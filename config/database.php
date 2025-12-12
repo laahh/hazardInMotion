@@ -115,6 +115,19 @@ return [
             'sslmode' => 'prefer',
         ],
 
+        'clickhouse' => [
+            'driver' => 'clickhouse',
+            'host' => env('CLICKHOUSE_HOST'),
+            'port' => env('CLICKHOUSE_PORT'),
+            'database' => env('CLICKHOUSE_DATABASE'),
+            'username' => env('CLICKHOUSE_USERNAME'),
+            'password' => env('CLICKHOUSE_PASSWORD'),
+            'options' => [
+                'timeout' => 30,
+                'protocol' => env('CLICKHOUSE_PROTOCOL', 'http'),
+            ],
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DATABASE_URL'),
@@ -128,6 +141,32 @@ return [
             'prefix_indexes' => true,
             // 'encrypt' => env('DB_ENCRYPT', 'yes'),
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
+        ],
+
+        'besigma_db' => [
+            'driver' => 'mysql',
+            'host' => env('BESIGMA_DB_HOST', '127.0.0.1'),
+            'port' => env('BESIGMA_DB_PORT', '3307'),
+            'database' => env('BESIGMA_DB_DATABASE', 'besigma_db'),
+            'username' => env('BESIGMA_DB_USERNAME', 'safety_evaluator'),
+            'password' => env('BESIGMA_DB_PASSWORD', 'Safety_EV2025'),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+            // SSH Tunnel Configuration
+            'ssh_host' => env('BESIGMA_SSH_HOST', '13.250.29.29'),
+            'ssh_port' => env('BESIGMA_SSH_PORT', 22),
+            'ssh_user' => env('BESIGMA_SSH_USER', 'ubuntu'),
+            'ssh_pkey' => env('BESIGMA_SSH_PKEY', public_path('bsigma-jumpserver.pem')),
+            'remote_host' => env('BESIGMA_REMOTE_HOST', '10.11.58.139'),
+            'remote_port' => env('BESIGMA_REMOTE_PORT', 3306),
+            'local_port' => env('BESIGMA_LOCAL_PORT', 3307),
         ],
 
     ],

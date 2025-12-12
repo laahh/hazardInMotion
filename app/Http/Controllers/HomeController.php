@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\CctvData;
 use Illuminate\Support\Facades\DB;
+use App\Services\ClickHouseService;
 use Exception;
 
 class HomeController extends Controller
@@ -14,11 +15,269 @@ class HomeController extends Controller
      */
     public function index()
     {
-        // Ambil statistik dari PostgreSQL
-        $overviewStats = $this->getOverviewStatsFromPostgres();
+        // Coba ambil statistik dari ClickHouse, fallback ke PostgreSQL
+        $overviewStats = $this->getOverviewStats();
         
         // Ambil statistik CCTV dari MySQL
         $cctvStats = $this->getCctvStatsFromMysql();
+
+        // Ambil data OAK register - coba ClickHouse dulu, fallback ke PostgreSQL (range 24 Nov 2025 - 1 Des 2025)
+        $oakData = [];
+        try {
+            $startDate = '2025-11-24 00:00:00';
+            $endDate = '2025-12-01 23:59:59';
+            
+            // Coba dari ClickHouse terlebih dahulu
+            $clickhouse = new ClickHouseService();
+            if ($clickhouse->isConnected()) {
+                try {
+                    // Query OAK dari ClickHouse menggunakan view yang sudah dibuat
+                    // View: nitip.oak_tabel_view sudah menggabungkan semua data yang diperlukan
+                    $oakQueryClickHouse = "
+                        SELECT 
+                            `oak.id` as id,
+                            mobile_uuid,
+                            activity,
+                            sub_activity,
+                            material,
+                            tool_type,
+                            conveyance_type,
+                            lifting_equipment,
+                            site,
+                            location,
+                            detail_location,
+                            location_description,
+                            shift,
+                            conclusion,
+                            company_submit_by,
+                            kode_sid_pelapor,
+                            `submit_by.kode_sid` as kode_sid,
+                            submit_by,
+                            submit_id,
+                            jabatan_fungsional_submiter,
+                            `oak.submit_date` as submit_date,
+                            sib_register,
+                            code_sib,
+                            tools_observasi,
+                            id_employee_team,
+                            nama_team,
+                            kode_sid_team,
+                            jabatan_fungsional_team,
+                            tipe,
+                            latitude,
+                            longitude,
+                            file_foto,
+                            platform,
+                            is_be_draft,
+                            bedraft_date,
+                            versi_apk,
+                            apk,
+                            method,
+                            url_photo
+                        FROM nitip.oak_tabel_view
+                        WHERE `oak.submit_date` >= '{startDate}'
+                            AND `oak.submit_date` <= '{endDate}'
+                        ORDER BY `oak.submit_date` DESC
+                        LIMIT 1000
+                    ";
+                    
+                    $oakQueryClickHouse = str_replace(
+                        ['{startDate}', '{endDate}'],
+                        [$startDate, $endDate],
+                        $oakQueryClickHouse
+                    );
+                    
+                    $oakDataClickHouse = $clickhouse->query($oakQueryClickHouse);
+                    
+                    if (!empty($oakDataClickHouse)) {
+                        \Log::info('OAK data fetched from ClickHouse view (nitip.oak_tabel_view): ' . count($oakDataClickHouse) . ' records');
+                        // Convert array hasil ClickHouse ke format object seperti PostgreSQL
+                        // Pastikan semua kolom ada dan format konsisten
+                        $oakData = array_map(function($row) {
+                            // Convert array associative ke object
+                            $obj = new \stdClass();
+                            foreach ($row as $key => $value) {
+                                // Handle NULL values dari ClickHouse
+                                $obj->$key = ($value === null || $value === '[NULL]' || $value === '') ? null : $value;
+                            }
+                            return $obj;
+                        }, $oakDataClickHouse);
+                    } else {
+                        \Log::info('No OAK data found in ClickHouse view (nitip.oak_tabel_view), trying PostgreSQL');
+                        throw new Exception('No data in ClickHouse');
+                    }
+                } catch (Exception $e) {
+                    \Log::warning('ClickHouse OAK query failed, falling back to PostgreSQL: ' . $e->getMessage());
+                    // Fallback ke PostgreSQL
+                    if ($this->isTunnelActive()) {
+                                $oakQuery = <<<SQL
+SELECT oak.id,
+       oak.mobile_uuid,
+       act.name AS activity,
+       subact.name AS sub_activity,
+       mat.name AS material,
+       tool.name AS tool_type,
+       conveyance.name AS conveyance_type,
+       lifting.name AS lifting_equipment,
+       site.nama AS site,
+       loc.nama AS location,
+       detailloc.nama AS detail_location,
+       oak.ket_lokasi AS location_description,
+       shift.name AS shift,
+       conclusion.name AS conclusion,
+       company_submit_by.nama AS company_submit_by,
+       submit_by.kode_sid AS kode_sid_pelapor,
+       submit_by.kode_sid,
+       submit_by.nama AS submit_by,
+       submit_by.id AS submit_id,
+       submit_jbt.nama AS jabatan_fungsional_submiter,
+       oak.submit_date,
+       oak.sib_register_id AS sib_register,
+       code_sib.code_sib,
+       tl_obs.name AS tools_observasi,
+       oak_team.id_employee AS id_employee_team,
+       mk.nama AS nama_team,
+       mk.kode_sid AS kode_sid_team,
+       mk_jbt.nama AS jabatan_fungsional_team,
+       oak_team.type AS tipe,
+       oak.location_latitude AS latitude,
+       oak.location_longitude AS longitude,
+       ff.filename AS file_foto,
+       oak.platform,
+       oak.is_be_draft,
+       oak.be_draft_photo_date AS bedraft_date,
+       su.app_version AS versi_apk,
+       CASE
+           WHEN su.app_version::text = 'BEATS-v0.3.1.1'::text THEN '3.1.1'::text
+           WHEN su.app_version::text = 'BEATS-v0.3.1.7'::text THEN '3.1.7'::text
+           ELSE 'others'::text
+       END AS apk,
+       CASE
+           WHEN oak.is_be_draft = 1 THEN 'BeDraft'::text
+           ELSE 'Normal'::text
+       END AS method,
+       concat('https://hseautomation.beraucoal.co.id/beats2/file/document/', oak.id) AS url_photo
+FROM bcbeats.oak_register oak
+JOIN bcbeats.m_oak_activity act ON act.id = oak.id_oak_activity
+JOIN bcbeats.m_oak_sub_activity subact ON subact.id = oak.id_oak_sub_activity
+JOIN bcbeats.m_oak_material mat ON mat.id = oak.id_oak_material
+JOIN bcbeats.m_oak_jenis_tools tool ON tool.id = oak.id_oak_type_tools
+JOIN bcbeats.m_oak_jenis_alat_angkut conveyance ON conveyance.id = oak.id_oak_type_conveyance
+JOIN bcbeats.m_oak_alat_angkat lifting ON lifting.id = oak.id_oak_lifting_equipment
+JOIN bcbeats.m_lokasi detailloc ON detailloc.id = oak.id_location
+JOIN bcbeats.m_lokasi loc ON loc.id = detailloc.id_parent
+JOIN bcbeats.m_lokasi site ON site.id = loc.id_parent
+JOIN bcbeats.m_lookup shift ON shift.id = oak.id_shift
+JOIN bcbeats.m_lookup conclusion ON conclusion.id = oak.id_conclusion
+JOIN bcbeats.oak_team ON bcbeats.oak_team.id_oak_register = oak.id
+LEFT JOIN bcbeats.m_lookup tl_obs ON tl_obs.id = oak.id_tools_observation
+LEFT JOIN bcsid.m_karyawan submit_by ON submit_by.id = oak.submit_by_id
+LEFT JOIN bcsid.m_jabatan submit_jbt ON submit_jbt.id = submit_by.id_jabatan_fungsional
+LEFT JOIN bcsid.m_perusahaan company_submit_by ON company_submit_by.id = submit_by.id_perusahaan
+LEFT JOIN bcsid.sib_register ON sib_register.id = oak.sib_register_id
+LEFT JOIN bcsid.sib_master code_sib ON code_sib.id = sib_register.id_m_sib
+LEFT JOIN bcsid.m_karyawan mk ON mk.id = bcbeats.oak_team.id_employee
+LEFT JOIN bcsid.m_jabatan mk_jbt ON mk_jbt.id = mk.id_jabatan_fungsional
+LEFT JOIN bcbeats.file_foto ff ON ff.id = oak.photo_id
+LEFT JOIN bcbeats.sys_user su ON su.username::text = submit_by.kode_sid::text
+WHERE oak.submit_date BETWEEN ?::timestamp without time zone AND ?::timestamp without time zone
+ORDER BY oak.submit_date DESC
+LIMIT 1000
+SQL;
+
+                        $oakData = DB::connection('pgsql_ssh')->select($oakQuery, [$startDate, $endDate]);
+                        \Log::info('OAK data fetched from PostgreSQL: ' . count($oakData) . ' records');
+                    } else {
+                        \Log::warning('SSH tunnel is not active, cannot fetch OAK data from PostgreSQL');
+                    }
+                }
+            } else {
+                // ClickHouse tidak tersedia, langsung gunakan PostgreSQL
+                \Log::info('ClickHouse not connected, using PostgreSQL for OAK data');
+                if ($this->isTunnelActive()) {
+                    $oakQuery = <<<SQL
+SELECT oak.id,
+       oak.mobile_uuid,
+       act.name AS activity,
+       subact.name AS sub_activity,
+       mat.name AS material,
+       tool.name AS tool_type,
+       conveyance.name AS conveyance_type,
+       lifting.name AS lifting_equipment,
+       site.nama AS site,
+       loc.nama AS location,
+       detailloc.nama AS detail_location,
+       oak.ket_lokasi AS location_description,
+       shift.name AS shift,
+       conclusion.name AS conclusion,
+       company_submit_by.nama AS company_submit_by,
+       submit_by.kode_sid AS kode_sid_pelapor,
+       submit_by.kode_sid,
+       submit_by.nama AS submit_by,
+       submit_by.id AS submit_id,
+       submit_jbt.nama AS jabatan_fungsional_submiter,
+       oak.submit_date,
+       oak.sib_register_id AS sib_register,
+       code_sib.code_sib,
+       tl_obs.name AS tools_observasi,
+       oak_team.id_employee AS id_employee_team,
+       mk.nama AS nama_team,
+       mk.kode_sid AS kode_sid_team,
+       mk_jbt.nama AS jabatan_fungsional_team,
+       oak_team.type AS tipe,
+       oak.location_latitude AS latitude,
+       oak.location_longitude AS longitude,
+       ff.filename AS file_foto,
+       oak.platform,
+       oak.is_be_draft,
+       oak.be_draft_photo_date AS bedraft_date,
+       su.app_version AS versi_apk,
+       CASE
+           WHEN su.app_version::text = 'BEATS-v0.3.1.1'::text THEN '3.1.1'::text
+           WHEN su.app_version::text = 'BEATS-v0.3.1.7'::text THEN '3.1.7'::text
+           ELSE 'others'::text
+       END AS apk,
+       CASE
+           WHEN oak.is_be_draft = 1 THEN 'BeDraft'::text
+           ELSE 'Normal'::text
+       END AS method,
+       concat('https://hseautomation.beraucoal.co.id/beats2/file/document/', oak.id) AS url_photo
+FROM bcbeats.oak_register oak
+JOIN bcbeats.m_oak_activity act ON act.id = oak.id_oak_activity
+JOIN bcbeats.m_oak_sub_activity subact ON subact.id = oak.id_oak_sub_activity
+JOIN bcbeats.m_oak_material mat ON mat.id = oak.id_oak_material
+JOIN bcbeats.m_oak_jenis_tools tool ON tool.id = oak.id_oak_type_tools
+JOIN bcbeats.m_oak_jenis_alat_angkut conveyance ON conveyance.id = oak.id_oak_type_conveyance
+JOIN bcbeats.m_oak_alat_angkat lifting ON lifting.id = oak.id_oak_lifting_equipment
+JOIN bcbeats.m_lokasi detailloc ON detailloc.id = oak.id_location
+JOIN bcbeats.m_lokasi loc ON loc.id = detailloc.id_parent
+JOIN bcbeats.m_lokasi site ON site.id = loc.id_parent
+JOIN bcbeats.m_lookup shift ON shift.id = oak.id_shift
+JOIN bcbeats.m_lookup conclusion ON conclusion.id = oak.id_conclusion
+JOIN bcbeats.oak_team ON bcbeats.oak_team.id_oak_register = oak.id
+LEFT JOIN bcbeats.m_lookup tl_obs ON tl_obs.id = oak.id_tools_observation
+LEFT JOIN bcsid.m_karyawan submit_by ON submit_by.id = oak.submit_by_id
+LEFT JOIN bcsid.m_jabatan submit_jbt ON submit_jbt.id = submit_by.id_jabatan_fungsional
+LEFT JOIN bcsid.m_perusahaan company_submit_by ON company_submit_by.id = submit_by.id_perusahaan
+LEFT JOIN bcsid.sib_register ON sib_register.id = oak.sib_register_id
+LEFT JOIN bcsid.sib_master code_sib ON code_sib.id = sib_register.id_m_sib
+LEFT JOIN bcsid.m_karyawan mk ON mk.id = bcbeats.oak_team.id_employee
+LEFT JOIN bcsid.m_jabatan mk_jbt ON mk_jbt.id = mk.id_jabatan_fungsional
+LEFT JOIN bcbeats.file_foto ff ON ff.id = oak.photo_id
+LEFT JOIN bcbeats.sys_user su ON su.username::text = submit_by.kode_sid::text
+WHERE oak.submit_date BETWEEN ?::timestamp without time zone AND ?::timestamp without time zone
+ORDER BY oak.submit_date DESC
+LIMIT 1000
+SQL;
+
+                    $oakData = DB::connection('pgsql_ssh')->select($oakQuery, [$startDate, $endDate]);
+                    \Log::info('OAK data fetched from PostgreSQL: ' . count($oakData) . ' records');
+                }
+            }
+        } catch (Exception $e) {
+            \Log::error('Error fetching OAK data: ' . $e->getMessage());
+            $oakData = [];
+        }
 
         // Parameters for coverage table
         $coverageSearch = request('coverage_search');
@@ -54,6 +313,7 @@ class HomeController extends Controller
         return view('index', compact(
             'overviewStats',
             'cctvStats',
+            'oakData',
             'coverageSummary',
             'coverageSearch',
             'coveragePage',
@@ -130,6 +390,220 @@ class HomeController extends Controller
             'total' => $data->count(),
             'data' => $data,
         ]);
+    }
+
+    /**
+     * Get overview statistics - try ClickHouse first, fallback to PostgreSQL
+     */
+    private function getOverviewStats()
+    {
+        $clickhouse = new ClickHouseService();
+        
+        // Coba dari ClickHouse jika tersedia
+        if ($clickhouse->isConnected()) {
+            try {
+                return $this->getOverviewStatsFromClickHouse($clickhouse);
+            } catch (Exception $e) {
+                \Log::warning('ClickHouse query failed, falling back to PostgreSQL: ' . $e->getMessage());
+            }
+        }
+        
+        // Fallback ke PostgreSQL
+        return $this->getOverviewStatsFromPostgres();
+    }
+
+    /**
+     * Get overview statistics from ClickHouse
+     */
+    private function getOverviewStatsFromClickHouse(ClickHouseService $clickhouse)
+    {
+        $currentYear = date('Y');
+        $currentMonth = date('m');
+        $lastMonth = date('m', strtotime('-1 month'));
+        $lastMonthYear = date('Y', strtotime('-1 month'));
+        $startOfYear = $currentYear . '-01-01';
+        $startOfMonth = $currentYear . '-' . $currentMonth . '-01';
+        $startOfLastMonth = $lastMonthYear . '-' . $lastMonth . '-01';
+        $endOfLastMonth = date('Y-m-t', strtotime('-1 month'));
+
+        // Total YTD Insiden
+        $ytdQuery = "
+            SELECT COUNT(*) as total
+            FROM car_register
+            WHERE id_sumberdata <> 200 
+                AND create_date >= '{startOfYear}'
+                AND create_date < today() + 1
+        ";
+        $ytdResult = $clickhouse->query(str_replace('{startOfYear}', $startOfYear, $ytdQuery));
+        $totalYtdInsiden = isset($ytdResult[0]) && isset($ytdResult[0]['total']) ? (int)$ytdResult[0]['total'] : 0;
+
+        // Total YTD Insiden bulan lalu
+        $ytdLastMonthQuery = "
+            SELECT COUNT(*) as total
+            FROM car_register
+            WHERE id_sumberdata <> 200 
+                AND create_date >= '{startOfYear}'
+                AND create_date <= '{endOfLastMonth} 23:59:59'
+        ";
+        $ytdLastMonthResult = $clickhouse->query(str_replace(
+            ['{startOfYear}', '{endOfLastMonth}'],
+            [$startOfYear, $endOfLastMonth],
+            $ytdLastMonthQuery
+        ));
+        $ytdLastMonth = isset($ytdLastMonthResult[0]) && isset($ytdLastMonthResult[0]['total']) ? (int)$ytdLastMonthResult[0]['total'] : 0;
+        $ytdInsidenChange = $ytdLastMonth > 0 ? round((($totalYtdInsiden - $ytdLastMonth) / $ytdLastMonth) * 100, 1) : 0;
+
+        // Active Hazards
+        $activeQuery = "
+            SELECT COUNT(*) as total
+            FROM car_register cr
+            LEFT JOIN m_status st ON st.id = cr.id_status
+            WHERE cr.id_sumberdata <> 200 
+                AND cr.create_date >= '2023-12-31 23:59:59'
+                AND (st.nama = 'Open' OR st.nama = 'In Progress')
+        ";
+        $activeResult = $clickhouse->query($activeQuery);
+        $activeHazards = isset($activeResult[0]) && isset($activeResult[0]['total']) ? (int)$activeResult[0]['total'] : 0;
+
+        // Total hazards
+        $totalHazardsQuery = "
+            SELECT COUNT(*) as total
+            FROM car_register
+            WHERE id_sumberdata <> 200 
+                AND create_date >= '2023-12-31 23:59:59'
+        ";
+        $totalHazardsResult = $clickhouse->query($totalHazardsQuery);
+        $totalHazards = isset($totalHazardsResult[0]) && isset($totalHazardsResult[0]['total']) ? (int)$totalHazardsResult[0]['total'] : 0;
+        $hazardIncrease = $activeHazards;
+
+        // Resolved Hazards This Year
+        $resolvedQuery = "
+            SELECT COUNT(*) as total
+            FROM car_register cr
+            LEFT JOIN m_status st ON st.id = cr.id_status
+            LEFT JOIN car_tindakan ct ON ct.id_car_register = cr.id
+            WHERE cr.id_sumberdata <> 200 
+                AND (st.nama = 'Closed' OR st.nama = 'Resolved')
+                AND ct.tanggal_aktual_penyelesaian >= '{startOfYear}'
+                AND ct.tanggal_aktual_penyelesaian < today() + 1
+        ";
+        $resolvedResult = $clickhouse->query(str_replace('{startOfYear}', $startOfYear, $resolvedQuery));
+        $resolvedHazards = isset($resolvedResult[0]) && isset($resolvedResult[0]['total']) ? (int)$resolvedResult[0]['total'] : 0;
+
+        // Resolved Hazards bulan lalu
+        $resolvedLastMonthQuery = "
+            SELECT COUNT(*) as total
+            FROM car_register cr
+            LEFT JOIN m_status st ON st.id = cr.id_status
+            LEFT JOIN car_tindakan ct ON ct.id_car_register = cr.id
+            WHERE cr.id_sumberdata <> 200 
+                AND (st.nama = 'Closed' OR st.nama = 'Resolved')
+                AND ct.tanggal_aktual_penyelesaian >= '{startOfYear}'
+                AND ct.tanggal_aktual_penyelesaian <= '{endOfLastMonth} 23:59:59'
+        ";
+        $resolvedLastMonthResult = $clickhouse->query(str_replace(
+            ['{startOfYear}', '{endOfLastMonth}'],
+            [$startOfYear, $endOfLastMonth],
+            $resolvedLastMonthQuery
+        ));
+        $resolvedLastMonth = isset($resolvedLastMonthResult[0]) && isset($resolvedLastMonthResult[0]['total']) ? (int)$resolvedLastMonthResult[0]['total'] : 0;
+        $resolvedHazardsChange = $resolvedLastMonth > 0 ? round((($resolvedHazards - $resolvedLastMonth) / $resolvedLastMonth) * 100, 1) : 0;
+
+        // Monthly Hazards
+        $monthlyQuery = "
+            SELECT COUNT(*) as total
+            FROM car_register
+            WHERE id_sumberdata <> 200 
+                AND create_date >= '{startOfMonth}'
+                AND create_date < today() + 1
+        ";
+        $monthlyResult = $clickhouse->query(str_replace('{startOfMonth}', $startOfMonth, $monthlyQuery));
+        $monthlyHazards = isset($monthlyResult[0]) && isset($monthlyResult[0]['total']) ? (int)$monthlyResult[0]['total'] : 0;
+
+        // Monthly Hazards bulan lalu
+        $monthlyLastMonthQuery = "
+            SELECT COUNT(*) as total
+            FROM car_register
+            WHERE id_sumberdata <> 200 
+                AND create_date >= '{startOfLastMonth}'
+                AND create_date <= '{endOfLastMonth} 23:59:59'
+        ";
+        $monthlyLastMonthResult = $clickhouse->query(str_replace(
+            ['{startOfLastMonth}', '{endOfLastMonth}'],
+            [$startOfLastMonth, $endOfLastMonth],
+            $monthlyLastMonthQuery
+        ));
+        $monthlyLastMonth = isset($monthlyLastMonthResult[0]) && isset($monthlyLastMonthResult[0]['total']) ? (int)$monthlyLastMonthResult[0]['total'] : 0;
+        $monthlyChange = $monthlyLastMonth > 0 ? round((($monthlyHazards - $monthlyLastMonth) / $monthlyLastMonth) * 100, 1) : 0;
+        $monthlyCount = $monthlyLastMonth;
+
+        // Yearly Hazards
+        $yearlyQuery = "
+            SELECT COUNT(*) as total
+            FROM car_register
+            WHERE id_sumberdata <> 200 
+                AND create_date >= '{startOfYear}'
+                AND create_date < today() + 1
+        ";
+        $yearlyResult = $clickhouse->query(str_replace('{startOfYear}', $startOfYear, $yearlyQuery));
+        $yearlyHazards = isset($yearlyResult[0]) && isset($yearlyResult[0]['total']) ? (int)$yearlyResult[0]['total'] : 0;
+
+        // Yearly Hazards tahun lalu
+        $lastYear = $currentYear - 1;
+        $yearlyLastYearQuery = "
+            SELECT COUNT(*) as total
+            FROM car_register
+            WHERE id_sumberdata <> 200 
+                AND create_date >= '{lastYear}-01-01'
+                AND create_date <= '{lastYear}-12-31 23:59:59'
+        ";
+        $yearlyLastYearResult = $clickhouse->query(str_replace('{lastYear}', $lastYear, $yearlyLastYearQuery));
+        $yearlyLastYear = isset($yearlyLastYearResult[0]) && isset($yearlyLastYearResult[0]['total']) ? (int)$yearlyLastYearResult[0]['total'] : 0;
+        $yearlyChange = $yearlyLastYear > 0 ? round((($yearlyHazards - $yearlyLastYear) / $yearlyLastYear) * 100, 1) : 0;
+        $yearlyCount = $yearlyLastYear;
+
+        // Chart data per bulan
+        $chartQuery = "
+            SELECT 
+                toMonth(create_date) as month_num,
+                COUNT(*) as count
+            FROM car_register
+            WHERE id_sumberdata <> 200 
+                AND create_date >= '{startOfYear}'
+                AND create_date < today() + 1
+            GROUP BY toMonth(create_date)
+            ORDER BY month_num
+        ";
+        $chartResult = $clickhouse->query(str_replace('{startOfYear}', $startOfYear, $chartQuery));
+        
+        $monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        $chartData = [];
+        foreach ($chartResult as $row) {
+            $monthNum = isset($row['month_num']) ? (int)$row['month_num'] : 0;
+            if ($monthNum >= 1 && $monthNum <= 12) {
+                $chartData[] = [
+                    'month' => $monthNames[$monthNum - 1],
+                    'count' => isset($row['count']) ? (int)$row['count'] : 0
+                ];
+            }
+        }
+
+        return [
+            'totalYtdInsiden' => $totalYtdInsiden,
+            'ytdInsidenChange' => $ytdInsidenChange,
+            'activeHazards' => $activeHazards,
+            'hazardIncrease' => $hazardIncrease,
+            'resolvedHazards' => $resolvedHazards,
+            'resolvedHazardsChange' => $resolvedHazardsChange,
+            'monthlyHazards' => $monthlyHazards,
+            'monthlyChange' => $monthlyChange,
+            'monthlyCount' => $monthlyCount,
+            'yearlyHazards' => $yearlyHazards,
+            'yearlyChange' => $yearlyChange,
+            'yearlyCount' => $yearlyCount,
+            'chartData' => $chartData,
+            'totalHazards' => $totalHazards,
+        ];
     }
 
     /**
@@ -1001,6 +1475,34 @@ class HomeController extends Controller
             return true;
         }
         return false;
+    }
+
+    /**
+     * Check ClickHouse connection status
+     */
+    public function checkClickHouseStatus()
+    {
+        try {
+            $clickhouse = new ClickHouseService();
+            $testResult = $clickhouse->testConnection();
+            
+            return response()->json([
+                'connected' => $clickhouse->isConnected(),
+                'test_result' => $testResult,
+                'troubleshooting' => [
+                    '1. Check if ClickHouse server is running on ' . config('database.connections.clickhouse.host') . ':' . config('database.connections.clickhouse.port'),
+                    '2. Verify network connectivity (ping or telnet)',
+                    '3. Check firewall rules',
+                    '4. Verify credentials in .env file',
+                    '5. Check ClickHouse server logs',
+                ],
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'connected' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function pageView($routeName, $page = null)

@@ -74,6 +74,104 @@
             </div>
           </div>
         </div><!--end row-->
+
+        {{-- Tabel Data OAK Register (24 Nov 2025 - 1 Des 2025) --}}
+        <div class="row mt-4">
+          <div class="col-12 d-flex">
+            <div class="card rounded-4 w-100">
+              <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between mb-3">
+                  <div>
+                    <h5 class="mb-0 fw-bold">Data OAK Register (24 Nov 2025 - 1 Des 2025)</h5>
+                    <p class="mb-0 text-muted small">Data diambil dari PostgreSQL (oak_register) berdasarkan submit_date</p>
+                  </div>
+                </div>
+                @if(!empty($oakData) && count($oakData) > 0)
+                  <div class="table-responsive">
+                    <table class="table table-striped table-hover table-bordered align-middle">
+                      <thead class="table-light">
+                        <tr>
+                          <th>ID</th>
+                          <th>Submit Date</th>
+                          <th>Mobile UUID</th>
+                          <th>Activity</th>
+                          <th>Sub Activity</th>
+                          <th>Material</th>
+                          <th>Tool Type</th>
+                          <th>Conveyance Type</th>
+                          <th>Lifting Equipment</th>
+                          <th>Site</th>
+                          <th>Location</th>
+                          <th>Detail Location</th>
+                          <th>Location Description</th>
+                          <th>Shift</th>
+                          <th>Conclusion</th>
+                          <th>Company Submit By</th>
+                          <th>Submit By</th>
+                          <th>Kode SID Pelapor</th>
+                          <th>Kode SID Team</th>
+                          <th>Nama Team</th>
+                          <th>Tipe</th>
+                          <th>Latitude</th>
+                          <th>Longitude</th>
+                          <th>Versi APK</th>
+                          <th>APK</th>
+                          <th>Method</th>
+                          <th>Platform</th>
+                          <th>Foto</th>
+                          <th>URL Photo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @foreach($oakData as $row)
+                          <tr>
+                            <td>{{ $row->id ?? '-' }}</td>
+                            <td>{{ $row->submit_date ?? '-' }}</td>
+                            <td>{{ $row->mobile_uuid ?? '-' }}</td>
+                            <td>{{ $row->activity ?? '-' }}</td>
+                            <td>{{ $row->sub_activity ?? '-' }}</td>
+                            <td>{{ $row->material ?? '-' }}</td>
+                            <td>{{ $row->tool_type ?? '-' }}</td>
+                            <td>{{ $row->conveyance_type ?? '-' }}</td>
+                            <td>{{ $row->lifting_equipment ?? '-' }}</td>
+                            <td>{{ $row->site ?? '-' }}</td>
+                            <td>{{ $row->location ?? '-' }}</td>
+                            <td>{{ $row->detail_location ?? '-' }}</td>
+                            <td>{{ $row->location_description ?? '-' }}</td>
+                            <td>{{ $row->shift ?? '-' }}</td>
+                            <td>{{ $row->conclusion ?? '-' }}</td>
+                            <td>{{ $row->company_submit_by ?? '-' }}</td>
+                            <td>{{ $row->submit_by ?? '-' }}</td>
+                            <td>{{ $row->kode_sid_pelapor ?? '-' }}</td>
+                            <td>{{ $row->kode_sid_team ?? '-' }}</td>
+                            <td>{{ $row->nama_team ?? '-' }}</td>
+                            <td>{{ $row->tipe ?? '-' }}</td>
+                            <td>{{ $row->latitude ?? '-' }}</td>
+                            <td>{{ $row->longitude ?? '-' }}</td>
+                            <td>{{ $row->versi_apk ?? '-' }}</td>
+                            <td>{{ $row->apk ?? '-' }}</td>
+                            <td>{{ $row->method ?? '-' }}</td>
+                            <td>{{ $row->platform ?? '-' }}</td>
+                            <td>{{ $row->file_foto ?? '-' }}</td>
+                            <td>
+                              @if(!empty($row->url_photo))
+                                <a href="{{ $row->url_photo }}" target="_blank" class="text-primary text-decoration-underline">Lihat</a>
+                              @else
+                                -
+                              @endif
+                            </td>
+                          </tr>
+                        @endforeach
+                      </tbody>
+                    </table>
+                  </div>
+                @else
+                  <p class="text-muted text-center py-4 mb-0">Tidak ada data OAK Register pada rentang tanggal 24 Nov 2025 - 1 Des 2025.</p>
+                @endif
+              </div>
+            </div>
+          </div>
+        </div><!--end row-->
         
         {{-- Statistik CCTV Detail --}}
         <div class="row">
@@ -1607,3 +1705,117 @@
     }
   </script>
 @endsection 
+
+
+
+
+
+
+
+
+SELECT 
+    -- Fields dari OAK (dengan rename)
+    CASE 
+        WHEN kode_sid_pelapor = kode_sid_team 
+        THEN kode_sid_pelapor 
+        ELSE NULL 
+    END AS `sid pelapor`,
+    oak.id AS `Task Number`,
+    activity AS `aktivitas pekerjaan oak`,
+    sub_activity AS `sub aktivitas pekerjaan oak`,
+    material AS `material oak`,
+    tool_type AS `tool pekerjaan oak`,
+    conveyance_type AS `jenis alat angkut oak`,
+    lifting_equipment AS `jenis alat angkat oak`,
+    site,
+    location AS `lokasi`,
+    detail_location AS `detail lokasi`,
+    location_description AS `keterangan lokasi`,
+    shift AS `shift oak`,
+    conclusion AS `hasil oak`,
+    company_submit_by AS `perusahaan pelapor`,
+    kode_sid_pelapor AS `kode sid pelapor`,
+    submit_by AS `pelapor`,
+    jabatan_fungsional_submiter AS `jabatan fungsional`,
+    submit_date AS `tanggal pelapor`,
+    code_sib AS `kode sib oak`,
+    tools_observasi AS `tools pengawasan`,
+    kode_sid_team,
+    tipe,
+    latitude,
+    longitude,
+    method,
+    platform,
+    bedraft_date,
+    versi_apk AS `versi apk`,
+    apk,
+    url_photo AS `url foto`,
+    -- Fields dari PIC OAK (dari join)
+    nama_team AS `pic`,
+    kode_sid_team AS `sid pic`,
+    perusahaan_pic AS `perusahaan pic`,
+    jabatan_fungsional_team AS `jabatan fungsional pic`
+FROM (
+    -- OAK Helper: Transformasi dari aaj_vw_car_oak_register_ytd_only
+    SELECT 
+        id,
+        activity,
+        sub_activity,
+        material,
+        tool_type,
+        conveyance_type,
+        lifting_equipment,
+        site,
+        location,
+        detail_location,
+        location_description,
+        shift,
+        conclusion,
+        company_submit_by,
+        kode_sid_pelapor,
+        submit_by,
+        jabatan_fungsional_submiter,
+        submit_date,
+        code_sib,
+        tools_observasi,
+        kode_sid_team,
+        tipe,
+        latitude,
+        longitude,
+        method,
+        platform,
+        bedraft_date,
+        versi_apk,
+        apk,
+        url_photo
+    FROM nitip.oak_tabel_view
+    WHERE 
+        -- Filter exclude tipe = 'OBSERVEE'
+        tipe != 'OBSERVEE'
+        -- Filter exclude tipe = 'pengawas langsung'
+        AND tipe != 'pengawas langsung'
+        -- Filter relative date last 2 years: 01/01/2024 - 31/12/2025
+        AND submit_date >= '2024-01-01'
+        AND submit_date <= '2025-12-31'
+) AS oak
+LEFT JOIN (
+    -- PIC OAK Helper: Transformasi dari aaj_vw_car_oak_register_ytd_only (instance kedua)
+    SELECT 
+        id AS tasknumber1,
+        nama_team,
+        kode_sid_team,
+        perusahaan_pic,
+        jabatan_fungsional_team
+    FROM nitip.oak_tabel_view
+    WHERE 
+        -- Filter keep only observe
+        tipe = 'OBSERVE'
+) AS pic_oak 
+    ON oak.id = tasknumber1
+WHERE 
+    -- Filter exclude null untuk calculated field sid pelapor
+    CASE 
+        WHEN kode_sid_pelapor = kode_sid_team 
+        THEN kode_sid_pelapor 
+        ELSE NULL 
+    END IS NOT NULL

@@ -450,11 +450,10 @@ class CctvDataController extends Controller
                         continue;
                     }
 
-                    // Cek apakah data dengan kombinasi nama_cctv dan no_cctv sudah ada di database
-                    // Hanya cek jika kedua field ada nilainya
-                    if (!empty($data['nama_cctv']) && !empty($data['no_cctv'])) {
-                        $existingData = CctvData::where('nama_cctv', $data['nama_cctv'])
-                                              ->where('no_cctv', $data['no_cctv'])
+                    // Cek apakah data dengan no_cctv sudah ada di database
+                    // Hanya cek jika no_cctv ada nilainya
+                    if (!empty($data['no_cctv'])) {
+                        $existingData = CctvData::where('no_cctv', $data['no_cctv'])
                                               ->first();
 
                         // Skip jika data sudah ada

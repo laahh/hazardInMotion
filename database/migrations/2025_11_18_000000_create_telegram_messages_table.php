@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('telegram_messages')) {
+            return;
+        }
+
         Schema::create('telegram_messages', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('update_id')->unique();
@@ -21,7 +25,8 @@ return new class extends Migration
             $table->string('first_name')->nullable();
             $table->string('last_name')->nullable();
             $table->text('text')->nullable();
-            $table->json('raw_payload');
+            // Use longText instead of json for MySQL compatibility
+            $table->longText('raw_payload');
             $table->timestamp('message_date')->nullable();
             $table->timestamps();
         });

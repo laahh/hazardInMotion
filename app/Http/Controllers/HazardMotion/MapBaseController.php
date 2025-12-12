@@ -8,26 +8,73 @@ use App\Models\InsidenTabel;
 use App\Models\GrTable;
 use App\Models\HazardValidation;
 use App\Services\BesigmaDbService;
+use App\Services\ClickHouseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 use Exception;
 
-class HazardDetectionController extends Controller
+class MapBaseController extends Controller
 {
     /**
      * Display the hazard detection page
      */
     public function index()
     {
-        // Ambil data CCTV yang memiliki koordinat
-        $cctvData = CctvData::whereNotNull('longitude')
+        // Ambil SEMUA data CCTV dari tabel cctv_data_bmo2 (termasuk yang tidak punya koordinat)
+        // Model CctvData sudah dikonfigurasi untuk menggunakan tabel cctv_data_bmo2
+        $cctvDataAll = CctvData::all();
+        
+        // Ambil data CCTV yang memiliki koordinat untuk ditampilkan di map
+        $cctvDataWithLocation = CctvData::whereNotNull('longitude')
             ->whereNotNull('latitude')
             ->get();
 
         // Format data untuk JavaScript dengan semua field yang diperlukan
-        $cctvLocations = $cctvData->map(function ($cctv) {
+        // Data diambil langsung dari database, bukan dari WMS atau GeoJSON
+        // Gunakan semua data untuk sidebar, tapi hanya yang punya koordinat untuk map
+        $cctvLocations = $cctvDataAll->map(function ($cctv) {
+            return [
+                'id' => $cctv->id,
+                'no_cctv' => $cctv->no_cctv ?? null,
+                'nomor_cctv' => $cctv->no_cctv ?? null,
+                'name' => $cctv->nama_cctv ?? 'CCTV ' . $cctv->id,
+                'cctv_name' => $cctv->nama_cctv ?? null,
+                'nama_cctv' => $cctv->nama_cctv ?? null,
+                'location' => ($cctv->longitude && $cctv->latitude) 
+                    ? [(float) $cctv->longitude, (float) $cctv->latitude] 
+                    : null,
+                'has_location' => !is_null($cctv->longitude) && !is_null($cctv->latitude),
+                'status' => $cctv->kondisi ?? $cctv->status ?? 'Unknown',
+                'kondisi' => $cctv->kondisi ?? null,
+                'site' => $cctv->site ?? null,
+                'perusahaan' => $cctv->perusahaan ?? null,
+                'perusahaan_cctv' => $cctv->perusahaan ?? null,
+                'link_akses' => $cctv->link_akses ?? null,
+                'externalUrl' => $cctv->link_akses ?? null,
+                'rtsp_url' => null, // Will be built if needed
+                'user_name' => $cctv->user_name ?? null,
+                'password' => $cctv->password ?? null,
+                'ip' => null, // Not in current schema
+                'port' => null,
+                'channel' => null,
+                'brand' => $this->extractBrandFromTipe($cctv->tipe_cctv ?? ''),
+                'tipe_cctv' => $cctv->tipe_cctv ?? null,
+                'fungsi_cctv' => $cctv->fungsi_cctv ?? null,
+                'lokasi_pemasangan' => $cctv->lokasi_pemasangan ?? null,
+                'control_room' => $cctv->control_room ?? null,
+                'coverage_lokasi' => $cctv->coverage_lokasi ?? null,
+                'created_at' => $cctv->created_at ? $cctv->created_at->toDateTimeString() : null,
+                'updated_at' => $cctv->updated_at ? $cctv->updated_at->toDateTimeString() : null,
+                'tahun_update' => $cctv->tahun_update ?? null,
+                'bulan_update' => $cctv->bulan_update ?? null,
+            ];
+        })->toArray();
+        
+        // Data untuk map (hanya yang punya koordinat)
+        $cctvLocationsForMap = $cctvDataWithLocation->map(function ($cctv) {
             return [
                 'id' => $cctv->id,
                 'no_cctv' => $cctv->no_cctv ?? null,
@@ -43,10 +90,10 @@ class HazardDetectionController extends Controller
                 'perusahaan_cctv' => $cctv->perusahaan ?? null,
                 'link_akses' => $cctv->link_akses ?? null,
                 'externalUrl' => $cctv->link_akses ?? null,
-                'rtsp_url' => null, // Will be built if needed
+                'rtsp_url' => null,
                 'user_name' => $cctv->user_name ?? null,
                 'password' => $cctv->password ?? null,
-                'ip' => null, // Not in current schema
+                'ip' => null,
                 'port' => null,
                 'channel' => null,
                 'brand' => $this->extractBrandFromTipe($cctv->tipe_cctv ?? ''),
@@ -80,8 +127,12 @@ class HazardDetectionController extends Controller
             ? round(($criticalCoverageCctv / $totalCctvCount) * 100, 1)
             : 0;
 
-        // Ambil data hazard detections dari PostgreSQL
-        $hazardDetections = $this->getHazardDetectionsFromPostgres();
+        // Ambil data SAP (Safety Action Plan) dari ClickHouse
+        // Mengganti hazard dengan SAP dari tabel nitip.union_sap_all_with_karyawan_full
+        // Default: ambil data untuk week ini (Senin-Senin)
+        $today = Carbon::now();
+        $weekStart = $today->copy()->startOfWeek(Carbon::MONDAY);
+        $sapData = $this->getSapDataFromClickHouse($weekStart);
 
         // Ambil data GR detections dari PostgreSQL
         $grDetections = $this->getGrDetectionsFromPostgres();
@@ -89,14 +140,14 @@ class HazardDetectionController extends Controller
         // Hitung jumlah valid GR yang cocok dengan data dari PostgreSQL
         $validGrCount = $this->getValidGrCount();
 
-        // Statistics
+        // Statistics untuk SAP
         $stats = [
-            'total_detections' => count($hazardDetections),
-            'active_detections' => count(array_filter($hazardDetections, fn($h) => $h['status'] === 'active')),
-            'resolved_detections' => count(array_filter($hazardDetections, fn($h) => $h['status'] === 'resolved')),
-            'critical_severity' => count(array_filter($hazardDetections, fn($h) => $h['severity'] === 'critical')),
-            'high_severity' => count(array_filter($hazardDetections, fn($h) => $h['severity'] === 'high')),
-            'medium_severity' => count(array_filter($hazardDetections, fn($h) => $h['severity'] === 'medium')),
+            'total_detections' => count($sapData),
+            'active_detections' => count($sapData), // Semua SAP dianggap active
+            'resolved_detections' => 0,
+            'critical_severity' => 0,
+            'high_severity' => 0,
+            'medium_severity' => count($sapData),
         ];
 
         // Get all insiden records (remove limit to get all data for accurate filtering)
@@ -188,9 +239,10 @@ class HazardDetectionController extends Controller
             $unitVehicles = [];
         }
 
-        return view('HazardMotion.admin.hazard-detection', compact(
+        return view('HazardMotion.admin.mapBase', compact(
             'cctvLocations',
-            'hazardDetections',
+            'cctvLocationsForMap',
+            'sapData',
             'grDetections',
             'stats',
             'insidenGroups',
@@ -1097,6 +1149,314 @@ class HazardDetectionController extends Controller
      * Get GR detections from MySQL gr_table
      * Only show GR with value "Valid" and "Potentially"
      */
+    /**
+     * Get SAP (Safety Action Plan) data from ClickHouse
+     * Mengambil data dari 4 tabel terpisah:
+     * - nitip.tabel_inspeksi_hazard (INSPEKSI, HAZARD)
+     * - nitip.tabel_observasi (OBSERVASI)
+     * - nitip.tabel_oak_pic (OAK)
+     * - nitip.tabel_coaching (COACHING)
+     * Filter per week: Senin sampai Senin (1 week)
+     */
+    private function getSapDataFromClickHouse($weekStart = null)
+    {
+        try {
+            $clickhouse = new ClickHouseService();
+            
+            if (!$clickhouse->isConnected()) {
+                Log::warning('ClickHouse is not connected. Returning empty SAP data.');
+                return [];
+            }
+
+            // Jika weekStart tidak diberikan, gunakan Senin minggu ini
+            if (!$weekStart) {
+                $today = Carbon::now();
+                $weekStart = $today->copy()->startOfWeek(Carbon::MONDAY)->setTime(0, 0, 0);
+            } else {
+                // Parse weekStart string (format: YYYY-MM-DD HH:MM:SS atau YYYY-MM-DD)
+                $weekStart = Carbon::parse($weekStart)->startOfWeek(Carbon::MONDAY)->setTime(0, 0, 0);
+            }
+            
+            // Week end adalah Senin berikutnya (7 hari setelah weekStart) pada 00:00:00
+            $weekEnd = $weekStart->copy()->addDays(7)->setTime(0, 0, 0);
+            
+            $weekStartStr = $weekStart->format('Y-m-d');
+            $weekEndStr = $weekEnd->format('Y-m-d');
+            
+            Log::info('SAP Query - Week Start: ' . $weekStartStr . ', Week End: ' . $weekEndStr);
+            
+            $sapData = [];
+            $resultsInspeksi = [];
+            $resultsObservasi = [];
+            $resultsOak = [];
+            $resultsCoaching = [];
+            
+            // 1. Query tabel_inspeksi_hazard
+            try {
+                $sqlInspeksi = "
+                    SELECT 
+                        toString(id) as task_number,
+                        toString(jenis_laporan) as jenis_laporan,
+                        toString(deskripsi) as aktivitas_pekerjaan,
+                        toString(lokasi) as lokasi,
+                        toString(`detail lokasi`) as detail_lokasi,
+                        toString(deskripsi) as keterangan,
+                        toString(`tanggal pelaporan`) as tanggal_pelaporan,
+                        toString(`perusahaan pelapor`) as perusahaan_pelapor,
+                        toString(pelapor) as pelapor,
+                        toString(sid_pelapor) as sid_pelapor,
+                        toString(`jabatan fungsional pelapor`) as jabatan_fungsional_pelapor,
+                        toString(`departemen pelapor`) as departemen_pelapor,
+                        toString(pic) as pic,
+                        toString(`sid pic`) as sid_pic,
+                        toString(`jabatan fungsional pic`) as jabatan_fungsional_pic,
+                        toString(`perusahaan pic`) as perusahaan_pic,
+                        toString(`departemen pic`) as departemen_pic,
+                        toString(`url foto`) as url_foto,
+                        toString(`tools pengawasan`) as tools_pengawasan,
+                        toString(tindakan) as catatan_tindakan,
+                        toString(id_pelapor) as nik_pelapor,
+                        toString(pelapor) as nama_pelapor,
+                        toString(`perusahaan pelapor`) as nama_perusahaan_pelapor_karyawan,
+                        toString(`jabatan fungsional pelapor`) as jabatan_fungsional_karyawan_pelapor,
+                        ifNull(toString(latitude), '') as latitude,
+                        ifNull(toString(longitude), '') as longitude,
+                        ifNull(toString(site), '') as site
+                    FROM nitip.tabel_inspeksi_hazard
+                    WHERE toDate(`tanggal pelaporan`) >= toDate('{$weekStartStr}')
+                        AND toDate(`tanggal pelaporan`) < toDate('{$weekEndStr}')
+                    ORDER BY toDateTime(`tanggal pelaporan`) DESC
+                    LIMIT 12500
+                ";
+                
+                $resultsInspeksi = $clickhouse->query($sqlInspeksi);
+                if (!empty($resultsInspeksi) && is_array($resultsInspeksi)) {
+                    foreach ($resultsInspeksi as $row) {
+                        $sapData[] = $this->formatSapRow($row, 'INSPEKSI_HAZARD');
+                    }
+                }
+                Log::info('Inspeksi Hazard: ' . count($resultsInspeksi ?? []) . ' records');
+            } catch (Exception $e) {
+                Log::error('Error querying tabel_inspeksi_hazard: ' . $e->getMessage());
+            }
+            
+            // 2. Query tabel_observasi
+            try {
+                $sqlObservasi = "
+                    SELECT 
+                        toString(TaskNumber) as task_number,
+                        toString(`aktivitas pekerjaan diobservasi`) as aktivitas_pekerjaan,
+                        toString(lokasi) as lokasi,
+                        toString(`detail lokasi`) as detail_lokasi,
+                        toString(keterangan) as keterangan,
+                        toString(`tanggal pelaporan`) as tanggal_pelaporan,
+                        toString(`perusahaan pelapor`) as perusahaan_pelapor,
+                        toString(pelapor) as pelapor,
+                        toString(`sid pelapor`) as sid_pelapor,
+                        toString(`jabatan fungsional pelapor`) as jabatan_fungsional_pelapor,
+                        toString(`departemen pelapor`) as departemen_pelapor,
+                        toString(pic) as pic,
+                        toString(`sid pic`) as sid_pic,
+                        toString(`jabatan fungsional pic`) as jabatan_fungsional_pic,
+                        toString(`perusahaan pic`) as perusahaan_pic,
+                        toString(`departemen pic`) as departemen_pic,
+                        toString(`url foto`) as url_foto,
+                        toString(`tools pengawasan`) as tools_pengawasan,
+                        toString(`catatan OBS`) as catatan_tindakan,
+                        toString(pelapor) as nama_pelapor,
+                        toString(`perusahaan pelapor`) as nama_perusahaan_pelapor_karyawan,
+                        toString(`jabatan fungsional pelapor`) as jabatan_fungsional_karyawan_pelapor
+                    FROM nitip.tabel_observasi
+                    WHERE toDate(`tanggal pelaporan`) >= toDate('{$weekStartStr}')
+                        AND toDate(`tanggal pelaporan`) < toDate('{$weekEndStr}')
+                    ORDER BY toDateTime(`tanggal pelaporan`) DESC
+                    LIMIT 12500
+                ";
+                
+                $resultsObservasi = $clickhouse->query($sqlObservasi);
+                if (!empty($resultsObservasi) && is_array($resultsObservasi)) {
+                    foreach ($resultsObservasi as $row) {
+                        $sapData[] = $this->formatSapRow($row, 'OBSERVASI');
+                    }
+                }
+                Log::info('Observasi: ' . count($resultsObservasi ?? []) . ' records');
+            } catch (Exception $e) {
+                Log::error('Error querying tabel_observasi: ' . $e->getMessage());
+            }
+            
+            // 3. Query tabel_oak_pic
+            try {
+                $sqlOak = "
+                    SELECT 
+                        toString(TaskNumber) as task_number,
+                        toString(`aktivitas pekerjaan oak`) as aktivitas_pekerjaan,
+                        toString(lokasi) as lokasi,
+                        toString(`detail lokasi`) as detail_lokasi,
+                        toString(`hasil oak`) as keterangan,
+                        toString(`tanggal pelaporan`) as tanggal_pelaporan,
+                        toString(`perusahaan pelapor`) as perusahaan_pelapor,
+                        toString(pelapor) as pelapor,
+                        toString(sid_pelapor) as sid_pelapor,
+                        toString(`jabatan fungsional pelapor`) as jabatan_fungsional_pelapor,
+                        toString(pic) as pic,
+                        toString(`sid pic`) as sid_pic,
+                        toString(`jabatan fungsional pic`) as jabatan_fungsional_pic,
+                        toString(`url foto`) as url_foto,
+                        toString(`tools pengawasan`) as tools_pengawasan,
+                        toString(pelapor) as nama_pelapor,
+                        toString(`perusahaan pelapor`) as nama_perusahaan_pelapor_karyawan,
+                        toString(`jabatan fungsional pelapor`) as jabatan_fungsional_karyawan_pelapor
+                    FROM nitip.tabel_oak_pic
+                    WHERE toDate(`tanggal pelaporan`) >= toDate('{$weekStartStr}')
+                        AND toDate(`tanggal pelaporan`) < toDate('{$weekEndStr}')
+                    ORDER BY toDateTime(`tanggal pelaporan`) DESC
+                    LIMIT 12500
+                ";
+                
+                $resultsOak = $clickhouse->query($sqlOak);
+                if (!empty($resultsOak) && is_array($resultsOak)) {
+                    foreach ($resultsOak as $row) {
+                        $sapData[] = $this->formatSapRow($row, 'OAK');
+                    }
+                }
+                Log::info('OAK: ' . count($resultsOak ?? []) . ' records');
+            } catch (Exception $e) {
+                Log::error('Error querying tabel_oak_pic: ' . $e->getMessage());
+            }
+            
+            // 4. Query tabel_coaching
+            try {
+                $sqlCoaching = "
+                    SELECT 
+                        toString(`Task Number`) as task_number,
+                        toString(`topik_coaching`) as aktivitas_pekerjaan,
+                        toString(lokasi) as lokasi,
+                        toString(`detail lokasi`) as detail_lokasi,
+                        toString(`keterangan lokasi`) as keterangan,
+                        toString(`tanggal pelaporan`) as tanggal_pelaporan,
+                        toString(`perusahaan pelapor`) as perusahaan_pelapor,
+                        toString(pelapor) as pelapor,
+                        toString(`sid pelapor`) as sid_pelapor,
+                        toString(`jabatan fungsional pelapor`) as jabatan_fungsional_pelapor,
+                        toString(`departemen pelapor`) as departemen_pelapor,
+                        toString(pic) as pic,
+                        toString(`sid pic`) as sid_pic,
+                        toString(`jabatan fungsional pic`) as jabatan_fungsional_pic,
+                        toString(`perusahaan pic`) as perusahaan_pic,
+                        toString(`departemen pic`) as departemen_pic,
+                        toString(`url foto`) as url_foto,
+                        toString(`tools pengawasan`) as tools_pengawasan,
+                        toString(`catatan_coach`) as catatan_tindakan,
+                        toString(id_coachee) as nik_pelapor,
+                        toString(pelapor) as nama_pelapor,
+                        toString(divisi_coachee) as divisi_pelapor,
+                        toString(`departemen pelapor`) as departement_pelapor_karyawan,
+                        toString(`perusahaan pelapor`) as nama_perusahaan_pelapor_karyawan,
+                        toString(`jabatan fungsional pelapor`) as jabatan_fungsional_karyawan_pelapor,
+                        toString(`jabatan struktural pelapor`) as jabatan_struktural_pelapor,
+                        ifNull(toString(latitude), '') as latitude,
+                        ifNull(toString(longitude), '') as longitude,
+                        ifNull(toString(site), '') as site
+                    FROM nitip.tabel_coaching
+                    WHERE toDate(`tanggal pelaporan`) >= toDate('{$weekStartStr}')
+                        AND toDate(`tanggal pelaporan`) < toDate('{$weekEndStr}')
+                    ORDER BY toDateTime(`tanggal pelaporan`) DESC
+                    LIMIT 12500
+                ";
+                
+                $resultsCoaching = $clickhouse->query($sqlCoaching);
+                if (!empty($resultsCoaching) && is_array($resultsCoaching)) {
+                    foreach ($resultsCoaching as $row) {
+                        $sapData[] = $this->formatSapRow($row, 'COACHING');
+                    }
+                }
+                Log::info('Coaching: ' . count($resultsCoaching ?? []) . ' records');
+            } catch (Exception $e) {
+                Log::error('Error querying tabel_coaching: ' . $e->getMessage());
+            }
+            
+            // Sort by tanggal_pelaporan descending
+            usort($sapData, function($a, $b) {
+                $dateA = $a['tanggal_pelaporan'] ?? '';
+                $dateB = $b['tanggal_pelaporan'] ?? '';
+                return strcmp($dateB, $dateA);
+            });
+            
+            Log::info('SAP data fetched: ' . count($sapData) . ' items from 4 tables (Inspeksi: ' . count($resultsInspeksi ?? []) . ', Observasi: ' . count($resultsObservasi ?? []) . ', OAK: ' . count($resultsOak ?? []) . ', Coaching: ' . count($resultsCoaching ?? []) . ')');
+            
+            if (count($sapData) === 0) {
+                Log::warning('No SAP data found for week: ' . $weekStartStr . ' to ' . $weekEndStr);
+            }
+            
+            return $sapData;
+
+        } catch (Exception $e) {
+            Log::error('Error fetching SAP data from ClickHouse: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Format SAP row data untuk konsistensi
+     */
+    private function formatSapRow($row, $sourceType)
+    {
+        // Get coordinates if available
+        $latitude = null;
+        $longitude = null;
+        
+        if (!empty($row['latitude']) && is_numeric($row['latitude'])) {
+            $latitude = floatval($row['latitude']);
+        }
+        if (!empty($row['longitude']) && is_numeric($row['longitude'])) {
+            $longitude = floatval($row['longitude']);
+        }
+        
+        // Set jenis_laporan berdasarkan source type jika tidak ada
+        $jenisLaporan = $row['jenis_laporan'] ?? $sourceType;
+        
+        return [
+            'id' => 'SAP-' . ($row['task_number'] ?? uniqid()),
+            'task_number' => $row['task_number'] ?? null,
+            'type' => $jenisLaporan,
+            'jenis_laporan' => $jenisLaporan,
+            'source_type' => $sourceType, // INSPEKSI_HAZARD, OBSERVASI, OAK, COACHING
+            'aktivitas_pekerjaan' => $row['aktivitas_pekerjaan'] ?? null,
+            'lokasi' => $row['lokasi'] ?? null,
+            'detail_lokasi' => $row['detail_lokasi'] ?? null,
+            'keterangan' => $row['keterangan'] ?? null,
+            'tanggal_pelaporan' => $row['tanggal_pelaporan'] ?? null,
+            'perusahaan_pelapor' => $row['perusahaan_pelapor'] ?? null,
+            'pelapor' => $row['pelapor'] ?? null,
+            'nama_pelapor' => $row['nama_pelapor'] ?? $row['pelapor'] ?? null,
+            'pic' => $row['pic'] ?? null,
+            'url_foto' => $row['url_foto'] ?? null,
+            'tools_pengawasan' => $row['tools_pengawasan'] ?? null,
+            'catatan_tindakan' => $row['catatan_tindakan'] ?? null,
+            'description' => $row['keterangan'] ?? $row['aktivitas_pekerjaan'] ?? 'No description',
+            'severity' => 'medium',
+            'status' => 'active',
+            'location' => [
+                'lat' => $latitude,
+                'lng' => $longitude,
+            ],
+            'detected_at' => $row['tanggal_pelaporan'] ?? null,
+            'site' => $row['site'] ?? null,
+            'perusahaan' => $row['perusahaan_pelapor'] ?? null,
+            'sid_pelapor' => $row['sid_pelapor'] ?? null,
+            'jabatan_fungsional_pelapor' => $row['jabatan_fungsional_pelapor'] ?? null,
+            'departemen_pelapor' => $row['departemen_pelapor'] ?? null,
+            'sid_pic' => $row['sid_pic'] ?? null,
+            'jabatan_fungsional_pic' => $row['jabatan_fungsional_pic'] ?? null,
+            'perusahaan_pic' => $row['perusahaan_pic'] ?? null,
+            'departemen_pic' => $row['departemen_pic'] ?? null,
+            'nik_pelapor' => $row['nik_pelapor'] ?? null,
+            'divisi_pelapor' => $row['divisi_pelapor'] ?? null,
+            'jabatan_fungsional_karyawan_pelapor' => $row['jabatan_fungsional_karyawan_pelapor'] ?? null,
+            'jabatan_struktural_pelapor' => $row['jabatan_struktural_pelapor'] ?? null,
+        ];
+    }
+
     private function getGrDetectionsFromPostgres()
     {
         try {
@@ -2614,6 +2974,737 @@ class HazardDetectionController extends Controller
                 'by_site' => [],
                 'by_status' => [],
                 'data' => []
+            ], 500);
+        }
+    }
+
+    /**
+     * Get filtered map data based on filters (company, site, layer visibility)
+     * API endpoint untuk mendapatkan data yang sudah difilter untuk ditampilkan di map
+     */
+    /**
+     * Get user GPS data from ClickHouse (nitip.users and nitip.user_gps_latests)
+     */
+    public function getUserGps(Request $request)
+    {
+        try {
+            $clickhouse = new ClickHouseService();
+            
+            if (!$clickhouse->isConnected()) {
+                Log::warning('ClickHouse is not connected. Returning empty user GPS data.');
+                return response()->json([
+                    'success' => false,
+                    'error' => 'ClickHouse is not connected',
+                    'users' => []
+                ], 500);
+            }
+            
+            // Set timeout lebih lama untuk query yang besar (60 detik)
+            // Note: timeout diatur di ClickHouseService, tapi kita bisa handle error dengan lebih baik
+
+            // Query untuk mengambil data user GPS terbaru dengan join ke tabel users
+            // Menggunakan toString() pada semua field untuk menghindari konflik tipe data
+            // Convert semua numeric fields ke string dulu, baru convert kembali di PHP
+            // Filter latitude/longitude != 0 dilakukan di PHP untuk menghindari konflik tipe
+            // Filter hanya data hari ini (berdasarkan updated_at)
+            $today = Carbon::now()->format('Y-m-d');
+            
+            $sql = "
+                SELECT 
+                    toString(u.id) as user_id,
+                    toString(u.npk) as npk,
+                    toString(u.fullname) as fullname,
+                    toString(u.email) as email,
+                    toString(u.phone) as phone,
+                    toString(u.gender) as gender,
+                    toString(u.division_name) as division_name,
+                    toString(u.department_name) as department_name,
+                    toString(u.functional_position) as functional_position,
+                    toString(u.structural_position) as structural_position,
+                    toString(u.site_assignment) as site_assignment,
+                    toString(u.company_id) as company_id,
+                    toString(u.is_deleted) as is_deleted,
+                    toString(u.is_active) as is_active,
+                    toString(gps.latitude) as latitude,
+                    toString(gps.longitude) as longitude,
+                    toString(gps.course) as course,
+                    toString(gps.battery) as battery,
+                    toString(gps.timezone) as timezone,
+                    toString(gps.updated_at) as gps_updated_at,
+                    toString(gps.created_at) as gps_created_at
+                FROM nitip.user_gps_latests gps
+                INNER JOIN nitip.users u ON toString(gps.user_id) = toString(u.id)
+                WHERE gps.latitude IS NOT NULL 
+                    AND gps.longitude IS NOT NULL
+                    AND toDate(gps.updated_at) = today()
+                ORDER BY gps.updated_at DESC
+                LIMIT 5000
+            ";
+
+            // Query dengan retry mechanism untuk handle timeout
+            // Coba dengan LIMIT yang lebih kecil jika timeout
+            $limit = 5000;
+            $maxRetries = 2;
+            $results = [];
+            
+            for ($retry = 0; $retry <= $maxRetries; $retry++) {
+                try {
+                    $sqlWithLimit = $sql;
+                    if ($retry > 0) {
+                        // Kurangi LIMIT jika retry
+                        $limit = intval($limit / 2);
+                        $sqlWithLimit = preg_replace('/LIMIT \d+/', 'LIMIT ' . $limit, $sql);
+                        Log::info("Retrying query with LIMIT: $limit");
+                    }
+                    
+                    $results = $clickhouse->query($sqlWithLimit);
+                    break; // Success, exit loop
+                } catch (Exception $queryException) {
+                    $errorMsg = $queryException->getMessage();
+                    // Jika timeout dan masih ada retry, coba lagi dengan LIMIT lebih kecil
+                    if (($retry < $maxRetries) && 
+                        (strpos($errorMsg, 'timeout') !== false || 
+                         strpos($errorMsg, 'timed out') !== false ||
+                         strpos($errorMsg, 'Operation timed out') !== false)) {
+                        Log::warning("Query timeout (attempt " . ($retry + 1) . "), retrying with smaller LIMIT");
+                        continue;
+                    } else {
+                        // Jika bukan timeout atau sudah max retries, throw exception
+                        throw $queryException;
+                    }
+                }
+            }
+
+            // Format data untuk frontend dan filter boolean di PHP
+            // Gunakan Map untuk deduplikasi berdasarkan user_id (ambil yang terbaru)
+            $userGpsDataMap = [];
+            foreach ($results as $row) {
+                // Filter boolean di PHP untuk menghindari konflik tipe di ClickHouse
+                $isDeleted = $row['is_deleted'] ?? null;
+                $isActive = $row['is_active'] ?? null;
+                
+                // Skip jika user deleted atau tidak active
+                if ($isDeleted === '1' || $isDeleted === 'true' || $isDeleted === 'True' || $isDeleted === true || $isDeleted === 1) {
+                    continue;
+                }
+                if ($isActive === '0' || $isActive === 'false' || $isActive === 'False' || $isActive === false || $isActive === 0) {
+                    continue;
+                }
+                
+                // Filter latitude/longitude != 0 di PHP
+                $latitude = isset($row['latitude']) && $row['latitude'] !== '' ? (float)$row['latitude'] : null;
+                $longitude = isset($row['longitude']) && $row['longitude'] !== '' ? (float)$row['longitude'] : null;
+                
+                if ($latitude === null || $longitude === null || $latitude == 0 || $longitude == 0) {
+                    continue;
+                }
+                
+                $userId = $row['user_id'] ?? null;
+                if (!$userId) {
+                    continue;
+                }
+                
+                $userData = [
+                    'id' => $userId,
+                    'user_id' => $userId,
+                    'npk' => $row['npk'] ?? null,
+                    'fullname' => $row['fullname'] ?? null,
+                    'email' => $row['email'] ?? null,
+                    'phone' => $row['phone'] ?? null,
+                    'gender' => $row['gender'] ?? null,
+                    'division_name' => $row['division_name'] ?? null,
+                    'department_name' => $row['department_name'] ?? null,
+                    'functional_position' => $row['functional_position'] ?? null,
+                    'structural_position' => $row['structural_position'] ?? null,
+                    'site_assignment' => $row['site_assignment'] ?? null,
+                    'company_id' => $row['company_id'] ?? null,
+                    'latitude' => $latitude,
+                    'longitude' => $longitude,
+                    'location' => [
+                        'lat' => $latitude,
+                        'lng' => $longitude
+                    ],
+                    'course' => isset($row['course']) && $row['course'] !== '' ? (float)$row['course'] : null,
+                    'battery' => isset($row['battery']) && $row['battery'] !== '' ? (int)$row['battery'] : null,
+                    'timezone' => $row['timezone'] ?? null,
+                    'gps_updated_at' => $row['gps_updated_at'] ?? null,
+                    'gps_created_at' => $row['gps_created_at'] ?? null
+                ];
+                
+                // Deduplikasi: jika user_id sudah ada, ambil yang terbaru berdasarkan gps_updated_at
+                if (!isset($userGpsDataMap[$userId])) {
+                    // User belum ada, tambahkan
+                    $userGpsDataMap[$userId] = $userData;
+                } else {
+                    // User sudah ada, bandingkan timestamp dan ambil yang terbaru
+                    $existingTime = $userGpsDataMap[$userId]['gps_updated_at'] ?? $userGpsDataMap[$userId]['gps_created_at'] ?? '';
+                    $currentTime = $userData['gps_updated_at'] ?? $userData['gps_created_at'] ?? '';
+                    
+                    if ($currentTime > $existingTime) {
+                        // Replace dengan data yang lebih baru
+                        $userGpsDataMap[$userId] = $userData;
+                    }
+                }
+            }
+            
+            // Convert map to array
+            $userGpsData = array_values($userGpsDataMap);
+
+            return response()->json([
+                'success' => true,
+                'users' => $userGpsData,
+                'count' => count($userGpsData)
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error fetching user GPS data from ClickHouse: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'users' => []
+            ], 500);
+        }
+    }
+
+    public function getFilteredMapData(Request $request)
+    {
+        try {
+            $company = trim($request->get('company', '__all__'));
+            $site = trim($request->get('site', '__all__'));
+            $weekStart = $request->get('week_start'); // Filter per week untuk SAP
+            $showCctv = $request->get('show_cctv', 'true') === 'true';
+            $showHazard = $request->get('show_hazard', 'true') === 'true';
+            $showSap = $request->get('show_sap', $showHazard ? 'true' : 'false') === 'true'; // Alias untuk SAP
+            $showGr = $request->get('show_gr', 'true') === 'true';
+            $showInsiden = $request->get('show_insiden', 'true') === 'true';
+            $showUnit = $request->get('show_unit', 'true') === 'true';
+
+            $result = [
+                'cctv' => [],
+                'sap' => [],
+                'hazard' => [], // Alias untuk kompatibilitas
+                'gr' => [],
+                'insiden' => [],
+                'unit' => []
+            ];
+
+            // Get CCTV data
+            if ($showCctv) {
+                $cctvQuery = CctvData::whereNotNull('longitude')
+                    ->whereNotNull('latitude');
+
+                if ($company !== '__all__') {
+                    if (strcasecmp($company, 'Tidak Diketahui') === 0) {
+                        $cctvQuery->where(function ($q) {
+                            $q->whereNull('perusahaan')
+                              ->orWhere('perusahaan', '');
+                        });
+                    } else {
+                        $cctvQuery->whereRaw('TRIM(perusahaan) = ?', [$company]);
+                    }
+                }
+
+                if ($site !== '__all__') {
+                    if (strcasecmp($site, 'Tidak Diketahui') === 0) {
+                        $cctvQuery->where(function ($q) {
+                            $q->whereNull('site')
+                              ->orWhere('site', '');
+                        });
+                    } else {
+                        $cctvQuery->whereRaw('TRIM(site) = ?', [$site]);
+                    }
+                }
+
+                $cctvData = $cctvQuery->get();
+                $result['cctv'] = $cctvData->map(function ($cctv) {
+                    return [
+                        'id' => $cctv->id,
+                        'no_cctv' => $cctv->no_cctv ?? null,
+                        'nomor_cctv' => $cctv->no_cctv ?? null,
+                        'name' => $cctv->nama_cctv ?? 'CCTV ' . $cctv->id,
+                        'cctv_name' => $cctv->nama_cctv ?? null,
+                        'nama_cctv' => $cctv->nama_cctv ?? null,
+                        'location' => [(float) $cctv->longitude, (float) $cctv->latitude],
+                        'status' => $cctv->kondisi ?? $cctv->status ?? 'Unknown',
+                        'kondisi' => $cctv->kondisi ?? null,
+                        'site' => $cctv->site ?? null,
+                        'perusahaan' => $cctv->perusahaan ?? null,
+                        'perusahaan_cctv' => $cctv->perusahaan ?? null,
+                        'link_akses' => $cctv->link_akses ?? null,
+                        'externalUrl' => $cctv->link_akses ?? null,
+                        'rtsp_url' => null,
+                        'user_name' => $cctv->user_name ?? null,
+                        'password' => $cctv->password ?? null,
+                        'ip' => null,
+                        'port' => null,
+                        'channel' => null,
+                        'brand' => $this->extractBrandFromTipe($cctv->tipe_cctv ?? ''),
+                        'tipe_cctv' => $cctv->tipe_cctv ?? null,
+                        'fungsi_cctv' => $cctv->fungsi_cctv ?? null,
+                        'lokasi_pemasangan' => $cctv->lokasi_pemasangan ?? null,
+                        'control_room' => $cctv->control_room ?? null,
+                        'coverage_lokasi' => $cctv->coverage_lokasi ?? null,
+                    ];
+                })->toArray();
+            }
+
+            // Get SAP data (mengganti Hazard)
+            if ($showHazard || $showSap) {
+                $sapData = $this->getSapDataFromClickHouse($weekStart);
+                
+                // Apply filters
+                if ($company !== '__all__' || $site !== '__all__') {
+                    $sapData = array_filter($sapData, function($sap) use ($company, $site) {
+                        if ($company !== '__all__') {
+                            $sapCompany = $sap['perusahaan_pelapor'] ?? $sap['perusahaan'] ?? null;
+                            if (strcasecmp($company, 'Tidak Diketahui') === 0) {
+                                if (!empty($sapCompany)) {
+                                    return false;
+                                }
+                            } else {
+                                if (trim($sapCompany) !== $company) {
+                                    return false;
+                                }
+                            }
+                        }
+                        
+                        // Site filter bisa diekstrak dari lokasi jika perlu
+                        // Untuk sementara skip site filter karena SAP mungkin tidak punya field site langsung
+                        
+                        return true;
+                    });
+                }
+                
+                $result['sap'] = array_values($sapData);
+                $result['hazard'] = array_values($sapData); // Alias untuk kompatibilitas
+            }
+
+            // Get GR data
+            if ($showGr) {
+                $grDetections = $this->getGrDetectionsFromPostgres();
+                
+                // Apply filters (GR mungkin tidak punya company/site, jadi skip filter untuk sekarang)
+                $result['gr'] = $grDetections;
+            }
+
+            // Get Insiden data
+            if ($showInsiden) {
+                $insidenQuery = InsidenTabel::orderByDesc('created_at');
+
+                if ($company !== '__all__') {
+                    if (strcasecmp($company, 'Tidak Diketahui') === 0) {
+                        $insidenQuery->where(function ($q) {
+                            $q->whereNull('perusahaan')
+                              ->orWhere('perusahaan', '');
+                        });
+                    } else {
+                        $insidenQuery->whereRaw('TRIM(perusahaan) = ?', [$company]);
+                    }
+                }
+
+                if ($site !== '__all__') {
+                    if (strcasecmp($site, 'Tidak Diketahui') === 0) {
+                        $insidenQuery->where(function ($q) {
+                            $q->whereNull('site')
+                              ->orWhere('site', '');
+                        });
+                    } else {
+                        $insidenQuery->whereRaw('TRIM(site) = ?', [$site]);
+                    }
+                }
+
+                $insidenRecords = $insidenQuery->get();
+                $insidenGroups = $insidenRecords
+                    ->groupBy('no_kecelakaan')
+                    ->map(function ($items, $noKecelakaan) {
+                        $items = $items->values();
+                        $first = $items->first();
+
+                        $latItem = $items->first(function ($item) {
+                            return ! is_null($item->latitude);
+                        });
+                        $lonItem = $items->first(function ($item) {
+                            return ! is_null($item->longitude);
+                        });
+
+                        return [
+                            'no_kecelakaan' => $noKecelakaan,
+                            'site' => $first->site,
+                            'lokasi' => $first->lokasi ?? $first->lokasi_spesifik ?? null,
+                            'status_lpi' => $first->status_lpi,
+                            'layer' => $first->layer,
+                            'jenis_item_ipls' => $first->jenis_item_ipls,
+                            'kategori' => $first->kategori,
+                            'tanggal' => optional($first->tanggal)->format('Y-m-d'),
+                            'latitude' => $latItem->latitude ?? null,
+                            'longitude' => $lonItem->longitude ?? null,
+                            'items' => $items->map(function ($item) {
+                                return [
+                                    'tasklist' => $item->tasklist ?? null,
+                                    'layer' => $item->layer,
+                                    'jenis_item_ipls' => $item->jenis_item_ipls,
+                                    'detail_layer' => $item->detail_layer,
+                                    'klasifikasi_layer' => $item->klasifikasi_layer,
+                                    'keterangan_layer' => $item->keterangan_layer,
+                                    'site' => $item->site,
+                                    'lokasi' => $item->lokasi,
+                                    'lokasi_spesifik' => $item->lokasi_spesifik,
+                                    'tanggal' => optional($item->tanggal)->format('Y-m-d'),
+                                    'status_lpi' => $item->status_lpi,
+                                    'catatan' => $item->catatan,
+                                    'perusahaan' => $item->perusahaan,
+                                    'latitude' => $item->latitude,
+                                    'longitude' => $item->longitude,
+                                ];
+                            })->toArray(),
+                        ];
+                    })
+                    ->filter(function ($group) {
+                        return ! is_null($group['latitude']) && ! is_null($group['longitude']);
+                    })
+                    ->values()
+                    ->toArray();
+
+                $result['insiden'] = $insidenGroups;
+            }
+
+            // Get Unit data
+            if ($showUnit) {
+                try {
+                    $besigmaService = new BesigmaDbService();
+                    $unitVehicles = $besigmaService->getCombinedUnitData();
+                    
+                    // Apply filters if needed (unit mungkin tidak punya company/site yang jelas)
+                    $result['unit'] = $unitVehicles;
+                } catch (Exception $e) {
+                    Log::error('Error fetching unit vehicles: ' . $e->getMessage());
+                    $result['unit'] = [];
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $result,
+                'filters' => [
+                    'company' => $company,
+                    'site' => $site,
+                    'week_start' => $weekStart,
+                    'show_cctv' => $showCctv,
+                    'show_hazard' => $showHazard,
+                    'show_sap' => $showSap,
+                    'show_gr' => $showGr,
+                    'show_insiden' => $showInsiden,
+                    'show_unit' => $showUnit,
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error fetching filtered map data: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching filtered map data: ' . $e->getMessage(),
+                'data' => [
+                    'cctv' => [],
+                    'sap' => [],
+                    'hazard' => [],
+                    'gr' => [],
+                    'insiden' => [],
+                    'unit' => []
+                ]
+            ], 500);
+        }
+    }
+
+    /**
+     * Get evaluation summary for area kerja or area CCTV
+     */
+    public function getEvaluationSummary(Request $request)
+    {
+        try {
+            $type = $request->input('type'); // 'area_kerja' or 'area_cctv'
+            $idLokasi = $request->input('id_lokasi');
+            $lokasiName = $request->input('lokasi_name');
+            $nomorCctv = $request->input('nomor_cctv');
+            $cctvName = $request->input('cctv_name');
+            $polygonCoords = $request->input('polygon_coords'); // Array of [lon, lat] coordinates
+
+            $summary = [
+                'cctv_list' => [],
+                'inspeksi_count' => 0,
+                'hazard_count' => 0,
+                'coaching_count' => 0,
+                'observasi_count' => 0,
+                'observasi_area_kritis_count' => 0,
+                'area_name' => $lokasiName ?? $cctvName ?? 'N/A',
+                'area_type' => $type ?? 'unknown'
+            ];
+
+            $clickhouse = new ClickHouseService();
+            $besigmaDb = new BesigmaDbService();
+
+            // Get CCTV list that covers this area
+            try {
+                $cctvQuery = CctvData::query();
+                
+                if ($lokasiName) {
+                    $cctvQuery->where(function($q) use ($lokasiName) {
+                        $q->where('coverage_lokasi', 'like', '%' . $lokasiName . '%')
+                          ->orWhere('coverage_detail_lokasi', 'like', '%' . $lokasiName . '%')
+                          ->orWhere('lokasi_pemasangan', 'like', '%' . $lokasiName . '%');
+                    });
+                } elseif ($cctvName || $nomorCctv) {
+                    // If clicking on area CCTV, find other CCTV in the same location
+                    $cctvData = CctvData::where(function($q) use ($cctvName, $nomorCctv) {
+                        if ($nomorCctv) {
+                            $q->where('no_cctv', 'like', '%' . $nomorCctv . '%');
+                        }
+                        if ($cctvName) {
+                            $q->orWhere('nama_cctv', 'like', '%' . $cctvName . '%');
+                        }
+                    })->first();
+                    
+                    if ($cctvData) {
+                        $lokasiCctv = $cctvData->coverage_detail_lokasi 
+                                    ?? $cctvData->lokasi_pemasangan 
+                                    ?? $cctvData->coverage_lokasi 
+                                    ?? null;
+                        
+                        if ($lokasiCctv) {
+                            $cctvQuery->where(function($q) use ($lokasiCctv) {
+                                $q->where('coverage_lokasi', 'like', '%' . $lokasiCctv . '%')
+                                  ->orWhere('coverage_detail_lokasi', 'like', '%' . $lokasiCctv . '%')
+                                  ->orWhere('lokasi_pemasangan', 'like', '%' . $lokasiCctv . '%');
+                            });
+                        }
+                    }
+                }
+                
+                $cctvList = $cctvQuery->select('id', 'no_cctv', 'nama_cctv', 'coverage_lokasi', 'coverage_detail_lokasi', 'lokasi_pemasangan', 'site', 'perusahaan')
+                    ->orderBy('no_cctv')
+                    ->get();
+                
+                $summary['cctv_list'] = $cctvList->map(function($cctv) {
+                    return [
+                        'id' => $cctv->id,
+                        'no_cctv' => $cctv->no_cctv,
+                        'nama_cctv' => $cctv->nama_cctv,
+                        'lokasi' => $cctv->coverage_detail_lokasi ?? $cctv->lokasi_pemasangan ?? $cctv->coverage_lokasi ?? 'N/A',
+                        'site' => $cctv->site,
+                        'perusahaan' => $cctv->perusahaan
+                    ];
+                })->toArray();
+            } catch (Exception $e) {
+                Log::warning('Error fetching CCTV list: ' . $e->getMessage());
+            }
+
+            // Get data for TODAY (hari ini)
+            $today = Carbon::now()->format('Y-m-d');
+            $todayStart = Carbon::now()->startOfDay()->format('Y-m-d H:i:s');
+            $todayEnd = Carbon::now()->endOfDay()->format('Y-m-d H:i:s');
+
+            // Get SAP/Hazard data from ClickHouse
+            if ($clickhouse->isConnected()) {
+                try {
+                    // Location filter for matching
+                    $locationFilter = '';
+                    if ($lokasiName) {
+                        $locationFilter = "AND (toString(lokasi) LIKE '%" . addslashes($lokasiName) . "%' OR toString(`detail lokasi`) LIKE '%" . addslashes($lokasiName) . "%')";
+                    } elseif ($cctvName || $nomorCctv) {
+                        $searchTerm = $cctvName ?? $nomorCctv ?? '';
+                        $locationFilter = "AND (toString(lokasi) LIKE '%" . addslashes($searchTerm) . "%' OR toString(`detail lokasi`) LIKE '%" . addslashes($searchTerm) . "%')";
+                    }
+
+                    // Query tabel_inspeksi_hazard (hari ini)
+                    $sqlInspeksi = "
+                        SELECT COUNT(*) as count
+                        FROM nitip.tabel_inspeksi_hazard
+                        WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                            {$locationFilter}
+                        LIMIT 1
+                    ";
+                    
+                    $resultsInspeksi = $clickhouse->query($sqlInspeksi);
+                    if (!empty($resultsInspeksi) && isset($resultsInspeksi[0]['count'])) {
+                        $summary['inspeksi_count'] += (int)$resultsInspeksi[0]['count'];
+                    }
+
+                    // Query tabel_observasi (hari ini)
+                    $sqlObservasi = "
+                        SELECT COUNT(*) as count
+                        FROM nitip.tabel_observasi
+                        WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                            {$locationFilter}
+                        LIMIT 1
+                    ";
+                    
+                    $resultsObservasi = $clickhouse->query($sqlObservasi);
+                    if (!empty($resultsObservasi) && isset($resultsObservasi[0]['count'])) {
+                        $summary['observasi_count'] = (int)$resultsObservasi[0]['count'];
+                    }
+
+                    // Query tabel_observasi area kritis (hari ini)
+                    // Find CCTV with kategori_area_tercapture = "Area Kritis" in this area, then match observasi by location
+                    $cctvKritisLokasi = [];
+                    try {
+                        $cctvKritisQuery = CctvData::query();
+                        
+                        if ($lokasiName) {
+                            $cctvKritisQuery->where(function($q) use ($lokasiName) {
+                                $q->where('coverage_lokasi', 'like', '%' . $lokasiName . '%')
+                                  ->orWhere('coverage_detail_lokasi', 'like', '%' . $lokasiName . '%')
+                                  ->orWhere('lokasi_pemasangan', 'like', '%' . $lokasiName . '%');
+                            });
+                        } elseif ($cctvName || $nomorCctv) {
+                            $cctvData = CctvData::where(function($q) use ($cctvName, $nomorCctv) {
+                                if ($nomorCctv) {
+                                    $q->where('no_cctv', 'like', '%' . $nomorCctv . '%');
+                                }
+                                if ($cctvName) {
+                                    $q->orWhere('nama_cctv', 'like', '%' . $cctvName . '%');
+                                }
+                            })->first();
+                            
+                            if ($cctvData) {
+                                $lokasiCctv = $cctvData->coverage_detail_lokasi 
+                                            ?? $cctvData->lokasi_pemasangan 
+                                            ?? $cctvData->coverage_lokasi 
+                                            ?? null;
+                                
+                                if ($lokasiCctv) {
+                                    $cctvKritisQuery->where(function($q) use ($lokasiCctv) {
+                                        $q->where('coverage_lokasi', 'like', '%' . $lokasiCctv . '%')
+                                          ->orWhere('coverage_detail_lokasi', 'like', '%' . $lokasiCctv . '%')
+                                          ->orWhere('lokasi_pemasangan', 'like', '%' . $lokasiCctv . '%');
+                                    });
+                                }
+                            }
+                        }
+                        
+                        $cctvKritisList = $cctvKritisQuery->where('kategori_area_tercapture', 'Area Kritis')
+                            ->select('coverage_lokasi', 'coverage_detail_lokasi', 'lokasi_pemasangan')
+                            ->get();
+                        
+                        foreach ($cctvKritisList as $cctv) {
+                            $lokasi = $cctv->coverage_detail_lokasi ?? $cctv->lokasi_pemasangan ?? $cctv->coverage_lokasi ?? null;
+                            if ($lokasi) {
+                                $cctvKritisLokasi[] = $lokasi;
+                            }
+                        }
+                    } catch (Exception $e) {
+                        Log::warning('Error fetching CCTV kritis locations: ' . $e->getMessage());
+                    }
+                    
+                    // Query observasi area kritis based on CCTV locations
+                    if (!empty($cctvKritisLokasi)) {
+                        $lokasiKritisFilter = '';
+                        foreach ($cctvKritisLokasi as $lokasi) {
+                            if ($lokasiKritisFilter) {
+                                $lokasiKritisFilter .= ' OR ';
+                            }
+                            $lokasiKritisFilter .= "(toString(lokasi) LIKE '%" . addslashes($lokasi) . "%' OR toString(`detail lokasi`) LIKE '%" . addslashes($lokasi) . "%')";
+                        }
+                        
+                        $sqlObservasiKritis = "
+                            SELECT COUNT(*) as count
+                            FROM nitip.tabel_observasi
+                            WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                                {$locationFilter}
+                                AND ({$lokasiKritisFilter})
+                            LIMIT 1
+                        ";
+                        
+                        try {
+                            $resultsObservasiKritis = $clickhouse->query($sqlObservasiKritis);
+                            if (!empty($resultsObservasiKritis) && isset($resultsObservasiKritis[0]['count'])) {
+                                $summary['observasi_area_kritis_count'] = (int)$resultsObservasiKritis[0]['count'];
+                            }
+                        } catch (Exception $e) {
+                            Log::warning('Error querying observasi area kritis: ' . $e->getMessage());
+                        }
+                    } else {
+                        // Fallback: search for 'kritis' or 'critical' in location
+                        $sqlObservasiKritis = "
+                            SELECT COUNT(*) as count
+                            FROM nitip.tabel_observasi
+                            WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                                {$locationFilter}
+                                AND (
+                                    toString(lokasi) LIKE '%kritis%' 
+                                    OR toString(lokasi) LIKE '%critical%'
+                                    OR toString(`detail lokasi`) LIKE '%kritis%'
+                                    OR toString(`detail lokasi`) LIKE '%critical%'
+                                )
+                            LIMIT 1
+                        ";
+                        
+                        try {
+                            $resultsObservasiKritis = $clickhouse->query($sqlObservasiKritis);
+                            if (!empty($resultsObservasiKritis) && isset($resultsObservasiKritis[0]['count'])) {
+                                $summary['observasi_area_kritis_count'] = (int)$resultsObservasiKritis[0]['count'];
+                            }
+                        } catch (Exception $e) {
+                            Log::warning('Error querying observasi area kritis fallback: ' . $e->getMessage());
+                        }
+                    }
+
+                    // Query tabel_coaching (hari ini)
+                    $sqlCoaching = "
+                        SELECT COUNT(*) as count
+                        FROM nitip.tabel_coaching
+                        WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                            {$locationFilter}
+                        LIMIT 1
+                    ";
+                    
+                    $resultsCoaching = $clickhouse->query($sqlCoaching);
+                    if (!empty($resultsCoaching) && isset($resultsCoaching[0]['count'])) {
+                        $summary['coaching_count'] = (int)$resultsCoaching[0]['count'];
+                    }
+                } catch (Exception $e) {
+                    Log::error('Error querying ClickHouse for evaluation: ' . $e->getMessage());
+                }
+            }
+
+            // Get Hazard data (from car_register in PostgreSQL) - hari ini
+            if ($lokasiName || $cctvName) {
+                try {
+                    $searchTerm = $lokasiName ?? $cctvName ?? '';
+                    $hazardCount = DB::connection('pgsql_ssh')
+                        ->table('bcbeats.car_register')
+                        ->whereBetween('create_date', [$todayStart, $todayEnd])
+                        ->where(function($query) use ($searchTerm) {
+                            $query->where('lokasi_detail', 'like', '%' . $searchTerm . '%')
+                                  ->orWhere('deskripsi', 'like', '%' . $searchTerm . '%');
+                        })
+                        ->where('id_sumberdata', '<>', 200)
+                        ->count();
+                    
+                    $summary['hazard_count'] = $hazardCount;
+                } catch (Exception $e) {
+                    Log::warning('Error fetching hazard count: ' . $e->getMessage());
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $summary
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error getting evaluation summary: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error getting evaluation summary: ' . $e->getMessage(),
+                'data' => [
+                    'cctv_list' => [],
+                    'inspeksi_count' => 0,
+                    'hazard_count' => 0,
+                    'coaching_count' => 0,
+                    'observasi_count' => 0,
+                    'observasi_area_kritis_count' => 0,
+                    'area_name' => 'N/A',
+                    'area_type' => 'unknown'
+                ]
             ], 500);
         }
     }

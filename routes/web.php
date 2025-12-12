@@ -16,9 +16,14 @@ use App\Http\Controllers\HazardMotion\SpatialAnalysisController;
 use App\Http\Controllers\HazardMotion\ReportingController;
 use App\Http\Controllers\HazardMotion\CctvManagementController;
 use App\Http\Controllers\HazardMotion\LiveStreamingController;
+use App\Http\Controllers\HazardMotion\CctvEvaluationController;
 use App\Http\Controllers\CarRegisterController;
 use App\Http\Controllers\GrTableController;
 use App\Http\Controllers\InsidenTabelController;
+use App\Http\Controllers\HazardValidationController;
+use App\Http\Controllers\BaselinePjaController;
+use App\Http\Controllers\ChatController;
+use App\Http\Controllers\HazardMotion\MapBaseController;
 
 /*
 |--------------------------------------------------------------------------
@@ -39,13 +44,15 @@ Auth::routes();
 Route::middleware(['auth'])->group(function () {
     // Define a GET route for the root URL ('/')
     Route::get('/', [HomeController::class, 'index'])->name('index');
+    Route::get('/clickhouse-status', [HomeController::class, 'checkClickHouseStatus'])->name('clickhouse.status');
     Route::get('/cctv-company-data', [HomeController::class, 'companyCctvData'])->name('cctv.company-data');
     Route::get('/company-cctv-data', [HomeController::class, 'getCompanyCctvData'])->name('company-cctv-data');
     Route::get('/company-stats', [HomeController::class, 'getCompanyStats'])->name('company-stats');
 
-    // Define a GET route for chat
-    Route::get('chat', function () {
-        return view('chat');
+    // Chatbot Routes
+    Route::prefix('chatbot')->name('chatbot.')->group(function () {
+        Route::get('/', [ChatController::class, 'index'])->name('index');
+        Route::post('/send', [ChatController::class, 'sendMessage'])->name('send');
     });
 
     // Database Viewer Routes
@@ -116,6 +123,7 @@ Route::middleware(['auth'])->group(function () {
     // Hazard Detection Routes - HARUS sebelum catch-all route
     Route::prefix('hazard-detection')->name('hazard-detection.')->group(function () {
         Route::get('/', [HazardDetectionController::class, 'index'])->name('index');
+        Route::get('/fullscreen-map', [HazardDetectionController::class, 'fullscreenMap'])->name('fullscreen-map');
         Route::get('/api/detections', [HazardDetectionController::class, 'getDetections'])->name('api.detections');
         Route::get('/api/cctv', [HazardDetectionController::class, 'getCctvByName'])->name('api.cctv');
         Route::get('/api/incidents-by-cctv', [HazardDetectionController::class, 'getIncidentsByCctv'])->name('api.incidents-by-cctv');
@@ -127,6 +135,21 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/api/cctv-chart-stats', [HazardDetectionController::class, 'getCctvChartStats'])->name('api.cctv-chart-stats');
         Route::get('/api/sites-list', [HazardDetectionController::class, 'getSitesList'])->name('api.sites-list');
         Route::get('/api/check-new-apd-detections', [HazardDetectionController::class, 'checkNewApdDetections'])->name('api.check-new-apd-detections');
+        Route::get('/api/tasklist-detail', [HazardDetectionController::class, 'getTasklistDetail'])->name('api.tasklist-detail');
+        Route::get('/api/total-cctv-count', [HazardDetectionController::class, 'getTotalCctvCount'])->name('api.total-cctv-count');
+        Route::get('/api/tbc-overview', [HazardDetectionController::class, 'getTbcOverview'])->name('api.tbc-overview');
+        Route::get('/api/unit-vehicles', [HazardDetectionController::class, 'getUnitVehicles'])->name('api.unit-vehicles');
+        Route::get('/api/unit-gps-logs', [HazardDetectionController::class, 'getUnitGpsLogs'])->name('api.unit-gps-logs');
+    });
+
+
+    // Maps Full
+    Route::prefix('maps')->name('maps.')->group(function(){
+         Route::get('/', [MapBaseController::class, 'index'])->name('map');
+         Route::get('/api/filtered-data', [MapBaseController::class, 'getFilteredMapData'])->name('api.filtered-data');
+         Route::get('/api/user-gps', [MapBaseController::class, 'getUserGps'])->name('api.user-gps');
+         Route::get('/api/unit-vehicles', [MapBaseController::class, 'getUnitVehicles'])->name('api.unit-vehicles');
+         Route::post('/api/evaluation-summary', [MapBaseController::class, 'getEvaluationSummary'])->name('api.evaluation-summary');
     });
 
     // Real-time Alerts Routes - HARUS sebelum catch-all route
@@ -168,6 +191,11 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/download/{reportId}', [ReportingController::class, 'download'])->name('download');
     });
 
+    // CCTV Evaluation Routes - HARUS sebelum catch-all route
+    Route::prefix('cctv-evaluation')->name('cctv-evaluation.')->group(function () {
+        Route::get('/', [CctvEvaluationController::class, 'index'])->name('index');
+    });
+
     // CCTV Management Routes - HARUS sebelum catch-all route
     Route::prefix('cctv-management')->name('cctv-management.')->group(function () {
         Route::get('/status', [CctvManagementController::class, 'status'])->name('status');
@@ -203,6 +231,26 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/{insidenTabel}', [InsidenTabelController::class, 'update'])->name('update');
         Route::delete('/{insidenTabel}', [InsidenTabelController::class, 'destroy'])->name('destroy');
         Route::post('/import', [InsidenTabelController::class, 'import'])->name('import');
+    });
+
+    // Hazard Validation Routes - HARUS sebelum catch-all route
+    Route::prefix('hazard-validation')->name('hazard-validation.')->group(function () {
+        Route::get('/', [HazardValidationController::class, 'index'])->name('index');
+        Route::post('/', [HazardValidationController::class, 'store'])->name('store');
+        Route::get('/{hazardValidation}/edit', [HazardValidationController::class, 'edit'])->name('edit');
+        Route::put('/{hazardValidation}', [HazardValidationController::class, 'update'])->name('update');
+        Route::delete('/{hazardValidation}', [HazardValidationController::class, 'destroy'])->name('destroy');
+        Route::post('/import', [HazardValidationController::class, 'import'])->name('import');
+    });
+
+    // Baseline PJA Routes - HARUS sebelum catch-all route
+    Route::prefix('baseline-pja')->name('baseline-pja.')->group(function () {
+        Route::get('/', [BaselinePjaController::class, 'index'])->name('index');
+        Route::post('/', [BaselinePjaController::class, 'store'])->name('store');
+        Route::get('/{baselinePja}/edit', [BaselinePjaController::class, 'edit'])->name('edit');
+        Route::put('/{baselinePja}', [BaselinePjaController::class, 'update'])->name('update');
+        Route::delete('/{baselinePja}', [BaselinePjaController::class, 'destroy'])->name('destroy');
+        Route::post('/import', [BaselinePjaController::class, 'import'])->name('import');
     });
 
     // Define a GET route with dynamic placeholders for route parameters

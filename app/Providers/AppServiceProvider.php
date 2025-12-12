@@ -12,7 +12,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Register ChatbotRuleService as singleton
+        $this->app->singleton(\App\Services\ChatbotRuleService::class);
     }
 
     /**

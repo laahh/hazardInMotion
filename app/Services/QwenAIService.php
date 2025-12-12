@@ -1034,5 +1034,498 @@ Do not add any other text, markdown, or explanation.";
         
         return $result;
     }
+
+    /**
+     * Chat umum dengan AI (untuk chatbot)
+     */
+    public function chat($message, $conversationHistory = [])
+    {
+        try {
+            // Daftar model Gemini yang akan dicoba
+            $models = [
+                'gemini-2.0-flash',
+                'gemini-1.5-pro',
+                'gemini-1.5-flash',
+                'gemini-pro',
+            ];
+
+            $response = null;
+
+            // Build conversation history
+            $contents = [];
+            foreach ($conversationHistory as $msg) {
+                $contents[] = [
+                    'parts' => [
+                        [
+                            'text' => $msg['content']
+                        ]
+                    ],
+                    'role' => $msg['role'] === 'user' ? 'user' : 'model'
+                ];
+            }
+
+            // Add current message
+            $contents[] = [
+                'parts' => [
+                    [
+                        'text' => $message
+                    ]
+                ],
+                'role' => 'user'
+            ];
+
+            // Coba setiap model sampai ada yang berhasil
+            foreach ($models as $model) {
+                try {
+                    $modelUrl = $this->apiUrl . '/' . $model . ':generateContent';
+                    
+                    $response = Http::withHeaders([
+                        'Content-Type' => 'application/json',
+                        'X-goog-api-key' => $this->apiKey,
+                    ])->timeout(60)->post($modelUrl, [
+                        'contents' => $contents,
+                        'generationConfig' => [
+                            'temperature' => 0.7,
+                            'maxOutputTokens' => 2048,
+                        ]
+                    ]);
+
+                    // Jika berhasil, keluar dari loop
+                    if ($response->successful()) {
+                        Log::info('Gemini API chat success with model', ['model' => $model]);
+                        break;
+                    }
+
+                    $errorData = $response->json();
+                    
+                    // Jika error bukan "model tidak tersedia", simpan error dan lanjut
+                    if (isset($errorData['error']['status']) && 
+                        $errorData['error']['status'] !== 'NOT_FOUND' &&
+                        $errorData['error']['status'] !== 'INVALID_ARGUMENT') {
+                        break; // Error lain, stop trying
+                    }
+
+                } catch (Exception $e) {
+                    Log::warning('Gemini API chat request exception', [
+                        'model' => $model,
+                        'error' => $e->getMessage()
+                    ]);
+                    continue;
+                }
+            }
+
+            // Jika Gemini gagal, coba fallback ke Mistral
+            if (!$response || !$response->successful()) {
+                return $this->chatWithMistral($message, $conversationHistory);
+            }
+
+            $responseData = $response->json();
+
+            // Extract text dari response Gemini
+            $text = '';
+            if (isset($responseData['candidates'][0]['content']['parts'][0]['text'])) {
+                $text = $responseData['candidates'][0]['content']['parts'][0]['text'];
+            } else {
+                throw new Exception('Invalid Gemini response structure');
+            }
+
+            return [
+                'success' => true,
+                'message' => $text,
+                'model' => 'gemini'
+            ];
+
+        } catch (Exception $e) {
+            Log::error('QwenAIService Chat Error', [
+                'message' => $e->getMessage(),
+                'user_message' => substr($message, 0, 100)
+            ]);
+            
+            // Try fallback
+            try {
+                return $this->chatWithMistral($message, $conversationHistory);
+            } catch (Exception $fallbackError) {
+                return [
+                    'success' => false,
+                    'message' => 'Maaf, terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi.',
+                    'error' => $e->getMessage()
+                ];
+            }
+        }
+    }
+
+    /**
+     * Chat dengan Mistral.ai sebagai fallback
+     */
+    private function chatWithMistral($message, $conversationHistory = [])
+    {
+        try {
+            Log::info('Using Mistral.ai for chat');
+            
+            $models = [
+                'mistral-large-latest',
+                'mistral-medium-latest',
+                'mistral-small-latest',
+            ];
+
+            $response = null;
+
+            // Build messages array
+            $messages = [];
+            foreach ($conversationHistory as $msg) {
+                $messages[] = [
+                    'role' => $msg['role'],
+                    'content' => $msg['content']
+                ];
+            }
+            $messages[] = [
+                'role' => 'user',
+                'content' => $message
+            ];
+
+            // Coba setiap model
+            foreach ($models as $model) {
+                try {
+                    $response = Http::withHeaders([
+                        'Content-Type' => 'application/json',
+                        'Authorization' => 'Bearer ' . $this->mistralApiKey,
+                    ])->timeout(60)->post($this->mistralApiUrl, [
+                        'model' => $model,
+                        'messages' => $messages,
+                        'temperature' => 0.7,
+                        'max_tokens' => 2048,
+                    ]);
+
+                    if ($response->successful()) {
+                        Log::info('Mistral.ai API chat success with model', ['model' => $model]);
+                        break;
+                    }
+                } catch (Exception $e) {
+                    continue;
+                }
+            }
+
+            if (!$response || !$response->successful()) {
+                throw new Exception('Mistral API request failed');
+            }
+
+            $responseData = $response->json();
+            $text = $responseData['choices'][0]['message']['content'] ?? '';
+
+            return [
+                'success' => true,
+                'message' => $text,
+                'model' => 'mistral'
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Mistral.ai Chat Error', ['error' => $e->getMessage()]);
+            throw $e;
+        }
+    }
+
+    /**
+     * AI-based rule selection menggunakan Gemini
+     * Menerjemahkan prompt user menjadi query berdasarkan rule base
+     */
+    public function selectRuleAndGenerateQuery($userPrompt, $availableRules, $tableSchema)
+    {
+        try {
+            // Format rules untuk prompt
+            $rulesDescription = $this->formatRulesForPrompt($availableRules);
+            
+            $prompt = "Anda adalah asisten AI yang ahli dalam memahami maksud user dan memilih rule yang tepat untuk generate SQL query.
+
+SCHEMA TABEL:
+{$tableSchema}
+
+RULES YANG TERSEDIA:
+{$rulesDescription}
+
+PROMPT USER: {$userPrompt}
+
+Tugas Anda:
+1. Analisis prompt user dengan teliti
+2. Pilih rule yang PALING COCOK dari daftar rules di atas
+3. Jika tidak ada rule yang cocok, return null untuk rule_id
+4. Extract parameter yang diperlukan dari prompt user
+5. Generate SQL query berdasarkan rule yang dipilih
+6. Berikan rekomendasi awal berdasarkan konteks query
+
+Kembalikan HANYA JSON dengan format berikut (tanpa markdown, tanpa penjelasan):
+{
+  \"rule_id\": \"string atau null\",
+  \"confidence\": 0.0-1.0,
+  \"extracted_params\": {
+    \"key\": \"value\"
+  },
+  \"sql_query\": \"string SQL query atau null\",
+  \"initial_recommendation\": \"string rekomendasi singkat berdasarkan konteks\",
+  \"reasoning\": \"string penjelasan singkat mengapa rule ini dipilih\"
+}
+
+CONTOH:
+- User: 'tampilkan data area non kritis ada berapa'
+- Output: {
+    \"rule_id\": \"stat_total_area_non_kritis\",
+    \"confidence\": 0.95,
+    \"extracted_params\": {},
+    \"sql_query\": \"SELECT COUNT(*) as total FROM cctv_data_bmo2 WHERE kategori_area_tercapture = 'Area Non Kritis'\",
+    \"initial_recommendation\": \"Area non kritis perlu monitoring rutin untuk memastikan tetap aman\",
+    \"reasoning\": \"User ingin mengetahui jumlah area non kritis, cocok dengan rule stat_total_area_non_kritis\"
+  }
+
+- User: 'cctv di site BMO 1'
+- Output: {
+    \"rule_id\": \"query_by_site\",
+    \"confidence\": 0.9,
+    \"extracted_params\": {\"site\": \"BMO 1\"},
+    \"sql_query\": \"SELECT * FROM cctv_data_bmo2 WHERE site = 'BMO 1'\",
+    \"initial_recommendation\": \"Pastikan semua CCTV di site BMO 1 berfungsi dengan baik\",
+    \"reasoning\": \"User ingin melihat CCTV berdasarkan site, cocok dengan rule query_by_site\"
+  }
+
+Hanya return JSON, tanpa markdown, tanpa penjelasan apapun.";
+
+            // Gunakan Gemini langsung (tanpa fallback untuk rule selection)
+            $models = [
+                'gemini-2.0-flash',
+                'gemini-1.5-pro',
+                'gemini-1.5-flash',
+            ];
+
+            $response = null;
+
+            foreach ($models as $model) {
+                try {
+                    $modelUrl = $this->apiUrl . '/' . $model . ':generateContent';
+                    
+                    $response = Http::withHeaders([
+                        'Content-Type' => 'application/json',
+                        'X-goog-api-key' => $this->apiKey,
+                    ])->timeout(60)->post($modelUrl, [
+                        'contents' => [
+                            [
+                                'parts' => [
+                                    [
+                                        'text' => $prompt
+                                    ]
+                                ]
+                            ]
+                        ],
+                        'generationConfig' => [
+                            'temperature' => 0.3, // Lower temperature untuk konsistensi
+                            'maxOutputTokens' => 2048,
+                        ]
+                    ]);
+
+                    if ($response->successful()) {
+                        Log::info('Gemini rule selection success', ['model' => $model]);
+                        break;
+                    }
+                } catch (Exception $e) {
+                    Log::warning('Gemini rule selection error', [
+                        'model' => $model,
+                        'error' => $e->getMessage()
+                    ]);
+                    continue;
+                }
+            }
+
+            if (!$response || !$response->successful()) {
+                throw new Exception('Gemini API failed for rule selection');
+            }
+
+            $responseData = $response->json();
+            $text = $responseData['candidates'][0]['content']['parts'][0]['text'] ?? '';
+
+            // Parse JSON response
+            $text = trim($text);
+            $text = preg_replace('/```json\s*/', '', $text);
+            $text = preg_replace('/```\s*/', '', $text);
+            $text = trim($text);
+
+            $result = json_decode($text, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new Exception('Failed to parse JSON: ' . json_last_error_msg());
+            }
+
+            return [
+                'success' => true,
+                'data' => $result,
+                'model' => 'gemini'
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Gemini Rule Selection Error', [
+                'error' => $e->getMessage(),
+                'prompt' => substr($userPrompt, 0, 100)
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Format rules untuk prompt AI
+     */
+    private function formatRulesForPrompt($rules)
+    {
+        $formatted = "ID | Nama | Keywords | SQL Template | Description\n";
+        $formatted .= str_repeat("-", 80) . "\n";
+
+        foreach ($rules as $rule) {
+            $keywords = implode(', ', array_slice($rule['keywords'] ?? [], 0, 5));
+            $sqlTemplate = $rule['sql_template'] ?? 'N/A';
+            if (strlen($sqlTemplate) > 50) {
+                $sqlTemplate = substr($sqlTemplate, 0, 50) . '...';
+            }
+
+            $formatted .= sprintf(
+                "%s | %s | %s | %s | %s\n",
+                $rule['id'] ?? 'N/A',
+                $rule['name'] ?? 'N/A',
+                $keywords,
+                $sqlTemplate,
+                $rule['description'] ?? 'N/A'
+            );
+        }
+
+        return $formatted;
+    }
+
+    /**
+     * Generate rekomendasi kontekstual menggunakan Gemini (langsung, tanpa fallback)
+     */
+    public function generateContextualRecommendation($queryResult, $queryContext, $userPrompt)
+    {
+        try {
+            $dataSummary = $this->prepareDataSummaryForRecommendation($queryResult);
+            
+            $prompt = "Anda adalah konsultan HSE (Health, Safety, Environment) yang ahli di bidang monitoring CCTV dan manajemen area kritis di pertambangan.
+
+KONTEKS QUERY:
+{$queryContext}
+
+HASIL QUERY:
+{$dataSummary}
+
+PERTANYAAN USER: {$userPrompt}
+
+Tugas Anda:
+Berdasarkan hasil query dan konteks, berikan rekomendasi yang:
+1. **Spesifik dan Actionable** - Rekomendasi yang bisa langsung ditindaklanjuti
+2. **Relevan dengan Konteks** - Sesuai dengan jenis data yang ditampilkan
+3. **Prioritas Tindakan** - Urutkan dari yang paling penting
+4. **Fokus HSE** - Relevan dengan keselamatan, kesehatan, dan lingkungan kerja
+
+Format rekomendasi:
+- Gunakan struktur yang jelas dengan heading
+- Gunakan bullet points untuk setiap rekomendasi
+- Berikan prioritas (High/Medium/Low) jika relevan
+- Maksimal 250 kata
+- Bahasa Indonesia
+
+CONTOH:
+Jika hasil menunjukkan area kritis sebanyak 660:
+**Rekomendasi Tindakan:**
+
+• **Monitoring Rutin (High Priority)**: Lakukan pengecekan harian pada semua area kritis untuk memastikan tidak ada perubahan kondisi yang membahayakan
+
+• **Penambahan CCTV (High Priority)**: Pertimbangkan penambahan CCTV di area kritis yang belum tercover dengan baik untuk meningkatkan monitoring
+
+• **Review Prosedur (Medium Priority)**: Lakukan review prosedur keselamatan untuk area kritis secara berkala dan update jika diperlukan
+
+• **Training Personel (Medium Priority)**: Pastikan semua personel yang bekerja di area kritis telah mendapat training yang memadai dan sertifikasi yang valid";
+
+            // Gunakan Gemini langsung (tanpa fallback)
+            $models = [
+                'gemini-2.0-flash',
+                'gemini-1.5-pro',
+                'gemini-1.5-flash',
+            ];
+
+            $response = null;
+
+            foreach ($models as $model) {
+                try {
+                    $modelUrl = $this->apiUrl . '/' . $model . ':generateContent';
+                    
+                    $response = Http::withHeaders([
+                        'Content-Type' => 'application/json',
+                        'X-goog-api-key' => $this->apiKey,
+                    ])->timeout(60)->post($modelUrl, [
+                        'contents' => [
+                            [
+                                'parts' => [
+                                    [
+                                        'text' => $prompt
+                                    ]
+                                ]
+                            ]
+                        ],
+                        'generationConfig' => [
+                            'temperature' => 0.7,
+                            'maxOutputTokens' => 2048,
+                        ]
+                    ]);
+
+                    if ($response->successful()) {
+                        Log::info('Gemini contextual recommendation success', ['model' => $model]);
+                        break;
+                    }
+                } catch (Exception $e) {
+                    Log::warning('Gemini contextual recommendation error', [
+                        'model' => $model,
+                        'error' => $e->getMessage()
+                    ]);
+                    continue;
+                }
+            }
+
+            if (!$response || !$response->successful()) {
+                Log::error('Gemini contextual recommendation failed');
+                return null;
+            }
+
+            $responseData = $response->json();
+            $text = $responseData['candidates'][0]['content']['parts'][0]['text'] ?? '';
+
+            return $text ?: null;
+
+        } catch (Exception $e) {
+            Log::error('Contextual Recommendation Error', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
+     * Prepare data summary untuk rekomendasi
+     */
+    private function prepareDataSummaryForRecommendation($results)
+    {
+        if (empty($results)) {
+            return "Tidak ada data ditemukan.";
+        }
+
+        $summary = "Jumlah baris: " . count($results) . "\n";
+        
+        if (count($results) === 1) {
+            $rowArray = (array) $results[0];
+            $summary .= "Data: " . json_encode($rowArray, JSON_PRETTY_PRINT);
+        } else {
+            $summary .= "Data (5 pertama):\n";
+            foreach (array_slice($results, 0, 5) as $index => $row) {
+                $rowArray = (array) $row;
+                $summary .= ($index + 1) . ". " . json_encode($rowArray) . "\n";
+            }
+        }
+
+        return $summary;
+    }
 }
 
