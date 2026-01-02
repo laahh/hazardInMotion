@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\API\TelegramWebhookController;
+use App\Http\Controllers\DMS\SafetyScoreController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -20,3 +21,6 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 Route::post('/telegram/webhook', TelegramWebhookController::class);
+
+// DMS (Driver Monitoring System) Routes
+Route::post('/dms/safety-score', [SafetyScoreController::class, 'store']);

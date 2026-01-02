@@ -4,118 +4,144 @@ namespace App\Http\Controllers\HazardMotion;
 
 use App\Http\Controllers\Controller;
 use App\Models\CctvData;
+use App\Models\WmsLink;
+use App\Models\GeojsonArea;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class GeofencingController extends Controller
 {
     /**
-     * Display zone management page
+     * Display WMS link management page
      */
     public function index()
     {
-        // Ambil data CCTV yang memiliki koordinat
-        $cctvData = CctvData::whereNotNull('longitude')
-            ->whereNotNull('latitude')
-            ->get();
-
-        // Format data untuk JavaScript
-        $cctvLocations = $cctvData->map(function ($cctv) {
-            return [
-                'id' => $cctv->no_cctv ?? 'CCTV-' . $cctv->id,
-                'name' => $cctv->nama_cctv ?? 'CCTV ' . $cctv->id,
-                'location' => [(float) $cctv->longitude, (float) $cctv->latitude],
-                'status' => $cctv->kondisi ?? $cctv->status ?? 'Unknown',
-            ];
-        })->toArray();
-
-        // Mock data untuk geofence zones (akan diganti dengan data real dari database)
-        $geofenceZones = [
-            [
-                'id' => 'ZONE-001',
-                'name' => 'Restricted Mining Area - Block A',
-                'type' => 'restricted',
-                'status' => 'active',
-                'coordinates' => [
-                    ['lat' => -2.186253, 'lng' => 117.4539035],
-                    ['lat' => -2.1767075, 'lng' => 117.3942385],
-                    ['lat' => -2.174805, 'lng' => 117.4606195],
-                    ['lat' => -2.186253, 'lng' => 117.4539035],
-                ],
-                'center' => ['lat' => -2.179253, 'lng' => 117.4366195],
-                'area' => '2.5 km²',
-                'description' => 'High-risk mining operational area - restricted access',
-                'created_at' => now()->subDays(30)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subDays(5)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 'ZONE-002',
-                'name' => 'Equipment Storage Zone',
-                'type' => 'storage',
-                'status' => 'active',
-                'coordinates' => [
-                    ['lat' => -2.033457, 'lng' => 117.44043],
-                    ['lat' => -2.033457, 'lng' => 117.45043],
-                    ['lat' => -2.043457, 'lng' => 117.45043],
-                    ['lat' => -2.043457, 'lng' => 117.44043],
-                    ['lat' => -2.033457, 'lng' => 117.44043],
-                ],
-                'center' => ['lat' => -2.038457, 'lng' => 117.44543],
-                'area' => '0.8 km²',
-                'description' => 'Designated area for equipment storage and maintenance',
-                'created_at' => now()->subDays(20)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subDays(2)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 'ZONE-003',
-                'name' => 'Personnel Safety Zone',
-                'type' => 'safety',
-                'status' => 'active',
-                'coordinates' => [
-                    ['lat' => -2.1523135, 'lng' => 117.554182],
-                    ['lat' => -2.1523135, 'lng' => 117.564182],
-                    ['lat' => -2.1623135, 'lng' => 117.564182],
-                    ['lat' => -2.1623135, 'lng' => 117.554182],
-                    ['lat' => -2.1523135, 'lng' => 117.554182],
-                ],
-                'center' => ['lat' => -2.1573135, 'lng' => 117.559182],
-                'area' => '1.2 km²',
-                'description' => 'Safe zone for personnel during operations',
-                'created_at' => now()->subDays(15)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subDays(1)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 'ZONE-004',
-                'name' => 'Blasting Exclusion Zone',
-                'type' => 'exclusion',
-                'status' => 'active',
-                'coordinates' => [
-                    ['lat' => -2.074805, 'lng' => 117.4606195],
-                    ['lat' => -2.074805, 'lng' => 117.4706195],
-                    ['lat' => -2.084805, 'lng' => 117.4706195],
-                    ['lat' => -2.084805, 'lng' => 117.4606195],
-                    ['lat' => -2.074805, 'lng' => 117.4606195],
-                ],
-                'center' => ['lat' => -2.079805, 'lng' => 117.4656195],
-                'area' => '0.5 km²',
-                'description' => 'Exclusion zone during blasting operations - no entry allowed',
-                'created_at' => now()->subDays(10)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subHours(6)->format('Y-m-d H:i:s'),
-            ],
-        ];
-
-        // Statistics
-        $stats = [
-            'total_zones' => count($geofenceZones),
-            'active_zones' => count(array_filter($geofenceZones, fn($z) => $z['status'] === 'active')),
-            'restricted_zones' => count(array_filter($geofenceZones, fn($z) => $z['type'] === 'restricted')),
-            'total_area' => '5.0 km²',
-        ];
+        $currentWeek = WmsLink::getCurrentWeek();
+        $currentYear = WmsLink::getCurrentYear();
+        
+        // Get WMS links with pagination, ordered by latest first
+        $wmsLinks = WmsLink::orderBy('created_at', 'desc')
+            ->paginate(15);
+        
+        // Get count of links for current week and year
+        $currentWeekLinksCount = WmsLink::where('year', $currentYear)
+            ->where('week', $currentWeek)
+            ->count();
 
         return view('HazardMotion.admin.geofencing', compact(
-            'cctvLocations',
-            'geofenceZones',
-            'stats'
+            'wmsLinks',
+            'currentWeek',
+            'currentYear',
+            'currentWeekLinksCount'
         ));
+    }
+
+    /**
+     * Store WMS link
+     */
+    public function storeWmsLink(Request $request)
+    {
+        $validated = $request->validate([
+            'location_name' => 'required|string|max:255',
+            'wms_link' => 'required|url|max:500',
+        ]);
+
+        // Get current week and year
+        $week = WmsLink::getCurrentWeek();
+        $year = WmsLink::getCurrentYear();
+
+        // Create WMS link
+        WmsLink::create([
+            'location_name' => $validated['location_name'],
+            'wms_link' => $validated['wms_link'],
+            'week' => $week,
+            'year' => $year,
+        ]);
+
+        $message = 'WMS link berhasil diupload untuk Week ' . $week . ' tahun ' . $year;
+
+        // Return JSON response for AJAX requests
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ]);
+        }
+
+        return redirect()->route('geofencing.index')
+            ->with('success', $message);
+    }
+
+    /**
+     * Get WMS link by ID (for edit)
+     */
+    public function getWmsLink($id)
+    {
+        $wmsLink = WmsLink::findOrFail($id);
+
+        return response()->json([
+            'success' => true,
+            'data' => $wmsLink
+        ]);
+    }
+
+    /**
+     * Update WMS link
+     */
+    public function updateWmsLink(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'location_name' => 'required|string|max:255',
+            'wms_link' => 'required|url|max:500',
+        ]);
+
+        $wmsLink = WmsLink::findOrFail($id);
+        
+        // Get current week and year for update
+        $week = WmsLink::getCurrentWeek();
+        $year = WmsLink::getCurrentYear();
+
+        $wmsLink->update([
+            'location_name' => $validated['location_name'],
+            'wms_link' => $validated['wms_link'],
+            'week' => $week,
+            'year' => $year,
+        ]);
+
+        $message = 'WMS link berhasil diupdate untuk Week ' . $week . ' tahun ' . $year;
+
+        // Return JSON response for AJAX requests
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ]);
+        }
+
+        return redirect()->route('geofencing.index')
+            ->with('success', $message);
+    }
+
+    /**
+     * Delete WMS link
+     */
+    public function deleteWmsLink(Request $request, $id)
+    {
+        $wmsLink = WmsLink::findOrFail($id);
+        $wmsLink->delete();
+
+        $message = 'WMS link berhasil dihapus';
+
+        // Return JSON response for AJAX requests
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ]);
+        }
+
+        return redirect()->route('geofencing.index')
+            ->with('success', $message);
     }
 
     /**
@@ -123,47 +149,213 @@ class GeofencingController extends Controller
      */
     public function rules()
     {
-        // Mock data untuk geofence rules
-        $geofenceRules = [
-            [
-                'id' => 'RULE-001',
-                'name' => 'Restricted Zone Entry Alert',
-                'zone_id' => 'ZONE-001',
-                'zone_name' => 'Restricted Mining Area - Block A',
-                'trigger_type' => 'entry',
-                'action' => 'alert',
-                'severity' => 'critical',
-                'notify_users' => ['Supervisor A', 'Security Team'],
-                'status' => 'active',
-                'created_at' => now()->subDays(30)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 'RULE-002',
-                'name' => 'Equipment Zone Violation',
-                'zone_id' => 'ZONE-002',
-                'zone_name' => 'Equipment Storage Zone',
-                'trigger_type' => 'unauthorized_entry',
-                'action' => 'alert_and_log',
-                'severity' => 'high',
-                'notify_users' => ['Equipment Manager'],
-                'status' => 'active',
-                'created_at' => now()->subDays(20)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 'RULE-003',
-                'name' => 'Blasting Zone Exclusion',
-                'zone_id' => 'ZONE-004',
-                'zone_name' => 'Blasting Exclusion Zone',
-                'trigger_type' => 'entry',
-                'action' => 'critical_alert',
-                'severity' => 'critical',
-                'notify_users' => ['Safety Officer', 'Site Manager', 'Security Team'],
-                'status' => 'active',
-                'created_at' => now()->subDays(10)->format('Y-m-d H:i:s'),
-            ],
-        ];
+        $currentWeek = GeojsonArea::getCurrentWeek();
+        $currentYear = GeojsonArea::getCurrentYear();
+        
+        // Get GeoJSON areas with pagination
+        $geojsonAreas = GeojsonArea::orderBy('created_at', 'desc')
+            ->paginate(15);
+        
+        // Get counts by type
+        $areaKerjaCount = GeojsonArea::where('type', 'area_kerja')->count();
+        $areaCctvCount = GeojsonArea::where('type', 'area_cctv')->count();
+        $currentWeekCount = GeojsonArea::where('year', $currentYear)
+            ->where('week', $currentWeek)
+            ->count();
 
-        return view('HazardMotion.admin.geofence-rules', compact('geofenceRules'));
+        return view('HazardMotion.admin.geofence-rules', compact(
+            'geojsonAreas',
+            'currentWeek',
+            'currentYear',
+            'areaKerjaCount',
+            'areaCctvCount',
+            'currentWeekCount'
+        ));
+    }
+
+    /**
+     * Store GeoJSON area
+     */
+    public function storeGeojsonArea(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'type' => 'required|in:area_kerja,area_cctv',
+            'geojson_file' => 'required|file|mimes:json,geojson|max:10240', // Max 10MB
+            'description' => 'nullable|string|max:500',
+        ]);
+
+        try {
+            // Read and validate GeoJSON file
+            $file = $request->file('geojson_file');
+            $fileContent = file_get_contents($file->getRealPath());
+            $geojsonData = json_decode($fileContent, true);
+
+            // Validate GeoJSON structure
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new \Exception('Invalid JSON format');
+            }
+
+            if (!isset($geojsonData['type']) || $geojsonData['type'] !== 'FeatureCollection') {
+                throw new \Exception('GeoJSON must be a FeatureCollection');
+            }
+
+            // Get current week and year
+            $week = GeojsonArea::getCurrentWeek();
+            $year = GeojsonArea::getCurrentYear();
+
+            // Store file (optional - bisa disimpan di storage atau hanya di database)
+            $fileName = $file->getClientOriginalName();
+            $filePath = $file->storeAs('geojson', $fileName, 'public');
+
+            // Create GeoJSON area
+            GeojsonArea::create([
+                'name' => $validated['name'],
+                'type' => $validated['type'],
+                'geojson_data' => $geojsonData,
+                'file_name' => $fileName,
+                'week' => $week,
+                'year' => $year,
+                'description' => $validated['description'] ?? null,
+            ]);
+
+            $message = 'GeoJSON ' . ($validated['type'] === 'area_kerja' ? 'Area Kerja' : 'Area CCTV') . ' berhasil diupload untuk Week ' . $week . ' tahun ' . $year;
+
+            // Return JSON response for AJAX requests
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $message
+                ]);
+            }
+
+            return redirect()->route('geofencing.rules')
+                ->with('success', $message);
+        } catch (\Exception $e) {
+            $errorMessage = 'Gagal mengupload GeoJSON: ' . $e->getMessage();
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $errorMessage
+                ], 400);
+            }
+
+            return redirect()->route('geofencing.rules')
+                ->with('error', $errorMessage);
+        }
+    }
+
+    /**
+     * Get GeoJSON area by ID (for edit)
+     */
+    public function getGeojsonArea($id)
+    {
+        $geojsonArea = GeojsonArea::findOrFail($id);
+
+        return response()->json([
+            'success' => true,
+            'data' => $geojsonArea
+        ]);
+    }
+
+    /**
+     * Update GeoJSON area
+     */
+    public function updateGeojsonArea(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'type' => 'required|in:area_kerja,area_cctv',
+            'geojson_file' => 'nullable|file|mimes:json,geojson|max:10240',
+            'description' => 'nullable|string|max:500',
+        ]);
+
+        try {
+            $geojsonArea = GeojsonArea::findOrFail($id);
+            
+            $updateData = [
+                'name' => $validated['name'],
+                'type' => $validated['type'],
+                'description' => $validated['description'] ?? null,
+            ];
+
+            // If new file is uploaded
+            if ($request->hasFile('geojson_file')) {
+                $file = $request->file('geojson_file');
+                $fileContent = file_get_contents($file->getRealPath());
+                $geojsonData = json_decode($fileContent, true);
+
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    throw new \Exception('Invalid JSON format');
+                }
+
+                if (!isset($geojsonData['type']) || $geojsonData['type'] !== 'FeatureCollection') {
+                    throw new \Exception('GeoJSON must be a FeatureCollection');
+                }
+
+                $fileName = $file->getClientOriginalName();
+                $filePath = $file->storeAs('geojson', $fileName, 'public');
+
+                $updateData['geojson_data'] = $geojsonData;
+                $updateData['file_name'] = $fileName;
+            }
+
+            // Get current week and year for update
+            $week = GeojsonArea::getCurrentWeek();
+            $year = GeojsonArea::getCurrentYear();
+            $updateData['week'] = $week;
+            $updateData['year'] = $year;
+
+            $geojsonArea->update($updateData);
+
+            $message = 'GeoJSON ' . ($validated['type'] === 'area_kerja' ? 'Area Kerja' : 'Area CCTV') . ' berhasil diupdate untuk Week ' . $week . ' tahun ' . $year;
+
+            // Return JSON response for AJAX requests
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $message
+                ]);
+            }
+
+            return redirect()->route('geofencing.rules')
+                ->with('success', $message);
+        } catch (\Exception $e) {
+            $errorMessage = 'Gagal mengupdate GeoJSON: ' . $e->getMessage();
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $errorMessage
+                ], 400);
+            }
+
+            return redirect()->route('geofencing.rules')
+                ->with('error', $errorMessage);
+        }
+    }
+
+    /**
+     * Delete GeoJSON area
+     */
+    public function deleteGeojsonArea(Request $request, $id)
+    {
+        $geojsonArea = GeojsonArea::findOrFail($id);
+        $geojsonArea->delete();
+
+        $message = 'GeoJSON area berhasil dihapus';
+
+        // Return JSON response for AJAX requests
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message
+            ]);
+        }
+
+        return redirect()->route('geofencing.rules')
+            ->with('success', $message);
     }
 
     /**

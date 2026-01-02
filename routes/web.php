@@ -24,6 +24,7 @@ use App\Http\Controllers\HazardValidationController;
 use App\Http\Controllers\BaselinePjaController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\HazardMotion\MapBaseController;
+use App\Http\Controllers\ScoreCard\ScoreCardController;
 
 /*
 |--------------------------------------------------------------------------
@@ -102,10 +103,35 @@ Route::middleware(['auth'])->group(function () {
     // Routes khusus harus didefinisikan SEBELUM resource route
     Route::get('cctv-data-import', [CctvDataController::class, 'importForm'])->name('cctv-data.import-form');
     Route::post('cctv-data-import', [CctvDataController::class, 'import'])->name('cctv-data.import');
+    Route::get('cctv-data-coverage-import', [CctvDataController::class, 'importCoverageForm'])->name('cctv-data.import-coverage-form');
+    Route::post('cctv-data-coverage-import', [CctvDataController::class, 'importCoverage'])->name('cctv-data.import-coverage');
+    Route::get('cctv-data-coverage-import/data', [CctvDataController::class, 'getCoverageData'])->name('cctv-data.coverage.data');
+    Route::get('cctv-data-coverage-import/download-template', [CctvDataController::class, 'downloadTemplateCoverage'])->name('cctv-data.download-template-coverage');
+    Route::get('cctv-data-control-room', [CctvDataController::class, 'indexControlRoom'])->name('cctv-data.control-room.index');
+    Route::get('cctv-data-control-room/data', [CctvDataController::class, 'getControlRoomData'])->name('cctv-data.control-room.data');
+    Route::post('cctv-data-control-room/pengawas', [CctvDataController::class, 'storePengawasControlRoom'])->name('cctv-data.control-room.pengawas.store');
+    Route::get('cctv-data-control-room/pengawas/{controlRoom}', [CctvDataController::class, 'getPengawasControlRoom'])->name('cctv-data.control-room.pengawas.get');
+    Route::delete('cctv-data-control-room/pengawas/{id}', [CctvDataController::class, 'deletePengawasControlRoom'])->name('cctv-data.control-room.pengawas.delete');
+    Route::get('cctv-data-pja-cctv-import', [CctvDataController::class, 'importPjaCctvForm'])->name('cctv-data.import-pja-cctv-form');
+    Route::post('cctv-data-pja-cctv-import', [CctvDataController::class, 'importPjaCctv'])->name('cctv-data.import-pja-cctv');
+    Route::get('cctv-data-pja-cctv-dedicated-import', [CctvDataController::class, 'importPjaCctvDedicatedForm'])->name('cctv-data.import-pja-cctv-dedicated-form');
+    Route::post('cctv-data-pja-cctv-dedicated-import', [CctvDataController::class, 'importPjaCctvDedicated'])->name('cctv-data.import-pja-cctv-dedicated');
+    Route::get('cctv-data-pja-cctv-dedicated', [CctvDataController::class, 'indexPjaCctvDedicated'])->name('cctv-data.pja-cctv-dedicated.index');
+    Route::get('cctv-data-pja-cctv-dedicated/data', [CctvDataController::class, 'getPjaCctvDedicatedData'])->name('cctv-data.pja-cctv-dedicated.data');
+    Route::get('cctv-data-pja-cctv-dedicated/export', [CctvDataController::class, 'exportPjaCctvDedicated'])->name('cctv-data.pja-cctv-dedicated.export');
+    Route::get('cctv-data-unmapped-cctv', [CctvDataController::class, 'indexUnmappedCctv'])->name('cctv-data.unmapped-cctv.index');
+    Route::get('cctv-data-unmapped-cctv/data', [CctvDataController::class, 'getUnmappedCctvData'])->name('cctv-data.unmapped-cctv.data');
+    Route::get('cctv-data-unmapped-cctv/export', [CctvDataController::class, 'exportUnmappedCctv'])->name('cctv-data.unmapped-cctv.export');
+    Route::get('cctv-data-download-template-mapping-pja', [CctvDataController::class, 'downloadTemplateMappingPja'])->name('cctv-data.download-template-mapping-pja');
+    Route::get('cctv-data-import-mapping-pja', [CctvDataController::class, 'importMappingPjaForm'])->name('cctv-data.import-mapping-pja-form');
+    Route::post('cctv-data-import-mapping-pja', [CctvDataController::class, 'importMappingPja'])->name('cctv-data.import-mapping-pja');
+    Route::post('cctv-data-unmapped-cctv/import-mapping', [CctvDataController::class, 'importMapping'])->name('cctv-data.unmapped-cctv.import-mapping');
     Route::get('cctv-data/data', [CctvDataController::class, 'getData'])->name('cctv-data.data');
     Route::get('cctv-data/{id}/scan', [CctvDataController::class, 'scan'])->name('cctv-data.scan');
     Route::get('cctv-data/{id}/qr-code', [CctvDataController::class, 'qrCodeImage'])->name('cctv-data.qr-code');
     Route::get('cctv-data/{id}/qr-code/download', [CctvDataController::class, 'downloadQrCode'])->name('cctv-data.qr-code.download');
+    Route::get('cctv-data/{id}/details', [CctvDataController::class, 'getCctvDetails'])->name('cctv-data.details');
+    Route::get('cctv-data/hazard-status', [CctvDataController::class, 'getCctvHazardStatus'])->name('cctv-data.hazard-status');
     // Resource routes dengan parameter eksplisit
     Route::get('cctv-data', [CctvDataController::class, 'index'])->name('cctv-data.index');
     Route::get('cctv-data/create', [CctvDataController::class, 'create'])->name('cctv-data.create');
@@ -148,8 +174,15 @@ Route::middleware(['auth'])->group(function () {
          Route::get('/', [MapBaseController::class, 'index'])->name('map');
          Route::get('/api/filtered-data', [MapBaseController::class, 'getFilteredMapData'])->name('api.filtered-data');
          Route::get('/api/user-gps', [MapBaseController::class, 'getUserGps'])->name('api.user-gps');
+         Route::get('/api/employee-location', [MapBaseController::class, 'getEmployeeLocation'])->name('api.employee-location');
+         Route::get('/api/work-areas', [MapBaseController::class, 'getWorkAreas'])->name('api.work-areas');
+         Route::post('/api/check-work-area', [MapBaseController::class, 'checkGpsInWorkArea'])->name('api.check-work-area');
+         Route::get('/api/gps-user-location-details', [MapBaseController::class, 'getGpsUserLocationDetails'])->name('api.gps-user-location-details');
+         Route::get('/api/user-gps-history', [MapBaseController::class, 'getUserGpsHistory'])->name('api.user-gps-history');
          Route::get('/api/unit-vehicles', [MapBaseController::class, 'getUnitVehicles'])->name('api.unit-vehicles');
+         Route::get('/api/pja-data', [MapBaseController::class, 'getPjaData'])->name('api.pja-data');
          Route::post('/api/evaluation-summary', [MapBaseController::class, 'getEvaluationSummary'])->name('api.evaluation-summary');
+         Route::post('/api/send-telegram', [MapBaseController::class, 'sendTelegramNotification'])->name('api.send-telegram');
     });
 
     // Real-time Alerts Routes - HARUS sebelum catch-all route
@@ -170,6 +203,18 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/api/zones', [GeofencingController::class, 'getZones'])->name('api.zones');
         Route::post('/zones', [GeofencingController::class, 'saveZone'])->name('zones.save');
         Route::delete('/zones/{zoneId}', [GeofencingController::class, 'deleteZone'])->name('zones.delete');
+        
+        // WMS Link Routes
+        Route::post('/wms', [GeofencingController::class, 'storeWmsLink'])->name('wms.store');
+        Route::get('/wms/{id}', [GeofencingController::class, 'getWmsLink'])->name('wms.get');
+        Route::put('/wms/{id}', [GeofencingController::class, 'updateWmsLink'])->name('wms.update');
+        Route::delete('/wms/{id}', [GeofencingController::class, 'deleteWmsLink'])->name('wms.delete');
+        
+        // GeoJSON Area Routes
+        Route::post('/geojson', [GeofencingController::class, 'storeGeojsonArea'])->name('geojson.store');
+        Route::get('/geojson/{id}', [GeofencingController::class, 'getGeojsonArea'])->name('geojson.get');
+        Route::put('/geojson/{id}', [GeofencingController::class, 'updateGeojsonArea'])->name('geojson.update');
+        Route::delete('/geojson/{id}', [GeofencingController::class, 'deleteGeojsonArea'])->name('geojson.delete');
     });
 
     // Spatial Analysis Routes - HARUS sebelum catch-all route
@@ -253,12 +298,18 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/import', [BaselinePjaController::class, 'import'])->name('import');
     });
 
+    // DMS (Driver Monitoring System) Routes - HARUS sebelum catch-all route
+    Route::prefix('dms')->name('dms.')->group(function () {
+        Route::get('/', function () {
+            return view('dms.index');
+        })->name('index');
+    });
+
+    // Route modul VALIDASI TBC & Score Card
+    require __DIR__ . '/validasi_tbc.php';
+    require __DIR__ . '/scorecard.php';
+
     // Define a GET route with dynamic placeholders for route parameters
     // HARUS di akhir agar tidak menangkap route spesifik di atas
     Route::get('{routeName}/{name?}', [HomeController::class, 'pageView']);
-    
-
-
-
-
 });

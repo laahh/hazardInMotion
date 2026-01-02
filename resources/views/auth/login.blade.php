@@ -11,7 +11,7 @@
     <div class="row g-4">
       <div class="col-lg-6 d-flex">
         <div class="card-body">
-          <img src="{{ URL::asset('build/images/logo1.png') }}" class="mb-4" width="145" alt="">
+          <img src="{{ URL::asset('build/images/logo.jpg') }}" class="mb-4" width="145" alt="">
           <h4 class="fw-bold">Get Started Now</h4>
           <p class="mb-0">Enter your credentials to login your account</p>
           <div class="row gy-2 gx-0 my-4">

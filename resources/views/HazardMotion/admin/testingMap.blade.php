@@ -1,4 +1,5 @@
-@extends('layouts.masterMotionHazardAdmin')
+{{-- @extends('layouts.masterMotionHazardAdmin') --}}
+@extends('layouts.master-home')
 
 @section('title', 'Hazard Detection - Beraucoal')
 
@@ -77,54 +78,238 @@
         opacity: 1;
     }
     
-    /* Map Sidebar Panel Styles */
-    .map-sidebar {
+    /* Icon Toolbar - Left Side - Modern Clean Style */
+    .map-icon-toolbar {
         position: absolute;
-        top: 0;
-        right: 0;
-        width: 380px;
-        height: 100%;
-        background: #ffffff;
-        box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+        top: 90px;
+        left: 20px;
         z-index: 1000;
         display: flex;
-        transition: transform 0.3s ease;
+        flex-direction: column;
+        gap: 6px;
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 10px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        transition: all 0.3s ease;
+    }
+    
+    /* Icon Toolbar Button - Clean Modern Style */
+    .icon-toolbar-btn {
+        position: relative;
+        width: 64px;
+        min-height: 64px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        color: #64748b;
+        padding: 10px 8px;
+        gap: 6px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+    
+    .icon-toolbar-btn:hover {
+        background: #f8fafc;
+        border-color: #cbd5e1;
+        color: #334155;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+        transform: translateY(-1px);
+    }
+    
+    .icon-toolbar-btn.active {
+        background: #3b82f6;
+        border-color: #3b82f6;
+        color: #ffffff;
+        box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
+    }
+    
+    .icon-toolbar-btn.active:hover {
+        background: #2563eb;
+        border-color: #2563eb;
+    }
+    
+    .icon-toolbar-btn i {
+        font-size: 26px;
+        transition: transform 0.15s ease;
+        line-height: 1;
+    }
+    
+    .icon-toolbar-btn:hover i {
+        transform: scale(1.05);
+    }
+    
+    .icon-toolbar-btn.active i {
+        transform: none;
+    }
+    
+    .icon-toolbar-btn .btn-label {
+        font-size: 11px;
+        font-weight: 500;
+        text-align: center;
+        line-height: 1.2;
+        color: inherit;
+        margin-top: 2px;
+    }
+    
+    /* Badge for count - Subtle Style */
+    .icon-toolbar-badge {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        background: #ef4444;
+        color: #ffffff;
+        border-radius: 9px;
+        font-size: 10px;
+        font-weight: 600;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        border: 2px solid #ffffff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        z-index: 10;
+    }
+    
+    .icon-toolbar-badge:not(:empty) {
+        display: flex;
+    }
+    
+    .icon-toolbar-btn.active .icon-toolbar-badge {
+        background: #ffffff;
+        color: #3b82f6;
+        border-color: #3b82f6;
+        box-shadow: 0 1px 3px rgba(59, 130, 246, 0.3);
+    }
+    
+    /* Divider - Subtle */
+    .icon-toolbar-divider {
+        height: 1px;
+        background: #e5e7eb;
+        margin: 6px 0;
+        border: none;
+    }
+    
+    /* Map Sidebar Panel Styles - Right Side */
+    .map-sidebar {
+        position: absolute;
+        top: 90px;
+        right: 0;
+        width: 420px;
+        height: calc(100% - 90px);
+        background: #ffffff;
+        box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        display: flex;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         transform: translateX(0);
+        border-top-left-radius: 20px;
+        border-bottom-left-radius: 20px;
+    }
+    
+    @media (max-width: 1200px) {
+        .map-icon-toolbar {
+            top: 85px;
+            left: 15px;
+            padding: 8px;
+        }
+        .icon-toolbar-btn {
+            width: 60px;
+            min-height: 60px;
+            padding: 8px 6px;
+        }
+        .icon-toolbar-btn i {
+            font-size: 24px;
+        }
+        .icon-toolbar-btn .btn-label {
+            font-size: 10px;
+        }
+        .map-sidebar {
+            top: 85px;
+            height: calc(100% - 85px);
+            width: 380px;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .map-icon-toolbar {
+            top: 75px;
+            left: 10px;
+            padding: 8px 6px;
+            gap: 4px;
+        }
+        .icon-toolbar-btn {
+            width: 56px;
+            min-height: 56px;
+            padding: 8px 4px;
+            gap: 4px;
+        }
+        .icon-toolbar-btn i {
+            font-size: 22px;
+        }
+        .icon-toolbar-btn .btn-label {
+            font-size: 9px;
+        }
+        .icon-toolbar-badge {
+            min-width: 16px;
+            height: 16px;
+            font-size: 9px;
+            padding: 0 4px;
+        }
+        .map-sidebar {
+            top: 75px;
+            height: calc(100% - 75px);
+            width: 100%;
+            max-width: 340px;
+        }
     }
     
     .map-sidebar.collapsed {
-        transform: translateX(calc(100% - 50px));
+        transform: translateX(calc(100% - 60px));
     }
     
     .sidebar-toggle-btn {
         position: absolute;
-        left: -40px;
+        left: -50px;
         top: 50%;
         transform: translateY(-50%);
-        width: 40px;
-        height: 60px;
-        background: #ffffff;
-        border: 1px solid #e5e7eb;
+        width: 50px;
+        height: 70px;
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border: 2px solid #e5e7eb;
         border-right: none;
-        border-radius: 8px 0 0 8px;
+        border-radius: 12px 0 0 12px;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.25s ease;
         z-index: 1001;
-        box-shadow: -2px 0 4px rgba(0, 0, 0, 0.05);
+        box-shadow: -4px 0 8px rgba(0, 0, 0, 0.08);
     }
     
     .sidebar-toggle-btn:hover {
-        background: #f9fafb;
-        box-shadow: -2px 0 6px rgba(0, 0, 0, 0.1);
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        box-shadow: -6px 0 12px rgba(0, 0, 0, 0.12);
+        border-color: #3b82f6;
     }
     
     .sidebar-toggle-btn i {
-        font-size: 24px;
+        font-size: 28px;
         color: #6b7280;
         transition: transform 0.3s ease;
+    }
+    
+    .sidebar-toggle-btn:hover i {
+        color: #3b82f6;
     }
     
     .map-sidebar.collapsed .sidebar-toggle-btn i {
@@ -137,80 +322,16 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
     }
     
+    /* Remove old tab styles - now using icon toolbar */
     .sidebar-tabs {
-        display: flex;
-        background: #f8f9fa;
-        border-bottom: 1px solid #e5e7eb;
-        padding: 8px;
-        gap: 4px;
-        overflow-x: auto;
-        overflow-y: hidden;
-        scroll-behavior: smooth;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: thin;
-        scrollbar-color: #cbd5e1 #f8f9fa;
-    }
-    
-    .sidebar-tabs::-webkit-scrollbar {
-        height: 6px;
-    }
-    
-    .sidebar-tabs::-webkit-scrollbar-track {
-        background: #f8f9fa;
-    }
-    
-    .sidebar-tabs::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 3px;
-    }
-    
-    .sidebar-tabs::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
+        display: none;
     }
     
     .sidebar-tab {
-        flex: 0 0 auto;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 12px 16px;
-        background: transparent;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        position: relative;
-        min-height: 70px;
-        min-width: 80px;
-        max-width: 120px;
-    }
-    
-    .sidebar-tab:hover {
-        background: #e9ecef;
-    }
-    
-    .sidebar-tab.active {
-        background: #ffffff;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-    
-    .sidebar-tab i {
-        font-size: 24px;
-        color: #6b7280;
-        margin-bottom: 4px;
-    }
-    
-    .sidebar-tab.active i {
-        color: #3b82f6;
-    }
-    
-    .sidebar-tab .tab-label {
-        font-size: 12px;
-        font-weight: 500;
-        color: #6b7280;
+        display: none;
         margin-bottom: 4px;
     }
     
@@ -332,6 +453,40 @@
     .sidebar-list-item.active {
         background: #eff6ff;
         border-color: #3b82f6;
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+    }
+    
+    /* CCTV specific styles */
+    .sidebar-list-item[data-type="cctv"] {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 0;
+        overflow: hidden;
+        position: relative;
+    }
+    
+    .sidebar-list-item[data-type="cctv"].expanded {
+        border-color: #3b82f6;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    }
+    
+    .sidebar-list-item[data-type="cctv"].no-hazard-inspection {
+        border-left: 3px solid #ef4444;
+    }
+    
+    .sidebar-list-item[data-type="cctv"].has-hazard-inspection {
+        border-left: 3px solid #10b981;
+    }
+    
+    .sidebar-list-item-header {
+        display: flex;
+        align-items: center;
+        padding: 12px;
+        transition: background-color 0.2s ease;
+    }
+    
+    .sidebar-list-item[data-type="cctv"]:hover .sidebar-list-item-header {
+        background-color: transparent;
     }
     
     .list-item-avatar {
@@ -346,9 +501,21 @@
         color: #ffffff;
         margin-right: 12px;
         flex-shrink: 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Pastikan avatar tidak terpengaruh oleh styling CCTV */
+    .sidebar-list-item:not([data-type="cctv"]) .list-item-avatar {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
     
     .list-item-content {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    /* Pastikan content tidak terpengaruh oleh styling CCTV */
+    .sidebar-list-item:not([data-type="cctv"]) .list-item-content {
         flex: 1;
         min-width: 0;
     }
@@ -359,12 +526,14 @@
         color: #111827;
         margin-bottom: 4px;
         word-break: break-word;
+        line-height: 1.4;
     }
     
     .list-item-subtitle {
         font-size: 12px;
         color: #6b7280;
         word-break: break-word;
+        line-height: 1.4;
     }
     
     .list-item-time {
@@ -373,21 +542,18 @@
         margin-top: 4px;
     }
     
-    .empty-state {
-        padding: 40px 20px;
-        text-align: center;
-        color: #9ca3af;
-    }
-    
-    .empty-state i {
-        font-size: 48px;
-        margin-bottom: 12px;
-        opacity: 0.5;
-    }
-    
-    .empty-state p {
-        font-size: 14px;
-        margin: 0;
+    .list-item-expand-icon {
+        margin-left: auto;
+        color: #6b7280;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease, color 0.2s ease;
+        flex-shrink: 0;
+        font-size: 20px;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
     }
     
     /* Control Room specific styles */
@@ -418,8 +584,6 @@
         padding: 14px 16px;
         cursor: pointer;
         transition: background-color 0.2s ease;
-        display: flex;
-        align-items: center;
     }
     
     .sidebar-list-item[data-type="controlroom"] .sidebar-list-item-header:hover {
@@ -505,18 +669,301 @@
         height: 8px;
     }
     
-    .list-item-expand-icon {
-        margin-left: auto;
-        color: #6b7280;
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease, color 0.2s ease;
+    /* Expand icon hanya untuk CCTV */
+    .sidebar-list-item[data-type="cctv"]:hover .list-item-expand-icon {
+        background-color: rgba(59, 130, 246, 0.1);
+        color: #3b82f6;
+    }
+    
+    .sidebar-list-item[data-type="cctv"].expanded .list-item-expand-icon {
+        transform: rotate(180deg);
+        background-color: rgba(59, 130, 246, 0.15);
+        color: #3b82f6;
+    }
+    
+    .cctv-hazard-status-icon {
+        margin-left: 8px;
+        margin-right: 8px;
         flex-shrink: 0;
-        font-size: 20px;
-        width: 24px;
-        height: 24px;
+        width: 20px;
+        height: 20px;
         display: flex;
         align-items: center;
         justify-content: center;
+        border-radius: 50%;
+        font-size: 14px;
+        transition: all 0.2s ease;
+    }
+    
+    .cctv-hazard-status-icon.has-hazard {
+        background-color: rgba(16, 185, 129, 0.15);
+        color: #10b981;
+    }
+    
+    .cctv-hazard-status-icon.no-hazard {
+        background-color: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+        animation: pulse-red 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse-red {
+        0%, 100% {
+            opacity: 1;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+        }
+        50% {
+            opacity: 0.8;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+        }
+    }
+    
+    .cctv-hazard-status-icon.loading {
+        background-color: rgba(156, 163, 175, 0.15);
+        color: #9ca3af;
+    }
+    
+    .cctv-hazard-status-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .cctv-hazard-status-badge.no-hazard {
+        background-color: #fee2e2;
+        color: #991b1b;
+    }
+    
+    .cctv-hazard-status-badge.has-hazard {
+        background-color: #d1fae5;
+        color: #065f46;
+    }
+    
+    .cctv-detail-section {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease;
+        padding: 0 12px;
+        background: #fafbfc;
+        border-top: 1px solid #e5e7eb;
+    }
+    
+    .sidebar-list-item.expanded .cctv-detail-section {
+        max-height: 2000px;
+        padding: 16px 12px;
+    }
+    
+    .cctv-detail-loading {
+        text-align: center;
+        padding: 24px 20px;
+        color: #6b7280;
+        font-size: 12px;
+    }
+    
+    .cctv-detail-loading i {
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    
+    .cctv-detail-error {
+        padding: 12px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 6px;
+        color: #991b1b;
+        font-size: 12px;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .cctv-detail-group {
+        margin-bottom: 20px;
+    }
+    
+    .cctv-detail-group:last-child {
+        margin-bottom: 0;
+    }
+    
+    .cctv-detail-group-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #111827;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-bottom: 6px;
+        border-bottom: 2px solid #e5e7eb;
+    }
+    
+    .cctv-detail-group-title i {
+        font-size: 18px;
+        color: #3b82f6;
+    }
+    
+    .cctv-coverage-item {
+        padding: 10px 12px;
+        background: #ffffff;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        border-left: 4px solid #3b82f6;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .cctv-coverage-item:hover {
+        transform: translateX(2px);
+        box-shadow: 0 2px 6px rgba(59, 130, 246, 0.15);
+    }
+    
+    .cctv-coverage-item:last-child {
+        margin-bottom: 0;
+    }
+    
+    .cctv-coverage-lokasi {
+        font-size: 12px;
+        font-weight: 600;
+        color: #111827;
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .cctv-coverage-lokasi::before {
+        content: '📍';
+        font-size: 14px;
+    }
+    
+    .cctv-coverage-detail {
+        font-size: 11px;
+        color: #6b7280;
+        margin-left: 20px;
+        line-height: 1.5;
+    }
+    
+    .cctv-hazard-stat {
+        padding: 10px 12px;
+        background: #ffffff;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        border-left: 4px solid #f59e0b;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .cctv-hazard-stat:hover {
+        transform: translateX(2px);
+        box-shadow: 0 2px 6px rgba(245, 158, 11, 0.15);
+    }
+    
+    .cctv-hazard-stat:last-child {
+        margin-bottom: 0;
+    }
+    
+    .cctv-hazard-stat-header {
+        font-size: 12px;
+        font-weight: 600;
+        color: #111827;
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .cctv-hazard-stat-header::before {
+        content: '⚠️';
+        font-size: 14px;
+    }
+    
+    .cctv-hazard-stat-count {
+        font-size: 11px;
+        color: #92400e;
+        margin-top: 4px;
+        padding: 4px 8px;
+        background: #fef3c7;
         border-radius: 4px;
+        display: inline-block;
+        font-weight: 600;
+    }
+    
+    .cctv-pja-item {
+        padding: 10px 12px;
+        background: #ffffff;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        border-left: 4px solid #10b981;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .cctv-pja-item:hover {
+        transform: translateX(2px);
+        box-shadow: 0 2px 6px rgba(16, 185, 129, 0.15);
+    }
+    
+    .cctv-pja-item:last-child {
+        margin-bottom: 0;
+    }
+    
+    .cctv-pja-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: #111827;
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .cctv-pja-name::before {
+        content: '👤';
+        font-size: 14px;
+    }
+    
+    .cctv-pja-info {
+        font-size: 11px;
+        color: #065f46;
+        margin-left: 20px;
+        line-height: 1.6;
+    }
+    
+    .cctv-no-data {
+        padding: 16px;
+        text-align: center;
+        color: #9ca3af;
+        font-size: 12px;
+        font-style: italic;
+        background: #f9fafb;
+        border-radius: 6px;
+        border: 1px dashed #d1d5db;
+    }
+    
+    .empty-state {
+        padding: 40px 20px;
+        text-align: center;
+        color: #9ca3af;
+    }
+    
+    .empty-state i {
+        font-size: 48px;
+        margin-bottom: 12px;
+        opacity: 0.5;
+    }
+    
+    .empty-state p {
+        font-size: 14px;
+        margin: 0;
     }
     
     /* Collapsed state styles */
@@ -713,27 +1160,85 @@
         color: #000;
     }
     
-    /* Map container - menggunakan class dari template */
+    /* Full-screen map container */
+    .map-fullscreen-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 999;
+        background-color: #f9fafb;
+        overflow: hidden;
+    }
+    
+    /* Map container - full screen */
     #hazardMap {
         width: 100%;
-        height: 600px;
-        border-radius: 12px;
+        height: 100%;
+        border-radius: 0;
         overflow: hidden;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        border: 1px solid #e5e7eb;
+        box-shadow: none;
+        border: none;
         background-color: #f9fafb;
     }
     
-    /* Map container responsive */
+    /* Map controls overlay panel */
+    .map-controls-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1001;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 0;
+        border-bottom-left-radius: 12px;
+        border-bottom-right-radius: 12px;
+        padding: 16px 20px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        border: none;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Ensure dropdowns appear above map */
+    .map-controls-overlay .dropdown-menu {
+        z-index: 1002;
+    }
+    
+    .map-controls-overlay .d-flex {
+        margin-bottom: 0;
+    }
+    
+    /* Responsive map controls */
     @media (max-width: 1200px) {
-        #hazardMap {
-            height: 500px;
+        .map-controls-overlay {
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 12px 16px;
         }
     }
     
     @media (max-width: 768px) {
-        #hazardMap {
-            height: 400px;
+        .map-controls-overlay {
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 10px 12px;
+        }
+        
+        .map-controls-overlay .btn-filter {
+            font-size: 12px;
+            padding: 6px 10px;
+        }
+        
+        .map-controls-overlay .btn-filter span {
+            display: none;
+        }
+        
+        .map-controls-overlay h5 {
+            font-size: 16px;
         }
     }
     
@@ -1158,15 +1663,163 @@
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.2.0/ol.css">
 <link rel="stylesheet" href="{{ URL::asset('build/plugins/datatable/css/dataTables.bootstrap5.min.css') }}">
+<!-- TourGuide JS CSS -->
+<link rel="stylesheet" href="https://unpkg.com/@sjmc11/tourguidejs/dist/css/tour.min.css">
+<style>
+    /* Custom TourGuide Dialog Styles */
+    [data-tg-dialog] {
+        max-width: 380px !important;
+        width: 100% !important;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3) !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+    }
+    
+    [data-tg-dialog-body] {
+        padding: 20px !important;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    [data-tg-dialog-footer] {
+        padding: 12px 20px !important;
+        border-top: 1px solid #e5e7eb !important;
+        background-color: #f9fafb !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 10px !important;
+    }
+    
+    [data-tg-step-dots] {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        gap: 8px !important;
+        margin-bottom: 8px !important;
+        padding: 8px 0 !important;
+        flex-wrap: wrap !important;
+    }
+    
+    [data-tg-step-dot] {
+        width: 8px !important;
+        height: 8px !important;
+        border-radius: 50% !important;
+        background-color: #d1d5db !important;
+        border: none !important;
+        padding: 0 !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+        margin: 0 2px !important;
+    }
+    
+    [data-tg-step-dot][data-tg-active="true"] {
+        background-color: #3b82f6 !important;
+        width: 24px !important;
+        border-radius: 4px !important;
+    }
+    
+    [data-tg-dialog-footer] [data-tg-buttons] {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        gap: 10px !important;
+        width: 100% !important;
+    }
+    
+    [data-tg-button] {
+        flex: 1 !important;
+        padding: 10px 16px !important;
+        border-radius: 8px !important;
+        font-weight: 500 !important;
+        font-size: 14px !important;
+        border: 1px solid #e5e7eb !important;
+        transition: all 0.2s ease !important;
+        cursor: pointer !important;
+        background-color: white !important;
+        color: #374151 !important;
+    }
+    
+    [data-tg-button][data-tg-button-primary] {
+        background-color: #3b82f6 !important;
+        color: white !important;
+        border-color: #3b82f6 !important;
+    }
+    
+    [data-tg-button][data-tg-button-primary]:hover {
+        background-color: #2563eb !important;
+        border-color: #2563eb !important;
+    }
+    
+    [data-tg-button]:not([data-tg-button-primary]):hover {
+        background-color: #f9fafb !important;
+    }
+    
+    [data-tg-step-progress] {
+        font-size: 12px !important;
+        color: #6b7280 !important;
+        margin-bottom: 8px !important;
+        text-align: center !important;
+        width: 100% !important;
+    }
+    
+    /* Alternative selectors for TourGuide JS */
+    .tg-dialog,
+    [class*="tg-dialog"] {
+        max-width: 380px !important;
+        width: 100% !important;
+    }
+    
+    .tg-dialog-footer,
+    [class*="tg-dialog-footer"] {
+        padding: 12px 20px !important;
+        border-top: 1px solid #e5e7eb !important;
+        background-color: #f9fafb !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 10px !important;
+    }
+    
+    .tg-step-dots,
+    [class*="tg-step-dots"] {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        gap: 8px !important;
+        margin-bottom: 8px !important;
+        padding: 8px 0 !important;
+        flex-wrap: wrap !important;
+    }
+    
+    .tg-buttons,
+    [class*="tg-buttons"] {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        gap: 10px !important;
+        width: 100% !important;
+    }
+    
+    .tg-button,
+    [class*="tg-button"] {
+        flex: 1 !important;
+        padding: 10px 16px !important;
+        border-radius: 8px !important;
+        font-weight: 500 !important;
+        font-size: 14px !important;
+        border: 1px solid #e5e7eb !important;
+        transition: all 0.2s ease !important;
+        cursor: pointer !important;
+    }
+</style>
 @endsection
 
 @section('content')
-<div class="hazard-detection-header">
+<div class="hazard-detection-header mt-5" >
     <h1 class="hazard-detection-title">Hazard in Motion </h1>
     <p class="hazard-detection-subtitle">Real-time detection and monitoring of safety hazards in operational areas</p>
     
     <!-- Collapse Header Button -->
-    <div class="mb-3">
+    <div class="mb-3" data-tg-tour="<strong>Dashboard Statistics & Coverage</strong><br><br>Klik untuk membuka/menutup panel statistik dashboard. Panel ini menampilkan ringkasan data CCTV, coverage area, dan statistik area kritis.">
         <button class="btn btn-outline-primary w-100 d-flex align-items-center justify-content-between p-3 rounded-4 shadow-sm" type="button" data-bs-toggle="collapse" data-bs-target="#dashboardStatsCollapse" aria-expanded="true" aria-controls="dashboardStatsCollapse">
             <span class="fw-bold d-flex align-items-center">
                 <i class="material-icons-outlined me-2">dashboard</i>
@@ -1182,13 +1835,13 @@
           <div class="col-12 d-flex">
             <div class="card rounded-4 w-100">
               <div class="card-body">
-                <div class="d-flex align-items-center justify-content-between mb-3">
+                <div class="d-flex align-items-center justify-content-between mb-3" data-tg-tour="<strong>Luasan Coverage CCTV</strong><br><br>Menampilkan statistik coverage CCTV meliputi:<br>• Total CCTV: Jumlah unit kamera CCTV<br>• Luasan Area Kerja: Total area yang dikerjakan<br>• Luasan CCTV: Total area yang tercover CCTV<br>• Coverage: Persentase coverage CCTV terhadap area kerja">
                   <h5 class="mb-0 fw-bold">Luasan Coverage CCTV</h5>
                   <span class="badge bg-primary" id="coverageBadge">0% Coverage</span>
                 </div>
                 <div class="d-flex align-items-center justify-content-around flex-wrap gap-4 p-4">
                      
-                  <button type="button" class="btn p-0 border-0 bg-transparent d-flex flex-column align-items-center justify-content-center gap-2" data-bs-toggle="modal" data-bs-target="#totalCctvModal" title="Lihat detail Total CCTV">
+                  <button type="button" class="btn p-0 border-0 bg-transparent d-flex flex-column align-items-center justify-content-center gap-2" data-bs-toggle="modal" data-bs-target="#totalCctvModal" title="Lihat detail Total CCTV" data-tg-tour="<strong>Total CCTV</strong><br><br>Klik untuk melihat detail total jumlah kamera CCTV yang terpasang di semua area kerja.">
                     <span class="mb-2 wh-48 bg-success bg-opacity-10 text-success rounded-circle d-flex align-items-center justify-content-center">
                       <i class="material-icons-outlined">view_list</i>
                     </span>
@@ -1197,7 +1850,7 @@
                     <small class="text-muted" id="totalCctvLabel">unit</small>
                   </button>
                   <div class="vr"></div>
-                  <button type="button" class="btn p-0 border-0 bg-transparent d-flex flex-column align-items-center justify-content-center gap-2" data-bs-toggle="modal" data-bs-target="#totalCctvModal" title="Lihat detail Luasan Area Kerja">
+                  <button type="button" class="btn p-0 border-0 bg-transparent d-flex flex-column align-items-center justify-content-center gap-2" data-bs-toggle="modal" data-bs-target="#totalCctvModal" title="Lihat detail Luasan Area Kerja" data-tg-tour="<strong>Luasan Area Kerja</strong><br><br>Menampilkan total luas area kerja yang dimonitor. Klik untuk melihat detail lebih lanjut.">
                     <span class="mb-2 wh-48 bg-info bg-opacity-10 text-info rounded-circle d-flex align-items-center justify-content-center">
                       <i class="material-icons-outlined">square_foot</i>
                     </span>
@@ -1206,7 +1859,7 @@
                     <small class="text-muted" id="luasanAreaKerjaUnit">m²</small>
                   </button>
                   <div class="vr"></div>
-                  <button type="button" class="btn p-0 border-0 bg-transparent d-flex flex-column align-items-center justify-content-center gap-2" data-bs-toggle="modal" data-bs-target="#cctvOnModal" title="Lihat detail Luasan CCTV">
+                  <button type="button" class="btn p-0 border-0 bg-transparent d-flex flex-column align-items-center justify-content-center gap-2" data-bs-toggle="modal" data-bs-target="#cctvOnModal" title="Lihat detail Luasan CCTV" data-tg-tour="<strong>Luasan CCTV</strong><br><br>Menampilkan total luas area yang tercover oleh kamera CCTV. Klik untuk melihat detail lebih lanjut.">
                     <span class="mb-2 wh-48 bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center">
                       <i class="material-icons-outlined">videocam</i>
                     </span>
@@ -1216,7 +1869,7 @@
                   </button>
                  
                   <div class="vr"></div>
-                  <button type="button" class="btn p-0 border-0 bg-transparent d-flex flex-column align-items-center justify-content-center gap-2" data-bs-toggle="modal" data-bs-target="#criticalCctvModal" title="Lihat detail Coverage">
+                  <button type="button" class="btn p-0 border-0 bg-transparent d-flex flex-column align-items-center justify-content-center gap-2" data-bs-toggle="modal" data-bs-target="#criticalCctvModal" title="Lihat detail Coverage" data-tg-tour="<strong>Coverage Percentage</strong><br><br>Menampilkan persentase coverage CCTV terhadap total area kerja. Semakin tinggi persentase, semakin baik monitoring area kerja.">
                     <span class="mb-2 wh-48 bg-warning bg-opacity-10 text-warning rounded-circle d-flex align-items-center justify-content-center">
                       <i class="material-icons-outlined">percent</i>
                     </span>
@@ -1240,7 +1893,7 @@
 
               
                     <div class="col-12 col-xl-12">
-                        <div class="card mb-4 border-0 shadow-sm">
+                        <div class="card mb-4 border-0 shadow-sm" data-tg-tour="<strong>Overview Area Kritis</strong><br><br>Menampilkan statistik area kritis berdasarkan kategori:<br>• Jumlah Area Kritis: Total area dengan potensi bahaya tinggi<br>• CCTV Area Kritis: Jumlah CCTV di area kritis<br>• CCTV Area Non Kritis: Jumlah CCTV di area non kritis<br><br>Klik setiap item untuk melihat detail lebih lanjut.">
                             <div class="card-body p-4">
                                 <div class="mb-3">
                                     <h5 class="fw-bold mb-1">Overview Area Kritis</h5>
@@ -1647,7 +2300,7 @@
                         </div>
                    </div> --}}
                    <div class="col-12  d-flex">
-                      <div class="card mb-0 rounded-4 w-100">
+                      <div class="card mb-0 rounded-4 w-100" data-tg-tour="<strong>Chart Perusahaan dengan CCTV Terbanyak</strong><br><br>Menampilkan grafik perbandingan jumlah CCTV per perusahaan. Grafik ini membantu melihat distribusi CCTV di berbagai perusahaan kontraktor.">
                        <div class="card-body">
                          <div class="d-flex align-items-start justify-content-between mb-3">
                           <div class="">
@@ -1684,7 +2337,7 @@
             </div>  
           </div> 
           <div class="col-12 col-xl-7 col-xxl-8 d-flex">
-            <div class="card w-100 rounded-4">
+            <div class="card w-100 rounded-4" data-tg-tour="<strong>Area Kerja & CCTV Coverage</strong><br><br>Tabel ini menampilkan detail coverage CCTV untuk setiap area kerja. Anda dapat melihat:<br>• Nama area kerja<br>• Luasan area<br>• Jumlah CCTV<br>• Persentase coverage<br><br>Di bawah tabel terdapat statistik TBC, HAZARD, INSIDEN, GR, dan kondisi CCTV.">
                <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between mb-3">
                   <div class="">
@@ -1707,7 +2360,7 @@
                      </tbody>
                    </table>
                  </div>
-                  <div class="d-flex flex-column flex-lg-row align-items-start justify-content-around border p-3 rounded-4 mt-3 gap-3">
+                  <div class="d-flex flex-column flex-lg-row align-items-start justify-content-around border p-3 rounded-4 mt-3 gap-3" data-tg-tour="<strong>Statistik Utama</strong><br><br>Menampilkan statistik utama:<br>• TBC: Total valid TBC<br>• HAZARD: Jumlah hazard terdeteksi<br>• INSIDEN: Jumlah insiden<br>• GR: Golden Rule violations<br><br>Setiap card menampilkan donut chart dan persentase perubahan.">
                      {{-- <div class="vr"></div> --}}
                     <div class="d-flex align-items-center gap-4 cctv-stat-card" id="cctvStatCard" style="cursor: pointer; padding: 8px; border-radius: 8px; transition: all 0.2s;" 
                          title="Klik untuk melihat detail TBC">
@@ -1773,7 +2426,7 @@
                     
                   </div>
 
-                 <div class="d-flex flex-column flex-lg-row align-items-start justify-content-around border p-3 rounded-4 mt-3 gap-3">
+                 <div class="d-flex flex-column flex-lg-row align-items-start justify-content-around border p-3 rounded-4 mt-3 gap-3" data-tg-tour="<strong>Statistik CCTV</strong><br><br>Menampilkan statistik kondisi CCTV:<br>• CCTV Live View & Connected: CCTV yang aktif dan terhubung<br>• Kondisi CCTV Baik: CCTV yang berfungsi dengan baik<br>• Kondisi CCTV Tidak Baik: CCTV yang bermasalah atau tidak berfungsi<br><br>Gunakan data ini untuk monitoring kesehatan sistem CCTV.">
                    
                    <div class="d-flex align-items-center gap-4 cctv-stat-card" id="cctvStatCard" style="cursor: pointer; padding: 8px; border-radius: 8px; transition: all 0.2s;" 
                         title="Klik untuk melihat detail CCTV">
@@ -1878,138 +2531,132 @@
 
 
 
-<!-- Main Content -->
-<div class="row">
-    
-    <!-- Map -->
-    <div class="col-12">
-        <div class="card rounded-4 w-200">
-            <div class="card-body">
-                <div class="d-flex align-items-start justify-content-between mb-3">
-                    <div class="">
-                        <h5 class="mb-0 fw-bold">Hazard Location Map</h5>
-                    </div>
-                    <div class="d-flex align-items-center gap-3 flex-wrap">
-                        <div class="btn-group position-static">
-                            <div class="btn-group position-static">
-                                <button type="button" class="btn btn-filter dropdown-toggle px-3" id="mainFilterCompanyBtn" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="material-icons-outlined me-2" style="font-size: 18px; vertical-align: middle;">business</i>
-                                    <span id="mainFilterCompanyText">Semua Perusahaan</span>
-                                </button>
-                                <ul class="dropdown-menu" id="mainFilterCompanyDropdown" style="max-height: 300px; overflow-y: auto;">
-                                    <li><a class="dropdown-item filter-option" href="javascript:;" data-value="__all__">Semua Perusahaan</a></li>
-                                </ul>
-                            </div>
-                            <div class="btn-group position-static">
-                                <button type="button" class="btn btn-filter dropdown-toggle px-3" id="mainFilterSiteBtn" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="material-icons-outlined me-2" style="font-size: 18px; vertical-align: middle;">location_on</i>
-                                    <span id="mainFilterSiteText">Semua Site</span>
-                                </button>
-                                <ul class="dropdown-menu" id="mainFilterSiteDropdown" style="max-height: 300px; overflow-y: auto;">
-                                    <li><a class="dropdown-item filter-option" href="javascript:;" data-value="__all__">Semua Site</a></li>
-                                </ul>
-                            </div>
-                        </div>
-                        <!-- Layer Visibility Toggle Buttons -->
-                        <div class="btn-group position-static" role="group" aria-label="Layer visibility controls">
-                            <button type="button" class="btn btn-filter px-3 layer-toggle-btn active" id="toggleCctv" data-layer="cctv" title="Toggle CCTV">
-                                <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">videocam</i>
-                                <span>CCTV</span>
-                            </button>
-                            <button type="button" class="btn btn-filter px-3 layer-toggle-btn" id="toggleHazard" data-layer="hazard" title="Toggle SAP">
-                                <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">assignment</i>
-                                <span>SAP</span>
-                            </button>
-                            <button type="button" class="btn btn-filter px-3 layer-toggle-btn active" id="toggleGr" data-layer="gr" title="Toggle Golden Rule">
-                                <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">rule</i>
-                                <span>GR</span>
-                            </button>
-                            <button type="button" class="btn btn-filter px-3 layer-toggle-btn active" id="toggleInsiden" data-layer="insiden" title="Toggle Insiden">
-                                <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">report_problem</i>
-                                <span>Insiden</span>
-                            </button>
-                            <button type="button" class="btn btn-filter px-3 layer-toggle-btn" id="toggleUnit" data-layer="unit" title="Toggle Unit">
-                                <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">directions_car</i>
-                                <span>Unit</span>
-                            </button>
-                            <button type="button" class="btn btn-filter px-3 layer-toggle-btn active" id="toggleGps" data-layer="gps" title="Toggle GPS Orang">
-                                <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">person_pin</i>
-                                <span>GPS Orang</span>
-                            </button>
-                            <button type="button" class="btn btn-filter px-3 layer-toggle-btn" id="toggleEvaluasi" data-layer="evaluasi" title="Toggle Evaluasi">
-                                <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">assessment</i>
-                                <span>Evaluasi</span>
-                            </button>
-                        </div>
-                        <button type="button" class="btn btn-filter px-3" id="btnResetMainFilter">
-                            <i class="material-icons-outlined me-2" style="font-size: 18px; vertical-align: middle;">refresh</i>
-                            Reset
+<!-- Full-Screen Map Container -->
+<div class="map-fullscreen-container">
+    <!-- Map Controls Overlay -->
+    <div class="map-controls-overlay">
+        <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+            <div class="" data-tg-tour="<strong>Hazard Location Map</strong><br><br>Peta interaktif untuk melihat lokasi hazard, CCTV, SAP, GR, Insiden, Unit, dan GPS Orang secara real-time. Gunakan filter dan layer toggle untuk menyesuaikan tampilan.">
+                <h5 class="mb-0 fw-bold">Hazard Location Map</h5>
+            </div>
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <div class="btn-group position-static">
+                    
+                    <div class="btn-group position-static">
+                        <button type="button" class="btn btn-filter dropdown-toggle px-3" id="mainFilterSiteBtn" data-bs-toggle="dropdown" aria-expanded="false" data-tg-tour="<strong>Filter Site</strong><br><br>Gunakan filter ini untuk memfilter data berdasarkan site/lokasi. Pilih 'Semua Site' untuk menampilkan semua data.">
+                            <i class="material-icons-outlined me-2" style="font-size: 18px; vertical-align: middle;">location_on</i>
+                            <span id="mainFilterSiteText">Semua Site</span>
                         </button>
+                        <ul class="dropdown-menu" id="mainFilterSiteDropdown" style="max-height: 300px; overflow-y: auto;">
+                            <li><a class="dropdown-item filter-option" href="javascript:;" data-value="__all__">Semua Site</a></li>
+                        </ul>
                     </div>
                 </div>
-                <div class="position-relative">
-                    <div id="hazardMap"></div>
-                    <div id="popup" class="ol-popup">
-                        <a href="#" id="popup-closer" class="ol-popup-closer"></a>
-                        <div id="popup-content"></div>
-                    </div>
-                    
-                    <!-- Sidebar Panel -->
-                    <div id="mapSidebar" class="map-sidebar">
-                        <!-- Toggle Button -->
-                        <button id="sidebarToggle" class="sidebar-toggle-btn" type="button">
-                            <i class="material-icons-outlined" id="sidebarToggleIcon">chevron_left</i>
-                        </button>
-                        
-                        <!-- Sidebar Content -->
-                        <div class="sidebar-content">
-                            <!-- Tab Navigation -->
-                            <div class="sidebar-tabs">
-                                <button class="sidebar-tab active" data-tab="cctv" title="CCTV">
-                                    <i class="material-icons-outlined">videocam</i>
-                                    <span class="tab-label">CCTV</span>
-                                    <span class="tab-count" id="cctvTabCount">0</span>
-                                </button>
-                                <button class="sidebar-tab" data-tab="sap" title="SAP">
-                                    <i class="material-icons-outlined">assignment</i>
-                                    <span class="tab-label">SAP</span>
-                                    <span class="tab-count" id="sapTabCount">0</span>
-                                </button>
-                                <button class="sidebar-tab" data-tab="insiden" title="Insiden">
-                                    <i class="material-icons-outlined">report_problem</i>
-                                    <span class="tab-label">Insiden</span>
-                                    <span class="tab-count" id="insidenTabCount">0</span>
-                                </button>
-                                <button class="sidebar-tab" data-tab="unit" title="Unit">
-                                    <i class="material-icons-outlined">directions_car</i>
-                                    <span class="tab-label">Unit</span>
-                                    <span class="tab-count" id="unitTabCount">0</span>
-                                </button>
-                                <button class="sidebar-tab" data-tab="gps" title="GPS Orang">
-                                    <i class="material-icons-outlined">person_pin</i>
-                                    <span class="tab-label">GPS Orang</span>
-                                    <span class="tab-count" id="gpsTabCount">0</span>
-                                </button>
-                                <button class="sidebar-tab" data-tab="controlroom" title="Control Room">
-                                    <i class="material-icons-outlined">meeting_room</i>
-                                    <span class="tab-label">Control Room</span>
-                                    <span class="tab-count" id="controlroomTabCount">0</span>
-                                </button>
-                                <button class="sidebar-tab" data-tab="pja" title="PJA">
-                                    <i class="material-icons-outlined">description</i>
-                                    <span class="tab-label">PJA</span>
-                                    <span class="tab-count" id="pjaTabCount">0</span>
-                                </button>
-                                <button class="sidebar-tab" data-tab="evaluasi" title="Evaluasi">
-                                    <i class="material-icons-outlined">assessment</i>
-                                    <span class="tab-label">Evaluasi</span>
-                                </button>
-                            </div>
+                <!-- Layer Visibility Toggle Buttons -->
+                <div class="btn-group position-static" role="group" aria-label="Layer visibility controls" data-tg-tour="<strong>Layer Toggle Buttons</strong><br><br>Gunakan tombol ini untuk menampilkan/menyembunyikan layer di peta:<br>• CCTV: Tampilkan lokasi kamera CCTV<br>• SAP: Tampilkan Safety Action Plan<br>• GR: Tampilkan Golden Rule violations<br>• Insiden: Tampilkan lokasi insiden<br>• Unit: Tampilkan posisi unit kendaraan<br>• GPS Orang: Tampilkan posisi GPS personel<br>• Evaluasi: Tampilkan data evaluasi">
+                    <button type="button" class="btn btn-filter px-3 layer-toggle-btn active" id="toggleCctv" data-layer="cctv" title="Toggle CCTV">
+                        <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">videocam</i>
+                        <span>CCTV</span>
+                    </button>
+                    <button type="button" class="btn btn-filter px-3 layer-toggle-btn" id="toggleHazard" data-layer="hazard" title="Toggle SAP">
+                        <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">assignment</i>
+                        <span>SAP</span>
+                    </button>
+                    <button type="button" class="btn btn-filter px-3 layer-toggle-btn active" id="toggleGr" data-layer="gr" title="Toggle Golden Rule">
+                        <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">rule</i>
+                        <span>GR</span>
+                    </button>
+                    <button type="button" class="btn btn-filter px-3 layer-toggle-btn active" id="toggleInsiden" data-layer="insiden" title="Toggle Insiden">
+                        <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">report_problem</i>
+                        <span>Insiden</span>
+                    </button>
+                    <button type="button" class="btn btn-filter px-3 layer-toggle-btn" id="toggleUnit" data-layer="unit" title="Toggle Unit">
+                        <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">directions_car</i>
+                        <span>Unit</span>
+                    </button>
+                    <button type="button" class="btn btn-filter px-3 layer-toggle-btn active" id="toggleGps" data-layer="gps" title="Toggle GPS Orang">
+                        <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">person_pin</i>
+                        <span>GPS Orang</span>
+                    </button>
+                    <button type="button" class="btn btn-filter px-3 layer-toggle-btn" id="toggleEvaluasi" data-layer="evaluasi" title="Toggle Evaluasi">
+                        <i class="material-icons-outlined me-1" style="font-size: 18px; vertical-align: middle;">assessment</i>
+                        <span>Evaluasi</span>
+                    </button>
+                </div>
+                <button type="button" class="btn btn-filter px-3" id="btnResetMainFilter" data-tg-tour="<strong>Reset Filter</strong><br><br>Klik tombol ini untuk mereset semua filter (Perusahaan dan Site) kembali ke 'Semua'.">
+                    <i class="material-icons-outlined me-2" style="font-size: 18px; vertical-align: middle;">refresh</i>
+                    Reset
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Map Container -->
+    <div class="position-relative" style="width: 100%; height: 100%;">
+        <div id="hazardMap" data-tg-tour="<strong>Interactive Map</strong><br><br>Peta interaktif untuk melihat lokasi semua data. Anda dapat:<br>• Zoom in/out dengan scroll mouse<br>• Klik marker untuk melihat detail<br>• Drag untuk menggeser peta<br>• Klik area kerja/CCTV untuk evaluasi"></div>
+        <div id="popup" class="ol-popup">
+            <a href="#" id="popup-closer" class="ol-popup-closer"></a>
+            <div id="popup-content"></div>
+        </div>
+        
+        <!-- Icon Toolbar - Left Side -->
+        <div class="map-icon-toolbar" data-tg-tour="<strong>Icon Toolbar</strong><br><br>Gunakan icon untuk melihat data berbeda:<br>• CCTV: Daftar kamera CCTV<br>• SAP: Safety Action Plan<br>• Insiden: Data insiden kecelakaan<br>• Unit: Posisi unit kendaraan<br>• GPS Orang: Lokasi personel<br>• Control Room: Data control room<br>• PJA: Pre Job Analysis<br>• Evaluasi: Summary evaluasi area">
+            <button class="icon-toolbar-btn active" data-tab="cctv" title="CCTV" id="iconToolbarCctv">
+                <i class="material-icons-outlined">videocam</i>
+                <span class="btn-label">CCTV</span>
+                <span class="icon-toolbar-badge" id="iconToolbarCctvCount">0</span>
+            </button>
+            <button class="icon-toolbar-btn" data-tab="sap" title="Safety Action Plan" id="iconToolbarSap">
+                <i class="material-icons-outlined">assignment</i>
+                <span class="btn-label">SAP</span>
+                <span class="icon-toolbar-badge" id="iconToolbarSapCount">0</span>
+            </button>
+            <button class="icon-toolbar-btn" data-tab="insiden" title="Insiden" id="iconToolbarInsiden">
+                <i class="material-icons-outlined">report_problem</i>
+                <span class="btn-label">Insiden</span>
+                <span class="icon-toolbar-badge" id="iconToolbarInsidenCount">0</span>
+            </button>
+            <button class="icon-toolbar-btn" data-tab="unit" title="Unit Kendaraan" id="iconToolbarUnit">
+                <i class="material-icons-outlined">directions_car</i>
+                <span class="btn-label">Unit</span>
+                <span class="icon-toolbar-badge" id="iconToolbarUnitCount">0</span>
+            </button>
+            <button class="icon-toolbar-btn" data-tab="gps" title="GPS Orang" id="iconToolbarGps">
+                <i class="material-icons-outlined">person_pin</i>
+                <span class="btn-label">GPS</span>
+                <span class="icon-toolbar-badge" id="iconToolbarGpsCount">0</span>
+            </button>
+            <div class="icon-toolbar-divider"></div>
+            <button class="icon-toolbar-btn" data-tab="controlroom" title="Control Room" id="iconToolbarControlroom">
+                <i class="material-icons-outlined">meeting_room</i>
+                <span class="btn-label">Control</span>
+                <span class="icon-toolbar-badge" id="iconToolbarControlroomCount">0</span>
+            </button>
+            <button class="icon-toolbar-btn" data-tab="pja" title="Pre Job Analysis" id="iconToolbarPja">
+                <i class="material-icons-outlined">description</i>
+                <span class="btn-label">PJA</span>
+                <span class="icon-toolbar-badge" id="iconToolbarPjaCount">0</span>
+            </button>
+            <button class="icon-toolbar-btn" data-tab="evaluasi" title="Evaluasi" id="iconToolbarEvaluasi">
+                <i class="material-icons-outlined">assessment</i>
+                <span class="btn-label">Evaluasi</span>
+            </button>
+        </div>
+        
+        <!-- Sidebar Panel - Right Side -->
+        <div id="mapSidebar" class="map-sidebar" data-tg-tour="<strong>Sidebar Panel</strong><br><br>Panel sidebar menampilkan daftar data berdasarkan tab yang dipilih. Gunakan icon toolbar di kiri untuk beralih antara CCTV, SAP, Insiden, Unit, GPS Orang, Control Room, PJA, dan Evaluasi. Gunakan search untuk mencari data spesifik.">
+            <!-- Toggle Button -->
+            <button id="sidebarToggle" class="sidebar-toggle-btn" type="button" data-tg-tour="<strong>Toggle Sidebar</strong><br><br>Klik tombol ini untuk membuka/menutup sidebar panel. Sidebar dapat di-collapse untuk memberikan lebih banyak ruang pada peta.">
+                <i class="material-icons-outlined" id="sidebarToggleIcon">chevron_left</i>
+            </button>
+            
+            <!-- Sidebar Content -->
+                          <div class="sidebar-content">
                             
                             <!-- Tab Content -->
                             <div class="sidebar-body">
                                 <!-- Search Bar -->
-                                <div class="sidebar-search">
+                                <div class="sidebar-search" data-tg-tour="<strong>Search & Filter</strong><br><br>Gunakan search bar untuk mencari data spesifik di tab yang aktif. Klik tombol filter untuk opsi filter tambahan.">
                                     <i class="material-icons-outlined search-icon">search</i>
                                     <input type="text" id="sidebarSearchInput" class="sidebar-search-input" placeholder="Cari...">
                                     <button type="button" class="sidebar-filter-btn" id="sidebarFilterBtn" title="Filter">
@@ -2076,8 +2723,6 @@
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
     </div>
 </div>
 
@@ -2102,6 +2747,48 @@
         </div>
     </div>
 </div>
+
+<!-- Modal untuk CCTV Stream Video -->
+<div class="modal fade" id="cctvStreamModal" tabindex="-1" aria-labelledby="cctvStreamModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cctvStreamModalLabel">CCTV Live Stream</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="cctvStreamContainer" style="width: 100%; height: 600px; background-color: #000; position: relative;">
+                    <!-- Python App iframe for stream -->
+                    <iframe 
+                        id="cctvStreamFrame" 
+                        style="width: 100%; height: 100%; border: none; display: none; background: #000;" 
+                        allowfullscreen
+                        allow="autoplay; fullscreen">
+                    </iframe>
+                    <!-- Fallback video element (kept for backward compatibility) -->
+                    <video id="cctvStreamVideo" style="width: 100%; height: 100%; display: none; background: #000;" controls autoplay muted playsinline></video>
+                    <div id="cctvStreamLoading" class="position-absolute top-50 start-50 translate-middle text-center text-white" style="display: none;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2 mb-0">Memuat stream video dari Python...</p>
+                        <small class="text-white-50 d-block">Pastikan aplikasi Python berjalan di localhost:5000</small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="btnRefreshStream" onclick="refreshCurrentStream()">
+                    <i class="material-icons-outlined me-1" style="font-size: 16px;">refresh</i>
+                    Refresh Stream
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
 
 @endsection
 
@@ -2447,9 +3134,11 @@
         pja: []
     };
     
+    // Store original PJA data for filtering
+    let originalPjaData = [];
+    
     // Store original Control Room data for filtering
     let originalControlRoomData = [];
-    let originalPjaData = [];
     
     // Layer visibility state
     // Default: SAP dan Unit hidden untuk performa
@@ -3450,36 +4139,59 @@
     map.addLayer(unitVehicleLayer);
     console.log('Unit vehicle layer created and added to map');
 
+    // Function to create user GPS icon from SVG - using direct data URI
+    const svgIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><g><path fill="#506C7F" d="M18,12c0-5.522,4.478-10,10-10h8c5.522,0,10,4.478,10,10v7c0-3.313-2.687-6-6-6h-6c-2.209,0-4-1.791-4-4c0-0.553-0.447-1-1-1s-1,0.447-1,1c0,2.209-1.791,4-4,4c-3.313,0-6,2.687-6,6V12z"></path><path fill="#45AAB8" d="M62,60c0,1.104-0.896,2-2,2H4c-1.104,0-2-0.896-2-2v-8c0-1.104,0.447-2.104,1.172-2.828l-0.004-0.004c4.148-3.343,8.896-5.964,14.046-7.714C20.869,45.467,26.117,48,31.973,48c5.862,0,11.115-2.538,14.771-6.56c5.167,1.75,9.929,4.376,14.089,7.728l-0.004,0.004C61.553,49.896,62,50.896,62,52V60z"></path><g><path fill="#F9EBB2" d="M32,42c-2.853,0-5.502-0.857-7.715-2.322c-1.675,0.283-3.325,0.638-4.934,1.097C22.602,43.989,27.041,46,31.973,46c4.938,0,9.383-2.017,12.634-5.238c-1.595-0.454-3.231-0.803-4.892-1.084C37.502,41.143,34.853,42,32,42z"></path><path fill="#F9EBB2" d="M46,22h-1c-0.553,0-1-0.447-1-1v-1v-1c0-2.209-1.791-4-4-4h-6c-2.088,0-3.926-1.068-5-2.687C27.926,13.932,26.088,15,24,15c-2.209,0-4,1.791-4,4v1v1c0,0.553-0.447,1-1,1h-1c-0.553,0-1,0.447-1,1v2c0,0.553,0.447,1,1,1h1c0.553,0,1,0.447,1,1v1c0,6.627,5.373,12,12,12s12-5.373,12-12v-1c0-0.553,0.447-1,1-1h1c0.553,0,1-0.447,1-1v-2C47,22.447,46.553,22,46,22z"></path></g><path fill="#394240" d="M62.242,47.758l0.014-0.014c-5.847-4.753-12.84-8.137-20.491-9.722C44.374,35.479,46,31.932,46,28c1.657,0,3-1.343,3-3v-2c0-0.886-0.391-1.673-1-2.222V12c0-6.627-5.373-12-12-12h-8c-6.627,0-12,5.373-12,12v8.778c-0.609,0.549-1,1.336-1,2.222v2c0,1.657,1.343,3,3,3c0,3.932,1.626,7.479,4.236,10.022c-7.652,1.586-14.646,4.969-20.492,9.722l0.014,0.014C0.672,48.844,0,50.344,0,52v8c0,2.211,1.789,4,4,4h56c2.211,0,4-1.789,4-4v-8C64,50.344,63.328,48.844,62.242,47.758z M18,12c0-5.522,4.478-10,10-10h8c5.522,0,10,4.478,10,10v7c0-3.313-2.687-6-6-6h-6c-2.209,0-4-1.791-4-4c0-0.553-0.447-1-1-1s-1,0.447-1,1c0,2.209-1.791,4-4,4c-3.313,0-6,2.687-6,6V12z M20,28v-1c0-0.553-0.447-1-1-1h-1c-0.553,0-1-0.447-1-1v-2c0-0.553,0.447-1,1-1h1c0.553,0,1-0.447,1-1v-2c0-2.209,1.791-4,4-4c2.088,0,3.926-1.068,5-2.687C30.074,13.932,31.912,15,34,15h6c2.209,0,4,1.791,4,4v2c0,0.553,0.447,1,1,1h1c0.553,0,1,0.447,1,1v2c0,0.553-0.447,1-1,1h-1c-0.553,0-1,0.447-1,1v1c0,6.627-5.373,12-12,12S20,34.627,20,28z M24.285,39.678C26.498,41.143,29.147,42,32,42s5.502-0.857,7.715-2.322c1.66,0.281,3.297,0.63,4.892,1.084C41.355,43.983,36.911,46,31.973,46c-4.932,0-9.371-2.011-12.621-5.226C20.96,40.315,22.61,39.961,24.285,39.678z M62,60c0,1.104-0.896,2-2,2H4c-1.104,0-2-0.896-2-2v-8c0-1.104,0.447-2.104,1.172-2.828l-0.004-0.004c4.148-3.343,8.896-5.964,14.046-7.714C20.869,45.467,26.117,48,31.973,48c5.862,0,11.115-2.538,14.771-6.56c5.167,1.75,9.929,4.376,14.089,7.728l-0.004,0.004C61.553,49.896,62,50.896,62,52V60z"></path><path fill="#394240" d="M24.537,21.862c0.475,0.255,1.073,0.068,1.345-0.396C25.91,21.419,26.18,21,26.998,21c0.808,0,1.096,0.436,1.111,0.458C28.287,21.803,28.637,22,28.999,22c0.154,0,0.311-0.035,0.457-0.111c0.491-0.253,0.684-0.856,0.431-1.347C29.592,19.969,28.651,19,26.998,19c-1.691,0-2.618,0.983-2.9,1.564C23.864,21.047,24.063,21.609,24.537,21.862z"></path><path fill="#394240" d="M34.539,21.862c0.475,0.255,1.073,0.068,1.345-0.396C35.912,21.419,36.182,21,37,21c0.808,0,1.096,0.436,1.111,0.458C38.289,21.803,38.639,22,39.001,22c0.154,0,0.311-0.035,0.457-0.111c0.491-0.253,0.684-0.856,0.431-1.347C39.594,19.969,38.653,19,37,19c-1.691,0-2.618,0.983-2.9,1.564C33.866,21.047,34.065,21.609,34.539,21.862z"></path></g></svg>';
+    const userGpsIconUrl = 'data:image/svg+xml;base64,' + btoa(svgIcon);
+
+    // Function to calculate dynamic scale based on zoom level
+    function getDynamicScale(zoom) {
+        // Scale dinamis berdasarkan zoom level
+        // Zoom rendah (jauh) = scale kecil, Zoom tinggi (dekat) = scale besar
+        if (zoom <= 10) {
+            return 0.15; // Sangat kecil saat zoom jauh
+        } else if (zoom <= 12) {
+            return 0.2; // Kecil
+        } else if (zoom <= 14) {
+            return 0.3; // Sedang
+        } else if (zoom <= 16) {
+            return 0.4; // Agak besar
+        } else if (zoom <= 18) {
+            return 0.5; // Besar
+        } else {
+            return 0.6; // Sangat besar saat zoom sangat dekat
+        }
+    }
+
     // Create User GPS Layer
     userGpsLayer = new ol.layer.Vector({
         source: new ol.source.Vector(),
-        style: function(feature) {
+        style: function(feature, resolution) {
             const userData = feature.get('userData');
-            const battery = userData?.battery ?? 100;
-            const batteryColor = battery < 20 ? '#ef4444' : battery < 50 ? '#f59e0b' : '#10b981';
+            // Dapatkan zoom level dari map
+            const zoom = map.getView().getZoom();
+            const dynamicScale = getDynamicScale(zoom);
             
-            // Icon untuk GPS orang - menggunakan person icon
-            const svgIcon = `
-                <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="16" cy="16" r="15" fill="${batteryColor}" opacity="0.9" stroke="white" stroke-width="2"/>
-                    <path d="M16 9 C13.24 9 11 11.24 11 14 C11 16.76 13.24 19 16 19 C18.76 19 21 16.76 21 14 C21 11.24 18.76 9 16 9 Z" fill="white"/>
-                    <path d="M10 22 C10 19.24 12.24 17 15 17 L17 17 C19.76 17 22 19.24 22 22 L22 24 L10 24 Z" fill="white"/>
-                </svg>
-            `;
-            
+            // Icon untuk GPS orang - menggunakan SVG dengan scale dinamis
             const iconStyle = new ol.style.Style({
                 image: new ol.style.Icon({
                     anchor: [0.5, 1],
                     anchorXUnits: 'fraction',
                     anchorYUnits: 'fraction',
-                    src: 'data:image/svg+xml;base64,' + btoa(svgIcon),
-                    scale: 0.7,
+                    src: userGpsIconUrl,
+                    scale: dynamicScale,
                     rotation: userData?.course ? (userData.course * Math.PI / 180) : 0
                 })
             });
             return iconStyle;
         },
         zIndex: 100
+    });
+    
+    // Update style saat zoom berubah
+    map.getView().on('change:resolution', function() {
+        if (userGpsLayer) {
+            userGpsLayer.getSource().changed();
+        }
     });
     map.addLayer(userGpsLayer);
     console.log('User GPS layer created and added to map');
@@ -6644,6 +7356,26 @@
         }
     }
 
+    // Helper function untuk format tanggal dengan mengurangi 8 jam (UTC ke WIB)
+    function formatDateWIB(dateString) {
+        if (!dateString) return 'N/A';
+        try {
+            const date = new Date(dateString);
+            // Kurangi 8 jam untuk konversi UTC ke WIB
+            date.setHours(date.getHours() - 8);
+            return date.toLocaleString('id-ID', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        } catch (e) {
+            return 'N/A';
+        }
+    }
+
     function showUserGpsPopup(coordinate, user) {
         if (!user) {
             return;
@@ -6662,11 +7394,12 @@
         const course = user.course !== null && user.course !== undefined ? user.course + '°' : 'N/A';
         const battery = user.battery !== null && user.battery !== undefined ? user.battery + '%' : 'N/A';
         const batteryColor = user.battery < 20 ? '#ef4444' : user.battery < 50 ? '#f59e0b' : '#10b981';
-        const updatedAt = user.gps_updated_at ? new Date(user.gps_updated_at).toLocaleString('id-ID') : 'N/A';
+        const updatedAt = formatDateWIB(user.gps_updated_at);
         const latitude = user.latitude !== null && user.latitude !== undefined ? user.latitude.toFixed(6) : 'N/A';
         const longitude = user.longitude !== null && user.longitude !== undefined ? user.longitude.toFixed(6) : 'N/A';
 
-        const content = `
+        // Tampilkan loading state dulu
+        const loadingContent = `
             <div style="min-width: 280px;">
                 <div class="d-flex align-items-center gap-2 mb-2">
                     <i class="material-icons-outlined text-primary">person_pin</i>
@@ -6674,7 +7407,43 @@
                 </div>
                 <div style="border-top: 1px solid #e5e7eb; padding-top: 10px; margin-top: 10px;">
                     <p style="margin: 5px 0; font-size: 13px;">
-                        <strong>NPK:</strong> ${npk}
+                        <strong>SID:</strong> ${npk}
+                    </p>
+                    <p style="margin: 5px 0; font-size: 13px; color: #6b7280;">
+                        <i class="material-icons-outlined" style="font-size: 14px; vertical-align: middle;">sync</i>
+                        Memuat informasi lokasi...
+                    </p>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('popup-content').innerHTML = loadingContent;
+        popupOverlay.setPosition(coordinate);
+
+        // Load location details
+        const locationId = user.location_id || user.work_area_location_id || null;
+        const employeeId = user.employee_id || user.user_id || user.id || null;
+        
+        fetch(`{{ route('maps.api.gps-user-location-details') }}?latitude=${latitude}&longitude=${longitude}${locationId ? '&location_id=' + locationId : ''}${employeeId ? '&employee_id=' + employeeId : ''}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.data) {
+                    const locationData = data.data;
+                    const workAreaName = locationData.work_area ? locationData.work_area.name : 'Tidak diketahui';
+                    const sapCount = locationData.sap_count || 0;
+                    const sapOpenCount = locationData.sap_open_count || 0;
+                    const cctvCount = locationData.cctv_count || 0;
+                    const pjaCount = locationData.pja_count || 0;
+
+                    const content = `
+                        <div style="min-width: 300px;">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="material-icons-outlined text-primary">person_pin</i>
+                                <h6 style="margin: 0; font-weight: 600;">${fullname}</h6>
+                            </div>
+                            <div style="border-top: 1px solid #e5e7eb; padding-top: 10px; margin-top: 10px;">
+                                <p style="margin: 5px 0; font-size: 13px;">
+                                    <strong>SID:</strong> ${npk}
                     </p>
                     ${email !== 'N/A' ? `<p style="margin: 5px 0; font-size: 13px;"><strong>Email:</strong> ${email}</p>` : ''}
                     ${phone !== 'N/A' ? `<p style="margin: 5px 0; font-size: 13px;"><strong>Phone:</strong> ${phone}</p>` : ''}
@@ -6690,6 +7459,7 @@
                     ${functionalPosition !== 'N/A' ? `<p style="margin: 5px 0; font-size: 13px;"><strong>Jabatan Fungsional:</strong> ${functionalPosition}</p>` : ''}
                     ${structuralPosition !== 'N/A' ? `<p style="margin: 5px 0; font-size: 13px;"><strong>Jabatan Struktural:</strong> ${structuralPosition}</p>` : ''}
                     ${siteAssignment !== 'N/A' ? `<p style="margin: 5px 0; font-size: 13px;"><strong>Site Assignment:</strong> ${siteAssignment}</p>` : ''}
+                                
                     <div style="border-top: 1px solid #e5e7eb; padding-top: 10px; margin-top: 10px;">
                         <p style="margin: 5px 0; font-size: 13px;">
                             <strong>Koordinat:</strong> ${latitude}, ${longitude}
@@ -6704,13 +7474,287 @@
                             <strong>Update Terakhir:</strong> ${updatedAt}
                         </p>
                     </div>
+
+                                <div style="border-top: 1px solid #e5e7eb; padding-top: 10px; margin-top: 10px; background-color: #f9fafb; padding: 10px; border-radius: 6px;">
+                                    <p style="margin: 5px 0; font-size: 13px; font-weight: 600; color: #1f2937;">
+                                        <i class="material-icons-outlined" style="font-size: 16px; vertical-align: middle;">location_on</i>
+                                        Lokasi Saat Ini
+                                    </p>
+                                    <p style="margin: 5px 0; font-size: 13px;">
+                                        <strong>Area Kerja:</strong> ${workAreaName}
+                                    </p>
+                                    <p style="margin: 5px 0; font-size: 13px;">
+                                        <strong>SAP di Area:</strong> <span style="color: ${sapCount > 0 ? '#ef4444' : '#10b981'}; font-weight: 600;">${sapCount}</span>
+                                    </p>
+                                    <p style="margin: 5px 0; font-size: 13px;">
+                                        <strong>SAP Open:</strong> <span style="color: ${sapOpenCount > 0 ? '#dc2626' : '#10b981'}; font-weight: 600;">${sapOpenCount}</span>
+                                    </p>
+                                    <p style="margin: 5px 0; font-size: 13px;">
+                                        <strong>CCTV Mengcover:</strong> <span style="color: ${cctvCount > 0 ? '#3b82f6' : '#6b7280'}; font-weight: 600;">${cctvCount}</span>
+                                    </p>
+                                    <p style="margin: 5px 0; font-size: 13px;">
+                                        <strong>PJA Lokasi:</strong> <span style="color: ${pjaCount > 0 ? '#8b5cf6' : '#6b7280'}; font-weight: 600;">${pjaCount}</span>
+                                    </p>
+                                </div>
+
+                                <div style="margin-top: 10px;">
+                                    <button class="btn btn-sm btn-primary w-100" onclick="showGpsUserDetailModal(${JSON.stringify(user).replace(/"/g, '&quot;')}, ${JSON.stringify(locationData).replace(/"/g, '&quot;')})">
+                                        <i class="material-icons-outlined" style="font-size: 16px; vertical-align: middle;">info</i>
+                                        Lihat Detail Lengkap
+                                    </button>
+                                </div>
                 </div>
             </div>
         `;
 
         document.getElementById('popup-content').innerHTML = content;
-        popupOverlay.setPosition(coordinate);
+                } else {
+                    // Fallback jika API error
+                    showUserGpsPopupFallback(coordinate, user);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading location details:', error);
+                showUserGpsPopupFallback(coordinate, user);
+            });
     }
+
+    function showUserGpsPopupFallback(coordinate, user) {
+        const fullname = user.fullname || 'N/A';
+        const npk = user.npk || 'N/A';
+        const latitude = user.latitude !== null && user.latitude !== undefined ? user.latitude.toFixed(6) : 'N/A';
+        const longitude = user.longitude !== null && user.longitude !== undefined ? user.longitude.toFixed(6) : 'N/A';
+        const workAreaName = user.work_area_name || 'Tidak diketahui';
+
+        const content = `
+            <div style="min-width: 280px;">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="material-icons-outlined text-primary">person_pin</i>
+                    <h6 style="margin: 0; font-weight: 600;">${fullname}</h6>
+                </div>
+                <div style="border-top: 1px solid #e5e7eb; padding-top: 10px; margin-top: 10px;">
+                    <p style="margin: 5px 0; font-size: 13px;">
+                        <strong>SID:</strong> ${npk}
+                    </p>
+                    <p style="margin: 5px 0; font-size: 13px;">
+                        <strong>Area Kerja:</strong> ${workAreaName}
+                    </p>
+                    <p style="margin: 5px 0; font-size: 13px;">
+                        <strong>Koordinat:</strong> ${latitude}, ${longitude}
+                    </p>
+                    <p style="margin: 5px 0; font-size: 12px; color: #6b7280;">
+                        Gagal memuat detail lokasi
+                    </p>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('popup-content').innerHTML = content;
+    }
+
+    // Function to show GPS user detail modal
+    window.showGpsUserDetailModal = function(user, locationData) {
+        // Close popup first
+        popupOverlay.setPosition(undefined);
+        
+        // Create or get modal element
+        let modalElement = document.getElementById('gpsUserDetailModal');
+        if (!modalElement) {
+            modalElement = document.createElement('div');
+            modalElement.id = 'gpsUserDetailModal';
+            modalElement.className = 'modal fade';
+            modalElement.setAttribute('tabindex', '-1');
+            document.body.appendChild(modalElement);
+    }
+
+        const workAreaName = locationData.work_area ? locationData.work_area.name : 'Tidak diketahui';
+        const sapCount = locationData.sap_count || 0;
+        const sapOpenCount = locationData.sap_open_count || 0;
+        const cctvCount = locationData.cctv_count || 0;
+        const pjaCount = locationData.pja_count || 0;
+        const sapList = locationData.sap_list || [];
+        const sapOpenList = locationData.sap_open_list || [];
+        const cctvList = locationData.cctv_list || [];
+        const pjaList = locationData.pja_list || [];
+
+        modalElement.innerHTML = `
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="material-icons-outlined">person_pin</i>
+                            Detail Lokasi: ${user.fullname || 'N/A'}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6 class="card-title">
+                                            <i class="material-icons-outlined">location_on</i>
+                                            Lokasi Saat Ini
+                                        </h6>
+                                        <p class="mb-1"><strong>Area Kerja:</strong></p>
+                                        <p class="text-muted">${workAreaName}</p>
+                                        ${locationData.work_area ? `
+                                            <p class="mb-1"><strong>Location ID:</strong></p>
+                                            <p class="text-muted">${locationData.work_area.location_id || 'N/A'}</p>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6 class="card-title">
+                                            <i class="material-icons-outlined">info</i>
+                                            Statistik
+                                        </h6>
+                                        <p class="mb-1"><strong>SAP di Area:</strong></p>
+                                        <p class="text-danger" style="font-size: 24px; font-weight: 600;">${sapCount}</p>
+                                        <p class="mb-1"><strong>SAP Open:</strong></p>
+                                        <p class="text-danger" style="font-size: 24px; font-weight: 600;">${sapOpenCount}</p>
+                                        <p class="mb-1"><strong>CCTV Mengcover:</strong></p>
+                                        <p class="text-primary" style="font-size: 24px; font-weight: 600;">${cctvCount}</p>
+                                        <p class="mb-1"><strong>PJA Lokasi:</strong></p>
+                                        <p class="text-purple" style="font-size: 24px; font-weight: 600; color: #8b5cf6;">${pjaCount}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${sapOpenList.length > 0 ? `
+                            <div class="mb-3">
+                                <h6><i class="material-icons-outlined">warning</i> Daftar SAP Open di Area (${sapOpenCount})</h6>
+                                <div class="table-responsive" style="max-height: 300px;">
+                                    <table class="table table-sm table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Task Number</th>
+                                                <th>Jenis</th>
+                                                <th>Lokasi</th>
+                                                <th>Tanggal</th>
+                                                <th>Jarak</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${sapOpenList.map(sap => `
+                                                <tr>
+                                                    <td>${sap.task_number || 'N/A'}</td>
+                                                    <td><span class="badge bg-danger">${sap.source_type || sap.jenis_laporan || 'SAP'}</span></td>
+                                                    <td>${sap.lokasi || sap.detail_lokasi || 'N/A'}</td>
+                                                    <td>${sap.tanggal ? formatDateWIB(sap.tanggal).split(',')[0] : 'N/A'}</td>
+                                                    <td>${sap.distance ? sap.distance + ' m' : 'N/A'}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        ${sapList.length > 0 ? `
+                            <div class="mb-3">
+                                <h6><i class="material-icons-outlined">warning</i> Daftar Semua SAP di Area (${sapCount})</h6>
+                                <div class="table-responsive" style="max-height: 300px;">
+                                    <table class="table table-sm table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Task Number</th>
+                                                <th>Jenis</th>
+                                                <th>Lokasi</th>
+                                                <th>Tanggal</th>
+                                                <th>Jarak</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${sapList.map(sap => `
+                                                <tr>
+                                                    <td>${sap.task_number || 'N/A'}</td>
+                                                    <td><span class="badge bg-warning">${sap.source_type || sap.jenis_laporan || 'SAP'}</span></td>
+                                                    <td>${sap.lokasi || sap.detail_lokasi || 'N/A'}</td>
+                                                    <td>${sap.tanggal ? formatDateWIB(sap.tanggal).split(',')[0] : 'N/A'}</td>
+                                                    <td>${sap.distance ? sap.distance + ' m' : 'N/A'}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        ${cctvList.length > 0 ? `
+                            <div class="mb-3">
+                                <h6><i class="material-icons-outlined">videocam</i> CCTV yang Mengcover Area (${cctvCount})</h6>
+                                <div class="table-responsive" style="max-height: 300px;">
+                                    <table class="table table-sm table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Nama CCTV</th>
+                                                <th>No CCTV</th>
+                                                <th>Coverage Lokasi</th>
+                                                <th>Jarak</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${cctvList.map(cctv => `
+                                                <tr>
+                                                    <td>${cctv.name || 'N/A'}</td>
+                                                    <td>${cctv.no_cctv || 'N/A'}</td>
+                                                    <td>${cctv.coverage_lokasi || 'N/A'}</td>
+                                                    <td>${cctv.distance ? cctv.distance + ' m' : 'N/A'}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        ${pjaList.length > 0 ? `
+                            <div class="mb-3">
+                                <h6><i class="material-icons-outlined">assignment</i> PJA di Lokasi (${pjaCount})</h6>
+                                <div class="table-responsive" style="max-height: 300px;">
+                                    <table class="table table-sm table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>PJA ID</th>
+                                                <th>Nama PJA</th>
+                                                <th>Lokasi</th>
+                                                <th>Site</th>
+                                                <th>Type</th>
+                                                <th>Employee</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${pjaList.map(pja => `
+                                                <tr>
+                                                    <td>${pja.pja_id || 'N/A'}</td>
+                                                    <td>${pja.nama_pja || 'N/A'}</td>
+                                                    <td>${pja.lokasi || pja.detail_lokasi || 'N/A'}</td>
+                                                    <td>${pja.site || 'N/A'}</td>
+                                                    <td><span class="badge bg-info">${pja.pja_type_name || 'N/A'}</span></td>
+                                                    <td>${pja.employee_name || pja.kode_sid || 'N/A'}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+    };
 
     function showUnitVehiclePopup(coordinate, unit) {
         if (!unit) {
@@ -11363,20 +12407,35 @@
                 // For more accurate check, create a point and check if it's inside polygon
                 const point = new ol.geom.Point(coordinate);
                 
-                // Check if point intersects with polygon (point inside polygon)
-                if (geometry.intersectsGeometry(point)) {
-                    return true;
+                // Check if point intersects with polygon using intersects method
+                // Note: intersectsGeometry doesn't exist in OpenLayers, use intersectsCoordinate instead
+                try {
+                    if (geometry.intersectsCoordinate(coordinate)) {
+                        return true;
+                    }
+                } catch (e) {
+                    // Fallback: check if coordinate is within extent
+                    const extent = geometry.getExtent();
+                    if (extent && ol.extent.containsCoordinate(extent, coordinate)) {
+                        // Additional check: use ray casting algorithm for more accurate point-in-polygon
+                        // For now, if it's in extent, we'll consider it as inside
+                        return true;
+                    }
                 }
                 
                 // Also check if point is very close to polygon boundary (within 10 meters tolerance)
                 // This handles cases where coordinate is slightly outside due to GPS accuracy
-                const closestPoint = geometry.getClosestPoint(coordinate);
-                const distance = ol.coordinate.distance(coordinate, closestPoint);
-                // Convert distance from map units to meters (approximate: 1 map unit ≈ 1 meter at equator)
-                // For more accuracy, we can use ol.sphere.getDistance but it requires lon/lat
-                const distanceInMeters = distance; // Approximate conversion
-                if (distanceInMeters < 10) { // 10 meters tolerance
-                    return true;
+                try {
+                    const closestPoint = geometry.getClosestPoint(coordinate);
+                    const distance = ol.coordinate.distance(coordinate, closestPoint);
+                    // Convert distance from map units to meters (approximate: 1 map unit ≈ 1 meter at equator)
+                    // For more accuracy, we can use ol.sphere.getDistance but it requires lon/lat
+                    const distanceInMeters = distance; // Approximate conversion
+                    if (distanceInMeters < 10) { // 10 meters tolerance
+                        return true;
+                    }
+                } catch (e) {
+                    // Ignore error in closest point calculation
                 }
             } else {
                 // For other geometry types, use intersectsCoordinate
@@ -11658,7 +12717,7 @@
         }
         // GPS data akan di-load oleh loadUserGpsData()
         
-        // Initialize Control Room data
+        // Initialize Control Room data - group CCTV by control_room
         initializeControlRoomData();
         
         updateTabCounts();
@@ -11677,11 +12736,34 @@
         const insidenCount = document.getElementById('insidenTabCount');
         const unitCount = document.getElementById('unitTabCount');
         const gpsCount = document.getElementById('gpsTabCount');
-        const controlroomCount = document.getElementById('controlroomTabCount');
         const pjaCount = document.getElementById('pjaTabCount');
         
-        if (cctvCount) cctvCount.textContent = filteredSidebarData.cctv.length;
+        // Update icon toolbar badges
+        const iconToolbarBadges = {
+            'cctvTabCount': 'iconToolbarCctvCount',
+            'sapTabCount': 'iconToolbarSapCount',
+            'insidenTabCount': 'iconToolbarInsidenCount',
+            'unitTabCount': 'iconToolbarUnitCount',
+            'gpsTabCount': 'iconToolbarGpsCount',
+            'pjaTabCount': 'iconToolbarPjaCount',
+            'controlroomTabCount': 'iconToolbarControlroomCount'
+        };
         
+        // Sync counts to icon toolbar badges
+        Object.keys(iconToolbarBadges).forEach(tabCountId => {
+            const tabCountEl = document.getElementById(tabCountId);
+            const iconBadgeEl = document.getElementById(iconToolbarBadges[tabCountId]);
+            if (tabCountEl && iconBadgeEl) {
+                const count = tabCountEl.textContent.trim();
+                if (count && count !== '0' && count !== '...') {
+                    iconBadgeEl.textContent = count;
+                } else {
+                    iconBadgeEl.textContent = '';
+                }
+            }
+        });
+        
+        if (cctvCount) cctvCount.textContent = filteredSidebarData.cctv.length;
         // Untuk SAP, gunakan semua data per week untuk count (bukan hanya data hari ini)
         if (sapCount) {
             const sapCountValue = (typeof sapDataAllWeek !== 'undefined' && sapDataAllWeek.length > 0) 
@@ -11689,12 +12771,26 @@
                 : filteredSidebarData.sap.length;
             sapCount.textContent = sapCountValue;
         }
-        
         if (insidenCount) insidenCount.textContent = filteredSidebarData.insiden.length;
         if (unitCount) unitCount.textContent = filteredSidebarData.unit.length;
         if (gpsCount) gpsCount.textContent = filteredSidebarData.gps.length;
+        const controlroomCount = document.getElementById('controlroomTabCount');
         if (controlroomCount) controlroomCount.textContent = filteredSidebarData.controlroom.length;
         if (pjaCount) pjaCount.textContent = filteredSidebarData.pja.length;
+        
+        // Update icon toolbar badges after updating tab counts
+        Object.keys(iconToolbarBadges).forEach(tabCountId => {
+            const tabCountEl = document.getElementById(tabCountId);
+            const iconBadgeEl = document.getElementById(iconToolbarBadges[tabCountId]);
+            if (tabCountEl && iconBadgeEl) {
+                const count = tabCountEl.textContent.trim();
+                if (count && count !== '0' && count !== '...') {
+                    iconBadgeEl.textContent = count;
+                } else {
+                    iconBadgeEl.textContent = '';
+                }
+            }
+        });
     }
     
     // Get avatar color based on first letter
@@ -11735,6 +12831,27 @@
         }
     }
     
+    // Format date with time (for history)
+    function formatDateWIB(dateString) {
+        if (!dateString) return 'N/A';
+        
+        try {
+            const date = new Date(dateString);
+            // Kurangi 7 jam dari waktu database
+            date.setHours(date.getHours() - 7);
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+            const day = date.getDate();
+            const month = months[date.getMonth()];
+            const year = date.getFullYear();
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            
+            return `${day} ${month} ${year}, ${hours}:${minutes} WITA`;
+        } catch (e) {
+            return dateString;
+        }
+    }
+    
     // Render CCTV list
     // Data CCTV diambil langsung dari database, bukan dari WMS atau GeoJSON
     function renderCctvList(data) {
@@ -11760,54 +12877,349 @@
             const firstLetter = getFirstLetter(name);
             const avatarColor = getAvatarColor(firstLetter);
             
-            // Gunakan timestamp dari database (created_at atau updated_at)
-            // Jika tidak ada, gunakan tahun_update dan bulan_update jika tersedia
-            let timestamp = '';
-            if (cctv.created_at) {
-                timestamp = formatTimestamp(cctv.created_at);
-            } else if (cctv.updated_at) {
-                timestamp = formatTimestamp(cctv.updated_at);
-            } else if (cctv.tahun_update && cctv.bulan_update) {
-                // Format dari tahun_update dan bulan_update
-                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-                timestamp = `${months[cctv.bulan_update - 1] || 'Des'} ${cctv.tahun_update}`;
-            }
+            // Gunakan kategori_area_tercapture dari database
+            const kategoriArea = cctv.kategori_area_tercapture || '';
+            
+            // Get RTSP URL for streaming
+            const rawRtspUrl = (cctv.rtsp_url && cctv.rtsp_url.trim() !== '') ? cctv.rtsp_url.trim() : '';
+            const effectiveRtspUrl = rawRtspUrl || defaultCctvRtspUrl || '';
             
             return `
-                <div class="sidebar-list-item" data-type="cctv" data-id="${cctv.id}" data-index="${index}">
-                    <div class="list-item-avatar" style="background-color: ${avatarColor};">
-                        ${firstLetter}
+                <div class="sidebar-list-item" data-type="cctv" data-id="${cctv.id}" data-index="${index}" data-hazard-status="loading" data-cctv-name="${escapeHtml(name).replace(/"/g, '&quot;')}" data-rtsp-url="${escapeHtml(effectiveRtspUrl).replace(/"/g, '&quot;')}">
+                    <div class="sidebar-list-item-header">
+                        <div class="list-item-avatar" style="background-color: ${avatarColor};">
+                            ${firstLetter}
+                        </div>
+                        <div class="list-item-content">
+                            <div class="list-item-title">${name}</div>
+                            <div class="list-item-subtitle">${id ? `${id}${fullId ? ` (${fullId})` : ''}` : `ID: ${fullId || index + 1}`}</div>
+                            ${kategoriArea ? `<div class="list-item-time">${kategoriArea}</div>` : ''}
+                        </div>
+                        <div class="cctv-hazard-status-icon loading" title="Memeriksa status hazard inspeksi...">
+                            <i class="material-icons-outlined" style="font-size: 14px;">hourglass_empty</i>
+                        </div>
+                        <i class="material-icons-outlined list-item-expand-icon">expand_more</i>
                     </div>
-                    <div class="list-item-content">
-                        <div class="list-item-title">${name}</div>
-                        <div class="list-item-subtitle">${id ? `${id}${fullId ? ` (${fullId})` : ''}` : `ID: ${fullId || index + 1}`}</div>
-                        ${timestamp ? `<div class="list-item-time">${timestamp}</div>` : ''}
+                    <div class="cctv-detail-section">
+                        <div class="cctv-detail-loading">
+                            <i class="material-icons-outlined" style="font-size: 24px; margin-bottom: 8px; opacity: 0.5;">hourglass_empty</i>
+                            <div>Memuat detail...</div>
+                        </div>
                     </div>
                 </div>
             `;
         }).join('');
         
-        // Add click handlers - zoom ke lokasi CCTV di map
+        // Load hazard status for all CCTV
+        loadCctvHazardStatus(data.map(c => c.id));
+        
+        // Add click handlers - toggle expand/collapse dan load details
         container.querySelectorAll('.sidebar-list-item').forEach(item => {
-            item.addEventListener('click', function() {
+            item.addEventListener('click', function(e) {
+                // Prevent event bubbling untuk icon expand
+                if (e.target.classList.contains('list-item-expand-icon')) {
+                    e.stopPropagation();
+                }
+                
                 const cctvId = this.dataset.id;
                 const cctvData = data.find(c => c.id == cctvId);
-                if (cctvData) {
+                
+                // Toggle expanded state
+                const isExpanded = this.classList.contains('expanded');
+                
+                if (isExpanded) {
+                    // Collapse
+                    this.classList.remove('expanded');
+                } else {
+                    // Expand - load details
+                    this.classList.add('expanded');
+                    loadCctvDetails(cctvId, this);
+                    
                     // Jika CCTV punya koordinat, zoom ke lokasi
-                    const hasLocation = cctvData.has_location !== false && cctvData.location && Array.isArray(cctvData.location) && cctvData.location.length === 2;
-                    if (hasLocation) {
-                        highlightAndZoomToLocation(cctvData.location, 'cctv', cctvData);
-                    } else {
-                        // Jika tidak punya koordinat, highlight saja di sidebar
-                        document.querySelectorAll('.sidebar-list-item').forEach(i => i.classList.remove('active'));
-                        this.classList.add('active');
-                        this.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        // Bisa tambahkan notifikasi bahwa CCTV ini tidak punya koordinat
-                        console.log('CCTV ini tidak memiliki koordinat:', cctvData.name || cctvData.nama_cctv);
+                    if (cctvData) {
+                        const hasLocation = cctvData.has_location !== false && cctvData.location && Array.isArray(cctvData.location) && cctvData.location.length === 2;
+                        if (hasLocation) {
+                            highlightAndZoomToLocation(cctvData.location, 'cctv', cctvData);
+                        }
                     }
                 }
+                
+                // Highlight active item
+                document.querySelectorAll('.sidebar-list-item').forEach(i => {
+                    if (i !== this) i.classList.remove('active');
+                });
+                this.classList.add('active');
             });
         });
+    }
+    
+    // Load CCTV details from API
+    function loadCctvDetails(cctvId, itemElement) {
+        const detailSection = itemElement.querySelector('.cctv-detail-section');
+        if (!detailSection) return;
+        
+        // Check if already loaded
+        if (detailSection.dataset.loaded === 'true') {
+            return;
+        }
+        
+        // Get CCTV data from itemElement data attributes
+        const cctvName = itemElement.dataset.cctvName || '';
+        const rtspUrl = itemElement.dataset.rtspUrl || '';
+        
+        // Show loading
+        detailSection.innerHTML = `
+            <div class="cctv-detail-loading">
+                <i class="material-icons-outlined" style="font-size: 24px; margin-bottom: 8px; opacity: 0.7;">hourglass_empty</i>
+                <div style="margin-top: 8px;">Memuat detail...</div>
+            </div>
+        `;
+        
+        // Fetch details
+        const detailsUrl = `{{ url('cctv-data') }}/${cctvId}/details`;
+        fetch(detailsUrl)
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    detailSection.dataset.loaded = 'true';
+                    // Pass CCTV name and rtsp_url to renderCctvDetails
+                    renderCctvDetails(result.data, detailSection, cctvName, rtspUrl);
+                } else {
+                    detailSection.innerHTML = `
+                        <div class="cctv-detail-error">
+                            <i class="material-icons-outlined" style="font-size: 18px;">error_outline</i>
+                            <span>Error: ${escapeHtml(result.error || 'Gagal memuat detail')}</span>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading CCTV details:', error);
+                detailSection.innerHTML = `
+                    <div class="cctv-detail-error">
+                        <i class="material-icons-outlined" style="font-size: 18px;">error_outline</i>
+                        <span>Error: Gagal memuat detail CCTV</span>
+                    </div>
+                `;
+            });
+    }
+    
+    // Render CCTV details
+    function renderCctvDetails(data, container, cctvName = '', rtspUrl = '') {
+        const { coverages, hazard_stats, pja_list, week_range } = data;
+        
+        let html = '';
+        
+        // Coverage Lokasi Section
+        html += '<div class="cctv-detail-group">';
+        html += '<div class="cctv-detail-group-title"><i class="material-icons-outlined">location_on</i> <span>Coverage Lokasi</span></div>';
+        if (coverages && coverages.length > 0) {
+            coverages.forEach(coverage => {
+                html += `
+                    <div class="cctv-coverage-item">
+                        <div class="cctv-coverage-lokasi">${escapeHtml(coverage.coverage_lokasi || '-')}</div>
+                        <div class="cctv-coverage-detail">${escapeHtml(coverage.coverage_detail_lokasi || '-')}</div>
+                    </div>
+                `;
+            });
+        } else {
+            html += '<div class="cctv-no-data">Tidak ada data coverage</div>';
+        }
+        html += '</div>';
+        
+        // Hazard Inspection Statistics Section
+        html += '<div class="cctv-detail-group">';
+        html += '<div class="cctv-detail-group-title"><i class="material-icons-outlined">warning</i> <span>Inspeksi Hazard (Minggu Ini)</span></div>';
+        if (week_range) {
+            html += `<div style="font-size: 11px; color: #6b7280; margin-bottom: 10px; padding: 6px 10px; background: #f3f4f6; border-radius: 4px; display: inline-block;">📅 ${week_range.start} - ${week_range.end}</div>`;
+        }
+        if (hazard_stats && hazard_stats.length > 0) {
+            hazard_stats.forEach(stat => {
+                html += `
+                    <div class="cctv-hazard-stat">
+                        <div class="cctv-hazard-stat-header">${escapeHtml(stat.detail_lokasi || '-')}</div>
+                        <div class="cctv-hazard-stat-count">Total: ${stat.total_count} inspeksi</div>
+                    </div>
+                `;
+            });
+        } else {
+            html += '<div class="cctv-no-data">Tidak ada inspeksi hazard minggu ini</div>';
+        }
+        html += '</div>';
+        
+        // PJA Section
+        html += '<div class="cctv-detail-group">';
+        html += '<div class="cctv-detail-group-title"><i class="material-icons-outlined">person</i> <span>PJA Lokasi</span></div>';
+        if (pja_list && Object.keys(pja_list).length > 0) {
+            Object.keys(pja_list).forEach(detailLokasi => {
+                const pjas = pja_list[detailLokasi];
+                pjas.forEach(pja => {
+                    html += `
+                        <div class="cctv-pja-item">
+                            <div class="cctv-pja-name">${escapeHtml(pja.nama_pja || '-')}</div>
+                            <div class="cctv-pja-info">
+                                ${escapeHtml(pja.employee_name || '-')} (${escapeHtml(pja.kode_sid || '-')})
+                                ${pja.employee_email ? `<br>📧 ${escapeHtml(pja.employee_email)}` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+            });
+        } else {
+            html += '<div class="cctv-no-data">Tidak ada data PJA</div>';
+        }
+        html += '</div>';
+        
+        // CCTV Stream Section (directly below PJA)
+        const hasRtspStream = rtspUrl && rtspUrl.trim() !== '';
+        if (hasRtspStream) {
+            html += '<div class="cctv-detail-group">';
+            html += '<div class="cctv-detail-group-title"><i class="material-icons-outlined">videocam</i> <span>CCTV Live Stream</span></div>';
+            html += `<div class="cctv-stream-container" style="width: 100%; height: 200px; background-color: #000; position: relative; border-radius: 4px; overflow: hidden;" data-cctv-name="${escapeHtml(cctvName).replace(/"/g, '&quot;')}" data-rtsp-url="${escapeHtml(rtspUrl).replace(/"/g, '&quot;')}">`;
+            html += '<iframe class="cctv-stream-iframe" style="width: 100%; height: 100%; border: none; display: none; background: #000;" allowfullscreen allow="autoplay; fullscreen"></iframe>';
+            html += '<div class="cctv-stream-loading position-absolute top-50 start-50 translate-middle text-center text-white" style="display: block;">';
+            html += '<div class="spinner-border spinner-border-sm text-primary" role="status">';
+            html += '<span class="visually-hidden">Loading...</span>';
+            html += '</div>';
+            html += '<p class="mt-2 mb-0" style="font-size: 11px;">Memuat stream...</p>';
+            html += '</div>';
+            html += '</div>';
+            html += '</div>';
+        }
+        
+        container.innerHTML = html;
+        
+        // Load stream directly if available
+        if (hasRtspStream) {
+            const streamContainer = container.querySelector('.cctv-stream-container');
+            if (streamContainer) {
+                loadCCTVStreamInline(streamContainer, cctvName, rtspUrl);
+            }
+        }
+    }
+    
+    // Function to load CCTV stream inline in sidebar
+    function loadCCTVStreamInline(container, cctvName, rtspUrl) {
+        const streamFrame = container.querySelector('.cctv-stream-iframe');
+        const streamLoading = container.querySelector('.cctv-stream-loading');
+        
+        if (!streamFrame || !streamLoading) return;
+        
+        // Build Python app URL
+        const pythonAppBaseUrl = pythonAppUrl || 'http://localhost:5000';
+        const pythonStreamUrl = `${pythonAppBaseUrl}?cctv=${encodeURIComponent(cctvName)}&rtsp=${encodeURIComponent(rtspUrl || '')}`;
+        
+        // Set iframe source
+        streamFrame.src = pythonStreamUrl;
+        
+        // Handle iframe load
+        streamFrame.onload = function() {
+            if (streamLoading) {
+                streamLoading.style.display = 'none';
+            }
+            streamFrame.style.display = 'block';
+        };
+        
+        // Handle iframe error
+        streamFrame.onerror = function() {
+            if (streamLoading) {
+                streamLoading.style.display = 'block';
+                streamLoading.innerHTML = `
+                    <div class="text-center text-white">
+                        <i class="material-icons-outlined" style="font-size: 24px; color: #ef4444;">error_outline</i>
+                        <p class="mt-1 mb-0" style="font-size: 11px;">Gagal memuat stream</p>
+                    </div>
+                `;
+            }
+            streamFrame.style.display = 'none';
+        };
+        
+        // Timeout check
+        setTimeout(function() {
+            if (streamFrame.style.display === 'none' && streamLoading && streamLoading.style.display === 'block') {
+                try {
+                    const frameDoc = streamFrame.contentDocument || streamFrame.contentWindow.document;
+                    if (streamLoading) streamLoading.style.display = 'none';
+                    streamFrame.style.display = 'block';
+                } catch (e) {
+                    // Cross-origin is expected, assume it's loading
+                    if (streamLoading) streamLoading.style.display = 'none';
+                    streamFrame.style.display = 'block';
+                }
+            }
+        }, 3000);
+    }
+    
+    // Load hazard status for multiple CCTV
+    function loadCctvHazardStatus(cctvIds) {
+        if (!cctvIds || cctvIds.length === 0) return;
+        
+        const statusUrl = `{{ url('cctv-data/hazard-status') }}?ids=${cctvIds.join(',')}`;
+        
+        fetch(statusUrl)
+            .then(response => response.json())
+            .then(result => {
+                if (result.success && result.data) {
+                    // Update status for each CCTV item
+                    Object.keys(result.data).forEach(cctvId => {
+                        const status = result.data[cctvId];
+                        const item = document.querySelector(`.sidebar-list-item[data-id="${cctvId}"]`);
+                        if (item) {
+                            const statusIcon = item.querySelector('.cctv-hazard-status-icon');
+                            const hasHazard = status.has_hazard_inspection;
+                            
+                            // Update data attribute
+                            item.setAttribute('data-hazard-status', hasHazard ? 'has' : 'no');
+                            
+                            // Update classes
+                            item.classList.remove('no-hazard-inspection', 'has-hazard-inspection');
+                            if (hasHazard) {
+                                item.classList.add('has-hazard-inspection');
+                            } else {
+                                item.classList.add('no-hazard-inspection');
+                            }
+                            
+                            // Update icon
+                            if (statusIcon) {
+                                statusIcon.classList.remove('loading', 'has-hazard', 'no-hazard');
+                                if (hasHazard) {
+                                    statusIcon.classList.add('has-hazard');
+                                    statusIcon.innerHTML = '<i class="material-icons-outlined" style="font-size: 14px;">check_circle</i>';
+                                    statusIcon.title = `Ada ${status.total_count} inspeksi hazard minggu ini`;
+                                } else {
+                                    statusIcon.classList.add('no-hazard');
+                                    statusIcon.innerHTML = '<i class="material-icons-outlined" style="font-size: 14px;">warning</i>';
+                                    statusIcon.title = 'Belum ada inspeksi hazard minggu ini';
+                                }
+                            }
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading CCTV hazard status:', error);
+                // Update all items to show error state
+                cctvIds.forEach(cctvId => {
+                    const item = document.querySelector(`.sidebar-list-item[data-id="${cctvId}"]`);
+                    if (item) {
+                        const statusIcon = item.querySelector('.cctv-hazard-status-icon');
+                        if (statusIcon) {
+                            statusIcon.classList.remove('loading', 'has-hazard', 'no-hazard');
+                            statusIcon.classList.add('no-hazard');
+                            statusIcon.innerHTML = '<i class="material-icons-outlined" style="font-size: 14px;">error_outline</i>';
+                            statusIcon.title = 'Error memuat status';
+                        }
+                    }
+                });
+            });
+    }
+    
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     
     // Render SAP list
@@ -11840,7 +13252,7 @@
                     </div>
                     <div class="list-item-content">
                         <div class="list-item-title">${name}</div>
-                        <div class="list-item-subtitle">${taskNumber ? `Task: ${taskNumber}` : ''} ${lokasi ? `- ${lokasi}` : ''}</div>
+                        <div class="list-item-subtitle">${taskNumber ? `Task: ${taskNumber}` : ''}${lokasi ? ` - ${lokasi}` : ''}</div>
                         ${timestamp ? `<div class="list-item-time">${timestamp}</div>` : ''}
                     </div>
                 </div>
@@ -11995,79 +13407,7 @@
         });
     }
     
-    // Render GPS Orang list
-    function renderGpsList(data) {
-        const container = document.getElementById('gpsList');
-        if (!container) return;
-        
-        if (!data || data.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <i class="material-icons-outlined">person_pin</i>
-                    <p>Tidak ada data GPS Orang hari ini</p>
-                </div>
-            `;
-            return;
-        }
-        
-        container.innerHTML = data.map((user, index) => {
-            const name = user.fullname || user.npk || `User ${index + 1}`;
-            const npk = user.npk || '';
-            const position = user.functional_position || user.structural_position || '';
-            const department = user.department_name || user.division_name || '';
-            const firstLetter = getFirstLetter(name);
-            const avatarColor = getAvatarColor(firstLetter);
-            const timestamp = formatTimestamp(user.gps_updated_at || user.gps_created_at);
-            const battery = user.battery !== null && user.battery !== undefined ? user.battery : null;
-            const batteryColor = battery < 20 ? '#ef4444' : battery < 50 ? '#f59e0b' : '#10b981';
-            
-            return `
-                <div class="sidebar-list-item" data-type="gps" data-id="${user.user_id || user.id}" data-index="${index}">
-                    <div class="list-item-avatar" style="background-color: ${avatarColor};">
-                        ${firstLetter}
-                    </div>
-                    <div class="list-item-content">
-                        <div class="list-item-title">${name}</div>
-                        <div class="list-item-subtitle">
-                            ${npk ? `NPK: ${npk}` : ''} 
-                            ${position ? `- ${position}` : ''}
-                            ${department ? ` (${department})` : ''}
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 11px; color: #6b7280;">
-                            ${battery !== null ? `
-                                <span style="display: flex; align-items: center; gap: 4px;">
-                                    <i class="material-icons-outlined" style="font-size: 14px;">battery_charging_full</i>
-                                    <span style="color: ${batteryColor};">${battery}%</span>
-                                </span>
-                            ` : ''}
-                            ${timestamp ? `<span>${timestamp}</span>` : ''}
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        
-        // Add click handlers
-        container.querySelectorAll('.sidebar-list-item').forEach(item => {
-            item.addEventListener('click', function() {
-                const userId = this.dataset.id;
-                const userData = data.find(u => (u.user_id || u.id) == userId);
-                if (userData) {
-                    // Highlight item di sidebar
-                    document.querySelectorAll('.sidebar-list-item').forEach(i => i.classList.remove('active'));
-                    this.classList.add('active');
-                    this.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    
-                    // Jika punya koordinat, zoom ke lokasi
-                    if (userData.latitude && userData.longitude) {
-                        highlightAndZoomToLocation({ lat: userData.latitude, lng: userData.longitude }, 'gps', userData);
-                    }
-                }
-            });
-        });
-    }
-    
-    // Initialize Control Room data
+    // Initialize Control Room data - group CCTV by control_room
     function initializeControlRoomData() {
         if (!cctvLocations || cctvLocations.length === 0) {
             filteredSidebarData.controlroom = [];
@@ -12246,6 +13586,351 @@
             });
         });
     }
+    
+    // Check if user is admin (from backend)
+    const isUserAdmin = @json(auth()->user() && (method_exists(auth()->user(), 'isAdmin') ? auth()->user()->isAdmin() : (isset(auth()->user()->role) && (auth()->user()->role === 'admin' || auth()->user()->role === 'administrator'))));
+    
+    // Flag untuk mencegah load history berulang
+    let gpsHistoryLoaded = false;
+    
+    // Render GPS Orang list
+    function renderGpsList(data) {
+        const container = document.getElementById('gpsList');
+        if (!container) return;
+        
+        // Jika user bukan admin, tampilkan history lokasi (hanya sekali)
+        if (!isUserAdmin && !gpsHistoryLoaded) {
+            gpsHistoryLoaded = true;
+            loadUserGpsHistory();
+            return;
+        }
+        
+        if (!data || data.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="material-icons-outlined">person_pin</i>
+                    <p>Tidak ada data GPS Orang hari ini</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = data.map((user, index) => {
+            const name = user.fullname || user.npk || `User ${index + 1}`;
+            const npk = user.npk || '';
+            const position = user.functional_position || user.structural_position || '';
+            const department = user.department_name || user.division_name || '';
+            const firstLetter = getFirstLetter(name);
+            const avatarColor = getAvatarColor(firstLetter);
+            const timestamp = formatTimestamp(user.gps_updated_at || user.gps_created_at);
+            const battery = user.battery !== null && user.battery !== undefined ? user.battery : null;
+            const batteryColor = battery < 20 ? '#ef4444' : battery < 50 ? '#f59e0b' : '#10b981';
+            
+            return `
+                <div class="sidebar-list-item" data-type="gps" data-id="${user.user_id || user.id}" data-index="${index}">
+                    <div class="list-item-avatar" style="background-color: ${avatarColor};">
+                        ${firstLetter}
+                    </div>
+                    <div class="list-item-content">
+                        <div class="list-item-title">${name}</div>
+                        <div class="list-item-subtitle">
+                            ${npk ? `SID: ${npk}` : ''} 
+                            ${position ? `- ${position}` : ''}
+                            ${department ? ` (${department})` : ''}
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 11px; color: #6b7280;">
+                            ${battery !== null ? `
+                                <span style="display: flex; align-items: center; gap: 4px;">
+                                    <i class="material-icons-outlined" style="font-size: 14px;">battery_charging_full</i>
+                                    <span style="color: ${batteryColor};">${battery}%</span>
+                                </span>
+                            ` : ''}
+                            ${timestamp ? `<span>${timestamp}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // Add click handlers
+        container.querySelectorAll('.sidebar-list-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const userId = this.dataset.id;
+                const userData = data.find(u => (u.user_id || u.id) == userId);
+                if (userData) {
+                    // Highlight item di sidebar
+                    document.querySelectorAll('.sidebar-list-item').forEach(i => i.classList.remove('active'));
+                    this.classList.add('active');
+                    this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // Jika punya koordinat, zoom ke lokasi
+                    if (userData.latitude && userData.longitude) {
+                        highlightAndZoomToLocation({ lat: userData.latitude, lng: userData.longitude }, 'gps', userData);
+                    }
+                }
+            });
+        });
+    }
+    
+    // Function to load user GPS history (for non-admin users)
+    function loadUserGpsHistory() {
+        const container = document.getElementById('gpsList');
+        if (!container) return;
+        
+        // Show loading state
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="spinner-border text-primary" role="status" style="width: 2rem; height: 2rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p style="margin-top: 16px;">Memuat history lokasi...</p>
+            </div>
+        `;
+        
+        fetch('{{ route("maps.api.user-gps-history") }}?days=7')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.history) {
+                    // Simpan history ke filteredSidebarData
+                    filteredSidebarData.gpsHistory = data.history;
+                    renderGpsHistoryList(data.history);
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="material-icons-outlined">history</i>
+                            <p>Tidak ada history lokasi</p>
+                            ${data.error ? `<p style="font-size: 11px; color: #ef4444; margin-top: 8px;">${data.error}</p>` : ''}
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading GPS history:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="material-icons-outlined">error_outline</i>
+                        <p>Gagal memuat history lokasi</p>
+                        <p style="font-size: 11px; color: #ef4444; margin-top: 8px;">Silakan refresh halaman</p>
+                    </div>
+                `;
+            });
+    }
+    
+    // Function to render GPS history list with collapsible
+    function renderGpsHistoryList(history) {
+        const container = document.getElementById('gpsList');
+        if (!container) return;
+        
+        if (!history || history.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="material-icons-outlined">history</i>
+                    <p>Tidak ada history lokasi</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = history.map((location, index) => {
+            const visitCount = location.visit_count || 0;
+            const firstVisit = location.first_visit ? formatDateWIB(location.first_visit) : 'N/A';
+            const lastVisit = location.last_visit ? formatDateWIB(location.last_visit) : 'N/A';
+            const locationId = `history-loc-${index}`;
+            const detailId = `history-detail-${index}`;
+            
+            return `
+                <div class="sidebar-list-item history-location-item" data-location-key="${location.location_key}" data-index="${index}">
+                    <div class="d-flex align-items-start gap-2 w-100" style="cursor: pointer;" onclick="toggleHistoryDetail('${detailId}', '${locationId}')">
+                        <div class="list-item-avatar" style="background-color: #3b82f6; min-width: 40px; width: 40px; height: 40px;">
+                            <i class="material-icons-outlined" style="color: white; font-size: 20px;">location_on</i>
+                        </div>
+                        <div class="list-item-content flex-grow-1">
+                            <div class="list-item-title">Lokasi ${index + 1}</div>
+                            <div class="list-item-subtitle">
+                                Kunjungan: <strong>${visitCount}x</strong>
+                            </div>
+                            <div style="font-size: 11px; color: #6b7280; margin-top: 4px;">
+                                <div>Pertama: ${firstVisit.split(',')[0]}</div>
+                                <div>Terakhir: ${lastVisit.split(',')[0]}</div>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <i class="material-icons-outlined history-toggle-icon" id="${locationId}" style="transition: transform 0.3s;">expand_more</i>
+                        </div>
+                    </div>
+                    <div class="history-detail-content" id="${detailId}" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+                        <div class="text-center py-2">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                            <p class="mt-2 mb-0" style="font-size: 12px; color: #6b7280;">Memuat detail lokasi...</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // Add click handler untuk zoom ke lokasi
+        container.querySelectorAll('.history-location-item').forEach(item => {
+            const locationData = history[parseInt(item.dataset.index)];
+            if (locationData && locationData.latitude && locationData.longitude) {
+                item.style.cursor = 'pointer';
+                item.addEventListener('click', function(e) {
+                    // Jangan trigger jika klik pada toggle icon atau detail content
+                    if (e.target.closest('.history-detail-content') || e.target.closest('.history-toggle-icon')) {
+                        return;
+                    }
+                    
+                    highlightAndZoomToLocation(
+                        { lat: locationData.latitude, lng: locationData.longitude }, 
+                        'gps', 
+                        locationData
+                    );
+                });
+            }
+        });
+    }
+    
+    // Function to toggle history detail
+    window.toggleHistoryDetail = function(detailId, iconId) {
+        const detailContent = document.getElementById(detailId);
+        const toggleIcon = document.getElementById(iconId);
+        
+        if (!detailContent || !toggleIcon) return;
+        
+        const isExpanded = detailContent.style.display !== 'none';
+        
+        if (isExpanded) {
+            // Collapse
+            detailContent.style.display = 'none';
+            toggleIcon.style.transform = 'rotate(0deg)';
+            toggleIcon.textContent = 'expand_more';
+        } else {
+            // Expand
+            detailContent.style.display = 'block';
+            toggleIcon.style.transform = 'rotate(180deg)';
+            toggleIcon.textContent = 'expand_less';
+            
+            // Load detail lokasi jika belum di-load
+            const locationItem = detailContent.closest('.history-location-item');
+            if (locationItem && !locationItem.dataset.detailLoaded) {
+                loadHistoryLocationDetail(locationItem, detailContent);
+            }
+        }
+    };
+    
+    // Function to load detail for a history location
+    function loadHistoryLocationDetail(locationItem, detailContainer) {
+        const locationIndex = locationItem.dataset.index;
+        const historyData = filteredSidebarData.gpsHistory || [];
+        const location = historyData[locationIndex];
+        
+        if (!location || !location.latitude || !location.longitude) {
+            detailContainer.innerHTML = `
+                <div class="text-center py-2">
+                    <p style="font-size: 12px; color: #ef4444;">Data lokasi tidak valid</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Load location details
+        fetch(`{{ route('maps.api.gps-user-location-details') }}?latitude=${location.latitude}&longitude=${location.longitude}${location.location_id ? '&location_id=' + location.location_id : ''}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.data) {
+                    const locationData = data.data;
+                    const workAreaName = locationData.work_area ? locationData.work_area.name : 'Tidak diketahui';
+                    const sapCount = locationData.sap_count || 0;
+                    const sapOpenCount = locationData.sap_open_count || 0;
+                    const cctvCount = locationData.cctv_count || 0;
+                    const pjaCount = locationData.pja_count || 0;
+                    
+                    // Get visit details
+                    const visits = location.visits || [];
+                    const visitList = visits.slice(0, 10).map(visit => {
+                        const visitDate = visit.date ? formatDateWIB(visit.date) : 'N/A';
+                        return `
+                            <div style="padding: 8px; border-bottom: 1px solid #f3f4f6; font-size: 12px;">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>${visitDate.split(',')[0]}</span>
+                                    <span style="color: #6b7280;">${visitDate.split(',')[1] || ''}</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    detailContainer.innerHTML = `
+                        <div style="background-color: #f9fafb; padding: 12px; border-radius: 6px; margin-bottom: 12px;">
+                            <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600;">
+                                <i class="material-icons-outlined" style="font-size: 16px; vertical-align: middle;">location_on</i>
+                                Area Kerja: ${workAreaName}
+                            </p>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+                                <div>
+                                    <span style="color: #6b7280;">SAP:</span>
+                                    <strong style="color: #ef4444;">${sapCount}</strong>
+                                </div>
+                                <div>
+                                    <span style="color: #6b7280;">SAP Open:</span>
+                                    <strong style="color: #dc2626;">${sapOpenCount}</strong>
+                                </div>
+                                <div>
+                                    <span style="color: #6b7280;">CCTV:</span>
+                                    <strong style="color: #3b82f6;">${cctvCount}</strong>
+                                </div>
+                                <div>
+                                    <span style="color: #6b7280;">PJA:</span>
+                                    <strong style="color: #8b5cf6;">${pjaCount}</strong>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom: 12px;">
+                            <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600;">
+                                <i class="material-icons-outlined" style="font-size: 16px; vertical-align: middle;">schedule</i>
+                                Riwayat Kunjungan (${visits.length})
+                            </p>
+                            <div style="max-height: 200px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px;">
+                                ${visitList || '<div style="padding: 12px; text-align: center; color: #6b7280; font-size: 12px;">Tidak ada data kunjungan</div>'}
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-sm btn-primary w-100" onclick="showHistoryLocationDetailModal(${JSON.stringify(location).replace(/"/g, '&quot;')}, ${JSON.stringify(locationData).replace(/"/g, '&quot;')})">
+                            <i class="material-icons-outlined" style="font-size: 16px; vertical-align: middle;">info</i>
+                            Lihat Detail Lengkap
+                        </button>
+                    `;
+                    
+                    locationItem.dataset.detailLoaded = 'true';
+                } else {
+                    detailContainer.innerHTML = `
+                        <div class="text-center py-2">
+                            <p style="font-size: 12px; color: #ef4444;">Gagal memuat detail lokasi</p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading location detail:', error);
+                detailContainer.innerHTML = `
+                    <div class="text-center py-2">
+                        <p style="font-size: 12px; color: #ef4444;">Error: ${error.message}</p>
+                    </div>
+                `;
+            });
+    }
+    
+    // Function to show history location detail modal
+    window.showHistoryLocationDetailModal = function(location, locationData) {
+        // Reuse the same modal function as current location
+        showGpsUserDetailModal(
+            {
+                fullname: location.visits && location.visits[0] ? location.visits[0].nama : 'History Lokasi',
+                latitude: location.latitude,
+                longitude: location.longitude
+            },
+            locationData
+        );
+    };
     
     // Load PJA data from API
     function loadPjaData() {
@@ -12658,6 +14343,8 @@
             filteredSidebarData.sap = [...(sapData || [])];
             filteredSidebarData.insiden = [...(insidenDataset || [])];
             filteredSidebarData.unit = [...(unitVehicles || [])];
+            // GPS data akan di-reset oleh loadUserGpsData() jika perlu
+            // Jangan reset GPS data jika sudah ada, biarkan dari loadUserGpsData()
             // Reset Control Room data ke original jika sudah ada
             if (originalControlRoomData && originalControlRoomData.length > 0) {
                 filteredSidebarData.controlroom = JSON.parse(JSON.stringify(originalControlRoomData));
@@ -12666,8 +14353,6 @@
             if (originalPjaData && originalPjaData.length > 0) {
                 filteredSidebarData.pja = [...originalPjaData];
             }
-            // GPS data akan di-reset oleh loadUserGpsData() jika perlu
-            // Jangan reset GPS data jika sudah ada, biarkan dari loadUserGpsData()
         } else {
             // Filter data CCTV dari database berdasarkan search term
             filteredSidebarData.cctv = (cctvLocations || []).filter(cctv => {
@@ -12702,17 +14387,6 @@
                 return unitId.includes(term) || id.includes(term);
             });
             
-            // Filter GPS data berdasarkan search term
-            if (filteredSidebarData.gps && filteredSidebarData.gps.length > 0) {
-                filteredSidebarData.gps = filteredSidebarData.gps.filter(user => {
-                    const fullname = (user.fullname || '').toLowerCase();
-                    const npk = (user.npk || '').toLowerCase();
-                    const department = (user.department_name || user.division_name || '').toLowerCase();
-                    const position = ((user.functional_position || '') + ' ' + (user.structural_position || '')).toLowerCase();
-                    return fullname.includes(term) || npk.includes(term) || department.includes(term) || position.includes(term);
-                });
-            }
-            
             // Filter Control Room data berdasarkan search term
             if (filteredSidebarData.controlroom && filteredSidebarData.controlroom.length > 0) {
                 filteredSidebarData.controlroom = filteredSidebarData.controlroom.filter(controlRoom => {
@@ -12723,6 +14397,17 @@
                         return cctvName.includes(term);
                     });
                     return name.includes(term) || hasMatchingCctv;
+                });
+            }
+            
+            // Filter GPS data berdasarkan search term
+            if (filteredSidebarData.gps && filteredSidebarData.gps.length > 0) {
+                filteredSidebarData.gps = filteredSidebarData.gps.filter(user => {
+                    const fullname = (user.fullname || '').toLowerCase();
+                    const npk = (user.npk || '').toLowerCase();
+                    const department = (user.department_name || user.division_name || '').toLowerCase();
+                    const position = ((user.functional_position || '') + ' ' + (user.structural_position || '')).toLowerCase();
+                    return fullname.includes(term) || npk.includes(term) || department.includes(term) || position.includes(term);
                 });
             }
             
@@ -12753,6 +14438,12 @@
     
     // Sidebar event listeners
     document.addEventListener('DOMContentLoaded', function() {
+        // Initialize icon toolbar - set CCTV as active by default
+        const defaultIconBtn = document.querySelector('.icon-toolbar-btn[data-tab="cctv"]');
+        if (defaultIconBtn) {
+            defaultIconBtn.classList.add('active');
+        }
+        
         // Toggle sidebar collapse
         const sidebarToggle = document.getElementById('sidebarToggle');
         const mapSidebar = document.getElementById('mapSidebar');
@@ -12768,7 +14459,28 @@
             });
         }
         
-        // Tab switching
+        // Icon Toolbar switching - New implementation
+        document.querySelectorAll('.icon-toolbar-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const tabName = this.dataset.tab;
+                
+                // Update active icon toolbar button
+                document.querySelectorAll('.icon-toolbar-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                // Open sidebar if collapsed
+                const mapSidebar = document.getElementById('mapSidebar');
+                if (mapSidebar && mapSidebar.classList.contains('collapsed')) {
+                    mapSidebar.classList.remove('collapsed');
+                }
+                
+                // Render tab content
+                currentSidebarTab = tabName;
+                renderSidebarTab(tabName);
+            });
+        });
+        
+        // Legacy tab switching (for backward compatibility)
         document.querySelectorAll('.sidebar-tab').forEach(tab => {
             tab.addEventListener('click', function() {
                 const tabName = this.dataset.tab;
@@ -12777,30 +14489,11 @@
                 document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
                 this.classList.add('active');
                 
-                // Auto-scroll to active tab if needed (horizontal scroll)
-                const sidebarTabs = document.querySelector('.sidebar-tabs');
-                if (sidebarTabs && !sidebarTabs.closest('.map-sidebar.collapsed')) {
-                    const tabRect = this.getBoundingClientRect();
-                    const tabsRect = sidebarTabs.getBoundingClientRect();
-                    const scrollLeft = sidebarTabs.scrollLeft;
-                    const tabLeft = this.offsetLeft;
-                    const tabWidth = this.offsetWidth;
-                    const tabsWidth = sidebarTabs.offsetWidth;
-                    
-                    // Check if tab is outside visible area
-                    if (tabLeft < scrollLeft) {
-                        // Tab is to the left, scroll to show it
-                        sidebarTabs.scrollTo({
-                            left: tabLeft - 8,
-                            behavior: 'smooth'
-                        });
-                    } else if (tabLeft + tabWidth > scrollLeft + tabsWidth) {
-                        // Tab is to the right, scroll to show it
-                        sidebarTabs.scrollTo({
-                            left: tabLeft + tabWidth - tabsWidth + 8,
-                            behavior: 'smooth'
-                        });
-                    }
+                // Sync with icon toolbar
+                document.querySelectorAll('.icon-toolbar-btn').forEach(b => b.classList.remove('active'));
+                const iconBtn = document.querySelector(`.icon-toolbar-btn[data-tab="${tabName}"]`);
+                if (iconBtn) {
+                    iconBtn.classList.add('active');
                 }
                 
                 // Render tab content
@@ -13205,6 +14898,414 @@
         }
     }
 
+    // ============================================
+    // Employee Location Monitoring & Telegram Notification
+    // ============================================
+    
+    // Cache untuk menyimpan lokasi user sebelumnya
+    let employeeLocationCache = {};
+    let monitoringInterval = null;
+    let isMonitoringActive = false;
+    
+    /**
+     * Function to find location from user coordinates
+     * Mencari lokasi area kerja berdasarkan koordinat latitude/longitude
+     */
+    function findLocationFromCoordinates(latitude, longitude) {
+        if (!latitude || !longitude || !window.areaKerjaLayers) {
+            return null;
+        }
+        
+        // Convert to number (handle comma as decimal separator)
+        const lat = parseFloat(String(latitude).replace(',', '.'));
+        const lng = parseFloat(String(longitude).replace(',', '.'));
+        
+        if (isNaN(lat) || isNaN(lng)) {
+            return null;
+        }
+        
+        // Iterate through all area kerja layers
+        for (const layer of window.areaKerjaLayers) {
+            if (!layer.getVisible()) continue;
+            
+            const source = layer.getSource();
+            if (!source) continue;
+            
+            const features = source.getFeatures();
+            
+            for (const feature of features) {
+                const geometry = feature.getGeometry();
+                if (!geometry) continue;
+                
+                // Check if coordinate is inside this geometry
+                if (isCoordinateInGeometry(lat, lng, geometry)) {
+                    const props = feature.getProperties();
+                    return {
+                        id_lokasi: props.id_lokasi || null,
+                        lokasi: props.lokasi || '',
+                        site: props.site || '',
+                        perusahaan: props.perusahaan || '',
+                        area_kerja: props.area_kerja || '',
+                        luasan: props.luasan || 0,
+                        geometry: geometry // Keep geometry for further checks
+                    };
+                }
+            }
+        }
+        
+        return null; // No location found
+    }
+    
+    /**
+     * Function to check if should send periodic notification
+     * Mengirim notifikasi periodik setiap 5 menit jika user masih di area yang sama
+     */
+    function shouldSendPeriodicNotification(employeeId) {
+        const cached = employeeLocationCache[employeeId];
+        if (!cached) return false;
+        
+        const now = new Date();
+        const lastNotification = new Date(cached.lastNotificationTime || 0);
+        const minutesDiff = (now - lastNotification) / (1000 * 60);
+        
+        // Send notification every 5 minutes if user is still in the same area
+        return minutesDiff >= 5;
+    }
+    
+    /**
+     * Function to send Telegram notification
+     * Mengirim notifikasi Telegram dengan informasi lokasi, SAP, CCTV, dan PJ
+     */
+    async function sendTelegramNotification(employee, location) {
+        try {
+            console.log(`[Telegram] Preparing notification for ${employee.nama || employee.kode_sid} at ${location.lokasi}`);
+            
+            // Get CSRF token
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+            
+            // Get location details (SAP count, CCTV count, PJ)
+            const summaryResponse = await fetch('{{ route("maps.api.evaluation-summary") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: JSON.stringify({
+                    type: 'area_kerja',
+                    id_lokasi: location.id_lokasi,
+                    lokasi_name: location.lokasi
+                })
+            });
+            
+            const summaryData = await summaryResponse.json();
+            const summary = summaryData.data || summaryData;
+            
+            // Calculate total SAP
+            const inspeksiCount = summary.inspeksi_count || 0;
+            const hazardCount = summary.hazard_count || 0;
+            const inspeksiHazardCount = inspeksiCount + hazardCount; // Gabungkan Inspeksi dan Hazard
+            const inspeksiHazardOpenCount = (summary.inspeksi_open_count || 0) + (summary.hazard_open_count || 0);
+            const coachingCount = summary.coaching_count || 0;
+            const coachingOpenCount = summary.coaching_open_count || 0;
+            const observasiCount = summary.observasi_count || 0;
+            const observasiOpenCount = summary.observasi_open_count || 0;
+            const observasiAreaKritisCount = summary.observasi_area_kritis_count || 0;
+            const observasiAreaKritisOpenCount = summary.observasi_area_kritis_open_count || 0;
+            const totalSap = inspeksiHazardCount + coachingCount + observasiCount;
+            
+            // Get detail lists
+            const inspeksiHazardList = summary.inspeksi_hazard_list || [];
+            const coachingList = summary.coaching_list || [];
+            const observasiList = summary.observasi_list || [];
+            const observasiAreaKritisList = summary.observasi_area_kritis_list || [];
+            
+            // Format message dengan HTML untuk tampilan card-like yang lebih menarik
+            const lokasiName = location.lokasi || 'Area Kerja';
+            const perusahaan = location.perusahaan || employee.nama_perusahaan || 'N/A';
+            const site = location.site || 'N/A';
+            const areaKerja = location.area_kerja || location.lokasi || 'N/A'; // Use lokasi if area_kerja is empty
+            const cctvCount = summary.cctv_list ? summary.cctv_list.length : 0;
+            const waktu = new Date().toLocaleString('id-ID', { 
+                timeZone: 'Asia/Makassar',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            const deviceInfo = employee.device_info ? employee.device_info.split('\n')[0].substring(0, 50) + '...' : 'N/A';
+            
+            // Function to create progress bar visualization
+            const createProgressBar = (value, max, length = 10) => {
+                if (max === 0) return '▱'.repeat(length);
+                const filled = Math.round((value / max) * length);
+                const empty = length - filled;
+                return '▰'.repeat(filled) + '▱'.repeat(empty);
+            };
+            
+            // Calculate max value for progress bars (gunakan inspeksiHazardCount yang sudah digabung)
+            const maxSap = Math.max(inspeksiHazardCount, coachingCount, observasiCount, 1);
+            
+            // Format dengan HTML untuk tampilan card-like yang lebih menarik
+            const message = `🔷 <b>USER DI AREA KERJA</b> 🔷
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+👤 <b>INFORMASI USER</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Nama:</b> ${employee.nama || employee.kode_sid || 'Unknown'}
+<b>Kode SID:</b> <code>${employee.kode_sid || 'N/A'}</code>
+<b>Perusahaan:</b> ${perusahaan}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📍 <b>INFORMASI LOKASI</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Lokasi:</b> ${lokasiName}
+<b>Site:</b> ${site}
+<b>Area Kerja:</b> ${areaKerja}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 <b>STATISTIK AREA</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📈 <b>TOTAL SAP:</b> <b>${totalSap.toLocaleString('id-ID')}</b>
+
+<b>📋 Detail SAP:</b>
+
+🔍⚠️ <b>Inspeksi & Hazard:</b> <b>${inspeksiHazardCount.toLocaleString('id-ID')}</b> | <b>Open:</b> ${inspeksiHazardOpenCount.toLocaleString('id-ID')}
+   ${createProgressBar(inspeksiHazardCount, maxSap)} ${inspeksiHazardCount > 0 ? Math.round((inspeksiHazardCount / maxSap) * 100) : 0}%
+${inspeksiHazardList.length > 0 ? '\n   <b>📝 Top 5:</b>\n' + inspeksiHazardList.slice(0, 5).map((item, idx) => {
+   const nomor = (item.nomor_laporan || 'N/A').toString();
+   const status = (item.status || 'N/A').toString();
+   return `   ${idx + 1}. <code>${nomor.length > 20 ? nomor.substring(0, 20) + '...' : nomor}</code> [${status}]`;
+}).join('\n') : '   <i>Tidak ada data</i>'}
+
+💬 <b>Coaching:</b> <b>${coachingCount.toLocaleString('id-ID')}</b> | <b>Open:</b> ${coachingOpenCount.toLocaleString('id-ID')}
+   ${createProgressBar(coachingCount, maxSap)} ${coachingCount > 0 ? Math.round((coachingCount / maxSap) * 100) : 0}%
+${coachingList.length > 0 ? '\n   <b>📝 Top 5:</b>\n' + coachingList.slice(0, 5).map((item, idx) => {
+   const nomor = (item.nomor_laporan || 'N/A').toString();
+   const status = (item.status || 'N/A').toString();
+   return `   ${idx + 1}. <code>${nomor.length > 20 ? nomor.substring(0, 20) + '...' : nomor}</code> [${status}]`;
+}).join('\n') : '   <i>Tidak ada data</i>'}
+
+👁️ <b>Observasi:</b> <b>${observasiCount.toLocaleString('id-ID')}</b> | <b>Open:</b> ${observasiOpenCount.toLocaleString('id-ID')}
+   ${createProgressBar(observasiCount, maxSap)} ${observasiCount > 0 ? Math.round((observasiCount / maxSap) * 100) : 0}%
+${observasiList.length > 0 ? '\n   <b>📝 Top 5:</b>\n' + observasiList.slice(0, 5).map((item, idx) => {
+   const nomor = (item.nomor_laporan || 'N/A').toString();
+   const status = (item.status || 'N/A').toString();
+   return `   ${idx + 1}. <code>${nomor.length > 20 ? nomor.substring(0, 20) + '...' : nomor}</code> [${status}]`;
+}).join('\n') : '   <i>Tidak ada data</i>'}
+
+⚠️ <b>Observasi Area Kritis:</b> <b>${observasiAreaKritisCount.toLocaleString('id-ID')}</b> | <b>Open:</b> ${observasiAreaKritisOpenCount.toLocaleString('id-ID')}
+${observasiAreaKritisList.length > 0 ? '\n   <b>📝 Top 5:</b>\n' + observasiAreaKritisList.slice(0, 5).map((item, idx) => {
+   const nomor = (item.nomor_laporan || 'N/A').toString();
+   const status = (item.status || 'N/A').toString();
+   return `   ${idx + 1}. <code>${nomor.length > 20 ? nomor.substring(0, 20) + '...' : nomor}</code> [${status}]`;
+}).join('\n') : '   <i>Tidak ada data</i>'}
+
+─────────────────────────────
+
+📹 <b>CCTV Coverage:</b> <b>${cctvCount.toLocaleString('id-ID')}</b> unit <i>(di lokasi ini)</i>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🕐 <b>Waktu:</b> ${waktu}
+📱 <b>Device:</b> <code>${deviceInfo}</code>`;
+            
+            // Send to Telegram (csrfToken already declared above)
+            const telegramResponse = await fetch('{{ route("maps.api.send-telegram") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: JSON.stringify({
+                    chat_id: '{{ config("services.telegram.chat_id") }}', // Use default chat_id from config
+                    message: message,
+                    parse_mode: 'HTML' // Use HTML for better formatting
+                })
+            });
+            
+            // Check if response is OK
+            if (!telegramResponse.ok) {
+                const errorText = await telegramResponse.text();
+                console.error(`[Telegram] ✗ HTTP Error ${telegramResponse.status}:`, errorText);
+                return false;
+            }
+            
+            const telegramResult = await telegramResponse.json();
+            
+            if (telegramResult.success) {
+                console.log(`[Telegram] ✓ Notification sent successfully for ${employee.nama || employee.kode_sid}`);
+                return true;
+            } else {
+                console.error(`[Telegram] ✗ Failed to send notification:`, telegramResult.error || telegramResult.message);
+                return false;
+            }
+            
+        } catch (error) {
+            console.error('[Telegram] Error sending notification:', error);
+            // If error is JSON parse error, log the response
+            if (error.message && error.message.includes('JSON')) {
+                console.error('[Telegram] Response was not valid JSON. Check server error logs.');
+            }
+            return false;
+        }
+    }
+    
+    /**
+     * Function to monitor employees and send Telegram notifications
+     * Memonitor lokasi employee dan mengirim notifikasi ketika masuk area kerja
+     */
+    async function monitorEmployeesAndNotify() {
+        if (!isMonitoringActive) {
+            return;
+        }
+        
+        try {
+            // Get employee location data
+            const response = await fetch('{{ route("maps.api.employee-location") }}?limit=1000');
+            const data = await response.json();
+            
+            if (!data.success || !data.employees || data.employees.length === 0) {
+                console.log('[Monitor] No employee location data available');
+                return;
+            }
+            
+            console.log(`[Monitor] Checking ${data.employees.length} employees...`);
+            
+            // Check if area kerja layers are loaded
+            if (!window.areaKerjaLayers || window.areaKerjaLayers.length === 0) {
+                console.log('[Monitor] Area kerja layers not loaded yet, waiting...');
+                return;
+            }
+            
+            const employees = data.employees;
+            let notificationCount = 0;
+            
+            for (const employee of employees) {
+                const employeeId = employee.employee_id || employee.id;
+                const lat = employee.latitude;
+                const lng = employee.longitude;
+                
+                if (!employeeId || !lat || !lng) continue;
+                
+                // Find location from coordinates
+                const location = findLocationFromCoordinates(lat, lng);
+                
+                if (!location) {
+                    // Employee is outside any work area
+                    if (employeeLocationCache[employeeId]) {
+                        // Employee left an area, clear cache
+                        console.log(`[Monitor] ${employee.nama || employee.kode_sid} left work area`);
+                        delete employeeLocationCache[employeeId];
+                    }
+                    continue;
+                }
+                
+                // Check if employee is in a new location or same location
+                const previousLocation = employeeLocationCache[employeeId];
+                const isNewLocation = !previousLocation || 
+                                     (previousLocation.id_lokasi !== location.id_lokasi);
+                
+                // Update cache
+                const now = new Date();
+                employeeLocationCache[employeeId] = {
+                    ...location,
+                    employee: employee,
+                    timestamp: now,
+                    lastNotificationTime: previousLocation?.lastNotificationTime || null
+                };
+                
+                // Send notification if new location or periodic check
+                if (isNewLocation) {
+                    console.log(`[Monitor] ${employee.nama || employee.kode_sid} entered new area: ${location.lokasi}`);
+                    const sent = await sendTelegramNotification(employee, location);
+                    if (sent) {
+                        employeeLocationCache[employeeId].lastNotificationTime = now;
+                        notificationCount++;
+                    }
+                } else if (shouldSendPeriodicNotification(employeeId)) {
+                    console.log(`[Monitor] ${employee.nama || employee.kode_sid} periodic notification for: ${location.lokasi}`);
+                    const sent = await sendTelegramNotification(employee, location);
+                    if (sent) {
+                        employeeLocationCache[employeeId].lastNotificationTime = now;
+                        notificationCount++;
+                    }
+                }
+            }
+            
+            if (notificationCount > 0) {
+                console.log(`[Monitor] ✓ Sent ${notificationCount} notifications`);
+            }
+            
+        } catch (error) {
+            console.error('[Monitor] Error monitoring employees:', error);
+        }
+    }
+    
+    /**
+     * Start monitoring employees
+     * Memulai monitoring lokasi employee dengan interval tertentu
+     */
+    function startEmployeeMonitoring(intervalSeconds = 30) {
+        if (monitoringInterval) {
+            console.log('[Monitor] Monitoring already active');
+            return;
+        }
+        
+        isMonitoringActive = true;
+        console.log(`[Monitor] Starting employee monitoring (interval: ${intervalSeconds}s)`);
+        
+        // Run immediately
+        monitorEmployeesAndNotify();
+        
+        // Then run at interval
+        monitoringInterval = setInterval(() => {
+            monitorEmployeesAndNotify();
+        }, intervalSeconds * 1000);
+    }
+    
+    /**
+     * Stop monitoring employees
+     */
+    function stopEmployeeMonitoring() {
+        if (monitoringInterval) {
+            clearInterval(monitoringInterval);
+            monitoringInterval = null;
+            isMonitoringActive = false;
+            console.log('[Monitor] Employee monitoring stopped');
+        }
+    }
+    
+    // Auto-start monitoring after area layers are loaded
+    // Wait for area layers to be loaded before starting monitoring
+    let monitoringStartAttempts = 0;
+    const maxMonitoringStartAttempts = 30; // Try for 30 seconds
+    
+    function tryStartMonitoring() {
+        if (window.areaKerjaLayers && window.areaKerjaLayers.length > 0) {
+            // Layers are loaded, start monitoring
+            startEmployeeMonitoring(30); // Check every 30 seconds
+        } else {
+            monitoringStartAttempts++;
+            if (monitoringStartAttempts < maxMonitoringStartAttempts) {
+                // Retry after 1 second
+                setTimeout(tryStartMonitoring, 1000);
+            } else {
+                console.warn('[Monitor] Area kerja layers not loaded after 30 seconds, monitoring not started');
+            }
+        }
+    }
+    
+    // Start trying to start monitoring after page load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(tryStartMonitoring, 5000); // Wait 5 seconds after DOM ready
+        });
+    } else {
+        setTimeout(tryStartMonitoring, 5000); // Wait 5 seconds
+    }
+    
     // Charts menggunakan script dari template index.js
     // Script chart akan di-load dari build/js/index.js
 </script>
@@ -13257,6 +15358,171 @@
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<!-- TourGuide JS Script -->
+<script src="https://unpkg.com/@sjmc11/tourguidejs/dist/tour.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+{{-- <script>
+    // Initialize TourGuide
+    let tourGuide = null;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // Wait for all elements and TourGuide script to be ready
+        setTimeout(function() {
+            try {
+                // Check for TourGuideClient (CDN version uses tourguide namespace)
+                let TourGuideClass = null;
+                
+                if (typeof TourGuideClient !== 'undefined') {
+                    TourGuideClass = TourGuideClient;
+                } else if (typeof tourguide !== 'undefined' && tourguide.TourGuideClient) {
+                    TourGuideClass = tourguide.TourGuideClient;
+                } else if (window.tourguide && window.tourguide.TourGuideClient) {
+                    TourGuideClass = window.tourguide.TourGuideClient;
+                }
+                
+                if (TourGuideClass) {
+                    tourGuide = new TourGuideClass({
+                        backdropColor: 'rgba(0, 0, 0, 0.75)',
+                        targetPadding: 20,
+                        dialogAnimate: true,
+                        backdropAnimate: true,
+                        showStepDots: true,
+                        stepDotsPlacement: 'footer',
+                        showStepProgress: true,
+                        showButtons: true,
+                        closeButton: true,
+                        nextLabel: 'Selanjutnya',
+                        prevLabel: 'Sebelumnya',
+                        finishLabel: 'Selesai',
+                        keyboardControls: true,
+                        exitOnEscape: true,
+                        exitOnClickOutside: false,
+                        rememberStep: false,
+                        completeOnFinish: true,
+                        debug: false,
+                        autoScroll: true,
+                        autoScrollSmooth: true,
+                        autoScrollOffset: 20,
+                        dialogWidth: 0,
+                        dialogMaxWidth: 380,
+                        dialogClass: 'custom-tour-dialog'
+                    });
+                    
+                    // Add button to start tour
+                    const startTourBtn = document.createElement('button');
+                    startTourBtn.className = 'btn btn-primary position-fixed';
+                    startTourBtn.style.cssText = 'bottom: 20px; left: 20px; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border-radius: 8px; padding: 10px 20px; font-weight: 500;';
+                    startTourBtn.innerHTML = '<i class="material-icons-outlined me-2" style="font-size: 18px; vertical-align: middle;">help_outline</i>Mulai Tour Guide';
+                    startTourBtn.onclick = function() {
+                        if (tourGuide) {
+                            tourGuide.start();
+                            
+                            // Apply custom styles after tour starts
+                            setTimeout(function() {
+                                const dialog = document.querySelector('[data-tg-dialog], .tg-dialog, [class*="tg-dialog"]');
+                                if (dialog) {
+                                    dialog.style.maxWidth = '380px';
+                                    dialog.style.width = '100%';
+                                    dialog.style.borderRadius = '12px';
+                                    dialog.style.overflow = 'hidden';
+                                }
+                                
+                                const footer = document.querySelector('[data-tg-dialog-footer], .tg-dialog-footer, [class*="tg-dialog-footer"]');
+                                if (footer) {
+                                    footer.style.padding = '12px 20px';
+                                    footer.style.borderTop = '1px solid #e5e7eb';
+                                    footer.style.backgroundColor = '#f9fafb';
+                                    footer.style.display = 'flex';
+                                    footer.style.flexDirection = 'column';
+                                    footer.style.gap = '10px';
+                                }
+                                
+                                const buttons = document.querySelectorAll('[data-tg-button], .tg-button, [class*="tg-button"]');
+                                buttons.forEach(function(btn) {
+                                    if (!btn.classList.contains('tg-close-button') && !btn.classList.contains('tg-step-dot')) {
+                                        btn.style.flex = '1';
+                                        btn.style.padding = '10px 16px';
+                                        btn.style.borderRadius = '8px';
+                                        btn.style.fontWeight = '500';
+                                        btn.style.fontSize = '14px';
+                                    }
+                                });
+                                
+                                const stepDots = document.querySelector('[data-tg-step-dots], .tg-step-dots, [class*="tg-step-dots"]');
+                                if (stepDots) {
+                                    stepDots.style.display = 'flex';
+                                    stepDots.style.justifyContent = 'center';
+                                    stepDots.style.alignItems = 'center';
+                                    stepDots.style.gap = '8px';
+                                    stepDots.style.marginBottom = '8px';
+                                    stepDots.style.padding = '8px 0';
+                                    stepDots.style.flexWrap = 'wrap';
+                                }
+                            }, 100);
+                        }
+                    };
+                    document.body.appendChild(startTourBtn);
+                    
+                    // Function to apply custom styles to dialog
+                    function applyDialogStyles() {
+                        setTimeout(function() {
+                            const dialog = document.querySelector('[data-tg-dialog], .tg-dialog, [class*="tg-dialog"]');
+                            if (dialog) {
+                                dialog.style.maxWidth = '380px';
+                                dialog.style.width = '100%';
+                                dialog.style.borderRadius = '12px';
+                                dialog.style.overflow = 'hidden';
+                            }
+                            
+                            const footer = document.querySelector('[data-tg-dialog-footer], .tg-dialog-footer, [class*="tg-dialog-footer"]');
+                            if (footer) {
+                                footer.style.padding = '12px 20px';
+                                footer.style.borderTop = '1px solid #e5e7eb';
+                                footer.style.backgroundColor = '#f9fafb';
+                                footer.style.display = 'flex';
+                                footer.style.flexDirection = 'column';
+                                footer.style.gap = '10px';
+                            }
+                            
+                            const buttons = document.querySelectorAll('[data-tg-button], .tg-button, [class*="tg-button"]');
+                            buttons.forEach(function(btn) {
+                                if (!btn.classList.contains('tg-close-button') && !btn.classList.contains('tg-step-dot')) {
+                                    btn.style.flex = '1';
+                                    btn.style.padding = '10px 16px';
+                                    btn.style.borderRadius = '8px';
+                                    btn.style.fontWeight = '500';
+                                    btn.style.fontSize = '14px';
+                                }
+                            });
+                            
+                            const stepDots = document.querySelector('[data-tg-step-dots], .tg-step-dots, [class*="tg-step-dots"]');
+                            if (stepDots) {
+                                stepDots.style.display = 'flex';
+                                stepDots.style.justifyContent = 'center';
+                                stepDots.style.alignItems = 'center';
+                                stepDots.style.gap = '8px';
+                                stepDots.style.marginBottom = '8px';
+                                stepDots.style.padding = '8px 0';
+                                stepDots.style.flexWrap = 'wrap';
+                            }
+                        }, 50);
+                    }
+                    
+                    // Listen for tour events to apply styles
+                    if (tourGuide && typeof tourGuide.on === 'function') {
+                        tourGuide.on('step:after', applyDialogStyles);
+                        tourGuide.on('start', applyDialogStyles);
+                    }
+                    
+                    console.log('TourGuide initialized successfully');
+                } else {
+                    console.error('TourGuideClient is not defined. Make sure the script is loaded correctly.');
+                }
+            } catch (error) {
+                console.error('Error initializing TourGuide:', error);
+            }
+        }, 1500);
+    });
+</script> --}}
 @endsection
 
 

@@ -9,6 +9,7 @@ use App\Models\GrTable;
 use App\Models\HazardValidation;
 use App\Services\BesigmaDbService;
 use App\Services\ClickHouseService;
+use App\Services\TelegramBotService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -66,6 +67,7 @@ class MapBaseController extends Controller
                 'lokasi_pemasangan' => $cctv->lokasi_pemasangan ?? null,
                 'control_room' => $cctv->control_room ?? null,
                 'coverage_lokasi' => $cctv->coverage_lokasi ?? null,
+                'kategori_area_tercapture' => $cctv->kategori_area_tercapture ?? null,
                 'created_at' => $cctv->created_at ? $cctv->created_at->toDateTimeString() : null,
                 'updated_at' => $cctv->updated_at ? $cctv->updated_at->toDateTimeString() : null,
                 'tahun_update' => $cctv->tahun_update ?? null,
@@ -437,6 +439,85 @@ class MapBaseController extends Controller
                 'success' => false,
                 'error' => $e->getMessage(),
                 'gpsLogs' => []
+            ], 500);
+        }
+    }
+
+    /**
+     * Get PJA data from ClickHouse
+     */
+    public function getPjaData(Request $request)
+    {
+        try {
+            $clickhouse = new ClickHouseService();
+            
+            if (!$clickhouse->isConnected()) {
+                Log::warning('ClickHouse is not connected. Returning empty PJA data.');
+                return response()->json([
+                    'success' => false,
+                    'error' => 'ClickHouse is not connected',
+                    'data' => []
+                ], 500);
+            }
+            
+            // Query untuk mengambil data PJA dari tabel nitip.pja_full_hierarchical_view_fix
+            $sql = "
+                SELECT 
+                    toString(site) as site,
+                    toString(lokasi) as lokasi,
+                    toString(detail_lokasi) as detail_lokasi,
+                    toString(pja_id) as pja_id,
+                    toString(nama_pja) as nama_pja,
+                    toString(pja_active) as pja_active,
+                    toString(pja_type_name) as pja_type_name,
+                    toString(pja_category_name) as pja_category_name,
+                    toString(pja_layer) as pja_layer,
+                    toString(id_employee) as id_employee,
+                    toString(nik) as nik,
+                    toString(kode_sid) as kode_sid,
+                    toString(employee_name) as employee_name,
+                    toString(employee_email) as employee_email,
+                    toString(kategori_pja) as kategori_pja
+                FROM nitip.pja_full_hierarchical_view_fix
+                ORDER BY pja_id DESC
+                LIMIT 10000
+            ";
+            
+            $results = $clickhouse->query($sql);
+            
+            // Format data untuk frontend
+            $pjaData = [];
+            foreach ($results as $row) {
+                $pjaData[] = [
+                    'site' => $row['site'] ?? null,
+                    'lokasi' => $row['lokasi'] ?? null,
+                    'detail_lokasi' => $row['detail_lokasi'] ?? null,
+                    'pja_id' => $row['pja_id'] ?? null,
+                    'nama_pja' => $row['nama_pja'] ?? null,
+                    'pja_active' => $row['pja_active'] ?? null,
+                    'pja_type_name' => $row['pja_type_name'] ?? null,
+                    'pja_category_name' => $row['pja_category_name'] ?? null,
+                    'pja_layer' => $row['pja_layer'] ?? null,
+                    'id_employee' => $row['id_employee'] ?? null,
+                    'nik' => $row['nik'] ?? null,
+                    'kode_sid' => $row['kode_sid'] ?? null,
+                    'employee_name' => $row['employee_name'] ?? null,
+                    'employee_email' => $row['employee_email'] ?? null,
+                    'kategori_pja' => $row['kategori_pja'] ?? null,
+                ];
+            }
+            
+            return response()->json([
+                'success' => true,
+                'data' => $pjaData,
+                'count' => count($pjaData)
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error fetching PJA data via API: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'data' => []
             ], 500);
         }
     }
@@ -2983,7 +3064,7 @@ class MapBaseController extends Controller
      * API endpoint untuk mendapatkan data yang sudah difilter untuk ditampilkan di map
      */
     /**
-     * Get user GPS data from ClickHouse (nitip.users and nitip.user_gps_latests)
+     * Get user GPS data from ClickHouse (nitip.v_employee_location)
      */
     public function getUserGps(Request $request)
     {
@@ -2999,45 +3080,71 @@ class MapBaseController extends Controller
                 ], 500);
             }
             
+            // Cek apakah user adalah admin
+            $user = auth()->user();
+            $isAdmin = false;
+            $userEmail = null;
+            $userKodeSid = null;
+            
+            if ($user) {
+                $userEmail = $user->email;
+                
+                // Opsi 1: Menggunakan method isAdmin() dari model User (disarankan)
+                // Pastikan kolom 'role' sudah ditambahkan di tabel users
+                if (method_exists($user, 'isAdmin')) {
+                    $isAdmin = $user->isAdmin();
+                } else {
+                    // Fallback: Cek kolom role langsung
+                    $isAdmin = isset($user->role) && ($user->role === 'admin' || $user->role === 'administrator');
+                }
+                
+                // Opsi 2: Jika menggunakan kolom is_admin (boolean)
+                // $isAdmin = isset($user->is_admin) && $user->is_admin === true;
+                
+                // Fallback: Jika kolom role/is_admin belum ada, gunakan pengecekan email
+                if (!$isAdmin && !isset($user->role) && !isset($user->is_admin)) {
+                    $isAdmin = stripos($userEmail, 'admin') !== false || 
+                              $userEmail === 'admin@gmail.com' ||
+                              $userEmail === 'administrator@gmail.com';
+                }
+            }
+            
             // Set timeout lebih lama untuk query yang besar (60 detik)
             // Note: timeout diatur di ClickHouseService, tapi kita bisa handle error dengan lebih baik
 
-            // Query untuk mengambil data user GPS terbaru dengan join ke tabel users
+            // Query untuk mengambil data employee location dari nitip.v_employee_location
             // Menggunakan toString() pada semua field untuk menghindari konflik tipe data
-            // Convert semua numeric fields ke string dulu, baru convert kembali di PHP
             // Filter latitude/longitude != 0 dilakukan di PHP untuk menghindari konflik tipe
-            // Filter hanya data hari ini (berdasarkan updated_at)
+            // Filter hanya data hari ini (berdasarkan date)
             $today = Carbon::now()->format('Y-m-d');
+            
+            // Jika bukan admin, filter berdasarkan kode_sid atau employee_id user
+            $whereClause = "latitude IS NOT NULL 
+                    AND longitude IS NOT NULL
+                    AND toDate(date) = today()";
+            
+            // Jika bukan admin, tambahkan filter untuk data user sendiri
+            // Asumsi: kita perlu mapping antara user email/name dengan kode_sid atau employee_id
+            // Untuk sementara, jika bukan admin, kita akan return empty atau filter di PHP
+            // Anda bisa menyesuaikan ini dengan menambahkan kolom user_id atau email di tabel employee
             
             $sql = "
                 SELECT 
-                    toString(u.id) as user_id,
-                    toString(u.npk) as npk,
-                    toString(u.fullname) as fullname,
-                    toString(u.email) as email,
-                    toString(u.phone) as phone,
-                    toString(u.gender) as gender,
-                    toString(u.division_name) as division_name,
-                    toString(u.department_name) as department_name,
-                    toString(u.functional_position) as functional_position,
-                    toString(u.structural_position) as structural_position,
-                    toString(u.site_assignment) as site_assignment,
-                    toString(u.company_id) as company_id,
-                    toString(u.is_deleted) as is_deleted,
-                    toString(u.is_active) as is_active,
-                    toString(gps.latitude) as latitude,
-                    toString(gps.longitude) as longitude,
-                    toString(gps.course) as course,
-                    toString(gps.battery) as battery,
-                    toString(gps.timezone) as timezone,
-                    toString(gps.updated_at) as gps_updated_at,
-                    toString(gps.created_at) as gps_created_at
-                FROM nitip.user_gps_latests gps
-                INNER JOIN nitip.users u ON toString(gps.user_id) = toString(u.id)
-                WHERE gps.latitude IS NOT NULL 
-                    AND gps.longitude IS NOT NULL
-                    AND toDate(gps.updated_at) = today()
-                ORDER BY gps.updated_at DESC
+                    toString(kode_sid) as kode_sid,
+                    toString(k.nama) as nama,
+                    toString(nama_perusahaan) as nama_perusahaan,
+                    toString(id) as id,
+                    toString(latitude) as latitude,
+                    toString(longitude) as longitude,
+                    toString(date) as date,
+                    toString(device_info) as device_info,
+                    toString(employee_id) as employee_id,
+                    toString(location_id) as location_id,
+                    toString(checkpoint) as checkpoint,
+                    toString(is_onsite) as is_onsite
+                FROM nitip.v_employee_location
+                WHERE {$whereClause}
+                ORDER BY date DESC
                 LIMIT 5000
             ";
 
@@ -3075,80 +3182,176 @@ class MapBaseController extends Controller
                 }
             }
 
-            // Format data untuk frontend dan filter boolean di PHP
-            // Gunakan Map untuk deduplikasi berdasarkan user_id (ambil yang terbaru)
+            // Format data untuk frontend
+            // Gunakan Map untuk deduplikasi berdasarkan employee_id (ambil yang terbaru)
             $userGpsDataMap = [];
             foreach ($results as $row) {
-                // Filter boolean di PHP untuk menghindari konflik tipe di ClickHouse
-                $isDeleted = $row['is_deleted'] ?? null;
-                $isActive = $row['is_active'] ?? null;
-                
-                // Skip jika user deleted atau tidak active
-                if ($isDeleted === '1' || $isDeleted === 'true' || $isDeleted === 'True' || $isDeleted === true || $isDeleted === 1) {
-                    continue;
-                }
-                if ($isActive === '0' || $isActive === 'false' || $isActive === 'False' || $isActive === false || $isActive === 0) {
-                    continue;
-                }
-                
                 // Filter latitude/longitude != 0 di PHP
-                $latitude = isset($row['latitude']) && $row['latitude'] !== '' ? (float)$row['latitude'] : null;
-                $longitude = isset($row['longitude']) && $row['longitude'] !== '' ? (float)$row['longitude'] : null;
+                // Handle comma as decimal separator (2,263024 -> 2.263024)
+                $latitude = isset($row['latitude']) && $row['latitude'] !== '' ? (float)str_replace(',', '.', $row['latitude']) : null;
+                $longitude = isset($row['longitude']) && $row['longitude'] !== '' ? (float)str_replace(',', '.', $row['longitude']) : null;
                 
                 if ($latitude === null || $longitude === null || $latitude == 0 || $longitude == 0) {
                     continue;
                 }
                 
-                $userId = $row['user_id'] ?? null;
-                if (!$userId) {
+                // Use employee_id as primary identifier, fallback to id or kode_sid
+                $employeeId = $row['employee_id'] ?? $row['id'] ?? $row['kode_sid'] ?? null;
+                if (!$employeeId) {
                     continue;
                 }
                 
+                // Map fields from v_employee_location to expected frontend format
                 $userData = [
-                    'id' => $userId,
-                    'user_id' => $userId,
-                    'npk' => $row['npk'] ?? null,
-                    'fullname' => $row['fullname'] ?? null,
-                    'email' => $row['email'] ?? null,
-                    'phone' => $row['phone'] ?? null,
-                    'gender' => $row['gender'] ?? null,
-                    'division_name' => $row['division_name'] ?? null,
-                    'department_name' => $row['department_name'] ?? null,
-                    'functional_position' => $row['functional_position'] ?? null,
-                    'structural_position' => $row['structural_position'] ?? null,
-                    'site_assignment' => $row['site_assignment'] ?? null,
-                    'company_id' => $row['company_id'] ?? null,
+                    'id' => $employeeId,
+                    'user_id' => $employeeId,
+                    'employee_id' => $row['employee_id'] ?? null,
+                    'kode_sid' => $row['kode_sid'] ?? null,
+                    'npk' => $row['kode_sid'] ?? null, // Use kode_sid as npk
+                    'fullname' => $row['nama'] ?? null,
+                    'nama_perusahaan' => $row['nama_perusahaan'] ?? null,
                     'latitude' => $latitude,
                     'longitude' => $longitude,
                     'location' => [
                         'lat' => $latitude,
                         'lng' => $longitude
                     ],
-                    'course' => isset($row['course']) && $row['course'] !== '' ? (float)$row['course'] : null,
-                    'battery' => isset($row['battery']) && $row['battery'] !== '' ? (int)$row['battery'] : null,
-                    'timezone' => $row['timezone'] ?? null,
-                    'gps_updated_at' => $row['gps_updated_at'] ?? null,
-                    'gps_created_at' => $row['gps_created_at'] ?? null
+                    'date' => $row['date'] ?? null,
+                    'gps_updated_at' => $row['date'] ?? null, // Use date as gps_updated_at
+                    'gps_created_at' => $row['date'] ?? null,
+                    'device_info' => $row['device_info'] ?? null,
+                    'location_id' => $row['location_id'] ?? null,
+                    'checkpoint' => $row['checkpoint'] ?? null,
+                    'is_onsite' => isset($row['is_onsite']) ? (int)$row['is_onsite'] : null
                 ];
                 
-                // Deduplikasi: jika user_id sudah ada, ambil yang terbaru berdasarkan gps_updated_at
-                if (!isset($userGpsDataMap[$userId])) {
-                    // User belum ada, tambahkan
-                    $userGpsDataMap[$userId] = $userData;
+                // Deduplikasi: jika employee_id sudah ada, ambil yang terbaru berdasarkan date
+                if (!isset($userGpsDataMap[$employeeId])) {
+                    // Employee belum ada, tambahkan
+                    $userGpsDataMap[$employeeId] = $userData;
                 } else {
-                    // User sudah ada, bandingkan timestamp dan ambil yang terbaru
-                    $existingTime = $userGpsDataMap[$userId]['gps_updated_at'] ?? $userGpsDataMap[$userId]['gps_created_at'] ?? '';
-                    $currentTime = $userData['gps_updated_at'] ?? $userData['gps_created_at'] ?? '';
+                    // Employee sudah ada, bandingkan timestamp dan ambil yang terbaru
+                    $existingTime = $userGpsDataMap[$employeeId]['date'] ?? $userGpsDataMap[$employeeId]['gps_updated_at'] ?? '';
+                    $currentTime = $userData['date'] ?? $userData['gps_updated_at'] ?? '';
                     
                     if ($currentTime > $existingTime) {
                         // Replace dengan data yang lebih baru
-                        $userGpsDataMap[$userId] = $userData;
+                        $userGpsDataMap[$employeeId] = $userData;
                     }
                 }
             }
             
             // Convert map to array
             $userGpsData = array_values($userGpsDataMap);
+            
+            // Jika bukan admin, filter hanya data user sendiri
+            // Filter berdasarkan kode_sid atau employee_id yang sesuai dengan user
+            // Catatan: Untuk mapping yang lebih akurat, disarankan menambahkan kolom kode_sid atau employee_id di tabel users
+            // Atau membuat tabel mapping antara users.id dengan employee.kode_sid/employee_id
+            if (!$isAdmin && $user) {
+                $userName = strtolower(trim($user->name ?? ''));
+                $userEmail = strtolower(trim($user->email ?? ''));
+                $filteredData = [];
+                
+                foreach ($userGpsData as $userData) {
+                    $employeeName = strtolower(trim($userData['fullname'] ?? ''));
+                    $employeeKodeSid = trim($userData['kode_sid'] ?? '');
+                    $employeeEmail = strtolower(trim($userData['email'] ?? ''));
+                    
+                    // Match berdasarkan:
+                    // 1. Nama (fuzzy match)
+                    // 2. Email (exact match)
+                    // 3. Kode SID (jika user memiliki kode_sid di profile)
+                    $nameMatch = $userName && $employeeName && 
+                                (stripos($employeeName, $userName) !== false || 
+                                 stripos($userName, $employeeName) !== false ||
+                                 $employeeName === $userName);
+                    
+                    $emailMatch = $userEmail && $employeeEmail && $employeeEmail === $userEmail;
+                    
+                    // Jika ada kode_sid di user (dari request atau profile), match dengan kode_sid employee
+                    $kodeSidMatch = false;
+                    if ($request->has('user_kode_sid')) {
+                        $userKodeSid = trim($request->input('user_kode_sid'));
+                        $kodeSidMatch = $userKodeSid && $employeeKodeSid && $employeeKodeSid === $userKodeSid;
+                    }
+                    
+                    if ($nameMatch || $emailMatch || $kodeSidMatch) {
+                        $filteredData[] = $userData;
+                    }
+                }
+                
+                $userGpsData = $filteredData;
+                
+                // Log untuk debugging
+                Log::info('GPS data filtered for user', [
+                    'user_id' => $user->id,
+                    'user_name' => $userName,
+                    'user_email' => $userEmail,
+                    'filtered_count' => count($filteredData),
+                    'total_count' => count($userGpsDataMap)
+                ]);
+            }
+            
+            // Deteksi area kerja untuk setiap user menggunakan PostGIS
+            // Batch check untuk performa yang lebih baik
+            // Cek koneksi PostgreSQL sekali di awal untuk menghindari spam log
+            $pgsqlAvailable = false;
+            try {
+                DB::connection('pgsql')->getPdo();
+                $pgsqlAvailable = true;
+            } catch (Exception $connException) {
+                // PostgreSQL tidak tersedia, skip semua query work area
+                Log::warning('PostgreSQL connection not available, skipping work area detection: ' . $connException->getMessage());
+            }
+            
+            if ($pgsqlAvailable) {
+                foreach ($userGpsData as &$userData) {
+                    if (isset($userData['latitude']) && isset($userData['longitude'])) {
+                        try {
+                            // Cek apakah koordinat berada di dalam area kerja dari tabel geo_tagging
+                            // Transform point ke SRID geometry terlebih dahulu untuk akurasi yang lebih baik
+                            $workArea = DB::connection('pgsql')
+                                ->table('geo_tagging')
+                                ->select('id', 'name', 'location_id', 'buffer', 'type_lookup_id')
+                                ->where('is_active', true)
+                                ->whereRaw(
+                                    'ST_Contains(
+                                        geometry, 
+                                        ST_Transform(
+                                            ST_SetSRID(ST_MakePoint(?, ?), 4326), 
+                                            ST_SRID(geometry)
+                                        )
+                                    )',
+                                    [$userData['longitude'], $userData['latitude']]
+                                )
+                                ->first();
+
+                            if ($workArea) {
+                                $userData['work_area_id'] = $workArea->id;
+                                $userData['work_area_name'] = $workArea->name;
+                                $userData['work_area_location_id'] = $workArea->location_id;
+                                $userData['work_area_buffer'] = $workArea->buffer;
+                                $userData['work_area_type_lookup_id'] = $workArea->type_lookup_id;
+                                $userData['is_in_work_area'] = true;
+                            } else {
+                                $userData['is_in_work_area'] = false;
+                            }
+                        } catch (Exception $e) {
+                            // Jika error saat query, skip deteksi untuk user ini
+                            // Tidak perlu log setiap error karena sudah dicek di awal
+                            $userData['is_in_work_area'] = false;
+                        }
+                    } else {
+                        $userData['is_in_work_area'] = false;
+                    }
+                }
+            } else {
+                // Jika PostgreSQL tidak tersedia, set semua user is_in_work_area = false
+                foreach ($userGpsData as &$userData) {
+                    $userData['is_in_work_area'] = false;
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -3162,6 +3365,1041 @@ class MapBaseController extends Controller
                 'success' => false,
                 'error' => $e->getMessage(),
                 'users' => []
+            ], 500);
+        }
+    }
+
+    /**
+     * Get employee location data from nitip.v_employee_location
+     * Returns latest location data for employees with coordinates
+     */
+    public function getEmployeeLocation(Request $request)
+    {
+        try {
+            $clickhouse = new ClickHouseService();
+            
+            if (!$clickhouse->isConnected()) {
+                Log::warning('ClickHouse is not connected. Returning empty employee location data.');
+                return response()->json([
+                    'success' => false,
+                    'error' => 'ClickHouse is not connected',
+                    'employees' => []
+                ], 500);
+            }
+            
+            // Get optional filters
+            $limit = (int)($request->input('limit', 1000));
+            $employeeId = $request->input('employee_id');
+            $kodeSid = $request->input('kode_sid');
+            $isOnsite = $request->input('is_onsite'); // 1 or 0
+            
+            // Build WHERE clause - avoid type conflicts by filtering in PHP instead
+            // Only check for NOT NULL in SQL, filter != 0 in PHP
+            $whereConditions = [
+                "latitude IS NOT NULL",
+                "longitude IS NOT NULL"
+            ];
+            
+            if ($employeeId) {
+                $whereConditions[] = "toString(employee_id) = '" . addslashes($employeeId) . "'";
+            }
+            
+            if ($kodeSid) {
+                $whereConditions[] = "toString(kode_sid) = '" . addslashes($kodeSid) . "'";
+            }
+            
+            if ($isOnsite !== null) {
+                $isOnsiteValue = $isOnsite === '1' || $isOnsite === 1 || $isOnsite === true ? '1' : '0';
+                $whereConditions[] = "toString(is_onsite) = '" . $isOnsiteValue . "'";
+            }
+            
+            $whereClause = implode(' AND ', $whereConditions);
+            
+            // Query untuk mengambil data employee location terbaru
+            // Use toString() for all fields to avoid type conflicts
+            $sql = "
+                SELECT 
+                    toString(kode_sid) as kode_sid,
+                    toString(k.nama) as nama,
+                    toString(nama_perusahaan) as nama_perusahaan,
+                    toString(id) as id,
+                    toString(latitude) as latitude,
+                    toString(longitude) as longitude,
+                    toString(date) as date,
+                    toString(device_info) as device_info,
+                    toString(employee_id) as employee_id,
+                    toString(location_id) as location_id,
+                    toString(checkpoint) as checkpoint,
+                    toString(is_onsite) as is_onsite
+                FROM nitip.v_employee_location
+                WHERE {$whereClause}
+                ORDER BY date DESC
+                LIMIT {$limit}
+            ";
+            
+            $results = $clickhouse->query($sql);
+            
+            // Format data untuk frontend
+            $employeeData = [];
+            $employeeMap = []; // Untuk deduplikasi per employee_id (ambil yang terbaru)
+            
+            foreach ($results as $row) {
+                $latitude = isset($row['latitude']) && $row['latitude'] !== '' ? (float)str_replace(',', '.', $row['latitude']) : null;
+                $longitude = isset($row['longitude']) && $row['longitude'] !== '' ? (float)str_replace(',', '.', $row['longitude']) : null;
+                
+                if ($latitude === null || $longitude === null || $latitude == 0 || $longitude == 0) {
+                    continue;
+                }
+                
+                $employeeId = $row['employee_id'] ?? null;
+                if (!$employeeId) {
+                    continue;
+                }
+                
+                $dateStr = $row['date'] ?? '';
+                
+                $empData = [
+                    'kode_sid' => $row['kode_sid'] ?? null,
+                    'nama' => $row['nama'] ?? null,
+                    'nama_perusahaan' => $row['nama_perusahaan'] ?? null,
+                    'id' => $row['id'] ?? null,
+                    'latitude' => $latitude,
+                    'longitude' => $longitude,
+                    'date' => $dateStr,
+                    'device_info' => $row['device_info'] ?? null,
+                    'employee_id' => $employeeId,
+                    'location_id' => $row['location_id'] ?? null,
+                    'checkpoint' => $row['checkpoint'] ?? null,
+                    'is_onsite' => isset($row['is_onsite']) ? (int)$row['is_onsite'] : null,
+                    'location' => [
+                        'lat' => $latitude,
+                        'lng' => $longitude
+                    ]
+                ];
+                
+                // Deduplikasi: jika employee_id sudah ada, ambil yang terbaru berdasarkan date
+                if (!isset($employeeMap[$employeeId])) {
+                    $employeeMap[$employeeId] = $empData;
+                } else {
+                    $existingDate = $employeeMap[$employeeId]['date'] ?? '';
+                    if ($dateStr > $existingDate) {
+                        $employeeMap[$employeeId] = $empData;
+                    }
+                }
+            }
+            
+            // Convert map to array
+            $employeeData = array_values($employeeMap);
+            
+            return response()->json([
+                'success' => true,
+                'employees' => $employeeData,
+                'count' => count($employeeData)
+            ]);
+            
+        } catch (Exception $e) {
+            Log::error('Error fetching employee location data from ClickHouse: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'employees' => []
+            ], 500);
+        }
+    }
+
+    /**
+     * Get work area polygons from geo_tagging table
+     * Returns area kerja data with geometry converted to GeoJSON
+     */
+    public function getWorkAreas(Request $request)
+    {
+        try {
+            // Cek koneksi PostgreSQL terlebih dahulu
+            try {
+                DB::connection('pgsql')->getPdo();
+            } catch (Exception $connException) {
+                Log::warning('PostgreSQL connection not available for getWorkAreas: ' . $connException->getMessage());
+                return response()->json([
+                    'success' => false,
+                    'error' => 'PostgreSQL connection not available',
+                    'areas' => []
+                ], 503);
+            }
+            
+            // Gunakan koneksi PostgreSQL untuk data geometry
+            // Convert geometry ke WGS84 (SRID 4326) untuk kompatibilitas dengan frontend
+            $workAreas = DB::connection('pgsql')
+                ->table('geo_tagging')
+                ->select(
+                    'id',
+                    'name',
+                    'location_id',
+                    'buffer',
+                    'is_active',
+                    'type_lookup_id',
+                    DB::raw('ST_AsGeoJSON(ST_Transform(geometry, 4326)) as geometry_json'),
+                    DB::raw('ST_SRID(geometry) as srid'),
+                    'created_date',
+                    'updated_date'
+                )
+                ->where('is_active', true)
+                ->get();
+
+            $areas = [];
+            foreach ($workAreas as $area) {
+                $geometryJson = json_decode($area->geometry_json, true);
+                
+                if ($geometryJson) {
+                    $areas[] = [
+                        'id' => $area->id,
+                        'name' => $area->name,
+                        'location_id' => $area->location_id,
+                        'buffer' => $area->buffer,
+                        'is_active' => $area->is_active,
+                        'type_lookup_id' => $area->type_lookup_id,
+                        'geometry' => $geometryJson,
+                        'srid' => $area->srid,
+                        'created_date' => $area->created_date,
+                        'updated_date' => $area->updated_date
+                    ];
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'areas' => $areas,
+                'count' => count($areas)
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error fetching work areas from database: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'areas' => []
+            ], 500);
+        }
+    }
+
+    /**
+     * Check if GPS coordinate is inside any work area polygon
+     * Uses PostGIS ST_Contains for efficient spatial query
+     */
+    public function checkGpsInWorkArea(Request $request)
+    {
+        try {
+            $latitude = $request->input('latitude');
+            $longitude = $request->input('longitude');
+            $employeeId = $request->input('employee_id');
+
+            if (!$latitude || !$longitude) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Latitude and longitude are required'
+                ], 400);
+            }
+
+            // Cek koneksi PostgreSQL terlebih dahulu
+            try {
+                DB::connection('pgsql')->getPdo();
+            } catch (Exception $connException) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'PostgreSQL connection not available',
+                    'is_inside' => false
+                ], 503);
+            }
+
+            // Gunakan PostGIS ST_Contains untuk mengecek apakah point berada di dalam polygon
+            // Transform point ke SRID geometry terlebih dahulu, lalu bandingkan
+            // ST_SetSRID: Set Spatial Reference System ID (4326 = WGS84)
+            // ST_MakePoint: Create point from longitude, latitude
+            // ST_Transform: Transform point ke SRID yang sama dengan geometry
+            $result = DB::connection('pgsql')
+                ->table('geo_tagging')
+                ->select(
+                    'id',
+                    'name',
+                    'location_id',
+                    'buffer',
+                    'type_lookup_id',
+                    DB::raw('ST_SRID(geometry) as srid')
+                )
+                ->where('is_active', true)
+                ->whereRaw(
+                    'ST_Contains(
+                        geometry, 
+                        ST_Transform(
+                            ST_SetSRID(ST_MakePoint(?, ?), 4326), 
+                            ST_SRID(geometry)
+                        )
+                    )',
+                    [$longitude, $latitude] // Note: PostGIS uses (lon, lat) order
+                )
+                ->first();
+
+            $isInside = $result !== null;
+
+            return response()->json([
+                'success' => true,
+                'is_inside' => $isInside,
+                'work_area' => $result,
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+                'employee_id' => $employeeId
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error checking GPS in work area: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'is_inside' => false
+            ], 500);
+        }
+    }
+
+    /**
+     * Get GPS user location history
+     * Returns history of locations visited by the user based on their name/kode_sid
+     */
+    public function getUserGpsHistory(Request $request)
+    {
+        try {
+            $clickhouse = new ClickHouseService();
+            
+            if (!$clickhouse->isConnected()) {
+                Log::warning('ClickHouse is not connected. Returning empty GPS history.');
+                return response()->json([
+                    'success' => false,
+                    'error' => 'ClickHouse is not connected',
+                    'history' => []
+                ], 500);
+            }
+
+            // Get current user
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'User not authenticated',
+                    'history' => []
+                ], 401);
+            }
+
+            // Get user info for filtering
+            $userName = strtolower(trim($user->name ?? ''));
+            $userEmail = strtolower(trim($user->email ?? ''));
+            $userKodeSid = $request->input('kode_sid'); // Optional: bisa dikirim dari frontend jika ada mapping
+            
+            // Get date range (default: 7 hari terakhir untuk performa lebih baik)
+            $daysBack = (int)$request->input('days', 7);
+            $startDate = Carbon::now()->subDays($daysBack)->format('Y-m-d');
+            $endDate = Carbon::now()->format('Y-m-d');
+
+            // Query untuk mengambil history lokasi dari nitip.v_employee_location
+            // Filter berdasarkan nama atau kode_sid user
+            $sql = "
+                SELECT 
+                    toString(kode_sid) as kode_sid,
+                    toString(k.nama) as nama,
+                    toString(nama_perusahaan) as nama_perusahaan,
+                    toString(id) as id,
+                    toString(latitude) as latitude,
+                    toString(longitude) as longitude,
+                    toString(date) as date,
+                    toString(device_info) as device_info,
+                    toString(employee_id) as employee_id,
+                    toString(location_id) as location_id,
+                    toString(checkpoint) as checkpoint,
+                    toString(is_onsite) as is_onsite
+                FROM nitip.v_employee_location
+                WHERE latitude IS NOT NULL 
+                    AND longitude IS NOT NULL
+                    AND toDate(date) >= '{$startDate}'
+                    AND toDate(date) <= '{$endDate}'
+            ";
+
+            // Filter berdasarkan nama atau kode_sid jika ada
+            // Untuk user biasa, filter berdasarkan nama user yang login
+            if ($userKodeSid) {
+                $sql .= " AND toString(kode_sid) = '" . addslashes($userKodeSid) . "'";
+            } elseif ($userName) {
+                // Filter berdasarkan nama (case-insensitive partial match)
+                // Cari nama yang mengandung kata-kata dari nama user
+                $nameWords = explode(' ', $userName);
+                $nameConditions = [];
+                foreach ($nameWords as $word) {
+                    if (strlen(trim($word)) > 2) { // Hanya kata dengan lebih dari 2 karakter
+                        $nameConditions[] = "lower(toString(k.nama)) LIKE '%" . addslashes(trim($word)) . "%'";
+                    }
+                }
+                if (!empty($nameConditions)) {
+                    $sql .= " AND (" . implode(' OR ', $nameConditions) . ")";
+                }
+            }
+
+            $sql .= " ORDER BY date DESC LIMIT 300";
+
+            $results = $clickhouse->query($sql);
+
+            // Group history berdasarkan area kerja (location_id atau koordinat yang sama dalam radius tertentu)
+            $historyByLocation = [];
+            $locationGroups = [];
+
+            foreach ($results as $row) {
+                // Handle comma as decimal separator
+                $latitude = isset($row['latitude']) && $row['latitude'] !== '' ? (float)str_replace(',', '.', $row['latitude']) : null;
+                $longitude = isset($row['longitude']) && $row['longitude'] !== '' ? (float)str_replace(',', '.', $row['longitude']) : null;
+                
+                if ($latitude === null || $longitude === null || $latitude == 0 || $longitude == 0) {
+                    continue;
+                }
+
+                $employeeId = $row['employee_id'] ?? $row['id'] ?? $row['kode_sid'] ?? null;
+                if (!$employeeId) {
+                    continue;
+                }
+
+                // Cek apakah koordinat ini sudah ada di group lokasi (dalam radius 100 meter)
+                // Optimasi: gunakan perkiraan jarak yang lebih cepat (tidak perlu akurat)
+                $locationKey = null;
+                $threshold = 0.001; // ~100 meter dalam derajat (perkiraan)
+                
+                foreach ($locationGroups as $key => $group) {
+                    $groupLat = $group['latitude'];
+                    $groupLng = $group['longitude'];
+                    
+                    // Quick check: jika perbedaan lat/lng terlalu besar, skip
+                    if (abs($latitude - $groupLat) > $threshold || abs($longitude - $groupLng) > $threshold) {
+                        continue;
+                    }
+                    
+                    // Hanya hitung jarak jika sudah dekat
+                    $distance = $this->calculateDistance($latitude, $longitude, $groupLat, $groupLng);
+                    
+                    if ($distance <= 100) { // Dalam radius 100 meter, anggap lokasi yang sama
+                        $locationKey = $key;
+                        break;
+                    }
+                }
+
+                // Jika belum ada group, buat group baru
+                if (!$locationKey) {
+                    $locationKey = 'loc_' . count($locationGroups);
+                    $locationGroups[$locationKey] = [
+                        'latitude' => $latitude,
+                        'longitude' => $longitude,
+                        'location_id' => $row['location_id'] ?? null,
+                        'count' => 0,
+                        'first_visit' => $row['date'],
+                        'last_visit' => $row['date'],
+                        'visits' => []
+                    ];
+                }
+
+                // Tambahkan visit ke group
+                $visitData = [
+                    'id' => $row['id'] ?? null,
+                    'employee_id' => $employeeId,
+                    'kode_sid' => $row['kode_sid'] ?? null,
+                    'nama' => $row['nama'] ?? null,
+                    'latitude' => $latitude,
+                    'longitude' => $longitude,
+                    'date' => $row['date'] ?? null,
+                    'location_id' => $row['location_id'] ?? null,
+                    'checkpoint' => $row['checkpoint'] ?? null,
+                    'is_onsite' => isset($row['is_onsite']) ? (int)$row['is_onsite'] : null,
+                    'device_info' => $row['device_info'] ?? null
+                ];
+
+                $locationGroups[$locationKey]['visits'][] = $visitData;
+                $locationGroups[$locationKey]['count']++;
+                
+                // Update first_visit dan last_visit
+                if ($row['date']) {
+                    $currentDate = $row['date'];
+                    $firstVisit = $locationGroups[$locationKey]['first_visit'];
+                    $lastVisit = $locationGroups[$locationKey]['last_visit'];
+                    
+                    // Compare dates (string comparison should work for ISO format)
+                    if ($currentDate < $firstVisit || !$firstVisit) {
+                        $locationGroups[$locationKey]['first_visit'] = $currentDate;
+                    }
+                    if ($currentDate > $lastVisit || !$lastVisit) {
+                        $locationGroups[$locationKey]['last_visit'] = $currentDate;
+                    }
+                }
+            }
+
+            // Convert groups to array dan sort by last_visit (terbaru dulu)
+            $historyData = [];
+            foreach ($locationGroups as $key => $group) {
+                // Sort visits by date (terbaru dulu)
+                usort($group['visits'], function($a, $b) {
+                    $dateA = $a['date'] ?? '';
+                    $dateB = $b['date'] ?? '';
+                    return strcmp($dateB, $dateA);
+                });
+
+                $historyData[] = [
+                    'location_key' => $key,
+                    'latitude' => $group['latitude'],
+                    'longitude' => $group['longitude'],
+                    'location_id' => $group['location_id'],
+                    'visit_count' => $group['count'],
+                    'first_visit' => $group['first_visit'],
+                    'last_visit' => $group['last_visit'],
+                    'visits' => $group['visits']
+                ];
+            }
+
+            // Sort by last_visit (terbaru dulu)
+            usort($historyData, function($a, $b) {
+                return strcmp($b['last_visit'], $a['last_visit']);
+            });
+
+            // Limit to 5 locations
+            $historyData = array_slice($historyData, 0, 5);
+
+            return response()->json([
+                'success' => true,
+                'history' => $historyData,
+                'count' => count($historyData),
+                'total_visits' => array_sum(array_column($historyData, 'visit_count'))
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error fetching user GPS history: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'history' => []
+            ], 500);
+        }
+    }
+
+    /**
+     * Get GPS user location details
+     * Returns information about location, SAP count, and CCTV count for a GPS coordinate
+     */
+    public function getGpsUserLocationDetails(Request $request)
+    {
+        try {
+            $latitude = $request->input('latitude');
+            $longitude = $request->input('longitude');
+            $locationId = $request->input('location_id');
+            $employeeId = $request->input('employee_id');
+
+            if (!$latitude || !$longitude) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Latitude and longitude are required'
+                ], 400);
+            }
+
+            $result = [
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+                'location_id' => $locationId,
+                'employee_id' => $employeeId,
+                'work_area' => null,
+                'sap_count' => 0,
+                'sap_open_count' => 0,
+                'cctv_count' => 0,
+                'pja_count' => 0,
+                'sap_list' => [],
+                'sap_open_list' => [],
+                'cctv_list' => [],
+                'pja_list' => []
+            ];
+
+            // Cek koneksi PostgreSQL terlebih dahulu
+            $pgsqlAvailable = false;
+            try {
+                DB::connection('pgsql')->getPdo();
+                $pgsqlAvailable = true;
+            } catch (Exception $connException) {
+                Log::warning('PostgreSQL connection not available for getGpsUserLocationDetails: ' . $connException->getMessage());
+            }
+
+            // 1. Cek area kerja dari geo_tagging
+            if ($pgsqlAvailable) {
+                try {
+                    // Cek dulu SRID dari geometry di tabel geo_tagging
+                    // Kemudian gunakan query yang sesuai dengan SRID tersebut
+                    // Coba beberapa metode untuk memastikan deteksi area kerja
+                    $workArea = null;
+                    
+                    // Method 1: ST_Contains dengan transform
+                    try {
+                        $workArea = DB::connection('pgsql')
+                            ->table('geo_tagging')
+                            ->select('id', 'name', 'location_id', 'buffer', 'type_lookup_id')
+                            ->where('is_active', true)
+                            ->whereRaw(
+                                'ST_Contains(
+                                    geometry, 
+                                    ST_Transform(
+                                        ST_SetSRID(ST_MakePoint(?, ?), 4326), 
+                                        COALESCE(ST_SRID(geometry), 4326)
+                                    )
+                                )',
+                                [$longitude, $latitude]
+                            )
+                            ->first();
+                    } catch (Exception $e) {
+                        Log::warning('Method 1 failed: ' . $e->getMessage());
+                    }
+
+                // Jika tidak ditemukan dengan transform, coba langsung tanpa transform (jika SRID sudah 4326)
+                if (!$workArea) {
+                    $workArea = DB::connection('pgsql')
+                        ->table('geo_tagging')
+                        ->select('id', 'name', 'location_id', 'buffer', 'type_lookup_id')
+                        ->where('is_active', true)
+                        ->whereRaw(
+                            'ST_Contains(
+                                geometry, 
+                                ST_SetSRID(ST_MakePoint(?, ?), 4326)
+                            )',
+                            [$longitude, $latitude]
+                        )
+                        ->first();
+                }
+
+                // Jika masih tidak ditemukan, coba dengan buffer menggunakan ST_DWithin (untuk toleransi)
+                if (!$workArea) {
+                    try {
+                        $bufferMeters = 50; // 50 meter buffer untuk toleransi
+                        $workArea = DB::connection('pgsql')
+                            ->table('geo_tagging')
+                            ->select('id', 'name', 'location_id', 'buffer', 'type_lookup_id')
+                            ->where('is_active', true)
+                            ->whereRaw(
+                                'ST_DWithin(
+                                    geometry::geography,
+                                    ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography,
+                                    ?
+                                )',
+                                [$longitude, $latitude, $bufferMeters]
+                            )
+                            ->orderByRaw(
+                                'ST_Distance(
+                                    geometry::geography,
+                                    ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography
+                                ) ASC'
+                            )
+                            ->first();
+                    } catch (Exception $e) {
+                        Log::warning('ST_DWithin method failed: ' . $e->getMessage());
+                    }
+                }
+                
+                // Method terakhir: Cek semua area kerja dan hitung jarak, ambil yang terdekat dalam radius tertentu
+                if (!$workArea) {
+                    try {
+                        $maxDistanceMeters = 100; // Maksimal 100 meter dari area kerja
+                        // Escape nilai untuk keamanan
+                        $safeLongitude = addslashes($longitude);
+                        $safeLatitude = addslashes($latitude);
+                        
+                        $allAreas = DB::connection('pgsql')
+                            ->table('geo_tagging')
+                            ->select(
+                                'id', 
+                                'name', 
+                                'location_id', 
+                                'buffer', 
+                                'type_lookup_id',
+                                DB::raw("ST_Distance(
+                                    geometry::geography,
+                                    ST_SetSRID(ST_MakePoint({$safeLongitude}, {$safeLatitude}), 4326)::geography
+                                ) as distance")
+                            )
+                            ->where('is_active', true)
+                            ->orderByRaw("ST_Distance(
+                                geometry::geography,
+                                ST_SetSRID(ST_MakePoint({$safeLongitude}, {$safeLatitude}), 4326)::geography
+                            ) ASC")
+                            ->limit(1)
+                            ->get();
+                        
+                        if ($allAreas->count() > 0) {
+                            $nearestArea = $allAreas->first();
+                            // Jika jarak kurang dari maxDistanceMeters, gunakan area ini
+                            if ($nearestArea->distance <= $maxDistanceMeters) {
+                                $workArea = (object)[
+                                    'id' => $nearestArea->id,
+                                    'name' => $nearestArea->name,
+                                    'location_id' => $nearestArea->location_id,
+                                    'buffer' => $nearestArea->buffer,
+                                    'type_lookup_id' => $nearestArea->type_lookup_id
+                                ];
+                            }
+                        }
+                    } catch (Exception $e) {
+                        Log::warning('Distance-based method failed: ' . $e->getMessage());
+                    }
+                }
+
+                if ($workArea) {
+                    $result['work_area'] = [
+                        'id' => $workArea->id,
+                        'name' => $workArea->name,
+                        'location_id' => $workArea->location_id,
+                        'buffer' => $workArea->buffer,
+                        'type_lookup_id' => $workArea->type_lookup_id
+                    ];
+                    Log::info('Work area found', [
+                        'work_area_id' => $workArea->id,
+                        'work_area_name' => $workArea->name,
+                        'location_id' => $workArea->location_id,
+                        'latitude' => $latitude,
+                        'longitude' => $longitude,
+                        'method' => 'detected'
+                    ]);
+                } else {
+                    // Cek apakah ada area kerja di database (dari ClickHouse)
+                    try {
+                        $clickhouse = new ClickHouseService();
+                        if ($clickhouse->isConnected()) {
+                            // Ambil total area kerja dari ClickHouse
+                            $totalAreasQuery = "
+                                SELECT count(*) as total
+                                FROM nitip.geo_tagging
+                                WHERE is_active = true
+                            ";
+                            $totalAreasResult = $clickhouse->query($totalAreasQuery);
+                            $totalAreas = $totalAreasResult[0]['total'] ?? 0;
+                            
+                            // Ambil sample area untuk debugging
+                            $sampleAreaQuery = "
+                                SELECT 
+                                    toString(id) as id,
+                                    toString(name) as name,
+                                    toString(location_id) as location_id,
+                                    toString(buffer) as buffer,
+                                    toString(type_lookup_id) as type_lookup_id
+                                FROM nitip.geo_tagging
+                                WHERE is_active = true
+                                LIMIT 1
+                            ";
+                            $sampleAreaResult = $clickhouse->query($sampleAreaQuery);
+                            $sampleArea = $sampleAreaResult[0] ?? null;
+                            
+                            Log::warning('No work area found for coordinates', [
+                                'latitude' => $latitude,
+                                'longitude' => $longitude,
+                                'total_active_areas' => $totalAreas,
+                                'location_id' => $locationId,
+                                'sample_area_id' => $sampleArea['id'] ?? 'unknown',
+                                'sample_area_name' => $sampleArea['name'] ?? 'unknown'
+                            ]);
+                        }
+                    } catch (Exception $e) {
+                        Log::error('Error checking work areas from ClickHouse: ' . $e->getMessage());
+                    }
+                }
+            } catch (Exception $e) {
+                Log::error('Error checking work area: ' . $e->getMessage(), [
+                    'trace' => $e->getTraceAsString(),
+                    'latitude' => $latitude,
+                    'longitude' => $longitude
+                ]);
+            }
+        }
+
+            // 2. Hitung SAP di area tersebut (berdasarkan koordinat atau location_id)
+            try {
+                $clickhouse = new ClickHouseService();
+                if ($clickhouse->isConnected()) {
+                    $today = Carbon::now();
+                    $weekStart = $today->copy()->startOfWeek(Carbon::MONDAY);
+                    $weekEnd = $weekStart->copy()->addDays(6);
+                    $weekStartStr = $weekStart->format('Y-m-d');
+                    $weekEndStr = $weekEnd->format('Y-m-d');
+
+                    // Query untuk mendapatkan SAP yang berada di area tersebut
+                    // Gunakan buffer sekitar 100 meter dari koordinat GPS
+                    $bufferDistance = 0.001; // ~100 meter dalam derajat
+                    $sapLatMin = $latitude - $bufferDistance;
+                    $sapLatMax = $latitude + $bufferDistance;
+                    $sapLngMin = $longitude - $bufferDistance;
+                    $sapLngMax = $longitude + $bufferDistance;
+
+                    // Query SAP dari semua tabel (Inspeksi, Observasi, OAK, Coaching)
+                    // Gunakan pendekatan yang lebih sederhana: ambil semua SAP minggu ini, filter di PHP
+                    $allSapResults = [];
+                    
+                    // Ambil SAP dari semua tabel untuk minggu ini
+                    $sapData = $this->getSapDataFromClickHouse($weekStart);
+                    
+                    // Filter SAP berdasarkan jarak dari koordinat GPS
+                    foreach ($sapData as $sap) {
+                        $sapLat = isset($sap['latitude']) ? (float)$sap['latitude'] : null;
+                        $sapLng = isset($sap['longitude']) ? (float)$sap['longitude'] : null;
+                        
+                        if ($sapLat && $sapLng) {
+                            // Hitung jarak dalam meter
+                            $distance = $this->calculateDistance($latitude, $longitude, $sapLat, $sapLng);
+                            if ($distance <= 100) { // Dalam radius 100 meter
+                                $allSapResults[] = [
+                                    'task_number' => $sap['task_number'] ?? null,
+                                    'lokasi' => $sap['lokasi'] ?? null,
+                                    'detail_lokasi' => $sap['detail_lokasi'] ?? null,
+                                    'latitude' => $sapLat,
+                                    'longitude' => $sapLng,
+                                    'tanggal' => $sap['tanggal'] ?? null,
+                                    'jenis_laporan' => $sap['jenis_laporan'] ?? $sap['source_type'] ?? null,
+                                    'source_type' => $sap['source_type'] ?? null,
+                                    'distance' => round($distance, 2)
+                                ];
+                            }
+                        }
+                    }
+
+                    // Pisahkan SAP open (belum selesai) dan semua SAP
+                    $sapOpenResults = [];
+                    foreach ($allSapResults as $sap) {
+                        // SAP dianggap open jika status belum selesai
+                        // Asumsi: jika tidak ada field status atau status != 'Selesai'/'Closed', maka open
+                        $status = $sap['status'] ?? null;
+                        $isOpen = !$status || 
+                                 (stripos($status, 'selesai') === false && 
+                                  stripos($status, 'closed') === false &&
+                                  stripos($status, 'done') === false);
+                        
+                        if ($isOpen) {
+                            $sapOpenResults[] = $sap;
+                        }
+                    }
+
+                    $result['sap_count'] = count($allSapResults);
+                    $result['sap_open_count'] = count($sapOpenResults);
+                    $result['sap_list'] = $allSapResults;
+                    $result['sap_open_list'] = $sapOpenResults;
+                }
+            } catch (Exception $e) {
+                Log::warning('Error counting SAP: ' . $e->getMessage());
+            }
+            
+            // 2b. Hitung PJA di lokasi tersebut
+            try {
+                $clickhouse = new ClickHouseService();
+                if ($clickhouse->isConnected()) {
+                    // Ambil PJA berdasarkan lokasi atau koordinat
+                    $pjaBuffer = 0.005; // ~500 meter
+                    $pjaLatMin = $latitude - $pjaBuffer;
+                    $pjaLatMax = $latitude + $pjaBuffer;
+                    $pjaLngMin = $longitude - $pjaBuffer;
+                    $pjaLngMax = $longitude + $pjaBuffer;
+                    
+                    // Query PJA dari tabel nitip.pja_full_hierarchical_view_fix
+                    // Filter berdasarkan lokasi jika ada location_id
+                    $pjaQuery = "
+                        SELECT 
+                            toString(site) as site,
+                            toString(lokasi) as lokasi,
+                            toString(detail_lokasi) as detail_lokasi,
+                            toString(pja_id) as pja_id,
+                            toString(nama_pja) as nama_pja,
+                            toString(pja_active) as pja_active,
+                            toString(pja_type_name) as pja_type_name,
+                            toString(pja_category_name) as pja_category_name,
+                            toString(pja_layer) as pja_layer,
+                            toString(id_employee) as id_employee,
+                            toString(nik) as nik,
+                            toString(kode_sid) as kode_sid,
+                            toString(employee_name) as employee_name
+                        FROM nitip.pja_full_hierarchical_view_fix
+                        WHERE pja_active = '1'
+                    ";
+                    
+                    // Jika ada location_id, filter berdasarkan lokasi
+                    if ($locationId) {
+                        $pjaQuery .= " AND toString(location_id) = '" . addslashes($locationId) . "'";
+                    } else {
+                        // Filter berdasarkan lokasi dari work_area jika ada
+                        if (isset($result['work_area']['location_id'])) {
+                            $pjaQuery .= " AND toString(location_id) = '" . addslashes($result['work_area']['location_id']) . "'";
+                        }
+                    }
+                    
+                    $pjaQuery .= " LIMIT 1000";
+                    
+                    try {
+                        $pjaResults = $clickhouse->query($pjaQuery);
+                        
+                        $pjaList = [];
+                        foreach ($pjaResults as $pja) {
+                            $pjaList[] = [
+                                'pja_id' => $pja['pja_id'] ?? null,
+                                'nama_pja' => $pja['nama_pja'] ?? null,
+                                'lokasi' => $pja['lokasi'] ?? null,
+                                'detail_lokasi' => $pja['detail_lokasi'] ?? null,
+                                'site' => $pja['site'] ?? null,
+                                'pja_type_name' => $pja['pja_type_name'] ?? null,
+                                'pja_category_name' => $pja['pja_category_name'] ?? null,
+                                'employee_name' => $pja['employee_name'] ?? null,
+                                'kode_sid' => $pja['kode_sid'] ?? null
+                            ];
+                        }
+                        
+                        $result['pja_count'] = count($pjaList);
+                        $result['pja_list'] = $pjaList;
+                    } catch (Exception $e) {
+                        Log::warning('Error querying PJA: ' . $e->getMessage());
+                    }
+                }
+            } catch (Exception $e) {
+                Log::warning('Error counting PJA: ' . $e->getMessage());
+            }
+
+            // 3. Hitung CCTV yang mengcover area tersebut
+            try {
+                // Cek CCTV berdasarkan location_id jika ada
+                if ($locationId) {
+                    $cctvByLocation = CctvData::where('location_id', $locationId)
+                        ->whereNotNull('longitude')
+                        ->whereNotNull('latitude')
+                        ->get();
+                    
+                    $result['cctv_count'] = $cctvByLocation->count();
+                    $result['cctv_list'] = $cctvByLocation->map(function($cctv) {
+                        return [
+                            'id' => $cctv->id,
+                            'name' => $cctv->nama_cctv ?? 'CCTV ' . $cctv->id,
+                            'no_cctv' => $cctv->no_cctv ?? null,
+                            'latitude' => $cctv->latitude,
+                            'longitude' => $cctv->longitude,
+                            'coverage_lokasi' => $cctv->coverage_lokasi ?? null
+                        ];
+                    })->toArray();
+                } else {
+                    // Jika tidak ada location_id, cari CCTV dalam radius 500 meter
+                    $cctvBuffer = 0.005; // ~500 meter
+                    $cctvLatMin = $latitude - $cctvBuffer;
+                    $cctvLatMax = $latitude + $cctvBuffer;
+                    $cctvLngMin = $longitude - $cctvBuffer;
+                    $cctvLngMax = $longitude + $cctvBuffer;
+
+                    $nearbyCctv = CctvData::whereNotNull('longitude')
+                        ->whereNotNull('latitude')
+                        ->whereBetween('latitude', [$cctvLatMin, $cctvLatMax])
+                        ->whereBetween('longitude', [$cctvLngMin, $cctvLngMax])
+                        ->get();
+
+                    // Filter berdasarkan jarak sebenarnya
+                    $filteredCctv = [];
+                    foreach ($nearbyCctv as $cctv) {
+                        $distance = $this->calculateDistance($latitude, $longitude, $cctv->latitude, $cctv->longitude);
+                        if ($distance <= 500) { // Dalam radius 500 meter
+                            $filteredCctv[] = [
+                                'id' => $cctv->id,
+                                'name' => $cctv->nama_cctv ?? 'CCTV ' . $cctv->id,
+                                'no_cctv' => $cctv->no_cctv ?? null,
+                                'latitude' => $cctv->latitude,
+                                'longitude' => $cctv->longitude,
+                                'coverage_lokasi' => $cctv->coverage_lokasi ?? null,
+                                'distance' => round($distance, 2)
+                            ];
+                        }
+                    }
+
+                    $result['cctv_count'] = count($filteredCctv);
+                    $result['cctv_list'] = $filteredCctv;
+                }
+            } catch (Exception $e) {
+                Log::warning('Error counting CCTV: ' . $e->getMessage());
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $result
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error getting GPS user location details: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Calculate distance between two coordinates in meters using Haversine formula
+     */
+    private function calculateDistance($lat1, $lon1, $lat2, $lon2)
+    {
+        $earthRadius = 6371000; // Earth radius in meters
+
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+
+        $a = sin($dLat / 2) * sin($dLat / 2) +
+             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+             sin($dLon / 2) * sin($dLon / 2);
+
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return $earthRadius * $c;
+    }
+
+    /**
+     * Send Telegram notification
+     */
+    public function sendTelegramNotification(Request $request)
+    {
+        try {
+            $chatId = $request->input('chat_id') ?? config('services.telegram.chat_id');
+            $message = $request->input('message');
+            $parseMode = $request->input('parse_mode', 'HTML'); // Default to HTML for better formatting
+            
+            if (!$message) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Message is required'
+                ], 400);
+            }
+            
+            if (!$chatId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Chat ID is required'
+                ], 400);
+            }
+            
+            $telegramService = TelegramBotService::makeFromConfig();
+            $response = $telegramService->sendMessage([
+                'chat_id' => $chatId,
+                'text' => $message,
+                'parse_mode' => $parseMode
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'response' => $response
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error sending Telegram notification: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Return more detailed error for debugging
+            $errorMessage = $e->getMessage();
+            if (strpos($errorMessage, 'Telegram bot token is not configured') !== false) {
+                $errorMessage = 'Telegram bot token is not configured. Please check your .env file.';
+            } elseif (strpos($errorMessage, 'Chat not found') !== false || strpos($errorMessage, 'Unauthorized') !== false) {
+                $errorMessage = 'Invalid Chat ID. Please check your Telegram Chat ID.';
+            }
+            
+            return response()->json([
+                'success' => false,
+                'error' => $errorMessage,
+                'details' => config('app.debug') ? $e->getTraceAsString() : null
             ], 500);
         }
     }
@@ -3431,10 +4669,19 @@ class MapBaseController extends Controller
             $summary = [
                 'cctv_list' => [],
                 'inspeksi_count' => 0,
+                'inspeksi_open_count' => 0,
                 'hazard_count' => 0,
+                'hazard_open_count' => 0,
                 'coaching_count' => 0,
+                'coaching_open_count' => 0,
                 'observasi_count' => 0,
+                'observasi_open_count' => 0,
                 'observasi_area_kritis_count' => 0,
+                'observasi_area_kritis_open_count' => 0,
+                'inspeksi_hazard_list' => [],
+                'coaching_list' => [],
+                'observasi_list' => [],
+                'observasi_area_kritis_list' => [],
                 'area_name' => $lokasiName ?? $cctvName ?? 'N/A',
                 'area_type' => $type ?? 'unknown'
             ];
@@ -3514,7 +4761,7 @@ class MapBaseController extends Controller
                         $locationFilter = "AND (toString(lokasi) LIKE '%" . addslashes($searchTerm) . "%' OR toString(`detail lokasi`) LIKE '%" . addslashes($searchTerm) . "%')";
                     }
 
-                    // Query tabel_inspeksi_hazard (hari ini)
+                    // Query tabel_inspeksi_hazard (hari ini) - COUNT
                     $sqlInspeksi = "
                         SELECT COUNT(*) as count
                         FROM nitip.tabel_inspeksi_hazard
@@ -3527,8 +4774,53 @@ class MapBaseController extends Controller
                     if (!empty($resultsInspeksi) && isset($resultsInspeksi[0]['count'])) {
                         $summary['inspeksi_count'] += (int)$resultsInspeksi[0]['count'];
                     }
+                    
+                    // Query tabel_inspeksi_hazard dengan status OPEN - COUNT
+                    $sqlInspeksiOpen = "
+                        SELECT COUNT(*) as count
+                        FROM nitip.tabel_inspeksi_hazard
+                        WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                            {$locationFilter}
+                            AND (toString(status) = 'Open' OR toString(status) = 'OPEN' OR toString(status) = 'open' OR toString(status) = 'Belum Selesai' OR toString(status) = 'BELUM SELESAI')
+                        LIMIT 1
+                    ";
+                    
+                    $resultsInspeksiOpen = $clickhouse->query($sqlInspeksiOpen);
+                    if (!empty($resultsInspeksiOpen) && isset($resultsInspeksiOpen[0]['count'])) {
+                        $summary['inspeksi_open_count'] = (int)$resultsInspeksiOpen[0]['count'];
+                    }
+                    
+                    // Query tabel_inspeksi_hazard - DETAIL (limit 5)
+                    $sqlInspeksiDetail = "
+                        SELECT 
+                            toString(`nomor laporan`) as nomor_laporan,
+                            toString(lokasi) as lokasi,
+                            toString(`detail lokasi`) as detail_lokasi,
+                            toString(deskripsi) as deskripsi,
+                            toString(status) as status,
+                            toString(`tanggal pelaporan`) as tanggal_pelaporan,
+                            toString(pelapor) as pelapor
+                        FROM nitip.tabel_inspeksi_hazard
+                        WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                            {$locationFilter}
+                        ORDER BY toDateTime(`tanggal pelaporan`) DESC
+                        LIMIT 5
+                    ";
+                    
+                    $resultsInspeksiDetail = $clickhouse->query($sqlInspeksiDetail);
+                    $summary['inspeksi_hazard_list'] = array_map(function($row) {
+                        return [
+                            'nomor_laporan' => $row['nomor_laporan'] ?? 'N/A',
+                            'lokasi' => $row['lokasi'] ?? 'N/A',
+                            'detail_lokasi' => $row['detail_lokasi'] ?? 'N/A',
+                            'deskripsi' => $row['deskripsi'] ?? 'N/A',
+                            'status' => $row['status'] ?? 'N/A',
+                            'tanggal_pelaporan' => $row['tanggal_pelaporan'] ?? 'N/A',
+                            'pelapor' => $row['pelapor'] ?? 'N/A'
+                        ];
+                    }, $resultsInspeksiDetail ?? []);
 
-                    // Query tabel_observasi (hari ini)
+                    // Query tabel_observasi (hari ini) - COUNT
                     $sqlObservasi = "
                         SELECT COUNT(*) as count
                         FROM nitip.tabel_observasi
@@ -3541,6 +4833,51 @@ class MapBaseController extends Controller
                     if (!empty($resultsObservasi) && isset($resultsObservasi[0]['count'])) {
                         $summary['observasi_count'] = (int)$resultsObservasi[0]['count'];
                     }
+                    
+                    // Query tabel_observasi dengan status OPEN - COUNT
+                    $sqlObservasiOpen = "
+                        SELECT COUNT(*) as count
+                        FROM nitip.tabel_observasi
+                        WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                            {$locationFilter}
+                            AND (toString(status) = 'Open' OR toString(status) = 'OPEN' OR toString(status) = 'open' OR toString(status) = 'Belum Selesai' OR toString(status) = 'BELUM SELESAI')
+                        LIMIT 1
+                    ";
+                    
+                    $resultsObservasiOpen = $clickhouse->query($sqlObservasiOpen);
+                    if (!empty($resultsObservasiOpen) && isset($resultsObservasiOpen[0]['count'])) {
+                        $summary['observasi_open_count'] = (int)$resultsObservasiOpen[0]['count'];
+                    }
+                    
+                    // Query tabel_observasi - DETAIL (limit 5)
+                    $sqlObservasiDetail = "
+                        SELECT 
+                            toString(`nomor laporan`) as nomor_laporan,
+                            toString(lokasi) as lokasi,
+                            toString(`detail lokasi`) as detail_lokasi,
+                            toString(deskripsi) as deskripsi,
+                            toString(status) as status,
+                            toString(`tanggal pelaporan`) as tanggal_pelaporan,
+                            toString(pelapor) as pelapor
+                        FROM nitip.tabel_observasi
+                        WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                            {$locationFilter}
+                        ORDER BY toDateTime(`tanggal pelaporan`) DESC
+                        LIMIT 5
+                    ";
+                    
+                    $resultsObservasiDetail = $clickhouse->query($sqlObservasiDetail);
+                    $summary['observasi_list'] = array_map(function($row) {
+                        return [
+                            'nomor_laporan' => $row['nomor_laporan'] ?? 'N/A',
+                            'lokasi' => $row['lokasi'] ?? 'N/A',
+                            'detail_lokasi' => $row['detail_lokasi'] ?? 'N/A',
+                            'deskripsi' => $row['deskripsi'] ?? 'N/A',
+                            'status' => $row['status'] ?? 'N/A',
+                            'tanggal_pelaporan' => $row['tanggal_pelaporan'] ?? 'N/A',
+                            'pelapor' => $row['pelapor'] ?? 'N/A'
+                        ];
+                    }, $resultsObservasiDetail ?? []);
 
                     // Query tabel_observasi area kritis (hari ini)
                     // Find CCTV with kategori_area_tercapture = "Area Kritis" in this area, then match observasi by location
@@ -3618,6 +4955,53 @@ class MapBaseController extends Controller
                             if (!empty($resultsObservasiKritis) && isset($resultsObservasiKritis[0]['count'])) {
                                 $summary['observasi_area_kritis_count'] = (int)$resultsObservasiKritis[0]['count'];
                             }
+                            
+                            // Query observasi area kritis dengan status OPEN - COUNT
+                            $sqlObservasiKritisOpen = "
+                                SELECT COUNT(*) as count
+                                FROM nitip.tabel_observasi
+                                WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                                    {$locationFilter}
+                                    AND ({$lokasiKritisFilter})
+                                    AND (toString(status) = 'Open' OR toString(status) = 'OPEN' OR toString(status) = 'open' OR toString(status) = 'Belum Selesai' OR toString(status) = 'BELUM SELESAI')
+                                LIMIT 1
+                            ";
+                            
+                            $resultsObservasiKritisOpen = $clickhouse->query($sqlObservasiKritisOpen);
+                            if (!empty($resultsObservasiKritisOpen) && isset($resultsObservasiKritisOpen[0]['count'])) {
+                                $summary['observasi_area_kritis_open_count'] = (int)$resultsObservasiKritisOpen[0]['count'];
+                            }
+                            
+                            // Query observasi area kritis - DETAIL (limit 5)
+                            $sqlObservasiKritisDetail = "
+                                SELECT 
+                                    toString(`nomor laporan`) as nomor_laporan,
+                                    toString(lokasi) as lokasi,
+                                    toString(`detail lokasi`) as detail_lokasi,
+                                    toString(deskripsi) as deskripsi,
+                                    toString(status) as status,
+                                    toString(`tanggal pelaporan`) as tanggal_pelaporan,
+                                    toString(pelapor) as pelapor
+                                FROM nitip.tabel_observasi
+                                WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                                    {$locationFilter}
+                                    AND ({$lokasiKritisFilter})
+                                ORDER BY toDateTime(`tanggal pelaporan`) DESC
+                                LIMIT 5
+                            ";
+                            
+                            $resultsObservasiKritisDetail = $clickhouse->query($sqlObservasiKritisDetail);
+                            $summary['observasi_area_kritis_list'] = array_map(function($row) {
+                                return [
+                                    'nomor_laporan' => $row['nomor_laporan'] ?? 'N/A',
+                                    'lokasi' => $row['lokasi'] ?? 'N/A',
+                                    'detail_lokasi' => $row['detail_lokasi'] ?? 'N/A',
+                                    'deskripsi' => $row['deskripsi'] ?? 'N/A',
+                                    'status' => $row['status'] ?? 'N/A',
+                                    'tanggal_pelaporan' => $row['tanggal_pelaporan'] ?? 'N/A',
+                                    'pelapor' => $row['pelapor'] ?? 'N/A'
+                                ];
+                            }, $resultsObservasiKritisDetail ?? []);
                         } catch (Exception $e) {
                             Log::warning('Error querying observasi area kritis: ' . $e->getMessage());
                         }
@@ -3642,12 +5026,69 @@ class MapBaseController extends Controller
                             if (!empty($resultsObservasiKritis) && isset($resultsObservasiKritis[0]['count'])) {
                                 $summary['observasi_area_kritis_count'] = (int)$resultsObservasiKritis[0]['count'];
                             }
+                            
+                            // Query observasi area kritis dengan status OPEN - COUNT (fallback)
+                            $sqlObservasiKritisOpen = "
+                                SELECT COUNT(*) as count
+                                FROM nitip.tabel_observasi
+                                WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                                    {$locationFilter}
+                                    AND (
+                                        toString(lokasi) LIKE '%kritis%' 
+                                        OR toString(lokasi) LIKE '%critical%'
+                                        OR toString(`detail lokasi`) LIKE '%kritis%'
+                                        OR toString(`detail lokasi`) LIKE '%critical%'
+                                    )
+                                    AND (toString(status) = 'Open' OR toString(status) = 'OPEN' OR toString(status) = 'open' OR toString(status) = 'Belum Selesai' OR toString(status) = 'BELUM SELESAI')
+                                LIMIT 1
+                            ";
+                            
+                            $resultsObservasiKritisOpen = $clickhouse->query($sqlObservasiKritisOpen);
+                            if (!empty($resultsObservasiKritisOpen) && isset($resultsObservasiKritisOpen[0]['count'])) {
+                                $summary['observasi_area_kritis_open_count'] = (int)$resultsObservasiKritisOpen[0]['count'];
+                            }
+                            
+                            // Query observasi area kritis - DETAIL (limit 5) - fallback
+                            $sqlObservasiKritisDetail = "
+                                SELECT 
+                                    toString(`nomor laporan`) as nomor_laporan,
+                                    toString(lokasi) as lokasi,
+                                    toString(`detail lokasi`) as detail_lokasi,
+                                    toString(deskripsi) as deskripsi,
+                                    toString(status) as status,
+                                    toString(`tanggal pelaporan`) as tanggal_pelaporan,
+                                    toString(pelapor) as pelapor
+                                FROM nitip.tabel_observasi
+                                WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                                    {$locationFilter}
+                                    AND (
+                                        toString(lokasi) LIKE '%kritis%' 
+                                        OR toString(lokasi) LIKE '%critical%'
+                                        OR toString(`detail lokasi`) LIKE '%kritis%'
+                                        OR toString(`detail lokasi`) LIKE '%critical%'
+                                    )
+                                ORDER BY toDateTime(`tanggal pelaporan`) DESC
+                                LIMIT 5
+                            ";
+                            
+                            $resultsObservasiKritisDetail = $clickhouse->query($sqlObservasiKritisDetail);
+                            $summary['observasi_area_kritis_list'] = array_map(function($row) {
+                                return [
+                                    'nomor_laporan' => $row['nomor_laporan'] ?? 'N/A',
+                                    'lokasi' => $row['lokasi'] ?? 'N/A',
+                                    'detail_lokasi' => $row['detail_lokasi'] ?? 'N/A',
+                                    'deskripsi' => $row['deskripsi'] ?? 'N/A',
+                                    'status' => $row['status'] ?? 'N/A',
+                                    'tanggal_pelaporan' => $row['tanggal_pelaporan'] ?? 'N/A',
+                                    'pelapor' => $row['pelapor'] ?? 'N/A'
+                                ];
+                            }, $resultsObservasiKritisDetail ?? []);
                         } catch (Exception $e) {
                             Log::warning('Error querying observasi area kritis fallback: ' . $e->getMessage());
                         }
                     }
 
-                    // Query tabel_coaching (hari ini)
+                    // Query tabel_coaching (hari ini) - COUNT
                     $sqlCoaching = "
                         SELECT COUNT(*) as count
                         FROM nitip.tabel_coaching
@@ -3660,6 +5101,51 @@ class MapBaseController extends Controller
                     if (!empty($resultsCoaching) && isset($resultsCoaching[0]['count'])) {
                         $summary['coaching_count'] = (int)$resultsCoaching[0]['count'];
                     }
+                    
+                    // Query tabel_coaching dengan status OPEN - COUNT
+                    $sqlCoachingOpen = "
+                        SELECT COUNT(*) as count
+                        FROM nitip.tabel_coaching
+                        WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                            {$locationFilter}
+                            AND (toString(status) = 'Open' OR toString(status) = 'OPEN' OR toString(status) = 'open' OR toString(status) = 'Belum Selesai' OR toString(status) = 'BELUM SELESAI')
+                        LIMIT 1
+                    ";
+                    
+                    $resultsCoachingOpen = $clickhouse->query($sqlCoachingOpen);
+                    if (!empty($resultsCoachingOpen) && isset($resultsCoachingOpen[0]['count'])) {
+                        $summary['coaching_open_count'] = (int)$resultsCoachingOpen[0]['count'];
+                    }
+                    
+                    // Query tabel_coaching - DETAIL (limit 5)
+                    $sqlCoachingDetail = "
+                        SELECT 
+                            toString(`nomor laporan`) as nomor_laporan,
+                            toString(lokasi) as lokasi,
+                            toString(`detail lokasi`) as detail_lokasi,
+                            toString(deskripsi) as deskripsi,
+                            toString(status) as status,
+                            toString(`tanggal pelaporan`) as tanggal_pelaporan,
+                            toString(pelapor) as pelapor
+                        FROM nitip.tabel_coaching
+                        WHERE toDate(`tanggal pelaporan`) = toDate('{$today}')
+                            {$locationFilter}
+                        ORDER BY toDateTime(`tanggal pelaporan`) DESC
+                        LIMIT 5
+                    ";
+                    
+                    $resultsCoachingDetail = $clickhouse->query($sqlCoachingDetail);
+                    $summary['coaching_list'] = array_map(function($row) {
+                        return [
+                            'nomor_laporan' => $row['nomor_laporan'] ?? 'N/A',
+                            'lokasi' => $row['lokasi'] ?? 'N/A',
+                            'detail_lokasi' => $row['detail_lokasi'] ?? 'N/A',
+                            'deskripsi' => $row['deskripsi'] ?? 'N/A',
+                            'status' => $row['status'] ?? 'N/A',
+                            'tanggal_pelaporan' => $row['tanggal_pelaporan'] ?? 'N/A',
+                            'pelapor' => $row['pelapor'] ?? 'N/A'
+                        ];
+                    }, $resultsCoachingDetail ?? []);
                 } catch (Exception $e) {
                     Log::error('Error querying ClickHouse for evaluation: ' . $e->getMessage());
                 }

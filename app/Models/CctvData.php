@@ -60,5 +60,13 @@ class CctvData extends Model
     {
         return 'id';
     }
+
+    /**
+     * Relasi ke CctvCoverage
+     */
+    public function coverages()
+    {
+        return $this->hasMany(CctvCoverage::class, 'id_cctv', 'id');
+    }
 }
 

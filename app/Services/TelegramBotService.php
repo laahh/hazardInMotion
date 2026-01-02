@@ -39,6 +39,16 @@ class TelegramBotService
     }
 
     /**
+     * Send message to Telegram
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function sendMessage(array $payload = []): array
+    {
+        return $this->request('sendMessage', $payload);
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */

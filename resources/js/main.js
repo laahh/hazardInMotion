@@ -4,13 +4,21 @@ $(function () {
   "use strict";
 
 
-  /* scrollar */
+  /* scrollbar */
+  var notifyListEl = document.querySelector('.notify-list');
+  if (notifyListEl) {
+    new PerfectScrollbar(notifyListEl);
+  }
 
-  new PerfectScrollbar(".notify-list")
+  var searchContentEl = document.querySelector('.search-content');
+  if (searchContentEl) {
+    new PerfectScrollbar(searchContentEl);
+  }
 
-  new PerfectScrollbar(".search-content")
-
-  // new PerfectScrollbar(".mega-menu-widgets")
+  // var megaMenuEl = document.querySelector('.mega-menu-widgets');
+  // if (megaMenuEl) {
+  //   new PerfectScrollbar(megaMenuEl);
+  // }
 
 
 

@@ -68,7 +68,7 @@
         <!--navigation-->
         <ul class="metismenu" id="sidenav">
           <li>
-            <a href="/">
+            <a href="{{ route('hazard-detection.index') }}">
               <div class="parent-icon"><i class="material-icons-outlined">dashboard</i>
               </div>
               <div class="menu-title">Dashboard</div>
@@ -86,10 +86,10 @@
           </li>
           
           <li>
-            <a href="{{ route('hazard-detection.index') }}">
+            <a href="{{ route('maps.map') }}">
               <div class="parent-icon"><i class="material-icons-outlined">warning</i>
               </div>
-              <div class="menu-title">Hazard Detection</div>
+              <div class="menu-title">Live Maps</div>
             </a>
           </li>
           
@@ -110,11 +110,11 @@
             <a class="has-arrow" href="javascript:;">
               <div class="parent-icon"><i class="material-icons-outlined">gps_fixed</i>
               </div>
-              <div class="menu-title">Geofencing</div>
+              <div class="menu-title">Spasial </div>
             </a>
             <ul>
-              <li><a href="{{ route('geofencing.index') }}"><i class="material-icons-outlined">arrow_right</i>Zone Management</a></li>
-              <li><a href="{{ route('geofencing.rules') }}"><i class="material-icons-outlined">arrow_right</i>Geofence Rules</a></li>
+              <li><a href="{{ route('geofencing.index') }}"><i class="material-icons-outlined">arrow_right</i>WMS</a></li>
+              <li><a href="{{ route('geofencing.rules') }}"><i class="material-icons-outlined">arrow_right</i>Area Kerja + Area CCTV</a></li>
               <li><a href="{{ route('geofencing.monitoring') }}"><i class="material-icons-outlined">arrow_right</i>Boundary Monitoring</a></li>
             </ul>
           </li>
@@ -192,9 +192,11 @@
             </a>
             <ul>
               <li><a href="{{ route('cctv-data.index') }}"><i class="material-icons-outlined">arrow_right</i>CCTV Database</a></li>
-              <li><a href="{{ route('cctv-data.create') }}"><i class="material-icons-outlined">arrow_right</i>Add CCTV</a></li>
-              <li><a href="{{ route('cctv-data.import-form') }}"><i class="material-icons-outlined">arrow_right</i>Import CCTV</a></li>
-              <li><a href="{{ route('cctv-management.status') }}"><i class="material-icons-outlined">arrow_right</i>CCTV Status</a></li>
+              <li><a href="{{ route('cctv-data.pja-cctv-dedicated.index') }}"><i class="material-icons-outlined">arrow_right</i>CCTV PJA DEDICATED</a></li>
+              <li><a href="{{ route('cctv-data.import-form') }}"><i class="material-icons-outlined">arrow_right</i>CCTV COVERAGE</a></li>
+              <li><a href="{{ route('cctv-data.control-room.index') }}"><i class="material-icons-outlined">arrow_right</i>Pengawas Control Room</a></li>
+              {{-- <li><a href="{{ route('cctv-data.import-pja-cctv-form') }}"><i class="material-icons-outlined">arrow_right</i>Import PJA-CCTV Mapping</a></li> --}}
+              {{-- <li><a href="{{ route('cctv-management.status') }}"><i class="material-icons-outlined">arrow_right</i>CCTV Status</a></li> --}}
             </ul>
           </li>
           
@@ -207,6 +209,46 @@
             <ul>
               <li><a href="{{ route('live-streaming.active') }}"><i class="material-icons-outlined">arrow_right</i>Active Streams</a></li>
               <li><a href="{{ route('live-streaming.archive') }}"><i class="material-icons-outlined">arrow_right</i>Stream Archive</a></li>
+            </ul>
+          </li>
+          
+          <li>
+            <a class="has-arrow" href="javascript:;">
+              <div class="parent-icon"><i class="material-icons-outlined">meeting_room</i>
+              </div>
+              <div class="menu-title">Control Room</div>
+            </a>
+            <ul>
+              @forelse($controlRooms ?? [] as $controlRoom)
+                <li>
+                  <a class="has-arrow" href="javascript:;">
+                    <i class="material-icons-outlined">arrow_right</i>
+                    {{ $controlRoom['name'] }} 
+                    <span class="badge bg-primary rounded-pill ms-2">{{ $controlRoom['cctv_count'] }}</span>
+                  </a>
+                  <ul>
+                    @foreach($controlRoom['cctv_list'] as $cctv)
+                      <li>
+                        <a href="javascript:;" 
+                           @if($cctv['link_akses']) 
+                             onclick="window.open('{{ $cctv['link_akses'] }}', '_blank');" 
+                           @endif
+                           title="{{ $cctv['lokasi_pemasangan'] ?? '' }}">
+                          <i class="material-icons-outlined">camera_alt</i>
+                          {{ $cctv['nama_cctv'] ?? $cctv['no_cctv'] ?? 'CCTV #' . $cctv['id'] }}
+                          @if($cctv['kondisi'] === 'Baik')
+                            <span class="badge bg-success rounded-pill ms-2">Baik</span>
+                          @elseif($cctv['kondisi'] === 'Rusak')
+                            <span class="badge bg-danger rounded-pill ms-2">Rusak</span>
+                          @endif
+                        </a>
+                      </li>
+                    @endforeach
+                  </ul>
+                </li>
+              @empty
+                <li><a href="javascript:;"><i class="material-icons-outlined">arrow_right</i>No Control Room Available</a></li>
+              @endforelse
             </ul>
           </li>
           
