@@ -61,19 +61,14 @@ class AutoBannedDailyDashboardService
     {
         $scrAvailable = $this->scrTableAvailable();
         $logAvailable = $this->logTableAvailable();
-        $period = $this->resolvePeriod($filters, $scrAvailable);
+        $period = $this->resolvePeriod($filters, $scrAvailable, $logAvailable);
         $resolvedFilters = array_merge($filters, [
             'filter_date' => $period['filter_date'],
         ]);
 
         $filterOptions = $scrAvailable
             ? $this->filterOptions($resolvedFilters)
-            : [
-                'dates' => collect(),
-                'sites' => collect(),
-                'perusahaan' => collect(),
-                'automationStatuses' => $this->automationStatusOptions(),
-            ];
+            : $this->filterOptionsFromLog($resolvedFilters, $logAvailable);
 
         $bannedRows = $scrAvailable
             ? $this->bannedRows($resolvedFilters, $logAvailable)
@@ -103,36 +98,54 @@ class AutoBannedDailyDashboardService
      * @param  array{filter_date?: string}  $filters
      * @return array{filter_date: string, scraped_at: ?string}
      */
-    private function resolvePeriod(array $filters, bool $scrAvailable): array
+    private function resolvePeriod(array $filters, bool $scrAvailable, bool $logAvailable): array
     {
-        if (! $scrAvailable) {
+        $requestedDate = $filters['filter_date'] ?? '';
+
+        if ($requestedDate !== '') {
+            $scrapedAt = null;
+            if ($scrAvailable) {
+                $latestScrape = ScrDailyBanned::query()
+                    ->whereDate('filter_date', $requestedDate)
+                    ->max('scraped_at');
+                $scrapedAt = $latestScrape ? (string) $latestScrape : null;
+            }
+
             return [
-                'filter_date' => $filters['filter_date'] ?? '',
+                'filter_date' => $requestedDate,
+                'scraped_at' => $scrapedAt,
+            ];
+        }
+
+        if ($scrAvailable) {
+            $latest = ScrDailyBanned::query()
+                ->select(['filter_date', 'scraped_at'])
+                ->orderByDesc('filter_date')
+                ->orderByDesc('scraped_at')
+                ->first();
+
+            return [
+                'filter_date' => $latest?->filter_date?->toDateString() ?? '',
+                'scraped_at' => $latest?->scraped_at?->toDateTimeString(),
+            ];
+        }
+
+        if ($logAvailable) {
+            $latestLogDate = SidBannedLog::query()
+                ->whereNotNull('filter_date')
+                ->max('filter_date');
+
+            return [
+                'filter_date' => $latestLogDate
+                    ? Carbon::parse((string) $latestLogDate)->toDateString()
+                    : '',
                 'scraped_at' => null,
             ];
         }
 
-        $requestedDate = $filters['filter_date'] ?? '';
-        if ($requestedDate !== '') {
-            $latestScrape = ScrDailyBanned::query()
-                ->whereDate('filter_date', $requestedDate)
-                ->max('scraped_at');
-
-            return [
-                'filter_date' => $requestedDate,
-                'scraped_at' => $latestScrape ? (string) $latestScrape : null,
-            ];
-        }
-
-        $latest = ScrDailyBanned::query()
-            ->select(['filter_date', 'scraped_at'])
-            ->orderByDesc('filter_date')
-            ->orderByDesc('scraped_at')
-            ->first();
-
         return [
-            'filter_date' => $latest?->filter_date?->toDateString() ?? '',
-            'scraped_at' => $latest?->scraped_at?->toDateTimeString(),
+            'filter_date' => '',
+            'scraped_at' => null,
         ];
     }
 
@@ -172,6 +185,62 @@ class AutoBannedDailyDashboardService
             ->distinct()
             ->orderBy(ScrDailyBannedColumns::PERUSAHAAN)
             ->pluck(ScrDailyBannedColumns::PERUSAHAAN)
+            ->values();
+
+        return [
+            'dates' => $dates,
+            'sites' => $sites,
+            'perusahaan' => $perusahaan,
+            'automationStatuses' => $this->automationStatusOptions(),
+        ];
+    }
+
+    /**
+     * @param  array{filter_date?: string}  $filters
+     * @return array{dates: Collection, sites: Collection, perusahaan: Collection, automationStatuses: Collection}
+     */
+    private function filterOptionsFromLog(array $filters, bool $logAvailable): array
+    {
+        if (! $logAvailable) {
+            return [
+                'dates' => collect(),
+                'sites' => collect(),
+                'perusahaan' => collect(),
+                'automationStatuses' => $this->automationStatusOptions(),
+            ];
+        }
+
+        $baseQuery = SidBannedLog::query();
+
+        if (($filters['filter_date'] ?? '') !== '') {
+            $baseQuery->whereDate('filter_date', $filters['filter_date']);
+        }
+
+        $dates = SidBannedLog::query()
+            ->select('filter_date')
+            ->whereNotNull('filter_date')
+            ->distinct()
+            ->orderByDesc('filter_date')
+            ->pluck('filter_date')
+            ->map(fn ($date) => $date instanceof Carbon ? $date->toDateString() : (string) $date)
+            ->values();
+
+        $sites = (clone $baseQuery)
+            ->whereNotNull('site_dedicated')
+            ->where('site_dedicated', '!=', '')
+            ->select('site_dedicated')
+            ->distinct()
+            ->orderBy('site_dedicated')
+            ->pluck('site_dedicated')
+            ->values();
+
+        $perusahaan = (clone $baseQuery)
+            ->whereNotNull('perusahaan')
+            ->where('perusahaan', '!=', '')
+            ->select('perusahaan')
+            ->distinct()
+            ->orderBy('perusahaan')
+            ->pluck('perusahaan')
             ->values();
 
         return [
@@ -228,21 +297,31 @@ class AutoBannedDailyDashboardService
     /**
      * @param  array{filter_date: string, site?: string, perusahaan?: string, automation_status?: string, q?: string}  $filters
      */
-    private function applyLogFilters(Builder $query, array $filters): Builder
+    private function applyLogFilters(Builder $query, array $filters, bool $includeAutomationStatus = true): Builder
     {
         if (($filters['filter_date'] ?? '') !== '') {
             $query->whereDate('filter_date', $filters['filter_date']);
         }
 
         if (($filters['site'] ?? '') !== '') {
-            $query->where('site_dedicated', $filters['site']);
+            $site = $filters['site'];
+            $query->where(function (Builder $inner) use ($site): void {
+                $inner->where('site_dedicated', $site);
+
+                if ($this->scrTableAvailable()) {
+                    $inner->orWhereHas(
+                        'scrDailyBanned',
+                        fn (Builder $scr) => $scr->where(ScrDailyBannedColumns::SITE, $site),
+                    );
+                }
+            });
         }
 
         if (($filters['perusahaan'] ?? '') !== '') {
             $query->where('perusahaan', $filters['perusahaan']);
         }
 
-        if (($filters['automation_status'] ?? '') !== '') {
+        if ($includeAutomationStatus && ($filters['automation_status'] ?? '') !== '') {
             $query->where('automation_status', $filters['automation_status']);
         }
 
@@ -356,6 +435,12 @@ class AutoBannedDailyDashboardService
 
         $this->applyLogFilters($query, $filters);
 
+        if ($this->scrTableAvailable()) {
+            $query->with([
+                'scrDailyBanned:id,'.ScrDailyBannedColumns::SITE,
+            ]);
+        }
+
         return $query
             ->orderByDesc('started_at')
             ->orderByDesc('id')
@@ -370,6 +455,7 @@ class AutoBannedDailyDashboardService
     {
         $stats = [
             'totalToBan' => 0,
+            'totalBannedToday' => 0,
             'processed' => 0,
             'notProcessed' => 0,
             'pending' => 0,
@@ -390,6 +476,7 @@ class AutoBannedDailyDashboardService
             $logQuery = SidBannedLog::query();
             $this->applyLogFilters($logQuery, $filters);
             $stats['processed'] = (int) (clone $logQuery)->count();
+            $stats['totalBannedToday'] = $this->countBannedTodayFromLog($filters);
 
             foreach (AutoBannedSidAutomationStatus::cases() as $status) {
                 $key = strtolower($status->value);
@@ -410,6 +497,21 @@ class AutoBannedDailyDashboardService
             : 0.0;
 
         return $stats;
+    }
+
+    /**
+     * Total karyawan yang sudah di-banned (automasi SUCCESS) dari sid_banned_log.
+     *
+     * @param  array{filter_date?: string, site?: string, perusahaan?: string, q?: string}  $filters
+     */
+    private function countBannedTodayFromLog(array $filters): int
+    {
+        $query = SidBannedLog::query()
+            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value);
+
+        $this->applyLogFilters($query, $filters, includeAutomationStatus: false);
+
+        return (int) $query->count();
     }
 
     /**

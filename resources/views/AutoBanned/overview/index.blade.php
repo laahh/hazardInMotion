@@ -60,6 +60,43 @@
    .ab-overview-kpi h3.mb-0 { font-size: 22px !important; }
    .ab-overview-kpi h6.m-b-5 { font-size: 11px !important; }
    .ab-overview-widget { margin-bottom: 12px !important; }
+   .ab-overview-summary {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+   }
+   @media (min-width: 768px) {
+      .ab-overview-summary { grid-template-columns: repeat(3, 1fr); }
+   }
+   .ab-overview-summary-card {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 1px 20px 0 rgba(69, 90, 100, 0.08);
+      border-top: 4px solid var(--summary-accent, #01b0c6);
+   }
+   .ab-overview-summary-body {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px;
+   }
+   .ab-overview-summary-body h6 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #888;
+   }
+   .ab-overview-summary-body h3 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 600;
+      color: #333;
+      line-height: 1.2;
+   }
+   .ab-overview-summary-body .material-icons-two-tone {
+      font-size: 40px;
+   }
 </style>
 @endpush
 
@@ -72,14 +109,7 @@
 
    $bannedChart = $banned['chartData'] ?? [];
    $unbanChart = $unban['chartData'] ?? [];
-   $bannedTrend = $bannedChart['dailyTrend'] ?? ['success' => []];
    $unbanTrend = $unbanChart['dailyTrend'] ?? ['approved' => []];
-   $bannedPieLabels = $bannedChart['byBannedStatus']['labels'] ?? [];
-   $bannedPieValues = $bannedChart['byBannedStatus']['values'] ?? [];
-   if (empty($bannedPieLabels) && !empty($bannedChart['topReasons']['labels'])) {
-      $bannedPieLabels = $bannedChart['topReasons']['labels'];
-      $bannedPieValues = $bannedChart['topReasons']['values'];
-   }
    $unbanPieLabels = $unbanChart['byStatus']['labels'] ?? [];
    $unbanPieValues = $unbanChart['byStatus']['values'] ?? [];
 @endphp
@@ -96,6 +126,10 @@
          'filterRoute' => 'auto-banned.index',
       ])
    </div>
+
+   @include('AutoBanned.overview.partials.summary-cards', [
+      'summaryStats' => $summaryStats ?? [],
+   ])
 
    <div class="ab-overview-split">
       @include('AutoBanned.overview.partials.banned-panel', [
@@ -118,10 +152,7 @@
    var BLUE = '#3952bc';
    var font = 'Poppins, Helvetica, Arial, sans-serif';
 
-   var bannedSpark = @json($bannedTrend['success'] ?? []);
    var unbanSpark = @json($unbanTrend['approved'] ?? []);
-   var bannedPieLabels = @json($bannedPieLabels);
-   var bannedPieValues = @json($bannedPieValues);
    var unbanPieLabels = @json($unbanPieLabels);
    var unbanPieValues = @json($unbanPieValues);
 
@@ -152,9 +183,7 @@
       }).render();
    }
 
-   renderSpark('#ab-overview-banned-spark', bannedSpark, CYAN);
    renderSpark('#ab-overview-unban-spark', unbanSpark, BLUE);
-   renderPie('#ab-overview-banned-pie', bannedPieLabels, bannedPieValues, CYAN);
    renderPie('#ab-overview-unban-pie', unbanPieLabels, unbanPieValues, BLUE);
 })();
 </script>

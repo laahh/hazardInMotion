@@ -39,6 +39,7 @@ class AutoBannedController extends Controller
             'navItems' => $this->autoBannedNavItems(),
             'filters' => $overview['filters'],
             'filterOptions' => $overview['filterOptions'],
+            'summaryStats' => $overview['summaryStats'],
             'banned' => $overview['banned'],
             'unban' => $overview['unban'],
         ]);
