@@ -9,9 +9,9 @@ use App\Support\AutoBanned\ScrDailyBannedColumns;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class SidUnbannedLog extends Model
+class SidUnbanLog extends Model
 {
-    protected $table = 'sid_unbanned_log';
+    protected $table = 'sid_unban_log';
 
     protected $guarded = [];
 

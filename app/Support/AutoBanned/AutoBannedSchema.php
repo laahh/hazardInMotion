@@ -54,10 +54,10 @@ final class AutoBannedSchema
         }
     }
 
-    public static function hasSidUnbannedLogTable(): bool
+    public static function hasSidUnbanLogTable(): bool
     {
         try {
-            return Schema::hasTable('sid_unbanned_log');
+            return Schema::hasTable('sid_unban_log');
         } catch (\Throwable) {
             return false;
         }
