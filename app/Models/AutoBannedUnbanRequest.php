@@ -59,4 +59,26 @@ class AutoBannedUnbanRequest extends Model
     {
         return $this->belongsTo(User::class, 'reviewed_by_id');
     }
+
+    /**
+     * scr_daily_banned_id yang sudah pernah diajukan treatment untuk SID ini.
+     *
+     * @return array<int, int>
+     */
+    public static function requestedScrDailyBannedIdsForSid(string $sid): array
+    {
+        $sid = strtoupper(trim($sid));
+        if ($sid === '') {
+            return [];
+        }
+
+        return static::query()
+            ->whereRaw('UPPER(TRIM(sid)) = ?', [$sid])
+            ->whereNotNull('scr_daily_banned_id')
+            ->pluck('scr_daily_banned_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
 }

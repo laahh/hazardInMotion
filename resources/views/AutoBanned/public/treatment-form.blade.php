@@ -216,12 +216,12 @@
                <div><span>Alasan Banned</span><strong id="pv-reason">—</strong></div>
             </div>
          </div>
-         <div class="field" id="scr-daily-wrap" style="display:none;margin-top:1rem;margin-bottom:0">
-            <label for="scr_daily_banned_id">Record Daily Banned <span class="req">*</span></label>
-            <select class="input" id="scr_daily_banned_id" name="scr_daily_banned_id">
+         <div class="field" id="banned-log-wrap" style="display:none;margin-top:1rem;margin-bottom:0">
+            <label for="sid_banned_log_id">Riwayat Banned <span class="req">*</span></label>
+            <select class="input" id="sid_banned_log_id" name="sid_banned_log_id">
                <option value="">— Pilih setelah cari SID —</option>
             </select>
-            <p class="hint">Pilih tanggal / record banned harian yang ingin diajukan unban.</p>
+            <p class="hint">Pilih riwayat banned (automasi) yang ingin diajukan unban.</p>
          </div>
       </section>
 
@@ -281,32 +281,41 @@
    var lookupBtn = document.getElementById('btn-lookup');
    var lookupMsg = document.getElementById('lookup-msg');
    var preview = document.getElementById('sid-preview');
-   var scrWrap = document.getElementById('scr-daily-wrap');
-   var scrSelect = document.getElementById('scr_daily_banned_id');
-   var oldScrDailyId = @json(old('scr_daily_banned_id'));
+   var bannedLogWrap = document.getElementById('banned-log-wrap');
+   var bannedLogSelect = document.getElementById('sid_banned_log_id');
+   var oldBannedLogId = @json(old('sid_banned_log_id'));
    var dropzone = document.getElementById('dropzone');
    var fileInput = document.getElementById('evidence_file');
    var fileNameEl = document.getElementById('file-name');
    var form = document.getElementById('treatment-form');
    var submitBtn = document.getElementById('btn-submit');
+   var canSubmitTreatment = true;
 
-   function setScrDailyOptions(options) {
-      if (!scrWrap || !scrSelect) return;
-      scrSelect.innerHTML = '<option value="">— Pilih record Daily Banned —</option>';
+   function setSubmitEnabled(enabled) {
+      canSubmitTreatment = enabled;
+      if (!submitBtn) return;
+      submitBtn.disabled = !enabled;
+      submitBtn.style.opacity = enabled ? '' : '0.55';
+      submitBtn.style.cursor = enabled ? '' : 'not-allowed';
+   }
+
+   function setBannedLogOptions(options) {
+      if (!bannedLogWrap || !bannedLogSelect) return;
+      bannedLogSelect.innerHTML = '<option value="">— Pilih riwayat banned —</option>';
       if (!options || !options.length) {
-         scrWrap.style.display = 'none';
-         scrSelect.removeAttribute('required');
+         bannedLogWrap.style.display = 'none';
+         bannedLogSelect.removeAttribute('required');
          return;
       }
       options.forEach(function (opt) {
          var option = document.createElement('option');
          option.value = String(opt.id);
          option.textContent = opt.label;
-         scrSelect.appendChild(option);
+         bannedLogSelect.appendChild(option);
       });
-      scrWrap.style.display = 'block';
-      scrSelect.setAttribute('required', 'required');
-      if (oldScrDailyId) scrSelect.value = String(oldScrDailyId);
+      bannedLogWrap.style.display = 'block';
+      bannedLogSelect.setAttribute('required', 'required');
+      if (oldBannedLogId) bannedLogSelect.value = String(oldBannedLogId);
    }
 
    function setPreview(data) {
@@ -340,13 +349,15 @@
                lookupMsg.textContent = payload.message || 'SID tidak ditemukan.';
                lookupMsg.style.color = '#dc2626';
                preview.classList.remove('is-visible');
-               setScrDailyOptions([]);
+               setBannedLogOptions([]);
+               setSubmitEnabled(false);
                return;
             }
             lookupMsg.textContent = payload.message || 'Data ditemukan ✓';
-            lookupMsg.style.color = '#059669';
+            lookupMsg.style.color = payload.can_submit === false ? '#b45309' : '#059669';
             setPreview(payload.data || {});
-            setScrDailyOptions(payload.scr_daily_options || []);
+            setBannedLogOptions(payload.banned_log_options || []);
+            setSubmitEnabled(payload.can_submit !== false);
          })
          .catch(function () {
             lookupBtn.disabled = false;
@@ -396,6 +407,11 @@
    }
 
    form.addEventListener('submit', function (e) {
+      if (!canSubmitTreatment) {
+         e.preventDefault();
+         alert('SID ini belum memiliki riwayat banned berstatus SUCCESS yang dapat diajukan.');
+         return;
+      }
       if (!fileInput.files || !fileInput.files.length) {
          e.preventDefault();
          alert('Pilih file bukti terlebih dahulu.');
@@ -406,9 +422,9 @@
          alert('Ukuran file terlalu besar. Maksimal ' + maxUploadMb + ' MB.');
          return;
       }
-      if (scrSelect && scrSelect.hasAttribute('required') && !scrSelect.value) {
+      if (bannedLogSelect && bannedLogSelect.hasAttribute('required') && !bannedLogSelect.value) {
          e.preventDefault();
-         alert('Pilih record Daily Banned terlebih dahulu.');
+         alert('Pilih riwayat banned terlebih dahulu.');
          return;
       }
       submitBtn.disabled = true;

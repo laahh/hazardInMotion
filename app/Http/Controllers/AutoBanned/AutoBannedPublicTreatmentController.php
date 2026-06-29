@@ -6,6 +6,7 @@ namespace App\Http\Controllers\AutoBanned;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AutoBanned\AutoBannedPublicStoreTreatmentEvidenceRequest;
+use App\Models\AutoBannedUnbanRequest;
 use App\Services\AutoBanned\AutoBannedOverviewService;
 use App\Services\AutoBanned\AutoBannedTreatmentService;
 use Illuminate\Http\JsonResponse;
@@ -56,20 +57,37 @@ class AutoBannedPublicTreatmentController extends Controller
             return response()->json(['found' => false, 'message' => 'Ketik SID Anda lalu tekan Cari.']);
         }
 
-        $context = $this->treatmentService->resolveSidContextFromScrDailyBanned($sid);
+        $context = $this->treatmentService->resolveSidContextFromSidBannedLog($sid);
 
         if ($context === null) {
             return response()->json([
                 'found' => false,
-                'message' => 'SID tidak ditemukan di data Daily Banned. Periksa ejaan SID atau hubungi admin.',
+                'message' => 'SID tidak ditemukan di riwayat banned. Periksa ejaan SID atau hubungi admin.',
+            ]);
+        }
+
+        $bannedLogOptions = $this->treatmentService->sidBannedLogOptionsForSid($sid);
+
+        if ($bannedLogOptions === []) {
+            $alreadyRequested = AutoBannedUnbanRequest::requestedScrDailyBannedIdsForSid($sid) !== [];
+
+            return response()->json([
+                'found' => true,
+                'can_submit' => false,
+                'message' => $alreadyRequested
+                    ? 'Semua riwayat banned SUCCESS yang tersedia sudah pernah diajukan.'
+                    : 'SID ditemukan, namun belum ada riwayat banned berstatus SUCCESS yang dapat diajukan.',
+                'data' => $context,
+                'banned_log_options' => [],
             ]);
         }
 
         return response()->json([
             'found' => true,
+            'can_submit' => true,
             'message' => 'Data ditemukan. Lanjut isi formulir di bawah.',
             'data' => $context,
-            'scr_daily_options' => $this->treatmentService->scrDailyBannedOptionsForSid($sid),
+            'banned_log_options' => $bannedLogOptions,
         ]);
     }
 
@@ -84,10 +102,11 @@ class AutoBannedPublicTreatmentController extends Controller
             alasanPengajuan: (string) $validated['alasan_pengajuan'],
             file: $request->file('evidence_file'),
             user: null,
-            scrDailyBannedId: isset($validated['scr_daily_banned_id'])
-                ? (int) $validated['scr_daily_banned_id']
-                : null,
+            scrDailyBannedId: null,
             noHp: (string) $validated['no_hp'],
+            sidBannedLogId: isset($validated['sid_banned_log_id'])
+                ? (int) $validated['sid_banned_log_id']
+                : null,
         );
 
         $whatsappUrl = $this->treatmentService->resolveMasterSodWhatsappRedirectUrl($unbanRequest);
