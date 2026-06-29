@@ -1,4 +1,4 @@
-<!-- @php
+@php
    $summaryStats = $summaryStats ?? [];
    $totalSudahDiBanned = (int) ($summaryStats['totalSudahDiBanned'] ?? 0);
    $totalMasihBanned = (int) ($summaryStats['totalMasihBanned'] ?? 0);
@@ -39,4 +39,4 @@
       </div>
    </div>
    @endforeach
-</div> -->
+</div>
