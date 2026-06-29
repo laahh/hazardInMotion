@@ -10,6 +10,7 @@ use App\Models\CctvControlRoomPengawas;
 use App\Models\IntervensiControlRoom;
 use App\Services\ClickHouseService;
 use App\Jobs\ImportPjaCctvJob;
+use App\Support\SpreadsheetExporter;
 use Illuminate\Http\Request;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -5768,6 +5769,158 @@ class CctvDataController extends Controller
                 'message' => 'Terjadi kesalahan saat mengupdate status done.'
             ], 500);
         }
+    }
+
+    /**
+     * Export daftar issue intervensi control room (open) ke Excel.
+     */
+    public function exportIntervensiControlRoomExcel(Request $request)
+    {
+        try {
+            $headers = [
+                'No', 'ID', 'Control Room', 'CCTV', 'SID PIC', 'Nama PIC', 'No HP PIC',
+                'Issue', 'Status', 'Tanggal Pelaporan', 'Created By', 'Created By Email', 'Updated At',
+            ];
+
+            $query = IntervensiControlRoom::where('status', 'open');
+
+            if ($request->filled('search')) {
+                $searchValue = $request->search;
+                $query->where(function ($q) use ($searchValue) {
+                    $q->where('control_room', 'like', '%' . $searchValue . '%')
+                        ->orWhere('pic_username', 'like', '%' . $searchValue . '%')
+                        ->orWhere('pic_nama', 'like', '%' . $searchValue . '%')
+                        ->orWhere('issue', 'like', '%' . $searchValue . '%');
+                });
+            }
+
+            $intervensiList = $query->with('cctvs')->orderByDesc('created_at')->get();
+
+            $spreadsheet = SpreadsheetExporter::createSheetWithHeaders($headers);
+            $sheet = $spreadsheet->getActiveSheet();
+
+            $rowNum = 2;
+            foreach ($intervensiList as $index => $intervensi) {
+                $sheet->fromArray([
+                    $index + 1,
+                    $intervensi->id,
+                    $intervensi->control_room ?? '',
+                    $this->formatIntervensiCctvNamesForExport($intervensi),
+                    $intervensi->pic_username ?? '',
+                    $intervensi->pic_nama ?? '',
+                    $intervensi->pic_telepon ?? '',
+                    $intervensi->issue ?? '',
+                    $intervensi->status ?? '',
+                    $intervensi->created_at ? $intervensi->created_at->format('Y-m-d H:i:s') : '',
+                    $intervensi->created_by ?? '',
+                    $intervensi->created_by_email ?? '',
+                    $intervensi->updated_at ? $intervensi->updated_at->format('Y-m-d H:i:s') : '',
+                ], null, 'A' . $rowNum);
+                $rowNum++;
+            }
+
+            SpreadsheetExporter::download($spreadsheet, 'intervensi_control_room_open_' . date('Y-m-d_His') . '.xlsx');
+        } catch (Exception $e) {
+            Log::error('Error exporting open intervensi control room: ' . $e->getMessage());
+
+            return redirect()
+                ->route('cctv-data.intervensi-control-room.index')
+                ->with('error', 'Gagal mengexport data Excel: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Export issue selesai intervensi control room ke Excel.
+     */
+    public function exportDoneIntervensiControlRoomExcel(Request $request)
+    {
+        try {
+            $headers = [
+                'No', 'ID', 'Control Room', 'CCTV', 'SID PIC', 'Nama PIC', 'No HP PIC',
+                'Issue', 'Resolution', 'Tanggal Pelaporan', 'Tanggal Selesai', 'Closed By', 'Updated At',
+            ];
+
+            $query = IntervensiControlRoom::where('status', 'closed');
+
+            if ($request->filled('search')) {
+                $searchValue = $request->search;
+                $query->where(function ($q) use ($searchValue) {
+                    $q->where('control_room', 'like', '%' . $searchValue . '%')
+                        ->orWhere('pic_username', 'like', '%' . $searchValue . '%')
+                        ->orWhere('pic_nama', 'like', '%' . $searchValue . '%')
+                        ->orWhere('issue', 'like', '%' . $searchValue . '%');
+                });
+            }
+
+            $intervensiList = $query->with('cctvs')->orderByDesc('closed_at')->get();
+
+            $spreadsheet = SpreadsheetExporter::createSheetWithHeaders($headers);
+            $sheet = $spreadsheet->getActiveSheet();
+
+            $rowNum = 2;
+            foreach ($intervensiList as $index => $intervensi) {
+                $sheet->fromArray([
+                    $index + 1,
+                    $intervensi->id,
+                    $intervensi->control_room ?? '',
+                    $this->formatIntervensiCctvNamesForExport($intervensi),
+                    $intervensi->pic_username ?? '',
+                    $intervensi->pic_nama ?? '',
+                    $intervensi->pic_telepon ?? '',
+                    $intervensi->issue ?? '',
+                    $intervensi->resolution ?? '',
+                    $intervensi->created_at ? $intervensi->created_at->format('Y-m-d H:i:s') : '',
+                    $intervensi->closed_at ? $intervensi->closed_at->format('Y-m-d H:i:s') : '',
+                    $intervensi->closed_by ?? '',
+                    $intervensi->updated_at ? $intervensi->updated_at->format('Y-m-d H:i:s') : '',
+                ], null, 'A' . $rowNum);
+                $rowNum++;
+            }
+
+            SpreadsheetExporter::download($spreadsheet, 'intervensi_control_room_done_' . date('Y-m-d_His') . '.xlsx');
+        } catch (Exception $e) {
+            Log::error('Error exporting done intervensi control room: ' . $e->getMessage());
+
+            return redirect()
+                ->route('cctv-data.intervensi-control-room.index')
+                ->with('error', 'Gagal mengexport data Excel: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Format nama CCTV untuk export Excel.
+     */
+    private function formatIntervensiCctvNamesForExport(IntervensiControlRoom $intervensi): string
+    {
+        try {
+            $cctvs = $intervensi->cctvs;
+            if ($cctvs && $cctvs->count() > 0) {
+                return $cctvs->map(function ($cctv) {
+                    $name = $cctv->nama_cctv ?? ('CCTV ' . $cctv->id);
+                    if ($cctv->no_cctv) {
+                        $name .= ' (' . $cctv->no_cctv . ')';
+                    }
+
+                    return $name;
+                })->implode(', ');
+            }
+
+            if ($intervensi->cctv_id) {
+                $cctv = CctvData::find($intervensi->cctv_id);
+                if ($cctv) {
+                    $name = $cctv->nama_cctv ?? ('CCTV ' . $cctv->id);
+                    if ($cctv->no_cctv) {
+                        $name .= ' (' . $cctv->no_cctv . ')';
+                    }
+
+                    return $name;
+                }
+            }
+        } catch (Exception $e) {
+            Log::warning('Error formatting CCTV for intervensi export ' . $intervensi->id . ': ' . $e->getMessage());
+        }
+
+        return '';
     }
 
 }

@@ -32,6 +32,9 @@
                             <h5 class="mb-0">Daftar CCTV P2H Checklist</h5>
                             <small class="text-muted">Menampilkan {{ $checklists->firstItem() ?? 0 }}-{{ $checklists->lastItem() ?? 0 }} dari {{ $checklists->total() }} data</small>
                         </div>
+                        <a href="{{ route('cctv-p2h-checklist.export', request()->query()) }}" class="btn btn-success rounded-3">
+                            <i class="material-icons-outlined align-middle" style="font-size:18px;">download</i> Download Excel
+                        </a>
                     </div>
                 </div>
                 <div class="card-body">

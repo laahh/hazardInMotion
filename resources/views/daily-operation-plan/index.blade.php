@@ -31,9 +31,14 @@
                         <h5 class="mb-0">Daftar Daily Operation Plan</h5>
                         <small class="text-muted">Menampilkan {{ $dops->firstItem() ?? 0 }}-{{ $dops->lastItem() ?? 0 }} dari {{ $dops->total() }} data</small>
                     </div>
-                    <a href="{{ route('daily-operation-plan.create') }}" class="btn btn-primary rounded-3">
-                        <i class="bx bx-plus"></i> Tambah DOP Baru
-                    </a>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ route('daily-operation-plan.export') }}" class="btn btn-success rounded-3">
+                            <i class="material-icons-outlined align-middle" style="font-size:18px;">download</i> Download Excel
+                        </a>
+                        <a href="{{ route('daily-operation-plan.create') }}" class="btn btn-primary rounded-3">
+                            <i class="bx bx-plus"></i> Tambah DOP Baru
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">

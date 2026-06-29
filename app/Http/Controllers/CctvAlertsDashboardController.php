@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use App\Support\SpreadsheetExporter;
 use Carbon\Carbon;
 
 class CctvAlertsDashboardController extends Controller
@@ -286,6 +288,87 @@ class CctvAlertsDashboardController extends Controller
             'success' => true,
             'sites' => $sites
         ]);
+    }
+
+    /**
+     * Export data CCTV alerts ke Excel (mendukung filter yang sama dengan DataTable).
+     */
+    public function exportExcel(Request $request)
+    {
+        try {
+            $headers = [
+                'No', 'Site', 'Tanggal', 'Jumlah Online', 'Jumlah Offline', 'Message ID', 'Created At',
+            ];
+
+            $query = DB::table('cctv_alerts');
+
+            if ($request->filled('site')) {
+                $query->where('site', $request->site);
+            }
+
+            $filterType = $request->get('filter_type', 'month');
+            $filterValue = $request->get('filter_value');
+
+            if ($filterType && $filterValue) {
+                switch ($filterType) {
+                    case 'month':
+                        [$year, $month] = explode('-', $filterValue);
+                        $startDate = Carbon::create((int) $year, (int) $month, 1)->startOfMonth();
+                        $endDate = $startDate->copy()->endOfMonth();
+                        $query->whereBetween('tanggal', [
+                            $startDate->format('Y-m-d H:i:s'),
+                            $endDate->format('Y-m-d H:i:s'),
+                        ]);
+                        break;
+                    case 'week':
+                        if (strpos($filterValue, '-W') !== false) {
+                            [$year, $week] = explode('-W', $filterValue);
+                            $startDate = Carbon::now()->setISODate((int) $year, (int) $week, 1)->startOfWeek();
+                            $endDate = $startDate->copy()->endOfWeek();
+                        } else {
+                            $date = Carbon::parse($filterValue);
+                            $startDate = $date->copy()->startOfWeek();
+                            $endDate = $date->copy()->endOfWeek();
+                        }
+                        $query->whereBetween('tanggal', [
+                            $startDate->format('Y-m-d H:i:s'),
+                            $endDate->format('Y-m-d H:i:s'),
+                        ]);
+                        break;
+                    case 'day':
+                        $date = Carbon::parse($filterValue);
+                        $query->whereDate('tanggal', $date->format('Y-m-d'));
+                        break;
+                }
+            }
+
+            $rows = $query->orderByDesc('tanggal')->orderBy('site')->get();
+
+            $spreadsheet = SpreadsheetExporter::createSheetWithHeaders($headers);
+            $sheet = $spreadsheet->getActiveSheet();
+
+            $rowNum = 2;
+            foreach ($rows as $index => $item) {
+                $sheet->fromArray([
+                    $index + 1,
+                    $item->site ?? '',
+                    $item->tanggal ? Carbon::parse($item->tanggal)->format('Y-m-d H:i:s') : '',
+                    $item->jumlah_online ?? 0,
+                    $item->jumlah_offline ?? 0,
+                    $item->message_id ?? '',
+                    $item->created_at ? Carbon::parse($item->created_at)->format('Y-m-d H:i:s') : '',
+                ], null, 'A' . $rowNum);
+                $rowNum++;
+            }
+
+            SpreadsheetExporter::download($spreadsheet, 'cctv_alerts_' . date('Y-m-d_His') . '.xlsx');
+        } catch (\Throwable $e) {
+            Log::error('CctvAlertsDashboardController exportExcel: ' . $e->getMessage());
+
+            return redirect()
+                ->route('cctv-alerts-dashboard.index')
+                ->with('error', 'Gagal mengexport data Excel: ' . $e->getMessage());
+        }
     }
 }
 

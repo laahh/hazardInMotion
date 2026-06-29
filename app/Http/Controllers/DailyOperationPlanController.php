@@ -16,6 +16,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
+use App\Support\SpreadsheetExporter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -602,6 +603,80 @@ class DailyOperationPlanController extends Controller
                 ->back()
                 ->withInput()
                 ->with('error', 'Gagal mengimpor file Excel: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Export semua data DOP ke Excel.
+     */
+    public function exportExcel()
+    {
+        try {
+            $headers = [
+                'No', 'Tanggal', 'Pekerjaan', 'Aktivitas', 'Unit ID', 'Perusahaan', 'Lokasi', 'Site',
+                'Latitude', 'Longitude', 'Detail Lokasi', 'CCTV', 'PIC Berau Coal', 'Pengawas Mitra Kerja',
+                'Potensi Risiko', 'Pengendalian Bahaya', 'Catatan', 'Status', 'Created At', 'Updated At',
+            ];
+
+            $spreadsheet = SpreadsheetExporter::createSheetWithHeaders($headers);
+            $sheet = $spreadsheet->getActiveSheet();
+
+            $dops = DailyOperationPlan::with(['picBerauCoal', 'pengawasMitraKerja', 'cctvs'])
+                ->orderByDesc('tanggal')
+                ->orderByDesc('created_at')
+                ->get();
+
+            $rowNum = 2;
+            foreach ($dops as $index => $dop) {
+                $cctvNames = $dop->cctvs->map(function ($cctv) {
+                    $name = $cctv->nama_cctv ?? ('CCTV ' . $cctv->id);
+                    if ($cctv->no_cctv) {
+                        $name .= ' (' . $cctv->no_cctv . ')';
+                    }
+
+                    return $name;
+                })->implode(', ');
+
+                $picBerauCoal = $dop->picBerauCoal->map(function ($pic) {
+                    return 'Shift: ' . ($pic->shift ?? '-') . ' - Nama: ' . ($pic->nama_pic ?? '-');
+                })->implode('; ');
+
+                $pengawasMitra = $dop->pengawasMitraKerja->map(function ($p) {
+                    return 'Shift: ' . ($p->shift ?? '-') . ' - Nama: ' . ($p->nama_pengawas ?? '-');
+                })->implode('; ');
+
+                $sheet->fromArray([
+                    $index + 1,
+                    $dop->tanggal ? $dop->tanggal->format('Y-m-d') : '',
+                    $dop->pekerjaan ?? '',
+                    $dop->aktivitas ?? '',
+                    $dop->unit_id ?? '',
+                    $dop->perusahaan ?? '',
+                    $dop->lokasi ?? '',
+                    $dop->site ?? '',
+                    $dop->latitude ?? '',
+                    $dop->longitude ?? '',
+                    $dop->detail_lokasi ?? '',
+                    $cctvNames,
+                    $picBerauCoal,
+                    $pengawasMitra,
+                    $dop->potensi_resiko ?? '',
+                    $dop->pengendalian_bahaya ?? '',
+                    $dop->catatan ?? '',
+                    $dop->status ? 'ON' : 'OFF',
+                    $dop->created_at ? $dop->created_at->format('Y-m-d H:i:s') : '',
+                    $dop->updated_at ? $dop->updated_at->format('Y-m-d H:i:s') : '',
+                ], null, 'A' . $rowNum);
+                $rowNum++;
+            }
+
+            SpreadsheetExporter::download($spreadsheet, 'daily_operation_plan_' . date('Y-m-d_His') . '.xlsx');
+        } catch (\Exception $e) {
+            Log::error('DailyOperationPlan export error: ' . $e->getMessage());
+
+            return redirect()
+                ->route('daily-operation-plan.index')
+                ->with('error', 'Gagal mengexport data Excel: ' . $e->getMessage());
         }
     }
 }

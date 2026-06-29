@@ -45,6 +45,9 @@
                         <h5 class="mb-0 fw-bold">Daftar Issue Control Room</h5>
                                 <p class="text-muted mb-0">Kelola intervensi yang masih terbuka</p>
                     </div>
+                    <a href="{{ route('cctv-data.intervensi-control-room.export') }}" class="btn btn-success rounded-3" id="btnExportOpen">
+                        <i class="material-icons-outlined align-middle" style="font-size:18px;">download</i> Download Excel
+                    </a>
                 </div>
 
                 <div class="table-responsive">
@@ -84,6 +87,9 @@
                                 <h5 class="mb-0 fw-bold">Issue Selesai</h5>
                                 <p class="text-muted mb-0">Daftar issue yang sudah ditangani dan ditutup</p>
                             </div>
+                            <a href="{{ route('cctv-data.intervensi-control-room.export-done') }}" class="btn btn-success rounded-3" id="btnExportDone">
+                                <i class="material-icons-outlined align-middle" style="font-size:18px;">download</i> Download Excel
+                            </a>
                         </div>
 
                         <div class="table-responsive">

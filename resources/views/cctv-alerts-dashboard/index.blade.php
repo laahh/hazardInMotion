@@ -62,8 +62,11 @@
                 <div class="row">
                     <div class="col-12">
                         <div class="card rounded-4">
-                            <div class="card-header">
+                            <div class="card-header d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
                                 <h5 class="mb-0">Data CCTV Alerts</h5>
+                                <button type="button" id="btnExportExcel" class="btn btn-success rounded-3">
+                                    <i class="material-icons-outlined align-middle" style="font-size:18px;">download</i> Download Excel
+                                </button>
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
@@ -456,6 +459,18 @@ $(document).ready(function() {
         setTimeout(function() {
             loadChart();
         }, 500);
+    });
+
+    $('#btnExportExcel').on('click', function() {
+        const params = new URLSearchParams();
+        params.set('filter_type', currentFilterType || 'month');
+        if (currentFilterValue) {
+            params.set('filter_value', currentFilterValue);
+        }
+        if (currentSite) {
+            params.set('site', currentSite);
+        }
+        window.location.href = @json(route('cctv-alerts-dashboard.export')) + '?' + params.toString();
     });
 });
 </script>

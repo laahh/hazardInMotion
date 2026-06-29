@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\SupervisoryAlertLog;
+use App\Support\SpreadsheetExporter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -142,5 +143,61 @@ class SupervisoryAlertLogController extends Controller
             'data' => [],
             'total' => 0,
         ]);
+    }
+
+    /**
+     * Export data alert supervisory ke Excel (mendukung filter tanggal & risk level).
+     */
+    public function exportExcel(Request $request)
+    {
+        try {
+            $headers = [
+                'No', 'Tanggal', 'ID Lokasi', 'Nama Lokasi', 'Risk Level',
+                'SAP Report', 'CCTV Online', 'High Risk Area', 'TARP Recommendations',
+                'CCTV List', 'SAP List', 'Created At', 'Updated At',
+            ];
+
+            $query = SupervisoryAlertLog::query();
+
+            if ($request->filled('tanggal')) {
+                $query->whereDate('tanggal', $request->tanggal);
+            }
+            if ($request->filled('risk_level') && in_array($request->risk_level, [SupervisoryAlertLog::RISK_HIGH, SupervisoryAlertLog::RISK_MEDIUM], true)) {
+                $query->where('risk_level', $request->risk_level);
+            }
+
+            $rows = $query->orderByDesc('tanggal')->orderByDesc('updated_at')->get();
+
+            $spreadsheet = SpreadsheetExporter::createSheetWithHeaders($headers);
+            $sheet = $spreadsheet->getActiveSheet();
+
+            $rowNum = 2;
+            foreach ($rows as $index => $row) {
+                $sheet->fromArray([
+                    $index + 1,
+                    $row->tanggal ? $row->tanggal->format('Y-m-d') : '',
+                    $row->id_lokasi ?? '',
+                    $row->nama_lokasi ?? '',
+                    $row->risk_level ?? '',
+                    $row->has_sap_report ? 'Ya' : 'Tidak',
+                    $row->has_online_cctv ? 'Ya' : 'Tidak',
+                    $row->is_high_risk_area ? 'Ya' : 'Tidak',
+                    $row->tarp_recommendations ? json_encode($row->tarp_recommendations, JSON_UNESCAPED_UNICODE) : '',
+                    $row->cctv_list ? json_encode($row->cctv_list, JSON_UNESCAPED_UNICODE) : '',
+                    $row->sap_list ? json_encode($row->sap_list, JSON_UNESCAPED_UNICODE) : '',
+                    $row->created_at ? $row->created_at->format('Y-m-d H:i:s') : '',
+                    $row->updated_at ? $row->updated_at->format('Y-m-d H:i:s') : '',
+                ], null, 'A' . $rowNum);
+                $rowNum++;
+            }
+
+            SpreadsheetExporter::download($spreadsheet, 'supervisory_alert_log_' . date('Y-m-d_His') . '.xlsx');
+        } catch (\Throwable $e) {
+            Log::error('SupervisoryAlertLogController exportExcel: ' . $e->getMessage());
+
+            return redirect()
+                ->route('supervisory-alert-log.index')
+                ->with('error', 'Gagal mengexport data Excel: ' . $e->getMessage());
+        }
     }
 }

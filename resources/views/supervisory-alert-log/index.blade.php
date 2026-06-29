@@ -105,6 +105,13 @@
                                     <button type="button" id="btnResetFilter" class="btn btn-outline-secondary w-100">Reset</button>
                                 </div>
                             </div>
+                            <div class="row g-3 mt-1">
+                                <div class="col-md-3">
+                                    <button type="button" class="btn btn-success w-100" id="btnExportSupervisory">
+                                        <i class="material-icons-outlined align-middle me-1" style="font-size:18px;">download</i> Download Excel
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -494,6 +501,16 @@ $(document).ready(function() {
 
     $('#filterTanggal, #filterRiskLevel').on('change', function() {
         table.ajax.reload();
+    });
+
+    $('#btnExportSupervisory').on('click', function() {
+        const params = new URLSearchParams();
+        const tanggal = $('#filterTanggal').val();
+        const riskLevel = $('#filterRiskLevel').val();
+        if (tanggal) params.set('tanggal', tanggal);
+        if (riskLevel) params.set('risk_level', riskLevel);
+        const baseUrl = @json(route('supervisory-alert-log.export'));
+        window.location.href = params.toString() ? baseUrl + '?' + params.toString() : baseUrl;
     });
 
     // Tab Mobility: load data saat tab ditampilkan

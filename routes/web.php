@@ -106,6 +106,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/chart-data', [CctvAlertsDashboardController::class, 'getChartData'])->name('chart-data');
         Route::get('/data', [CctvAlertsDashboardController::class, 'getDataTableData'])->name('data');
         Route::get('/sites', [CctvAlertsDashboardController::class, 'getSites'])->name('sites');
+        Route::get('/export', [CctvAlertsDashboardController::class, 'exportExcel'])->name('export');
     });
     Route::get('/full-maps', [fullMapsController::class, 'index'])->name('fullmaps');
     Route::get('/full-maps/api/search-cctv', [fullMapsController::class, 'searchCctv'])->name('full-maps.api.search-cctv');
@@ -367,6 +368,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('cctv-data-control-room/cctv', [CctvDataController::class, 'getCctvByControlRoom'])->name('cctv-data.control-room.cctv.get');
     Route::post('cctv-data-control-room/intervensi', [CctvDataController::class, 'storeIntervensiControlRoom'])->name('cctv-data.control-room.intervensi.store');
     Route::get('cctv-data-control-room/intervensi', [CctvDataController::class, 'indexIntervensiControlRoom'])->name('cctv-data.intervensi-control-room.index');
+    Route::get('cctv-data-control-room/intervensi/export', [CctvDataController::class, 'exportIntervensiControlRoomExcel'])->name('cctv-data.intervensi-control-room.export');
+    Route::get('cctv-data-control-room/intervensi/export-done', [CctvDataController::class, 'exportDoneIntervensiControlRoomExcel'])->name('cctv-data.intervensi-control-room.export-done');
     Route::get('cctv-data-control-room/intervensi/data', [CctvDataController::class, 'getIntervensiControlRoomData'])->name('cctv-data.intervensi-control-room.data');
     Route::get('cctv-data-control-room/intervensi/done/data', [CctvDataController::class, 'getDoneIntervensiControlRoomData'])->name('cctv-data.intervensi-control-room.done.data');
     Route::get('cctv-data-control-room/intervensi/{id}/detail', [CctvDataController::class, 'getIntervensiDetail'])->name('cctv-data.intervensi-control-room.detail');
@@ -382,6 +385,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('intervensi-area-kerja/{id}/done/detail', [\App\Http\Controllers\IntervensiAreaKerjaController::class, 'getDoneDetail'])->name('intervensi-area-kerja.done.detail');
     Route::post('intervensi-area-kerja/{id}/status', [\App\Http\Controllers\IntervensiAreaKerjaController::class, 'updateStatus'])->name('intervensi-area-kerja.status.update');
     Route::get('supervisory-alert-log', [\App\Http\Controllers\SupervisoryAlertLogController::class, 'index'])->name('supervisory-alert-log.index');
+    Route::get('supervisory-alert-log/export', [\App\Http\Controllers\SupervisoryAlertLogController::class, 'exportExcel'])->name('supervisory-alert-log.export');
     Route::get('supervisory-alert-log/data', [\App\Http\Controllers\SupervisoryAlertLogController::class, 'getData'])->name('supervisory-alert-log.data');
     Route::get('supervisory-alert-log/data-mobility', [\App\Http\Controllers\SupervisoryAlertLogController::class, 'getDataMobility'])->name('supervisory-alert-log.data-mobility');
     Route::get('supervisory-alert-log/{id}/detail', [\App\Http\Controllers\SupervisoryAlertLogController::class, 'getDetail'])->name('supervisory-alert-log.detail');
@@ -560,6 +564,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/create', [DailyOperationPlanController::class, 'create'])->name('create');
         Route::post('/', [DailyOperationPlanController::class, 'store'])->name('store');
         Route::get('/template', [DailyOperationPlanController::class, 'downloadTemplate'])->name('template');
+        Route::get('/export', [DailyOperationPlanController::class, 'exportExcel'])->name('export');
         Route::post('/import', [DailyOperationPlanController::class, 'import'])->name('import');
         Route::patch('/{id}/toggle-status', [DailyOperationPlanController::class, 'toggleStatus'])->name('toggle-status');
         Route::get('/{id}', [DailyOperationPlanController::class, 'show'])->name('show');
@@ -571,6 +576,7 @@ Route::middleware(['auth'])->group(function () {
     // CCTV P2H Checklist Routes
     Route::prefix('cctv-p2h-checklist')->name('cctv-p2h-checklist.')->group(function () {
         Route::get('/', [CctvP2hChecklistController::class, 'index'])->name('index');
+        Route::get('/export', [CctvP2hChecklistController::class, 'exportExcel'])->name('export');
         Route::get('/{id}', [CctvP2hChecklistController::class, 'show'])->name('show');
         Route::delete('/{id}', [CctvP2hChecklistController::class, 'destroy'])->name('destroy');
     });
