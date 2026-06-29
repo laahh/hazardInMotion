@@ -56,6 +56,18 @@
       $mean = array_sum($trendTotal) / count($trendTotal);
       $avgLineData = array_fill(0, count($trendTotal), round($mean, 1));
    }
+
+   $approvalSlaAvgSeconds = $stats['approvalSlaAvgSeconds'] ?? null;
+   $approvalSlaSampleCount = (int) ($stats['approvalSlaSampleCount'] ?? 0);
+   if ($approvalSlaAvgSeconds === null || $approvalSlaSampleCount === 0) {
+      $approvalSlaLabel = '—';
+   } elseif ($approvalSlaAvgSeconds >= 86400) {
+      $approvalSlaLabel = round($approvalSlaAvgSeconds / 86400, 1).' hari';
+   } elseif ($approvalSlaAvgSeconds >= 3600) {
+      $approvalSlaLabel = round($approvalSlaAvgSeconds / 3600, 1).' jam';
+   } else {
+      $approvalSlaLabel = round($approvalSlaAvgSeconds / 60, 0).' menit';
+   }
 @endphp
 
 <div class="ab-phppot -mt-1">
@@ -123,9 +135,9 @@
             <div class="dash-col-6">
                <div class="dash-card support-bar">
                   <div class="card-body pb-0">
-                     <h2 class="m-0">{{ number_format($stats['withEvidence'] ?? 0) }}</h2>
-                     <span class="label-cyan">Dengan Evidence</span>
-                     <p class="widget-desc mb-3 mt-3">Pengajuan yang sudah melampirkan file bukti treatment.</p>
+                     <h2 class="m-0">{{ $approvalSlaLabel }}</h2>
+                     <span class="label-cyan">LSA</span>
+                     <p class="widget-desc mb-3 mt-3">Rata-rata waktu dari pengajuan hingga approval@if($approvalSlaSampleCount > 0) ({{ number_format($approvalSlaSampleCount) }} pengajuan disetujui)@endif.</p>
                   </div>
                   <div class="card-footer border-0">
                      <div class="footer-row">

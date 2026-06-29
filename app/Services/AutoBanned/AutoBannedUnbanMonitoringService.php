@@ -228,7 +228,8 @@ class AutoBannedUnbanMonitoringService
             'pending' => 0,
             'approved' => 0,
             'rejected' => 0,
-            'withEvidence' => 0,
+            'approvalSlaAvgSeconds' => null,
+            'approvalSlaSampleCount' => 0,
             'linkedScr' => 0,
             'hsctNotified' => 0,
             'approvalRate' => 0.0,
@@ -244,10 +245,9 @@ class AutoBannedUnbanMonitoringService
         $stats['approved'] = (int) $stats[AutoBannedUnbanStatus::Approved->value];
         $stats['rejected'] = (int) $stats[AutoBannedUnbanStatus::Rejected->value];
 
-        $stats['withEvidence'] = (int) (clone $baseQuery)
-            ->whereNotNull('evidence_file_path')
-            ->where('evidence_file_path', '!=', '')
-            ->count();
+        $approvalSla = $this->calculateApprovalSla($filters);
+        $stats['approvalSlaAvgSeconds'] = $approvalSla['avgSeconds'];
+        $stats['approvalSlaSampleCount'] = $approvalSla['sampleCount'];
 
         if (AutoBannedSchema::hasScrDailyBannedTable()) {
             $stats['linkedScr'] = (int) (clone $baseQuery)
@@ -265,6 +265,35 @@ class AutoBannedUnbanMonitoringService
             : 0.0;
 
         return $stats;
+    }
+
+    /**
+     * Rata-rata SLA dari waktu pengajuan (created_at) ke waktu approval (reviewed_at).
+     *
+     * @param  array{filter_date?: string, site?: string, status?: string, q?: string}  $filters
+     * @return array{avgSeconds: ?float, sampleCount: int}
+     */
+    private function calculateApprovalSla(array $filters): array
+    {
+        $query = AutoBannedUnbanRequest::query()
+            ->where('status', AutoBannedUnbanStatus::Approved->value)
+            ->whereNotNull('created_at')
+            ->whereNotNull('reviewed_at');
+
+        $this->applyFilters($query, array_merge($filters, ['status' => '']));
+
+        $result = (clone $query)
+            ->selectRaw('AVG(TIMESTAMPDIFF(SECOND, created_at, reviewed_at)) as avg_seconds')
+            ->selectRaw('COUNT(*) as sample_count')
+            ->first();
+
+        $avgSeconds = $result?->avg_seconds;
+        $sampleCount = (int) ($result?->sample_count ?? 0);
+
+        return [
+            'avgSeconds' => $avgSeconds !== null ? (float) $avgSeconds : null,
+            'sampleCount' => $sampleCount,
+        ];
     }
 
     /**
@@ -328,7 +357,8 @@ class AutoBannedUnbanMonitoringService
             'pending' => 0,
             'approved' => 0,
             'rejected' => 0,
-            'withEvidence' => 0,
+            'approvalSlaAvgSeconds' => null,
+            'approvalSlaSampleCount' => 0,
             'linkedScr' => 0,
             'hsctNotified' => 0,
             'approvalRate' => 0.0,
