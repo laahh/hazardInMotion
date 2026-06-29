@@ -68,6 +68,12 @@
    } else {
       $approvalSlaLabel = round($approvalSlaAvgSeconds / 60, 0).' menit';
    }
+
+   $approvalSlaDesc = 'Rata-rata waktu dari pengajuan hingga approval';
+   if ($approvalSlaSampleCount > 0) {
+      $approvalSlaDesc .= ' ('.number_format($approvalSlaSampleCount).' pengajuan disetujui)';
+   }
+   $approvalSlaDesc .= '.';
 @endphp
 
 <div class="ab-phppot -mt-1">
@@ -137,7 +143,7 @@
                   <div class="card-body pb-0">
                      <h2 class="m-0">{{ $approvalSlaLabel }}</h2>
                      <span class="label-cyan">LSA</span>
-                     <p class="widget-desc mb-3 mt-3">Rata-rata waktu dari pengajuan hingga approval@if($approvalSlaSampleCount > 0) ({{ number_format($approvalSlaSampleCount) }} pengajuan disetujui)@endif.</p>
+                     <p class="widget-desc mb-3 mt-3">{{ $approvalSlaDesc }}</p>
                   </div>
                   <div class="card-footer border-0">
                      <div class="footer-row">
