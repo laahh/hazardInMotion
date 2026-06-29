@@ -66,6 +66,12 @@
       gap: 16px;
       margin-bottom: 20px;
    }
+   .ab-overview-summary-note {
+      grid-column: 1 / -1;
+      margin: 0 0 4px;
+      font-size: 11px;
+      color: #888;
+   }
    @media (min-width: 768px) {
       .ab-overview-summary { grid-template-columns: repeat(3, 1fr); }
    }

@@ -193,6 +193,28 @@ class AutoBannedUnbanMonitoringService
     }
 
     /**
+     * Total pengajuan unban disetujui — kumulatif, tanpa filter tanggal.
+     *
+     * @param  array{site?: string, q?: string}  $filters
+     */
+    public function countApprovedTotal(array $filters = []): int
+    {
+        if (! $this->tableAvailable()) {
+            return 0;
+        }
+
+        $query = AutoBannedUnbanRequest::query()
+            ->where('status', AutoBannedUnbanStatus::Approved->value);
+
+        $this->applyFilters($query, array_merge([
+            'filter_date' => '',
+            'status' => '',
+        ], $filters));
+
+        return (int) $query->count();
+    }
+
+    /**
      * @param  array{filter_date?: string, site?: string, status?: string, q?: string}  $filters
      * @return array<string, int|float>
      */

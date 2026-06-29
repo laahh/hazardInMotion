@@ -500,6 +500,28 @@ class AutoBannedDailyDashboardService
     }
 
     /**
+     * Total karyawan yang sudah di-banned (automasi SUCCESS) — kumulatif, tanpa filter tanggal.
+     *
+     * @param  array{site?: string, perusahaan?: string, q?: string}  $filters
+     */
+    public function countBannedSuccessTotal(array $filters = []): int
+    {
+        if (! $this->logTableAvailable()) {
+            return 0;
+        }
+
+        $query = SidBannedLog::query()
+            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value);
+
+        $this->applyLogFilters($query, array_merge([
+            'filter_date' => '',
+            'automation_status' => '',
+        ], $filters), includeAutomationStatus: false);
+
+        return (int) $query->count();
+    }
+
+    /**
      * Total karyawan yang sudah di-banned (automasi SUCCESS) dari sid_banned_log.
      *
      * @param  array{filter_date?: string, site?: string, perusahaan?: string, q?: string}  $filters

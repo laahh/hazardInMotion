@@ -12,6 +12,7 @@ class AutoBannedMonitoringOverviewService
     public function __construct(
         private readonly AutoBannedDailyDashboardService $dailyDashboardService,
         private readonly AutoBannedUnbanMonitoringService $unbanMonitoringService,
+        private readonly AutoBannedMonitoringSummaryService $summaryService,
     ) {}
 
     /**
@@ -60,30 +61,13 @@ class AutoBannedMonitoringOverviewService
         return [
             'filters' => $filters,
             'filterOptions' => $this->mergeFilterOptions($banned, $unban),
-            'summaryStats' => $this->buildSummaryStats($banned, $unban),
+            'summaryStats' => $this->summaryService->buildSummaryStats([
+                'site' => $filters['site'] ?? '',
+                'perusahaan' => $filters['perusahaan'] ?? '',
+                'q' => $filters['q'] ?? '',
+            ]),
             'banned' => $banned,
             'unban' => $unban,
-        ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $banned
-     * @param  array<string, mixed>  $unban
-     * @return array{totalSudahDiBanned: int, totalMasihBanned: int, totalUnBanned: int}
-     */
-    public function buildSummaryStats(array $banned, array $unban): array
-    {
-        $bannedStats = $banned['stats'] ?? [];
-        $unbanStats = $unban['stats'] ?? [];
-
-        $totalSudahDiBanned = (int) ($bannedStats['totalBannedToday'] ?? $bannedStats['success'] ?? 0);
-        $totalUnBanned = (int) ($unbanStats['approved'] ?? 0);
-        $totalMasihBanned = max(0, $totalSudahDiBanned - $totalUnBanned);
-
-        return [
-            'totalSudahDiBanned' => $totalSudahDiBanned,
-            'totalMasihBanned' => $totalMasihBanned,
-            'totalUnBanned' => $totalUnBanned,
         ];
     }
 

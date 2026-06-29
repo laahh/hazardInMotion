@@ -45,6 +45,24 @@ final class AutoBannedSchema
         }
     }
 
+    public static function hasSidBannedLogTable(): bool
+    {
+        try {
+            return Schema::hasTable('sid_banned_log');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    public static function hasSidUnbannedLogTable(): bool
+    {
+        try {
+            return Schema::hasTable('sid_unbanned_log');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     public static function hasTableauFlowHistoryTable(): bool
     {
         try {
