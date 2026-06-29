@@ -1,4 +1,4 @@
-@php
+<!-- @php
    $summaryStats = $summaryStats ?? [];
    $totalSudahDiBanned = (int) ($summaryStats['totalSudahDiBanned'] ?? 0);
    $totalMasihBanned = (int) ($summaryStats['totalMasihBanned'] ?? 0);
@@ -25,7 +25,7 @@
       ],
    ];
 @endphp
-<!-- 
+
 <div class="ab-overview-summary">
    <p class="ab-overview-summary-note">Data kumulatif dari awal — <code>sid_banned_log</code> (SUCCESS) &amp; <code>sid_unban_log</code> (tanpa filter tanggal)</p>
    @foreach($summaryCards as $card)
