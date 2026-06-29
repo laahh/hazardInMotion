@@ -25,7 +25,7 @@
       ],
    ];
 @endphp
-
+<!-- 
 <div class="ab-overview-summary">
    <p class="ab-overview-summary-note">Data kumulatif dari awal — <code>sid_banned_log</code> (SUCCESS) &amp; <code>sid_unban_log</code> (tanpa filter tanggal)</p>
    @foreach($summaryCards as $card)
@@ -39,4 +39,4 @@
       </div>
    </div>
    @endforeach
-</div>
+</div> -->
