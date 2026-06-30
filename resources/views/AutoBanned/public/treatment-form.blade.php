@@ -163,7 +163,7 @@
          @if($periodLabel !== '')
          <div class="period-pill">
             <span class="material-symbols-outlined" style="font-size:16px">calendar_month</span>
-            Periode data: {{ $periodLabel }}
+          
          </div>
          @endif
       </div>
