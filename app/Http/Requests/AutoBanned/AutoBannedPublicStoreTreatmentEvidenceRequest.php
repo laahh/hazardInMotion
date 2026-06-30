@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\AutoBanned;
 
-use App\Http\Requests\AutoBanned\Concerns\ValidatesAutoBannedSidBannedLogLink;
+use App\Http\Requests\AutoBanned\Concerns\ValidatesAutoBannedTreatmentBannedLogRef;
 use App\Http\Requests\AutoBanned\Concerns\ValidatesAutoBannedTreatmentEvidenceFile;
 use Illuminate\Foundation\Http\FormRequest;
 
 class AutoBannedPublicStoreTreatmentEvidenceRequest extends FormRequest
 {
-    use ValidatesAutoBannedSidBannedLogLink;
+    use ValidatesAutoBannedTreatmentBannedLogRef;
     use ValidatesAutoBannedTreatmentEvidenceFile;
 
     public function authorize(): bool
@@ -35,7 +35,7 @@ class AutoBannedPublicStoreTreatmentEvidenceRequest extends FormRequest
             'no_hp' => ['required', 'string', 'max:32'],
             'evidence_file' => $this->treatmentEvidenceFileRules(),
             'website' => ['nullable', 'string', 'max:0'],
-        ], $this->sidBannedLogIdRules());
+        ], $this->bannedLogRefRules());
     }
 
     /**
@@ -43,7 +43,7 @@ class AutoBannedPublicStoreTreatmentEvidenceRequest extends FormRequest
      */
     public function messages(): array
     {
-        return array_merge($this->treatmentEvidenceFileMessages(), $this->sidBannedLogIdMessages(), [
+        return array_merge($this->treatmentEvidenceFileMessages(), $this->bannedLogRefMessages(), [
             'sid.required' => 'Masukkan SID Anda terlebih dahulu.',
             'alasan_pengajuan.required' => 'Ceritakan singkat tindakan perbaikan yang sudah dilakukan.',
             'no_hp.required' => 'Masukkan nomor HP / WhatsApp Anda.',

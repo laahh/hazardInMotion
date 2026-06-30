@@ -57,7 +57,7 @@ class AutoBannedPublicTreatmentController extends Controller
             return response()->json(['found' => false, 'message' => 'Ketik SID Anda lalu tekan Cari.']);
         }
 
-        $context = $this->treatmentService->resolveSidContextFromSidBannedLog($sid);
+        $context = $this->treatmentService->resolveSidContextFromBannedLogs($sid);
 
         if ($context === null) {
             return response()->json([
@@ -66,10 +66,10 @@ class AutoBannedPublicTreatmentController extends Controller
             ]);
         }
 
-        $bannedLogOptions = $this->treatmentService->sidBannedLogOptionsForSid($sid);
+        $bannedLogOptions = $this->treatmentService->treatmentBannedLogOptionsForSid($sid);
 
         if ($bannedLogOptions === []) {
-            $alreadyRequested = AutoBannedUnbanRequest::requestedScrDailyBannedIdsForSid($sid) !== [];
+            $alreadyRequested = AutoBannedUnbanRequest::hasAnyRequestedBannedRefsForSid($sid);
 
             return response()->json([
                 'found' => true,
@@ -104,9 +104,7 @@ class AutoBannedPublicTreatmentController extends Controller
             user: null,
             scrDailyBannedId: null,
             noHp: (string) $validated['no_hp'],
-            sidBannedLogId: isset($validated['sid_banned_log_id'])
-                ? (int) $validated['sid_banned_log_id']
-                : null,
+            bannedLogRef: (string) $validated['banned_log_ref'],
         );
 
         $whatsappUrl = $this->treatmentService->resolveMasterSodWhatsappRedirectUrl($unbanRequest);

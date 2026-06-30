@@ -217,11 +217,11 @@
             </div>
          </div>
          <div class="field" id="banned-log-wrap" style="display:none;margin-top:1rem;margin-bottom:0">
-            <label for="sid_banned_log_id">Riwayat Banned <span class="req">*</span></label>
-            <select class="input" id="sid_banned_log_id" name="sid_banned_log_id">
+            <label for="banned_log_ref">Riwayat Banned <span class="req">*</span></label>
+            <select class="input" id="banned_log_ref" name="banned_log_ref">
                <option value="">— Pilih setelah cari SID —</option>
             </select>
-            <p class="hint">Pilih riwayat banned (automasi) yang ingin diajukan unban.</p>
+            <p class="hint">Pilih riwayat banned harian atau mingguan (automasi SUCCESS) yang ingin diajukan unban.</p>
          </div>
       </section>
 
@@ -282,8 +282,8 @@
    var lookupMsg = document.getElementById('lookup-msg');
    var preview = document.getElementById('sid-preview');
    var bannedLogWrap = document.getElementById('banned-log-wrap');
-   var bannedLogSelect = document.getElementById('sid_banned_log_id');
-   var oldBannedLogId = @json(old('sid_banned_log_id'));
+   var bannedLogSelect = document.getElementById('banned_log_ref');
+   var oldBannedLogRef = @json(old('banned_log_ref'));
    var dropzone = document.getElementById('dropzone');
    var fileInput = document.getElementById('evidence_file');
    var fileNameEl = document.getElementById('file-name');
@@ -309,13 +309,13 @@
       }
       options.forEach(function (opt) {
          var option = document.createElement('option');
-         option.value = String(opt.id);
+         option.value = String(opt.value || ((opt.type || 'daily') + '-' + opt.id));
          option.textContent = opt.label;
          bannedLogSelect.appendChild(option);
       });
       bannedLogWrap.style.display = 'block';
       bannedLogSelect.setAttribute('required', 'required');
-      if (oldBannedLogId) bannedLogSelect.value = String(oldBannedLogId);
+      if (oldBannedLogRef) bannedLogSelect.value = String(oldBannedLogRef);
    }
 
    function setPreview(data) {

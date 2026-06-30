@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\AutoBannedUnbanStatus;
+use App\Support\AutoBanned\AutoBannedSchema;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -14,6 +15,7 @@ class AutoBannedUnbanRequest extends Model
 
     protected $fillable = [
         'scr_daily_banned_id',
+        'scr_weekly_banned_id',
         'sid',
         'karyawan',
         'perusahaan',
@@ -50,6 +52,11 @@ class AutoBannedUnbanRequest extends Model
         return $this->belongsTo(ScrDailyBanned::class, 'scr_daily_banned_id');
     }
 
+    public function scrWeeklyBanned(): BelongsTo
+    {
+        return $this->belongsTo(ScrWeeklyBanned::class, 'scr_weekly_banned_id');
+    }
+
     public function submittedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'submitted_by_id');
@@ -80,5 +87,37 @@ class AutoBannedUnbanRequest extends Model
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * scr_weekly_banned_id yang sudah pernah diajukan treatment untuk SID ini.
+     *
+     * @return array<int, int>
+     */
+    public static function requestedScrWeeklyBannedIdsForSid(string $sid): array
+    {
+        if (! AutoBannedSchema::hasUnbanRequestScrWeeklyBannedColumn()) {
+            return [];
+        }
+
+        $sid = strtoupper(trim($sid));
+        if ($sid === '') {
+            return [];
+        }
+
+        return static::query()
+            ->whereRaw('UPPER(TRIM(sid)) = ?', [$sid])
+            ->whereNotNull('scr_weekly_banned_id')
+            ->pluck('scr_weekly_banned_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public static function hasAnyRequestedBannedRefsForSid(string $sid): bool
+    {
+        return self::requestedScrDailyBannedIdsForSid($sid) !== []
+            || self::requestedScrWeeklyBannedIdsForSid($sid) !== [];
     }
 }

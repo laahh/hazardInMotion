@@ -11,10 +11,13 @@ use App\Models\AutoBannedStatusSnapshot;
 use App\Models\AutoBannedUnbanRequest;
 use App\Models\ScrAutoBannedTbcSap;
 use App\Models\ScrDailyBanned;
+use App\Models\ScrWeeklyBanned;
 use App\Models\SidBannedLog;
+use App\Models\SidBannedLogWeekly;
 use App\Models\User;
 use App\Support\AutoBanned\AutoBannedSchema;
 use App\Support\AutoBanned\ScrDailyBannedColumns;
+use App\Support\AutoBanned\ScrWeeklyBannedColumns;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -281,6 +284,223 @@ class AutoBannedTreatmentService
     }
 
     /**
+     * Resolve SID context dari tabel sid_banned_log_weekly.
+     *
+     * @return array{sid: string, karyawan: string, perusahaan: string, site_dedicated: string, banned_reason: string, status_banned_ref: string, week: string, iso_year: string}|null
+     */
+    public function resolveSidContextFromSidBannedLogWeekly(string $sid, ?int $sidBannedLogWeeklyId = null): ?array
+    {
+        if (! AutoBannedSchema::hasSidBannedLogWeeklyTable()) {
+            return null;
+        }
+
+        $sid = strtoupper(trim($sid));
+        if ($sid === '') {
+            return null;
+        }
+
+        $query = SidBannedLogWeekly::query()
+            ->whereRaw('UPPER(TRIM(sid)) = ?', [$sid]);
+
+        if ($sidBannedLogWeeklyId !== null) {
+            $query->where('id', $sidBannedLogWeeklyId);
+        } else {
+            $query->orderByDesc('filter_date')
+                ->orderByDesc('completed_at')
+                ->orderByDesc('id');
+        }
+
+        if (AutoBannedSchema::hasScrWeeklyBannedTable()) {
+            $query->with([
+                'scrWeeklyBanned:id,'.ScrWeeklyBannedColumns::SITE.','.ScrWeeklyBannedColumns::ISO_YEAR.','.ScrWeeklyBannedColumns::ISO_WEEK,
+            ]);
+        }
+
+        $row = $query->first([
+            'id',
+            'scr_weekly_banned_id',
+            'sid',
+            'nama',
+            'perusahaan',
+            'site_dedicated',
+            'banned_reason',
+            'banned_status',
+            'filter_date',
+        ]);
+
+        if ($row === null) {
+            return null;
+        }
+
+        $rowSid = strtoupper(trim((string) ($row->sid ?? '')));
+        $siteDedicated = trim((string) ($row->site_dedicated ?? ''));
+        if ($siteDedicated === '') {
+            $siteDedicated = trim((string) ($row->scrWeeklyBanned?->{ScrWeeklyBannedColumns::SITE} ?? ''));
+        }
+
+        $isoYear = trim((string) ($row->scrWeeklyBanned?->{ScrWeeklyBannedColumns::ISO_YEAR} ?? ''));
+        $isoWeek = trim((string) ($row->scrWeeklyBanned?->{ScrWeeklyBannedColumns::ISO_WEEK} ?? ''));
+
+        return [
+            'sid' => $rowSid !== '' ? $rowSid : $sid,
+            'karyawan' => trim((string) ($row->nama ?? '')),
+            'perusahaan' => trim((string) ($row->perusahaan ?? '')),
+            'site_dedicated' => $siteDedicated,
+            'banned_reason' => trim((string) ($row->banned_reason ?? '')),
+            'status_banned_ref' => trim((string) ($row->banned_status ?? '')),
+            'week' => $isoWeek !== '' ? 'W'.$isoWeek : '',
+            'iso_year' => $isoYear,
+        ];
+    }
+
+    /**
+     * Gabungan preview dari riwayat banned harian & mingguan (ambil yang terbaru).
+     *
+     * @return array{sid: string, karyawan: string, perusahaan: string, site_dedicated: string, banned_reason: string, status_banned_ref: string, week: string, iso_year: string}|null
+     */
+    public function resolveSidContextFromBannedLogs(string $sid): ?array
+    {
+        $sid = strtoupper(trim($sid));
+        if ($sid === '') {
+            return null;
+        }
+
+        $dailyRow = $this->latestSidBannedLogRowForSid($sid);
+        $weeklyRow = $this->latestSidBannedLogWeeklyRowForSid($sid);
+
+        if ($dailyRow === null && $weeklyRow === null) {
+            return null;
+        }
+
+        if ($dailyRow === null) {
+            return $this->resolveSidContextFromSidBannedLogWeekly($sid, (int) $weeklyRow->id);
+        }
+
+        if ($weeklyRow === null) {
+            return $this->resolveSidContextFromSidBannedLog($sid, (int) $dailyRow->id);
+        }
+
+        $dailySort = $this->bannedLogSortTimestamp($dailyRow->filter_date, $dailyRow->completed_at);
+        $weeklySort = $this->bannedLogSortTimestamp($weeklyRow->filter_date, $weeklyRow->completed_at);
+
+        return $weeklySort > $dailySort
+            ? $this->resolveSidContextFromSidBannedLogWeekly($sid, (int) $weeklyRow->id)
+            : $this->resolveSidContextFromSidBannedLog($sid, (int) $dailyRow->id);
+    }
+
+    /**
+     * @return array<int, array{value: string, type: string, id: int, label: string, filter_date: ?string, banned_reason: string, site: string, nama: string}>
+     */
+    public function treatmentBannedLogOptionsForSid(string $sid): array
+    {
+        $dailyOptions = collect($this->sidBannedLogOptionsForSid($sid))
+            ->map(static fn (array $option): array => [
+                'value' => 'daily-'.$option['id'],
+                'type' => 'daily',
+                'id' => $option['id'],
+                'label' => '[Harian] '.$option['label'],
+                'filter_date' => $option['filter_date'] ?? null,
+                'banned_reason' => $option['banned_reason'],
+                'site' => $option['site'],
+                'nama' => $option['nama'],
+            ]);
+
+        $weeklyOptions = collect($this->sidBannedLogWeeklyOptionsForSid($sid))
+            ->map(static fn (array $option): array => [
+                'value' => 'weekly-'.$option['id'],
+                'type' => 'weekly',
+                'id' => $option['id'],
+                'label' => '[Mingguan] '.$option['label'],
+                'filter_date' => $option['filter_date'] ?? null,
+                'banned_reason' => $option['banned_reason'],
+                'site' => $option['site'],
+                'nama' => $option['nama'],
+            ]);
+
+        return $dailyOptions
+            ->merge($weeklyOptions)
+            ->sortByDesc(static fn (array $option): string => ($option['filter_date'] ?? '').'-'.str_pad((string) $option['id'], 8, '0', STR_PAD_LEFT))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{id: int, label: string, filter_date: ?string, banned_reason: string, site: string, nama: string}>
+     */
+    public function sidBannedLogWeeklyOptionsForSid(string $sid): array
+    {
+        if (! AutoBannedSchema::hasSidBannedLogWeeklyTable()) {
+            return [];
+        }
+
+        $sid = strtoupper(trim($sid));
+        if ($sid === '') {
+            return [];
+        }
+
+        $requestedScrIds = AutoBannedUnbanRequest::requestedScrWeeklyBannedIdsForSid($sid);
+
+        $query = SidBannedLogWeekly::query()
+            ->whereRaw('UPPER(TRIM(sid)) = ?', [$sid])
+            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value);
+
+        if ($requestedScrIds !== []) {
+            $query->where(function ($inner) use ($requestedScrIds): void {
+                $inner->whereNull('scr_weekly_banned_id')
+                    ->orWhereNotIn('scr_weekly_banned_id', $requestedScrIds);
+            });
+        }
+
+        return $query
+            ->when(
+                AutoBannedSchema::hasScrWeeklyBannedTable(),
+                fn ($query) => $query->with([
+                    'scrWeeklyBanned:id,'.ScrWeeklyBannedColumns::SITE.','.ScrWeeklyBannedColumns::ISO_YEAR.','.ScrWeeklyBannedColumns::ISO_WEEK,
+                ]),
+            )
+            ->orderByDesc('filter_date')
+            ->orderByDesc('completed_at')
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get([
+                'id',
+                'scr_weekly_banned_id',
+                'filter_date',
+                'completed_at',
+                'banned_reason',
+                'banned_status',
+                'site_dedicated',
+                'nama',
+            ])
+            ->map(function (SidBannedLogWeekly $row): array {
+                $isoWeek = trim((string) ($row->scrWeeklyBanned?->{ScrWeeklyBannedColumns::ISO_WEEK} ?? ''));
+                $isoYear = trim((string) ($row->scrWeeklyBanned?->{ScrWeeklyBannedColumns::ISO_YEAR} ?? ''));
+                $periodLabel = ($isoWeek !== '' && $isoYear !== '')
+                    ? 'W'.$isoWeek.' '.$isoYear
+                    : ($row->filter_date?->format('d M Y')
+                        ?? $row->completed_at?->format('d M Y')
+                        ?? '—');
+                $reason = trim((string) ($row->banned_reason ?? '')) ?: '—';
+                $site = trim((string) ($row->site_dedicated ?? ''));
+                if ($site === '') {
+                    $site = trim((string) ($row->scrWeeklyBanned?->{ScrWeeklyBannedColumns::SITE} ?? ''));
+                }
+                $site = $site !== '' ? $site : '—';
+
+                return [
+                    'id' => (int) $row->id,
+                    'label' => sprintf('%s — %s (%s)', $periodLabel, $reason, $site),
+                    'filter_date' => $row->filter_date?->toDateString(),
+                    'banned_reason' => $reason,
+                    'site' => $site,
+                    'nama' => trim((string) ($row->nama ?? '')),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array<int, array{id: int, label: string, filter_date: ?string, banned_reason: string, site: string, nama: string}>
      */
     public function scrDailyBannedOptionsForSid(string $sid): array
@@ -336,6 +556,8 @@ class AutoBannedTreatmentService
         ?int $scrDailyBannedId = null,
         ?string $noHp = null,
         ?int $sidBannedLogId = null,
+        ?int $sidBannedLogWeeklyId = null,
+        ?string $bannedLogRef = null,
     ): AutoBannedUnbanRequest {
         if (! Schema::hasTable('auto_banned_unban_requests')) {
             throw ValidationException::withMessages([
@@ -347,9 +569,22 @@ class AutoBannedTreatmentService
         $week = $this->normalizer->normalizeWeek($week);
         $year = trim($year);
 
+        [$parsedType, $parsedId] = $this->parseBannedLogRef($bannedLogRef);
+        if ($parsedType === 'daily') {
+            $sidBannedLogId = $parsedId;
+        } elseif ($parsedType === 'weekly') {
+            $sidBannedLogWeeklyId = $parsedId;
+        }
+
         $context = $this->resolveSidContext($sid, $week, $year);
         if ($context === null && $sidBannedLogId !== null) {
             $context = $this->resolveSidContextFromSidBannedLog($sid, $sidBannedLogId);
+        }
+        if ($context === null && $sidBannedLogWeeklyId !== null) {
+            $context = $this->resolveSidContextFromSidBannedLogWeekly($sid, $sidBannedLogWeeklyId);
+        }
+        if ($context === null) {
+            $context = $this->resolveSidContextFromBannedLogs($sid);
         }
         if ($context === null) {
             $context = $this->resolveSidContextFromScrDailyBanned($sid, $scrDailyBannedId);
@@ -374,9 +609,16 @@ class AutoBannedTreatmentService
         }
 
         $banLog = null;
+        $banLogWeekly = null;
         $scrRow = null;
+        $scrWeeklyRow = null;
 
-        if ($sidBannedLogId !== null) {
+        if ($sidBannedLogWeeklyId !== null) {
+            $banLogWeekly = $this->resolveSidBannedLogWeeklyForSid($sid, $sidBannedLogWeeklyId);
+            if ($banLogWeekly->scr_weekly_banned_id !== null) {
+                $scrWeeklyRow = ScrWeeklyBanned::query()->find($banLogWeekly->scr_weekly_banned_id);
+            }
+        } elseif ($sidBannedLogId !== null) {
             $banLog = $this->resolveSidBannedLogForSid($sid, $sidBannedLogId);
             if ($banLog->scr_daily_banned_id !== null) {
                 $scrRow = ScrDailyBanned::query()->find($banLog->scr_daily_banned_id);
@@ -408,26 +650,33 @@ class AutoBannedTreatmentService
             $submitterDisplayName = 'Form Publik';
         }
 
-        $request = AutoBannedUnbanRequest::query()->create([
+        $requestPayload = [
             'scr_daily_banned_id' => $scrRow?->id ?? $banLog?->scr_daily_banned_id,
             'sid' => $context['sid'],
-            'karyawan' => $banLog !== null
-                ? (trim((string) ($banLog->nama ?? '')) ?: ($context['karyawan'] !== '' ? $context['karyawan'] : $sid))
-                : ($scrRow?->{ScrDailyBannedColumns::NAMA}
-                    ? trim((string) $scrRow->{ScrDailyBannedColumns::NAMA})
-                    : ($context['karyawan'] !== '' ? $context['karyawan'] : $sid)),
-            'perusahaan' => ($banLog !== null ? trim((string) ($banLog->perusahaan ?? '')) : '')
-                ?: ($context['perusahaan'] ?: null),
-            'site_dedicated' => $banLog !== null
-                ? (trim((string) ($banLog->site_dedicated ?? '')) ?: ($context['site_dedicated'] ?: null))
-                : ($scrRow?->{ScrDailyBannedColumns::SITE}
-                    ? trim((string) $scrRow->{ScrDailyBannedColumns::SITE})
-                    : ($context['site_dedicated'] ?: null)),
-            'banned_reason' => $banLog !== null
-                ? (trim((string) ($banLog->banned_reason ?? '')) ?: ($context['banned_reason'] ?: null))
-                : ($scrRow?->{ScrDailyBannedColumns::BANNED_REASON}
-                    ? trim((string) $scrRow->{ScrDailyBannedColumns::BANNED_REASON})
-                    : ($context['banned_reason'] ?: null)),
+            'karyawan' => $banLogWeekly !== null
+                ? (trim((string) ($banLogWeekly->nama ?? '')) ?: ($context['karyawan'] !== '' ? $context['karyawan'] : $sid))
+                : ($banLog !== null
+                    ? (trim((string) ($banLog->nama ?? '')) ?: ($context['karyawan'] !== '' ? $context['karyawan'] : $sid))
+                    : ($scrRow?->{ScrDailyBannedColumns::NAMA}
+                        ? trim((string) $scrRow->{ScrDailyBannedColumns::NAMA})
+                        : ($context['karyawan'] !== '' ? $context['karyawan'] : $sid))),
+            'perusahaan' => ($banLogWeekly !== null ? trim((string) ($banLogWeekly->perusahaan ?? '')) : '')
+                ?: (($banLog !== null ? trim((string) ($banLog->perusahaan ?? '')) : '')
+                ?: ($context['perusahaan'] ?: null)),
+            'site_dedicated' => $banLogWeekly !== null
+                ? (trim((string) ($banLogWeekly->site_dedicated ?? '')) ?: ($context['site_dedicated'] ?: null))
+                : ($banLog !== null
+                    ? (trim((string) ($banLog->site_dedicated ?? '')) ?: ($context['site_dedicated'] ?: null))
+                    : ($scrRow?->{ScrDailyBannedColumns::SITE}
+                        ? trim((string) $scrRow->{ScrDailyBannedColumns::SITE})
+                        : ($context['site_dedicated'] ?: null))),
+            'banned_reason' => $banLogWeekly !== null
+                ? (trim((string) ($banLogWeekly->banned_reason ?? '')) ?: ($context['banned_reason'] ?: null))
+                : ($banLog !== null
+                    ? (trim((string) ($banLog->banned_reason ?? '')) ?: ($context['banned_reason'] ?: null))
+                    : ($scrRow?->{ScrDailyBannedColumns::BANNED_REASON}
+                        ? trim((string) $scrRow->{ScrDailyBannedColumns::BANNED_REASON})
+                        : ($context['banned_reason'] ?: null))),
             'status_banned_ref' => $context['status_banned_ref'] ?: null,
             'alasan_pengajuan' => trim($alasanPengajuan),
             'evidence_file_path' => $storedPath,
@@ -440,7 +689,13 @@ class AutoBannedTreatmentService
             'submitted_by_id' => $user?->id,
             'submitted_by_name' => $submitterDisplayName,
             'no_hp' => $this->normalizeStoredPhoneNumber($noHp),
-        ]);
+        ];
+
+        if (AutoBannedSchema::hasUnbanRequestScrWeeklyBannedColumn()) {
+            $requestPayload['scr_weekly_banned_id'] = $scrWeeklyRow?->id ?? $banLogWeekly?->scr_weekly_banned_id;
+        }
+
+        $request = AutoBannedUnbanRequest::query()->create($requestPayload);
 
         $this->syncSnapshotWorkflow($sid, $week, $year);
 
@@ -513,11 +768,136 @@ class AutoBannedTreatmentService
         $scrDailyBannedId = $banLog->scr_daily_banned_id !== null ? (int) $banLog->scr_daily_banned_id : null;
         if ($scrDailyBannedId !== null && in_array($scrDailyBannedId, AutoBannedUnbanRequest::requestedScrDailyBannedIdsForSid($sid), true)) {
             throw ValidationException::withMessages([
-                'sid_banned_log_id' => ['Riwayat banned ini sudah pernah diajukan treatment.'],
+                'banned_log_ref' => ['Riwayat banned ini sudah pernah diajukan treatment.'],
             ]);
         }
 
         return $banLog;
+    }
+
+    private function resolveSidBannedLogWeeklyForSid(string $sid, ?int $sidBannedLogWeeklyId): SidBannedLogWeekly
+    {
+        if (! AutoBannedSchema::hasSidBannedLogWeeklyTable()) {
+            throw ValidationException::withMessages([
+                'banned_log_ref' => ['Tabel riwayat banned mingguan belum tersedia.'],
+            ]);
+        }
+
+        if ($sidBannedLogWeeklyId === null) {
+            throw ValidationException::withMessages([
+                'banned_log_ref' => ['Pilih riwayat banned yang terkait.'],
+            ]);
+        }
+
+        $banLog = SidBannedLogWeekly::query()->find($sidBannedLogWeeklyId);
+        if ($banLog === null) {
+            throw ValidationException::withMessages([
+                'banned_log_ref' => ['Riwayat banned mingguan tidak ditemukan.'],
+            ]);
+        }
+
+        $logSid = strtoupper(trim((string) ($banLog->sid ?? '')));
+        if ($logSid !== $sid) {
+            throw ValidationException::withMessages([
+                'banned_log_ref' => ['Riwayat banned tidak cocok dengan SID yang dipilih.'],
+            ]);
+        }
+
+        if ($banLog->automation_status !== AutoBannedSidAutomationStatus::Success) {
+            throw ValidationException::withMessages([
+                'banned_log_ref' => ['Riwayat banned belum berhasil diproses otomasi.'],
+            ]);
+        }
+
+        $scrWeeklyBannedId = $banLog->scr_weekly_banned_id !== null ? (int) $banLog->scr_weekly_banned_id : null;
+        if ($scrWeeklyBannedId !== null && in_array($scrWeeklyBannedId, AutoBannedUnbanRequest::requestedScrWeeklyBannedIdsForSid($sid), true)) {
+            throw ValidationException::withMessages([
+                'banned_log_ref' => ['Riwayat banned ini sudah pernah diajukan treatment.'],
+            ]);
+        }
+
+        return $banLog;
+    }
+
+    /**
+     * @return array{0: ?string, 1: ?int}
+     */
+    public function parseBannedLogRef(?string $bannedLogRef): array
+    {
+        if ($bannedLogRef === null || trim($bannedLogRef) === '') {
+            return [null, null];
+        }
+
+        if (! preg_match('/^(daily|weekly)-(\d+)$/', trim($bannedLogRef), $matches)) {
+            return [null, null];
+        }
+
+        return [$matches[1], (int) $matches[2]];
+    }
+
+    public function isValidTreatmentBannedLogRef(string $sid, string $bannedLogRef): bool
+    {
+        [$type, $id] = $this->parseBannedLogRef($bannedLogRef);
+        if ($type === null || $id === null) {
+            return false;
+        }
+
+        try {
+            if ($type === 'daily') {
+                $this->resolveSidBannedLogForSid(strtoupper(trim($sid)), $id);
+            } else {
+                $this->resolveSidBannedLogWeeklyForSid(strtoupper(trim($sid)), $id);
+            }
+
+            return true;
+        } catch (ValidationException) {
+            return false;
+        }
+    }
+
+    private function latestSidBannedLogRowForSid(string $sid): ?SidBannedLog
+    {
+        if (! AutoBannedSchema::hasSidBannedLogTable()) {
+            return null;
+        }
+
+        return SidBannedLog::query()
+            ->whereRaw('UPPER(TRIM(sid)) = ?', [$sid])
+            ->orderByDesc('filter_date')
+            ->orderByDesc('completed_at')
+            ->orderByDesc('id')
+            ->first(['id', 'filter_date', 'completed_at']);
+    }
+
+    private function latestSidBannedLogWeeklyRowForSid(string $sid): ?SidBannedLogWeekly
+    {
+        if (! AutoBannedSchema::hasSidBannedLogWeeklyTable()) {
+            return null;
+        }
+
+        return SidBannedLogWeekly::query()
+            ->whereRaw('UPPER(TRIM(sid)) = ?', [$sid])
+            ->orderByDesc('filter_date')
+            ->orderByDesc('completed_at')
+            ->orderByDesc('id')
+            ->first(['id', 'filter_date', 'completed_at']);
+    }
+
+    private function bannedLogSortTimestamp(mixed $filterDate, mixed $completedAt): int
+    {
+        if ($completedAt !== null) {
+            return $completedAt instanceof \DateTimeInterface
+                ? $completedAt->getTimestamp()
+                : (int) strtotime((string) $completedAt);
+        }
+
+        if ($filterDate !== null) {
+            return $filterDate instanceof \DateTimeInterface
+                ? $filterDate->getTimestamp()
+                : (int) strtotime((string) $filterDate);
+        }
+
+        return 0;
     }
 
     public function resolveMasterSodWhatsappRedirectUrl(AutoBannedUnbanRequest $unbanRequest): ?string
