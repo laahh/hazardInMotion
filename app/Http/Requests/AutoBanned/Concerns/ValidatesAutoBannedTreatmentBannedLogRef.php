@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Requests\AutoBanned\Concerns;
 
 use App\Services\AutoBanned\AutoBannedTreatmentService;
-use Illuminate\Contracts\Validation\Validator;
 
 trait ValidatesAutoBannedTreatmentBannedLogRef
 {
@@ -19,6 +18,21 @@ trait ValidatesAutoBannedTreatmentBannedLogRef
                 'required',
                 'string',
                 'regex:/^(daily|weekly)-\d+$/',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $sid = strtoupper(trim((string) $this->input('sid', '')));
+                    $bannedLogRef = trim((string) $value);
+
+                    if ($sid === '' || $bannedLogRef === '') {
+                        return;
+                    }
+
+                    /** @var AutoBannedTreatmentService $treatmentService */
+                    $treatmentService = app(AutoBannedTreatmentService::class);
+
+                    if (! $treatmentService->isValidTreatmentBannedLogRef($sid, $bannedLogRef)) {
+                        $fail('Riwayat banned tidak valid untuk SID ini atau sudah pernah diajukan.');
+                    }
+                },
             ],
         ];
     }
@@ -32,31 +46,5 @@ trait ValidatesAutoBannedTreatmentBannedLogRef
             'banned_log_ref.required' => 'Pilih riwayat banned yang terkait.',
             'banned_log_ref.regex' => 'Riwayat banned tidak valid.',
         ];
-    }
-
-    protected function withValidator(Validator $validator): void
-    {
-        $validator->after(function (Validator $validator): void {
-            if ($validator->errors()->has('banned_log_ref')) {
-                return;
-            }
-
-            $sid = strtoupper(trim((string) $this->input('sid', '')));
-            $bannedLogRef = trim((string) $this->input('banned_log_ref', ''));
-
-            if ($sid === '' || $bannedLogRef === '') {
-                return;
-            }
-
-            /** @var AutoBannedTreatmentService $treatmentService */
-            $treatmentService = app(AutoBannedTreatmentService::class);
-
-            if (! $treatmentService->isValidTreatmentBannedLogRef($sid, $bannedLogRef)) {
-                $validator->errors()->add(
-                    'banned_log_ref',
-                    'Riwayat banned tidak valid untuk SID ini atau sudah pernah diajukan.',
-                );
-            }
-        });
     }
 }
