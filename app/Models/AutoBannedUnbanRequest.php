@@ -68,7 +68,8 @@ class AutoBannedUnbanRequest extends Model
     }
 
     /**
-     * scr_daily_banned_id yang sudah pernah diajukan treatment untuk SID ini.
+     * scr_daily_banned_id yang masih memblokir pengajuan ulang (pending / approved).
+     * Pengajuan ditolak tidak dihitung agar SID dapat mengajukan kembali.
      *
      * @return array<int, int>
      */
@@ -82,6 +83,10 @@ class AutoBannedUnbanRequest extends Model
         return static::query()
             ->whereRaw('UPPER(TRIM(sid)) = ?', [$sid])
             ->whereNotNull('scr_daily_banned_id')
+            ->whereIn('status', [
+                AutoBannedUnbanStatus::Pending,
+                AutoBannedUnbanStatus::Approved,
+            ])
             ->pluck('scr_daily_banned_id')
             ->map(static fn ($id): int => (int) $id)
             ->unique()
@@ -90,7 +95,8 @@ class AutoBannedUnbanRequest extends Model
     }
 
     /**
-     * scr_weekly_banned_id yang sudah pernah diajukan treatment untuk SID ini.
+     * scr_weekly_banned_id yang masih memblokir pengajuan ulang (pending / approved).
+     * Pengajuan ditolak tidak dihitung agar SID dapat mengajukan kembali.
      *
      * @return array<int, int>
      */
@@ -108,6 +114,10 @@ class AutoBannedUnbanRequest extends Model
         return static::query()
             ->whereRaw('UPPER(TRIM(sid)) = ?', [$sid])
             ->whereNotNull('scr_weekly_banned_id')
+            ->whereIn('status', [
+                AutoBannedUnbanStatus::Pending,
+                AutoBannedUnbanStatus::Approved,
+            ])
             ->pluck('scr_weekly_banned_id')
             ->map(static fn ($id): int => (int) $id)
             ->unique()
