@@ -388,6 +388,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('supervisory-alert-log/export', [\App\Http\Controllers\SupervisoryAlertLogController::class, 'exportExcel'])->name('supervisory-alert-log.export');
     Route::get('supervisory-alert-log/data', [\App\Http\Controllers\SupervisoryAlertLogController::class, 'getData'])->name('supervisory-alert-log.data');
     Route::get('supervisory-alert-log/data-mobility', [\App\Http\Controllers\SupervisoryAlertLogController::class, 'getDataMobility'])->name('supervisory-alert-log.data-mobility');
+    Route::get('supervisory-alert-log/data-critical-area', [\App\Http\Controllers\SupervisoryAlertLogController::class, 'getDataCriticalArea'])->name('supervisory-alert-log.data-critical-area');
     Route::get('supervisory-alert-log/{id}/detail', [\App\Http\Controllers\SupervisoryAlertLogController::class, 'getDetail'])->name('supervisory-alert-log.detail');
     Route::get('cctv-data-pja-cctv-import', [CctvDataController::class, 'importPjaCctvForm'])->name('cctv-data.import-pja-cctv-form');
     Route::post('cctv-data-pja-cctv-import', [CctvDataController::class, 'importPjaCctv'])->name('cctv-data.import-pja-cctv');

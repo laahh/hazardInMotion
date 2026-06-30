@@ -1,8 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Models\SupervisoryAlertLog;
+use App\Models\SupervisoryCriticalAreaAlertLog;
 use App\Support\SpreadsheetExporter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -130,6 +133,66 @@ class SupervisoryAlertLogController extends Controller
                 'updated_at' => $log->updated_at ? $log->updated_at->format('d/m/Y H:i') : null,
             ],
         ]);
+    }
+
+    /**
+     * Data untuk tab Alert Critical Area (DOP area kritis tanpa observasi).
+     */
+    public function getDataCriticalArea(Request $request)
+    {
+        try {
+            $query = SupervisoryCriticalAreaAlertLog::query()
+                ->with(['dailyOperationPlan:id,pekerjaan,unit_id,perusahaan,lokasi,detail_lokasi,tanggal'])
+                ->select(['id', 'tanggal', 'dop_id', 'has_observasi', 'status_intervensi', 'temuan', 'dop_snapshot', 'updated_at']);
+
+            if ($request->filled('tanggal')) {
+                $query->whereDate('tanggal', $request->tanggal);
+            }
+            if ($request->filled('tanggal_from') && $request->filled('tanggal_to')) {
+                $query->whereBetween('tanggal', [$request->tanggal_from, $request->tanggal_to]);
+            }
+
+            $rows = $query->orderByDesc('tanggal')->orderByDesc('id')->get();
+
+            $data = $rows->map(function (SupervisoryCriticalAreaAlertLog $row) {
+                $snapshot = $row->dop_snapshot ?? [];
+                $dop = $row->dailyOperationPlan;
+
+                return [
+                    'id' => $row->id,
+                    'tanggal' => $row->tanggal ? $row->tanggal->format('d/m/Y') : '-',
+                    'tanggal_raw' => $row->tanggal ? $row->tanggal->format('Y-m-d') : null,
+                    'dop_id' => $row->dop_id,
+                    'nama_pekerjaan' => $snapshot['pekerjaan'] ?? $dop?->pekerjaan ?? '-',
+                    'lokasi' => $snapshot['lokasi'] ?? $dop?->lokasi ?? '-',
+                    'detail_lokasi' => $snapshot['detail_lokasi'] ?? $dop?->detail_lokasi ?? '-',
+                    'unit_id' => $snapshot['unit_id'] ?? $dop?->unit_id ?? '-',
+                    'perusahaan' => $snapshot['perusahaan'] ?? $dop?->perusahaan ?? '-',
+                    'temuan' => $row->temuan ?? 'Belum ada observasi',
+                    'has_observasi' => $row->has_observasi,
+                    'status_intervensi' => $row->status_intervensi,
+                    'status_intervensi_label' => $row->status_intervensi === SupervisoryCriticalAreaAlertLog::STATUS_SUDAH_DI_INTERVENSI
+                        ? 'Sudah diintervensi'
+                        : 'Belum diintervensi',
+                    'updated_at' => $row->updated_at ? $row->updated_at->format('d/m/Y H:i') : '-',
+                ];
+            })->values()->toArray();
+
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+                'total' => count($data),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('SupervisoryAlertLogController getDataCriticalArea: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memuat data Critical Area.',
+                'data' => [],
+                'total' => 0,
+            ], 500);
+        }
     }
 
     /**

@@ -161,16 +161,39 @@
 
                 {{-- Tab 3: Alert Critical Area --}}
                 <div class="tab-pane fade" id="critical-area" role="tabpanel">
+                    <div class="card filter-card mb-4 border">
+                        <div class="card-body">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-3">
+                                    <label class="form-label fw-semibold">Dari Tanggal</label>
+                                    <input type="date" id="filterCriticalAreaFrom" class="form-control" value="2026-06-01">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label fw-semibold">Sampai Tanggal</label>
+                                    <input type="date" id="filterCriticalAreaTo" class="form-control" value="2026-06-30">
+                                </div>
+                                <div class="col-md-3">
+                                    <button type="button" id="btnApplyCriticalAreaFilter" class="btn btn-primary w-100">
+                                        <i class="material-icons-outlined align-middle me-1" style="font-size:18px;">filter_alt</i> Filter
+                                    </button>
+                                </div>
+                                <div class="col-md-3">
+                                    <button type="button" id="btnResetCriticalAreaFilter" class="btn btn-outline-secondary w-100">Reset</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div id="criticalAreaTableWrap" class="table-responsive d-none">
                         <table id="criticalAreaTable" class="table table-hover table-striped" style="width:100%">
                             <thead>
                                 <tr>
-                                    <th>Kode IKK</th>
-                                    <th>Jenis IJK</th>
+                                    <th>Tanggal</th>
+                                    <th>ID DOP</th>
                                     <th>Nama Pekerjaan</th>
-                                    <th>Site</th>
-                                    <th>Status Matriks</th>
-                                    <th>Status Pekerjaan</th>
+                                    <th>Lokasi</th>
+                                    <th>Unit / Site</th>
+                                    <th>Temuan</th>
+                                    <th>Status Intervensi</th>
                                     <th class="text-end">Aksi</th>
                                 </tr>
                             </thead>
@@ -179,11 +202,11 @@
                     </div>
                     <div id="criticalAreaEmpty" class="empty-state d-none">
                         <i class="material-icons-outlined" style="font-size: 48px;">check_circle</i>
-                        <p class="mt-2 mb-0">Tidak ada alert Critical Area (semua IKK sudah ada IPK/OKK).</p>
+                        <p class="mt-2 mb-0">Tidak ada alert Critical Area untuk periode yang dipilih.</p>
                     </div>
                     <div id="criticalAreaLoading" class="empty-state">
                         <div class="spinner-border spinner-border-sm text-primary"></div>
-                        <p class="mt-2 mb-0">Memuat data IKK...</p>
+                        <p class="mt-2 mb-0">Memuat data Critical Area...</p>
                     </div>
                 </div>
 
@@ -539,53 +562,77 @@ $(document).ready(function() {
         });
     });
 
-    // Tab Critical Area: load IKK dari full-maps API
-    $('button[data-bs-target="#critical-area"]').on('shown.bs.tab', function() {
-        if ($('#criticalAreaTableBody').data('loaded')) return;
+    // Tab Critical Area: load alert DOP area kritis
+    function loadCriticalAreaData(forceReload) {
+        if (!forceReload && $('#criticalAreaTableBody').data('loaded')) return;
         $('#criticalAreaLoading').removeClass('d-none');
         $('#criticalAreaTableWrap').addClass('d-none');
         $('#criticalAreaEmpty').addClass('d-none');
-        $.get("{{ route('full-maps.api.ikk-for-controlroom-sidebar') }}").done(function(res) {
+
+        var params = {};
+        var from = $('#filterCriticalAreaFrom').val();
+        var to = $('#filterCriticalAreaTo').val();
+        if (from) params.tanggal_from = from;
+        if (to) params.tanggal_to = to;
+
+        $.get("{{ route('supervisory-alert-log.data-critical-area') }}", params).done(function(res) {
             $('#criticalAreaLoading').addClass('d-none');
             $('#criticalAreaTableBody').data('loaded', true);
             var data = (res.success && res.data) ? res.data : [];
             if (data.length === 0) {
                 $('#criticalAreaEmpty').removeClass('d-none');
             } else {
-                var badge = function(s) {
-                    if (s === 'Merah') return '<span class="badge bg-danger">Merah</span>';
-                    if (s === 'Kuning') return '<span class="badge bg-warning text-dark">Kuning</span>';
-                    return '<span class="badge bg-secondary">' + escapeHtml(s || '-') + '</span>';
+                var intervensiBadge = function(s) {
+                    if (s === 'sudah_di_intervensi') return '<span class="badge bg-success">Sudah diintervensi</span>';
+                    return '<span class="badge bg-warning text-dark">Belum diintervensi</span>';
+                };
+                var temuanBadge = function(t) {
+                    return '<span class="badge bg-danger">' + escapeHtml(t || 'Belum ada observasi') + '</span>';
                 };
                 var rows = data.map(function(r) {
-                    var dopmData = JSON.stringify({
-                        kode_ikk: r.code || '',
-                        tanggal_dop: r.tanggal_dop || '{{ now()->format("Y-m-d") }}',
-                        nama_pekerjaan: r.nama_pekerjaan || '',
-                        jenis_ijin_kerja_khusus: r.jenis_ijin_kerja_khusus || '',
-                        site: r.site || '',
-                        location_name: r.location_name || r.lokasi || '',
-                        location_detail_name: r.location_detail_name || '',
-                        nama_layer_1: r.nama_layer_1 || '',
-                        nama_layer_2: r.nama_layer_2 || '',
-                        nama_layer_3: r.nama_layer_3 || '',
-                        nama_layer_4: r.nama_layer_4 || '',
-                        sid_layer_1: r.sid_layer_1 || '',
-                        sid_layer_2: r.sid_layer_2 || '',
-                        sid_layer_3: r.sid_layer_3 || '',
-                        sid_layer_4: r.sid_layer_4 || '',
-                        ra_pjo_name: r.ra_pjo_name || ''
-                    });
-                    var btn = '<button type="button" class="btn btn-sm btn-outline-warning btn-intervensi-dopm" data-dopm=\'' + escapeHtml(dopmData) + '\' title="Intervensi DOPM"><i class="material-icons-outlined me-1" style="font-size:16px;vertical-align:middle;">campaign</i> Intervensi</button>';
-                    return '<tr><td>' + escapeHtml(r.code || '-') + '</td><td>' + escapeHtml(r.jenis_ijin_kerja_khusus || '-') + '</td><td>' + escapeHtml(r.nama_pekerjaan || '-') + '</td><td>' + escapeHtml(r.site || '-') + '</td><td>' + badge(r.status_matriks) + '</td><td>' + escapeHtml(r.status_pekerjaan || '-') + '</td><td class="text-end">' + btn + '</td></tr>';
+                    var lokasiText = [r.lokasi, r.detail_lokasi].filter(Boolean).join(' / ');
+                    var unitSite = [r.unit_id, r.perusahaan].filter(Boolean).join(' — ');
+                    var btn = '';
+                    if (r.status_intervensi !== 'sudah_di_intervensi') {
+                        var lokParam = (r.detail_lokasi || r.lokasi || '').toString();
+                        btn = '<button type="button" class="btn btn-sm btn-outline-success btn-intervensi" data-lokasi="' + escapeHtml(lokParam) + '" title="Intervensi"><i class="material-icons-outlined me-1" style="font-size:16px;vertical-align:middle;">campaign</i> Intervensi</button>';
+                    } else {
+                        btn = '<span class="text-muted small">—</span>';
+                    }
+                    return '<tr>'
+                        + '<td>' + escapeHtml(r.tanggal || '-') + '</td>'
+                        + '<td>' + escapeHtml(String(r.dop_id || '-')) + '</td>'
+                        + '<td>' + escapeHtml(r.nama_pekerjaan || '-') + '</td>'
+                        + '<td>' + escapeHtml(lokasiText || '-') + '</td>'
+                        + '<td>' + escapeHtml(unitSite || '-') + '</td>'
+                        + '<td>' + temuanBadge(r.temuan) + '</td>'
+                        + '<td>' + intervensiBadge(r.status_intervensi) + '</td>'
+                        + '<td class="text-end">' + btn + '</td>'
+                        + '</tr>';
                 }).join('');
                 $('#criticalAreaTableBody').html(rows);
                 $('#criticalAreaTableWrap').removeClass('d-none');
             }
         }).fail(function() {
             $('#criticalAreaLoading').addClass('d-none');
-            $('#criticalAreaEmpty').removeClass('d-none').find('p').text('Gagal memuat data IKK.');
+            $('#criticalAreaEmpty').removeClass('d-none').find('p').text('Gagal memuat data Critical Area.');
         });
+    }
+
+    $('button[data-bs-target="#critical-area"]').on('shown.bs.tab', function() {
+        loadCriticalAreaData(false);
+    });
+
+    $('#btnApplyCriticalAreaFilter').on('click', function() {
+        $('#criticalAreaTableBody').data('loaded', false);
+        loadCriticalAreaData(true);
+    });
+
+    $('#btnResetCriticalAreaFilter').on('click', function() {
+        $('#filterCriticalAreaFrom').val('2026-06-01');
+        $('#filterCriticalAreaTo').val('2026-06-30');
+        $('#criticalAreaTableBody').data('loaded', false);
+        loadCriticalAreaData(true);
     });
 
     // Tab Probability: load PJA dari maps API
