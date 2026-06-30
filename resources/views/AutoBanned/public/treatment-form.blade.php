@@ -160,12 +160,7 @@
          </span>
          <h1>Form Bukti Treatment Banned</h1>
          <p class="lead">Isi formulir ini jika SID Anda terbanned dan sudah melakukan perbaikan. Lampirkan bukti (foto/dokumen) agar tim Safety dapat memproses.</p>
-         @if($periodLabel !== '')
-         <div class="period-pill">
-            <!-- <span class="material-symbols-outlined" style="font-size:16px">calendar_month</span> -->
-          
-         </div>
-         @endif
+       
       </div>
    </div>
 
