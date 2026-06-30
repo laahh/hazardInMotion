@@ -6,6 +6,7 @@ namespace Database\Seeders;
 
 use App\Models\DailyOperationPlan;
 use App\Models\SupervisoryCriticalAreaAlertLog;
+use App\Services\SistemRoster\PlanningSiteService;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 
@@ -77,11 +78,13 @@ class SupervisoryCriticalAreaAlertLogSeeder extends Seeder
 
             foreach (self::DOP_TEMPLATES as $template) {
                 $dopId = $dopIds[$template['id']];
+                $site = $this->resolveRandomSite($tanggal, (int) $template['id']);
 
                 $snapshot = [
                     'id' => $dopId,
                     'pekerjaan' => $template['pekerjaan'],
-                    'unit_id' => $template['unit_id'],
+                    'site' => $site,
+                    'unit_id' => $site,
                     'perusahaan' => $template['perusahaan'],
                     'lokasi' => $template['lokasi'],
                     'detail_lokasi' => $template['detail_lokasi'],
@@ -149,5 +152,16 @@ class SupervisoryCriticalAreaAlertLogSeeder extends Seeder
         }
 
         return $map;
+    }
+
+    /**
+     * Site acak deterministik dari semua site sistem (reproducible saat re-seed).
+     */
+    private function resolveRandomSite(string $tanggal, int $templateId): string
+    {
+        $sites = PlanningSiteService::FILTER_SITES;
+        $index = abs(crc32($tanggal . '|' . $templateId)) % count($sites);
+
+        return $sites[$index];
     }
 }

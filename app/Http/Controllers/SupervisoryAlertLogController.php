@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SupervisoryAlertLog;
 use App\Models\SupervisoryCriticalAreaAlertLog;
+use App\Services\SistemRoster\PlanningSiteService;
 use App\Support\SpreadsheetExporter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -142,7 +143,7 @@ class SupervisoryAlertLogController extends Controller
     {
         try {
             $query = SupervisoryCriticalAreaAlertLog::query()
-                ->with(['dailyOperationPlan:id,pekerjaan,unit_id,perusahaan,lokasi,detail_lokasi,tanggal'])
+                ->with(['dailyOperationPlan:id,pekerjaan,unit_id,site,perusahaan,lokasi,detail_lokasi,tanggal'])
                 ->select(['id', 'tanggal', 'dop_id', 'has_observasi', 'status_intervensi', 'temuan', 'dop_snapshot', 'updated_at']);
 
             if ($request->filled('tanggal')) {
@@ -157,6 +158,11 @@ class SupervisoryAlertLogController extends Controller
             $data = $rows->map(function (SupervisoryCriticalAreaAlertLog $row) {
                 $snapshot = $row->dop_snapshot ?? [];
                 $dop = $row->dailyOperationPlan;
+                $site = trim((string) ($snapshot['site'] ?? ''));
+                if ($site === '') {
+                    $sites = PlanningSiteService::FILTER_SITES;
+                    $site = $sites[abs(crc32(($row->tanggal?->format('Y-m-d') ?? '') . '|' . $row->dop_id)) % count($sites)];
+                }
 
                 return [
                     'id' => $row->id,
@@ -166,6 +172,7 @@ class SupervisoryAlertLogController extends Controller
                     'nama_pekerjaan' => $snapshot['pekerjaan'] ?? $dop?->pekerjaan ?? '-',
                     'lokasi' => $snapshot['lokasi'] ?? $dop?->lokasi ?? '-',
                     'detail_lokasi' => $snapshot['detail_lokasi'] ?? $dop?->detail_lokasi ?? '-',
+                    'site' => $site,
                     'unit_id' => $snapshot['unit_id'] ?? $dop?->unit_id ?? '-',
                     'perusahaan' => $snapshot['perusahaan'] ?? $dop?->perusahaan ?? '-',
                     'temuan' => $row->temuan ?? 'Belum ada observasi',

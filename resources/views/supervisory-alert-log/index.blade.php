@@ -191,7 +191,7 @@
                                     <th>ID DOP</th>
                                     <th>Nama Pekerjaan</th>
                                     <th>Lokasi</th>
-                                    <th>Unit / Site</th>
+                                    <th>Site</th>
                                     <th>Temuan</th>
                                     <th>Status Intervensi</th>
                                     <th class="text-end">Aksi</th>
@@ -591,7 +591,7 @@ $(document).ready(function() {
                 };
                 var rows = data.map(function(r) {
                     var lokasiText = [r.lokasi, r.detail_lokasi].filter(Boolean).join(' / ');
-                    var unitSite = [r.unit_id, r.perusahaan].filter(Boolean).join(' — ');
+                    var siteLabel = r.site || r.unit_id || '-';
                     var btn = '';
                     if (r.status_intervensi !== 'sudah_di_intervensi') {
                         var lokParam = (r.detail_lokasi || r.lokasi || '').toString();
@@ -604,7 +604,7 @@ $(document).ready(function() {
                         + '<td>' + escapeHtml(String(r.dop_id || '-')) + '</td>'
                         + '<td>' + escapeHtml(r.nama_pekerjaan || '-') + '</td>'
                         + '<td>' + escapeHtml(lokasiText || '-') + '</td>'
-                        + '<td>' + escapeHtml(unitSite || '-') + '</td>'
+                        + '<td>' + escapeHtml(siteLabel) + '</td>'
                         + '<td>' + temuanBadge(r.temuan) + '</td>'
                         + '<td>' + intervensiBadge(r.status_intervensi) + '</td>'
                         + '<td class="text-end">' + btn + '</td>'
