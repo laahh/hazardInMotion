@@ -3,7 +3,16 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\AutoBanned\AutoBannedPublicTreatmentController;
+use App\Http\Controllers\AutoBanned\AutoBannedPipelineMonitoringController;
 use Illuminate\Support\Facades\Route;
+
+Route::prefix('auto-banned')
+    ->name('auto-banned.')
+    ->middleware('throttle:60,1')
+    ->group(function (): void {
+        Route::get('/pipeline-monitoring', [AutoBannedPipelineMonitoringController::class, 'index'])
+            ->name('pipeline-monitoring.index');
+    });
 
 Route::prefix('form/pengajuan-treatment')
     ->name('auto-banned.public.treatment.')

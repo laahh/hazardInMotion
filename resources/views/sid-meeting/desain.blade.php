@@ -834,7 +834,6 @@
           <div class="no-print flex flex-col gap-2 md:flex-row">
             <button onclick="toggleCompanyInputContainer(true)" class="fab-action">+ Input Perusahaan</button>
             <button onclick="exportCompanyMasterCSV()" class="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white hover:bg-slate-800">Export Master CSV</button>
-            <button onclick="resetCompanyMaster()" class="rounded-2xl bg-red-50 px-4 py-3 text-sm font-black text-red-700 ring-1 ring-red-100 hover:bg-red-100">Reset Master</button>
           </div>
         </div>
 
@@ -1529,8 +1528,7 @@
     search: 'Cari:',
     paginate: { first: '«', last: '»', next: '›', previous: '‹' }
   };
-  let syncInFlight = false;
-  let syncQueued = false;
+  let meetingTypeRecords = [];
   let scannedEventId = getScannedEventIdFromURL();
   let selectedRecapEventId = '';
   let sitePerformanceChart = null;
@@ -1602,7 +1600,6 @@
   }
 
   function saveDB() {
-    queueDatabaseSync();
     refreshAll();
   }
 
@@ -1689,6 +1686,7 @@
             + sites.map(s => `<option value="${escapeHTML(s.name)}">${escapeHTML(s.name)}</option>`).join('');
           if (currentSite) siteSelect.value = currentSite;
         }
+        meetingTypeRecords = types;
         db.meetingTypes = types.length
           ? types.map(t => t.name)
           : getDefaultMeetingTypes();
@@ -1962,38 +1960,6 @@
     if (!fullDataLoaded) await hydrateFromDatabase(false);
   }
 
-  function buildSyncPayload() {
-    return {
-      events: db.events || [],
-      attendance: db.attendance || [],
-      companies: db.companies || [],
-      meetingTypes: db.meetingTypes || []
-    };
-  }
-
-  async function queueDatabaseSync() {
-    if (syncInFlight) {
-      syncQueued = true;
-      return;
-    }
-    syncInFlight = true;
-    try {
-      await apiFetch(`${SID_MEETING_API_BASE}/sync`, {
-        method: 'POST',
-        body: JSON.stringify(buildSyncPayload())
-      });
-    } catch (err) {
-      console.warn('Sync DB gagal:', err);
-      toast('Sinkronisasi database gagal. Coba lagi.');
-    } finally {
-      syncInFlight = false;
-      if (syncQueued) {
-        syncQueued = false;
-        queueDatabaseSync();
-      }
-    }
-  }
-
   function uid(prefix = 'ID') { return prefix + '-' + Math.random().toString(36).slice(2, 9).toUpperCase(); }
 
   function toast(message) {
@@ -2195,12 +2161,7 @@
   }
 
   function deleteEvent(id) {
-    if (!confirm('Hapus event ini beserta log absensinya?')) return;
-    db.events = db.events.filter(x => x.id !== id);
-    db.attendance = db.attendance.filter(x => x.eventId !== id);
-    if (scannedEventId === id) scannedEventId = '';
-    saveDB();
-    toast('Event dihapus');
+    toast('Penghapusan event dinonaktifkan demi keamanan data.');
   }
 
   function clearEventForm() {
@@ -3265,7 +3226,9 @@
     }
   }
 
-  function deleteAttendance(id) { if (!confirm('Hapus log absensi ini?')) return; db.attendance = db.attendance.filter(x => x.id !== id); saveDB(); toast('Log absensi dihapus'); }
+  function deleteAttendance(id) {
+    toast('Penghapusan log absensi dinonaktifkan demi keamanan data.');
+  }
 
   function renderAttendance() { return; }
 
@@ -3338,12 +3301,7 @@
   }
 
   function deleteCompany(id) {
-    const company = getCompanyMaster().find(item => item.id === id);
-    if (!company) return;
-    if (!confirm(`Hapus perusahaan ${company.name} dari master?`)) return;
-    db.companies = getCompanyMaster().filter(item => item.id !== id);
-    saveDB();
-    toast('Perusahaan dihapus dari master');
+    toast('Gunakan tombol Hapus di tabel master perusahaan (database).');
   }
 
   function clearCompanyForm() {
@@ -3355,13 +3313,7 @@
   }
 
   function toggleCompanySite(id, site, checked) {
-    const company = getCompanyMaster().find(item => item.id === id);
-    if (!company) return;
-    const sites = new Set(company.sites || []);
-    if (checked) sites.add(site); else sites.delete(site);
-    company.sites = [...sites].filter(value => SITE_MASTER.includes(value));
-    company.updatedAt = new Date().toISOString();
-    saveDB();
+    toast('Gunakan checkbox di tabel master perusahaan untuk memperbarui site.');
   }
 
   function renderCompanyMaster() {
@@ -3373,10 +3325,7 @@
   }
 
   function resetCompanyMaster() {
-    if (!confirm('Reset master perusahaan ke daftar default dan checklist semua site?')) return;
-    db.companies = getDefaultCompanyMaster();
-    saveDB();
-    toast('Master perusahaan direset ke default');
+    toast('Reset master perusahaan dinonaktifkan demi keamanan data.');
   }
 
   function exportCompanyMasterCSV() {
@@ -3423,17 +3372,26 @@
     if (willOpen) setTimeout(() => document.getElementById('newMeetingType')?.focus(), 80);
   }
 
-  function addMeetingType() {
+  async function addMeetingType() {
     const input = document.getElementById('newMeetingType');
     const value = input?.value.trim();
     if (!value) return toast('Isi nama jenis meeting terlebih dahulu');
     const types = getMeetingTypes();
     if (types.some(type => type.toLowerCase() === value.toLowerCase())) return toast('Jenis meeting sudah ada');
-    types.push(value);
-    if (input) input.value = '';
-    saveDB();
-    document.getElementById('meetingType').value = value;
-    toast('Jenis meeting berhasil ditambahkan');
+    try {
+      await apiFetch(`${SID_MEETING_API_BASE}/meeting-types`, {
+        method: 'POST',
+        body: JSON.stringify({ name: value })
+      });
+      if (input) input.value = '';
+      formOptionsLoaded = false;
+      await loadFormOptions();
+      const select = document.getElementById('meetingType');
+      if (select) select.value = value;
+      toast('Jenis meeting berhasil ditambahkan');
+    } catch (err) {
+      toast(err.message || 'Gagal menambah jenis meeting');
+    }
   }
 
   function deleteMeetingTypeByIndex(index) {
@@ -3443,26 +3401,27 @@
     deleteMeetingType(type);
   }
 
-  function deleteMeetingType(type) {
+  async function deleteMeetingType(type) {
     const normalizedType = String(type || '').trim();
     const types = getMeetingTypes();
     if (!normalizedType) return toast('Jenis meeting tidak valid');
     if (types.length <= 1) return toast('Minimal 1 jenis meeting harus tersedia');
-
-    db.meetingTypes = types.filter(item => item !== normalizedType);
-
-    const select = document.getElementById('meetingType');
-    if (select?.value === normalizedType) select.value = '';
-
-    saveDB();
-
-    const manager = document.getElementById('meetingTypeManager');
-    const icon = document.getElementById('meetingTypeManagerIcon');
-    if (manager) manager.classList.remove('hidden');
-    if (icon) icon.textContent = '−';
-
-    const usedCount = db.events.filter(ev => ev.meetingType === normalizedType).length;
-    toast(usedCount ? `Jenis meeting dihapus dari dropdown. ${usedCount} event lama tetap tersimpan.` : 'Jenis meeting dihapus dari dropdown');
+    const record = meetingTypeRecords.find(item => item.name === normalizedType);
+    if (!record?.id) return toast('Jenis meeting tidak ditemukan di server');
+    try {
+      const result = await apiFetch(`${SID_MEETING_API_BASE}/meeting-types/${record.id}`, { method: 'DELETE' });
+      formOptionsLoaded = false;
+      await loadFormOptions();
+      const select = document.getElementById('meetingType');
+      if (select?.value === normalizedType) select.value = '';
+      const manager = document.getElementById('meetingTypeManager');
+      const icon = document.getElementById('meetingTypeManagerIcon');
+      if (manager) manager.classList.remove('hidden');
+      if (icon) icon.textContent = '−';
+      toast(result.message || 'Jenis meeting berhasil dihapus/dinonaktifkan');
+    } catch (err) {
+      toast(err.message || 'Gagal menghapus jenis meeting');
+    }
   }
 
   function renderOptions() {
@@ -4717,10 +4676,12 @@
       ],
       generalIssues: []
     };
-    scannedEventId = db.events[0].id; window.location.hash = `absen=${scannedEventId}`; saveDB(); openEventRecapModal(scannedEventId); toast('Data demo berhasil dibuat. Coba input SID001 pada form absensi di modal event.');
+    scannedEventId = db.events[0].id; window.location.hash = `absen=${scannedEventId}`; openEventRecapModal(scannedEventId); toast('Data demo lokal berhasil dibuat (tidak disinkronkan ke database).');
   }
 
-  function resetAllData() { if (!confirm('Reset semua data?')) return; db = { events: [], attendance: [], companies: getDefaultCompanyMaster(), meetingTypes: getDefaultMeetingTypes() }; scannedEventId = ''; selectedRecapEventId = ''; pendingCloseEventId = ''; closePromptSnoozed = {}; window.location.hash = ''; clearEventForm(); clearAttendanceForm(); saveDB(); toast('Semua data direset dan disinkronkan ke database'); }
+  function resetAllData() {
+    toast('Reset database dinonaktifkan demi keamanan data.');
+  }
 
   function shouldPromptClose(ev, now = new Date()) {
     if (!ev || ev.manualStatus === 'Closed' || ev.closedAt || ev.manualStatus === 'Draft') return false;

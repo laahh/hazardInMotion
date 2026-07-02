@@ -22,10 +22,13 @@ class AutoBannedPipelineMonitoringController extends Controller
     {
         $filters = $this->pipelineMonitoringService->resolveFilters($request);
         $dashboard = $this->pipelineMonitoringService->buildDashboard($filters);
+        $isPublicGuest = ! auth()->check();
 
         return view('AutoBanned.pipeline-monitoring.index', [
             'navActive' => 'pipeline-monitoring',
-            'navItems' => $this->autoBannedNavItems(),
+            'navItems' => $isPublicGuest ? [] : $this->autoBannedNavItems(),
+            'programLabel' => 'Pipeline Banned → Unban',
+            'isPublicGuest' => $isPublicGuest,
             'filters' => $dashboard['filters'],
             'period' => $dashboard['period'],
             'filterOptions' => $dashboard['filterOptions'],

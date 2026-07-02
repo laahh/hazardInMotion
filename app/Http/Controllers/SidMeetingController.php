@@ -1242,6 +1242,10 @@ class SidMeetingController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /**
+     * Sinkronisasi legacy — hanya upsert, tanpa penghapusan massal event/absensi.
+     * Notulensi gunakan endpoint khusus api.events.minutes.store.
+     */
     public function apiSync(Request $request): JsonResponse
     {
         $payload = $request->validate([
@@ -1288,15 +1292,15 @@ class SidMeetingController extends Controller
                 $company = Company::query()->firstOrCreate(['name' => $name], ['is_active' => true]);
                 $sync = collect($row['sites'] ?? [])->mapWithKeys(function ($siteName) use ($siteMap): array {
                     $siteId = $siteMap[trim((string) $siteName)] ?? null;
+
                     return $siteId ? [$siteId => ['is_required' => true]] : [];
                 })->all();
                 if ($sync !== []) {
-                    $company->sites()->sync($sync);
+                    $company->sites()->syncWithoutDetaching($sync);
                 }
             }
 
             $eventIdMap = [];
-            $eventIds = [];
             foreach ($eventRows as $row) {
                 $eventCode = trim((string) ($row['code'] ?? ''));
                 if ($eventCode === '') {
@@ -1306,7 +1310,7 @@ class SidMeetingController extends Controller
                 $siteName = trim((string) ($row['site'] ?? ''));
                 $meetingTypeId = $meetingTypeMap[$meetingTypeName] ?? null;
                 $siteId = $siteMap[$siteName] ?? null;
-                if (!$meetingTypeId || !$siteId) {
+                if (! $meetingTypeId || ! $siteId) {
                     continue;
                 }
 
@@ -1338,50 +1342,12 @@ class SidMeetingController extends Controller
 
                 $clientId = (string) ($row['id'] ?? $eventCode);
                 $eventIdMap[$clientId] = $event->id;
-                $eventIds[] = $event->id;
-
-                $minutes = $row['minutes'] ?? null;
-                if (is_array($minutes)) {
-                    $minute = EventMinute::query()->updateOrCreate(
-                        ['event_id' => $event->id],
-                        [
-                            'title' => $minutes['meetingTitle'] ?? null,
-                            'notulis' => $minutes['notulis'] ?? null,
-                            'location' => $minutes['location'] ?? null,
-                            'updated_by' => auth()->id(),
-                        ]
-                    );
-                    $minute->issues()->delete();
-                    foreach (['enviro' => 'enviroIssues', 'safety' => 'safetyIssues', 'general' => 'generalIssues'] as $section => $key) {
-                        foreach (($minutes[$key] ?? []) as $index => $issue) {
-                            $note = trim((string) ($issue['note'] ?? ''));
-                            if ($note === '') {
-                                continue;
-                            }
-                            $minute->issues()->create([
-                                'section' => $section,
-                                'nomor' => (int) ($issue['nomor'] ?? ($index + 1)),
-                                'catatan_meeting' => $note,
-                                'issued_by' => $issue['issuedBy'] ?? null,
-                                'pic' => $issue['pic'] ?? null,
-                                'due_date' => $issue['dueDate'] ?? null,
-                                'status' => $issue['status'] ?? 'Open',
-                                'keterangan' => $issue['remark'] ?? null,
-                            ]);
-                        }
-                    }
-                }
             }
 
-            if ($eventIds !== []) {
-                Event::query()->whereNotIn('id', $eventIds)->delete();
-            }
-
-            Attendance::query()->delete();
             foreach ($attendanceRows as $row) {
                 $clientEventId = (string) ($row['eventId'] ?? '');
                 $eventId = $eventIdMap[$clientEventId] ?? (is_numeric($clientEventId) ? (int) $clientEventId : null);
-                if (!$eventId) {
+                if (! $eventId) {
                     continue;
                 }
 
@@ -1402,19 +1368,68 @@ class SidMeetingController extends Controller
                     ]
                 );
 
-                Attendance::query()->create([
-                    'event_id' => $eventId,
-                    'employee_id' => $employee->id,
-                    'kode_sid' => $employee->kode_sid,
-                    'nama_snapshot' => $row['name'] ?? $employee->nama,
-                    'perusahaan_snapshot' => $companyName,
-                    'jabatan_struktural_snapshot' => $row['structuralPosition'] ?? $employee->jabatan_struktural,
-                    'jabatan_fungsional_snapshot' => $row['functionalPosition'] ?? $employee->jabatan_fungsional,
-                    'attended_at' => $row['timestamp'] ?? now()->toDateTimeString(),
-                    'input_method' => strtolower((string) ($row['source'] ?? 'manual')) === 'qr' ? 'qr' : 'manual',
-                ]);
+                Attendance::query()->updateOrCreate(
+                    [
+                        'event_id' => $eventId,
+                        'employee_id' => $employee->id,
+                    ],
+                    [
+                        'kode_sid' => $employee->kode_sid,
+                        'nama_snapshot' => $row['name'] ?? $employee->nama,
+                        'perusahaan_snapshot' => $companyName,
+                        'jabatan_struktural_snapshot' => $row['structuralPosition'] ?? $employee->jabatan_struktural,
+                        'jabatan_fungsional_snapshot' => $row['functionalPosition'] ?? $employee->jabatan_fungsional,
+                        'attended_at' => $row['timestamp'] ?? now()->toDateTimeString(),
+                        'input_method' => strtolower((string) ($row['source'] ?? 'manual')) === 'qr' ? 'qr' : 'manual',
+                    ]
+                );
             }
         });
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Sinkronisasi aman selesai. Tidak ada penghapusan massal data.',
+        ]);
+    }
+
+    public function apiStoreMeetingType(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'name' => 'required|string|max:255',
+        ]);
+
+        $meetingType = MeetingType::query()->firstOrCreate(
+            ['name' => trim($payload['name'])],
+            ['is_active' => true]
+        );
+
+        if (! $meetingType->is_active) {
+            $meetingType->update(['is_active' => true]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'meetingType' => [
+                'id' => $meetingType->id,
+                'name' => $meetingType->name,
+            ],
+        ]);
+    }
+
+    public function apiDestroyMeetingType(MeetingType $meetingType): JsonResponse
+    {
+        $inUse = Event::query()->where('meeting_type_id', $meetingType->id)->exists();
+        if ($inUse) {
+            $meetingType->update(['is_active' => false]);
+
+            return response()->json([
+                'ok' => true,
+                'deactivated' => true,
+                'message' => 'Jenis meeting dinonaktifkan karena masih dipakai event.',
+            ]);
+        }
+
+        $meetingType->delete();
 
         return response()->json(['ok' => true]);
     }

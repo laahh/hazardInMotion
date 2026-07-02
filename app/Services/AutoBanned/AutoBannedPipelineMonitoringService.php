@@ -11,6 +11,7 @@ use App\Models\AutoBannedUnbanRequest;
 use App\Models\SidBannedLog;
 use App\Models\SidUnbanLog;
 use App\Support\AutoBanned\AutoBannedSchema;
+use App\Support\AutoBanned\AutoBannedSiteOptions;
 use App\Support\AutoBanned\ScrDailyBannedColumns;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
@@ -167,17 +168,7 @@ class AutoBannedPipelineMonitoringService
         }
 
         if (($filters['site'] ?? '') !== '') {
-            $site = $filters['site'];
-            $query->where(function (Builder $inner) use ($site): void {
-                $inner->where('site_dedicated', $site);
-
-                if (AutoBannedSchema::hasScrDailyBannedTable()) {
-                    $inner->orWhereHas(
-                        'scrDailyBanned',
-                        fn (Builder $scr) => $scr->where(ScrDailyBannedColumns::SITE, $site),
-                    );
-                }
-            });
+            AutoBannedSiteOptions::applyBannedLogSiteFilter($query, $filters['site']);
         }
 
         if (($filters['perusahaan'] ?? '') !== '') {
@@ -608,7 +599,7 @@ class AutoBannedPipelineMonitoringService
             ->map(static fn ($date) => $date instanceof Carbon ? $date->toDateString() : (string) $date)
             ->values();
 
-        $sites = SidBannedLog::query()
+        $sitesFromDb = SidBannedLog::query()
             ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
             ->whereNotNull('site_dedicated')
             ->where('site_dedicated', '!=', '')
@@ -617,6 +608,8 @@ class AutoBannedPipelineMonitoringService
             ->orderBy('site_dedicated')
             ->pluck('site_dedicated')
             ->values();
+
+        $sites = AutoBannedSiteOptions::mergeFilterOptions($sitesFromDb);
 
         $perusahaan = SidBannedLog::query()
             ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)

@@ -80,6 +80,7 @@
    $periodLabel = !empty($period['filter_date'])
       ? \Carbon\Carbon::parse($period['filter_date'])->format('d M Y')
       : 'Semua Tanggal';
+   $siteFilterLabel = ($filters['site'] ?? '') !== '' ? ($filters['site']) : '';
    $stats = $stats ?? [];
    $pipelineRows = $pipelineRows ?? collect();
    $tableAvailable = $tableAvailable ?? false;
@@ -113,6 +114,9 @@
          <p>
             Monitoring end-to-end: siapa sudah di-banned, status pengajuan treatment, approval SOD, dan target unban.
             &bull; {{ $periodLabel }}
+            @if($siteFilterLabel !== '')
+            &bull; Site: <strong>{{ $siteFilterLabel }}</strong>
+            @endif
          </p>
       </div>
       <div class="flex flex-col items-end gap-2.5">
@@ -287,7 +291,7 @@
                      @if(!empty($row['hsctNotifiedAt']))
                      <div class="text-[10px] text-emerald-700">HSCT: {{ $row['hsctNotifiedAt'] }}</div>
                      @endif
-                     @if(!empty($row['requestId']))
+                     @if(!empty($row['requestId']) && !($isPublicGuest ?? false))
                      <a href="{{ route('auto-banned.sod-verification.index', ['q' => $row['sid'] ?? '']) }}" class="text-[10px] text-primary font-semibold hover:underline">Lihat di SOD →</a>
                      @endif
                      @else

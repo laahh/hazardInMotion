@@ -33,6 +33,8 @@ Route::middleware(['auth'])->prefix('sid-meeting')->name('sid-meeting.')->group(
     Route::post('/api/companies/{company}/sites', [SidMeetingController::class, 'apiToggleCompanySite'])->name('api.companies.sites.toggle');
     Route::post('/api/events', [SidMeetingController::class, 'apiStoreEvent'])->name('api.events.store');
     Route::post('/api/companies', [SidMeetingController::class, 'apiStoreCompany'])->name('api.companies.store');
+    Route::post('/api/meeting-types', [SidMeetingController::class, 'apiStoreMeetingType'])->name('api.meeting-types.store');
+    Route::delete('/api/meeting-types/{meetingType}', [SidMeetingController::class, 'apiDestroyMeetingType'])->name('api.meeting-types.destroy');
     Route::post('/api/attendance', [SidMeetingController::class, 'apiStoreAttendance'])->name('api.attendance.store');
     Route::post('/api/events/{event}/minutes', [SidMeetingController::class, 'apiSaveMinutes'])->name('api.events.minutes.store');
     Route::post('/api/sync', [SidMeetingController::class, 'apiSync'])->name('api.sync');
