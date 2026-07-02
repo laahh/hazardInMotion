@@ -27,6 +27,11 @@ trait ProvidesAutoBannedLayout
                 'label' => 'Monitoring Un Banned',
                 'route' => 'auto-banned.unban-monitoring.index',
             ],
+            [
+                'key' => 'pipeline-monitoring',
+                'label' => 'Pipeline Banned → Unban',
+                'route' => 'auto-banned.pipeline-monitoring.index',
+            ],
             // [
             //     'key' => 'hsct-email',
             //     'label' => 'Riwayat Email HSECT',

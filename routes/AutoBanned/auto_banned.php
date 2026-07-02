@@ -10,6 +10,7 @@ use App\Http\Controllers\AutoBanned\AutoBannedMasterSodController;
 use App\Http\Controllers\AutoBanned\AutoBannedSodVerificationController;
 use App\Http\Controllers\AutoBanned\AutoBannedTableauFlowHistoryController;
 use App\Http\Controllers\AutoBanned\AutoBannedTreatmentController;
+use App\Http\Controllers\AutoBanned\AutoBannedPipelineMonitoringController;
 use App\Http\Controllers\AutoBanned\AutoBannedUnbanMonitoringController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,6 +22,7 @@ Route::middleware(['auth'])
         Route::get('/banned-monitoring', [AutoBannedController::class, 'bannedMonitoring'])->name('banned-monitoring.index');
         Route::post('/banned-monitoring/send-email', [AutoBannedController::class, 'sendDailyBannedEmail'])->name('banned-monitoring.send-email');
         Route::get('/unban-monitoring', [AutoBannedUnbanMonitoringController::class, 'index'])->name('unban-monitoring.index');
+        Route::get('/pipeline-monitoring', [AutoBannedPipelineMonitoringController::class, 'index'])->name('pipeline-monitoring.index');
         Route::get('/hsct-email', [AutoBannedHsctEmailController::class, 'index'])->name('hsct-email.index');
         Route::get('/tableau-flow-history', [AutoBannedTableauFlowHistoryController::class, 'index'])->name('tableau-flow-history.index');
         Route::post('/hsct-email/initial', [AutoBannedHsctEmailController::class, 'sendInitial'])->name('hsct-email.initial');
