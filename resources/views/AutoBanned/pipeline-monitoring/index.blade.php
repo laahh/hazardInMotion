@@ -36,12 +36,29 @@
    .ab-pipeline-table tbody tr.is-unbanned td { background: #f0fdf4; }
    .ab-pipeline-kpi-note { font-size: 11px; color: #888; margin: -12px 0 20px; }
    .ab-search-wrap {
-      display: flex; align-items: center; gap: .5rem;
+      display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
       border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; padding: .5rem .75rem;
    }
-   .ab-search-wrap input {
-      border: 0; outline: none; font-size: 12px; width: 100%; min-width: 140px; background: transparent;
+   .ab-search-wrap input[type="search"],
+   .ab-search-wrap input[type="text"] {
+      border: 0; outline: none; font-size: 12px; background: transparent;
    }
+   .ab-search-wrap input[name="sid"] {
+      font-family: ui-monospace, monospace; font-weight: 700; text-transform: uppercase;
+      width: 7rem; min-width: 7rem;
+   }
+   .ab-search-wrap input[name="nama"] {
+      width: 10rem; min-width: 10rem;
+   }
+   .ab-search-btn {
+      border: 0; border-radius: 8px; background: #3952bc; color: #fff;
+      font-size: 11px; font-weight: 700; padding: .45rem .75rem; cursor: pointer;
+   }
+   .ab-search-btn:hover { opacity: .92; }
+   .ab-search-clear {
+      font-size: 11px; font-weight: 600; color: #64748b; text-decoration: none;
+   }
+   .ab-search-clear:hover { color: #3952bc; }
    @media (max-width: 1199px) {
       .ab-pipeline .dash-col-6[style*="33.333%"] { width: 50% !important; }
    }
@@ -76,28 +93,49 @@
       'site' => $filters['site'] ?? '',
       'perusahaan' => $filters['perusahaan'] ?? '',
       'pipeline_stage' => $filters['pipeline_stage'] ?? '',
+      'sid' => $filters['sid'] ?? '',
+      'nama' => $filters['nama'] ?? '',
       'q' => $filters['q'] ?? '',
    ], fn ($v) => $v !== '' && $v !== null);
+
+   $hasActiveSearch = ($filters['sid'] ?? '') !== '' || ($filters['nama'] ?? '') !== '';
 @endphp
 
 <div class="ab-phppot ab-pipeline -mt-1">
    <div class="page-top">
       <div class="min-w-0">
          <h1>Pipeline Banned → Unban</h1>
-         <p>
-            Monitoring end-to-end: siapa sudah di-banned, status pengajuan treatment, approval SOD, dan target unban.
-            &bull; {{ $periodLabel }}
-         </p>
+        
       </div>
       <div class="flex flex-col items-end gap-2.5">
-         <form method="GET" action="{{ route('auto-banned.pipeline-monitoring.index') }}" class="ab-search-wrap">
+         <form method="GET" action="{{ route('auto-banned.pipeline-monitoring.index') }}" class="ab-search-wrap" id="ab-pipeline-search-form">
             @foreach($queryBase as $key => $val)
-               @if($key !== 'q')
+               @if(!in_array($key, ['sid', 'nama', 'q'], true))
                <input type="hidden" name="{{ $key }}" value="{{ $val }}"/>
                @endif
             @endforeach
             <span class="material-symbols-outlined text-primary/70 text-lg">search</span>
-            <input type="search" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="Cari SID, nama, perusahaan…"/>
+            <input
+               type="text"
+               name="sid"
+               value="{{ $filters['sid'] ?? '' }}"
+               placeholder="SID"
+               maxlength="64"
+               autocomplete="off"
+            />
+            <span class="text-[#cbd5e1]">|</span>
+            <input
+               type="search"
+               name="nama"
+               value="{{ $filters['nama'] ?? '' }}"
+               placeholder="Nama karyawan"
+               maxlength="255"
+               autocomplete="off"
+            />
+            <button type="submit" class="ab-search-btn">Cari</button>
+            @if($hasActiveSearch)
+            <a href="{{ route('auto-banned.pipeline-monitoring.index', collect($queryBase)->except(['sid', 'nama', 'q'])->all()) }}" class="ab-search-clear">Reset</a>
+            @endif
          </form>
          @include('AutoBanned.partials.pipeline-filter-bar', [
             'filters' => $filters,
@@ -107,12 +145,7 @@
       </div>
    </div>
 
-   @if(!$tableAvailable)
-   <div class="dash-card card-body text-sm text-[#888] mb-3">
-      Tabel <code>sid_banned_log</code> belum tersedia.
-   </div>
-   @else
-
+  
    <p class="ab-pipeline-kpi-note">
       Sumber: <code>sid_banned_log</code> (SUCCESS) + <code>auto_banned_unban_requests</code> + <code>sid_unban_log</code>.
       Target unban otomatis: <strong>{{ AutoBannedSlaCalculator::AUTOMATION_UNBAN_HOURS }} jam</strong> sejak waktu banned (<code>completed_at</code>).
@@ -148,7 +181,17 @@
       </div>
       <div class="card-body p-0 overflow-x-auto">
          @if($pipelineRows->isEmpty())
-         <p class="p-6 text-sm text-[#888]">Tidak ada data untuk filter yang dipilih.</p>
+         <p class="p-6 text-sm text-[#888]">
+            @if($hasActiveSearch)
+            Tidak ada data untuk SID <strong>{{ $filters['sid'] ?: '—' }}</strong>
+            @if(($filters['nama'] ?? '') !== '')
+            / nama <strong>{{ $filters['nama'] }}</strong>
+            @endif
+            . Coba kata kunci lain atau <a href="{{ route('auto-banned.pipeline-monitoring.index', collect($queryBase)->except(['sid', 'nama', 'q'])->all()) }}" class="text-primary font-semibold hover:underline">reset pencarian</a>.
+            @else
+            Tidak ada data untuk filter yang dipilih.
+            @endif
+         </p>
          @else
          <table class="ab-pipeline-table">
             <thead>
@@ -256,4 +299,20 @@
 
    @endif
 </div>
+
+@push('scripts')
+<script>
+(function () {
+   var form = document.getElementById('ab-pipeline-search-form');
+   if (!form) return;
+   var sidInput = form.querySelector('input[name="sid"]');
+   if (!sidInput) return;
+   sidInput.addEventListener('input', function () {
+      var pos = sidInput.selectionStart;
+      sidInput.value = sidInput.value.toUpperCase();
+      if (pos !== null) sidInput.setSelectionRange(pos, pos);
+   });
+})();
+</script>
+@endpush
 @endsection

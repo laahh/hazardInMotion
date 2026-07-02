@@ -1,5 +1,5 @@
 @php
-   $filters = $filters ?? ['filter_date' => '', 'site' => '', 'perusahaan' => '', 'pipeline_stage' => '', 'q' => ''];
+   $filters = $filters ?? ['filter_date' => '', 'site' => '', 'perusahaan' => '', 'pipeline_stage' => '', 'sid' => '', 'nama' => '', 'q' => ''];
    $filterOptions = $filterOptions ?? ['dates' => collect(), 'sites' => collect(), 'perusahaan' => collect(), 'pipelineStages' => collect()];
 
    $dateLabel = $filters['filter_date'] !== '' ? \Carbon\Carbon::parse($filters['filter_date'])->format('d M Y') : 'Semua Tanggal';
@@ -19,6 +19,12 @@
 @endphp
 
 <form method="GET" action="{{ route($filterRoute) }}" id="ab-pipeline-filter-form" class="flex flex-wrap items-center justify-end gap-2.5">
+   @if(($filters['sid'] ?? '') !== '')
+   <input type="hidden" name="sid" value="{{ $filters['sid'] }}"/>
+   @endif
+   @if(($filters['nama'] ?? '') !== '')
+   <input type="hidden" name="nama" value="{{ $filters['nama'] }}"/>
+   @endif
    @if(($filters['q'] ?? '') !== '')
    <input type="hidden" name="q" value="{{ $filters['q'] }}"/>
    @endif

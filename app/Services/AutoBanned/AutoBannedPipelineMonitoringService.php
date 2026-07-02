@@ -30,6 +30,8 @@ class AutoBannedPipelineMonitoringService
      *     site: string,
      *     perusahaan: string,
      *     pipeline_stage: string,
+     *     sid: string,
+     *     nama: string,
      *     q: string
      * }
      */
@@ -40,6 +42,8 @@ class AutoBannedPipelineMonitoringService
             'site' => trim((string) $request->query('site', '')),
             'perusahaan' => trim((string) $request->query('perusahaan', '')),
             'pipeline_stage' => trim((string) $request->query('pipeline_stage', '')),
+            'sid' => strtoupper(trim((string) $request->query('sid', ''))),
+            'nama' => trim((string) $request->query('nama', '')),
             'q' => trim((string) $request->query('q', '')),
         ];
     }
@@ -109,6 +113,47 @@ class AutoBannedPipelineMonitoringService
     }
 
     /**
+     * @param  Builder<SidBannedLog>  $query
+     * @param  array<string, string>  $filters
+     */
+    private function applySearchFilters(Builder $query, array $filters): void
+    {
+        $sid = strtoupper(trim((string) ($filters['sid'] ?? '')));
+        $nama = trim((string) ($filters['nama'] ?? ''));
+        $q = trim((string) ($filters['q'] ?? ''));
+
+        if ($sid !== '') {
+            $query->whereRaw('UPPER(TRIM(sid)) LIKE ?', ['%'.$sid.'%']);
+        }
+
+        if ($nama !== '') {
+            $namaTerm = '%'.$nama.'%';
+            $query->where(function (Builder $inner) use ($namaTerm): void {
+                $inner->where('nama', 'like', $namaTerm);
+
+                if (AutoBannedSchema::hasScrDailyBannedTable()) {
+                    $inner->orWhereHas(
+                        'scrDailyBanned',
+                        fn (Builder $scr) => $scr->where(ScrDailyBannedColumns::NAMA, 'like', $namaTerm),
+                    );
+                }
+            });
+        }
+
+        if ($q !== '' && $sid === '' && $nama === '') {
+            $term = '%'.$q.'%';
+            $sidTerm = '%'.strtoupper($q).'%';
+            $query->where(function (Builder $inner) use ($term, $sidTerm): void {
+                $inner->whereRaw('UPPER(TRIM(sid)) LIKE ?', [$sidTerm])
+                    ->orWhere('nama', 'like', $term)
+                    ->orWhere('nik', 'like', $term)
+                    ->orWhere('perusahaan', 'like', $term)
+                    ->orWhere('banned_reason', 'like', $term);
+            });
+        }
+    }
+
+    /**
      * @param  array<string, string>  $filters
      * @return Collection<int, SidBannedLog>
      */
@@ -139,20 +184,11 @@ class AutoBannedPipelineMonitoringService
             $query->where('perusahaan', $filters['perusahaan']);
         }
 
-        if (($filters['q'] ?? '') !== '') {
-            $term = '%'.$filters['q'].'%';
-            $query->where(function (Builder $inner) use ($term): void {
-                $inner->where('sid', 'like', $term)
-                    ->orWhere('nama', 'like', $term)
-                    ->orWhere('nik', 'like', $term)
-                    ->orWhere('perusahaan', 'like', $term)
-                    ->orWhere('banned_reason', 'like', $term);
-            });
-        }
+        $this->applySearchFilters($query, $filters);
 
         if (AutoBannedSchema::hasScrDailyBannedTable()) {
             $query->with([
-                'scrDailyBanned:id,filter_date,'.ScrDailyBannedColumns::SITE.','.ScrDailyBannedColumns::BANNED_STATUS,
+                'scrDailyBanned:id,filter_date,'.ScrDailyBannedColumns::SITE.','.ScrDailyBannedColumns::BANNED_STATUS.','.ScrDailyBannedColumns::NAMA,
             ]);
         }
 
@@ -618,6 +654,8 @@ class AutoBannedPipelineMonitoringService
             'site' => '',
             'perusahaan' => '',
             'pipeline_stage' => '',
+            'sid' => '',
+            'nama' => '',
             'q' => '',
         ];
     }
