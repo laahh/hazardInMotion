@@ -37,7 +37,12 @@
    .ab-pipeline-kpi-note { font-size: 11px; color: #888; margin: -12px 0 20px; }
    .ab-search-wrap {
       display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
-      border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; padding: .5rem .75rem;
+      border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; padding: .45rem .65rem;
+   }
+   .ab-pipeline-table-toolbar {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: .75rem; width: 100%; margin-top: .75rem; padding-top: .75rem;
+      border-top: 1px solid #f1f5f9;
    }
    .ab-search-wrap input[type="search"],
    .ab-search-wrap input[type="text"] {
@@ -111,35 +116,6 @@
          </p>
       </div>
       <div class="flex flex-col items-end gap-2.5">
-         <form method="GET" action="{{ route('auto-banned.pipeline-monitoring.index') }}" class="ab-search-wrap" id="ab-pipeline-search-form">
-            @foreach($queryBase as $key => $val)
-               @if(!in_array($key, ['sid', 'nama', 'q'], true))
-               <input type="hidden" name="{{ $key }}" value="{{ $val }}"/>
-               @endif
-            @endforeach
-            <span class="material-symbols-outlined text-primary/70 text-lg">search</span>
-            <input
-               type="text"
-               name="sid"
-               value="{{ $filters['sid'] ?? '' }}"
-               placeholder="SID"
-               maxlength="64"
-               autocomplete="off"
-            />
-            <span class="text-[#cbd5e1]">|</span>
-            <input
-               type="search"
-               name="nama"
-               value="{{ $filters['nama'] ?? '' }}"
-               placeholder="Nama karyawan"
-               maxlength="255"
-               autocomplete="off"
-            />
-            <button type="submit" class="ab-search-btn">Cari</button>
-            @if($hasActiveSearch)
-            <a href="{{ route('auto-banned.pipeline-monitoring.index', collect($queryBase)->except(['sid', 'nama', 'q'])->all()) }}" class="ab-search-clear">Reset</a>
-            @endif
-         </form>
          @include('AutoBanned.partials.pipeline-filter-bar', [
             'filters' => $filters,
             'filterOptions' => $filterOptions,
@@ -178,13 +154,54 @@
    </div>
 
    <div class="dash-card">
-      <div class="card-header flex flex-wrap items-center justify-between gap-2">
-         <h5>Daftar Pipeline ({{ $pipelineRows->count() }})</h5>
-         <div class="flex flex-wrap gap-2 text-[10px]">
-            <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'no_request'])) }}" class="ab-pipeline-badge ab-pipeline-badge--warn">Belum ajukan</a>
-            <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'request_pending'])) }}" class="ab-pipeline-badge ab-pipeline-badge--info">Pending SOD</a>
-            <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'awaiting_unban'])) }}" class="ab-pipeline-badge ab-pipeline-badge--wait">Menunggu automasi unban</a>
-            <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'overdue'])) }}" class="ab-pipeline-badge ab-pipeline-badge--danger">Lewat deadline</a>
+      <div class="card-header" style="display:block">
+         <div class="flex flex-wrap items-center justify-between gap-2">
+            <h5 style="margin:0">Daftar Pipeline ({{ $pipelineRows->count() }})</h5>
+            <div class="flex flex-wrap gap-2 text-[10px]">
+               <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'no_request'])) }}" class="ab-pipeline-badge ab-pipeline-badge--warn">Belum ajukan</a>
+               <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'request_pending'])) }}" class="ab-pipeline-badge ab-pipeline-badge--info">Pending SOD</a>
+               <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'awaiting_unban'])) }}" class="ab-pipeline-badge ab-pipeline-badge--wait">Menunggu automasi unban</a>
+               <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'overdue'])) }}" class="ab-pipeline-badge ab-pipeline-badge--danger">Lewat deadline</a>
+            </div>
+         </div>
+         <div class="ab-pipeline-table-toolbar">
+            <form method="GET" action="{{ route('auto-banned.pipeline-monitoring.index') }}" class="ab-search-wrap" id="ab-pipeline-search-form">
+               @foreach($queryBase as $key => $val)
+                  @if(!in_array($key, ['sid', 'nama', 'q'], true))
+                  <input type="hidden" name="{{ $key }}" value="{{ $val }}"/>
+                  @endif
+               @endforeach
+               <span class="material-symbols-outlined text-primary/70 text-base">search</span>
+               <input
+                  type="text"
+                  name="sid"
+                  value="{{ $filters['sid'] ?? '' }}"
+                  placeholder="Cari SID"
+                  maxlength="64"
+                  autocomplete="off"
+               />
+               <span class="text-[#cbd5e1]">|</span>
+               <input
+                  type="search"
+                  name="nama"
+                  value="{{ $filters['nama'] ?? '' }}"
+                  placeholder="Cari nama karyawan"
+                  maxlength="255"
+                  autocomplete="off"
+               />
+               <button type="submit" class="ab-search-btn">Cari</button>
+               @if($hasActiveSearch)
+               <a href="{{ route('auto-banned.pipeline-monitoring.index', collect($queryBase)->except(['sid', 'nama', 'q'])->all()) }}" class="ab-search-clear">Reset</a>
+               @endif
+            </form>
+            @if($hasActiveSearch)
+            <span class="text-[11px] text-[#64748b]">
+               Filter aktif:
+               @if(($filters['sid'] ?? '') !== '')<strong class="text-primary">{{ $filters['sid'] }}</strong>@endif
+               @if(($filters['sid'] ?? '') !== '' && ($filters['nama'] ?? '') !== '') &bull; @endif
+               @if(($filters['nama'] ?? '') !== '')<strong>{{ $filters['nama'] }}</strong>@endif
+            </span>
+            @endif
          </div>
       </div>
       <div class="card-body p-0 overflow-x-auto">
