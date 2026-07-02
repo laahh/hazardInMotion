@@ -267,6 +267,7 @@ class AutoBannedPipelineMonitoringService
                 'remainingLabel' => $deadline['remainingLabel'],
                 'isOverdue' => $deadline['isOverdue'],
                 'dueTone' => $deadline['dueTone'],
+                'bannedAtLabel' => $deadline['bannedAtLabel'] ?? '—',
             ];
         });
     }
@@ -413,43 +414,31 @@ class AutoBannedPipelineMonitoringService
         AutoBannedPipelineStage $pipeline,
         CarbonInterface $now,
     ): array {
-        if ($pipeline === AutoBannedPipelineStage::Unbanned && $unbanLog?->completed_at !== null) {
-            return [
-                'nextActionLabel' => 'Selesai — sudah di-unban',
-                'dueAt' => $unbanLog->completed_at,
-                'dueAtLabel' => $unbanLog->completed_at->format('d M Y H:i'),
-                'remainingLabel' => '—',
-                'isOverdue' => false,
-                'dueTone' => 'ok',
-            ];
-        }
-
-        $dueAt = match ($pipeline) {
-            AutoBannedPipelineStage::NoRequest,
-            AutoBannedPipelineStage::RequestRejected => $this->addDays(
-                $banLog->completed_at ?? $banLog->started_at ?? $banLog->filter_date?->startOfDay(),
-                AutoBannedSlaCalculator::TREATMENT_DEADLINE_DAYS,
-            ),
-            AutoBannedPipelineStage::RequestPending => $this->addDays(
-                $unbanRequest?->created_at,
-                AutoBannedSlaCalculator::VERIFICATION_DEADLINE_DAYS,
-            ),
-            AutoBannedPipelineStage::AwaitingUnban => $this->addDays(
-                $unbanRequest?->reviewed_at ?? $unbanRequest?->created_at,
-                AutoBannedSlaCalculator::UNBAN_SLA_DAYS,
-            ),
-            default => null,
-        };
-
         $nextActionLabel = match ($pipeline) {
             AutoBannedPipelineStage::NoRequest => 'Karyawan harus ajukan treatment',
             AutoBannedPipelineStage::RequestRejected => 'Ajukan ulang treatment',
             AutoBannedPipelineStage::RequestPending => 'SOD harus review pengajuan',
-            AutoBannedPipelineStage::AwaitingUnban => 'Target unban fisik / HSECT',
+            AutoBannedPipelineStage::AwaitingUnban => 'Menunggu automasi un banned',
+            AutoBannedPipelineStage::Unbanned => 'Selesai — sudah di-unban',
             default => '—',
         };
 
-        if ($dueAt === null) {
+        if ($pipeline === AutoBannedPipelineStage::Unbanned && $unbanLog?->completed_at !== null) {
+            return [
+                'nextActionLabel' => $nextActionLabel,
+                'dueAt' => $unbanLog->completed_at,
+                'dueAtLabel' => $unbanLog->completed_at->format('d M Y H:i'),
+                'remainingLabel' => 'Selesai',
+                'isOverdue' => false,
+                'dueTone' => 'ok',
+                'bannedAtLabel' => $this->formatBannedAtLabel($banLog),
+            ];
+        }
+
+        $bannedAt = $banLog->completed_at ?? $banLog->started_at ?? $banLog->filter_date?->copy()->startOfDay();
+        $automationDueAt = $this->addHours($bannedAt, AutoBannedSlaCalculator::AUTOMATION_UNBAN_HOURS);
+
+        if ($automationDueAt === null) {
             return [
                 'nextActionLabel' => $nextActionLabel,
                 'dueAt' => null,
@@ -457,23 +446,32 @@ class AutoBannedPipelineMonitoringService
                 'remainingLabel' => '—',
                 'isOverdue' => false,
                 'dueTone' => 'muted',
+                'bannedAtLabel' => '—',
             ];
         }
 
-        $isOverdue = $now->greaterThan($dueAt);
-        $remainingLabel = $this->formatRemaining($now, $dueAt, $isOverdue);
+        $isOverdue = $now->greaterThan($automationDueAt);
+        $remainingLabel = $this->formatRemaining($now, $automationDueAt, $isOverdue);
 
         return [
             'nextActionLabel' => $nextActionLabel,
-            'dueAt' => $dueAt,
-            'dueAtLabel' => $dueAt->format('d M Y H:i'),
+            'dueAt' => $automationDueAt,
+            'dueAtLabel' => $automationDueAt->format('d M Y H:i'),
             'remainingLabel' => $remainingLabel,
             'isOverdue' => $isOverdue,
             'dueTone' => $isOverdue ? 'danger' : 'wait',
+            'bannedAtLabel' => $this->formatBannedAtLabel($banLog),
         ];
     }
 
-    private function addDays(mixed $base, int $days): ?CarbonInterface
+    private function formatBannedAtLabel(SidBannedLog $banLog): string
+    {
+        $bannedAt = $banLog->completed_at ?? $banLog->started_at;
+
+        return $bannedAt !== null ? $bannedAt->format('d M Y H:i') : '—';
+    }
+
+    private function addHours(mixed $base, int $hours): ?CarbonInterface
     {
         if ($base === null) {
             return null;
@@ -483,31 +481,40 @@ class AutoBannedPipelineMonitoringService
             ? $base->copy()
             : Carbon::parse((string) $base);
 
-        return $carbon->addDays($days);
+        return $carbon->addHours($hours);
     }
 
     private function formatRemaining(CarbonInterface $now, CarbonInterface $dueAt, bool $isOverdue): string
     {
         if ($isOverdue) {
-            $hours = (int) $dueAt->diffInHours($now);
-            if ($hours >= 24) {
-                return 'Lewat '.(int) floor($hours / 24).' hari';
+            $totalMinutes = (int) $dueAt->diffInMinutes($now);
+            if ($totalMinutes < 60) {
+                return 'Lewat '.max(1, $totalMinutes).' menit';
             }
 
-            return 'Lewat '.$hours.' jam';
+            $hours = intdiv($totalMinutes, 60);
+            $minutes = $totalMinutes % 60;
+
+            return $minutes > 0
+                ? 'Lewat '.$hours.' jam '.$minutes.' menit'
+                : 'Lewat '.$hours.' jam';
         }
 
-        if ($dueAt->isToday()) {
-            return 'Hari ini';
+        $totalMinutes = (int) $now->diffInMinutes($dueAt);
+        if ($totalMinutes < 1) {
+            return 'Kurang dari 1 jam lagi';
         }
 
-        if ($dueAt->isTomorrow()) {
-            return 'Besok';
+        if ($totalMinutes < 60) {
+            return $totalMinutes.' menit lagi';
         }
 
-        $days = (int) $now->copy()->startOfDay()->diffInDays($dueAt->copy()->startOfDay());
+        $hours = intdiv($totalMinutes, 60);
+        $minutes = $totalMinutes % 60;
 
-        return $days.' hari lagi';
+        return $minutes > 0
+            ? $hours.' jam '.$minutes.' menit lagi'
+            : $hours.' jam lagi';
     }
 
     /**

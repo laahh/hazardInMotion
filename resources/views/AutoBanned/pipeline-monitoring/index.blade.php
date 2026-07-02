@@ -66,7 +66,7 @@
       ['title' => 'Total Di-Banned', 'value' => number_format($stats['total'] ?? 0), 'icon' => 'block'],
       ['title' => 'Belum Pengajuan', 'value' => number_format($stats['no_request'] ?? 0), 'icon' => 'assignment_late'],
       ['title' => 'Menunggu Review', 'value' => number_format($stats['request_pending'] ?? 0), 'icon' => 'hourglass_top'],
-      ['title' => 'Menunggu Unban', 'value' => number_format($stats['awaiting_unban'] ?? 0), 'icon' => 'lock_clock'],
+      ['title' => 'Menunggu Automasi Unban', 'value' => number_format($stats['awaiting_unban'] ?? 0), 'icon' => 'lock_clock'],
       ['title' => 'Sudah Unban', 'value' => number_format($stats['unbanned'] ?? 0), 'icon' => 'lock_open'],
       ['title' => 'Lewat Deadline', 'value' => number_format($stats['overdue'] ?? 0), 'icon' => 'warning'],
    ];
@@ -115,9 +115,7 @@
 
    <p class="ab-pipeline-kpi-note">
       Sumber: <code>sid_banned_log</code> (SUCCESS) + <code>auto_banned_unban_requests</code> + <code>sid_unban_log</code>.
-      SLA: pengajuan +{{ AutoBannedSlaCalculator::TREATMENT_DEADLINE_DAYS }} hari,
-      review +{{ AutoBannedSlaCalculator::VERIFICATION_DEADLINE_DAYS }} hari,
-      unban fisik +{{ AutoBannedSlaCalculator::UNBAN_SLA_DAYS }} hari setelah approve.
+      Target unban otomatis: <strong>{{ AutoBannedSlaCalculator::AUTOMATION_UNBAN_HOURS }} jam</strong> sejak waktu banned (<code>completed_at</code>).
    </p>
 
    <div class="dash-row">
@@ -144,7 +142,7 @@
          <div class="flex flex-wrap gap-2 text-[10px]">
             <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'no_request'])) }}" class="ab-pipeline-badge ab-pipeline-badge--warn">Belum ajukan</a>
             <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'request_pending'])) }}" class="ab-pipeline-badge ab-pipeline-badge--info">Pending SOD</a>
-            <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'awaiting_unban'])) }}" class="ab-pipeline-badge ab-pipeline-badge--wait">Menunggu unban</a>
+            <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'awaiting_unban'])) }}" class="ab-pipeline-badge ab-pipeline-badge--wait">Menunggu automasi unban</a>
             <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge($queryBase, ['pipeline_stage' => 'overdue'])) }}" class="ab-pipeline-badge ab-pipeline-badge--danger">Lewat deadline</a>
          </div>
       </div>
@@ -162,7 +160,7 @@
                   <th>Tahapan Pipeline</th>
                   <th>Status Pengajuan</th>
                   <th>Aksi Berikutnya</th>
-                  <th>Target / Deadline</th>
+                  <th>Target Unban Otomatis</th>
                   <th>Sisa Waktu</th>
                   <th>Unban Selesai</th>
                </tr>
@@ -229,8 +227,18 @@
                      @endif
                   </td>
                   <td class="text-[11px] leading-snug">{{ $row['nextActionLabel'] ?? '—' }}</td>
-                  <td class="{{ $dueToneClass }}">{{ $row['dueAtLabel'] ?? '—' }}</td>
-                  <td class="{{ $dueToneClass }}">{{ $row['remainingLabel'] ?? '—' }}</td>
+                  <td class="{{ $dueToneClass }}">
+                     <div class="font-semibold">{{ $row['dueAtLabel'] ?? '—' }}</div>
+                     @if(!empty($row['bannedAtLabel']) && $row['bannedAtLabel'] !== '—')
+                     <div class="text-[10px] text-[#64748b] font-normal">Dari banned: {{ $row['bannedAtLabel'] }}</div>
+                     @endif
+                  </td>
+                  <td class="{{ $dueToneClass }}">
+                     <div class="font-semibold">{{ $row['remainingLabel'] ?? '—' }}</div>
+                     @if(($row['pipelineStage'] ?? '') !== 'unbanned' && !empty($row['dueAtLabel']) && ($row['dueAtLabel'] ?? '—') !== '—')
+                     <div class="text-[10px] text-[#64748b] font-normal">hingga unban otomatis</div>
+                     @endif
+                  </td>
                   <td>
                      @if(!empty($row['unbanCompletedAt']))
                      <span class="ab-pipeline-badge ab-pipeline-badge--ok">{{ $row['unbanCompletedAt'] }}</span>

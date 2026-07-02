@@ -18,6 +18,9 @@ class AutoBannedSlaCalculator
 
     public const UNBAN_SLA_DAYS = 3;
 
+    /** Target unban otomatis: 24 jam setelah waktu banned (completed_at). */
+    public const AUTOMATION_UNBAN_HOURS = 24;
+
     public const TREATMENT_DEADLINE_DAYS = 1;
 
     public const VERIFICATION_DEADLINE_DAYS = 1;

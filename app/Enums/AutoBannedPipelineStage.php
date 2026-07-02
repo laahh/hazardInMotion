@@ -18,7 +18,7 @@ enum AutoBannedPipelineStage: string
             self::Unbanned => 'Sudah Unban',
             self::NoRequest => 'Belum Pengajuan',
             self::RequestPending => 'Menunggu Review SOD',
-            self::AwaitingUnban => 'Menunggu Unban Fisik',
+            self::AwaitingUnban => 'Menunggu Automasi Unban',
             self::RequestRejected => 'Pengajuan Ditolak',
         };
     }
