@@ -105,7 +105,10 @@
    <div class="page-top">
       <div class="min-w-0">
          <h1>Pipeline Banned → Unban</h1>
-        
+         <p>
+            Monitoring end-to-end: siapa sudah di-banned, status pengajuan treatment, approval SOD, dan target unban.
+            &bull; {{ $periodLabel }}
+         </p>
       </div>
       <div class="flex flex-col items-end gap-2.5">
          <form method="GET" action="{{ route('auto-banned.pipeline-monitoring.index') }}" class="ab-search-wrap" id="ab-pipeline-search-form">
@@ -145,7 +148,12 @@
       </div>
    </div>
 
-  
+   @if(!$tableAvailable)
+   <div class="dash-card card-body text-sm text-[#888] mb-3">
+      Tabel <code>sid_banned_log</code> belum tersedia.
+   </div>
+   @else
+
    <p class="ab-pipeline-kpi-note">
       Sumber: <code>sid_banned_log</code> (SUCCESS) + <code>auto_banned_unban_requests</code> + <code>sid_unban_log</code>.
       Target unban otomatis: <strong>{{ AutoBannedSlaCalculator::AUTOMATION_UNBAN_HOURS }} jam</strong> sejak waktu banned (<code>completed_at</code>).
