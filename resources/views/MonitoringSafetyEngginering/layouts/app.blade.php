@@ -3,7 +3,7 @@
    <head>
       <meta charset="utf-8"/>
       <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-      <title>@yield('title', 'Monitoring Safety Engineering') — PAMA GMO</title>
+      <title>@yield('title', 'Monitoring Safety Engineering') — Berau Coal</title>
       <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
       <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
       <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
@@ -54,7 +54,7 @@
          <div class="mx-auto px-6 py-3 flex justify-between items-center gap-4">
             <div class="flex items-center gap-6 min-w-0 flex-1">
                <div class="flex flex-col shrink-0">
-                  <h1 class="font-headline font-bold text-primary text-lg tracking-tighter leading-tight">PAMA GMO</h1>
+                  <h1 class="font-headline font-bold text-primary text-lg tracking-tighter leading-tight">Berau Coal</h1>
                   <p class="text-on-surface-variant text-[9px] font-bold uppercase tracking-widest max-w-[14rem] truncate">{{ $programLabel }}</p>
                </div>
                @if(count($navItems) > 0)
@@ -76,13 +76,28 @@
                   <span class="material-symbols-outlined text-2xl text-primary">account_circle</span>
                   <div class="text-left hidden sm:block">
                      <p class="text-[10px] font-bold text-primary uppercase leading-none">{{ auth()->user()->name ?? 'User' }}</p>
-                     <p class="text-[9px] text-on-surface-variant font-medium">PAMA BRCG</p>
+                     <p class="text-[9px] text-on-surface-variant font-medium">Berau Coal</p>
                   </div>
                </div>
             </div>
          </div>
       </header>
       <main class="flex-grow w-full mx-auto p-5 md:p-7 lg:p-8 max-w-[1600px]">
+         @if(session('success'))
+         <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 mb-6" role="status">{{ session('success') }}</div>
+         @endif
+         @if(session('error'))
+         <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-900 mb-6" role="alert">{{ session('error') }}</div>
+         @endif
+         @if($errors->any())
+         <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 mb-6" role="alert">
+            <ul class="list-disc pl-5 space-y-1">
+               @foreach($errors->all() as $error)
+               <li>{{ $error }}</li>
+               @endforeach
+            </ul>
+         </div>
+         @endif
          @yield('content')
       </main>
       @stack('scripts')

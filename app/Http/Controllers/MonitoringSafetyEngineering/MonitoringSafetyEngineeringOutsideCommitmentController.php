@@ -6,24 +6,23 @@ namespace App\Http\Controllers\MonitoringSafetyEngineering;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\MonitoringSafetyEngineering\Concerns\ProvidesMonitoringSafetyEngineeringLayout;
-use App\Services\MonitoringSafetyEngineering\MonitoringSafetyEngineeringDashboardService;
+use App\Services\MonitoringSafetyEngineering\MonitoringSafetyEngineeringOutsideCommitmentService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
-class MonitoringSafetyEngineeringDashboardController extends Controller
+class MonitoringSafetyEngineeringOutsideCommitmentController extends Controller
 {
     use ProvidesMonitoringSafetyEngineeringLayout;
 
     public function __construct(
-        private readonly MonitoringSafetyEngineeringDashboardService $dashboardService,
+        private readonly MonitoringSafetyEngineeringOutsideCommitmentService $outsideCommitmentService,
     ) {}
 
     public function index(Request $request): View
     {
-        $dashboard = $this->dashboardService->buildDashboard($request);
+        $dashboard = $this->outsideCommitmentService->buildDashboard($request);
 
-        return view('MonitoringSafetyEngginering.dashboard', $this->monitoringSafetyEngineeringViewData('dashboard', [
-            'dashboard' => $dashboard,
+        return view('MonitoringSafetyEngginering.outside-commitment', $this->monitoringSafetyEngineeringViewData('outside-commitment', [
             'filters' => $dashboard['filters'],
             'filterOptions' => $dashboard['filter_options'],
             'summary' => $dashboard['summary'],

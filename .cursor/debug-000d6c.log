@@ -1,0 +1,1 @@
+{"sessionId":"000d6c","location":"update.blade.php:loadRecords","message":"frontend load breakdown","data":{"fetch_ms":271477,"parse_ms":5,"handsontable_ms":391,"total_ms":271873,"row_count":103,"column_count":32},"timestamp":1783170327236,"hypothesisId":"D,E"}

@@ -13,7 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
-class MonitoringSafetyEngineeringDashboardService
+class MonitoringSafetyEngineeringOutsideCommitmentService
 {
     use BuildsMonitoringSafetyEngineeringItems;
 
@@ -29,28 +29,21 @@ class MonitoringSafetyEngineeringDashboardService
         }
 
         $records = $this->fetchFilteredRecords($filters);
-        $itemsByCategory = $this->groupItemsByCategory($records);
-
-        $replikasiItems = $itemsByCategory['replikasi'];
-        $safetyEngineeringItems = $itemsByCategory['safety_engineering'];
-        $additionalSafetyItems = $itemsByCategory['additional_safety_engineering'];
+        $categories = $this->buildCategories($records);
 
         $activeCategory = $filters['category'];
-        $activeItems = $itemsByCategory[$activeCategory] ?? [];
+        $activeItems = $categories[$activeCategory]['items'] ?? [];
 
         return [
             'filters' => $filters,
             'filter_options' => $this->filterOptions(),
-            'summary' => $this->buildSummary($replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
-            'overdue_summary' => $this->buildOverdueSummary($replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
+            'summary' => $this->buildSummary($categories),
+            'overdue_summary' => $this->buildOverdueSummary($categories),
             'active_category' => $activeCategory,
             'active_items' => $activeItems,
-            'replikasi_items' => $replikasiItems,
-            'safety_engineering_items' => $safetyEngineeringItems,
-            'additional_safety_items' => $additionalSafetyItems,
-            'brief_analysis' => $this->buildBriefAnalysis($records, $replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
+            'brief_analysis' => $this->buildBriefAnalysis($records, $categories),
             'next_todo' => $this->buildNextTodo($records),
-            'charts' => $this->buildCharts($replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
+            'charts' => $this->buildCharts($categories),
         ];
     }
 
@@ -64,18 +57,15 @@ class MonitoringSafetyEngineeringDashboardService
      */
     private function emptyDashboard(array $filters): array
     {
-        $emptyItems = [];
+        $categories = $this->emptyCategories();
 
         return [
             'filters' => $filters,
             'filter_options' => $this->filterOptions(),
-            'summary' => $this->buildSummary($emptyItems, $emptyItems, $emptyItems),
-            'overdue_summary' => $this->buildOverdueSummary($emptyItems, $emptyItems, $emptyItems),
+            'summary' => $this->buildSummary($categories),
+            'overdue_summary' => $this->buildOverdueSummary($categories),
             'active_category' => $filters['category'],
-            'active_items' => $emptyItems,
-            'replikasi_items' => $emptyItems,
-            'safety_engineering_items' => $emptyItems,
-            'additional_safety_items' => $emptyItems,
+            'active_items' => [],
             'brief_analysis' => [
                 [
                     'title' => 'Status Penyelesaian',
@@ -83,8 +73,26 @@ class MonitoringSafetyEngineeringDashboardService
                 ],
             ],
             'next_todo' => ['Upload atau input data rekayasa melalui menu Update Data.'],
-            'charts' => $this->buildCharts($emptyItems, $emptyItems, $emptyItems),
+            'charts' => $this->buildCharts($categories),
         ];
+    }
+
+    /**
+     * @return array<string, array{label: string, color: string, items: list<array<string, mixed>>}>
+     */
+    private function emptyCategories(): array
+    {
+        $categories = [];
+
+        foreach (config('monitoring_safety_engineering.outside_commitment_categories', []) as $key => $meta) {
+            $categories[$key] = [
+                'label' => (string) ($meta['label'] ?? $key),
+                'color' => (string) ($meta['color'] ?? '#7366FF'),
+                'items' => [],
+            ];
+        }
+
+        return $categories;
     }
 
     /**
@@ -117,6 +125,7 @@ class MonitoringSafetyEngineeringDashboardService
                 'next_to_do',
                 'period_year',
             ])
+            ->whereIn('sumber_rekayasa', $this->outsideCommitmentSumberValues())
             ->orderBy('sort_order')
             ->orderBy('row_no')
             ->orderBy('id');
@@ -124,6 +133,27 @@ class MonitoringSafetyEngineeringDashboardService
         $this->applyFilters($query, $filters);
 
         return $query->get();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function outsideCommitmentSumberValues(): array
+    {
+        $values = [];
+        $labels = config('monitoring_safety_engineering.sumber_rekayasa', []);
+
+        foreach (config('monitoring_safety_engineering.outside_commitment_categories', []) as $category) {
+            foreach ($category['sumber_rekayasa'] ?? [] as $value) {
+                $values[] = (string) $value;
+
+                if (isset($labels[$value])) {
+                    $values[] = (string) $labels[$value];
+                }
+            }
+        }
+
+        return array_values(array_unique($values));
     }
 
     /**
@@ -193,46 +223,31 @@ class MonitoringSafetyEngineeringDashboardService
 
     /**
      * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $records
-     * @return array<string, list<array<string, mixed>>>
+     * @return array<string, array{label: string, color: string, items: list<array<string, mixed>>}>
      */
-    private function groupItemsByCategory(Collection $records): array
+    private function buildCategories(Collection $records): array
     {
-        $grouped = [
-            'replikasi' => [],
-            'safety_engineering' => [],
-            'additional_safety_engineering' => [],
-        ];
+        $categories = $this->emptyCategories();
 
         foreach ($records as $record) {
             $category = $this->resolveCategory($record);
-            $grouped[$category][] = $this->recordToItem($record);
+            $categories[$category]['items'][] = $this->recordToItem($record);
         }
 
-        return $grouped;
+        return $categories;
     }
 
     private function resolveCategory(MonitoringSafetyEngineeringRecord $record): string
     {
         $sumber = $this->normalizeEnumValue($record->sumber_rekayasa);
-        $pelaksana = $this->normalizeEnumValue($record->pelaksana_rekayasa);
-        $categories = config('monitoring_safety_engineering.dashboard_categories', []);
 
-        if (in_array($sumber, $categories['additional_safety_engineering']['sumber_rekayasa'] ?? [], true)) {
-            return 'additional_safety_engineering';
+        foreach (config('monitoring_safety_engineering.outside_commitment_categories', []) as $key => $meta) {
+            if (in_array($sumber, $meta['sumber_rekayasa'] ?? [], true)) {
+                return (string) $key;
+            }
         }
 
-        if (in_array($sumber, $categories['safety_engineering']['sumber_rekayasa'] ?? [], true)) {
-            return 'safety_engineering';
-        }
-
-        if (
-            in_array($sumber, $categories['replikasi']['sumber_rekayasa'] ?? [], true)
-            || in_array($pelaksana, $categories['replikasi']['pelaksana_rekayasa'] ?? [], true)
-        ) {
-            return 'replikasi';
-        }
-
-        return 'replikasi';
+        return 'arahan_manajemen';
     }
 
     /**
@@ -271,6 +286,7 @@ class MonitoringSafetyEngineeringDashboardService
             'overdue' => $this->calculateRecordOverdue($record, $percentage),
             'site' => $record->site,
             'perusahaan' => $record->perusahaan,
+            'sumber_rekayasa' => $this->normalizeEnumValue($record->sumber_rekayasa),
         ];
     }
 
@@ -340,44 +356,39 @@ class MonitoringSafetyEngineeringDashboardService
 
     /**
      * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $records
-     * @param  list<array<string, mixed>>  $replikasi
-     * @param  list<array<string, mixed>>  $safety
-     * @param  list<array<string, mixed>>  $additional
+     * @param  array<string, array{label: string, color: string, items: list<array<string, mixed>>}>  $categories
      * @return list<array{title: string, points: list<string>}>
      */
-    private function buildBriefAnalysis(
-        Collection $records,
-        array $replikasi,
-        array $safety,
-        array $additional,
-    ): array {
+    private function buildBriefAnalysis(Collection $records, array $categories): array
+    {
         if ($records->isEmpty()) {
             return [
                 [
                     'title' => 'Status Penyelesaian',
-                    'points' => ['Belum ada data pada filter yang dipilih.'],
+                    'points' => ['Belum ada data luar komitmen pada filter yang dipilih.'],
                 ],
             ];
         }
 
-        $allItems = array_merge($replikasi, $safety, $additional);
-        $completed = count(array_filter($allItems, static fn (array $item): bool => $item['percentage'] >= 100));
-        $onTrack = count(array_filter($allItems, static fn (array $item): bool => $item['percentage'] >= 50 && $item['percentage'] < 100));
-        $overdue = $this->sumOverdue($allItems);
+        $points = [];
 
-        $points = [
-            sprintf(
-                'Dari %d pengendalian, %d item sudah selesai 100%% dan %d item berada pada progress 50–99%%.',
-                count($allItems),
+        foreach ($categories as $category) {
+            $items = $category['items'];
+            if ($items === []) {
+                continue;
+            }
+
+            $completed = count(array_filter($items, static fn (array $item): bool => $item['percentage'] >= 100));
+            $overdue = $this->sumOverdue($items);
+
+            $points[] = sprintf(
+                '%s: %d dari %d item selesai 100%%, %d item overdue.',
+                $category['label'],
                 $completed,
-                $onTrack,
-            ),
-            sprintf(
-                '%d item belum selesai dengan total %d item overdue berdasarkan due date fase/replikasi.',
-                count($allItems) - $completed,
+                count($items),
                 $overdue,
-            ),
-        ];
+            );
+        }
 
         $dbPoints = $records
             ->pluck('brief_analysis_challenge')
@@ -395,7 +406,7 @@ class MonitoringSafetyEngineeringDashboardService
         return [
             [
                 'title' => 'Status Penyelesaian',
-                'points' => $points,
+                'points' => $points !== [] ? $points : ['Data tersedia, namun belum ada ringkasan analisis.'],
             ],
         ];
     }
@@ -424,41 +435,146 @@ class MonitoringSafetyEngineeringDashboardService
         }
 
         return [
-            'Lengkapi kolom Next To Do pada data rekayasa untuk menampilkan rencana tindak lanjut.',
+            'Lengkapi kolom Next To Do pada data luar komitmen untuk menampilkan rencana tindak lanjut.',
         ];
     }
 
     /**
-     * @param  list<array<string, mixed>>  $replikasi
-     * @param  list<array<string, mixed>>  $safety
-     * @param  list<array<string, mixed>>  $additional
      * @return array<string, mixed>
      */
-    private function buildCharts(array $replikasi, array $safety, array $additional): array
+    private function resolveFilters(Request $request): array
     {
-        $categories = [
-            'replikasi' => ['label' => 'Replikasi', 'color' => '#2563eb', 'items' => $replikasi],
-            'safety_engineering' => ['label' => 'Safety Engineering', 'color' => '#15803d', 'items' => $safety],
-            'additional_safety_engineering' => ['label' => 'Additional Safety Engineering', 'color' => '#65a30d', 'items' => $additional],
+        $category = (string) $request->get('category', 'arahan_manajemen');
+        $allowedCategories = array_keys(config('monitoring_safety_engineering.outside_commitment_categories', []));
+
+        if (! in_array($category, $allowedCategories, true)) {
+            $category = 'arahan_manajemen';
+        }
+
+        $dateFrom = (string) $request->get('date_from', now()->startOfYear()->format('Y-m-d'));
+        $periodYear = (int) date('Y', strtotime($dateFrom) ?: time());
+
+        return [
+            'bar' => (string) $request->get('bar', ''),
+            'company' => (string) $request->get('company', ''),
+            'review_week' => (string) $request->get('review_week', 'W' . now()->isoWeek()),
+            'date_from' => $dateFrom,
+            'date_to' => (string) $request->get('date_to', now()->format('Y-m-d')),
+            'category' => $category,
+            'period_year' => $periodYear > 0 ? $periodYear : (int) now()->year,
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function filterOptions(): array
+    {
+        $sites = config('monitoring_safety_engineering.sites', []);
+        $companies = config('monitoring_safety_engineering.perusahaan', []);
+        $sumberValues = $this->outsideCommitmentSumberValues();
+
+        if ($this->tablesReady()) {
+            $baseQuery = MonitoringSafetyEngineeringRecord::query()
+                ->whereIn('sumber_rekayasa', $sumberValues);
+
+            $sites = array_values(array_unique(array_merge(
+                $sites,
+                (clone $baseQuery)
+                    ->select('site')
+                    ->distinct()
+                    ->orderBy('site')
+                    ->pluck('site')
+                    ->filter()
+                    ->all(),
+            )));
+
+            $companies = array_values(array_unique(array_merge(
+                $companies,
+                (clone $baseQuery)
+                    ->select('perusahaan')
+                    ->distinct()
+                    ->orderBy('perusahaan')
+                    ->pluck('perusahaan')
+                    ->filter()
+                    ->all(),
+            )));
+        }
+
+        sort($sites);
+
+        $categories = [];
+        foreach (config('monitoring_safety_engineering.outside_commitment_categories', []) as $key => $meta) {
+            $categories[$key] = (string) ($meta['label'] ?? $key);
+        }
+
+        return [
+            'bars' => array_merge(['' => 'Semua Site'], array_combine($sites, $sites) ?: []),
+            'companies' => array_merge(
+                ['' => 'Semua Perusahaan'],
+                array_combine($companies, $companies) ?: [],
+            ),
+            'review_weeks' => collect(range(1, 53))->map(fn (int $w): string => 'W' . $w)->all(),
+            'categories' => $categories,
+        ];
+    }
+
+    /**
+     * @param  array<string, array{label: string, color: string, items: list<array<string, mixed>>}>  $categories
+     * @return array<string, mixed>
+     */
+    private function buildSummary(array $categories): array
+    {
+        $total = array_sum(array_map(static fn (array $category): int => count($category['items']), $categories));
+
+        $summary = ['total_luar_komitmen' => $total];
+
+        foreach ($categories as $key => $category) {
+            $summary[$key] = [
+                'label' => $category['label'],
+                'count' => count($category['items']),
+                'progress' => $this->calculateOverallProgress($category['items']),
+            ];
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @param  array<string, array{label: string, color: string, items: list<array<string, mixed>>}>  $categories
+     * @return list<array{label: string, overdue: int}>
+     */
+    private function buildOverdueSummary(array $categories): array
+    {
+        return array_values(array_map(
+            fn (array $category): array => [
+                'label' => $category['label'],
+                'overdue' => $this->sumOverdue($category['items']),
+            ],
+            $categories,
+        ));
+    }
+
+    /**
+     * @param  array<string, array{label: string, color: string, items: list<array<string, mixed>>}>  $categories
+     * @return array<string, mixed>
+     */
+    private function buildCharts(array $categories): array
+    {
+        $allItems = array_merge(...array_values(array_map(static fn (array $category): array => $category['items'], $categories)));
 
         return [
             'category_distribution' => [
                 'labels' => array_column($categories, 'label'),
-                'data' => array_values(array_map(static fn (array $c): int => count($c['items']), $categories)),
+                'data' => array_values(array_map(static fn (array $category): int => count($category['items']), $categories)),
                 'colors' => array_column($categories, 'color'),
             ],
             'progress_by_category' => [
                 'labels' => array_column($categories, 'label'),
-                'data' => [
-                    $this->calculateOverallProgress($replikasi),
-                    $this->calculateOverallProgress($safety),
-                    $this->calculateOverallProgress($additional),
-                ],
+                'data' => array_values(array_map(fn (array $category): int => $this->calculateOverallProgress($category['items']), $categories)),
                 'colors' => array_column($categories, 'color'),
             ],
-            'status_breakdown' => $this->buildStatusBreakdown(array_merge($replikasi, $safety, $additional)),
-            'due_timeline' => $this->buildDueTimeline($categories),
+            'status_breakdown' => $this->buildStatusBreakdown($allItems),
         ];
     }
 
@@ -483,170 +599,6 @@ class MonitoringSafetyEngineeringDashboardService
             'labels' => array_column($buckets, 'label'),
             'data' => array_column($buckets, 'count'),
             'colors' => array_column($buckets, 'color'),
-        ];
-    }
-
-    /**
-     * @param  array<string, array{label: string, color: string, items: list<array<string, mixed>>}>  $categories
-     * @return array<string, mixed>
-     */
-    private function buildDueTimeline(array $categories): array
-    {
-        $quarterKeys = [];
-        $seriesByCategory = [];
-
-        foreach ($categories as $key => $category) {
-            $counts = [];
-
-            foreach ($category['items'] as $item) {
-                $dueDate = (string) ($item['due_date'] ?? '');
-                if ($dueDate === '') {
-                    continue;
-                }
-
-                $timestamp = strtotime($dueDate);
-                if ($timestamp === false) {
-                    continue;
-                }
-
-                $quarterKey = date('Y', $timestamp) . '-Q' . (int) ceil((int) date('n', $timestamp) / 3);
-                $quarterKeys[$quarterKey] = true;
-                $counts[$quarterKey] = ($counts[$quarterKey] ?? 0) + 1;
-            }
-
-            $seriesByCategory[$key] = $counts;
-        }
-
-        $sortedQuarters = array_keys($quarterKeys);
-        sort($sortedQuarters);
-
-        $labels = array_map(static fn (string $q): string => str_replace('-', ' ', $q), $sortedQuarters);
-
-        $datasets = [];
-        foreach ($categories as $key => $category) {
-            $datasets[] = [
-                'label' => $category['label'],
-                'color' => $category['color'],
-                'data' => array_map(static fn (string $q): int => $seriesByCategory[$key][$q] ?? 0, $sortedQuarters),
-            ];
-        }
-
-        return [
-            'labels' => $labels,
-            'datasets' => $datasets,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function resolveFilters(Request $request): array
-    {
-        $category = (string) $request->get('category', 'replikasi');
-        $allowedCategories = array_keys(config('monitoring_safety_engineering.categories', []));
-
-        if (! in_array($category, $allowedCategories, true)) {
-            $category = 'replikasi';
-        }
-
-        $dateFrom = (string) $request->get('date_from', now()->startOfYear()->format('Y-m-d'));
-        $periodYear = (int) date('Y', strtotime($dateFrom) ?: time());
-
-        return [
-            'bar' => (string) $request->get('bar', ''),
-            'company' => (string) $request->get('company', ''),
-            'review_week' => (string) $request->get('review_week', 'W' . now()->isoWeek()),
-            'date_from' => $dateFrom,
-            'date_to' => (string) $request->get('date_to', now()->format('Y-m-d')),
-            'category' => $category,
-            'period_year' => $periodYear > 0 ? $periodYear : (int) now()->year,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function filterOptions(): array
-    {
-        $sites = config('monitoring_safety_engineering.sites', []);
-        $companies = config('monitoring_safety_engineering.perusahaan', []);
-
-        if ($this->tablesReady()) {
-            $sites = array_values(array_unique(array_merge(
-                $sites,
-                MonitoringSafetyEngineeringRecord::query()
-                    ->select('site')
-                    ->distinct()
-                    ->orderBy('site')
-                    ->pluck('site')
-                    ->filter()
-                    ->all(),
-            )));
-
-            $companies = array_values(array_unique(array_merge(
-                $companies,
-                MonitoringSafetyEngineeringRecord::query()
-                    ->select('perusahaan')
-                    ->distinct()
-                    ->orderBy('perusahaan')
-                    ->pluck('perusahaan')
-                    ->filter()
-                    ->all(),
-            )));
-        }
-
-        sort($sites);
-
-        return [
-            'bars' => array_merge(['' => 'Semua Site'], array_combine($sites, $sites) ?: []),
-            'companies' => array_merge(
-                ['' => 'Semua Perusahaan'],
-                array_combine($companies, $companies) ?: [],
-            ),
-            'review_weeks' => collect(range(1, 53))->map(fn (int $w): string => 'W' . $w)->all(),
-            'categories' => config('monitoring_safety_engineering.categories', []),
-        ];
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $replikasi
-     * @param  list<array<string, mixed>>  $safety
-     * @param  list<array<string, mixed>>  $additional
-     * @return array<string, mixed>
-     */
-    private function buildSummary(array $replikasi, array $safety, array $additional): array
-    {
-        $totalPlan = count($replikasi) + count($safety) + count($additional);
-
-        return [
-            'total_komitmen' => $totalPlan,
-            'replikasi' => [
-                'count' => count($replikasi),
-                'progress' => $this->calculateOverallProgress($replikasi),
-            ],
-            'safety_engineering' => [
-                'count' => count($safety),
-                'progress' => $this->calculateOverallProgress($safety),
-            ],
-            'additional_safety_engineering' => [
-                'count' => count($additional),
-                'progress' => $this->calculateOverallProgress($additional),
-            ],
-        ];
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $replikasi
-     * @param  list<array<string, mixed>>  $safety
-     * @param  list<array<string, mixed>>  $additional
-     * @return list<array{label: string, overdue: int}>
-     */
-    private function buildOverdueSummary(array $replikasi, array $safety, array $additional): array
-    {
-        return [
-            ['label' => 'Replikasi', 'overdue' => $this->sumOverdue($replikasi)],
-            ['label' => 'Safety Engineering', 'overdue' => $this->sumOverdue($safety)],
-            ['label' => 'Additional Safety Engineering', 'overdue' => $this->sumOverdue($additional)],
         ];
     }
 }
