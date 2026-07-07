@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\AutoBanned\AutoBannedController;
 use App\Http\Controllers\AutoBanned\AutoBannedHsctEmailController;
 use App\Http\Controllers\AutoBanned\AutoBannedInputasiController;
+use App\Http\Controllers\AutoBanned\AutoBannedInputasiReconcileController;
 use App\Http\Controllers\AutoBanned\AutoBannedMasterDataController;
 use App\Http\Controllers\AutoBanned\AutoBannedMasterSodController;
 use App\Http\Controllers\AutoBanned\AutoBannedSodVerificationController;
@@ -29,6 +30,8 @@ Route::middleware(['auth'])
         Route::post('/snapshots/{snapshot}/hsct-sent', [AutoBannedController::class, 'markHsctSent'])->name('snapshots.hsct-sent');
         Route::post('/snapshots/{snapshot}/hsct-confirmed', [AutoBannedController::class, 'markHsctConfirmed'])->name('snapshots.hsct-confirmed');
         Route::get('/inputasi', [AutoBannedInputasiController::class, 'index'])->name('inputasi.index');
+        Route::get('/inputasi/reconcile', [AutoBannedInputasiReconcileController::class, 'index'])->name('inputasi.reconcile.index');
+        Route::post('/inputasi/reconcile', [AutoBannedInputasiReconcileController::class, 'store'])->name('inputasi.reconcile.store');
         Route::get('/treatment-evidence/lookup-sid', [AutoBannedTreatmentController::class, 'lookupSid'])->name('treatment-evidence.lookup-sid');
         Route::post('/treatment-evidence', [AutoBannedTreatmentController::class, 'store'])->name('treatment-evidence.store');
         Route::get('/unban-requests/{unbanRequest}/evidence', [AutoBannedTreatmentController::class, 'downloadEvidence'])->name('unban-requests.evidence');
