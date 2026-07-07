@@ -128,7 +128,7 @@ class AutoBannedLogReconcileService
         $period = $this->resolvePeriodFromBanLog($banLog);
         $actorName = trim((string) ($actor->name ?? 'Admin'));
 
-        AutoBannedUnbanRequest::query()->create(
+        $unbanRequest = AutoBannedUnbanRequest::query()->create(
             $this->filterPayloadForTable('auto_banned_unban_requests', [
                 'scr_daily_banned_id' => (int) $banLog->scr_daily_banned_id,
                 'sid' => $sid,
@@ -154,7 +154,7 @@ class AutoBannedLogReconcileService
         );
 
         SidUnbanLog::query()->create(
-            $this->buildUnbanLogPayload($banLog, $unbanCompletedAt),
+            $this->buildUnbanLogPayload($banLog, $unbanCompletedAt, (int) $unbanRequest->id),
         );
     }
 
@@ -234,7 +234,7 @@ class AutoBannedLogReconcileService
     /**
      * @return array<string, mixed>
      */
-    private function buildUnbanLogPayload(SidBannedLog $banLog, Carbon $unbanCompletedAt): array
+    private function buildUnbanLogPayload(SidBannedLog $banLog, Carbon $unbanCompletedAt, int $unbanRequestId): array
     {
         $startedAt = $banLog->completed_at?->copy()->addHours(AutoBannedSlaCalculator::AUTOMATION_UNBAN_HOURS)
             ?? $unbanCompletedAt->copy()->subMinutes(5);
@@ -244,6 +244,7 @@ class AutoBannedLogReconcileService
         }
 
         return $this->filterPayloadForTable('sid_unban_log', [
+            'unban_request_id' => $unbanRequestId,
             'scr_daily_banned_id' => $banLog->scr_daily_banned_id,
             'filter_date' => $banLog->filter_date,
             'filter_shift' => $banLog->filter_shift,
