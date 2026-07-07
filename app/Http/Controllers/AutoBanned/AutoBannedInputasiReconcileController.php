@@ -6,6 +6,7 @@ namespace App\Http\Controllers\AutoBanned;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\AutoBanned\Concerns\ProvidesAutoBannedLayout;
+use App\Enums\AutoBannedReconcileUnbanLogMode;
 use App\Http\Requests\AutoBanned\AutoBannedInputasiReconcileRequest;
 use App\Services\AutoBanned\AutoBannedLogReconcileService;
 use App\Services\AutoBanned\AutoBannedPipelineGapService;
@@ -40,6 +41,7 @@ class AutoBannedInputasiReconcileController extends Controller
             'tableAvailable' => $tableAvailable,
             'defaultAlasan' => AutoBannedLogReconcileService::DEFAULT_ALASAN,
             'defaultMinDaysOld' => AutoBannedPipelineGapService::DEFAULT_MIN_DAYS_OLD,
+            'unbanLogModes' => AutoBannedReconcileUnbanLogMode::cases(),
         ]);
     }
 
@@ -52,11 +54,14 @@ class AutoBannedInputasiReconcileController extends Controller
             ? Carbon::parse((string) $validated['unban_completed_at'])
             : null;
 
+        $unbanLogMode = AutoBannedReconcileUnbanLogMode::from((string) $validated['unban_log_mode']);
+
         $result = $this->logReconcileService->reconcileBanLogs(
             banLogIds: array_map('intval', $validated['ban_log_ids']),
             actor: $user,
             alasanPengajuan: (string) ($validated['alasan_pengajuan'] ?? ''),
             unbanCompletedAt: $unbanCompletedAt,
+            unbanLogMode: $unbanLogMode,
         );
 
         $redirect = redirect()
@@ -68,7 +73,9 @@ class AutoBannedInputasiReconcileController extends Controller
             ], static fn ($value) => $value !== null && $value !== ''));
 
         if ($result['processed'] > 0) {
-            $message = $result['processed'].' riwayat berhasil direkonsiliasi (request approved + log unban SUCCESS).';
+            $message = $unbanLogMode === AutoBannedReconcileUnbanLogMode::BelumSukses
+                ? $result['processed'].' riwayat berhasil direkonsiliasi (pengajuan Disetujui saja, tanpa log unban SUCCESS).'
+                : $result['processed'].' riwayat berhasil direkonsiliasi (pengajuan Disetujui + log unban SUCCESS).';
             if ($result['skipped'] > 0) {
                 $message .= ' '.$result['skipped'].' dilewati.';
             }

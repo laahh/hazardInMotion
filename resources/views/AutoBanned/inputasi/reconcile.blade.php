@@ -6,12 +6,14 @@
    @include('AutoBanned.partials.page-header', [
       'breadcrumbCurrent' => 'Rekonsiliasi Log',
       'pageTitle' => 'Rekonsiliasi Log Unban',
-      'pageSubtitle' => 'Backfill pengajuan approved & log unban SUCCESS untuk banned yang sudah di-unban manual',
+      'pageSubtitle' => 'Backfill pengajuan Disetujui — opsional dengan log unban SUCCESS',
    ])
 @endsection
 
 @section('content')
 @php
+   use App\Enums\AutoBannedReconcileUnbanLogMode;
+
    $gapRows = collect($gapRows ?? []);
    $tableAvailable = $tableAvailable ?? false;
    $filters = $filters ?? [];
@@ -50,9 +52,9 @@
 <div class="rounded-2xl border border-amber-200/70 bg-amber-50/60 px-5 py-4 text-sm text-amber-950 mb-5">
    <p class="font-bold mb-1">Kapan menggunakan fitur ini?</p>
    <p class="text-xs leading-relaxed text-amber-900/90">
-      Untuk SID yang <strong>sudah di-unban manual di luar sistem</strong> tetapi belum tercatat di
-      <code class="text-[11px]">auto_banned_unban_requests</code> dan <code class="text-[11px]">sid_unban_log</code>.
-      Sistem akan membuat pengajuan berstatus <strong>Disetujui</strong> dan log unban <strong>SUCCESS</strong> agar pipeline kembali akurat.
+      Untuk SID yang belum tercatat di sistem. Pilih mode rekonsiliasi:
+      <strong>SUCCESS</strong> = pengajuan Disetujui + log unban SUCCESS (unban sudah selesai manual).
+      <strong>BLM SUKSES</strong> = hanya pengajuan Disetujui (unban otomatis belum berhasil / masih menunggu).
       Default filter: data banned dengan <code class="text-[11px]">filter_date</code> H-{{ $defaultMinDaysOld }} atau lebih lama.
    </p>
 </div>
@@ -106,7 +108,21 @@
       <input type="hidden" name="{{ $key }}" value="{{ $val }}"/>
       @endforeach
 
-      <div class="border-b border-outline-variant/15 px-5 py-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="border-b border-outline-variant/15 px-5 py-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+         <div>
+            <label for="ab-reconcile-unban-mode" class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">
+               Status log unban <span class="text-red-500">*</span>
+            </label>
+            <select id="ab-reconcile-unban-mode" name="unban_log_mode" required
+               class="w-full rounded-xl border border-outline-variant/25 bg-[#f8fafc] px-3 py-2.5 text-sm text-on-surface focus:border-primary/30 focus:ring-2 focus:ring-primary/10">
+               @foreach($unbanLogModes ?? AutoBannedReconcileUnbanLogMode::cases() as $mode)
+               <option value="{{ $mode->value }}" @selected(old('unban_log_mode', AutoBannedReconcileUnbanLogMode::Success->value) === $mode->value)>
+                  {{ $mode->shortLabel() }}
+               </option>
+               @endforeach
+            </select>
+            <p id="ab-reconcile-mode-hint" class="mt-1.5 text-[11px] text-on-surface-variant leading-relaxed"></p>
+         </div>
          <div>
             <label for="ab-reconcile-alasan" class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">
                Ringkasan pengajuan (untuk semua terpilih)
@@ -115,13 +131,13 @@
                class="w-full rounded-xl border border-outline-variant/25 bg-[#f8fafc] px-3 py-2.5 text-sm"
                placeholder="{{ $defaultAlasan }}">{{ old('alasan_pengajuan', $defaultAlasan) }}</textarea>
          </div>
-         <div>
+         <div id="ab-reconcile-unban-at-wrap">
             <label for="ab-reconcile-unban-at" class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">
-               Waktu unban selesai (opsional)
+               <span id="ab-reconcile-unban-at-label">Waktu unban selesai (opsional)</span>
             </label>
             <input type="datetime-local" id="ab-reconcile-unban-at" name="unban_completed_at" value="{{ old('unban_completed_at') }}"
                class="w-full rounded-xl border border-outline-variant/25 bg-[#f8fafc] px-3 py-2.5 text-sm"/>
-            <p class="mt-1 text-[11px] text-on-surface-variant">Kosongkan untuk memakai waktu sekarang.</p>
+            <p id="ab-reconcile-unban-at-hint" class="mt-1 text-[11px] text-on-surface-variant">Kosongkan untuk memakai waktu sekarang.</p>
          </div>
       </div>
 
@@ -225,6 +241,39 @@
    var checks = document.querySelectorAll('.ab-reconcile-check');
    var submitBtn = document.getElementById('ab-reconcile-submit');
    var form = document.getElementById('ab-reconcile-form');
+   var modeSelect = document.getElementById('ab-reconcile-unban-mode');
+   var modeHint = document.getElementById('ab-reconcile-mode-hint');
+   var unbanAtWrap = document.getElementById('ab-reconcile-unban-at-wrap');
+   var unbanAtLabel = document.getElementById('ab-reconcile-unban-at-label');
+   var unbanAtHint = document.getElementById('ab-reconcile-unban-at-hint');
+
+   var modeHints = {
+      success: 'Pengajuan Disetujui + insert sid_unban_log berstatus SUCCESS. Pipeline akan tampil Sudah Unban.',
+      belum_sukses: 'Hanya insert auto_banned_unban_requests berstatus Disetujui. Tidak ada log unban — pipeline Menunggu Automasi Unban.'
+   };
+
+   function updateModeUi() {
+      if (!modeSelect) return;
+      var mode = modeSelect.value;
+      if (modeHint) {
+         modeHint.textContent = modeHints[mode] || '';
+      }
+      if (unbanAtLabel) {
+         unbanAtLabel.textContent = mode === 'belum_sukses'
+            ? 'Waktu disetujui SOD (opsional)'
+            : 'Waktu unban selesai (opsional)';
+      }
+      if (unbanAtHint) {
+         unbanAtHint.textContent = mode === 'belum_sukses'
+            ? 'Digunakan sebagai reviewed_at pengajuan. Kosongkan = sekarang.'
+            : 'Digunakan sebagai completed_at log unban. Kosongkan = sekarang.';
+      }
+   }
+
+   if (modeSelect) {
+      modeSelect.addEventListener('change', updateModeUi);
+      updateModeUi();
+   }
 
    function updateSubmitState() {
       if (!submitBtn) return;
@@ -260,7 +309,11 @@
             e.preventDefault();
             return;
          }
-         if (!confirm('Rekonsiliasi ' + selected.length + ' riwayat?\n\nAkan dibuat pengajuan APPROVED + log unban SUCCESS.')) {
+         var mode = modeSelect ? modeSelect.value : 'success';
+         var modeLabel = mode === 'belum_sukses'
+            ? 'pengajuan Disetujui saja (tanpa log unban)'
+            : 'pengajuan Disetujui + log unban SUCCESS';
+         if (!confirm('Rekonsiliasi ' + selected.length + ' riwayat?\n\nMode: ' + modeLabel + '.')) {
             e.preventDefault();
          }
       });

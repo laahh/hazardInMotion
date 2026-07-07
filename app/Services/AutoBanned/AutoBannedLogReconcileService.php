@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\AutoBanned;
 
+use App\Enums\AutoBannedReconcileUnbanLogMode;
 use App\Enums\AutoBannedSidAutomationStatus;
 use App\Enums\AutoBannedUnbanStatus;
 use App\Models\AutoBannedUnbanRequest;
@@ -32,6 +33,7 @@ class AutoBannedLogReconcileService
         User $actor,
         string $alasanPengajuan = self::DEFAULT_ALASAN,
         ?Carbon $unbanCompletedAt = null,
+        AutoBannedReconcileUnbanLogMode $unbanLogMode = AutoBannedReconcileUnbanLogMode::Success,
     ): array {
         if (! AutoBannedSchema::hasUnbanRequestsTable()) {
             throw ValidationException::withMessages([
@@ -39,7 +41,7 @@ class AutoBannedLogReconcileService
             ]);
         }
 
-        if (! AutoBannedSchema::hasSidUnbanLogTable()) {
+        if ($unbanLogMode->createsUnbanLog() && ! AutoBannedSchema::hasSidUnbanLogTable()) {
             throw ValidationException::withMessages([
                 'ban_log_ids' => ['Tabel sid_unban_log belum tersedia.'],
             ]);
@@ -67,8 +69,8 @@ class AutoBannedLogReconcileService
 
         foreach ($banLogIds as $banLogId) {
             try {
-                DB::transaction(function () use ($banLogId, $actor, $alasanPengajuan, $unbanCompletedAt): void {
-                    $this->reconcileSingleBanLog($banLogId, $actor, $alasanPengajuan, $unbanCompletedAt);
+                DB::transaction(function () use ($banLogId, $actor, $alasanPengajuan, $unbanCompletedAt, $unbanLogMode): void {
+                    $this->reconcileSingleBanLog($banLogId, $actor, $alasanPengajuan, $unbanCompletedAt, $unbanLogMode);
                 });
                 $processed++;
             } catch (\Throwable $exception) {
@@ -77,7 +79,9 @@ class AutoBannedLogReconcileService
             }
         }
 
-        return compact('processed', 'skipped', 'errors');
+        return array_merge(compact('processed', 'skipped', 'errors'), [
+            'unban_log_mode' => $unbanLogMode->value,
+        ]);
     }
 
     private function reconcileSingleBanLog(
@@ -85,6 +89,7 @@ class AutoBannedLogReconcileService
         User $actor,
         string $alasanPengajuan,
         Carbon $unbanCompletedAt,
+        AutoBannedReconcileUnbanLogMode $unbanLogMode,
     ): void {
         $banLog = SidBannedLog::query()->find($banLogId);
 
@@ -96,8 +101,8 @@ class AutoBannedLogReconcileService
             throw new \RuntimeException('Riwayat banned #'.$banLogId.' bukan status SUCCESS.');
         }
 
-        if ($this->hasMatchingUnbanLog($banLog)) {
-            throw new \RuntimeException('Riwayat banned #'.$banLogId.' sudah memiliki log unban.');
+        if ($unbanLogMode->createsUnbanLog() && $this->hasMatchingUnbanLog($banLog)) {
+            throw new \RuntimeException('Riwayat banned #'.$banLogId.' sudah memiliki log unban SUCCESS.');
         }
 
         if ($this->hasUnbanRequest($banLog)) {
@@ -146,12 +151,18 @@ class AutoBannedLogReconcileService
                 'reviewed_by_id' => $actor->id,
                 'reviewed_by_name' => $actorName,
                 'reviewed_at' => $reviewedAt,
-                'catatan_review' => 'Inputasi rekonsiliasi log manual.',
+                'catatan_review' => $unbanLogMode === AutoBannedReconcileUnbanLogMode::BelumSukses
+                    ? 'Inputasi rekonsiliasi — pengajuan disetujui, unban belum SUCCESS.'
+                    : 'Inputasi rekonsiliasi log manual.',
                 'hsct_notified_at' => $reviewedAt,
                 'created_at' => $submittedAt,
                 'updated_at' => $reviewedAt,
             ]),
         );
+
+        if (! $unbanLogMode->createsUnbanLog()) {
+            return;
+        }
 
         SidUnbanLog::query()->create(
             $this->buildUnbanLogPayload($banLog, $unbanCompletedAt, (int) $unbanRequest->id),
