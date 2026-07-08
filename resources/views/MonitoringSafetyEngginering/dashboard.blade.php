@@ -54,6 +54,8 @@
       : collect([8, 14, 11, 18, 16, 12, 7]);
    $dateFromDisplay = $filters['date_from'] !== '' ? date('d/m/Y', strtotime($filters['date_from'])) : '';
    $dateToDisplay = $filters['date_to'] !== '' ? date('d/m/Y', strtotime($filters['date_to'])) : '';
+   $isSafetyTable = $activeCategory === 'safety_engineering';
+   $safetyEngineeringDetailById = $safetyEngineeringDetailById ?? [];
 @endphp
 
 {{-- Filter Bar --}}
@@ -247,8 +249,16 @@
             @forelse($tablePreview as $index => $item)
             @php
                $initials = collect(explode(' ', $item['name']))->map(fn ($w) => mb_substr($w, 0, 1))->take(2)->implode('');
+               $rowClickable = $isSafetyTable && !empty($item['id']) && isset($safetyEngineeringDetailById[$item['id']]);
+               $rowClasses = trim(implode(' ', array_filter([
+                  !empty($item['due_in_review_week']) ? 'crm-row--review-week' : '',
+                  $rowClickable ? 'crm-row--clickable' : '',
+               ])));
             @endphp
-            <tr class="{{ !empty($item['due_in_review_week']) ? 'crm-row--review-week' : '' }}">
+            <tr
+               class="{{ $rowClasses }}"
+               @if($rowClickable) data-record-id="{{ $item['id'] }}" role="button" tabindex="0" aria-label="Lihat detail {{ $item['name'] }}" @endif
+            >
                <td>
                   <div class="crm-table-name">
                      <span class="crm-table-avatar" style="background:{{ $avatarColors[$index % count($avatarColors)] }}">{{ $initials }}</span>
@@ -286,6 +296,13 @@
       </div>
    </div>
 
+   @if($isSafetyTable)
+   <p class="text-xs text-crm-muted mb-3 flex items-center gap-1">
+      <span class="material-symbols-outlined text-sm">touch_app</span>
+      Klik baris pada tabel untuk melihat detail pengendalian Safety Engineering.
+   </p>
+   @endif
+
    <div class="crm-data-table-wrap">
       <table class="crm-data-table">
          <thead>
@@ -302,7 +319,17 @@
          </thead>
          <tbody>
             @forelse($activeItems as $index => $item)
-            <tr class="{{ !empty($item['due_in_review_week']) ? 'crm-row--review-week' : '' }}">
+            @php
+               $rowClickable = $isSafetyTable && !empty($item['id']) && isset($safetyEngineeringDetailById[$item['id']]);
+               $rowClasses = trim(implode(' ', array_filter([
+                  !empty($item['due_in_review_week']) ? 'crm-row--review-week' : '',
+                  $rowClickable ? 'crm-row--clickable' : '',
+               ])));
+            @endphp
+            <tr
+               class="{{ $rowClasses }}"
+               @if($rowClickable) data-record-id="{{ $item['id'] }}" role="button" tabindex="0" aria-label="Lihat detail {{ $item['name'] }}" @endif
+            >
                <td class="text-crm-muted font-medium">{{ $index + 1 }}</td>
                <td class="font-medium max-w-xs">
                   {{ $item['name'] }}
@@ -328,6 +355,23 @@
       </table>
    </div>
 </div>
+
+@if($isSafetyTable)
+<div id="mse-record-detail-modal" class="crm-history-modal" role="dialog" aria-modal="true" aria-labelledby="mse-record-detail-title">
+   <div class="crm-history-panel crm-detail-panel">
+      <div class="crm-history-header">
+         <div>
+            <p id="mse-record-detail-title" class="crm-history-title">Detail Safety Engineering</p>
+            <p id="mse-record-detail-subtitle" class="crm-history-subtitle">—</p>
+         </div>
+         <button type="button" id="mse-record-detail-close" class="crm-history-close" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="mse-record-detail-body" class="crm-history-body">
+         <p class="crm-history-empty">Memuat detail...</p>
+      </div>
+   </div>
+</div>
+@endif
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
@@ -449,6 +493,127 @@
             }
          });
       }
+
+      @if($isSafetyTable)
+      var safetyDetailById = @json($safetyEngineeringDetailById);
+      var detailModal = document.getElementById('mse-record-detail-modal');
+      var detailBody = document.getElementById('mse-record-detail-body');
+      var detailTitle = document.getElementById('mse-record-detail-title');
+      var detailSubtitle = document.getElementById('mse-record-detail-subtitle');
+      var detailClose = document.getElementById('mse-record-detail-close');
+
+      function escapeHtml(value) {
+         return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+      }
+
+      function renderDetail(detail) {
+         if (!detail) {
+            return '<p class="crm-history-empty">Detail tidak tersedia.</p>';
+         }
+
+         var phasesHtml = (detail.phases || []).map(function (phase) {
+            return '<tr>'
+               + '<td>' + escapeHtml(phase.label) + '</td>'
+               + '<td>' + escapeHtml(phase.status) + '</td>'
+               + '<td>' + escapeHtml(phase.due_date) + '</td>'
+               + '<td>' + escapeHtml(phase.compliance) + '</td>'
+               + '</tr>';
+         }).join('');
+
+         var replikasiHtml = '';
+         if (detail.replikasi) {
+            var r = detail.replikasi;
+            replikasiHtml = '<div class="crm-detail-section">'
+               + '<p class="crm-detail-section-title">Replikasi</p>'
+               + '<div class="crm-detail-grid">'
+               + '<div><span class="crm-detail-label">Target</span><span class="crm-detail-value">' + escapeHtml(r.target_komitmen) + ' ' + escapeHtml(r.satuan) + '</span></div>'
+               + '<div><span class="crm-detail-label">Aktual</span><span class="crm-detail-value">' + escapeHtml(r.aktual) + ' ' + escapeHtml(r.satuan) + '</span></div>'
+               + '<div><span class="crm-detail-label">Populasi</span><span class="crm-detail-value">' + escapeHtml(r.total_populasi) + '</span></div>'
+               + '<div><span class="crm-detail-label">Due Date</span><span class="crm-detail-value">' + escapeHtml(r.due_date) + '</span></div>'
+               + '</div></div>';
+         }
+
+         var flagsHtml = '<div class="crm-detail-flags">'
+            + '<span class="crm-detail-flag ' + (detail.terkait_hazard ? 'crm-detail-flag--on' : '') + '">Terkait Hazard</span>'
+            + '<span class="crm-detail-flag ' + (detail.terkait_insiden ? 'crm-detail-flag--on' : '') + '">Terkait Insiden</span>'
+            + '<span class="crm-detail-flag ' + (detail.potensi_peningkatan_efektivitas ? 'crm-detail-flag--on' : '') + '">Potensi Efektivitas</span>'
+            + '</div>';
+
+         var analysisHtml = detail.brief_analysis_challenge
+            ? '<div class="crm-detail-section"><p class="crm-detail-section-title">Brief Analysis / Challenge</p><p class="crm-detail-text">' + escapeHtml(detail.brief_analysis_challenge) + '</p></div>'
+            : '';
+
+         var todoHtml = detail.next_to_do
+            ? '<div class="crm-detail-section"><p class="crm-detail-section-title">Next To Do</p><p class="crm-detail-text">' + escapeHtml(detail.next_to_do).replace(/\n/g, '<br>') + '</p></div>'
+            : '';
+
+         return '<div class="crm-detail-progress">'
+            + '<div class="crm-detail-progress-value">' + escapeHtml(detail.progress.percentage) + '%</div>'
+            + '<div class="crm-detail-progress-meta">'
+            + escapeHtml(detail.progress.done) + ' / ' + escapeHtml(detail.progress.plan) + ' ' + escapeHtml(detail.progress.unit)
+            + '</div></div>'
+            + '<div class="crm-detail-section"><p class="crm-detail-section-title">Informasi Umum</p>'
+            + '<div class="crm-detail-grid">'
+            + '<div><span class="crm-detail-label">Site</span><span class="crm-detail-value">' + escapeHtml(detail.site) + '</span></div>'
+            + '<div><span class="crm-detail-label">Perusahaan</span><span class="crm-detail-value">' + escapeHtml(detail.perusahaan) + '</span></div>'
+            + '<div><span class="crm-detail-label">Aktivitas</span><span class="crm-detail-value">' + escapeHtml(detail.aktivitas) + '</span></div>'
+            + '<div><span class="crm-detail-label">Sumber Rekayasa</span><span class="crm-detail-value">' + escapeHtml(detail.sumber_rekayasa) + '</span></div>'
+            + '<div><span class="crm-detail-label">Pelaksana</span><span class="crm-detail-value">' + escapeHtml(detail.pelaksana_rekayasa) + '</span></div>'
+            + '<div><span class="crm-detail-label">Tanggal Ideation</span><span class="crm-detail-value">' + escapeHtml(detail.tanggal_ideation) + '</span></div>'
+            + '<div><span class="crm-detail-label">Tahun Periode</span><span class="crm-detail-value">' + escapeHtml(detail.period_year) + '</span></div>'
+            + '<div><span class="crm-detail-label">Intervensi Deviasi</span><span class="crm-detail-value">' + escapeHtml(detail.intervensi_deviasi) + '</span></div>'
+            + '</div></div>'
+            + flagsHtml
+            + '<div class="crm-detail-section"><p class="crm-detail-section-title">Fase Penyelesaian</p>'
+            + '<table class="crm-detail-phase-table"><thead><tr><th>Fase</th><th>Status</th><th>Due Date</th><th>Compliance</th></tr></thead>'
+            + '<tbody>' + (phasesHtml || '<tr><td colspan="4" class="text-center text-crm-muted py-4">Tidak ada data fase</td></tr>') + '</tbody></table></div>'
+            + replikasiHtml
+            + analysisHtml
+            + todoHtml;
+      }
+
+      function openDetailModal(recordId) {
+         var detail = safetyDetailById[String(recordId)] || safetyDetailById[recordId];
+         if (!detail || !detailModal) return;
+
+         detailTitle.textContent = detail.pengendalian_rekayasa || 'Detail Safety Engineering';
+         detailSubtitle.textContent = [detail.site, detail.perusahaan, detail.sumber_rekayasa].filter(Boolean).join(' · ');
+         detailBody.innerHTML = renderDetail(detail);
+         detailModal.classList.add('crm-history-modal--open');
+         document.body.style.overflow = 'hidden';
+      }
+
+      function closeDetailModal() {
+         detailModal?.classList.remove('crm-history-modal--open');
+         document.body.style.overflow = '';
+      }
+
+      document.querySelectorAll('tr.crm-row--clickable[data-record-id]').forEach(function (row) {
+         row.addEventListener('click', function () {
+            openDetailModal(this.getAttribute('data-record-id'));
+         });
+         row.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+               event.preventDefault();
+               openDetailModal(this.getAttribute('data-record-id'));
+            }
+         });
+      });
+
+      detailClose?.addEventListener('click', closeDetailModal);
+      detailModal?.addEventListener('click', function (event) {
+         if (event.target === detailModal) closeDetailModal();
+      });
+      document.addEventListener('keydown', function (event) {
+         if (event.key === 'Escape' && detailModal?.classList.contains('crm-history-modal--open')) {
+            closeDetailModal();
+         }
+      });
+      @endif
    });
 </script>
 @endpush

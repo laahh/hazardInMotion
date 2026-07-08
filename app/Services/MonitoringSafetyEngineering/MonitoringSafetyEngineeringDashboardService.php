@@ -94,26 +94,43 @@ class MonitoringSafetyEngineeringDashboardService
         $query = MonitoringSafetyEngineeringRecord::query()
             ->select([
                 'id',
+                'row_no',
                 'site',
                 'perusahaan',
+                'aktivitas',
                 'sumber_rekayasa',
                 'pelaksana_rekayasa',
                 'pengendalian_rekayasa',
                 'tanggal_ideation',
                 'kajian_teknis_due_date',
                 'kajian_teknis_status',
+                'kajian_teknis_status_compliance',
                 'pengadaan_due_date',
                 'pengadaan_status',
+                'pengadaan_status_compliance',
                 'uji_coba_due_date',
                 'uji_coba_status',
+                'uji_coba_status_compliance',
                 'standardisasi_due_date',
                 'standardisasi_status',
+                'standardisasi_status_compliance',
                 'replikasi_due_date',
+                'replikasi_total_populasi',
                 'replikasi_satuan',
                 'replikasi_target_komitmen',
+                'replikasi_diusulkan_pjo',
+                'replikasi_ditinjau',
+                'replikasi_disetujui',
                 'replikasi_aktual',
+                'deteksi_deviasi',
+                'intervensi_deviasi',
+                'prediksi_penurunan_tangga_risiko',
+                'terkait_hazard',
+                'terkait_insiden',
                 'brief_analysis_challenge',
                 'next_to_do',
+                'potensi_peningkatan_efektivitas',
+                'pengendalian_peningkatan_efektivitas',
                 'period_year',
             ])
             ->orderBy('sort_order')
@@ -157,7 +174,13 @@ class MonitoringSafetyEngineeringDashboardService
 
         foreach ($records as $record) {
             $category = $this->resolveCategory($record);
-            $grouped[$category][] = $this->recordToItem($record, $filters);
+            $item = $this->recordToItem($record, $filters);
+
+            if ($category === 'safety_engineering') {
+                $item['detail'] = $this->buildRecordDetail($record, $item);
+            }
+
+            $grouped[$category][] = $item;
         }
 
         return $grouped;
@@ -224,6 +247,86 @@ class MonitoringSafetyEngineeringDashboardService
             'due_in_review_week' => $this->recordHasDueDateInReviewWeek($record, $filters),
             'site' => $record->site,
             'perusahaan' => $record->perusahaan,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>
+     */
+    private function buildRecordDetail(MonitoringSafetyEngineeringRecord $record, array $item): array
+    {
+        $sumberLabels = config('monitoring_safety_engineering.sumber_rekayasa', []);
+        $pelaksanaLabels = config('monitoring_safety_engineering.pelaksana_rekayasa', []);
+        $phaseStatusLabels = config('monitoring_safety_engineering.phase_status', []);
+        $complianceLabels = config('monitoring_safety_engineering.status_compliance', []);
+        $intervensiLabels = config('monitoring_safety_engineering.intervensi_deviasi', []);
+
+        $sumber = $this->normalizeEnumValue($record->sumber_rekayasa);
+        $pelaksana = $this->normalizeEnumValue($record->pelaksana_rekayasa);
+        $intervensi = $this->normalizeEnumValue($record->intervensi_deviasi);
+
+        $phases = [];
+
+        foreach (config('monitoring_safety_engineering.trace_phases', []) as $phase) {
+            $statusField = (string) ($phase['status'] ?? '');
+            $dueField = (string) ($phase['due'] ?? '');
+            $complianceField = (string) ($phase['compliance'] ?? '');
+            $statusValue = $this->normalizeEnumValue($record->{$statusField} ?? null);
+            $complianceValue = $this->normalizeEnumValue($record->{$complianceField} ?? null);
+            $dueDate = $record->{$dueField} ?? null;
+
+            $phases[] = [
+                'label' => (string) ($phase['label'] ?? $statusField),
+                'status' => (string) ($phaseStatusLabels[$statusValue] ?? ($statusValue !== '' ? ucfirst(str_replace('_', ' ', $statusValue)) : '-')),
+                'due_date' => $dueDate !== null ? $dueDate->format('d M Y') : '-',
+                'compliance' => (string) ($complianceLabels[$complianceValue] ?? ($complianceValue !== '' ? ucfirst(str_replace('_', ' ', $complianceValue)) : '-')),
+            ];
+        }
+
+        $replikasi = null;
+
+        if ((int) $record->replikasi_target_komitmen > 0) {
+            $replikasi = [
+                'total_populasi' => (int) $record->replikasi_total_populasi,
+                'target_komitmen' => (int) $record->replikasi_target_komitmen,
+                'diusulkan_pjo' => $record->replikasi_diusulkan_pjo,
+                'ditinjau' => $record->replikasi_ditinjau,
+                'disetujui' => $record->replikasi_disetujui,
+                'aktual' => (int) $record->replikasi_aktual,
+                'satuan' => $record->replikasi_satuan !== '' ? $record->replikasi_satuan : 'Kegiatan',
+                'due_date' => $record->replikasi_due_date?->format('d M Y') ?? '-',
+            ];
+        }
+
+        return [
+            'id' => $record->id,
+            'row_no' => (int) $record->row_no,
+            'pengendalian_rekayasa' => $record->pengendalian_rekayasa,
+            'site' => $record->site,
+            'perusahaan' => $record->perusahaan,
+            'aktivitas' => $record->aktivitas !== '' && $record->aktivitas !== '-' ? $record->aktivitas : '-',
+            'sumber_rekayasa' => (string) ($sumberLabels[$sumber] ?? $sumber),
+            'pelaksana_rekayasa' => (string) ($pelaksanaLabels[$pelaksana] ?? $pelaksana),
+            'tanggal_ideation' => $record->tanggal_ideation?->format('d M Y') ?? '-',
+            'period_year' => (int) $record->period_year,
+            'progress' => [
+                'plan' => (int) $item['plan'],
+                'done' => (int) $item['done'],
+                'percentage' => (int) $item['percentage'],
+                'unit' => (string) $item['unit'],
+            ],
+            'phases' => $phases,
+            'replikasi' => $replikasi,
+            'terkait_hazard' => (bool) $record->terkait_hazard,
+            'terkait_insiden' => (bool) $record->terkait_insiden,
+            'deteksi_deviasi' => $record->deteksi_deviasi,
+            'intervensi_deviasi' => (string) ($intervensiLabels[$intervensi] ?? ($record->intervensi_deviasi ?? '-')),
+            'prediksi_penurunan_tangga_risiko' => $record->prediksi_penurunan_tangga_risiko,
+            'potensi_peningkatan_efektivitas' => (bool) $record->potensi_peningkatan_efektivitas,
+            'pengendalian_peningkatan_efektivitas' => $record->pengendalian_peningkatan_efektivitas ?? '-',
+            'brief_analysis_challenge' => trim((string) ($record->brief_analysis_challenge ?? '')),
+            'next_to_do' => trim((string) ($record->next_to_do ?? '')),
         ];
     }
 

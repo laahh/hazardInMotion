@@ -319,6 +319,50 @@
       font-weight: 600;
       vertical-align: middle;
    }
+   .crm-data-table tbody tr.crm-row--clickable,
+   .crm-table tbody tr.crm-row--clickable { cursor: pointer; }
+   .crm-data-table tbody tr.crm-row--clickable:hover td,
+   .crm-table tbody tr.crm-row--clickable:hover td { background: #EEF2FF; }
+   .crm-detail-panel { width: min(860px, 100%); }
+   .crm-detail-progress {
+      display: flex; align-items: center; gap: 1rem;
+      padding: 0.85rem 1rem; margin-bottom: 1rem;
+      border-radius: 0.65rem; background: #ECE9FF;
+   }
+   .crm-detail-progress-value { font-size: 1.75rem; font-weight: 800; color: #7366FF; line-height: 1; }
+   .crm-detail-progress-meta { font-size: 0.8125rem; color: #5f52e0; font-weight: 600; }
+   .crm-detail-section { margin-bottom: 1rem; }
+   .crm-detail-section-title {
+      font-size: 0.75rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.05em; color: #7366FF; margin-bottom: 0.5rem;
+   }
+   .crm-detail-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem 1rem;
+   }
+   @media (min-width: 768px) {
+      .crm-detail-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+   }
+   .crm-detail-label { display: block; font-size: 0.65rem; color: #848488; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+   .crm-detail-value { display: block; font-size: 0.8125rem; color: #2F2F3A; font-weight: 600; margin-top: 0.15rem; word-break: break-word; }
+   .crm-detail-flags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+   .crm-detail-flag {
+      font-size: 0.6875rem; font-weight: 700; padding: 0.25rem 0.55rem; border-radius: 9999px;
+      background: #F4F7F9; color: #848488;
+   }
+   .crm-detail-flag--on { background: #E8F9E5; color: #2d8a15; }
+   .crm-detail-phase-table {
+      width: 100%; border-collapse: collapse; font-size: 0.75rem;
+      border: 1px solid #E6E9EB; border-radius: 0.5rem; overflow: hidden;
+   }
+   .crm-detail-phase-table thead th {
+      background: #F4F7F9; color: #848488; font-weight: 700; text-align: left;
+      padding: 0.55rem 0.75rem; border-bottom: 1px solid #E6E9EB;
+   }
+   .crm-detail-phase-table tbody td {
+      padding: 0.55rem 0.75rem; border-bottom: 1px solid #F4F7F9; color: #2F2F3A;
+   }
+   .crm-detail-phase-table tbody tr:last-child td { border-bottom: none; }
+   .crm-detail-text { font-size: 0.8125rem; color: #2F2F3A; line-height: 1.55; white-space: pre-wrap; }
    .crm-pct {
       display: inline-flex; align-items: center; justify-content: center;
       min-width: 2.75rem; padding: 0.15rem 0.45rem; border-radius: 0.375rem;

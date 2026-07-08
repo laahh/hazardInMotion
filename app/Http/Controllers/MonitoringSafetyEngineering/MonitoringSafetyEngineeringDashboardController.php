@@ -30,6 +30,10 @@ class MonitoringSafetyEngineeringDashboardController extends Controller
             'overdueSummary' => $dashboard['overdue_summary'],
             'activeCategory' => $dashboard['active_category'],
             'activeItems' => $dashboard['active_items'],
+            'safetyEngineeringDetailById' => collect($dashboard['safety_engineering_items'] ?? [])
+                ->filter(static fn (array $item): bool => isset($item['detail']))
+                ->mapWithKeys(static fn (array $item): array => [(int) $item['id'] => $item['detail']])
+                ->all(),
             'briefAnalysis' => $dashboard['brief_analysis'],
             'nextTodo' => $dashboard['next_todo'],
             'charts' => $dashboard['charts'],
