@@ -33,6 +33,25 @@ class MonitoringSafetyEngineeringOutsideCommitmentService
         $activeCategory = $filters['category'];
         $activeItems = $categories[$activeCategory]['items'] ?? [];
 
+        if ($activeItems === [] && ! $request->has('category')) {
+            foreach ($categories as $key => $category) {
+                if ($category['items'] !== []) {
+                    $activeCategory = (string) $key;
+                    $activeItems = $category['items'];
+                    break;
+                }
+            }
+        }
+
+        $filters['category'] = $activeCategory;
+
+        $previewItems = array_slice(array_merge(
+            ...array_values(array_map(
+                static fn (array $category): array => $category['items'],
+                $categories,
+            )),
+        ), 0, 5);
+
         return [
             'filters' => $filters,
             'filter_options' => $this->filterOptions(),
@@ -40,6 +59,7 @@ class MonitoringSafetyEngineeringOutsideCommitmentService
             'overdue_summary' => $this->buildOverdueSummary($categories),
             'active_category' => $activeCategory,
             'active_items' => $activeItems,
+            'preview_items' => $previewItems,
             'brief_analysis' => $this->buildBriefAnalysis($records, $categories),
             'next_todo' => $this->buildNextTodo($records),
             'charts' => $this->buildCharts($categories),
@@ -65,6 +85,7 @@ class MonitoringSafetyEngineeringOutsideCommitmentService
             'overdue_summary' => $this->buildOverdueSummary($categories),
             'active_category' => $filters['category'],
             'active_items' => [],
+            'preview_items' => [],
             'brief_analysis' => [
                 [
                     'title' => 'Status Penyelesaian',

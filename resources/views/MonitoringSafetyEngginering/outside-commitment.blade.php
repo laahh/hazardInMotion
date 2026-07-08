@@ -45,7 +45,7 @@
    $statusNotStarted = $charts['status_breakdown']['data'][3] ?? 0;
    $statusTotal = max(1, $statusCompleted + $statusOnTrack + $statusRunning + $statusNotStarted);
    $avatarColors = ['#7366FF', '#51BB25', '#FFAA05', '#FF5B5B', '#3B97FF', '#9b93ff'];
-   $tablePreview = collect($activeItems)->take(5);
+   $tablePreview = collect($previewItems ?? $activeItems)->take(5);
    $categoryIcons = [
       'arahan_manajemen' => 'campaign',
       'rekom_insiden' => 'report',

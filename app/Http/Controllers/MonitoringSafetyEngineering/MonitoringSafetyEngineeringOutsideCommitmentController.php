@@ -29,6 +29,7 @@ class MonitoringSafetyEngineeringOutsideCommitmentController extends Controller
             'overdueSummary' => $dashboard['overdue_summary'],
             'activeCategory' => $dashboard['active_category'],
             'activeItems' => $dashboard['active_items'],
+            'previewItems' => $dashboard['preview_items'],
             'briefAnalysis' => $dashboard['brief_analysis'],
             'nextTodo' => $dashboard['next_todo'],
             'charts' => $dashboard['charts'],
