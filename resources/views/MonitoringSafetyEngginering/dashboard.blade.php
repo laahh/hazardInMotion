@@ -79,7 +79,7 @@
    </div>
 
    <div class="crm-filter-field crm-filter-field--week">
-      <label class="crm-filter-label" for="mse-filter-week">Review W</label>
+      <label class="crm-filter-label" for="mse-filter-week">Review W <span class="text-crm-muted font-normal">(highlight)</span></label>
       <select id="mse-filter-week" name="review_week" class="crm-filter-select" onchange="this.form.submit()">
          @foreach($filterOptions['review_weeks'] ?? [] as $week)
          <option value="{{ $week }}" @selected($filters['review_week'] === $week)>{{ $week }}</option>
@@ -88,7 +88,7 @@
    </div>
 
    <div class="crm-filter-field crm-filter-field--period">
-      <label class="crm-filter-label" for="mse-filter-date-from">Periode</label>
+      <label class="crm-filter-label" for="mse-filter-date-from">Periode YTD</label>
       <div class="crm-filter-date-range">
          <label class="crm-filter-date-box" for="mse-filter-date-from">
             <span class="crm-filter-date-display" id="mse-date-from-display">{{ $dateFromDisplay }}</span>
@@ -122,6 +122,7 @@
       </div>
    </div>
 </form>
+<p class="text-xs text-crm-muted mb-4 -mt-2">Menampilkan progres YTD tahun {{ $filters['period_year'] }}. Baris dengan highlight = due date di {{ $filters['review_week'] }}.</p>
 
 {{-- Row 1: 4 Stat Cards --}}
 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
@@ -247,7 +248,7 @@
             @php
                $initials = collect(explode(' ', $item['name']))->map(fn ($w) => mb_substr($w, 0, 1))->take(2)->implode('');
             @endphp
-            <tr>
+            <tr class="{{ !empty($item['due_in_review_week']) ? 'crm-row--review-week' : '' }}">
                <td>
                   <div class="crm-table-name">
                      <span class="crm-table-avatar" style="background:{{ $avatarColors[$index % count($avatarColors)] }}">{{ $initials }}</span>
@@ -301,9 +302,14 @@
          </thead>
          <tbody>
             @forelse($activeItems as $index => $item)
-            <tr>
+            <tr class="{{ !empty($item['due_in_review_week']) ? 'crm-row--review-week' : '' }}">
                <td class="text-crm-muted font-medium">{{ $index + 1 }}</td>
-               <td class="font-medium max-w-xs">{{ $item['name'] }}</td>
+               <td class="font-medium max-w-xs">
+                  {{ $item['name'] }}
+                  @if(!empty($item['due_in_review_week']))
+                  <span class="crm-review-week-badge">{{ $filters['review_week'] }}</span>
+                  @endif
+               </td>
                <td class="text-crm-muted">{{ $item['unit'] }}</td>
                <td class="text-center font-semibold">{{ $item['plan'] }}</td>
                <td class="text-center font-semibold">{{ $item['done'] }}</td>

@@ -7,7 +7,6 @@ namespace App\Services\MonitoringSafetyEngineering;
 use App\Models\MonitoringSafetyEngineeringRecord;
 use App\Services\MonitoringSafetyEngineering\Concerns\BuildsMonitoringSafetyEngineeringItems;
 use BackedEnum;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -29,7 +28,7 @@ class MonitoringSafetyEngineeringOutsideCommitmentService
         }
 
         $records = $this->fetchFilteredRecords($filters);
-        $categories = $this->buildCategories($records);
+        $categories = $this->buildCategories($records, $filters);
 
         $activeCategory = $filters['category'];
         $activeItems = $categories[$activeCategory]['items'] ?? [];
@@ -172,66 +171,19 @@ class MonitoringSafetyEngineeringOutsideCommitmentService
         if ($filters['period_year'] > 0) {
             $query->where('period_year', $filters['period_year']);
         }
-
-        if ($filters['date_from'] !== '') {
-            $query->where(function (Builder $builder) use ($filters): void {
-                $builder->whereDate('replikasi_due_date', '>=', $filters['date_from'])
-                    ->orWhereDate('tanggal_ideation', '>=', $filters['date_from'])
-                    ->orWhereDate('kajian_teknis_due_date', '>=', $filters['date_from'])
-                    ->orWhereDate('pengadaan_due_date', '>=', $filters['date_from'])
-                    ->orWhereDate('uji_coba_due_date', '>=', $filters['date_from'])
-                    ->orWhereDate('standardisasi_due_date', '>=', $filters['date_from']);
-            });
-        }
-
-        if ($filters['date_to'] !== '') {
-            $query->where(function (Builder $builder) use ($filters): void {
-                $builder->whereDate('replikasi_due_date', '<=', $filters['date_to'])
-                    ->orWhereDate('tanggal_ideation', '<=', $filters['date_to'])
-                    ->orWhereDate('kajian_teknis_due_date', '<=', $filters['date_to'])
-                    ->orWhereDate('pengadaan_due_date', '<=', $filters['date_to'])
-                    ->orWhereDate('uji_coba_due_date', '<=', $filters['date_to'])
-                    ->orWhereDate('standardisasi_due_date', '<=', $filters['date_to']);
-            });
-        }
-
-        $this->applyReviewWeekFilter($query, $filters);
-    }
-
-    /**
-     * @param  Builder<MonitoringSafetyEngineeringRecord>  $query
-     */
-    private function applyReviewWeekFilter(Builder $query, array $filters): void
-    {
-        if (! preg_match('/^W(\d{1,2})$/', $filters['review_week'], $matches)) {
-            return;
-        }
-
-        $week = max(1, min(53, (int) $matches[1]));
-        $year = $filters['period_year'] > 0 ? $filters['period_year'] : (int) now()->year;
-        $start = Carbon::now()->setISODate($year, $week)->startOfWeek()->toDateString();
-        $end = Carbon::now()->setISODate($year, $week)->endOfWeek()->toDateString();
-
-        $query->where(function (Builder $builder) use ($start, $end): void {
-            $builder->whereBetween('replikasi_due_date', [$start, $end])
-                ->orWhereBetween('kajian_teknis_due_date', [$start, $end])
-                ->orWhereBetween('pengadaan_due_date', [$start, $end])
-                ->orWhereBetween('uji_coba_due_date', [$start, $end])
-                ->orWhereBetween('standardisasi_due_date', [$start, $end]);
-        });
     }
 
     /**
      * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $records
      * @return array<string, array{label: string, color: string, items: list<array<string, mixed>>}>
      */
-    private function buildCategories(Collection $records): array
+    private function buildCategories(Collection $records, array $filters): array
     {
         $categories = $this->emptyCategories();
 
         foreach ($records as $record) {
             $category = $this->resolveCategory($record);
-            $categories[$category]['items'][] = $this->recordToItem($record);
+            $categories[$category]['items'][] = $this->recordToItem($record, $filters);
         }
 
         return $categories;
@@ -253,7 +205,7 @@ class MonitoringSafetyEngineeringOutsideCommitmentService
     /**
      * @return array<string, mixed>
      */
-    private function recordToItem(MonitoringSafetyEngineeringRecord $record): array
+    private function recordToItem(MonitoringSafetyEngineeringRecord $record, array $filters): array
     {
         $plan = (int) $record->replikasi_target_komitmen;
         $done = (int) $record->replikasi_aktual;
@@ -284,6 +236,7 @@ class MonitoringSafetyEngineeringOutsideCommitmentService
             'due_date' => $dueDate,
             'due_date_label' => $dueDate !== '' ? date('d M Y', strtotime($dueDate)) : '-',
             'overdue' => $this->calculateRecordOverdue($record, $percentage),
+            'due_in_review_week' => $this->recordHasDueDateInReviewWeek($record, $filters),
             'site' => $record->site,
             'perusahaan' => $record->perusahaan,
             'sumber_rekayasa' => $this->normalizeEnumValue($record->sumber_rekayasa),
@@ -365,7 +318,7 @@ class MonitoringSafetyEngineeringOutsideCommitmentService
             return [
                 [
                     'title' => 'Status Penyelesaian',
-                    'points' => ['Belum ada data luar komitmen pada filter yang dipilih.'],
+                    'points' => ['Belum ada data luar komitmen pada periode YTD yang dipilih.'],
                 ],
             ];
         }

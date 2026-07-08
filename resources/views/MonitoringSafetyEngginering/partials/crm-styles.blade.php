@@ -306,6 +306,19 @@
    }
    .crm-data-table tbody tr:nth-child(even) td { background: #FAFBFC; }
    .crm-data-table tbody tr:hover td { background: #F4F7F9; }
+   .crm-data-table tbody tr.crm-row--review-week td { background: #EEF2FF; }
+   .crm-data-table tbody tr.crm-row--review-week:hover td { background: #E0E7FF; }
+   .crm-review-week-badge {
+      display: inline-block;
+      margin-left: 0.375rem;
+      padding: 0.125rem 0.375rem;
+      border-radius: 9999px;
+      background: #7366FF;
+      color: #fff;
+      font-size: 0.625rem;
+      font-weight: 600;
+      vertical-align: middle;
+   }
    .crm-pct {
       display: inline-flex; align-items: center; justify-content: center;
       min-width: 2.75rem; padding: 0.15rem 0.45rem; border-radius: 0.375rem;
