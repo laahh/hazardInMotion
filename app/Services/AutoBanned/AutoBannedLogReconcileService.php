@@ -103,8 +103,8 @@ class AutoBannedLogReconcileService
             throw new \RuntimeException('Riwayat banned #'.$banLogId.' tidak ditemukan.');
         }
 
-        if ($banLog->automation_status !== AutoBannedSidAutomationStatus::Success) {
-            throw new \RuntimeException('Riwayat banned #'.$banLogId.' bukan status SUCCESS.');
+        if (! $this->isReconcileEligibleBanLog($banLog)) {
+            throw new \RuntimeException('Riwayat banned #'.$banLogId.' bukan status SUCCESS/SKIPPED yang boleh direkonsiliasi.');
         }
 
         if ($unbanLogMode->createsUnbanLog() && $this->hasMatchingUnbanLog($banLog)) {
@@ -183,8 +183,8 @@ class AutoBannedLogReconcileService
             throw new \RuntimeException('Riwayat banned #'.$banLogId.' tidak ditemukan.');
         }
 
-        if ($banLog->automation_status !== AutoBannedSidAutomationStatus::Success) {
-            throw new \RuntimeException('Riwayat banned #'.$banLogId.' bukan status SUCCESS.');
+        if (! $this->isReconcileEligibleBanLog($banLog)) {
+            throw new \RuntimeException('Riwayat banned #'.$banLogId.' bukan status SUCCESS/SKIPPED yang boleh direkonsiliasi.');
         }
 
         if ($banLog->scr_daily_banned_id === null) {
@@ -214,6 +214,21 @@ class AutoBannedLogReconcileService
 
         SidUnbanLog::query()->create(
             $this->buildUnbanLogPayload($banLog, $unbanCompletedAt, (int) $unbanRequest->id),
+        );
+    }
+
+    private function isReconcileEligibleBanLog(SidBannedLog $banLog): bool
+    {
+        $status = $banLog->automation_status;
+
+        if ($status instanceof AutoBannedSidAutomationStatus) {
+            return $status->isReconcileEligible();
+        }
+
+        return in_array(
+            strtoupper(trim((string) $status)),
+            AutoBannedSidAutomationStatus::reconcileEligibleValues(),
+            true,
         );
     }
 

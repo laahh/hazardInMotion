@@ -59,8 +59,9 @@
    <p class="font-bold mb-1">Kapan menggunakan fitur ini?</p>
    <p class="text-xs leading-relaxed text-amber-900/90">
       @if($isMissingUnbanLogGap)
-      Tab <strong>Tanpa log unban</strong>: pengajuan sudah ada (<code class="text-[11px]">scr_daily_banned_id</code> sama), log unban belum ada.
-      Pilih mode <strong>LOG SAJA (log unban saja)</strong> untuk backfill <code class="text-[11px]">sid_unban_log</code> SUCCESS.
+      Tab <strong>Tanpa log unban</strong>: pengajuan Disetujui sudah ada (<code class="text-[11px]">scr_daily_banned_id</code> sama), log unban belum ada.
+      Termasuk log banned <strong>SKIPPED</strong> (ban sudah ada, automasi lewati duplikat).
+      Pilih mode <strong>LOG SAJA (log unban saja)</strong>.
       @else
       Tab <strong>Tanpa pengajuan</strong>: banned ada, belum ada request unban di sistem.
       <strong>SUCCESS (request unban + log unban)</strong> atau
@@ -213,6 +214,7 @@
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Karyawan</th>
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Site</th>
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Alasan</th>
+                  <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Status ban</th>
                   @if($isMissingUnbanLogGap)
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Pengajuan</th>
                   @endif
@@ -250,6 +252,15 @@
                      @endif
                      {{ \Illuminate\Support\Str::limit($row->banned_reason ?? '—', 80) }}
                   </td>
+                  <td class="border-b border-outline-variant/10 px-4 py-3 align-top text-xs">
+                     @if($row->automation_status)
+                     <span class="inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-bold {{ $row->automation_status->badgeClass() ?? '' }}">
+                        {{ $row->automation_status->label() ?? $row->automation_status }}
+                     </span>
+                     @else
+                     —
+                     @endif
+                  </td>
                   @if($isMissingUnbanLogGap)
                   <td class="border-b border-outline-variant/10 px-4 py-3 align-top text-xs">
                      @if($linkedRequest)
@@ -270,7 +281,7 @@
                </tr>
                @empty
                <tr>
-                  <td colspan="{{ $isMissingUnbanLogGap ? 7 : 6 }}" class="px-4 py-10 text-center text-on-surface-variant">
+                  <td colspan="{{ $isMissingUnbanLogGap ? 8 : 7 }}" class="px-4 py-10 text-center text-on-surface-variant">
                      @if($isMissingUnbanLogGap)
                      Tidak ada gap log unban untuk filter ini. Semua pengajuan Disetujui sudah memiliki <code>sid_unban_log</code> SUCCESS dengan <code>scr_daily_banned_id</code> yang sama.
                      @else

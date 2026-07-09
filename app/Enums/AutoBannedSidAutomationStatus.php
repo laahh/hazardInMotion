@@ -33,4 +33,22 @@ enum AutoBannedSidAutomationStatus: string
             self::Skipped => 'ab-badge--muted',
         };
     }
+
+    /**
+     * Status banned yang boleh direkonsiliasi (termasuk SKIPPED = ban sudah ada, automasi lewati duplikat).
+     *
+     * @return array<int, string>
+     */
+    public static function reconcileEligibleValues(): array
+    {
+        return [
+            self::Success->value,
+            self::Skipped->value,
+        ];
+    }
+
+    public function isReconcileEligible(): bool
+    {
+        return in_array($this->value, self::reconcileEligibleValues(), true);
+    }
 }

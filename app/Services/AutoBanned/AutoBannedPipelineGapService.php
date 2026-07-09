@@ -134,7 +134,7 @@ class AutoBannedPipelineGapService
         $minDaysOld = max(0, (int) ($filters['min_days_old'] ?? self::DEFAULT_MIN_DAYS_OLD));
 
         $query = SidBannedLog::query()
-            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+            ->whereIn('automation_status', AutoBannedSidAutomationStatus::reconcileEligibleValues())
             ->whereNotNull('filter_date')
             ->whereNotNull('scr_daily_banned_id');
 
@@ -178,6 +178,7 @@ class AutoBannedPipelineGapService
                 'banned_status',
                 'banned_reason',
                 'status_onsite',
+                'automation_status',
                 'completed_at',
                 'started_at',
             ]);
@@ -242,7 +243,7 @@ class AutoBannedPipelineGapService
         }
 
         $query = SidBannedLog::query()
-            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+            ->whereIn('automation_status', AutoBannedSidAutomationStatus::reconcileEligibleValues())
             ->whereNotNull('site_dedicated')
             ->where('site_dedicated', '!=', '');
 
