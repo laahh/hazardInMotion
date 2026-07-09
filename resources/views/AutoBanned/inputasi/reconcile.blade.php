@@ -59,12 +59,12 @@
    <p class="font-bold mb-1">Kapan menggunakan fitur ini?</p>
    <p class="text-xs leading-relaxed text-amber-900/90">
       @if($isMissingUnbanLogGap)
-      Tab <strong>Tanpa log unban</strong>: pengajuan treatment sudah ada &amp; Disetujui (<code class="text-[11px]">scr_daily_banned_id</code> sama), tapi <code class="text-[11px]">sid_unban_log</code> SUCCESS belum ada.
-      Gunakan mode <strong>LOG SAJA</strong> untuk backfill log unban tanpa membuat pengajuan baru.
+      Tab <strong>Tanpa log unban</strong>: pengajuan sudah ada (<code class="text-[11px]">scr_daily_banned_id</code> sama), log unban belum ada.
+      Pilih mode <strong>LOG SAJA (log unban saja)</strong> untuk backfill <code class="text-[11px]">sid_unban_log</code> SUCCESS.
       @else
-      Tab <strong>Tanpa pengajuan</strong>: banned ada, belum ada pengajuan di sistem.
-      <strong>SUCCESS</strong> = pengajuan Disetujui + log unban SUCCESS.
-      <strong>BLM SUKSES</strong> = hanya pengajuan Disetujui (unban otomatis belum berhasil).
+      Tab <strong>Tanpa pengajuan</strong>: banned ada, belum ada request unban di sistem.
+      <strong>SUCCESS (request unban + log unban)</strong> atau
+      <strong>BLM SUKSES (hanya request unban)</strong>.
       Default filter: <code class="text-[11px]">filter_date</code> H-{{ $defaultMinDaysOld }} atau lebih lama.
       @endif
    </p>
@@ -150,7 +150,7 @@
                class="w-full rounded-xl border border-outline-variant/25 bg-[#f8fafc] px-3 py-2.5 text-sm text-on-surface focus:border-primary/30 focus:ring-2 focus:ring-primary/10">
                @foreach($unbanLogModes ?? $gapType->allowedUnbanLogModes() as $mode)
                <option value="{{ $mode->value }}" @selected(old('unban_log_mode', $defaultMode) === $mode->value)>
-                  {{ $mode->shortLabel() }}
+                  {{ $mode->selectLabel() }}
                </option>
                @endforeach
             </select>
@@ -300,9 +300,9 @@
    var unbanAtHint = document.getElementById('ab-reconcile-unban-at-hint');
 
    var modeHints = {
-      success: 'Pengajuan Disetujui + insert sid_unban_log berstatus SUCCESS. Pipeline akan tampil Sudah Unban.',
-      belum_sukses: 'Hanya insert auto_banned_unban_requests berstatus Disetujui. Tidak ada log unban — pipeline Menunggu Automasi Unban.',
-      unban_log_only: 'Pengajuan sudah ada (scr_daily_banned_id sama). Hanya insert sid_unban_log SUCCESS — tidak membuat pengajuan baru.'
+      success: 'Request unban Disetujui + insert sid_unban_log SUCCESS. Pipeline akan tampil Sudah Unban.',
+      belum_sukses: 'Hanya insert request unban Disetujui. Tanpa log unban — pipeline Menunggu Automasi Unban.',
+      unban_log_only: 'Request unban sudah ada (scr_daily_banned_id sama). Hanya insert log unban SUCCESS.'
    };
 
    function updateModeUi() {
@@ -367,9 +367,9 @@
          }
          var mode = modeSelect ? modeSelect.value : 'success';
          var modeLabel = {
-            belum_sukses: 'pengajuan Disetujui saja (tanpa log unban)',
-            unban_log_only: 'log unban SUCCESS saja (pengajuan sudah ada)',
-            success: 'pengajuan Disetujui + log unban SUCCESS'
+            belum_sukses: 'BLM SUKSES (hanya request unban)',
+            unban_log_only: 'LOG SAJA (log unban saja)',
+            success: 'SUCCESS (request unban + log unban)'
          }[mode] || mode;
          if (!confirm('Rekonsiliasi ' + selected.length + ' riwayat?\n\nMode: ' + modeLabel + '.')) {
             e.preventDefault();

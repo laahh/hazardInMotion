@@ -28,6 +28,16 @@ enum AutoBannedReconcileUnbanLogMode: string
         };
     }
 
+    /** Label untuk opsi select mode rekonsiliasi. */
+    public function selectLabel(): string
+    {
+        return match ($this) {
+            self::Success => 'SUCCESS (request unban + log unban)',
+            self::BelumSukses => 'BLM SUKSES (hanya request unban)',
+            self::UnbanLogOnly => 'LOG SAJA (log unban saja)',
+        };
+    }
+
     public function createsUnbanLog(): bool
     {
         return $this === self::Success || $this === self::UnbanLogOnly;
