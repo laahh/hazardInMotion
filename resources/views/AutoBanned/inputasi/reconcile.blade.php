@@ -6,7 +6,7 @@
    @include('AutoBanned.partials.page-header', [
       'breadcrumbCurrent' => 'Rekonsiliasi Log',
       'pageTitle' => 'Rekonsiliasi Log Unban',
-      'pageSubtitle' => 'Backfill pengajuan dan/atau log unban untuk data yang belum sinkron',
+      'pageSubtitle' => 'Pastikan setiap banned SUCCESS punya pengajuan Disetujui + log unban SUCCESS per tiket',
    ])
 @endsection
 
@@ -16,6 +16,7 @@
    use App\Enums\AutoBannedReconcileUnbanLogMode;
 
    $gapRows = collect($gapRows ?? []);
+   $gapExplanations = collect($gapExplanations ?? []);
    $tableAvailable = $tableAvailable ?? false;
    $filters = $filters ?? [];
    $filterOptions = $filterOptions ?? ['sites' => collect()];
@@ -59,15 +60,38 @@
 </div>
 @endif
 
+<div class="rounded-2xl border border-emerald-200/70 bg-emerald-50/60 px-5 py-4 text-sm text-emerald-950 mb-5">
+   <p class="font-bold mb-1 flex items-center gap-1.5">
+      <span class="material-symbols-outlined text-base">rule</span>
+      Aturan rantai banned SUCCESS
+   </p>
+   <p class="text-xs leading-relaxed text-emerald-900/90">
+      Setiap log banned <strong>SUCCESS</strong> ({{ $gapType->scopeLabel() }}) wajib memiliki
+      <strong>pengajuan unban Disetujui</strong> dan <strong>sid_unban_log SUCCESS</strong> dengan
+      <code class="text-[11px]">{{ $scrRefColumn }}</code> yang sama.
+      Halaman ini menampilkan tiket yang rantainya belum lengkap.
+   </p>
+</div>
+
+<div class="rounded-2xl border border-sky-200/70 bg-sky-50/60 px-5 py-4 text-sm text-sky-950 mb-5">
+   <p class="font-bold mb-1 flex items-center gap-1.5">
+      <span class="material-symbols-outlined text-base">confirmation_number</span>
+      Daily dan Weekly = tiket terpisah
+   </p>
+   <p class="text-xs leading-relaxed text-sky-900/90">
+      Satu SID bisa punya beberapa banned (mis. <strong>D-1079</strong> daily dan <strong>W-265</strong> weekly).
+      Pengajuan atau unban di tiket weekly <strong>tidak menutup</strong> gap daily, dan sebaliknya.
+      Rekonsiliasi selalu per <code class="text-[11px]">{{ $scrRefColumn }}</code> pada tab <strong>{{ $gapType->scopeLabel() }}</strong> yang aktif.
+   </p>
+</div>
+
 <div class="rounded-2xl border border-amber-200/70 bg-amber-50/60 px-5 py-4 text-sm text-amber-950 mb-5">
    <p class="font-bold mb-1">Kapan menggunakan fitur ini?</p>
    <p class="text-xs leading-relaxed text-amber-900/90">
       @if($isMissingUnbanLogGap)
-      Tab <strong>{{ $gapType->label() }}</strong>: request Disetujui sudah ada (<code class="text-[11px]">{{ $scrRefColumn }}</code> sama), log unban belum ada.
-      Termasuk log banned <strong>SKIPPED</strong>. Pilih mode <strong>LOG SAJA (log unban saja)</strong>.
+      Tab <strong>{{ $gapType->label() }}</strong>: pengajuan Disetujui sudah ada, log unban SUCCESS belum ada. Pilih mode <strong>LOG SAJA (log unban saja)</strong>.
       @else
-      Tab <strong>{{ $gapType->label() }}</strong>: banned {{ $isWeekly ? 'weekly' : 'daily' }} ada, belum ada request unban.
-      <strong>SUCCESS (request unban + log unban)</strong> atau <strong>BLM SUKSES (hanya request unban)</strong>.
+      Tab <strong>{{ $gapType->label() }}</strong>: banned SUCCESS ada, belum ada pengajuan unban. Gunakan <strong>SUCCESS (pengajuan + log unban)</strong> atau <strong>BLM SUKSES (hanya pengajuan)</strong>.
       Default filter: <code class="text-[11px]">filter_date</code> H-{{ $defaultMinDaysOld }} atau lebih lama.
       @endif
    </p>
@@ -208,9 +232,12 @@
                <tr class="bg-[#f8fafc] text-[10px] uppercase tracking-wider text-on-surface-variant">
                   <th class="border-b border-outline-variant/15 px-4 py-3 w-10"></th>
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Tanggal / SID</th>
+                  <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Tiket ini</th>
+                  <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Tiket lain (SID sama)</th>
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Karyawan</th>
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Site</th>
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Alasan</th>
+                  <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Status rantai</th>
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Status ban</th>
                   @if($isMissingUnbanLogGap)
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Pengajuan</th>
@@ -225,6 +252,19 @@
                   $canReconcile = $scrRefId !== null;
                   $hoursSince = $row->completed_at ? (int) $row->completed_at->diffInHours(now()) : null;
                   $linkedRequest = $row->relationLoaded('reconcileUnbanRequest') ? $row->getRelation('reconcileUnbanRequest') : null;
+                  $chainGap = $row->relationLoaded('bannedChainGap') ? $row->getRelation('bannedChainGap') : null;
+                  $crossScopeTickets = $row->relationLoaded('reconcileCrossScopeTickets')
+                     ? collect($row->getRelation('reconcileCrossScopeTickets'))
+                     : collect();
+                  $currentTicketCode = trim((string) ($row->banned_status ?? ''));
+                  $currentTicketCode = $currentTicketCode !== '' ? $currentTicketCode : $gapType->scopeLabel().' #'.$row->id;
+                  $statusToneClasses = [
+                     'ok' => 'bg-emerald-100 text-emerald-800',
+                     'warn' => 'bg-amber-100 text-amber-900',
+                     'wait' => 'bg-sky-100 text-sky-900',
+                     'info' => 'bg-violet-100 text-violet-900',
+                     'danger' => 'bg-red-100 text-red-800',
+                  ];
                @endphp
                <tr class="hover:bg-[#fafbfc] {{ !$canReconcile ? 'opacity-60' : '' }}">
                   <td class="border-b border-outline-variant/10 px-4 py-3 align-top">
@@ -237,7 +277,64 @@
                   <td class="border-b border-outline-variant/10 px-4 py-3 align-top">
                      <div class="font-semibold">{{ $row->filter_date?->format('d M Y') ?? '—' }}</div>
                      <div class="font-mono text-xs font-bold text-primary">{{ $row->sid }}</div>
-                     <div class="text-[10px] text-on-surface-variant">#{{ $row->id }} · SCR {{ $scrRefId ?? '—' }}</div>
+                     <div class="text-[10px] text-on-surface-variant">Log #{{ $row->id }}</div>
+                  </td>
+                  <td class="border-b border-outline-variant/10 px-4 py-3 align-top text-xs">
+                     <span class="inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-bold bg-primary/10 text-primary mb-1.5">
+                        {{ $gapType->scopeLabel() }}
+                     </span>
+                     <div class="font-semibold">{{ $currentTicketCode }}</div>
+                     <div class="text-[10px] text-on-surface-variant">SCR {{ $scrRefId ?? '—' }}</div>
+                     @if($isMissingUnbanLogGap)
+                     <div class="mt-1 text-[10px] text-sky-800">Gap tab ini: belum ada log unban</div>
+                     @else
+                     <div class="mt-1 text-[10px] text-amber-800">Gap tab ini: belum ada pengajuan</div>
+                     @endif
+                  </td>
+                  <td class="border-b border-outline-variant/10 px-4 py-3 align-top text-xs max-w-[14rem]">
+                     @if($crossScopeTickets->isEmpty())
+                     <span class="text-on-surface-variant">—</span>
+                     @else
+                     <div class="space-y-2">
+                        @foreach($crossScopeTickets as $otherTicket)
+                        @php
+                           $tone = $statusToneClasses[$otherTicket['status_tone'] ?? 'info'] ?? $statusToneClasses['info'];
+                           $otherTabQuery = array_merge(
+                              collect($queryBase)->except(['gap_type', 'min_days_old', 'q'])->all(),
+                              array_filter([
+                                 'gap_type' => $otherTicket['gap_type'] ?? null,
+                                 'sid' => $row->sid,
+                                 'min_days_old' => isset($otherTicket['gap_type'])
+                                    ? (AutoBannedReconcileGapType::tryFrom((string) $otherTicket['gap_type'])?->defaultMinDaysOld() ?? 0)
+                                    : 0,
+                              ]),
+                           );
+                        @endphp
+                        <div class="rounded-lg border border-outline-variant/15 bg-[#fafbfc] px-2.5 py-2">
+                           <div class="flex flex-wrap items-center gap-1 mb-0.5">
+                              <span class="inline-flex rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-slate-200 text-slate-700">
+                                 {{ $otherTicket['scope_label'] ?? 'Lain' }}
+                              </span>
+                              <span class="font-semibold text-[11px]">{{ $otherTicket['ticket_code'] ?? '—' }}</span>
+                           </div>
+                           <div class="text-[10px] text-on-surface-variant">{{ $otherTicket['filter_date'] ?? '—' }} · SCR {{ $otherTicket['scr_ref_id'] ?? '—' }}</div>
+                           <span class="inline-flex mt-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold {{ $tone }}">
+                              {{ $otherTicket['status_label'] ?? '—' }}
+                           </span>
+                           @if(!empty($otherTicket['gap_type']))
+                           <div class="mt-1">
+                              <a href="{{ route('auto-banned.inputasi.reconcile.index', $otherTabQuery) }}"
+                                 class="text-[10px] font-bold text-primary hover:underline">
+                                 Buka tab {{ $otherTicket['scope_label'] }} →
+                              </a>
+                           </div>
+                           @elseif(!empty($otherTicket['note']))
+                           <p class="mt-1 text-[10px] leading-snug text-on-surface-variant">{{ $otherTicket['note'] }}</p>
+                           @endif
+                        </div>
+                        @endforeach
+                     </div>
+                     @endif
                   </td>
                   <td class="border-b border-outline-variant/10 px-4 py-3 align-top">
                      <div class="font-semibold">{{ $row->nama ?: '—' }}</div>
@@ -249,6 +346,22 @@
                      <div class="font-semibold text-[10px]">{{ $row->banned_status }}</div>
                      @endif
                      {{ \Illuminate\Support\Str::limit($row->banned_reason ?? '—', 80) }}
+                  </td>
+                  <td class="border-b border-outline-variant/10 px-4 py-3 align-top text-xs">
+                     @if($chainGap instanceof \App\Enums\AutoBannedBannedChainGap)
+                     <span class="inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-bold {{ $chainGap->badgeClass() }}">
+                        {{ $chainGap->label() }}
+                     </span>
+                     @if($chainGap === \App\Enums\AutoBannedBannedChainGap::RequestPending)
+                     <div class="mt-1">
+                        <a href="{{ route('auto-banned.sod-verification.index', ['sid' => $row->sid]) }}" class="text-[10px] font-bold text-primary hover:underline">
+                           Review di Verifikasi SOD →
+                        </a>
+                     </div>
+                     @endif
+                     @else
+                     —
+                     @endif
                   </td>
                   <td class="border-b border-outline-variant/10 px-4 py-3 align-top text-xs">
                      @if($row->automation_status)
@@ -279,11 +392,57 @@
                </tr>
                @empty
                <tr>
-                  <td colspan="{{ $isMissingUnbanLogGap ? 8 : 7 }}" class="px-4 py-10 text-center text-on-surface-variant">
+                  <td colspan="{{ $isMissingUnbanLogGap ? 11 : 10 }}" class="px-4 py-10 text-on-surface-variant">
+                     <p class="text-center mb-4">
                      @if($isMissingUnbanLogGap)
                      Tidak ada gap log unban untuk filter ini. Semua pengajuan Disetujui sudah memiliki <code>sid_unban_log</code> SUCCESS dengan <code>{{ $scrRefColumn }}</code> yang sama.
                      @else
                      Tidak ada gap log untuk filter ini. Semua data H-{{ (int) ($filters['min_days_old'] ?? $defaultMinDaysOld) }} sudah memiliki request/log unban, atau belum ada data banned {{ $isWeekly ? 'weekly' : 'daily' }}.
+                     @endif
+                     </p>
+                     @if($gapExplanations->isNotEmpty())
+                     <div class="mx-auto max-w-3xl text-left rounded-xl border border-violet-200 bg-violet-50/70 px-4 py-4">
+                        <p class="text-sm font-bold text-violet-950 mb-3">
+                           Riwayat banned untuk SID <span class="font-mono">{{ $filters['sid'] }}</span> ditemukan, tapi tidak masuk tab <strong>{{ $gapType->label() }}</strong>:
+                        </p>
+                        <div class="space-y-3">
+                           @foreach($gapExplanations as $explanation)
+                           <div class="rounded-lg border border-violet-200/60 bg-white px-3 py-3 text-xs">
+                              <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                                 <span class="inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold uppercase bg-slate-200 text-slate-700">{{ $explanation['scope'] }}</span>
+                                 <span class="font-semibold text-sm">{{ $explanation['ticket_code'] }}</span>
+                                 <span class="text-on-surface-variant">Log #{{ $explanation['ban_log_id'] }} · SCR {{ $explanation['scr_ref_id'] ?? '—' }} · {{ $explanation['filter_date'] }}</span>
+                              </div>
+                              @if(!empty($explanation['reasons']))
+                              <ul class="list-disc pl-4 space-y-1 text-violet-950/90">
+                                 @foreach($explanation['reasons'] as $reason)
+                                 <li>{{ $reason }}</li>
+                                 @endforeach
+                              </ul>
+                              @else
+                              <p class="text-emerald-800 font-semibold">Memenuhi syarat tab ini.</p>
+                              @endif
+                              @if(!empty($explanation['suggested_gap_type']))
+                              @php
+                                 $suggestedType = AutoBannedReconcileGapType::tryFrom((string) $explanation['suggested_gap_type']);
+                                 $suggestQuery = array_merge(
+                                    collect($queryBase)->except(['gap_type', 'min_days_old'])->all(),
+                                    [
+                                       'gap_type' => $explanation['suggested_gap_type'],
+                                       'sid' => $filters['sid'] ?? '',
+                                       'min_days_old' => $suggestedType?->defaultMinDaysOld() ?? 0,
+                                    ],
+                                 );
+                              @endphp
+                              <a href="{{ route('auto-banned.inputasi.reconcile.index', $suggestQuery) }}"
+                                 class="inline-flex mt-2 text-[11px] font-bold text-primary hover:underline">
+                                 Coba tab {{ $suggestedType?->label() ?? $explanation['suggested_gap_type'] }} →
+                              </a>
+                              @endif
+                           </div>
+                           @endforeach
+                        </div>
+                     </div>
                      @endif
                   </td>
                </tr>

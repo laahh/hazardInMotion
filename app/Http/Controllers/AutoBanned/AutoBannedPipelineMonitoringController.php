@@ -6,6 +6,7 @@ namespace App\Http\Controllers\AutoBanned;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\AutoBanned\Concerns\ProvidesAutoBannedLayout;
+use App\Enums\AutoBannedPipelineBanScope;
 use App\Services\AutoBanned\AutoBannedPipelineMonitoringService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -29,6 +30,8 @@ class AutoBannedPipelineMonitoringController extends Controller
             'navItems' => $isPublicGuest ? [] : $this->autoBannedNavItems(),
             'programLabel' => 'Pipeline Banned → Unban',
             'isPublicGuest' => $isPublicGuest,
+            'banScope' => $dashboard['banScope'] ?? AutoBannedPipelineBanScope::Daily,
+            'banScopes' => AutoBannedPipelineBanScope::cases(),
             'filters' => $dashboard['filters'],
             'period' => $dashboard['period'],
             'filterOptions' => $dashboard['filterOptions'],

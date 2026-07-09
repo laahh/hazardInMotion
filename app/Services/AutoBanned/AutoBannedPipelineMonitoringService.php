@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace App\Services\AutoBanned;
 
+use App\Enums\AutoBannedPipelineBanScope;
 use App\Enums\AutoBannedPipelineStage;
 use App\Enums\AutoBannedSidAutomationStatus;
 use App\Enums\AutoBannedUnbanStatus;
 use App\Models\AutoBannedUnbanRequest;
 use App\Models\SidBannedLog;
+use App\Models\SidBannedLogWeekly;
 use App\Models\SidUnbanLog;
 use App\Support\AutoBanned\AutoBannedSchema;
 use App\Support\AutoBanned\AutoBannedSiteOptions;
 use App\Support\AutoBanned\ScrDailyBannedColumns;
+use App\Support\AutoBanned\ScrWeeklyBannedColumns;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -27,6 +30,7 @@ class AutoBannedPipelineMonitoringService
 
     /**
      * @return array{
+     *     ban_scope: string,
      *     filter_date: string,
      *     site: string,
      *     perusahaan: string,
@@ -38,7 +42,11 @@ class AutoBannedPipelineMonitoringService
      */
     public function resolveFilters(Request $request): array
     {
+        $banScope = AutoBannedPipelineBanScope::tryFrom(trim((string) $request->query('ban_scope', '')))
+            ?? AutoBannedPipelineBanScope::Daily;
+
         return [
+            'ban_scope' => $banScope->value,
             'filter_date' => trim((string) $request->query('filter_date', '')),
             'site' => trim((string) $request->query('site', '')),
             'perusahaan' => trim((string) $request->query('perusahaan', '')),
@@ -49,9 +57,17 @@ class AutoBannedPipelineMonitoringService
         ];
     }
 
-    public function bannedLogTableAvailable(): bool
+    public function resolveBanScope(array $filters): AutoBannedPipelineBanScope
     {
-        return AutoBannedSchema::hasSidBannedLogTable();
+        return AutoBannedPipelineBanScope::tryFrom(trim((string) ($filters['ban_scope'] ?? '')))
+            ?? AutoBannedPipelineBanScope::Daily;
+    }
+
+    public function bannedLogTableAvailable(AutoBannedPipelineBanScope $banScope): bool
+    {
+        return $banScope->isWeekly()
+            ? AutoBannedSchema::hasSidBannedLogWeeklyTable()
+            : AutoBannedSchema::hasSidBannedLogTable();
     }
 
     /**
@@ -73,9 +89,13 @@ class AutoBannedPipelineMonitoringService
      */
     public function buildDashboard(array $filters): array
     {
-        if (! $this->bannedLogTableAvailable()) {
+        $resolvedFilters = array_merge($this->emptyFilters(), $filters);
+        $banScope = $this->resolveBanScope($resolvedFilters);
+
+        if (! $this->bannedLogTableAvailable($banScope)) {
             return [
-                'filters' => array_merge($this->emptyFilters(), $filters),
+                'filters' => $resolvedFilters,
+                'banScope' => $banScope,
                 'period' => ['filter_date' => ''],
                 'filterOptions' => $this->emptyFilterOptions(),
                 'stats' => $this->emptyStats(),
@@ -84,9 +104,8 @@ class AutoBannedPipelineMonitoringService
             ];
         }
 
-        $resolvedFilters = array_merge($this->emptyFilters(), $filters);
-        $banLogs = $this->fetchBanLogs($resolvedFilters);
-        $pipelineRows = $this->buildPipelineRows($banLogs);
+        $banLogs = $this->fetchBanLogs($resolvedFilters, $banScope);
+        $pipelineRows = $this->buildPipelineRows($banLogs, $banScope);
 
         if (($resolvedFilters['pipeline_stage'] ?? '') !== ''
             && $resolvedFilters['pipeline_stage'] !== 'all') {
@@ -105,8 +124,9 @@ class AutoBannedPipelineMonitoringService
 
         return [
             'filters' => $resolvedFilters,
+            'banScope' => $banScope,
             'period' => ['filter_date' => $resolvedFilters['filter_date']],
-            'filterOptions' => $this->filterOptions(),
+            'filterOptions' => $this->filterOptions($banScope),
             'stats' => $this->buildStats($pipelineRows),
             'pipelineRows' => $pipelineRows,
             'tableAvailable' => true,
@@ -114,10 +134,9 @@ class AutoBannedPipelineMonitoringService
     }
 
     /**
-     * @param  Builder<SidBannedLog>  $query
      * @param  array<string, string>  $filters
      */
-    private function applySearchFilters(Builder $query, array $filters): void
+    private function applySearchFilters(Builder $query, array $filters, AutoBannedPipelineBanScope $banScope): void
     {
         $sid = strtoupper(trim((string) ($filters['sid'] ?? '')));
         $nama = trim((string) ($filters['nama'] ?? ''));
@@ -129,10 +148,15 @@ class AutoBannedPipelineMonitoringService
 
         if ($nama !== '') {
             $namaTerm = '%'.$nama.'%';
-            $query->where(function (Builder $inner) use ($namaTerm): void {
+            $query->where(function (Builder $inner) use ($namaTerm, $banScope): void {
                 $inner->where('nama', 'like', $namaTerm);
 
-                if (AutoBannedSchema::hasScrDailyBannedTable()) {
+                if ($banScope->isWeekly() && AutoBannedSchema::hasScrWeeklyBannedTable()) {
+                    $inner->orWhereHas(
+                        'scrWeeklyBanned',
+                        fn (Builder $scr) => $scr->where(ScrWeeklyBannedColumns::NAMA, 'like', $namaTerm),
+                    );
+                } elseif (AutoBannedSchema::hasScrDailyBannedTable()) {
                     $inner->orWhereHas(
                         'scrDailyBanned',
                         fn (Builder $scr) => $scr->where(ScrDailyBannedColumns::NAMA, 'like', $namaTerm),
@@ -156,9 +180,20 @@ class AutoBannedPipelineMonitoringService
 
     /**
      * @param  array<string, string>  $filters
+     * @return Collection<int, SidBannedLog|SidBannedLogWeekly>
+     */
+    private function fetchBanLogs(array $filters, AutoBannedPipelineBanScope $banScope): Collection
+    {
+        return $banScope->isWeekly()
+            ? $this->fetchWeeklyBanLogs($filters)
+            : $this->fetchDailyBanLogs($filters);
+    }
+
+    /**
+     * @param  array<string, string>  $filters
      * @return Collection<int, SidBannedLog>
      */
-    private function fetchBanLogs(array $filters): Collection
+    private function fetchDailyBanLogs(array $filters): Collection
     {
         $query = SidBannedLog::query()
             ->where('automation_status', AutoBannedSidAutomationStatus::Success->value);
@@ -175,7 +210,7 @@ class AutoBannedPipelineMonitoringService
             $query->where('perusahaan', $filters['perusahaan']);
         }
 
-        $this->applySearchFilters($query, $filters);
+        $this->applySearchFilters($query, $filters, AutoBannedPipelineBanScope::Daily);
 
         if (AutoBannedSchema::hasScrDailyBannedTable()) {
             $query->with([
@@ -207,19 +242,76 @@ class AutoBannedPipelineMonitoringService
     }
 
     /**
-     * @param  Collection<int, SidBannedLog>  $banLogs
+     * @param  array<string, string>  $filters
+     * @return Collection<int, SidBannedLogWeekly>
+     */
+    private function fetchWeeklyBanLogs(array $filters): Collection
+    {
+        $query = SidBannedLogWeekly::query()
+            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value);
+
+        if (($filters['filter_date'] ?? '') !== '') {
+            $query->whereDate('filter_date', $filters['filter_date']);
+        }
+
+        if (($filters['site'] ?? '') !== '') {
+            AutoBannedSiteOptions::applyBannedLogWeeklySiteFilter($query, $filters['site']);
+        }
+
+        if (($filters['perusahaan'] ?? '') !== '') {
+            $query->where('perusahaan', $filters['perusahaan']);
+        }
+
+        $this->applySearchFilters($query, $filters, AutoBannedPipelineBanScope::Weekly);
+
+        if (AutoBannedSchema::hasScrWeeklyBannedTable()) {
+            $query->with([
+                'scrWeeklyBanned:id,'.ScrWeeklyBannedColumns::ISO_YEAR.','.ScrWeeklyBannedColumns::ISO_WEEK.','.ScrWeeklyBannedColumns::SITE.','.ScrWeeklyBannedColumns::BANNED_STATUS.','.ScrWeeklyBannedColumns::NAMA,
+            ]);
+        }
+
+        return $query
+            ->orderByDesc('filter_date')
+            ->orderByDesc('completed_at')
+            ->orderByDesc('id')
+            ->limit(1000)
+            ->get([
+                'id',
+                'scr_weekly_banned_id',
+                'filter_date',
+                'filter_shift',
+                'nik',
+                'sid',
+                'nama',
+                'perusahaan',
+                'site_dedicated',
+                'banned_status',
+                'banned_reason',
+                'status_onsite',
+                'completed_at',
+                'started_at',
+            ]);
+    }
+
+    /**
+     * @param  Collection<int, SidBannedLog|SidBannedLogWeekly>  $banLogs
      * @return Collection<int, array<string, mixed>>
      */
-    private function buildPipelineRows(Collection $banLogs): Collection
+    private function buildPipelineRows(Collection $banLogs, AutoBannedPipelineBanScope $banScope): Collection
     {
         if ($banLogs->isEmpty()) {
             return collect();
         }
 
         $scrIds = $banLogs
-            ->pluck('scr_daily_banned_id')
-            ->filter(static fn ($id): bool => $id !== null)
-            ->map(static fn ($id): int => (int) $id)
+            ->map(function (SidBannedLog|SidBannedLogWeekly $banLog) use ($banScope): ?int {
+                $scrId = $banScope->isWeekly()
+                    ? $banLog->scr_weekly_banned_id
+                    : $banLog->scr_daily_banned_id;
+
+                return $scrId !== null ? (int) $scrId : null;
+            })
+            ->filter(static fn (?int $id): bool => $id !== null)
             ->unique()
             ->values()
             ->all();
@@ -232,19 +324,28 @@ class AutoBannedPipelineMonitoringService
             ->values()
             ->all();
 
-        $latestRequests = $this->latestUnbanRequestsByScrId($scrIds);
-        $unbanLogsByScrId = $this->unbanLogsByScrId($scrIds);
+        $latestRequests = $banScope->isWeekly()
+            ? $this->latestWeeklyUnbanRequestsByScrId($scrIds)
+            : $this->latestUnbanRequestsByScrId($scrIds);
+
+        $unbanLogsByScrId = $banScope->isWeekly()
+            ? $this->weeklyUnbanLogsByScrId($scrIds)
+            : $this->unbanLogsByScrId($scrIds);
+
         $unbanLogsBySid = $this->unbanLogsBySid($sids);
 
         $now = now()->timezone(config('app.timezone'));
 
-        return $banLogs->map(function (SidBannedLog $banLog) use (
+        return $banLogs->map(function (SidBannedLog|SidBannedLogWeekly $banLog) use (
+            $banScope,
             $latestRequests,
             $unbanLogsByScrId,
             $unbanLogsBySid,
             $now,
         ): array {
-            $scrId = $banLog->scr_daily_banned_id !== null ? (int) $banLog->scr_daily_banned_id : null;
+            $scrId = $banScope->isWeekly()
+                ? ($banLog->scr_weekly_banned_id !== null ? (int) $banLog->scr_weekly_banned_id : null)
+                : ($banLog->scr_daily_banned_id !== null ? (int) $banLog->scr_daily_banned_id : null);
             $sid = strtoupper(trim((string) ($banLog->sid ?? '')));
 
             /** @var AutoBannedUnbanRequest|null $unbanRequest */
@@ -262,10 +363,15 @@ class AutoBannedPipelineMonitoringService
             $deadline = $this->resolveDeadline($banLog, $unbanRequest, $unbanLog, $pipeline, $now);
 
             return [
+                'banScope' => $banScope->value,
                 'banLogId' => (int) $banLog->id,
-                'scrDailyBannedId' => $scrId,
+                'scrDailyBannedId' => $banScope->isWeekly() ? null : $scrId,
+                'scrWeeklyBannedId' => $banScope->isWeekly() ? $scrId : null,
+                'scrRefId' => $scrId,
+                'scrRefColumn' => $banScope->scrRefColumn(),
                 'filterDate' => $banLog->filter_date?->format('d M Y'),
                 'filterShift' => trim((string) ($banLog->filter_shift ?? '')),
+                'isoPeriodLabel' => $banScope->isWeekly() ? $this->resolveWeeklyPeriodLabel($banLog) : '',
                 'sid' => $sid,
                 'nik' => trim((string) ($banLog->nik ?? '')),
                 'nama' => trim((string) ($banLog->nama ?? '')),
@@ -299,6 +405,28 @@ class AutoBannedPipelineMonitoringService
         });
     }
 
+    private function resolveWeeklyPeriodLabel(SidBannedLog|SidBannedLogWeekly $banLog): string
+    {
+        if (! $banLog instanceof SidBannedLogWeekly) {
+            return '';
+        }
+
+        $isoWeek = trim((string) ($banLog->scrWeeklyBanned?->{ScrWeeklyBannedColumns::ISO_WEEK} ?? ''));
+        $isoYear = trim((string) ($banLog->scrWeeklyBanned?->{ScrWeeklyBannedColumns::ISO_YEAR} ?? ''));
+
+        if ($isoWeek !== '' && $isoYear !== '') {
+            $week = str_starts_with(strtoupper($isoWeek), 'W') ? strtoupper($isoWeek) : 'W'.$isoWeek;
+
+            return $week.' '.$isoYear;
+        }
+
+        if ($banLog->filter_date === null) {
+            return '';
+        }
+
+        return 'W'.$banLog->filter_date->isoWeek().' '.$banLog->filter_date->isoWeekYear();
+    }
+
     /**
      * @param  array<int, int>  $scrIds
      * @return array<int, AutoBannedUnbanRequest>
@@ -318,6 +446,34 @@ class AutoBannedPipelineMonitoringService
         $map = [];
         foreach ($requests as $request) {
             $scrId = (int) $request->scr_daily_banned_id;
+            if (! isset($map[$scrId])) {
+                $map[$scrId] = $request;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  array<int, int>  $scrIds
+     * @return array<int, AutoBannedUnbanRequest>
+     */
+    private function latestWeeklyUnbanRequestsByScrId(array $scrIds): array
+    {
+        if ($scrIds === [] || ! AutoBannedSchema::hasUnbanRequestsTable()
+            || ! AutoBannedSchema::hasUnbanRequestScrWeeklyBannedColumn()) {
+            return [];
+        }
+
+        $requests = AutoBannedUnbanRequest::query()
+            ->whereIn('scr_weekly_banned_id', $scrIds)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $map = [];
+        foreach ($requests as $request) {
+            $scrId = (int) $request->scr_weekly_banned_id;
             if (! isset($map[$scrId])) {
                 $map[$scrId] = $request;
             }
@@ -355,6 +511,35 @@ class AutoBannedPipelineMonitoringService
     }
 
     /**
+     * @param  array<int, int>  $scrIds
+     * @return array<int, SidUnbanLog>
+     */
+    private function weeklyUnbanLogsByScrId(array $scrIds): array
+    {
+        if ($scrIds === [] || ! AutoBannedSchema::hasSidUnbanLogTable()
+            || ! AutoBannedSchema::hasSidUnbanLogScrWeeklyBannedColumn()) {
+            return [];
+        }
+
+        $logs = SidUnbanLog::query()
+            ->whereIn('scr_weekly_banned_id', $scrIds)
+            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+            ->orderByDesc('completed_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $map = [];
+        foreach ($logs as $log) {
+            $scrId = (int) $log->scr_weekly_banned_id;
+            if (! isset($map[$scrId])) {
+                $map[$scrId] = $log;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
      * @param  array<int, string>  $sids
      * @return array<string, Collection<int, SidUnbanLog>>
      */
@@ -380,14 +565,14 @@ class AutoBannedPipelineMonitoringService
      * @param  array<string, Collection<int, SidUnbanLog>>  $unbanLogsBySid
      */
     private function resolveMatchingUnbanLog(
-        SidBannedLog $banLog,
+        SidBannedLog|SidBannedLogWeekly $banLog,
         ?int $scrId,
         string $sid,
         array $unbanLogsByScrId,
         array $unbanLogsBySid,
     ): ?SidUnbanLog {
-        if ($scrId !== null && isset($unbanLogsByScrId[$scrId])) {
-            return $unbanLogsByScrId[$scrId];
+        if ($scrId !== null) {
+            return $unbanLogsByScrId[$scrId] ?? null;
         }
 
         if ($sid === '' || ! isset($unbanLogsBySid[$sid])) {
@@ -435,7 +620,7 @@ class AutoBannedPipelineMonitoringService
      * }
      */
     private function resolveDeadline(
-        SidBannedLog $banLog,
+        SidBannedLog|SidBannedLogWeekly $banLog,
         ?AutoBannedUnbanRequest $unbanRequest,
         ?SidUnbanLog $unbanLog,
         AutoBannedPipelineStage $pipeline,
@@ -491,7 +676,7 @@ class AutoBannedPipelineMonitoringService
         ];
     }
 
-    private function formatBannedAtLabel(SidBannedLog $banLog): string
+    private function formatBannedAtLabel(SidBannedLog|SidBannedLogWeekly $banLog): string
     {
         $bannedAt = $banLog->completed_at ?? $banLog->started_at;
 
@@ -587,39 +772,73 @@ class AutoBannedPipelineMonitoringService
     /**
      * @return array<string, Collection>
      */
-    private function filterOptions(): array
+    private function filterOptions(AutoBannedPipelineBanScope $banScope): array
     {
-        $dates = SidBannedLog::query()
-            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
-            ->selectRaw('DATE(filter_date) as ban_date')
-            ->whereNotNull('filter_date')
-            ->distinct()
-            ->orderByDesc('ban_date')
-            ->pluck('ban_date')
-            ->map(static fn ($date) => $date instanceof Carbon ? $date->toDateString() : (string) $date)
-            ->values();
+        if ($banScope->isWeekly()) {
+            $dates = SidBannedLogWeekly::query()
+                ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+                ->selectRaw('DATE(filter_date) as ban_date')
+                ->whereNotNull('filter_date')
+                ->distinct()
+                ->orderByDesc('ban_date')
+                ->pluck('ban_date')
+                ->map(static fn ($date) => $date instanceof Carbon ? $date->toDateString() : (string) $date)
+                ->values();
 
-        $sitesFromDb = SidBannedLog::query()
-            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
-            ->whereNotNull('site_dedicated')
-            ->where('site_dedicated', '!=', '')
-            ->select('site_dedicated')
-            ->distinct()
-            ->orderBy('site_dedicated')
-            ->pluck('site_dedicated')
-            ->values();
+            $sitesFromDb = SidBannedLogWeekly::query()
+                ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+                ->whereNotNull('site_dedicated')
+                ->where('site_dedicated', '!=', '')
+                ->select('site_dedicated')
+                ->distinct()
+                ->orderBy('site_dedicated')
+                ->pluck('site_dedicated')
+                ->values();
 
-        $sites = AutoBannedSiteOptions::mergeFilterOptions($sitesFromDb);
+            $sites = AutoBannedSiteOptions::mergeFilterOptions($sitesFromDb);
 
-        $perusahaan = SidBannedLog::query()
-            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
-            ->whereNotNull('perusahaan')
-            ->where('perusahaan', '!=', '')
-            ->select('perusahaan')
-            ->distinct()
-            ->orderBy('perusahaan')
-            ->pluck('perusahaan')
-            ->values();
+            $perusahaan = SidBannedLogWeekly::query()
+                ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+                ->whereNotNull('perusahaan')
+                ->where('perusahaan', '!=', '')
+                ->select('perusahaan')
+                ->distinct()
+                ->orderBy('perusahaan')
+                ->pluck('perusahaan')
+                ->values();
+        } else {
+            $dates = SidBannedLog::query()
+                ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+                ->selectRaw('DATE(filter_date) as ban_date')
+                ->whereNotNull('filter_date')
+                ->distinct()
+                ->orderByDesc('ban_date')
+                ->pluck('ban_date')
+                ->map(static fn ($date) => $date instanceof Carbon ? $date->toDateString() : (string) $date)
+                ->values();
+
+            $sitesFromDb = SidBannedLog::query()
+                ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+                ->whereNotNull('site_dedicated')
+                ->where('site_dedicated', '!=', '')
+                ->select('site_dedicated')
+                ->distinct()
+                ->orderBy('site_dedicated')
+                ->pluck('site_dedicated')
+                ->values();
+
+            $sites = AutoBannedSiteOptions::mergeFilterOptions($sitesFromDb);
+
+            $perusahaan = SidBannedLog::query()
+                ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+                ->whereNotNull('perusahaan')
+                ->where('perusahaan', '!=', '')
+                ->select('perusahaan')
+                ->distinct()
+                ->orderBy('perusahaan')
+                ->pluck('perusahaan')
+                ->values();
+        }
 
         $pipelineStages = collect(AutoBannedPipelineStage::cases())
             ->map(static fn (AutoBannedPipelineStage $stage): array => [
@@ -643,6 +862,7 @@ class AutoBannedPipelineMonitoringService
     private function emptyFilters(): array
     {
         return [
+            'ban_scope' => AutoBannedPipelineBanScope::Daily->value,
             'filter_date' => '',
             'site' => '',
             'perusahaan' => '',

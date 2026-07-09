@@ -10,6 +10,7 @@ use App\Enums\AutoBannedUnbanStatus;
 use App\Models\AutoBannedUnbanRequest;
 use App\Models\SidBannedLog;
 use App\Models\SidBannedLogWeekly;
+use App\Models\SidUnbanLog;
 use App\Support\AutoBanned\AutoBannedSchema;
 use App\Support\AutoBanned\AutoBannedSiteOptions;
 use App\Support\AutoBanned\ScrDailyBannedColumns;
@@ -22,6 +23,10 @@ use Illuminate\Support\Collection;
 class AutoBannedPipelineGapService
 {
     public const DEFAULT_MIN_DAYS_OLD = 3;
+
+    public function __construct(
+        private readonly AutoBannedBannedChainService $chainService,
+    ) {}
 
     /**
      * @return array{
@@ -94,12 +99,14 @@ class AutoBannedPipelineGapService
         };
 
         if ($gapType->isMissingUnbanLog()) {
-            return $gapType->isWeekly()
+            $rows = $gapType->isWeekly()
                 ? $this->attachLatestApprovedWeeklyUnbanRequests($rows)
                 : $this->attachLatestApprovedUnbanRequests($rows);
         }
 
-        return $rows;
+        return $gapType->isWeekly()
+            ? $this->chainService->attachWeeklyChainGaps($rows)
+            : $this->chainService->attachDailyChainGaps($rows);
     }
 
     /**
@@ -176,9 +183,10 @@ class AutoBannedPipelineGapService
         $minDaysOld = max(0, (int) ($filters['min_days_old'] ?? self::DEFAULT_MIN_DAYS_OLD));
 
         $query = SidBannedLog::query()
-            ->whereIn('automation_status', AutoBannedSidAutomationStatus::reconcileEligibleValues())
             ->whereNotNull('filter_date')
             ->whereNotNull('scr_daily_banned_id');
+
+        $this->chainService->scopeDailySuccessBanned($query);
 
         if ($minDaysOld > 0) {
             $cutoffDate = Carbon::now()->subDays($minDaysOld)->toDateString();
@@ -199,9 +207,10 @@ class AutoBannedPipelineGapService
         $minDaysOld = max(0, (int) ($filters['min_days_old'] ?? self::DEFAULT_MIN_DAYS_OLD));
 
         $query = SidBannedLogWeekly::query()
-            ->whereIn('automation_status', AutoBannedSidAutomationStatus::reconcileEligibleValues())
             ->whereNotNull('filter_date')
             ->whereNotNull('scr_weekly_banned_id');
+
+        $this->chainService->scopeWeeklySuccessBanned($query);
 
         if ($minDaysOld > 0) {
             $cutoffDate = Carbon::now()->subDays($minDaysOld)->toDateString();
@@ -394,9 +403,9 @@ class AutoBannedPipelineGapService
         }
 
         if ($gapType->isWeekly()) {
-            $query = SidBannedLogWeekly::query()
-                ->whereIn('automation_status', AutoBannedSidAutomationStatus::reconcileEligibleValues())
-                ->whereNotNull('site_dedicated')
+        $query = SidBannedLogWeekly::query()
+            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+            ->whereNotNull('site_dedicated')
                 ->where('site_dedicated', '!=', '');
 
             if (($filters['site'] ?? '') !== '') {
@@ -416,7 +425,7 @@ class AutoBannedPipelineGapService
         }
 
         $query = SidBannedLog::query()
-            ->whereIn('automation_status', AutoBannedSidAutomationStatus::reconcileEligibleValues())
+            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
             ->whereNotNull('site_dedicated')
             ->where('site_dedicated', '!=', '');
 
@@ -451,16 +460,8 @@ class AutoBannedPipelineGapService
             NOT EXISTS (
                 SELECT 1 FROM sid_unban_log ul
                 WHERE ul.automation_status = ?
-                  AND (
-                      (sid_banned_log.scr_daily_banned_id IS NOT NULL
-                       AND ul.scr_daily_banned_id = sid_banned_log.scr_daily_banned_id)
-                      OR (
-                          sid_banned_log.sid IS NOT NULL
-                          AND sid_banned_log.sid != ''
-                          AND UPPER(TRIM(ul.sid)) = UPPER(TRIM(sid_banned_log.sid))
-                          AND ul.completed_at >= COALESCE(sid_banned_log.completed_at, sid_banned_log.started_at)
-                      )
-                  )
+                  AND sid_banned_log.scr_daily_banned_id IS NOT NULL
+                  AND ul.scr_daily_banned_id = sid_banned_log.scr_daily_banned_id
             )
         ", [$success]);
     }
@@ -481,16 +482,8 @@ class AutoBannedPipelineGapService
                 NOT EXISTS (
                     SELECT 1 FROM sid_unban_log ul
                     WHERE ul.automation_status = ?
-                      AND (
-                          (sid_banned_log_weekly.scr_weekly_banned_id IS NOT NULL
-                           AND ul.scr_weekly_banned_id = sid_banned_log_weekly.scr_weekly_banned_id)
-                          OR (
-                              sid_banned_log_weekly.sid IS NOT NULL
-                              AND sid_banned_log_weekly.sid != ''
-                              AND UPPER(TRIM(ul.sid)) = UPPER(TRIM(sid_banned_log_weekly.sid))
-                              AND ul.completed_at >= COALESCE(sid_banned_log_weekly.completed_at, sid_banned_log_weekly.started_at)
-                          )
-                      )
+                      AND sid_banned_log_weekly.scr_weekly_banned_id IS NOT NULL
+                      AND ul.scr_weekly_banned_id = sid_banned_log_weekly.scr_weekly_banned_id
                 )
             ", [$success]);
 
@@ -645,5 +638,316 @@ class AutoBannedPipelineGapService
                     ->orWhere('perusahaan', 'like', $term);
             });
         }
+    }
+
+    /**
+     * Jelaskan mengapa riwayat banned untuk SID tidak masuk tab gap aktif (saat hasil filter kosong).
+     *
+     * @param  array{min_days_old?: int, site?: string, sid?: string, q?: string}  $filters
+     * @return Collection<int, array{
+     *     ban_log_id: int,
+     *     scope: string,
+     *     scr_ref_id: ?int,
+     *     filter_date: string,
+     *     ticket_code: string,
+     *     in_current_gap: bool,
+     *     reasons: array<int, string>,
+     *     suggested_gap_type: ?string
+     * }>
+     */
+    public function explainGapExclusionsForSid(array $filters, AutoBannedReconcileGapType $gapType): Collection
+    {
+        $sid = strtoupper(trim((string) ($filters['sid'] ?? '')));
+        if ($sid === '') {
+            return collect();
+        }
+
+        return $gapType->isWeekly()
+            ? $this->explainWeeklyGapExclusionsForSid($filters, $gapType, $sid)
+            : $this->explainDailyGapExclusionsForSid($filters, $gapType, $sid);
+    }
+
+    /**
+     * @param  array{min_days_old?: int, site?: string, sid?: string, q?: string}  $filters
+     * @return Collection<int, array{
+     *     ban_log_id: int,
+     *     scope: string,
+     *     scr_ref_id: ?int,
+     *     filter_date: string,
+     *     ticket_code: string,
+     *     in_current_gap: bool,
+     *     reasons: array<int, string>,
+     *     suggested_gap_type: ?string
+     * }>
+     */
+    private function explainDailyGapExclusionsForSid(array $filters, AutoBannedReconcileGapType $gapType, string $sid): Collection
+    {
+        if (! AutoBannedSchema::hasSidBannedLogTable()) {
+            return collect();
+        }
+
+        $query = SidBannedLog::query()
+            ->whereRaw('UPPER(TRIM(sid)) LIKE ?', ['%'.$sid.'%'])
+            ->orderByDesc('filter_date')
+            ->orderByDesc('id')
+            ->limit(20);
+
+        if (($filters['site'] ?? '') !== '') {
+            AutoBannedSiteOptions::applyBannedLogSiteFilter($query, $filters['site']);
+        }
+
+        $logs = $query->get([
+            'id',
+            'scr_daily_banned_id',
+            'filter_date',
+            'banned_status',
+            'automation_status',
+        ]);
+
+        return $logs->map(fn (SidBannedLog $log): array => $this->buildDailyExclusionExplanation($log, $filters, $gapType));
+    }
+
+    /**
+     * @param  array{min_days_old?: int, site?: string, sid?: string, q?: string}  $filters
+     * @return Collection<int, array{
+     *     ban_log_id: int,
+     *     scope: string,
+     *     scr_ref_id: ?int,
+     *     filter_date: string,
+     *     ticket_code: string,
+     *     in_current_gap: bool,
+     *     reasons: array<int, string>,
+     *     suggested_gap_type: ?string
+     * }>
+     */
+    private function explainWeeklyGapExclusionsForSid(array $filters, AutoBannedReconcileGapType $gapType, string $sid): Collection
+    {
+        if (! AutoBannedSchema::hasSidBannedLogWeeklyTable()) {
+            return collect();
+        }
+
+        $query = SidBannedLogWeekly::query()
+            ->whereRaw('UPPER(TRIM(sid)) LIKE ?', ['%'.$sid.'%'])
+            ->orderByDesc('filter_date')
+            ->orderByDesc('id')
+            ->limit(20);
+
+        if (($filters['site'] ?? '') !== '') {
+            AutoBannedSiteOptions::applyBannedLogWeeklySiteFilter($query, $filters['site']);
+        }
+
+        $logs = $query->get([
+            'id',
+            'scr_weekly_banned_id',
+            'filter_date',
+            'banned_status',
+            'automation_status',
+        ]);
+
+        return $logs->map(fn (SidBannedLogWeekly $log): array => $this->buildWeeklyExclusionExplanation($log, $filters, $gapType));
+    }
+
+    /**
+     * @param  array{min_days_old?: int, site?: string, sid?: string, q?: string}  $filters
+     * @return array{
+     *     ban_log_id: int,
+     *     scope: string,
+     *     scr_ref_id: ?int,
+     *     filter_date: string,
+     *     ticket_code: string,
+     *     in_current_gap: bool,
+     *     reasons: array<int, string>,
+     *     suggested_gap_type: ?string
+     * }
+     */
+    private function buildDailyExclusionExplanation(SidBannedLog $log, array $filters, AutoBannedReconcileGapType $gapType): array
+    {
+        $reasons = [];
+        $scrRefId = $log->scr_daily_banned_id !== null ? (int) $log->scr_daily_banned_id : null;
+        $ticketCode = trim((string) ($log->banned_status ?? '')) ?: 'Daily #'.$log->id;
+        $suggestedGapType = null;
+
+        $status = $log->automation_status instanceof AutoBannedSidAutomationStatus
+            ? $log->automation_status->value
+            : strtoupper(trim((string) $log->automation_status));
+
+        if ($status !== AutoBannedSidAutomationStatus::Success->value) {
+            $reasons[] = 'Hanya banned berstatus SUCCESS yang wajib punya pengajuan + log unban ('.($status ?: '—').').';
+        }
+
+        if ($log->filter_date === null) {
+            $reasons[] = 'filter_date kosong.';
+        }
+
+        if ($scrRefId === null) {
+            $reasons[] = 'scr_daily_banned_id kosong — tidak bisa direkonsiliasi.';
+        }
+
+        $minDaysOld = max(0, (int) ($filters['min_days_old'] ?? self::DEFAULT_MIN_DAYS_OLD));
+        if ($minDaysOld > 0 && $log->filter_date !== null) {
+            $cutoffDate = Carbon::now()->subDays($minDaysOld)->startOfDay();
+            if ($log->filter_date->greaterThan($cutoffDate)) {
+                $reasons[] = 'filter_date '.$log->filter_date->format('d M Y').' belum memenuhi H-'.$minDaysOld.' (cutoff '.$cutoffDate->format('d M Y').'). Turunkan Min. hari lalu ke 0.';
+            }
+        }
+
+        $unbanLog = null;
+        if ($scrRefId !== null && AutoBannedSchema::hasSidUnbanLogTable()) {
+            $unbanLog = SidUnbanLog::query()
+                ->where('scr_daily_banned_id', $scrRefId)
+                ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+                ->orderByDesc('completed_at')
+                ->first(['id', 'completed_at']);
+        }
+
+        if ($unbanLog !== null) {
+            $reasons[] = 'Sudah ada sid_unban_log SUCCESS #'.$unbanLog->id.' untuk scr_daily_banned_id '.$scrRefId.' — tiket daily sudah selesai.';
+        }
+
+        $request = null;
+        if ($scrRefId !== null && AutoBannedSchema::hasUnbanRequestsTable()) {
+            $request = AutoBannedUnbanRequest::query()
+                ->where('scr_daily_banned_id', $scrRefId)
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->first(['id', 'status', 'created_at']);
+        }
+
+        if ($request !== null) {
+            $requestStatus = $request->status instanceof AutoBannedUnbanStatus
+                ? $request->status
+                : AutoBannedUnbanStatus::tryFrom((string) $request->status);
+            $statusLabel = $requestStatus?->label() ?? (string) $request->status;
+
+            if ($gapType === AutoBannedReconcileGapType::NoRequest) {
+                $reasons[] = 'Sudah ada pengajuan unban #'.$request->id.' ('.$statusLabel.') untuk scr_daily_banned_id '.$scrRefId.'.';
+                if ($requestStatus === AutoBannedUnbanStatus::Approved && $unbanLog === null) {
+                    $suggestedGapType = AutoBannedReconcileGapType::MissingUnbanLog->value;
+                }
+            } elseif ($requestStatus !== AutoBannedUnbanStatus::Approved) {
+                $reasons[] = 'Pengajuan #'.$request->id.' berstatus '.$statusLabel.' — tab ini hanya untuk pengajuan Disetujui tanpa log unban.';
+                $suggestedGapType = AutoBannedReconcileGapType::NoRequest->value;
+            }
+        } elseif ($gapType === AutoBannedReconcileGapType::MissingUnbanLog) {
+            $reasons[] = 'Belum ada pengajuan Disetujui untuk scr_daily_banned_id '.($scrRefId ?? '—').'.';
+            $suggestedGapType = AutoBannedReconcileGapType::NoRequest->value;
+        }
+
+        if ($gapType === AutoBannedReconcileGapType::NoRequest && $unbanLog === null && $request === null && $reasons === []) {
+            $reasons[] = 'Seharusnya muncul di tab ini — coba reset filter atau refresh halaman.';
+        }
+
+        return [
+            'ban_log_id' => (int) $log->id,
+            'scope' => 'Daily',
+            'scr_ref_id' => $scrRefId,
+            'filter_date' => $log->filter_date?->format('d M Y') ?? '—',
+            'ticket_code' => $ticketCode,
+            'in_current_gap' => $reasons === [],
+            'reasons' => $reasons,
+            'suggested_gap_type' => $suggestedGapType,
+        ];
+    }
+
+    /**
+     * @param  array{min_days_old?: int, site?: string, sid?: string, q?: string}  $filters
+     * @return array{
+     *     ban_log_id: int,
+     *     scope: string,
+     *     scr_ref_id: ?int,
+     *     filter_date: string,
+     *     ticket_code: string,
+     *     in_current_gap: bool,
+     *     reasons: array<int, string>,
+     *     suggested_gap_type: ?string
+     * }
+     */
+    private function buildWeeklyExclusionExplanation(SidBannedLogWeekly $log, array $filters, AutoBannedReconcileGapType $gapType): array
+    {
+        $reasons = [];
+        $scrRefId = $log->scr_weekly_banned_id !== null ? (int) $log->scr_weekly_banned_id : null;
+        $ticketCode = trim((string) ($log->banned_status ?? '')) ?: 'Weekly #'.$log->id;
+        $suggestedGapType = null;
+
+        $status = $log->automation_status instanceof AutoBannedSidAutomationStatus
+            ? $log->automation_status->value
+            : strtoupper(trim((string) $log->automation_status));
+
+        if ($status !== AutoBannedSidAutomationStatus::Success->value) {
+            $reasons[] = 'Hanya banned berstatus SUCCESS yang wajib punya pengajuan + log unban ('.($status ?: '—').').';
+        }
+
+        if ($log->filter_date === null) {
+            $reasons[] = 'filter_date kosong.';
+        }
+
+        if ($scrRefId === null) {
+            $reasons[] = 'scr_weekly_banned_id kosong — tidak bisa direkonsiliasi.';
+        }
+
+        $minDaysOld = max(0, (int) ($filters['min_days_old'] ?? self::DEFAULT_MIN_DAYS_OLD));
+        if ($minDaysOld > 0 && $log->filter_date !== null) {
+            $cutoffDate = Carbon::now()->subDays($minDaysOld)->startOfDay();
+            if ($log->filter_date->greaterThan($cutoffDate)) {
+                $reasons[] = 'filter_date '.$log->filter_date->format('d M Y').' belum memenuhi H-'.$minDaysOld.' (cutoff '.$cutoffDate->format('d M Y').'). Turunkan Min. hari lalu ke 0.';
+            }
+        }
+
+        $unbanLog = null;
+        if ($scrRefId !== null
+            && AutoBannedSchema::hasSidUnbanLogTable()
+            && AutoBannedSchema::hasSidUnbanLogScrWeeklyBannedColumn()) {
+            $unbanLog = SidUnbanLog::query()
+                ->where('scr_weekly_banned_id', $scrRefId)
+                ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+                ->orderByDesc('completed_at')
+                ->first(['id', 'completed_at']);
+        }
+
+        if ($unbanLog !== null) {
+            $reasons[] = 'Sudah ada sid_unban_log SUCCESS #'.$unbanLog->id.' untuk scr_weekly_banned_id '.$scrRefId.' — tiket weekly sudah selesai.';
+        }
+
+        $request = null;
+        if ($scrRefId !== null
+            && AutoBannedSchema::hasUnbanRequestsTable()
+            && AutoBannedSchema::hasUnbanRequestScrWeeklyBannedColumn()) {
+            $request = AutoBannedUnbanRequest::query()
+                ->where('scr_weekly_banned_id', $scrRefId)
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->first(['id', 'status', 'created_at']);
+        }
+
+        if ($request !== null) {
+            $requestStatus = $request->status instanceof AutoBannedUnbanStatus
+                ? $request->status
+                : AutoBannedUnbanStatus::tryFrom((string) $request->status);
+            $statusLabel = $requestStatus?->label() ?? (string) $request->status;
+
+            if ($gapType === AutoBannedReconcileGapType::WeeklyNoRequest) {
+                $reasons[] = 'Sudah ada pengajuan unban #'.$request->id.' ('.$statusLabel.') untuk scr_weekly_banned_id '.$scrRefId.'.';
+                if ($requestStatus === AutoBannedUnbanStatus::Approved && $unbanLog === null) {
+                    $suggestedGapType = AutoBannedReconcileGapType::WeeklyMissingUnbanLog->value;
+                }
+            } elseif ($requestStatus !== AutoBannedUnbanStatus::Approved) {
+                $reasons[] = 'Pengajuan #'.$request->id.' berstatus '.$statusLabel.' — tab ini hanya untuk pengajuan Disetujui tanpa log unban.';
+                $suggestedGapType = AutoBannedReconcileGapType::WeeklyNoRequest->value;
+            }
+        } elseif ($gapType === AutoBannedReconcileGapType::WeeklyMissingUnbanLog) {
+            $reasons[] = 'Belum ada pengajuan Disetujui untuk scr_weekly_banned_id '.($scrRefId ?? '—').'.';
+            $suggestedGapType = AutoBannedReconcileGapType::WeeklyNoRequest->value;
+        }
+
+        return [
+            'ban_log_id' => (int) $log->id,
+            'scope' => 'Weekly',
+            'scr_ref_id' => $scrRefId,
+            'filter_date' => $log->filter_date?->format('d M Y') ?? '—',
+            'ticket_code' => $ticketCode,
+            'in_current_gap' => $reasons === [],
+            'reasons' => $reasons,
+            'suggested_gap_type' => $suggestedGapType,
+        ];
     }
 }

@@ -75,7 +75,14 @@
 
 @section('content')
 @php
+   use App\Enums\AutoBannedPipelineBanScope;
    use App\Services\AutoBanned\AutoBannedSlaCalculator;
+
+   $banScope = $banScope ?? AutoBannedPipelineBanScope::Daily;
+   $banScopes = $banScopes ?? AutoBannedPipelineBanScope::cases();
+   $isWeeklyScope = $banScope->isWeekly();
+   $bannedLogTableLabel = $banScope->bannedLogTableLabel();
+   $scrRefColumn = $banScope->scrRefColumn();
 
    $periodLabel = !empty($period['filter_date'])
       ? \Carbon\Carbon::parse($period['filter_date'])->format('d M Y')
@@ -95,6 +102,7 @@
    ];
 
    $queryBase = array_filter([
+      'ban_scope' => $filters['ban_scope'] ?? $banScope->value,
       'filter_date' => $filters['filter_date'] ?? '',
       'site' => $filters['site'] ?? '',
       'perusahaan' => $filters['perusahaan'] ?? '',
@@ -113,6 +121,7 @@
          <h1>Pipeline Banned → Unban</h1>
          <p>
             Monitoring end-to-end: siapa sudah di-banned, status pengajuan treatment, approval SOD, dan target unban.
+            &bull; <strong>{{ $banScope->label() }}</strong>
             &bull; {{ $periodLabel }}
             @if($siteFilterLabel !== '')
             &bull; Site: <strong>{{ $siteFilterLabel }}</strong>
@@ -120,6 +129,14 @@
          </p>
       </div>
       <div class="flex flex-col items-end gap-2.5">
+         <div class="flex flex-wrap justify-end gap-2 mb-1">
+            @foreach($banScopes as $scope)
+            <a href="{{ route('auto-banned.pipeline-monitoring.index', array_merge(collect($queryBase)->except(['ban_scope'])->all(), ['ban_scope' => $scope->value])) }}"
+               class="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-bold transition-colors {{ $scope === $banScope ? 'bg-primary text-white' : 'bg-white border border-outline-variant/20 text-on-surface-variant hover:bg-primary/10 hover:text-primary' }}">
+               {{ $scope->label() }}
+            </a>
+            @endforeach
+         </div>
          @include('AutoBanned.partials.pipeline-filter-bar', [
             'filters' => $filters,
             'filterOptions' => $filterOptions,
@@ -130,12 +147,13 @@
 
    @if(!$tableAvailable)
    <div class="dash-card card-body text-sm text-[#888] mb-3">
-      Tabel <code>sid_banned_log</code> belum tersedia.
+      Tabel <code>{{ $bannedLogTableLabel }}</code> belum tersedia.
    </div>
    @else
 
    <p class="ab-pipeline-kpi-note">
-      Sumber: <code>sid_banned_log</code> (SUCCESS) + <code>auto_banned_unban_requests</code> + <code>sid_unban_log</code>.
+      Sumber: <code>{{ $bannedLogTableLabel }}</code> (SUCCESS) + <code>auto_banned_unban_requests</code>
+      (via <code>{{ $scrRefColumn }}</code>) + <code>sid_unban_log</code>.
       Target unban otomatis: <strong>{{ AutoBannedSlaCalculator::AUTOMATION_UNBAN_HOURS }} jam</strong> sejak waktu banned (<code>completed_at</code>).
    </p>
 
@@ -251,10 +269,16 @@
                <tr class="{{ $rowClass }}">
                   <td>
                      <div class="font-semibold">{{ $row['filterDate'] ?? '—' }}</div>
+                     @if($isWeeklyScope && !empty($row['isoPeriodLabel']))
+                     <div class="text-[10px] font-bold text-primary">{{ $row['isoPeriodLabel'] }}</div>
+                     @endif
                      @if(!empty($row['filterShift']))
                      <div class="text-[10px] text-[#64748b]">{{ $row['filterShift'] }}</div>
                      @endif
                      <div class="text-[10px] text-[#64748b]">Banned: {{ $row['bannedAt'] ?? '—' }}</div>
+                     @if(!empty($row['scrRefId']))
+                     <div class="text-[10px] text-[#94a3b8]">SCR {{ $row['scrRefId'] }}</div>
+                     @endif
                   </td>
                   <td>
                      <div class="font-mono font-bold text-primary">{{ $row['sid'] ?? '—' }}</div>

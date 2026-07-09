@@ -28,6 +28,9 @@
    @if(($filters['q'] ?? '') !== '')
    <input type="hidden" name="q" value="{{ $filters['q'] }}"/>
    @endif
+   @if(($filters['ban_scope'] ?? '') !== '')
+   <input type="hidden" name="ban_scope" value="{{ $filters['ban_scope'] }}"/>
+   @endif
    @foreach($preserveParams ?? [] as $paramKey => $paramValue)
    @if($paramValue !== '' && $paramValue !== null)
    <input type="hidden" name="{{ $paramKey }}" value="{{ $paramValue }}"/>

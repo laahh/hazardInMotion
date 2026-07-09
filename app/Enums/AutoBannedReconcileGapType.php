@@ -40,11 +40,16 @@ enum AutoBannedReconcileGapType: string
     public function description(): string
     {
         return match ($this) {
-            self::NoRequest => 'Daily banned ada, belum ada request unban (scr_daily_banned_id).',
-            self::MissingUnbanLog => 'Daily request Disetujui ada (scr_daily_banned_id sama), log unban belum ada.',
-            self::WeeklyNoRequest => 'Weekly banned ada, belum ada request unban (scr_weekly_banned_id).',
-            self::WeeklyMissingUnbanLog => 'Weekly request Disetujui ada (scr_weekly_banned_id sama), log unban belum ada.',
+            self::NoRequest => 'Banned daily SUCCESS wajib punya pengajuan Disetujui + log unban SUCCESS (per scr_daily_banned_id). Tab ini: belum ada pengajuan sama sekali.',
+            self::MissingUnbanLog => 'Banned daily SUCCESS wajib punya pengajuan Disetujui + log unban SUCCESS. Tab ini: pengajuan Disetujui sudah ada, log unban belum.',
+            self::WeeklyNoRequest => 'Banned weekly SUCCESS wajib punya pengajuan Disetujui + log unban SUCCESS (per scr_weekly_banned_id). Tab ini: belum ada pengajuan sama sekali.',
+            self::WeeklyMissingUnbanLog => 'Banned weekly SUCCESS wajib punya pengajuan Disetujui + log unban SUCCESS. Tab ini: pengajuan Disetujui sudah ada, log unban belum.',
         };
+    }
+
+    public function scopeLabel(): string
+    {
+        return $this->isWeekly() ? 'Weekly' : 'Daily';
     }
 
     public function bannedLogTableLabel(): string

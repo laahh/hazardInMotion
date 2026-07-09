@@ -387,14 +387,10 @@ class AutoBannedLogReconcileService
         $sid = strtoupper(trim((string) ($banLog->sid ?? '')));
 
         if ($scrId !== null) {
-            $byScr = SidUnbanLog::query()
+            return SidUnbanLog::query()
                 ->where('scr_daily_banned_id', $scrId)
                 ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
                 ->exists();
-
-            if ($byScr) {
-                return true;
-            }
         }
 
         return $this->hasMatchingUnbanLogBySid($sid, $banLog->completed_at ?? $banLog->started_at);
@@ -410,14 +406,10 @@ class AutoBannedLogReconcileService
         $sid = strtoupper(trim((string) ($banLog->sid ?? '')));
 
         if ($scrId !== null && AutoBannedSchema::hasSidUnbanLogScrWeeklyBannedColumn()) {
-            $byScr = SidUnbanLog::query()
+            return SidUnbanLog::query()
                 ->where('scr_weekly_banned_id', $scrId)
                 ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
                 ->exists();
-
-            if ($byScr) {
-                return true;
-            }
         }
 
         return $this->hasMatchingUnbanLogBySid($sid, $banLog->completed_at ?? $banLog->started_at);

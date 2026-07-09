@@ -11,6 +11,7 @@ use App\Enums\AutoBannedReconcileUnbanLogMode;
 use App\Http\Requests\AutoBanned\AutoBannedInputasiReconcileRequest;
 use App\Services\AutoBanned\AutoBannedLogReconcileService;
 use App\Services\AutoBanned\AutoBannedPipelineGapService;
+use App\Services\AutoBanned\AutoBannedReconcileCrossScopeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -23,6 +24,7 @@ class AutoBannedInputasiReconcileController extends Controller
     public function __construct(
         private readonly AutoBannedPipelineGapService $pipelineGapService,
         private readonly AutoBannedLogReconcileService $logReconcileService,
+        private readonly AutoBannedReconcileCrossScopeService $crossScopeService,
     ) {}
 
     public function index(Request $request): View
@@ -31,7 +33,14 @@ class AutoBannedInputasiReconcileController extends Controller
         $gapType = $this->pipelineGapService->resolveGapType($filters);
         $tableAvailable = $this->pipelineGapService->bannedLogTableAvailable($gapType);
         $gapRows = $tableAvailable
-            ? $this->pipelineGapService->gapBanLogs($filters)
+            ? $this->crossScopeService->attachCrossScopeTickets(
+                $this->pipelineGapService->gapBanLogs($filters),
+                $gapType,
+            )
+            : collect();
+
+        $gapExplanations = ($tableAvailable && $gapRows->isEmpty() && ($filters['sid'] ?? '') !== '')
+            ? $this->pipelineGapService->explainGapExclusionsForSid($filters, $gapType)
             : collect();
 
         return view('AutoBanned.inputasi.reconcile', [
@@ -41,6 +50,7 @@ class AutoBannedInputasiReconcileController extends Controller
             'gapType' => $gapType,
             'filterOptions' => $this->pipelineGapService->filterOptions($filters),
             'gapRows' => $gapRows,
+            'gapExplanations' => $gapExplanations,
             'tableAvailable' => $tableAvailable,
             'defaultAlasan' => AutoBannedLogReconcileService::DEFAULT_ALASAN,
             'defaultMinDaysOld' => AutoBannedPipelineGapService::DEFAULT_MIN_DAYS_OLD,
