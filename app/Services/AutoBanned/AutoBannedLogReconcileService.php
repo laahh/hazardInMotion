@@ -91,6 +91,12 @@ class AutoBannedLogReconcileService
         Carbon $unbanCompletedAt,
         AutoBannedReconcileUnbanLogMode $unbanLogMode,
     ): void {
+        if ($unbanLogMode->requiresExistingRequest()) {
+            $this->reconcileUnbanLogOnly($banLogId, $unbanCompletedAt);
+
+            return;
+        }
+
         $banLog = SidBannedLog::query()->find($banLogId);
 
         if ($banLog === null) {
@@ -105,7 +111,7 @@ class AutoBannedLogReconcileService
             throw new \RuntimeException('Riwayat banned #'.$banLogId.' sudah memiliki log unban SUCCESS.');
         }
 
-        if ($this->hasUnbanRequest($banLog)) {
+        if ($unbanLogMode->createsUnbanRequest() && $this->hasUnbanRequest($banLog)) {
             throw new \RuntimeException('Riwayat banned #'.$banLogId.' sudah memiliki pengajuan unban.');
         }
 
@@ -169,6 +175,48 @@ class AutoBannedLogReconcileService
         );
     }
 
+    private function reconcileUnbanLogOnly(int $banLogId, Carbon $unbanCompletedAt): void
+    {
+        $banLog = SidBannedLog::query()->find($banLogId);
+
+        if ($banLog === null) {
+            throw new \RuntimeException('Riwayat banned #'.$banLogId.' tidak ditemukan.');
+        }
+
+        if ($banLog->automation_status !== AutoBannedSidAutomationStatus::Success) {
+            throw new \RuntimeException('Riwayat banned #'.$banLogId.' bukan status SUCCESS.');
+        }
+
+        if ($banLog->scr_daily_banned_id === null) {
+            throw new \RuntimeException('Riwayat banned #'.$banLogId.' tidak terhubung ke scr_daily_banned_id.');
+        }
+
+        if ($this->hasMatchingUnbanLog($banLog)) {
+            throw new \RuntimeException('Riwayat banned #'.$banLogId.' sudah memiliki log unban SUCCESS.');
+        }
+
+        $unbanRequest = $this->findApprovedUnbanRequest($banLog);
+        if ($unbanRequest === null) {
+            throw new \RuntimeException(
+                'Riwayat banned #'.$banLogId.' belum memiliki pengajuan Disetujui dengan scr_daily_banned_id yang sama.',
+            );
+        }
+
+        if ((int) $unbanRequest->scr_daily_banned_id !== (int) $banLog->scr_daily_banned_id) {
+            throw new \RuntimeException(
+                'scr_daily_banned_id pengajuan (#'.$unbanRequest->id.') tidak cocok dengan banned #'.$banLogId.'.',
+            );
+        }
+
+        $banLog->loadMissing([
+            'scrDailyBanned:id,'.ScrDailyBannedColumns::SID.','.ScrDailyBannedColumns::NAMA.','.ScrDailyBannedColumns::PERUSAHAAN.','.ScrDailyBannedColumns::SITE.','.ScrDailyBannedColumns::BANNED_REASON.','.ScrDailyBannedColumns::BANNED_STATUS,
+        ]);
+
+        SidUnbanLog::query()->create(
+            $this->buildUnbanLogPayload($banLog, $unbanCompletedAt, (int) $unbanRequest->id),
+        );
+    }
+
     private function hasMatchingUnbanLog(SidBannedLog $banLog): bool
     {
         if (! AutoBannedSchema::hasSidUnbanLogTable()) {
@@ -208,13 +256,34 @@ class AutoBannedLogReconcileService
 
     private function hasUnbanRequest(SidBannedLog $banLog): bool
     {
+        return $this->findAnyUnbanRequest($banLog) !== null;
+    }
+
+    private function findApprovedUnbanRequest(SidBannedLog $banLog): ?AutoBannedUnbanRequest
+    {
         if (! AutoBannedSchema::hasUnbanRequestsTable() || $banLog->scr_daily_banned_id === null) {
-            return false;
+            return null;
         }
 
         return AutoBannedUnbanRequest::query()
             ->where('scr_daily_banned_id', (int) $banLog->scr_daily_banned_id)
-            ->exists();
+            ->where('status', AutoBannedUnbanStatus::Approved->value)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    private function findAnyUnbanRequest(SidBannedLog $banLog): ?AutoBannedUnbanRequest
+    {
+        if (! AutoBannedSchema::hasUnbanRequestsTable() || $banLog->scr_daily_banned_id === null) {
+            return null;
+        }
+
+        return AutoBannedUnbanRequest::query()
+            ->where('scr_daily_banned_id', (int) $banLog->scr_daily_banned_id)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
     }
 
     /**

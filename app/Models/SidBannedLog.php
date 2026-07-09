@@ -8,6 +8,7 @@ use App\Enums\AutoBannedSidAutomationStatus;
 use App\Support\AutoBanned\ScrDailyBannedColumns;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class SidBannedLog extends Model
 {
@@ -25,6 +26,14 @@ class SidBannedLog extends Model
     public function scrDailyBanned(): BelongsTo
     {
         return $this->belongsTo(ScrDailyBanned::class, 'scr_daily_banned_id');
+    }
+
+    /**
+     * Pengajuan unban terkait (di-set saat gap type missing_unban_log).
+     */
+    public function reconcileUnbanRequest(): HasOne
+    {
+        return $this->hasOne(AutoBannedUnbanRequest::class, 'scr_daily_banned_id', 'scr_daily_banned_id');
     }
 
     public function getDisplaySiteAttribute(): string

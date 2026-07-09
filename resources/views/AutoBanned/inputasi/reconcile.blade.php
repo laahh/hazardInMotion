@@ -6,20 +6,26 @@
    @include('AutoBanned.partials.page-header', [
       'breadcrumbCurrent' => 'Rekonsiliasi Log',
       'pageTitle' => 'Rekonsiliasi Log Unban',
-      'pageSubtitle' => 'Backfill pengajuan Disetujui — opsional dengan log unban SUCCESS',
+      'pageSubtitle' => 'Backfill pengajuan dan/atau log unban untuk data yang belum sinkron',
    ])
 @endsection
 
 @section('content')
 @php
+   use App\Enums\AutoBannedReconcileGapType;
    use App\Enums\AutoBannedReconcileUnbanLogMode;
 
    $gapRows = collect($gapRows ?? []);
    $tableAvailable = $tableAvailable ?? false;
    $filters = $filters ?? [];
    $filterOptions = $filterOptions ?? ['sites' => collect()];
+   $gapType = $gapType ?? AutoBannedReconcileGapType::NoRequest;
+   $gapTypes = $gapTypes ?? AutoBannedReconcileGapType::cases();
+   $defaultMode = $gapType->defaultUnbanLogMode()->value;
+   $isMissingUnbanLogGap = $gapType === AutoBannedReconcileGapType::MissingUnbanLog;
    $queryBase = array_filter([
-      'min_days_old' => $filters['min_days_old'] ?? $defaultMinDaysOld,
+      'gap_type' => $filters['gap_type'] ?? $gapType->value,
+      'min_days_old' => $filters['min_days_old'] ?? $gapType->defaultMinDaysOld(),
       'site' => $filters['site'] ?? '',
       'sid' => $filters['sid'] ?? '',
       'q' => $filters['q'] ?? '',
@@ -31,7 +37,7 @@
       <span class="material-symbols-outlined text-base">arrow_back</span>
       Kembali ke Inputasi
    </a>
-   <a href="{{ route('auto-banned.pipeline-monitoring.index', ['pipeline_stage' => 'no_request']) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-on-surface-variant hover:text-primary">
+   <a href="{{ route('auto-banned.pipeline-monitoring.index', ['pipeline_stage' => $isMissingUnbanLogGap ? 'awaiting_unban' : 'no_request']) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-on-surface-variant hover:text-primary">
       <span class="material-symbols-outlined text-base">timeline</span>
       Lihat Pipeline
    </a>
@@ -52,10 +58,15 @@
 <div class="rounded-2xl border border-amber-200/70 bg-amber-50/60 px-5 py-4 text-sm text-amber-950 mb-5">
    <p class="font-bold mb-1">Kapan menggunakan fitur ini?</p>
    <p class="text-xs leading-relaxed text-amber-900/90">
-      Untuk SID yang belum tercatat di sistem. Pilih mode rekonsiliasi:
-      <strong>SUCCESS</strong> = pengajuan Disetujui + log unban SUCCESS (unban sudah selesai manual).
-      <strong>BLM SUKSES</strong> = hanya pengajuan Disetujui (unban otomatis belum berhasil / masih menunggu).
-      Default filter: data banned dengan <code class="text-[11px]">filter_date</code> H-{{ $defaultMinDaysOld }} atau lebih lama.
+      @if($isMissingUnbanLogGap)
+      Tab <strong>Tanpa log unban</strong>: pengajuan treatment sudah ada &amp; Disetujui (<code class="text-[11px]">scr_daily_banned_id</code> sama), tapi <code class="text-[11px]">sid_unban_log</code> SUCCESS belum ada.
+      Gunakan mode <strong>LOG SAJA</strong> untuk backfill log unban tanpa membuat pengajuan baru.
+      @else
+      Tab <strong>Tanpa pengajuan</strong>: banned ada, belum ada pengajuan di sistem.
+      <strong>SUCCESS</strong> = pengajuan Disetujui + log unban SUCCESS.
+      <strong>BLM SUKSES</strong> = hanya pengajuan Disetujui (unban otomatis belum berhasil).
+      Default filter: <code class="text-[11px]">filter_date</code> H-{{ $defaultMinDaysOld }} atau lebih lama.
+      @endif
    </p>
 </div>
 
@@ -67,10 +78,32 @@
 
 <div class="rounded-2xl border border-outline-variant/15 bg-white shadow-sm mb-5">
    <div class="border-b border-outline-variant/15 px-5 py-4">
+      <div class="flex flex-wrap gap-2 mb-4">
+         @foreach($gapTypes as $type)
+         @php
+            $tabQuery = array_merge(
+               collect($queryBase)->except(['gap_type', 'min_days_old'])->all(),
+               ['gap_type' => $type->value]
+            );
+            if ($type !== $gapType) {
+               $tabQuery['min_days_old'] = $type->defaultMinDaysOld();
+            } else {
+               $tabQuery['min_days_old'] = $filters['min_days_old'] ?? $type->defaultMinDaysOld();
+            }
+         @endphp
+         <a href="{{ route('auto-banned.inputasi.reconcile.index', $tabQuery) }}"
+            class="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-colors {{ $type === $gapType ? 'bg-primary text-white' : 'bg-[#f8fafc] text-on-surface-variant hover:bg-primary/10 hover:text-primary' }}">
+            {{ $type->label() }}
+         </a>
+         @endforeach
+      </div>
+      <p class="text-[11px] text-on-surface-variant mb-3">{{ $gapType->description() }}</p>
+
       <form method="GET" action="{{ route('auto-banned.inputasi.reconcile.index') }}" class="flex flex-wrap items-end gap-3">
+         <input type="hidden" name="gap_type" value="{{ $gapType->value }}"/>
          <div>
             <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Min. hari lalu (H-N)</label>
-            <input type="number" name="min_days_old" min="0" max="90" value="{{ $filters['min_days_old'] ?? $defaultMinDaysOld }}"
+            <input type="number" name="min_days_old" min="0" max="90" value="{{ $filters['min_days_old'] ?? $gapType->defaultMinDaysOld() }}"
                class="w-24 rounded-xl border border-outline-variant/25 bg-[#f8fafc] px-3 py-2 text-sm"/>
          </div>
          <div>
@@ -96,8 +129,8 @@
             <span class="material-symbols-outlined text-base">filter_alt</span>
             Filter
          </button>
-         @if($queryBase !== [])
-         <a href="{{ route('auto-banned.inputasi.reconcile.index') }}" class="text-sm font-semibold text-on-surface-variant hover:text-primary">Reset</a>
+         @if(count($queryBase) > 1 || ($filters['min_days_old'] ?? null) !== $gapType->defaultMinDaysOld())
+         <a href="{{ route('auto-banned.inputasi.reconcile.index', ['gap_type' => $gapType->value]) }}" class="text-sm font-semibold text-on-surface-variant hover:text-primary">Reset</a>
          @endif
       </form>
    </div>
@@ -111,19 +144,19 @@
       <div class="border-b border-outline-variant/15 px-5 py-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
          <div>
             <label for="ab-reconcile-unban-mode" class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">
-               Status log unban <span class="text-red-500">*</span>
+               Mode rekonsiliasi <span class="text-red-500">*</span>
             </label>
             <select id="ab-reconcile-unban-mode" name="unban_log_mode" required
                class="w-full rounded-xl border border-outline-variant/25 bg-[#f8fafc] px-3 py-2.5 text-sm text-on-surface focus:border-primary/30 focus:ring-2 focus:ring-primary/10">
-               @foreach($unbanLogModes ?? AutoBannedReconcileUnbanLogMode::cases() as $mode)
-               <option value="{{ $mode->value }}" @selected(old('unban_log_mode', AutoBannedReconcileUnbanLogMode::Success->value) === $mode->value)>
+               @foreach($unbanLogModes ?? $gapType->allowedUnbanLogModes() as $mode)
+               <option value="{{ $mode->value }}" @selected(old('unban_log_mode', $defaultMode) === $mode->value)>
                   {{ $mode->shortLabel() }}
                </option>
                @endforeach
             </select>
             <p id="ab-reconcile-mode-hint" class="mt-1.5 text-[11px] text-on-surface-variant leading-relaxed"></p>
          </div>
-         <div>
+         <div id="ab-reconcile-alasan-wrap" @if($isMissingUnbanLogGap) hidden @endif>
             <label for="ab-reconcile-alasan" class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">
                Ringkasan pengajuan (untuk semua terpilih)
             </label>
@@ -180,6 +213,9 @@
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Karyawan</th>
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Site</th>
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Alasan</th>
+                  @if($isMissingUnbanLogGap)
+                  <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Pengajuan</th>
+                  @endif
                   <th class="border-b border-outline-variant/15 px-4 py-3 text-left">Banned at</th>
                </tr>
             </thead>
@@ -188,6 +224,7 @@
                @php
                   $canReconcile = $row->scr_daily_banned_id !== null;
                   $hoursSince = $row->completed_at ? (int) $row->completed_at->diffInHours(now()) : null;
+                  $linkedRequest = $row->relationLoaded('reconcileUnbanRequest') ? $row->getRelation('reconcileUnbanRequest') : null;
                @endphp
                <tr class="hover:bg-[#fafbfc] {{ !$canReconcile ? 'opacity-60' : '' }}">
                   <td class="border-b border-outline-variant/10 px-4 py-3 align-top">
@@ -213,6 +250,17 @@
                      @endif
                      {{ \Illuminate\Support\Str::limit($row->banned_reason ?? '—', 80) }}
                   </td>
+                  @if($isMissingUnbanLogGap)
+                  <td class="border-b border-outline-variant/10 px-4 py-3 align-top text-xs">
+                     @if($linkedRequest)
+                     <div class="font-semibold text-emerald-700">{{ $linkedRequest->status?->label() ?? 'Disetujui' }}</div>
+                     <div class="text-[10px] text-on-surface-variant">Req #{{ $linkedRequest->id }}</div>
+                     <div class="text-[10px] text-on-surface-variant">{{ $linkedRequest->created_at?->format('d M Y H:i') ?? '—' }}</div>
+                     @else
+                     <span class="text-red-600">Tidak ditemukan</span>
+                     @endif
+                  </td>
+                  @endif
                   <td class="border-b border-outline-variant/10 px-4 py-3 align-top text-xs whitespace-nowrap">
                      {{ $row->completed_at?->format('d M Y H:i') ?? '—' }}
                      @if($hoursSince !== null)
@@ -222,8 +270,12 @@
                </tr>
                @empty
                <tr>
-                  <td colspan="6" class="px-4 py-10 text-center text-on-surface-variant">
+                  <td colspan="{{ $isMissingUnbanLogGap ? 7 : 6 }}" class="px-4 py-10 text-center text-on-surface-variant">
+                     @if($isMissingUnbanLogGap)
+                     Tidak ada gap log unban untuk filter ini. Semua pengajuan Disetujui sudah memiliki <code>sid_unban_log</code> SUCCESS dengan <code>scr_daily_banned_id</code> yang sama.
+                     @else
                      Tidak ada gap log untuk filter ini. Semua data H-{{ (int) ($filters['min_days_old'] ?? $defaultMinDaysOld) }} sudah memiliki request/log unban, atau belum ada data banned.
+                     @endif
                   </td>
                </tr>
                @endforelse
@@ -243,13 +295,14 @@
    var form = document.getElementById('ab-reconcile-form');
    var modeSelect = document.getElementById('ab-reconcile-unban-mode');
    var modeHint = document.getElementById('ab-reconcile-mode-hint');
-   var unbanAtWrap = document.getElementById('ab-reconcile-unban-at-wrap');
+   var alasanWrap = document.getElementById('ab-reconcile-alasan-wrap');
    var unbanAtLabel = document.getElementById('ab-reconcile-unban-at-label');
    var unbanAtHint = document.getElementById('ab-reconcile-unban-at-hint');
 
    var modeHints = {
       success: 'Pengajuan Disetujui + insert sid_unban_log berstatus SUCCESS. Pipeline akan tampil Sudah Unban.',
-      belum_sukses: 'Hanya insert auto_banned_unban_requests berstatus Disetujui. Tidak ada log unban — pipeline Menunggu Automasi Unban.'
+      belum_sukses: 'Hanya insert auto_banned_unban_requests berstatus Disetujui. Tidak ada log unban — pipeline Menunggu Automasi Unban.',
+      unban_log_only: 'Pengajuan sudah ada (scr_daily_banned_id sama). Hanya insert sid_unban_log SUCCESS — tidak membuat pengajuan baru.'
    };
 
    function updateModeUi() {
@@ -257,6 +310,9 @@
       var mode = modeSelect.value;
       if (modeHint) {
          modeHint.textContent = modeHints[mode] || '';
+      }
+      if (alasanWrap) {
+         alasanWrap.hidden = mode === 'unban_log_only';
       }
       if (unbanAtLabel) {
          unbanAtLabel.textContent = mode === 'belum_sukses'
@@ -310,9 +366,11 @@
             return;
          }
          var mode = modeSelect ? modeSelect.value : 'success';
-         var modeLabel = mode === 'belum_sukses'
-            ? 'pengajuan Disetujui saja (tanpa log unban)'
-            : 'pengajuan Disetujui + log unban SUCCESS';
+         var modeLabel = {
+            belum_sukses: 'pengajuan Disetujui saja (tanpa log unban)',
+            unban_log_only: 'log unban SUCCESS saja (pengajuan sudah ada)',
+            success: 'pengajuan Disetujui + log unban SUCCESS'
+         }[mode] || mode;
          if (!confirm('Rekonsiliasi ' + selected.length + ' riwayat?\n\nMode: ' + modeLabel + '.')) {
             e.preventDefault();
          }

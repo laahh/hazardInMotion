@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\AutoBanned;
 
+use App\Enums\AutoBannedReconcileGapType;
 use App\Enums\AutoBannedReconcileUnbanLogMode;
 use App\Support\AutoBanned\AutoBannedSchema;
 use Illuminate\Foundation\Http\FormRequest;
@@ -33,6 +34,7 @@ class AutoBannedInputasiReconcileRequest extends FormRequest
             'ban_log_ids' => ['required', 'array', 'min:1'],
             'ban_log_ids.*' => $banLogRule,
             'unban_log_mode' => ['required', 'string', Rule::in(array_column(AutoBannedReconcileUnbanLogMode::cases(), 'value'))],
+            'gap_type' => ['nullable', 'string', Rule::in(array_column(AutoBannedReconcileGapType::cases(), 'value'))],
             'alasan_pengajuan' => ['nullable', 'string', 'max:2000'],
             'unban_completed_at' => ['nullable', 'date'],
         ];

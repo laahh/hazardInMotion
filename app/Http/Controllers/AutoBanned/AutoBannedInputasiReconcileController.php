@@ -6,6 +6,7 @@ namespace App\Http\Controllers\AutoBanned;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\AutoBanned\Concerns\ProvidesAutoBannedLayout;
+use App\Enums\AutoBannedReconcileGapType;
 use App\Enums\AutoBannedReconcileUnbanLogMode;
 use App\Http\Requests\AutoBanned\AutoBannedInputasiReconcileRequest;
 use App\Services\AutoBanned\AutoBannedLogReconcileService;
@@ -27,6 +28,7 @@ class AutoBannedInputasiReconcileController extends Controller
     public function index(Request $request): View
     {
         $filters = $this->pipelineGapService->resolveFilters($request);
+        $gapType = $this->pipelineGapService->resolveGapType($filters);
         $tableAvailable = $this->pipelineGapService->bannedLogTableAvailable();
         $gapRows = $tableAvailable
             ? $this->pipelineGapService->gapBanLogs($filters)
@@ -36,12 +38,14 @@ class AutoBannedInputasiReconcileController extends Controller
             'navActive' => 'inputasi',
             'navItems' => $this->autoBannedNavItems(),
             'filters' => $filters,
+            'gapType' => $gapType,
             'filterOptions' => $this->pipelineGapService->filterOptions($filters),
             'gapRows' => $gapRows,
             'tableAvailable' => $tableAvailable,
             'defaultAlasan' => AutoBannedLogReconcileService::DEFAULT_ALASAN,
             'defaultMinDaysOld' => AutoBannedPipelineGapService::DEFAULT_MIN_DAYS_OLD,
-            'unbanLogModes' => AutoBannedReconcileUnbanLogMode::cases(),
+            'unbanLogModes' => $gapType->allowedUnbanLogModes(),
+            'gapTypes' => AutoBannedReconcileGapType::cases(),
         ]);
     }
 
@@ -66,6 +70,7 @@ class AutoBannedInputasiReconcileController extends Controller
 
         $redirect = redirect()
             ->route('auto-banned.inputasi.reconcile.index', array_filter([
+                'gap_type' => $request->input('gap_type'),
                 'min_days_old' => $request->input('min_days_old'),
                 'site' => $request->input('site'),
                 'sid' => $request->input('sid'),
@@ -73,9 +78,11 @@ class AutoBannedInputasiReconcileController extends Controller
             ], static fn ($value) => $value !== null && $value !== ''));
 
         if ($result['processed'] > 0) {
-            $message = $unbanLogMode === AutoBannedReconcileUnbanLogMode::BelumSukses
-                ? $result['processed'].' riwayat berhasil direkonsiliasi (pengajuan Disetujui saja, tanpa log unban SUCCESS).'
-                : $result['processed'].' riwayat berhasil direkonsiliasi (pengajuan Disetujui + log unban SUCCESS).';
+            $message = match ($unbanLogMode) {
+                AutoBannedReconcileUnbanLogMode::BelumSukses => $result['processed'].' riwayat berhasil direkonsiliasi (pengajuan Disetujui saja, tanpa log unban SUCCESS).',
+                AutoBannedReconcileUnbanLogMode::UnbanLogOnly => $result['processed'].' riwayat berhasil direkonsiliasi (log unban SUCCESS — pengajuan sudah ada).',
+                default => $result['processed'].' riwayat berhasil direkonsiliasi (pengajuan Disetujui + log unban SUCCESS).',
+            };
             if ($result['skipped'] > 0) {
                 $message .= ' '.$result['skipped'].' dilewati.';
             }
