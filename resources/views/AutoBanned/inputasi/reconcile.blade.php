@@ -22,7 +22,11 @@
    $gapType = $gapType ?? AutoBannedReconcileGapType::NoRequest;
    $gapTypes = $gapTypes ?? AutoBannedReconcileGapType::cases();
    $defaultMode = $gapType->defaultUnbanLogMode()->value;
-   $isMissingUnbanLogGap = $gapType === AutoBannedReconcileGapType::MissingUnbanLog;
+   $isWeekly = $gapType->isWeekly();
+   $isMissingUnbanLogGap = $gapType->isMissingUnbanLog();
+   $scrRefColumn = $gapType->scrRefColumn();
+   $bannedLogTableLabel = $gapType->bannedLogTableLabel();
+   $defaultMinDaysOld = $gapType->defaultMinDaysOld();
    $queryBase = array_filter([
       'gap_type' => $filters['gap_type'] ?? $gapType->value,
       'min_days_old' => $filters['min_days_old'] ?? $gapType->defaultMinDaysOld(),
@@ -59,13 +63,11 @@
    <p class="font-bold mb-1">Kapan menggunakan fitur ini?</p>
    <p class="text-xs leading-relaxed text-amber-900/90">
       @if($isMissingUnbanLogGap)
-      Tab <strong>Tanpa log unban</strong>: pengajuan Disetujui sudah ada (<code class="text-[11px]">scr_daily_banned_id</code> sama), log unban belum ada.
-      Termasuk log banned <strong>SKIPPED</strong> (ban sudah ada, automasi lewati duplikat).
-      Pilih mode <strong>LOG SAJA (log unban saja)</strong>.
+      Tab <strong>{{ $gapType->label() }}</strong>: request Disetujui sudah ada (<code class="text-[11px]">{{ $scrRefColumn }}</code> sama), log unban belum ada.
+      Termasuk log banned <strong>SKIPPED</strong>. Pilih mode <strong>LOG SAJA (log unban saja)</strong>.
       @else
-      Tab <strong>Tanpa pengajuan</strong>: banned ada, belum ada request unban di sistem.
-      <strong>SUCCESS (request unban + log unban)</strong> atau
-      <strong>BLM SUKSES (hanya request unban)</strong>.
+      Tab <strong>{{ $gapType->label() }}</strong>: banned {{ $isWeekly ? 'weekly' : 'daily' }} ada, belum ada request unban.
+      <strong>SUCCESS (request unban + log unban)</strong> atau <strong>BLM SUKSES (hanya request unban)</strong>.
       Default filter: <code class="text-[11px]">filter_date</code> H-{{ $defaultMinDaysOld }} atau lebih lama.
       @endif
    </p>
@@ -73,7 +75,7 @@
 
 @if(!$tableAvailable)
 <div class="rounded-2xl border border-outline-variant/15 bg-white p-6 text-sm text-on-surface-variant">
-   Tabel <code>sid_banned_log</code> belum tersedia.
+   Tabel <code>{{ $bannedLogTableLabel }}</code> belum tersedia.
 </div>
 @else
 
@@ -84,16 +86,11 @@
          @php
             $tabQuery = array_merge(
                collect($queryBase)->except(['gap_type', 'min_days_old'])->all(),
-               ['gap_type' => $type->value]
+               ['gap_type' => $type->value, 'min_days_old' => $type === $gapType ? ($filters['min_days_old'] ?? $type->defaultMinDaysOld()) : $type->defaultMinDaysOld()]
             );
-            if ($type !== $gapType) {
-               $tabQuery['min_days_old'] = $type->defaultMinDaysOld();
-            } else {
-               $tabQuery['min_days_old'] = $filters['min_days_old'] ?? $type->defaultMinDaysOld();
-            }
          @endphp
          <a href="{{ route('auto-banned.inputasi.reconcile.index', $tabQuery) }}"
-            class="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-colors {{ $type === $gapType ? 'bg-primary text-white' : 'bg-[#f8fafc] text-on-surface-variant hover:bg-primary/10 hover:text-primary' }}">
+            class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[11px] font-bold transition-colors {{ $type === $gapType ? 'bg-primary text-white' : 'bg-[#f8fafc] text-on-surface-variant hover:bg-primary/10 hover:text-primary' }}">
             {{ $type->label() }}
          </a>
          @endforeach
@@ -224,7 +221,8 @@
             <tbody>
                @forelse($gapRows as $row)
                @php
-                  $canReconcile = $row->scr_daily_banned_id !== null;
+                  $scrRefId = $isWeekly ? ($row->scr_weekly_banned_id ?? null) : ($row->scr_daily_banned_id ?? null);
+                  $canReconcile = $scrRefId !== null;
                   $hoursSince = $row->completed_at ? (int) $row->completed_at->diffInHours(now()) : null;
                   $linkedRequest = $row->relationLoaded('reconcileUnbanRequest') ? $row->getRelation('reconcileUnbanRequest') : null;
                @endphp
@@ -233,13 +231,13 @@
                      @if($canReconcile)
                      <input type="checkbox" name="ban_log_ids[]" value="{{ $row->id }}" class="ab-reconcile-check rounded border-outline-variant/40 text-primary focus:ring-primary/20"/>
                      @else
-                     <span class="text-[10px] text-red-600" title="Tidak ada scr_daily_banned_id">—</span>
+                     <span class="text-[10px] text-red-600" title="Tidak ada {{ $scrRefColumn }}">—</span>
                      @endif
                   </td>
                   <td class="border-b border-outline-variant/10 px-4 py-3 align-top">
                      <div class="font-semibold">{{ $row->filter_date?->format('d M Y') ?? '—' }}</div>
                      <div class="font-mono text-xs font-bold text-primary">{{ $row->sid }}</div>
-                     <div class="text-[10px] text-on-surface-variant">#{{ $row->id }} · SCR {{ $row->scr_daily_banned_id ?? '—' }}</div>
+                     <div class="text-[10px] text-on-surface-variant">#{{ $row->id }} · SCR {{ $scrRefId ?? '—' }}</div>
                   </td>
                   <td class="border-b border-outline-variant/10 px-4 py-3 align-top">
                      <div class="font-semibold">{{ $row->nama ?: '—' }}</div>
@@ -283,9 +281,9 @@
                <tr>
                   <td colspan="{{ $isMissingUnbanLogGap ? 8 : 7 }}" class="px-4 py-10 text-center text-on-surface-variant">
                      @if($isMissingUnbanLogGap)
-                     Tidak ada gap log unban untuk filter ini. Semua pengajuan Disetujui sudah memiliki <code>sid_unban_log</code> SUCCESS dengan <code>scr_daily_banned_id</code> yang sama.
+                     Tidak ada gap log unban untuk filter ini. Semua pengajuan Disetujui sudah memiliki <code>sid_unban_log</code> SUCCESS dengan <code>{{ $scrRefColumn }}</code> yang sama.
                      @else
-                     Tidak ada gap log untuk filter ini. Semua data H-{{ (int) ($filters['min_days_old'] ?? $defaultMinDaysOld) }} sudah memiliki request/log unban, atau belum ada data banned.
+                     Tidak ada gap log untuk filter ini. Semua data H-{{ (int) ($filters['min_days_old'] ?? $defaultMinDaysOld) }} sudah memiliki request/log unban, atau belum ada data banned {{ $isWeekly ? 'weekly' : 'daily' }}.
                      @endif
                   </td>
                </tr>
@@ -310,10 +308,11 @@
    var unbanAtLabel = document.getElementById('ab-reconcile-unban-at-label');
    var unbanAtHint = document.getElementById('ab-reconcile-unban-at-hint');
 
+   var scrRefColumn = @json($scrRefColumn);
    var modeHints = {
-      success: 'Request unban Disetujui + insert sid_unban_log SUCCESS. Pipeline akan tampil Sudah Unban.',
-      belum_sukses: 'Hanya insert request unban Disetujui. Tanpa log unban — pipeline Menunggu Automasi Unban.',
-      unban_log_only: 'Request unban sudah ada (scr_daily_banned_id sama). Hanya insert log unban SUCCESS.'
+      success: 'Request unban Disetujui + insert sid_unban_log SUCCESS.',
+      belum_sukses: 'Hanya insert request unban Disetujui. Tanpa log unban.',
+      unban_log_only: 'Request unban sudah ada (' + scrRefColumn + ' sama). Hanya insert log unban SUCCESS.'
    };
 
    function updateModeUi() {

@@ -91,6 +91,16 @@ final class AutoBannedSchema
         }
     }
 
+    public static function hasSidUnbanLogScrWeeklyBannedColumn(): bool
+    {
+        try {
+            return Schema::hasTable('sid_unban_log')
+                && Schema::hasColumn('sid_unban_log', 'scr_weekly_banned_id');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     public static function hasTableauFlowHistoryTable(): bool
     {
         try {

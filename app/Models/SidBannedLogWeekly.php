@@ -8,6 +8,7 @@ use App\Enums\AutoBannedSidAutomationStatus;
 use App\Support\AutoBanned\ScrWeeklyBannedColumns;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class SidBannedLogWeekly extends Model
 {
@@ -25,6 +26,14 @@ class SidBannedLogWeekly extends Model
     public function scrWeeklyBanned(): BelongsTo
     {
         return $this->belongsTo(ScrWeeklyBanned::class, 'scr_weekly_banned_id');
+    }
+
+    /**
+     * Pengajuan unban terkait (di-set saat gap type weekly missing unban log).
+     */
+    public function reconcileUnbanRequest(): HasOne
+    {
+        return $this->hasOne(AutoBannedUnbanRequest::class, 'scr_weekly_banned_id', 'scr_weekly_banned_id');
     }
 
     public function getDisplaySiteAttribute(): string

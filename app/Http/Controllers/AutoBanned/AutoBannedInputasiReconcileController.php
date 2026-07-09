@@ -29,7 +29,7 @@ class AutoBannedInputasiReconcileController extends Controller
     {
         $filters = $this->pipelineGapService->resolveFilters($request);
         $gapType = $this->pipelineGapService->resolveGapType($filters);
-        $tableAvailable = $this->pipelineGapService->bannedLogTableAvailable();
+        $tableAvailable = $this->pipelineGapService->bannedLogTableAvailable($gapType);
         $gapRows = $tableAvailable
             ? $this->pipelineGapService->gapBanLogs($filters)
             : collect();
@@ -54,6 +54,9 @@ class AutoBannedInputasiReconcileController extends Controller
         $validated = $request->validated();
         $user = $request->user();
 
+        $gapType = AutoBannedReconcileGapType::tryFrom((string) ($validated['gap_type'] ?? ''))
+            ?? AutoBannedReconcileGapType::NoRequest;
+
         $unbanCompletedAt = isset($validated['unban_completed_at']) && $validated['unban_completed_at'] !== ''
             ? Carbon::parse((string) $validated['unban_completed_at'])
             : null;
@@ -63,6 +66,7 @@ class AutoBannedInputasiReconcileController extends Controller
         $result = $this->logReconcileService->reconcileBanLogs(
             banLogIds: array_map('intval', $validated['ban_log_ids']),
             actor: $user,
+            gapType: $gapType,
             alasanPengajuan: (string) ($validated['alasan_pengajuan'] ?? ''),
             unbanCompletedAt: $unbanCompletedAt,
             unbanLogMode: $unbanLogMode,
@@ -70,7 +74,7 @@ class AutoBannedInputasiReconcileController extends Controller
 
         $redirect = redirect()
             ->route('auto-banned.inputasi.reconcile.index', array_filter([
-                'gap_type' => $request->input('gap_type'),
+                'gap_type' => $gapType->value,
                 'min_days_old' => $request->input('min_days_old'),
                 'site' => $request->input('site'),
                 'sid' => $request->input('sid'),
@@ -78,10 +82,11 @@ class AutoBannedInputasiReconcileController extends Controller
             ], static fn ($value) => $value !== null && $value !== ''));
 
         if ($result['processed'] > 0) {
+            $scopeLabel = $gapType->isWeekly() ? 'weekly' : 'daily';
             $message = match ($unbanLogMode) {
-                AutoBannedReconcileUnbanLogMode::BelumSukses => $result['processed'].' riwayat berhasil direkonsiliasi (pengajuan Disetujui saja, tanpa log unban SUCCESS).',
-                AutoBannedReconcileUnbanLogMode::UnbanLogOnly => $result['processed'].' riwayat berhasil direkonsiliasi (log unban SUCCESS — pengajuan sudah ada).',
-                default => $result['processed'].' riwayat berhasil direkonsiliasi (pengajuan Disetujui + log unban SUCCESS).',
+                AutoBannedReconcileUnbanLogMode::BelumSukses => $result['processed'].' riwayat '.$scopeLabel.' berhasil direkonsiliasi (request unban Disetujui saja, tanpa log unban SUCCESS).',
+                AutoBannedReconcileUnbanLogMode::UnbanLogOnly => $result['processed'].' riwayat '.$scopeLabel.' berhasil direkonsiliasi (log unban SUCCESS — request sudah ada).',
+                default => $result['processed'].' riwayat '.$scopeLabel.' berhasil direkonsiliasi (request unban Disetujui + log unban SUCCESS).',
             };
             if ($result['skipped'] > 0) {
                 $message .= ' '.$result['skipped'].' dilewati.';

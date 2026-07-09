@@ -79,4 +79,23 @@ final class AutoBannedSiteOptions
             }
         });
     }
+
+    /**
+     * @param  Builder<\Illuminate\Database\Eloquent\Model>  $query
+     */
+    public static function applyBannedLogWeeklySiteFilter(Builder $query, string $canonicalSite): void
+    {
+        $values = self::matchValuesForFilter($canonicalSite);
+
+        $query->where(function (Builder $inner) use ($values): void {
+            $inner->whereIn('site_dedicated', $values);
+
+            if (AutoBannedSchema::hasScrWeeklyBannedTable()) {
+                $inner->orWhereHas(
+                    'scrWeeklyBanned',
+                    static fn (Builder $scr): Builder => $scr->whereIn(ScrWeeklyBannedColumns::SITE, $values),
+                );
+            }
+        });
+    }
 }
