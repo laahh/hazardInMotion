@@ -455,15 +455,23 @@ class AutoBannedPipelineGapService
         }
 
         $success = AutoBannedSidAutomationStatus::Success->value;
+        $approved = AutoBannedUnbanStatus::Approved->value;
 
         $query->whereRaw("
             NOT EXISTS (
                 SELECT 1 FROM sid_unban_log ul
                 WHERE ul.automation_status = ?
                   AND sid_banned_log.scr_daily_banned_id IS NOT NULL
-                  AND ul.scr_daily_banned_id = sid_banned_log.scr_daily_banned_id
+                  AND (
+                      ul.scr_daily_banned_id = sid_banned_log.scr_daily_banned_id
+                      OR ul.unban_request_id IN (
+                          SELECT ur.id FROM auto_banned_unban_requests ur
+                          WHERE ur.scr_daily_banned_id = sid_banned_log.scr_daily_banned_id
+                            AND ur.status = ?
+                      )
+                  )
             )
-        ", [$success]);
+        ", [$success, $approved]);
     }
 
     /**
@@ -476,6 +484,7 @@ class AutoBannedPipelineGapService
         }
 
         $success = AutoBannedSidAutomationStatus::Success->value;
+        $approved = AutoBannedUnbanStatus::Approved->value;
 
         if (AutoBannedSchema::hasSidUnbanLogScrWeeklyBannedColumn()) {
             $query->whereRaw("
@@ -483,9 +492,16 @@ class AutoBannedPipelineGapService
                     SELECT 1 FROM sid_unban_log ul
                     WHERE ul.automation_status = ?
                       AND sid_banned_log_weekly.scr_weekly_banned_id IS NOT NULL
-                      AND ul.scr_weekly_banned_id = sid_banned_log_weekly.scr_weekly_banned_id
+                      AND (
+                          ul.scr_weekly_banned_id = sid_banned_log_weekly.scr_weekly_banned_id
+                          OR ul.unban_request_id IN (
+                              SELECT ur.id FROM auto_banned_unban_requests ur
+                              WHERE ur.scr_weekly_banned_id = sid_banned_log_weekly.scr_weekly_banned_id
+                                AND ur.status = ?
+                          )
+                      )
                 )
-            ", [$success]);
+            ", [$success, $approved]);
 
             return;
         }
@@ -792,16 +808,49 @@ class AutoBannedPipelineGapService
         }
 
         $unbanLog = null;
+        $incompleteUnbanLog = null;
+        $approvedRequest = null;
+
+        if ($scrRefId !== null && AutoBannedSchema::hasUnbanRequestsTable()) {
+            $approvedRequest = AutoBannedUnbanRequest::query()
+                ->where('scr_daily_banned_id', $scrRefId)
+                ->where('status', AutoBannedUnbanStatus::Approved->value)
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->first(['id', 'status', 'created_at']);
+        }
+
         if ($scrRefId !== null && AutoBannedSchema::hasSidUnbanLogTable()) {
             $unbanLog = SidUnbanLog::query()
                 ->where('scr_daily_banned_id', $scrRefId)
                 ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
                 ->orderByDesc('completed_at')
-                ->first(['id', 'completed_at']);
+                ->first(['id', 'completed_at', 'unban_request_id']);
+
+            if ($unbanLog === null && $approvedRequest !== null) {
+                $unbanLog = SidUnbanLog::query()
+                    ->where('unban_request_id', (int) $approvedRequest->id)
+                    ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+                    ->orderByDesc('completed_at')
+                    ->first(['id', 'completed_at', 'unban_request_id']);
+            }
+
+            if ($unbanLog === null && $approvedRequest !== null) {
+                $incompleteUnbanLog = SidUnbanLog::query()
+                    ->where('unban_request_id', (int) $approvedRequest->id)
+                    ->orderByDesc('id')
+                    ->first(['id', 'automation_status', 'scr_daily_banned_id']);
+            }
         }
 
         if ($unbanLog !== null) {
-            $reasons[] = 'Sudah ada sid_unban_log SUCCESS #'.$unbanLog->id.' untuk scr_daily_banned_id '.$scrRefId.' — tiket daily sudah selesai.';
+            $reasons[] = 'Sudah ada sid_unban_log SUCCESS #'.$unbanLog->id
+                .($unbanLog->unban_request_id ? ' (pengajuan #'.$unbanLog->unban_request_id.')' : '')
+                .' — tiket daily sudah selesai.';
+        } elseif ($incompleteUnbanLog !== null && $gapType !== AutoBannedReconcileGapType::MissingUnbanLog) {
+            $reasons[] = 'Log unban #'.$incompleteUnbanLog->id.' untuk pengajuan #'.$approvedRequest?->id
+                .' sudah ada tetapi belum SUCCESS / scr belum lengkap — gunakan tab Daily · Tanpa log unban untuk memperbaiki.';
+            $suggestedGapType = AutoBannedReconcileGapType::MissingUnbanLog->value;
         }
 
         $request = null;
@@ -894,6 +943,20 @@ class AutoBannedPipelineGapService
         }
 
         $unbanLog = null;
+        $incompleteUnbanLog = null;
+        $approvedRequest = null;
+
+        if ($scrRefId !== null
+            && AutoBannedSchema::hasUnbanRequestsTable()
+            && AutoBannedSchema::hasUnbanRequestScrWeeklyBannedColumn()) {
+            $approvedRequest = AutoBannedUnbanRequest::query()
+                ->where('scr_weekly_banned_id', $scrRefId)
+                ->where('status', AutoBannedUnbanStatus::Approved->value)
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->first(['id', 'status', 'created_at']);
+        }
+
         if ($scrRefId !== null
             && AutoBannedSchema::hasSidUnbanLogTable()
             && AutoBannedSchema::hasSidUnbanLogScrWeeklyBannedColumn()) {
@@ -901,11 +964,32 @@ class AutoBannedPipelineGapService
                 ->where('scr_weekly_banned_id', $scrRefId)
                 ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
                 ->orderByDesc('completed_at')
-                ->first(['id', 'completed_at']);
+                ->first(['id', 'completed_at', 'unban_request_id']);
+
+            if ($unbanLog === null && $approvedRequest !== null) {
+                $unbanLog = SidUnbanLog::query()
+                    ->where('unban_request_id', (int) $approvedRequest->id)
+                    ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+                    ->orderByDesc('completed_at')
+                    ->first(['id', 'completed_at', 'unban_request_id']);
+            }
+
+            if ($unbanLog === null && $approvedRequest !== null) {
+                $incompleteUnbanLog = SidUnbanLog::query()
+                    ->where('unban_request_id', (int) $approvedRequest->id)
+                    ->orderByDesc('id')
+                    ->first(['id', 'automation_status', 'scr_weekly_banned_id']);
+            }
         }
 
         if ($unbanLog !== null) {
-            $reasons[] = 'Sudah ada sid_unban_log SUCCESS #'.$unbanLog->id.' untuk scr_weekly_banned_id '.$scrRefId.' — tiket weekly sudah selesai.';
+            $reasons[] = 'Sudah ada sid_unban_log SUCCESS #'.$unbanLog->id
+                .($unbanLog->unban_request_id ? ' (pengajuan #'.$unbanLog->unban_request_id.')' : '')
+                .' — tiket weekly sudah selesai.';
+        } elseif ($incompleteUnbanLog !== null && $gapType !== AutoBannedReconcileGapType::WeeklyMissingUnbanLog) {
+            $reasons[] = 'Log unban #'.$incompleteUnbanLog->id.' untuk pengajuan #'.$approvedRequest?->id
+                .' sudah ada tetapi belum SUCCESS / scr belum lengkap — gunakan tab Weekly · Tanpa log unban untuk memperbaiki.';
+            $suggestedGapType = AutoBannedReconcileGapType::WeeklyMissingUnbanLog->value;
         }
 
         $request = null;

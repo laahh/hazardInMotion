@@ -176,9 +176,7 @@ class AutoBannedLogReconcileService
             return;
         }
 
-        SidUnbanLog::query()->create(
-            $this->buildDailyUnbanLogPayload($banLog, $unbanCompletedAt, (int) $unbanRequest->id),
-        );
+        $this->persistDailyUnbanLog($banLog, $unbanCompletedAt, (int) $unbanRequest->id);
     }
 
     private function reconcileDailyUnbanLogOnly(int $banLogId, Carbon $unbanCompletedAt): void
@@ -216,9 +214,7 @@ class AutoBannedLogReconcileService
             'scrDailyBanned:id,'.ScrDailyBannedColumns::SID.','.ScrDailyBannedColumns::NAMA.','.ScrDailyBannedColumns::PERUSAHAAN.','.ScrDailyBannedColumns::SITE.','.ScrDailyBannedColumns::BANNED_REASON.','.ScrDailyBannedColumns::BANNED_STATUS,
         ]);
 
-        SidUnbanLog::query()->create(
-            $this->buildDailyUnbanLogPayload($banLog, $unbanCompletedAt, (int) $unbanRequest->id),
-        );
+        $this->persistDailyUnbanLog($banLog, $unbanCompletedAt, (int) $unbanRequest->id);
     }
 
     private function reconcileSingleWeeklyBanLog(
@@ -310,9 +306,7 @@ class AutoBannedLogReconcileService
             return;
         }
 
-        SidUnbanLog::query()->create(
-            $this->buildWeeklyUnbanLogPayload($banLog, $unbanCompletedAt, (int) $unbanRequest->id),
-        );
+        $this->persistWeeklyUnbanLog($banLog, $unbanCompletedAt, (int) $unbanRequest->id);
     }
 
     private function reconcileWeeklyUnbanLogOnly(int $banLogId, Carbon $unbanCompletedAt): void
@@ -350,9 +344,7 @@ class AutoBannedLogReconcileService
             'scrWeeklyBanned:id,'.ScrWeeklyBannedColumns::SID.','.ScrWeeklyBannedColumns::NAMA.','.ScrWeeklyBannedColumns::PERUSAHAAN.','.ScrWeeklyBannedColumns::SITE.','.ScrWeeklyBannedColumns::BANNED_REASON.','.ScrWeeklyBannedColumns::BANNED_STATUS.','.ScrWeeklyBannedColumns::ISO_YEAR.','.ScrWeeklyBannedColumns::ISO_WEEK,
         ]);
 
-        SidUnbanLog::query()->create(
-            $this->buildWeeklyUnbanLogPayload($banLog, $unbanCompletedAt, (int) $unbanRequest->id),
-        );
+        $this->persistWeeklyUnbanLog($banLog, $unbanCompletedAt, (int) $unbanRequest->id);
     }
 
     private function assertReconcileEligibleBanLog(SidBannedLog|SidBannedLogWeekly $banLog, int $banLogId): void
@@ -387,10 +379,19 @@ class AutoBannedLogReconcileService
         $sid = strtoupper(trim((string) ($banLog->sid ?? '')));
 
         if ($scrId !== null) {
-            return SidUnbanLog::query()
+            if (SidUnbanLog::query()
                 ->where('scr_daily_banned_id', $scrId)
                 ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
-                ->exists();
+                ->exists()) {
+                return true;
+            }
+
+            $approvedRequest = $this->findApprovedDailyUnbanRequest($banLog);
+            if ($approvedRequest !== null && $this->hasSuccessUnbanLogForRequest((int) $approvedRequest->id)) {
+                return true;
+            }
+
+            return false;
         }
 
         return $this->hasMatchingUnbanLogBySid($sid, $banLog->completed_at ?? $banLog->started_at);
@@ -406,13 +407,78 @@ class AutoBannedLogReconcileService
         $sid = strtoupper(trim((string) ($banLog->sid ?? '')));
 
         if ($scrId !== null && AutoBannedSchema::hasSidUnbanLogScrWeeklyBannedColumn()) {
-            return SidUnbanLog::query()
+            if (SidUnbanLog::query()
                 ->where('scr_weekly_banned_id', $scrId)
                 ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
-                ->exists();
+                ->exists()) {
+                return true;
+            }
+
+            $approvedRequest = $this->findApprovedWeeklyUnbanRequest($banLog);
+            if ($approvedRequest !== null && $this->hasSuccessUnbanLogForRequest((int) $approvedRequest->id)) {
+                return true;
+            }
+
+            return false;
         }
 
         return $this->hasMatchingUnbanLogBySid($sid, $banLog->completed_at ?? $banLog->started_at);
+    }
+
+    private function hasSuccessUnbanLogForRequest(int $unbanRequestId): bool
+    {
+        if (! AutoBannedSchema::hasSidUnbanLogTable()) {
+            return false;
+        }
+
+        return SidUnbanLog::query()
+            ->where('unban_request_id', $unbanRequestId)
+            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+            ->exists();
+    }
+
+    private function findUnbanLogByRequestId(int $unbanRequestId): ?SidUnbanLog
+    {
+        if (! AutoBannedSchema::hasSidUnbanLogTable()) {
+            return null;
+        }
+
+        return SidUnbanLog::query()
+            ->where('unban_request_id', $unbanRequestId)
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    private function persistDailyUnbanLog(SidBannedLog $banLog, Carbon $unbanCompletedAt, int $unbanRequestId): SidUnbanLog
+    {
+        $payload = $this->buildDailyUnbanLogPayload($banLog, $unbanCompletedAt, $unbanRequestId);
+        $existing = $this->findUnbanLogByRequestId($unbanRequestId);
+
+        if ($existing !== null) {
+            $updatePayload = $payload;
+            unset($updatePayload['created_at']);
+            $existing->update($this->filterPayloadForTable('sid_unban_log', $updatePayload));
+
+            return $existing->refresh();
+        }
+
+        return SidUnbanLog::query()->create($payload);
+    }
+
+    private function persistWeeklyUnbanLog(SidBannedLogWeekly $banLog, Carbon $unbanCompletedAt, int $unbanRequestId): SidUnbanLog
+    {
+        $payload = $this->buildWeeklyUnbanLogPayload($banLog, $unbanCompletedAt, $unbanRequestId);
+        $existing = $this->findUnbanLogByRequestId($unbanRequestId);
+
+        if ($existing !== null) {
+            $updatePayload = $payload;
+            unset($updatePayload['created_at']);
+            $existing->update($this->filterPayloadForTable('sid_unban_log', $updatePayload));
+
+            return $existing->refresh();
+        }
+
+        return SidUnbanLog::query()->create($payload);
     }
 
     private function hasMatchingUnbanLogBySid(string $sid, mixed $banCompletedAt): bool

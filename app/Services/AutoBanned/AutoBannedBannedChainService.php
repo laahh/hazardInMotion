@@ -40,7 +40,7 @@ class AutoBannedBannedChainService
         }
 
         $request ??= $this->findLatestDailyRequest($scrDailyBannedId);
-        $unbanLog ??= $this->findSuccessDailyUnbanLog($scrDailyBannedId);
+        $unbanLog ??= $this->findSuccessDailyUnbanLog($scrDailyBannedId, $request);
 
         if ($unbanLog !== null) {
             return AutoBannedBannedChainGap::Complete;
@@ -72,7 +72,7 @@ class AutoBannedBannedChainService
         }
 
         $request ??= $this->findLatestWeeklyRequest($scrWeeklyBannedId);
-        $unbanLog ??= $this->findSuccessWeeklyUnbanLog($scrWeeklyBannedId);
+        $unbanLog ??= $this->findSuccessWeeklyUnbanLog($scrWeeklyBannedId, $request);
 
         if ($unbanLog !== null) {
             return AutoBannedBannedChainGap::Complete;
@@ -113,14 +113,24 @@ class AutoBannedBannedChainService
             ->all();
 
         $requestsByScrId = $this->loadLatestDailyRequestsByScrId($scrIds);
+        $approvedRequestsByScrId = $this->loadApprovedDailyRequestsByScrId($scrIds);
         $unbanByScrId = $this->loadSuccessDailyUnbanLogsByScrId($scrIds);
+        $unbanByRequestId = $this->loadSuccessUnbanLogsByRequestId(
+            collect($approvedRequestsByScrId)->pluck('id')->map(static fn ($id): int => (int) $id)->all(),
+        );
 
-        return $banLogs->map(function (SidBannedLog $banLog) use ($requestsByScrId, $unbanByScrId): SidBannedLog {
+        return $banLogs->map(function (SidBannedLog $banLog) use ($requestsByScrId, $approvedRequestsByScrId, $unbanByScrId, $unbanByRequestId): SidBannedLog {
             $scrId = $banLog->scr_daily_banned_id !== null ? (int) $banLog->scr_daily_banned_id : null;
+            $approvedRequest = $scrId !== null ? ($approvedRequestsByScrId[$scrId] ?? null) : null;
+            $unbanLog = $scrId !== null
+                ? ($unbanByScrId[$scrId] ?? ($approvedRequest !== null
+                    ? ($unbanByRequestId[(int) $approvedRequest->id] ?? null)
+                    : null))
+                : null;
             $gap = $this->resolveDailyChainGap(
                 $scrId,
                 $scrId !== null ? ($requestsByScrId[$scrId] ?? null) : null,
-                $scrId !== null ? ($unbanByScrId[$scrId] ?? null) : null,
+                $unbanLog,
             );
             $banLog->setRelation('bannedChainGap', $gap);
 
@@ -147,14 +157,24 @@ class AutoBannedBannedChainService
             ->all();
 
         $requestsByScrId = $this->loadLatestWeeklyRequestsByScrId($scrIds);
+        $approvedRequestsByScrId = $this->loadApprovedWeeklyRequestsByScrId($scrIds);
         $unbanByScrId = $this->loadSuccessWeeklyUnbanLogsByScrId($scrIds);
+        $unbanByRequestId = $this->loadSuccessUnbanLogsByRequestId(
+            collect($approvedRequestsByScrId)->pluck('id')->map(static fn ($id): int => (int) $id)->all(),
+        );
 
-        return $banLogs->map(function (SidBannedLogWeekly $banLog) use ($requestsByScrId, $unbanByScrId): SidBannedLogWeekly {
+        return $banLogs->map(function (SidBannedLogWeekly $banLog) use ($requestsByScrId, $approvedRequestsByScrId, $unbanByScrId, $unbanByRequestId): SidBannedLogWeekly {
             $scrId = $banLog->scr_weekly_banned_id !== null ? (int) $banLog->scr_weekly_banned_id : null;
+            $approvedRequest = $scrId !== null ? ($approvedRequestsByScrId[$scrId] ?? null) : null;
+            $unbanLog = $scrId !== null
+                ? ($unbanByScrId[$scrId] ?? ($approvedRequest !== null
+                    ? ($unbanByRequestId[(int) $approvedRequest->id] ?? null)
+                    : null))
+                : null;
             $gap = $this->resolveWeeklyChainGap(
                 $scrId,
                 $scrId !== null ? ($requestsByScrId[$scrId] ?? null) : null,
-                $scrId !== null ? ($unbanByScrId[$scrId] ?? null) : null,
+                $unbanLog,
             );
             $banLog->setRelation('bannedChainGap', $gap);
 
@@ -205,29 +225,94 @@ class AutoBannedBannedChainService
             ->first();
     }
 
-    private function findSuccessDailyUnbanLog(int $scrDailyBannedId): ?SidUnbanLog
+    private function findSuccessDailyUnbanLog(int $scrDailyBannedId, ?AutoBannedUnbanRequest $request = null): ?SidUnbanLog
     {
         if (! AutoBannedSchema::hasSidUnbanLogTable()) {
             return null;
         }
 
-        return SidUnbanLog::query()
+        $byScr = SidUnbanLog::query()
             ->where('scr_daily_banned_id', $scrDailyBannedId)
             ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
             ->orderByDesc('completed_at')
             ->orderByDesc('id')
             ->first();
+
+        if ($byScr !== null) {
+            return $byScr;
+        }
+
+        $request ??= $this->findApprovedDailyRequest($scrDailyBannedId);
+        if ($request === null) {
+            return null;
+        }
+
+        return $this->findSuccessUnbanLogByRequestId((int) $request->id);
     }
 
-    private function findSuccessWeeklyUnbanLog(int $scrWeeklyBannedId): ?SidUnbanLog
+    private function findSuccessWeeklyUnbanLog(int $scrWeeklyBannedId, ?AutoBannedUnbanRequest $request = null): ?SidUnbanLog
     {
         if (! AutoBannedSchema::hasSidUnbanLogTable()
             || ! AutoBannedSchema::hasSidUnbanLogScrWeeklyBannedColumn()) {
             return null;
         }
 
-        return SidUnbanLog::query()
+        $byScr = SidUnbanLog::query()
             ->where('scr_weekly_banned_id', $scrWeeklyBannedId)
+            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+            ->orderByDesc('completed_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($byScr !== null) {
+            return $byScr;
+        }
+
+        $request ??= $this->findApprovedWeeklyRequest($scrWeeklyBannedId);
+        if ($request === null) {
+            return null;
+        }
+
+        return $this->findSuccessUnbanLogByRequestId((int) $request->id);
+    }
+
+    private function findApprovedDailyRequest(int $scrDailyBannedId): ?AutoBannedUnbanRequest
+    {
+        if (! AutoBannedSchema::hasUnbanRequestsTable()) {
+            return null;
+        }
+
+        return AutoBannedUnbanRequest::query()
+            ->where('scr_daily_banned_id', $scrDailyBannedId)
+            ->where('status', AutoBannedUnbanStatus::Approved->value)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    private function findApprovedWeeklyRequest(int $scrWeeklyBannedId): ?AutoBannedUnbanRequest
+    {
+        if (! AutoBannedSchema::hasUnbanRequestsTable()
+            || ! AutoBannedSchema::hasUnbanRequestScrWeeklyBannedColumn()) {
+            return null;
+        }
+
+        return AutoBannedUnbanRequest::query()
+            ->where('scr_weekly_banned_id', $scrWeeklyBannedId)
+            ->where('status', AutoBannedUnbanStatus::Approved->value)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    private function findSuccessUnbanLogByRequestId(int $unbanRequestId): ?SidUnbanLog
+    {
+        if (! AutoBannedSchema::hasSidUnbanLogTable()) {
+            return null;
+        }
+
+        return SidUnbanLog::query()
+            ->where('unban_request_id', $unbanRequestId)
             ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
             ->orderByDesc('completed_at')
             ->orderByDesc('id')
@@ -299,6 +384,8 @@ class AutoBannedBannedChainService
             return [];
         }
 
+        $indexed = [];
+
         $logs = SidUnbanLog::query()
             ->whereIn('scr_daily_banned_id', $scrIds)
             ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
@@ -306,11 +393,26 @@ class AutoBannedBannedChainService
             ->orderByDesc('id')
             ->get();
 
-        $indexed = [];
         foreach ($logs as $log) {
             $scrId = (int) $log->scr_daily_banned_id;
             if (! isset($indexed[$scrId])) {
                 $indexed[$scrId] = $log;
+            }
+        }
+
+        $approvedRequestsByScrId = $this->loadApprovedDailyRequestsByScrId($scrIds);
+        $unbanByRequestId = $this->loadSuccessUnbanLogsByRequestId(
+            collect($approvedRequestsByScrId)->pluck('id')->map(static fn ($id): int => (int) $id)->all(),
+        );
+
+        foreach ($approvedRequestsByScrId as $scrId => $request) {
+            if (isset($indexed[$scrId])) {
+                continue;
+            }
+
+            $unbanLog = $unbanByRequestId[(int) $request->id] ?? null;
+            if ($unbanLog !== null) {
+                $indexed[$scrId] = $unbanLog;
             }
         }
 
@@ -328,6 +430,8 @@ class AutoBannedBannedChainService
             return [];
         }
 
+        $indexed = [];
+
         $logs = SidUnbanLog::query()
             ->whereIn('scr_weekly_banned_id', $scrIds)
             ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
@@ -335,11 +439,111 @@ class AutoBannedBannedChainService
             ->orderByDesc('id')
             ->get();
 
-        $indexed = [];
         foreach ($logs as $log) {
             $scrId = (int) $log->scr_weekly_banned_id;
             if (! isset($indexed[$scrId])) {
                 $indexed[$scrId] = $log;
+            }
+        }
+
+        $approvedRequestsByScrId = $this->loadApprovedWeeklyRequestsByScrId($scrIds);
+        $unbanByRequestId = $this->loadSuccessUnbanLogsByRequestId(
+            collect($approvedRequestsByScrId)->pluck('id')->map(static fn ($id): int => (int) $id)->all(),
+        );
+
+        foreach ($approvedRequestsByScrId as $scrId => $request) {
+            if (isset($indexed[$scrId])) {
+                continue;
+            }
+
+            $unbanLog = $unbanByRequestId[(int) $request->id] ?? null;
+            if ($unbanLog !== null) {
+                $indexed[$scrId] = $unbanLog;
+            }
+        }
+
+        return $indexed;
+    }
+
+    /**
+     * @param  array<int, int>  $scrIds
+     * @return array<int, AutoBannedUnbanRequest>
+     */
+    private function loadApprovedDailyRequestsByScrId(array $scrIds): array
+    {
+        if ($scrIds === [] || ! AutoBannedSchema::hasUnbanRequestsTable()) {
+            return [];
+        }
+
+        $requests = AutoBannedUnbanRequest::query()
+            ->whereIn('scr_daily_banned_id', $scrIds)
+            ->where('status', AutoBannedUnbanStatus::Approved->value)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $indexed = [];
+        foreach ($requests as $request) {
+            $scrId = (int) $request->scr_daily_banned_id;
+            if (! isset($indexed[$scrId])) {
+                $indexed[$scrId] = $request;
+            }
+        }
+
+        return $indexed;
+    }
+
+    /**
+     * @param  array<int, int>  $scrIds
+     * @return array<int, AutoBannedUnbanRequest>
+     */
+    private function loadApprovedWeeklyRequestsByScrId(array $scrIds): array
+    {
+        if ($scrIds === [] || ! AutoBannedSchema::hasUnbanRequestsTable()
+            || ! AutoBannedSchema::hasUnbanRequestScrWeeklyBannedColumn()) {
+            return [];
+        }
+
+        $requests = AutoBannedUnbanRequest::query()
+            ->whereIn('scr_weekly_banned_id', $scrIds)
+            ->where('status', AutoBannedUnbanStatus::Approved->value)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $indexed = [];
+        foreach ($requests as $request) {
+            $scrId = (int) $request->scr_weekly_banned_id;
+            if (! isset($indexed[$scrId])) {
+                $indexed[$scrId] = $request;
+            }
+        }
+
+        return $indexed;
+    }
+
+    /**
+     * @param  array<int, int>  $unbanRequestIds
+     * @return array<int, SidUnbanLog>
+     */
+    private function loadSuccessUnbanLogsByRequestId(array $unbanRequestIds): array
+    {
+        if ($unbanRequestIds === [] || ! AutoBannedSchema::hasSidUnbanLogTable()) {
+            return [];
+        }
+
+        $logs = SidUnbanLog::query()
+            ->whereIn('unban_request_id', $unbanRequestIds)
+            ->where('automation_status', AutoBannedSidAutomationStatus::Success->value)
+            ->orderByDesc('completed_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $indexed = [];
+        foreach ($logs as $log) {
+            $requestId = (int) $log->unban_request_id;
+            if (! isset($indexed[$requestId])) {
+                $indexed[$requestId] = $log;
             }
         }
 
