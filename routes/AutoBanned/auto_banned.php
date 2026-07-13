@@ -32,6 +32,8 @@ Route::middleware(['auth'])
         Route::get('/inputasi', [AutoBannedInputasiController::class, 'index'])->name('inputasi.index');
         Route::get('/inputasi/reconcile', [AutoBannedInputasiReconcileController::class, 'index'])->name('inputasi.reconcile.index');
         Route::post('/inputasi/reconcile', [AutoBannedInputasiReconcileController::class, 'store'])->name('inputasi.reconcile.store');
+        Route::get('/inputasi/reconcile/options/karyawan', [AutoBannedInputasiReconcileController::class, 'optionsKaryawan'])->name('inputasi.reconcile.options.karyawan');
+        Route::post('/inputasi/reconcile/manual-ban', [AutoBannedInputasiReconcileController::class, 'storeManualBan'])->name('inputasi.reconcile.manual-ban');
         Route::get('/treatment-evidence/lookup-sid', [AutoBannedTreatmentController::class, 'lookupSid'])->name('treatment-evidence.lookup-sid');
         Route::post('/treatment-evidence', [AutoBannedTreatmentController::class, 'store'])->name('treatment-evidence.store');
         Route::get('/unban-requests/{unbanRequest}/evidence', [AutoBannedTreatmentController::class, 'downloadEvidence'])->name('unban-requests.evidence');

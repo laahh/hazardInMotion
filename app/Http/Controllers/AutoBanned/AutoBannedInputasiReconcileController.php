@@ -4,14 +4,19 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\AutoBanned;
 
-use App\Http\Controllers\Controller;
-use App\Http\Controllers\AutoBanned\Concerns\ProvidesAutoBannedLayout;
+use App\Enums\AutoBannedManualBanScope;
 use App\Enums\AutoBannedReconcileGapType;
 use App\Enums\AutoBannedReconcileUnbanLogMode;
+use App\Http\Controllers\AutoBanned\Concerns\ProvidesAutoBannedLayout;
+use App\Http\Controllers\Controller;
 use App\Http\Requests\AutoBanned\AutoBannedInputasiReconcileRequest;
+use App\Http\Requests\AutoBanned\AutoBannedManualBanInputRequest;
 use App\Services\AutoBanned\AutoBannedLogReconcileService;
+use App\Services\AutoBanned\AutoBannedManualBanInputService;
 use App\Services\AutoBanned\AutoBannedPipelineGapService;
 use App\Services\AutoBanned\AutoBannedReconcileCrossScopeService;
+use App\Support\AutoBanned\AutoBannedSiteOptions;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -25,6 +30,7 @@ class AutoBannedInputasiReconcileController extends Controller
         private readonly AutoBannedPipelineGapService $pipelineGapService,
         private readonly AutoBannedLogReconcileService $logReconcileService,
         private readonly AutoBannedReconcileCrossScopeService $crossScopeService,
+        private readonly AutoBannedManualBanInputService $manualBanInputService,
     ) {}
 
     public function index(Request $request): View
@@ -56,7 +62,61 @@ class AutoBannedInputasiReconcileController extends Controller
             'defaultMinDaysOld' => AutoBannedPipelineGapService::DEFAULT_MIN_DAYS_OLD,
             'unbanLogModes' => $gapType->allowedUnbanLogModes(),
             'gapTypes' => AutoBannedReconcileGapType::cases(),
+            'manualBanScopes' => AutoBannedManualBanScope::cases(),
+            'manualBanSites' => AutoBannedSiteOptions::mergeFilterOptions(collect()),
+            'manualBanDefaultScope' => $gapType->isWeekly()
+                ? AutoBannedManualBanScope::Weekly->value
+                : AutoBannedManualBanScope::Daily->value,
         ]);
+    }
+
+    public function optionsKaryawan(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->query('q', ''));
+        $limit = min(max((int) $request->query('limit', 30), 5), 100);
+
+        return response()->json([
+            'data' => $this->manualBanInputService->karyawanOptions($q, $limit),
+        ]);
+    }
+
+    public function storeManualBan(AutoBannedManualBanInputRequest $request): RedirectResponse
+    {
+        $validated = $request->validated();
+        $scope = AutoBannedManualBanScope::from((string) $validated['ban_scope']);
+
+        try {
+            $result = $this->manualBanInputService->createManualBan($validated, $request->user());
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return redirect()
+                ->route('auto-banned.inputasi.reconcile.index', array_filter([
+                    'gap_type' => $request->input('gap_type'),
+                    'sid' => $validated['sid'] ?? null,
+                ]))
+                ->with('error', 'Gagal input banned: '.$exception->getMessage())
+                ->withInput();
+        }
+
+        $redirectGapType = $scope->isWeekly()
+            ? AutoBannedReconcileGapType::WeeklyNoRequest->value
+            : AutoBannedReconcileGapType::NoRequest->value;
+
+        return redirect()
+            ->route('auto-banned.inputasi.reconcile.index', [
+                'gap_type' => $redirectGapType,
+                'min_days_old' => 0,
+                'sid' => $result['sid'],
+            ])
+            ->with(
+                'success',
+                'Banned '.$scope->label().' berhasil diinput: '.$result['nama']
+                .' (SID '.$result['sid'].') — SCR #'.$result['scr_id']
+                .' · Log #'.$result['ban_log_id'].'.',
+            );
     }
 
     public function store(AutoBannedInputasiReconcileRequest $request): RedirectResponse

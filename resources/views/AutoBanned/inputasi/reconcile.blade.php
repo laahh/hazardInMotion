@@ -1,12 +1,12 @@
 @extends('AutoBanned.layouts.app')
 
-@section('title', 'Rekonsiliasi Log Unban')
+@section('title', 'Input Banned & Rekonsiliasi Unban')
 
 @section('page-header')
    @include('AutoBanned.partials.page-header', [
       'breadcrumbCurrent' => 'Rekonsiliasi Log',
-      'pageTitle' => 'Rekonsiliasi Log Unban',
-      'pageSubtitle' => 'Pastikan setiap banned SUCCESS punya pengajuan Disetujui + log unban SUCCESS per tiket',
+      'pageTitle' => 'Input Banned & Rekonsiliasi Unban',
+      'pageSubtitle' => 'Bagisah: input banned baru, lalu backfill pengajuan / log unban untuk gap yang belum lengkap',
    ])
 @endsection
 
@@ -37,15 +37,20 @@
    ], static fn ($value) => $value !== '' && $value !== null);
 @endphp
 
-<div class="mb-4 flex flex-wrap items-center gap-3">
-   <a href="{{ route('auto-banned.inputasi.index') }}" class="inline-flex items-center gap-1 text-sm font-bold text-primary hover:underline">
-      <span class="material-symbols-outlined text-base">arrow_back</span>
-      Kembali ke Inputasi
-   </a>
-   <a href="{{ route('auto-banned.pipeline-monitoring.index', ['pipeline_stage' => $isMissingUnbanLogGap ? 'awaiting_unban' : 'no_request']) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-on-surface-variant hover:text-primary">
-      <span class="material-symbols-outlined text-base">timeline</span>
-      Lihat Pipeline
-   </a>
+<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+   <div class="flex flex-wrap items-center gap-3">
+      <a href="{{ route('auto-banned.inputasi.index') }}" class="inline-flex items-center gap-1 text-sm font-bold text-primary hover:underline">
+         <span class="material-symbols-outlined text-base">arrow_back</span>
+         Kembali ke Inputasi
+      </a>
+      <a href="{{ route('auto-banned.pipeline-monitoring.index', ['pipeline_stage' => $isMissingUnbanLogGap ? 'awaiting_unban' : 'no_request']) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-on-surface-variant hover:text-primary">
+         <span class="material-symbols-outlined text-base">timeline</span>
+         Pipeline
+      </a>
+   </div>
+   <p class="text-[11px] text-on-surface-variant">
+      Daily &amp; Weekly = tiket terpisah · rekonsiliasi per <code class="text-[10px]">{{ $scrRefColumn }}</code>
+   </p>
 </div>
 
 @if(session('success'))
@@ -60,42 +65,28 @@
 </div>
 @endif
 
-<div class="rounded-2xl border border-emerald-200/70 bg-emerald-50/60 px-5 py-4 text-sm text-emerald-950 mb-5">
-   <p class="font-bold mb-1 flex items-center gap-1.5">
-      <span class="material-symbols-outlined text-base">rule</span>
-      Aturan rantai banned SUCCESS
-   </p>
-   <p class="text-xs leading-relaxed text-emerald-900/90">
-      Setiap log banned <strong>SUCCESS</strong> ({{ $gapType->scopeLabel() }}) wajib memiliki
-      <strong>pengajuan unban Disetujui</strong> dan <strong>sid_unban_log SUCCESS</strong> dengan
-      <code class="text-[11px]">{{ $scrRefColumn }}</code> yang sama.
-      Halaman ini menampilkan tiket yang rantainya belum lengkap.
-   </p>
+{{-- ===== SECTION 1: BANNED ===== --}}
+<div class="mb-8">
+   @include('AutoBanned.inputasi.partials.manual-ban-form')
 </div>
 
-<div class="rounded-2xl border border-sky-200/70 bg-sky-50/60 px-5 py-4 text-sm text-sky-950 mb-5">
-   <p class="font-bold mb-1 flex items-center gap-1.5">
-      <span class="material-symbols-outlined text-base">confirmation_number</span>
-      Daily dan Weekly = tiket terpisah
-   </p>
-   <p class="text-xs leading-relaxed text-sky-900/90">
-      Satu SID bisa punya beberapa banned (mis. <strong>D-1079</strong> daily dan <strong>W-265</strong> weekly).
-      Pengajuan atau unban di tiket weekly <strong>tidak menutup</strong> gap daily, dan sebaliknya.
-      Rekonsiliasi selalu per <code class="text-[11px]">{{ $scrRefColumn }}</code> pada tab <strong>{{ $gapType->scopeLabel() }}</strong> yang aktif.
-   </p>
-</div>
-
-<div class="rounded-2xl border border-amber-200/70 bg-amber-50/60 px-5 py-4 text-sm text-amber-950 mb-5">
-   <p class="font-bold mb-1">Kapan menggunakan fitur ini?</p>
-   <p class="text-xs leading-relaxed text-amber-900/90">
-      @if($isMissingUnbanLogGap)
-      Tab <strong>{{ $gapType->label() }}</strong>: pengajuan Disetujui sudah ada, log unban SUCCESS belum ada. Pilih mode <strong>LOG SAJA (log unban saja)</strong>.
-      @else
-      Tab <strong>{{ $gapType->label() }}</strong>: banned SUCCESS ada, belum ada pengajuan unban. Gunakan <strong>SUCCESS (pengajuan + log unban)</strong> atau <strong>BLM SUKSES (hanya pengajuan)</strong>.
-      Default filter: <code class="text-[11px]">filter_date</code> H-{{ $defaultMinDaysOld }} atau lebih lama.
-      @endif
-   </p>
-</div>
+{{-- ===== SECTION 2: UNBAN ===== --}}
+<section class="mb-2">
+   <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
+      <div>
+         <div class="flex items-center gap-2">
+            <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-700 text-[11px] font-bold text-white">2</span>
+            <h2 class="font-headline text-base font-bold text-on-background">Rekonsiliasi Unban</h2>
+         </div>
+         <p class="mt-1 text-xs text-on-surface-variant ml-9">
+            @if($isMissingUnbanLogGap)
+            Gap: pengajuan Disetujui sudah ada, log unban belum — mode <strong>LOG SAJA</strong>.
+            @else
+            Gap: banned SUCCESS belum punya pengajuan — mode <strong>SUCCESS</strong> atau <strong>BLM SUKSES</strong>. Default H-{{ $defaultMinDaysOld }}.
+            @endif
+         </p>
+      </div>
+   </div>
 
 @if(!$tableAvailable)
 <div class="rounded-2xl border border-outline-variant/15 bg-white p-6 text-sm text-on-surface-variant">
@@ -103,7 +94,7 @@
 </div>
 @else
 
-<div class="rounded-2xl border border-outline-variant/15 bg-white shadow-sm mb-5">
+<div class="rounded-2xl border border-outline-variant/15 bg-white shadow-sm overflow-hidden">
    <div class="border-b border-outline-variant/15 px-5 py-4">
       <div class="flex flex-wrap gap-2 mb-4">
          @foreach($gapTypes as $type)
@@ -114,17 +105,16 @@
             );
          @endphp
          <a href="{{ route('auto-banned.inputasi.reconcile.index', $tabQuery) }}"
-            class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[11px] font-bold transition-colors {{ $type === $gapType ? 'bg-primary text-white' : 'bg-[#f8fafc] text-on-surface-variant hover:bg-primary/10 hover:text-primary' }}">
+            class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[11px] font-bold transition-colors {{ $type === $gapType ? 'bg-emerald-700 text-white' : 'bg-[#f8fafc] text-on-surface-variant hover:bg-emerald-50 hover:text-emerald-800' }}">
             {{ $type->label() }}
          </a>
          @endforeach
       </div>
-      <p class="text-[11px] text-on-surface-variant mb-3">{{ $gapType->description() }}</p>
 
       <form method="GET" action="{{ route('auto-banned.inputasi.reconcile.index') }}" class="flex flex-wrap items-end gap-3">
          <input type="hidden" name="gap_type" value="{{ $gapType->value }}"/>
          <div>
-            <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Min. hari lalu (H-N)</label>
+            <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Min. hari lalu</label>
             <input type="number" name="min_days_old" min="0" max="90" value="{{ $filters['min_days_old'] ?? $gapType->defaultMinDaysOld() }}"
                class="w-24 rounded-xl border border-outline-variant/25 bg-[#f8fafc] px-3 py-2 text-sm"/>
          </div>
@@ -147,12 +137,12 @@
             <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="Nama karyawan…"
                class="w-full rounded-xl border border-outline-variant/25 bg-[#f8fafc] px-3 py-2 text-sm"/>
          </div>
-         <button type="submit" class="inline-flex items-center gap-1 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-95">
+         <button type="submit" class="inline-flex items-center gap-1 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white hover:opacity-95">
             <span class="material-symbols-outlined text-base">filter_alt</span>
             Filter
          </button>
          @if(count($queryBase) > 1 || ($filters['min_days_old'] ?? null) !== $gapType->defaultMinDaysOld())
-         <a href="{{ route('auto-banned.inputasi.reconcile.index', ['gap_type' => $gapType->value]) }}" class="text-sm font-semibold text-on-surface-variant hover:text-primary">Reset</a>
+         <a href="{{ route('auto-banned.inputasi.reconcile.index', ['gap_type' => $gapType->value]) }}" class="text-sm font-semibold text-on-surface-variant hover:text-emerald-800">Reset</a>
          @endif
       </form>
    </div>
@@ -163,13 +153,13 @@
       <input type="hidden" name="{{ $key }}" value="{{ $val }}"/>
       @endforeach
 
-      <div class="border-b border-outline-variant/15 px-5 py-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="border-b border-outline-variant/15 px-5 py-4 grid grid-cols-1 lg:grid-cols-3 gap-4 bg-emerald-50/30">
          <div>
             <label for="ab-reconcile-unban-mode" class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">
-               Mode rekonsiliasi <span class="text-red-500">*</span>
+               Mode unban <span class="text-red-500">*</span>
             </label>
             <select id="ab-reconcile-unban-mode" name="unban_log_mode" required
-               class="w-full rounded-xl border border-outline-variant/25 bg-[#f8fafc] px-3 py-2.5 text-sm text-on-surface focus:border-primary/30 focus:ring-2 focus:ring-primary/10">
+               class="w-full rounded-xl border border-outline-variant/25 bg-white px-3 py-2.5 text-sm text-on-surface focus:border-emerald-500/40 focus:ring-2 focus:ring-emerald-500/10">
                @foreach($unbanLogModes ?? $gapType->allowedUnbanLogModes() as $mode)
                <option value="{{ $mode->value }}" @selected(old('unban_log_mode', $defaultMode) === $mode->value)>
                   {{ $mode->selectLabel() }}
@@ -180,10 +170,10 @@
          </div>
          <div id="ab-reconcile-alasan-wrap" @if($isMissingUnbanLogGap) hidden @endif>
             <label for="ab-reconcile-alasan" class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">
-               Ringkasan pengajuan (untuk semua terpilih)
+               Ringkasan pengajuan
             </label>
             <textarea id="ab-reconcile-alasan" name="alasan_pengajuan" rows="2" maxlength="2000"
-               class="w-full rounded-xl border border-outline-variant/25 bg-[#f8fafc] px-3 py-2.5 text-sm"
+               class="w-full rounded-xl border border-outline-variant/25 bg-white px-3 py-2.5 text-sm"
                placeholder="{{ $defaultAlasan }}">{{ old('alasan_pengajuan', $defaultAlasan) }}</textarea>
          </div>
          <div id="ab-reconcile-unban-at-wrap">
@@ -191,8 +181,8 @@
                <span id="ab-reconcile-unban-at-label">Waktu unban selesai (opsional)</span>
             </label>
             <input type="datetime-local" id="ab-reconcile-unban-at" name="unban_completed_at" value="{{ old('unban_completed_at') }}"
-               class="w-full rounded-xl border border-outline-variant/25 bg-[#f8fafc] px-3 py-2.5 text-sm"/>
-            <p id="ab-reconcile-unban-at-hint" class="mt-1 text-[11px] text-on-surface-variant">Kosongkan untuk memakai waktu sekarang.</p>
+               class="w-full rounded-xl border border-outline-variant/25 bg-white px-3 py-2.5 text-sm"/>
+            <p id="ab-reconcile-unban-at-hint" class="mt-1 text-[11px] text-on-surface-variant">Kosongkan = waktu sekarang.</p>
          </div>
       </div>
 
@@ -218,7 +208,7 @@
             <span class="text-on-surface-variant/30">|</span>
             <button type="button" id="ab-reconcile-clear-all" class="text-xs font-semibold text-on-surface-variant hover:underline">Bersihkan</button>
             <button type="submit" id="ab-reconcile-submit"
-               class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:opacity-95 disabled:opacity-50"
+               class="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white hover:opacity-95 disabled:opacity-50"
                disabled>
                <span class="material-symbols-outlined text-base">sync</span>
                Rekonsiliasi terpilih
@@ -454,6 +444,7 @@
 </div>
 
 @endif
+</section>
 
 @push('scripts')
 <script>
@@ -547,6 +538,151 @@
    }
 
    updateSubmitState();
+
+   // --- Manual ban form ---
+   var manualScopes = document.querySelectorAll('.ab-manual-ban-scope');
+   var dailyFields = document.getElementById('ab-manual-ban-daily-fields');
+   var weeklyYear = document.getElementById('ab-manual-ban-weekly-year');
+   var weeklyWeek = document.getElementById('ab-manual-ban-weekly-week');
+   var statusInput = document.getElementById('ab-manual-ban-status');
+   var defaultStatusByScope = {
+      daily: @json(\App\Enums\AutoBannedManualBanScope::Daily->defaultBannedStatus()),
+      weekly: @json(\App\Enums\AutoBannedManualBanScope::Weekly->defaultBannedStatus())
+   };
+
+   function currentManualScope() {
+      var checked = document.querySelector('.ab-manual-ban-scope:checked');
+      return checked ? checked.value : 'daily';
+   }
+
+   function updateManualScopeUi() {
+      var scope = currentManualScope();
+      var isWeekly = scope === 'weekly';
+      if (dailyFields) dailyFields.hidden = isWeekly;
+      if (weeklyYear) weeklyYear.hidden = !isWeekly;
+      if (weeklyWeek) weeklyWeek.hidden = !isWeekly;
+      var filterDate = document.getElementById('ab-manual-ban-filter-date');
+      var isoYear = document.getElementById('ab-manual-ban-iso-year');
+      var isoWeek = document.getElementById('ab-manual-ban-iso-week');
+      if (filterDate) filterDate.required = !isWeekly;
+      if (isoYear) isoYear.required = isWeekly;
+      if (isoWeek) isoWeek.required = isWeekly;
+      if (statusInput) {
+         var known = Object.values(defaultStatusByScope);
+         if (!statusInput.value || known.indexOf(statusInput.value) !== -1) {
+            statusInput.value = defaultStatusByScope[scope] || statusInput.value;
+         }
+      }
+   }
+
+   manualScopes.forEach(function (el) {
+      el.addEventListener('change', updateManualScopeUi);
+   });
+   updateManualScopeUi();
+
+   var karyawanWrap = document.getElementById('ab-manual-ban-karyawan-wrap');
+   var karyawanInput = document.getElementById('ab-manual-ban-karyawan');
+   var karyawanList = document.getElementById('ab-manual-ban-karyawan-list');
+   var sidField = document.getElementById('ab-manual-ban-sid');
+   var nikField = document.getElementById('ab-manual-ban-nik');
+   var namaField = document.getElementById('ab-manual-ban-nama');
+   var perusahaanField = document.getElementById('ab-manual-ban-perusahaan');
+   var siteField = document.getElementById('ab-manual-ban-site');
+   var karyawanTimer = null;
+   var karyawanItems = [];
+
+   function hideKaryawanList() {
+      if (karyawanList) karyawanList.classList.add('hidden');
+   }
+
+   function fillKaryawan(item) {
+      if (!item) return;
+      if (sidField) sidField.value = item.sid || '';
+      if (nikField) nikField.value = item.nik || '';
+      if (namaField) namaField.value = item.nama || '';
+      if (perusahaanField) perusahaanField.value = item.nama_perusahaan || '';
+      if (siteField) siteField.value = item.site || '';
+      if (karyawanInput) karyawanInput.value = (item.nama || '') + (item.sid ? ' (' + item.sid + ')' : '');
+      hideKaryawanList();
+   }
+
+   function renderKaryawanList(items) {
+      karyawanItems = items || [];
+      if (!karyawanList) return;
+      if (!karyawanItems.length) {
+         karyawanList.innerHTML = '<li class="px-3 py-2 text-sm text-on-surface-variant">Tidak ada hasil</li>';
+         karyawanList.classList.remove('hidden');
+         return;
+      }
+      karyawanList.innerHTML = karyawanItems.map(function (item, idx) {
+         return '<li><button type="button" class="block w-full px-3 py-2 text-left text-sm hover:bg-[#f1f5f9]" data-ab-karyawan-idx="' + idx + '">' +
+            '<span class="font-semibold">' + (item.nama || '—') + '</span>' +
+            '<span class="block text-[11px] text-on-surface-variant">' + (item.subtitle || item.sid || '') + '</span>' +
+            '</button></li>';
+      }).join('');
+      karyawanList.classList.remove('hidden');
+   }
+
+   function searchKaryawan(q) {
+      if (!karyawanWrap) return;
+      var url = karyawanWrap.getAttribute('data-url');
+      if (!url) return;
+      fetch(url + '?q=' + encodeURIComponent(q) + '&limit=30', {
+         headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+      })
+         .then(function (res) { return res.json(); })
+         .then(function (json) { renderKaryawanList((json && json.data) || []); })
+         .catch(function () { renderKaryawanList([]); });
+   }
+
+   if (karyawanInput) {
+      karyawanInput.addEventListener('input', function () {
+         var q = karyawanInput.value.trim();
+         clearTimeout(karyawanTimer);
+         if (q.length < 2) {
+            hideKaryawanList();
+            return;
+         }
+         karyawanTimer = setTimeout(function () { searchKaryawan(q); }, 250);
+      });
+      karyawanInput.addEventListener('focus', function () {
+         if (karyawanInput.value.trim().length >= 2 && karyawanItems.length) {
+            karyawanList.classList.remove('hidden');
+         }
+      });
+   }
+
+   if (karyawanList) {
+      karyawanList.addEventListener('click', function (e) {
+         var btn = e.target.closest('[data-ab-karyawan-idx]');
+         if (!btn) return;
+         var item = karyawanItems[parseInt(btn.getAttribute('data-ab-karyawan-idx'), 10)];
+         fillKaryawan(item);
+      });
+   }
+
+   document.addEventListener('click', function (e) {
+      if (karyawanWrap && !karyawanWrap.contains(e.target)) {
+         hideKaryawanList();
+      }
+   });
+
+   var manualForm = document.getElementById('ab-manual-ban-form');
+   if (manualForm) {
+      manualForm.addEventListener('submit', function (e) {
+         var scope = currentManualScope();
+         var sid = sidField ? sidField.value.trim() : '';
+         var nama = namaField ? namaField.value.trim() : '';
+         if (!sid || !nama) {
+            e.preventDefault();
+            alert('Pilih karyawan atau isi SID dan nama terlebih dahulu.');
+            return;
+         }
+         if (!confirm('Simpan banned ' + (scope === 'weekly' ? 'Weekly' : 'Daily') + ' untuk ' + nama + ' (' + sid + ')?')) {
+            e.preventDefault();
+         }
+      });
+   }
 })();
 </script>
 @endpush
