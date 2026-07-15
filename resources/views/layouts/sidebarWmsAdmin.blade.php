@@ -130,6 +130,14 @@
             </a>
           </li>
 
+          <li>
+            <a class="" href="{{ route('hsecm.dashboard') }}">
+              <div class="parent-icon"><i class="material-icons-outlined">monitor_heart</i>
+              </div>
+              <div class="menu-title">HSECM Monitoring</div>
+            </a>
+          </li>
+
           <!-- <li class="menu-label">DOPM$IKK</li>
           <li>
             <a href="{{ route('dopmikk.dopm.dashboard') }}">

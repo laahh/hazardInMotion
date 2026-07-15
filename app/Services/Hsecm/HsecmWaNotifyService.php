@@ -1,0 +1,380 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services\Hsecm;
+
+use App\Mail\HsecmSummaryMail;
+use App\Services\FonnteService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
+
+class HsecmWaNotifyService
+{
+    public function __construct(
+        private readonly HsecmDashboardService $dashboardService,
+        private readonly FonnteService $fonnteService,
+    ) {}
+
+    /**
+     * @return list<array{
+     *   index: int,
+     *   site: ?string,
+     *   perusahaan: string,
+     *   role: string,
+     *   nama: string,
+     *   no: string,
+     *   email: string,
+     *   phone_normalized: string,
+     *   wa_url: string,
+     *   message: string,
+     *   kpis: list<array<string, mixed>>,
+     *   total_records: int
+     * }>
+     */
+    public function buildRecipientRows(Request $request): array
+    {
+        $periodFilters = [
+            'week' => trim((string) $request->input('week', $request->query('week', ''))),
+            'year' => trim((string) $request->input('year', $request->query('year', ''))),
+            'q' => '',
+        ];
+
+        $filterOptions = $this->dashboardService->buildScopeSummary([
+            'site' => '',
+            'perusahaan' => '',
+            'week' => $periodFilters['week'],
+            'year' => $periodFilters['year'],
+            'q' => '',
+        ])['filter_options'];
+
+        /** @var array<string, array{kpis: list<array<string, mixed>>, datasets: list<array<string, mixed>>}> $summaryCache */
+        $summaryCache = [];
+
+        return collect(config('hsecm.wa_recipients', []))
+            ->values()
+            ->map(function (array $recipient, int $index) use ($periodFilters, $filterOptions, &$summaryCache): array {
+                $site = $this->normalizeNullableString($recipient['site'] ?? null);
+                $perusahaan = trim((string) ($recipient['perusahaan'] ?? ''));
+                $resolvedSite = $this->resolveAgainstOptions($site, $filterOptions['sites'] ?? []);
+                $resolvedCompany = $this->resolveAgainstOptions($perusahaan, $filterOptions['companies'] ?? []);
+
+                $filters = [
+                    'site' => $site === null ? '' : ($resolvedSite ?? ''),
+                    'perusahaan' => $resolvedCompany ?? $perusahaan,
+                    'week' => $periodFilters['week'],
+                    'year' => $periodFilters['year'],
+                    'q' => '',
+                ];
+
+                $cacheKey = implode('|', [$filters['site'], $filters['perusahaan'], $filters['week'], $filters['year']]);
+                if (! isset($summaryCache[$cacheKey])) {
+                    $summaryCache[$cacheKey] = $this->dashboardService->buildScopeSummary($filters);
+                }
+                $summary = $summaryCache[$cacheKey];
+
+                $message = $this->composeMessage($recipient, $filters, $summary);
+                $phone = $this->fonnteService->normalizePhoneNumber((string) ($recipient['no'] ?? ''));
+
+                return [
+                    'index' => $index,
+                    'site' => $site,
+                    'perusahaan' => $perusahaan,
+                    'role' => (string) ($recipient['role'] ?? ''),
+                    'nama' => (string) ($recipient['nama'] ?? ''),
+                    'no' => (string) ($recipient['no'] ?? ''),
+                    'email' => (string) ($recipient['email'] ?? ''),
+                    'phone_normalized' => $phone,
+                    'resolved_site' => $filters['site'] !== '' ? $filters['site'] : null,
+                    'resolved_perusahaan' => $filters['perusahaan'],
+                    'message' => $message,
+                    'wa_url' => $phone !== ''
+                        ? 'https://wa.me/'.$phone.'?text='.rawurlencode($message)
+                        : '',
+                    'kpis' => $summary['kpis'],
+                    'datasets' => $summary['datasets'],
+                    'scope' => [
+                        'site' => $filters['site'],
+                        'perusahaan' => $filters['perusahaan'],
+                        'week' => $filters['week'],
+                        'year' => $filters['year'],
+                    ],
+                    'total_records' => collect($summary['datasets'])->sum('count'),
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @return array{success: bool, message: string, channel: string}
+     */
+    public function sendEmail(int $index, Request $request): array
+    {
+        $rows = $this->buildRecipientRows($request);
+        $row = collect($rows)->firstWhere('index', $index);
+
+        if ($row === null) {
+            return [
+                'success' => false,
+                'message' => 'Kontak tidak ditemukan.',
+                'channel' => 'email',
+            ];
+        }
+
+        return $this->dispatchEmailRow($row);
+    }
+
+    /**
+     * Kirim email satu per satu ke indeks terpilih.
+     *
+     * @param  list<int>  $indexes
+     * @return array{success: bool, message: string, channel: string, sent: int, failed: int, details: list<array{nama: string, email: string, success: bool, message: string}>}
+     */
+    public function sendEmails(array $indexes, Request $request): array
+    {
+        $rows = collect($this->buildRecipientRows($request))->keyBy('index');
+        $details = [];
+        $sent = 0;
+        $failed = 0;
+
+        $uniqueIndexes = collect($indexes)
+            ->map(static fn ($v): int => (int) $v)
+            ->unique()
+            ->sort()
+            ->values();
+
+        foreach ($uniqueIndexes as $index) {
+            $row = $rows->get($index);
+            if ($row === null) {
+                $failed++;
+                $details[] = [
+                    'nama' => '#'.$index,
+                    'email' => '-',
+                    'success' => false,
+                    'message' => 'Kontak tidak ditemukan',
+                ];
+                continue;
+            }
+
+            $result = $this->dispatchEmailRow($row);
+            $details[] = [
+                'nama' => $row['nama'],
+                'email' => $row['email'],
+                'success' => $result['success'],
+                'message' => $result['message'],
+            ];
+
+            if ($result['success']) {
+                $sent++;
+            } else {
+                $failed++;
+            }
+
+            // jeda singkat antar kirim agar tidak membanjiri SMTP
+            usleep(250000);
+        }
+
+        $message = $sent > 0
+            ? "Email terkirim: {$sent} berhasil".($failed > 0 ? ", {$failed} gagal." : '.')
+            : 'Tidak ada email yang berhasil dikirim.'.($failed > 0 ? " {$failed} gagal." : '');
+
+        return [
+            'success' => $sent > 0 && $failed === 0,
+            'message' => $message,
+            'channel' => 'email',
+            'sent' => $sent,
+            'failed' => $failed,
+            'details' => $details,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array{success: bool, message: string, channel: string}
+     */
+    private function dispatchEmailRow(array $row): array
+    {
+        $email = trim((string) ($row['email'] ?? ''));
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return [
+                'success' => false,
+                'message' => 'Email tidak valid untuk '.$row['nama'].'.',
+                'channel' => 'email',
+            ];
+        }
+
+        try {
+            Mail::to($email)->send(new HsecmSummaryMail(
+                recipient: [
+                    'nama' => $row['nama'],
+                    'role' => $row['role'],
+                    'site' => $row['site'],
+                    'perusahaan' => $row['perusahaan'],
+                    'no' => $row['no'],
+                    'email' => $row['email'],
+                ],
+                scope: $row['scope'],
+                kpis: $row['kpis'],
+                datasets: $row['datasets'],
+                totalRecords: (int) $row['total_records'],
+                dashboardUrl: route('hsecm.dashboard', array_filter([
+                    'site' => $row['scope']['site'] ?? null,
+                    'perusahaan' => $row['scope']['perusahaan'] ?? null,
+                    'week' => $row['scope']['week'] ?? null,
+                    'year' => $row['scope']['year'] ?? null,
+                ])),
+                generatedAt: now()->timezone(config('app.timezone', 'Asia/Makassar'))->format('d/m/Y H:i').' WITA',
+            ));
+
+            return [
+                'success' => true,
+                'message' => 'Email berhasil dikirim ke '.$row['nama'].' ('.$email.').',
+                'channel' => 'email',
+            ];
+        } catch (\Throwable $e) {
+            report($e);
+
+            return [
+                'success' => false,
+                'message' => 'Gagal kirim email ke '.$row['nama'].': '.$e->getMessage(),
+                'channel' => 'email',
+            ];
+        }
+    }
+
+    /**
+     * @return array{success: bool, message: string, wa_url?: string, channel: string}
+     */
+    public function send(int $index, Request $request, string $channel = 'wa_me'): array
+    {
+        $rows = $this->buildRecipientRows($request);
+        $row = collect($rows)->firstWhere('index', $index);
+
+        if ($row === null) {
+            return [
+                'success' => false,
+                'message' => 'Kontak tidak ditemukan.',
+                'channel' => $channel,
+            ];
+        }
+
+        if ($row['phone_normalized'] === '') {
+            return [
+                'success' => false,
+                'message' => 'Nomor WhatsApp tidak valid untuk '.$row['nama'].'.',
+                'channel' => $channel,
+            ];
+        }
+
+        if ($channel === 'fonnte') {
+            $result = $this->fonnteService->sendMessage($row['phone_normalized'], $row['message']);
+
+            return [
+                'success' => (bool) ($result['success'] ?? false),
+                'message' => ($result['success'] ?? false)
+                    ? 'Pesan berhasil dikirim via Fonnte ke '.$row['nama'].'.'
+                    : 'Gagal kirim Fonnte: '.($result['response']['error'] ?? $result['status'] ?? 'unknown'),
+                'channel' => 'fonnte',
+                'wa_url' => $row['wa_url'],
+            ];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Membuka WhatsApp untuk '.$row['nama'].'.',
+            'channel' => 'wa_me',
+            'wa_url' => $row['wa_url'],
+        ];
+    }
+
+    public function fonnteConfigured(): bool
+    {
+        return trim((string) config('services.fonnte.token', '')) !== '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $recipient
+     * @param  array{site: string, perusahaan: string, week: string, year: string, q: string}  $filters
+     * @param  array{kpis: list<array<string, mixed>>, datasets: list<array<string, mixed>>}  $summary
+     */
+    private function composeMessage(array $recipient, array $filters, array $summary): string
+    {
+        $nama = (string) ($recipient['nama'] ?? '-');
+        $role = (string) ($recipient['role'] ?? '-');
+        $siteLabel = $filters['site'] !== '' ? $filters['site'] : (($recipient['site'] ?? null) ?: 'Semua Site');
+        $companyLabel = $filters['perusahaan'] !== '' ? $filters['perusahaan'] : ((string) ($recipient['perusahaan'] ?? '-'));
+        $period = trim(implode(' / ', array_filter([
+            $filters['week'] !== '' ? 'Week '.$filters['week'] : null,
+            $filters['year'] !== '' ? 'Year '.$filters['year'] : null,
+        ]))) ?: 'Semua periode';
+
+        $lines = [
+            '*HSECM Monitoring Summary*',
+            '',
+            'Yth. *'.$nama.'*',
+            'Role: '.$role,
+            'Site: '.$siteLabel,
+            'Perusahaan: '.$companyLabel,
+            'Periode: '.$period,
+            '',
+            '*Ringkasan KPI*',
+        ];
+
+        foreach ($summary['kpis'] as $kpi) {
+            $lines[] = '• '.$kpi['label'].': *'.$kpi['value'].'*'.(
+                ! empty($kpi['hint']) ? ' ('.$kpi['hint'].')' : ''
+            );
+        }
+
+        $lines[] = '';
+        $lines[] = '*Jumlah Record Dataset*';
+        foreach ($summary['datasets'] as $dataset) {
+            $lines[] = '• '.$dataset['label'].': '.number_format((int) $dataset['count']);
+        }
+
+        $lines[] = '';
+        $lines[] = '_Pesan otomatis dari HSECM Monitoring Dashboard_';
+        $lines[] = '_'.now()->timezone(config('app.timezone', 'Asia/Makassar'))->format('d/m/Y H:i').'_';
+
+        return implode("\n", $lines);
+    }
+
+    private function normalizeNullableString(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $trimmed = trim((string) $value);
+
+        return $trimmed === '' ? null : $trimmed;
+    }
+
+    /**
+     * @param  list<string>  $options
+     */
+    private function resolveAgainstOptions(?string $value, array $options): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        foreach ($options as $option) {
+            if (strcasecmp((string) $option, $value) === 0) {
+                return (string) $option;
+            }
+        }
+
+        // Soft match: hilangkan spasi & karakter non-alfanumerik
+        $needle = Str::lower(preg_replace('/[^a-z0-9]/i', '', $value) ?? '');
+        foreach ($options as $option) {
+            $hay = Str::lower(preg_replace('/[^a-z0-9]/i', '', (string) $option) ?? '');
+            if ($needle !== '' && $hay === $needle) {
+                return (string) $option;
+            }
+        }
+
+        return $value;
+    }
+}
