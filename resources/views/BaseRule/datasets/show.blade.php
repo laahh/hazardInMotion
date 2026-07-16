@@ -63,7 +63,7 @@
                <td class="px-3 py-2.5 whitespace-nowrap max-w-[18rem] truncate" title="{{ is_scalar($value) ? $value : '' }}">
                   @if($value === null || $value === '')
                   <span class="text-slate-300">—</span>
-                  @elseif(is_numeric($value) && str_starts_with($column, 'pct_'))
+                  @elseif(is_numeric($value) && (str_starts_with($column, 'pct_') || str_starts_with($column, '%')))
                   <span class="font-semibold {{ (float) $value >= 80 ? 'text-emerald-700' : ((float) $value >= 50 ? 'text-amber-700' : 'text-red-600') }}">{{ $value }}%</span>
                   @else
                   {{ $value }}
