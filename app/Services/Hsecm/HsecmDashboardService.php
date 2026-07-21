@@ -13,208 +13,231 @@ use Illuminate\Support\Str;
 class HsecmDashboardService
 {
     /**
-     * Mapping dataset UI → sheet JSON + kolom filter/display.
-     * Semua data diambil dari resources/views/BaseRule/database.json.
+     * Mapping dataset UI → tabel DB (scr_hsecm_*) + kolom filter/display.
+     * Semua data diambil dari tabel hasil scraping Tableau via HsecmDatabaseRepository.
      */
     public const DATASETS = [
         'sap-rfid' => [
             'label' => 'SAP / RFID Pelapor (L1 tanpa SAP)',
             'icon' => 'badge',
-            'sheet' => 'L1 tanpa SAP',
-            'site_column' => 'site dedicated pelapor all karyawan',
-            'company_column' => 'perusahaan pelapor all karyawan',
-            'week_column' => 'Week of date',
-            'year_column' => 'Year of date',
+            'table' => 'scr_hsecm_partisipasi_sap_l1_rfid',
+            'site_column' => 'site_dedicated_pelapor_all_karyawan',
+            'company_column' => 'perusahaan_pelapor_all_karyawan',
+            'week_column' => 'Week_of_date',
+            'year_column' => 'Year_of_date',
             'columns' => [
                 'date' => 'Tanggal',
-                'sid pelapor all karyawan' => 'SID',
-                'pelapor all karyawan' => 'Pelapor',
-                'perusahaan pelapor all karyawan' => 'Perusahaan',
-                'site dedicated pelapor all karyawan' => 'Site',
-                'Layer Pelapor' => 'Layer',
-                'jabatan struktural pelapor all karyawan' => 'Jabatan Struktural',
-                'RFID per SID' => 'RFID / SID',
-                'SAP per SID' => 'SAP / SID',
-                'Week of date' => 'Week',
-                'Year of date' => 'Year',
+                'sid_pelapor_all_karyawan' => 'SID',
+                'pelapor_all_karyawan' => 'Pelapor',
+                'perusahaan_pelapor_all_karyawan' => 'Perusahaan',
+                'site_dedicated_pelapor_all_karyawan' => 'Site',
+                'Layer_Pelapor' => 'Layer',
+                'jabatan_struktural_pelapor_all_karyawan' => 'Jabatan Struktural',
+                'RFID_per_SID' => 'RFID / SID',
+                'SAP_per_SID' => 'SAP / SID',
+                'Week_of_date' => 'Week',
+                'Year_of_date' => 'Year',
             ],
         ],
         'coverage-cctv' => [
             'label' => 'Coverage Area Kritis',
             'icon' => 'videocam',
-            'sheet' => 'Area Kritis tidak Tercover',
+            'table' => 'scr_hsecm_coverage_area_kritis_daily',
             'site_column' => 'Site',
             'company_column' => null,
-            'week_column' => 'Week of Date',
-            'year_column' => 'Year of Date',
+            'week_column' => 'Week_of_Date',
+            'year_column' => 'Year_of_Date',
             'columns' => [
                 'Site' => 'Site',
                 'Lokasi' => 'Lokasi',
-                'Detil Lokasi' => 'Detil Lokasi',
-                'Status Coverage dalam 1 Week' => 'Status Coverage',
-                '% Tercover' => '% Tercover',
-                'Day of Date' => 'Day',
-                'Week of Date' => 'Week',
-                'Year of Date' => 'Year',
+                'Detil_Lokasi' => 'Detil Lokasi',
+                'Status_Coverage_dalam_1_Week' => 'Status Coverage',
+                'Tercover' => '% Tercover',
+                'Day_of_Date' => 'Day',
+                'Week_of_Date' => 'Week',
+                'Year_of_Date' => 'Year',
             ],
         ],
         'tbc-blindspot' => [
             'label' => 'Blindspot TBC',
             'icon' => 'visibility_off',
-            'sheet' => 'Blindspot TBC',
+            'table' => 'scr_hsecm_blindspot_tbc_gr',
             'site_column' => 'site',
-            'company_column' => 'perusahaan pelapor all karyawan',
-            'week_column' => 'Week of Date for Join',
-            'year_column' => 'Year of Date for Join',
+            'company_column' => 'perusahaan_pelapor_all_karyawan',
+            'week_column' => 'Week_of_Date_for_Join',
+            'year_column' => 'Year_of_Date_for_Join',
             'columns' => [
                 'site' => 'Site',
-                'kategori TBC' => 'Kategori TBC',
-                'blindspot TBC' => 'Blindspot TBC',
+                'kategori_TBC' => 'Kategori TBC',
+                'blindspot_TBC' => 'Blindspot TBC',
                 'deskripsi' => 'Deskripsi',
-                'pelapor all karyawan' => 'Pelapor',
-                'perusahaan pelapor all karyawan' => 'Perusahaan Pelapor',
+                'pelapor_all_karyawan' => 'Pelapor',
+                'perusahaan_pelapor_all_karyawan' => 'Perusahaan Pelapor',
                 'pic' => 'PIC',
-                'perusahaan pic' => 'Perusahaan PIC',
+                'perusahaan_pic' => 'Perusahaan PIC',
                 'status3' => 'Status',
-                'validasi GR' => 'Validasi GR',
-                'Week of Date for Join' => 'Week',
-                'Year of Date for Join' => 'Year',
+                'validasi_GR' => 'Validasi GR',
+                'Week_of_Date_for_Join' => 'Week',
+                'Year_of_Date_for_Join' => 'Year',
             ],
         ],
         'task-overdue' => [
             'label' => 'Task Follow-up Overdue',
             'icon' => 'schedule',
-            'sheet' => 'Overdue',
+            'table' => 'scr_hsecm_overdue_hazard',
             'site_column' => 'site',
-            'company_column' => 'perusahaan pelapor all karyawan',
-            'week_column' => 'Week of date time',
-            'year_column' => 'Year of date time',
+            'company_column' => 'perusahaan_pelapor_all_karyawan',
+            'week_column' => 'Week_of_date_time',
+            'year_column' => 'Year_of_date_time',
             'columns' => [
-                '#Task Number' => 'No Task',
+                'Task_Number' => 'No Task',
                 'site' => 'Site',
                 'deskripsi' => 'Deskripsi',
-                'pelapor all karyawan' => 'Pelapor',
-                'perusahaan pelapor all karyawan' => 'Perusahaan Pelapor',
+                'pelapor_all_karyawan' => 'Pelapor',
+                'perusahaan_pelapor_all_karyawan' => 'Perusahaan Pelapor',
                 'pic' => 'PIC',
-                'perusahaan pic' => 'Perusahaan PIC',
+                'perusahaan_pic' => 'Perusahaan PIC',
                 'status3' => 'Status',
                 'tanggal_janji' => 'Tanggal Janji',
-                'Week of date time' => 'Week',
-                'Year of date time' => 'Year',
+                'Week_of_date_time' => 'Week',
+                'Year_of_date_time' => 'Year',
             ],
         ],
         'task-submitted' => [
             'label' => 'Submitted Over 24 Hours',
             'icon' => 'task_alt',
-            'sheet' => 'Submitted over 24 hours',
+            'table' => 'scr_hsecm_submitted_hazard_24jam',
             'site_column' => 'site',
-            'company_column' => 'perusahaan pelapor all karyawan',
-            'week_column' => 'Week of date time',
-            'year_column' => 'Year of date time',
+            'company_column' => 'perusahaan_pelapor_all_karyawan',
+            'week_column' => 'Week_of_date_time',
+            'year_column' => 'Year_of_date_time',
             'columns' => [
-                '#Task Number' => 'No Task',
+                'Task_Number' => 'No Task',
                 'site' => 'Site',
                 'deskripsi' => 'Deskripsi',
-                'pelapor all karyawan' => 'Pelapor',
-                'perusahaan pelapor all karyawan' => 'Perusahaan Pelapor',
+                'pelapor_all_karyawan' => 'Pelapor',
+                'perusahaan_pelapor_all_karyawan' => 'Perusahaan Pelapor',
                 'pic' => 'PIC',
-                'perusahaan pic' => 'Perusahaan PIC',
+                'perusahaan_pic' => 'Perusahaan PIC',
                 'status3' => 'Status',
-                'Selisih jam dari Submit' => 'Selisih Jam',
-                'Week of date time' => 'Week',
-                'Year of date time' => 'Year',
+                'Selisih_jam_dari_Submit' => 'Selisih Jam',
+                'Week_of_date_time' => 'Week',
+                'Year_of_date_time' => 'Year',
             ],
         ],
         'ikk-work-permit' => [
             'label' => 'Compliance IKK',
             'icon' => 'description',
-            'sheet' => 'Compliance IKK',
-            'site_column' => 'Ra Site Name',
-            'company_column' => 'Company Name (Ikk Work Permit)',
-            'week_column' => 'Week of Start Date Convert',
-            'year_column' => 'ISO Year of Start Date Convert',
+            'table' => 'scr_hsecm_ikk_aktif_ipk_okk',
+            'site_column' => 'Ra_Site_Name',
+            'company_column' => 'Company_Name_Ikk_Work_Permit',
+            'week_column' => 'Week_of_Start_Date_Convert',
+            'year_column' => 'ISO_Year_of_Start_Date_Convert',
             'columns' => [
                 'Code' => 'Code',
-                'Name (Ikk Work Permit)' => 'Nama IKK',
-                'Company Name (Ikk Work Permit)' => 'Perusahaan',
-                'Ra Site Name' => 'Site',
-                'Location Name' => 'Lokasi',
-                'Location Detail Name' => 'Detil Lokasi',
+                'Name_Ikk_Work_Permit' => 'Nama IKK',
+                'Company_Name_Ikk_Work_Permit' => 'Perusahaan',
+                'Ra_Site_Name' => 'Site',
+                'Location_Name' => 'Lokasi',
+                'Location_Detail_Name' => 'Detil Lokasi',
                 'Status' => 'Status',
-                'Status (Ikk Work Permit Pic)' => 'Status PIC',
-                '% Compliance IKK' => '% Compliance',
-                'Start Date Convert' => 'Start Date',
-                'Week of Start Date Convert' => 'Week',
-                'ISO Year of Start Date Convert' => 'Year',
+                'Status_Ikk_Work_Permit_Pic' => 'Status PIC',
+                'Compliance_IKK' => '% Compliance',
+                'Start_Date_Convert' => 'Start Date',
+                'Week_of_Start_Date_Convert' => 'Week',
+                'ISO_Year_of_Start_Date_Convert' => 'Year',
+            ],
+        ],
+        'implementasi-ikk' => [
+            'label' => 'Implementasi IKK',
+            'icon' => 'assignment_turned_in',
+            'table' => 'scr_hsecm_implementasi_ikk',
+            'site_column' => 'Ra_Site_Name',
+            'company_column' => 'Company_Name_Ikk_Work_Permit',
+            'week_column' => 'Week_of_Start_Date_Convert',
+            'year_column' => 'ISO_Year_of_Start_Date_Convert',
+            'columns' => [
+                'Code' => 'Code',
+                'Name_Ikk_Work_Permit' => 'Nama IKK',
+                'Company_Name_Ikk_Work_Permit' => 'Perusahaan',
+                'Ra_Site_Name' => 'Site',
+                'Location_Name' => 'Lokasi',
+                'Location_Detail_Name' => 'Detil Lokasi',
+                'Status' => 'Status',
+                'Status_Ikk_Work_Permit_Pic' => 'Status PIC',
+                'Compliance_IKK' => '% Compliance',
+                'Start_Date_Convert' => 'Start Date',
+                'Week_of_Start_Date_Convert' => 'Week',
+                'ISO_Year_of_Start_Date_Convert' => 'Year',
             ],
         ],
         'aggregator' => [
             'label' => 'Tidak Mengisi Aggregator',
             'icon' => 'percent',
-            'sheet' => 'Tidak mengisi aggregator',
-            'site_column' => 'Site Dedicated',
-            'company_column' => 'Nama Perusahaan',
-            'week_column' => 'Week of Tanggal Date',
-            'year_column' => 'Year of Tanggal Date',
+            'table' => 'scr_hsecm_pengisian_ftw',
+            'site_column' => 'Site_Dedicated',
+            'company_column' => 'Nama_Perusahaan',
+            'week_column' => 'Week_of_Tanggal_Date',
+            'year_column' => 'Year_of_Tanggal_Date',
             'columns' => [
-                'Kode Sid' => 'SID',
+                'Kode_Sid' => 'SID',
                 'Nama' => 'Nama',
-                'Nama Perusahaan' => 'Perusahaan',
-                'Site Dedicated' => 'Site',
-                'Jabatan Struktural' => 'Jabatan Struktural',
-                '% Pengisian Aggregator' => '% Pengisian',
-                'Day of Tanggal Date' => 'Day',
-                'Week of Tanggal Date' => 'Week',
-                'Year of Tanggal Date' => 'Year',
+                'Nama_Perusahaan' => 'Perusahaan',
+                'Site_Dedicated' => 'Site',
+                'Jabatan_Struktural' => 'Jabatan Struktural',
+                'Pengisian_Aggregator' => '% Pengisian',
+                'Day_of_Tanggal_Date' => 'Day',
+                'Week_of_Tanggal_Date' => 'Week',
+                'Year_of_Tanggal_Date' => 'Year',
             ],
         ],
         'fatigue' => [
             'label' => 'FTW Merah',
             'icon' => 'bedtime',
-            'sheet' => 'FTW Merah',
-            'site_column' => 'Site Dedicated',
-            'company_column' => 'Nama Perusahaan',
-            'week_column' => 'Week of Tanggal Date',
-            'year_column' => 'Year of Tanggal Date',
+            'table' => 'scr_hsecm_ftw_merah',
+            'site_column' => 'Site_Dedicated',
+            'company_column' => 'Nama_Perusahaan',
+            'week_column' => 'Week_of_Tanggal_Date',
+            'year_column' => 'Year_of_Tanggal_Date',
             'columns' => [
-                'Tanggal Date' => 'Tanggal',
-                'Kode Sid' => 'SID',
+                'Tanggal_Date' => 'Tanggal',
+                'Kode_Sid' => 'SID',
                 'Nama' => 'Nama',
-                'Nama Perusahaan' => 'Perusahaan',
-                'Site Dedicated' => 'Site',
-                'Kondisi Karyawan' => 'Kondisi',
-                'FTW Merah' => 'FTW Merah',
-                'Jumlah Jam Tidur' => 'Jam Tidur',
+                'Nama_Perusahaan' => 'Perusahaan',
+                'Site_Dedicated' => 'Site',
+                'Kondisi_Karyawan' => 'Kondisi',
+                'Penyakit_Terkonfirmasi' => 'Penyakit Terkonfirmasi',
+                'Jumlah_Jam_Tidur' => 'Jam Tidur',
                 'hasil_sobriety_test' => 'Sobriety',
-                'Klasifikasi Tekanan Darah' => 'Tekanan Darah',
-                'Week of Tanggal Date' => 'Week',
-                'Year of Tanggal Date' => 'Year',
+                'Klasifikasi_Tekanan_Darah' => 'Tekanan Darah',
+                'Week_of_Tanggal_Date' => 'Week',
+                'Year_of_Tanggal_Date' => 'Year',
             ],
         ],
         'sumber-rfid' => [
             'label' => 'Pekerja Baru (RFID)',
             'icon' => 'database',
-            'sheet' => 'Pekerja Baru',
+            'table' => 'scr_hsecm_pekerja_baru',
             'site_column' => 'site_dedicated',
-            'company_column' => 'perusahaan pelapor all karyawan',
-            'week_column' => 'Week of date',
-            'year_column' => 'Year of date',
+            'company_column' => 'perusahaan_pelapor_all_karyawan',
+            'week_column' => 'Week_of_date',
+            'year_column' => 'Year_of_date',
             'columns' => [
                 'date' => 'Tanggal',
-                'sid pelapor all karyawan' => 'SID',
+                'sid_pelapor_all_karyawan' => 'SID',
                 'nama' => 'Nama',
-                'perusahaan pelapor all karyawan' => 'Perusahaan',
+                'perusahaan_pelapor_all_karyawan' => 'Perusahaan',
                 'site_dedicated' => 'Site',
                 'sumber_data' => 'Sumber Data',
                 'tanggal_hari_pertama' => 'Hari Pertama Lapor',
-                'Week of date' => 'Week',
-                'Year of date' => 'Year',
+                'Week_of_date' => 'Week',
+                'Year_of_date' => 'Year',
             ],
         ],
     ];
 
     public function __construct(
-        private readonly HsecmJsonDataRepository $jsonRepository,
+        private readonly HsecmDatabaseRepository $repository,
     ) {}
 
     /**
@@ -249,7 +272,7 @@ class HsecmDashboardService
                 'icon' => $meta['icon'],
                 'count' => $this->filteredRows($key, $filters)->count(),
             ])->values()->all(),
-            'data_source' => 'json',
+            'data_source' => 'database',
         ];
     }
 
@@ -306,14 +329,14 @@ class HsecmDashboardService
      */
     private function buildFilterOptions(): array
     {
-        return Cache::remember('hsecm.filter_options.json.v1', 300, function (): array {
+        return Cache::remember('hsecm.filter_options.db.v1', 300, function (): array {
             $sites = collect();
             $companies = collect();
             $weeks = collect();
             $years = collect();
 
             foreach (self::DATASETS as $key => $meta) {
-                $rows = collect($this->jsonRepository->sheet($meta['sheet']));
+                $rows = collect($this->repository->rows($meta['table']));
 
                 $sites = $sites->merge($this->uniqueColumnValues($rows, $meta['site_column']));
                 if ($meta['company_column'] !== null) {
@@ -355,31 +378,25 @@ class HsecmDashboardService
     private function buildKpis(array $filters): array
     {
         $sapRows = $this->filteredRows('sap-rfid', $filters)->filter(function (array $row): bool {
-            return ! $this->isAllToken($row['SAP per SID'] ?? null)
-                && ! $this->isAllToken($row['RFID per SID'] ?? null);
+            return ! $this->isAllToken($row['SAP_per_SID'] ?? null)
+                && ! $this->isAllToken($row['RFID_per_SID'] ?? null);
         });
 
-        $avgSap = $this->avgNumeric($sapRows, 'SAP per SID');
-        $avgCoverage = $this->avgNumeric($this->filteredRows('coverage-cctv', $filters), '% Tercover');
+        $avgSap = $this->avgNumeric($sapRows, 'SAP_per_SID');
+        $avgCoverage = $this->avgNumeric($this->filteredRows('coverage-cctv', $filters), 'Tercover');
         $tbcCount = $this->filteredRows('tbc-blindspot', $filters)->count();
         $overdueCount = $this->filteredRows('task-overdue', $filters)->count();
         $submittedRows = $this->filteredRows('task-submitted', $filters);
         $submittedCount = $submittedRows->count();
-        $avgSubmitHours = $this->avgNumeric($submittedRows, 'Selisih jam dari Submit');
+        $avgSubmitHours = $this->avgNumeric($submittedRows, 'Selisih_jam_dari_Submit');
         $ikkRows = $this->filteredRows('ikk-work-permit', $filters);
         $ikkCount = $ikkRows->count();
-        $avgIkk = $this->avgNumeric($ikkRows, '% Compliance IKK');
-        $avgAggregator = $this->avgNumeric($this->filteredRows('aggregator', $filters), '% Pengisian Aggregator');
+        $avgIkk = $this->avgNumeric($ikkRows, 'Compliance_IKK');
+        $avgAggregator = $this->avgNumeric($this->filteredRows('aggregator', $filters), 'Pengisian_Aggregator');
         $fatigueRows = $this->filteredRows('fatigue', $filters);
         $fatigueCount = $fatigueRows->count();
-        $ftwMerah = $fatigueRows->filter(function (array $row): bool {
-            $val = trim((string) ($row['FTW Merah'] ?? ''));
-            if ($val === '') {
-                return false;
-            }
-
-            return ! in_array(Str::lower($val), ['tidak', 'no', '0', 'false'], true);
-        })->count();
+        // Seluruh baris pada tabel scr_hsecm_ftw_merah sudah berstatus FTW merah.
+        $ftwMerah = $fatigueCount;
         $sumberCount = $this->filteredRows('sumber-rfid', $filters)->count();
 
         return [
@@ -507,11 +524,11 @@ class HsecmDashboardService
                 $current['total_records'] = (int) $current['total_records'] + $count;
 
                 if ($key === 'coverage-cctv') {
-                    $current['avg_coverage'] = round($this->avgNumeric($items, '% Tercover'), 1);
+                    $current['avg_coverage'] = round($this->avgNumeric($items, 'Tercover'), 1);
                 } elseif ($key === 'ikk-work-permit') {
-                    $current['avg_ikk'] = round($this->avgNumeric($items, '% Compliance IKK'), 1);
+                    $current['avg_ikk'] = round($this->avgNumeric($items, 'Compliance_IKK'), 1);
                 } elseif ($key === 'aggregator') {
-                    $current['avg_aggregator'] = round($this->avgNumeric($items, '% Pengisian Aggregator'), 1);
+                    $current['avg_aggregator'] = round($this->avgNumeric($items, 'Pengisian_Aggregator'), 1);
                 }
 
                 $rows->put($site, $current);
@@ -573,9 +590,9 @@ class HsecmDashboardService
                 $current['total_records'] = (int) $current['total_records'] + $count;
 
                 if ($key === 'ikk-work-permit') {
-                    $current['avg_ikk'] = round($this->avgNumeric($items, '% Compliance IKK'), 1);
+                    $current['avg_ikk'] = round($this->avgNumeric($items, 'Compliance_IKK'), 1);
                 } elseif ($key === 'aggregator') {
-                    $current['avg_aggregator'] = round($this->avgNumeric($items, '% Pengisian Aggregator'), 1);
+                    $current['avg_aggregator'] = round($this->avgNumeric($items, 'Pengisian_Aggregator'), 1);
                 }
 
                 $rows->put($company, $current);
@@ -594,20 +611,23 @@ class HsecmDashboardService
         $rows = $this->filteredRows($datasetKey, $filters);
         $extra = match ($datasetKey) {
             'sap-rfid' => [
-                'avg_sap' => round($this->avgNumeric($rows->filter(fn ($r) => ! $this->isAllToken($r['SAP per SID'] ?? null)), 'SAP per SID'), 1),
-                'avg_rfid' => round($this->avgNumeric($rows->filter(fn ($r) => ! $this->isAllToken($r['RFID per SID'] ?? null)), 'RFID per SID'), 1),
+                'avg_sap' => round($this->avgNumeric($rows->filter(fn ($r) => ! $this->isAllToken($r['SAP_per_SID'] ?? null)), 'SAP_per_SID'), 1),
+                'avg_rfid' => round($this->avgNumeric($rows->filter(fn ($r) => ! $this->isAllToken($r['RFID_per_SID'] ?? null)), 'RFID_per_SID'), 1),
             ],
             'coverage-cctv' => [
-                'avg_pct' => round($this->avgNumeric($rows, '% Tercover'), 1),
+                'avg_pct' => round($this->avgNumeric($rows, 'Tercover'), 1),
             ],
             'task-submitted' => [
-                'avg_hours' => round($this->avgNumeric($rows, 'Selisih jam dari Submit'), 1),
+                'avg_hours' => round($this->avgNumeric($rows, 'Selisih_jam_dari_Submit'), 1),
             ],
             'ikk-work-permit' => [
-                'avg_compliance' => round($this->avgNumeric($rows, '% Compliance IKK'), 1),
+                'avg_compliance' => round($this->avgNumeric($rows, 'Compliance_IKK'), 1),
+            ],
+            'implementasi-ikk' => [
+                'avg_compliance' => round($this->avgNumeric($rows, 'Compliance_IKK'), 1),
             ],
             'aggregator' => [
-                'avg_fill' => round($this->avgNumeric($rows, '% Pengisian Aggregator'), 1),
+                'avg_fill' => round($this->avgNumeric($rows, 'Pengisian_Aggregator'), 1),
             ],
             default => [],
         };
@@ -658,7 +678,7 @@ class HsecmDashboardService
     private function filteredRows(string $datasetKey, array $filters): Collection
     {
         $meta = self::DATASETS[$datasetKey];
-        $rows = collect($this->jsonRepository->sheet($meta['sheet']));
+        $rows = collect($this->repository->rows($meta['table']));
 
         return $rows->filter(function (array $row) use ($meta, $filters): bool {
             if ($filters['site'] !== '') {
