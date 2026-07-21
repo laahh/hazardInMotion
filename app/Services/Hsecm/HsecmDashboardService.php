@@ -383,7 +383,7 @@ class HsecmDashboardService
         });
 
         $avgSap = $this->avgNumeric($sapRows, 'SAP_per_SID');
-        $avgCoverage = $this->avgNumeric($this->filteredRows('coverage-cctv', $filters), 'Tercover');
+        $avgCoverage = $this->avgPercent($this->filteredRows('coverage-cctv', $filters), 'Tercover');
         $tbcCount = $this->filteredRows('tbc-blindspot', $filters)->count();
         $overdueCount = $this->filteredRows('task-overdue', $filters)->count();
         $submittedRows = $this->filteredRows('task-submitted', $filters);
@@ -391,8 +391,8 @@ class HsecmDashboardService
         $avgSubmitHours = $this->avgNumeric($submittedRows, 'Selisih_jam_dari_Submit');
         $ikkRows = $this->filteredRows('ikk-work-permit', $filters);
         $ikkCount = $ikkRows->count();
-        $avgIkk = $this->avgNumeric($ikkRows, 'Compliance_IKK');
-        $avgAggregator = $this->avgNumeric($this->filteredRows('aggregator', $filters), 'Pengisian_Aggregator');
+        $avgIkk = $this->avgPercent($ikkRows, 'Compliance_IKK');
+        $avgAggregator = $this->avgPercent($this->filteredRows('aggregator', $filters), 'Pengisian_Aggregator');
         $fatigueRows = $this->filteredRows('fatigue', $filters);
         $fatigueCount = $fatigueRows->count();
         // Seluruh baris pada tabel scr_hsecm_ftw_merah sudah berstatus FTW merah.
@@ -524,11 +524,11 @@ class HsecmDashboardService
                 $current['total_records'] = (int) $current['total_records'] + $count;
 
                 if ($key === 'coverage-cctv') {
-                    $current['avg_coverage'] = round($this->avgNumeric($items, 'Tercover'), 1);
+                    $current['avg_coverage'] = round($this->avgPercent($items, 'Tercover'), 1);
                 } elseif ($key === 'ikk-work-permit') {
-                    $current['avg_ikk'] = round($this->avgNumeric($items, 'Compliance_IKK'), 1);
+                    $current['avg_ikk'] = round($this->avgPercent($items, 'Compliance_IKK'), 1);
                 } elseif ($key === 'aggregator') {
-                    $current['avg_aggregator'] = round($this->avgNumeric($items, 'Pengisian_Aggregator'), 1);
+                    $current['avg_aggregator'] = round($this->avgPercent($items, 'Pengisian_Aggregator'), 1);
                 }
 
                 $rows->put($site, $current);
@@ -590,9 +590,9 @@ class HsecmDashboardService
                 $current['total_records'] = (int) $current['total_records'] + $count;
 
                 if ($key === 'ikk-work-permit') {
-                    $current['avg_ikk'] = round($this->avgNumeric($items, 'Compliance_IKK'), 1);
+                    $current['avg_ikk'] = round($this->avgPercent($items, 'Compliance_IKK'), 1);
                 } elseif ($key === 'aggregator') {
-                    $current['avg_aggregator'] = round($this->avgNumeric($items, 'Pengisian_Aggregator'), 1);
+                    $current['avg_aggregator'] = round($this->avgPercent($items, 'Pengisian_Aggregator'), 1);
                 }
 
                 $rows->put($company, $current);
@@ -615,19 +615,19 @@ class HsecmDashboardService
                 'avg_rfid' => round($this->avgNumeric($rows->filter(fn ($r) => ! $this->isAllToken($r['RFID_per_SID'] ?? null)), 'RFID_per_SID'), 1),
             ],
             'coverage-cctv' => [
-                'avg_pct' => round($this->avgNumeric($rows, 'Tercover'), 1),
+                'avg_pct' => round($this->avgPercent($rows, 'Tercover'), 1),
             ],
             'task-submitted' => [
                 'avg_hours' => round($this->avgNumeric($rows, 'Selisih_jam_dari_Submit'), 1),
             ],
             'ikk-work-permit' => [
-                'avg_compliance' => round($this->avgNumeric($rows, 'Compliance_IKK'), 1),
+                'avg_compliance' => round($this->avgPercent($rows, 'Compliance_IKK'), 1),
             ],
             'implementasi-ikk' => [
-                'avg_compliance' => round($this->avgNumeric($rows, 'Compliance_IKK'), 1),
+                'avg_compliance' => round($this->avgPercent($rows, 'Compliance_IKK'), 1),
             ],
             'aggregator' => [
-                'avg_fill' => round($this->avgNumeric($rows, 'Pengisian_Aggregator'), 1),
+                'avg_fill' => round($this->avgPercent($rows, 'Pengisian_Aggregator'), 1),
             ],
             default => [],
         };
@@ -752,6 +752,16 @@ class HsecmDashboardService
         }
 
         return (float) $values->avg();
+    }
+
+    /**
+     * Rata-rata kolom bernilai boolean 0/1 (1 = tercapai) dinyatakan dalam persen 0-100.
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     */
+    private function avgPercent(Collection $rows, string $column): float
+    {
+        return $this->avgNumeric($rows, $column) * 100;
     }
 
     private function toFloat(mixed $value): ?float
