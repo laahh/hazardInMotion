@@ -366,7 +366,9 @@ class HsecmDashboardService
         $submittedRows = $this->filteredRows('task-submitted', $filters);
         $submittedCount = $submittedRows->count();
         $avgSubmitHours = $this->avgNumeric($submittedRows, 'Selisih jam dari Submit');
-        $avgIkk = $this->avgNumeric($this->filteredRows('ikk-work-permit', $filters), '% Compliance IKK');
+        $ikkRows = $this->filteredRows('ikk-work-permit', $filters);
+        $ikkCount = $ikkRows->count();
+        $avgIkk = $this->avgNumeric($ikkRows, '% Compliance IKK');
         $avgAggregator = $this->avgNumeric($this->filteredRows('aggregator', $filters), '% Pengisian Aggregator');
         $fatigueRows = $this->filteredRows('fatigue', $filters);
         $fatigueCount = $fatigueRows->count();
@@ -414,6 +416,13 @@ class HsecmDashboardService
                 'value' => $submittedCount,
                 'icon' => 'task_alt',
                 'hint' => 'Avg '.$this->formatNumber($avgSubmitHours).' jam',
+                'tone' => 'primary',
+            ],
+            [
+                'label' => 'Jumlah IKK',
+                'value' => $ikkCount,
+                'icon' => 'fact_check',
+                'hint' => 'IKK aktif (baris)',
                 'tone' => 'primary',
             ],
             [
