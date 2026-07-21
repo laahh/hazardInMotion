@@ -12,10 +12,6 @@ use Illuminate\Support\Facades\Schema;
 
 class MonitoringSafetyEngineeringEffectivenessService
 {
-    private const HAZARD_HIGH_FREQUENT = 500;
-
-    private const HAZARD_HIGH_REPEAT = 100;
-
     /**
      * @return array<string, mixed>
      */
@@ -138,8 +134,7 @@ class MonitoringSafetyEngineeringEffectivenessService
     private function recordToItem(MonitoringSafetyEngineeringRecord $record): array
     {
         $prediksi = $record->prediksi_penurunan_tangga_risiko;
-        $deteksi = $record->deteksi_deviasi;
-        $hasHazard = ($deteksi !== null && $deteksi > 0) || (bool) $record->terkait_hazard;
+        $hasHazard = (bool) $record->terkait_hazard;
         $hasInsiden = (bool) $record->terkait_insiden;
         $validasi = $this->resolveValidasi($hasHazard, $hasInsiden, $prediksi);
 
@@ -148,19 +143,21 @@ class MonitoringSafetyEngineeringEffectivenessService
             $tindakLanjut = $validasi['tindak_lanjut'];
         }
 
+        $deteksiLabel = trim((string) ($record->deteksi_deviasi ?? ''));
+
         return [
             'id' => $record->id,
             'name' => $record->pengendalian_rekayasa,
             'perusahaan' => trim($record->perusahaan . ' ' . $record->site),
             'prediksi' => $this->prediksiLabel($prediksi),
             'prediksi_value' => $prediksi,
-            'hazard' => $this->hazardLabel($deteksi, $hasHazard),
-            'hazard_up' => $this->isHighHazard($deteksi, $hasHazard),
+            'hazard' => $this->hazardLabel($deteksiLabel, $hasHazard),
+            'hazard_up' => $hasHazard && $hasInsiden,
             'insiden' => $hasInsiden ? 'Ada' : 'Tidak ada',
             'validasi' => $validasi['label'],
             'validasi_class' => $validasi['class'],
             'tindak_lanjut' => $tindakLanjut,
-            'priority_score' => $this->priorityScore($validasi['label'], $deteksi, $hasHazard, (bool) $record->potensi_peningkatan_efektivitas),
+            'priority_score' => $this->priorityScore($validasi['label'], $hasHazard, (bool) $record->potensi_peningkatan_efektivitas),
             'potensi_naik_level' => $this->hasUpgradePotential($validasi['label'], (bool) $record->potensi_peningkatan_efektivitas),
         ];
     }
@@ -211,26 +208,13 @@ class MonitoringSafetyEngineeringEffectivenessService
         };
     }
 
-    private function hazardLabel(?int $deteksi, bool $hasHazard): string
+    private function hazardLabel(string $deteksiLabel, bool $hasHazard): string
     {
-        if ($deteksi !== null && $deteksi > 0) {
-            return match (true) {
-                $deteksi >= self::HAZARD_HIGH_FREQUENT => 'Tinggi (Sering)',
-                $deteksi >= self::HAZARD_HIGH_REPEAT => 'Tinggi (Berulang)',
-                default => 'Rendah (Sesekali)',
-            };
+        if ($deteksiLabel !== '') {
+            return $deteksiLabel;
         }
 
         return $hasHazard ? 'Ada' : 'Tidak ada';
-    }
-
-    private function isHighHazard(?int $deteksi, bool $hasHazard): bool
-    {
-        if ($deteksi !== null && $deteksi >= self::HAZARD_HIGH_REPEAT) {
-            return true;
-        }
-
-        return $hasHazard && $deteksi !== null && $deteksi > 0;
     }
 
     private function hasUpgradePotential(string $validasi, bool $potensiFlag): bool
@@ -242,7 +226,7 @@ class MonitoringSafetyEngineeringEffectivenessService
         return in_array($validasi, ['Tidak Efektif', 'Efektif Sebagian'], true);
     }
 
-    private function priorityScore(string $validasi, ?int $deteksi, bool $hasHazard, bool $potensiFlag): int
+    private function priorityScore(string $validasi, bool $hasHazard, bool $potensiFlag): int
     {
         $score = match ($validasi) {
             'Tidak Efektif' => 100,
@@ -251,16 +235,12 @@ class MonitoringSafetyEngineeringEffectivenessService
             default => 10,
         };
 
-        if ($this->isHighHazard($deteksi, $hasHazard)) {
+        if ($hasHazard) {
             $score += 25;
         }
 
         if ($potensiFlag) {
             $score += 15;
-        }
-
-        if ($deteksi !== null) {
-            $score += min(20, (int) floor($deteksi / 50));
         }
 
         return $score;

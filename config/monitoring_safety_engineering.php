@@ -81,9 +81,11 @@ return [
     ],
 
     'intervensi_deviasi' => [
+        'menahan_mengurangi' => 'Menahan/mengurangi dampak',
         'eliminasi' => 'Eliminasi',
         'alat' => 'Alat',
         'manusia' => 'Manusia',
+        // Legacy combined format (deteksi -> intervensi) untuk data lama
         'eliminasi_eliminasi' => 'Eliminasi -> Eliminasi',
         'eliminasi_alat' => 'Eliminasi -> Alat',
         'eliminasi_manusia' => 'Eliminasi -> Manusia',
@@ -93,6 +95,13 @@ return [
         'manusia_eliminasi' => 'Manusia -> Eliminasi',
         'manusia_alat' => 'Manusia -> Alat',
         'manusia_manusia' => 'Manusia -> Manusia',
+    ],
+
+    'deteksi_deviasi' => [
+        'tidak_mendeteksi' => 'Tidak mendeteksi',
+        'eliminasi' => 'Eliminasi',
+        'alat' => 'Alat',
+        'manusia' => 'Manusia',
     ],
 
     'replikasi_satuan' => [
@@ -219,5 +228,23 @@ return [
         'Rekomendasi Insiden',
         'Arahan Manajemen',
         'Pelanggaran Golden Rules',
+    ],
+
+    /**
+     * Matriks penurunan risiko: baris dari Deteksi->Intervensi, kolom dari prediksi tangga.
+     */
+    'risk_reduction_matrix' => [
+        'rows' => [
+            'eliminasi' => 'Eliminasi',
+            'full_automasi' => 'Full Automasi (Deteksi & Intervensi Alat)',
+            'hybrid' => 'Hybrid (Alat & Manusia)',
+            'manusia' => 'Deteksi & Intervensi Manusia',
+            'menahan_mengurangi' => 'Menahan & Mengurangi',
+        ],
+        'columns' => [
+            3 => 'Turun 3 Tangga',
+            2 => 'Turun 2 Tangga',
+            1 => 'Turun 1 Tangga',
+        ],
     ],
 ];

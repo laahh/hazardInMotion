@@ -50,6 +50,7 @@ class MonitoringSafetyEngineeringDashboardService
             'brief_analysis' => $this->buildBriefAnalysis($records, $replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
             'next_todo' => $this->buildNextTodo($records),
             'charts' => $this->buildCharts($replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
+            'risk_reduction_matrix' => $this->buildRiskReductionMatrix($records),
         ];
     }
 
@@ -83,6 +84,7 @@ class MonitoringSafetyEngineeringDashboardService
             ],
             'next_todo' => ['Upload atau input data rekayasa melalui menu Update Data.'],
             'charts' => $this->buildCharts($emptyItems, $emptyItems, $emptyItems),
+            'risk_reduction_matrix' => $this->buildRiskReductionMatrix(collect()),
         ];
     }
 
@@ -175,10 +177,7 @@ class MonitoringSafetyEngineeringDashboardService
         foreach ($records as $record) {
             $category = $this->resolveCategory($record);
             $item = $this->recordToItem($record, $filters);
-
-            if ($category === 'safety_engineering') {
-                $item['detail'] = $this->buildRecordDetail($record, $item);
-            }
+            $item['detail'] = $this->buildRecordDetail($record, $item);
 
             $grouped[$category][] = $item;
         }
@@ -676,18 +675,28 @@ class MonitoringSafetyEngineeringDashboardService
 
         return [
             'total_komitmen' => $totalPlan,
-            'replikasi' => [
-                'count' => count($replikasi),
-                'progress' => $this->calculateOverallProgress($replikasi),
-            ],
-            'safety_engineering' => [
-                'count' => count($safety),
-                'progress' => $this->calculateOverallProgress($safety),
-            ],
-            'additional_safety_engineering' => [
-                'count' => count($additional),
-                'progress' => $this->calculateOverallProgress($additional),
-            ],
+            'replikasi' => $this->buildCategoryStat($replikasi),
+            'safety_engineering' => $this->buildCategoryStat($safety),
+            'additional_safety_engineering' => $this->buildCategoryStat($additional),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @return array{count: int, overdue: int, done: int, plan: int, completed: int, progress: int}
+     */
+    private function buildCategoryStat(array $items): array
+    {
+        return [
+            'count' => count($items),
+            'overdue' => $this->sumOverdue($items),
+            'done' => (int) array_sum(array_column($items, 'done')),
+            'plan' => (int) array_sum(array_column($items, 'plan')),
+            'completed' => count(array_filter(
+                $items,
+                static fn (array $item): bool => (int) ($item['percentage'] ?? 0) >= 100,
+            )),
+            'progress' => $this->calculateOverallProgress($items),
         ];
     }
 
@@ -704,5 +713,200 @@ class MonitoringSafetyEngineeringDashboardService
             ['label' => 'Safety Engineering', 'overdue' => $this->sumOverdue($safety)],
             ['label' => 'Additional Safety Engineering', 'overdue' => $this->sumOverdue($additional)],
         ];
+    }
+
+    /**
+     * Matriks: baris = level kontrol dari Deteksi/Intervensi Deviasi,
+     * kolom = prediksi penurunan tangga risiko (1–3).
+     *
+     * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $records
+     * @return array{
+     *     columns: list<array{key: int, label: string}>,
+     *     rows: list<array{key: string, label: string, cells: array<int, array{count: int, items: list<array<string, mixed>>}>}>,
+     *     total: int,
+     *     without_prediksi: int
+     * }
+     */
+    private function buildRiskReductionMatrix(Collection $records): array
+    {
+        $rowLabels = config('monitoring_safety_engineering.risk_reduction_matrix.rows', []);
+        $columnLabels = config('monitoring_safety_engineering.risk_reduction_matrix.columns', [
+            3 => 'Turun 3 Tangga',
+            2 => 'Turun 2 Tangga',
+            1 => 'Turun 1 Tangga',
+        ]);
+
+        $columns = [];
+        foreach ($columnLabels as $key => $label) {
+            $columns[] = [
+                'key' => (int) $key,
+                'label' => (string) $label,
+            ];
+        }
+
+        $cells = [];
+        foreach (array_keys($rowLabels) as $rowKey) {
+            foreach (array_keys($columnLabels) as $columnKey) {
+                $cells[(string) $rowKey][(int) $columnKey] = [
+                    'count' => 0,
+                    'items' => [],
+                ];
+            }
+        }
+
+        $total = 0;
+        $withoutPrediksi = 0;
+
+        foreach ($records as $record) {
+            $rowKey = $this->resolveRiskControlRowKey(
+                $record->deteksi_deviasi !== null ? (string) $record->deteksi_deviasi : null,
+                $record->intervensi_deviasi !== null ? (string) $record->intervensi_deviasi : null,
+            );
+            if (! isset($cells[$rowKey])) {
+                $rowKey = 'menahan_mengurangi';
+            }
+
+            $prediksi = $record->prediksi_penurunan_tangga_risiko;
+            $isDerived = false;
+
+            if ($prediksi === null || ! isset($columnLabels[$prediksi])) {
+                $derived = $this->defaultPrediksiForRiskRow($rowKey);
+                if ($derived === null) {
+                    $withoutPrediksi++;
+                    continue;
+                }
+                $prediksi = $derived;
+                $isDerived = true;
+                $withoutPrediksi++;
+            }
+
+            $item = [
+                'id' => $record->id,
+                'name' => $record->pengendalian_rekayasa,
+                'site' => $record->site,
+                'perusahaan' => $record->perusahaan,
+                'deteksi_deviasi' => $record->deteksi_deviasi !== null && (string) $record->deteksi_deviasi !== ''
+                    ? (string) $record->deteksi_deviasi
+                    : '—',
+                'intervensi_deviasi' => (string) ($record->intervensi_deviasi ?? '-'),
+                'prediksi' => (int) $prediksi,
+                'prediksi_label' => (string) ($columnLabels[$prediksi] ?? 'Turun '.$prediksi.' Tangga'),
+                'is_derived' => $isDerived,
+            ];
+
+            $cells[$rowKey][$prediksi]['count']++;
+            $cells[$rowKey][$prediksi]['items'][] = $item;
+            $total++;
+        }
+
+        $rows = [];
+        foreach ($rowLabels as $rowKey => $rowLabel) {
+            $rowCells = [];
+            foreach (array_keys($columnLabels) as $columnKey) {
+                $rowCells[(int) $columnKey] = $cells[(string) $rowKey][(int) $columnKey]
+                    ?? ['count' => 0, 'items' => []];
+            }
+
+            $rows[] = [
+                'key' => (string) $rowKey,
+                'label' => (string) $rowLabel,
+                'cells' => $rowCells,
+            ];
+        }
+
+        return [
+            'columns' => $columns,
+            'rows' => $rows,
+            'total' => $total,
+            'without_prediksi' => $withoutPrediksi,
+        ];
+    }
+
+    /**
+     * Klasifikasi baris matriks dari DETEKSI + INTERVENSI (kolom terpisah).
+     * Mendukung juga format legacy "Deteksi -> Intervensi" di kolom intervensi saja.
+     */
+    private function resolveRiskControlRowKey(?string $deteksi, ?string $intervensi): string
+    {
+        $deteksiLevel = $this->normalizeRiskControlLevel((string) ($deteksi ?? ''));
+        $intervensiLevel = $this->normalizeRiskControlLevel((string) ($intervensi ?? ''));
+
+        // Legacy: "Alat -> Manusia" tersimpan hanya di intervensi_deviasi
+        if (
+            ($deteksiLevel === '' || $deteksiLevel === '0')
+            && preg_match('/^(.+?)\s*->\s*(.+)$/u', (string) ($intervensi ?? ''), $matches) === 1
+        ) {
+            $deteksiLevel = $this->normalizeRiskControlLevel($matches[1]);
+            $intervensiLevel = $this->normalizeRiskControlLevel($matches[2]);
+        }
+
+        if ($deteksiLevel === 'eliminasi' || $intervensiLevel === 'eliminasi') {
+            return 'eliminasi';
+        }
+
+        if ($deteksiLevel === 'alat' && $intervensiLevel === 'alat') {
+            return 'full_automasi';
+        }
+
+        if (
+            ($deteksiLevel === 'alat' && $intervensiLevel === 'manusia')
+            || ($deteksiLevel === 'manusia' && $intervensiLevel === 'alat')
+        ) {
+            return 'hybrid';
+        }
+
+        if ($deteksiLevel === 'manusia' && $intervensiLevel === 'manusia') {
+            return 'manusia';
+        }
+
+        if (
+            $deteksiLevel === 'tidak_mendeteksi'
+            || $intervensiLevel === 'menahan_mengurangi'
+            || $intervensiLevel === 'menahan'
+        ) {
+            return 'menahan_mengurangi';
+        }
+
+        if ($deteksiLevel === '' && $intervensiLevel === '') {
+            return 'menahan_mengurangi';
+        }
+
+        return match ($intervensiLevel !== '' ? $intervensiLevel : $deteksiLevel) {
+            'alat' => 'full_automasi',
+            'manusia' => 'manusia',
+            default => 'menahan_mengurangi',
+        };
+    }
+
+    private function normalizeRiskControlLevel(string $value): string
+    {
+        $normalized = strtolower(trim($value));
+        $normalized = str_replace(['–', '—', '→', '⇒'], '->', $normalized);
+        $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+        $normalized = str_replace([' ', '-', '/'], '_', $normalized);
+
+        return match ($normalized) {
+            'eliminasi', 'eliminate', 'elimination' => 'eliminasi',
+            'alat', 'machine', 'equipment', 'tool' => 'alat',
+            'manusia', 'human', 'people' => 'manusia',
+            'tidak_mendeteksi', 'tidak_ada_deteksi', 'tidakmendeteksi' => 'tidak_mendeteksi',
+            'menahan_mengurangi', 'menahan_mengurangi_dampak', 'menahan_mengurangi_dampak_' => 'menahan_mengurangi',
+            'menahan', 'mengurangi' => 'menahan_mengurangi',
+            default => $normalized,
+        };
+    }
+
+    /**
+     * Fallback prediksi tangga bila kolom prediksi belum diisi,
+     * berdasarkan hierarki Deteksi/Intervensi.
+     */
+    private function defaultPrediksiForRiskRow(string $rowKey): ?int
+    {
+        return match ($rowKey) {
+            'eliminasi', 'full_automasi' => 3,
+            'hybrid' => 2,
+            'manusia', 'menahan_mengurangi' => 1,
+            default => null,
+        };
     }
 }

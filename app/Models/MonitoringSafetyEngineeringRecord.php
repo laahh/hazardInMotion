@@ -95,7 +95,6 @@ class MonitoringSafetyEngineeringRecord extends Model
             'replikasi_total_populasi' => 'integer',
             'replikasi_target_komitmen' => 'integer',
             'replikasi_aktual' => 'integer',
-            'deteksi_deviasi' => 'integer',
             'prediksi_penurunan_tangga_risiko' => 'integer',
             'terkait_hazard' => 'boolean',
             'terkait_insiden' => 'boolean',

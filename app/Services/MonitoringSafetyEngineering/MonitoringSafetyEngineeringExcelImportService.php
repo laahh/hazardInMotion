@@ -151,7 +151,7 @@ final class MonitoringSafetyEngineeringExcelImportService
             'replikasi_ditinjau' => $this->nullableString($row[Excel::COL_REP_DITINJAU] ?? null),
             'replikasi_disetujui' => $this->nullableString($row[Excel::COL_REP_DISETUJUI] ?? null),
             'replikasi_aktual' => $this->parseInteger($row[Excel::COL_REP_AKTUAL] ?? 0, 0),
-            'deteksi_deviasi' => $this->parseNullableInteger($row[Excel::COL_DETEKSI_DEVIASI] ?? null),
+            'deteksi_deviasi' => Mapper::resolveDeteksi(isset($row[Excel::COL_DETEKSI_DEVIASI]) ? (string) $row[Excel::COL_DETEKSI_DEVIASI] : null),
             'intervensi_deviasi' => Mapper::resolveIntervensi(isset($row[Excel::COL_INTERVENSI_DEVIASI]) ? (string) $row[Excel::COL_INTERVENSI_DEVIASI] : null),
             'prediksi_penurunan_tangga_risiko' => $this->parseNullableInteger($row[Excel::COL_PREDIKSI_RISIKO] ?? null),
             'terkait_hazard' => Mapper::resolveBoolean(isset($row[Excel::COL_TERKAIT_HAZARD]) ? (string) $row[Excel::COL_TERKAIT_HAZARD] : null, 'TERKAIT HAZARD'),

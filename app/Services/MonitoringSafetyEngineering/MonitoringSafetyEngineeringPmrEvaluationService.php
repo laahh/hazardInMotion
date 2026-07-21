@@ -162,10 +162,11 @@ class MonitoringSafetyEngineeringPmrEvaluationService
             'pmr' => $this->resolvePmrGroup($record),
             'level' => $prediksi ?? 0,
             'level_label' => $this->levelLabel($prediksi),
-            'hazard' => (int) ($record->deteksi_deviasi ?? ($record->terkait_hazard ? 1 : 0)),
+            'hazard' => $record->terkait_hazard ? 1 : 0,
             'insiden' => $record->terkait_insiden ? 1 : 0,
             'site' => $record->site,
             'perusahaan' => $record->perusahaan,
+            'deteksi_deviasi' => $record->deteksi_deviasi,
             'intervensi_deviasi' => $record->intervensi_deviasi,
             'sumber_rekayasa' => $this->normalizeEnumValue($record->sumber_rekayasa),
         ];

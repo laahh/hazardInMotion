@@ -89,7 +89,59 @@ final class MonitoringSafetyEngineeringExcelValueMapper
     }
 
     /**
+     * @return array<string, string>
+     */
+    public static function deteksiLabelToValue(): array
+    {
+        $map = [];
+        foreach (config('monitoring_safety_engineering.deteksi_deviasi', []) as $value => $label) {
+            $map[self::normalizeKey((string) $label)] = (string) $value;
+            $map[self::normalizeKey((string) $value)] = (string) $value;
+        }
+
+        // Alias umum dari spreadsheet
+        $map[self::normalizeKey('tidak mendeteksi')] = 'tidak_mendeteksi';
+        $map[self::normalizeKey('tidak ada deteksi')] = 'tidak_mendeteksi';
+
+        return $map;
+    }
+
+    /**
+     * Normalisasi nilai deteksi deviasi ke label kanonik (kolom terpisah dari intervensi).
+     */
+    public static function resolveDeteksi(?string $input): ?string
+    {
+        if ($input === null || trim($input) === '') {
+            return null;
+        }
+
+        $trimmed = trim($input);
+
+        // Legacy: kolom pernah bertipe integer (jumlah hazard)
+        if (is_numeric($trimmed)) {
+            return null;
+        }
+
+        $config = config('monitoring_safety_engineering.deteksi_deviasi', []);
+        $key = self::normalizeKey($trimmed);
+
+        foreach ($config as $configKey => $label) {
+            if (self::normalizeKey((string) $label) === $key || self::normalizeKey((string) $configKey) === $key) {
+                return (string) $label;
+            }
+        }
+
+        $map = self::deteksiLabelToValue();
+        if (isset($map[$key], $config[$map[$key]])) {
+            return (string) $config[$map[$key]];
+        }
+
+        throw new \InvalidArgumentException('DETEKSI DEVIASI tidak valid: "' . $input . '".');
+    }
+
+    /**
      * Normalisasi nilai intervensi deviasi ke label kanonik untuk disimpan/ditampilkan.
+     * Tidak menggabungkan dengan deteksi — kolom tetap terpisah.
      */
     public static function resolveIntervensi(?string $input): ?string
     {
@@ -105,6 +157,17 @@ final class MonitoringSafetyEngineeringExcelValueMapper
             if (self::normalizeKey((string) $label) === $key || self::normalizeKey((string) $configKey) === $key) {
                 return (string) $label;
             }
+        }
+
+        // Alias spreadsheet
+        $aliases = [
+            'menahan/mengurangi dampak' => 'menahan_mengurangi',
+            'menahan mengurangi dampak' => 'menahan_mengurangi',
+            'menahan & mengurangi' => 'menahan_mengurangi',
+            'menahan dan mengurangi' => 'menahan_mengurangi',
+        ];
+        if (isset($aliases[$key], $config[$aliases[$key]])) {
+            return (string) $config[$aliases[$key]];
         }
 
         $transitionKey = self::intervensiTransitionKeyFromLabel($trimmed);
@@ -157,11 +220,15 @@ final class MonitoringSafetyEngineeringExcelValueMapper
     private static function normalizeIntervensiLevel(string $level): ?string
     {
         $key = self::normalizeKey($level);
+        $key = str_replace(['/', '-'], ' ', $key);
+        $key = preg_replace('/\s+/', ' ', $key) ?? $key;
 
         return match ($key) {
             'eliminasi' => 'eliminasi',
             'alat' => 'alat',
             'manusia' => 'manusia',
+            'menahan mengurangi dampak', 'menahan mengurangi', 'menahan' => 'menahan_mengurangi',
+            'tidak mendeteksi' => 'tidak_mendeteksi',
             default => null,
         };
     }

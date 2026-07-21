@@ -244,7 +244,7 @@ final class MonitoringSafetyEngineeringRecordGridService
             'replikasi_ditinjau' => $this->nullableString($row['replikasi_ditinjau'] ?? null),
             'replikasi_disetujui' => $this->nullableString($row['replikasi_disetujui'] ?? null),
             'replikasi_aktual' => $this->parseInteger($row['replikasi_aktual'] ?? 0, 0),
-            'deteksi_deviasi' => $this->parseNullableInteger($row['deteksi_deviasi'] ?? null),
+            'deteksi_deviasi' => Mapper::resolveDeteksi(isset($row['deteksi_deviasi']) ? (string) $row['deteksi_deviasi'] : null),
             'intervensi_deviasi' => Mapper::resolveIntervensi(isset($row['intervensi_deviasi']) ? (string) $row['intervensi_deviasi'] : null),
             'prediksi_penurunan_tangga_risiko' => $this->parseNullableInteger($row['prediksi_penurunan_tangga_risiko'] ?? null),
             'terkait_hazard' => Mapper::resolveBoolean(isset($row['terkait_hazard']) ? (string) $row['terkait_hazard'] : null, 'Terkait Hazard'),

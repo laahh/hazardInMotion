@@ -360,7 +360,6 @@ class HsecmDashboardService
         });
 
         $avgSap = $this->avgNumeric($sapRows, 'SAP per SID');
-        $avgRfid = $this->avgNumeric($sapRows, 'RFID per SID');
         $avgCoverage = $this->avgNumeric($this->filteredRows('coverage-cctv', $filters), '% Tercover');
         $tbcCount = $this->filteredRows('tbc-blindspot', $filters)->count();
         $overdueCount = $this->filteredRows('task-overdue', $filters)->count();
@@ -383,21 +382,14 @@ class HsecmDashboardService
 
         return [
             [
-                'label' => 'Avg SAP / SID',
+                'label' => 'Layer 1 tanpa SAP',
                 'value' => round($avgSap, 1),
                 'icon' => 'analytics',
                 'hint' => 'L1 tanpa SAP',
                 'tone' => 'primary',
             ],
             [
-                'label' => 'Avg RFID / SID',
-                'value' => round($avgRfid, 1),
-                'icon' => 'contactless',
-                'hint' => 'L1 tanpa SAP',
-                'tone' => 'primary',
-            ],
-            [
-                'label' => 'CCTV Coverage',
+                'label' => 'Coverage Area Kritis',
                 'value' => round($avgCoverage, 1).'%',
                 'icon' => 'videocam',
                 'hint' => 'Area kritis',
@@ -446,7 +438,7 @@ class HsecmDashboardService
                 'tone' => $ftwMerah > 0 ? 'warning' : 'success',
             ],
             [
-                'label' => 'Pekerja Baru',
+                'label' => 'Jumlah pekerja baru',
                 'value' => $sumberCount,
                 'icon' => 'database',
                 'hint' => 'RFID pekerja baru',

@@ -28,7 +28,6 @@
       'orange' => 'Berjalan',
       default => $pct === 0 ? 'Belum Mulai' : 'Kritis',
    };
-   $totalOverdue = collect($overdueSummary)->sum('overdue');
    $totalItems = $summary['total_komitmen'];
    $overallProgress = $totalItems > 0
       ? (int) round(
@@ -38,6 +37,68 @@
          ) / $totalItems
       )
       : 0;
+   $categoryStatCards = [
+      [
+         'key' => 'replikasi',
+         'label' => 'total Replikasi',
+         'title' => 'Replikasi',
+         'stat' => $summary['replikasi'],
+         'items' => $replikasiItems ?? [],
+      ],
+      [
+         'key' => 'safety_engineering',
+         'label' => 'total safety engineering',
+         'title' => 'Safety Engineering',
+         'stat' => $summary['safety_engineering'],
+         'items' => $safetyEngineeringItems ?? [],
+      ],
+      [
+         'key' => 'additional_safety_engineering',
+         'label' => 'total additional safety',
+         'title' => 'Additional Safety',
+         'stat' => $summary['additional_safety_engineering'],
+         'items' => $additionalSafetyItems ?? [],
+      ],
+   ];
+   $categoryModalPayload = collect($categoryStatCards)->mapWithKeys(static function (array $card): array {
+      return [
+         $card['key'] => [
+            'label' => $card['label'],
+            'title' => $card['title'],
+            'stat' => $card['stat'],
+            'items' => collect($card['items'])->map(static function (array $item): array {
+               return [
+                  'id' => $item['id'] ?? null,
+                  'name' => $item['name'] ?? '-',
+                  'unit' => $item['unit'] ?? '-',
+                  'plan' => $item['plan'] ?? 0,
+                  'done' => $item['done'] ?? 0,
+                  'percentage' => $item['percentage'] ?? 0,
+                  'percentage_color' => $item['percentage_color'] ?? 'red',
+                  'due_date_label' => $item['due_date_label'] ?? '-',
+                  'overdue' => $item['overdue'] ?? 0,
+                  'site' => $item['site'] ?? '-',
+                  'perusahaan' => $item['perusahaan'] ?? '-',
+               ];
+            })->values()->all(),
+         ],
+      ];
+   })->all();
+   $recordDetailById = $recordDetailById ?? ($safetyEngineeringDetailById ?? []);
+   $riskReductionMatrix = $riskReductionMatrix ?? ['columns' => [], 'rows' => [], 'total' => 0, 'without_prediksi' => 0];
+   $riskMatrixCellPayload = [];
+   foreach ($riskReductionMatrix['rows'] ?? [] as $row) {
+      foreach ($riskReductionMatrix['columns'] ?? [] as $column) {
+         $cell = $row['cells'][$column['key']] ?? ['count' => 0, 'items' => []];
+         $cellId = $row['key'].'-'.$column['key'];
+         $riskMatrixCellPayload[$cellId] = [
+            'title' => $row['label'],
+            'subtitle' => $column['label'],
+            'count' => (int) ($cell['count'] ?? 0),
+            'items' => $cell['items'] ?? [],
+         ];
+      }
+   }
    $statusCompleted = $charts['status_breakdown']['data'][0] ?? 0;
    $statusOnTrack = $charts['status_breakdown']['data'][1] ?? 0;
    $statusRunning = $charts['status_breakdown']['data'][2] ?? 0;
@@ -54,7 +115,6 @@
       : collect([8, 14, 11, 18, 16, 12, 7]);
    $dateFromDisplay = $filters['date_from'] !== '' ? date('d/m/Y', strtotime($filters['date_from'])) : '';
    $dateToDisplay = $filters['date_to'] !== '' ? date('d/m/Y', strtotime($filters['date_to'])) : '';
-   $isSafetyTable = $activeCategory === 'safety_engineering';
    $safetyEngineeringDetailById = $safetyEngineeringDetailById ?? [];
 @endphp
 
@@ -126,7 +186,7 @@
 </form>
 <p class="text-xs text-crm-muted mb-4 -mt-2">Menampilkan progres YTD tahun {{ $filters['period_year'] }}. Baris dengan highlight = due date di {{ $filters['review_week'] }}.</p>
 
-{{-- Row 1: 4 Stat Cards --}}
+{{-- Row 1: Total + Category Stat Cards --}}
 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
    <div class="crm-card crm-stat-card">
       <p class="crm-stat-label">Total Pengendalian</p>
@@ -136,30 +196,101 @@
          +{{ $overallProgress }}%
       </span>
    </div>
-   <div class="crm-card crm-stat-card">
-      <p class="crm-stat-label">Total Overdue</p>
-      <p class="crm-stat-value">{{ $totalOverdue }}</p>
-      <span class="crm-stat-trend {{ $totalOverdue > 0 ? 'crm-stat-trend--down' : 'crm-stat-trend--up' }}">
-         <span class="material-symbols-outlined text-sm">{{ $totalOverdue > 0 ? 'arrow_downward' : 'arrow_upward' }}</span>
-         {{ $totalOverdue > 0 ? '-' . $totalOverdue : '0' }}%
+   @foreach($categoryStatCards as $categoryCard)
+   @php
+      $stat = $categoryCard['stat'];
+      $progress = (int) ($stat['progress'] ?? 0);
+      $trendUp = $progress >= 50;
+   @endphp
+   <div
+      class="crm-card crm-stat-card crm-stat-card--clickable"
+      role="button"
+      tabindex="0"
+      data-category-key="{{ $categoryCard['key'] }}"
+      aria-label="Lihat detail {{ $categoryCard['title'] }}"
+   >
+      <p class="crm-stat-label">{{ $categoryCard['label'] }}</p>
+      <div class="crm-stat-main">
+         <p class="crm-stat-value">{{ $stat['count'] ?? 0 }}</p>
+         <div class="crm-stat-meta">
+            <span>overdue {{ $stat['overdue'] ?? 0 }}</span>
+            <span>selesai {{ $stat['done'] ?? 0 }}/{{ $stat['plan'] ?? 0 }}</span>
+         </div>
+      </div>
+      <span class="crm-stat-trend {{ $trendUp ? 'crm-stat-trend--up' : 'crm-stat-trend--down' }}">
+         <span class="material-symbols-outlined text-sm">{{ $trendUp ? 'arrow_upward' : 'arrow_downward' }}</span>
+         {{ $trendUp ? '+' : '-' }}{{ $progress }}%
       </span>
    </div>
-   <div class="crm-card crm-stat-card">
-      <p class="crm-stat-label">Item Selesai</p>
-      <p class="crm-stat-value">{{ $statusCompleted }}</p>
-      <span class="crm-stat-trend crm-stat-trend--up">
-         <span class="material-symbols-outlined text-sm">arrow_upward</span>
-         +{{ $totalItems > 0 ? round(($statusCompleted / $totalItems) * 100) : 0 }}%
-      </span>
+   @endforeach
+</div>
+
+{{-- Matriks Penurunan Risiko (Deteksi & Intervensi Deviasi) --}}
+<div class="crm-card mb-4">
+   <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
+      <div>
+         <p class="crm-card-title mb-1">Matriks Penurunan Risiko</p>
+         <p class="text-xs text-crm-muted">
+            Baris diklasifikasi dari Deteksi &amp; Intervensi Deviasi. Kolom dari Prediksi Penurunan Tangga Risiko.
+         </p>
+      </div>
+      <div class="text-xs text-crm-muted whitespace-nowrap">
+         Terpetakan: <strong class="text-crm-ink">{{ $riskReductionMatrix['total'] ?? 0 }}</strong>
+         @if(($riskReductionMatrix['without_prediksi'] ?? 0) > 0)
+         · Estimasi hierarki (belum isi prediksi): <strong class="text-[#FFAA05]">{{ $riskReductionMatrix['without_prediksi'] }}</strong>
+         @endif
+      </div>
    </div>
-   <div class="crm-card crm-stat-card">
-      <p class="crm-stat-label">Overall Progress</p>
-      <p class="crm-stat-value">{{ $overallProgress }}%</p>
-      <span class="crm-stat-trend {{ $overallProgress >= 50 ? 'crm-stat-trend--up' : 'crm-stat-trend--down' }}">
-         <span class="material-symbols-outlined text-sm">{{ $overallProgress >= 50 ? 'arrow_upward' : 'arrow_downward' }}</span>
-         {{ $overallProgress >= 50 ? '+' : '-' }}{{ abs($overallProgress - 50) }}%
-      </span>
+   <div class="overflow-x-auto">
+      <table class="crm-matrix-table crm-risk-matrix-table">
+         <thead>
+            <tr>
+               <th></th>
+               @foreach($riskReductionMatrix['columns'] ?? [] as $column)
+               <th class="text-center">{{ $column['label'] }}</th>
+               @endforeach
+            </tr>
+         </thead>
+         <tbody>
+            @forelse($riskReductionMatrix['rows'] ?? [] as $row)
+            <tr>
+               <th scope="row" class="crm-risk-matrix-row-label">{{ $row['label'] }}</th>
+               @foreach($riskReductionMatrix['columns'] ?? [] as $column)
+               @php
+                  $cell = $row['cells'][$column['key']] ?? ['count' => 0, 'items' => []];
+                  $count = (int) ($cell['count'] ?? 0);
+                  $cellId = $row['key'].'-'.$column['key'];
+               @endphp
+               <td class="text-center {{ $count > 0 ? 'crm-risk-matrix-cell--clickable' : '' }}"
+                  @if($count > 0)
+                  role="button"
+                  tabindex="0"
+                  data-risk-cell="{{ $cellId }}"
+                  aria-label="Lihat {{ $count }} item {{ $row['label'] }} — {{ $column['label'] }}"
+                  @endif
+               >
+                  @if($count > 0)
+                  <span class="crm-risk-matrix-count">{{ $count }}</span>
+                  @else
+                  <span class="text-crm-muted">—</span>
+                  @endif
+               </td>
+               @endforeach
+            </tr>
+            @empty
+            <tr>
+               <td colspan="{{ max(1, count($riskReductionMatrix['columns'] ?? []) + 1) }}" class="text-center py-8 text-crm-muted">
+                  Belum ada data matriks penurunan risiko.
+               </td>
+            </tr>
+            @endforelse
+         </tbody>
+      </table>
    </div>
+   <p class="text-xs text-crm-muted mt-3 flex items-center gap-1">
+      <span class="material-symbols-outlined text-sm">info</span>
+      Jika Prediksi Penurunan Tangga belum diisi, sistem memakai estimasi dari hierarki Deteksi→Intervensi. Klik angka untuk detail.
+   </p>
 </div>
 
 {{-- Row 2: Donut + Bar + Application Progress --}}
@@ -249,7 +380,7 @@
             @forelse($tablePreview as $index => $item)
             @php
                $initials = collect(explode(' ', $item['name']))->map(fn ($w) => mb_substr($w, 0, 1))->take(2)->implode('');
-               $rowClickable = $isSafetyTable && !empty($item['id']) && isset($safetyEngineeringDetailById[$item['id']]);
+               $rowClickable = !empty($item['id']) && isset($recordDetailById[$item['id']]);
                $rowClasses = trim(implode(' ', array_filter([
                   !empty($item['due_in_review_week']) ? 'crm-row--review-week' : '',
                   $rowClickable ? 'crm-row--clickable' : '',
@@ -296,12 +427,10 @@
       </div>
    </div>
 
-   @if($isSafetyTable)
    <p class="text-xs text-crm-muted mb-3 flex items-center gap-1">
       <span class="material-symbols-outlined text-sm">touch_app</span>
-      Klik baris pada tabel untuk melihat detail pengendalian Safety Engineering.
+      Klik card kategori di atas atau baris tabel untuk melihat detail data.
    </p>
-   @endif
 
    <div class="crm-data-table-wrap">
       <table class="crm-data-table">
@@ -320,7 +449,7 @@
          <tbody>
             @forelse($activeItems as $index => $item)
             @php
-               $rowClickable = $isSafetyTable && !empty($item['id']) && isset($safetyEngineeringDetailById[$item['id']]);
+               $rowClickable = !empty($item['id']) && isset($recordDetailById[$item['id']]);
                $rowClasses = trim(implode(' ', array_filter([
                   !empty($item['due_in_review_week']) ? 'crm-row--review-week' : '',
                   $rowClickable ? 'crm-row--clickable' : '',
@@ -356,12 +485,26 @@
    </div>
 </div>
 
-@if($isSafetyTable)
+<div id="mse-category-detail-modal" class="crm-history-modal" role="dialog" aria-modal="true" aria-labelledby="mse-category-detail-title">
+   <div class="crm-history-panel crm-category-panel">
+      <div class="crm-history-header">
+         <div>
+            <p id="mse-category-detail-title" class="crm-history-title">Detail Kategori</p>
+            <p id="mse-category-detail-subtitle" class="crm-history-subtitle">—</p>
+         </div>
+         <button type="button" id="mse-category-detail-close" class="crm-history-close" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="mse-category-detail-body" class="crm-history-body">
+         <p class="crm-history-empty">Memuat detail...</p>
+      </div>
+   </div>
+</div>
+
 <div id="mse-record-detail-modal" class="crm-history-modal" role="dialog" aria-modal="true" aria-labelledby="mse-record-detail-title">
    <div class="crm-history-panel crm-detail-panel">
       <div class="crm-history-header">
          <div>
-            <p id="mse-record-detail-title" class="crm-history-title">Detail Safety Engineering</p>
+            <p id="mse-record-detail-title" class="crm-history-title">Detail Pengendalian</p>
             <p id="mse-record-detail-subtitle" class="crm-history-subtitle">—</p>
          </div>
          <button type="button" id="mse-record-detail-close" class="crm-history-close" aria-label="Tutup">&times;</button>
@@ -371,7 +514,6 @@
       </div>
    </div>
 </div>
-@endif
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
@@ -494,8 +636,14 @@
          });
       }
 
-      @if($isSafetyTable)
-      var safetyDetailById = @json($safetyEngineeringDetailById);
+      var categoryModalData = @json($categoryModalPayload);
+      var riskMatrixCellData = @json($riskMatrixCellPayload);
+      var recordDetailById = @json($recordDetailById);
+      var categoryModal = document.getElementById('mse-category-detail-modal');
+      var categoryBody = document.getElementById('mse-category-detail-body');
+      var categoryTitle = document.getElementById('mse-category-detail-title');
+      var categorySubtitle = document.getElementById('mse-category-detail-subtitle');
+      var categoryClose = document.getElementById('mse-category-detail-close');
       var detailModal = document.getElementById('mse-record-detail-modal');
       var detailBody = document.getElementById('mse-record-detail-body');
       var detailTitle = document.getElementById('mse-record-detail-title');
@@ -508,6 +656,19 @@
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+      }
+
+      function pctClass(color) {
+         if (color === 'green') return 'crm-pct--green';
+         if (color === 'amber') return 'crm-pct--amber';
+         if (color === 'orange') return 'crm-pct--orange';
+         return 'crm-pct--red';
+      }
+
+      function syncBodyScroll() {
+         var anyOpen = categoryModal?.classList.contains('crm-history-modal--open')
+            || detailModal?.classList.contains('crm-history-modal--open');
+         document.body.style.overflow = anyOpen ? 'hidden' : '';
       }
 
       function renderDetail(detail) {
@@ -566,6 +727,8 @@
             + '<div><span class="crm-detail-label">Tanggal Ideation</span><span class="crm-detail-value">' + escapeHtml(detail.tanggal_ideation) + '</span></div>'
             + '<div><span class="crm-detail-label">Tahun Periode</span><span class="crm-detail-value">' + escapeHtml(detail.period_year) + '</span></div>'
             + '<div><span class="crm-detail-label">Intervensi Deviasi</span><span class="crm-detail-value">' + escapeHtml(detail.intervensi_deviasi) + '</span></div>'
+            + '<div><span class="crm-detail-label">Deteksi Deviasi</span><span class="crm-detail-value">' + escapeHtml(detail.deteksi_deviasi ?? '—') + '</span></div>'
+            + '<div><span class="crm-detail-label">Prediksi Turun Tangga</span><span class="crm-detail-value">' + escapeHtml(detail.prediksi_penurunan_tangga_risiko ?? '—') + '</span></div>'
             + '</div></div>'
             + flagsHtml
             + '<div class="crm-detail-section"><p class="crm-detail-section-title">Fase Penyelesaian</p>'
@@ -576,21 +739,193 @@
             + todoHtml;
       }
 
+      function renderCategoryModal(payload) {
+         var stat = payload.stat || {};
+         var items = payload.items || [];
+         var rowsHtml = items.map(function (item, index) {
+            var clickable = item.id != null && (recordDetailById[String(item.id)] || recordDetailById[item.id]);
+            return '<tr class="' + (clickable ? 'crm-row--clickable' : '') + '"'
+               + (clickable ? ' data-record-id="' + escapeHtml(item.id) + '" role="button" tabindex="0"' : '')
+               + '>'
+               + '<td class="crm-modal-col-no">' + (index + 1) + '</td>'
+               + '<td>'
+               + '<div class="crm-modal-name"><div class="crm-modal-name-top"><span class="crm-modal-name-title">' + escapeHtml(item.name) + '</span></div></div>'
+               + '<div class="crm-modal-meta">' + escapeHtml(item.site) + ' · ' + escapeHtml(item.perusahaan) + '</div>'
+               + '</td>'
+               + '<td><span class="crm-modal-chip crm-modal-chip--muted">' + escapeHtml(item.unit) + '</span></td>'
+               + '<td class="text-center font-semibold">' + escapeHtml(item.plan) + '</td>'
+               + '<td class="text-center font-semibold">' + escapeHtml(item.done) + '</td>'
+               + '<td class="text-center"><span class="crm-pct ' + pctClass(item.percentage_color) + '">' + escapeHtml(item.percentage) + '%</span></td>'
+               + '<td class="text-crm-muted whitespace-nowrap">' + escapeHtml(item.due_date_label) + '</td>'
+               + '<td class="text-center font-bold ' + (Number(item.overdue) > 0 ? 'text-[#FF5B5B]' : 'text-crm-muted') + '">' + escapeHtml(item.overdue) + '</td>'
+               + '</tr>';
+         }).join('');
+
+         return '<div class="crm-category-summary">'
+            + '<div class="crm-category-summary-item crm-category-summary-item--accent">'
+            + '<span class="crm-category-summary-label">Total</span>'
+            + '<span class="crm-category-summary-value crm-category-summary-value--lg">' + escapeHtml(stat.count || 0) + '</span>'
+            + '</div>'
+            + '<div class="crm-category-summary-item">'
+            + '<span class="crm-category-summary-label">Overdue</span>'
+            + '<span class="crm-category-summary-value">' + escapeHtml(stat.overdue || 0) + '</span>'
+            + '</div>'
+            + '<div class="crm-category-summary-item">'
+            + '<span class="crm-category-summary-label">Selesai</span>'
+            + '<span class="crm-category-summary-value">' + escapeHtml(stat.done || 0) + '/' + escapeHtml(stat.plan || 0) + '</span>'
+            + '</div>'
+            + '<div class="crm-category-summary-item">'
+            + '<span class="crm-category-summary-label">Progress</span>'
+            + '<span class="crm-category-summary-value">' + escapeHtml(stat.progress || 0) + '%</span>'
+            + '</div>'
+            + '</div>'
+            + '<div class="crm-data-table-wrap crm-modal-table-wrap">'
+            + '<table class="crm-data-table"><thead><tr>'
+            + '<th class="crm-modal-col-no">No</th><th>Pengendalian</th><th>Satuan</th>'
+            + '<th class="text-center">Plan</th><th class="text-center">Done</th>'
+            + '<th class="text-center">%</th><th>Due Date</th>'
+            + '<th class="text-center">Overdue</th>'
+            + '</tr></thead><tbody>'
+            + (rowsHtml || '<tr><td colspan="8" class="crm-modal-empty">Tidak ada data untuk kategori ini.</td></tr>')
+            + '</tbody></table></div>';
+      }
+
+      function shortRiskTitle(title) {
+         var map = {
+            'Full Automasi (Deteksi & Intervensi Alat)': 'Full Automasi',
+            'Deteksi & Intervensi Manusia': 'Intervensi Manusia',
+            'Menahan & Mengurangi': 'Menahan & Mengurangi',
+            'Hybrid (Alat & Manusia)': 'Hybrid',
+            'Eliminasi': 'Eliminasi'
+         };
+         return map[title] || title;
+      }
+
+      function renderRiskMatrixModal(payload) {
+         var items = payload.items || [];
+         var derivedCount = items.filter(function (item) { return !!item.is_derived; }).length;
+
+         var rowsHtml = items.map(function (item, index) {
+            var clickable = item.id != null && (recordDetailById[String(item.id)] || recordDetailById[item.id]);
+            var derivedBadge = item.is_derived
+               ? '<span class="crm-modal-badge crm-modal-badge--warn">estimasi</span>'
+               : '';
+
+            return '<tr class="' + (clickable ? 'crm-row--clickable' : '') + '"'
+               + (clickable ? ' data-record-id="' + escapeHtml(item.id) + '" role="button" tabindex="0"' : '')
+               + '>'
+               + '<td class="crm-modal-col-no">' + (index + 1) + '</td>'
+               + '<td>'
+               + '<div class="crm-modal-name">'
+               + '<div class="crm-modal-name-top"><span class="crm-modal-name-title">' + escapeHtml(item.name) + '</span>' + derivedBadge + '</div>'
+               + '</div>'
+               + '<div class="crm-modal-meta">' + escapeHtml(item.site) + ' · ' + escapeHtml(item.perusahaan) + '</div>'
+               + '</td>'
+               + '<td class="crm-modal-col-side"><span class="crm-modal-chip crm-modal-chip--muted">' + escapeHtml(item.intervensi_deviasi) + '</span></td>'
+               + '</tr>';
+         }).join('');
+
+         return '<div class="crm-modal-toolbar">'
+            + '<span class="crm-modal-stat-pill"><strong>' + escapeHtml(payload.count || items.length) + '</strong> item</span>'
+            + '<span class="crm-modal-stat-pill">' + escapeHtml(payload.subtitle || '') + '</span>'
+            + (derivedCount > 0
+               ? '<span class="crm-modal-stat-pill crm-modal-stat-pill--soft">' + derivedCount + ' estimasi hierarki</span>'
+               : '')
+            + '</div>'
+            + '<div class="crm-data-table-wrap crm-modal-table-wrap">'
+            + '<table class="crm-data-table"><thead><tr>'
+            + '<th class="crm-modal-col-no">No</th>'
+            + '<th>Pengendalian Rekayasa</th>'
+            + '<th class="crm-modal-col-side">Intervensi</th>'
+            + '</tr></thead><tbody>'
+            + (rowsHtml || '<tr><td colspan="3" class="crm-modal-empty">Tidak ada data pada sel ini.</td></tr>')
+            + '</tbody></table></div>';
+      }
+
+      function bindModalRowClicks(container) {
+         container.querySelectorAll('tr.crm-row--clickable[data-record-id]').forEach(function (row) {
+            row.addEventListener('click', function () {
+               openDetailModal(this.getAttribute('data-record-id'));
+            });
+            row.addEventListener('keydown', function (event) {
+               if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  openDetailModal(this.getAttribute('data-record-id'));
+               }
+            });
+         });
+      }
+
+      function openRiskMatrixModal(cellId) {
+         var payload = riskMatrixCellData[cellId];
+         if (!payload || !categoryModal) return;
+
+         var shortTitle = shortRiskTitle(payload.title || 'Matriks Penurunan Risiko');
+         categoryTitle.textContent = shortTitle;
+         categoryTitle.setAttribute('title', payload.title || shortTitle);
+         categorySubtitle.textContent = (payload.subtitle || '') + ' · ' + (payload.count || 0) + ' pengendalian';
+         categoryBody.innerHTML = renderRiskMatrixModal(payload);
+         categoryModal.classList.add('crm-history-modal--open');
+         syncBodyScroll();
+         bindModalRowClicks(categoryBody);
+      }
+
+      function openCategoryModal(categoryKey) {
+         var payload = categoryModalData[categoryKey];
+         if (!payload || !categoryModal) return;
+
+         categoryTitle.textContent = payload.title || 'Detail Kategori';
+         categorySubtitle.textContent = (payload.stat?.count || 0) + ' pengendalian · progress ' + (payload.stat?.progress || 0) + '%';
+         categoryBody.innerHTML = renderCategoryModal(payload);
+         categoryModal.classList.add('crm-history-modal--open');
+         syncBodyScroll();
+         bindModalRowClicks(categoryBody);
+      }
+
+      function closeCategoryModal() {
+         categoryModal?.classList.remove('crm-history-modal--open');
+         syncBodyScroll();
+      }
+
       function openDetailModal(recordId) {
-         var detail = safetyDetailById[String(recordId)] || safetyDetailById[recordId];
+         var detail = recordDetailById[String(recordId)] || recordDetailById[recordId];
          if (!detail || !detailModal) return;
 
-         detailTitle.textContent = detail.pengendalian_rekayasa || 'Detail Safety Engineering';
+         detailTitle.textContent = detail.pengendalian_rekayasa || 'Detail Pengendalian';
          detailSubtitle.textContent = [detail.site, detail.perusahaan, detail.sumber_rekayasa].filter(Boolean).join(' · ');
          detailBody.innerHTML = renderDetail(detail);
          detailModal.classList.add('crm-history-modal--open');
-         document.body.style.overflow = 'hidden';
+         syncBodyScroll();
       }
 
       function closeDetailModal() {
          detailModal?.classList.remove('crm-history-modal--open');
-         document.body.style.overflow = '';
+         syncBodyScroll();
       }
+
+      document.querySelectorAll('.crm-stat-card--clickable[data-category-key]').forEach(function (card) {
+         card.addEventListener('click', function () {
+            openCategoryModal(this.getAttribute('data-category-key'));
+         });
+         card.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+               event.preventDefault();
+               openCategoryModal(this.getAttribute('data-category-key'));
+            }
+         });
+      });
+
+      document.querySelectorAll('[data-risk-cell]').forEach(function (cell) {
+         cell.addEventListener('click', function () {
+            openRiskMatrixModal(this.getAttribute('data-risk-cell'));
+         });
+         cell.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+               event.preventDefault();
+               openRiskMatrixModal(this.getAttribute('data-risk-cell'));
+            }
+         });
+      });
 
       document.querySelectorAll('tr.crm-row--clickable[data-record-id]').forEach(function (row) {
          row.addEventListener('click', function () {
@@ -604,16 +939,24 @@
          });
       });
 
+      categoryClose?.addEventListener('click', closeCategoryModal);
+      categoryModal?.addEventListener('click', function (event) {
+         if (event.target === categoryModal) closeCategoryModal();
+      });
       detailClose?.addEventListener('click', closeDetailModal);
       detailModal?.addEventListener('click', function (event) {
          if (event.target === detailModal) closeDetailModal();
       });
       document.addEventListener('keydown', function (event) {
-         if (event.key === 'Escape' && detailModal?.classList.contains('crm-history-modal--open')) {
+         if (event.key !== 'Escape') return;
+         if (detailModal?.classList.contains('crm-history-modal--open')) {
             closeDetailModal();
+            return;
+         }
+         if (categoryModal?.classList.contains('crm-history-modal--open')) {
+            closeCategoryModal();
          }
       });
-      @endif
    });
 </script>
 @endpush

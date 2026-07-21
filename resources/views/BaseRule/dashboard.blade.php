@@ -83,7 +83,7 @@
                <th class="px-3 py-3 text-right">Aggregator</th>
                <th class="px-3 py-3 text-right">Avg Agg%</th>
                <th class="px-3 py-3 text-right">Fatigue</th>
-               <th class="px-3 py-3 text-right">Sumber RFID</th>
+               <th class="px-3 py-3 text-right">Jumlah pekerja baru</th>
             </tr>
          </thead>
          <tbody>
@@ -140,7 +140,7 @@
                <th class="px-3 py-3 text-right">Aggregator</th>
                <th class="px-3 py-3 text-right">Avg Agg%</th>
                <th class="px-3 py-3 text-right">Fatigue</th>
-               <th class="px-3 py-3 text-right">Sumber RFID</th>
+               <th class="px-3 py-3 text-right">Jumlah pekerja baru</th>
             </tr>
          </thead>
          <tbody>

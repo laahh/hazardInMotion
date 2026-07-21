@@ -326,6 +326,7 @@ final class MonitoringSafetyEngineeringRecordChangeLogService
             'uji_coba_status' => config('monitoring_safety_engineering.phase_status', []),
             'standardisasi_status' => config('monitoring_safety_engineering.phase_status', []),
             'intervensi_deviasi' => config('monitoring_safety_engineering.intervensi_deviasi', []),
+            'deteksi_deviasi' => config('monitoring_safety_engineering.deteksi_deviasi', []),
         ];
 
         if (isset($maps[$field])) {
