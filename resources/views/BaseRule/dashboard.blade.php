@@ -73,8 +73,7 @@
                <th class="px-4 py-3 text-left">Site</th>
                <th class="px-3 py-3 text-right">Total</th>
                <th class="px-3 py-3 text-right">SAP/RFID</th>
-               <th class="px-3 py-3 text-right">CCTV</th>
-               <th class="px-3 py-3 text-right">Avg Cov%</th>
+               <th class="px-3 py-3 text-right">Coverage Kritis</th>
                <th class="px-3 py-3 text-right">TBC</th>
                <th class="px-3 py-3 text-right">Overdue</th>
                <th class="px-3 py-3 text-right">Submitted</th>
@@ -94,8 +93,7 @@
                </td>
                <td class="px-3 py-3 text-right font-bold">{{ number_format($row['total_records']) }}</td>
                <td class="px-3 py-3 text-right">{{ number_format($row['sap_rfid']) }}</td>
-               <td class="px-3 py-3 text-right">{{ number_format($row['coverage_cctv']) }}</td>
-               <td class="px-3 py-3 text-right">{{ $row['avg_coverage'] }}%</td>
+               <td class="px-3 py-3 text-right {{ $row['coverage_cctv'] > 0 ? 'text-red-600 font-semibold' : '' }}">{{ number_format($row['coverage_cctv']) }}</td>
                <td class="px-3 py-3 text-right {{ $row['tbc_blindspot'] > 0 ? 'text-red-600 font-semibold' : '' }}">{{ number_format($row['tbc_blindspot']) }}</td>
                <td class="px-3 py-3 text-right {{ $row['task_overdue'] > 0 ? 'text-red-600 font-semibold' : '' }}">{{ number_format($row['task_overdue']) }}</td>
                <td class="px-3 py-3 text-right">{{ number_format($row['task_submitted']) }}</td>
@@ -108,7 +106,7 @@
             </tr>
             @empty
             <tr>
-               <td colspan="14" class="px-4 py-8 text-center text-on-surface-variant">Tidak ada data untuk filter yang dipilih.</td>
+               <td colspan="13" class="px-4 py-8 text-center text-on-surface-variant">Tidak ada data untuk filter yang dipilih.</td>
             </tr>
             @endforelse
          </tbody>

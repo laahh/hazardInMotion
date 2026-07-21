@@ -383,7 +383,7 @@ class HsecmDashboardService
         });
 
         $avgSap = $this->avgNumeric($sapRows, 'SAP_per_SID');
-        $avgCoverage = $this->avgPercent($this->filteredRows('coverage-cctv', $filters), 'Tercover');
+        $coverageCount = $this->filteredRows('coverage-cctv', $filters)->count();
         $tbcCount = $this->filteredRows('tbc-blindspot', $filters)->count();
         $overdueCount = $this->filteredRows('task-overdue', $filters)->count();
         $submittedRows = $this->filteredRows('task-submitted', $filters);
@@ -409,10 +409,10 @@ class HsecmDashboardService
             ],
             [
                 'label' => 'Coverage Area Kritis',
-                'value' => round($avgCoverage, 1).'%',
+                'value' => $coverageCount,
                 'icon' => 'videocam',
-                'hint' => 'Area kritis',
-                'tone' => $avgCoverage >= 80 ? 'success' : 'warning',
+                'hint' => 'Area kritis belum tercover',
+                'tone' => $coverageCount > 0 ? 'danger' : 'success',
             ],
             [
                 'label' => 'TBC Blindspot',
@@ -515,7 +515,6 @@ class HsecmDashboardService
                     'fatigue' => 0,
                     'sumber_rfid' => 0,
                     'avg_ikk' => 0,
-                    'avg_coverage' => 0,
                     'avg_aggregator' => 0,
                 ]);
 
@@ -523,9 +522,7 @@ class HsecmDashboardService
                 $current[$field] = $count;
                 $current['total_records'] = (int) $current['total_records'] + $count;
 
-                if ($key === 'coverage-cctv') {
-                    $current['avg_coverage'] = round($this->avgPercent($items, 'Tercover'), 1);
-                } elseif ($key === 'ikk-work-permit') {
+                if ($key === 'ikk-work-permit') {
                     $current['avg_ikk'] = round($this->avgPercent($items, 'Compliance_IKK'), 1);
                 } elseif ($key === 'aggregator') {
                     $current['avg_aggregator'] = round($this->avgPercent($items, 'Pengisian_Aggregator'), 1);
@@ -613,9 +610,6 @@ class HsecmDashboardService
             'sap-rfid' => [
                 'avg_sap' => round($this->avgNumeric($rows->filter(fn ($r) => ! $this->isAllToken($r['SAP_per_SID'] ?? null)), 'SAP_per_SID'), 1),
                 'avg_rfid' => round($this->avgNumeric($rows->filter(fn ($r) => ! $this->isAllToken($r['RFID_per_SID'] ?? null)), 'RFID_per_SID'), 1),
-            ],
-            'coverage-cctv' => [
-                'avg_pct' => round($this->avgPercent($rows, 'Tercover'), 1),
             ],
             'task-submitted' => [
                 'avg_hours' => round($this->avgNumeric($rows, 'Selisih_jam_dari_Submit'), 1),
