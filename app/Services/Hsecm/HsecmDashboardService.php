@@ -552,20 +552,8 @@ class HsecmDashboardService
                     action: 'Intervensi karyawan FTW merah; jangan biarkan bekerja tanpa kontrol.',
                     tone: 'danger',
                 ),
-                array_merge($this->makeUnavailableEmailSection(
-                    key: 'related-causal',
-                    title: 'Pengecekan Hazard terkait Related Causal Incident',
-                ), [
-                    'action' => 'Dataset belum tersedia — siapkan pengecekan manual bila ada isu terkait causal incident.',
-                    'tone' => 'muted',
-                ]),
-                array_merge($this->makeUnavailableEmailSection(
-                    key: 'historical-incident',
-                    title: 'Pengecekan Detail Lokasi dengan Historical Incident',
-                ), [
-                    'action' => 'Dataset belum tersedia — cek lokasi kerja terhadap historical incident secara manual bila perlu.',
-                    'tone' => 'muted',
-                ]),
+                // Poin Related Causal / Historical Incident: sengaja tidak ditampilkan
+                // di email selama dataset belum tersedia.
             ],
         ];
     }

@@ -384,23 +384,19 @@ class HsecmShiftEmailDispatchService
                     }
                 }
 
-                $tasklist = $tasklistCache[$cacheKey];
-                if ($tasklist instanceof HsecmTasklist) {
-                    $ctaUrl = $this->tasklistService->publicUrl($tasklist);
-                } else {
-                    $hasGapAction = collect($narrative['gaps'] ?? [])->contains(
-                        fn (array $g): bool => ($g['needs_action'] ?? false) && ((int) ($g['total'] ?? 0)) > 0
-                    );
-                    if (! $hasGapAction) {
-                        $skipped++;
-                        $details[] = [
-                            'nama' => (string) ($recipient['nama'] ?? ''),
-                            'email' => (string) ($recipient['email'] ?? ''),
-                            'success' => true,
-                            'message' => 'Skip: tidak ada gap still-open.',
-                        ];
-                        continue;
-                    }
+                // CTA email pasca-shift = Aksi PJO (daily monitoring), bukan link tasklist.
+                $hasGapAction = collect($narrative['gaps'] ?? [])->contains(
+                    fn (array $g): bool => ($g['needs_action'] ?? false) && ((int) ($g['total'] ?? 0)) > 0
+                );
+                if (! $hasGapAction && ($tasklistCache[$cacheKey] ?? null) === null) {
+                    $skipped++;
+                    $details[] = [
+                        'nama' => (string) ($recipient['nama'] ?? ''),
+                        'email' => (string) ($recipient['email'] ?? ''),
+                        'success' => true,
+                        'message' => 'Skip: tidak ada gap still-open.',
+                    ];
+                    continue;
                 }
             }
 

@@ -6,6 +6,7 @@ namespace App\Mail;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Address;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
@@ -41,7 +42,11 @@ class HsecmSummaryMail extends Mailable
             default => 'Daily Monitoring & Intervensi',
         };
 
+        $fromAddress = (string) config('mail.from.address', 'noreply@beraucoal.co.id');
+        $fromName = (string) config('hsecm.mail_from_name', 'Daily Notification');
+
         return new Envelope(
+            from: new Address($fromAddress, $fromName),
             subject: $prefix.' — '.$site.' · '.$company,
         );
     }

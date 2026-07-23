@@ -22,8 +22,14 @@
   $companyLabel = ($scope['perusahaan'] ?? '') !== '' ? $scope['perusahaan'] : 'Semua Perusahaan';
   $nama = $recipient['nama'] ?? 'Bapak/Ibu';
   $role = trim((string) ($recipient['role'] ?? '')) !== '' ? $recipient['role'] : 'PENANGGUNG JAWAB OPERASIONAL';
-  $exposure = $emailNarrative['exposure'] ?? [];
-  $gaps = $emailNarrative['gaps'] ?? [];
+  $exposure = collect($emailNarrative['exposure'] ?? [])
+      ->filter(static fn (array $s): bool => (bool) ($s['available'] ?? true))
+      ->values()
+      ->all();
+  $gaps = collect($emailNarrative['gaps'] ?? [])
+      ->filter(static fn (array $s): bool => (bool) ($s['available'] ?? true))
+      ->values()
+      ->all();
   $slotLabel = $batchSlotLabel !== '' ? $batchSlotLabel : 'slot akhir shift';
 @endphp
 
@@ -41,26 +47,28 @@
           <td style="padding:28px;">
             <p style="margin:0 0 10px;font-size:15px;color:#0f172a;">Yth. <strong>{{ $nama }}</strong></p>
             <p style="margin:0 0 18px;font-size:13px;line-height:1.65;color:#475569;">
-              {{ $role }} · Shift telah berakhir. Berikut item yang <strong>masih open</strong> dibanding tengah shift
-              dan wajib ditindaklanjuti melalui tasklist bersama evidence.
+              {{ $role }} · Shift telah berakhir. Berikut ringkasan item yang <strong>masih open</strong>
+              dibanding tengah shift sebagai <strong>Monitoring &amp; Intervensi</strong> untuk scope site &amp; perusahaan Anda.
             </p>
 
             @if(count($exposure) > 0)
-              <p style="margin:0 0 12px;font-size:13px;line-height:1.6;color:#334155;">Exposure shift (informasi):</p>
+              <p style="margin:0 0 12px;font-size:13px;line-height:1.6;color:#334155;">
+                Berikut kami sampaikan exposure dan hal yang perlu menjadi perhatian:
+              </p>
               @foreach($exposure as $i => $section)
                 @include('emails.partials.hsecm-section-detail', ['number' => $i + 1, 'section' => $section])
               @endforeach
             @endif
 
             <p style="margin:22px 0 12px;font-size:13px;line-height:1.6;color:#334155;">
-              Gap yang masih open — lakukan aksi per item di tasklist:
+              Berikut gap yang masih open agar segera ditindaklanjuti:
             </p>
             @foreach($gaps as $i => $section)
               @include('emails.partials.hsecm-section-detail', ['number' => $i + 1, 'section' => $section])
             @endforeach
 
             <p style="margin:22px 0 10px;font-size:13px;line-height:1.65;color:#334155;">
-              Buka tasklist (shared link untuk scope site &amp; perusahaan Anda), pilih item, isi catatan perbaikan, dan upload evidence:
+              Detail data secara overall dapat diakses pada Website berikut:
             </p>
             <p style="margin:0 0 18px;">
               <a href="{{ $dashboardUrl }}" target="_blank" rel="noopener" style="color:#b45309;font-weight:700;word-break:break-all;">{{ $dashboardUrl }}</a>
@@ -68,13 +76,13 @@
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:18px;">
               <tr>
                 <td align="center">
-                  <a href="{{ $dashboardUrl }}" class="btn" target="_blank" rel="noopener">Buka Tasklist &amp; Submit Evidence</a>
+                  <a href="{{ $dashboardUrl }}" class="btn" target="_blank" rel="noopener">Buka Aksi PJO</a>
                 </td>
               </tr>
             </table>
             <p style="margin:0;font-size:13px;line-height:1.65;color:#334155;">
-              Setelah submit, status item menjadi <strong>submitted</strong> dan menunggu ACC HSE.
-              Reminder otomatis akan dikirim jika tasklist belum closed.
+              Mohon setiap point dari gap yang muncul di atas dapat dikontrol dan ditindaklanjuti
+              dari masing-masing point di atas.
             </p>
             <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;text-align:center;">Email digenerate otomatis pada {{ $generatedAt }}.</p>
           </td>

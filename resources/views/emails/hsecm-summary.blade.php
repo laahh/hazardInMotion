@@ -29,6 +29,8 @@
   $role = trim((string) ($recipient['role'] ?? '')) !== '' ? $recipient['role'] : 'PENANGGUNG JAWAB OPERASIONAL';
   $exposure = $emailNarrative['exposure'] ?? [];
   $gaps = $emailNarrative['gaps'] ?? [];
+  $exposure = collect($exposure)->filter(static fn (array $s): bool => (bool) ($s['available'] ?? true))->values()->all();
+  $gaps = collect($gaps)->filter(static fn (array $s): bool => (bool) ($s['available'] ?? true))->values()->all();
 @endphp
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f4;">

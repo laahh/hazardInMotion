@@ -12,6 +12,14 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Nama pengirim email HSECM (From Name)
+    |--------------------------------------------------------------------------
+    | Terpisah dari MAIL_FROM_NAME global (mis. Auto Banned).
+    */
+    'mail_from_name' => env('HSECM_MAIL_FROM_NAME', 'Daily Notification'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Scheduler (Asia/Makassar) — lihat app/Console/Kernel.php
     |--------------------------------------------------------------------------
     | Midshift 01:00 → batch_slot 00:00 (night)
