@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Hsecm\HsecmDashboardController;
 use App\Http\Controllers\Hsecm\HsecmDatasetController;
+use App\Http\Controllers\Hsecm\HsecmPjoActionController;
 use App\Http\Controllers\Hsecm\HsecmWaNotifyController;
 use Illuminate\Support\Facades\Route;
 
@@ -13,7 +14,12 @@ Route::middleware(['auth'])
     ->group(function (): void {
         Route::redirect('/', '/hsecm/dashboard')->name('home');
         Route::get('/dashboard', [HsecmDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/pjo-action', [HsecmPjoActionController::class, 'index'])->name('pjo-action');
         Route::get('/wa-notify', [HsecmWaNotifyController::class, 'index'])->name('wa-notify.index');
+        Route::post('/wa-notify/recipients', [HsecmWaNotifyController::class, 'storeRecipient'])
+            ->name('wa-notify.recipients.store');
+        Route::delete('/wa-notify/recipients/{id}', [HsecmWaNotifyController::class, 'destroyRecipient'])
+            ->name('wa-notify.recipients.destroy');
         Route::post('/wa-notify/{index}/send', [HsecmWaNotifyController::class, 'send'])
             ->whereNumber('index')
             ->name('wa-notify.send');

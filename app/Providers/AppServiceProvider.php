@@ -24,6 +24,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->ensureOpenSslCaBundle();
+
         // 🔑 Force HTTPS for asset URLs in production
         if ($this->app->environment('production')) {
             URL::forceScheme('https');
@@ -64,5 +66,28 @@ class AppServiceProvider extends ServiceProvider
             
             $view->with('controlRooms', $controlRooms);
         });
+    }
+
+    /**
+     * Pastikan OpenSSL punya CA bundle (sering kosong di Laragon Windows),
+     * supaya STARTTLS SMTP tidak gagal "certificate verify failed".
+     */
+    private function ensureOpenSslCaBundle(): void
+    {
+        if (ini_get('openssl.cafile')) {
+            return;
+        }
+
+        $candidates = [
+            'C:\\laragon\\etc\\ssl\\cacert.pem',
+            dirname(PHP_BINARY).DIRECTORY_SEPARATOR.'extras'.DIRECTORY_SEPARATOR.'ssl'.DIRECTORY_SEPARATOR.'cacert.pem',
+        ];
+
+        foreach ($candidates as $caFile) {
+            if (is_file($caFile)) {
+                ini_set('openssl.cafile', $caFile);
+                break;
+            }
+        }
     }
 }

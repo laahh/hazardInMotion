@@ -17,26 +17,23 @@ class HsecmSummaryMail extends Mailable
     /**
      * @param  array<string, mixed>  $recipient
      * @param  array{site: string, perusahaan: string, week: string, year: string}  $scope
-     * @param  list<array{label: string, value: string|int|float, icon: string, hint: string, tone: string}>  $kpis
-     * @param  list<array{key: string, label: string, count: int}>  $datasets
+     * @param  array{exposure: list<array<string, mixed>>, gaps: list<array<string, mixed>>}  $emailNarrative
      */
     public function __construct(
         public array $recipient,
         public array $scope,
-        public array $kpis,
-        public array $datasets,
-        public int $totalRecords,
+        public array $emailNarrative,
         public string $dashboardUrl,
         public string $generatedAt,
     ) {}
 
     public function envelope(): Envelope
     {
-        $site = $this->scope['site'] !== '' ? $this->scope['site'] : 'Semua Site';
-        $company = $this->scope['perusahaan'] !== '' ? $this->scope['perusahaan'] : 'Semua Perusahaan';
+        $site = ($this->scope['site'] ?? '') !== '' ? $this->scope['site'] : 'Semua Site';
+        $company = ($this->scope['perusahaan'] ?? '') !== '' ? $this->scope['perusahaan'] : 'Semua Perusahaan';
 
         return new Envelope(
-            subject: 'HSECM Monitoring Summary — '.$site.' · '.$company,
+            subject: 'HSECM Monitoring & Intervensi — '.$site.' · '.$company,
         );
     }
 

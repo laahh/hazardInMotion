@@ -78,6 +78,85 @@
    </div>
 </form>
 
+<form method="POST" action="{{ route('hsecm.wa-notify.recipients.store') }}" class="hsecm-card rounded-2xl p-5 mb-6 border border-teal-100">
+   @csrf
+   <input type="hidden" name="week" value="{{ $filters['week'] ?? '' }}">
+   <input type="hidden" name="year" value="{{ $filters['year'] ?? '' }}">
+
+   <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+      <div>
+         <h2 class="font-headline font-bold text-lg text-on-background">Tambah Penerima Email</h2>
+         <p class="text-xs text-on-surface-variant mt-0.5">
+            Kontak baru disimpan terpisah dari daftar bawaan. Kosongkan site/perusahaan untuk scope agregat semua data.
+         </p>
+      </div>
+      <span class="hsecm-badge">Custom storage</span>
+   </div>
+
+   @if($errors->any())
+   <div class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+      <ul class="list-disc pl-4 space-y-0.5">
+         @foreach($errors->all() as $error)
+         <li>{{ $error }}</li>
+         @endforeach
+      </ul>
+   </div>
+   @endif
+
+   <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+      <div>
+         <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Nama <span class="text-red-500">*</span></label>
+         <input type="text" name="nama" value="{{ old('nama') }}" required maxlength="150"
+            class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white"
+            placeholder="Nama penerima">
+      </div>
+      <div>
+         <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Email <span class="text-red-500">*</span></label>
+         <input type="email" name="email" value="{{ old('email') }}" required maxlength="190"
+            class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white"
+            placeholder="nama@perusahaan.com">
+      </div>
+      <div>
+         <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">No. WA</label>
+         <input type="text" name="no" value="{{ old('no') }}" maxlength="30"
+            class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white"
+            placeholder="08xxxxxxxxxx">
+      </div>
+      <div>
+         <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Role</label>
+         <input type="text" name="role" value="{{ old('role') }}" maxlength="150"
+            class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white"
+            placeholder="PROJECT MANAGER">
+      </div>
+      <div>
+         <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Site</label>
+         <select name="site" class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white">
+            <option value="">Semua Site</option>
+            @foreach($filterOptions['sites'] ?? [] as $site)
+            <option value="{{ $site }}" @selected(old('site') === (string) $site)>{{ $site }}</option>
+            @endforeach
+         </select>
+      </div>
+      <div>
+         <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Perusahaan</label>
+         <select name="perusahaan" class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white">
+            <option value="">Semua Perusahaan</option>
+            @foreach($filterOptions['companies'] ?? [] as $company)
+            <option value="{{ $company }}" @selected(old('perusahaan') === (string) $company)>{{ $company }}</option>
+            @endforeach
+         </select>
+      </div>
+   </div>
+
+   <div class="mt-4 flex flex-wrap items-center gap-2">
+      <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:opacity-95">
+         <span class="material-symbols-outlined text-sm">person_add</span>
+         Tambah Penerima
+      </button>
+      <p class="text-[11px] text-on-surface-variant">Wajib: nama &amp; email. Site/perusahaan mengatur scope isi email.</p>
+   </div>
+</form>
+
 <form id="hsecm-email-bulk-form" method="POST" action="{{ route('hsecm.wa-notify.send-email-bulk') }}">
    @csrf
    <input type="hidden" name="week" value="{{ $filters['week'] ?? '' }}">
@@ -126,7 +205,12 @@
                      >
                   </td>
                   <td class="px-4 py-3">
-                     <p class="font-bold text-on-background">{{ $row['nama'] }}</p>
+                     <div class="flex flex-wrap items-center gap-1.5">
+                        <p class="font-bold text-on-background">{{ $row['nama'] }}</p>
+                        @if(($row['source'] ?? '') === 'custom')
+                        <span class="hsecm-badge hsecm-badge--success">Custom</span>
+                        @endif
+                     </div>
                      <p class="text-[11px] text-on-surface-variant">{{ $row['role'] }}</p>
                   </td>
                   <td class="px-3 py-3 whitespace-nowrap">
@@ -135,9 +219,9 @@
                      <div class="text-[10px] text-amber-700">→ {{ $row['resolved_site'] }}</div>
                      @endif
                   </td>
-                  <td class="px-3 py-3 min-w-[12rem]">{{ $row['perusahaan'] }}</td>
+                  <td class="px-3 py-3 min-w-[12rem]">{{ $row['perusahaan'] !== '' ? $row['perusahaan'] : '—' }}</td>
                   <td class="px-3 py-3 whitespace-nowrap">
-                     <div>{{ $row['no'] }}</div>
+                     <div>{{ $row['no'] !== '' ? $row['no'] : '—' }}</div>
                      <div class="text-[11px] text-on-surface-variant truncate max-w-[14rem]">{{ $row['email'] }}</div>
                   </td>
                   <td class="px-3 py-3 text-right font-bold">{{ number_format($row['total_records']) }}</td>
@@ -172,6 +256,17 @@
                         <button type="submit" form="hsecm-fonnte-{{ $row['index'] }}" class="inline-flex items-center gap-1.5 rounded-xl border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-800 hover:bg-teal-50" onclick="return confirm('Kirim pesan via Fonnte ke {{ $row['nama'] }}?')">
                            <span class="material-symbols-outlined text-sm">send</span>
                            Kirim Fonnte
+                        </button>
+                        @endif
+                        @if(!empty($row['editable']))
+                        <button
+                           type="submit"
+                           form="hsecm-delete-{{ $row['index'] }}"
+                           class="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-50"
+                           onclick="return confirm('Hapus penerima custom {{ $row['nama'] }}?')"
+                        >
+                           <span class="material-symbols-outlined text-sm">delete</span>
+                           Hapus
                         </button>
                         @endif
                      </div>
@@ -220,6 +315,14 @@
 <form id="hsecm-fonnte-{{ $row['index'] }}" method="POST" action="{{ route('hsecm.wa-notify.send', $row['index']) }}" class="hidden">
    @csrf
    <input type="hidden" name="channel" value="fonnte">
+   <input type="hidden" name="week" value="{{ $filters['week'] ?? '' }}">
+   <input type="hidden" name="year" value="{{ $filters['year'] ?? '' }}">
+</form>
+@endif
+@if(!empty($row['editable']))
+<form id="hsecm-delete-{{ $row['index'] }}" method="POST" action="{{ route('hsecm.wa-notify.recipients.destroy', $row['id']) }}" class="hidden">
+   @csrf
+   @method('DELETE')
    <input type="hidden" name="week" value="{{ $filters['week'] ?? '' }}">
    <input type="hidden" name="year" value="{{ $filters['year'] ?? '' }}">
 </form>

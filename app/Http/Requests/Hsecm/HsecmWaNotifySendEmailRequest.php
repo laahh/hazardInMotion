@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Hsecm;
 
+use App\Services\Hsecm\HsecmWaRecipientRepository;
 use Illuminate\Foundation\Http\FormRequest;
 
 class HsecmWaNotifySendEmailRequest extends FormRequest
@@ -18,7 +19,7 @@ class HsecmWaNotifySendEmailRequest extends FormRequest
      */
     public function rules(): array
     {
-        $maxIndex = max(count(config('hsecm.wa_recipients', [])) - 1, 0);
+        $maxIndex = max(count(app(HsecmWaRecipientRepository::class)->all()) - 1, 0);
 
         return [
             'indexes' => ['required', 'array', 'min:1'],

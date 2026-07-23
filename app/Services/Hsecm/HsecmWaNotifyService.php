@@ -15,7 +15,30 @@ class HsecmWaNotifyService
     public function __construct(
         private readonly HsecmDashboardService $dashboardService,
         private readonly FonnteService $fonnteService,
+        private readonly HsecmWaRecipientRepository $recipientRepository,
     ) {}
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function recipients(): array
+    {
+        return $this->recipientRepository->all();
+    }
+
+    /**
+     * @param  array{nama: string, email: string, site?: ?string, perusahaan?: string, role?: string, no?: string}  $payload
+     * @return array<string, mixed>
+     */
+    public function addRecipient(array $payload): array
+    {
+        return $this->recipientRepository->add($payload);
+    }
+
+    public function deleteRecipient(string $id): bool
+    {
+        return $this->recipientRepository->delete($id);
+    }
 
     /**
      * @return list<array{
@@ -38,6 +61,8 @@ class HsecmWaNotifyService
         $periodFilters = [
             'week' => trim((string) $request->input('week', $request->query('week', ''))),
             'year' => trim((string) $request->input('year', $request->query('year', ''))),
+            'date_from' => trim((string) $request->input('date_from', $request->query('date_from', ''))),
+            'date_to' => trim((string) $request->input('date_to', $request->query('date_to', ''))),
             'q' => '',
         ];
 
@@ -46,13 +71,15 @@ class HsecmWaNotifyService
             'perusahaan' => '',
             'week' => $periodFilters['week'],
             'year' => $periodFilters['year'],
+            'date_from' => $periodFilters['date_from'],
+            'date_to' => $periodFilters['date_to'],
             'q' => '',
         ])['filter_options'];
 
-        /** @var array<string, array{kpis: list<array<string, mixed>>, datasets: list<array<string, mixed>>}> $summaryCache */
+        /** @var array<string, array{kpis: list<array<string, mixed>>, datasets: list<array<string, mixed>>, by_company: list<array<string, mixed>>}> $summaryCache */
         $summaryCache = [];
 
-        return collect(config('hsecm.wa_recipients', []))
+        return collect($this->recipientRepository->all())
             ->values()
             ->map(function (array $recipient, int $index) use ($periodFilters, $filterOptions, &$summaryCache): array {
                 $site = $this->normalizeNullableString($recipient['site'] ?? null);
@@ -65,10 +92,19 @@ class HsecmWaNotifyService
                     'perusahaan' => $resolvedCompany ?? $perusahaan,
                     'week' => $periodFilters['week'],
                     'year' => $periodFilters['year'],
+                    'date_from' => $periodFilters['date_from'],
+                    'date_to' => $periodFilters['date_to'],
                     'q' => '',
                 ];
 
-                $cacheKey = implode('|', [$filters['site'], $filters['perusahaan'], $filters['week'], $filters['year']]);
+                $cacheKey = implode('|', [
+                    $filters['site'],
+                    $filters['perusahaan'],
+                    $filters['week'],
+                    $filters['year'],
+                    $filters['date_from'],
+                    $filters['date_to'],
+                ]);
                 if (! isset($summaryCache[$cacheKey])) {
                     $summaryCache[$cacheKey] = $this->dashboardService->buildScopeSummary($filters);
                 }
@@ -79,6 +115,9 @@ class HsecmWaNotifyService
 
                 return [
                     'index' => $index,
+                    'id' => (string) ($recipient['id'] ?? ''),
+                    'source' => (string) ($recipient['source'] ?? 'config'),
+                    'editable' => (bool) ($recipient['editable'] ?? false),
                     'site' => $site,
                     'perusahaan' => $perusahaan,
                     'role' => (string) ($recipient['role'] ?? ''),
@@ -94,11 +133,15 @@ class HsecmWaNotifyService
                         : '',
                     'kpis' => $summary['kpis'],
                     'datasets' => $summary['datasets'],
+                    'by_company' => $summary['by_company'] ?? [],
+                    'email_narrative' => $summary['email_narrative'] ?? ['exposure' => [], 'gaps' => []],
                     'scope' => [
                         'site' => $filters['site'],
                         'perusahaan' => $filters['perusahaan'],
                         'week' => $filters['week'],
                         'year' => $filters['year'],
+                        'date_from' => $filters['date_from'],
+                        'date_to' => $filters['date_to'],
                     ],
                     'total_records' => collect($summary['datasets'])->sum('count'),
                 ];
@@ -215,14 +258,14 @@ class HsecmWaNotifyService
                     'email' => $row['email'],
                 ],
                 scope: $row['scope'],
-                kpis: $row['kpis'],
-                datasets: $row['datasets'],
-                totalRecords: (int) $row['total_records'],
+                emailNarrative: $row['email_narrative'] ?? ['exposure' => [], 'gaps' => []],
                 dashboardUrl: route('hsecm.dashboard', array_filter([
                     'site' => $row['scope']['site'] ?? null,
                     'perusahaan' => $row['scope']['perusahaan'] ?? null,
                     'week' => $row['scope']['week'] ?? null,
                     'year' => $row['scope']['year'] ?? null,
+                    'date_from' => $row['scope']['date_from'] ?? null,
+                    'date_to' => $row['scope']['date_to'] ?? null,
                 ])),
                 generatedAt: now()->timezone(config('app.timezone', 'Asia/Makassar'))->format('d/m/Y H:i').' WITA',
             ));
@@ -318,13 +361,29 @@ class HsecmWaNotifyService
             'Perusahaan: '.$companyLabel,
             'Periode: '.$period,
             '',
-            '*Ringkasan KPI*',
+            '*Ringkasan KPI (Agregat)*',
         ];
 
         foreach ($summary['kpis'] as $kpi) {
             $lines[] = '• '.$kpi['label'].': *'.$kpi['value'].'*'.(
                 ! empty($kpi['hint']) ? ' ('.$kpi['hint'].')' : ''
             );
+        }
+
+        $byCompany = $summary['by_company'] ?? [];
+        if ($byCompany !== []) {
+            $lines[] = '';
+            $lines[] = '*Detail per Perusahaan*';
+            foreach ($byCompany as $companyRow) {
+                $lines[] = '';
+                $lines[] = '*'.((string) ($companyRow['perusahaan'] ?? '-')).'*';
+                foreach ($companyRow['metrics'] ?? [] as $metric) {
+                    $value = ($metric['format'] ?? 'number') === 'percent'
+                        ? number_format((float) $metric['value'], 1).'%'
+                        : number_format((int) $metric['value']);
+                    $lines[] = '• '.$metric['label'].': *'.$value.'*';
+                }
+            }
         }
 
         $lines[] = '';

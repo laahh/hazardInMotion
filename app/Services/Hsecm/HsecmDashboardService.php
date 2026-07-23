@@ -307,11 +307,26 @@ class HsecmDashboardService
     }
 
     /**
-     * @param  array{site: string, perusahaan: string, week: string, year: string, q: string}  $filters
-     * @return array{kpis: list<array<string, mixed>>, datasets: list<array<string, mixed>>, filter_options: array<string, mixed>}
+     * @param  array{site: string, perusahaan: string, week: string, year: string, date_from?: string, date_to?: string, q: string}  $filters
+     * @return array{
+     *     kpis: list<array<string, mixed>>,
+     *     datasets: list<array<string, mixed>>,
+     *     by_company: list<array<string, mixed>>,
+     *     filter_options: array<string, mixed>
+     * }
      */
     public function buildScopeSummary(array $filters): array
     {
+        $filters = array_merge([
+            'site' => '',
+            'perusahaan' => '',
+            'week' => '',
+            'year' => '',
+            'date_from' => '',
+            'date_to' => '',
+            'q' => '',
+        ], $filters);
+
         return [
             'kpis' => $this->buildKpis($filters),
             'datasets' => collect(self::DATASETS)->map(fn (array $meta, string $key): array => [
@@ -319,8 +334,430 @@ class HsecmDashboardService
                 'label' => $meta['label'],
                 'count' => $this->filteredRows($key, $filters)->count(),
             ])->values()->all(),
+            'by_company' => $this->buildCompanyDetailForNotify($filters),
+            'email_narrative' => $this->buildEmailNarrative($filters),
             'filter_options' => $this->buildFilterOptions(),
         ];
+    }
+
+    /**
+     * Struktur konten email naratif (exposure + gap) beserta tabel detail.
+     *
+     * @param  array{site: string, perusahaan: string, week: string, year: string, date_from?: string, date_to?: string, q: string}  $filters
+     * @return array{exposure: list<array<string, mixed>>, gaps: list<array<string, mixed>>}
+     */
+    public function buildEmailNarrative(array $filters, int $rowLimit = 40): array
+    {
+        $filters = array_merge([
+            'site' => '',
+            'perusahaan' => '',
+            'week' => '',
+            'year' => '',
+            'date_from' => '',
+            'date_to' => '',
+            'q' => '',
+        ], $filters);
+
+        $ikkRows = $this->filteredRows('ikk-work-permit', $filters);
+        $avgIkk = round($this->avgPercent($ikkRows, 'Compliance_IKK'), 1);
+        $sumberRows = $this->filteredRows('sumber-rfid', $filters);
+        $coverageRows = $this->filteredRows('coverage-cctv', $filters);
+        $tbcRows = $this->filteredRows('tbc-blindspot', $filters);
+        $overdueRows = $this->filteredRows('task-overdue', $filters);
+        $submittedRows = $this->filteredRows('task-submitted', $filters);
+        $aggregatorRows = $this->filteredRows('aggregator', $filters);
+        $fatigueRows = $this->filteredRows('fatigue', $filters);
+
+        $sapRows = $this->filteredRows('sap-rfid', $filters)
+            ->filter(function (array $row): bool {
+                if ($this->isAllToken($row['SAP_per_SID'] ?? null)) {
+                    return false;
+                }
+                $sap = $this->toFloat($row['SAP_per_SID'] ?? null);
+
+                return $sap !== null && abs($sap) < 0.00001;
+            })
+            ->values();
+
+        return [
+            'exposure' => [
+                $this->makeEmailDetailSection(
+                    key: 'ikk-aktif',
+                    title: 'Jumlah IKK Aktif',
+                    value: (string) $ikkRows->count(),
+                    datasetKey: 'ikk-work-permit',
+                    rows: $ikkRows,
+                    columnKeys: ['Start_Date_Convert', 'Code', 'Name_Ikk_Work_Permit', 'Company_Name_Ikk_Work_Permit', 'Ra_Site_Name', 'Compliance_IKK'],
+                    filters: $filters,
+                    percentColumns: ['Compliance_IKK'],
+                    rowLimit: $rowLimit,
+                    action: 'Pantau IKK aktif di area kerja; pastikan PIC & status permit terkendali selama shift.',
+                    tone: 'info',
+                    needsAction: false,
+                ),
+                $this->makeEmailDetailSection(
+                    key: 'pekerja-baru',
+                    title: 'Jumlah Pekerja Baru',
+                    value: (string) $sumberRows->count(),
+                    datasetKey: 'sumber-rfid',
+                    rows: $sumberRows,
+                    columnKeys: ['date', 'sid_pelapor_all_karyawan', 'nama', 'perusahaan_pelapor_all_karyawan', 'site_dedicated', 'sumber_data'],
+                    filters: $filters,
+                    rowLimit: $rowLimit,
+                    action: 'Pastikan pekerja baru mendapat induksi/exposure control sebelum mulai bekerja.',
+                    tone: 'info',
+                    needsAction: false,
+                ),
+            ],
+            'gaps' => [
+                $this->makeEmailDetailSection(
+                    key: 'layer1-tanpa-sap',
+                    title: 'Layer 1 Tanpa SAP',
+                    value: (string) $sapRows->count(),
+                    datasetKey: 'sap-rfid',
+                    rows: $sapRows,
+                    columnKeys: ['date', 'sid_pelapor_all_karyawan', 'pelapor_all_karyawan', 'perusahaan_pelapor_all_karyawan', 'site_dedicated_pelapor_all_karyawan', 'SAP_per_SID'],
+                    filters: $filters,
+                    rowLimit: $rowLimit,
+                    action: 'Minta pelapor Layer 1 segera mengisi SAP sebelum akhir shift.',
+                    tone: 'warning',
+                ),
+                $this->makeEmailDetailSection(
+                    key: 'coverage-area',
+                    title: 'Area Kritis belum tercover SAP',
+                    value: (string) $coverageRows->count(),
+                    datasetKey: 'coverage-cctv',
+                    rows: $coverageRows,
+                    columnKeys: ['Day_of_Date', 'Site', 'Lokasi', 'Detil_Lokasi', 'Status_Coverage_dalam_1_Week', 'Tercover'],
+                    filters: $filters,
+                    rowLimit: $rowLimit,
+                    action: 'Tindaklanjuti area kritis yang belum tercover; assign PIC coverage.',
+                    tone: 'danger',
+                ),
+                $this->makeEmailDetailSection(
+                    key: 'tbc-blindspot',
+                    title: 'TBC Blindspot',
+                    value: (string) $tbcRows->count(),
+                    datasetKey: 'tbc-blindspot',
+                    rows: $tbcRows,
+                    columnKeys: ['Date_for_Join', 'site', 'kategori_TBC', 'blindspot_TBC', 'pelapor_all_karyawan', 'status3'],
+                    filters: $filters,
+                    rowLimit: $rowLimit,
+                    action: 'Validasi blindspot TBC dan pastikan status follow-up bergerak hari ini.',
+                    tone: 'danger',
+                ),
+                $this->makeEmailDetailSection(
+                    key: 'hazard-overdue',
+                    title: 'Hazard Overdue',
+                    value: (string) $overdueRows->count(),
+                    datasetKey: 'task-overdue',
+                    rows: $overdueRows,
+                    columnKeys: ['tanggal_janji', 'Task_Number', 'site', 'deskripsi', 'pic', 'status3'],
+                    filters: $filters,
+                    rowLimit: $rowLimit,
+                    action: 'Escalasi ke PIC terkait; closing hazard overdue sebelum shift berakhir.',
+                    tone: 'danger',
+                ),
+                $this->makeEmailDetailSection(
+                    key: 'hazard-submitted',
+                    title: 'Hazard Submitted > 24 jam',
+                    value: (string) $submittedRows->count(),
+                    datasetKey: 'task-submitted',
+                    rows: $submittedRows,
+                    columnKeys: ['Second_of_date_time', 'Task_Number', 'site', 'Selisih_jam_dari_Submit', 'pic', 'status3'],
+                    filters: $filters,
+                    rowLimit: $rowLimit,
+                    action: 'Percepat closing hazard yang sudah >24 jam dari submit.',
+                    tone: 'warning',
+                ),
+                $this->makeEmailDetailSection(
+                    key: 'ikk-compliance',
+                    title: 'IKK Compliance',
+                    value: $avgIkk.'%',
+                    datasetKey: 'ikk-work-permit',
+                    rows: $ikkRows,
+                    columnKeys: ['Start_Date_Convert', 'Code', 'Name_Ikk_Work_Permit', 'Company_Name_Ikk_Work_Permit', 'Ra_Site_Name', 'Compliance_IKK'],
+                    filters: $filters,
+                    percentColumns: ['Compliance_IKK'],
+                    rowLimit: $rowLimit,
+                    action: 'Perbaiki IKK yang belum compliant (work permit) hingga mencapai target.',
+                    tone: $avgIkk >= 80 ? 'success' : 'warning',
+                    needsAction: $ikkRows->isNotEmpty() && $avgIkk < 100,
+                ),
+                $this->makeEmailDetailSection(
+                    key: 'aggregator-fill',
+                    title: 'Tidak mengisi Aggregator Fit to Work',
+                    value: (string) $aggregatorRows->count(),
+                    datasetKey: 'aggregator',
+                    rows: $aggregatorRows,
+                    columnKeys: ['Day_of_Tanggal_Date', 'Kode_Sid', 'Nama', 'Nama_Perusahaan', 'Site_Dedicated', 'Pengisian_Aggregator'],
+                    filters: $filters,
+                    percentColumns: ['Pengisian_Aggregator'],
+                    rowLimit: $rowLimit,
+                    action: 'Pastikan karyawan terkait mengisi Aggregator FTW hari ini.',
+                    tone: 'warning',
+                ),
+                $this->makeEmailDetailSection(
+                    key: 'ftw-merah',
+                    title: 'Aggregator Fit to Work Merah',
+                    value: (string) $fatigueRows->count(),
+                    datasetKey: 'fatigue',
+                    rows: $fatigueRows,
+                    columnKeys: ['Tanggal_Date', 'Kode_Sid', 'Nama', 'Nama_Perusahaan', 'Site_Dedicated', 'Kondisi_Karyawan'],
+                    filters: $filters,
+                    rowLimit: $rowLimit,
+                    action: 'Intervensi karyawan FTW merah; jangan biarkan bekerja tanpa kontrol.',
+                    tone: 'danger',
+                ),
+                array_merge($this->makeUnavailableEmailSection(
+                    key: 'related-causal',
+                    title: 'Pengecekan Hazard terkait Related Causal Incident',
+                ), [
+                    'action' => 'Dataset belum tersedia — siapkan pengecekan manual bila ada isu terkait causal incident.',
+                    'tone' => 'muted',
+                ]),
+                array_merge($this->makeUnavailableEmailSection(
+                    key: 'historical-incident',
+                    title: 'Pengecekan Detail Lokasi dengan Historical Incident',
+                ), [
+                    'action' => 'Dataset belum tersedia — cek lokasi kerja terhadap historical incident secara manual bila perlu.',
+                    'tone' => 'muted',
+                ]),
+            ],
+        ];
+    }
+
+    /**
+     * Ringkasan dashboard PJO (Monitoring & Intervensi) selaras template email.
+     *
+     * @param  array{site: string, perusahaan: string, week: string, year: string, date_from: string, date_to: string, q: string}  $filters
+     * @return array<string, mixed>
+     */
+    public function buildPjoActionDashboard(array $filters): array
+    {
+        $narrative = $this->buildEmailNarrative($filters, 100);
+        $exposure = $narrative['exposure'];
+        $gaps = $narrative['gaps'];
+
+        $actionGaps = collect($gaps)
+            ->filter(static fn (array $section): bool => (bool) ($section['needs_action'] ?? false))
+            ->values()
+            ->all();
+
+        return [
+            'filters' => $filters,
+            'filter_options' => $this->buildFilterOptions(),
+            'period_label' => $this->buildPeriodLabel($filters),
+            'exposure' => $exposure,
+            'gaps' => $gaps,
+            'action_gaps' => $actionGaps,
+            'summary' => [
+                'exposure_items' => count($exposure),
+                'gap_items' => count($gaps),
+                'open_actions' => count($actionGaps),
+                'total_gap_rows' => collect($actionGaps)->sum(static fn (array $s): int => (int) ($s['total'] ?? 0)),
+            ],
+        ];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @param  list<string>  $columnKeys
+     * @param  array{site: string, perusahaan: string, week: string, year: string, date_from?: string, date_to?: string, q?: string}  $filters
+     * @param  list<string>  $percentColumns
+     * @return array<string, mixed>
+     */
+    private function makeEmailDetailSection(
+        string $key,
+        string $title,
+        string $value,
+        string $datasetKey,
+        Collection $rows,
+        array $columnKeys,
+        array $filters,
+        array $percentColumns = [],
+        int $rowLimit = 40,
+        string $action = '',
+        string $tone = 'warning',
+        ?bool $needsAction = null,
+    ): array {
+        $meta = self::DATASETS[$datasetKey];
+        $allLabels = $meta['columns'];
+        $columns = [];
+        foreach ($columnKeys as $columnKey) {
+            if (! isset($allLabels[$columnKey])) {
+                continue;
+            }
+            $columns[] = [
+                'key' => $columnKey,
+                'label' => $allLabels[$columnKey],
+            ];
+        }
+
+        $total = $rows->count();
+        $limit = max(1, $rowLimit);
+        $previewRows = $rows->take($limit)->map(function (array $row) use ($columnKeys, $percentColumns): array {
+            $cells = [];
+            foreach ($columnKeys as $columnKey) {
+                $raw = $row[$columnKey] ?? '';
+                if (in_array($columnKey, $percentColumns, true)) {
+                    $num = $this->toFloat($raw);
+                    $cells[$columnKey] = $num === null ? '—' : round($num * 100, 1).'%';
+                    continue;
+                }
+
+                $text = is_scalar($raw) || $raw === null ? (string) ($raw ?? '') : '';
+                $text = trim($text);
+                if (mb_strlen($text) > 80) {
+                    $text = mb_substr($text, 0, 77).'...';
+                }
+                $cells[$columnKey] = $text !== '' ? $text : '—';
+            }
+
+            return $cells;
+        })->values()->all();
+
+        $resolvedNeedsAction = $needsAction ?? ($total > 0);
+
+        return [
+            'key' => $key,
+            'title' => $title,
+            'value' => $value,
+            'available' => true,
+            'dataset_key' => $datasetKey,
+            'total' => $total,
+            'truncated' => $total > $limit,
+            'columns' => $columns,
+            'rows' => $previewRows,
+            'action' => $action,
+            'tone' => $tone,
+            'needs_action' => $resolvedNeedsAction,
+            'detail_url' => route('hsecm.datasets.show', array_filter([
+                'dataset' => $datasetKey,
+                'site' => $filters['site'] ?? null,
+                'perusahaan' => $filters['perusahaan'] ?? null,
+                'week' => $filters['week'] ?? null,
+                'year' => $filters['year'] ?? null,
+                'date_from' => $filters['date_from'] ?? null,
+                'date_to' => $filters['date_to'] ?? null,
+            ], static fn ($v) => $v !== null && $v !== '')),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function makeUnavailableEmailSection(string $key, string $title): array
+    {
+        return [
+            'key' => $key,
+            'title' => $title,
+            'value' => '—',
+            'available' => false,
+            'dataset_key' => null,
+            'total' => 0,
+            'truncated' => false,
+            'columns' => [],
+            'rows' => [],
+            'note' => 'Dataset belum tersedia di HSECM Monitoring.',
+            'detail_url' => null,
+            'action' => '',
+            'tone' => 'muted',
+            'needs_action' => false,
+        ];
+    }
+
+    /**
+     * Detail metrik per perusahaan untuk email/WA notify (selaras KPI dashboard).
+     *
+     * @param  array{site: string, perusahaan: string, week: string, year: string, date_from?: string, date_to?: string, q: string}  $filters
+     * @return list<array<string, mixed>>
+     */
+    public function buildCompanyDetailForNotify(array $filters): array
+    {
+        $companies = $this->buildCompanyMonitoring($filters);
+        $scopedCompany = trim((string) ($filters['perusahaan'] ?? ''));
+
+        if ($scopedCompany !== '') {
+            $companies = collect($companies)
+                ->filter(function (array $row) use ($scopedCompany): bool {
+                    return strcasecmp((string) ($row['perusahaan'] ?? ''), $scopedCompany) === 0;
+                })
+                ->values()
+                ->all();
+        }
+
+        return collect($companies)->map(function (array $row): array {
+            return [
+                'perusahaan' => (string) ($row['perusahaan'] ?? '-'),
+                'metrics' => [
+                    [
+                        'key' => 'sap_rfid',
+                        'label' => 'Layer 1 Tanpa SAP',
+                        'value' => (int) ($row['sap_rfid'] ?? 0),
+                        'hint' => 'Jumlah baris SAP = 0',
+                        'format' => 'number',
+                    ],
+                    [
+                        'key' => 'tbc_blindspot',
+                        'label' => 'TBC Blindspot',
+                        'value' => (int) ($row['tbc_blindspot'] ?? 0),
+                        'hint' => 'Kasus blindspot',
+                        'format' => 'number',
+                    ],
+                    [
+                        'key' => 'task_overdue',
+                        'label' => 'Task Overdue',
+                        'value' => (int) ($row['task_overdue'] ?? 0),
+                        'hint' => 'Follow-up terlambat',
+                        'format' => 'number',
+                    ],
+                    [
+                        'key' => 'task_submitted',
+                        'label' => 'Submitted >24jam',
+                        'value' => (int) ($row['task_submitted'] ?? 0),
+                        'hint' => 'Closing hazard terlambat',
+                        'format' => 'number',
+                    ],
+                    [
+                        'key' => 'ikk',
+                        'label' => 'Jumlah IKK',
+                        'value' => (int) ($row['ikk'] ?? 0),
+                        'hint' => 'IKK aktif (baris)',
+                        'format' => 'number',
+                    ],
+                    [
+                        'key' => 'avg_ikk',
+                        'label' => 'IKK Compliance',
+                        'value' => (float) ($row['avg_ikk'] ?? 0),
+                        'hint' => 'Work permit',
+                        'format' => 'percent',
+                    ],
+                    [
+                        'key' => 'aggregator',
+                        'label' => 'Aggregator Fill',
+                        'value' => (int) ($row['aggregator'] ?? 0),
+                        'hint' => 'Jumlah tidak mengisi aggregator',
+                        'format' => 'number',
+                    ],
+                    [
+                        'key' => 'fatigue',
+                        'label' => 'FTW Merah',
+                        'value' => (int) ($row['fatigue'] ?? 0),
+                        'hint' => 'Jumlah FTW merah (agregat)',
+                        'format' => 'number',
+                    ],
+                    [
+                        'key' => 'sumber_rfid',
+                        'label' => 'Jumlah Pekerja Baru',
+                        'value' => (int) ($row['sumber_rfid'] ?? 0),
+                        'hint' => 'RFID pekerja baru',
+                        'format' => 'number',
+                    ],
+                ],
+                'total_records' => (int) ($row['total_records'] ?? 0),
+            ];
+        })->values()->all();
     }
 
     /**

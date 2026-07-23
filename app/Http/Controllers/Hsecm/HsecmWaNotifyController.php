@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Hsecm;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Hsecm\Concerns\ProvidesHsecmLayout;
 use App\Http\Requests\Hsecm\HsecmWaNotifySendEmailRequest;
+use App\Http\Requests\Hsecm\HsecmWaNotifyStoreRecipientRequest;
 use App\Services\Hsecm\HsecmDashboardService;
 use App\Services\Hsecm\HsecmWaNotifyService;
 use Illuminate\Http\RedirectResponse;
@@ -40,6 +41,35 @@ class HsecmWaNotifyController extends Controller
             'recipients' => $recipients,
             'fonnteConfigured' => $this->waNotifyService->fonnteConfigured(),
         ]));
+    }
+
+    public function storeRecipient(HsecmWaNotifyStoreRecipientRequest $request): RedirectResponse
+    {
+        $data = $request->validated();
+        $recipient = $this->waNotifyService->addRecipient([
+            'nama' => $data['nama'],
+            'email' => $data['email'],
+            'site' => $data['site'] ?? null,
+            'perusahaan' => $data['perusahaan'] ?? '',
+            'role' => $data['role'] ?? '',
+            'no' => $data['no'] ?? '',
+        ]);
+
+        return $this->redirectToIndex($request)
+            ->with('success', 'Penerima ditambahkan: '.$recipient['nama'].' ('.$recipient['email'].').');
+    }
+
+    public function destroyRecipient(Request $request, string $id): RedirectResponse
+    {
+        $deleted = $this->waNotifyService->deleteRecipient($id);
+
+        return $this->redirectToIndex($request)
+            ->with(
+                $deleted ? 'success' : 'error',
+                $deleted
+                    ? 'Penerima custom berhasil dihapus.'
+                    : 'Penerima tidak ditemukan atau tidak bisa dihapus (kontak bawaan config).'
+            );
     }
 
     public function send(Request $request, int $index): RedirectResponse
