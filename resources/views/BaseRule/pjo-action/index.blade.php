@@ -79,45 +79,6 @@
    </div>
 </div>
 
-{{-- Checklist cepat --}}
-<div class="hsecm-card rounded-2xl p-5 mb-8">
-   <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
-      <div>
-         <h2 class="font-headline font-bold text-lg text-on-background">Yang harus dilakukan PJO sekarang</h2>
-         <p class="text-xs text-on-surface-variant mt-0.5">Fokus pada gap yang masih terbuka sebelum akhir shift.</p>
-      </div>
-      <a href="{{ route('hsecm.wa-notify.index', array_filter(['week' => $filters['week'] ?? null, 'year' => $filters['year'] ?? null])) }}"
-         class="inline-flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800 hover:bg-teal-100">
-         <span class="material-symbols-outlined text-sm">mail</span>
-         Kirim ringkasan ke PJO
-      </a>
-   </div>
-
-   @if(count($actionGaps) === 0)
-      <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-         Tidak ada gap terbuka pada filter saat ini. Tetap pantau exposure IKK & pekerja baru.
-      </div>
-   @else
-      <ol class="space-y-2">
-         @foreach($actionGaps as $i => $item)
-         <li class="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3">
-            <div class="min-w-0">
-               <p class="text-sm font-bold text-on-background">
-                  {{ $i + 1 }}. {{ $item['title'] }}:
-                  <span class="text-primary">{{ $item['value'] }}</span>
-               </p>
-               <p class="text-xs text-on-surface-variant mt-1">{{ $item['action'] ?? '' }}</p>
-            </div>
-            <a href="#section-{{ $item['key'] }}" class="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline shrink-0">
-               Lihat detail
-               <span class="material-symbols-outlined text-sm">south</span>
-            </a>
-         </li>
-         @endforeach
-      </ol>
-   @endif
-</div>
-
 {{-- Exposure --}}
 <div class="mb-3">
    <h2 class="font-headline font-bold text-lg text-on-background">Exposure & perhatian shift berjalan</h2>

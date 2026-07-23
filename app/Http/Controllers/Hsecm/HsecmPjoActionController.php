@@ -29,7 +29,6 @@ class HsecmPjoActionController extends Controller
             'periodLabel' => $dashboard['period_label'],
             'exposure' => $dashboard['exposure'],
             'gaps' => $dashboard['gaps'],
-            'actionGaps' => $dashboard['action_gaps'],
             'summary' => $dashboard['summary'],
         ]));
     }

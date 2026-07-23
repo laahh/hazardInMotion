@@ -391,7 +391,7 @@ class HsecmDashboardService
                     filters: $filters,
                     percentColumns: ['Compliance_IKK'],
                     rowLimit: $rowLimit,
-                    action: 'Pantau IKK aktif di area kerja; pastikan PIC & status permit terkendali selama shift.',
+                    action: 'Pantau IKK aktif di area kerja; pastikan PIC & OAK dan OKK ada',
                     tone: 'info',
                     needsAction: false,
                 ),
