@@ -16,7 +16,7 @@ class HsecmSummaryMail extends Mailable
 
     /**
      * @param  array<string, mixed>  $recipient
-     * @param  array{site: string, perusahaan: string, week: string, year: string}  $scope
+     * @param  array{site: string, perusahaan: string, week?: string, year?: string, batch_slot?: string}  $scope
      * @param  array{exposure: list<array<string, mixed>>, gaps: list<array<string, mixed>>}  $emailNarrative
      */
     public function __construct(
@@ -25,6 +25,9 @@ class HsecmSummaryMail extends Mailable
         public array $emailNarrative,
         public string $dashboardUrl,
         public string $generatedAt,
+        public string $mode = 'midshift',
+        public string $batchSlotLabel = '',
+        public int $escalateCount = 0,
     ) {}
 
     public function envelope(): Envelope
@@ -32,15 +35,25 @@ class HsecmSummaryMail extends Mailable
         $site = ($this->scope['site'] ?? '') !== '' ? $this->scope['site'] : 'Semua Site';
         $company = ($this->scope['perusahaan'] ?? '') !== '' ? $this->scope['perusahaan'] : 'Semua Perusahaan';
 
+        $prefix = match ($this->mode) {
+            'endshift' => 'Pasca Shift — Monitoring & Intervensi',
+            'escalate' => 'Escalate #'.$this->escalateCount.' — Tasklist belum closed',
+            default => 'Daily Monitoring & Intervensi',
+        };
+
         return new Envelope(
-            subject: 'Daily Monitoring & Intervensi — '.$site.' · '.$company,
+            subject: $prefix.' — '.$site.' · '.$company,
         );
     }
 
     public function content(): Content
     {
-        return new Content(
-            view: 'emails.hsecm-summary',
-        );
+        $view = match ($this->mode) {
+            'endshift' => 'emails.hsecm-endshift',
+            'escalate' => 'emails.hsecm-escalate',
+            default => 'emails.hsecm-summary',
+        };
+
+        return new Content(view: $view);
     }
 }

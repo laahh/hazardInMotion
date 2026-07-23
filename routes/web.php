@@ -89,6 +89,9 @@ Route::get('/dopmikk/dopm/dashboard/screenshot', function (\Illuminate\Http\Requ
     return app(\App\Http\Controllers\DOPMIKK\DOPMController::class)->dashboard($request);
 })->name('dopm.dashboard.screenshot');
 
+// HSECM: pjo-action publik dulu (sebelum catch-all auth), sisanya auth di file route
+require __DIR__ . '/Hsecm/hsecm.php';
+
 // Define a group of routes with 'auth' middleware applied
 Route::middleware(['auth'])->group(function () {
     // Define a GET route for the root URL ('/')
@@ -882,12 +885,11 @@ Route::middleware(['auth'])->group(function () {
     require __DIR__ . '/FatigueManagement/fatigue-management.php';
     require __DIR__ . '/DopSafety/dop-safety.php';
     require __DIR__ . '/MonitoringSafetyEngineering/monitoring-safety-engineering.php';
-    require __DIR__ . '/Hsecm/hsecm.php';
     require __DIR__ . '/EvaluasiWell/evaluasi-well.php';
 
 
     // Define a GET route with dynamic placeholders for route parameters
     // HARUS di akhir agar tidak menangkap route spesifik di atas
     Route::get('{routeName}/{name?}', [HomeController::class, 'pageView'])
-        ->where('routeName', '^(?!sid-meeting$|attendance$).+');
+        ->where('routeName', '^(?!sid-meeting$|attendance$|hsecm$).+');
 });

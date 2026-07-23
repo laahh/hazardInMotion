@@ -73,8 +73,8 @@
                <div class="flex items-center gap-2 p-1 pr-3 bg-white rounded-full border border-outline-variant/40 shadow-sm">
                   <span class="material-symbols-outlined text-2xl text-primary">account_circle</span>
                   <div class="text-left hidden sm:block">
-                     <p class="text-[10px] font-bold text-primary uppercase leading-none">{{ auth()->user()->name ?? 'User' }}</p>
-                     <p class="text-[9px] text-on-surface-variant font-medium">Monitoring</p>
+                     <p class="text-[10px] font-bold text-primary uppercase leading-none">{{ auth()->user()->name ?? 'Guest' }}</p>
+                     <p class="text-[9px] text-on-surface-variant font-medium">{{ auth()->check() ? 'Monitoring' : 'Public View' }}</p>
                   </div>
                </div>
             </div>

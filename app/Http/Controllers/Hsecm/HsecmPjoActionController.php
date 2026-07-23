@@ -30,6 +30,13 @@ class HsecmPjoActionController extends Controller
             'exposure' => $dashboard['exposure'],
             'gaps' => $dashboard['gaps'],
             'summary' => $dashboard['summary'],
+            'isPublicAccess' => ! auth()->check(),
+            // Guest: jangan tampilkan menu yang butuh login
+            'navItems' => auth()->check()
+                ? $this->hsecmNavItems()
+                : [
+                    ['key' => 'pjo-action', 'label' => 'Aksi PJO', 'route' => 'hsecm.pjo-action'],
+                ],
         ]));
     }
 }

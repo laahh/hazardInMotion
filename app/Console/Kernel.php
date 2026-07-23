@@ -100,6 +100,42 @@ class Kernel extends ConsoleKernel
             ->everyMinutes()
             ->withoutOverlapping(15)
             ->appendOutputTo(storage_path('logs/roster-generate-planning.log'));
+
+        // HSECM: 2 shift / hari
+        // Midshift  → 01:00 (slot 00) & 13:00 (slot 12)
+        // Endshift  → 07:00 (06 vs 00) & 19:00 (18 vs 12)
+        $schedule->command('hsecm:send-midshift-email --shift=night')
+            ->timezone('Asia/Makassar')
+            ->dailyAt('01:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/hsecm-midshift-email.log'));
+
+        $schedule->command('hsecm:send-midshift-email --shift=day')
+            ->timezone('Asia/Makassar')
+            ->dailyAt('13:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/hsecm-midshift-email.log'));
+
+        $schedule->command('hsecm:send-endshift-email --shift=night')
+            ->timezone('Asia/Makassar')
+            ->dailyAt('07:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/hsecm-endshift-email.log'));
+
+        $schedule->command('hsecm:send-endshift-email --shift=day')
+            ->timezone('Asia/Makassar')
+            ->dailyAt('19:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/hsecm-endshift-email.log'));
+
+        // HSECM escalate tasklist terbuka: 08 / 14 / 20 / 02
+        foreach (['08:00', '14:00', '20:00', '02:00'] as $escalateAt) {
+            $schedule->command('hsecm:escalate-open-tasklists')
+                ->timezone('Asia/Makassar')
+                ->dailyAt($escalateAt)
+                ->withoutOverlapping()
+                ->appendOutputTo(storage_path('logs/hsecm-escalate-tasklists.log'));
+        }
     }
 
     /**

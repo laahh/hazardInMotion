@@ -12,9 +12,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | HSECM WA Recipients
+    | Scheduler (Asia/Makassar) — lihat app/Console/Kernel.php
     |--------------------------------------------------------------------------
-    | Daftar penerima notifikasi WhatsApp summary per site & perusahaan.
+    | Midshift 01:00 → batch_slot 00:00 (night)
+    | Endshift 07:00 → still_open 06:00 vs 00:00 + tasklist (night)
+    | Midshift 13:00 → batch_slot 12:00 (day)
+    | Endshift 19:00 → still_open 18:00 vs 12:00 + tasklist (day)
+    | Escalate       → 08 / 14 / 20 / 02
+    */
+
+    /*
+    |--------------------------------------------------------------------------
+    | HSECM WA / Email Recipients
+    |--------------------------------------------------------------------------
     | site = null → filter hanya berdasarkan perusahaan.
     */
     'wa_recipients' => [

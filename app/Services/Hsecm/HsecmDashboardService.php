@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Hsecm;
 
+use App\Models\Employee;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
@@ -34,6 +35,7 @@ class HsecmDashboardService
                 'perusahaan_pelapor_all_karyawan' => 'Perusahaan',
                 'site_dedicated_pelapor_all_karyawan' => 'Site',
                 'Layer_Pelapor' => 'Layer',
+                'jabatan_fungsional_pelapor_all_karyawan' => 'Department',
                 'jabatan_struktural_pelapor_all_karyawan' => 'Jabatan Struktural',
                 'RFID_per_SID' => 'RFID / SID',
                 'SAP_per_SID' => 'SAP / SID',
@@ -218,6 +220,7 @@ class HsecmDashboardService
                 'Nama' => 'Nama',
                 'Nama_Perusahaan' => 'Perusahaan',
                 'Site_Dedicated' => 'Site',
+                'Jabatan_Struktural' => 'Jabatan Struktural',
                 'Kondisi_Karyawan' => 'Kondisi',
                 'Penyakit_Terkonfirmasi' => 'Penyakit Terkonfirmasi',
                 'Jumlah_Jam_Tidur' => 'Jam Tidur',
@@ -243,6 +246,8 @@ class HsecmDashboardService
                 'nama' => 'Nama',
                 'perusahaan_pelapor_all_karyawan' => 'Perusahaan',
                 'site_dedicated' => 'Site',
+                'department' => 'Department',
+                'jabatan_struktural' => 'Jabatan Struktural',
                 'sumber_data' => 'Sumber Data',
                 'Week_of_date' => 'Week',
                 'Year_of_date' => 'Year',
@@ -255,7 +260,18 @@ class HsecmDashboardService
     ) {}
 
     /**
-     * @return array{site: string, perusahaan: string, week: string, year: string, date_from: string, date_to: string, q: string}
+     * @return array{
+     *     site: string,
+     *     perusahaan: string,
+     *     week: string,
+     *     year: string,
+     *     date_from: string,
+     *     date_to: string,
+     *     q: string,
+     *     batch_slot: string,
+     *     data_mode: string,
+     *     previous_batch_slot: string
+     * }
      */
     public function resolveFilters(Request $request): array
     {
@@ -272,6 +288,11 @@ class HsecmDashboardService
             [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
         }
 
+        $dataMode = strtolower(trim((string) $request->query('data_mode', $request->input('data_mode', 'snapshot'))));
+        if (! in_array($dataMode, ['snapshot', 'still_open', 'all'], true)) {
+            $dataMode = 'snapshot';
+        }
+
         return [
             'site' => trim((string) $request->query('site', $request->input('site', ''))),
             'perusahaan' => trim((string) $request->query('perusahaan', $request->input('perusahaan', ''))),
@@ -280,7 +301,23 @@ class HsecmDashboardService
             'date_from' => $dateFrom,
             'date_to' => $dateTo,
             'q' => trim((string) $request->query('q', $request->input('q', ''))),
+            'batch_slot' => trim((string) $request->query('batch_slot', $request->input('batch_slot', ''))),
+            'data_mode' => $dataMode,
+            'previous_batch_slot' => trim((string) $request->query('previous_batch_slot', $request->input('previous_batch_slot', ''))),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    public function withBatchContext(array $filters, string $batchSlot, string $dataMode = 'snapshot', ?string $previousBatchSlot = null): array
+    {
+        return array_merge($filters, [
+            'batch_slot' => $batchSlot,
+            'data_mode' => $dataMode,
+            'previous_batch_slot' => $previousBatchSlot ?? '',
+        ]);
     }
 
     /**
@@ -325,6 +362,9 @@ class HsecmDashboardService
             'date_from' => '',
             'date_to' => '',
             'q' => '',
+            'batch_slot' => '',
+            'data_mode' => 'snapshot',
+            'previous_batch_slot' => '',
         ], $filters);
 
         return [
@@ -356,6 +396,9 @@ class HsecmDashboardService
             'date_from' => '',
             'date_to' => '',
             'q' => '',
+            'batch_slot' => '',
+            'data_mode' => 'snapshot',
+            'previous_batch_slot' => '',
         ], $filters);
 
         $ikkRows = $this->filteredRows('ikk-work-permit', $filters);
@@ -400,8 +443,8 @@ class HsecmDashboardService
                     title: 'Jumlah Pekerja Baru',
                     value: (string) $sumberRows->count(),
                     datasetKey: 'sumber-rfid',
-                    rows: $sumberRows,
-                    columnKeys: ['date', 'sid_pelapor_all_karyawan', 'nama', 'perusahaan_pelapor_all_karyawan', 'site_dedicated', 'sumber_data'],
+                    rows: $this->enrichPekerjaBaruWithEmployeeMeta($sumberRows),
+                    columnKeys: ['date', 'sid_pelapor_all_karyawan', 'nama', 'perusahaan_pelapor_all_karyawan', 'site_dedicated', 'department', 'jabatan_struktural', 'sumber_data'],
                     filters: $filters,
                     rowLimit: $rowLimit,
                     action: 'Pastikan pekerja baru mendapat induksi/exposure control sebelum mulai bekerja.',
@@ -416,7 +459,7 @@ class HsecmDashboardService
                     value: (string) $sapRows->count(),
                     datasetKey: 'sap-rfid',
                     rows: $sapRows,
-                    columnKeys: ['date', 'sid_pelapor_all_karyawan', 'pelapor_all_karyawan', 'perusahaan_pelapor_all_karyawan', 'site_dedicated_pelapor_all_karyawan', 'SAP_per_SID'],
+                    columnKeys: ['date', 'sid_pelapor_all_karyawan', 'pelapor_all_karyawan', 'perusahaan_pelapor_all_karyawan', 'site_dedicated_pelapor_all_karyawan', 'jabatan_fungsional_pelapor_all_karyawan', 'jabatan_struktural_pelapor_all_karyawan', 'SAP_per_SID'],
                     filters: $filters,
                     rowLimit: $rowLimit,
                     action: 'Minta pelapor Layer 1 segera mengisi SAP sebelum akhir shift.',
@@ -490,7 +533,7 @@ class HsecmDashboardService
                     value: (string) $aggregatorRows->count(),
                     datasetKey: 'aggregator',
                     rows: $aggregatorRows,
-                    columnKeys: ['Day_of_Tanggal_Date', 'Kode_Sid', 'Nama', 'Nama_Perusahaan', 'Site_Dedicated', 'Pengisian_Aggregator'],
+                    columnKeys: ['Day_of_Tanggal_Date', 'Kode_Sid', 'Nama', 'Nama_Perusahaan', 'Site_Dedicated', 'Jabatan_Struktural', 'Pengisian_Aggregator'],
                     filters: $filters,
                     percentColumns: ['Pengisian_Aggregator'],
                     rowLimit: $rowLimit,
@@ -503,7 +546,7 @@ class HsecmDashboardService
                     value: (string) $fatigueRows->count(),
                     datasetKey: 'fatigue',
                     rows: $fatigueRows,
-                    columnKeys: ['Tanggal_Date', 'Kode_Sid', 'Nama', 'Nama_Perusahaan', 'Site_Dedicated', 'Kondisi_Karyawan'],
+                    columnKeys: ['Tanggal_Date', 'Kode_Sid', 'Nama', 'Nama_Perusahaan', 'Site_Dedicated', 'Jabatan_Struktural', 'Kondisi_Karyawan'],
                     filters: $filters,
                     rowLimit: $rowLimit,
                     action: 'Intervensi karyawan FTW merah; jangan biarkan bekerja tanpa kontrol.',
@@ -665,6 +708,52 @@ class HsecmDashboardService
             'tone' => 'muted',
             'needs_action' => false,
         ];
+    }
+
+    /**
+     * Dataset pekerja baru belum punya kolom department/jabatan — lengkapi dari master employees by SID.
+     * Department memakai jabatan_fungsional (kolom department belum ada di scrape).
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function enrichPekerjaBaruWithEmployeeMeta(Collection $rows): Collection
+    {
+        if ($rows->isEmpty()) {
+            return $rows;
+        }
+
+        $sids = $rows
+            ->map(static fn (array $row): string => strtoupper(trim((string) ($row['sid_pelapor_all_karyawan'] ?? ''))))
+            ->filter(static fn (string $sid): bool => $sid !== '')
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($sids === []) {
+            return $rows->map(static function (array $row): array {
+                $row['department'] = $row['department'] ?? '';
+                $row['jabatan_struktural'] = $row['jabatan_struktural'] ?? '';
+
+                return $row;
+            });
+        }
+
+        $employees = Employee::query()
+            ->select(['kode_sid', 'jabatan_fungsional', 'jabatan_struktural'])
+            ->whereIn('kode_sid', $sids)
+            ->get()
+            ->keyBy(static fn (Employee $employee): string => strtoupper(trim((string) $employee->kode_sid)));
+
+        return $rows->map(static function (array $row) use ($employees): array {
+            $sid = strtoupper(trim((string) ($row['sid_pelapor_all_karyawan'] ?? '')));
+            $employee = $sid !== '' ? $employees->get($sid) : null;
+
+            $row['department'] = trim((string) ($employee?->jabatan_fungsional ?? $row['department'] ?? ''));
+            $row['jabatan_struktural'] = trim((string) ($employee?->jabatan_struktural ?? $row['jabatan_struktural'] ?? ''));
+
+            return $row;
+        });
     }
 
     /**
@@ -1131,13 +1220,187 @@ class HsecmDashboardService
     }
 
     /**
+     * Item gap siap dijadikan tasklist (per baris + business_key).
+     *
+     * @param  array<string, mixed>  $filters
+     * @return list<array{
+     *     program_key: string,
+     *     title: string,
+     *     business_key: string,
+     *     action_hint: string,
+     *     value_label: string,
+     *     payload: array<string, mixed>
+     * }>
+     */
+    public function extractTasklistItemsFromGaps(array $filters): array
+    {
+        $narrative = $this->buildEmailNarrative($filters, 500);
+        $items = [];
+
+        foreach ($narrative['gaps'] as $section) {
+            if (! ($section['available'] ?? false) || ! ($section['needs_action'] ?? false)) {
+                continue;
+            }
+
+            $datasetKey = (string) ($section['dataset_key'] ?? '');
+            if ($datasetKey === '' || ! isset(self::DATASETS[$datasetKey])) {
+                continue;
+            }
+
+            $programKey = (string) ($section['key'] ?? $datasetKey);
+            $title = (string) ($section['title'] ?? $programKey);
+            $action = (string) ($section['action'] ?? '');
+            $meta = self::DATASETS[$datasetKey];
+
+            $rows = $this->filteredRows($datasetKey, $filters);
+            if ($programKey === 'layer1-tanpa-sap') {
+                $rows = $rows->filter(function (array $row): bool {
+                    if ($this->isAllToken($row['SAP_per_SID'] ?? null)) {
+                        return false;
+                    }
+                    $sap = $this->toFloat($row['SAP_per_SID'] ?? null);
+
+                    return $sap !== null && abs($sap) < 0.00001;
+                })->values();
+            }
+
+            foreach ($rows as $row) {
+                $businessKey = $this->resolveBusinessKey($row, $datasetKey);
+                $items[] = [
+                    'program_key' => $programKey,
+                    'title' => $title,
+                    'business_key' => $businessKey,
+                    'action_hint' => $action,
+                    'value_label' => $this->buildItemValueLabel($row, $datasetKey),
+                    'payload' => [
+                        'dataset_key' => $datasetKey,
+                        'table' => $meta['table'],
+                        'batch_slot' => $row['batch_slot'] ?? ($filters['batch_slot'] ?? null),
+                        'gap_count' => $row['gap_count'] ?? null,
+                        'row_id' => $row['_row_id'] ?? null,
+                        'preview' => $this->buildItemPreviewCells($row, $datasetKey),
+                    ],
+                ];
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function resolveBusinessKey(array $row, string $datasetKey): string
+    {
+        $fromCol = trim((string) ($row['business_key'] ?? ''));
+        if ($fromCol !== '') {
+            return $fromCol;
+        }
+
+        $candidates = match ($datasetKey) {
+            'sap-rfid', 'sumber-rfid' => [
+                $row['sid_pelapor_all_karyawan'] ?? null,
+                $row['date'] ?? null,
+            ],
+            'task-overdue', 'task-submitted' => [
+                $row['Task_Number'] ?? null,
+            ],
+            'ikk-work-permit', 'implementasi-ikk' => [
+                $row['Code'] ?? null,
+            ],
+            'coverage-cctv' => [
+                $row['Site'] ?? null,
+                $row['Lokasi'] ?? null,
+                $row['Detil_Lokasi'] ?? null,
+                $row['Day_of_Date'] ?? null,
+            ],
+            'tbc-blindspot' => [
+                $row['site'] ?? null,
+                $row['blindspot_TBC'] ?? null,
+                $row['Date_for_Join'] ?? null,
+            ],
+            'aggregator', 'fatigue' => [
+                $row['Kode_Sid'] ?? null,
+                $row['Day_of_Tanggal_Date'] ?? ($row['Tanggal_Date'] ?? null),
+            ],
+            default => [$row['_row_id'] ?? null],
+        };
+
+        $parts = [];
+        foreach ($candidates as $part) {
+            $text = trim((string) ($part ?? ''));
+            if ($text !== '') {
+                $parts[] = $text;
+            }
+        }
+
+        if ($parts === []) {
+            return $datasetKey.':'.(string) ($row['_row_id'] ?? uniqid('row_', true));
+        }
+
+        return $datasetKey.':'.implode('|', $parts);
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function buildItemValueLabel(array $row, string $datasetKey): string
+    {
+        return match ($datasetKey) {
+            'sap-rfid' => trim((string) ($row['pelapor_all_karyawan'] ?? $row['sid_pelapor_all_karyawan'] ?? '')),
+            'task-overdue', 'task-submitted' => trim((string) ($row['Task_Number'] ?? '')),
+            'ikk-work-permit' => trim((string) ($row['Code'] ?? $row['Name_Ikk_Work_Permit'] ?? '')),
+            'coverage-cctv' => trim(implode(' · ', array_filter([
+                (string) ($row['Lokasi'] ?? ''),
+                (string) ($row['Detil_Lokasi'] ?? ''),
+            ]))),
+            'tbc-blindspot' => trim((string) ($row['blindspot_TBC'] ?? $row['kategori_TBC'] ?? '')),
+            'aggregator', 'fatigue' => trim((string) ($row['Nama'] ?? $row['Kode_Sid'] ?? '')),
+            default => (string) ($row['_row_id'] ?? ''),
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, string>
+     */
+    private function buildItemPreviewCells(array $row, string $datasetKey): array
+    {
+        $keys = array_slice(array_keys(self::DATASETS[$datasetKey]['columns']), 0, 6);
+        $out = [];
+        foreach ($keys as $key) {
+            $text = trim((string) ($row[$key] ?? ''));
+            $out[$key] = $text !== '' ? (mb_strlen($text) > 80 ? mb_substr($text, 0, 77).'...' : $text) : '—';
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  array{site: string, perusahaan: string, week: string, year: string, q: string}  $filters
      * @return Collection<int, array<string, mixed>>
      */
     private function filteredRows(string $datasetKey, array $filters): Collection
     {
         $meta = self::DATASETS[$datasetKey];
-        $rows = collect($this->repository->rows($meta['table']));
+        $dataMode = strtolower((string) ($filters['data_mode'] ?? 'snapshot'));
+        $batchSlot = trim((string) ($filters['batch_slot'] ?? ''));
+        $previousSlot = trim((string) ($filters['previous_batch_slot'] ?? ''));
+
+        if ($dataMode === 'all' || ! $this->repository->hasBatchSlotSupport($meta['table'])) {
+            $rows = collect($this->repository->rows($meta['table']));
+        } elseif ($dataMode === 'still_open') {
+            $rows = collect($this->repository->rowsStillOpen(
+                $meta['table'],
+                $batchSlot !== '' ? $batchSlot : null,
+                $previousSlot !== '' ? $previousSlot : null,
+            ));
+        } else {
+            $rows = collect($this->repository->rowsForBatchSlot(
+                $meta['table'],
+                $batchSlot !== '' ? $batchSlot : null,
+            ));
+        }
 
         return $rows->filter(function (array $row) use ($meta, $filters): bool {
             if ($filters['site'] !== '') {

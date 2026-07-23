@@ -90,6 +90,7 @@
          'number' => $i + 1,
          'section' => $section,
          'filters' => $filters,
+         'isPublicAccess' => $isPublicAccess ?? false,
       ])
    @endforeach
 </div>
@@ -105,6 +106,7 @@
          'number' => $i + 1,
          'section' => $section,
          'filters' => $filters,
+         'isPublicAccess' => $isPublicAccess ?? false,
       ])
    @endforeach
 </div>

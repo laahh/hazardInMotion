@@ -5,16 +5,40 @@ declare(strict_types=1);
 use App\Http\Controllers\Hsecm\HsecmDashboardController;
 use App\Http\Controllers\Hsecm\HsecmDatasetController;
 use App\Http\Controllers\Hsecm\HsecmPjoActionController;
+use App\Http\Controllers\Hsecm\HsecmTasklistManageController;
+use App\Http\Controllers\Hsecm\HsecmTasklistPublicController;
 use App\Http\Controllers\Hsecm\HsecmWaNotifyController;
 use Illuminate\Support\Facades\Route;
 
+/*
+|--------------------------------------------------------------------------
+| Publik — tanpa login (link dari email PJO)
+|--------------------------------------------------------------------------
+*/
+Route::prefix('hsecm')
+    ->name('hsecm.')
+    ->group(function (): void {
+        Route::get('/pjo-action', [HsecmPjoActionController::class, 'index'])->name('pjo-action');
+        Route::get('/tasklist/{token}', [HsecmTasklistPublicController::class, 'show'])
+            ->where('token', '[A-Za-z0-9]{32,64}')
+            ->name('tasklist.show');
+        Route::post('/tasklist/{token}/submit', [HsecmTasklistPublicController::class, 'submit'])
+            ->middleware('throttle:20,1')
+            ->where('token', '[A-Za-z0-9]{32,64}')
+            ->name('tasklist.submit');
+    });
+
+/*
+|--------------------------------------------------------------------------
+| Dilindungi auth
+|--------------------------------------------------------------------------
+*/
 Route::middleware(['auth'])
     ->prefix('hsecm')
     ->name('hsecm.')
     ->group(function (): void {
         Route::redirect('/', '/hsecm/dashboard')->name('home');
         Route::get('/dashboard', [HsecmDashboardController::class, 'index'])->name('dashboard');
-        Route::get('/pjo-action', [HsecmPjoActionController::class, 'index'])->name('pjo-action');
         Route::get('/wa-notify', [HsecmWaNotifyController::class, 'index'])->name('wa-notify.index');
         Route::post('/wa-notify/recipients', [HsecmWaNotifyController::class, 'storeRecipient'])
             ->name('wa-notify.recipients.store');
@@ -28,6 +52,18 @@ Route::middleware(['auth'])
             ->name('wa-notify.send-email');
         Route::post('/wa-notify/send-email-bulk', [HsecmWaNotifyController::class, 'sendEmailBulk'])
             ->name('wa-notify.send-email-bulk');
+
+        Route::get('/tasklist', [HsecmTasklistManageController::class, 'index'])->name('tasklist.index');
+        Route::get('/tasklist/manage/{id}', [HsecmTasklistManageController::class, 'manage'])
+            ->whereNumber('id')
+            ->name('tasklist.manage');
+        Route::post('/tasklist/items/{itemId}/approve', [HsecmTasklistManageController::class, 'approve'])
+            ->whereNumber('itemId')
+            ->name('tasklist.items.approve');
+        Route::post('/tasklist/items/{itemId}/reject', [HsecmTasklistManageController::class, 'reject'])
+            ->whereNumber('itemId')
+            ->name('tasklist.items.reject');
+
         Route::get('/datasets/{dataset}', [HsecmDatasetController::class, 'show'])
             ->where('dataset', 'sap-rfid|coverage-cctv|tbc-blindspot|task-overdue|task-submitted|ikk-work-permit|aggregator|fatigue|sumber-rfid')
             ->name('datasets.show');

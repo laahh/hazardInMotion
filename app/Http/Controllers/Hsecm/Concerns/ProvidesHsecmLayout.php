@@ -16,6 +16,7 @@ trait ProvidesHsecmLayout
         $items = [
             ['key' => 'dashboard', 'label' => 'Overview', 'route' => 'hsecm.dashboard'],
             ['key' => 'pjo-action', 'label' => 'Aksi PJO', 'route' => 'hsecm.pjo-action'],
+            ['key' => 'tasklist-review', 'label' => 'Tasklist Review', 'route' => 'hsecm.tasklist.index'],
             ['key' => 'wa-notify', 'label' => 'Kirim WA & Email', 'route' => 'hsecm.wa-notify.index'],
         ];
 

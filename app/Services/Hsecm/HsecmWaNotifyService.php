@@ -270,6 +270,7 @@ class HsecmWaNotifyService
                         : null,
                 ]),
                 generatedAt: now()->timezone(config('app.timezone', 'Asia/Makassar'))->format('d/m/Y H:i').' WITA',
+                mode: 'midshift',
             ));
 
             return [
