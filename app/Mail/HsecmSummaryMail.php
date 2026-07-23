@@ -33,7 +33,7 @@ class HsecmSummaryMail extends Mailable
         $company = ($this->scope['perusahaan'] ?? '') !== '' ? $this->scope['perusahaan'] : 'Semua Perusahaan';
 
         return new Envelope(
-            subject: 'HSECM Monitoring & Intervensi — '.$site.' · '.$company,
+            subject: 'Daily Monitoring & Intervensi — '.$site.' · '.$company,
         );
     }
 

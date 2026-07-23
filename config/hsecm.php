@@ -5,6 +5,13 @@ declare(strict_types=1);
 return [
     /*
     |--------------------------------------------------------------------------
+    | Public base URL untuk link di email (bukan APP_URL lokal)
+    |--------------------------------------------------------------------------
+    */
+    'public_url' => rtrim((string) env('HSECM_PUBLIC_URL', 'https://besentry-dev.beraucoal.co.id'), '/'),
+
+    /*
+    |--------------------------------------------------------------------------
     | HSECM WA Recipients
     |--------------------------------------------------------------------------
     | Daftar penerima notifikasi WhatsApp summary per site & perusahaan.

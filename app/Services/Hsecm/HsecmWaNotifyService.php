@@ -258,15 +258,17 @@ class HsecmWaNotifyService
                     'email' => $row['email'],
                 ],
                 scope: $row['scope'],
-                emailNarrative: $row['email_narrative'] ?? ['exposure' => [], 'gaps' => []],
-                dashboardUrl: route('hsecm.dashboard', array_filter([
-                    'site' => $row['scope']['site'] ?? null,
-                    'perusahaan' => $row['scope']['perusahaan'] ?? null,
-                    'week' => $row['scope']['week'] ?? null,
-                    'year' => $row['scope']['year'] ?? null,
-                    'date_from' => $row['scope']['date_from'] ?? null,
-                    'date_to' => $row['scope']['date_to'] ?? null,
-                ])),
+                emailNarrative: $this->rewriteNarrativePublicUrls(
+                    $row['email_narrative'] ?? ['exposure' => [], 'gaps' => []]
+                ),
+                dashboardUrl: $this->buildHsecmPublicUrl('/hsecm/pjo-action', [
+                    'site' => trim((string) ($row['scope']['site'] ?? '')) !== ''
+                        ? (string) $row['scope']['site']
+                        : null,
+                    'perusahaan' => trim((string) ($row['scope']['perusahaan'] ?? '')) !== ''
+                        ? (string) $row['scope']['perusahaan']
+                        : null,
+                ]),
                 generatedAt: now()->timezone(config('app.timezone', 'Asia/Makassar'))->format('d/m/Y H:i').' WITA',
             ));
 
@@ -397,6 +399,58 @@ class HsecmWaNotifyService
         $lines[] = '_'.now()->timezone(config('app.timezone', 'Asia/Makassar'))->format('d/m/Y H:i').'_';
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Absolute URL publik untuk link di email (bukan APP_URL lokal).
+     *
+     * @param  array<string, string|null>  $query
+     */
+    private function buildHsecmPublicUrl(string $path, array $query = []): string
+    {
+        $base = rtrim((string) config('hsecm.public_url', 'https://besentry-dev.beraucoal.co.id'), '/');
+        $path = '/'.ltrim($path, '/');
+        $filtered = array_filter(
+            $query,
+            static fn ($v) => $v !== null && trim((string) $v) !== ''
+        );
+
+        if ($filtered === []) {
+            return $base.$path;
+        }
+
+        return $base.$path.'?'.http_build_query($filtered);
+    }
+
+    /**
+     * @param  array{exposure?: list<array<string, mixed>>, gaps?: list<array<string, mixed>>}  $narrative
+     * @return array{exposure: list<array<string, mixed>>, gaps: list<array<string, mixed>>}
+     */
+    private function rewriteNarrativePublicUrls(array $narrative): array
+    {
+        foreach (['exposure', 'gaps'] as $group) {
+            $sections = $narrative[$group] ?? [];
+            foreach ($sections as $i => $section) {
+                $detailUrl = trim((string) ($section['detail_url'] ?? ''));
+                if ($detailUrl === '') {
+                    continue;
+                }
+
+                $parts = parse_url($detailUrl);
+                $path = (string) ($parts['path'] ?? '');
+                $query = [];
+                if (! empty($parts['query'])) {
+                    parse_str($parts['query'], $query);
+                }
+
+                $narrative[$group][$i]['detail_url'] = $this->buildHsecmPublicUrl($path, $query);
+            }
+        }
+
+        $narrative['exposure'] = $narrative['exposure'] ?? [];
+        $narrative['gaps'] = $narrative['gaps'] ?? [];
+
+        return $narrative;
     }
 
     private function normalizeNullableString(mixed $value): ?string

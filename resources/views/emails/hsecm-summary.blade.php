@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
-  <title>HSECM Monitoring & Intervensi</title>
+  <title>Daily Monitoring & Intervensi</title>
   <style type="text/css">
     body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
@@ -38,7 +38,7 @@
 
         <tr>
           <td style="background:linear-gradient(135deg,#0f766e 0%,#115e59 100%);padding:22px 28px;">
-            <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.85);font-weight:700;">HSECM Monitoring &amp; Intervensi</div>
+            <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.85);font-weight:700;">Daily Monitoring &amp; Intervensi</div>
             <div style="margin-top:6px;font-size:13px;color:rgba(255,255,255,.9);">{{ $siteLabel }} · {{ $companyLabel }} · {{ $periodLabel }}</div>
           </td>
         </tr>
@@ -87,7 +87,7 @@
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:18px;">
               <tr>
                 <td align="center">
-                  <a href="{{ $dashboardUrl }}" class="btn" target="_blank" rel="noopener">Buka HSECM Dashboard</a>
+                  <a href="{{ $dashboardUrl }}" class="btn" target="_blank" rel="noopener">Buka Aksi PJO</a>
                 </td>
               </tr>
             </table>
@@ -105,7 +105,7 @@
 
         <tr>
           <td style="background:#0f172a;color:#94a3b8;padding:16px 28px;font-size:11px;line-height:1.6;">
-            <strong style="color:#e2e8f0;">HSECM Monitoring Dashboard</strong><br/>
+            <strong style="color:#e2e8f0;">Daily Monitoring Dashboard</strong><br/>
             Dikirim otomatis dari sistem monitoring HSE.
           </td>
         </tr>
