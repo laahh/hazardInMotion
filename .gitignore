@@ -6,6 +6,8 @@
 .env
 .env.backup
 .env.production
+*.pem
+*.ppk
 .phpunit.result.cache
 Homestead.json
 Homestead.yaml

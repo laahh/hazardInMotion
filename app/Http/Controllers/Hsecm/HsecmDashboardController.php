@@ -26,6 +26,7 @@ class HsecmDashboardController extends Controller
         return view('BaseRule.dashboard', $this->hsecmViewData('dashboard', [
             'filters' => $dashboard['filters'],
             'filterOptions' => $dashboard['filter_options'],
+            'periodLabel' => $dashboard['period_label'],
             'kpis' => $dashboard['kpis'],
             'bySite' => $dashboard['by_site'],
             'byCompany' => $dashboard['by_company'],

@@ -6,11 +6,13 @@
   - $filterOptions
   - $showCompany (bool, default true)
   - $showSearch (bool, default false)
+  - $showDate (bool, default true)
 --}}
 @php
    $actionParams = $actionParams ?? [];
    $showCompany = $showCompany ?? true;
    $showSearch = $showSearch ?? false;
+   $showDate = $showDate ?? true;
 @endphp
 <form method="GET" action="{{ route($actionRoute, $actionParams) }}" class="hsecm-card rounded-2xl p-4 mb-6">
    <div class="flex flex-wrap items-end gap-3">
@@ -33,6 +35,17 @@
             <option value="{{ $company }}" @selected(($filters['perusahaan'] ?? '') === $company)>{{ $company }}</option>
             @endforeach
          </select>
+      </div>
+      @endif
+
+      @if($showDate)
+      <div class="min-w-[10rem]">
+         <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Tanggal Dari</label>
+         <input type="date" name="date_from" value="{{ $filters['date_from'] ?? '' }}" class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white">
+      </div>
+      <div class="min-w-[10rem]">
+         <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Tanggal Sampai</label>
+         <input type="date" name="date_to" value="{{ $filters['date_to'] ?? '' }}" class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white">
       </div>
       @endif
 

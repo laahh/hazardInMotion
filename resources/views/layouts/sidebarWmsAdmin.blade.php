@@ -1,4 +1,4 @@
-<aside class="sidebar-wrapper">
+﻿<aside class="sidebar-wrapper">
     <style>
       .sidebar-wrapper .sidebar-header .logo-icon { width:100%; display:flex; justify-content:center; align-items:center; }
       .sidebar-wrapper .sidebar-header .logo-img { height:70px; width:auto; }
@@ -347,6 +347,21 @@
               <div class="menu-title">History P2H</div>
             </a>
           </li>
+
+          @if(Auth::check())
+          <li class="menu-label">Health / BeWell</li>
+          <li>
+            <a class="has-arrow" href="javascript:;">
+              <div class="parent-icon"><i class="material-icons-outlined">directions_run</i>
+              </div>
+              <div class="menu-title">Evaluasi Olahraga</div>
+            </a>
+            <ul>
+              <li><a href="{{ route('evaluasi-well.index') }}"><i class="material-icons-outlined">arrow_right</i>Dashboard</a></li>
+              <li><a href="{{ route('evaluasi-well.activities.index') }}"><i class="material-icons-outlined">arrow_right</i>Detail Aktivitas</a></li>
+            </ul>
+          </li>
+          @endif
            
        
           

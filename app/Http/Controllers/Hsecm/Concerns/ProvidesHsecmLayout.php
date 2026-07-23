@@ -39,8 +39,8 @@ trait ProvidesHsecmLayout
         return array_merge([
             'navActive' => $navActive,
             'navItems' => $this->hsecmNavItems(),
-            'programLabel' => 'HSECM Monitoring Dashboard',
-            'programCode' => 'HSECM',
+            'programLabel' => 'Daily Monitoring Dashboard',
+            'programCode' => 'Daily',
         ], $extra);
     }
 }

@@ -9,7 +9,7 @@
 @section('content')
 @include('BaseRule.partials.page-header', [
    'title' => $dataset['label'],
-   'subtitle' => 'Detail data HSECM dengan filter site, perusahaan, week, dan pencarian.',
+   'subtitle' => 'Detail gap — filter site, perusahaan, tanggal, week, dan pencarian.',
    'breadcrumb' => $dataset['label'],
 ])
 
@@ -20,6 +20,7 @@
    'filterOptions' => $filterOptions,
    'showCompany' => $dataset['has_company_filter'],
    'showSearch' => true,
+   'showDate' => true,
 ])
 
 {{-- Summary chips --}}

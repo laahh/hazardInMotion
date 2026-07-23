@@ -3,7 +3,7 @@
    <head>
       <meta charset="utf-8"/>
       <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-      <title>@yield('title', 'HSECM Monitoring') — PT. Berau Coal</title>
+      <title>@yield('title', 'Daily Monitoring Dashboard') — PT. Berau Coal</title>
       <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
       <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
       <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
@@ -45,14 +45,14 @@
    <body class="bg-[#f1f5f9] font-body text-on-surface min-h-screen flex flex-col">
       @php
          $navActive = $navActive ?? 'dashboard';
-         $programLabel = $programLabel ?? 'HSECM Monitoring Dashboard';
+         $programLabel = $programLabel ?? 'Daily Monitoring Dashboard';
          $navItems = $navItems ?? [];
       @endphp
       <header class="w-full sticky top-0 bg-white border-b border-[#e2e8f0] z-50 shadow-sm">
          <div class="mx-auto px-6 py-3 flex justify-between items-center gap-4">
             <div class="flex items-center gap-6 min-w-0 flex-1">
                <div class="flex flex-col shrink-0">
-                  <h1 class="font-headline font-bold text-primary text-lg tracking-tighter leading-tight">HSECM</h1>
+                  <h1 class="font-headline font-bold text-primary text-lg tracking-tighter leading-tight">Daily Monitoring</h1>
                   <p class="text-on-surface-variant text-[9px] font-bold uppercase tracking-widest max-w-[14rem] truncate">{{ $programLabel }}</p>
                </div>
                @if(count($navItems) > 0)
@@ -69,7 +69,7 @@
                @endif
             </div>
             <div class="flex items-center gap-2 shrink-0">
-               <span class="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border border-teal-200 bg-teal-50 text-teal-800">{{ $programCode ?? 'HSECM' }}</span>
+               <span class="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border border-teal-200 bg-teal-50 text-teal-800">{{ $programCode ?? 'Daily Monitoring' }}</span>
                <div class="flex items-center gap-2 p-1 pr-3 bg-white rounded-full border border-outline-variant/40 shadow-sm">
                   <span class="material-symbols-outlined text-2xl text-primary">account_circle</span>
                   <div class="text-left hidden sm:block">

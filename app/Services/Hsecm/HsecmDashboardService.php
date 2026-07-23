@@ -6,6 +6,7 @@ namespace App\Services\Hsecm;
 
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -25,6 +26,7 @@ class HsecmDashboardService
             'company_column' => 'perusahaan_pelapor_all_karyawan',
             'week_column' => 'Week_of_date',
             'year_column' => 'Year_of_date',
+            'date_column' => 'date',
             'columns' => [
                 'date' => 'Tanggal',
                 'sid_pelapor_all_karyawan' => 'SID',
@@ -47,13 +49,14 @@ class HsecmDashboardService
             'company_column' => null,
             'week_column' => 'Week_of_Date',
             'year_column' => 'Year_of_Date',
+            'date_column' => 'Day_of_Date',
             'columns' => [
+                'Day_of_Date' => 'Tanggal',
                 'Site' => 'Site',
                 'Lokasi' => 'Lokasi',
                 'Detil_Lokasi' => 'Detil Lokasi',
                 'Status_Coverage_dalam_1_Week' => 'Status Coverage',
                 'Tercover' => '% Tercover',
-                'Day_of_Date' => 'Day',
                 'Week_of_Date' => 'Week',
                 'Year_of_Date' => 'Year',
             ],
@@ -66,7 +69,9 @@ class HsecmDashboardService
             'company_column' => 'perusahaan_pelapor_all_karyawan',
             'week_column' => 'Week_of_Date_for_Join',
             'year_column' => 'Year_of_Date_for_Join',
+            'date_column' => 'Date_for_Join',
             'columns' => [
+                'Date_for_Join' => 'Tanggal',
                 'site' => 'Site',
                 'kategori_TBC' => 'Kategori TBC',
                 'blindspot_TBC' => 'Blindspot TBC',
@@ -89,7 +94,10 @@ class HsecmDashboardService
             'company_column' => 'perusahaan_pelapor_all_karyawan',
             'week_column' => 'Week_of_date_time',
             'year_column' => 'Year_of_date_time',
+            'date_column' => 'tanggal_janji',
             'columns' => [
+                'Second_of_date_time' => 'Tanggal/Waktu',
+                'tanggal_janji' => 'Tanggal Janji',
                 'Task_Number' => 'No Task',
                 'site' => 'Site',
                 'deskripsi' => 'Deskripsi',
@@ -98,7 +106,6 @@ class HsecmDashboardService
                 'pic' => 'PIC',
                 'perusahaan_pic' => 'Perusahaan PIC',
                 'status3' => 'Status',
-                'tanggal_janji' => 'Tanggal Janji',
                 'Week_of_date_time' => 'Week',
                 'Year_of_date_time' => 'Year',
             ],
@@ -111,7 +118,9 @@ class HsecmDashboardService
             'company_column' => 'perusahaan_pelapor_all_karyawan',
             'week_column' => 'Week_of_date_time',
             'year_column' => 'Year_of_date_time',
+            'date_column' => 'Second_of_date_time',
             'columns' => [
+                'Second_of_date_time' => 'Tanggal/Waktu',
                 'Task_Number' => 'No Task',
                 'site' => 'Site',
                 'deskripsi' => 'Deskripsi',
@@ -133,7 +142,9 @@ class HsecmDashboardService
             'company_column' => 'Company_Name_Ikk_Work_Permit',
             'week_column' => 'Week_of_Start_Date_Convert',
             'year_column' => 'ISO_Year_of_Start_Date_Convert',
+            'date_column' => 'Start_Date_Convert',
             'columns' => [
+                'Start_Date_Convert' => 'Tanggal',
                 'Code' => 'Code',
                 'Name_Ikk_Work_Permit' => 'Nama IKK',
                 'Company_Name_Ikk_Work_Permit' => 'Perusahaan',
@@ -143,7 +154,6 @@ class HsecmDashboardService
                 'Status' => 'Status',
                 'Status_Ikk_Work_Permit_Pic' => 'Status PIC',
                 'Compliance_IKK' => '% Compliance',
-                'Start_Date_Convert' => 'Start Date',
                 'Week_of_Start_Date_Convert' => 'Week',
                 'ISO_Year_of_Start_Date_Convert' => 'Year',
             ],
@@ -156,7 +166,9 @@ class HsecmDashboardService
             'company_column' => 'Company_Name_Ikk_Work_Permit',
             'week_column' => 'Week_of_Start_Date_Convert',
             'year_column' => 'ISO_Year_of_Start_Date_Convert',
+            'date_column' => 'Start_Date_Convert',
             'columns' => [
+                'Start_Date_Convert' => 'Tanggal',
                 'Code' => 'Code',
                 'Name_Ikk_Work_Permit' => 'Nama IKK',
                 'Company_Name_Ikk_Work_Permit' => 'Perusahaan',
@@ -166,7 +178,6 @@ class HsecmDashboardService
                 'Status' => 'Status',
                 'Status_Ikk_Work_Permit_Pic' => 'Status PIC',
                 'Compliance_IKK' => '% Compliance',
-                'Start_Date_Convert' => 'Start Date',
                 'Week_of_Start_Date_Convert' => 'Week',
                 'ISO_Year_of_Start_Date_Convert' => 'Year',
             ],
@@ -179,14 +190,15 @@ class HsecmDashboardService
             'company_column' => 'Nama_Perusahaan',
             'week_column' => 'Week_of_Tanggal_Date',
             'year_column' => 'Year_of_Tanggal_Date',
+            'date_column' => 'Day_of_Tanggal_Date',
             'columns' => [
+                'Day_of_Tanggal_Date' => 'Tanggal',
                 'Kode_Sid' => 'SID',
                 'Nama' => 'Nama',
                 'Nama_Perusahaan' => 'Perusahaan',
                 'Site_Dedicated' => 'Site',
                 'Jabatan_Struktural' => 'Jabatan Struktural',
                 'Pengisian_Aggregator' => '% Pengisian',
-                'Day_of_Tanggal_Date' => 'Day',
                 'Week_of_Tanggal_Date' => 'Week',
                 'Year_of_Tanggal_Date' => 'Year',
             ],
@@ -199,6 +211,7 @@ class HsecmDashboardService
             'company_column' => 'Nama_Perusahaan',
             'week_column' => 'Week_of_Tanggal_Date',
             'year_column' => 'Year_of_Tanggal_Date',
+            'date_column' => 'Tanggal_Date',
             'columns' => [
                 'Tanggal_Date' => 'Tanggal',
                 'Kode_Sid' => 'SID',
@@ -222,14 +235,15 @@ class HsecmDashboardService
             'company_column' => 'perusahaan_pelapor_all_karyawan',
             'week_column' => 'Week_of_date',
             'year_column' => 'Year_of_date',
+            'date_column' => 'date',
             'columns' => [
                 'date' => 'Tanggal',
+                'tanggal_hari_pertama' => 'Hari Pertama Lapor',
                 'sid_pelapor_all_karyawan' => 'SID',
                 'nama' => 'Nama',
                 'perusahaan_pelapor_all_karyawan' => 'Perusahaan',
                 'site_dedicated' => 'Site',
                 'sumber_data' => 'Sumber Data',
-                'tanggal_hari_pertama' => 'Hari Pertama Lapor',
                 'Week_of_date' => 'Week',
                 'Year_of_date' => 'Year',
             ],
@@ -241,21 +255,36 @@ class HsecmDashboardService
     ) {}
 
     /**
-     * @return array{site: string, perusahaan: string, week: string, year: string, q: string}
+     * @return array{site: string, perusahaan: string, week: string, year: string, date_from: string, date_to: string, q: string}
      */
     public function resolveFilters(Request $request): array
     {
+        $dateFrom = trim((string) $request->query('date_from', $request->input('date_from', '')));
+        $dateTo = trim((string) $request->query('date_to', $request->input('date_to', '')));
+
+        if ($dateFrom !== '' && ! $this->isValidYmd($dateFrom)) {
+            $dateFrom = '';
+        }
+        if ($dateTo !== '' && ! $this->isValidYmd($dateTo)) {
+            $dateTo = '';
+        }
+        if ($dateFrom !== '' && $dateTo !== '' && $dateFrom > $dateTo) {
+            [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
+        }
+
         return [
             'site' => trim((string) $request->query('site', $request->input('site', ''))),
             'perusahaan' => trim((string) $request->query('perusahaan', $request->input('perusahaan', ''))),
             'week' => trim((string) $request->query('week', $request->input('week', ''))),
             'year' => trim((string) $request->query('year', $request->input('year', ''))),
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
             'q' => trim((string) $request->query('q', $request->input('q', ''))),
         ];
     }
 
     /**
-     * @param  array{site: string, perusahaan: string, week: string, year: string, q: string}  $filters
+     * @param  array{site: string, perusahaan: string, week: string, year: string, date_from: string, date_to: string, q: string}  $filters
      * @return array<string, mixed>
      */
     public function buildDashboard(array $filters): array
@@ -263,6 +292,7 @@ class HsecmDashboardService
         return [
             'filters' => $filters,
             'filter_options' => $this->buildFilterOptions(),
+            'period_label' => $this->buildPeriodLabel($filters),
             'kpis' => $this->buildKpis($filters),
             'by_site' => $this->buildSiteMonitoring($filters),
             'by_company' => $this->buildCompanyMonitoring($filters),
@@ -377,12 +407,8 @@ class HsecmDashboardService
      */
     private function buildKpis(array $filters): array
     {
-        $sapRows = $this->filteredRows('sap-rfid', $filters)->filter(function (array $row): bool {
-            return ! $this->isAllToken($row['SAP_per_SID'] ?? null)
-                && ! $this->isAllToken($row['RFID_per_SID'] ?? null);
-        });
-
-        $avgSap = $this->avgNumeric($sapRows, 'SAP_per_SID');
+        // Layer 1 tanpa SAP = jumlah (count) baris dengan SAP_per_SID masih 0.
+        $layer1TanpaSap = $this->countRowsWithSapZero($this->filteredRows('sap-rfid', $filters));
         $coverageCount = $this->filteredRows('coverage-cctv', $filters)->count();
         $tbcCount = $this->filteredRows('tbc-blindspot', $filters)->count();
         $overdueCount = $this->filteredRows('task-overdue', $filters)->count();
@@ -392,20 +418,18 @@ class HsecmDashboardService
         $ikkRows = $this->filteredRows('ikk-work-permit', $filters);
         $ikkCount = $ikkRows->count();
         $avgIkk = $this->avgPercent($ikkRows, 'Compliance_IKK');
-        $avgAggregator = $this->avgPercent($this->filteredRows('aggregator', $filters), 'Pengisian_Aggregator');
-        $fatigueRows = $this->filteredRows('fatigue', $filters);
-        $fatigueCount = $fatigueRows->count();
-        // Seluruh baris pada tabel scr_hsecm_ftw_merah sudah berstatus FTW merah.
-        $ftwMerah = $fatigueCount;
+        $aggregatorCount = $this->filteredRows('aggregator', $filters)->count();
+        // FTW Merah = jumlah (agregat) seluruh baris FTW merah.
+        $ftwMerah = $this->filteredRows('fatigue', $filters)->count();
         $sumberCount = $this->filteredRows('sumber-rfid', $filters)->count();
 
         return [
             [
                 'label' => 'Layer 1 tanpa SAP',
-                'value' => round($avgSap, 1),
+                'value' => $layer1TanpaSap,
                 'icon' => 'analytics',
-                'hint' => 'L1 tanpa SAP',
-                'tone' => 'primary',
+                'hint' => 'Jumlah baris SAP = 0',
+                'tone' => $layer1TanpaSap > 0 ? 'warning' : 'success',
             ],
             [
                 'label' => 'Coverage Area Kritis',
@@ -451,16 +475,16 @@ class HsecmDashboardService
             ],
             [
                 'label' => 'Aggregator Fill',
-                'value' => round($avgAggregator, 1).'%',
-                'icon' => 'percent',
-                'hint' => 'Pengisian aggregator',
-                'tone' => $avgAggregator >= 80 ? 'success' : 'warning',
+                'value' => $aggregatorCount,
+                'icon' => 'person_off',
+                'hint' => 'Jumlah tidak mengisi aggregator',
+                'tone' => $aggregatorCount > 0 ? 'warning' : 'success',
             ],
             [
                 'label' => 'FTW Merah',
-                'value' => $fatigueCount,
+                'value' => $ftwMerah,
                 'icon' => 'bedtime',
-                'hint' => 'Flag merah: '.$ftwMerah,
+                'hint' => 'Jumlah FTW merah (agregat)',
                 'tone' => $ftwMerah > 0 ? 'warning' : 'success',
             ],
             [
@@ -518,7 +542,9 @@ class HsecmDashboardService
                     'avg_aggregator' => 0,
                 ]);
 
-                $count = $items->count();
+                $count = $key === 'sap-rfid'
+                    ? $this->countRowsWithSapZero($items)
+                    : $items->count();
                 $current[$field] = $count;
                 $current['total_records'] = (int) $current['total_records'] + $count;
 
@@ -582,7 +608,9 @@ class HsecmDashboardService
                     'avg_aggregator' => 0,
                 ]);
 
-                $count = $items->count();
+                $count = $key === 'sap-rfid'
+                    ? $this->countRowsWithSapZero($items)
+                    : $items->count();
                 $current[$field] = $count;
                 $current['total_records'] = (int) $current['total_records'] + $count;
 
@@ -699,6 +727,20 @@ class HsecmDashboardService
                 }
             }
 
+            $dateColumn = $meta['date_column'] ?? null;
+            if ($dateColumn !== null && ($filters['date_from'] !== '' || $filters['date_to'] !== '')) {
+                $rowDate = $this->parseFlexibleDate($row[$dateColumn] ?? null);
+                if ($rowDate === null) {
+                    return false;
+                }
+                if ($filters['date_from'] !== '' && $rowDate < $filters['date_from']) {
+                    return false;
+                }
+                if ($filters['date_to'] !== '' && $rowDate > $filters['date_to']) {
+                    return false;
+                }
+            }
+
             if ($filters['q'] !== '') {
                 $q = Str::lower($filters['q']);
                 $matched = false;
@@ -749,6 +791,24 @@ class HsecmDashboardService
     }
 
     /**
+     * Hitung baris Layer 1 tanpa SAP: SAP_per_SID masih 0.
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     */
+    private function countRowsWithSapZero(Collection $rows): int
+    {
+        return $rows->filter(function (array $row): bool {
+            if ($this->isAllToken($row['SAP_per_SID'] ?? null)) {
+                return false;
+            }
+
+            $sap = $this->toFloat($row['SAP_per_SID'] ?? null);
+
+            return $sap !== null && abs($sap) < 0.00001;
+        })->count();
+    }
+
+    /**
      * Rata-rata kolom bernilai boolean 0/1 (1 = tercapai) dinyatakan dalam persen 0-100.
      *
      * @param  Collection<int, array<string, mixed>>  $rows
@@ -794,5 +854,106 @@ class HsecmDashboardService
     private function formatNumber(float $value): string
     {
         return number_format($value, 1);
+    }
+
+    /**
+     * @param  array{site: string, perusahaan: string, week: string, year: string, date_from: string, date_to: string, q: string}  $filters
+     */
+    private function buildPeriodLabel(array $filters): string
+    {
+        $parts = [];
+
+        if ($filters['date_from'] !== '' || $filters['date_to'] !== '') {
+            $from = $filters['date_from'] !== ''
+                ? Carbon::parse($filters['date_from'])->format('d M Y')
+                : 'awal';
+            $to = $filters['date_to'] !== ''
+                ? Carbon::parse($filters['date_to'])->format('d M Y')
+                : 'akhir';
+            $parts[] = $from.' – '.$to;
+        }
+
+        if ($filters['week'] !== '') {
+            $parts[] = 'Week '.$filters['week'];
+        }
+        if ($filters['year'] !== '') {
+            $parts[] = 'Year '.$filters['year'];
+        }
+
+        if ($parts === []) {
+            return 'Semua periode (belum ada filter tanggal / week / year)';
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    private function isValidYmd(string $value): bool
+    {
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return false;
+        }
+
+        try {
+            $parsed = Carbon::createFromFormat('Y-m-d', $value);
+
+            return $parsed !== null && $parsed->format('Y-m-d') === $value;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Normalisasi nilai tanggal row ke Y-m-d (null jika tidak bisa diparse).
+     */
+    private function parseFlexibleDate(mixed $value): ?string
+    {
+        if ($value === null || $this->isAllToken($value)) {
+            return null;
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance(\DateTimeImmutable::createFromInterface($value))->format('Y-m-d');
+        }
+
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return null;
+        }
+
+        // Epoch / numeric timestamp (detik)
+        if (ctype_digit($raw) && strlen($raw) >= 10) {
+            try {
+                return Carbon::createFromTimestamp((int) $raw)->format('Y-m-d');
+            } catch (\Throwable) {
+                // continue
+            }
+        }
+
+        $formats = [
+            'Y-m-d',
+            'Y-m-d H:i:s',
+            'd/m/Y',
+            'd-m-Y',
+            'm/d/Y',
+            'd M Y',
+            'Y/m/d',
+        ];
+
+        foreach ($formats as $format) {
+            try {
+                $parsed = Carbon::createFromFormat($format, $raw);
+                if ($parsed !== false) {
+                    return $parsed->format('Y-m-d');
+                }
+            } catch (\Throwable) {
+                // try next
+            }
+        }
+
+        try {
+            return Carbon::parse($raw)->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

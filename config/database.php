@@ -156,6 +156,34 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        'bewell_db' => [
+            'driver' => 'mysql',
+            'host' => env('BEWELL_DB_HOST', '127.0.0.1'),
+            'port' => env('BEWELL_DB_PORT', '3316'),
+            'database' => env('BEWELL_DB_DATABASE', 'bewell'),
+            'username' => env('BEWELL_DB_USERNAME', 'bewelluser'),
+            'password' => env('BEWELL_DB_PASSWORD', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+            // Referensi tunnel (bukan dibaca otomatis oleh Laravel - tunnel dibuka manual,
+            // lihat scripts/bemcu-forward-db.bat di project Deploy, atau start-bewell-tunnel.bat
+            // di project ini)
+            'ssh_host' => env('BEWELL_SSH_HOST', '52.221.229.4'),
+            'ssh_port' => env('BEWELL_SSH_PORT', 22),
+            'ssh_user' => env('BEWELL_SSH_USER', 'ubuntu'),
+            'ssh_pkey' => env('BEWELL_SSH_PKEY', public_path('BeMCU_jumpserver.pem')),
+            'remote_host' => env('BEWELL_REMOTE_HOST', '10.11.48.135'),
+            'remote_port' => env('BEWELL_REMOTE_PORT', 3306),
+            'local_port' => env('BEWELL_DB_PORT', 3316),
+        ],
+
         'besigma_db' => [
             'driver' => 'mysql',
             'host' => env('BESIGMA_DB_HOST', '127.0.0.1'),

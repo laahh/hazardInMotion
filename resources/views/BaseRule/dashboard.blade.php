@@ -1,6 +1,6 @@
 @extends('BaseRule.layouts.app')
 
-@section('title', 'Overview — HSECM Monitoring')
+@section('title', 'Daily Monitoring Dashboard')
 
 @push('head')
 @include('BaseRule.partials.styles')
@@ -8,8 +8,8 @@
 
 @section('content')
 @include('BaseRule.partials.page-header', [
-   'title' => 'HSECM Monitoring Dashboard',
-   'subtitle' => 'Monitoring SAP/RFID, CCTV coverage, TBC, task follow-up, IKK, aggregator, fatigue, dan sumber data RFID — per site & per perusahaan.',
+   'title' => 'Daily Monitoring Dashboard',
+   'subtitle' => 'Monitoring Gap Performance Daily SAP, Coverage Area, Blindspot, Closing Hazard, Implementasi IKK, Implementasi Aggregator Fit to Work, dan Exposure Control Pekerja Baru',
    'breadcrumb' => 'Overview',
 ])
 
@@ -19,7 +19,19 @@
    'filterOptions' => $filterOptions,
    'showCompany' => true,
    'showSearch' => false,
+   'showDate' => true,
 ])
+
+@php
+   $periodLabel = $periodLabel ?? null;
+@endphp
+@if($periodLabel)
+<div class="mb-6 flex flex-wrap items-center gap-2 text-sm text-on-surface-variant">
+   <span class="material-symbols-outlined text-base text-primary">calendar_month</span>
+   <span class="font-semibold text-on-background">Periode data:</span>
+   <span>{{ $periodLabel }}</span>
+</div>
+@endif
 
 {{-- KPI cards --}}
 <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-8">
@@ -37,18 +49,22 @@
    @endforeach
 </div>
 
-{{-- Dataset shortcuts --}}
+{{-- Detail shortcuts (gap) --}}
 <div class="mb-8">
-   <h2 class="font-headline font-bold text-lg text-on-background mb-3">Dataset</h2>
+   <div class="mb-3">
+      <h2 class="font-headline font-bold text-lg text-on-background">Detail</h2>
+      <p class="text-xs text-on-surface-variant mt-0.5">Klik untuk detail gap</p>
+   </div>
    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       @foreach($datasets as $item)
       <a href="{{ route('hsecm.datasets.show', array_merge(['dataset' => $item['key']], array_filter($filters))) }}"
-         class="hsecm-card rounded-2xl p-4 flex items-center justify-between gap-3 hover:border-teal-300 transition-colors">
+         class="hsecm-card rounded-2xl p-4 flex items-center justify-between gap-3 hover:border-teal-300 transition-colors"
+         title="Klik untuk detail gap">
          <div class="flex items-center gap-3 min-w-0">
             <span class="material-symbols-outlined text-primary text-2xl">{{ $item['icon'] }}</span>
             <div class="min-w-0">
                <p class="text-sm font-bold text-on-background truncate">{{ $item['label'] }}</p>
-               <p class="text-[11px] text-on-surface-variant">{{ number_format($item['count']) }} baris (terfilter)</p>
+               <p class="text-[11px] text-on-surface-variant">{{ number_format($item['count']) }} baris (terfilter) · Detail gap</p>
             </div>
          </div>
          <span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
