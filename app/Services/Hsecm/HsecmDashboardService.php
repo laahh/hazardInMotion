@@ -462,7 +462,7 @@ class HsecmDashboardService
                     columnKeys: ['date', 'sid_pelapor_all_karyawan', 'pelapor_all_karyawan', 'perusahaan_pelapor_all_karyawan', 'site_dedicated_pelapor_all_karyawan', 'jabatan_fungsional_pelapor_all_karyawan', 'jabatan_struktural_pelapor_all_karyawan', 'SAP_per_SID'],
                     filters: $filters,
                     rowLimit: $rowLimit,
-                    action: 'Minta pelapor Layer 1 segera mengisi SAP sebelum akhir shift.',
+                    action: 'Coaching oleh atasan langsung',
                     tone: 'warning',
                 ),
                 $this->makeEmailDetailSection(
@@ -474,7 +474,7 @@ class HsecmDashboardService
                     columnKeys: ['Day_of_Date', 'Site', 'Lokasi', 'Detil_Lokasi', 'Status_Coverage_dalam_1_Week', 'Tercover'],
                     filters: $filters,
                     rowLimit: $rowLimit,
-                    action: 'Tindaklanjuti area kritis yang belum tercover; assign PIC coverage.',
+                    action: 'Jika detail lokasi tidak aktif dinonaktifkan dan wajib pemenuhan SAP di shift berikutnya',
                     tone: 'danger',
                 ),
                 $this->makeEmailDetailSection(
@@ -486,7 +486,7 @@ class HsecmDashboardService
                     columnKeys: ['Date_for_Join', 'site', 'kategori_TBC', 'blindspot_TBC', 'pelapor_all_karyawan', 'status3'],
                     filters: $filters,
                     rowLimit: $rowLimit,
-                    action: 'Validasi blindspot TBC dan pastikan status follow-up bergerak hari ini.',
+                    action: 'Wajib dilaksanakan Peer Pressure',
                     tone: 'danger',
                 ),
                 $this->makeEmailDetailSection(
@@ -498,7 +498,7 @@ class HsecmDashboardService
                     columnKeys: ['tanggal_janji', 'Task_Number', 'site', 'deskripsi', 'pic', 'status3'],
                     filters: $filters,
                     rowLimit: $rowLimit,
-                    action: 'Escalasi ke PIC terkait; closing hazard overdue sebelum shift berakhir.',
+                    action: 'Coaching oleh atasan langsung',
                     tone: 'danger',
                 ),
                 $this->makeEmailDetailSection(
@@ -510,7 +510,7 @@ class HsecmDashboardService
                     columnKeys: ['Second_of_date_time', 'Task_Number', 'site', 'Selisih_jam_dari_Submit', 'pic', 'status3'],
                     filters: $filters,
                     rowLimit: $rowLimit,
-                    action: 'Percepat closing hazard yang sudah >24 jam dari submit.',
+                    action: 'Tindaklanjut tasklist',
                     tone: 'warning',
                 ),
                 $this->makeEmailDetailSection(
@@ -523,7 +523,7 @@ class HsecmDashboardService
                     filters: $filters,
                     percentColumns: ['Compliance_IKK'],
                     rowLimit: $rowLimit,
-                    action: 'Perbaiki IKK yang belum compliant (work permit) hingga mencapai target.',
+                    action: 'Suspend IKK & Coaching personil terkait',
                     tone: $avgIkk >= 80 ? 'success' : 'warning',
                     needsAction: $ikkRows->isNotEmpty() && $avgIkk < 100,
                 ),
@@ -537,7 +537,7 @@ class HsecmDashboardService
                     filters: $filters,
                     percentColumns: ['Pengisian_Aggregator'],
                     rowLimit: $rowLimit,
-                    action: 'Pastikan karyawan terkait mengisi Aggregator FTW hari ini.',
+                    action: 'Menunjukkan evidence Operator tanpa Aggregator tidak mengoperasikan unit',
                     tone: 'warning',
                 ),
                 $this->makeEmailDetailSection(
@@ -549,11 +549,10 @@ class HsecmDashboardService
                     columnKeys: ['Tanggal_Date', 'Kode_Sid', 'Nama', 'Nama_Perusahaan', 'Site_Dedicated', 'Jabatan_Struktural', 'Kondisi_Karyawan'],
                     filters: $filters,
                     rowLimit: $rowLimit,
-                    action: 'Intervensi karyawan FTW merah; jangan biarkan bekerja tanpa kontrol.',
+                    action: 'Stop Operasi & Mengarahkan Operator dengan Fit to Work Merah diistirahatkan & Menunjukkan Operator tidak mengoperasikan unit',
                     tone: 'danger',
                 ),
-                // Poin Related Causal / Historical Incident: sengaja tidak ditampilkan
-                // di email selama dataset belum tersedia.
+                // Poin 9–10 hanya ditampilkan bila dataset sudah tersedia.
             ],
         ];
     }

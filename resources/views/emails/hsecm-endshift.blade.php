@@ -47,21 +47,19 @@
           <td style="padding:28px;">
             <p style="margin:0 0 10px;font-size:15px;color:#0f172a;">Yth. <strong>{{ $nama }}</strong></p>
             <p style="margin:0 0 18px;font-size:13px;line-height:1.65;color:#475569;">
-              {{ $role }} · Shift telah berakhir. Berikut ringkasan item yang <strong>masih open</strong>
-              dibanding tengah shift sebagai <strong>Monitoring &amp; Intervensi</strong> untuk scope site &amp; perusahaan Anda.
+              {{ $role }} · Berikut ringkasan highlight gap untuk scope site &amp; perusahaan Anda sebagai
+              <strong>Monitoring &amp; Intervensi</strong> berdasarkan shift yang sudah berjalan sebelumnya.
             </p>
 
-            @if(count($exposure) > 0)
-              <p style="margin:0 0 12px;font-size:13px;line-height:1.6;color:#334155;">
-                Berikut kami sampaikan exposure dan hal yang perlu menjadi perhatian:
-              </p>
-              @foreach($exposure as $i => $section)
-                @include('emails.partials.hsecm-section-detail', ['number' => $i + 1, 'section' => $section])
-              @endforeach
-            @endif
+            <p style="margin:0 0 12px;font-size:13px;line-height:1.6;color:#334155;">
+              Berikut kami sampaikan exposure dari shift yang sudah berjalan sebelumnya:
+            </p>
+            @foreach($exposure as $i => $section)
+              @include('emails.partials.hsecm-section-detail', ['number' => $i + 1, 'section' => $section])
+            @endforeach
 
             <p style="margin:22px 0 12px;font-size:13px;line-height:1.6;color:#334155;">
-              Berikut gap yang masih open agar segera ditindaklanjuti:
+              Berikut kami sampaikan gap yang menjadi concern agar segera ditindaklanjuti pasca shift berakhir:
             </p>
             @foreach($gaps as $i => $section)
               @include('emails.partials.hsecm-section-detail', ['number' => $i + 1, 'section' => $section])
@@ -81,8 +79,8 @@
               </tr>
             </table>
             <p style="margin:0;font-size:13px;line-height:1.65;color:#334155;">
-              Mohon setiap point dari gap yang muncul di atas dapat dikontrol dan ditindaklanjuti
-              dari masing-masing point di atas.
+              Mohon setiap point dari gap yang muncul di atas dapat dikontrol dan ditindaklanjuti untuk diperbaiki
+              agar tidak terjadi perulangan terhadap gap yang sama pada shift berikutnya.
             </p>
             <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;text-align:center;">Email digenerate otomatis pada {{ $generatedAt }}.</p>
           </td>

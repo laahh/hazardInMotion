@@ -5,14 +5,15 @@
   $rows = $section['rows'] ?? [];
   $total = (int) ($section['total'] ?? 0);
   $truncated = (bool) ($section['truncated'] ?? false);
+  $action = trim((string) ($section['action'] ?? ''));
 @endphp
 
 <div style="margin:0 0 16px;">
   <p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#0f172a;">
     <strong>{{ $number }}. {{ $section['title'] }}:</strong>
     <span style="color:#0f766e;font-weight:800;">{{ $section['value'] ?? '—' }}</span>
-    @if($available && $total > 0)
-      <span style="color:#64748b;font-size:11px;">({{ number_format($total) }} baris)</span>
+    @if($action !== '')
+      <span style="color:#334155;"> — {{ $action }}</span>
     @endif
   </p>
 
