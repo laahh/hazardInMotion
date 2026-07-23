@@ -97,7 +97,7 @@ class Kernel extends ConsoleKernel
 
         // Generate planning roster dari DOP & IKK setiap 10 menit (hari ini). Skip jika job periode yang sama masih pending/processing.
         $schedule->command('roster:generate-planning')
-            ->everyMinutes()
+            ->everyMinute()
             ->withoutOverlapping(15)
             ->appendOutputTo(storage_path('logs/roster-generate-planning.log'));
 
