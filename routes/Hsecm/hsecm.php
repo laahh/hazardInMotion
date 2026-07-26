@@ -52,6 +52,8 @@ Route::middleware(['auth'])
             ->name('wa-notify.send-email');
         Route::post('/wa-notify/send-email-bulk', [HsecmWaNotifyController::class, 'sendEmailBulk'])
             ->name('wa-notify.send-email-bulk');
+        Route::post('/wa-notify/send-shift-email', [HsecmWaNotifyController::class, 'sendShiftEmail'])
+            ->name('wa-notify.send-shift-email');
 
         Route::get('/tasklist', [HsecmTasklistManageController::class, 'index'])->name('tasklist.index');
         Route::get('/tasklist/manage/{id}', [HsecmTasklistManageController::class, 'manage'])

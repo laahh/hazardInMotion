@@ -78,6 +78,67 @@
    </div>
 </form>
 
+{{-- Panel kirim terjadwal midshift / endshift (night & day) --}}
+<form method="POST" action="{{ route('hsecm.wa-notify.send-shift-email') }}" id="hsecm-shift-email-form" class="hsecm-card rounded-2xl p-5 mb-6 border border-amber-100">
+   @csrf
+   <input type="hidden" name="week" value="{{ $filters['week'] ?? '' }}">
+   <input type="hidden" name="year" value="{{ $filters['year'] ?? '' }}">
+   <input type="hidden" name="mode" id="hsecm-shift-mode" value="midshift">
+   <input type="hidden" name="shift" id="hsecm-shift-value" value="night">
+   <div id="hsecm-shift-indexes"></div>
+
+   <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+      <div>
+         <h2 class="font-headline font-bold text-lg text-on-background">Kirim Email Shift (Manual)</h2>
+         <p class="text-xs text-on-surface-variant mt-0.5">
+            Midshift = snapshot · Endshift = still-open + tasklist.
+            Night = slot 00/06 · Day = slot 12/18.
+            Centang penerima di tabel di bawah untuk membatasi, atau kosongkan = semua penerima.
+         </p>
+      </div>
+      <span class="hsecm-badge hsecm-badge--warning">Scheduler override</span>
+   </div>
+
+   <div class="flex flex-wrap items-end gap-3 mb-4">
+      <div class="min-w-[16rem] flex-1">
+         <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Email uji (opsional)</label>
+         <input type="email" name="email" value="{{ old('email') }}" placeholder="kosongkan = pakai daftar / centangan"
+                class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm bg-white">
+      </div>
+      <label class="inline-flex items-center gap-2 text-sm font-semibold text-on-surface px-2 py-2">
+         <input type="checkbox" name="dry_run" value="1" class="hsecm-check" @checked(old('dry_run'))>
+         Dry-run (tidak kirim sungguhan)
+      </label>
+   </div>
+
+   <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <button type="submit" class="hsecm-shift-btn inline-flex flex-col items-start gap-1 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-left hover:bg-teal-100"
+              data-mode="midshift" data-shift="night"
+              onclick="return window.hsecmConfirmShift(this)">
+         <span class="text-xs font-bold uppercase tracking-wide text-teal-800">Midshift Night</span>
+         <span class="text-[11px] text-teal-700">01:00 · snapshot slot 00:00</span>
+      </button>
+      <button type="submit" class="hsecm-shift-btn inline-flex flex-col items-start gap-1 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-left hover:bg-teal-100"
+              data-mode="midshift" data-shift="day"
+              onclick="return window.hsecmConfirmShift(this)">
+         <span class="text-xs font-bold uppercase tracking-wide text-teal-800">Midshift Day</span>
+         <span class="text-[11px] text-teal-700">13:00 · snapshot slot 12:00</span>
+      </button>
+      <button type="submit" class="hsecm-shift-btn inline-flex flex-col items-start gap-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100"
+              data-mode="endshift" data-shift="night"
+              onclick="return window.hsecmConfirmShift(this)">
+         <span class="text-xs font-bold uppercase tracking-wide text-amber-900">Endshift Night</span>
+         <span class="text-[11px] text-amber-800">07:00 · still-open 06 vs 00</span>
+      </button>
+      <button type="submit" class="hsecm-shift-btn inline-flex flex-col items-start gap-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100"
+              data-mode="endshift" data-shift="day"
+              onclick="return window.hsecmConfirmShift(this)">
+         <span class="text-xs font-bold uppercase tracking-wide text-amber-900">Endshift Day</span>
+         <span class="text-[11px] text-amber-800">19:00 · still-open 18 vs 12</span>
+      </button>
+   </div>
+</form>
+
 <form method="POST" action="{{ route('hsecm.wa-notify.recipients.store') }}" class="hsecm-card rounded-2xl p-5 mb-6 border border-teal-100">
    @csrf
    <input type="hidden" name="week" value="{{ $filters['week'] ?? '' }}">
@@ -342,14 +403,50 @@
    const rowChecks = Array.from(document.querySelectorAll('.hsecm-row-check'));
    const selectedCount = document.getElementById('hsecm-selected-count');
    const bulkBtn = document.getElementById('hsecm-bulk-email-btn');
+   const shiftIndexes = document.getElementById('hsecm-shift-indexes');
+   const shiftMode = document.getElementById('hsecm-shift-mode');
+   const shiftValue = document.getElementById('hsecm-shift-value');
 
    const sync = () => {
       const enabled = rowChecks.filter((el) => !el.disabled);
       const checked = enabled.filter((el) => el.checked);
-      selectedCount.textContent = `${checked.length} dipilih`;
-      bulkBtn.disabled = checked.length === 0;
-      checkAll.checked = enabled.length > 0 && checked.length === enabled.length;
-      checkAll.indeterminate = checked.length > 0 && checked.length < enabled.length;
+      if (selectedCount) selectedCount.textContent = `${checked.length} dipilih`;
+      if (bulkBtn) bulkBtn.disabled = checked.length === 0;
+      if (checkAll) {
+         checkAll.checked = enabled.length > 0 && checked.length === enabled.length;
+         checkAll.indeterminate = checked.length > 0 && checked.length < enabled.length;
+      }
+   };
+
+   const syncShiftIndexes = () => {
+      if (!shiftIndexes) return;
+      shiftIndexes.innerHTML = '';
+      rowChecks.filter((el) => el.checked && !el.disabled).forEach((el) => {
+         const input = document.createElement('input');
+         input.type = 'hidden';
+         input.name = 'indexes[]';
+         input.value = el.value;
+         shiftIndexes.appendChild(input);
+      });
+   };
+
+   window.hsecmConfirmShift = (btn) => {
+      const mode = btn.getAttribute('data-mode') || 'midshift';
+      const shift = btn.getAttribute('data-shift') || 'night';
+      if (shiftMode) shiftMode.value = mode;
+      if (shiftValue) shiftValue.value = shift;
+      syncShiftIndexes();
+      const dry = document.querySelector('#hsecm-shift-email-form input[name="dry_run"]')?.checked;
+      const label = `${mode.toUpperCase()} / ${shift.toUpperCase()}`;
+      return confirm(
+         (dry ? '[DRY-RUN] ' : '') +
+         `Kirim email ${label} sekarang?\n` +
+         (document.querySelector('#hsecm-shift-email-form input[name="email"]')?.value
+            ? 'Target: email uji yang diisi.'
+            : (shiftIndexes.children.length > 0
+               ? `Target: ${shiftIndexes.children.length} penerima tercentang.`
+               : 'Target: semua penerima.'))
+      );
    };
 
    checkAll?.addEventListener('change', () => {

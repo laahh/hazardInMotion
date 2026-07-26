@@ -35,6 +35,7 @@ class HsecmShiftEmailDispatchService
         ?string $overrideSite = null,
         ?string $overridePerusahaan = null,
         string $shift = 'auto',
+        ?array $onlyEmails = null,
     ): array {
         $now = ($now ?? now())->timezone('Asia/Makassar');
         $window = $this->resolveShiftWindow('midshift', $shift, $now);
@@ -50,6 +51,7 @@ class HsecmShiftEmailDispatchService
             overrideSite: $overrideSite,
             overridePerusahaan: $overridePerusahaan,
             shiftLabel: $window['label'],
+            onlyEmails: $onlyEmails,
         );
     }
 
@@ -59,6 +61,7 @@ class HsecmShiftEmailDispatchService
      * - day   → slot 18:00 vs 12:00
      * - auto  → pilih dari jam sekarang (WITA)
      *
+     * @param  list<string>|null  $onlyEmails
      * @return array{sent: int, failed: int, skipped: int, message: string, details: list<array<string, mixed>>}
      */
     public function dispatchEndshift(
@@ -68,6 +71,7 @@ class HsecmShiftEmailDispatchService
         ?string $overrideSite = null,
         ?string $overridePerusahaan = null,
         string $shift = 'auto',
+        ?array $onlyEmails = null,
     ): array {
         $now = ($now ?? now())->timezone('Asia/Makassar');
         $window = $this->resolveShiftWindow('endshift', $shift, $now);
@@ -84,6 +88,7 @@ class HsecmShiftEmailDispatchService
             overrideSite: $overrideSite,
             overridePerusahaan: $overridePerusahaan,
             shiftLabel: $window['label'],
+            onlyEmails: $onlyEmails,
         );
     }
 
@@ -283,6 +288,7 @@ class HsecmShiftEmailDispatchService
         ?string $overrideSite = null,
         ?string $overridePerusahaan = null,
         string $shiftLabel = '',
+        ?array $onlyEmails = null,
     ): array {
         $now = ($now ?? now())->timezone('Asia/Makassar');
         $probeTable = $this->probeTable();
@@ -315,7 +321,12 @@ class HsecmShiftEmailDispatchService
             }
         }
 
-        $recipients = $this->resolveRecipientsForDispatch($onlyEmail, $overrideSite, $overridePerusahaan);
+        $recipients = $this->resolveRecipientsForDispatch(
+            $onlyEmail,
+            $overrideSite,
+            $overridePerusahaan,
+            $onlyEmails,
+        );
         if ($recipients === []) {
             return [
                 'sent' => 0,
@@ -341,10 +352,7 @@ class HsecmShiftEmailDispatchService
         foreach ($recipients as $recipient) {
             $site = $this->normalizeNullable($recipient['site'] ?? null);
             $perusahaan = trim((string) ($recipient['perusahaan'] ?? ''));
-            if ($perusahaan === '') {
-                $skipped++;
-                continue;
-            }
+            // Site/perusahaan kosong = agregat semua data (tidak di-skip).
 
             $filters = $this->dashboardService->withBatchContext(
                 $this->baseFilters($site, $perusahaan),
@@ -367,6 +375,17 @@ class HsecmShiftEmailDispatchService
                     $gapItems = $this->dashboardService->extractTasklistItemsFromGaps($filters);
                     if ($gapItems === []) {
                         $tasklistCache[$cacheKey] = null;
+                    } elseif ($perusahaan === '') {
+                        // Tasklist butuh perusahaan (kolom NOT NULL); agregat hanya kirim email.
+                        $tasklistCache[$cacheKey] = null;
+                        if ($dryRun) {
+                            $details[] = [
+                                'nama' => '(dry-run tasklist)',
+                                'email' => '-',
+                                'success' => true,
+                                'message' => 'Dry-run: scope agregat — email dikirim tanpa buat tasklist ('.count($gapItems).' gap items).',
+                            ];
+                        }
                     } elseif ($dryRun) {
                         $tasklistCache[$cacheKey] = null;
                         $details[] = [
@@ -511,25 +530,52 @@ class HsecmShiftEmailDispatchService
     }
 
     /**
+     * @param  list<string>|null  $onlyEmails
      * @return list<array<string, mixed>>
      */
     private function resolveRecipientsForDispatch(
         ?string $onlyEmail,
         ?string $overrideSite = null,
         ?string $overridePerusahaan = null,
+        ?array $onlyEmails = null,
     ): array {
         $all = $this->recipientRepository->all();
-        $onlyEmail = $this->normalizeEmail($onlyEmail);
-        if ($onlyEmail === null) {
+
+        $emailList = [];
+        foreach ($onlyEmails ?? [] as $email) {
+            $normalized = $this->normalizeEmail($email);
+            if ($normalized !== null) {
+                $emailList[$normalized] = true;
+            }
+        }
+        $single = $this->normalizeEmail($onlyEmail);
+        if ($single !== null) {
+            $emailList[$single] = true;
+        }
+
+        if ($emailList === []) {
             return $all;
         }
 
-        $matched = $this->filterRecipientsByEmail($all, $onlyEmail);
+        $matched = collect($all)
+            ->filter(function (array $r) use ($emailList): bool {
+                $email = $this->normalizeEmail($r['email'] ?? null);
+
+                return $email !== null && isset($emailList[$email]);
+            })
+            ->values()
+            ->all();
+
         if ($matched !== []) {
             return $matched;
         }
 
-        // Email belum terdaftar: kirim 1x sebagai penerima uji (override).
+        // Semua email belum terdaftar: buat penerima uji dari email pertama.
+        $firstEmail = array_key_first($emailList);
+        if ($firstEmail === null) {
+            return [];
+        }
+
         $site = $this->normalizeNullable($overrideSite);
         $perusahaan = trim((string) ($overridePerusahaan ?? ''));
         if ($perusahaan === '') {
@@ -546,7 +592,7 @@ class HsecmShiftEmailDispatchService
             'site' => $site,
             'perusahaan' => $perusahaan !== '' ? $perusahaan : 'TEST Scope',
             'no' => '',
-            'email' => $onlyEmail,
+            'email' => $firstEmail,
             'source' => 'cli-override',
         ]];
     }
@@ -693,6 +739,8 @@ class HsecmShiftEmailDispatchService
 
     private function scopeLabel(?string $site, string $perusahaan): string
     {
-        return ($site ?: 'Semua Site').' · '.$perusahaan;
+        $perusahaan = trim($perusahaan);
+
+        return ($site ?: 'Semua Site').' · '.($perusahaan !== '' ? $perusahaan : 'Semua Perusahaan');
     }
 }

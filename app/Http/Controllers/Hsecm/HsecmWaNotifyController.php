@@ -7,12 +7,15 @@ namespace App\Http\Controllers\Hsecm;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Hsecm\Concerns\ProvidesHsecmLayout;
 use App\Http\Requests\Hsecm\HsecmWaNotifySendEmailRequest;
+use App\Http\Requests\Hsecm\HsecmWaNotifySendShiftEmailRequest;
 use App\Http\Requests\Hsecm\HsecmWaNotifyStoreRecipientRequest;
 use App\Services\Hsecm\HsecmDashboardService;
+use App\Services\Hsecm\HsecmShiftEmailDispatchService;
 use App\Services\Hsecm\HsecmWaNotifyService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Throwable;
 
 class HsecmWaNotifyController extends Controller
 {
@@ -21,6 +24,7 @@ class HsecmWaNotifyController extends Controller
     public function __construct(
         private readonly HsecmWaNotifyService $waNotifyService,
         private readonly HsecmDashboardService $dashboardService,
+        private readonly HsecmShiftEmailDispatchService $shiftEmailDispatchService,
     ) {}
 
     public function index(Request $request): View
@@ -104,6 +108,69 @@ class HsecmWaNotifyController extends Controller
         $flashKey = ($result['sent'] ?? 0) > 0
             ? (($result['failed'] ?? 0) > 0 ? 'success' : 'success')
             : 'error';
+
+        return $this->redirectToIndex($request)
+            ->with($flashKey, $result['message'])
+            ->with('email_send_details', $result['details'] ?? []);
+    }
+
+    public function sendShiftEmail(HsecmWaNotifySendShiftEmailRequest $request): RedirectResponse
+    {
+        $data = $request->validated();
+        $mode = (string) $data['mode'];
+        $shift = (string) $data['shift'];
+        $dryRun = (bool) ($data['dry_run'] ?? false);
+        $overrideEmail = isset($data['email']) ? trim((string) $data['email']) : '';
+
+        $onlyEmails = null;
+        if ($overrideEmail !== '') {
+            $onlyEmails = [$overrideEmail];
+        } elseif (! empty($data['indexes']) && is_array($data['indexes'])) {
+            $rows = collect($this->waNotifyService->buildRecipientRows($request))->keyBy('index');
+            $onlyEmails = collect($data['indexes'])
+                ->map(static fn ($i): int => (int) $i)
+                ->unique()
+                ->map(function (int $index) use ($rows): ?string {
+                    $row = $rows->get($index);
+                    if ($row === null) {
+                        return null;
+                    }
+                    $email = trim((string) ($row['email'] ?? ''));
+
+                    return $email !== '' ? $email : null;
+                })
+                ->filter()
+                ->values()
+                ->all();
+
+            if ($onlyEmails === []) {
+                return $this->redirectToIndex($request)
+                    ->with('error', 'Tidak ada email valid dari penerima yang dipilih.');
+            }
+        }
+
+        try {
+            $result = $mode === 'endshift'
+                ? $this->shiftEmailDispatchService->dispatchEndshift(
+                    dryRun: $dryRun,
+                    shift: $shift,
+                    onlyEmails: $onlyEmails,
+                )
+                : $this->shiftEmailDispatchService->dispatchMidshift(
+                    dryRun: $dryRun,
+                    shift: $shift,
+                    onlyEmails: $onlyEmails,
+                );
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->redirectToIndex($request)
+                ->with('error', $e->getMessage());
+        }
+
+        $flashKey = ($result['failed'] ?? 0) > 0 && ($result['sent'] ?? 0) === 0
+            ? 'error'
+            : 'success';
 
         return $this->redirectToIndex($request)
             ->with($flashKey, $result['message'])

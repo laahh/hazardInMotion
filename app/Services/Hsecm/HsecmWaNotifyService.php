@@ -340,66 +340,99 @@ class HsecmWaNotifyService
     }
 
     /**
+     * Format WA selaras narasi email Daily Monitoring & Intervensi.
+     *
      * @param  array<string, mixed>  $recipient
      * @param  array{site: string, perusahaan: string, week: string, year: string, q: string}  $filters
-     * @param  array{kpis: list<array<string, mixed>>, datasets: list<array<string, mixed>>}  $summary
+     * @param  array{
+     *     kpis?: list<array<string, mixed>>,
+     *     datasets?: list<array<string, mixed>>,
+     *     email_narrative?: array{exposure?: list<array<string, mixed>>, gaps?: list<array<string, mixed>>}
+     * }  $summary
      */
     private function composeMessage(array $recipient, array $filters, array $summary): string
     {
         $nama = (string) ($recipient['nama'] ?? '-');
-        $role = (string) ($recipient['role'] ?? '-');
+        $role = trim((string) ($recipient['role'] ?? ''));
+        if ($role === '') {
+            $role = 'PENANGGUNG JAWAB OPERASIONAL';
+        }
         $siteLabel = $filters['site'] !== '' ? $filters['site'] : (($recipient['site'] ?? null) ?: 'Semua Site');
         $companyLabel = $filters['perusahaan'] !== '' ? $filters['perusahaan'] : ((string) ($recipient['perusahaan'] ?? '-'));
-        $period = trim(implode(' / ', array_filter([
-            $filters['week'] !== '' ? 'Week '.$filters['week'] : null,
-            $filters['year'] !== '' ? 'Year '.$filters['year'] : null,
-        ]))) ?: 'Semua periode';
+
+        $narrative = $summary['email_narrative'] ?? ['exposure' => [], 'gaps' => []];
+        $exposure = collect($narrative['exposure'] ?? [])
+            ->filter(static fn (array $s): bool => (bool) ($s['available'] ?? true))
+            ->values()
+            ->all();
+        $gaps = collect($narrative['gaps'] ?? [])
+            ->filter(static fn (array $s): bool => (bool) ($s['available'] ?? true))
+            ->values()
+            ->all();
+
+        $pjoUrl = $this->buildHsecmPublicUrl('/hsecm/pjo-action', [
+            'site' => $filters['site'] !== '' ? $filters['site'] : null,
+            'perusahaan' => $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null,
+        ]);
 
         $lines = [
-            '*HSECM Monitoring Summary*',
+            '*Daily Monitoring & Intervensi*',
+            $siteLabel.' · '.$companyLabel,
             '',
             'Yth. *'.$nama.'*',
-            'Role: '.$role,
-            'Site: '.$siteLabel,
-            'Perusahaan: '.$companyLabel,
-            'Periode: '.$period,
             '',
-            '*Ringkasan KPI (Agregat)*',
+            $role.' · Berikut ringkasan highlight gap untuk scope site & perusahaan Anda sebagai *Monitoring & Intervensi* berdasarkan shift yang sudah berjalan sebelumnya.',
+            '',
+            'Berikut kami sampaikan exposure dari shift yang sudah berjalan sebelumnya:',
         ];
 
-        foreach ($summary['kpis'] as $kpi) {
-            $lines[] = '• '.$kpi['label'].': *'.$kpi['value'].'*'.(
-                ! empty($kpi['hint']) ? ' ('.$kpi['hint'].')' : ''
-            );
+        $expNo = 1;
+        foreach ($exposure as $section) {
+            $lines[] = $this->formatNarrativeWaLine($expNo, $section);
+            $expNo++;
         }
-
-        $byCompany = $summary['by_company'] ?? [];
-        if ($byCompany !== []) {
-            $lines[] = '';
-            $lines[] = '*Detail per Perusahaan*';
-            foreach ($byCompany as $companyRow) {
-                $lines[] = '';
-                $lines[] = '*'.((string) ($companyRow['perusahaan'] ?? '-')).'*';
-                foreach ($companyRow['metrics'] ?? [] as $metric) {
-                    $value = ($metric['format'] ?? 'number') === 'percent'
-                        ? number_format((float) $metric['value'], 1).'%'
-                        : number_format((int) $metric['value']);
-                    $lines[] = '• '.$metric['label'].': *'.$value.'*';
-                }
-            }
+        if ($exposure === []) {
+            $lines[] = '_Tidak ada item exposure pada scope ini._';
         }
 
         $lines[] = '';
-        $lines[] = '*Jumlah Record Dataset*';
-        foreach ($summary['datasets'] as $dataset) {
-            $lines[] = '• '.$dataset['label'].': '.number_format((int) $dataset['count']);
+        $lines[] = 'Berikut kami sampaikan gap yang menjadi concern agar segera ditindaklanjuti pasca shift berakhir:';
+
+        $gapNo = 1;
+        foreach ($gaps as $section) {
+            $lines[] = $this->formatNarrativeWaLine($gapNo, $section);
+            $gapNo++;
+        }
+        if ($gaps === []) {
+            $lines[] = '_Tidak ada gap concern pada scope ini._';
         }
 
         $lines[] = '';
-        $lines[] = '_Pesan otomatis dari HSECM Monitoring Dashboard_';
-        $lines[] = '_'.now()->timezone(config('app.timezone', 'Asia/Makassar'))->format('d/m/Y H:i').'_';
+        $lines[] = 'Detail data secara overall dapat diakses pada Website berikut:';
+        $lines[] = $pjoUrl;
+        $lines[] = '';
+        $lines[] = 'Mohon setiap point dari gap yang muncul di atas dapat dikontrol dan ditindaklanjuti untuk diperbaiki agar tidak terjadi perulangan terhadap gap yang sama pada shift berikutnya.';
+        $lines[] = '';
+        $lines[] = '_'.now()->timezone(config('app.timezone', 'Asia/Makassar'))->format('d/m/Y H:i').' WITA_';
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * @param  array<string, mixed>  $section
+     */
+    private function formatNarrativeWaLine(int $number, array $section): string
+    {
+        $title = (string) ($section['title'] ?? '-');
+        $value = (string) ($section['value'] ?? '—');
+        $action = trim((string) ($section['action'] ?? ''));
+
+        $line = $number.'. '.$title.': *'.$value.'*';
+        if ($action !== '') {
+            $line .= ' — '.$action;
+        }
+
+        return $line;
     }
 
     /**
