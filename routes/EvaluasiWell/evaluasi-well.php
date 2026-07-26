@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\SportEvaluation\HealthNutritionRiskController;
 use App\Http\Controllers\SportEvaluation\NutritionEvaluationController;
 use App\Http\Controllers\SportEvaluation\SportActivitiesController;
 use App\Http\Controllers\SportEvaluation\SportEmployeeController;
@@ -24,10 +25,22 @@ Route::middleware('evaluasi-well.access')
         Route::get('/distribution', [SportEvaluationDashboardController::class, 'distribution'])->name('distribution');
         Route::get('/leaderboard', [SportEvaluationDashboardController::class, 'leaderboard'])->name('leaderboard');
 
+        Route::get('/not-installed/data', [SportEvaluationDashboardController::class, 'notInstalledData'])
+            ->name('not-installed.data');
+        Route::get('/not-installed/export', [SportEvaluationDashboardController::class, 'notInstalledExport'])
+            ->name('not-installed.export');
+
         Route::get('/activities', [SportActivitiesController::class, 'index'])->name('activities.index');
         Route::get('/activities/data', [SportActivitiesController::class, 'data'])->name('activities.data');
 
         Route::get('/nutrition', [NutritionEvaluationController::class, 'index'])->name('nutrition.index');
+
+        Route::get('/health-nutrition', [HealthNutritionRiskController::class, 'index'])
+            ->name('health-nutrition.index');
+        Route::get('/health-nutrition/data', [HealthNutritionRiskController::class, 'data'])
+            ->name('health-nutrition.data');
+        Route::get('/health-nutrition/export', [HealthNutritionRiskController::class, 'export'])
+            ->name('health-nutrition.export');
 
         Route::get('/employees/{userId}', [SportEmployeeController::class, 'show'])
             ->whereNumber('userId')

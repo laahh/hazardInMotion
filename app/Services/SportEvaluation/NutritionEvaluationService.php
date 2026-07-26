@@ -35,6 +35,287 @@ final class NutritionEvaluationService
         'es krim', 'ice cream', 'minuman manis',
     ];
 
+    /**
+     * Evaluasi risiko pola makan untuk daftar user_id (reuse oleh HealthNutritionRiskService).
+     *
+     * @param  array<int,int>  $userIds
+     * @return array<int,array{
+     *     user_id:int,
+     *     has_poor_diet:bool,
+     *     alert_codes:array<int,string>,
+     *     alerts:array<int,array<string,mixed>>,
+     *     days_logged:int,
+     *     avg_calories:float,
+     *     risk_score:int
+     * }>
+     */
+    public function evaluateDietRiskForUsers(array $userIds, ?\Illuminate\Support\Carbon $from = null, ?\Illuminate\Support\Carbon $to = null): array
+    {
+        $userIds = array_values(array_unique(array_map('intval', $userIds)));
+        if ($userIds === [] || ! $this->connection->isUp()) {
+            return [];
+        }
+
+        $from7 = ($from ?? Carbon::now()->subDays(6)->startOfDay())->copy();
+        $to7 = ($to ?? Carbon::now()->endOfDay())->copy();
+        $from30 = Carbon::now()->subDays(30)->startOfDay();
+
+        $alerts = $this->buildAlertsForUsers($userIds, $from7, $to7, $from30);
+
+        $from7Str = $from7->format('Y-m-d H:i:s');
+        $to7Str = $to7->format('Y-m-d H:i:s');
+
+        $dayRows = $this->db()->table('food_analyses')
+            ->selectRaw('user_id, DATE(created_at) AS d, COALESCE(SUM(total_calories), 0) AS day_cal')
+            ->whereIn('user_id', $userIds)
+            ->whereBetween('created_at', [$from7Str, $to7Str])
+            ->groupByRaw('user_id, DATE(created_at)')
+            ->get()
+            ->groupBy('user_id');
+
+        $dailyStats = [];
+        foreach ($dayRows as $uid => $rows) {
+            $cals = $rows->pluck('day_cal')->map(static fn ($v): float => (float) $v);
+            $dailyStats[(int) $uid] = [
+                'days_logged' => $rows->count(),
+                'avg_calories' => round((float) ($cals->avg() ?: 0), 1),
+            ];
+        }
+
+        $byUser = [];
+        foreach ($userIds as $uid) {
+            $byUser[$uid] = [
+                'user_id' => $uid,
+                'has_poor_diet' => false,
+                'alert_codes' => [],
+                'alerts' => [],
+                'days_logged' => (int) ($dailyStats[$uid]['days_logged'] ?? 0),
+                'avg_calories' => (float) ($dailyStats[$uid]['avg_calories'] ?? 0),
+                'risk_score' => 0,
+            ];
+        }
+
+        foreach ($alerts as $alert) {
+            $uid = (int) $alert['user_id'];
+            if (! isset($byUser[$uid])) {
+                continue;
+            }
+            $byUser[$uid]['has_poor_diet'] = true;
+            $byUser[$uid]['alert_codes'][] = (string) $alert['code'];
+            $byUser[$uid]['alerts'][] = $alert;
+            $byUser[$uid]['risk_score'] += ($alert['severity'] === 'high') ? 3 : 2;
+        }
+
+        foreach ($byUser as &$row) {
+            $row['alert_codes'] = array_values(array_unique($row['alert_codes']));
+        }
+        unset($row);
+
+        return $byUser;
+    }
+
+    /**
+     * @param  array<int,int>  $userIds
+     * @return array<int,array<string,mixed>>
+     */
+    private function buildAlertsForUsers(array $userIds, Carbon $from7, Carbon $to7, Carbon $from30): array
+    {
+        // Reuse buildAlerts but scoped: temporarily call with filtered candidates
+        // by injecting via a thin wrapper around existing private logic.
+        $db = $this->db();
+        $from7Str = $from7->format('Y-m-d H:i:s');
+        $to7Str = $to7->format('Y-m-d H:i:s');
+        $scoreFrom = $from7->format('Y-m-d');
+        $scoreTo = $to7->format('Y-m-d');
+
+        if ($userIds === []) {
+            return [];
+        }
+
+        $profiles = $db->table('employee_profiles')
+            ->whereIn('id', $userIds)
+            ->get(['id', 'nama', 'kode_sid', 'divisi'])
+            ->keyBy('id');
+
+        $dailyFood = $db->table('food_analyses')
+            ->selectRaw('user_id, DATE(created_at) AS d')
+            ->selectRaw('COUNT(*) AS entries')
+            ->selectRaw('COALESCE(SUM(total_calories), 0) AS calories')
+            ->selectRaw('COALESCE(SUM(carbs_g), 0) AS carbs')
+            ->selectRaw('COALESCE(SUM(protein_g), 0) AS protein')
+            ->whereIn('user_id', $userIds)
+            ->whereBetween('created_at', [$from7Str, $to7Str])
+            ->groupByRaw('user_id, DATE(created_at)')
+            ->get()
+            ->groupBy('user_id');
+
+        $logDays7 = [];
+        foreach ($dailyFood as $userId => $rows) {
+            $logDays7[(int) $userId] = $rows->count();
+        }
+
+        $scores = $db->table('daily_health_scores')
+            ->whereIn('user_id', $userIds)
+            ->whereBetween('score_date', [$scoreFrom, $scoreTo])
+            ->get([
+                'user_id',
+                'score_date',
+                'category',
+                'calorie_actual',
+                'protein_actual_g',
+                'carb_actual_g',
+            ])
+            ->groupBy('user_id');
+
+        $targets = $db->table('goal_daily_targets')
+            ->whereIn('user_id', $userIds)
+            ->whereBetween('target_date', [$scoreFrom, $scoreTo])
+            ->get([
+                'user_id',
+                'target_date',
+                'calorie_target',
+                'protein_target_g',
+                'carb_target_g',
+            ])
+            ->groupBy('user_id');
+
+        $sweetCounts = $this->countSweetFoodEntries($userIds, $from7Str, $to7Str);
+        $alerts = [];
+
+        foreach ($userIds as $userId) {
+            $profile = $profiles->get($userId);
+            if ($profile === null) {
+                continue;
+            }
+
+            $base = [
+                'user_id' => $userId,
+                'nama' => (string) ($profile->nama ?: 'User #'.$userId),
+                'kode_sid' => (string) ($profile->kode_sid ?: '-'),
+                'divisi' => (string) ($profile->divisi ?: '-'),
+            ];
+
+            $userDaily = $dailyFood->get($userId) ?? $dailyFood->get((string) $userId, collect());
+            $userScores = $scores->get($userId) ?? $scores->get((string) $userId, collect());
+            $userTargetGroup = $targets->get($userId) ?? $targets->get((string) $userId, collect());
+            $userTargets = $userTargetGroup->keyBy(
+                static fn ($row): string => (string) $row->target_date
+            );
+
+            $daysByDate = $this->mergeDailyActuals($userDaily, $userScores, $userTargets);
+
+            $calorieOverDays = 0;
+            $carbOverDays = 0;
+            $proteinUnderDays = 0;
+
+            foreach ($daysByDate as $day) {
+                $calTarget = $day['calorie_target'];
+                $carbTarget = $day['carb_target'];
+                $proteinTarget = $day['protein_target'];
+
+                if ($calTarget > 0) {
+                    if ($day['calories'] >= $calTarget * 1.2) {
+                        $calorieOverDays++;
+                    }
+                } elseif ($day['calories'] >= self::ABSOLUTE_CALORIE_OVER) {
+                    $calorieOverDays++;
+                }
+
+                if ($carbTarget > 0) {
+                    if ($day['carbs'] >= $carbTarget * 1.3) {
+                        $carbOverDays++;
+                    }
+                } elseif ($day['carbs'] >= self::ABSOLUTE_CARB_OVER) {
+                    $carbOverDays++;
+                }
+
+                if ($proteinTarget > 0) {
+                    if ($day['protein'] <= $proteinTarget * 0.7) {
+                        $proteinUnderDays++;
+                    }
+                } elseif ($day['protein'] > 0 && $day['protein'] <= self::DEFAULT_PROTEIN_TARGET * 0.7) {
+                    $proteinUnderDays++;
+                }
+            }
+
+            $poorScoreDays = $userScores->filter(
+                static fn ($row): bool => in_array((string) $row->category, ['poor', 'need_improvement'], true)
+            )->count();
+
+            $daysLogged = $logDays7[$userId] ?? 0;
+            $sweetCount = $sweetCounts[$userId] ?? 0;
+
+            if ($calorieOverDays >= 3) {
+                $alerts[] = $base + [
+                    'code' => 'calorie_over',
+                    'title' => 'Kalori berlebih',
+                    'severity' => 'high',
+                    'evidence' => $calorieOverDays.' hari ≥120% target / ambang kalori',
+                    'days_flagged' => $calorieOverDays,
+                ];
+            }
+
+            if ($carbOverDays >= 3) {
+                $alerts[] = $base + [
+                    'code' => 'carb_over',
+                    'title' => 'Karbohidrat tinggi',
+                    'severity' => 'high',
+                    'evidence' => $carbOverDays.' hari ≥130% target karbo',
+                    'days_flagged' => $carbOverDays,
+                ];
+            }
+
+            if ($proteinUnderDays >= 3) {
+                $alerts[] = $base + [
+                    'code' => 'protein_under',
+                    'title' => 'Protein kurang',
+                    'severity' => 'medium',
+                    'evidence' => $proteinUnderDays.' hari ≤70% target protein',
+                    'days_flagged' => $proteinUnderDays,
+                ];
+            }
+
+            if ($poorScoreDays >= 3) {
+                $alerts[] = $base + [
+                    'code' => 'score_poor',
+                    'title' => 'Skor nutrisi buruk',
+                    'severity' => 'high',
+                    'evidence' => $poorScoreDays.' hari kategori poor / need improvement',
+                    'days_flagged' => $poorScoreDays,
+                ];
+            }
+
+            if ($daysLogged < 3) {
+                $alerts[] = $base + [
+                    'code' => 'log_inconsistent',
+                    'title' => 'Log makanan tidak konsisten',
+                    'severity' => 'medium',
+                    'evidence' => 'Hanya '.$daysLogged.' hari log dalam 7 hari',
+                    'days_flagged' => $daysLogged,
+                ];
+            }
+
+            if ($sweetCount >= 2 || $carbOverDays >= 2) {
+                $parts = [];
+                if ($sweetCount >= 2) {
+                    $parts[] = $sweetCount.' entri manis';
+                }
+                if ($carbOverDays >= 2) {
+                    $parts[] = $carbOverDays.' hari karbo tinggi';
+                }
+                $alerts[] = $base + [
+                    'code' => 'sugar_risk_estimate',
+                    'title' => 'Risiko gula (estimasi)',
+                    'severity' => 'medium',
+                    'evidence' => implode(' · ', $parts),
+                    'days_flagged' => max($sweetCount, $carbOverDays),
+                ];
+            }
+        }
+
+        return $alerts;
+    }
+
     public function __construct(
         private readonly BewellConnectionService $connection,
     ) {}

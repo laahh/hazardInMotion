@@ -6,6 +6,10 @@ namespace App\Http\Controllers\SportEvaluation;
 
 use App\Http\Controllers\Controller;
 use App\Services\SportEvaluation\BewellConnectionService;
+use App\Support\SpreadsheetExporter;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +25,7 @@ class SportEvaluationDashboardController extends Controller
         private readonly BewellConnectionService $connection,
     ) {}
 
-    public function index(): View
+    public function index(Request $request): View
     {
         return view('evaluasi-well.dashboard', array_merge(
             $this->newUsersCardData(),
@@ -35,32 +39,202 @@ class SportEvaluationDashboardController extends Controller
             $this->topUsersData(),
             $this->siteDistributionData(),
             $this->weeklyActivityData(),
-            $this->recentFeedData(),
+            $this->notInstalledFilterData(),
         ));
     }
 
-    public function summary(): View
+    /**
+     * DataTables server-side: karyawan AKTIF + status install & user aktif minggu ini.
+     */
+    public function notInstalledData(Request $request): JsonResponse
     {
-        return $this->index();
-    }
+        $draw = (int) $request->input('draw', 1);
 
-    public function trend(): View
-    {
-        return $this->index();
-    }
+        if (! $this->connection->isUp()) {
+            return response()->json([
+                'draw' => $draw,
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+                'data' => [],
+            ]);
+        }
 
-    public function distribution(): View
-    {
-        return $this->index();
-    }
+        try {
+            $filters = $this->readNotInstalledFilters($request);
+            $search = trim((string) $request->input('search.value', ''));
+            $start = max(0, (int) $request->input('start', 0));
+            $length = (int) $request->input('length', 10);
+            if ($length < 1) {
+                $length = 10;
+            }
+            if ($length > 100) {
+                $length = 100;
+            }
 
-    public function leaderboard(): View
-    {
-        return $this->index();
+            $orderColumnIndex = (int) data_get($request->input('order'), '0.column', 0);
+            $orderDir = strtolower((string) data_get($request->input('order'), '0.dir', 'asc')) === 'desc'
+                ? 'desc'
+                : 'asc';
+
+            $week = $this->currentWeekRange();
+            $orderableColumns = [
+                0 => 'e.nama',
+                1 => 'e.nama_perusahaan',
+                2 => 'e.divisi',
+                3 => 'is_installed',
+                4 => 'is_weekly_active',
+            ];
+            $orderColumn = $orderableColumns[$orderColumnIndex] ?? 'e.nama';
+
+            $recordsTotal = (int) $this->activeEmployeesBaseQuery()->count('e.id');
+
+            $filteredQuery = $this->applyNotInstalledFilters(
+                $this->activeEmployeesBaseQuery(),
+                $filters,
+                $search,
+                $week['start'],
+                $week['end'],
+            );
+            $recordsFiltered = (int) (clone $filteredQuery)->count('e.id');
+
+            $rows = $this->appendEmployeeStatusSelects(clone $filteredQuery, $week['start'], $week['end'])
+                ->orderBy($orderColumn, $orderDir)
+                ->orderBy('e.nama')
+                ->offset($start)
+                ->limit($length)
+                ->get();
+
+            $data = [];
+            foreach ($rows as $row) {
+                $isInstalled = (int) ($row->is_installed ?? 0) === 1;
+                $isWeeklyActive = (int) ($row->is_weekly_active ?? 0) === 1;
+
+                $data[] = [
+                    'id' => (int) $row->id,
+                    'nama' => (string) ($row->nama ?: 'User #'.$row->id),
+                    'kode_sid' => (string) ($row->kode_sid ?: '-'),
+                    'site' => (string) (trim((string) ($row->site ?? '')) !== '' ? $row->site : '-'),
+                    'company' => (string) (trim((string) ($row->nama_perusahaan ?? '')) !== '' ? $row->nama_perusahaan : '-'),
+                    'divisi' => (string) (trim((string) ($row->divisi ?? '')) !== '' ? $row->divisi : '-'),
+                    'install' => $isInstalled ? 'Sudah' : 'Belum',
+                    'install_class' => $isInstalled
+                        ? 'bg-success-focus text-success-main'
+                        : 'bg-warning-focus text-warning-main',
+                    'user_aktif' => $isWeeklyActive ? 'Ya' : 'Tidak',
+                    'user_aktif_class' => $isWeeklyActive
+                        ? 'bg-success-focus text-success-main'
+                        : 'bg-neutral-200 text-secondary-light',
+                ];
+            }
+
+            return response()->json([
+                'draw' => $draw,
+                'recordsTotal' => $recordsTotal,
+                'recordsFiltered' => $recordsFiltered,
+                'data' => $data,
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'draw' => $draw,
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+                'data' => [],
+                'error' => 'Gagal memuat data karyawan.',
+            ], 500);
+        }
     }
 
     /**
-     * Total user install = distinct user_id di login_audit (event login_success).
+     * Export Excel karyawan AKTIF (mengikuti filter install / user aktif / site / dll).
+     */
+    public function notInstalledExport(Request $request): JsonResponse
+    {
+        if (! $this->connection->isUp()) {
+            return response()->json(['message' => 'Koneksi BeWell tidak tersedia.'], 503);
+        }
+
+        try {
+            $filters = $this->readNotInstalledFilters($request);
+            $search = trim((string) $request->query('search', ''));
+            $week = $this->currentWeekRange();
+
+            $rows = $this->appendEmployeeStatusSelects(
+                $this->applyNotInstalledFilters(
+                    $this->activeEmployeesBaseQuery(),
+                    $filters,
+                    $search,
+                    $week['start'],
+                    $week['end'],
+                ),
+                $week['start'],
+                $week['end'],
+            )
+                ->orderBy('e.nama')
+                ->get();
+
+            $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
+                'No',
+                'Nama',
+                'Kode SID',
+                'Site',
+                'Perusahaan',
+                'Divisi',
+                'Install',
+                'User Aktif',
+            ]);
+            $sheet = $spreadsheet->getActiveSheet();
+
+            $rowNum = 2;
+            foreach ($rows as $index => $row) {
+                $sheet->fromArray([
+                    $index + 1,
+                    (string) ($row->nama ?: '-'),
+                    (string) ($row->kode_sid ?: '-'),
+                    (string) (trim((string) ($row->site ?? '')) !== '' ? $row->site : '-'),
+                    (string) (trim((string) ($row->nama_perusahaan ?? '')) !== '' ? $row->nama_perusahaan : '-'),
+                    (string) (trim((string) ($row->divisi ?? '')) !== '' ? $row->divisi : '-'),
+                    (int) ($row->is_installed ?? 0) === 1 ? 'Sudah' : 'Belum',
+                    (int) ($row->is_weekly_active ?? 0) === 1 ? 'Ya' : 'Tidak',
+                ], null, 'A'.$rowNum);
+                $rowNum++;
+            }
+
+            SpreadsheetExporter::download(
+                $spreadsheet,
+                'evaluasi_well_status_install_'.date('Y-m-d_His').'.xlsx'
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => 'Gagal mengekspor data.'], 500);
+        }
+    }
+
+    public function summary(Request $request): View
+    {
+        return $this->index($request);
+    }
+
+    public function trend(Request $request): View
+    {
+        return $this->index($request);
+    }
+
+    public function distribution(Request $request): View
+    {
+        return $this->index($request);
+    }
+
+    public function leaderboard(Request $request): View
+    {
+        return $this->index($request);
+    }
+
+    /**
+     * Total user install = distinct user yang pernah login_success
+     * ATAU punya aktivitas (food/workout) di tanggal berapa pun.
      *
      * @return array{newUsersTotal:int, newUsersWeekIncrease:int}
      */
@@ -76,23 +250,34 @@ class SportEvaluationDashboardController extends Controller
         try {
             $db = DB::connection(BewellConnectionService::CONNECTION);
 
-            $newUsersTotal = (int) $db->table('login_audit')
-                ->where('event', 'login_success')
-                ->whereNotNull('user_id')
-                ->distinct()
-                ->count('user_id');
+            // Install = pernah login_success ATAU punya aktivitas apa pun
+            // (upload makanan/olahraga tidak mungkin tanpa aplikasi terpasang).
+            $installSignalsSql = '
+                SELECT user_id, created_at FROM login_audit
+                    WHERE event = ? AND user_id IS NOT NULL
+                UNION ALL
+                SELECT user_id, created_at FROM food_analyses
+                    WHERE user_id IS NOT NULL
+                UNION ALL
+                SELECT user_id, created_at FROM workout_analyses
+                    WHERE user_id IS NOT NULL
+            ';
+
+            $row = $db->selectOne(
+                'SELECT COUNT(DISTINCT user_id) AS c FROM ('.$installSignalsSql.') AS install_signals',
+                ['login_success']
+            );
+            $newUsersTotal = (int) ($row->c ?? 0);
 
             $weekStart = Carbon::now()->startOfWeek()->format('Y-m-d H:i:s');
 
             $row = $db->selectOne(
                 'SELECT COUNT(*) AS c FROM (
                     SELECT user_id
-                    FROM login_audit
-                    WHERE event = ?
-                      AND user_id IS NOT NULL
+                    FROM ('.$installSignalsSql.') AS install_signals
                     GROUP BY user_id
                     HAVING MIN(created_at) >= ?
-                ) AS first_login_week',
+                ) AS first_install_week',
                 ['login_success', $weekStart]
             );
             $newUsersWeekIncrease = (int) ($row->c ?? 0);
@@ -756,7 +941,7 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Distribusi karyawan per site (jumlah + persen dari total).
+     * Distribusi karyawan AKTIF per site (jumlah + persen dari total).
      *
      * @return array{siteRows:array<int,array<string,mixed>>, siteTotalEmployees:int}
      */
@@ -772,9 +957,12 @@ class SportEvaluationDashboardController extends Controller
         try {
             $db = DB::connection(BewellConnectionService::CONNECTION);
 
-            $siteTotalEmployees = (int) $db->table('employee_profiles')->count();
+            $siteTotalEmployees = (int) $db->table('employee_profiles')
+                ->where('status_karyawan', 'AKTIF')
+                ->count();
 
             $rows = $db->table('employee_profiles')
+                ->where('status_karyawan', 'AKTIF')
                 ->selectRaw("COALESCE(NULLIF(TRIM(site), ''), 'Tidak diketahui') AS site_name, COUNT(*) AS total")
                 ->groupByRaw("COALESCE(NULLIF(TRIM(site), ''), 'Tidak diketahui')")
                 ->orderByDesc('total')
@@ -935,183 +1123,299 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Feed bawah dashboard: Aktivitas Terbaru (tab) + Login Terbaru.
+     * Opsi filter + total untuk kartu Status Install di dashboard.
      *
      * @return array{
-     *     recentAllActivities:array<int,array<string,mixed>>,
-     *     recentFoodActivities:array<int,array<string,mixed>>,
-     *     recentWorkoutActivities:array<int,array<string,mixed>>,
-     *     recentLogins:array<int,array<string,mixed>>
+     *     notInstalledTotal:int,
+     *     notInstalledSites:array<int,string>,
+     *     notInstalledCompanies:array<int,string>,
+     *     notInstalledDivisions:array<int,string>,
+     *     notInstalledWeekLabel:string
      * }
      */
-    private function recentFeedData(): array
+    private function notInstalledFilterData(): array
     {
-        $recentAllActivities = [];
-        $recentFoodActivities = [];
-        $recentWorkoutActivities = [];
-        $recentLogins = [];
+        $notInstalledTotal = 0;
+        $notInstalledSites = [];
+        $notInstalledCompanies = [];
+        $notInstalledDivisions = [];
+        $week = $this->currentWeekRange();
+        $notInstalledWeekLabel = $week['label'];
 
         if (! $this->connection->isUp()) {
             return compact(
-                'recentAllActivities',
-                'recentFoodActivities',
-                'recentWorkoutActivities',
-                'recentLogins',
+                'notInstalledTotal',
+                'notInstalledSites',
+                'notInstalledCompanies',
+                'notInstalledDivisions',
+                'notInstalledWeekLabel',
             );
         }
 
         try {
-            $cached = Cache::remember('evaluasi_well:recent_feed', 120, function (): array {
-                $db = DB::connection(BewellConnectionService::CONNECTION);
+            $cached = Cache::remember('evaluasi_well:active_employees_filters_v3', 120, function (): array {
+                $base = DB::connection(BewellConnectionService::CONNECTION)
+                    ->table('employee_profiles as e')
+                    ->where('e.status_karyawan', 'AKTIF');
 
-                $foodRows = $db->table('food_analyses as f')
-                    ->join('employee_profiles as e', 'e.id', '=', 'f.user_id')
-                    ->where('f.source_type', 'photo')
-                    ->orderByDesc('f.created_at')
-                    ->limit(8)
-                    ->get([
-                        'f.id',
-                        'f.food_name',
-                        'f.total_calories',
-                        'f.created_at',
-                        'e.id as user_id',
-                        'e.nama',
-                        'e.kode_sid',
-                    ]);
-
-                $workoutRows = $db->table('workout_analyses as w')
-                    ->join('employee_profiles as e', 'e.id', '=', 'w.user_id')
-                    ->orderByDesc('w.created_at')
-                    ->limit(8)
-                    ->get([
-                        'w.id',
-                        'w.activity_type',
-                        'w.calories_kcal',
-                        'w.created_at',
-                        'e.id as user_id',
-                        'e.nama',
-                        'e.kode_sid',
-                    ]);
-
-                $mapFood = static function ($row): array {
-                    $calories = $row->total_calories !== null
-                        ? number_format((float) $row->total_calories, 0).' kkal'
-                        : 'Foto makanan';
-
-                    return [
-                        'id' => (int) $row->id,
-                        'title' => (string) ($row->food_name !== '' ? $row->food_name : 'Upload makanan'),
-                        'subtitle' => $calories,
-                        'user_id' => (int) $row->user_id,
-                        'user_name' => (string) ($row->nama ?: 'User #'.$row->user_id),
-                        'at' => Carbon::parse($row->created_at)->format('d M Y H:i'),
-                        'at_raw' => (string) $row->created_at,
-                        'type' => 'Makanan',
-                        'badge_class' => 'bg-warning-focus text-warning-main',
-                    ];
-                };
-
-                $mapWorkout = static function ($row): array {
-                    $calories = $row->calories_kcal !== null
-                        ? number_format((float) $row->calories_kcal, 0).' kkal'
-                        : 'Workout';
-
-                    return [
-                        'id' => (int) $row->id,
-                        'title' => (string) ($row->activity_type !== '' ? $row->activity_type : 'Olahraga'),
-                        'subtitle' => $calories,
-                        'user_id' => (int) $row->user_id,
-                        'user_name' => (string) ($row->nama ?: 'User #'.$row->user_id),
-                        'at' => Carbon::parse($row->created_at)->format('d M Y H:i'),
-                        'at_raw' => (string) $row->created_at,
-                        'type' => 'Olahraga',
-                        'badge_class' => 'bg-success-focus text-success-main',
-                    ];
-                };
-
-                $food = $foodRows->map($mapFood)->all();
-                $workout = $workoutRows->map($mapWorkout)->all();
-
-                $all = collect(array_merge($food, $workout))
-                    ->sortByDesc('at_raw')
-                    ->take(8)
-                    ->values()
-                    ->map(static function (array $item): array {
-                        unset($item['at_raw']);
-
-                        return $item;
+                $belumInstall = (clone $base)
+                    ->whereNotExists(function ($query): void {
+                        $query->selectRaw('1')
+                            ->from('login_audit as a')
+                            ->whereColumn('a.user_id', 'e.id')
+                            ->where('a.event', 'login_success');
                     })
-                    ->all();
-
-                $food = array_map(static function (array $item): array {
-                    unset($item['at_raw']);
-
-                    return $item;
-                }, $food);
-
-                $workout = array_map(static function (array $item): array {
-                    unset($item['at_raw']);
-
-                    return $item;
-                }, $workout);
-
-                $loginRows = $db->table('login_audit as a')
-                    ->leftJoin('employee_profiles as e', 'e.id', '=', 'a.user_id')
-                    ->orderByDesc('a.created_at')
-                    ->limit(8)
-                    ->get([
-                        'a.id',
-                        'a.user_id',
-                        'a.kode_sid',
-                        'a.event',
-                        'a.platform',
-                        'a.created_at',
-                        'e.nama',
-                    ]);
-
-                $logins = [];
-                foreach ($loginRows as $row) {
-                    $isSuccess = $row->event === 'login_success';
-                    $name = (string) ($row->nama ?: '');
-                    if ($name === '') {
-                        $name = (string) ($row->kode_sid ?: 'SID tidak dikenal');
-                    }
-
-                    $logins[] = [
-                        'id' => (int) $row->id,
-                        'user_id' => $row->user_id !== null ? (int) $row->user_id : null,
-                        'user_name' => $name,
-                        'kode_sid' => (string) ($row->kode_sid ?: '-'),
-                        'at' => Carbon::parse($row->created_at)->format('d M Y H:i'),
-                        'status' => $isSuccess ? 'Sukses' : 'Gagal',
-                        'status_class' => $isSuccess
-                            ? 'bg-success-focus text-success-main'
-                            : 'bg-danger-focus text-danger-main',
-                        'platform' => (string) ($row->platform ?: '-'),
-                    ];
-                }
+                    ->whereNotExists(function ($query): void {
+                        $query->selectRaw('1')
+                            ->from('food_analyses as f')
+                            ->whereColumn('f.user_id', 'e.id');
+                    })
+                    ->whereNotExists(function ($query): void {
+                        $query->selectRaw('1')
+                            ->from('workout_analyses as w')
+                            ->whereColumn('w.user_id', 'e.id');
+                    });
 
                 return [
-                    'all' => $all,
-                    'food' => $food,
-                    'workout' => $workout,
-                    'logins' => $logins,
+                    'total' => (int) $belumInstall->count(),
+                    'sites' => (clone $base)
+                        ->whereNotNull('e.site')
+                        ->where('e.site', '<>', '')
+                        ->distinct()
+                        ->orderBy('e.site')
+                        ->pluck('e.site')
+                        ->map(static fn (mixed $site): string => (string) $site)
+                        ->all(),
+                    'companies' => (clone $base)
+                        ->whereNotNull('e.nama_perusahaan')
+                        ->where('e.nama_perusahaan', '<>', '')
+                        ->distinct()
+                        ->orderBy('e.nama_perusahaan')
+                        ->pluck('e.nama_perusahaan')
+                        ->map(static fn (mixed $company): string => (string) $company)
+                        ->all(),
+                    'divisions' => (clone $base)
+                        ->whereNotNull('e.divisi')
+                        ->where('e.divisi', '<>', '')
+                        ->distinct()
+                        ->orderBy('e.divisi')
+                        ->pluck('e.divisi')
+                        ->map(static fn (mixed $division): string => (string) $division)
+                        ->all(),
                 ];
             });
 
-            $recentAllActivities = $cached['all'];
-            $recentFoodActivities = $cached['food'];
-            $recentWorkoutActivities = $cached['workout'];
-            $recentLogins = $cached['logins'];
+            $notInstalledTotal = (int) $cached['total'];
+            $notInstalledSites = $cached['sites'];
+            $notInstalledCompanies = $cached['companies'];
+            $notInstalledDivisions = $cached['divisions'];
         } catch (Throwable $e) {
             report($e);
         }
 
         return compact(
-            'recentAllActivities',
-            'recentFoodActivities',
-            'recentWorkoutActivities',
-            'recentLogins',
+            'notInstalledTotal',
+            'notInstalledSites',
+            'notInstalledCompanies',
+            'notInstalledDivisions',
+            'notInstalledWeekLabel',
         );
+    }
+
+    /**
+     * @return array{start:string,end:string,label:string}
+     */
+    private function currentWeekRange(): array
+    {
+        $start = Carbon::now()->startOfWeek(Carbon::MONDAY);
+        $end = Carbon::now()->endOfWeek(Carbon::SUNDAY);
+
+        return [
+            'start' => $start->format('Y-m-d H:i:s'),
+            'end' => $end->format('Y-m-d H:i:s'),
+            'label' => $start->translatedFormat('d M').' – '.$end->translatedFormat('d M Y'),
+        ];
+    }
+
+    /**
+     * Karyawan status AKTIF.
+     */
+    private function activeEmployeesBaseQuery(): Builder
+    {
+        return DB::connection(BewellConnectionService::CONNECTION)
+            ->table('employee_profiles as e')
+            ->where('e.status_karyawan', 'AKTIF');
+    }
+
+    /**
+     * Tambah kolom kalkulasi install & user aktif minggu ini.
+     */
+    private function appendEmployeeStatusSelects(Builder $query, string $weekStart, string $weekEnd): Builder
+    {
+        return $query
+            ->select([
+                'e.id',
+                'e.nama',
+                'e.kode_sid',
+                'e.site',
+                'e.nama_perusahaan',
+                'e.divisi',
+            ])
+            ->selectRaw(
+                'CASE WHEN EXISTS (
+                    SELECT 1 FROM login_audit a
+                    WHERE a.user_id = e.id AND a.event = ?
+                ) OR EXISTS (
+                    SELECT 1 FROM food_analyses f2
+                    WHERE f2.user_id = e.id
+                ) OR EXISTS (
+                    SELECT 1 FROM workout_analyses w2
+                    WHERE w2.user_id = e.id
+                ) THEN 1 ELSE 0 END AS is_installed',
+                ['login_success']
+            )
+            ->selectRaw(
+                'CASE WHEN EXISTS (
+                    SELECT 1 FROM food_analyses f
+                    WHERE f.user_id = e.id
+                      AND f.source_type = ?
+                      AND f.created_at BETWEEN ? AND ?
+                ) OR EXISTS (
+                    SELECT 1 FROM workout_analyses w
+                    WHERE w.user_id = e.id
+                      AND w.created_at BETWEEN ? AND ?
+                ) THEN 1 ELSE 0 END AS is_weekly_active',
+                ['photo', $weekStart, $weekEnd, $weekStart, $weekEnd]
+            );
+    }
+
+    /**
+     * @return array{site:string,company:string,division:string,install:string,user_aktif:string}
+     */
+    private function readNotInstalledFilters(Request $request): array
+    {
+        $readFilter = static fn (mixed $value): string => is_string($value)
+            ? mb_substr(trim($value), 0, 150)
+            : '';
+
+        $install = strtolower($readFilter($request->input('install')));
+        if (! in_array($install, ['sudah', 'belum'], true)) {
+            $install = '';
+        }
+
+        $userAktif = strtolower($readFilter($request->input('user_aktif')));
+        if (! in_array($userAktif, ['ya', 'tidak'], true)) {
+            $userAktif = '';
+        }
+
+        return [
+            'site' => $readFilter($request->input('site')),
+            'company' => $readFilter($request->input('company')),
+            'division' => $readFilter($request->input('division')),
+            'install' => $install,
+            'user_aktif' => $userAktif,
+        ];
+    }
+
+    /**
+     * @param  array{site:string,company:string,division:string,install:string,user_aktif:string}  $filters
+     */
+    private function applyNotInstalledFilters(
+        Builder $query,
+        array $filters,
+        string $search = '',
+        string $weekStart = '',
+        string $weekEnd = '',
+    ): Builder {
+        if ($filters['site'] !== '') {
+            $query->where('e.site', $filters['site']);
+        }
+        if ($filters['company'] !== '') {
+            $query->where('e.nama_perusahaan', $filters['company']);
+        }
+        if ($filters['division'] !== '') {
+            $query->where('e.divisi', 'like', '%'.$filters['division'].'%');
+        }
+
+        // Sudah install = pernah login_success ATAU punya aktivitas apa pun
+        // (upload makanan/olahraga tidak mungkin tanpa aplikasi terpasang).
+        if ($filters['install'] === 'sudah') {
+            $query->where(function (Builder $outer): void {
+                $outer->whereExists(function ($inner): void {
+                    $inner->selectRaw('1')
+                        ->from('login_audit as a')
+                        ->whereColumn('a.user_id', 'e.id')
+                        ->where('a.event', 'login_success');
+                })->orWhereExists(function ($inner): void {
+                    $inner->selectRaw('1')
+                        ->from('food_analyses as f')
+                        ->whereColumn('f.user_id', 'e.id');
+                })->orWhereExists(function ($inner): void {
+                    $inner->selectRaw('1')
+                        ->from('workout_analyses as w')
+                        ->whereColumn('w.user_id', 'e.id');
+                });
+            });
+        } elseif ($filters['install'] === 'belum') {
+            $query->whereNotExists(function ($inner): void {
+                $inner->selectRaw('1')
+                    ->from('login_audit as a')
+                    ->whereColumn('a.user_id', 'e.id')
+                    ->where('a.event', 'login_success');
+            })->whereNotExists(function ($inner): void {
+                $inner->selectRaw('1')
+                    ->from('food_analyses as f')
+                    ->whereColumn('f.user_id', 'e.id');
+            })->whereNotExists(function ($inner): void {
+                $inner->selectRaw('1')
+                    ->from('workout_analyses as w')
+                    ->whereColumn('w.user_id', 'e.id');
+            });
+        }
+
+        if ($weekStart !== '' && $weekEnd !== '') {
+            if ($filters['user_aktif'] === 'ya') {
+                $query->where(function (Builder $outer) use ($weekStart, $weekEnd): void {
+                    $outer->whereExists(function ($inner) use ($weekStart, $weekEnd): void {
+                        $inner->selectRaw('1')
+                            ->from('food_analyses as f')
+                            ->whereColumn('f.user_id', 'e.id')
+                            ->where('f.source_type', 'photo')
+                            ->whereBetween('f.created_at', [$weekStart, $weekEnd]);
+                    })->orWhereExists(function ($inner) use ($weekStart, $weekEnd): void {
+                        $inner->selectRaw('1')
+                            ->from('workout_analyses as w')
+                            ->whereColumn('w.user_id', 'e.id')
+                            ->whereBetween('w.created_at', [$weekStart, $weekEnd]);
+                    });
+                });
+            } elseif ($filters['user_aktif'] === 'tidak') {
+                $query->whereNotExists(function ($inner) use ($weekStart, $weekEnd): void {
+                    $inner->selectRaw('1')
+                        ->from('food_analyses as f')
+                        ->whereColumn('f.user_id', 'e.id')
+                        ->where('f.source_type', 'photo')
+                        ->whereBetween('f.created_at', [$weekStart, $weekEnd]);
+                })->whereNotExists(function ($inner) use ($weekStart, $weekEnd): void {
+                    $inner->selectRaw('1')
+                        ->from('workout_analyses as w')
+                        ->whereColumn('w.user_id', 'e.id')
+                        ->whereBetween('w.created_at', [$weekStart, $weekEnd]);
+                });
+            }
+        }
+
+        if ($search !== '') {
+            $like = '%'.$search.'%';
+            $query->where(function (Builder $inner) use ($like): void {
+                $inner->where('e.nama', 'like', $like)
+                    ->orWhere('e.kode_sid', 'like', $like)
+                    ->orWhere('e.site', 'like', $like)
+                    ->orWhere('e.nama_perusahaan', 'like', $like)
+                    ->orWhere('e.divisi', 'like', $like);
+            });
+        }
+
+        return $query;
     }
 }

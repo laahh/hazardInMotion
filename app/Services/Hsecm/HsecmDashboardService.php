@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Hsecm;
 
 use App\Models\Employee;
+use App\Support\FatigueManagement\FatigueManagementCompanyResolver;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
@@ -253,11 +254,60 @@ class HsecmDashboardService
                 'Year_of_date' => 'Year',
             ],
         ],
+        'hazard-rootcause' => [
+            'label' => 'Hazard Rootcause Belum Terlaporkan',
+            'icon' => 'report',
+            'table' => 'scr_hsecm_hazard_rootcause_belum_terlaporkan',
+            'hidden' => true,
+            'site_column' => 'Site',
+            'company_column' => null,
+            'week_column' => 'Week',
+            'year_column' => 'filter_year',
+            'date_column' => null,
+            'columns' => [
+                'Site' => 'Site',
+                'Lokasi' => 'Lokasi',
+                'Detail_Lokasi' => 'Detail Lokasi',
+                'Ketidaksesuaian' => 'Ketidaksesuaian',
+                'Sub_Ketidaksesuaian' => 'Sub Ketidaksesuaian',
+                'HIPO_Index_pada_Lokasi' => 'HIPO Index',
+                'Severity_Index_pada_Lokasi' => 'Severity Index',
+                'Week' => 'Week',
+                'filter_year' => 'Year',
+            ],
+        ],
+    ];
+
+    /**
+     * Urutan site & mitra untuk header Ringkasan Gap Perulangan (2 tingkat).
+     *
+     * @var array<string, list<string>>
+     */
+    private const GAP_PERULANGAN_SITE_COMPANIES = [
+        'BMO 1' => ['BUMA', 'KDC', 'MTL'],
+        'BMO 2' => ['PAMA'],
+        'BMO3' => ['BAR'],
+        'GMO' => ['PAMA'],
+        'LMO' => ['BUMA', 'FAD', 'MTN'],
+    ];
+
+    /**
+     * @var array<string, string>
+     */
+    private const GAP_PERULANGAN_COMPANY_NAMES = [
+        'BUMA' => 'PT Bukit Makmur Mandiri Utama',
+        'KDC' => 'PT Kaltim Diamond Coal',
+        'MTL' => 'PT Mutiara Tanjung Lestari',
+        'PAMA' => 'PT Pamapersada Nusantara',
+        'BAR' => 'PT Bumi Artlantis Raya',
+        'FAD' => 'PT Fajar Anugerah Dinamika',
+        'MTN' => 'PT Madhani Talatah Nusantara',
     ];
 
     public function __construct(
         private readonly HsecmDatabaseRepository $repository,
     ) {}
+
 
     /**
      * @return array{
@@ -333,7 +383,7 @@ class HsecmDashboardService
             'kpis' => $this->buildKpis($filters),
             'by_site' => $this->buildSiteMonitoring($filters),
             'by_company' => $this->buildCompanyMonitoring($filters),
-            'datasets' => collect(self::DATASETS)->map(fn (array $meta, string $key): array => [
+            'datasets' => collect($this->visibleDatasets())->map(fn (array $meta, string $key): array => [
                 'key' => $key,
                 'label' => $meta['label'],
                 'icon' => $meta['icon'],
@@ -341,6 +391,634 @@ class HsecmDashboardService
             ])->values()->all(),
             'data_source' => 'database',
         ];
+    }
+
+    /**
+     * Dashboard Gap Perulangan — data still_open per program.
+     *
+     * @param  array{site: string, perusahaan: string, week: string, year: string, date_from: string, date_to: string, q: string, batch_slot?: string, data_mode?: string, previous_batch_slot?: string}  $filters
+     * @return array{
+     *     filters: array<string, mixed>,
+     *     filter_options: array<string, mixed>,
+     *     period_label: string,
+     *     summary: array{
+     *         groups: list<array{site: string, companies: list<array{code: string, name: string, key: string}>}>,
+     *         columns: list<string>,
+     *         rows: list<array{key: string, label: string, counts: array<string, int>}>
+     *     },
+     *     sections: list<array<string, mixed>>
+     * }
+     */
+    public function buildGapPerulanganDashboard(array $filters): array
+    {
+        // Snapshot batch terkini (bukan still_open): banyak program punya gap_count=1
+        // tanpa irisan business_key antar slot, sehingga still_open jadi kosong.
+        $filters = array_merge($filters, [
+            'data_mode' => 'snapshot',
+            'batch_slot' => '',
+            'previous_batch_slot' => '',
+        ]);
+
+        $datasetRows = [];
+        foreach (array_keys($this->visibleDatasets()) as $key) {
+            $datasetRows[$key] = $this->filteredRows($key, $filters);
+        }
+
+        return [
+            'filters' => $filters,
+            'filter_options' => $this->buildFilterOptions(),
+            'period_label' => $this->buildPeriodLabel($filters),
+            'summary' => $this->buildGapPerulanganSummary($datasetRows),
+            'sections' => $this->buildGapPerulanganSections($datasetRows, $filters),
+        ];
+    }
+
+    /**
+     * @param  array<string, Collection<int, array<string, mixed>>>  $datasetRows
+     * @return array{
+     *     groups: list<array{site: string, companies: list<array{code: string, name: string, key: string}>}>,
+     *     columns: list<string>,
+     *     rows: list<array{key: string, label: string, counts: array<string, int>}>
+     * }
+     */
+    private function buildGapPerulanganSummary(array $datasetRows): array
+    {
+        $matrixRows = [];
+        /** @var array<string, array<string, true>> $seenPairs site => [code => true] */
+        $seenPairs = [];
+
+        foreach ($this->visibleDatasets() as $key => $meta) {
+            $rows = $datasetRows[$key] ?? collect();
+            $counts = [];
+
+            foreach ($rows as $row) {
+                $pair = $this->gapPerulanganSiteCompanyPair($row, $meta);
+                if ($pair === null) {
+                    continue;
+                }
+
+                [$site, $code] = $pair;
+                $scopeKey = $this->gapPerulanganMatrixKey($site, $code);
+                $counts[$scopeKey] = ($counts[$scopeKey] ?? 0) + 1;
+                $seenPairs[$site][$code] = true;
+            }
+
+            $matrixRows[] = [
+                'key' => $key,
+                'label' => $this->gapPerulanganProgramLabel($key, $meta['label']),
+                'counts' => $counts,
+            ];
+        }
+
+        $groups = $this->buildGapPerulanganHeaderGroups($seenPairs);
+        $columns = [];
+        foreach ($groups as $group) {
+            foreach ($group['companies'] as $company) {
+                $columns[] = $company['key'];
+            }
+        }
+
+        return [
+            'groups' => $groups,
+            'columns' => $columns,
+            'rows' => $matrixRows,
+        ];
+    }
+
+    /**
+     * @param  array<string, array<string, true>>  $seenPairs
+     * @return list<array{site: string, companies: list<array{code: string, name: string, key: string}>}>
+     */
+    private function buildGapPerulanganHeaderGroups(array $seenPairs): array
+    {
+        $groups = [];
+        /** @var array<string, int> $groupIndexByNormSite */
+        $groupIndexByNormSite = [];
+
+        foreach (self::GAP_PERULANGAN_SITE_COMPANIES as $site => $codes) {
+            $companies = [];
+            foreach ($codes as $code) {
+                $companies[] = [
+                    'code' => $code,
+                    'name' => self::GAP_PERULANGAN_COMPANY_NAMES[$code] ?? $code,
+                    'key' => $this->gapPerulanganMatrixKey($site, $code),
+                ];
+            }
+
+            $groupIndexByNormSite[$this->normalizeGapPerulanganSite($site)] = count($groups);
+            $groups[] = [
+                'site' => $site,
+                'companies' => $companies,
+            ];
+        }
+
+        foreach ($seenPairs as $site => $codesMap) {
+            $norm = $this->normalizeGapPerulanganSite($site);
+            $codes = array_keys($codesMap);
+            sort($codes);
+
+            if (isset($groupIndexByNormSite[$norm])) {
+                $idx = $groupIndexByNormSite[$norm];
+                $existing = array_column($groups[$idx]['companies'], 'code');
+                $templateSite = $groups[$idx]['site'];
+
+                foreach (array_diff($codes, $existing) as $code) {
+                    $groups[$idx]['companies'][] = [
+                        'code' => $code,
+                        'name' => self::GAP_PERULANGAN_COMPANY_NAMES[$code]
+                            ?? FatigueManagementCompanyResolver::partnerToCompany($code),
+                        'key' => $this->gapPerulanganMatrixKey($templateSite, $code),
+                    ];
+                }
+
+                continue;
+            }
+
+            $companies = [];
+            foreach ($codes as $code) {
+                $companies[] = [
+                    'code' => $code,
+                    'name' => self::GAP_PERULANGAN_COMPANY_NAMES[$code]
+                        ?? FatigueManagementCompanyResolver::partnerToCompany($code),
+                    'key' => $this->gapPerulanganMatrixKey($site, $code),
+                ];
+            }
+
+            if ($companies === []) {
+                continue;
+            }
+
+            $groupIndexByNormSite[$norm] = count($groups);
+            $groups[] = [
+                'site' => $site,
+                'companies' => $companies,
+            ];
+        }
+
+        return $groups;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, mixed>  $meta
+     * @return array{0: string, 1: string}|null
+     */
+    private function gapPerulanganSiteCompanyPair(array $row, array $meta): ?array
+    {
+        $siteRaw = trim((string) ($row[$meta['site_column']] ?? ''));
+        if ($siteRaw === '' || $this->isAllToken($siteRaw)) {
+            return null;
+        }
+
+        $site = $this->resolveGapPerulanganTemplateSite($siteRaw) ?? $siteRaw;
+        $code = $this->resolveGapPerulanganCompanyCode($row, $meta);
+        if ($code === null) {
+            return null;
+        }
+
+        return [$site, $code];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, mixed>  $meta
+     */
+    private function resolveGapPerulanganCompanyCode(array $row, array $meta): ?string
+    {
+        $companyColumn = $meta['company_column'] ?? null;
+        if ($companyColumn !== null) {
+            $raw = trim((string) ($row[$companyColumn] ?? ''));
+            if ($raw !== '' && ! $this->isAllToken($raw)) {
+                $code = FatigueManagementCompanyResolver::companyToPartner($raw);
+                $normalized = FatigueManagementCompanyResolver::normalizeKey($code);
+                if (FatigueManagementCompanyResolver::isKnownPartnerKey($normalized)) {
+                    return $normalized;
+                }
+                // Sudah singkatan pendek (BUMA, FAD, …)
+                if (preg_match('/^[A-Z]{2,6}$/', $normalized) === 1) {
+                    return $normalized;
+                }
+            }
+        }
+
+        foreach (['Detail_Lokasi', 'Detil_Lokasi', 'Lokasi', 'Location_Name'] as $col) {
+            $text = trim((string) ($row[$col] ?? ''));
+            if ($text === '') {
+                continue;
+            }
+            if (preg_match('/\[([A-Za-z]{2,6})\]/', $text, $m) === 1) {
+                $code = FatigueManagementCompanyResolver::normalizeKey($m[1]);
+                if ($code !== '') {
+                    return $code;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveGapPerulanganTemplateSite(string $site): ?string
+    {
+        $normalized = $this->normalizeGapPerulanganSite($site);
+
+        foreach (array_keys(self::GAP_PERULANGAN_SITE_COMPANIES) as $template) {
+            if ($this->normalizeGapPerulanganSite($template) === $normalized) {
+                return $template;
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizeGapPerulanganSite(string $site): string
+    {
+        $s = mb_strtoupper(preg_replace('/\s+/u', ' ', trim($site)) ?? '');
+        $s = str_replace(['BMO1', 'BMO 1'], 'BMO 1', $s);
+        $s = str_replace(['BMO2', 'BMO 2'], 'BMO 2', $s);
+        $s = str_replace(['BMO 3', 'BMO-3'], 'BMO3', $s);
+
+        return $s;
+    }
+
+    private function gapPerulanganMatrixKey(string $site, string $companyCode): string
+    {
+        return $site.'|'.$companyCode;
+    }
+
+    /**
+     * @param  array<string, Collection<int, array<string, mixed>>>  $datasetRows
+     * @param  array<string, mixed>  $filters
+     * @return list<array<string, mixed>>
+     */
+    private function buildGapPerulanganSections(array $datasetRows, array $filters): array
+    {
+        $sections = [];
+
+        foreach ($this->visibleDatasets() as $key => $meta) {
+            $rows = $datasetRows[$key] ?? collect();
+            $sections[] = match ($key) {
+                'sap-rfid' => $this->buildGapPerulanganSapSection($key, $meta, $rows),
+                'coverage-cctv' => $this->buildGapPerulanganCoverageSection($key, $meta, $rows, $filters),
+                default => $this->buildGapPerulanganGenericSection($key, $meta, $rows),
+            };
+        }
+
+        return $sections;
+    }
+
+    /**
+     * @param  array<string, mixed>  $meta
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return array<string, mixed>
+     */
+    private function buildGapPerulanganSapSection(string $key, array $meta, Collection $rows): array
+    {
+        $sorted = $rows
+            ->sortByDesc(fn (array $row): int => (int) ($row['gap_count'] ?? 0))
+            ->values()
+            ->take(100);
+
+        $tableRows = [];
+        foreach ($sorted as $index => $row) {
+            $tableRows[] = [
+                'rank' => $index + 1,
+                'nama' => (string) ($row['pelapor_all_karyawan'] ?? '—'),
+                'sid' => (string) ($row['sid_pelapor_all_karyawan'] ?? '—'),
+                'jabatan' => (string) ($row['jabatan_struktural_pelapor_all_karyawan'] ?? '—'),
+                'perusahaan' => (string) ($row['perusahaan_pelapor_all_karyawan'] ?? '—'),
+                'gap_count' => (int) ($row['gap_count'] ?? 0),
+                'sap' => $row['SAP_per_SID'] ?? '—',
+            ];
+        }
+
+        return [
+            'key' => $key,
+            'label' => 'Layer 1 tanpa SAP',
+            'icon' => $meta['icon'],
+            'layout' => 'sap-rfid',
+            'chart_title' => 'Top Perusahaan dengan Perulangan',
+            'top_chart' => $this->buildGapPerulanganTopChart($rows, $meta, 'company', 8),
+            'table_headers' => ['Rank', 'Nama', 'SID', 'Jabatan Struktural', 'Perusahaan', 'Jumlah Perulangan', 'Total SAP'],
+            'table_rows' => $tableRows,
+            'total' => $rows->count(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $meta
+     * @param  Collection<int, array<string, mixed>>  $rows  Snapshot gap terkini (untuk ranking lokasi).
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    private function buildGapPerulanganCoverageSection(string $key, array $meta, Collection $rows, array $filters): array
+    {
+        $dateKeys = $this->resolveCoverageWeekDateKeys($rows, $meta, $filters);
+
+        // Ambil histori 7 hari (mode all + filter tanggal) agar kolom harian X/V lengkap.
+        $weekFilters = array_merge($filters, [
+            'data_mode' => 'all',
+            'batch_slot' => '',
+            'previous_batch_slot' => '',
+            'date_from' => $dateKeys[0] ?? '',
+            'date_to' => $dateKeys[count($dateKeys) - 1] ?? '',
+        ]);
+        $weekRows = $dateKeys === []
+            ? collect()
+            : $this->filteredRows($key, $weekFilters);
+
+        $grouped = [];
+
+        foreach ($weekRows as $row) {
+            $site = trim((string) ($row['Site'] ?? ''));
+            $lokasi = trim((string) ($row['Lokasi'] ?? ''));
+            $detil = trim((string) ($row['Detil_Lokasi'] ?? ''));
+            if ($site === '' && $lokasi === '' && $detil === '') {
+                continue;
+            }
+
+            $groupKey = $site.'|'.$lokasi.'|'.$detil;
+            $ymd = $this->parseFlexibleDate($row[$meta['date_column']] ?? null);
+
+            if (! isset($grouped[$groupKey])) {
+                $grouped[$groupKey] = [
+                    'site' => $site !== '' ? $site : '—',
+                    'lokasi' => $lokasi !== '' ? $lokasi : '—',
+                    'detil' => $detil !== '' ? $detil : '—',
+                    'gap_count' => (int) ($row['gap_count'] ?? 0),
+                    'x_count' => 0,
+                    'days' => [],
+                ];
+            }
+
+            $grouped[$groupKey]['gap_count'] = max(
+                $grouped[$groupKey]['gap_count'],
+                (int) ($row['gap_count'] ?? 0)
+            );
+
+            if ($ymd === null || ! in_array($ymd, $dateKeys, true)) {
+                continue;
+            }
+
+            $mark = $this->coverageDayMark($row);
+            $grouped[$groupKey]['days'][$ymd] = $mark;
+            if ($mark === 'X') {
+                $grouped[$groupKey]['x_count']++;
+            }
+        }
+
+        // Utamakan lokasi yang punya gap (X) di minggu ini.
+        $grouped = array_filter(
+            $grouped,
+            static fn (array $item): bool => $item['x_count'] > 0 || $item['gap_count'] > 0
+        );
+
+        uasort($grouped, static function (array $a, array $b): int {
+            if ($a['x_count'] !== $b['x_count']) {
+                return $b['x_count'] <=> $a['x_count'];
+            }
+
+            return $b['gap_count'] <=> $a['gap_count'];
+        });
+        $limited = array_slice($grouped, 0, 100, true);
+
+        $tableRows = [];
+        $rank = 1;
+        $siteGapCounts = [];
+        foreach ($limited as $item) {
+            $dayMarks = [];
+            foreach ($dateKeys as $ymd) {
+                // Kosong jika tidak ada data hari itu (bukan default X).
+                $dayMarks[$ymd] = $item['days'][$ymd] ?? '';
+            }
+
+            $tableRows[] = [
+                'rank' => $rank++,
+                'site' => $item['site'],
+                'lokasi' => $item['lokasi'],
+                'detil' => $item['detil'],
+                'days' => $dayMarks,
+                'gap_count' => $item['gap_count'],
+                'x_count' => $item['x_count'],
+            ];
+
+            if ($item['site'] !== '—') {
+                $siteGapCounts[$item['site']] = ($siteGapCounts[$item['site']] ?? 0) + $item['x_count'];
+            }
+        }
+
+        arsort($siteGapCounts);
+        $topChart = [];
+        foreach (array_slice($siteGapCounts, 0, 8, true) as $label => $value) {
+            $topChart[] = ['label' => $label, 'value' => $value];
+        }
+
+        $dateHeaders = [];
+        foreach ($dateKeys as $ymd) {
+            $dateHeaders[$ymd] = Carbon::parse($ymd)->format('d M');
+        }
+
+        return [
+            'key' => $key,
+            'label' => 'Coverage Area Kritis Daily',
+            'icon' => $meta['icon'],
+            'layout' => 'coverage-cctv',
+            'chart_title' => 'Top Site dengan Perulangan',
+            'top_chart' => $topChart,
+            'date_headers' => $dateHeaders,
+            'table_rows' => $tableRows,
+            'total' => count($grouped),
+        ];
+    }
+
+    /**
+     * Rentang 7 hari untuk matriks Coverage (wireframe 19–25 Jul).
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $meta
+     * @param  array<string, mixed>  $filters
+     * @return list<string> Y-m-d
+     */
+    private function resolveCoverageWeekDateKeys(Collection $rows, array $meta, array $filters): array
+    {
+        if ($filters['date_from'] !== '' && $filters['date_to'] !== '') {
+            $dates = [];
+            $cursor = Carbon::parse($filters['date_from'])->startOfDay();
+            $end = Carbon::parse($filters['date_to'])->startOfDay();
+            while ($cursor->lte($end) && count($dates) < 14) {
+                $dates[] = $cursor->format('Y-m-d');
+                $cursor->addDay();
+            }
+
+            return $dates;
+        }
+
+        $endYmd = $rows
+            ->map(fn (array $row): ?string => $this->parseFlexibleDate($row[$meta['date_column']] ?? null))
+            ->filter()
+            ->sort()
+            ->last();
+
+        if (! is_string($endYmd) || $endYmd === '') {
+            $endYmd = Carbon::now()->format('Y-m-d');
+        }
+
+        $end = Carbon::parse($endYmd)->startOfDay();
+        $start = $end->copy()->subDays(6);
+        $dates = [];
+        $cursor = $start->copy();
+        while ($cursor->lte($end)) {
+            $dates[] = $cursor->format('Y-m-d');
+            $cursor->addDay();
+        }
+
+        return $dates;
+    }
+
+    /**
+     * @param  array<string, mixed>  $meta
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return array<string, mixed>
+     */
+    private function buildGapPerulanganGenericSection(string $key, array $meta, Collection $rows): array
+    {
+        $columnKeys = array_slice(array_keys($meta['columns']), 0, 6);
+        $headers = ['Rank'];
+        foreach ($columnKeys as $col) {
+            $headers[] = $meta['columns'][$col];
+        }
+        $headers[] = 'Jumlah Perulangan';
+
+        $sorted = $rows
+            ->sortByDesc(fn (array $row): int => (int) ($row['gap_count'] ?? 0))
+            ->values()
+            ->take(100);
+
+        $tableRows = [];
+        foreach ($sorted as $index => $row) {
+            $cells = [];
+            foreach ($columnKeys as $col) {
+                $val = $row[$col] ?? null;
+                $cells[$col] = $val === null || trim((string) $val) === '' ? '—' : (string) $val;
+            }
+
+            $tableRows[] = [
+                'rank' => $index + 1,
+                'cells' => $cells,
+                'gap_count' => (int) ($row['gap_count'] ?? 0),
+            ];
+        }
+
+        $chartAxis = $meta['company_column'] !== null ? 'company' : 'site';
+
+        return [
+            'key' => $key,
+            'label' => $meta['label'],
+            'icon' => $meta['icon'],
+            'layout' => 'generic',
+            'chart_title' => $chartAxis === 'company'
+                ? 'Top Perusahaan dengan Perulangan'
+                : 'Top Site dengan Perulangan',
+            'top_chart' => $this->buildGapPerulanganTopChart($rows, $meta, $chartAxis, 8),
+            'table_headers' => $headers,
+            'table_column_keys' => $columnKeys,
+            'table_rows' => $tableRows,
+            'total' => $rows->count(),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $meta
+     * @return list<array{label: string, value: int}>
+     */
+    private function buildGapPerulanganTopChart(Collection $rows, array $meta, string $axis, int $limit): array
+    {
+        $counts = [];
+
+        foreach ($rows as $row) {
+            if ($axis === 'company' && $meta['company_column'] !== null) {
+                $label = trim((string) ($row[$meta['company_column']] ?? ''));
+            } else {
+                $label = trim((string) ($row[$meta['site_column']] ?? ''));
+            }
+
+            if ($label === '') {
+                continue;
+            }
+
+            $counts[$label] = ($counts[$label] ?? 0) + 1;
+        }
+
+        arsort($counts);
+
+        $chart = [];
+        foreach (array_slice($counts, 0, $limit, true) as $label => $value) {
+            $chart[] = [
+                'label' => $label,
+                'value' => $value,
+            ];
+        }
+
+        return $chart;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function coverageDayMark(array $row): string
+    {
+        $status = strtolower(trim((string) ($row['Status_Coverage_dalam_1_Week'] ?? '')));
+        if ($status !== '') {
+            if (str_contains($status, 'tidak') || str_contains($status, 'belum') || str_contains($status, 'gap')) {
+                return 'X';
+            }
+            if (str_contains($status, 'tercover') || $status === 'v' || $status === 'ok' || $status === 'covered') {
+                return 'V';
+            }
+        }
+
+        $tercover = $this->toFloat($row['Tercover'] ?? null);
+        if ($tercover !== null) {
+            return $tercover >= 1 ? 'V' : 'X';
+        }
+
+        return 'X';
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, mixed>  $meta
+     */
+    private function gapPerulanganScopeKey(array $row, array $meta): string
+    {
+        $site = trim((string) ($row[$meta['site_column']] ?? ''));
+        $companyColumn = $meta['company_column'] ?? null;
+
+        if ($companyColumn === null) {
+            return $site;
+        }
+
+        $company = trim((string) ($row[$companyColumn] ?? ''));
+        if ($company === '' && $site === '') {
+            return '';
+        }
+        if ($company === '') {
+            return $site;
+        }
+        if ($site === '') {
+            return $company;
+        }
+
+        return $company.' '.$site;
+    }
+
+    private function gapPerulanganProgramLabel(string $key, string $defaultLabel): string
+    {
+        return match ($key) {
+            'sap-rfid' => 'Layer 1 tanpa SAP',
+            'coverage-cctv' => 'Coverage Area Kritis',
+            default => $defaultLabel,
+        };
     }
 
     /**
@@ -369,7 +1047,7 @@ class HsecmDashboardService
 
         return [
             'kpis' => $this->buildKpis($filters),
-            'datasets' => collect(self::DATASETS)->map(fn (array $meta, string $key): array => [
+            'datasets' => collect($this->visibleDatasets())->map(fn (array $meta, string $key): array => [
                 'key' => $key,
                 'label' => $meta['label'],
                 'count' => $this->filteredRows($key, $filters)->count(),
@@ -864,7 +1542,29 @@ class HsecmDashboardService
 
     public function datasetExists(string $datasetKey): bool
     {
-        return isset(self::DATASETS[$datasetKey]);
+        return isset(self::DATASETS[$datasetKey]) && $this->isDatasetVisible($datasetKey);
+    }
+
+    /**
+     * Dataset yang ditampilkan di UI (abaikan flag hidden).
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function visibleDatasets(): array
+    {
+        return array_filter(
+            self::DATASETS,
+            static fn (array $meta): bool => ! (bool) ($meta['hidden'] ?? false)
+        );
+    }
+
+    private function isDatasetVisible(string $datasetKey): bool
+    {
+        if (! isset(self::DATASETS[$datasetKey])) {
+            return false;
+        }
+
+        return ! (bool) (self::DATASETS[$datasetKey]['hidden'] ?? false);
     }
 
     /**
@@ -872,13 +1572,13 @@ class HsecmDashboardService
      */
     private function buildFilterOptions(): array
     {
-        return Cache::remember('hsecm.filter_options.db.v1', 300, function (): array {
+        return Cache::remember('hsecm.filter_options.db.v2', 300, function (): array {
             $sites = collect();
             $companies = collect();
             $weeks = collect();
             $years = collect();
 
-            foreach (self::DATASETS as $key => $meta) {
+            foreach ($this->visibleDatasets() as $key => $meta) {
                 $rows = collect($this->repository->rows($meta['table']));
 
                 $sites = $sites->merge($this->uniqueColumnValues($rows, $meta['site_column']));
@@ -1032,6 +1732,9 @@ class HsecmDashboardService
         $rows = collect();
 
         foreach ($map as $key => $field) {
+            if (! $this->isDatasetVisible($key)) {
+                continue;
+            }
             $meta = self::DATASETS[$key];
             $siteCol = $meta['site_column'];
             $grouped = $this->filteredRows($key, array_merge($filters, ['site' => '']))
@@ -1310,6 +2013,14 @@ class HsecmDashboardService
                 $row['Kode_Sid'] ?? null,
                 $row['Day_of_Tanggal_Date'] ?? ($row['Tanggal_Date'] ?? null),
             ],
+            'hazard-rootcause' => [
+                $row['Site'] ?? null,
+                $row['Lokasi'] ?? null,
+                $row['Detail_Lokasi'] ?? null,
+                $row['Ketidaksesuaian'] ?? null,
+                $row['Sub_Ketidaksesuaian'] ?? null,
+                $row['Week'] ?? null,
+            ],
             default => [$row['_row_id'] ?? null],
         };
 
@@ -1343,6 +2054,11 @@ class HsecmDashboardService
             ]))),
             'tbc-blindspot' => trim((string) ($row['blindspot_TBC'] ?? $row['kategori_TBC'] ?? '')),
             'aggregator', 'fatigue' => trim((string) ($row['Nama'] ?? $row['Kode_Sid'] ?? '')),
+            'hazard-rootcause' => trim(implode(' · ', array_filter([
+                (string) ($row['Lokasi'] ?? ''),
+                (string) ($row['Detail_Lokasi'] ?? ''),
+                (string) ($row['Sub_Ketidaksesuaian'] ?? ''),
+            ]))),
             default => (string) ($row['_row_id'] ?? ''),
         };
     }
@@ -1623,6 +2339,8 @@ class HsecmDashboardService
             'd-m-Y',
             'm/d/Y',
             'd M Y',
+            'F j, Y',
+            'M j, Y',
             'Y/m/d',
         ];
 

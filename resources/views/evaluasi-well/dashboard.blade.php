@@ -2,6 +2,151 @@
 
 @section('title', 'Dashboard')
 
+@section('css')
+<style>
+  .not-installed-datatable + .dt-layout-row,
+  .dt-container:has(#notInstalledTable) .dt-layout-row,
+  #notInstalledTable_wrapper .dt-layout-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-paging,
+  #notInstalledTable_wrapper .dt-paging {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.375rem;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-paging .dt-paging-button,
+  #notInstalledTable_wrapper .dt-paging .dt-paging-button {
+    width: auto !important;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.625rem !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    line-height: 1 !important;
+    border-radius: 6px !important;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-paging .dt-paging-button.first,
+  .dt-container:has(#notInstalledTable) .dt-paging .dt-paging-button.previous,
+  .dt-container:has(#notInstalledTable) .dt-paging .dt-paging-button.next,
+  .dt-container:has(#notInstalledTable) .dt-paging .dt-paging-button.last,
+  #notInstalledTable_wrapper .dt-paging .dt-paging-button.first,
+  #notInstalledTable_wrapper .dt-paging .dt-paging-button.previous,
+  #notInstalledTable_wrapper .dt-paging .dt-paging-button.next,
+  #notInstalledTable_wrapper .dt-paging .dt-paging-button.last {
+    min-width: 2.25rem;
+    font-weight: 600;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-search input,
+  #notInstalledTable_wrapper .dt-search input {
+    margin-left: 0.5rem;
+    min-width: 240px;
+    display: inline-block;
+    width: auto;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-length select,
+  #notInstalledTable_wrapper .dt-length select {
+    margin: 0 0.375rem;
+    width: auto;
+    display: inline-block;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-length label,
+  .dt-container:has(#notInstalledTable) .dt-search label,
+  #notInstalledTable_wrapper .dt-length label,
+  #notInstalledTable_wrapper .dt-search label {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary-light);
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-info,
+  #notInstalledTable_wrapper .dt-info {
+    font-size: 0.875rem;
+    color: var(--text-secondary-light);
+    padding-top: 0;
+  }
+
+  .dt-container:has(#notInstalledTable),
+  #notInstalledTable_wrapper,
+  .not-installed-datatable,
+  .dt-container:has(#notInstalledTable) .dt-layout-table,
+  #notInstalledTable_wrapper .dt-layout-table,
+  .dt-container:has(#notInstalledTable) table.dataTable,
+  #notInstalledTable {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-layout-table,
+  #notInstalledTable_wrapper .dt-layout-table {
+    display: block !important;
+  }
+
+  #notInstalledTable {
+    table-layout: fixed !important;
+    width: 100% !important;
+  }
+
+  #notInstalledTable colgroup,
+  #notInstalledTable col {
+    width: auto !important;
+  }
+
+  #notInstalledTable th,
+  #notInstalledTable td {
+    vertical-align: middle;
+  }
+
+  #notInstalledTable thead th {
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  #notInstalledTable th:nth-child(1),
+  #notInstalledTable td:nth-child(1) {
+    width: 26% !important;
+  }
+
+  #notInstalledTable th:nth-child(2),
+  #notInstalledTable td:nth-child(2) {
+    width: 26% !important;
+    word-break: break-word;
+  }
+
+  #notInstalledTable th:nth-child(3),
+  #notInstalledTable td:nth-child(3) {
+    width: 28% !important;
+    word-break: break-word;
+  }
+
+  #notInstalledTable th:nth-child(4),
+  #notInstalledTable td:nth-child(4),
+  #notInstalledTable th:nth-child(5),
+  #notInstalledTable td:nth-child(5) {
+    width: 10% !important;
+    text-align: center;
+  }
+</style>
+@endsection
+
 @section('page-scripts')
 <script src="{{ asset('evaluasi-well-assets/js/homeTwoChart.js') }}"></script>
 <script>
@@ -313,6 +458,235 @@
             }
         }
     }).render();
+})();
+</script>
+<script>
+(function () {
+    var tableEl = document.querySelector('#notInstalledTable');
+    if (!tableEl || typeof DataTable === 'undefined') {
+        return;
+    }
+
+    var employeeShowBase = @json(url('/evaluasi-well/employees'));
+    var dataUrl = @json(route('evaluasi-well.not-installed.data'));
+    var exportUrl = @json(route('evaluasi-well.not-installed.export'));
+
+    var siteEl = document.querySelector('#not-installed-site');
+    var companyEl = document.querySelector('#not-installed-company');
+    var divisionEl = document.querySelector('#not-installed-division');
+    var installEl = document.querySelector('#not-installed-install');
+    var userAktifEl = document.querySelector('#not-installed-user-aktif');
+    var applyBtn = document.querySelector('#not-installed-apply-btn');
+    var resetBtn = document.querySelector('#not-installed-reset-btn');
+    var exportBtn = document.querySelector('#not-installed-export-btn');
+    var totalBadge = document.querySelector('#not-installed-total-badge');
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function currentFilters() {
+        return {
+            site: siteEl ? siteEl.value : '',
+            company: companyEl ? companyEl.value : '',
+            division: divisionEl ? divisionEl.value.trim() : '',
+            install: installEl ? installEl.value : 'belum',
+            user_aktif: userAktifEl ? userAktifEl.value : ''
+        };
+    }
+
+    function updateExportHref() {
+        if (!exportBtn) {
+            return;
+        }
+        var filters = currentFilters();
+        var params = new URLSearchParams();
+        Object.keys(filters).forEach(function (key) {
+            if (filters[key]) {
+                params.set(key, filters[key]);
+            }
+        });
+
+        var search = table.search();
+        if (search) {
+            params.set('search', search);
+        }
+
+        var query = params.toString();
+        exportBtn.href = query ? (exportUrl + '?' + query) : exportUrl;
+    }
+
+    function badgeHtml(label, className) {
+        return '<span class="' + className + ' px-16 py-4 rounded-pill fw-medium text-sm">'
+            + escapeHtml(label)
+            + '</span>';
+    }
+
+    var table = new DataTable(tableEl, {
+        processing: true,
+        serverSide: true,
+        searching: true,
+        ordering: true,
+        pageLength: 10,
+        lengthMenu: [10, 25, 50, 100],
+        order: [[0, 'asc']],
+        autoWidth: false,
+        scrollX: false,
+        layout: {
+            topStart: 'pageLength',
+            topEnd: 'search',
+            bottomStart: 'info',
+            bottomEnd: 'paging'
+        },
+        columnDefs: [
+            { targets: 0, width: '26%' },
+            { targets: 1, width: '26%' },
+            { targets: 2, width: '28%' },
+            { targets: 3, width: '10%', className: 'text-center' },
+            { targets: 4, width: '10%', className: 'text-center' }
+        ],
+        ajax: {
+            url: dataUrl,
+            data: function (d) {
+                var filters = currentFilters();
+                d.site = filters.site;
+                d.company = filters.company;
+                d.division = filters.division;
+                d.install = filters.install;
+                d.user_aktif = filters.user_aktif;
+            }
+        },
+        columns: [
+            {
+                data: 'nama',
+                render: function (data, type, row) {
+                    if (type !== 'display') {
+                        return data;
+                    }
+                    return '<a href="' + employeeShowBase + '/' + row.id + '" class="text-primary-light hover-text-primary fw-medium">'
+                        + escapeHtml(data)
+                        + '</a>'
+                        + '<span class="text-sm d-block fw-normal text-secondary-light">'
+                        + escapeHtml(row.kode_sid)
+                        + '</span>';
+                }
+            },
+            { data: 'company' },
+            { data: 'divisi' },
+            {
+                data: 'install',
+                render: function (data, type, row) {
+                    if (type !== 'display') {
+                        return data;
+                    }
+                    return badgeHtml(data, row.install_class);
+                }
+            },
+            {
+                data: 'user_aktif',
+                render: function (data, type, row) {
+                    if (type !== 'display') {
+                        return data;
+                    }
+                    return badgeHtml(data, row.user_aktif_class);
+                }
+            }
+        ],
+        language: {
+            processing: 'Memuat...',
+            search: 'Cari:',
+            lengthMenu: 'Tampilkan _MENU_ data',
+            info: 'Menampilkan _START_–_END_ dari _TOTAL_ data',
+            infoEmpty: 'Tidak ada data',
+            infoFiltered: '(difilter dari _MAX_ total data)',
+            zeroRecords: 'Tidak ada data untuk filter ini.',
+            paginate: {
+                first: '«',
+                last: '»',
+                next: '›',
+                previous: '‹'
+            }
+        }
+    });
+
+    function forceFullWidthTable() {
+        tableEl.style.setProperty('width', '100%', 'important');
+        tableEl.removeAttribute('width');
+
+        var colgroup = tableEl.querySelector('colgroup');
+        if (colgroup) {
+            colgroup.remove();
+        }
+
+        var container = tableEl.closest('.dt-container');
+        if (container) {
+            container.style.setProperty('width', '100%', 'important');
+            var layoutTable = container.querySelector('.dt-layout-table');
+            if (layoutTable) {
+                layoutTable.style.setProperty('width', '100%', 'important');
+            }
+        }
+    }
+
+    table.on('init', function () {
+        forceFullWidthTable();
+
+        var container = tableEl.closest('.dt-container');
+        var searchInput = container ? container.querySelector('.dt-search input') : null;
+        if (searchInput) {
+            searchInput.setAttribute('placeholder', 'Cari nama / SID / divisi...');
+            searchInput.classList.add('form-control', 'form-control-sm');
+        }
+    });
+
+    table.on('draw', function () {
+        forceFullWidthTable();
+        if (totalBadge) {
+            totalBadge.textContent = Number(table.page.info().recordsDisplay || 0).toLocaleString('id-ID');
+        }
+        updateExportHref();
+    });
+
+    table.on('search.dt', function () {
+        updateExportHref();
+    });
+
+    if (applyBtn) {
+        applyBtn.addEventListener('click', function () {
+            table.ajax.reload();
+            updateExportHref();
+        });
+    }
+
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+            if (siteEl) siteEl.value = '';
+            if (companyEl) companyEl.value = '';
+            if (divisionEl) divisionEl.value = '';
+            if (installEl) installEl.value = 'belum';
+            if (userAktifEl) userAktifEl.value = '';
+            table.search('');
+            table.ajax.reload();
+            updateExportHref();
+        });
+    }
+
+    if (divisionEl) {
+        divisionEl.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                table.ajax.reload();
+                updateExportHref();
+            }
+        });
+    }
+
+    updateExportHref();
 })();
 </script>
 @endsection
@@ -722,93 +1096,105 @@
       <!-- Top User End -->
 
 
-      <!-- Aktivitas & Login Terbaru Start -->
-      <div class="col-xxl-6">
-        <div class="card h-100">
-          <div class="card-header border-bottom bg-base ps-0 py-0 pe-24 d-flex align-items-center justify-content-between">
-              <ul class="nav bordered-tab nav-pills mb-0" id="pills-tab" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="pills-to-do-list-tab" data-bs-toggle="pill" data-bs-target="#pills-to-do-list" type="button" role="tab" aria-controls="pills-to-do-list" aria-selected="true">Semua</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="pills-recent-food-tab" data-bs-toggle="pill" data-bs-target="#pills-recent-food" type="button" role="tab" aria-controls="pills-recent-food" aria-selected="false" tabindex="-1">Makanan</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="pills-recent-workout-tab" data-bs-toggle="pill" data-bs-target="#pills-recent-workout" type="button" role="tab" aria-controls="pills-recent-workout" aria-selected="false" tabindex="-1">Olahraga</button>
-                </li>
-              </ul>
-              <a href="{{ route('evaluasi-well.activities.index') }}" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
-                Lihat Semua
-                <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
+      <!-- Belum Install Start -->
+      <div class="col-12">
+        <div class="card radius-8 border-0 shadow-sm">
+          <div class="card-header border-bottom bg-base py-16 px-24">
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+              <div>
+                <div class="d-flex align-items-center gap-2 mb-4">
+                  <h6 class="text-lg fw-semibold mb-0">Status Install Karyawan</h6>
+                  <span id="not-installed-total-badge" class="bg-warning-focus text-warning-main text-sm fw-medium px-12 py-2 rounded-pill">{{ number_format($notInstalledTotal ?? 0) }}</span>
+                </div>
+                <p class="text-sm text-secondary-light mb-0">
+                  Karyawan status AKTIF · User aktif = upload makanan/olahraga minggu ini ({{ $notInstalledWeekLabel ?? 'Sen–Min' }})
+                </p>
+              </div>
+              <a id="not-installed-export-btn" href="{{ route('evaluasi-well.not-installed.export', ['install' => 'belum']) }}" class="btn btn-sm btn-success-600 d-inline-flex align-items-center gap-1">
+                <iconify-icon icon="solar:file-download-bold" class="icon"></iconify-icon>
+                Download Excel
               </a>
             </div>
-            <div class="card-body p-24">
-              <div class="tab-content" id="pills-tabContent">
-                <div class="tab-pane fade show active" id="pills-to-do-list" role="tabpanel" aria-labelledby="pills-to-do-list-tab" tabindex="0">
-                  @include('evaluasi-well.partials._recent-activities-table', ['items' => $recentAllActivities ?? []])
-                </div>
-                <div class="tab-pane fade" id="pills-recent-food" role="tabpanel" aria-labelledby="pills-recent-food-tab" tabindex="0">
-                  @include('evaluasi-well.partials._recent-activities-table', ['items' => $recentFoodActivities ?? []])
-                </div>
-                <div class="tab-pane fade" id="pills-recent-workout" role="tabpanel" aria-labelledby="pills-recent-workout-tab" tabindex="0">
-                  @include('evaluasi-well.partials._recent-activities-table', ['items' => $recentWorkoutActivities ?? []])
-                </div>
-              </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-xxl-6">
-        <div class="card h-100">
-          <div class="card-header border-bottom bg-base py-16 px-24 d-flex align-items-center justify-content-between">
-            <h6 class="text-lg fw-semibold mb-0">Login Terbaru</h6>
-            <a href="{{ route('evaluasi-well.index') }}" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
-              Lihat Semua
-              <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
-            </a>
           </div>
           <div class="card-body p-24">
-            <div class="table-responsive scroll-sm">
-              <table class="table bordered-table mb-0">
+            <div class="bg-neutral-50 border radius-8 p-16 mb-20">
+              <div class="row g-3 align-items-end">
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                  <label for="not-installed-site" class="form-label text-sm fw-medium mb-6">Site</label>
+                  <select id="not-installed-site" class="form-select form-select-sm">
+                    <option value="">Semua Site</option>
+                    @foreach (($notInstalledSites ?? []) as $site)
+                      <option value="{{ $site }}">{{ $site }}</option>
+                    @endforeach
+                  </select>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                  <label for="not-installed-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
+                  <select id="not-installed-company" class="form-select form-select-sm">
+                    <option value="">Semua Perusahaan</option>
+                    @foreach (($notInstalledCompanies ?? []) as $company)
+                      <option value="{{ $company }}">{{ $company }}</option>
+                    @endforeach
+                  </select>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                  <label for="not-installed-division" class="form-label text-sm fw-medium mb-6">Divisi</label>
+                  <input
+                    id="not-installed-division"
+                    type="search"
+                    list="not-installed-division-options"
+                    class="form-control form-control-sm"
+                    placeholder="Cari divisi..."
+                    autocomplete="off"
+                  >
+                  <datalist id="not-installed-division-options">
+                    @foreach (($notInstalledDivisions ?? []) as $division)
+                      <option value="{{ $division }}"></option>
+                    @endforeach
+                  </datalist>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                  <label for="not-installed-install" class="form-label text-sm fw-medium mb-6">Install</label>
+                  <select id="not-installed-install" class="form-select form-select-sm">
+                    <option value="">Semua</option>
+                    <option value="belum" selected>Belum</option>
+                    <option value="sudah">Sudah</option>
+                  </select>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                  <label for="not-installed-user-aktif" class="form-label text-sm fw-medium mb-6">User Aktif</label>
+                  <select id="not-installed-user-aktif" class="form-select form-select-sm">
+                    <option value="">Semua</option>
+                    <option value="ya">Ya</option>
+                    <option value="tidak">Tidak</option>
+                  </select>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                  <div class="d-flex gap-2">
+                    <button type="button" id="not-installed-reset-btn" class="btn btn-sm btn-outline-secondary w-100">Reset</button>
+                    <button type="button" id="not-installed-apply-btn" class="btn btn-sm btn-primary-600 w-100">Filter</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="not-installed-datatable w-100">
+              <table id="notInstalledTable" class="table bordered-table mb-0 w-100" style="width:100%">
                 <thead>
                   <tr>
-                    <th scope="col">Karyawan</th>
-                    <th scope="col">Waktu</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Platform</th>
+                    <th scope="col" style="width:26%">Karyawan</th>
+                    <th scope="col" style="width:26%">Perusahaan</th>
+                    <th scope="col" style="width:28%">Divisi</th>
+                    <th scope="col" style="width:10%">Install</th>
+                    <th scope="col" style="width:10%">User Aktif</th>
                   </tr>
                 </thead>
-                <tbody>
-                  @forelse (($recentLogins ?? []) as $login)
-                  <tr>
-                    <td>
-                      @if ($login['user_id'])
-                        <a href="{{ route('evaluasi-well.employees.show', $login['user_id']) }}" class="text-primary-light hover-text-primary">
-                          {{ $login['user_name'] }}
-                        </a>
-                        <span class="text-sm d-block fw-normal text-secondary-light">{{ $login['kode_sid'] }}</span>
-                      @else
-                        <span class="text-primary-light">{{ $login['user_name'] }}</span>
-                        <span class="text-sm d-block fw-normal text-secondary-light">{{ $login['kode_sid'] }}</span>
-                      @endif
-                    </td>
-                    <td>{{ $login['at'] }}</td>
-                    <td>
-                      <span class="{{ $login['status_class'] }} px-24 py-4 rounded-pill fw-medium text-sm">{{ $login['status'] }}</span>
-                    </td>
-                    <td>{{ strtoupper($login['platform']) }}</td>
-                  </tr>
-                  @empty
-                  <tr>
-                    <td colspan="4" class="text-secondary-light text-sm">Belum ada data login.</td>
-                  </tr>
-                  @endforelse
-                </tbody>
+                <tbody></tbody>
               </table>
             </div>
           </div>
         </div>
       </div>
-      <!-- Aktivitas & Login Terbaru End -->
+      <!-- Belum Install End -->
     </div>
 @endsection

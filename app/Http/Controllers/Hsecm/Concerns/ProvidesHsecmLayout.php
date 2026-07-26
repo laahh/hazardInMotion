@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Hsecm\Concerns;
 
-use App\Services\Hsecm\HsecmDashboardService;
-
 trait ProvidesHsecmLayout
 {
     /**
@@ -13,23 +11,13 @@ trait ProvidesHsecmLayout
      */
     protected function hsecmNavItems(): array
     {
-        $items = [
+        return [
             ['key' => 'dashboard', 'label' => 'Overview', 'route' => 'hsecm.dashboard'],
+            ['key' => 'gap-perulangan', 'label' => 'Gap Perulangan', 'route' => 'hsecm.gap-perulangan'],
             ['key' => 'pjo-action', 'label' => 'Aksi PJO', 'route' => 'hsecm.pjo-action'],
             ['key' => 'tasklist-review', 'label' => 'Tasklist Review', 'route' => 'hsecm.tasklist.index'],
             ['key' => 'wa-notify', 'label' => 'Kirim WA & Email', 'route' => 'hsecm.wa-notify.index'],
         ];
-
-        foreach (HsecmDashboardService::DATASETS as $key => $meta) {
-            $items[] = [
-                'key' => $key,
-                'label' => $meta['label'],
-                'route' => 'hsecm.datasets.show',
-                'params' => ['dataset' => $key],
-            ];
-        }
-
-        return $items;
     }
 
     /**

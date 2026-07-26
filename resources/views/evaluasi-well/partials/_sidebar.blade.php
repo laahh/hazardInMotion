@@ -11,28 +11,23 @@
   </div>
   <div class="sidebar-menu-area">
     <ul class="sidebar-menu" id="sidebar-menu">
-      <li class="dropdown open">
-        <a href="javascript:void(0)">
+      <li>
+        <a href="{{ route('evaluasi-well.index') }}" class="{{ request()->routeIs('evaluasi-well.index') || request()->routeIs('evaluasi-well.summary') || request()->routeIs('evaluasi-well.trend') || request()->routeIs('evaluasi-well.distribution') || request()->routeIs('evaluasi-well.leaderboard') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:home-smile-angle-outline" class="menu-icon"></iconify-icon>
           <span>Dashboard</span>
         </a>
-        <ul class="sidebar-submenu" style="display:block;">
-          <li>
-            <a href="{{ route('evaluasi-well.index') }}" class="{{ request()->routeIs('evaluasi-well.index') ? 'active-page' : '' }}">
-              <i class="ri-circle-fill circle-icon text-primary-600 w-auto"></i> Evaluasi Olahraga
-            </a>
-          </li>
-          <li>
-            <a href="{{ route('evaluasi-well.nutrition.index') }}" class="{{ request()->routeIs('evaluasi-well.nutrition.*') ? 'active-page' : '' }}">
-              <i class="ri-circle-fill circle-icon text-success-main w-auto"></i> Evaluasi Nutrisi
-            </a>
-          </li>
-          <li>
-            <a href="{{ route('evaluasi-well.activities.index') }}" class="{{ request()->routeIs('evaluasi-well.activities.*') || request()->routeIs('evaluasi-well.employees.*') ? 'active-page' : '' }}">
-              <i class="ri-circle-fill circle-icon text-warning-main w-auto"></i> Detail Aktivitas
-            </a>
-          </li>
-        </ul>
+      </li>
+      <li>
+        <a href="{{ route('evaluasi-well.health-nutrition.index') }}" class="{{ request()->routeIs('evaluasi-well.health-nutrition.*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:heart-pulse-outline" class="menu-icon"></iconify-icon>
+          <span>Risiko MCU × Nutrisi</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('evaluasi-well.nutrition.index') }}" class="{{ request()->routeIs('evaluasi-well.nutrition.*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:cup-hot-outline" class="menu-icon"></iconify-icon>
+          <span>Evaluasi Nutrisi</span>
+        </a>
       </li>
       <li class="sidebar-menu-group-title">Navigasi</li>
       <li>

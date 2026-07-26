@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Hsecm\HsecmDashboardController;
 use App\Http\Controllers\Hsecm\HsecmDatasetController;
+use App\Http\Controllers\Hsecm\HsecmGapPerulanganController;
 use App\Http\Controllers\Hsecm\HsecmPjoActionController;
 use App\Http\Controllers\Hsecm\HsecmTasklistManageController;
 use App\Http\Controllers\Hsecm\HsecmTasklistPublicController;
@@ -39,6 +40,7 @@ Route::middleware(['auth'])
     ->group(function (): void {
         Route::redirect('/', '/hsecm/dashboard')->name('home');
         Route::get('/dashboard', [HsecmDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/gap-perulangan', [HsecmGapPerulanganController::class, 'index'])->name('gap-perulangan');
         Route::get('/wa-notify', [HsecmWaNotifyController::class, 'index'])->name('wa-notify.index');
         Route::post('/wa-notify/recipients', [HsecmWaNotifyController::class, 'storeRecipient'])
             ->name('wa-notify.recipients.store');
@@ -67,6 +69,6 @@ Route::middleware(['auth'])
             ->name('tasklist.items.reject');
 
         Route::get('/datasets/{dataset}', [HsecmDatasetController::class, 'show'])
-            ->where('dataset', 'sap-rfid|coverage-cctv|tbc-blindspot|task-overdue|task-submitted|ikk-work-permit|aggregator|fatigue|sumber-rfid')
+            ->where('dataset', 'sap-rfid|coverage-cctv|tbc-blindspot|task-overdue|task-submitted|ikk-work-permit|aggregator|fatigue|sumber-rfid|hazard-rootcause')
             ->name('datasets.show');
     });

@@ -88,14 +88,14 @@ return [
             'charset' => 'utf8',
             'prefix' => '',
             'prefix_indexes' => true,
-            'search_path' => 'public, datamart, bcsid',
+            'search_path' => env('PG_SCHEMA_SEARCH_PATH', 'bcbeats,public,bcsid,datamart'),
             'sslmode' => 'prefer',
-            // SSH Configuration
+            // SSH Configuration (setup-ssh-tunnel.bat / start-bemcu-tunnel.bat)
             'ssh_host' => env('SSH_HOST', '13.212.87.127'),
             'ssh_port' => env('SSH_PORT', 22),
             'ssh_user' => env('SSH_USER', 'ubuntu'),
             'ssh_password' => env('SSH_PASSWORD'),
-            'ssh_pkey' => env('SSH_PKEY'),
+            'ssh_pkey' => env('SSH_PKEY', public_path('JumpHostVPC2.pem')),
             'pg_host' => env('PG_HOST', 'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com'),
             'pg_port' => env('PG_PORT', 5432),
             'local_port' => env('PG_SSH_LOCAL_PORT', 5433),
@@ -208,6 +208,24 @@ return [
             'remote_host' => env('BESIGMA_REMOTE_HOST', '10.11.58.139'),
             'remote_port' => env('BESIGMA_REMOTE_PORT', 3306),
             'local_port' => env('BESIGMA_LOCAL_PORT', 3307),
+        ],
+
+        /*
+        | Alias legacy: MCU metabolik memakai pgsql_ssh (bcsid.mv_ftw_mcu).
+        | Disimpan agar env BEMCU_* lama tidak membingungkan — default = OLAP tunnel 5433.
+        */
+        'bemcu_db' => [
+            'driver' => 'pgsql',
+            'host' => env('BEMCU_DB_HOST', env('PG_SSH_HOST', '127.0.0.1')),
+            'port' => env('BEMCU_DB_PORT', env('PG_SSH_LOCAL_PORT', '5433')),
+            'database' => env('BEMCU_DB_DATABASE', env('PG_SSH_DATABASE', 'hse_automation')),
+            'username' => env('BEMCU_DB_USERNAME', env('PG_SSH_USER', 'safety_evaluator_2')),
+            'password' => env('BEMCU_DB_PASSWORD', env('PG_SSH_PASSWORD', 'safety123')),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => env('BEMCU_DB_SCHEMA', env('PG_SCHEMA_SEARCH_PATH', 'bcbeats,public,bcsid,datamart')),
+            'sslmode' => 'prefer',
         ],
 
     ],
