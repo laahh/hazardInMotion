@@ -141,4 +141,45 @@ return [
             'email' => 'habudin@pamapersada.com',
         ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Tasklist Review — mapping nama akun (users.name) → site
+    |--------------------------------------------------------------------------
+    | User yang terdaftar hanya melihat tasklist site-nya.
+    | Admin / user di luar daftar → lihat semua site.
+    | Match nama case-insensitive (abaikan spasi berlebih).
+    | Opsional: 'sid' untuk catatan identitas (belum dipakai filter DB users).
+    */
+    'tasklist_reviewers' => [
+        [
+            'nama' => 'DAVI ADITYA TANTRA',
+            'site' => 'GMO',
+        ],
+        [
+            'nama' => 'OSCAR WHIMMY A',
+            'site' => 'BMO 1',
+        ],
+        [
+            'nama' => 'PAIAN MHM SIREGAR',
+            'site' => 'BMO 1',
+        ],
+        [
+            'nama' => 'WAHYUDI',
+            'sid' => 'CPHR5',
+            'site' => 'BMO 2',
+        ],
+        [
+            'nama' => 'YADI HARYADI',
+            'site' => 'LMO',
+        ],
+        [
+            'nama' => 'SEPRIYANTO',
+            'site' => 'BMO 3',
+        ],
+        [
+            'nama' => 'DHEHAVE RIAVIANDHI',
+            'site' => 'SMO',
+        ],
+    ],
 ];

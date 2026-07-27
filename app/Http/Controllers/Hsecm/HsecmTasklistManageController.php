@@ -29,14 +29,10 @@ class HsecmTasklistManageController extends Controller
         abort_unless($this->tasklistService->tablesAvailable(), 503, 'Tabel tasklist belum dimigrate.');
 
         $status = trim((string) $request->query('status', ''));
+        $user = auth()->user();
+        $reviewerSite = $this->tasklistService->resolveReviewerSite($user);
+
         $query = HsecmTasklist::query()
-            ->withCount([
-                'items',
-                'items as open_count' => fn ($q) => $q->where('status', 'open'),
-                'items as submitted_count' => fn ($q) => $q->where('status', 'submitted'),
-                'items as rejected_count' => fn ($q) => $q->where('status', 'rejected'),
-                'items as approved_count' => fn ($q) => $q->where('status', 'approved'),
-            ])
             ->orderByDesc('batch_slot')
             ->orderByDesc('id');
 
@@ -44,11 +40,25 @@ class HsecmTasklistManageController extends Controller
             $query->where('status', $status);
         }
 
+        if ($reviewerSite !== null) {
+            $query->whereNotNull('site')
+                ->where('site', '!=', '')
+                ->where(function ($q) use ($reviewerSite): void {
+                    $q->where('site', $reviewerSite);
+                    // variasi spacing umum (BMO1 vs BMO 1)
+                    $compact = preg_replace('/\s+/', '', $reviewerSite) ?? $reviewerSite;
+                    if ($compact !== $reviewerSite) {
+                        $q->orWhereRaw("REPLACE(site, ' ', '') = ?", [$compact]);
+                    }
+                });
+        }
+
         $tasklists = $query->paginate(20)->withQueryString();
 
         return view('BaseRule.tasklist.index', $this->hsecmViewData('tasklist-review', [
             'tasklists' => $tasklists,
             'statusFilter' => $status,
+            'reviewerSite' => $reviewerSite,
         ]));
     }
 
@@ -59,6 +69,12 @@ class HsecmTasklistManageController extends Controller
         $tasklist = HsecmTasklist::query()
             ->with(['items.evidences'])
             ->findOrFail($id);
+
+        abort_unless(
+            $this->tasklistService->userCanAccessTasklist(auth()->user(), $tasklist),
+            403,
+            'Anda tidak berhak mengakses tasklist site ini.'
+        );
 
         $items = $this->tasklistService->withPreviousRecurrenceCounts($tasklist, $tasklist->items);
 
@@ -74,6 +90,11 @@ class HsecmTasklistManageController extends Controller
         $tasklist = HsecmTasklist::query()->findOrFail($id);
         $user = auth()->user();
         abort_unless($user !== null, 403);
+        abort_unless(
+            $this->tasklistService->userCanAccessTasklist($user, $tasklist),
+            403,
+            'Anda tidak berhak mengakses tasklist site ini.'
+        );
 
         $itemIds = collect($request->input('items', []))
             ->map(static fn ($v): int => (int) $v)
@@ -94,6 +115,11 @@ class HsecmTasklistManageController extends Controller
         $tasklist = HsecmTasklist::query()->findOrFail($id);
         $user = auth()->user();
         abort_unless($user !== null, 403);
+        abort_unless(
+            $this->tasklistService->userCanAccessTasklist($user, $tasklist),
+            403,
+            'Anda tidak berhak mengakses tasklist site ini.'
+        );
 
         $itemIds = collect($request->input('items', []))
             ->map(static fn ($v): int => (int) $v)
@@ -119,6 +145,12 @@ class HsecmTasklistManageController extends Controller
         $item = HsecmTasklistItem::query()->with('tasklist')->findOrFail($itemId);
         $user = auth()->user();
         abort_unless($user !== null, 403);
+        abort_unless(
+            $item->tasklist !== null
+                && $this->tasklistService->userCanAccessTasklist($user, $item->tasklist),
+            403,
+            'Anda tidak berhak mengakses tasklist site ini.'
+        );
 
         $this->tasklistService->approveItem($item, $user);
 
@@ -132,6 +164,12 @@ class HsecmTasklistManageController extends Controller
         $item = HsecmTasklistItem::query()->with('tasklist')->findOrFail($itemId);
         $user = auth()->user();
         abort_unless($user !== null, 403);
+        abort_unless(
+            $item->tasklist !== null
+                && $this->tasklistService->userCanAccessTasklist($user, $item->tasklist),
+            403,
+            'Anda tidak berhak mengakses tasklist site ini.'
+        );
 
         $this->tasklistService->rejectItem(
             $item,

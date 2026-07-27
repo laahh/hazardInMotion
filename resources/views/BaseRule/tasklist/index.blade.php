@@ -17,6 +17,12 @@
   <div class="mb-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 text-sm">{{ session('success') }}</div>
 @endif
 
+@if(!empty($reviewerSite))
+  <div class="mb-4 rounded-xl bg-teal-50 border border-teal-100 text-teal-900 px-4 py-3 text-sm">
+    Scope review Anda: site <strong>{{ $reviewerSite }}</strong>
+  </div>
+@endif
+
 <form method="GET" action="{{ route('hsecm.tasklist.index') }}" class="mb-4 flex gap-2 items-end">
   <div>
     <label class="block text-xs font-bold uppercase text-on-surface-variant mb-1">Status</label>
@@ -38,7 +44,6 @@
           <th class="px-4 py-3 text-left">Batch</th>
           <th class="px-4 py-3 text-left">Scope</th>
           <th class="px-4 py-3 text-left">Status</th>
-          <th class="px-4 py-3 text-left">Items</th>
           <th class="px-4 py-3 text-left">Escalate</th>
           <th class="px-4 py-3 text-left"></th>
         </tr>
@@ -53,10 +58,6 @@
             </td>
             <td class="px-4 py-3 font-bold">{{ strtoupper($tl->status) }}</td>
             <td class="px-4 py-3 text-xs">
-              O {{ $tl->open_count }} · S {{ $tl->submitted_count }} · R {{ $tl->rejected_count }} · A {{ $tl->approved_count }}
-              <div class="text-on-surface-variant">Total {{ $tl->items_count }}</div>
-            </td>
-            <td class="px-4 py-3 text-xs">
               #{{ $tl->escalate_count }}
               @if($tl->next_escalate_at)
                 <div>Next {{ $tl->next_escalate_at->format('d/m H:i') }}</div>
@@ -67,7 +68,7 @@
             </td>
           </tr>
         @empty
-          <tr><td colspan="6" class="px-4 py-8 text-center text-on-surface-variant">Belum ada tasklist.</td></tr>
+          <tr><td colspan="5" class="px-4 py-8 text-center text-on-surface-variant">Belum ada tasklist untuk scope Anda.</td></tr>
         @endforelse
       </tbody>
     </table>

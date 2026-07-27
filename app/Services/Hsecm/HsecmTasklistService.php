@@ -547,6 +547,78 @@ class HsecmTasklistService
         return $base.'/hsecm/tasklist/'.$tasklist->token;
     }
 
+    /**
+     * Site yang boleh di-review oleh user.
+     * null = semua site (admin / tidak terdaftar di mapping reviewer).
+     */
+    public function resolveReviewerSite(?User $user): ?string
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        if (method_exists($user, 'isAdmin') && $user->isAdmin()) {
+            return null;
+        }
+
+        $userName = $this->normalizePersonName((string) ($user->name ?? ''));
+        if ($userName === '') {
+            return null;
+        }
+
+        /** @var list<array{nama?: string, site?: string, sid?: string}> $reviewers */
+        $reviewers = config('hsecm.tasklist_reviewers', []);
+        foreach ($reviewers as $row) {
+            $mappedName = $this->normalizePersonName((string) ($row['nama'] ?? ''));
+            $site = trim((string) ($row['site'] ?? ''));
+            if ($mappedName === '' || $site === '') {
+                continue;
+            }
+            if ($mappedName === $userName || str_starts_with($userName, $mappedName) || str_starts_with($mappedName, $userName)) {
+                return $site;
+            }
+        }
+
+        return null;
+    }
+
+    public function userCanAccessTasklist(?User $user, HsecmTasklist $tasklist): bool
+    {
+        $allowedSite = $this->resolveReviewerSite($user);
+        if ($allowedSite === null) {
+            return true;
+        }
+
+        $taskSite = trim((string) ($tasklist->site ?? ''));
+        if ($taskSite === '') {
+            return false;
+        }
+
+        return $this->sitesMatch($allowedSite, $taskSite);
+    }
+
+    public function sitesMatch(string $a, string $b): bool
+    {
+        return $this->normalizeSiteKey($a) === $this->normalizeSiteKey($b);
+    }
+
+    private function normalizePersonName(string $name): string
+    {
+        $name = Str::upper(trim(preg_replace('/\s+/u', ' ', $name) ?? ''));
+
+        return $name;
+    }
+
+    private function normalizeSiteKey(string $site): string
+    {
+        $s = Str::upper(trim(preg_replace('/\s+/u', ' ', $site) ?? ''));
+        $s = str_replace(['BMO1', 'BMO-1'], 'BMO 1', $s);
+        $s = str_replace(['BMO2', 'BMO-2'], 'BMO 2', $s);
+        $s = str_replace(['BMO3', 'BMO-3', 'BMO 3'], 'BMO3', $s);
+
+        return $s;
+    }
+
     private function firstEscalateAt(Carbon $batchSlot): Carbon
     {
         // H+1 08:00 WITA relatif terhadap tanggal batch_slot
