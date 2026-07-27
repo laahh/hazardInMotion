@@ -9,7 +9,7 @@
 @section('content')
 @include('BaseRule.partials.page-header', [
    'title' => 'Daily Monitoring Dashboard',
-   'subtitle' => 'Monitoring Gap Performance Daily SAP, Coverage Area, Blindspot, Closing Hazard, Implementasi IKK, Implementasi Aggregator Fit to Work, dan Exposure Control Pekerja Baru',
+   'subtitle' => 'Monitoring Gap Performance Daily SAP, Coverage Area, Blindspot, Closing Hazard, Hazard Rootcause, Implementasi IKK, Implementasi Aggregator Fit to Work, dan Exposure Control Pekerja Baru',
    'breadcrumb' => 'Overview',
 ])
 
@@ -99,6 +99,7 @@
                <th class="px-3 py-3 text-right">Avg Agg%</th>
                <th class="px-3 py-3 text-right">Fatigue</th>
                <th class="px-3 py-3 text-right">Jumlah pekerja baru</th>
+               <th class="px-3 py-3 text-right">Hazard Rootcause</th>
             </tr>
          </thead>
          <tbody>
@@ -119,10 +120,11 @@
                <td class="px-3 py-3 text-right">{{ $row['avg_aggregator'] }}%</td>
                <td class="px-3 py-3 text-right">{{ number_format($row['fatigue']) }}</td>
                <td class="px-3 py-3 text-right">{{ number_format($row['sumber_rfid']) }}</td>
+               <td class="px-3 py-3 text-right {{ ($row['hazard_rootcause'] ?? 0) > 0 ? 'text-red-600 font-semibold' : '' }}">{{ number_format($row['hazard_rootcause'] ?? 0) }}</td>
             </tr>
             @empty
             <tr>
-               <td colspan="13" class="px-4 py-8 text-center text-on-surface-variant">Tidak ada data untuk filter yang dipilih.</td>
+               <td colspan="14" class="px-4 py-8 text-center text-on-surface-variant">Tidak ada data untuk filter yang dipilih.</td>
             </tr>
             @endforelse
          </tbody>

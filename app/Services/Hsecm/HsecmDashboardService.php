@@ -258,7 +258,6 @@ class HsecmDashboardService
             'label' => 'Hazard Rootcause Belum Terlaporkan',
             'icon' => 'report',
             'table' => 'scr_hsecm_hazard_rootcause_belum_terlaporkan',
-            'hidden' => true,
             'site_column' => 'Site',
             'company_column' => null,
             'week_column' => 'Week',
@@ -376,6 +375,12 @@ class HsecmDashboardService
      */
     public function buildDashboard(array $filters): array
     {
+        // Snapshot + batch_slot kosong → rowsForBatchSlot memakai latestBatchSlot() per tabel.
+        if (trim((string) ($filters['batch_slot'] ?? '')) === '') {
+            $filters['data_mode'] = 'snapshot';
+            $filters['previous_batch_slot'] = '';
+        }
+
         return [
             'filters' => $filters,
             'filter_options' => $this->buildFilterOptions(),
@@ -1017,6 +1022,7 @@ class HsecmDashboardService
         return match ($key) {
             'sap-rfid' => 'Layer 1 tanpa SAP',
             'coverage-cctv' => 'Coverage Area Kritis',
+            'hazard-rootcause' => 'Hazard Rootcause Belum Terlaporkan',
             default => $defaultLabel,
         };
     }
@@ -1304,13 +1310,19 @@ class HsecmDashboardService
 
         $total = $rows->count();
         $limit = max(1, $rowLimit);
-        $previewRows = $rows->take($limit)->map(function (array $row) use ($columnKeys, $percentColumns): array {
+        $dateColumn = is_string($meta['date_column'] ?? null) ? (string) $meta['date_column'] : null;
+        $previewRows = $rows->take($limit)->map(function (array $row) use ($columnKeys, $percentColumns, $dateColumn): array {
             $cells = [];
             foreach ($columnKeys as $columnKey) {
                 $raw = $row[$columnKey] ?? '';
                 if (in_array($columnKey, $percentColumns, true)) {
                     $num = $this->toFloat($raw);
                     $cells[$columnKey] = $num === null ? '—' : round($num * 100, 1).'%';
+                    continue;
+                }
+
+                if ($dateColumn !== null && $columnKey === $dateColumn) {
+                    $cells[$columnKey] = $this->formatEmailDateCell($row, $dateColumn);
                     continue;
                 }
 
@@ -1591,7 +1603,7 @@ class HsecmDashboardService
      */
     private function buildFilterOptions(): array
     {
-        return Cache::remember('hsecm.filter_options.db.v2', 300, function (): array {
+        return Cache::remember('hsecm.filter_options.db.v3', 300, function (): array {
             $sites = collect();
             $companies = collect();
             $weeks = collect();
@@ -1654,6 +1666,7 @@ class HsecmDashboardService
         // FTW Merah = jumlah (agregat) seluruh baris FTW merah.
         $ftwMerah = $this->filteredRows('fatigue', $filters)->count();
         $sumberCount = $this->filteredRows('sumber-rfid', $filters)->count();
+        $hazardRootcauseCount = $this->filteredRows('hazard-rootcause', $filters)->count();
 
         return [
             [
@@ -1726,6 +1739,13 @@ class HsecmDashboardService
                 'hint' => 'RFID pekerja baru',
                 'tone' => 'primary',
             ],
+            [
+                'label' => 'Hazard Rootcause',
+                'value' => $hazardRootcauseCount,
+                'icon' => 'report',
+                'hint' => 'Belum terlaporkan (batch terkini)',
+                'tone' => $hazardRootcauseCount > 0 ? 'danger' : 'success',
+            ],
         ];
     }
 
@@ -1745,6 +1765,7 @@ class HsecmDashboardService
             'aggregator' => 'aggregator',
             'fatigue' => 'fatigue',
             'sumber-rfid' => 'sumber_rfid',
+            'hazard-rootcause' => 'hazard_rootcause',
         ];
 
         /** @var Collection<string, array<string, int|float|string>> $rows */
@@ -1773,6 +1794,7 @@ class HsecmDashboardService
                     'aggregator' => 0,
                     'fatigue' => 0,
                     'sumber_rfid' => 0,
+                    'hazard_rootcause' => 0,
                     'avg_ikk' => 0,
                     'avg_aggregator' => 0,
                 ]);
@@ -2088,14 +2110,49 @@ class HsecmDashboardService
      */
     private function buildItemPreviewCells(array $row, string $datasetKey): array
     {
-        $keys = array_slice(array_keys(self::DATASETS[$datasetKey]['columns']), 0, 6);
+        $meta = self::DATASETS[$datasetKey];
+        $keys = array_slice(array_keys($meta['columns']), 0, 6);
+        $dateColumn = is_string($meta['date_column'] ?? null) ? (string) $meta['date_column'] : null;
         $out = [];
         foreach ($keys as $key) {
+            if ($dateColumn !== null && $key === $dateColumn) {
+                $out[$key] = $this->formatEmailDateCell($row, $dateColumn);
+                continue;
+            }
             $text = trim((string) ($row[$key] ?? ''));
             $out[$key] = $text !== '' ? (mb_strlen($text) > 80 ? mb_substr($text, 0, 77).'...' : $text) : '—';
         }
 
         return $out;
+    }
+
+    /**
+     * Tanggal untuk email/preview: kolom bisnis dulu, fallback batch_slot / scraped_at
+     * (scrape L1 tanpa SAP H-1 sering mengosongkan kolom date).
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function formatEmailDateCell(array $row, string $dateColumn): string
+    {
+        $raw = $row[$dateColumn] ?? null;
+        $text = is_scalar($raw) || $raw === null ? trim((string) ($raw ?? '')) : '';
+        if ($text !== '' && ! $this->isAllToken($text)) {
+            $ymd = $this->parseFlexibleDate($text);
+            if ($ymd !== null) {
+                return Carbon::parse($ymd)->format('d/m/Y');
+            }
+
+            return mb_strlen($text) > 80 ? mb_substr($text, 0, 77).'...' : $text;
+        }
+
+        foreach (['batch_slot', 'scraped_at'] as $fallbackKey) {
+            $ymd = $this->parseFlexibleDate($row[$fallbackKey] ?? null);
+            if ($ymd !== null) {
+                return Carbon::parse($ymd)->format('d/m/Y');
+            }
+        }
+
+        return '—';
     }
 
     /**
@@ -2110,8 +2167,14 @@ class HsecmDashboardService
         $previousSlot = trim((string) ($filters['previous_batch_slot'] ?? ''));
         $hasDateFilter = ($filters['date_from'] ?? '') !== '' || ($filters['date_to'] ?? '') !== '';
 
-        // Filter tanggal = hitung baris pada tanggal tersebut (bukan irisan snapshot batch terkini).
-        if ($hasDateFilter && $dataMode === 'snapshot' && $batchSlot === '') {
+        // Filter tanggal hanya relevan bila dataset punya date_column.
+        // Tanpa date_column (mis. hazard-rootcause), tetap snapshot batch terkini.
+        if (
+            $hasDateFilter
+            && $dataMode === 'snapshot'
+            && $batchSlot === ''
+            && ($meta['date_column'] ?? null) !== null
+        ) {
             $dataMode = 'all';
         }
 
