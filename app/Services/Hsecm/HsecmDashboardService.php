@@ -888,10 +888,22 @@ class HsecmDashboardService
      */
     private function buildGapPerulanganGenericSection(string $key, array $meta, Collection $rows): array
     {
-        $columnKeys = array_slice(array_keys($meta['columns']), 0, 6);
+        $columnKeys = match ($key) {
+            'tbc-blindspot' => [
+                'Date_for_Join',
+                'site',
+                'kategori_TBC',
+                'blindspot_TBC',
+                'deskripsi',
+                'pelapor_all_karyawan',
+                'perusahaan_pic',
+                'pic',
+            ],
+            default => array_slice(array_keys($meta['columns']), 0, 6),
+        };
         $headers = ['Rank'];
         foreach ($columnKeys as $col) {
-            $headers[] = $meta['columns'][$col];
+            $headers[] = $meta['columns'][$col] ?? $col;
         }
         $headers[] = 'Jumlah Perulangan';
 
