@@ -5,6 +5,7 @@ use App\Http\Controllers\SportEvaluation\NutritionEvaluationController;
 use App\Http\Controllers\SportEvaluation\SportActivitiesController;
 use App\Http\Controllers\SportEvaluation\SportEmployeeController;
 use App\Http\Controllers\SportEvaluation\SportEvaluationDashboardController;
+use App\Http\Controllers\SportEvaluation\SportEvaluationWeeklyUploadController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -41,6 +42,13 @@ Route::middleware('evaluasi-well.access')
             ->name('health-nutrition.data');
         Route::get('/health-nutrition/export', [HealthNutritionRiskController::class, 'export'])
             ->name('health-nutrition.export');
+
+        Route::get('/weekly-uploads', [SportEvaluationWeeklyUploadController::class, 'index'])
+            ->name('weekly-uploads.index');
+        Route::get('/weekly-uploads/data', [SportEvaluationWeeklyUploadController::class, 'data'])
+            ->name('weekly-uploads.data');
+        Route::get('/weekly-uploads/export', [SportEvaluationWeeklyUploadController::class, 'export'])
+            ->name('weekly-uploads.export');
 
         Route::get('/employees/{userId}', [SportEmployeeController::class, 'show'])
             ->whereNumber('userId')

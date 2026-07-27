@@ -29,6 +29,12 @@
           <span>Evaluasi Nutrisi</span>
         </a>
       </li>
+      <li>
+        <a href="{{ route('evaluasi-well.weekly-uploads.index') }}" class="{{ request()->routeIs('evaluasi-well.weekly-uploads.*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:calendar-mark-outline" class="menu-icon"></iconify-icon>
+          <span>Upload Mingguan</span>
+        </a>
+      </li>
       <li class="sidebar-menu-group-title">Navigasi</li>
       <li>
         <a href="{{ url('/') }}">
