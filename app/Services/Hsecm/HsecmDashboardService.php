@@ -685,10 +685,12 @@ class HsecmDashboardService
 
         $tableRows = [];
         foreach ($sorted as $index => $row) {
+            $site = trim((string) ($row['site_dedicated_pelapor_all_karyawan'] ?? ''));
             $tableRows[] = [
                 'rank' => $index + 1,
                 'nama' => (string) ($row['pelapor_all_karyawan'] ?? '—'),
                 'sid' => (string) ($row['sid_pelapor_all_karyawan'] ?? '—'),
+                'site' => $site !== '' ? $site : '—',
                 'jabatan' => (string) ($row['jabatan_struktural_pelapor_all_karyawan'] ?? '—'),
                 'perusahaan' => (string) ($row['perusahaan_pelapor_all_karyawan'] ?? '—'),
                 'gap_count' => (int) ($row['gap_count'] ?? 0),
@@ -703,7 +705,7 @@ class HsecmDashboardService
             'layout' => 'sap-rfid',
             'chart_title' => 'Top Perusahaan dengan Perulangan',
             'top_chart' => $this->buildGapPerulanganTopChart($rows, $meta, 'company', 8),
-            'table_headers' => ['Rank', 'Nama', 'SID', 'Jabatan Struktural', 'Perusahaan', 'Jumlah Perulangan', 'Total SAP'],
+            'table_headers' => ['Rank', 'Nama', 'SID', 'Site', 'Jabatan Struktural', 'Perusahaan', 'Jumlah Perulangan', 'Total SAP'],
             'table_rows' => $tableRows,
             'total' => $rows->count(),
         ];

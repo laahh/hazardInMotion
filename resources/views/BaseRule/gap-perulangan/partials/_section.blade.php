@@ -47,6 +47,7 @@
                         <td class="px-3 py-2 text-on-surface-variant">{{ $row['rank'] }}</td>
                         <td class="px-3 py-2 font-semibold text-on-background whitespace-nowrap">{{ $row['nama'] }}</td>
                         <td class="px-3 py-2 whitespace-nowrap">{{ $row['sid'] }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap font-semibold">{{ $row['site'] ?? '—' }}</td>
                         <td class="px-3 py-2 whitespace-nowrap">{{ $row['jabatan'] }}</td>
                         <td class="px-3 py-2 whitespace-nowrap">{{ $row['perusahaan'] }}</td>
                         <td class="px-3 py-2 text-right font-semibold {{ $row['gap_count'] > 0 ? 'text-red-600' : '' }}">{{ number_format($row['gap_count']) }}</td>
@@ -54,7 +55,7 @@
                      </tr>
                      @empty
                      <tr>
-                        <td colspan="7" class="px-4 py-8 text-center text-on-surface-variant">Tidak ada data perulangan.</td>
+                        <td colspan="8" class="px-4 py-8 text-center text-on-surface-variant">Tidak ada data perulangan.</td>
                      </tr>
                      @endforelse
                   </tbody>
