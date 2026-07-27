@@ -9,7 +9,7 @@
 @section('content')
 @include('BaseRule.partials.page-header', [
    'title' => 'Daily Monitoring Dashboard',
-   'subtitle' => 'Monitoring Gap Performance Daily SAP, Coverage Area, Blindspot, Closing Hazard, Hazard Rootcause, Implementasi IKK, Implementasi Aggregator Fit to Work, dan Exposure Control Pekerja Baru',
+   'subtitle' => 'Monitoring Gap Performance Daily SAP, Coverage Area, Blindspot, Closing Hazard, Hazard Related Incident, Implementasi IKK, Implementasi Aggregator Fit to Work, dan Exposure Control Pekerja Baru',
    'breadcrumb' => 'Overview',
 ])
 
@@ -99,7 +99,7 @@
                <th class="px-3 py-3 text-right">Avg Agg%</th>
                <th class="px-3 py-3 text-right">Fatigue</th>
                <th class="px-3 py-3 text-right">Jumlah pekerja baru</th>
-               <th class="px-3 py-3 text-right">Hazard Rootcause</th>
+               <th class="px-3 py-3 text-right">Hazard Related Incident</th>
             </tr>
          </thead>
          <tbody>

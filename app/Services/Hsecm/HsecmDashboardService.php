@@ -255,7 +255,7 @@ class HsecmDashboardService
             ],
         ],
         'hazard-rootcause' => [
-            'label' => 'Hazard Rootcause Belum Terlaporkan',
+            'label' => 'Hazard Related Incident',
             'icon' => 'report',
             'table' => 'scr_hsecm_hazard_rootcause_belum_terlaporkan',
             'site_column' => 'Site',
@@ -1022,7 +1022,7 @@ class HsecmDashboardService
         return match ($key) {
             'sap-rfid' => 'Layer 1 tanpa SAP',
             'coverage-cctv' => 'Coverage Area Kritis',
-            'hazard-rootcause' => 'Hazard Rootcause Belum Terlaporkan',
+            'hazard-rootcause' => 'Hazard Related Incident',
             default => $defaultLabel,
         };
     }
@@ -1740,7 +1740,7 @@ class HsecmDashboardService
                 'tone' => 'primary',
             ],
             [
-                'label' => 'Hazard Rootcause',
+                'label' => 'Hazard Related Incident',
                 'value' => $hazardRootcauseCount,
                 'icon' => 'report',
                 'hint' => 'Belum terlaporkan (batch terkini)',
