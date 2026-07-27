@@ -69,7 +69,7 @@ class HsecmDashboardService
             'icon' => 'visibility_off',
             'table' => 'scr_hsecm_blindspot_tbc_gr',
             'site_column' => 'site',
-            'company_column' => 'perusahaan_pelapor_all_karyawan',
+            'company_column' => 'perusahaan_pic',
             'week_column' => 'Week_of_Date_for_Join',
             'year_column' => 'Year_of_Date_for_Join',
             'date_column' => 'Date_for_Join',
