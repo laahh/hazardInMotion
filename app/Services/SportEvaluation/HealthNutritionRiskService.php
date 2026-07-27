@@ -201,42 +201,21 @@ final class HealthNutritionRiskService
             'priorityOne' => [],
         ];
 
-        // #region agent log
-        $__dbgBuildT0 = microtime(true);
-        $__dbgBewellT0 = microtime(true);
-        // #endregion
         $bewellUp = $this->bewell->isUp();
-        // #region agent log
-        file_put_contents(base_path('debug-8686de.log'), json_encode(['sessionId' => '8686de', 'hypothesisId' => 'A', 'location' => 'HealthNutritionRiskService::buildDataset', 'message' => 'bewell_isUp', 'data' => ['up' => $bewellUp, 'ms' => (int) round((microtime(true) - $__dbgBewellT0) * 1000)], 'timestamp' => (int) round(microtime(true) * 1000)], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND);
-        // #endregion
         if (! $bewellUp) {
             return $empty;
         }
 
         $filterHash = sha1(json_encode($filters, JSON_THROW_ON_ERROR));
         $cacheKey = 'evaluasi_well:health_nutrition:v4:'.$filterHash;
-        // #region agent log
-        $__dbgCacheHit = Cache::has($cacheKey);
-        file_put_contents(base_path('debug-8686de.log'), json_encode(['sessionId' => '8686de', 'hypothesisId' => 'B', 'location' => 'HealthNutritionRiskService::buildDataset', 'message' => 'cache_check', 'data' => ['hit' => $__dbgCacheHit, 'key_suffix' => substr($filterHash, 0, 8)], 'timestamp' => (int) round(microtime(true) * 1000)], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND);
-        // #endregion
 
         try {
             return Cache::remember(
                 $cacheKey,
                 self::CACHE_TTL,
-                function () use ($filters, $weekLabel, $weekStart, $weekEnd, $__dbgBuildT0): array {
-                    // #region agent log
-                    $__dbgMcuT0 = microtime(true);
-                    // #endregion
+                function () use ($filters, $weekLabel, $weekStart, $weekEnd): array {
                     $mcuRows = $this->fetchLatestMetabolicFindings();
-                    // #region agent log
-                    file_put_contents(base_path('debug-8686de.log'), json_encode(['sessionId' => '8686de', 'hypothesisId' => 'B', 'location' => 'HealthNutritionRiskService::buildDataset', 'message' => 'after_mcu_fetch', 'data' => ['ms' => (int) round((microtime(true) - $__dbgMcuT0) * 1000), 'mcu_rows' => $mcuRows->count()], 'timestamp' => (int) round(microtime(true) * 1000)], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND);
-                    $__dbgMapT0 = microtime(true);
-                    // #endregion
                     $mapped = $this->mapToActiveEmployees($mcuRows);
-                    // #region agent log
-                    file_put_contents(base_path('debug-8686de.log'), json_encode(['sessionId' => '8686de', 'hypothesisId' => 'C', 'location' => 'HealthNutritionRiskService::buildDataset', 'message' => 'after_map', 'data' => ['ms' => (int) round((microtime(true) - $__dbgMapT0) * 1000), 'mapped' => $mapped->count()], 'timestamp' => (int) round(microtime(true) * 1000)], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND);
-                    // #endregion
 
                     $filterOptions = $this->buildFilterOptions($mapped);
 
@@ -269,14 +248,7 @@ final class HealthNutritionRiskService
                     }
 
                     $userIds = $mapped->pluck('user_id')->map(static fn ($id): int => (int) $id)->all();
-                    // #region agent log
-                    $__dbgDietT0 = microtime(true);
-                    // #endregion
                     $dietByUser = $this->nutrition->evaluateDietRiskForUsers($userIds, $weekStart, $weekEnd);
-                    // #region agent log
-                    file_put_contents(base_path('debug-8686de.log'), json_encode(['sessionId' => '8686de', 'hypothesisId' => 'D', 'location' => 'HealthNutritionRiskService::buildDataset', 'message' => 'after_diet_eval', 'data' => ['ms' => (int) round((microtime(true) - $__dbgDietT0) * 1000), 'user_ids' => count($userIds)], 'timestamp' => (int) round(microtime(true) * 1000), 'runId' => 'post-fix'], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND);
-                    $__dbgLoopT0 = microtime(true);
-                    // #endregion
 
                     $uricUserIds = $mapped
                         ->filter(static fn (array $row): bool => isset($row['findings']['uric_acid']))
@@ -285,13 +257,7 @@ final class HealthNutritionRiskService
                         ->unique()
                         ->values()
                         ->all();
-                    // #region agent log
-                    $__dbgPurineT0 = microtime(true);
-                    // #endregion
                     $purineHits = $this->findUsersWithPurineFood($uricUserIds, $weekStart, $weekEnd);
-                    // #region agent log
-                    file_put_contents(base_path('debug-8686de.log'), json_encode(['sessionId' => '8686de', 'hypothesisId' => 'E', 'location' => 'HealthNutritionRiskService::buildDataset', 'message' => 'after_purine_batch', 'data' => ['ms' => (int) round((microtime(true) - $__dbgPurineT0) * 1000), 'uric_users' => count($uricUserIds), 'purine_hits' => count($purineHits)], 'timestamp' => (int) round(microtime(true) * 1000), 'runId' => 'post-fix'], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND);
-                    // #endregion
 
                     // P3: poor diet among AKTIF without requiring MCU match — limited sample from diet alerts on mapped empty set
                     $p3Count = 0;
@@ -357,16 +323,9 @@ final class HealthNutritionRiskService
                         }
                     }
 
-                    // #region agent log
-                    file_put_contents(base_path('debug-8686de.log'), json_encode(['sessionId' => '8686de', 'hypothesisId' => 'E', 'location' => 'HealthNutritionRiskService::buildDataset', 'message' => 'after_priority_loop', 'data' => ['ms' => (int) round((microtime(true) - $__dbgLoopT0) * 1000), 'purine_mode' => 'batch', 'p1' => $p1, 'p2' => $p2], 'timestamp' => (int) round(microtime(true) * 1000), 'runId' => 'post-fix'], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND);
-                    $__dbgP3T0 = microtime(true);
-                    // #endregion
                     // P3: karyawan AKTIF dengan pola makan buruk tanpa MCU abnormal di dataset ini
                     // Ambil kandidat terbatas dari food_analyses 7 hari yang tidak ada di mapped MCU
                     $p3Count = $this->countPriorityThree($userIds, $weekStart, $weekEnd);
-                    // #region agent log
-                    file_put_contents(base_path('debug-8686de.log'), json_encode(['sessionId' => '8686de', 'hypothesisId' => 'E', 'location' => 'HealthNutritionRiskService::buildDataset', 'message' => 'after_p3', 'data' => ['ms' => (int) round((microtime(true) - $__dbgP3T0) * 1000), 'p3' => $p3Count, 'total_build_ms' => (int) round((microtime(true) - $__dbgBuildT0) * 1000)], 'timestamp' => (int) round(microtime(true) * 1000), 'runId' => 'post-fix'], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND);
-                    // #endregion
 
                     usort($priorityOne, static function (array $a, array $b): int {
                         return $b['risk_score'] <=> $a['risk_score']

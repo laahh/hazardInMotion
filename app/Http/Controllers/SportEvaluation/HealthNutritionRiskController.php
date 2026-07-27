@@ -23,19 +23,10 @@ final class HealthNutritionRiskController extends Controller
 
     public function index(Request $request): View
     {
-        // #region agent log
-        $__dbgT0 = microtime(true);
-        file_put_contents(base_path('debug-8686de.log'), json_encode(['sessionId' => '8686de', 'hypothesisId' => 'A', 'location' => 'HealthNutritionRiskController::index', 'message' => 'index_enter', 'data' => ['uri' => $request->getRequestUri()], 'timestamp' => (int) round(microtime(true) * 1000)], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND);
-        // #endregion
-
         $filters = $this->service->readFilters($request);
         $this->service->logAccess('evaluasi-well.health-nutrition.index', $filters);
 
         $data = $this->service->dashboard($filters);
-
-        // #region agent log
-        file_put_contents(base_path('debug-8686de.log'), json_encode(['sessionId' => '8686de', 'hypothesisId' => 'A', 'location' => 'HealthNutritionRiskController::index', 'message' => 'index_exit', 'data' => ['ms' => (int) round((microtime(true) - $__dbgT0) * 1000), 'mcuUp' => $data['mcuUp'] ?? null, 'bewellUp' => $data['bewellUp'] ?? null, 'mcuAbnormal' => $data['kpi']['mcu_abnormal'] ?? null], 'timestamp' => (int) round(microtime(true) * 1000)], JSON_UNESCAPED_UNICODE)."\n", FILE_APPEND);
-        // #endregion
 
         return view('evaluasi-well.health-nutrition.index', $data);
     }
