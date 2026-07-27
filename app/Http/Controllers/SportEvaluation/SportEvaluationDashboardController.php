@@ -80,9 +80,10 @@ class SportEvaluationDashboardController extends Controller
             $orderableColumns = [
                 0 => 'e.nama',
                 1 => 'e.nama_perusahaan',
-                2 => 'e.divisi',
-                3 => 'is_installed',
-                4 => 'is_weekly_active',
+                2 => 'e.departement',
+                3 => 'e.divisi',
+                4 => 'is_installed',
+                5 => 'is_weekly_active',
             ];
             $orderColumn = $orderableColumns[$orderColumnIndex] ?? 'e.nama';
 
@@ -115,6 +116,7 @@ class SportEvaluationDashboardController extends Controller
                     'kode_sid' => (string) ($row->kode_sid ?: '-'),
                     'site' => (string) (trim((string) ($row->site ?? '')) !== '' ? $row->site : '-'),
                     'company' => (string) (trim((string) ($row->nama_perusahaan ?? '')) !== '' ? $row->nama_perusahaan : '-'),
+                    'departement' => (string) (trim((string) ($row->departement ?? '')) !== '' ? $row->departement : '-'),
                     'divisi' => (string) (trim((string) ($row->divisi ?? '')) !== '' ? $row->divisi : '-'),
                     'install' => $isInstalled ? 'Sudah' : 'Belum',
                     'install_class' => $isInstalled
@@ -180,7 +182,9 @@ class SportEvaluationDashboardController extends Controller
                 'Kode SID',
                 'Site',
                 'Perusahaan',
+                'Departemen',
                 'Divisi',
+                'Jabatan Fungsional',
                 'Install',
                 'User Aktif',
             ]);
@@ -194,7 +198,9 @@ class SportEvaluationDashboardController extends Controller
                     (string) ($row->kode_sid ?: '-'),
                     (string) (trim((string) ($row->site ?? '')) !== '' ? $row->site : '-'),
                     (string) (trim((string) ($row->nama_perusahaan ?? '')) !== '' ? $row->nama_perusahaan : '-'),
+                    (string) (trim((string) ($row->departement ?? '')) !== '' ? $row->departement : '-'),
                     (string) (trim((string) ($row->divisi ?? '')) !== '' ? $row->divisi : '-'),
+                    (string) (trim((string) ($row->jabatan_fungsional ?? '')) !== '' ? $row->jabatan_fungsional : '-'),
                     (int) ($row->is_installed ?? 0) === 1 ? 'Sudah' : 'Belum',
                     (int) ($row->is_weekly_active ?? 0) === 1 ? 'Ya' : 'Tidak',
                 ], null, 'A'.$rowNum);
@@ -1130,6 +1136,7 @@ class SportEvaluationDashboardController extends Controller
      *     notInstalledSites:array<int,string>,
      *     notInstalledCompanies:array<int,string>,
      *     notInstalledDivisions:array<int,string>,
+     *     notInstalledDepartements:array<int,string>,
      *     notInstalledJabatanFungsionals:array<int,string>,
      *     notInstalledWeekLabel:string
      * }
@@ -1140,6 +1147,7 @@ class SportEvaluationDashboardController extends Controller
         $notInstalledSites = [];
         $notInstalledCompanies = [];
         $notInstalledDivisions = [];
+        $notInstalledDepartements = [];
         $notInstalledJabatanFungsionals = [];
         $week = $this->currentWeekRange();
         $notInstalledWeekLabel = $week['label'];
@@ -1150,13 +1158,14 @@ class SportEvaluationDashboardController extends Controller
                 'notInstalledSites',
                 'notInstalledCompanies',
                 'notInstalledDivisions',
+                'notInstalledDepartements',
                 'notInstalledJabatanFungsionals',
                 'notInstalledWeekLabel',
             );
         }
 
         try {
-            $cached = Cache::remember('evaluasi_well:active_employees_filters_v4', 120, function (): array {
+            $cached = Cache::remember('evaluasi_well:active_employees_filters_v5', 120, function (): array {
                 $base = $this->activeEmployeesBaseQuery();
 
                 $belumInstall = (clone $base)
@@ -1203,6 +1212,14 @@ class SportEvaluationDashboardController extends Controller
                         ->pluck('e.divisi')
                         ->map(static fn (mixed $division): string => (string) $division)
                         ->all(),
+                    'departements' => (clone $base)
+                        ->whereNotNull('e.departement')
+                        ->where('e.departement', '<>', '')
+                        ->distinct()
+                        ->orderBy('e.departement')
+                        ->pluck('e.departement')
+                        ->map(static fn (mixed $departement): string => (string) $departement)
+                        ->all(),
                     'jabatan_fungsionals' => (clone $base)
                         ->whereNotNull('e.jabatan_fungsional')
                         ->where('e.jabatan_fungsional', '<>', '')
@@ -1218,6 +1235,7 @@ class SportEvaluationDashboardController extends Controller
             $notInstalledSites = $cached['sites'];
             $notInstalledCompanies = $cached['companies'];
             $notInstalledDivisions = $cached['divisions'];
+            $notInstalledDepartements = $cached['departements'];
             $notInstalledJabatanFungsionals = $cached['jabatan_fungsionals'];
         } catch (Throwable $e) {
             report($e);
@@ -1228,6 +1246,7 @@ class SportEvaluationDashboardController extends Controller
             'notInstalledSites',
             'notInstalledCompanies',
             'notInstalledDivisions',
+            'notInstalledDepartements',
             'notInstalledJabatanFungsionals',
             'notInstalledWeekLabel',
         );
@@ -1271,7 +1290,9 @@ class SportEvaluationDashboardController extends Controller
                 'e.kode_sid',
                 'e.site',
                 'e.nama_perusahaan',
+                'e.departement',
                 'e.divisi',
+                'e.jabatan_fungsional',
             ])
             ->selectRaw(
                 'CASE WHEN EXISTS (
@@ -1302,7 +1323,7 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * @return array{site:string,company:string,division:string,jabatan_fungsional:string,install:string,user_aktif:string}
+     * @return array{site:string,company:string,division:string,departement:string,jabatan_fungsional:string,install:string,user_aktif:string}
      */
     private function readNotInstalledFilters(Request $request): array
     {
@@ -1329,6 +1350,7 @@ class SportEvaluationDashboardController extends Controller
             'site' => $readFilter($request->input('site')),
             'company' => $readFilter($request->input('company')),
             'division' => $readFilter($request->input('division')),
+            'departement' => $readFilter($request->input('departement')),
             'jabatan_fungsional' => $jabatanFungsional,
             'install' => $install,
             'user_aktif' => $userAktif,
@@ -1336,7 +1358,7 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * @param  array{site:string,company:string,division:string,jabatan_fungsional:string,install:string,user_aktif:string}  $filters
+     * @param  array{site:string,company:string,division:string,departement:string,jabatan_fungsional:string,install:string,user_aktif:string}  $filters
      */
     private function applyNotInstalledFilters(
         Builder $query,
@@ -1353,6 +1375,9 @@ class SportEvaluationDashboardController extends Controller
         }
         if ($filters['division'] !== '') {
             $query->where('e.divisi', 'like', '%'.$filters['division'].'%');
+        }
+        if ($filters['departement'] !== '') {
+            $query->where('e.departement', 'like', '%'.$filters['departement'].'%');
         }
         if ($filters['jabatan_fungsional'] !== '') {
             $query->where('e.jabatan_fungsional', $filters['jabatan_fungsional']);
@@ -1433,6 +1458,7 @@ class SportEvaluationDashboardController extends Controller
                     ->orWhere('e.kode_sid', 'like', $like)
                     ->orWhere('e.site', 'like', $like)
                     ->orWhere('e.nama_perusahaan', 'like', $like)
+                    ->orWhere('e.departement', 'like', $like)
                     ->orWhere('e.divisi', 'like', $like)
                     ->orWhere('e.jabatan_fungsional', 'like', $like);
             });

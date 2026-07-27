@@ -474,6 +474,7 @@
     var siteEl = document.querySelector('#not-installed-site');
     var companyEl = document.querySelector('#not-installed-company');
     var divisionEl = document.querySelector('#not-installed-division');
+    var departementEl = document.querySelector('#not-installed-departement');
     var jabatanFungsionalEl = document.querySelector('#not-installed-jabatan-fungsional');
     var installEl = document.querySelector('#not-installed-install');
     var userAktifEl = document.querySelector('#not-installed-user-aktif');
@@ -496,6 +497,7 @@
             site: siteEl ? siteEl.value : '',
             company: companyEl ? companyEl.value : '',
             division: divisionEl ? divisionEl.value.trim() : '',
+            departement: departementEl ? departementEl.value.trim() : '',
             jabatan_fungsional: jabatanFungsionalEl ? jabatanFungsionalEl.value : '',
             install: installEl ? installEl.value : 'belum',
             user_aktif: userAktifEl ? userAktifEl.value : ''
@@ -546,11 +548,12 @@
             bottomEnd: 'paging'
         },
         columnDefs: [
-            { targets: 0, width: '26%' },
-            { targets: 1, width: '26%' },
-            { targets: 2, width: '28%' },
-            { targets: 3, width: '10%', className: 'text-center' },
-            { targets: 4, width: '10%', className: 'text-center' }
+            { targets: 0, width: '20%' },
+            { targets: 1, width: '18%' },
+            { targets: 2, width: '18%' },
+            { targets: 3, width: '18%' },
+            { targets: 4, width: '13%', className: 'text-center' },
+            { targets: 5, width: '13%', className: 'text-center' }
         ],
         ajax: {
             url: dataUrl,
@@ -559,6 +562,7 @@
                 d.site = filters.site;
                 d.company = filters.company;
                 d.division = filters.division;
+                d.departement = filters.departement;
                 d.jabatan_fungsional = filters.jabatan_fungsional;
                 d.install = filters.install;
                 d.user_aktif = filters.user_aktif;
@@ -580,6 +584,7 @@
                 }
             },
             { data: 'company' },
+            { data: 'departement' },
             { data: 'divisi' },
             {
                 data: 'install',
@@ -642,7 +647,7 @@
         var container = tableEl.closest('.dt-container');
         var searchInput = container ? container.querySelector('.dt-search input') : null;
         if (searchInput) {
-            searchInput.setAttribute('placeholder', 'Cari nama / SID / divisi...');
+            searchInput.setAttribute('placeholder', 'Cari nama / SID / departemen / divisi...');
             searchInput.classList.add('form-control', 'form-control-sm');
         }
     });
@@ -671,6 +676,7 @@
             if (siteEl) siteEl.value = '';
             if (companyEl) companyEl.value = '';
             if (divisionEl) divisionEl.value = '';
+            if (departementEl) departementEl.value = '';
             if (jabatanFungsionalEl) jabatanFungsionalEl.value = '';
             if (installEl) installEl.value = 'belum';
             if (userAktifEl) userAktifEl.value = '';
@@ -682,6 +688,16 @@
 
     if (divisionEl) {
         divisionEl.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                table.ajax.reload();
+                updateExportHref();
+            }
+        });
+    }
+
+    if (departementEl) {
+        departementEl.addEventListener('keydown', function (event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
                 table.ajax.reload();
@@ -1158,6 +1174,22 @@
                   </datalist>
                 </div>
                 <div class="col-xl-2 col-md-4 col-sm-6">
+                  <label for="not-installed-departement" class="form-label text-sm fw-medium mb-6">Departemen</label>
+                  <input
+                    id="not-installed-departement"
+                    type="search"
+                    list="not-installed-departement-options"
+                    class="form-control form-control-sm"
+                    placeholder="Cari departemen..."
+                    autocomplete="off"
+                  >
+                  <datalist id="not-installed-departement-options">
+                    @foreach (($notInstalledDepartements ?? []) as $departement)
+                      <option value="{{ $departement }}"></option>
+                    @endforeach
+                  </datalist>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6">
                   <label for="not-installed-jabatan-fungsional" class="form-label text-sm fw-medium mb-6">Jabatan Fungsional</label>
                   <select id="not-installed-jabatan-fungsional" class="form-select form-select-sm">
                     <option value="">Semua Jabatan</option>
@@ -1195,11 +1227,12 @@
               <table id="notInstalledTable" class="table bordered-table mb-0 w-100" style="width:100%">
                 <thead>
                   <tr>
-                    <th scope="col" style="width:26%">Karyawan</th>
-                    <th scope="col" style="width:26%">Perusahaan</th>
-                    <th scope="col" style="width:28%">Divisi</th>
-                    <th scope="col" style="width:10%">Install</th>
-                    <th scope="col" style="width:10%">User Aktif</th>
+                    <th scope="col" style="width:20%">Karyawan</th>
+                    <th scope="col" style="width:18%">Perusahaan</th>
+                    <th scope="col" style="width:18%">Departemen</th>
+                    <th scope="col" style="width:18%">Divisi</th>
+                    <th scope="col" style="width:13%">Install</th>
+                    <th scope="col" style="width:13%">User Aktif</th>
                   </tr>
                 </thead>
                 <tbody></tbody>

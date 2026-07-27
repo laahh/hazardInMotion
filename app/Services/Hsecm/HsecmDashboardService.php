@@ -420,7 +420,7 @@ class HsecmDashboardService
         ]);
 
         $datasetRows = [];
-        foreach (array_keys($this->visibleDatasets()) as $key) {
+        foreach (array_keys($this->gapPerulanganDatasets()) as $key) {
             $datasetRows[$key] = $this->filteredRows($key, $filters);
         }
 
@@ -447,7 +447,7 @@ class HsecmDashboardService
         /** @var array<string, array<string, true>> $seenPairs site => [code => true] */
         $seenPairs = [];
 
-        foreach ($this->visibleDatasets() as $key => $meta) {
+        foreach ($this->gapPerulanganDatasets() as $key => $meta) {
             $rows = $datasetRows[$key] ?? collect();
             $counts = [];
 
@@ -654,7 +654,7 @@ class HsecmDashboardService
     {
         $sections = [];
 
-        foreach ($this->visibleDatasets() as $key => $meta) {
+        foreach ($this->gapPerulanganDatasets() as $key => $meta) {
             $rows = $datasetRows[$key] ?? collect();
             $sections[] = match ($key) {
                 'sap-rfid' => $this->buildGapPerulanganSapSection($key, $meta, $rows),
@@ -1555,6 +1555,25 @@ class HsecmDashboardService
         return array_filter(
             self::DATASETS,
             static fn (array $meta): bool => ! (bool) ($meta['hidden'] ?? false)
+        );
+    }
+
+    /**
+     * Dataset untuk Gap Perulangan — exclude Implementasi IKK & Pekerja Baru (RFID).
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function gapPerulanganDatasets(): array
+    {
+        $excluded = [
+            'implementasi-ikk' => true,
+            'sumber-rfid' => true,
+        ];
+
+        return array_filter(
+            $this->visibleDatasets(),
+            static fn (array $meta, string $key): bool => ! isset($excluded[$key]),
+            ARRAY_FILTER_USE_BOTH
         );
     }
 
