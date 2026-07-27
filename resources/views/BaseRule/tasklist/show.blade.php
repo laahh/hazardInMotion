@@ -134,9 +134,9 @@
               $panelId = 'hsecm-group-'.md5((string) $groupKey);
             @endphp
             <div class="border border-slate-200 rounded-xl overflow-hidden hsecm-program-group" data-group="{{ $panelId }}">
-              <div class="bg-slate-50 px-4 py-3 flex flex-wrap items-start gap-3">
+              <div class="bg-slate-50 px-4 py-3 flex items-start gap-3">
                 @if(! $isClosed && $groupSubmittable->isNotEmpty())
-                  <label class="inline-flex items-center pt-1 cursor-pointer" title="Pilih semua di program ini" onclick="event.stopPropagation()">
+                  <label class="inline-flex items-center pt-1 cursor-pointer shrink-0" title="Pilih semua di program ini" onclick="event.stopPropagation()">
                     <input type="checkbox" class="hsecm-group-check rounded border-slate-300 text-teal-700" data-group-check="{{ $panelId }}" />
                   </label>
                 @endif
@@ -150,7 +150,7 @@
                       <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
                     </svg>
                   </span>
-                  <span class="min-w-0">
+                  <span class="min-w-0 flex-1">
                     <span class="block font-bold text-slate-800">{{ $groupTitle }}</span>
                     @if($groupHint !== '')
                       <span class="block text-xs text-slate-500 mt-0.5">{{ $groupHint }}</span>
@@ -163,7 +163,7 @@
                       @if($groupApproved > 0)<span class="inline-flex px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">{{ $groupApproved }} approved</span>@endif
                     </span>
                   </span>
-                  <span class="hsecm-toggle-label shrink-0 text-xs font-bold text-teal-700 pt-1">Lihat</span>
+                  <span class="hsecm-toggle-label shrink-0 self-center ml-auto pl-3 text-xs font-bold text-teal-700 whitespace-nowrap">Lihat</span>
                 </button>
               </div>
 
