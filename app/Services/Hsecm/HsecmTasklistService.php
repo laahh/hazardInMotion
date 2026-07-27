@@ -18,6 +18,10 @@ use RuntimeException;
 
 class HsecmTasklistService
 {
+    public function __construct(
+        private readonly HsecmDatabaseRepository $repository,
+    ) {}
+
     public function tablesAvailable(): bool
     {
         try {
@@ -127,10 +131,72 @@ class HsecmTasklistService
     }
 
     /**
-     * Submit item oleh PJO (publik).
+     * Lengkapi tiap item dengan jumlah kemunculan di batch_slot sebelum batch tasklist.
+     * Slot yang tidak punya item tidak dihitung.
+     *
+     * @param  \Illuminate\Support\Collection<int, HsecmTasklistItem>|iterable<HsecmTasklistItem>  $items
+     * @return \Illuminate\Support\Collection<int, HsecmTasklistItem>
+     */
+    public function withPreviousRecurrenceCounts(HsecmTasklist $tasklist, iterable $items): \Illuminate\Support\Collection
+    {
+        $collection = collect($items);
+        $beforeSlot = optional($tasklist->batch_slot)?->format('Y-m-d H:i:s');
+        if ($beforeSlot === null || $collection->isEmpty()) {
+            return $collection->each(function (HsecmTasklistItem $item): void {
+                $item->setAttribute('previous_recurrence_count', $this->fallbackPreviousFromPayload($item));
+            });
+        }
+
+        /** @var array<string, list<string>> $keysByTable */
+        $keysByTable = [];
+        foreach ($collection as $item) {
+            $payload = is_array($item->payload) ? $item->payload : [];
+            $table = trim((string) ($payload['table'] ?? ''));
+            $businessKey = trim((string) ($item->business_key ?? ''));
+            if ($table === '' || $businessKey === '') {
+                continue;
+            }
+            $keysByTable[$table][] = $businessKey;
+        }
+
+        /** @var array<string, array<string, int>> $countsByTable */
+        $countsByTable = [];
+        foreach ($keysByTable as $table => $keys) {
+            $countsByTable[$table] = $this->repository->countPreviousAppearancesByKeys(
+                $table,
+                $keys,
+                $beforeSlot
+            );
+        }
+
+        return $collection->each(function (HsecmTasklistItem $item) use ($countsByTable): void {
+            $payload = is_array($item->payload) ? $item->payload : [];
+            $table = trim((string) ($payload['table'] ?? ''));
+            $businessKey = trim((string) ($item->business_key ?? ''));
+            $count = 0;
+            if ($table !== '' && $businessKey !== '') {
+                $count = (int) ($countsByTable[$table][$businessKey] ?? 0);
+            }
+            if ($count <= 0) {
+                $count = $this->fallbackPreviousFromPayload($item);
+            }
+            $item->setAttribute('previous_recurrence_count', $count);
+        });
+    }
+
+    private function fallbackPreviousFromPayload(HsecmTasklistItem $item): int
+    {
+        $payload = is_array($item->payload) ? $item->payload : [];
+        $gapCount = (int) ($payload['gap_count'] ?? 0);
+
+        // gap_count = streak termasuk slot sekarang → hari sebelumnya = max(0, gap_count - 1)
+        return max(0, $gapCount - 1);
+    }
+
+    /**
+     * Submit item oleh PJO (publik) — 1 file evidence untuk semua item terpilih.
      *
      * @param  list<int>  $itemIds
-     * @param  array<int, UploadedFile|null>  $files keyed by item id
      * @return array{success: bool, message: string}
      */
     public function submitItems(

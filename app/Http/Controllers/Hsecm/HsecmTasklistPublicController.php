@@ -22,9 +22,11 @@ class HsecmTasklistPublicController extends Controller
         $tasklist = $this->tasklistService->findByToken($token);
         abort_if($tasklist === null, 404);
 
+        $items = $this->tasklistService->withPreviousRecurrenceCounts($tasklist, $tasklist->items);
+
         return view('BaseRule.tasklist.show', [
             'tasklist' => $tasklist,
-            'items' => $tasklist->items,
+            'items' => $items,
             'navActive' => 'tasklist',
             'navItems' => [
                 ['key' => 'tasklist', 'label' => 'Tasklist', 'route' => 'hsecm.tasklist.show', 'params' => ['token' => $token]],

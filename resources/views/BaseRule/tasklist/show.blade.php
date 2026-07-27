@@ -131,6 +131,7 @@
               $groupRejected = $groupItems->where('status', 'rejected')->count();
               $groupSubmitted = $groupItems->where('status', 'submitted')->count();
               $groupApproved = $groupItems->where('status', 'approved')->count();
+              $groupRepeat = $groupItems->filter(fn ($item) => (int) ($item->previous_recurrence_count ?? 0) > 0)->count();
               $panelId = 'hsecm-group-'.md5((string) $groupKey);
             @endphp
             <div class="border border-slate-200 rounded-xl overflow-hidden hsecm-program-group" data-group="{{ $panelId }}">
@@ -161,6 +162,7 @@
                       @if($groupRejected > 0)<span class="inline-flex px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-semibold">{{ $groupRejected }} rejected</span>@endif
                       @if($groupSubmitted > 0)<span class="inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">{{ $groupSubmitted }} submitted</span>@endif
                       @if($groupApproved > 0)<span class="inline-flex px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">{{ $groupApproved }} approved</span>@endif
+                      @if($groupRepeat > 0)<span class="inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-semibold">{{ $groupRepeat }} berulang</span>@endif
                     </span>
                   </span>
                   <span class="hsecm-toggle-label shrink-0 self-center ml-auto pl-3 text-xs font-bold text-teal-700 whitespace-nowrap">Lihat</span>
@@ -174,13 +176,17 @@
                       <tr>
                         <th class="px-3 py-2 text-left w-14">Pilih</th>
                         <th class="px-3 py-2 text-left">Item</th>
+                        <th class="px-3 py-2 text-left whitespace-nowrap">Perulangan</th>
                         <th class="px-3 py-2 text-left">Status</th>
                         <th class="px-3 py-2 text-left">Evidence terakhir</th>
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                       @foreach($groupItems as $item)
-                        @php $canSubmit = in_array($item->status, ['open', 'rejected'], true) && ! $isClosed; @endphp
+                        @php
+                          $canSubmit = in_array($item->status, ['open', 'rejected'], true) && ! $isClosed;
+                          $prevCount = (int) ($item->previous_recurrence_count ?? 0);
+                        @endphp
                         <tr class="align-top">
                           <td class="px-3 py-3">
                             @if($canSubmit)
@@ -201,6 +207,15 @@
                             @endif
                             @if($item->remediation_notes)
                               <div class="mt-2 text-xs text-slate-500">Catatan terakhir: {{ $item->remediation_notes }}</div>
+                            @endif
+                          </td>
+                          <td class="px-3 py-3 whitespace-nowrap">
+                            @if($prevCount > 0)
+                              <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900" title="Jumlah slot/hari sebelumnya yang masih muncul sebagai gap">
+                                {{ $prevCount }}× sebelumnya
+                              </span>
+                            @else
+                              <span class="text-xs text-slate-400" title="Belum muncul di hari/slot sebelumnya">Baru</span>
                             @endif
                           </td>
                           <td class="px-3 py-3">

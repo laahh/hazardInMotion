@@ -221,6 +221,64 @@ class HsecmDatabaseRepository
         ));
     }
 
+    /**
+     * Hitung berapa kali business_key muncul di batch_slot SEBELUM $beforeSlot.
+     * Hari/slot yang tidak punya item tidak dihitung.
+     *
+     * @param  list<string>  $businessKeys
+     * @return array<string, int> business_key => jumlah kemunculan sebelumnya
+     */
+    public function countPreviousAppearancesByKeys(string $table, array $businessKeys, string $beforeSlot): array
+    {
+        $keys = array_values(array_unique(array_filter(array_map(
+            static fn (string $k): string => trim($k),
+            $businessKeys
+        ), static fn (string $k): bool => $k !== '')));
+
+        if ($keys === [] || ! $this->hasBatchSlotSupport($table) || ! $this->hasBusinessKeySupport($table)) {
+            return [];
+        }
+
+        $before = $this->normalizeSlot($beforeSlot);
+        if ($before === null) {
+            return [];
+        }
+
+        $cacheKey = self::cacheKey(
+            $table,
+            'prev_appear.'.md5($before.'|'.implode("\n", $keys))
+        );
+
+        /** @var array<string, int> $cached */
+        $cached = Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($table, $keys, $before): array {
+            $rows = DB::table($table)
+                ->select(['business_key', 'batch_slot'])
+                ->whereIn('business_key', $keys)
+                ->where('batch_slot', '<', $before)
+                ->get();
+
+            $seen = [];
+            foreach ($rows as $row) {
+                $key = trim((string) ($row->business_key ?? ''));
+                $slot = $this->normalizeSlot($row->batch_slot ?? null);
+                if ($key === '' || $slot === null) {
+                    continue;
+                }
+                // Satu batch_slot = satu kemunculan (hari/slot sebelumnya).
+                $seen[$key][$slot] = true;
+            }
+
+            $out = [];
+            foreach ($keys as $key) {
+                $out[$key] = isset($seen[$key]) ? count($seen[$key]) : 0;
+            }
+
+            return $out;
+        });
+
+        return $cached;
+    }
+
     public function forgetCache(string $table): void
     {
         Cache::forget(self::cacheKey($table, 'all'));
