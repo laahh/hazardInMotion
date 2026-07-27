@@ -17,7 +17,7 @@ class HsecmSendEndshiftEmailCommand extends Command
                             {--perusahaan= : Scope perusahaan jika email belum terdaftar}
                             {--shift=auto : auto|day|night — day=18vs12, night=06vs00}';
 
-    protected $description = 'Kirim email pasca-shift + tasklist (day:18vs12 / night:06vs00)';
+    protected $description = 'Kirim email pasca-shift + tasklist (snapshot latest batch_slot)';
 
     public function handle(HsecmShiftEmailDispatchService $dispatchService): int
     {

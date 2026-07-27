@@ -91,8 +91,8 @@
       <div>
          <h2 class="font-headline font-bold text-lg text-on-background">Kirim Email Shift (Manual)</h2>
          <p class="text-xs text-on-surface-variant mt-0.5">
-            Midshift = snapshot · Endshift = still-open + tasklist.
-            Night = slot 00/06 · Day = slot 12/18.
+            Midshift = snapshot slot cut-off · Endshift = snapshot latest batch_slot + tasklist.
+            Night / Day hanya membedakan label jadwal.
             Centang penerima di tabel di bawah untuk membatasi, atau kosongkan = semua penerima.
          </p>
       </div>
@@ -128,13 +128,13 @@
               data-mode="endshift" data-shift="night"
               onclick="return window.hsecmConfirmShift(this)">
          <span class="text-xs font-bold uppercase tracking-wide text-amber-900">Endshift Night</span>
-         <span class="text-[11px] text-amber-800">07:00 · still-open 06 vs 00</span>
+         <span class="text-[11px] text-amber-800">07:30 · snapshot latest batch_slot</span>
       </button>
       <button type="submit" class="hsecm-shift-btn inline-flex flex-col items-start gap-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100"
               data-mode="endshift" data-shift="day"
               onclick="return window.hsecmConfirmShift(this)">
          <span class="text-xs font-bold uppercase tracking-wide text-amber-900">Endshift Day</span>
-         <span class="text-[11px] text-amber-800">19:00 · still-open 18 vs 12</span>
+         <span class="text-[11px] text-amber-800">20:30 · snapshot latest batch_slot</span>
       </button>
    </div>
 </form>

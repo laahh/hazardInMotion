@@ -103,7 +103,7 @@ class Kernel extends ConsoleKernel
 
         // HSECM: 2 shift / hari
         // Midshift  → 01:00 (slot 00) & 13:00 (slot 12)
-        // Endshift  → 07:00 (06 vs 00) & 19:00 (18 vs 12)
+        // Endshift  → 07:30 & 20:30 (snapshot latest batch_slot, setelah scrape cut-off)
         $schedule->command('hsecm:send-midshift-email --shift=night')
             ->timezone('Asia/Makassar')
             ->dailyAt('01:00')
@@ -118,13 +118,13 @@ class Kernel extends ConsoleKernel
 
         $schedule->command('hsecm:send-endshift-email --shift=night')
             ->timezone('Asia/Makassar')
-            ->dailyAt('07:00')
+            ->dailyAt('07:30')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/hsecm-endshift-email.log'));
 
         $schedule->command('hsecm:send-endshift-email --shift=day')
             ->timezone('Asia/Makassar')
-            ->dailyAt('19:00')
+            ->dailyAt('20:30')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/hsecm-endshift-email.log'));
 

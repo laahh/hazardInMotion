@@ -56,10 +56,9 @@ class HsecmShiftEmailDispatchService
     }
 
     /**
-     * Endshift: still-open vs midshift slot + buat tasklist.
-     * - night → slot 06:00 vs 00:00
-     * - day   → slot 18:00 vs 12:00
-     * - auto  → pilih dari jam sekarang (WITA)
+     * Endshift: snapshot batch_slot terkini + buat tasklist.
+     * - Selalu pakai latestBatchSlot() (data scrape paling baru)
+     * - night/day hanya untuk label jadwal (auto dari jam WITA)
      *
      * @param  list<string>|null  $onlyEmails
      * @return array{sent: int, failed: int, skipped: int, message: string, details: list<array<string, mixed>>}
@@ -79,16 +78,17 @@ class HsecmShiftEmailDispatchService
         return $this->dispatchSnapshotMode(
             mode: 'endshift',
             slotHour: $window['slot_hour'],
-            dataMode: 'still_open',
+            dataMode: 'snapshot',
             dryRun: $dryRun,
             now: $now,
             createTasklist: true,
-            previousSlotHour: $window['previous_slot_hour'],
+            previousSlotHour: null,
             onlyEmail: $onlyEmail,
             overrideSite: $overrideSite,
             overridePerusahaan: $overridePerusahaan,
             shiftLabel: $window['label'],
             onlyEmails: $onlyEmails,
+            useLatestBatchSlot: true,
         );
     }
 
@@ -127,21 +127,21 @@ class HsecmShiftEmailDispatchService
             ];
         }
 
-        // endshift
+        // endshift — data selalu latest batch_slot; jam slot hanya label historis jadwal
         if ($shift === 'night') {
             return [
                 'shift' => 'night',
                 'slot_hour' => 6,
-                'previous_slot_hour' => 0,
-                'label' => 'night/end (slot 06:00 vs 00:00)',
+                'previous_slot_hour' => null,
+                'label' => 'night/end (snapshot latest batch_slot)',
             ];
         }
 
         return [
             'shift' => 'day',
             'slot_hour' => 18,
-            'previous_slot_hour' => 12,
-            'label' => 'day/end (slot 18:00 vs 12:00)',
+            'previous_slot_hour' => null,
+            'label' => 'day/end (snapshot latest batch_slot)',
         ];
     }
 
@@ -289,6 +289,7 @@ class HsecmShiftEmailDispatchService
         ?string $overridePerusahaan = null,
         string $shiftLabel = '',
         ?array $onlyEmails = null,
+        bool $useLatestBatchSlot = false,
     ): array {
         $now = ($now ?? now())->timezone('Asia/Makassar');
         $probeTable = $this->probeTable();
@@ -299,21 +300,36 @@ class HsecmShiftEmailDispatchService
             );
         }
 
-        $target = $now->copy()->startOfDay()->setTime($slotHour, 0, 0);
-        // Endshift malam jam 06: target hari ini 06:00. Midshift malam jam 00: target hari ini 00:00.
-        $batchSlot = $this->repository->resolveBatchSlotAtOrBefore($probeTable, $target);
-        if ($batchSlot === null) {
-            return [
-                'sent' => 0,
-                'failed' => 0,
-                'skipped' => 0,
-                'message' => "Tidak ada data batch_slot <= {$target->format('Y-m-d H:i')}".($shiftLabel !== '' ? " [{$shiftLabel}]" : '').'.',
-                'details' => [],
-            ];
+        if ($useLatestBatchSlot) {
+            // Pastikan MAX(batch_slot) tidak tertahan cache setelah scrape baru.
+            $this->repository->forgetCache($probeTable);
+            $batchSlot = $this->repository->latestBatchSlot($probeTable);
+            if ($batchSlot === null) {
+                return [
+                    'sent' => 0,
+                    'failed' => 0,
+                    'skipped' => 0,
+                    'message' => 'Tidak ada data batch_slot.'.($shiftLabel !== '' ? " [{$shiftLabel}]" : ''),
+                    'details' => [],
+                ];
+            }
+        } else {
+            $target = $now->copy()->startOfDay()->setTime($slotHour, 0, 0);
+            // Midshift: target cut-off hari ini (00:00 / 12:00).
+            $batchSlot = $this->repository->resolveBatchSlotAtOrBefore($probeTable, $target);
+            if ($batchSlot === null) {
+                return [
+                    'sent' => 0,
+                    'failed' => 0,
+                    'skipped' => 0,
+                    'message' => "Tidak ada data batch_slot <= {$target->format('Y-m-d H:i')}".($shiftLabel !== '' ? " [{$shiftLabel}]" : '').'.',
+                    'details' => [],
+                ];
+            }
         }
 
         $previousSlot = null;
-        if ($previousSlotHour !== null) {
+        if (! $useLatestBatchSlot && $previousSlotHour !== null) {
             $prevTarget = $now->copy()->startOfDay()->setTime($previousSlotHour, 0, 0);
             $previousSlot = $this->repository->resolveBatchSlotAtOrBefore($probeTable, $prevTarget);
             if ($previousSlot !== null && $previousSlot >= $batchSlot) {
@@ -413,7 +429,9 @@ class HsecmShiftEmailDispatchService
                         'nama' => (string) ($recipient['nama'] ?? ''),
                         'email' => (string) ($recipient['email'] ?? ''),
                         'success' => true,
-                        'message' => 'Skip: tidak ada gap still-open.',
+                        'message' => $dataMode === 'still_open'
+                            ? 'Skip: tidak ada gap still-open.'
+                            : 'Skip: tidak ada gap pada snapshot terkini.',
                     ];
                     continue;
                 }

@@ -23,9 +23,9 @@ return [
     | Scheduler (Asia/Makassar) — lihat app/Console/Kernel.php
     |--------------------------------------------------------------------------
     | Midshift 01:00 → batch_slot 00:00 (night)
-    | Endshift 07:00 → still_open 06:00 vs 00:00 + tasklist (night)
+    | Endshift 07:30 → snapshot latest batch_slot + tasklist (night)
     | Midshift 13:00 → batch_slot 12:00 (day)
-    | Endshift 19:00 → still_open 18:00 vs 12:00 + tasklist (day)
+    | Endshift 20:30 → snapshot latest batch_slot + tasklist (day)
     | Escalate       → 08 / 14 / 20 / 02
     */
 
