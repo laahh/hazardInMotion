@@ -474,6 +474,7 @@
     var siteEl = document.querySelector('#not-installed-site');
     var companyEl = document.querySelector('#not-installed-company');
     var divisionEl = document.querySelector('#not-installed-division');
+    var jabatanFungsionalEl = document.querySelector('#not-installed-jabatan-fungsional');
     var installEl = document.querySelector('#not-installed-install');
     var userAktifEl = document.querySelector('#not-installed-user-aktif');
     var applyBtn = document.querySelector('#not-installed-apply-btn');
@@ -495,6 +496,7 @@
             site: siteEl ? siteEl.value : '',
             company: companyEl ? companyEl.value : '',
             division: divisionEl ? divisionEl.value.trim() : '',
+            jabatan_fungsional: jabatanFungsionalEl ? jabatanFungsionalEl.value : '',
             install: installEl ? installEl.value : 'belum',
             user_aktif: userAktifEl ? userAktifEl.value : ''
         };
@@ -557,6 +559,7 @@
                 d.site = filters.site;
                 d.company = filters.company;
                 d.division = filters.division;
+                d.jabatan_fungsional = filters.jabatan_fungsional;
                 d.install = filters.install;
                 d.user_aktif = filters.user_aktif;
             }
@@ -668,6 +671,7 @@
             if (siteEl) siteEl.value = '';
             if (companyEl) companyEl.value = '';
             if (divisionEl) divisionEl.value = '';
+            if (jabatanFungsionalEl) jabatanFungsionalEl.value = '';
             if (installEl) installEl.value = 'belum';
             if (userAktifEl) userAktifEl.value = '';
             table.search('');
@@ -1107,7 +1111,7 @@
                   <span id="not-installed-total-badge" class="bg-warning-focus text-warning-main text-sm fw-medium px-12 py-2 rounded-pill">{{ number_format($notInstalledTotal ?? 0) }}</span>
                 </div>
                 <p class="text-sm text-secondary-light mb-0">
-                  Karyawan status AKTIF · User aktif = upload makanan/olahraga minggu ini ({{ $notInstalledWeekLabel ?? 'Sen–Min' }})
+                  Karyawan status AKTIF (exclude VISITOR) · User aktif = upload makanan/olahraga minggu ini ({{ $notInstalledWeekLabel ?? 'Sen–Min' }})
                 </p>
               </div>
               <a id="not-installed-export-btn" href="{{ route('evaluasi-well.not-installed.export', ['install' => 'belum']) }}" class="btn btn-sm btn-success-600 d-inline-flex align-items-center gap-1">
@@ -1152,6 +1156,15 @@
                       <option value="{{ $division }}"></option>
                     @endforeach
                   </datalist>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6">
+                  <label for="not-installed-jabatan-fungsional" class="form-label text-sm fw-medium mb-6">Jabatan Fungsional</label>
+                  <select id="not-installed-jabatan-fungsional" class="form-select form-select-sm">
+                    <option value="">Semua Jabatan</option>
+                    @foreach (($notInstalledJabatanFungsionals ?? []) as $jabatan)
+                      <option value="{{ $jabatan }}">{{ $jabatan }}</option>
+                    @endforeach
+                  </select>
                 </div>
                 <div class="col-xl-2 col-md-4 col-sm-6">
                   <label for="not-installed-install" class="form-label text-sm fw-medium mb-6">Install</label>

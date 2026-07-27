@@ -1130,6 +1130,7 @@ class SportEvaluationDashboardController extends Controller
      *     notInstalledSites:array<int,string>,
      *     notInstalledCompanies:array<int,string>,
      *     notInstalledDivisions:array<int,string>,
+     *     notInstalledJabatanFungsionals:array<int,string>,
      *     notInstalledWeekLabel:string
      * }
      */
@@ -1139,6 +1140,7 @@ class SportEvaluationDashboardController extends Controller
         $notInstalledSites = [];
         $notInstalledCompanies = [];
         $notInstalledDivisions = [];
+        $notInstalledJabatanFungsionals = [];
         $week = $this->currentWeekRange();
         $notInstalledWeekLabel = $week['label'];
 
@@ -1148,15 +1150,14 @@ class SportEvaluationDashboardController extends Controller
                 'notInstalledSites',
                 'notInstalledCompanies',
                 'notInstalledDivisions',
+                'notInstalledJabatanFungsionals',
                 'notInstalledWeekLabel',
             );
         }
 
         try {
-            $cached = Cache::remember('evaluasi_well:active_employees_filters_v3', 120, function (): array {
-                $base = DB::connection(BewellConnectionService::CONNECTION)
-                    ->table('employee_profiles as e')
-                    ->where('e.status_karyawan', 'AKTIF');
+            $cached = Cache::remember('evaluasi_well:active_employees_filters_v4', 120, function (): array {
+                $base = $this->activeEmployeesBaseQuery();
 
                 $belumInstall = (clone $base)
                     ->whereNotExists(function ($query): void {
@@ -1202,6 +1203,14 @@ class SportEvaluationDashboardController extends Controller
                         ->pluck('e.divisi')
                         ->map(static fn (mixed $division): string => (string) $division)
                         ->all(),
+                    'jabatan_fungsionals' => (clone $base)
+                        ->whereNotNull('e.jabatan_fungsional')
+                        ->where('e.jabatan_fungsional', '<>', '')
+                        ->distinct()
+                        ->orderBy('e.jabatan_fungsional')
+                        ->pluck('e.jabatan_fungsional')
+                        ->map(static fn (mixed $jabatan): string => (string) $jabatan)
+                        ->all(),
                 ];
             });
 
@@ -1209,6 +1218,7 @@ class SportEvaluationDashboardController extends Controller
             $notInstalledSites = $cached['sites'];
             $notInstalledCompanies = $cached['companies'];
             $notInstalledDivisions = $cached['divisions'];
+            $notInstalledJabatanFungsionals = $cached['jabatan_fungsionals'];
         } catch (Throwable $e) {
             report($e);
         }
@@ -1218,6 +1228,7 @@ class SportEvaluationDashboardController extends Controller
             'notInstalledSites',
             'notInstalledCompanies',
             'notInstalledDivisions',
+            'notInstalledJabatanFungsionals',
             'notInstalledWeekLabel',
         );
     }
@@ -1238,13 +1249,14 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Karyawan status AKTIF.
+     * Karyawan status AKTIF, exclude jabatan_fungsional VISITOR.
      */
     private function activeEmployeesBaseQuery(): Builder
     {
         return DB::connection(BewellConnectionService::CONNECTION)
             ->table('employee_profiles as e')
-            ->where('e.status_karyawan', 'AKTIF');
+            ->where('e.status_karyawan', 'AKTIF')
+            ->whereRaw('UPPER(TRIM(COALESCE(e.jabatan_fungsional, \'\'))) <> ?', ['VISITOR']);
     }
 
     /**
@@ -1290,7 +1302,7 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * @return array{site:string,company:string,division:string,install:string,user_aktif:string}
+     * @return array{site:string,company:string,division:string,jabatan_fungsional:string,install:string,user_aktif:string}
      */
     private function readNotInstalledFilters(Request $request): array
     {
@@ -1308,17 +1320,23 @@ class SportEvaluationDashboardController extends Controller
             $userAktif = '';
         }
 
+        $jabatanFungsional = $readFilter($request->input('jabatan_fungsional'));
+        if (mb_strtoupper($jabatanFungsional) === 'VISITOR') {
+            $jabatanFungsional = '';
+        }
+
         return [
             'site' => $readFilter($request->input('site')),
             'company' => $readFilter($request->input('company')),
             'division' => $readFilter($request->input('division')),
+            'jabatan_fungsional' => $jabatanFungsional,
             'install' => $install,
             'user_aktif' => $userAktif,
         ];
     }
 
     /**
-     * @param  array{site:string,company:string,division:string,install:string,user_aktif:string}  $filters
+     * @param  array{site:string,company:string,division:string,jabatan_fungsional:string,install:string,user_aktif:string}  $filters
      */
     private function applyNotInstalledFilters(
         Builder $query,
@@ -1335,6 +1353,9 @@ class SportEvaluationDashboardController extends Controller
         }
         if ($filters['division'] !== '') {
             $query->where('e.divisi', 'like', '%'.$filters['division'].'%');
+        }
+        if ($filters['jabatan_fungsional'] !== '') {
+            $query->where('e.jabatan_fungsional', $filters['jabatan_fungsional']);
         }
 
         // Sudah install = pernah login_success ATAU punya aktivitas apa pun
@@ -1412,7 +1433,8 @@ class SportEvaluationDashboardController extends Controller
                     ->orWhere('e.kode_sid', 'like', $like)
                     ->orWhere('e.site', 'like', $like)
                     ->orWhere('e.nama_perusahaan', 'like', $like)
-                    ->orWhere('e.divisi', 'like', $like);
+                    ->orWhere('e.divisi', 'like', $like)
+                    ->orWhere('e.jabatan_fungsional', 'like', $like);
             });
         }
 
