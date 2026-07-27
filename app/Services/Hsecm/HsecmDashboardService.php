@@ -2089,6 +2089,12 @@ class HsecmDashboardService
         $dataMode = strtolower((string) ($filters['data_mode'] ?? 'snapshot'));
         $batchSlot = trim((string) ($filters['batch_slot'] ?? ''));
         $previousSlot = trim((string) ($filters['previous_batch_slot'] ?? ''));
+        $hasDateFilter = ($filters['date_from'] ?? '') !== '' || ($filters['date_to'] ?? '') !== '';
+
+        // Filter tanggal = hitung baris pada tanggal tersebut (bukan irisan snapshot batch terkini).
+        if ($hasDateFilter && $dataMode === 'snapshot' && $batchSlot === '') {
+            $dataMode = 'all';
+        }
 
         if ($dataMode === 'all' || ! $this->repository->hasBatchSlotSupport($meta['table'])) {
             $rows = collect($this->repository->rows($meta['table']));
@@ -2105,7 +2111,7 @@ class HsecmDashboardService
             ));
         }
 
-        return $rows->filter(function (array $row) use ($meta, $filters): bool {
+        $filtered = $rows->filter(function (array $row) use ($meta, $filters): bool {
             if ($filters['site'] !== '') {
                 if (! $this->valueEquals($row[$meta['site_column']] ?? null, $filters['site'])) {
                     return false;
@@ -2131,20 +2137,20 @@ class HsecmDashboardService
             }
 
             $dateColumn = $meta['date_column'] ?? null;
-            if ($dateColumn !== null && ($filters['date_from'] !== '' || $filters['date_to'] !== '')) {
+            if ($dateColumn !== null && (($filters['date_from'] ?? '') !== '' || ($filters['date_to'] ?? '') !== '')) {
                 $rowDate = $this->parseFlexibleDate($row[$dateColumn] ?? null);
                 if ($rowDate === null) {
                     return false;
                 }
-                if ($filters['date_from'] !== '' && $rowDate < $filters['date_from']) {
+                if (($filters['date_from'] ?? '') !== '' && $rowDate < $filters['date_from']) {
                     return false;
                 }
-                if ($filters['date_to'] !== '' && $rowDate > $filters['date_to']) {
+                if (($filters['date_to'] ?? '') !== '' && $rowDate > $filters['date_to']) {
                     return false;
                 }
             }
 
-            if ($filters['q'] !== '') {
+            if (($filters['q'] ?? '') !== '') {
                 $q = Str::lower($filters['q']);
                 $matched = false;
                 foreach (array_keys($meta['columns']) as $column) {
@@ -2161,6 +2167,113 @@ class HsecmDashboardService
 
             return true;
         })->values();
+
+        // Mode all + filter tanggal bisa menumpuk batch_slot yang sama → dedupe identity.
+        if ($hasDateFilter && $dataMode === 'all') {
+            return $this->dedupeRowsByBusinessKey($filtered);
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function dedupeRowsByBusinessKey(Collection $rows): Collection
+    {
+        return $rows
+            ->sortByDesc(static fn (array $row): int => (int) ($row['id'] ?? $row['_row_id'] ?? 0))
+            ->unique(function (array $row): string {
+                $key = trim((string) ($row['business_key'] ?? ''));
+                if ($key !== '') {
+                    return $key;
+                }
+
+                return 'id:'.(string) ($row['id'] ?? $row['_row_id'] ?? uniqid('row_', true));
+            })
+            ->values();
+    }
+
+    /**
+     * Normalisasi nilai tanggal row ke Y-m-d (null jika tidak bisa diparse).
+     * Tanggal slash dari Tableau memakai format US m/d/Y (contoh: 7/22/2026).
+     */
+    private function parseFlexibleDate(mixed $value): ?string
+    {
+        if ($value === null || $this->isAllToken($value)) {
+            return null;
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance(\DateTimeImmutable::createFromInterface($value))->format('Y-m-d');
+        }
+
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return null;
+        }
+
+        // Epoch / numeric timestamp (detik)
+        if (ctype_digit($raw) && strlen($raw) >= 10) {
+            try {
+                return Carbon::createFromTimestamp((int) $raw)->format('Y-m-d');
+            } catch (\Throwable) {
+                // continue
+            }
+        }
+
+        // 7/22/2026 atau 7/22/2026 6:00:00 AM — utamakan m/d/Y (Tableau), hindari overflow d/m/Y.
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\b.*)?$/', $raw, $m) === 1) {
+            $first = (int) $m[1];
+            $second = (int) $m[2];
+            $year = (int) $m[3];
+
+            if ($second > 12 && $first >= 1 && $first <= 12) {
+                $month = $first;
+                $day = $second;
+            } elseif ($first > 12 && $second >= 1 && $second <= 12) {
+                $day = $first;
+                $month = $second;
+            } else {
+                // Ambigu (keduanya ≤ 12): data scrap HSECM = US m/d/Y.
+                $month = $first;
+                $day = $second;
+            }
+
+            if (! checkdate($month, $day, $year)) {
+                return null;
+            }
+
+            return sprintf('%04d-%02d-%02d', $year, $month, $day);
+        }
+
+        $formats = [
+            'Y-m-d',
+            'Y-m-d H:i:s',
+            'd-m-Y',
+            'd M Y',
+            'F j, Y',
+            'M j, Y',
+            'Y/m/d',
+        ];
+
+        foreach ($formats as $format) {
+            try {
+                $parsed = Carbon::createFromFormat('!'.$format, $raw);
+                if ($parsed !== false) {
+                    return $parsed->format('Y-m-d');
+                }
+            } catch (\Throwable) {
+                // try next
+            }
+        }
+
+        try {
+            return Carbon::parse($raw)->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -2302,63 +2415,6 @@ class HsecmDashboardService
             return $parsed !== null && $parsed->format('Y-m-d') === $value;
         } catch (\Throwable) {
             return false;
-        }
-    }
-
-    /**
-     * Normalisasi nilai tanggal row ke Y-m-d (null jika tidak bisa diparse).
-     */
-    private function parseFlexibleDate(mixed $value): ?string
-    {
-        if ($value === null || $this->isAllToken($value)) {
-            return null;
-        }
-
-        if ($value instanceof \DateTimeInterface) {
-            return Carbon::instance(\DateTimeImmutable::createFromInterface($value))->format('Y-m-d');
-        }
-
-        $raw = trim((string) $value);
-        if ($raw === '') {
-            return null;
-        }
-
-        // Epoch / numeric timestamp (detik)
-        if (ctype_digit($raw) && strlen($raw) >= 10) {
-            try {
-                return Carbon::createFromTimestamp((int) $raw)->format('Y-m-d');
-            } catch (\Throwable) {
-                // continue
-            }
-        }
-
-        $formats = [
-            'Y-m-d',
-            'Y-m-d H:i:s',
-            'd/m/Y',
-            'd-m-Y',
-            'm/d/Y',
-            'd M Y',
-            'F j, Y',
-            'M j, Y',
-            'Y/m/d',
-        ];
-
-        foreach ($formats as $format) {
-            try {
-                $parsed = Carbon::createFromFormat($format, $raw);
-                if ($parsed !== false) {
-                    return $parsed->format('Y-m-d');
-                }
-            } catch (\Throwable) {
-                // try next
-            }
-        }
-
-        try {
-            return Carbon::parse($raw)->format('Y-m-d');
-        } catch (\Throwable) {
-            return null;
         }
     }
 }
