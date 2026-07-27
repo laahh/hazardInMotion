@@ -47,22 +47,19 @@ class HsecmTasklistPublicController extends Controller
             ->values()
             ->all();
 
-        /** @var array<int, UploadedFile|null> $files */
-        $files = [];
-        foreach ($itemIds as $itemId) {
-            $files[$itemId] = $request->file('evidence.'.$itemId);
-        }
+        /** @var UploadedFile $sharedEvidence */
+        $sharedEvidence = $request->file('evidence_shared');
 
         $this->tasklistService->submitItems(
             $tasklist,
             $itemIds,
             (string) $request->input('submitted_by_name'),
             (string) $request->input('remediation_notes'),
-            $files,
+            $sharedEvidence,
         );
 
         return redirect()
             ->route('hsecm.tasklist.show', ['token' => $token])
-            ->with('success', 'Submit berhasil. Menunggu ACC dari HSE.');
+            ->with('success', 'Submit berhasil untuk '.count($itemIds).' item. Menunggu ACC dari HSE.');
     }
 }

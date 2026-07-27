@@ -138,7 +138,7 @@ class HsecmTasklistService
         array $itemIds,
         string $submittedByName,
         string $notes,
-        array $files,
+        UploadedFile $sharedEvidence,
     ): array {
         if ($tasklist->isClosed()) {
             throw ValidationException::withMessages([
@@ -173,30 +173,26 @@ class HsecmTasklistService
                     'items' => 'Item #'.$item->id.' berstatus '.$item->status.' dan tidak bisa di-submit.',
                 ]);
             }
-            $file = $files[$item->id] ?? null;
-            if (! $file instanceof UploadedFile) {
-                throw ValidationException::withMessages([
-                    'evidence.'.$item->id => 'File evidence wajib untuk item: '.($item->value_label ?: $item->title),
-                ]);
-            }
         }
 
-        DB::transaction(function () use ($items, $submittedByName, $notes, $files, $tasklist): void {
+        DB::transaction(function () use ($items, $submittedByName, $notes, $sharedEvidence, $tasklist): void {
+            $path = $sharedEvidence->store(
+                'hsecm/tasklist-evidence/'.now()->format('Y').'/'.now()->format('m'),
+                'public'
+            );
+            $originalName = $sharedEvidence->getClientOriginalName();
+            $mimeType = $sharedEvidence->getClientMimeType();
+            $fileSize = (int) $sharedEvidence->getSize();
+
             foreach ($items as $item) {
-                /** @var UploadedFile $file */
-                $file = $files[$item->id];
                 $batch = ((int) $item->submission_batch) + 1;
-                $path = $file->store(
-                    'hsecm/tasklist-evidence/'.now()->format('Y').'/'.now()->format('m'),
-                    'public'
-                );
 
                 HsecmTasklistEvidence::query()->create([
                     'tasklist_item_id' => $item->id,
                     'file_path' => $path,
-                    'original_name' => $file->getClientOriginalName(),
-                    'mime_type' => $file->getClientMimeType(),
-                    'file_size' => (int) $file->getSize(),
+                    'original_name' => $originalName,
+                    'mime_type' => $mimeType,
+                    'file_size' => $fileSize,
                     'submission_batch' => $batch,
                 ]);
 

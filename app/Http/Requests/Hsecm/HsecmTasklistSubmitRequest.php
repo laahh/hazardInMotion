@@ -23,8 +23,7 @@ class HsecmTasklistSubmitRequest extends FormRequest
             'remediation_notes' => ['required', 'string', 'max:5000'],
             'items' => ['required', 'array', 'min:1'],
             'items.*' => ['integer', 'min:1'],
-            'evidence' => ['nullable', 'array'],
-            'evidence.*' => ['nullable', 'file', 'max:10240', 'mimes:jpg,jpeg,png,pdf,webp,doc,docx,xls,xlsx'],
+            'evidence_shared' => ['required', 'file', 'max:10240', 'mimes:jpg,jpeg,png,pdf,webp,doc,docx,xls,xlsx'],
         ];
     }
 
@@ -37,6 +36,9 @@ class HsecmTasklistSubmitRequest extends FormRequest
             'items.required' => 'Pilih minimal satu item.',
             'remediation_notes.required' => 'Catatan perbaikan wajib diisi.',
             'submitted_by_name.required' => 'Nama pengirim wajib diisi.',
+            'evidence_shared.required' => 'Upload satu file evidence untuk semua item yang dipilih.',
+            'evidence_shared.mimes' => 'Format evidence tidak didukung.',
+            'evidence_shared.max' => 'Ukuran evidence maksimal 10 MB.',
         ];
     }
 }

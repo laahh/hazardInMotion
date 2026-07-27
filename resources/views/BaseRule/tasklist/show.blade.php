@@ -25,6 +25,7 @@
     'rejected' => 'bg-red-100 text-red-800',
     'approved' => 'bg-emerald-100 text-emerald-800',
   ];
+  $submittableCount = $items->filter(fn ($item) => in_array($item->status, ['open', 'rejected'], true) && $tasklist->status !== 'closed')->count();
 @endphp
 <div class="max-w-5xl mx-auto px-4 py-8">
   <div class="bg-white border border-teal-100 rounded-2xl shadow-sm overflow-hidden">
@@ -57,7 +58,7 @@
         </div>
       @endif
 
-      <form method="POST" action="{{ route('hsecm.tasklist.submit', ['token' => $tasklist->token]) }}" enctype="multipart/form-data" class="space-y-5">
+      <form method="POST" action="{{ route('hsecm.tasklist.submit', ['token' => $tasklist->token]) }}" enctype="multipart/form-data" class="space-y-5" id="hsecm-tasklist-form">
         @csrf
         <div class="grid md:grid-cols-2 gap-4">
           <div>
@@ -67,22 +68,46 @@
                    @disabled($tasklist->status === 'closed') />
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">Catatan perbaikan (untuk item terpilih)</label>
+            <label class="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">Catatan perbaikan</label>
             <textarea name="remediation_notes" rows="2" required class="w-full rounded-xl border-slate-200 text-sm"
-                      placeholder="Jelaskan tindakan perbaikan..."
+                      placeholder="Jelaskan tindakan perbaikan untuk semua item yang dipilih..."
                       @disabled($tasklist->status === 'closed')>{{ old('remediation_notes') }}</textarea>
           </div>
         </div>
+
+        @if($tasklist->status !== 'closed' && $submittableCount > 0)
+          <div class="rounded-xl border border-teal-100 bg-teal-50/60 px-4 py-4 space-y-3">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wide text-teal-900 mb-1">Evidence (1 file untuk semua item terpilih)</label>
+              <input type="file" name="evidence_shared" required
+                     class="block w-full text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-teal-700 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white"
+                     accept=".jpg,.jpeg,.png,.pdf,.webp,.doc,.docx,.xls,.xlsx" />
+              <p class="text-[11px] text-teal-800/80 mt-1">
+                Satu file evidence akan dipakai untuk semua gap yang masih open/rejected yang Anda centang
+                ({{ $submittableCount }} item siap submit). Maks. 10 MB.
+              </p>
+            </div>
+          </div>
+        @endif
 
         <div class="overflow-x-auto border border-slate-100 rounded-xl">
           <table class="min-w-full text-sm">
             <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th class="px-3 py-2 text-left">Pilih</th>
+                <th class="px-3 py-2 text-left">
+                  @if($tasklist->status !== 'closed' && $submittableCount > 0)
+                    <label class="inline-flex items-center gap-2 cursor-pointer font-bold normal-case tracking-normal">
+                      <input type="checkbox" id="hsecm-select-all" class="rounded border-slate-300 text-teal-700" checked />
+                      Pilih
+                    </label>
+                  @else
+                    Pilih
+                  @endif
+                </th>
                 <th class="px-3 py-2 text-left">Program</th>
                 <th class="px-3 py-2 text-left">Item</th>
                 <th class="px-3 py-2 text-left">Status</th>
-                <th class="px-3 py-2 text-left">Aksi / Evidence</th>
+                <th class="px-3 py-2 text-left">Evidence terakhir</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -91,7 +116,9 @@
                 <tr class="align-top">
                   <td class="px-3 py-3">
                     @if($canSubmit)
-                      <input type="checkbox" name="items[]" value="{{ $item->id }}" class="rounded border-slate-300 text-teal-700" />
+                      <input type="checkbox" name="items[]" value="{{ $item->id }}"
+                             class="hsecm-item-check rounded border-slate-300 text-teal-700"
+                             @checked(collect(old('items', []))->map(fn ($v) => (int) $v)->contains($item->id)) />
                     @else
                       <span class="text-slate-300">—</span>
                     @endif
@@ -117,14 +144,13 @@
                     </span>
                   </td>
                   <td class="px-3 py-3 min-w-[12rem]">
-                    @if($canSubmit)
-                      <input type="file" name="evidence[{{ $item->id }}]" class="block w-full text-xs" accept=".jpg,.jpeg,.png,.pdf,.webp,.doc,.docx,.xls,.xlsx" />
-                    @endif
-                    @foreach($item->evidences->sortByDesc('id')->take(2) as $ev)
-                      <a href="{{ $ev->publicUrl() }}" target="_blank" class="block text-xs text-teal-700 mt-1 underline">
+                    @forelse($item->evidences->sortByDesc('id')->take(2) as $ev)
+                      <a href="{{ $ev->publicUrl() }}" target="_blank" class="block text-xs text-teal-700 underline">
                         {{ $ev->original_name }} (batch {{ $ev->submission_batch }})
                       </a>
-                    @endforeach
+                    @empty
+                      <span class="text-xs text-slate-400">Belum ada evidence</span>
+                    @endforelse
                   </td>
                 </tr>
               @empty
@@ -134,10 +160,11 @@
           </table>
         </div>
 
-        @if($tasklist->status !== 'closed')
-          <div class="flex justify-end">
+        @if($tasklist->status !== 'closed' && $submittableCount > 0)
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-xs text-slate-500">Centang item yang ingin di-submit, lalu upload 1 evidence di atas.</p>
             <button type="submit" class="inline-flex items-center px-5 py-2.5 rounded-xl bg-teal-700 text-white text-sm font-bold hover:bg-teal-800">
-              Submit item terpilih
+              Submit semua item terpilih
             </button>
           </div>
         @endif
@@ -145,5 +172,32 @@
     </div>
   </div>
 </div>
+@if($tasklist->status !== 'closed' && $submittableCount > 0)
+<script>
+  (function () {
+    const selectAll = document.getElementById('hsecm-select-all');
+    const checks = Array.from(document.querySelectorAll('.hsecm-item-check'));
+    if (!selectAll || checks.length === 0) return;
+
+    const syncSelectAll = () => {
+      selectAll.checked = checks.every((el) => el.checked);
+      selectAll.indeterminate = checks.some((el) => el.checked) && !selectAll.checked;
+    };
+
+    selectAll.addEventListener('change', () => {
+      checks.forEach((el) => { el.checked = selectAll.checked; });
+    });
+    checks.forEach((el) => el.addEventListener('change', syncSelectAll));
+
+    // Default: pilih semua gap yang masih bisa di-submit (kecuali ada old input).
+    @if(collect(old('items', []))->isEmpty())
+      checks.forEach((el) => { el.checked = true; });
+      selectAll.checked = true;
+    @else
+      syncSelectAll();
+    @endif
+  })();
+</script>
+@endif
 </body>
 </html>
