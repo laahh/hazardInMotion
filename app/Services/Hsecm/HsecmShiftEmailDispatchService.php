@@ -384,10 +384,17 @@ class HsecmShiftEmailDispatchService
                 'site' => $site,
                 'perusahaan' => $perusahaan,
             ]);
+            $ctaLabel = 'Buka Aksi PJO';
 
             if ($createTasklist) {
                 $cacheKey = ($site ?? '').'|'.$perusahaan;
                 if (! array_key_exists($cacheKey, $tasklistCache)) {
+                    if (! $this->tasklistService->tablesAvailable()) {
+                        throw new RuntimeException(
+                            'Tabel tasklist HSECM belum tersedia. Jalankan migration dulu sebelum endshift.'
+                        );
+                    }
+
                     $gapItems = $this->dashboardService->extractTasklistItemsFromGaps($filters);
                     if ($gapItems === []) {
                         $tasklistCache[$cacheKey] = null;
@@ -408,7 +415,7 @@ class HsecmShiftEmailDispatchService
                             'nama' => '(dry-run tasklist)',
                             'email' => '-',
                             'success' => true,
-                            'message' => 'Dry-run: akan buat tasklist '.$cacheKey.' ('.count($gapItems).' items)',
+                            'message' => 'Dry-run: akan buat tasklist '.$cacheKey.' ('.count($gapItems).' items) + CTA link tasklist.',
                         ];
                     } else {
                         $tasklistCache[$cacheKey] = $this->tasklistService->createFromEndshift(
@@ -419,11 +426,16 @@ class HsecmShiftEmailDispatchService
                     }
                 }
 
-                // CTA email pasca-shift = Aksi PJO (daily monitoring), bukan link tasklist.
+                $tasklist = $tasklistCache[$cacheKey] ?? null;
+                if ($tasklist !== null) {
+                    $ctaUrl = $this->tasklistService->publicUrl($tasklist);
+                    $ctaLabel = 'Buka Tasklist';
+                }
+
                 $hasGapAction = collect($narrative['gaps'] ?? [])->contains(
                     fn (array $g): bool => ($g['needs_action'] ?? false) && ((int) ($g['total'] ?? 0)) > 0
                 );
-                if (! $hasGapAction && ($tasklistCache[$cacheKey] ?? null) === null) {
+                if (! $hasGapAction && $tasklist === null) {
                     $skipped++;
                     $details[] = [
                         'nama' => (string) ($recipient['nama'] ?? ''),
@@ -445,6 +457,7 @@ class HsecmShiftEmailDispatchService
                 ctaUrl: $ctaUrl,
                 dryRun: $dryRun,
                 batchSlotLabel: Carbon::parse($batchSlot)->format('d/m/Y H:i'),
+                ctaLabel: $ctaLabel,
             );
 
             if ($result['success']) {
@@ -482,6 +495,7 @@ class HsecmShiftEmailDispatchService
         bool $dryRun,
         string $batchSlotLabel = '',
         int $escalateCount = 0,
+        string $ctaLabel = 'Buka Dashboard',
     ): array {
         $nama = (string) ($recipient['nama'] ?? '-');
         $email = trim((string) ($recipient['email'] ?? ''));
@@ -500,7 +514,7 @@ class HsecmShiftEmailDispatchService
                 'nama' => $nama,
                 'email' => $email,
                 'success' => true,
-                'message' => "Dry-run {$mode} → {$email} (cta={$ctaUrl})",
+                'message' => "Dry-run {$mode} → {$email} (cta={$ctaLabel}: {$ctaUrl})",
             ];
         }
 
@@ -527,13 +541,14 @@ class HsecmShiftEmailDispatchService
                 mode: $mode,
                 batchSlotLabel: $batchSlotLabel,
                 escalateCount: $escalateCount,
+                ctaLabel: $ctaLabel,
             ));
 
             return [
                 'nama' => $nama,
                 'email' => $email,
                 'success' => true,
-                'message' => "Terkirim ({$mode}).",
+                'message' => "Terkirim ({$mode}".($mode === 'endshift' && str_contains($ctaUrl, '/hsecm/tasklist/') ? ' + tasklist' : '').').',
             ];
         } catch (\Throwable $e) {
             report($e);

@@ -66,7 +66,7 @@
             @endforeach
 
             <p style="margin:22px 0 10px;font-size:13px;line-height:1.65;color:#334155;">
-              Detail data secara overall dapat diakses pada Website berikut:
+              Silakan buka <strong>Tasklist</strong> di bawah untuk menindaklanjuti gap (upload evidence &amp; submit perbaikan):
             </p>
             <p style="margin:0 0 18px;">
               <a href="{{ $dashboardUrl }}" target="_blank" rel="noopener" style="color:#b45309;font-weight:700;word-break:break-all;">{{ $dashboardUrl }}</a>
@@ -74,12 +74,12 @@
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:18px;">
               <tr>
                 <td align="center">
-                  <a href="{{ $dashboardUrl }}" class="btn" target="_blank" rel="noopener">Buka Aksi PJO</a>
+                  <a href="{{ $dashboardUrl }}" class="btn" target="_blank" rel="noopener">{{ $ctaLabel ?? 'Buka Tasklist' }}</a>
                 </td>
               </tr>
             </table>
             <p style="margin:0;font-size:13px;line-height:1.65;color:#334155;">
-              Mohon setiap point dari gap yang muncul di atas dapat dikontrol dan ditindaklanjuti untuk diperbaiki
+              Mohon setiap point dari gap yang muncul di atas dapat dikontrol dan ditindaklanjuti melalui tasklist
               agar tidak terjadi perulangan terhadap gap yang sama pada shift berikutnya.
             </p>
             <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;text-align:center;">Email digenerate otomatis pada {{ $generatedAt }}.</p>

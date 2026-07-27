@@ -61,6 +61,12 @@ Route::middleware(['auth'])
         Route::get('/tasklist/manage/{id}', [HsecmTasklistManageController::class, 'manage'])
             ->whereNumber('id')
             ->name('tasklist.manage');
+        Route::post('/tasklist/manage/{id}/approve-bulk', [HsecmTasklistManageController::class, 'approveBulk'])
+            ->whereNumber('id')
+            ->name('tasklist.approve-bulk');
+        Route::post('/tasklist/manage/{id}/reject-bulk', [HsecmTasklistManageController::class, 'rejectBulk'])
+            ->whereNumber('id')
+            ->name('tasklist.reject-bulk');
         Route::post('/tasklist/items/{itemId}/approve', [HsecmTasklistManageController::class, 'approve'])
             ->whereNumber('itemId')
             ->name('tasklist.items.approve');

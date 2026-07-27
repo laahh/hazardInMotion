@@ -6,6 +6,8 @@ namespace App\Http\Controllers\Hsecm;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Hsecm\Concerns\ProvidesHsecmLayout;
+use App\Http\Requests\Hsecm\HsecmTasklistBulkApproveRequest;
+use App\Http\Requests\Hsecm\HsecmTasklistBulkRejectRequest;
 use App\Http\Requests\Hsecm\HsecmTasklistRejectRequest;
 use App\Models\Hsecm\HsecmTasklist;
 use App\Models\Hsecm\HsecmTasklistItem;
@@ -58,11 +60,58 @@ class HsecmTasklistManageController extends Controller
             ->with(['items.evidences'])
             ->findOrFail($id);
 
+        $items = $this->tasklistService->withPreviousRecurrenceCounts($tasklist, $tasklist->items);
+
         return view('BaseRule.tasklist.manage', $this->hsecmViewData('tasklist-review', [
             'tasklist' => $tasklist,
-            'items' => $tasklist->items,
+            'items' => $items,
             'publicUrl' => $this->tasklistService->publicUrl($tasklist),
         ]));
+    }
+
+    public function approveBulk(HsecmTasklistBulkApproveRequest $request, int $id): RedirectResponse
+    {
+        $tasklist = HsecmTasklist::query()->findOrFail($id);
+        $user = auth()->user();
+        abort_unless($user !== null, 403);
+
+        $itemIds = collect($request->input('items', []))
+            ->map(static fn ($v): int => (int) $v)
+            ->filter(static fn (int $v): bool => $v > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        $count = $this->tasklistService->approveItems($tasklist, $itemIds, $user);
+
+        return redirect()
+            ->route('hsecm.tasklist.manage', ['id' => $tasklist->id])
+            ->with('success', $count.' item di-ACC.');
+    }
+
+    public function rejectBulk(HsecmTasklistBulkRejectRequest $request, int $id): RedirectResponse
+    {
+        $tasklist = HsecmTasklist::query()->findOrFail($id);
+        $user = auth()->user();
+        abort_unless($user !== null, 403);
+
+        $itemIds = collect($request->input('items', []))
+            ->map(static fn ($v): int => (int) $v)
+            ->filter(static fn (int $v): bool => $v > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        $count = $this->tasklistService->rejectItems(
+            $tasklist,
+            $itemIds,
+            $user,
+            (string) $request->input('rejection_reason'),
+        );
+
+        return redirect()
+            ->route('hsecm.tasklist.manage', ['id' => $tasklist->id])
+            ->with('success', $count.' item ditolak. PJO dapat resubmit.');
     }
 
     public function approve(int $itemId): RedirectResponse

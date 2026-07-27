@@ -335,6 +335,123 @@ class HsecmTasklistService
         }
     }
 
+    /**
+     * ACC massal item submitted pada satu tasklist.
+     *
+     * @param  list<int>  $itemIds
+     */
+    public function approveItems(HsecmTasklist $tasklist, array $itemIds, User $reviewer): int
+    {
+        $itemIds = array_values(array_unique(array_filter(
+            array_map(static fn ($id): int => (int) $id, $itemIds),
+            static fn (int $id): bool => $id > 0
+        )));
+        if ($itemIds === []) {
+            throw ValidationException::withMessages(['items' => 'Pilih minimal satu item untuk di-ACC.']);
+        }
+
+        $items = HsecmTasklistItem::query()
+            ->where('tasklist_id', $tasklist->id)
+            ->whereIn('id', $itemIds)
+            ->get();
+
+        if ($items->count() !== count($itemIds)) {
+            throw ValidationException::withMessages(['items' => 'Ada item yang tidak valid untuk tasklist ini.']);
+        }
+
+        foreach ($items as $item) {
+            if ($item->status !== 'submitted') {
+                throw ValidationException::withMessages([
+                    'items' => 'Item #'.$item->id.' berstatus '.$item->status.' — hanya submitted yang bisa di-ACC.',
+                ]);
+            }
+        }
+
+        $reviewerName = (string) ($reviewer->name ?? $reviewer->email ?? 'HSE');
+        $now = now();
+
+        DB::transaction(function () use ($items, $reviewer, $reviewerName, $now, $tasklist): void {
+            foreach ($items as $item) {
+                $item->fill([
+                    'status' => 'approved',
+                    'reviewed_by' => $reviewer->id,
+                    'reviewed_by_name' => $reviewerName,
+                    'reviewed_at' => $now,
+                    'rejection_reason' => null,
+                ])->save();
+            }
+
+            $this->recomputeTasklistStatus($tasklist->fresh(['items']));
+        });
+
+        return $items->count();
+    }
+
+    /**
+     * Tolak massal item submitted pada satu tasklist.
+     *
+     * @param  list<int>  $itemIds
+     */
+    public function rejectItems(HsecmTasklist $tasklist, array $itemIds, User $reviewer, string $reason): int
+    {
+        $reason = trim($reason);
+        if ($reason === '') {
+            throw ValidationException::withMessages([
+                'rejection_reason' => 'Alasan penolakan wajib diisi.',
+            ]);
+        }
+
+        $itemIds = array_values(array_unique(array_filter(
+            array_map(static fn ($id): int => (int) $id, $itemIds),
+            static fn (int $id): bool => $id > 0
+        )));
+        if ($itemIds === []) {
+            throw ValidationException::withMessages(['items' => 'Pilih minimal satu item untuk ditolak.']);
+        }
+
+        $items = HsecmTasklistItem::query()
+            ->where('tasklist_id', $tasklist->id)
+            ->whereIn('id', $itemIds)
+            ->get();
+
+        if ($items->count() !== count($itemIds)) {
+            throw ValidationException::withMessages(['items' => 'Ada item yang tidak valid untuk tasklist ini.']);
+        }
+
+        foreach ($items as $item) {
+            if ($item->status !== 'submitted') {
+                throw ValidationException::withMessages([
+                    'items' => 'Item #'.$item->id.' berstatus '.$item->status.' — hanya submitted yang bisa ditolak.',
+                ]);
+            }
+        }
+
+        $reviewerName = (string) ($reviewer->name ?? $reviewer->email ?? 'HSE');
+        $now = now();
+
+        DB::transaction(function () use ($items, $reviewer, $reviewerName, $now, $reason, $tasklist): void {
+            foreach ($items as $item) {
+                $item->fill([
+                    'status' => 'rejected',
+                    'reviewed_by' => $reviewer->id,
+                    'reviewed_by_name' => $reviewerName,
+                    'reviewed_at' => $now,
+                    'rejection_reason' => $reason,
+                ])->save();
+            }
+
+            $fresh = $tasklist->fresh(['items']);
+            $this->recomputeTasklistStatus($fresh);
+
+            if ($fresh !== null && $fresh->status !== 'closed' && $fresh->next_escalate_at === null) {
+                $fresh->next_escalate_at = now()->timezone('Asia/Makassar');
+                $fresh->save();
+            }
+        });
+
+        return $items->count();
+    }
+
     public function recomputeTasklistStatus(?HsecmTasklist $tasklist): void
     {
         if ($tasklist === null) {
