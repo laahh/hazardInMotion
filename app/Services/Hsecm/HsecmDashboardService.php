@@ -1108,6 +1108,7 @@ class HsecmDashboardService
         $submittedRows = $this->filteredRows('task-submitted', $filters);
         $aggregatorRows = $this->filteredRows('aggregator', $filters);
         $fatigueRows = $this->filteredRows('fatigue', $filters);
+        $hazardRootcauseRows = $this->filteredRows('hazard-rootcause', $filters);
 
         $sapRows = $this->filteredRows('sap-rfid', $filters)
             ->filter(function (array $row): bool {
@@ -1250,7 +1251,27 @@ class HsecmDashboardService
                     action: 'Stop Operasi & Mengarahkan Operator dengan Fit to Work Merah diistirahatkan & Menunjukkan Operator tidak mengoperasikan unit',
                     tone: 'danger',
                 ),
-                // Poin 9–10 hanya ditampilkan bila dataset sudah tersedia.
+                $this->makeEmailDetailSection(
+                    key: 'hazard-rootcause',
+                    title: 'Hazard Related Rootcause Incident Belum Terlaporkan',
+                    value: (string) $hazardRootcauseRows->count(),
+                    datasetKey: 'hazard-rootcause',
+                    rows: $hazardRootcauseRows,
+                    columnKeys: [
+                        'Site',
+                        'Lokasi',
+                        'Detail_Lokasi',
+                        'Ketidaksesuaian',
+                        'Sub_Ketidaksesuaian',
+                        'HIPO_Index_pada_Lokasi',
+                        'Severity_Index_pada_Lokasi',
+                        'Week',
+                    ],
+                    filters: $filters,
+                    rowLimit: $rowLimit,
+                    action: 'Laporkan / tindaklanjuti rootcause hazard terkait incident yang belum terlaporkan',
+                    tone: 'danger',
+                ),
             ],
         ];
     }
