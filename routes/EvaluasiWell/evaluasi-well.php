@@ -34,6 +34,9 @@ Route::middleware('evaluasi-well.access')
         Route::get('/install-stats', [SportEvaluationDashboardController::class, 'installStats'])
             ->name('install-stats');
 
+        Route::get('/active-stats', [SportEvaluationDashboardController::class, 'activeStats'])
+            ->name('active-stats');
+
         Route::get('/activities', [SportActivitiesController::class, 'index'])->name('activities.index');
         Route::get('/activities/data', [SportActivitiesController::class, 'data'])->name('activities.data');
 

@@ -127,15 +127,6 @@ class Kernel extends ConsoleKernel
             ->dailyAt('20:30')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/hsecm-endshift-email.log'));
-
-        // HSECM escalate tasklist terbuka: 08 / 14 / 20 / 02
-        foreach (['08:00', '14:00', '20:00', '02:00'] as $escalateAt) {
-            $schedule->command('hsecm:escalate-open-tasklists')
-                ->timezone('Asia/Makassar')
-                ->dailyAt($escalateAt)
-                ->withoutOverlapping()
-                ->appendOutputTo(storage_path('logs/hsecm-escalate-tasklists.log'));
-        }
     }
 
     /**

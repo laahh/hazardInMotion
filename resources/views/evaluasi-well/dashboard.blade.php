@@ -227,6 +227,77 @@
     background: rgba(72, 127, 255, 0.1);
   }
 
+  #active-stats-loading.is-visible {
+    display: flex !important;
+  }
+
+  .active-stats-kpi-card {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .active-stats-dim-card {
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    border: 1px solid var(--input-form-light, #e5e7eb);
+    background: var(--white, #fff);
+  }
+
+  .active-stats-dim-card:hover {
+    border-color: #45b369;
+    box-shadow: 0 6px 18px rgba(69, 179, 105, 0.08);
+  }
+
+  .active-stats-dim-card.is-active {
+    border-color: #45b369;
+    box-shadow: 0 0 0 1px #45b369;
+    background: rgba(69, 179, 105, 0.04);
+  }
+
+  .active-stats-dim-card .dim-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .active-stats-dim-card .dim-meta-item {
+    background: var(--neutral-50, #f8fafc);
+    border-radius: 8px;
+    padding: 0.5rem 0.625rem;
+  }
+
+  .active-stats-table-wrap {
+    height: 300px;
+    min-height: 300px;
+    max-height: 300px;
+    overflow: auto;
+  }
+
+  #active-stats-bar,
+  #active-stats-trend {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  #active-stats-detail-row > [class*='col-'] {
+    min-height: 0;
+  }
+
+  #active-stats-table thead th,
+  #active-stats-table tfoot td {
+    position: sticky;
+    background: var(--white, #fff);
+    z-index: 1;
+  }
+
+  #active-stats-table thead th {
+    top: 0;
+  }
+
+  #active-stats-table tfoot td {
+    bottom: 0;
+    border-top: 1px solid var(--input-form-light, #e5e7eb);
+  }
+
   #installPeopleTable_wrapper .dt-layout-row,
   .dt-container:has(#installPeopleTable) .dt-layout-row {
     display: flex;
@@ -1640,6 +1711,639 @@
     }
 })();
 </script>
+<script>
+(function () {
+    var modalEl = document.getElementById('activeStatsModal');
+    if (!modalEl) {
+        return;
+    }
+
+    var dataUrl = @json(route('evaluasi-well.active-stats'));
+    var employeeShowBase = @json(url('/evaluasi-well/employees'));
+    var cache = {};
+    var currentDimension = 'site';
+    var currentWeekStart = '';
+    var barChart = null;
+    var trendChart = null;
+    var overviewRendered = false;
+    var weekOptionsFilled = false;
+
+    var loadingEl = document.getElementById('active-stats-loading');
+    var unavailableEl = document.getElementById('active-stats-unavailable');
+    var contentEl = document.getElementById('active-stats-content');
+    var messageEl = document.getElementById('active-stats-message');
+    var footnoteEl = document.getElementById('active-stats-footnote');
+    var overviewEl = document.getElementById('active-stats-overview');
+    var tableBody = document.querySelector('#active-stats-table tbody');
+    var tableEmptyEl = document.getElementById('active-stats-table-empty');
+    var chartEmptyEl = document.getElementById('active-stats-chart-empty');
+    var chartEl = document.getElementById('active-stats-bar');
+    var trendEl = document.getElementById('active-stats-trend');
+    var trendEmptyEl = document.getElementById('active-stats-trend-empty');
+    var tableWrapEl = document.querySelector('.active-stats-table-wrap');
+    var tableDimLabelEl = document.getElementById('active-stats-table-dim-label');
+    var detailTitleEl = document.getElementById('active-stats-detail-title');
+    var detailSubtitleEl = document.getElementById('active-stats-detail-subtitle');
+    var groupsHintEl = document.getElementById('active-stats-kpi-groups-hint');
+    var weekSelectEl = document.getElementById('active-stats-week');
+    var weekLabelEl = document.getElementById('active-stats-week-label');
+    var leaderboardBody = document.querySelector('#active-stats-leaderboard tbody');
+    var leaderboardEmptyEl = document.getElementById('active-stats-leaderboard-empty');
+    var leaderboardBadge = document.getElementById('active-leaderboard-total-badge');
+    var openStatusBtn = document.getElementById('active-stats-open-status-btn');
+    var cardEl = document.getElementById('total-user-aktif-card');
+
+    var dimensionUnit = {
+        site: 'site',
+        company: 'perusahaan',
+        jabatan: 'jabatan'
+    };
+
+    function formatNumber(value) {
+        return Number(value || 0).toLocaleString('id-ID');
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function cacheKey(dimension, weekStart) {
+        return dimension + '|' + (weekStart || '');
+    }
+
+    function setLoading(isLoading) {
+        if (!loadingEl) {
+            return;
+        }
+        loadingEl.classList.toggle('d-none', !isLoading);
+        loadingEl.classList.toggle('is-visible', isLoading);
+    }
+
+    function applyDetailHeight(height) {
+        if (chartEl) {
+            chartEl.style.height = height + 'px';
+        }
+        if (tableWrapEl) {
+            tableWrapEl.style.height = height + 'px';
+            tableWrapEl.style.minHeight = height + 'px';
+            tableWrapEl.style.maxHeight = height + 'px';
+        }
+    }
+
+    function fillWeekOptions(options, selected) {
+        if (!weekSelectEl || weekOptionsFilled) {
+            return;
+        }
+        weekSelectEl.innerHTML = '';
+        (options || []).forEach(function (opt) {
+            var option = document.createElement('option');
+            option.value = opt.start;
+            option.textContent = opt.label;
+            if (opt.start === selected) {
+                option.selected = true;
+            }
+            weekSelectEl.appendChild(option);
+        });
+        weekOptionsFilled = true;
+    }
+
+    function renderSummary(payload) {
+        var summary = payload.summary || {};
+        var week = payload.week || {};
+
+        var activeEl = document.getElementById('active-stats-kpi-active');
+        var foodEl = document.getElementById('active-stats-kpi-food');
+        var workoutEl = document.getElementById('active-stats-kpi-workout');
+        var totalEvalsEl = document.getElementById('active-stats-kpi-total-evals');
+        var kpiCardEl = document.getElementById('active-stats-kpi-card-total');
+        var increaseBadge = document.getElementById('active-stats-kpi-increase-badge');
+
+        if (activeEl) activeEl.textContent = formatNumber(summary.active_users);
+        if (foodEl) foodEl.textContent = formatNumber(summary.food_evals);
+        if (workoutEl) workoutEl.textContent = formatNumber(summary.workout_evals);
+        if (totalEvalsEl) totalEvalsEl.textContent = formatNumber(summary.total_evals);
+        if (kpiCardEl) kpiCardEl.textContent = formatNumber(summary.kpi_card_total);
+        if (increaseBadge) {
+            increaseBadge.textContent = '+' + formatNumber(summary.week_increase);
+        }
+
+        if (footnoteEl && payload.footnote) {
+            footnoteEl.textContent = payload.footnote;
+        }
+        if (weekLabelEl) {
+            weekLabelEl.textContent = week.label || '—';
+        }
+        if (tableDimLabelEl) {
+            tableDimLabelEl.textContent = payload.dimension_label || 'Site';
+        }
+        if (detailTitleEl) {
+            detailTitleEl.textContent = payload.dimension_label || 'Site';
+        }
+        if (detailSubtitleEl) {
+            detailSubtitleEl.textContent = formatNumber(summary.groups || 0) + ' ' +
+                (dimensionUnit[payload.dimension] || 'grup') +
+                ' · ' + formatNumber(summary.active_users) + ' user aktif · ' +
+                formatNumber(summary.total_evals) + ' evaluasi';
+        }
+        if (groupsHintEl) {
+            groupsHintEl.textContent = formatNumber(summary.groups || 0) + ' ' +
+                (dimensionUnit[payload.dimension] || 'grup') + ' · +' +
+                formatNumber(summary.week_increase) + ' vs minggu lalu';
+        }
+
+        var tfootActive = document.getElementById('active-stats-tfoot-active');
+        var tfootFood = document.getElementById('active-stats-tfoot-food');
+        var tfootWorkout = document.getElementById('active-stats-tfoot-workout');
+        var tfootEvals = document.getElementById('active-stats-tfoot-evals');
+        if (tfootActive) tfootActive.textContent = formatNumber(summary.active_users);
+        if (tfootFood) tfootFood.textContent = formatNumber(summary.food_evals);
+        if (tfootWorkout) tfootWorkout.textContent = formatNumber(summary.workout_evals);
+        if (tfootEvals) tfootEvals.textContent = formatNumber(summary.total_evals);
+    }
+
+    function renderOverview(overview, activeDimension) {
+        if (!overviewEl) {
+            return;
+        }
+
+        overviewEl.innerHTML = '';
+        (overview || []).forEach(function (item) {
+            var col = document.createElement('div');
+            col.className = 'col-12 col-md-4';
+
+            var card = document.createElement('div');
+            card.className = 'active-stats-dim-card radius-8 p-16 h-100' +
+                (item.dimension === activeDimension ? ' is-active' : '');
+            card.setAttribute('role', 'button');
+            card.setAttribute('tabindex', '0');
+            card.setAttribute('data-dimension', item.dimension);
+
+            var unit = dimensionUnit[item.dimension] || 'grup';
+
+            card.innerHTML =
+                '<div class="d-flex align-items-start justify-content-between gap-2 mb-12">' +
+                    '<div class="d-flex align-items-center gap-2 min-w-0">' +
+                        '<span class="w-40-px h-40-px bg-success-focus text-success-main radius-8 d-inline-flex align-items-center justify-content-center flex-shrink-0">' +
+                            '<iconify-icon icon="' + (item.icon || 'solar:chart-bold') + '" class="text-xl"></iconify-icon>' +
+                        '</span>' +
+                        '<div class="min-w-0">' +
+                            '<h6 class="mb-0 fw-semibold text-md text-truncate"></h6>' +
+                            '<span class="text-xs text-secondary-light"></span>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="dim-meta mb-12">' +
+                    '<div class="dim-meta-item">' +
+                        '<div class="text-xs text-secondary-light mb-2">Aktif</div>' +
+                        '<div class="fw-semibold text-sm meta-active">0</div>' +
+                    '</div>' +
+                    '<div class="dim-meta-item">' +
+                        '<div class="text-xs text-secondary-light mb-2">Food</div>' +
+                        '<div class="fw-semibold text-sm text-primary-600 meta-food">0</div>' +
+                    '</div>' +
+                    '<div class="dim-meta-item">' +
+                        '<div class="text-xs text-secondary-light mb-2">Workout</div>' +
+                        '<div class="fw-semibold text-sm text-warning-main meta-workout">0</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="d-flex align-items-center justify-content-between gap-2">' +
+                    '<span class="text-xs text-secondary-light text-truncate top-label">Top: -</span>' +
+                    '<span class="text-xs fw-medium text-success-main flex-shrink-0 top-evals">0 eval</span>' +
+                '</div>';
+
+            card.querySelector('h6').textContent = item.label || item.dimension;
+            card.querySelector('.text-xs.text-secondary-light').textContent =
+                formatNumber(item.groups || 0) + ' ' + unit;
+            card.querySelector('.meta-active').textContent = formatNumber(item.active_users);
+            card.querySelector('.meta-food').textContent = formatNumber(item.food_evals);
+            card.querySelector('.meta-workout').textContent = formatNumber(item.workout_evals);
+            card.querySelector('.top-label').textContent = 'Top: ' + (item.top_name || '-');
+            card.querySelector('.top-evals').textContent = formatNumber(item.top_evals) + ' eval';
+
+            card.addEventListener('click', function () {
+                loadDimension(item.dimension, currentWeekStart);
+            });
+            card.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    loadDimension(item.dimension, currentWeekStart);
+                }
+            });
+
+            col.appendChild(card);
+            overviewEl.appendChild(col);
+        });
+
+        overviewRendered = true;
+    }
+
+    function highlightOverview(activeDimension) {
+        if (!overviewEl) {
+            return;
+        }
+        overviewEl.querySelectorAll('.active-stats-dim-card').forEach(function (card) {
+            card.classList.toggle('is-active', card.getAttribute('data-dimension') === activeDimension);
+        });
+    }
+
+    function renderTable(rows) {
+        if (!tableBody) {
+            return;
+        }
+        tableBody.innerHTML = '';
+        if (!rows || !rows.length) {
+            if (tableEmptyEl) tableEmptyEl.classList.remove('d-none');
+            return;
+        }
+        if (tableEmptyEl) tableEmptyEl.classList.add('d-none');
+
+        rows.forEach(function (row) {
+            var tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td class="fw-medium">' + escapeHtml(row.name) + '</td>' +
+                '<td class="text-end">' + formatNumber(row.active_users) + '</td>' +
+                '<td class="text-end">' + formatNumber(row.food_evals) + '</td>' +
+                '<td class="text-end">' + formatNumber(row.workout_evals) + '</td>' +
+                '<td class="text-end fw-semibold">' + formatNumber(row.total_evals) + '</td>' +
+                '<td class="text-end">' + (row.pct || 0) + '%</td>';
+            tableBody.appendChild(tr);
+        });
+    }
+
+    function renderLeaderboard(rows) {
+        if (!leaderboardBody) {
+            return;
+        }
+        leaderboardBody.innerHTML = '';
+        if (leaderboardBadge) {
+            leaderboardBadge.textContent = formatNumber((rows || []).length);
+        }
+        if (!rows || !rows.length) {
+            if (leaderboardEmptyEl) leaderboardEmptyEl.classList.remove('d-none');
+            return;
+        }
+        if (leaderboardEmptyEl) leaderboardEmptyEl.classList.add('d-none');
+
+        rows.forEach(function (row) {
+            var tr = document.createElement('tr');
+            var nameHtml = escapeHtml(row.nama);
+            if (row.user_id) {
+                nameHtml = '<a href="' + employeeShowBase + '/' + row.user_id + '" class="text-primary-600 hover-text-primary fw-medium">' +
+                    escapeHtml(row.nama) + '</a>';
+            }
+            var activeBadge = row.is_active
+                ? '<span class="bg-success-focus text-success-main px-10 py-2 rounded-pill text-xs fw-medium">Ya</span>'
+                : '<span class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-pill text-xs fw-medium">Tidak</span>';
+
+            tr.innerHTML =
+                '<td class="fw-semibold">' + formatNumber(row.rank) + '</td>' +
+                '<td>' + nameHtml + '</td>' +
+                '<td>' + escapeHtml(row.site) + '</td>' +
+                '<td>' + escapeHtml(row.perusahaan) + '</td>' +
+                '<td>' + escapeHtml(row.jabatan) + '</td>' +
+                '<td class="text-end">' + formatNumber(row.food_evals) + '</td>' +
+                '<td class="text-end">' + formatNumber(row.workout_evals) + '</td>' +
+                '<td class="text-end fw-semibold">' + formatNumber(row.total_evals) + '</td>' +
+                '<td class="text-center">' + activeBadge + '</td>';
+            leaderboardBody.appendChild(tr);
+        });
+    }
+
+    function renderTrend(trend) {
+        if (!trendEl || typeof ApexCharts === 'undefined') {
+            return;
+        }
+        var labels = (trend && trend.labels) ? trend.labels : [];
+        var series = (trend && trend.active_users) ? trend.active_users : [];
+
+        if (trendChart) {
+            trendChart.destroy();
+            trendChart = null;
+        }
+
+        if (!labels.length) {
+            if (trendEmptyEl) trendEmptyEl.classList.remove('d-none');
+            trendEl.classList.add('d-none');
+            return;
+        }
+        if (trendEmptyEl) trendEmptyEl.classList.add('d-none');
+        trendEl.classList.remove('d-none');
+
+        trendChart = new ApexCharts(trendEl, {
+            series: [{ name: 'User Aktif', data: series }],
+            chart: {
+                type: 'area',
+                height: 140,
+                toolbar: { show: false },
+                sparkline: { enabled: false },
+                parentHeightOffset: 0
+            },
+            stroke: { curve: 'smooth', width: 2 },
+            colors: ['#45b369'],
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    shadeIntensity: 1,
+                    opacityFrom: 0.35,
+                    opacityTo: 0.05,
+                    stops: [0, 90, 100]
+                }
+            },
+            dataLabels: { enabled: false },
+            grid: {
+                borderColor: '#E5E7EB',
+                strokeDashArray: 4,
+                padding: { left: 8, right: 8 }
+            },
+            xaxis: {
+                categories: labels,
+                labels: { style: { fontSize: '10px' } }
+            },
+            yaxis: {
+                labels: {
+                    style: { fontSize: '10px' },
+                    formatter: function (value) {
+                        return formatNumber(value);
+                    }
+                }
+            },
+            tooltip: {
+                y: {
+                    formatter: function (value) {
+                        return formatNumber(value) + ' user';
+                    }
+                }
+            }
+        });
+        trendChart.render();
+    }
+
+    function renderChart(payload) {
+        if (!chartEl || typeof ApexCharts === 'undefined') {
+            return;
+        }
+
+        var categories = (payload.chart && payload.chart.categories) ? payload.chart.categories : [];
+        var activeUsers = (payload.chart && payload.chart.active_users) ? payload.chart.active_users : [];
+        var foodEvals = (payload.chart && payload.chart.food_evals) ? payload.chart.food_evals : [];
+        var workoutEvals = (payload.chart && payload.chart.workout_evals) ? payload.chart.workout_evals : [];
+
+        if (barChart) {
+            barChart.destroy();
+            barChart = null;
+        }
+
+        if (!categories.length) {
+            if (chartEmptyEl) chartEmptyEl.classList.remove('d-none');
+            chartEl.classList.add('d-none');
+            return;
+        }
+        if (chartEmptyEl) chartEmptyEl.classList.add('d-none');
+        chartEl.classList.remove('d-none');
+
+        var height = Math.max(300, categories.length * 28 + 80);
+        applyDetailHeight(height);
+
+        barChart = new ApexCharts(chartEl, {
+            series: [
+                { name: 'User Aktif', data: activeUsers },
+                { name: 'Eval. Makanan', data: foodEvals },
+                { name: 'Eval. Olahraga', data: workoutEvals }
+            ],
+            chart: {
+                type: 'bar',
+                height: height,
+                width: '100%',
+                stacked: false,
+                toolbar: { show: false },
+                parentHeightOffset: 0
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: true,
+                    borderRadius: 4,
+                    barHeight: '68%',
+                    dataLabels: { position: 'top' }
+                }
+            },
+            colors: ['#45b369', '#487FFF', '#FF9F29'],
+            dataLabels: { enabled: false },
+            grid: {
+                show: true,
+                borderColor: '#D1D5DB',
+                strokeDashArray: 4,
+                position: 'back',
+                padding: { left: 8, right: 8 }
+            },
+            xaxis: {
+                categories: categories,
+                labels: {
+                    formatter: function (value) {
+                        var n = Number(value);
+                        if (n >= 1000) {
+                            return (n / 1000).toFixed(0) + 'k';
+                        }
+                        return value;
+                    }
+                }
+            },
+            yaxis: {
+                labels: {
+                    style: { fontSize: '11px' },
+                    maxWidth: 120
+                }
+            },
+            legend: {
+                position: 'top',
+                horizontalAlign: 'left',
+                fontSize: '12px'
+            },
+            tooltip: {
+                y: {
+                    formatter: function (value) {
+                        return formatNumber(value);
+                    }
+                }
+            }
+        });
+        barChart.render().then(function () {
+            applyDetailHeight(height);
+        });
+    }
+
+    function renderPayload(payload) {
+        if (footnoteEl && payload.footnote) {
+            footnoteEl.textContent = payload.footnote;
+        }
+
+        if (!payload.available) {
+            if (unavailableEl) unavailableEl.classList.remove('d-none');
+            if (contentEl) contentEl.classList.add('d-none');
+            if (messageEl) messageEl.textContent = payload.message || 'Koneksi BeWell belum tersedia.';
+            return;
+        }
+
+        if (unavailableEl) unavailableEl.classList.add('d-none');
+        if (contentEl) contentEl.classList.remove('d-none');
+
+        currentDimension = payload.dimension || 'site';
+        if (payload.week && payload.week.start) {
+            currentWeekStart = payload.week.start;
+        }
+
+        fillWeekOptions(payload.week_options || [], currentWeekStart);
+        if (weekSelectEl && currentWeekStart) {
+            weekSelectEl.value = currentWeekStart;
+        }
+
+        renderSummary(payload);
+        if (!overviewRendered || !(payload.overview && payload.overview.length)) {
+            renderOverview(payload.overview || [], currentDimension);
+        } else {
+            highlightOverview(currentDimension);
+        }
+        renderTable(payload.rows || []);
+        renderChart(payload);
+        renderTrend(payload.weekly_trend || {});
+        renderLeaderboard(payload.leaderboard || []);
+    }
+
+    function loadDimension(dimension, weekStart) {
+        dimension = dimension || 'site';
+        weekStart = weekStart || currentWeekStart || '';
+        var key = cacheKey(dimension, weekStart);
+
+        if (cache[key]) {
+            renderPayload(cache[key]);
+            return;
+        }
+
+        setLoading(true);
+        var url = dataUrl + '?dimension=' + encodeURIComponent(dimension);
+        if (weekStart) {
+            url += '&week_start=' + encodeURIComponent(weekStart);
+        }
+
+        fetch(url, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin'
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.json();
+            })
+            .then(function (payload) {
+                cache[key] = payload;
+                if (payload.overview && payload.overview.length) {
+                    overviewRendered = false;
+                }
+                renderPayload(payload);
+            })
+            .catch(function () {
+                renderPayload({
+                    available: false,
+                    dimension: dimension,
+                    dimension_label: 'Site',
+                    footnote: 'User aktif (luas) = food photo / workout / komunitas / Main Bareng. Evaluasi = food + workout.',
+                    message: 'Gagal memuat statistik user aktif.',
+                    week: { start: weekStart, end: '', label: '—', prev_start: '' },
+                    week_options: [],
+                    weekly_trend: { labels: [], active_users: [], week_starts: [] },
+                    summary: {
+                        active_users: 0,
+                        food_evals: 0,
+                        workout_evals: 0,
+                        total_evals: 0,
+                        week_increase: 0,
+                        kpi_card_total: 0,
+                        groups: 0
+                    },
+                    overview: [],
+                    rows: [],
+                    chart: { categories: [], active_users: [], food_evals: [], workout_evals: [] },
+                    leaderboard: []
+                });
+            })
+            .finally(function () {
+                setLoading(false);
+            });
+    }
+
+    function scrollToStatusInstall() {
+        var section = document.getElementById('notInstalledTable');
+        var userAktifEl = document.getElementById('not-installed-user-aktif');
+        var installEl = document.getElementById('not-installed-install');
+        if (userAktifEl) {
+            userAktifEl.value = 'ya';
+        }
+        if (installEl) {
+            installEl.value = '';
+        }
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        var applyBtn = document.getElementById('not-installed-apply-btn');
+        if (applyBtn) {
+            applyBtn.click();
+        }
+    }
+
+    modalEl.addEventListener('shown.bs.modal', function () {
+        overviewRendered = false;
+        weekOptionsFilled = false;
+        loadDimension(currentDimension || 'site', currentWeekStart || '');
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', function () {
+        if (barChart) {
+            barChart.destroy();
+            barChart = null;
+        }
+        if (trendChart) {
+            trendChart.destroy();
+            trendChart = null;
+        }
+    });
+
+    if (weekSelectEl) {
+        weekSelectEl.addEventListener('change', function () {
+            currentWeekStart = weekSelectEl.value || '';
+            overviewRendered = false;
+            loadDimension(currentDimension || 'site', currentWeekStart);
+        });
+    }
+
+    if (openStatusBtn) {
+        openStatusBtn.addEventListener('click', function () {
+            var modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+            window.setTimeout(scrollToStatusInstall, 250);
+        });
+    }
+
+    if (cardEl) {
+        cardEl.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+            }
+        });
+    }
+})();
+</script>
 @endsection
 
 @section('content')
@@ -1693,7 +2397,16 @@
           </div>
           
           <div class="col-xxl-4 col-sm-6">
-            <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-2">
+            <div
+              class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-2 cursor-pointer"
+              role="button"
+              tabindex="0"
+              data-bs-toggle="modal"
+              data-bs-target="#activeStatsModal"
+              aria-label="Lihat detail statistik user aktif"
+              title="Lihat detail statistik user aktif"
+              id="total-user-aktif-card"
+            >
               <div class="card-body p-0">
                 <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
                   
@@ -2185,4 +2898,5 @@
     </div>
 
 @include('evaluasi-well.partials._install-stats-modal')
+@include('evaluasi-well.partials._active-stats-modal')
 @endsection

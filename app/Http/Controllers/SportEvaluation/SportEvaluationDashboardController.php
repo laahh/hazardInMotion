@@ -6,6 +6,7 @@ namespace App\Http\Controllers\SportEvaluation;
 
 use App\Http\Controllers\Controller;
 use App\Services\SportEvaluation\BewellConnectionService;
+use App\Services\SportEvaluation\SportEvaluationActiveStatsService;
 use App\Services\SportEvaluation\SportEvaluationInstallStatsService;
 use App\Support\SpreadsheetExporter;
 use Illuminate\Database\Query\Builder;
@@ -25,6 +26,7 @@ class SportEvaluationDashboardController extends Controller
     public function __construct(
         private readonly BewellConnectionService $connection,
         private readonly SportEvaluationInstallStatsService $installStatsService,
+        private readonly SportEvaluationActiveStatsService $activeStatsService,
     ) {}
 
     public function index(Request $request): View
@@ -80,6 +82,68 @@ class SportEvaluationDashboardController extends Controller
                     'installed' => [],
                     'not_installed' => [],
                 ],
+            ]);
+        }
+    }
+
+    /**
+     * Detail statistik user aktif per dimensi (site / perusahaan / jabatan) + leaderboard.
+     */
+    public function activeStats(Request $request): JsonResponse
+    {
+        $dimension = is_string($request->input('dimension'))
+            ? $request->input('dimension')
+            : 'site';
+
+        $weekStart = is_string($request->input('week_start'))
+            ? $request->input('week_start')
+            : null;
+
+        try {
+            return response()->json($this->activeStatsService->getStats($dimension, $weekStart));
+        } catch (Throwable $e) {
+            report($e);
+
+            $fallbackWeekStart = Carbon::now()->startOfWeek()->toDateString();
+            $fallbackWeekEnd = Carbon::now()->endOfWeek()->toDateString();
+
+            return response()->json([
+                'available' => false,
+                'dimension' => 'site',
+                'dimension_label' => 'Site',
+                'footnote' => 'User aktif (luas) = food photo / workout / komunitas / Main Bareng. Evaluasi = food + workout.',
+                'message' => 'Gagal memuat statistik user aktif.',
+                'week' => [
+                    'start' => $fallbackWeekStart,
+                    'end' => $fallbackWeekEnd,
+                    'label' => Carbon::now()->startOfWeek()->format('d M')
+                        .' – '.Carbon::now()->endOfWeek()->format('d M Y'),
+                    'prev_start' => Carbon::now()->subWeek()->startOfWeek()->toDateString(),
+                ],
+                'week_options' => [],
+                'weekly_trend' => [
+                    'labels' => [],
+                    'active_users' => [],
+                    'week_starts' => [],
+                ],
+                'summary' => [
+                    'active_users' => 0,
+                    'food_evals' => 0,
+                    'workout_evals' => 0,
+                    'total_evals' => 0,
+                    'week_increase' => 0,
+                    'kpi_card_total' => 0,
+                    'groups' => 0,
+                ],
+                'overview' => [],
+                'rows' => [],
+                'chart' => [
+                    'categories' => [],
+                    'active_users' => [],
+                    'food_evals' => [],
+                    'workout_evals' => [],
+                ],
+                'leaderboard' => [],
             ]);
         }
     }
@@ -361,11 +425,11 @@ class SportEvaluationDashboardController extends Controller
             $lastWeekStart = $now->copy()->subWeek()->startOfWeek();
             $lastWeekEnd = $now->copy()->subWeek()->endOfWeek();
 
-            $thisWeek = $this->countActiveUsersInRange(
+            $thisWeek = $this->activeStatsService->countActiveUsersInRange(
                 $thisWeekStart->format('Y-m-d H:i:s'),
                 $thisWeekEnd->format('Y-m-d H:i:s'),
             );
-            $lastWeek = $this->countActiveUsersInRange(
+            $lastWeek = $this->activeStatsService->countActiveUsersInRange(
                 $lastWeekStart->format('Y-m-d H:i:s'),
                 $lastWeekEnd->format('Y-m-d H:i:s'),
             );
@@ -416,56 +480,6 @@ class SportEvaluationDashboardController extends Controller
         }
 
         return compact('totalStravaConnect', 'totalStravaConnectWeekIncrease');
-    }
-
-    private function countActiveUsersInRange(string $from, string $to): int
-    {
-        $db = DB::connection(BewellConnectionService::CONNECTION);
-
-        $row = $db->selectOne(
-            'SELECT COUNT(*) AS c FROM (
-                SELECT user_id FROM food_analyses
-                    WHERE source_type = ? AND user_id IS NOT NULL
-                      AND created_at BETWEEN ? AND ?
-                UNION
-                SELECT user_id FROM workout_analyses
-                    WHERE user_id IS NOT NULL
-                      AND created_at BETWEEN ? AND ?
-                UNION
-                SELECT author_user_id AS user_id FROM community_posts
-                    WHERE author_user_id IS NOT NULL
-                      AND created_at BETWEEN ? AND ?
-                UNION
-                SELECT user_id FROM community_members
-                    WHERE user_id IS NOT NULL
-                      AND joined_at BETWEEN ? AND ?
-                UNION
-                SELECT user_id FROM community_event_rsvps
-                    WHERE user_id IS NOT NULL
-                      AND created_at BETWEEN ? AND ?
-                UNION
-                SELECT host_user_id AS user_id FROM open_play_events
-                    WHERE host_user_id IS NOT NULL
-                      AND starts_at BETWEEN ? AND ?
-                UNION
-                SELECT p.user_id
-                    FROM open_play_participants p
-                    INNER JOIN open_play_events e ON e.id = p.event_id
-                    WHERE p.user_id IS NOT NULL
-                      AND e.starts_at BETWEEN ? AND ?
-            ) AS active_users',
-            [
-                'photo', $from, $to,
-                $from, $to,
-                $from, $to,
-                $from, $to,
-                $from, $to,
-                $from, $to,
-                $from, $to,
-            ]
-        );
-
-        return (int) ($row->c ?? 0);
     }
 
     /**
@@ -642,7 +656,7 @@ class SportEvaluationDashboardController extends Controller
                     for ($i = 11; $i >= 0; $i--) {
                         $start = $now->copy()->subWeeks($i)->startOfWeek();
                         $end = $now->copy()->subWeeks($i)->endOfWeek();
-                        $count = $this->countActiveUsersInRange(
+                        $count = $this->activeStatsService->countActiveUsersInRange(
                             $start->format('Y-m-d H:i:s'),
                             $end->format('Y-m-d H:i:s'),
                         );
@@ -720,7 +734,7 @@ class SportEvaluationDashboardController extends Controller
                 ->whereBetween('created_at', [$yearStart, $yearEnd])
                 ->count();
 
-            $adoptionAktif = $this->countActiveUsersInRange($weekStart, $weekEnd);
+            $adoptionAktif = $this->activeStatsService->countActiveUsersInRange($weekStart, $weekEnd);
 
             $rows = $db->table('login_audit')
                 ->selectRaw('MONTH(created_at) as m, COUNT(*) as total')
