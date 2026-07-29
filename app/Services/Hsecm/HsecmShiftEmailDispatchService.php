@@ -380,6 +380,7 @@ class HsecmShiftEmailDispatchService
             $summary = $this->dashboardService->buildScopeSummary($filters);
             $narrative = $summary['email_narrative'] ?? ['exposure' => [], 'gaps' => []];
 
+            $scopeLabel = $this->scopeLabel($site, $perusahaan);
             $ctaUrl = $this->buildPublicUrl('/hsecm/pjo-action', [
                 'site' => $site,
                 'perusahaan' => $perusahaan,
@@ -397,7 +398,10 @@ class HsecmShiftEmailDispatchService
 
                     $gapItems = $this->dashboardService->extractTasklistItemsFromGaps($filters);
                     if ($gapItems === []) {
-                        $tasklistCache[$cacheKey] = null;
+                        // Tetap coba pakai tasklist existing untuk scope ini (batch terkini).
+                        $tasklistCache[$cacheKey] = $perusahaan !== ''
+                            ? $this->tasklistService->findByScope($site ?? '', $perusahaan, $batchSlot)
+                            : null;
                     } elseif ($perusahaan === '') {
                         // Tasklist butuh perusahaan (kolom NOT NULL); agregat hanya kirim email.
                         $tasklistCache[$cacheKey] = null;
@@ -410,12 +414,15 @@ class HsecmShiftEmailDispatchService
                             ];
                         }
                     } elseif ($dryRun) {
-                        $tasklistCache[$cacheKey] = null;
+                        $existing = $this->tasklistService->findByScope($site ?? '', $perusahaan, $batchSlot);
+                        $tasklistCache[$cacheKey] = $existing;
                         $details[] = [
                             'nama' => '(dry-run tasklist)',
                             'email' => '-',
                             'success' => true,
-                            'message' => 'Dry-run: akan buat tasklist '.$cacheKey.' ('.count($gapItems).' items) + CTA link tasklist.',
+                            'message' => $existing !== null
+                                ? 'Dry-run: pakai tasklist existing '.$cacheKey.' + CTA tasklist.'
+                                : 'Dry-run: akan buat tasklist '.$cacheKey.' ('.count($gapItems).' items) + CTA tasklist.',
                         ];
                     } else {
                         $tasklistCache[$cacheKey] = $this->tasklistService->createFromEndshift(
@@ -427,9 +434,14 @@ class HsecmShiftEmailDispatchService
                 }
 
                 $tasklist = $tasklistCache[$cacheKey] ?? null;
+
+                // CTA endshift: selalu ke tasklist scope site + perusahaan (bukan Aksi PJO).
                 if ($tasklist !== null) {
                     $ctaUrl = $this->tasklistService->publicUrl($tasklist);
-                    $ctaLabel = 'Buka Tasklist';
+                    $ctaLabel = 'Buka Tasklist — '.$scopeLabel;
+                } elseif ($perusahaan !== '') {
+                    $ctaUrl = $this->tasklistService->openUrl($site, $perusahaan, $batchSlot);
+                    $ctaLabel = 'Buka Tasklist — '.$scopeLabel;
                 }
 
                 $hasGapAction = collect($narrative['gaps'] ?? [])->contains(

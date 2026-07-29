@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Hsecm\HsecmTasklistSubmitRequest;
 use App\Services\Hsecm\HsecmTasklistService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\View\View;
 
@@ -16,6 +17,27 @@ class HsecmTasklistPublicController extends Controller
     public function __construct(
         private readonly HsecmTasklistService $tasklistService,
     ) {}
+
+    /**
+     * Resolve tasklist by site + perusahaan (+ optional batch_slot) lalu redirect ke token.
+     */
+    public function open(Request $request): RedirectResponse
+    {
+        $site = trim((string) $request->query('site', ''));
+        $perusahaan = trim((string) $request->query('perusahaan', ''));
+        $batchSlot = trim((string) $request->query('batch_slot', ''));
+
+        abort_if($perusahaan === '', 404, 'Parameter perusahaan wajib.');
+
+        $tasklist = $this->tasklistService->findByScope(
+            $site,
+            $perusahaan,
+            $batchSlot !== '' ? $batchSlot : null,
+        );
+        abort_if($tasklist === null, 404, 'Tasklist tidak ditemukan untuk site/perusahaan ini.');
+
+        return redirect()->route('hsecm.tasklist.show', ['token' => $tasklist->token]);
+    }
 
     public function show(string $token): View
     {

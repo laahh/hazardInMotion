@@ -66,7 +66,9 @@
             @endforeach
 
             <p style="margin:22px 0 10px;font-size:13px;line-height:1.65;color:#334155;">
-              Silakan buka <strong>Tasklist</strong> di bawah untuk menindaklanjuti gap (upload evidence &amp; submit perbaikan):
+              Silakan buka <strong>Tasklist</strong> untuk scope
+              <strong>{{ $siteLabel }} · {{ $companyLabel }}</strong>
+              di bawah untuk menindaklanjuti gap (upload evidence &amp; submit perbaikan):
             </p>
             <p style="margin:0 0 18px;">
               <a href="{{ $dashboardUrl }}" target="_blank" rel="noopener" style="color:#b45309;font-weight:700;word-break:break-all;">{{ $dashboardUrl }}</a>
@@ -74,7 +76,7 @@
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:18px;">
               <tr>
                 <td align="center">
-                  <a href="{{ $dashboardUrl }}" class="btn" target="_blank" rel="noopener">{{ $ctaLabel ?? 'Buka Tasklist' }}</a>
+                  <a href="{{ $dashboardUrl }}" class="btn" target="_blank" rel="noopener">{{ $ctaLabel ?? ('Buka Tasklist — '.$siteLabel.' · '.$companyLabel) }}</a>
                 </td>
               </tr>
             </table>

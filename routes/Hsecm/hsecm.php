@@ -20,6 +20,8 @@ Route::prefix('hsecm')
     ->name('hsecm.')
     ->group(function (): void {
         Route::get('/pjo-action', [HsecmPjoActionController::class, 'index'])->name('pjo-action');
+        Route::get('/tasklist/open', [HsecmTasklistPublicController::class, 'open'])
+            ->name('tasklist.open');
         Route::get('/tasklist/{token}', [HsecmTasklistPublicController::class, 'show'])
             ->where('token', '[A-Za-z0-9]{32,64}')
             ->name('tasklist.show');

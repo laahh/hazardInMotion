@@ -6,6 +6,7 @@ namespace App\Http\Controllers\SportEvaluation;
 
 use App\Http\Controllers\Controller;
 use App\Services\SportEvaluation\BewellConnectionService;
+use App\Services\SportEvaluation\SportEvaluationInstallStatsService;
 use App\Support\SpreadsheetExporter;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
@@ -23,6 +24,7 @@ class SportEvaluationDashboardController extends Controller
 {
     public function __construct(
         private readonly BewellConnectionService $connection,
+        private readonly SportEvaluationInstallStatsService $installStatsService,
     ) {}
 
     public function index(Request $request): View
@@ -41,6 +43,45 @@ class SportEvaluationDashboardController extends Controller
             $this->weeklyActivityData(),
             $this->notInstalledFilterData(),
         ));
+    }
+
+    /**
+     * Detail statistik install per dimensi (site / perusahaan / departemen / jabatan).
+     */
+    public function installStats(Request $request): JsonResponse
+    {
+        $dimension = is_string($request->input('dimension'))
+            ? $request->input('dimension')
+            : 'site';
+
+        try {
+            return response()->json($this->installStatsService->getStats($dimension));
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'available' => false,
+                'dimension' => 'site',
+                'dimension_label' => 'Site',
+                'footnote' => 'Berdasarkan karyawan status AKTIF (exclude VISITOR). Angka dapat berbeda dari total di kartu KPI.',
+                'message' => 'Gagal memuat statistik install.',
+                'summary' => [
+                    'total' => 0,
+                    'installed' => 0,
+                    'not_installed' => 0,
+                    'adoption_pct' => 0,
+                    'kpi_card_total' => 0,
+                    'groups' => 0,
+                ],
+                'overview' => [],
+                'rows' => [],
+                'chart' => [
+                    'categories' => [],
+                    'installed' => [],
+                    'not_installed' => [],
+                ],
+            ]);
+        }
     }
 
     /**
@@ -118,6 +159,7 @@ class SportEvaluationDashboardController extends Controller
                     'company' => (string) (trim((string) ($row->nama_perusahaan ?? '')) !== '' ? $row->nama_perusahaan : '-'),
                     'departement' => (string) (trim((string) ($row->departement ?? '')) !== '' ? $row->departement : '-'),
                     'divisi' => (string) (trim((string) ($row->divisi ?? '')) !== '' ? $row->divisi : '-'),
+                    'jabatan' => (string) (trim((string) ($row->jabatan_fungsional ?? '')) !== '' ? $row->jabatan_fungsional : '-'),
                     'install' => $isInstalled ? 'Sudah' : 'Belum',
                     'install_class' => $isInstalled
                         ? 'bg-success-focus text-success-main'

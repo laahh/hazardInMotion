@@ -144,6 +144,103 @@
     width: 10% !important;
     text-align: center;
   }
+
+  #install-stats-loading.is-visible {
+    display: flex !important;
+  }
+
+  .install-stats-kpi-card {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .install-stats-dim-card {
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    border: 1px solid var(--input-form-light, #e5e7eb);
+    background: var(--white, #fff);
+  }
+
+  .install-stats-dim-card:hover {
+    border-color: #487fff;
+    box-shadow: 0 6px 18px rgba(72, 127, 255, 0.08);
+  }
+
+  .install-stats-dim-card.is-active {
+    border-color: #487fff;
+    box-shadow: 0 0 0 1px #487fff;
+    background: rgba(72, 127, 255, 0.04);
+  }
+
+  .install-stats-dim-card .dim-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .install-stats-dim-card .dim-meta-item {
+    background: var(--neutral-50, #f8fafc);
+    border-radius: 8px;
+    padding: 0.5rem 0.625rem;
+  }
+
+  .install-stats-table-wrap {
+    height: 300px;
+    min-height: 300px;
+    max-height: 300px;
+    overflow: auto;
+  }
+
+  #install-stats-bar {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  #install-stats-detail-row > [class*='col-'] {
+    min-height: 0;
+  }
+
+  #install-stats-table thead th,
+  #install-stats-table tfoot td {
+    position: sticky;
+    background: var(--white, #fff);
+    z-index: 1;
+  }
+
+  #install-stats-table thead th {
+    top: 0;
+  }
+
+  #install-stats-table tfoot td {
+    bottom: 0;
+    border-top: 1px solid var(--input-form-light, #e5e7eb);
+  }
+
+  #install-stats-table tbody tr.install-stats-row {
+    cursor: pointer;
+  }
+
+  #install-stats-table tbody tr.install-stats-row:hover {
+    background: rgba(72, 127, 255, 0.06);
+  }
+
+  #install-stats-table tbody tr.install-stats-row.is-selected {
+    background: rgba(72, 127, 255, 0.1);
+  }
+
+  #installPeopleTable_wrapper .dt-layout-row,
+  .dt-container:has(#installPeopleTable) .dt-layout-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+  }
+
+  #installPeopleTable th,
+  #installPeopleTable td {
+    vertical-align: middle;
+  }
 </style>
 @endsection
 
@@ -709,6 +806,840 @@
     updateExportHref();
 })();
 </script>
+<script>
+(function () {
+    var modalEl = document.getElementById('installStatsModal');
+    if (!modalEl) {
+        return;
+    }
+
+    var dataUrl = @json(route('evaluasi-well.install-stats'));
+    var peopleDataUrl = @json(route('evaluasi-well.not-installed.data'));
+    var employeeShowBase = @json(url('/evaluasi-well/employees'));
+    var cache = {};
+    var currentDimension = 'site';
+    var currentPeopleValue = '';
+    var barChart = null;
+    var overviewRendered = false;
+    var peopleTable = null;
+    var latestRows = [];
+
+    var loadingEl = document.getElementById('install-stats-loading');
+    var unavailableEl = document.getElementById('install-stats-unavailable');
+    var contentEl = document.getElementById('install-stats-content');
+    var messageEl = document.getElementById('install-stats-message');
+    var footnoteEl = document.getElementById('install-stats-footnote');
+    var overviewEl = document.getElementById('install-stats-overview');
+    var tableBody = document.querySelector('#install-stats-table tbody');
+    var tableEmptyEl = document.getElementById('install-stats-table-empty');
+    var chartEmptyEl = document.getElementById('install-stats-chart-empty');
+    var chartEl = document.getElementById('install-stats-bar');
+    var tableWrapEl = document.querySelector('.install-stats-table-wrap');
+    var tableDimLabelEl = document.getElementById('install-stats-table-dim-label');
+    var detailTitleEl = document.getElementById('install-stats-detail-title');
+    var detailSubtitleEl = document.getElementById('install-stats-detail-subtitle');
+    var groupsHintEl = document.getElementById('install-stats-kpi-groups-hint');
+    var openStatusBtn = document.getElementById('install-stats-open-status-btn');
+    var cardEl = document.getElementById('total-user-install-card');
+    var peopleValueEl = document.getElementById('install-people-value');
+    var peopleInstallEl = document.getElementById('install-people-install');
+    var peopleApplyBtn = document.getElementById('install-people-apply-btn');
+    var peopleResetBtn = document.getElementById('install-people-reset-btn');
+    var peopleTitleEl = document.getElementById('install-people-title');
+    var peopleSubtitleEl = document.getElementById('install-people-subtitle');
+    var peopleValueLabelEl = document.getElementById('install-people-value-label');
+    var peopleTotalBadge = document.getElementById('install-people-total-badge');
+    var peopleTableEl = document.getElementById('installPeopleTable');
+
+    var filterMap = {
+        site: 'not-installed-site',
+        company: 'not-installed-company',
+        departement: 'not-installed-departement',
+        jabatan: 'not-installed-jabatan-fungsional'
+    };
+
+    var dimensionUnit = {
+        site: 'site',
+        company: 'perusahaan',
+        departement: 'departemen',
+        jabatan: 'jabatan'
+    };
+
+    var dimensionLabels = {
+        site: 'Site',
+        company: 'Perusahaan',
+        departement: 'Departemen',
+        jabatan: 'Jabatan'
+    };
+
+    function formatNumber(value) {
+        return Number(value || 0).toLocaleString('id-ID');
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function badgeHtml(label, className) {
+        return '<span class="' + className + ' px-12 py-4 rounded-pill fw-medium text-sm">'
+            + escapeHtml(label)
+            + '</span>';
+    }
+
+    function setLoading(isLoading) {
+        if (!loadingEl) {
+            return;
+        }
+        loadingEl.classList.toggle('d-none', !isLoading);
+        loadingEl.classList.toggle('is-visible', isLoading);
+    }
+
+    function adoptionBadgeClass(pct) {
+        if (pct >= 50) {
+            return { cls: ['bg-success-focus', 'text-success-main'], text: 'Baik' };
+        }
+        if (pct >= 25) {
+            return { cls: ['bg-warning-focus', 'text-warning-main'], text: 'Perlu dorongan' };
+        }
+        return { cls: ['bg-danger-focus', 'text-danger-main'], text: 'Rendah' };
+    }
+
+    function renderSummary(payload) {
+        var summary = payload.summary || {};
+        var installedEl = document.getElementById('install-stats-kpi-installed');
+        var notInstalledEl = document.getElementById('install-stats-kpi-not-installed');
+        var totalEl = document.getElementById('install-stats-kpi-total');
+        var adoptionEl = document.getElementById('install-stats-kpi-adoption');
+        var adoptionBadge = document.getElementById('install-stats-kpi-adoption-badge');
+        var kpiCardEl = document.getElementById('install-stats-kpi-card-total');
+
+        if (installedEl) installedEl.textContent = formatNumber(summary.installed);
+        if (notInstalledEl) notInstalledEl.textContent = formatNumber(summary.not_installed);
+        if (totalEl) totalEl.textContent = formatNumber(summary.total);
+        if (adoptionEl) adoptionEl.textContent = (summary.adoption_pct || 0) + '%';
+        if (kpiCardEl) kpiCardEl.textContent = formatNumber(summary.kpi_card_total);
+
+        if (adoptionBadge) {
+            var badge = adoptionBadgeClass(Number(summary.adoption_pct || 0));
+            adoptionBadge.className = 'text-xs fw-medium px-8 py-2 rounded-pill';
+            badge.cls.forEach(function (c) { adoptionBadge.classList.add(c); });
+            adoptionBadge.textContent = badge.text;
+        }
+
+        if (footnoteEl && payload.footnote) {
+            footnoteEl.textContent = payload.footnote;
+        }
+        if (tableDimLabelEl) {
+            tableDimLabelEl.textContent = payload.dimension_label || 'Site';
+        }
+        if (detailTitleEl) {
+            detailTitleEl.textContent = payload.dimension_label || 'Site';
+        }
+        if (detailSubtitleEl) {
+            detailSubtitleEl.textContent = formatNumber(summary.groups || 0) + ' ' +
+                (dimensionUnit[payload.dimension] || 'grup') +
+                ' · ' + formatNumber(summary.installed) + ' sudah install · ' +
+                formatNumber(summary.not_installed) + ' belum';
+        }
+        if (groupsHintEl) {
+            groupsHintEl.textContent = formatNumber(summary.groups || 0) + ' ' +
+                (dimensionUnit[payload.dimension] || 'grup') + ' pada dimensi aktif';
+        }
+
+        var tfootTotal = document.getElementById('install-stats-tfoot-total');
+        var tfootInstalled = document.getElementById('install-stats-tfoot-installed');
+        var tfootNotInstalled = document.getElementById('install-stats-tfoot-not-installed');
+        var tfootPct = document.getElementById('install-stats-tfoot-pct');
+        if (tfootTotal) tfootTotal.textContent = formatNumber(summary.total);
+        if (tfootInstalled) tfootInstalled.textContent = formatNumber(summary.installed);
+        if (tfootNotInstalled) tfootNotInstalled.textContent = formatNumber(summary.not_installed);
+        if (tfootPct) tfootPct.textContent = (summary.adoption_pct || 0) + '%';
+    }
+
+    function renderOverview(overview, activeDimension) {
+        if (!overviewEl) {
+            return;
+        }
+
+        overviewEl.innerHTML = '';
+        (overview || []).forEach(function (item) {
+            var col = document.createElement('div');
+            col.className = 'col-12 col-md-6 col-xl-3';
+
+            var card = document.createElement('div');
+            card.className = 'install-stats-dim-card radius-8 p-16 h-100' +
+                (item.dimension === activeDimension ? ' is-active' : '');
+            card.setAttribute('role', 'button');
+            card.setAttribute('tabindex', '0');
+            card.setAttribute('data-dimension', item.dimension);
+
+            var unit = dimensionUnit[item.dimension] || 'grup';
+            var badge = adoptionBadgeClass(Number(item.adoption_pct || 0));
+
+            card.innerHTML =
+                '<div class="d-flex align-items-start justify-content-between gap-2 mb-12">' +
+                    '<div class="d-flex align-items-center gap-2 min-w-0">' +
+                        '<span class="w-40-px h-40-px bg-primary-50 text-primary-600 radius-8 d-inline-flex align-items-center justify-content-center flex-shrink-0">' +
+                            '<iconify-icon icon="' + (item.icon || 'solar:chart-bold') + '" class="text-xl"></iconify-icon>' +
+                        '</span>' +
+                        '<div class="min-w-0">' +
+                            '<h6 class="mb-0 fw-semibold text-md text-truncate"></h6>' +
+                            '<span class="text-xs text-secondary-light"></span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<span class="text-xs fw-medium px-8 py-2 rounded-pill flex-shrink-0 ' + badge.cls.join(' ') + '"></span>' +
+                '</div>' +
+                '<div class="dim-meta mb-12">' +
+                    '<div class="dim-meta-item">' +
+                        '<div class="text-xs text-secondary-light mb-2">Total</div>' +
+                        '<div class="fw-semibold text-sm meta-total">0</div>' +
+                    '</div>' +
+                    '<div class="dim-meta-item">' +
+                        '<div class="text-xs text-secondary-light mb-2">Sudah</div>' +
+                        '<div class="fw-semibold text-sm text-primary-600 meta-installed">0</div>' +
+                    '</div>' +
+                    '<div class="dim-meta-item">' +
+                        '<div class="text-xs text-secondary-light mb-2">Belum</div>' +
+                        '<div class="fw-semibold text-sm text-warning-main meta-not-installed">0</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="d-flex align-items-center justify-content-between gap-2">' +
+                    '<span class="text-xs text-secondary-light text-truncate meta-top" title=""></span>' +
+                    '<span class="fw-bold text-md meta-pct flex-shrink-0">0%</span>' +
+                '</div>';
+
+            card.querySelector('h6').textContent = item.label || item.dimension;
+            card.querySelector('.text-xs.text-secondary-light').textContent =
+                formatNumber(item.groups) + ' ' + unit;
+            card.querySelector('.rounded-pill').textContent = badge.text;
+            card.querySelector('.meta-total').textContent = formatNumber(item.total);
+            card.querySelector('.meta-installed').textContent = formatNumber(item.installed);
+            card.querySelector('.meta-not-installed').textContent = formatNumber(item.not_installed);
+            card.querySelector('.meta-pct').textContent = (item.adoption_pct || 0) + '%';
+
+            var topText = 'Teratas: ' + (item.top_name || '-') +
+                ' (' + formatNumber(item.top_installed) + ')';
+            var topEl = card.querySelector('.meta-top');
+            topEl.textContent = topText;
+            topEl.setAttribute('title', topText);
+
+            card.addEventListener('click', function () {
+                loadDimension(item.dimension);
+            });
+            card.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    loadDimension(item.dimension);
+                }
+            });
+
+            col.appendChild(card);
+            overviewEl.appendChild(col);
+        });
+
+        overviewRendered = true;
+    }
+
+    function highlightOverview(dimension) {
+        if (!overviewEl) {
+            return;
+        }
+        overviewEl.querySelectorAll('.install-stats-dim-card').forEach(function (card) {
+            card.classList.toggle('is-active', card.getAttribute('data-dimension') === dimension);
+        });
+    }
+
+    function applyDetailHeight(height) {
+        var px = Math.max(300, Math.ceil(Number(height) || 300));
+        if (chartEl) {
+            chartEl.style.height = px + 'px';
+            chartEl.style.minHeight = px + 'px';
+            chartEl.style.maxHeight = px + 'px';
+        }
+        if (tableWrapEl) {
+            tableWrapEl.style.height = px + 'px';
+            tableWrapEl.style.minHeight = px + 'px';
+            tableWrapEl.style.maxHeight = px + 'px';
+        }
+    }
+
+    function renderChart(payload) {
+        if (!chartEl || typeof ApexCharts === 'undefined') {
+            return;
+        }
+
+        var chart = payload.chart || {};
+        var categories = chart.categories || [];
+        var installed = chart.installed || [];
+        var notInstalled = chart.not_installed || [];
+        var hasData = categories.length > 0;
+
+        if (chartEmptyEl) {
+            chartEmptyEl.classList.toggle('d-none', hasData);
+        }
+        chartEl.classList.toggle('d-none', !hasData);
+
+        if (barChart) {
+            barChart.destroy();
+            barChart = null;
+        }
+
+        if (!hasData) {
+            applyDetailHeight(300);
+            return;
+        }
+
+        // Tinggi chart = tinggi tabel (kotak merah).
+        var height = Math.max(300, Math.min(520, categories.length * 34));
+        applyDetailHeight(height);
+
+        barChart = new ApexCharts(chartEl, {
+            series: [
+                { name: 'Sudah Install', data: installed },
+                { name: 'Belum Install', data: notInstalled }
+            ],
+            chart: {
+                type: 'bar',
+                height: height,
+                width: '100%',
+                stacked: true,
+                toolbar: { show: false },
+                parentHeightOffset: 0,
+                events: {
+                    dataPointSelection: function (event, chartContext, config) {
+                        var cats = (payload.chart && payload.chart.categories) ? payload.chart.categories : [];
+                        var name = cats[config.dataPointIndex] || '';
+                        if (name) {
+                            applyDimensionFilter(currentDimension, name);
+                        }
+                    }
+                }
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: true,
+                    borderRadius: 4,
+                    barHeight: '64%'
+                }
+            },
+            colors: ['#487FFF', '#FF9F29'],
+            dataLabels: { enabled: false },
+            grid: {
+                show: true,
+                borderColor: '#D1D5DB',
+                strokeDashArray: 4,
+                position: 'back',
+                padding: { left: 8, right: 8 }
+            },
+            xaxis: {
+                categories: categories,
+                labels: {
+                    formatter: function (value) {
+                        var n = Number(value);
+                        if (n >= 1000) {
+                            return (n / 1000).toFixed(0) + 'k';
+                        }
+                        return value;
+                    }
+                }
+            },
+            yaxis: {
+                labels: {
+                    style: { fontSize: '11px' },
+                    maxWidth: 120
+                }
+            },
+            legend: {
+                position: 'top',
+                horizontalAlign: 'left',
+                fontSize: '12px'
+            },
+            tooltip: {
+                y: {
+                    formatter: function (value) {
+                        return formatNumber(value) + ' orang';
+                    }
+                }
+            }
+        });
+        barChart.render().then(function () {
+            applyDetailHeight(height);
+        });
+    }
+
+    function buildPeopleFilters() {
+        var value = peopleValueEl ? peopleValueEl.value : '';
+        if (value === 'Tidak diketahui') {
+            value = '';
+        }
+
+        return {
+            site: currentDimension === 'site' ? value : '',
+            company: currentDimension === 'company' ? value : '',
+            division: '',
+            departement: currentDimension === 'departement' ? value : '',
+            jabatan_fungsional: currentDimension === 'jabatan' ? value : '',
+            install: peopleInstallEl ? peopleInstallEl.value : '',
+            user_aktif: ''
+        };
+    }
+
+    function populatePeopleValueOptions(rows, selectedValue) {
+        if (!peopleValueEl) {
+            return;
+        }
+
+        var label = dimensionLabels[currentDimension] || 'Site';
+        if (peopleValueLabelEl) {
+            peopleValueLabelEl.textContent = label;
+        }
+        if (peopleTitleEl) {
+            peopleTitleEl.textContent = label;
+        }
+
+        var previous = selectedValue !== undefined ? selectedValue : peopleValueEl.value;
+        peopleValueEl.innerHTML = '';
+
+        var allOpt = document.createElement('option');
+        allOpt.value = '';
+        allOpt.textContent = 'Semua ' + label;
+        peopleValueEl.appendChild(allOpt);
+
+        (rows || []).forEach(function (row) {
+            if (!row.name || row.name === 'Lainnya') {
+                return;
+            }
+            var opt = document.createElement('option');
+            opt.value = row.name;
+            opt.textContent = row.name + ' (' + formatNumber(row.installed) + '/' + formatNumber(row.total) + ')';
+            peopleValueEl.appendChild(opt);
+        });
+
+        if (previous && Array.prototype.some.call(peopleValueEl.options, function (o) { return o.value === previous; })) {
+            peopleValueEl.value = previous;
+        } else {
+            peopleValueEl.value = '';
+        }
+
+        currentPeopleValue = peopleValueEl.value;
+        updatePeopleSubtitle();
+    }
+
+    function updatePeopleSubtitle() {
+        if (!peopleSubtitleEl) {
+            return;
+        }
+        var label = dimensionLabels[currentDimension] || 'Site';
+        var value = peopleValueEl ? peopleValueEl.value : '';
+        var install = peopleInstallEl ? peopleInstallEl.value : '';
+        var parts = [];
+        parts.push(value ? (label + ': ' + value) : ('Semua ' + label.toLowerCase()));
+        if (install === 'sudah') {
+            parts.push('sudah install');
+        } else if (install === 'belum') {
+            parts.push('belum install');
+        } else {
+            parts.push('semua status install');
+        }
+        peopleSubtitleEl.textContent = parts.join(' · ');
+    }
+
+    function highlightSummaryRow(name) {
+        if (!tableBody) {
+            return;
+        }
+        tableBody.querySelectorAll('tr.install-stats-row').forEach(function (tr) {
+            tr.classList.toggle('is-selected', !!name && tr.getAttribute('data-name') === name);
+        });
+    }
+
+    function ensurePeopleTable() {
+        if (peopleTable || !peopleTableEl || typeof DataTable === 'undefined') {
+            return peopleTable;
+        }
+
+        peopleTable = new DataTable(peopleTableEl, {
+            processing: true,
+            serverSide: true,
+            searching: true,
+            ordering: true,
+            pageLength: 10,
+            lengthMenu: [10, 25, 50],
+            order: [[0, 'asc']],
+            autoWidth: false,
+            layout: {
+                topStart: 'pageLength',
+                topEnd: 'search',
+                bottomStart: 'info',
+                bottomEnd: 'paging'
+            },
+            ajax: {
+                url: peopleDataUrl,
+                data: function (d) {
+                    var filters = buildPeopleFilters();
+                    d.site = filters.site;
+                    d.company = filters.company;
+                    d.division = filters.division;
+                    d.departement = filters.departement;
+                    d.jabatan_fungsional = filters.jabatan_fungsional;
+                    d.install = filters.install;
+                    d.user_aktif = filters.user_aktif;
+                }
+            },
+            columns: [
+                {
+                    data: 'nama',
+                    render: function (data, type, row) {
+                        var name = escapeHtml(data || '-');
+                        var sid = escapeHtml(row.kode_sid || '-');
+                        var href = employeeShowBase + '/' + encodeURIComponent(row.id);
+                        return '<div class="fw-medium"><a href="' + href + '" class="text-primary-light hover-text-primary">' + name + '</a></div>'
+                            + '<div class="text-xs text-secondary-light">' + sid + '</div>';
+                    }
+                },
+                { data: 'site' },
+                { data: 'company' },
+                { data: 'departement' },
+                { data: 'jabatan', defaultContent: '-' },
+                {
+                    data: 'install',
+                    orderable: true,
+                    render: function (data, type, row) {
+                        return badgeHtml(data, row.install_class || 'bg-neutral-200 text-secondary-light');
+                    }
+                }
+            ],
+            language: {
+                processing: 'Memuat…',
+                search: 'Cari:',
+                lengthMenu: 'Tampil _MENU_',
+                info: 'Menampilkan _START_–_END_ dari _TOTAL_',
+                infoEmpty: 'Tidak ada data',
+                zeroRecords: 'Tidak ada karyawan ditemukan',
+                paginate: {
+                    previous: '‹',
+                    next: '›'
+                }
+            }
+        });
+
+        peopleTable.on('draw', function () {
+            if (peopleTotalBadge) {
+                peopleTotalBadge.textContent = formatNumber(peopleTable.page.info().recordsDisplay || 0);
+            }
+        });
+
+        return peopleTable;
+    }
+
+    function reloadPeopleTable() {
+        updatePeopleSubtitle();
+        highlightSummaryRow(peopleValueEl ? peopleValueEl.value : '');
+        var table = ensurePeopleTable();
+        if (table) {
+            table.ajax.reload();
+        }
+    }
+
+    function filterPeopleByDimensionValue(name) {
+        if (!peopleValueEl) {
+            return;
+        }
+        if (!name || name === 'Lainnya') {
+            peopleValueEl.value = '';
+        } else if (Array.prototype.some.call(peopleValueEl.options, function (o) { return o.value === name; })) {
+            peopleValueEl.value = name;
+        } else {
+            peopleValueEl.value = '';
+        }
+        currentPeopleValue = peopleValueEl.value;
+        reloadPeopleTable();
+
+        var section = document.getElementById('install-people-section');
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    function applyDimensionFilter(dimension, name) {
+        // Filter daftar karyawan di dalam modal (bukan tutup modal).
+        if (dimension !== currentDimension) {
+            loadDimension(dimension, name);
+            return;
+        }
+        filterPeopleByDimensionValue(name);
+    }
+
+    function scrollToStatusInstall() {
+        var section = document.getElementById('notInstalledTable');
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    function syncPeopleFilterToDashboard() {
+        var siteEl = document.getElementById('not-installed-site');
+        var companyEl = document.getElementById('not-installed-company');
+        var divisionEl = document.getElementById('not-installed-division');
+        var departementEl = document.getElementById('not-installed-departement');
+        var jabatanEl = document.getElementById('not-installed-jabatan-fungsional');
+        var installEl = document.getElementById('not-installed-install');
+        var userAktifEl = document.getElementById('not-installed-user-aktif');
+        var applyBtn = document.getElementById('not-installed-apply-btn');
+
+        if (siteEl) siteEl.value = '';
+        if (companyEl) companyEl.value = '';
+        if (divisionEl) divisionEl.value = '';
+        if (departementEl) departementEl.value = '';
+        if (jabatanEl) jabatanEl.value = '';
+        if (userAktifEl) userAktifEl.value = '';
+
+        var value = peopleValueEl ? peopleValueEl.value : '';
+        if (value && value !== 'Tidak diketahui') {
+            var targetId = filterMap[currentDimension];
+            var targetEl = targetId ? document.getElementById(targetId) : null;
+            if (targetEl) {
+                targetEl.value = value;
+            }
+        }
+
+        if (installEl) {
+            installEl.value = peopleInstallEl ? peopleInstallEl.value : '';
+        }
+
+        if (applyBtn) {
+            applyBtn.click();
+        }
+    }
+
+    function renderTable(payload) {
+        var rows = payload.rows || [];
+        latestRows = rows;
+        if (!tableBody) {
+            return;
+        }
+
+        tableBody.innerHTML = '';
+        if (tableEmptyEl) {
+            tableEmptyEl.classList.toggle('d-none', rows.length > 0);
+        }
+
+        rows.forEach(function (row) {
+            var tr = document.createElement('tr');
+            tr.className = 'install-stats-row';
+            tr.setAttribute('data-name', row.name);
+            tr.setAttribute('role', 'button');
+            tr.setAttribute('tabindex', '0');
+            tr.title = 'Klik untuk filter daftar karyawan: ' + row.name;
+
+            tr.innerHTML =
+                '<td><div class="text-truncate fw-medium" style="max-width: 160px;"></div>' +
+                    '<div class="progress progress-sm rounded-pill mt-6" style="height: 4px;">' +
+                        '<div class="progress-bar rounded-pill"></div>' +
+                    '</div>' +
+                '</td>' +
+                '<td class="text-end"></td>' +
+                '<td class="text-end text-primary-600 fw-medium"></td>' +
+                '<td class="text-end text-warning-main"></td>' +
+                '<td class="text-end fw-semibold"></td>';
+
+            var nameEl = tr.querySelector('.text-truncate');
+            nameEl.textContent = row.name;
+            nameEl.setAttribute('title', row.name);
+
+            var bar = tr.querySelector('.progress-bar');
+            bar.classList.add(row.bar_class || 'bg-primary-600');
+            bar.style.width = Math.min(100, Number(row.pct || 0)) + '%';
+
+            var cells = tr.querySelectorAll('td');
+            cells[1].textContent = formatNumber(row.total);
+            cells[2].textContent = formatNumber(row.installed);
+            cells[3].textContent = formatNumber(row.not_installed);
+            cells[4].textContent = (row.pct || 0) + '%';
+
+            tr.addEventListener('click', function () {
+                applyDimensionFilter(payload.dimension, row.name);
+            });
+            tr.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    applyDimensionFilter(payload.dimension, row.name);
+                }
+            });
+
+            tableBody.appendChild(tr);
+        });
+
+        highlightSummaryRow(currentPeopleValue);
+    }
+
+    function renderPayload(payload) {
+        var available = !!payload.available;
+        if (unavailableEl) {
+            unavailableEl.classList.toggle('d-none', available);
+        }
+        if (contentEl) {
+            contentEl.classList.toggle('d-none', !available && !(payload.rows && payload.rows.length));
+        }
+        if (!available) {
+            if (messageEl) {
+                messageEl.textContent = payload.message || 'Koneksi BeWell belum tersedia.';
+            }
+            if (contentEl && (!payload.rows || !payload.rows.length)) {
+                contentEl.classList.add('d-none');
+                return;
+            }
+        } else if (contentEl) {
+            contentEl.classList.remove('d-none');
+        }
+
+        if (payload.overview && payload.overview.length) {
+            if (!overviewRendered) {
+                renderOverview(payload.overview, payload.dimension);
+            } else {
+                highlightOverview(payload.dimension);
+            }
+        }
+
+        renderSummary(payload);
+        renderChart(payload);
+        renderTable(payload);
+        populatePeopleValueOptions(payload.rows || [], currentPeopleValue);
+        ensurePeopleTable();
+        reloadPeopleTable();
+    }
+
+    function loadDimension(dimension, preserveValue) {
+        currentDimension = dimension;
+        if (preserveValue !== undefined) {
+            currentPeopleValue = preserveValue === 'Lainnya' ? '' : (preserveValue || '');
+        } else {
+            currentPeopleValue = '';
+            if (peopleValueEl) {
+                peopleValueEl.value = '';
+            }
+        }
+        highlightOverview(dimension);
+
+        if (cache[dimension]) {
+            renderPayload(cache[dimension]);
+            if (preserveValue) {
+                filterPeopleByDimensionValue(preserveValue);
+            }
+            return;
+        }
+
+        setLoading(true);
+        fetch(dataUrl + '?dimension=' + encodeURIComponent(dimension), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.json();
+            })
+            .then(function (payload) {
+                cache[dimension] = payload;
+                if (payload.overview && payload.overview.length) {
+                    overviewRendered = false;
+                }
+                renderPayload(payload);
+                if (preserveValue) {
+                    filterPeopleByDimensionValue(preserveValue);
+                }
+            })
+            .catch(function () {
+                renderPayload({
+                    available: false,
+                    dimension: dimension,
+                    dimension_label: 'Site',
+                    footnote: 'Berdasarkan karyawan status AKTIF (exclude VISITOR). Angka dapat berbeda dari total di kartu KPI.',
+                    message: 'Gagal memuat statistik install.',
+                    summary: { total: 0, installed: 0, not_installed: 0, adoption_pct: 0, kpi_card_total: 0, groups: 0 },
+                    overview: [],
+                    rows: [],
+                    chart: { categories: [], installed: [], not_installed: [] }
+                });
+            })
+            .finally(function () {
+                setLoading(false);
+            });
+    }
+
+    modalEl.addEventListener('shown.bs.modal', function () {
+        overviewRendered = false;
+        currentPeopleValue = '';
+        if (peopleInstallEl) {
+            peopleInstallEl.value = '';
+        }
+        loadDimension(currentDimension || 'site');
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', function () {
+        if (barChart) {
+            barChart.destroy();
+            barChart = null;
+        }
+    });
+
+    if (peopleApplyBtn) {
+        peopleApplyBtn.addEventListener('click', function () {
+            currentPeopleValue = peopleValueEl ? peopleValueEl.value : '';
+            reloadPeopleTable();
+        });
+    }
+
+    if (peopleResetBtn) {
+        peopleResetBtn.addEventListener('click', function () {
+            if (peopleValueEl) peopleValueEl.value = '';
+            if (peopleInstallEl) peopleInstallEl.value = '';
+            currentPeopleValue = '';
+            reloadPeopleTable();
+        });
+    }
+
+    if (peopleValueEl) {
+        peopleValueEl.addEventListener('change', function () {
+            currentPeopleValue = peopleValueEl.value;
+            reloadPeopleTable();
+        });
+    }
+
+    if (peopleInstallEl) {
+        peopleInstallEl.addEventListener('change', function () {
+            reloadPeopleTable();
+        });
+    }
+
+    if (openStatusBtn) {
+        openStatusBtn.addEventListener('click', function () {
+            syncPeopleFilterToDashboard();
+            var modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+            window.setTimeout(scrollToStatusInstall, 250);
+        });
+    }
+
+    if (cardEl) {
+        cardEl.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+            }
+        });
+    }
+})();
+</script>
 @endsection
 
 @section('content')
@@ -731,7 +1662,16 @@
         <div class="row gy-4">
           
           <div class="col-xxl-4 col-sm-6">
-            <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-1">
+            <div
+              class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-1 cursor-pointer"
+              role="button"
+              tabindex="0"
+              data-bs-toggle="modal"
+              data-bs-target="#installStatsModal"
+              aria-label="Lihat detail statistik install"
+              title="Lihat detail statistik install"
+              id="total-user-install-card"
+            >
               <div class="card-body p-0">
                 <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
                   
@@ -1243,4 +2183,6 @@
       </div>
       <!-- Belum Install End -->
     </div>
+
+@include('evaluasi-well.partials._install-stats-modal')
 @endsection

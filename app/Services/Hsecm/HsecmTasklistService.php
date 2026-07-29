@@ -131,6 +131,41 @@ class HsecmTasklistService
     }
 
     /**
+     * Cari tasklist by site + perusahaan (opsional batch_slot; default latest).
+     */
+    public function findByScope(string $site, string $perusahaan, ?string $batchSlot = null): ?HsecmTasklist
+    {
+        $perusahaan = trim($perusahaan);
+        if ($perusahaan === '') {
+            return null;
+        }
+
+        $query = HsecmTasklist::query()
+            ->where('perusahaan', $perusahaan);
+
+        $site = trim($site);
+        if ($site === '') {
+            $query->where(function ($q): void {
+                $q->whereNull('site')->orWhere('site', '');
+            });
+        } else {
+            $query->where('site', $site);
+        }
+
+        if ($batchSlot !== null && trim($batchSlot) !== '') {
+            $query->where('batch_slot', Carbon::parse($batchSlot)->format('Y-m-d H:i:s'));
+        }
+
+        /** @var HsecmTasklist|null $tasklist */
+        $tasklist = $query
+            ->orderByDesc('batch_slot')
+            ->orderByDesc('id')
+            ->first();
+
+        return $tasklist;
+    }
+
+    /**
      * Lengkapi tiap item dengan jumlah kemunculan di batch_slot sebelum batch tasklist.
      * Slot yang tidak punya item tidak dihitung.
      *
@@ -545,6 +580,21 @@ class HsecmTasklistService
         $base = rtrim((string) config('hsecm.public_url', 'https://besentry-dev.beraucoal.co.id'), '/');
 
         return $base.'/hsecm/tasklist/'.$tasklist->token;
+    }
+
+    /**
+     * URL publik yang resolve ke tasklist berdasarkan site + perusahaan.
+     */
+    public function openUrl(?string $site, string $perusahaan, ?string $batchSlot = null): string
+    {
+        $base = rtrim((string) config('hsecm.public_url', 'https://besentry-dev.beraucoal.co.id'), '/');
+        $query = array_filter([
+            'site' => $site !== null && trim($site) !== '' ? trim($site) : null,
+            'perusahaan' => trim($perusahaan),
+            'batch_slot' => $batchSlot !== null && trim($batchSlot) !== '' ? trim($batchSlot) : null,
+        ], static fn ($v): bool => $v !== null && $v !== '');
+
+        return $base.'/hsecm/tasklist/open?'.http_build_query($query);
     }
 
     /**
