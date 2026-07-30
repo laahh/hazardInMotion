@@ -693,7 +693,7 @@ class HsecmDashboardService
                 'site' => $site !== '' ? $site : '—',
                 'jabatan' => (string) ($row['jabatan_struktural_pelapor_all_karyawan'] ?? '—'),
                 'perusahaan' => (string) ($row['perusahaan_pelapor_all_karyawan'] ?? '—'),
-                'gap_count' => (int) ($row['gap_count'] ?? 0),
+                'gap_count' => $this->toPerulanganDisplayCount((int) ($row['gap_count'] ?? 0)),
                 'sap' => $row['SAP_per_SID'] ?? '—',
             ];
         }
@@ -804,7 +804,7 @@ class HsecmDashboardService
                 'lokasi' => $item['lokasi'],
                 'detil' => $item['detil'],
                 'days' => $dayMarks,
-                'gap_count' => $item['gap_count'],
+                'gap_count' => $this->toPerulanganDisplayCount((int) ($item['gap_count'] ?? 0)),
                 'x_count' => $item['x_count'],
             ];
 
@@ -923,7 +923,7 @@ class HsecmDashboardService
             $tableRows[] = [
                 'rank' => $index + 1,
                 'cells' => $cells,
-                'gap_count' => (int) ($row['gap_count'] ?? 0),
+                'gap_count' => $this->toPerulanganDisplayCount((int) ($row['gap_count'] ?? 0)),
             ];
         }
 
@@ -1101,6 +1101,7 @@ class HsecmDashboardService
 
         $ikkRows = $this->filteredRows('ikk-work-permit', $filters);
         $avgIkk = round($this->avgPercent($ikkRows, 'Compliance_IKK'), 1);
+        $ikkNonCompliantRows = $this->filterIkkBelowFullCompliance($ikkRows);
         $sumberRows = $this->filteredRows('sumber-rfid', $filters);
         $coverageRows = $this->filteredRows('coverage-cctv', $filters);
         $tbcRows = $this->filteredRows('tbc-blindspot', $filters);
@@ -1163,6 +1164,7 @@ class HsecmDashboardService
                     rowLimit: $rowLimit,
                     action: 'Coaching oleh atasan langsung',
                     tone: 'warning',
+                    includeStreak: true,
                 ),
                 $this->makeEmailDetailSection(
                     key: 'coverage-area',
@@ -1175,6 +1177,7 @@ class HsecmDashboardService
                     rowLimit: $rowLimit,
                     action: 'Jika detail lokasi tidak aktif dinonaktifkan dan wajib pemenuhan SAP di shift berikutnya',
                     tone: 'danger',
+                    includeStreak: true,
                 ),
                 $this->makeEmailDetailSection(
                     key: 'tbc-blindspot',
@@ -1187,6 +1190,7 @@ class HsecmDashboardService
                     rowLimit: $rowLimit,
                     action: 'Wajib dilaksanakan Peer Pressure',
                     tone: 'danger',
+                    includeStreak: true,
                 ),
                 $this->makeEmailDetailSection(
                     key: 'hazard-overdue',
@@ -1199,6 +1203,7 @@ class HsecmDashboardService
                     rowLimit: $rowLimit,
                     action: 'Coaching oleh atasan langsung',
                     tone: 'danger',
+                    includeStreak: true,
                 ),
                 $this->makeEmailDetailSection(
                     key: 'hazard-submitted',
@@ -1211,20 +1216,22 @@ class HsecmDashboardService
                     rowLimit: $rowLimit,
                     action: 'Tindaklanjut tasklist',
                     tone: 'warning',
+                    includeStreak: true,
                 ),
                 $this->makeEmailDetailSection(
                     key: 'ikk-compliance',
                     title: 'IKK Compliance',
                     value: $avgIkk.'%',
                     datasetKey: 'ikk-work-permit',
-                    rows: $ikkRows,
+                    rows: $ikkNonCompliantRows,
                     columnKeys: ['Start_Date_Convert', 'Code', 'Name_Ikk_Work_Permit', 'Company_Name_Ikk_Work_Permit', 'Ra_Site_Name', 'Compliance_IKK'],
                     filters: $filters,
                     percentColumns: ['Compliance_IKK'],
                     rowLimit: $rowLimit,
                     action: 'Suspend IKK & Coaching personil terkait',
                     tone: $avgIkk >= 80 ? 'success' : 'warning',
-                    needsAction: $ikkRows->isNotEmpty() && $avgIkk < 100,
+                    needsAction: $ikkNonCompliantRows->isNotEmpty(),
+                    includeStreak: true,
                 ),
                 $this->makeEmailDetailSection(
                     key: 'aggregator-fill',
@@ -1238,6 +1245,7 @@ class HsecmDashboardService
                     rowLimit: $rowLimit,
                     action: 'Menunjukkan evidence Operator tanpa Aggregator tidak mengoperasikan unit',
                     tone: 'warning',
+                    includeStreak: true,
                 ),
                 $this->makeEmailDetailSection(
                     key: 'ftw-merah',
@@ -1250,6 +1258,7 @@ class HsecmDashboardService
                     rowLimit: $rowLimit,
                     action: 'Stop Operasi & Mengarahkan Operator dengan Fit to Work Merah diistirahatkan & Menunjukkan Operator tidak mengoperasikan unit',
                     tone: 'danger',
+                    includeStreak: true,
                 ),
                 $this->makeEmailDetailSection(
                     key: 'hazard-rootcause',
@@ -1271,6 +1280,7 @@ class HsecmDashboardService
                     rowLimit: $rowLimit,
                     action: 'Laporkan / tindaklanjuti rootcause hazard terkait incident yang belum terlaporkan',
                     tone: 'danger',
+                    includeStreak: true,
                 ),
             ],
         ];
@@ -1312,7 +1322,7 @@ class HsecmDashboardService
     /**
      * @param  Collection<int, array<string, mixed>>  $rows
      * @param  list<string>  $columnKeys
-     * @param  array{site: string, perusahaan: string, week: string, year: string, date_from?: string, date_to?: string, q?: string}  $filters
+     * @param  array{site: string, perusahaan: string, week: string, year: string, date_from?: string, date_to?: string, q?: string, batch_slot?: string}  $filters
      * @param  list<string>  $percentColumns
      * @return array<string, mixed>
      */
@@ -1329,10 +1339,26 @@ class HsecmDashboardService
         string $action = '',
         string $tone = 'warning',
         ?bool $needsAction = null,
+        bool $includeStreak = false,
     ): array {
         $meta = self::DATASETS[$datasetKey];
+        $beforeCount = $rows->count();
+        $rows = $this->dedupeEmailRows($rows, $datasetKey);
+        $afterCount = $rows->count();
+        if (trim($value) === (string) $beforeCount) {
+            $value = (string) $afterCount;
+        }
+
         $allLabels = $meta['columns'];
         $columns = [];
+
+        if ($includeStreak) {
+            $columns[] = [
+                'key' => '_perulangan',
+                'label' => 'Perulangan',
+            ];
+        }
+
         foreach ($columnKeys as $columnKey) {
             if (! isset($allLabels[$columnKey])) {
                 continue;
@@ -1343,11 +1369,42 @@ class HsecmDashboardService
             ];
         }
 
+        if ($includeStreak && $rows->isNotEmpty()) {
+            $streakByKey = $this->resolveEmailRowStreaks($datasetKey, $meta, $rows, $filters);
+            $rows = $rows
+                ->map(function (array $row) use ($streakByKey, $datasetKey): array {
+                    $businessKey = $this->resolveBusinessKey($row, $datasetKey);
+                    $streak = 1;
+                    if ($businessKey !== '' && isset($streakByKey[$businessKey]) && (int) $streakByKey[$businessKey] > 0) {
+                        $streak = (int) $streakByKey[$businessKey];
+                    } else {
+                        $gapCount = (int) ($row['gap_count'] ?? 0);
+                        $streak = $gapCount > 0 ? $gapCount : 1;
+                    }
+                    $row['_streak'] = $streak;
+
+                    return $row;
+                })
+                ->sortByDesc(static fn (array $row): int => (int) ($row['_streak'] ?? 1))
+                ->values();
+        }
+
         $total = $rows->count();
         $limit = max(1, $rowLimit);
         $dateColumn = is_string($meta['date_column'] ?? null) ? (string) $meta['date_column'] : null;
-        $previewRows = $rows->take($limit)->map(function (array $row) use ($columnKeys, $percentColumns, $dateColumn): array {
+        $previewRows = $rows->take($limit)->map(function (array $row) use (
+            $columnKeys,
+            $percentColumns,
+            $dateColumn,
+            $includeStreak,
+        ): array {
             $cells = [];
+
+            if ($includeStreak) {
+                $streak = max(1, (int) ($row['_streak'] ?? 1));
+                $cells['_perulangan'] = $this->toPerulanganDisplayCount($streak).'×';
+            }
+
             foreach ($columnKeys as $columnKey) {
                 $raw = $row[$columnKey] ?? '';
                 if (in_array($columnKey, $percentColumns, true)) {
@@ -1397,6 +1454,37 @@ class HsecmDashboardService
                 'date_to' => $filters['date_to'] ?? null,
             ], static fn ($v) => $v !== null && $v !== '')),
         ];
+    }
+
+    /**
+     * Streak consecutive per business_key (batch_slot). Fallback kosong → caller pakai gap_count.
+     *
+     * @param  array<string, mixed>  $meta
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $filters
+     * @return array<string, int>
+     */
+    private function resolveEmailRowStreaks(string $datasetKey, array $meta, Collection $rows, array $filters): array
+    {
+        $table = (string) ($meta['table'] ?? '');
+        $currentSlot = trim((string) ($filters['batch_slot'] ?? ''));
+        if ($currentSlot === '' && $table !== '') {
+            $currentSlot = (string) ($this->repository->latestBatchSlot($table) ?? '');
+        }
+
+        $keys = [];
+        foreach ($rows as $row) {
+            $businessKey = $this->resolveBusinessKey($row, $datasetKey);
+            if ($businessKey !== '') {
+                $keys[] = $businessKey;
+            }
+        }
+
+        if ($table === '' || $currentSlot === '' || $keys === []) {
+            return [];
+        }
+
+        return $this->repository->countConsecutiveStreakByKeys($table, $keys, $currentSlot);
     }
 
     /**
@@ -2029,6 +2117,11 @@ class HsecmDashboardService
                     return $sap !== null && abs($sap) < 0.00001;
                 })->values();
             }
+            if ($programKey === 'ikk-compliance') {
+                $rows = $this->filterIkkBelowFullCompliance($rows);
+            }
+
+            $rows = $this->dedupeEmailRows($rows, $datasetKey);
 
             foreach ($rows as $row) {
                 $businessKey = $this->resolveBusinessKey($row, $datasetKey);
@@ -2294,6 +2387,61 @@ class HsecmDashboardService
     }
 
     /**
+     * Tampilkan perulangan = ceil(total_slot / 2).
+     * 2 batch_slot per hari; jika ganjil diganjilkan dulu (5 → 6 → 3).
+     */
+    private function toPerulanganDisplayCount(int $slotStreak): int
+    {
+        if ($slotStreak <= 0) {
+            return 0;
+        }
+
+        return (int) ceil($slotStreak / 2);
+    }
+
+    /**
+     * Unique baris email: 1 business_key (atau fingerprint kolom) = 1 baris.
+     * Pertahankan row dengan gap_count / id tertinggi.
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function dedupeEmailRows(Collection $rows, string $datasetKey): Collection
+    {
+        if ($rows->isEmpty()) {
+            return $rows;
+        }
+
+        $meta = self::DATASETS[$datasetKey] ?? null;
+        $columnKeys = is_array($meta['columns'] ?? null) ? array_keys($meta['columns']) : [];
+
+        return $rows
+            ->sortBy([
+                [static fn (array $row): int => (int) ($row['gap_count'] ?? 0), 'desc'],
+                [static fn (array $row): int => (int) ($row['id'] ?? $row['_row_id'] ?? 0), 'desc'],
+            ])
+            ->unique(function (array $row) use ($datasetKey, $columnKeys): string {
+                $businessKey = $this->resolveBusinessKey($row, $datasetKey);
+                if ($businessKey !== '') {
+                    return 'bk:'.$businessKey;
+                }
+
+                $parts = [];
+                foreach ($columnKeys as $columnKey) {
+                    $raw = $row[$columnKey] ?? '';
+                    $parts[] = $columnKey.'='.(is_scalar($raw) || $raw === null ? trim((string) ($raw ?? '')) : '');
+                }
+
+                if ($parts !== []) {
+                    return 'fp:'.md5(implode('|', $parts));
+                }
+
+                return 'id:'.(string) ($row['id'] ?? $row['_row_id'] ?? uniqid('row_', true));
+            })
+            ->values();
+    }
+
+    /**
      * @param  Collection<int, array<string, mixed>>  $rows
      * @return Collection<int, array<string, mixed>>
      */
@@ -2439,6 +2587,31 @@ class HsecmDashboardService
 
             return $sap !== null && abs($sap) < 0.00001;
         })->count();
+    }
+
+    /**
+     * IKK dengan Compliance_IKK di bawah 100% (ratio 0–1 atau persen 0–100).
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function filterIkkBelowFullCompliance(Collection $rows): Collection
+    {
+        return $rows
+            ->filter(function (array $row): bool {
+                $num = $this->toFloat($row['Compliance_IKK'] ?? null);
+                if ($num === null) {
+                    return true;
+                }
+
+                // Scraped sebagai ratio (1 = 100%); toleransi jika sudah dalam persen.
+                if ($num > 1.0001) {
+                    return $num < 100;
+                }
+
+                return $num < 0.999999;
+            })
+            ->values();
     }
 
     /**

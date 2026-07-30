@@ -30,6 +30,8 @@ class HsecmSummaryMail extends Mailable
         public string $batchSlotLabel = '',
         public int $escalateCount = 0,
         public string $ctaLabel = 'Buka Dashboard',
+        public string $monitoringUrl = '',
+        public string $tasklistUrl = '',
     ) {}
 
     public function envelope(): Envelope
@@ -38,7 +40,7 @@ class HsecmSummaryMail extends Mailable
         $company = ($this->scope['perusahaan'] ?? '') !== '' ? $this->scope['perusahaan'] : 'Semua Perusahaan';
 
         $prefix = match ($this->mode) {
-            'endshift' => 'Pasca Shift — Tasklist Monitoring & Intervensi',
+            'endshift' => 'Pertengahan Shift — Tasklist Monitoring & Intervensi',
             'escalate' => 'Escalate #'.$this->escalateCount.' — Tasklist belum closed',
             default => 'Daily Monitoring & Intervensi',
         };

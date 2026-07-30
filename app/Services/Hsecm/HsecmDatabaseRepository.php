@@ -222,13 +222,13 @@ class HsecmDatabaseRepository
     }
 
     /**
-     * Hitung berapa kali business_key muncul di batch_slot SEBELUM $beforeSlot.
-     * Hari/slot yang tidak punya item tidak dihitung.
+     * Streak consecutive: mundur dari $currentSlot per batch_slot scrape.
+     * Putus 1 slot → streak berhenti. Termasuk slot sekarang (min 1 jika key ada di slot terkini).
      *
      * @param  list<string>  $businessKeys
-     * @return array<string, int> business_key => jumlah kemunculan sebelumnya
+     * @return array<string, int> business_key => streak (>= 0)
      */
-    public function countPreviousAppearancesByKeys(string $table, array $businessKeys, string $beforeSlot): array
+    public function countConsecutiveStreakByKeys(string $table, array $businessKeys, string $currentSlot): array
     {
         $keys = array_values(array_unique(array_filter(array_map(
             static fn (string $k): string => trim($k),
@@ -239,44 +239,95 @@ class HsecmDatabaseRepository
             return [];
         }
 
-        $before = $this->normalizeSlot($beforeSlot);
-        if ($before === null) {
+        $current = $this->normalizeSlot($currentSlot);
+        if ($current === null) {
             return [];
         }
 
         $cacheKey = self::cacheKey(
             $table,
-            'prev_appear.'.md5($before.'|'.implode("\n", $keys))
+            'streak_consec.'.md5($current.'|'.implode("\n", $keys))
         );
 
         /** @var array<string, int> $cached */
-        $cached = Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($table, $keys, $before): array {
-            $rows = DB::table($table)
+        $cached = Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($table, $keys, $current): array {
+            $rawSlots = DB::table($table)
+                ->where('batch_slot', '<=', $current)
+                ->distinct()
+                ->orderByDesc('batch_slot')
+                ->pluck('batch_slot');
+
+            $slots = [];
+            foreach ($rawSlots as $rawSlot) {
+                $normalized = $this->normalizeSlot($rawSlot);
+                if ($normalized !== null) {
+                    $slots[$normalized] = true;
+                }
+            }
+            $slots = array_keys($slots);
+            rsort($slots, SORT_STRING);
+
+            if ($slots === []) {
+                $out = [];
+                foreach ($keys as $key) {
+                    $out[$key] = 0;
+                }
+
+                return $out;
+            }
+
+            $appearRows = DB::table($table)
                 ->select(['business_key', 'batch_slot'])
                 ->whereIn('business_key', $keys)
-                ->where('batch_slot', '<', $before)
+                ->where('batch_slot', '<=', $current)
                 ->get();
 
-            $seen = [];
-            foreach ($rows as $row) {
+            /** @var array<string, array<string, true>> $presence */
+            $presence = [];
+            foreach ($appearRows as $row) {
                 $key = trim((string) ($row->business_key ?? ''));
                 $slot = $this->normalizeSlot($row->batch_slot ?? null);
                 if ($key === '' || $slot === null) {
                     continue;
                 }
-                // Satu batch_slot = satu kemunculan (hari/slot sebelumnya).
-                $seen[$key][$slot] = true;
+                $presence[$key][$slot] = true;
             }
 
             $out = [];
             foreach ($keys as $key) {
-                $out[$key] = isset($seen[$key]) ? count($seen[$key]) : 0;
+                $streak = 0;
+                foreach ($slots as $slot) {
+                    if (! empty($presence[$key][$slot])) {
+                        $streak++;
+                    } else {
+                        break;
+                    }
+                }
+                $out[$key] = $streak;
             }
 
             return $out;
         });
 
         return $cached;
+    }
+
+    /**
+     * Jumlah slot sebelumnya dalam streak consecutive (max(0, streak - 1)).
+     * Putus 1 batch_slot → reset; bukan total kemunculan historis non-consecutive.
+     *
+     * @param  list<string>  $businessKeys
+     * @return array<string, int> business_key => jumlah slot sebelumnya dalam streak
+     */
+    public function countPreviousAppearancesByKeys(string $table, array $businessKeys, string $beforeSlot): array
+    {
+        $streaks = $this->countConsecutiveStreakByKeys($table, $businessKeys, $beforeSlot);
+        $out = [];
+        foreach ($streaks as $key => $streak) {
+            $out[$key] = max(0, (int) $streak - 1);
+        }
+
+        return $out;
     }
 
     public function forgetCache(string $table): void

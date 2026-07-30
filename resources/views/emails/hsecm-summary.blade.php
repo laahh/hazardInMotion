@@ -14,6 +14,7 @@
     .detail-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #334155; vertical-align: top; }
     .detail-table tr:last-child td { border-bottom: none; }
     .btn { display: inline-block; background: #0f766e; color: #ffffff !important; text-decoration: none; font-weight: 700; font-size: 13px; padding: 12px 22px; border-radius: 10px; }
+    .btn-secondary { display: inline-block; background: #115e59; color: #ffffff !important; text-decoration: none; font-weight: 700; font-size: 13px; padding: 12px 22px; border-radius: 10px; }
   </style>
 </head>
 <body>
@@ -31,6 +32,10 @@
   $gaps = $emailNarrative['gaps'] ?? [];
   $exposure = collect($exposure)->filter(static fn (array $s): bool => (bool) ($s['available'] ?? true))->values()->all();
   $gaps = collect($gaps)->filter(static fn (array $s): bool => (bool) ($s['available'] ?? true))->values()->all();
+  $monitoringLink = trim((string) ($monitoringUrl ?? ''));
+  if ($monitoringLink === '') {
+      $monitoringLink = (string) ($dashboardUrl ?? '');
+  }
 @endphp
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f4;">
@@ -78,20 +83,27 @@
             @endforeach
 
             <p style="margin:22px 0 10px;font-size:13px;line-height:1.65;color:#334155;">
-              Detail data secara overall dapat diakses pada Website berikut:
+              Detail data secara overall dapat diakses pada <strong>Dashboard</strong> berikut:
             </p>
             <p style="margin:0 0 18px;">
-              <a href="{{ $dashboardUrl }}" target="_blank" rel="noopener" style="color:#0f766e;font-weight:700;word-break:break-all;">
-                {{ $dashboardUrl }}
+              <a href="{{ $monitoringLink }}" target="_blank" rel="noopener" style="color:#0f766e;font-weight:700;word-break:break-all;">
+                {{ $monitoringLink }}
               </a>
             </p>
 
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:18px;">
               <tr>
-                <td align="center">
-                  <a href="{{ $dashboardUrl }}" class="btn" target="_blank" rel="noopener">Buka Aksi PJO</a>
+                <td align="center" style="padding-bottom:10px;">
+                  <a href="{{ $monitoringLink }}" class="btn" target="_blank" rel="noopener">Buka Dashboard</a>
                 </td>
               </tr>
+              @if(! empty($dashboardUrl) && $dashboardUrl !== $monitoringLink)
+              <tr>
+                <td align="center">
+                  <a href="{{ $dashboardUrl }}" class="btn-secondary" target="_blank" rel="noopener">{{ $ctaLabel ?? 'Buka Aksi PJO' }}</a>
+                </td>
+              </tr>
+              @endif
             </table>
 
             <p style="margin:0;font-size:13px;line-height:1.65;color:#334155;">

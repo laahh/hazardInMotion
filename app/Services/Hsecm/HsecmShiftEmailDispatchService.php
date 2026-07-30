@@ -381,11 +381,16 @@ class HsecmShiftEmailDispatchService
             $narrative = $summary['email_narrative'] ?? ['exposure' => [], 'gaps' => []];
 
             $scopeLabel = $this->scopeLabel($site, $perusahaan);
+            $monitoringUrl = $this->buildPublicUrl('/hsecm/dashboard', [
+                'site' => $site,
+                'perusahaan' => $perusahaan,
+            ]);
             $ctaUrl = $this->buildPublicUrl('/hsecm/pjo-action', [
                 'site' => $site,
                 'perusahaan' => $perusahaan,
             ]);
             $ctaLabel = 'Buka Aksi PJO';
+            $tasklistUrl = '';
 
             if ($createTasklist) {
                 $cacheKey = ($site ?? '').'|'.$perusahaan;
@@ -435,12 +440,14 @@ class HsecmShiftEmailDispatchService
 
                 $tasklist = $tasklistCache[$cacheKey] ?? null;
 
-                // CTA endshift: selalu ke tasklist scope site + perusahaan (bukan Aksi PJO).
+                // CTA endshift: tasklist scope site + perusahaan (+ dashboard monitoring terpisah).
                 if ($tasklist !== null) {
-                    $ctaUrl = $this->tasklistService->publicUrl($tasklist);
+                    $tasklistUrl = $this->tasklistService->publicUrl($tasklist);
+                    $ctaUrl = $tasklistUrl;
                     $ctaLabel = 'Buka Tasklist — '.$scopeLabel;
                 } elseif ($perusahaan !== '') {
-                    $ctaUrl = $this->tasklistService->openUrl($site, $perusahaan, $batchSlot);
+                    $tasklistUrl = $this->tasklistService->openUrl($site, $perusahaan, $batchSlot);
+                    $ctaUrl = $tasklistUrl;
                     $ctaLabel = 'Buka Tasklist — '.$scopeLabel;
                 }
 
@@ -470,6 +477,8 @@ class HsecmShiftEmailDispatchService
                 dryRun: $dryRun,
                 batchSlotLabel: Carbon::parse($batchSlot)->format('d/m/Y H:i'),
                 ctaLabel: $ctaLabel,
+                monitoringUrl: $monitoringUrl,
+                tasklistUrl: $tasklistUrl,
             );
 
             if ($result['success']) {
@@ -508,6 +517,8 @@ class HsecmShiftEmailDispatchService
         string $batchSlotLabel = '',
         int $escalateCount = 0,
         string $ctaLabel = 'Buka Dashboard',
+        string $monitoringUrl = '',
+        string $tasklistUrl = '',
     ): array {
         $nama = (string) ($recipient['nama'] ?? '-');
         $email = trim((string) ($recipient['email'] ?? ''));
@@ -526,7 +537,10 @@ class HsecmShiftEmailDispatchService
                 'nama' => $nama,
                 'email' => $email,
                 'success' => true,
-                'message' => "Dry-run {$mode} → {$email} (cta={$ctaLabel}: {$ctaUrl})",
+                'message' => "Dry-run {$mode} → {$email} (cta={$ctaLabel}: {$ctaUrl}"
+                    .($monitoringUrl !== '' ? "; dashboard={$monitoringUrl}" : '')
+                    .($tasklistUrl !== '' ? "; tasklist={$tasklistUrl}" : '')
+                    .')',
             ];
         }
 
@@ -554,6 +568,8 @@ class HsecmShiftEmailDispatchService
                 batchSlotLabel: $batchSlotLabel,
                 escalateCount: $escalateCount,
                 ctaLabel: $ctaLabel,
+                monitoringUrl: $monitoringUrl,
+                tasklistUrl: $tasklistUrl !== '' ? $tasklistUrl : ($mode === 'endshift' ? $ctaUrl : ''),
             ));
 
             return [

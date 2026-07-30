@@ -166,8 +166,8 @@ class HsecmTasklistService
     }
 
     /**
-     * Lengkapi tiap item dengan jumlah kemunculan di batch_slot sebelum batch tasklist.
-     * Slot yang tidak punya item tidak dihitung.
+     * Lengkapi tiap item dengan jumlah slot sebelumnya dalam streak consecutive.
+     * Putus 1 batch_slot → reset; previous = max(0, streak - 1).
      *
      * @param  \Illuminate\Support\Collection<int, HsecmTasklistItem>|iterable<HsecmTasklistItem>  $items
      * @return \Illuminate\Support\Collection<int, HsecmTasklistItem>
@@ -175,8 +175,8 @@ class HsecmTasklistService
     public function withPreviousRecurrenceCounts(HsecmTasklist $tasklist, iterable $items): \Illuminate\Support\Collection
     {
         $collection = collect($items);
-        $beforeSlot = optional($tasklist->batch_slot)?->format('Y-m-d H:i:s');
-        if ($beforeSlot === null || $collection->isEmpty()) {
+        $currentSlot = optional($tasklist->batch_slot)?->format('Y-m-d H:i:s');
+        if ($currentSlot === null || $collection->isEmpty()) {
             return $collection->each(function (HsecmTasklistItem $item): void {
                 $item->setAttribute('previous_recurrence_count', $this->fallbackPreviousFromPayload($item));
             });
@@ -194,28 +194,35 @@ class HsecmTasklistService
             $keysByTable[$table][] = $businessKey;
         }
 
-        /** @var array<string, array<string, int>> $countsByTable */
-        $countsByTable = [];
+        /** @var array<string, array<string, int>> $streaksByTable */
+        $streaksByTable = [];
         foreach ($keysByTable as $table => $keys) {
-            $countsByTable[$table] = $this->repository->countPreviousAppearancesByKeys(
+            $streaksByTable[$table] = $this->repository->countConsecutiveStreakByKeys(
                 $table,
                 $keys,
-                $beforeSlot
+                $currentSlot
             );
         }
 
-        return $collection->each(function (HsecmTasklistItem $item) use ($countsByTable): void {
+        return $collection->each(function (HsecmTasklistItem $item) use ($streaksByTable): void {
             $payload = is_array($item->payload) ? $item->payload : [];
             $table = trim((string) ($payload['table'] ?? ''));
             $businessKey = trim((string) ($item->business_key ?? ''));
-            $count = 0;
-            if ($table !== '' && $businessKey !== '') {
-                $count = (int) ($countsByTable[$table][$businessKey] ?? 0);
+
+            if ($table === '' || $businessKey === '' || ! isset($streaksByTable[$table])) {
+                $item->setAttribute('previous_recurrence_count', $this->fallbackPreviousFromPayload($item));
+
+                return;
             }
-            if ($count <= 0) {
-                $count = $this->fallbackPreviousFromPayload($item);
+
+            $streak = (int) ($streaksByTable[$table][$businessKey] ?? 0);
+            if ($streak <= 0) {
+                $item->setAttribute('previous_recurrence_count', $this->fallbackPreviousFromPayload($item));
+
+                return;
             }
-            $item->setAttribute('previous_recurrence_count', $count);
+
+            $item->setAttribute('previous_recurrence_count', max(0, $streak - 1));
         });
     }
 
