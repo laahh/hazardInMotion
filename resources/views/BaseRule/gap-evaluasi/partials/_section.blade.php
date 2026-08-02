@@ -32,52 +32,28 @@
       <p class="text-xs text-on-surface-variant mt-0.5">Ringkasan per Site → Perusahaan (baris ke bawah)</p>
    </div>
 
-   {{-- Summary total parameter (tabel 3 kolom) --}}
-   <div class="overflow-x-auto">
-      <table class="w-full text-sm border-collapse">
-         <thead>
-            <tr class="bg-teal-600 text-white">
-               <th class="px-4 py-3 text-left align-top font-semibold border-r border-white/20 w-1/3">
-                  <div class="text-[11px] font-bold uppercase tracking-wider">Total Gap</div>
-                  <div class="text-[10px] font-normal text-teal-50/90 mt-1 normal-case tracking-normal leading-snug">
-                     Distinct orang/lokasi/aktivitas (tanpa lihat berulang)
-                  </div>
-               </th>
-               <th class="px-4 py-3 text-left align-top font-semibold border-r border-white/20 w-1/3">
-                  <div class="text-[11px] font-bold uppercase tracking-wider">Total Perulangan</div>
-                  <div class="text-[10px] font-normal text-teal-50/90 mt-1 normal-case tracking-normal leading-snug">
-                     Distinct tetap (D−1 &amp; D) atau streak ≥ 2
-                  </div>
-               </th>
-               <th class="px-4 py-3 text-left align-top font-semibold w-1/3">
-                  <div class="text-[11px] font-bold uppercase tracking-wider">Perbaikan tanpa Perulangan</div>
-                  <div class="text-[10px] font-normal text-teal-50/90 mt-1 normal-case tracking-normal leading-snug">
-                     Pernah gap lalu clear · streak &lt; 2 · distinct
-                  </div>
-               </th>
-            </tr>
-         </thead>
-         <tbody>
-            <tr class="bg-teal-50">
-               <td class="px-4 py-4 text-2xl font-extrabold text-teal-900 border-r border-teal-100">{{ number_format($totalGap) }}</td>
-               <td class="px-4 py-4 text-2xl font-extrabold text-teal-900 border-r border-teal-100">{{ number_format($totalPerulangan) }}</td>
-               <td class="px-4 py-4 text-2xl font-extrabold text-teal-900">{{ number_format($perbaikanTanpa) }}</td>
-            </tr>
-         </tbody>
-         <tfoot>
-            <tr class="bg-teal-700 text-white">
-               <td colspan="3" class="px-4 py-2 text-center text-sm font-bold tracking-wide">
-                  {{ number_format($totalGap) }} / {{ number_format($totalPerulangan) }} / {{ number_format($perbaikanTanpa) }}
-               </td>
-            </tr>
-         </tfoot>
-      </table>
+   {{-- 4 kartu summary khusus parameter ini --}}
+   <div class="px-4 pt-4">
+      @include('BaseRule.gap-evaluasi.partials._overview-cards', [
+         'wrapClass' => 'mb-4',
+         'overview' => [
+            'total_gap' => (int) ($program['total_gap'] ?? 0),
+            'total_perulangan' => (int) ($program['total_perulangan'] ?? 0),
+            'perbaikan_total' => (int) ($program['perbaikan_total'] ?? 0),
+            'perbaikan_tanpa_perulangan' => (int) ($program['perbaikan_tanpa_perulangan'] ?? 0),
+            'tindaklanjut_berhasil' => (int) ($program['tindaklanjut_berhasil'] ?? 0),
+            'tindaklanjut_tanpa_perulangan' => (int) ($program['tindaklanjut_tanpa_perulangan'] ?? 0),
+         ],
+      ])
    </div>
 
    {{-- Matriks vertikal: Site & Perusahaan ke bawah --}}
    <div class="border-t border-slate-100">
-      <div class="px-5 py-3 border-b border-slate-50">
+      <div class="px-5 py-3 border-b border-slate-50 flex items-center justify-between gap-2">
          <p class="text-xs font-semibold text-on-background">Matriks Site / Perusahaan</p>
+         <span class="inline-flex items-center rounded-md bg-teal-600 text-white text-xs font-bold px-2.5 py-1 tracking-wide">
+            {{ number_format($totalGap) }} / {{ number_format($totalPerulangan) }} / {{ number_format($perbaikanTanpa) }}
+         </span>
       </div>
       <div class="overflow-x-auto">
          <table class="hsecm-table w-full text-sm">

@@ -1,7 +1,8 @@
 @php
    $ov = $overview ?? [];
+   $wrapClass = $wrapClass ?? 'mb-8';
 @endphp
-<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-8">
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 {{ $wrapClass }}">
    <div class="hsecm-card gap-eval-card rounded-2xl p-4 border border-teal-100 bg-teal-50/50">
       <p class="text-[10px] font-bold uppercase tracking-wider text-teal-800">Total Gap</p>
       <p class="text-3xl font-extrabold text-teal-900 mt-1">{{ number_format((int) ($ov['total_gap'] ?? 0)) }}</p>
