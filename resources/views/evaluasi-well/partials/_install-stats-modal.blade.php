@@ -1,6 +1,6 @@
 {{-- Modal detail statistik Total User Install --}}
 <div class="modal fade" id="installStatsModal" tabindex="-1" aria-labelledby="installStatsModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+  <div class="modal-dialog modal-xxl modal-dialog-scrollable install-stats-modal-dialog">
     <div class="modal-content radius-8 border-0 shadow-lg">
       <div class="modal-header border-bottom py-16 px-24">
         <div class="min-w-0 pe-12">
@@ -140,6 +140,25 @@
                 </div>
                 <span class="text-xs text-secondary-light" id="install-stats-kpi-groups-hint">0 grup pada dimensi aktif</span>
               </div>
+            </div>
+          </div>
+
+          {{-- Tren harian 4 minggu terakhir --}}
+          <div class="border radius-8 overflow-hidden mb-24" id="install-stats-trend-section">
+            <div class="px-16 py-12 border-bottom bg-neutral-50 d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <div>
+                <h6 class="mb-0 fw-semibold text-md">Tren Install & Penggunaan Harian</h6>
+                <span class="text-xs text-secondary-light" id="install-stats-trend-subtitle">
+                  4 minggu terakhir (termasuk minggu berjalan)
+                </span>
+              </div>
+              <span class="text-xs text-secondary-light">Install baru = first signal · Penggunaan = user aktif harian</span>
+            </div>
+            <div class="p-16">
+              <div id="install-stats-trend" style="min-height: 220px;"></div>
+              <p id="install-stats-trend-empty" class="text-secondary-light text-sm mb-0 d-none text-center py-40">
+                Belum ada data tren untuk rentang ini.
+              </p>
             </div>
           </div>
 

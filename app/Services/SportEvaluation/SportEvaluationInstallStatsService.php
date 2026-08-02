@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\SportEvaluation;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -17,6 +18,9 @@ final class SportEvaluationInstallStatsService
     private const CACHE_TTL = 180;
 
     private const CHART_TOP_N = 15;
+
+    /** Jumlah minggu tren harian (minggu berjalan + 3 minggu sebelumnya). */
+    private const TREND_WEEKS = 4;
 
     /** @var array<string, string> */
     private const DIMENSION_LABELS = [
@@ -81,6 +85,7 @@ final class SportEvaluationInstallStatsService
             });
 
             $stats['overview'] = $this->getOverview($filters);
+            $stats['daily_trend'] = $this->getDailyTrend($filters);
             $stats['filters'] = $filters;
             $stats['filter_options'] = $this->filterOptions();
 
@@ -507,6 +512,7 @@ final class SportEvaluationInstallStatsService
 
     /**
      * @return list<array{
+     *     id:int,
      *     kode_sid:string,
      *     site:string,
      *     divisi:string,
@@ -518,12 +524,13 @@ final class SportEvaluationInstallStatsService
      */
     private function rawEmployeeRows(): array
     {
-        /** @var list<array{kode_sid:string,site:string,divisi:string,company:string,departement:string,jabatan:string,is_installed:bool}> */
-        return Cache::remember('evaluasi_well:install_stats:raw_employees:v1', self::CACHE_TTL, function (): array {
+        /** @var list<array{id:int,kode_sid:string,site:string,divisi:string,company:string,departement:string,jabatan:string,is_installed:bool}> */
+        return Cache::remember('evaluasi_well:install_stats:raw_employees:v2', self::CACHE_TTL, function (): array {
             $db = DB::connection(BewellConnectionService::CONNECTION);
 
             $sql = '
                 SELECT
+                    e.id,
                     e.kode_sid,
                     e.site,
                     e.divisi,
@@ -554,6 +561,7 @@ final class SportEvaluationInstallStatsService
 
             foreach ($queryRows as $row) {
                 $rows[] = [
+                    'id' => (int) ($row->id ?? 0),
                     'kode_sid' => trim((string) ($row->kode_sid ?? '')),
                     'site' => trim((string) ($row->site ?? '')),
                     'divisi' => trim((string) ($row->divisi ?? '')),
@@ -566,6 +574,192 @@ final class SportEvaluationInstallStatsService
 
             return $rows;
         });
+    }
+
+    /**
+     * Tren harian 4 minggu terakhir (minggu berjalan + 3 minggu sebelumnya).
+     *
+     * @param  array{
+     *     site:string,
+     *     division_group:string,
+     *     jabatan:string,
+     *     company:string,
+     *     departement:string,
+     *     install:string
+     * }  $filters
+     * @return array{
+     *     labels:list<string>,
+     *     dates:list<string>,
+     *     new_installs:list<int>,
+     *     active_users:list<int>,
+     *     range_label:string
+     * }
+     */
+    private function getDailyTrend(array $filters): array
+    {
+        $empty = [
+            'labels' => [],
+            'dates' => [],
+            'new_installs' => [],
+            'active_users' => [],
+            'range_label' => '',
+        ];
+
+        try {
+            $cacheKey = 'evaluasi_well:install_stats:daily_trend:v1:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+
+            return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters, $empty): array {
+                $end = Carbon::now()->endOfDay();
+                $start = Carbon::now()->startOfWeek(Carbon::MONDAY)->subWeeks(self::TREND_WEEKS - 1)->startOfDay();
+
+                $buckets = [];
+                $cursor = $start->copy();
+                while ($cursor->lte($end)) {
+                    $key = $cursor->toDateString();
+                    $buckets[$key] = [
+                        'label' => $cursor->format('d M'),
+                        'new_installs' => 0,
+                        'active_users' => 0,
+                    ];
+                    $cursor->addDay();
+                }
+
+                if ($buckets === []) {
+                    return $empty;
+                }
+
+                $rangeLabel = $start->translatedFormat('d M Y').' – '.$end->translatedFormat('d M Y');
+                $userIds = null;
+
+                if ($this->hasActiveFilters($filters)) {
+                    $userIds = [];
+                    foreach ($this->rawEmployeeRows() as $row) {
+                        $resolvedSite = $this->siteResolver->resolve($row['kode_sid'], $row['site']);
+                        $divisiGroup = $this->divisiGroupResolver->resolve($row['divisi']);
+                        if ($filters['site'] !== '' && $resolvedSite !== $filters['site']) {
+                            continue;
+                        }
+                        if ($filters['division_group'] !== '' && $divisiGroup !== $filters['division_group']) {
+                            continue;
+                        }
+                        if ($filters['company'] !== '' && $row['company'] !== $filters['company']) {
+                            continue;
+                        }
+                        if ($filters['departement'] !== '' && ! str_contains(mb_strtolower($row['departement']), mb_strtolower($filters['departement']))) {
+                            continue;
+                        }
+                        if ($filters['jabatan'] !== '' && $row['jabatan'] !== $filters['jabatan']) {
+                            continue;
+                        }
+                        if ($filters['install'] === 'sudah' && ! $row['is_installed']) {
+                            continue;
+                        }
+                        if ($filters['install'] === 'belum' && $row['is_installed']) {
+                            continue;
+                        }
+                        if (($row['id'] ?? 0) > 0) {
+                            $userIds[] = (int) $row['id'];
+                        }
+                    }
+                    $userIds = array_values(array_unique($userIds));
+                    if ($userIds === []) {
+                        return [
+                            'labels' => array_column($buckets, 'label'),
+                            'dates' => array_keys($buckets),
+                            'new_installs' => array_fill(0, count($buckets), 0),
+                            'active_users' => array_fill(0, count($buckets), 0),
+                            'range_label' => $rangeLabel,
+                        ];
+                    }
+                }
+
+                $db = DB::connection(BewellConnectionService::CONNECTION);
+                $from = $start->format('Y-m-d H:i:s');
+                $to = $end->format('Y-m-d H:i:s');
+
+                $signalsSql = '
+                    SELECT user_id, created_at FROM login_audit
+                        WHERE event = ? AND user_id IS NOT NULL
+                          AND created_at BETWEEN ? AND ?
+                    UNION ALL
+                    SELECT user_id, created_at FROM food_analyses
+                        WHERE user_id IS NOT NULL
+                          AND created_at BETWEEN ? AND ?
+                    UNION ALL
+                    SELECT user_id, created_at FROM workout_analyses
+                        WHERE user_id IS NOT NULL
+                          AND created_at BETWEEN ? AND ?
+                ';
+
+                $activeSql = '
+                    SELECT DATE(s.created_at) AS d, COUNT(DISTINCT s.user_id) AS c
+                    FROM ('.$signalsSql.') AS s
+                ';
+                $activeBindings = ['login_success', $from, $to, $from, $to, $from, $to];
+                if ($userIds !== null) {
+                    $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+                    $activeSql .= ' WHERE s.user_id IN ('.$placeholders.')';
+                    $activeBindings = array_merge($activeBindings, $userIds);
+                }
+                $activeSql .= ' GROUP BY DATE(s.created_at)';
+
+                foreach ($db->select($activeSql, $activeBindings) as $row) {
+                    $d = (string) ($row->d ?? '');
+                    if (isset($buckets[$d])) {
+                        $buckets[$d]['active_users'] = (int) ($row->c ?? 0);
+                    }
+                }
+
+                $firstSql = '
+                    SELECT DATE(first_at) AS d, COUNT(*) AS c
+                    FROM (
+                        SELECT user_id, MIN(created_at) AS first_at
+                        FROM (
+                            SELECT user_id, created_at FROM login_audit
+                                WHERE event = ? AND user_id IS NOT NULL
+                            UNION ALL
+                            SELECT user_id, created_at FROM food_analyses
+                                WHERE user_id IS NOT NULL
+                            UNION ALL
+                            SELECT user_id, created_at FROM workout_analyses
+                                WHERE user_id IS NOT NULL
+                        ) AS all_signals
+                ';
+                $firstBindings = ['login_success'];
+                if ($userIds !== null) {
+                    $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+                    $firstSql .= ' WHERE user_id IN ('.$placeholders.')';
+                    $firstBindings = array_merge($firstBindings, $userIds);
+                }
+                $firstSql .= '
+                        GROUP BY user_id
+                    ) AS firsts
+                    WHERE first_at BETWEEN ? AND ?
+                    GROUP BY DATE(first_at)
+                ';
+                $firstBindings[] = $from;
+                $firstBindings[] = $to;
+
+                foreach ($db->select($firstSql, $firstBindings) as $row) {
+                    $d = (string) ($row->d ?? '');
+                    if (isset($buckets[$d])) {
+                        $buckets[$d]['new_installs'] = (int) ($row->c ?? 0);
+                    }
+                }
+
+                return [
+                    'labels' => array_column($buckets, 'label'),
+                    'dates' => array_keys($buckets),
+                    'new_installs' => array_map(static fn (array $b): int => $b['new_installs'], array_values($buckets)),
+                    'active_users' => array_map(static fn (array $b): int => $b['active_users'], array_values($buckets)),
+                    'range_label' => $rangeLabel,
+                ];
+            });
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        }
     }
 
     /**
@@ -697,6 +891,13 @@ final class SportEvaluationInstallStatsService
                 'companies' => [],
                 'departements' => [],
                 'jabatans' => [],
+            ],
+            'daily_trend' => [
+                'labels' => [],
+                'dates' => [],
+                'new_installs' => [],
+                'active_users' => [],
+                'range_label' => '',
             ],
         ];
     }

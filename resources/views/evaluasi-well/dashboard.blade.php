@@ -149,6 +149,22 @@
     display: flex !important;
   }
 
+  .install-stats-modal-dialog {
+    max-width: min(96vw, 1680px);
+    width: 96vw;
+    margin: 0.75rem auto;
+    height: calc(100vh - 1.5rem);
+  }
+
+  .install-stats-modal-dialog .modal-content {
+    max-height: 100%;
+  }
+
+  #install-stats-trend {
+    width: 100%;
+    min-height: 220px;
+  }
+
   .install-stats-kpi-card {
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
@@ -890,6 +906,7 @@
     var cache = {};
     var currentDimension = 'site';
     var barChart = null;
+    var trendChart = null;
     var overviewRendered = false;
     var peopleTable = null;
     var latestRows = [];
@@ -905,6 +922,9 @@
     var tableEmptyEl = document.getElementById('install-stats-table-empty');
     var chartEmptyEl = document.getElementById('install-stats-chart-empty');
     var chartEl = document.getElementById('install-stats-bar');
+    var trendEl = document.getElementById('install-stats-trend');
+    var trendEmptyEl = document.getElementById('install-stats-trend-empty');
+    var trendSubtitleEl = document.getElementById('install-stats-trend-subtitle');
     var tableWrapEl = document.querySelector('.install-stats-table-wrap');
     var tableDimLabelEl = document.getElementById('install-stats-table-dim-label');
     var detailTitleEl = document.getElementById('install-stats-detail-title');
@@ -1144,6 +1164,97 @@
             tableWrapEl.style.minHeight = px + 'px';
             tableWrapEl.style.maxHeight = px + 'px';
         }
+    }
+
+    function renderDailyTrend(trend) {
+        if (!trendEl || typeof ApexCharts === 'undefined') {
+            return;
+        }
+
+        var labels = (trend && trend.labels) ? trend.labels : [];
+        var newInstalls = (trend && trend.new_installs) ? trend.new_installs : [];
+        var activeUsers = (trend && trend.active_users) ? trend.active_users : [];
+
+        if (trendSubtitleEl) {
+            trendSubtitleEl.textContent = (trend && trend.range_label)
+                ? ('4 minggu terakhir · ' + trend.range_label)
+                : '4 minggu terakhir (termasuk minggu berjalan)';
+        }
+
+        if (trendChart) {
+            trendChart.destroy();
+            trendChart = null;
+        }
+
+        if (!labels.length) {
+            if (trendEmptyEl) trendEmptyEl.classList.remove('d-none');
+            trendEl.classList.add('d-none');
+            return;
+        }
+        if (trendEmptyEl) trendEmptyEl.classList.add('d-none');
+        trendEl.classList.remove('d-none');
+
+        trendChart = new ApexCharts(trendEl, {
+            series: [
+                { name: 'Install Baru', data: newInstalls },
+                { name: 'Penggunaan (User Aktif)', data: activeUsers }
+            ],
+            chart: {
+                type: 'area',
+                height: 240,
+                toolbar: { show: false },
+                parentHeightOffset: 0,
+                zoom: { enabled: false }
+            },
+            stroke: { curve: 'smooth', width: 2 },
+            colors: ['#487FFF', '#45b369'],
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    shadeIntensity: 1,
+                    opacityFrom: 0.28,
+                    opacityTo: 0.04,
+                    stops: [0, 90, 100]
+                }
+            },
+            dataLabels: { enabled: false },
+            grid: {
+                borderColor: '#E5E7EB',
+                strokeDashArray: 4,
+                padding: { left: 8, right: 8 }
+            },
+            xaxis: {
+                categories: labels,
+                tickAmount: 8,
+                labels: {
+                    style: { fontSize: '10px' },
+                    rotate: -35,
+                    hideOverlappingLabels: true
+                }
+            },
+            yaxis: {
+                labels: {
+                    style: { fontSize: '10px' },
+                    formatter: function (value) {
+                        return formatNumber(value);
+                    }
+                }
+            },
+            legend: {
+                position: 'top',
+                horizontalAlign: 'left',
+                fontSize: '12px'
+            },
+            tooltip: {
+                shared: true,
+                y: {
+                    formatter: function (value) {
+                        return formatNumber(value) + ' user';
+                    }
+                }
+            }
+        });
+        trendChart.render();
     }
 
     function renderChart(payload) {
@@ -1602,6 +1713,7 @@
         }
 
         renderSummary(payload);
+        renderDailyTrend(payload.daily_trend || {});
         renderChart(payload);
         renderTable(payload);
         ensurePeopleTable();
@@ -1692,6 +1804,10 @@
         if (barChart) {
             barChart.destroy();
             barChart = null;
+        }
+        if (trendChart) {
+            trendChart.destroy();
+            trendChart = null;
         }
     });
 
