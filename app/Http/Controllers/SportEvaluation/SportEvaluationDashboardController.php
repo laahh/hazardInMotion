@@ -7,6 +7,7 @@ namespace App\Http\Controllers\SportEvaluation;
 use App\Http\Controllers\Controller;
 use App\Services\SportEvaluation\BewellConnectionService;
 use App\Services\SportEvaluation\SportEvaluationActiveStatsService;
+use App\Services\SportEvaluation\SportEvaluationDivisiGroupResolver;
 use App\Services\SportEvaluation\SportEvaluationInstallStatsService;
 use App\Services\SportEvaluation\SportEvaluationKaryawanWellSiteResolver;
 use App\Support\SpreadsheetExporter;
@@ -29,6 +30,7 @@ class SportEvaluationDashboardController extends Controller
         private readonly SportEvaluationInstallStatsService $installStatsService,
         private readonly SportEvaluationActiveStatsService $activeStatsService,
         private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
+        private readonly SportEvaluationDivisiGroupResolver $divisiGroupResolver,
     ) {}
 
     public function index(Request $request): View
@@ -50,7 +52,7 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Detail statistik install per dimensi (site / perusahaan / departemen / jabatan).
+     * Detail statistik install per dimensi (site / divisi / perusahaan / departemen / jabatan).
      */
     public function installStats(Request $request): JsonResponse
     {
@@ -58,8 +60,17 @@ class SportEvaluationDashboardController extends Controller
             ? $request->input('dimension')
             : 'site';
 
+        $filters = $this->installStatsService->normalizeFilters([
+            'site' => $request->input('site'),
+            'division_group' => $request->input('division_group', $request->input('division')),
+            'jabatan' => $request->input('jabatan', $request->input('jabatan_fungsional')),
+            'company' => $request->input('company'),
+            'departement' => $request->input('departement'),
+            'install' => $request->input('install'),
+        ]);
+
         try {
-            return response()->json($this->installStatsService->getStats($dimension));
+            return response()->json($this->installStatsService->getStats($dimension, $filters));
         } catch (Throwable $e) {
             report($e);
 
@@ -67,7 +78,7 @@ class SportEvaluationDashboardController extends Controller
                 'available' => false,
                 'dimension' => 'site',
                 'dimension_label' => 'Site',
-                'footnote' => 'Sudah Install mengikuti KPI kartu. Breakdown dimensi memakai karyawan status AKTIF (exclude VISITOR).',
+                'footnote' => 'Filter global mempengaruhi seluruh ringkasan. Divisi digabung per grup sejenis.',
                 'message' => 'Gagal memuat statistik install.',
                 'summary' => [
                     'total' => 0,
@@ -83,6 +94,14 @@ class SportEvaluationDashboardController extends Controller
                     'categories' => [],
                     'installed' => [],
                     'not_installed' => [],
+                ],
+                'filters' => $filters,
+                'filter_options' => [
+                    'sites' => [],
+                    'division_groups' => [],
+                    'companies' => [],
+                    'departements' => [],
+                    'jabatans' => [],
                 ],
             ]);
         }
@@ -1402,7 +1421,7 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * @return array{site:string,company:string,division:string,departement:string,jabatan_fungsional:string,install:string,user_aktif:string}
+     * @return array{site:string,company:string,division:string,division_group:string,departement:string,jabatan_fungsional:string,install:string,user_aktif:string}
      */
     private function readNotInstalledFilters(Request $request): array
     {
@@ -1429,6 +1448,7 @@ class SportEvaluationDashboardController extends Controller
             'site' => $readFilter($request->input('site')),
             'company' => $readFilter($request->input('company')),
             'division' => $readFilter($request->input('division')),
+            'division_group' => $readFilter($request->input('division_group')),
             'departement' => $readFilter($request->input('departement')),
             'jabatan_fungsional' => $jabatanFungsional,
             'install' => $install,
@@ -1437,7 +1457,7 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * @param  array{site:string,company:string,division:string,departement:string,jabatan_fungsional:string,install:string,user_aktif:string}  $filters
+     * @param  array{site:string,company:string,division:string,division_group?:string,departement:string,jabatan_fungsional:string,install:string,user_aktif:string}  $filters
      */
     private function applyNotInstalledFilters(
         Builder $query,
@@ -1452,7 +1472,26 @@ class SportEvaluationDashboardController extends Controller
         if ($filters['company'] !== '') {
             $query->where('e.nama_perusahaan', $filters['company']);
         }
-        if ($filters['division'] !== '') {
+        if (($filters['division_group'] ?? '') !== '') {
+            $aliases = $this->divisiGroupResolver->aliasesForGroup($filters['division_group']);
+            if ($aliases !== []) {
+                $normalized = array_map(
+                    static fn (string $alias): string => mb_strtoupper(trim($alias)),
+                    $aliases
+                );
+                $placeholders = implode(',', array_fill(0, count($normalized), '?'));
+                $query->whereRaw(
+                    'UPPER(TRIM(COALESCE(e.divisi, \'\'))) IN ('.$placeholders.')',
+                    $normalized
+                );
+            } else {
+                // Grup belum termapping: cocokkan exact ke label / nilai resolve
+                $query->whereRaw(
+                    'UPPER(TRIM(COALESCE(e.divisi, \'\'))) = ?',
+                    [mb_strtoupper($filters['division_group'])]
+                );
+            }
+        } elseif (($filters['division'] ?? '') !== '') {
             $query->where('e.divisi', 'like', '%'.$filters['division'].'%');
         }
         if ($filters['departement'] !== '') {

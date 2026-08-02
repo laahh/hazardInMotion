@@ -889,11 +889,11 @@
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
     var cache = {};
     var currentDimension = 'site';
-    var currentPeopleValue = '';
     var barChart = null;
     var overviewRendered = false;
     var peopleTable = null;
     var latestRows = [];
+    var filterOptionsReady = false;
 
     var loadingEl = document.getElementById('install-stats-loading');
     var unavailableEl = document.getElementById('install-stats-unavailable');
@@ -912,27 +912,23 @@
     var groupsHintEl = document.getElementById('install-stats-kpi-groups-hint');
     var openStatusBtn = document.getElementById('install-stats-open-status-btn');
     var cardEl = document.getElementById('total-user-install-card');
-    var peopleValueEl = document.getElementById('install-people-value');
-    var peopleDivisionEl = document.getElementById('install-people-division');
-    var peopleJabatanEl = document.getElementById('install-people-jabatan');
-    var peopleInstallEl = document.getElementById('install-people-install');
-    var peopleApplyBtn = document.getElementById('install-people-apply-btn');
-    var peopleResetBtn = document.getElementById('install-people-reset-btn');
-    var peopleTitleEl = document.getElementById('install-people-title');
     var peopleSubtitleEl = document.getElementById('install-people-subtitle');
-    var peopleValueLabelEl = document.getElementById('install-people-value-label');
     var peopleTotalBadge = document.getElementById('install-people-total-badge');
     var peopleTableEl = document.getElementById('installPeopleTable');
 
-    var filterMap = {
-        site: 'not-installed-site',
-        company: 'not-installed-company',
-        departement: 'not-installed-departement',
-        jabatan: 'not-installed-jabatan-fungsional'
-    };
+    var globalSiteEl = document.getElementById('install-global-site');
+    var globalDivisionEl = document.getElementById('install-global-division');
+    var globalJabatanEl = document.getElementById('install-global-jabatan');
+    var globalCompanyEl = document.getElementById('install-global-company');
+    var globalDepartementEl = document.getElementById('install-global-departement');
+    var globalDepartementListEl = document.getElementById('install-global-departement-options');
+    var globalInstallEl = document.getElementById('install-global-install');
+    var globalApplyBtn = document.getElementById('install-global-apply-btn');
+    var globalResetBtn = document.getElementById('install-global-reset-btn');
 
     var dimensionUnit = {
         site: 'site',
+        divisi: 'grup divisi',
         company: 'perusahaan',
         departement: 'departemen',
         jabatan: 'jabatan'
@@ -940,9 +936,18 @@
 
     var dimensionLabels = {
         site: 'Site',
+        divisi: 'Divisi',
         company: 'Perusahaan',
         departement: 'Departemen',
         jabatan: 'Jabatan'
+    };
+
+    var dimensionToGlobalFilter = {
+        site: 'site',
+        divisi: 'division_group',
+        company: 'company',
+        departement: 'departement',
+        jabatan: 'jabatan'
     };
 
     function formatNumber(value) {
@@ -1245,109 +1250,90 @@
         });
     }
 
-    function syncPeopleJabatanVisibility() {
-        if (!peopleJabatanEl) {
-            return;
-        }
-        var wrap = peopleJabatanEl.closest('[class*="col-"]');
-        var hide = currentDimension === 'jabatan';
-        if (wrap) {
-            wrap.classList.toggle('d-none', hide);
-        }
-        if (hide) {
-            peopleJabatanEl.value = '';
-        }
-    }
-
-    function buildPeopleFilters() {
-        var value = peopleValueEl ? peopleValueEl.value : '';
-        if (value === 'Tidak diketahui') {
-            value = '';
-        }
-
-        var division = peopleDivisionEl ? peopleDivisionEl.value.trim() : '';
-        var jabatan = peopleJabatanEl ? peopleJabatanEl.value : '';
-
-        // Dimensi aktif mengisi filter utamanya; Divisi/Jabatan tambahan tetap bisa digabung.
+    function readGlobalFilters() {
         return {
-            site: currentDimension === 'site' ? value : '',
-            company: currentDimension === 'company' ? value : '',
-            division: division,
-            departement: currentDimension === 'departement' ? value : '',
-            jabatan_fungsional: currentDimension === 'jabatan'
-                ? value
-                : jabatan,
-            install: peopleInstallEl ? peopleInstallEl.value : '',
-            user_aktif: ''
+            site: globalSiteEl ? globalSiteEl.value : '',
+            division_group: globalDivisionEl ? globalDivisionEl.value : '',
+            jabatan: globalJabatanEl ? globalJabatanEl.value : '',
+            company: globalCompanyEl ? globalCompanyEl.value : '',
+            departement: globalDepartementEl ? globalDepartementEl.value.trim() : '',
+            install: globalInstallEl ? globalInstallEl.value : ''
         };
     }
 
-    function populatePeopleValueOptions(rows, selectedValue) {
-        if (!peopleValueEl) {
+    function filtersCacheKey(filters) {
+        return [
+            filters.site || '',
+            filters.division_group || '',
+            filters.jabatan || '',
+            filters.company || '',
+            filters.departement || '',
+            filters.install || ''
+        ].join('|');
+    }
+
+    function fillSelectOptions(selectEl, values, allLabel, selectedValue) {
+        if (!selectEl) {
             return;
         }
-
-        var label = dimensionLabels[currentDimension] || 'Site';
-        if (peopleValueLabelEl) {
-            peopleValueLabelEl.textContent = label;
-        }
-        if (peopleTitleEl) {
-            peopleTitleEl.textContent = label;
-        }
-
-        var previous = selectedValue !== undefined ? selectedValue : peopleValueEl.value;
-        peopleValueEl.innerHTML = '';
-
+        var previous = selectedValue !== undefined ? selectedValue : selectEl.value;
+        selectEl.innerHTML = '';
         var allOpt = document.createElement('option');
         allOpt.value = '';
-        allOpt.textContent = 'Semua ' + label;
-        peopleValueEl.appendChild(allOpt);
-
-        (rows || []).forEach(function (row) {
-            if (!row.name || row.name === 'Lainnya') {
+        allOpt.textContent = allLabel;
+        selectEl.appendChild(allOpt);
+        (values || []).forEach(function (value) {
+            if (!value) {
                 return;
             }
             var opt = document.createElement('option');
-            opt.value = row.name;
-            opt.textContent = row.name + ' (' + formatNumber(row.installed) + '/' + formatNumber(row.total) + ')';
-            peopleValueEl.appendChild(opt);
+            opt.value = value;
+            opt.textContent = value;
+            selectEl.appendChild(opt);
         });
-
-        if (previous && Array.prototype.some.call(peopleValueEl.options, function (o) { return o.value === previous; })) {
-            peopleValueEl.value = previous;
+        if (previous && Array.prototype.some.call(selectEl.options, function (o) { return o.value === previous; })) {
+            selectEl.value = previous;
         } else {
-            peopleValueEl.value = '';
+            selectEl.value = '';
         }
+    }
 
-        currentPeopleValue = peopleValueEl.value;
-        updatePeopleSubtitle();
+    function populateGlobalFilterOptions(options) {
+        if (!options) {
+            return;
+        }
+        fillSelectOptions(globalSiteEl, options.sites || [], 'Semua Site');
+        fillSelectOptions(globalDivisionEl, options.division_groups || [], 'Semua Divisi');
+        fillSelectOptions(globalJabatanEl, options.jabatans || [], 'Semua Jabatan');
+        fillSelectOptions(globalCompanyEl, options.companies || [], 'Semua Perusahaan');
+
+        if (globalDepartementListEl) {
+            globalDepartementListEl.innerHTML = '';
+            (options.departements || []).forEach(function (value) {
+                var opt = document.createElement('option');
+                opt.value = value;
+                globalDepartementListEl.appendChild(opt);
+            });
+        }
+        filterOptionsReady = true;
     }
 
     function updatePeopleSubtitle() {
         if (!peopleSubtitleEl) {
             return;
         }
-        var label = dimensionLabels[currentDimension] || 'Site';
-        var value = peopleValueEl ? peopleValueEl.value : '';
-        var division = peopleDivisionEl ? peopleDivisionEl.value.trim() : '';
-        var jabatan = peopleJabatanEl ? peopleJabatanEl.value : '';
-        var install = peopleInstallEl ? peopleInstallEl.value : '';
+        var filters = readGlobalFilters();
         var parts = [];
-        parts.push(value ? (label + ': ' + value) : ('Semua ' + label.toLowerCase()));
-        if (division) {
-            parts.push('Divisi: ' + division);
-        }
-        if (currentDimension !== 'jabatan' && jabatan) {
-            parts.push('Jabatan: ' + jabatan);
-        }
-        if (install === 'sudah') {
-            parts.push('sudah install');
-        } else if (install === 'belum') {
-            parts.push('belum install');
-        } else {
-            parts.push('semua status install');
-        }
-        peopleSubtitleEl.textContent = parts.join(' · ');
+        if (filters.site) parts.push('Site: ' + filters.site);
+        if (filters.division_group) parts.push('Divisi: ' + filters.division_group);
+        if (filters.jabatan) parts.push('Jabatan: ' + filters.jabatan);
+        if (filters.company) parts.push('Perusahaan: ' + filters.company);
+        if (filters.departement) parts.push('Departemen: ' + filters.departement);
+        if (filters.install === 'sudah') parts.push('sudah install');
+        else if (filters.install === 'belum') parts.push('belum install');
+        peopleSubtitleEl.textContent = parts.length
+            ? parts.join(' · ')
+            : 'Mengikuti filter global di atas (semua data)';
     }
 
     function highlightSummaryRow(name) {
@@ -1382,14 +1368,15 @@
             ajax: {
                 url: peopleDataUrl,
                 data: function (d) {
-                    var filters = buildPeopleFilters();
+                    var filters = readGlobalFilters();
                     d.site = filters.site;
                     d.company = filters.company;
-                    d.division = filters.division;
+                    d.division_group = filters.division_group;
+                    d.division = '';
                     d.departement = filters.departement;
-                    d.jabatan_fungsional = filters.jabatan_fungsional;
+                    d.jabatan_fungsional = filters.jabatan;
                     d.install = filters.install;
-                    d.user_aktif = filters.user_aktif;
+                    d.user_aktif = '';
                 }
             },
             columns: [
@@ -1440,40 +1427,54 @@
 
     function reloadPeopleTable() {
         updatePeopleSubtitle();
-        highlightSummaryRow(peopleValueEl ? peopleValueEl.value : '');
         var table = ensurePeopleTable();
         if (table) {
             table.ajax.reload();
         }
     }
 
-    function filterPeopleByDimensionValue(name) {
-        if (!peopleValueEl) {
-            return;
-        }
-        if (!name || name === 'Lainnya') {
-            peopleValueEl.value = '';
-        } else if (Array.prototype.some.call(peopleValueEl.options, function (o) { return o.value === name; })) {
-            peopleValueEl.value = name;
-        } else {
-            peopleValueEl.value = '';
-        }
-        currentPeopleValue = peopleValueEl.value;
-        reloadPeopleTable();
-
-        var section = document.getElementById('install-people-section');
-        if (section) {
-            section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-    }
-
     function applyDimensionFilter(dimension, name) {
-        // Filter daftar karyawan di dalam modal (bukan tutup modal).
-        if (dimension !== currentDimension) {
-            loadDimension(dimension, name);
+        if (!name || name === 'Lainnya' || name === 'Tidak diketahui') {
+            if (dimension !== currentDimension) {
+                loadDimension(dimension);
+            }
             return;
         }
-        filterPeopleByDimensionValue(name);
+
+        var filterKey = dimensionToGlobalFilter[dimension];
+        if (filterKey === 'site' && globalSiteEl) {
+            globalSiteEl.value = name;
+        } else if (filterKey === 'division_group' && globalDivisionEl) {
+            if (!Array.prototype.some.call(globalDivisionEl.options, function (o) { return o.value === name; })) {
+                var opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                globalDivisionEl.appendChild(opt);
+            }
+            globalDivisionEl.value = name;
+        } else if (filterKey === 'company' && globalCompanyEl) {
+            if (!Array.prototype.some.call(globalCompanyEl.options, function (o) { return o.value === name; })) {
+                var cOpt = document.createElement('option');
+                cOpt.value = name;
+                cOpt.textContent = name;
+                globalCompanyEl.appendChild(cOpt);
+            }
+            globalCompanyEl.value = name;
+        } else if (filterKey === 'departement' && globalDepartementEl) {
+            globalDepartementEl.value = name;
+        } else if (filterKey === 'jabatan' && globalJabatanEl) {
+            if (!Array.prototype.some.call(globalJabatanEl.options, function (o) { return o.value === name; })) {
+                var jOpt = document.createElement('option');
+                jOpt.value = name;
+                jOpt.textContent = name;
+                globalJabatanEl.appendChild(jOpt);
+            }
+            globalJabatanEl.value = name;
+        }
+
+        cache = {};
+        overviewRendered = false;
+        loadDimension(dimension);
     }
 
     function scrollToStatusInstall() {
@@ -1492,34 +1493,15 @@
         var installEl = document.getElementById('not-installed-install');
         var userAktifEl = document.getElementById('not-installed-user-aktif');
         var applyBtn = document.getElementById('not-installed-apply-btn');
+        var filters = readGlobalFilters();
 
-        if (siteEl) siteEl.value = '';
-        if (companyEl) companyEl.value = '';
-        if (divisionEl) divisionEl.value = '';
-        if (departementEl) departementEl.value = '';
-        if (jabatanEl) jabatanEl.value = '';
+        if (siteEl) siteEl.value = filters.site || '';
+        if (companyEl) companyEl.value = filters.company || '';
+        if (divisionEl) divisionEl.value = filters.division_group || '';
+        if (departementEl) departementEl.value = filters.departement || '';
+        if (jabatanEl) jabatanEl.value = filters.jabatan || '';
         if (userAktifEl) userAktifEl.value = '';
-
-        var value = peopleValueEl ? peopleValueEl.value : '';
-        if (value && value !== 'Tidak diketahui') {
-            var targetId = filterMap[currentDimension];
-            var targetEl = targetId ? document.getElementById(targetId) : null;
-            if (targetEl) {
-                targetEl.value = value;
-            }
-        }
-
-        if (divisionEl && peopleDivisionEl && peopleDivisionEl.value.trim() !== '') {
-            divisionEl.value = peopleDivisionEl.value.trim();
-        }
-
-        if (jabatanEl && currentDimension !== 'jabatan' && peopleJabatanEl && peopleJabatanEl.value !== '') {
-            jabatanEl.value = peopleJabatanEl.value;
-        }
-
-        if (installEl) {
-            installEl.value = peopleInstallEl ? peopleInstallEl.value : '';
-        }
+        if (installEl) installEl.value = filters.install || '';
 
         if (applyBtn) {
             applyBtn.click();
@@ -1584,7 +1566,7 @@
             tableBody.appendChild(tr);
         });
 
-        highlightSummaryRow(currentPeopleValue);
+        highlightSummaryRow('');
     }
 
     function renderPayload(payload) {
@@ -1607,6 +1589,10 @@
             contentEl.classList.remove('d-none');
         }
 
+        if (payload.filter_options) {
+            populateGlobalFilterOptions(payload.filter_options);
+        }
+
         if (payload.overview && payload.overview.length) {
             if (!overviewRendered) {
                 renderOverview(payload.overview, payload.dimension);
@@ -1618,34 +1604,33 @@
         renderSummary(payload);
         renderChart(payload);
         renderTable(payload);
-        populatePeopleValueOptions(payload.rows || [], currentPeopleValue);
         ensurePeopleTable();
         reloadPeopleTable();
     }
 
-    function loadDimension(dimension, preserveValue) {
+    function loadDimension(dimension) {
         currentDimension = dimension;
-        if (preserveValue !== undefined) {
-            currentPeopleValue = preserveValue === 'Lainnya' ? '' : (preserveValue || '');
-        } else {
-            currentPeopleValue = '';
-            if (peopleValueEl) {
-                peopleValueEl.value = '';
-            }
-        }
-        syncPeopleJabatanVisibility();
         highlightOverview(dimension);
 
-        if (cache[dimension]) {
-            renderPayload(cache[dimension]);
-            if (preserveValue) {
-                filterPeopleByDimensionValue(preserveValue);
-            }
+        var filters = readGlobalFilters();
+        var key = dimension + '::' + filtersCacheKey(filters);
+
+        if (cache[key]) {
+            renderPayload(cache[key]);
             return;
         }
 
         setLoading(true);
-        fetch(dataUrl + '?dimension=' + encodeURIComponent(dimension), {
+        var params = new URLSearchParams();
+        params.set('dimension', dimension);
+        if (filters.site) params.set('site', filters.site);
+        if (filters.division_group) params.set('division_group', filters.division_group);
+        if (filters.jabatan) params.set('jabatan', filters.jabatan);
+        if (filters.company) params.set('company', filters.company);
+        if (filters.departement) params.set('departement', filters.departement);
+        if (filters.install) params.set('install', filters.install);
+
+        fetch(dataUrl + '?' + params.toString(), {
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
         })
@@ -1656,21 +1641,18 @@
                 return response.json();
             })
             .then(function (payload) {
-                cache[dimension] = payload;
+                cache[key] = payload;
                 if (payload.overview && payload.overview.length) {
                     overviewRendered = false;
                 }
                 renderPayload(payload);
-                if (preserveValue) {
-                    filterPeopleByDimensionValue(preserveValue);
-                }
             })
             .catch(function () {
                 renderPayload({
                     available: false,
                     dimension: dimension,
-                    dimension_label: 'Site',
-                    footnote: 'Berdasarkan karyawan status AKTIF (exclude VISITOR). Angka dapat berbeda dari total di kartu KPI.',
+                    dimension_label: dimensionLabels[dimension] || 'Site',
+                    footnote: 'Filter global mempengaruhi seluruh ringkasan. Divisi digabung per grup sejenis.',
                     message: 'Gagal memuat statistik install.',
                     summary: { total: 0, installed: 0, not_installed: 0, adoption_pct: 0, kpi_card_total: 0, groups: 0 },
                     overview: [],
@@ -1683,19 +1665,26 @@
             });
     }
 
+    function resetGlobalFilters() {
+        if (globalSiteEl) globalSiteEl.value = '';
+        if (globalDivisionEl) globalDivisionEl.value = '';
+        if (globalJabatanEl) globalJabatanEl.value = '';
+        if (globalCompanyEl) globalCompanyEl.value = '';
+        if (globalDepartementEl) globalDepartementEl.value = '';
+        if (globalInstallEl) globalInstallEl.value = '';
+    }
+
+    function applyGlobalFilters() {
+        cache = {};
+        overviewRendered = false;
+        loadDimension(currentDimension || 'site');
+    }
+
     modalEl.addEventListener('shown.bs.modal', function () {
         overviewRendered = false;
-        currentPeopleValue = '';
-        if (peopleDivisionEl) {
-            peopleDivisionEl.value = '';
-        }
-        if (peopleJabatanEl) {
-            peopleJabatanEl.value = '';
-        }
-        if (peopleInstallEl) {
-            peopleInstallEl.value = '';
-        }
-        syncPeopleJabatanVisibility();
+        filterOptionsReady = false;
+        resetGlobalFilters();
+        cache = {};
         loadDimension(currentDimension || 'site');
     });
 
@@ -1706,49 +1695,25 @@
         }
     });
 
-    if (peopleApplyBtn) {
-        peopleApplyBtn.addEventListener('click', function () {
-            currentPeopleValue = peopleValueEl ? peopleValueEl.value : '';
-            reloadPeopleTable();
+    if (globalApplyBtn) {
+        globalApplyBtn.addEventListener('click', function () {
+            applyGlobalFilters();
         });
     }
 
-    if (peopleResetBtn) {
-        peopleResetBtn.addEventListener('click', function () {
-            if (peopleValueEl) peopleValueEl.value = '';
-            if (peopleDivisionEl) peopleDivisionEl.value = '';
-            if (peopleJabatanEl) peopleJabatanEl.value = '';
-            if (peopleInstallEl) peopleInstallEl.value = '';
-            currentPeopleValue = '';
-            reloadPeopleTable();
+    if (globalResetBtn) {
+        globalResetBtn.addEventListener('click', function () {
+            resetGlobalFilters();
+            applyGlobalFilters();
         });
     }
 
-    if (peopleValueEl) {
-        peopleValueEl.addEventListener('change', function () {
-            currentPeopleValue = peopleValueEl.value;
-            reloadPeopleTable();
-        });
-    }
-
-    if (peopleDivisionEl) {
-        peopleDivisionEl.addEventListener('keydown', function (event) {
+    if (globalDepartementEl) {
+        globalDepartementEl.addEventListener('keydown', function (event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
-                reloadPeopleTable();
+                applyGlobalFilters();
             }
-        });
-    }
-
-    if (peopleJabatanEl) {
-        peopleJabatanEl.addEventListener('change', function () {
-            reloadPeopleTable();
-        });
-    }
-
-    if (peopleInstallEl) {
-        peopleInstallEl.addEventListener('change', function () {
-            reloadPeopleTable();
         });
     }
 

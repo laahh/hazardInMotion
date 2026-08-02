@@ -6,7 +6,7 @@
         <div class="min-w-0 pe-12">
           <h5 class="modal-title fw-bold text-lg mb-4" id="installStatsModalLabel">Detail Total User Install</h5>
           <p id="install-stats-footnote" class="text-sm text-secondary-light mb-0">
-            Sudah Install mengikuti KPI kartu. Breakdown dimensi memakai karyawan status AKTIF (exclude VISITOR).
+            Sudah Install mengikuti KPI kartu (tanpa filter). Filter global mengubah seluruh ringkasan; Divisi digabung per grup sejenis.
           </p>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
@@ -28,6 +28,66 @@
         </div>
 
         <div id="install-stats-content">
+          {{-- Filter global (mempengaruhi seluruh modal) --}}
+          <div class="bg-neutral-50 border radius-8 p-16 mb-20" id="install-stats-global-filters">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-12">
+              <h6 class="mb-0 fw-semibold text-md">Filter</h6>
+              <span class="text-xs text-secondary-light">Filter ini mengubah KPI, ringkasan, chart, dan daftar karyawan</span>
+            </div>
+            <div class="row g-3 align-items-end">
+              <div class="col-6 col-md-4 col-xl-2">
+                <label for="install-global-site" class="form-label text-sm fw-medium mb-6">Site</label>
+                <select id="install-global-site" class="form-select form-select-sm">
+                  <option value="">Semua Site</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-4 col-xl-2">
+                <label for="install-global-division" class="form-label text-sm fw-medium mb-6">Divisi</label>
+                <select id="install-global-division" class="form-select form-select-sm">
+                  <option value="">Semua Divisi</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-4 col-xl-2">
+                <label for="install-global-jabatan" class="form-label text-sm fw-medium mb-6">Jabatan</label>
+                <select id="install-global-jabatan" class="form-select form-select-sm">
+                  <option value="">Semua Jabatan</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-4 col-xl-2">
+                <label for="install-global-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
+                <select id="install-global-company" class="form-select form-select-sm">
+                  <option value="">Semua Perusahaan</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-4 col-xl-2">
+                <label for="install-global-departement" class="form-label text-sm fw-medium mb-6">Departemen</label>
+                <input
+                  type="text"
+                  id="install-global-departement"
+                  class="form-control form-control-sm"
+                  list="install-global-departement-options"
+                  placeholder="Semua Departemen"
+                  autocomplete="off"
+                >
+                <datalist id="install-global-departement-options"></datalist>
+              </div>
+              <div class="col-6 col-md-4 col-xl-2">
+                <label for="install-global-install" class="form-label text-sm fw-medium mb-6">Status Install</label>
+                <select id="install-global-install" class="form-select form-select-sm">
+                  <option value="">Semua</option>
+                  <option value="sudah">Sudah</option>
+                  <option value="belum">Belum</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-4 col-xl-3">
+                <div class="d-flex gap-2">
+                  <button type="button" id="install-global-reset-btn" class="btn btn-sm btn-outline-secondary w-100">Reset</button>
+                  <button type="button" id="install-global-apply-btn" class="btn btn-sm btn-primary-600 w-100">Filter</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {{-- Global KPI --}}
           <div class="row g-3 mb-20" id="install-stats-summary">
             <div class="col-6 col-xl-3">
@@ -138,71 +198,21 @@
             </div>
           </div>
 
-          {{-- Detail orang per dimensi --}}
+          {{-- Detail orang (mengikuti filter global) --}}
           <div class="border radius-8 overflow-hidden mt-20" id="install-people-section">
             <div class="px-16 py-12 border-bottom bg-neutral-50 d-flex align-items-start justify-content-between flex-wrap gap-2">
               <div>
                 <h6 class="mb-0 fw-semibold text-md">
-                  Daftar Karyawan · <span id="install-people-title">Site</span>
+                  Daftar Karyawan
                 </h6>
                 <span class="text-xs text-secondary-light" id="install-people-subtitle">
-                  Filter dari ringkasan di atas, atau pilih manual di bawah
+                  Mengikuti filter global di atas
                 </span>
               </div>
               <span id="install-people-total-badge" class="bg-primary-50 text-primary-600 text-sm fw-medium px-12 py-2 rounded-pill">0</span>
             </div>
 
             <div class="p-16">
-              <div class="bg-neutral-50 border radius-8 p-16 mb-16">
-                <div class="row g-3 align-items-end">
-                  <div class="col-6 col-md-4 col-xl-2">
-                    <label for="install-people-value" class="form-label text-sm fw-medium mb-6" id="install-people-value-label">Site</label>
-                    <select id="install-people-value" class="form-select form-select-sm">
-                      <option value="">Semua</option>
-                    </select>
-                  </div>
-                  <div class="col-6 col-md-4 col-xl-2">
-                    <label for="install-people-division" class="form-label text-sm fw-medium mb-6">Divisi</label>
-                    <input
-                      type="text"
-                      id="install-people-division"
-                      class="form-control form-control-sm"
-                      list="install-people-division-options"
-                      placeholder="Semua Divisi"
-                      autocomplete="off"
-                    >
-                    <datalist id="install-people-division-options">
-                      @foreach (($notInstalledDivisions ?? []) as $division)
-                        <option value="{{ $division }}"></option>
-                      @endforeach
-                    </datalist>
-                  </div>
-                  <div class="col-6 col-md-4 col-xl-2">
-                    <label for="install-people-jabatan" class="form-label text-sm fw-medium mb-6">Jabatan</label>
-                    <select id="install-people-jabatan" class="form-select form-select-sm">
-                      <option value="">Semua Jabatan</option>
-                      @foreach (($notInstalledJabatanFungsionals ?? []) as $jabatan)
-                        <option value="{{ $jabatan }}">{{ $jabatan }}</option>
-                      @endforeach
-                    </select>
-                  </div>
-                  <div class="col-6 col-md-4 col-xl-2">
-                    <label for="install-people-install" class="form-label text-sm fw-medium mb-6">Status Install</label>
-                    <select id="install-people-install" class="form-select form-select-sm">
-                      <option value="">Semua</option>
-                      <option value="sudah">Sudah</option>
-                      <option value="belum">Belum</option>
-                    </select>
-                  </div>
-                  <div class="col-12 col-md-4 col-xl-3">
-                    <div class="d-flex gap-2">
-                      <button type="button" id="install-people-reset-btn" class="btn btn-sm btn-outline-secondary w-100">Reset</button>
-                      <button type="button" id="install-people-apply-btn" class="btn btn-sm btn-primary-600 w-100">Filter</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <div class="table-responsive">
                 <table id="installPeopleTable" class="table bordered-table mb-0 w-100" style="width:100%">
                   <thead>
