@@ -913,6 +913,8 @@
     var openStatusBtn = document.getElementById('install-stats-open-status-btn');
     var cardEl = document.getElementById('total-user-install-card');
     var peopleValueEl = document.getElementById('install-people-value');
+    var peopleDivisionEl = document.getElementById('install-people-division');
+    var peopleJabatanEl = document.getElementById('install-people-jabatan');
     var peopleInstallEl = document.getElementById('install-people-install');
     var peopleApplyBtn = document.getElementById('install-people-apply-btn');
     var peopleResetBtn = document.getElementById('install-people-reset-btn');
@@ -1243,18 +1245,38 @@
         });
     }
 
+    function syncPeopleJabatanVisibility() {
+        if (!peopleJabatanEl) {
+            return;
+        }
+        var wrap = peopleJabatanEl.closest('[class*="col-"]');
+        var hide = currentDimension === 'jabatan';
+        if (wrap) {
+            wrap.classList.toggle('d-none', hide);
+        }
+        if (hide) {
+            peopleJabatanEl.value = '';
+        }
+    }
+
     function buildPeopleFilters() {
         var value = peopleValueEl ? peopleValueEl.value : '';
         if (value === 'Tidak diketahui') {
             value = '';
         }
 
+        var division = peopleDivisionEl ? peopleDivisionEl.value.trim() : '';
+        var jabatan = peopleJabatanEl ? peopleJabatanEl.value : '';
+
+        // Dimensi aktif mengisi filter utamanya; Divisi/Jabatan tambahan tetap bisa digabung.
         return {
             site: currentDimension === 'site' ? value : '',
             company: currentDimension === 'company' ? value : '',
-            division: '',
+            division: division,
             departement: currentDimension === 'departement' ? value : '',
-            jabatan_fungsional: currentDimension === 'jabatan' ? value : '',
+            jabatan_fungsional: currentDimension === 'jabatan'
+                ? value
+                : jabatan,
             install: peopleInstallEl ? peopleInstallEl.value : '',
             user_aktif: ''
         };
@@ -1307,9 +1329,17 @@
         }
         var label = dimensionLabels[currentDimension] || 'Site';
         var value = peopleValueEl ? peopleValueEl.value : '';
+        var division = peopleDivisionEl ? peopleDivisionEl.value.trim() : '';
+        var jabatan = peopleJabatanEl ? peopleJabatanEl.value : '';
         var install = peopleInstallEl ? peopleInstallEl.value : '';
         var parts = [];
         parts.push(value ? (label + ': ' + value) : ('Semua ' + label.toLowerCase()));
+        if (division) {
+            parts.push('Divisi: ' + division);
+        }
+        if (currentDimension !== 'jabatan' && jabatan) {
+            parts.push('Jabatan: ' + jabatan);
+        }
         if (install === 'sudah') {
             parts.push('sudah install');
         } else if (install === 'belum') {
@@ -1479,6 +1509,14 @@
             }
         }
 
+        if (divisionEl && peopleDivisionEl && peopleDivisionEl.value.trim() !== '') {
+            divisionEl.value = peopleDivisionEl.value.trim();
+        }
+
+        if (jabatanEl && currentDimension !== 'jabatan' && peopleJabatanEl && peopleJabatanEl.value !== '') {
+            jabatanEl.value = peopleJabatanEl.value;
+        }
+
         if (installEl) {
             installEl.value = peopleInstallEl ? peopleInstallEl.value : '';
         }
@@ -1595,6 +1633,7 @@
                 peopleValueEl.value = '';
             }
         }
+        syncPeopleJabatanVisibility();
         highlightOverview(dimension);
 
         if (cache[dimension]) {
@@ -1647,9 +1686,16 @@
     modalEl.addEventListener('shown.bs.modal', function () {
         overviewRendered = false;
         currentPeopleValue = '';
+        if (peopleDivisionEl) {
+            peopleDivisionEl.value = '';
+        }
+        if (peopleJabatanEl) {
+            peopleJabatanEl.value = '';
+        }
         if (peopleInstallEl) {
             peopleInstallEl.value = '';
         }
+        syncPeopleJabatanVisibility();
         loadDimension(currentDimension || 'site');
     });
 
@@ -1670,6 +1716,8 @@
     if (peopleResetBtn) {
         peopleResetBtn.addEventListener('click', function () {
             if (peopleValueEl) peopleValueEl.value = '';
+            if (peopleDivisionEl) peopleDivisionEl.value = '';
+            if (peopleJabatanEl) peopleJabatanEl.value = '';
             if (peopleInstallEl) peopleInstallEl.value = '';
             currentPeopleValue = '';
             reloadPeopleTable();
@@ -1679,6 +1727,21 @@
     if (peopleValueEl) {
         peopleValueEl.addEventListener('change', function () {
             currentPeopleValue = peopleValueEl.value;
+            reloadPeopleTable();
+        });
+    }
+
+    if (peopleDivisionEl) {
+        peopleDivisionEl.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                reloadPeopleTable();
+            }
+        });
+    }
+
+    if (peopleJabatanEl) {
+        peopleJabatanEl.addEventListener('change', function () {
             reloadPeopleTable();
         });
     }

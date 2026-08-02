@@ -99,7 +99,7 @@ final class SportEvaluationInstallStatsService
 
         try {
             $stats = Cache::remember(
-                'evaluasi_well:install_stats:v3:'.$dimension,
+                'evaluasi_well:install_stats:v4:'.$dimension,
                 self::CACHE_TTL,
                 function () use ($dimension): array {
                     return $this->buildStats($dimension);
@@ -141,14 +141,14 @@ final class SportEvaluationInstallStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:install_stats:overview:v3',
+                'evaluasi_well:install_stats:overview:v4',
                 self::CACHE_TTL,
                 function (): array {
                     $overview = [];
 
                     foreach (array_keys(self::DIMENSION_COLUMNS) as $dimension) {
                         $stats = Cache::remember(
-                            'evaluasi_well:install_stats:v3:'.$dimension,
+                            'evaluasi_well:install_stats:v4:'.$dimension,
                             self::CACHE_TTL,
                             function () use ($dimension): array {
                                 return $this->buildStats($dimension);
@@ -394,7 +394,7 @@ final class SportEvaluationInstallStatsService
     {
         $rows = [];
         $totalAll = 0;
-        $installedAll = 0;
+        $installedScoped = 0;
 
         foreach ($queryRows as $i => $row) {
             $total = (int) ($row->total ?? 0);
@@ -412,9 +412,12 @@ final class SportEvaluationInstallStatsService
             ];
 
             $totalAll += $total;
-            $installedAll += $installed;
+            $installedScoped += $installed;
         }
 
+        // Sudah Install di ringkasan mengikuti KPI kartu (distinct sinyal install, tanpa filter AKTIF/VISITOR).
+        $kpiCardTotal = $this->kpiCardTotal();
+        $installedAll = $kpiCardTotal > 0 ? $kpiCardTotal : $installedScoped;
         $notInstalledAll = max(0, $totalAll - $installedAll);
         $adoptionPct = $totalAll > 0 ? round($installedAll / $totalAll * 100, 1) : 0.0;
 
@@ -422,14 +425,14 @@ final class SportEvaluationInstallStatsService
             'available' => true,
             'dimension' => $dimension,
             'dimension_label' => self::DIMENSION_LABELS[$dimension],
-            'footnote' => 'Berdasarkan karyawan status AKTIF (exclude VISITOR). Angka dapat berbeda dari total di kartu KPI.',
+            'footnote' => 'Sudah Install mengikuti KPI kartu (distinct user dengan sinyal install). Breakdown dimensi memakai karyawan status AKTIF (exclude VISITOR).',
             'message' => null,
             'summary' => [
                 'total' => $totalAll,
                 'installed' => $installedAll,
                 'not_installed' => $notInstalledAll,
                 'adoption_pct' => $adoptionPct,
-                'kpi_card_total' => $this->kpiCardTotal(),
+                'kpi_card_total' => $kpiCardTotal,
                 'groups' => count($rows),
             ],
             'overview' => [],
@@ -584,7 +587,7 @@ final class SportEvaluationInstallStatsService
             'available' => false,
             'dimension' => $dimension,
             'dimension_label' => self::DIMENSION_LABELS[$dimension] ?? 'Site',
-            'footnote' => 'Berdasarkan karyawan status AKTIF (exclude VISITOR). Angka dapat berbeda dari total di kartu KPI.',
+            'footnote' => 'Sudah Install mengikuti KPI kartu. Breakdown dimensi memakai karyawan status AKTIF (exclude VISITOR).',
             'message' => $message,
             'summary' => [
                 'total' => 0,

@@ -6,7 +6,7 @@
         <div class="min-w-0 pe-12">
           <h5 class="modal-title fw-bold text-lg mb-4" id="installStatsModalLabel">Detail Total User Install</h5>
           <p id="install-stats-footnote" class="text-sm text-secondary-light mb-0">
-            Berdasarkan karyawan status AKTIF (exclude VISITOR). Angka dapat berbeda dari total di kartu KPI.
+            Sudah Install mengikuti KPI kartu. Breakdown dimensi memakai karyawan status AKTIF (exclude VISITOR).
           </p>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
@@ -155,13 +155,38 @@
             <div class="p-16">
               <div class="bg-neutral-50 border radius-8 p-16 mb-16">
                 <div class="row g-3 align-items-end">
-                  <div class="col-md-5 col-lg-4">
+                  <div class="col-6 col-md-4 col-xl-2">
                     <label for="install-people-value" class="form-label text-sm fw-medium mb-6" id="install-people-value-label">Site</label>
                     <select id="install-people-value" class="form-select form-select-sm">
                       <option value="">Semua</option>
                     </select>
                   </div>
-                  <div class="col-md-4 col-lg-3">
+                  <div class="col-6 col-md-4 col-xl-2">
+                    <label for="install-people-division" class="form-label text-sm fw-medium mb-6">Divisi</label>
+                    <input
+                      type="text"
+                      id="install-people-division"
+                      class="form-control form-control-sm"
+                      list="install-people-division-options"
+                      placeholder="Semua Divisi"
+                      autocomplete="off"
+                    >
+                    <datalist id="install-people-division-options">
+                      @foreach (($notInstalledDivisions ?? []) as $division)
+                        <option value="{{ $division }}"></option>
+                      @endforeach
+                    </datalist>
+                  </div>
+                  <div class="col-6 col-md-4 col-xl-2">
+                    <label for="install-people-jabatan" class="form-label text-sm fw-medium mb-6">Jabatan</label>
+                    <select id="install-people-jabatan" class="form-select form-select-sm">
+                      <option value="">Semua Jabatan</option>
+                      @foreach (($notInstalledJabatanFungsionals ?? []) as $jabatan)
+                        <option value="{{ $jabatan }}">{{ $jabatan }}</option>
+                      @endforeach
+                    </select>
+                  </div>
+                  <div class="col-6 col-md-4 col-xl-2">
                     <label for="install-people-install" class="form-label text-sm fw-medium mb-6">Status Install</label>
                     <select id="install-people-install" class="form-select form-select-sm">
                       <option value="">Semua</option>
@@ -169,7 +194,7 @@
                       <option value="belum">Belum</option>
                     </select>
                   </div>
-                  <div class="col-md-3 col-lg-3">
+                  <div class="col-12 col-md-4 col-xl-3">
                     <div class="d-flex gap-2">
                       <button type="button" id="install-people-reset-btn" class="btn btn-sm btn-outline-secondary w-100">Reset</button>
                       <button type="button" id="install-people-apply-btn" class="btn btn-sm btn-primary-600 w-100">Filter</button>

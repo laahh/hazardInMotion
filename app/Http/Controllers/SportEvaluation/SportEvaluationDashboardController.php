@@ -67,7 +67,7 @@ class SportEvaluationDashboardController extends Controller
                 'available' => false,
                 'dimension' => 'site',
                 'dimension_label' => 'Site',
-                'footnote' => 'Berdasarkan karyawan status AKTIF (exclude VISITOR). Angka dapat berbeda dari total di kartu KPI.',
+                'footnote' => 'Sudah Install mengikuti KPI kartu. Breakdown dimensi memakai karyawan status AKTIF (exclude VISITOR).',
                 'message' => 'Gagal memuat statistik install.',
                 'summary' => [
                     'total' => 0,
