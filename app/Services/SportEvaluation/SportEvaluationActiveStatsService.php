@@ -63,6 +63,7 @@ final class SportEvaluationActiveStatsService
     public function __construct(
         private readonly BewellConnectionService $connection,
         private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
+        private readonly SportEvaluationCompanyAliasResolver $companyAliasResolver,
     ) {}
 
     /**
@@ -138,7 +139,7 @@ final class SportEvaluationActiveStatsService
 
         try {
             $stats = Cache::remember(
-                'evaluasi_well:active_stats:v2:'.$dimension.':'.$week['start'],
+                'evaluasi_well:active_stats:v3:'.$dimension.':'.$week['start'],
                 self::CACHE_TTL,
                 function () use ($dimension, $week): array {
                     return $this->buildStats($dimension, $week);
@@ -196,14 +197,14 @@ final class SportEvaluationActiveStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:overview:v2:'.$week['start'],
+                'evaluasi_well:active_stats:overview:v3:'.$week['start'],
                 self::CACHE_TTL,
                 function () use ($week): array {
                     $overview = [];
 
                     foreach (array_keys(self::DIMENSION_COLUMNS) as $dimension) {
                         $stats = Cache::remember(
-                            'evaluasi_well:active_stats:v2:'.$dimension.':'.$week['start'],
+                            'evaluasi_well:active_stats:v3:'.$dimension.':'.$week['start'],
                             self::CACHE_TTL,
                             function () use ($dimension, $week): array {
                                 return $this->buildStats($dimension, $week);
@@ -457,19 +458,44 @@ final class SportEvaluationActiveStatsService
             $active = (int) ($row->active_users ?? 0);
             $food = (int) ($row->food_evals ?? 0);
             $workout = (int) ($row->workout_evals ?? 0);
+            $rawName = (string) ($row->dim_name ?? 'Tidak diketahui');
+            $name = $dimension === 'company'
+                ? ($this->companyAliasResolver->resolve($rawName) ?: 'Tidak diketahui')
+                : $rawName;
 
-            $rows[] = [
-                'name' => (string) ($row->dim_name ?? 'Tidak diketahui'),
-                'active_users' => $active,
-                'food_evals' => $food,
-                'workout_evals' => $workout,
-                'total_evals' => $food + $workout,
-                'pct' => 0.0,
-                'bar_class' => self::BAR_CLASSES[0],
-            ];
+            if (! isset($rows[$name])) {
+                $rows[$name] = [
+                    'name' => $name,
+                    'active_users' => 0,
+                    'food_evals' => 0,
+                    'workout_evals' => 0,
+                    'total_evals' => 0,
+                    'pct' => 0.0,
+                    'bar_class' => self::BAR_CLASSES[0],
+                ];
+            }
+
+            $rows[$name]['active_users'] += $active;
+            $rows[$name]['food_evals'] += $food;
+            $rows[$name]['workout_evals'] += $workout;
+            $rows[$name]['total_evals'] = $rows[$name]['food_evals'] + $rows[$name]['workout_evals'];
         }
 
-        return $rows;
+        $list = array_values($rows);
+        usort($list, static function (array $a, array $b): int {
+            $cmp = $b['active_users'] <=> $a['active_users'];
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+            $cmp = $b['total_evals'] <=> $a['total_evals'];
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+
+            return strcmp($a['name'], $b['name']);
+        });
+
+        return $list;
     }
 
     /**
@@ -660,7 +686,9 @@ final class SportEvaluationActiveStatsService
                     isset($row->kode_sid) ? (string) $row->kode_sid : null,
                     isset($row->site) ? (string) $row->site : null,
                 ),
-                'perusahaan' => (string) ($row->perusahaan ?? '-'),
+                'perusahaan' => ($resolved = $this->companyAliasResolver->resolve(
+                    isset($row->perusahaan) ? (string) $row->perusahaan : null
+                )) !== '' ? $resolved : '-',
                 'jabatan' => (string) ($row->jabatan ?? '-'),
                 'food_evals' => $food,
                 'workout_evals' => $workout,

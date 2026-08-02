@@ -54,6 +54,7 @@ final class SportEvaluationInstallStatsService
         private readonly BewellConnectionService $connection,
         private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
         private readonly SportEvaluationDivisiGroupResolver $divisiGroupResolver,
+        private readonly SportEvaluationCompanyAliasResolver $companyAliasResolver,
     ) {}
 
     /**
@@ -78,7 +79,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:v6:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:v7:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             $stats = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($dimension, $filters): array {
                 return $this->buildStats($dimension, $filters);
@@ -117,7 +118,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:overview:v6:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:overview:v7:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters): array {
                 $overview = [];
@@ -174,7 +175,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            return Cache::remember('evaluasi_well:install_stats:filter_options:v2', self::CACHE_TTL, function (): array {
+            return Cache::remember('evaluasi_well:install_stats:filter_options:v3', self::CACHE_TTL, function (): array {
                 $rows = $this->rawEmployeeRows();
                 $sites = [];
                 $companies = [];
@@ -193,8 +194,9 @@ final class SportEvaluationInstallStatsService
                         $divisionGroups[$group] = true;
                     }
 
-                    if ($row['company'] !== '' && $this->isMineconCompany($row['company'])) {
-                        $companies[$row['company']] = true;
+                    $company = $this->companyAliasResolver->resolve($row['company']);
+                    if ($company !== '' && $this->isMineconCompany($company)) {
+                        $companies[$company] = true;
                     }
                     if ($row['departement'] !== '') {
                         $departements[$row['departement']] = true;
@@ -322,14 +324,16 @@ final class SportEvaluationInstallStatsService
         $aggregated = [];
 
         foreach ($rows as $row) {
-            if ($dimension === 'company' && ! $this->isMineconCompany($row['company'])) {
+            $company = $this->companyAliasResolver->resolve($row['company']);
+
+            if ($dimension === 'company' && ! $this->isMineconCompany($company)) {
                 continue;
             }
 
             $name = match ($dimension) {
                 'site' => $row['resolved_site'] !== '' ? $row['resolved_site'] : 'Tidak diketahui',
                 'divisi' => $row['divisi_group'] !== '' ? $row['divisi_group'] : 'Tidak diketahui',
-                'company' => $row['company'] !== '' ? $row['company'] : 'Tidak diketahui',
+                'company' => $company !== '' ? $company : 'Tidak diketahui',
                 'departement' => $row['departement'] !== '' ? $row['departement'] : 'Tidak diketahui',
                 'jabatan' => $row['jabatan'] !== '' ? $row['jabatan'] : 'Tidak diketahui',
                 default => 'Tidak diketahui',
@@ -475,6 +479,7 @@ final class SportEvaluationInstallStatsService
         foreach ($this->rawEmployeeRows() as $row) {
             $resolvedSite = $this->siteResolver->resolve($row['kode_sid'], $row['site']);
             $divisiGroup = $this->divisiGroupResolver->resolve($row['divisi']);
+            $company = $this->companyAliasResolver->resolve($row['company']);
 
             if ($filters['site'] !== '' && $resolvedSite !== $filters['site']) {
                 continue;
@@ -482,7 +487,7 @@ final class SportEvaluationInstallStatsService
             if ($filters['division_group'] !== '' && $divisiGroup !== $filters['division_group']) {
                 continue;
             }
-            if ($filters['company'] !== '' && $row['company'] !== $filters['company']) {
+            if ($filters['company'] !== '' && ! $this->companyAliasResolver->matchesFilter($row['company'], $filters['company'])) {
                 continue;
             }
             if ($filters['departement'] !== '' && ! str_contains(mb_strtolower($row['departement']), mb_strtolower($filters['departement']))) {
@@ -504,7 +509,7 @@ final class SportEvaluationInstallStatsService
                 'resolved_site' => $resolvedSite,
                 'divisi' => $row['divisi'],
                 'divisi_group' => $divisiGroup,
-                'company' => $row['company'],
+                'company' => $company,
                 'departement' => $row['departement'],
                 'jabatan' => $row['jabatan'],
                 'is_installed' => $row['is_installed'],
@@ -646,7 +651,7 @@ final class SportEvaluationInstallStatsService
                         if ($filters['division_group'] !== '' && $divisiGroup !== $filters['division_group']) {
                             continue;
                         }
-                        if ($filters['company'] !== '' && $row['company'] !== $filters['company']) {
+                        if ($filters['company'] !== '' && ! $this->companyAliasResolver->matchesFilter($row['company'], $filters['company'])) {
                             continue;
                         }
                         if ($filters['departement'] !== '' && ! str_contains(mb_strtolower($row['departement']), mb_strtolower($filters['departement']))) {
