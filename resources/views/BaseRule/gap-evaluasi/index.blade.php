@@ -134,6 +134,38 @@
       ])
    </div>
 </details>
+
+{{-- Modal detail gap per Site/Perusahaan --}}
+<div id="gap-eval-modal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+   <div class="absolute inset-0 bg-slate-900/40" data-gap-modal-close></div>
+   <div class="relative mx-auto mt-10 mb-10 w-[min(56rem,94vw)] max-h-[85vh] flex flex-col rounded-2xl bg-white shadow-xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
+         <div class="min-w-0">
+            <p id="gap-eval-modal-metric" class="text-[10px] font-bold uppercase tracking-wider text-teal-700"></p>
+            <h3 id="gap-eval-modal-title" class="font-headline font-bold text-lg text-on-background truncate"></h3>
+            <p id="gap-eval-modal-subtitle" class="text-xs text-on-surface-variant mt-0.5"></p>
+         </div>
+         <button type="button" class="rounded-lg p-1.5 text-on-surface-variant hover:bg-slate-100" data-gap-modal-close aria-label="Tutup">
+            <span class="material-symbols-outlined">close</span>
+         </button>
+      </div>
+      <div class="overflow-auto flex-1">
+         <table class="hsecm-table w-full text-sm">
+            <thead>
+               <tr>
+                  <th class="px-4 py-2 text-left">Status</th>
+                  <th class="px-4 py-2 text-left">Item</th>
+                  <th class="px-4 py-2 text-left">Site</th>
+                  <th class="px-4 py-2 text-left">Perusahaan</th>
+                  <th class="px-4 py-2 text-center">Streak</th>
+               </tr>
+            </thead>
+            <tbody id="gap-eval-modal-body"></tbody>
+         </table>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-100 text-xs text-on-surface-variant" id="gap-eval-modal-footer"></div>
+   </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -169,6 +201,107 @@ document.addEventListener('DOMContentLoaded', function () {
          strip.classList.toggle('is-active', strip.getAttribute('data-program-key') === firstKey);
       });
    }
+
+   const detailStore = {};
+   document.querySelectorAll('.gap-eval-scope-json').forEach(function (el) {
+      const programKey = el.getAttribute('data-program-key');
+      try {
+         detailStore[programKey] = JSON.parse(el.textContent || '{}');
+      } catch (e) {
+         detailStore[programKey] = {};
+      }
+   });
+
+   const statusLabel = {
+      tetap: 'Masih berulang',
+      hilang: 'Sudah perbaikan',
+      baru: 'Gap baru',
+      kembali: 'Kembali muncul'
+   };
+   const statusBadge = {
+      tetap: 'hsecm-badge--danger',
+      hilang: 'hsecm-badge--success',
+      baru: 'hsecm-badge--warning',
+      kembali: 'hsecm-badge--warning'
+   };
+
+   const modal = document.getElementById('gap-eval-modal');
+   const modalTitle = document.getElementById('gap-eval-modal-title');
+   const modalMetric = document.getElementById('gap-eval-modal-metric');
+   const modalSubtitle = document.getElementById('gap-eval-modal-subtitle');
+   const modalBody = document.getElementById('gap-eval-modal-body');
+   const modalFooter = document.getElementById('gap-eval-modal-footer');
+
+   function escapeHtml(str) {
+      return String(str ?? '')
+         .replace(/&/g, '&amp;')
+         .replace(/</g, '&lt;')
+         .replace(/>/g, '&gt;')
+         .replace(/"/g, '&quot;');
+   }
+
+   function openModal(btn) {
+      const programKey = btn.getAttribute('data-program-key');
+      const programLabel = btn.getAttribute('data-program-label') || programKey;
+      const scopeKey = btn.getAttribute('data-scope-key');
+      const scopeTitle = btn.getAttribute('data-scope-title') || '';
+      const metric = btn.getAttribute('data-metric');
+      const metricLabel = btn.getAttribute('data-metric-label') || metric;
+      const rows = (((detailStore[programKey] || {})[scopeKey] || {})[metric]) || [];
+
+      modalMetric.textContent = metricLabel;
+      modalTitle.textContent = programLabel;
+      modalSubtitle.textContent = scopeTitle;
+
+      if (!rows.length) {
+         modalBody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-on-surface-variant">Tidak ada detail untuk ditampilkan.</td></tr>';
+      } else {
+         modalBody.innerHTML = rows.map(function (row) {
+            const st = row.status || '';
+            const badge = statusBadge[st] || '';
+            const label = statusLabel[st] || st || '—';
+            const streak = Number(row.day_streak || 0);
+            const streakClass = streak >= 2 ? 'text-red-600' : '';
+            return (
+               '<tr class="border-t border-slate-50">' +
+                  '<td class="px-4 py-2 whitespace-nowrap"><span class="hsecm-badge ' + badge + '">' + escapeHtml(label) + '</span></td>' +
+                  '<td class="px-4 py-2"><div class="text-on-background">' + escapeHtml(row.value_label || '—') + '</div>' +
+                     '<div class="text-[11px] text-on-surface-variant font-mono">' + escapeHtml((row.business_key || '').slice(0, 48)) + '</div></td>' +
+                  '<td class="px-4 py-2 whitespace-nowrap">' + escapeHtml(row.site || '—') + '</td>' +
+                  '<td class="px-4 py-2">' + escapeHtml(row.perusahaan || '—') + '</td>' +
+                  '<td class="px-4 py-2 text-center font-semibold ' + streakClass + '">' + streak + '×</td>' +
+               '</tr>'
+            );
+         }).join('');
+      }
+
+      modalFooter.textContent = rows.length + ' item ditampilkan' + (rows.length >= 100 ? ' (maks. 100 per sel)' : '');
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('overflow-hidden');
+   }
+
+   function closeModal() {
+      modal.classList.add('hidden');
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('overflow-hidden');
+   }
+
+   document.querySelectorAll('.gap-eval-open-modal').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+         openModal(btn);
+      });
+   });
+
+   modal.querySelectorAll('[data-gap-modal-close]').forEach(function (el) {
+      el.addEventListener('click', closeModal);
+   });
+
+   document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+         closeModal();
+      }
+   });
 });
 </script>
 @endpush

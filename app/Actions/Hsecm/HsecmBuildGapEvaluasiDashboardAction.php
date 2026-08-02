@@ -18,6 +18,8 @@ final class HsecmBuildGapEvaluasiDashboardAction
 {
     private const DETAIL_LIMIT = 200;
 
+    private const SCOPE_DETAIL_LIMIT = 100;
+
     /**
      * Urutan & label parameter (selaras mockup Gap Evaluasi).
      *
@@ -557,8 +559,10 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 $scopeKey = $this->resolveScopeKeyOrOther($row);
                 $this->ensureScopeBucket($stats[$key]['scopes'], $scopeKey);
                 $stats[$key]['scopes'][$scopeKey]['total_gap']++;
+                $this->pushScopeDetail($stats[$key]['scopes'][$scopeKey]['detail_gap'], $row);
                 if ($isPerulangan) {
                     $stats[$key]['scopes'][$scopeKey]['total_perulangan']++;
+                    $this->pushScopeDetail($stats[$key]['scopes'][$scopeKey]['detail_perulangan'], $row);
                 }
             }
         }
@@ -579,6 +583,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
             $this->ensureScopeBucket($stats[$key]['scopes'], $scopeKey);
             if ($tanpaPerulangan) {
                 $stats[$key]['scopes'][$scopeKey]['perbaikan_tanpa_perulangan']++;
+                $this->pushScopeDetail($stats[$key]['scopes'][$scopeKey]['detail_perbaikan'], $row);
             }
         }
 
@@ -653,7 +658,14 @@ final class HsecmBuildGapEvaluasiDashboardAction
     }
 
     /**
-     * @param  array<string, array{total_gap: int, total_perulangan: int, perbaikan_tanpa_perulangan: int}>  $scopes
+     * @param  array<string, array{
+     *     total_gap: int,
+     *     total_perulangan: int,
+     *     perbaikan_tanpa_perulangan: int,
+     *     detail_gap: list<array<string, mixed>>,
+     *     detail_perulangan: list<array<string, mixed>>,
+     *     detail_perbaikan: list<array<string, mixed>>
+     * }>  $scopes
      */
     private function ensureScopeBucket(array &$scopes, string $scopeKey): void
     {
@@ -662,16 +674,46 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'total_gap' => 0,
                 'total_perulangan' => 0,
                 'perbaikan_tanpa_perulangan' => 0,
+                'detail_gap' => [],
+                'detail_perulangan' => [],
+                'detail_perbaikan' => [],
             ];
         }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $bucket
+     * @param  array<string, mixed>  $row
+     */
+    private function pushScopeDetail(array &$bucket, array $row): void
+    {
+        if (count($bucket) >= self::SCOPE_DETAIL_LIMIT) {
+            return;
+        }
+
+        $bucket[] = [
+            'status' => (string) ($row['status'] ?? ''),
+            'value_label' => (string) ($row['value_label'] ?? ''),
+            'business_key' => (string) ($row['business_key'] ?? ''),
+            'site' => (string) ($row['site'] ?? ''),
+            'perusahaan' => (string) ($row['perusahaan'] ?? ''),
+            'day_streak' => (int) ($row['day_streak'] ?? 0),
+        ];
     }
 
     /**
      * Tabel vertikal: Site/Perusahaan ke bawah, metrik ke samping.
      *
      * @param  list<array{key: string, site: string, company_code: string, company_name: string}>  $scopeOrder
-     * @param  array<string, array{total_gap: int, total_perulangan: int, perbaikan_tanpa_perulangan: int}>  $scopes
-     * @return list<array{key: string, site: string, company_code: string, company_name: string, total_gap: int, total_perulangan: int, perbaikan_tanpa_perulangan: int}>
+     * @param  array<string, array{
+     *     total_gap: int,
+     *     total_perulangan: int,
+     *     perbaikan_tanpa_perulangan: int,
+     *     detail_gap?: list<array<string, mixed>>,
+     *     detail_perulangan?: list<array<string, mixed>>,
+     *     detail_perbaikan?: list<array<string, mixed>>
+     * }>  $scopes
+     * @return list<array<string, mixed>>
      */
     private function buildVerticalScopeRows(array $scopeOrder, array $scopes): array
     {
@@ -685,16 +727,17 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'total_gap' => 0,
                 'total_perulangan' => 0,
                 'perbaikan_tanpa_perulangan' => 0,
+                'detail_gap' => [],
+                'detail_perulangan' => [],
+                'detail_perbaikan' => [],
             ];
-            $rows[] = [
-                'key' => $key,
-                'site' => $scope['site'],
-                'company_code' => $scope['company_code'],
-                'company_name' => $scope['company_name'],
-                'total_gap' => (int) $bucket['total_gap'],
-                'total_perulangan' => (int) $bucket['total_perulangan'],
-                'perbaikan_tanpa_perulangan' => (int) $bucket['perbaikan_tanpa_perulangan'],
-            ];
+            $rows[] = $this->formatMatrixScopeRow(
+                $key,
+                $scope['site'],
+                $scope['company_code'],
+                $scope['company_name'],
+                $bucket,
+            );
         }
 
         foreach ($scopes as $key => $bucket) {
@@ -702,18 +745,41 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 continue;
             }
             $parts = explode('|', $key, 2);
-            $rows[] = [
-                'key' => $key,
-                'site' => $parts[0] !== '' ? $parts[0] : 'Lainnya',
-                'company_code' => $parts[1] ?? '—',
-                'company_name' => $parts[1] ?? '—',
-                'total_gap' => (int) $bucket['total_gap'],
-                'total_perulangan' => (int) $bucket['total_perulangan'],
-                'perbaikan_tanpa_perulangan' => (int) $bucket['perbaikan_tanpa_perulangan'],
-            ];
+            $rows[] = $this->formatMatrixScopeRow(
+                $key,
+                $parts[0] !== '' ? $parts[0] : 'Lainnya',
+                $parts[1] ?? '—',
+                $parts[1] ?? '—',
+                $bucket,
+            );
         }
 
         return $rows;
+    }
+
+    /**
+     * @param  array<string, mixed>  $bucket
+     * @return array<string, mixed>
+     */
+    private function formatMatrixScopeRow(
+        string $key,
+        string $site,
+        string $companyCode,
+        string $companyName,
+        array $bucket,
+    ): array {
+        return [
+            'key' => $key,
+            'site' => $site,
+            'company_code' => $companyCode,
+            'company_name' => $companyName,
+            'total_gap' => (int) ($bucket['total_gap'] ?? 0),
+            'total_perulangan' => (int) ($bucket['total_perulangan'] ?? 0),
+            'perbaikan_tanpa_perulangan' => (int) ($bucket['perbaikan_tanpa_perulangan'] ?? 0),
+            'detail_gap' => array_values($bucket['detail_gap'] ?? []),
+            'detail_perulangan' => array_values($bucket['detail_perulangan'] ?? []),
+            'detail_perbaikan' => array_values($bucket['detail_perbaikan'] ?? []),
+        ];
     }
 
     /**

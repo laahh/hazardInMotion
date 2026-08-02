@@ -74,6 +74,8 @@
                   $g = (int) ($m['total_gap'] ?? 0);
                   $p = (int) ($m['total_perulangan'] ?? 0);
                   $b = (int) ($m['perbaikan_tanpa_perulangan'] ?? 0);
+                  $scopeKey = (string) ($m['key'] ?? '');
+                  $scopeTitle = trim(($m['site'] ?? '').' · '.($m['company_code'] ?? ''));
                @endphp
                <tr class="border-t border-slate-50">
                   <td class="px-4 py-2 font-semibold text-on-background whitespace-nowrap">{{ $m['site'] }}</td>
@@ -83,9 +85,54 @@
                         <span class="block text-[11px] text-on-surface-variant">{{ $m['company_name'] }}</span>
                      @endif
                   </td>
-                  <td class="px-4 py-2 text-right font-semibold {{ $g > 0 ? 'text-red-600' : 'text-on-surface-variant' }}">{{ number_format($g) }}</td>
-                  <td class="px-4 py-2 text-right font-semibold {{ $p > 0 ? 'text-red-600' : 'text-on-surface-variant' }}">{{ number_format($p) }}</td>
-                  <td class="px-4 py-2 text-right font-semibold {{ $b > 0 ? 'text-emerald-700' : 'text-on-surface-variant' }}">{{ number_format($b) }}</td>
+                  <td class="px-4 py-2 text-right">
+                     @if($g > 0)
+                     <button
+                        type="button"
+                        class="gap-eval-open-modal font-semibold text-red-600 underline decoration-red-300 underline-offset-2 hover:text-red-700"
+                        data-program-key="{{ $key }}"
+                        data-program-label="{{ $label }}"
+                        data-scope-key="{{ $scopeKey }}"
+                        data-scope-title="{{ $scopeTitle }}"
+                        data-metric="gap"
+                        data-metric-label="Total Gap"
+                     >{{ number_format($g) }}</button>
+                     @else
+                     <span class="font-semibold text-on-surface-variant">0</span>
+                     @endif
+                  </td>
+                  <td class="px-4 py-2 text-right">
+                     @if($p > 0)
+                     <button
+                        type="button"
+                        class="gap-eval-open-modal font-semibold text-red-600 underline decoration-red-300 underline-offset-2 hover:text-red-700"
+                        data-program-key="{{ $key }}"
+                        data-program-label="{{ $label }}"
+                        data-scope-key="{{ $scopeKey }}"
+                        data-scope-title="{{ $scopeTitle }}"
+                        data-metric="perulangan"
+                        data-metric-label="Total Perulangan"
+                     >{{ number_format($p) }}</button>
+                     @else
+                     <span class="font-semibold text-on-surface-variant">0</span>
+                     @endif
+                  </td>
+                  <td class="px-4 py-2 text-right">
+                     @if($b > 0)
+                     <button
+                        type="button"
+                        class="gap-eval-open-modal font-semibold text-emerald-700 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-800"
+                        data-program-key="{{ $key }}"
+                        data-program-label="{{ $label }}"
+                        data-scope-key="{{ $scopeKey }}"
+                        data-scope-title="{{ $scopeTitle }}"
+                        data-metric="perbaikan"
+                        data-metric-label="Perbaikan tanpa Perulangan"
+                     >{{ number_format($b) }}</button>
+                     @else
+                     <span class="font-semibold text-on-surface-variant">0</span>
+                     @endif
+                  </td>
                </tr>
                @empty
                <tr>
@@ -95,6 +142,17 @@
             </tbody>
          </table>
       </div>
+      @php
+         $scopeDetailPayload = [];
+         foreach ($matrixRows as $mRow) {
+            $scopeDetailPayload[(string) ($mRow['key'] ?? '')] = [
+               'gap' => $mRow['detail_gap'] ?? [],
+               'perulangan' => $mRow['detail_perulangan'] ?? [],
+               'perbaikan' => $mRow['detail_perbaikan'] ?? [],
+            ];
+         }
+      @endphp
+      <script type="application/json" class="gap-eval-scope-json" data-program-key="{{ $key }}">@json($scopeDetailPayload)</script>
    </div>
 
    {{-- Detail item (opsional, collapse) --}}
