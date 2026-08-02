@@ -48,28 +48,34 @@ final class HsecmBuildGapEvaluasiDashboardAction
     {
         $probeTable = HsecmDashboardService::DATASETS['sap-rfid']['table'];
         $dates = $this->repository->listDistinctBatchSlotDates($probeTable, 90);
+        [$dateFrom, $dateTo] = $this->resolveDateRange($filters, $dates);
 
-        $evalDate = trim((string) ($filters['date_from'] ?? ''));
-        if ($evalDate === '' || preg_match('/^\d{4}-\d{2}-\d{2}$/', $evalDate) !== 1) {
-            $evalDate = $dates[0] ?? Carbon::now('Asia/Makassar')->format('Y-m-d');
+        $rangeDates = $this->datesInRange($dates, $dateFrom, $dateTo);
+        if ($rangeDates === []) {
+            // Tidak ada scrape di range — tetap pakai date_from sebagai titik evaluasi jika ada slot.
+            $rangeDates = [$dateFrom];
         }
 
-        $prevDate = $this->resolvePreviousDate($dates, $evalDate);
+        $prevDate = $this->resolvePreviousDate($dates, $dateFrom);
 
-        $slotsD = $this->repository->listBatchSlotsOnDate($probeTable, $evalDate);
+        $slotsD = $this->collectSlotsForDates($probeTable, $rangeDates);
         $slotsPrev = $prevDate !== null
             ? $this->repository->listBatchSlotsOnDate($probeTable, $prevDate)
             : [];
 
-        $mapD = $this->collectDayIdentityMap($filters, $slotsD);
+        $collected = $this->collectRangeIdentityMap($filters, $slotsD, $rangeDates);
+        $mapD = $collected['map'];
+        /** @var array<string, int> $dayCountByIdentity */
+        $dayCountByIdentity = $collected['day_counts'];
+
         $mapPrev = $this->collectDayIdentityMap($filters, $slotsPrev);
 
-        $scrape = $this->classifyScrape($mapD, $mapPrev, $prevDate, $slotsPrev);
+        $scrape = $this->classifyScrape($mapD, $mapPrev, $prevDate, $slotsPrev, $dayCountByIdentity);
 
         $tasklist = $this->buildTasklistEffectiveness(
             $filters,
             $mapD,
-            $evalDate,
+            $dateTo,
         );
 
         /** @var array<string, int> $hilangStreakByIdentity */
@@ -99,7 +105,6 @@ final class HsecmBuildGapEvaluasiDashboardAction
             $tasklist,
             $hilangStreakByIdentity,
         );
-        $overview = $this->buildOverviewCards($scrape, $tasklist, $programs);
 
         unset(
             $tasklist['acted_identities'],
@@ -109,24 +114,104 @@ final class HsecmBuildGapEvaluasiDashboardAction
             $scrape['all_details'],
         );
 
+        $periodLabel = $dateFrom === $dateTo
+            ? (
+                $prevDate !== null
+                    ? 'Evaluasi '.$dateFrom.' vs '.$prevDate.' (hari kalender scrape)'
+                    : 'Evaluasi '.$dateFrom.' (belum ada hari pembanding)'
+            )
+            : (
+                $prevDate !== null
+                    ? 'Evaluasi '.$dateFrom.' s/d '.$dateTo.' vs pembanding '.$prevDate
+                    : 'Evaluasi '.$dateFrom.' s/d '.$dateTo.' (belum ada hari pembanding)'
+            );
+
         return [
             'filters' => array_merge($filters, [
-                'date_from' => $evalDate,
-                'date_to' => $evalDate,
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
             ]),
             'filter_options' => $this->dashboardService->getFilterOptions(),
-            'period_label' => $prevDate !== null
-                ? 'Evaluasi '.$evalDate.' vs '.$prevDate.' (hari kalender scrape)'
-                : 'Evaluasi '.$evalDate.' (belum ada hari pembanding)',
-            'eval_date' => $evalDate,
+            'period_label' => $periodLabel,
+            'eval_date' => $dateTo,
             'prev_date' => $prevDate,
             'slots_d' => $slotsD,
             'slots_prev' => $slotsPrev,
-            'overview' => $overview,
+            'range_dates' => $rangeDates,
             'programs' => $programs,
             'scrape' => $scrape,
             'tasklist' => $tasklist,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @param  list<string>  $availableDates  desc Y-m-d
+     * @return array{0: string, 1: string}
+     */
+    private function resolveDateRange(array $filters, array $availableDates): array
+    {
+        $fallback = $availableDates[0] ?? Carbon::now('Asia/Makassar')->format('Y-m-d');
+
+        $dateFrom = trim((string) ($filters['date_from'] ?? ''));
+        $dateTo = trim((string) ($filters['date_to'] ?? ''));
+
+        if ($dateFrom === '' || preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom) !== 1) {
+            $dateFrom = $fallback;
+        }
+        if ($dateTo === '' || preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo) !== 1) {
+            $dateTo = $dateFrom;
+        }
+
+        if ($dateFrom > $dateTo) {
+            [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
+        }
+
+        // Batasi rentang agar performa tetap wajar (max 31 hari kalender).
+        $from = Carbon::parse($dateFrom, 'Asia/Makassar')->startOfDay();
+        $to = Carbon::parse($dateTo, 'Asia/Makassar')->startOfDay();
+        if ($from->diffInDays($to) > 30) {
+            $dateFrom = $to->copy()->subDays(30)->format('Y-m-d');
+            $dateTo = $to->format('Y-m-d');
+        }
+
+        return [$dateFrom, $dateTo];
+    }
+
+    /**
+     * Irisan tanggal scrape yang tersedia dengan range filter.
+     *
+     * @param  list<string>  $availableDates
+     * @return list<string>  ascending
+     */
+    private function datesInRange(array $availableDates, string $dateFrom, string $dateTo): array
+    {
+        $matched = [];
+        foreach ($availableDates as $date) {
+            if ($date >= $dateFrom && $date <= $dateTo) {
+                $matched[] = $date;
+            }
+        }
+
+        sort($matched);
+
+        return $matched;
+    }
+
+    /**
+     * @param  list<string>  $dates
+     * @return list<string>
+     */
+    private function collectSlotsForDates(string $table, array $dates): array
+    {
+        $slots = [];
+        foreach ($dates as $date) {
+            foreach ($this->repository->listBatchSlotsOnDate($table, $date) as $slot) {
+                $slots[$slot] = true;
+            }
+        }
+
+        return array_keys($slots);
     }
 
     /**
@@ -150,10 +235,24 @@ final class HsecmBuildGapEvaluasiDashboardAction
      */
     private function collectDayIdentityMap(array $filters, array $slots): array
     {
+        return $this->collectRangeIdentityMap($filters, $slots, [])['map'];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @param  list<string>  $slots
+     * @param  list<string>  $rangeDates  untuk hitung distinct hari per identity (opsional)
+     * @return array{map: array<string, array<string, mixed>>, day_counts: array<string, int>}
+     */
+    private function collectRangeIdentityMap(array $filters, array $slots, array $rangeDates): array
+    {
         /** @var array<string, array<string, mixed>> $map */
         $map = [];
+        /** @var array<string, array<string, true>> $daysByIdentity */
+        $daysByIdentity = [];
 
         foreach ($slots as $slot) {
+            $slotDate = $this->slotToDate($slot);
             $slotFilters = $this->dashboardService->withBatchContext(
                 [
                     'site' => (string) ($filters['site'] ?? ''),
@@ -170,24 +269,61 @@ final class HsecmBuildGapEvaluasiDashboardAction
 
             foreach ($this->dashboardService->extractGapIdentityRows($slotFilters) as $row) {
                 $identity = (string) $row['identity'];
-                if ($identity === '' || isset($map[$identity])) {
+                if ($identity === '') {
                     continue;
                 }
-                $map[$identity] = $row;
+                if (! isset($map[$identity])) {
+                    $map[$identity] = $row;
+                }
+                if ($slotDate !== null && ($rangeDates === [] || in_array($slotDate, $rangeDates, true))) {
+                    $daysByIdentity[$identity][$slotDate] = true;
+                }
             }
         }
 
-        return $map;
+        $dayCounts = [];
+        foreach ($daysByIdentity as $identity => $days) {
+            $dayCounts[$identity] = count($days);
+        }
+
+        return [
+            'map' => $map,
+            'day_counts' => $dayCounts,
+        ];
+    }
+
+    private function slotToDate(string $slot): ?string
+    {
+        $slot = trim($slot);
+        if ($slot === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($slot, 'Asia/Makassar')->format('Y-m-d');
+        } catch (\Throwable) {
+            if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $slot, $m) === 1) {
+                return $m[1];
+            }
+
+            return null;
+        }
     }
 
     /**
      * @param  array<string, array<string, mixed>>  $mapD
      * @param  array<string, array<string, mixed>>  $mapPrev
      * @param  list<string>  $slotsPrev
+     * @param  array<string, int>  $dayCountByIdentity
      * @return array<string, mixed>
      */
-    private function classifyScrape(array $mapD, array $mapPrev, ?string $prevDate, array $slotsPrev): array
-    {
+    private function classifyScrape(
+        array $mapD,
+        array $mapPrev,
+        ?string $prevDate,
+        array $slotsPrev,
+        array $dayCountByIdentity = [],
+    ): array {
         $tetap = [];
         $hilang = [];
         $baru = [];
@@ -222,6 +358,11 @@ final class HsecmBuildGapEvaluasiDashboardAction
             $bk = trim((string) ($row['business_key'] ?? ''));
             $slotStreak = (int) ($streakByTable[$table][$bk] ?? (int) ($row['payload']['gap_count'] ?? 1));
             $dayStreak = max(1, (int) ceil($slotStreak / 2));
+            // Perulangan dalam range: naikkan streak jika muncul multi-hari di periode filter.
+            $rangeDays = (int) ($dayCountByIdentity[$identity] ?? 0);
+            if ($rangeDays > $dayStreak) {
+                $dayStreak = $rangeDays;
+            }
 
             if (isset($mapD[$identity])) {
                 $tetap[] = $this->detailRow($row, 'tetap', $dayStreak);
@@ -261,11 +402,12 @@ final class HsecmBuildGapEvaluasiDashboardAction
             }
             $table = (string) ($row['table'] ?? '');
             $bk = trim((string) ($row['business_key'] ?? ''));
+            $rangeDays = max(1, (int) ($dayCountByIdentity[$identity] ?? 1));
             $isReopen = $bk !== '' && isset($presentBefore[$table][$bk]);
             if ($isReopen) {
-                $kembali[] = $this->detailRow($row, 'kembali', 1);
+                $kembali[] = $this->detailRow($row, 'kembali', $rangeDays);
             } else {
-                $baru[] = $this->detailRow($row, 'baru', 1);
+                $baru[] = $this->detailRow($row, 'baru', $rangeDays);
             }
         }
 
@@ -570,36 +712,6 @@ final class HsecmBuildGapEvaluasiDashboardAction
         }
 
         return $rows;
-    }
-
-    /**
-     * @param  array<string, mixed>  $scrape
-     * @param  array<string, mixed>  $tasklist
-     * @param  list<array<string, mixed>>  $programs
-     * @return array<string, int>
-     */
-    private function buildOverviewCards(array $scrape, array $tasklist, array $programs): array
-    {
-        $totalGap = 0;
-        $totalPerulangan = 0;
-        $perbaikanTanpaPerulangan = 0;
-        foreach ($programs as $program) {
-            $totalGap += (int) ($program['total_gap'] ?? 0);
-            $totalPerulangan += (int) ($program['total_perulangan'] ?? 0);
-            $perbaikanTanpaPerulangan += (int) ($program['perbaikan_tanpa_perulangan'] ?? 0);
-        }
-
-        $cards = $scrape['cards'] ?? [];
-        $tlCards = $tasklist['cards'] ?? [];
-
-        return [
-            'total_gap' => $totalGap,
-            'total_perulangan' => $totalPerulangan,
-            'perbaikan_total' => (int) ($cards['hilang'] ?? 0),
-            'perbaikan_tanpa_perulangan' => $perbaikanTanpaPerulangan,
-            'tindaklanjut_berhasil' => (int) ($tlCards['tindaklanjut_berhasil'] ?? 0),
-            'tindaklanjut_tanpa_perulangan' => (int) ($tlCards['tindaklanjut_tanpa_perulangan'] ?? 0),
-        ];
     }
 
     /**

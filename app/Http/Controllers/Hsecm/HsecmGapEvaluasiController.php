@@ -33,7 +33,7 @@ class HsecmGapEvaluasiController extends Controller
             'prevDate' => $dashboard['prev_date'],
             'slotsD' => $dashboard['slots_d'],
             'slotsPrev' => $dashboard['slots_prev'],
-            'overview' => $dashboard['overview'],
+            'rangeDates' => $dashboard['range_dates'] ?? [],
             'programs' => $dashboard['programs'],
             'scrape' => $dashboard['scrape'],
             'tasklist' => $dashboard['tasklist'],

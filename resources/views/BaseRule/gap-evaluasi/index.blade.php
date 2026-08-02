@@ -45,15 +45,16 @@
    <span class="font-semibold text-on-background">Periode:</span>
    <span>{{ $periodLabel }}</span>
    @if(!empty($slotsD))
-      <span class="hsecm-badge ml-1">{{ count($slotsD) }} slot hari evaluasi</span>
+      <span class="hsecm-badge ml-1">{{ count($slotsD) }} slot di range</span>
+   @endif
+   @if(!empty($rangeDates))
+      <span class="hsecm-badge">{{ count($rangeDates) }} hari scrape</span>
    @endif
    @if(!empty($slotsPrev))
       <span class="hsecm-badge">{{ count($slotsPrev) }} slot hari pembanding</span>
    @endif
 </div>
 @endif
-
-@include('BaseRule.gap-evaluasi.partials._overview-cards', ['overview' => $overview ?? []])
 
 {{-- Navigasi cepat ke parameter --}}
 @if(!empty($programs))
