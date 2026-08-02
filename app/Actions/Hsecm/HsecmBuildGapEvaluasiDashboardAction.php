@@ -370,7 +370,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
      */
     private function buildProgramMetrics(array $allDetails, array $tasklist, array $hilangStreakByIdentity): array
     {
-        /** @var array<string, array{total_gap: int, total_perulangan: int, perbaikan_tanpa_perulangan: int, perbaikan_total: int, tindaklanjut_berhasil: int, tindaklanjut_tanpa_perulangan: int}> $stats */
+        /** @var array<string, array{total_gap: int, total_perulangan: int, perbaikan_tanpa_perulangan: int, perbaikan_total: int, tindaklanjut_berhasil: int, tindaklanjut_tanpa_perulangan: int, rows: list<array<string, mixed>>}> $stats */
         $stats = [];
         foreach (array_keys(self::PROGRAM_LABELS) as $key) {
             $stats[$key] = [
@@ -380,6 +380,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'perbaikan_total' => 0,
                 'tindaklanjut_berhasil' => 0,
                 'tindaklanjut_tanpa_perulangan' => 0,
+                'rows' => [],
             ];
         }
 
@@ -393,6 +394,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 if ($this->isPerulangan($row)) {
                     $stats[$key]['total_perulangan']++;
                 }
+                $stats[$key]['rows'][] = $row;
             }
         }
 
@@ -405,6 +407,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
             if ((int) ($row['day_streak'] ?? 1) <= 1) {
                 $stats[$key]['perbaikan_tanpa_perulangan']++;
             }
+            $stats[$key]['rows'][] = $row;
         }
 
         foreach ($tasklist['berhasil_identities'] ?? [] as $identity) {
@@ -419,9 +422,31 @@ final class HsecmBuildGapEvaluasiDashboardAction
             }
         }
 
+        $statusOrder = [
+            'tetap' => 0,
+            'kembali' => 1,
+            'baru' => 2,
+            'hilang' => 3,
+        ];
+
         $programs = [];
         foreach (self::PROGRAM_LABELS as $key => $label) {
             $s = $stats[$key];
+            $rows = $s['rows'];
+            usort(
+                $rows,
+                static function (array $a, array $b) use ($statusOrder): int {
+                    $oa = $statusOrder[(string) ($a['status'] ?? '')] ?? 99;
+                    $ob = $statusOrder[(string) ($b['status'] ?? '')] ?? 99;
+                    if ($oa !== $ob) {
+                        return $oa <=> $ob;
+                    }
+
+                    return ((int) ($b['day_streak'] ?? 0)) <=> ((int) ($a['day_streak'] ?? 0));
+                }
+            );
+
+            $totalRows = count($rows);
             $programs[] = [
                 'key' => $key,
                 'label' => $label,
@@ -431,6 +456,9 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'perbaikan_total' => $s['perbaikan_total'],
                 'tindaklanjut_berhasil' => $s['tindaklanjut_berhasil'],
                 'tindaklanjut_tanpa_perulangan' => $s['tindaklanjut_tanpa_perulangan'],
+                'rows' => array_slice($rows, 0, self::DETAIL_LIMIT),
+                'truncated' => max(0, $totalRows - self::DETAIL_LIMIT),
+                'row_total' => $totalRows,
             ];
         }
 

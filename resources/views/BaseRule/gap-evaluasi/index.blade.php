@@ -85,7 +85,7 @@
 
 @include('BaseRule.gap-evaluasi.partials._summary-matrix', ['summary' => $summary ?? []])
 
-<div class="space-y-4 mb-10" id="gap-program-sections">
+<div class="space-y-8 mb-10" id="gap-program-sections">
    @foreach($programs ?? [] as $program)
       @include('BaseRule.gap-evaluasi.partials._section', ['program' => $program])
    @endforeach
