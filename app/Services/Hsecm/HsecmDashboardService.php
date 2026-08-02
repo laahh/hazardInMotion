@@ -659,6 +659,71 @@ class HsecmDashboardService
     }
 
     /**
+     * Template header matriks Site → Perusahaan (untuk Gap Evaluasi / Perulangan).
+     *
+     * @return array{
+     *     groups: list<array{site: string, companies: list<array{code: string, name: string, key: string}>}>,
+     *     columns: list<string>
+     * }
+     */
+    public function buildGapEvaluasiMatrixTemplate(): array
+    {
+        $groups = [];
+        $columns = [];
+
+        foreach (self::GAP_PERULANGAN_SITE_COMPANIES as $site => $codes) {
+            $companies = [];
+            foreach ($codes as $code) {
+                $key = $this->gapPerulanganMatrixKey($site, $code);
+                $companies[] = [
+                    'code' => $code,
+                    'name' => self::GAP_PERULANGAN_COMPANY_NAMES[$code] ?? $code,
+                    'key' => $key,
+                ];
+                $columns[] = $key;
+            }
+            $groups[] = [
+                'site' => $site,
+                'companies' => $companies,
+            ];
+        }
+
+        return [
+            'groups' => $groups,
+            'columns' => $columns,
+        ];
+    }
+
+    /**
+     * Resolve kunci matriks `Site|KODE` dari label site + perusahaan identity row.
+     */
+    public function resolveGapEvaluasiScopeKey(string $site, string $perusahaan): ?string
+    {
+        $siteRaw = trim($site);
+        if ($siteRaw === '' || $this->isAllToken($siteRaw)) {
+            return null;
+        }
+
+        $templateSite = $this->resolveGapPerulanganTemplateSite($siteRaw) ?? $siteRaw;
+        $companyRaw = trim($perusahaan);
+        if ($companyRaw === '' || $this->isAllToken($companyRaw)) {
+            return null;
+        }
+
+        $code = FatigueManagementCompanyResolver::companyToPartner($companyRaw);
+        $normalized = FatigueManagementCompanyResolver::normalizeKey($code);
+        if (FatigueManagementCompanyResolver::isKnownPartnerKey($normalized)) {
+            return $this->gapPerulanganMatrixKey($templateSite, $normalized);
+        }
+
+        if (preg_match('/^[A-Z]{2,6}$/', $normalized) === 1) {
+            return $this->gapPerulanganMatrixKey($templateSite, $normalized);
+        }
+
+        return null;
+    }
+
+    /**
      * @param  array<string, Collection<int, array<string, mixed>>>  $datasetRows
      * @param  array<string, mixed>  $filters
      * @return list<array<string, mixed>>

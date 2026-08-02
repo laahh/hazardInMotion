@@ -12,10 +12,28 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Evaluasi gap harian (scrape D vs D-1) + efektivitas pasca tindak lanjut tasklist.
+ * Termasuk ringkasan matriks & metrik per parameter program.
  */
 final class HsecmBuildGapEvaluasiDashboardAction
 {
     private const DETAIL_LIMIT = 200;
+
+    /**
+     * Urutan & label parameter (selaras mockup Gap Evaluasi).
+     *
+     * @var array<string, string>
+     */
+    private const PROGRAM_LABELS = [
+        'layer1-tanpa-sap' => 'Layer 1 tanpa SAP',
+        'coverage-area' => 'Coverage Area Kritis Daily',
+        'tbc-blindspot' => 'Blindspot TBC',
+        'hazard-overdue' => 'Task Follow-up Overdue',
+        'hazard-submitted' => 'Submitted Over 24 Hours',
+        'ikk-compliance' => 'Compliance IKK',
+        'aggregator-fill' => 'Tidak Mengisi Aggregator',
+        'ftw-merah' => 'FTW Merah',
+        'hazard-rootcause' => 'Hazard Related Incident',
+    ];
 
     public function __construct(
         private readonly HsecmDashboardService $dashboardService,
@@ -54,14 +72,43 @@ final class HsecmBuildGapEvaluasiDashboardAction
             $evalDate,
         );
 
+        /** @var array<string, int> $hilangStreakByIdentity */
+        $hilangStreakByIdentity = $scrape['hilang_streak_by_identity'] ?? [];
+        /** @var list<string> $hilangIdentities */
+        $hilangIdentities = $scrape['hilang_identities'] ?? [];
+
         $hilangTanpaTindaklanjut = 0;
-        foreach ($scrape['hilang_identities'] ?? [] as $identity) {
+        foreach ($hilangIdentities as $identity) {
             if (! isset($tasklist['acted_identities'][$identity])) {
                 $hilangTanpaTindaklanjut++;
             }
         }
         $tasklist['cards']['hilang_tanpa_tindaklanjut'] = $hilangTanpaTindaklanjut;
-        unset($tasklist['acted_identities'], $scrape['hilang_identities']);
+
+        $tindaklanjutTanpaPerulangan = 0;
+        foreach ($tasklist['berhasil_identities'] ?? [] as $identity) {
+            $streak = (int) ($hilangStreakByIdentity[$identity] ?? 1);
+            if ($streak < 2) {
+                $tindaklanjutTanpaPerulangan++;
+            }
+        }
+        $tasklist['cards']['tindaklanjut_tanpa_perulangan'] = $tindaklanjutTanpaPerulangan;
+
+        $programs = $this->buildProgramMetrics(
+            $scrape['all_details'] ?? [],
+            $tasklist,
+            $hilangStreakByIdentity,
+        );
+        $summary = $this->buildSummaryMatrix($scrape['all_details']['tetap'] ?? []);
+        $overview = $this->buildOverviewCards($scrape, $tasklist, $programs);
+
+        unset(
+            $tasklist['acted_identities'],
+            $tasklist['berhasil_identities'],
+            $scrape['hilang_identities'],
+            $scrape['hilang_streak_by_identity'],
+            $scrape['all_details'],
+        );
 
         return [
             'filters' => array_merge($filters, [
@@ -76,6 +123,9 @@ final class HsecmBuildGapEvaluasiDashboardAction
             'prev_date' => $prevDate,
             'slots_d' => $slotsD,
             'slots_prev' => $slotsPrev,
+            'overview' => $overview,
+            'summary' => $summary,
+            'programs' => $programs,
             'scrape' => $scrape,
             'tasklist' => $tasklist,
         ];
@@ -225,11 +275,12 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $perbaikanDenganPerulangan = 0;
         /** @var list<string> $hilangIdentities */
         $hilangIdentities = [];
+        /** @var array<string, int> $hilangStreakByIdentity */
+        $hilangStreakByIdentity = [];
         foreach ($hilang as $row) {
-            $hilangIdentities[] = strtolower((string) $row['program_key']).'|'
-                .((string) $row['business_key']).'|'
-                .strtolower((string) $row['site']).'|'
-                .strtolower((string) $row['perusahaan']);
+            $identity = $this->rowIdentity($row);
+            $hilangIdentities[] = $identity;
+            $hilangStreakByIdentity[$identity] = (int) ($row['day_streak'] ?? 1);
             if ((int) ($row['day_streak'] ?? 1) <= 1) {
                 $perbaikanTanpaPerulangan++;
             } else {
@@ -254,6 +305,13 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'perbaikan_dengan_perulangan' => $perbaikanDenganPerulangan,
             ],
             'hilang_identities' => $hilangIdentities,
+            'hilang_streak_by_identity' => $hilangStreakByIdentity,
+            'all_details' => [
+                'tetap' => $tetap,
+                'hilang' => $hilang,
+                'baru' => $baru,
+                'kembali' => $kembali,
+            ],
             'details' => [
                 'tetap' => array_slice($tetap, 0, self::DETAIL_LIMIT),
                 'hilang' => array_slice($hilang, 0, self::DETAIL_LIMIT),
@@ -289,6 +347,188 @@ final class HsecmBuildGapEvaluasiDashboardAction
     }
 
     /**
+     * @param  array<string, mixed>  $row
+     */
+    private function rowIdentity(array $row): string
+    {
+        return strtolower((string) ($row['program_key'] ?? '')).'|'
+            .((string) ($row['business_key'] ?? '')).'|'
+            .strtolower((string) ($row['site'] ?? '')).'|'
+            .strtolower((string) ($row['perusahaan'] ?? ''));
+    }
+
+    /**
+     * @param  array{
+     *     tetap: list<array<string, mixed>>,
+     *     hilang: list<array<string, mixed>>,
+     *     baru: list<array<string, mixed>>,
+     *     kembali: list<array<string, mixed>>
+     * }  $allDetails
+     * @param  array<string, mixed>  $tasklist
+     * @param  array<string, int>  $hilangStreakByIdentity
+     * @return list<array<string, mixed>>
+     */
+    private function buildProgramMetrics(array $allDetails, array $tasklist, array $hilangStreakByIdentity): array
+    {
+        /** @var array<string, array{total_gap: int, total_perulangan: int, perbaikan_tanpa_perulangan: int, perbaikan_total: int, tindaklanjut_berhasil: int, tindaklanjut_tanpa_perulangan: int}> $stats */
+        $stats = [];
+        foreach (array_keys(self::PROGRAM_LABELS) as $key) {
+            $stats[$key] = [
+                'total_gap' => 0,
+                'total_perulangan' => 0,
+                'perbaikan_tanpa_perulangan' => 0,
+                'perbaikan_total' => 0,
+                'tindaklanjut_berhasil' => 0,
+                'tindaklanjut_tanpa_perulangan' => 0,
+            ];
+        }
+
+        foreach (['tetap', 'baru', 'kembali'] as $bucket) {
+            foreach ($allDetails[$bucket] ?? [] as $row) {
+                $key = (string) ($row['program_key'] ?? '');
+                if (! isset($stats[$key])) {
+                    continue;
+                }
+                $stats[$key]['total_gap']++;
+                if ($this->isPerulangan($row)) {
+                    $stats[$key]['total_perulangan']++;
+                }
+            }
+        }
+
+        foreach ($allDetails['hilang'] ?? [] as $row) {
+            $key = (string) ($row['program_key'] ?? '');
+            if (! isset($stats[$key])) {
+                continue;
+            }
+            $stats[$key]['perbaikan_total']++;
+            if ((int) ($row['day_streak'] ?? 1) <= 1) {
+                $stats[$key]['perbaikan_tanpa_perulangan']++;
+            }
+        }
+
+        foreach ($tasklist['berhasil_identities'] ?? [] as $identity) {
+            $programKey = explode('|', $identity, 2)[0] ?? '';
+            if (! isset($stats[$programKey])) {
+                continue;
+            }
+            $stats[$programKey]['tindaklanjut_berhasil']++;
+            $streak = (int) ($hilangStreakByIdentity[$identity] ?? 1);
+            if ($streak < 2) {
+                $stats[$programKey]['tindaklanjut_tanpa_perulangan']++;
+            }
+        }
+
+        $programs = [];
+        foreach (self::PROGRAM_LABELS as $key => $label) {
+            $s = $stats[$key];
+            $programs[] = [
+                'key' => $key,
+                'label' => $label,
+                'total_gap' => $s['total_gap'],
+                'total_perulangan' => $s['total_perulangan'],
+                'perbaikan_tanpa_perulangan' => $s['perbaikan_tanpa_perulangan'],
+                'perbaikan_total' => $s['perbaikan_total'],
+                'tindaklanjut_berhasil' => $s['tindaklanjut_berhasil'],
+                'tindaklanjut_tanpa_perulangan' => $s['tindaklanjut_tanpa_perulangan'],
+            ];
+        }
+
+        return $programs;
+    }
+
+    /**
+     * Matriks: jumlah gap berulang (streak ≥ 2) per program × Site/Perusahaan.
+     *
+     * @param  list<array<string, mixed>>  $tetapRows
+     * @return array{
+     *     groups: list<array{site: string, companies: list<array{code: string, name: string, key: string}>}>,
+     *     columns: list<string>,
+     *     rows: list<array{key: string, label: string, counts: array<string, int>}>
+     * }
+     */
+    private function buildSummaryMatrix(array $tetapRows): array
+    {
+        $template = $this->dashboardService->buildGapEvaluasiMatrixTemplate();
+        $matrixRows = [];
+
+        foreach (self::PROGRAM_LABELS as $key => $label) {
+            $counts = [];
+            foreach ($tetapRows as $row) {
+                if ((string) ($row['program_key'] ?? '') !== $key) {
+                    continue;
+                }
+                if (! $this->isPerulangan($row)) {
+                    continue;
+                }
+                $scopeKey = $this->dashboardService->resolveGapEvaluasiScopeKey(
+                    (string) ($row['site'] ?? ''),
+                    (string) ($row['perusahaan'] ?? ''),
+                );
+                if ($scopeKey === null) {
+                    continue;
+                }
+                $counts[$scopeKey] = ($counts[$scopeKey] ?? 0) + 1;
+            }
+
+            $matrixRows[] = [
+                'key' => $key,
+                'label' => $label,
+                'counts' => $counts,
+            ];
+        }
+
+        return [
+            'groups' => $template['groups'],
+            'columns' => $template['columns'],
+            'rows' => $matrixRows,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $scrape
+     * @param  array<string, mixed>  $tasklist
+     * @param  list<array<string, mixed>>  $programs
+     * @return array<string, int>
+     */
+    private function buildOverviewCards(array $scrape, array $tasklist, array $programs): array
+    {
+        $totalGap = 0;
+        $totalPerulangan = 0;
+        $perbaikanTanpaPerulangan = 0;
+        foreach ($programs as $program) {
+            $totalGap += (int) ($program['total_gap'] ?? 0);
+            $totalPerulangan += (int) ($program['total_perulangan'] ?? 0);
+            $perbaikanTanpaPerulangan += (int) ($program['perbaikan_tanpa_perulangan'] ?? 0);
+        }
+
+        $cards = $scrape['cards'] ?? [];
+        $tlCards = $tasklist['cards'] ?? [];
+
+        return [
+            'total_gap' => $totalGap,
+            'total_perulangan' => $totalPerulangan,
+            'perbaikan_total' => (int) ($cards['hilang'] ?? 0),
+            'perbaikan_tanpa_perulangan' => $perbaikanTanpaPerulangan,
+            'tindaklanjut_berhasil' => (int) ($tlCards['tindaklanjut_berhasil'] ?? 0),
+            'tindaklanjut_tanpa_perulangan' => (int) ($tlCards['tindaklanjut_tanpa_perulangan'] ?? 0),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function isPerulangan(array $row): bool
+    {
+        // Tetap = ada di D−1 & D → minimal 2 hari (berulang day-over-day).
+        if (($row['status'] ?? '') === 'tetap') {
+            return true;
+        }
+
+        return (int) ($row['day_streak'] ?? 1) >= 2;
+    }
+
+    /**
      * @param  array<string, mixed>  $filters
      * @param  array<string, array<string, mixed>>  $mapD
      * @return array<string, mixed>
@@ -303,12 +543,15 @@ final class HsecmBuildGapEvaluasiDashboardAction
                     'tindaklanjut_belum_efektif' => 0,
                     'belum_tindaklanjut_masih_gap' => 0,
                     'hilang_tanpa_tindaklanjut' => 0,
+                    'tindaklanjut_tanpa_perulangan' => 0,
                 ],
                 'details' => [
                     'tindaklanjut_berhasil' => [],
                     'tindaklanjut_belum_efektif' => [],
                     'belum_tindaklanjut_masih_gap' => [],
                 ],
+                'acted_identities' => [],
+                'berhasil_identities' => [],
                 'message' => 'Tabel tasklist belum tersedia.',
             ];
         }
@@ -336,7 +579,6 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 if ($perusahaan !== '') {
                     $q->where('perusahaan', $perusahaan);
                 }
-                // Tasklist yang relevan: batch pada/sebelum hari evaluasi
                 $q->where(function ($inner) use ($evalDate): void {
                     $inner->whereNull('batch_slot')
                         ->orWhereDate('batch_slot', '<=', $evalDate);
@@ -350,6 +592,8 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $belumTindaklanjut = [];
         /** @var array<string, true> $actedIdentities */
         $actedIdentities = [];
+        /** @var list<string> $berhasilIdentities */
+        $berhasilIdentities = [];
 
         foreach ($items as $item) {
             $tasklist = $item->tasklist;
@@ -388,22 +632,12 @@ final class HsecmBuildGapEvaluasiDashboardAction
                     $belumEfektif[] = $detail;
                 } else {
                     $berhasil[] = $detail;
+                    $berhasilIdentities[] = $identity;
                 }
             } elseif ($stillGap && in_array($status, ['open', 'rejected'], true)) {
                 $belumTindaklanjut[] = $detail;
             }
         }
-
-        // Hilang di scrape D tanpa ada tindak lanjut tasklist (dari mapPrev keys yang hilang)
-        // Dihitung di controller layer via scrape cards; di sini hitung identity di mapD absen
-        // yang punya riwayat di mapPrev — sudah di scrape.hilang. Untuk B: hilang tanpa acted.
-        // Kita hitung dari keys yang tidak di mapD tapi pernah di-tasklist? Plan:
-        // hilang_tanpa_tindaklanjut = scrape hilang identities without acted submit.
-        // Action needs mapPrev for that — pass via classify or recompute here from scrape details.
-        // Simpler: count later in execute by intersecting — for now compute from mapD absence:
-        // Actually build from acted vs scrape: identities in mapD that weren't acted aren't "hilang".
-        // hilang_tanpa_tindaklanjut = keys missing from mapD that appear in prev scrape and not in actedIdentities.
-        // We don't have mapPrev here easily for count without passing — pass scrape hilang identities.
 
         return [
             'available' => true,
@@ -411,9 +645,11 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'tindaklanjut_berhasil' => count($berhasil),
                 'tindaklanjut_belum_efektif' => count($belumEfektif),
                 'belum_tindaklanjut_masih_gap' => count($belumTindaklanjut),
-                'hilang_tanpa_tindaklanjut' => 0, // diisi di execute setelah scrape
+                'hilang_tanpa_tindaklanjut' => 0,
+                'tindaklanjut_tanpa_perulangan' => 0,
             ],
             'acted_identities' => $actedIdentities,
+            'berhasil_identities' => array_values(array_unique($berhasilIdentities)),
             'details' => [
                 'tindaklanjut_berhasil' => array_slice($berhasil, 0, self::DETAIL_LIMIT),
                 'tindaklanjut_belum_efektif' => array_slice($belumEfektif, 0, self::DETAIL_LIMIT),
