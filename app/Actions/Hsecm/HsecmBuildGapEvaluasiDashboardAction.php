@@ -581,8 +581,8 @@ final class HsecmBuildGapEvaluasiDashboardAction
             ];
         }
 
-        // Detail list per program tidak disimpan di $stats['rows'] (hemat memori/HTML);
-        // detail cukup di scope untuk modal.
+        // Total Gap = semua yang terkait gap di evaluasi (masih open ATAU sudah perbaikan).
+        // Sehingga: Perbaikan tanpa Perulangan ⊆ Total Gap (tidak bisa lebih besar).
         foreach (['tetap', 'baru', 'kembali'] as $bucket) {
             foreach ($allDetails[$bucket] ?? [] as $row) {
                 $key = (string) ($row['program_key'] ?? '');
@@ -611,6 +611,8 @@ final class HsecmBuildGapEvaluasiDashboardAction
             if (! isset($stats[$key])) {
                 continue;
             }
+            // Hilang = pernah gap lalu clear → tetap bagian dari Total Gap.
+            $stats[$key]['total_gap']++;
             $stats[$key]['perbaikan_total']++;
             $tanpaPerulangan = (int) ($row['day_streak'] ?? 1) <= 1;
             if ($tanpaPerulangan) {
@@ -619,6 +621,8 @@ final class HsecmBuildGapEvaluasiDashboardAction
 
             $scopeKey = $this->resolveScopeKeyOrOther($row);
             $this->ensureScopeBucket($stats[$key]['scopes'], $scopeKey);
+            $stats[$key]['scopes'][$scopeKey]['total_gap']++;
+            $this->pushScopeDetail($stats[$key]['scopes'][$scopeKey]['detail_gap'], $row);
             if ($tanpaPerulangan) {
                 $stats[$key]['scopes'][$scopeKey]['perbaikan_tanpa_perulangan']++;
                 $this->pushScopeDetail($stats[$key]['scopes'][$scopeKey]['detail_perbaikan'], $row);

@@ -23,6 +23,7 @@ final class HealthNutritionRiskService
         private readonly McuConnectionService $mcu,
         private readonly BewellConnectionService $bewell,
         private readonly NutritionEvaluationService $nutrition,
+        private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
     ) {}
 
     /**
@@ -207,7 +208,7 @@ final class HealthNutritionRiskService
         }
 
         $filterHash = sha1(json_encode($filters, JSON_THROW_ON_ERROR));
-        $cacheKey = 'evaluasi_well:health_nutrition:v4:'.$filterHash;
+        $cacheKey = 'evaluasi_well:health_nutrition:v5:'.$filterHash;
 
         try {
             return Cache::remember(
@@ -685,7 +686,10 @@ final class HealthNutritionRiskService
                 'user_id' => $uid,
                 'nama' => (string) ($profile->nama ?: 'User #'.$uid),
                 'kode_sid' => (string) ($profile->kode_sid ?: '-'),
-                'site' => (string) (trim((string) ($profile->site ?? '')) !== '' ? $profile->site : '-'),
+                'site' => $this->siteResolver->resolveOrDash(
+                    isset($profile->kode_sid) ? (string) $profile->kode_sid : null,
+                    isset($profile->site) ? (string) $profile->site : null,
+                ),
                 'company' => (string) (trim((string) ($profile->nama_perusahaan ?? '')) !== '' ? $profile->nama_perusahaan : '-'),
                 'divisi' => (string) (trim((string) ($profile->divisi ?? '')) !== '' ? $profile->divisi : '-'),
                 'findings' => $mcu['findings'],

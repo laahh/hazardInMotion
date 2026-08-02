@@ -20,6 +20,10 @@ final class SportEvaluationService
 
     private const CACHE_TTL = 600; // 10 menit
 
+    public function __construct(
+        private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
+    ) {}
+
     /**
      * Normalisasi input filter dari request menjadi struktur baku.
      * $forced dipakai untuk scoping wajib (mis. Manajer per divisi) yang
@@ -56,7 +60,7 @@ final class SportEvaluationService
      */
     public function filterOptions(): array
     {
-        return Cache::remember('sport_eval:filter_options', self::CACHE_TTL, function (): array {
+        return Cache::remember('sport_eval:filter_options_v2', self::CACHE_TTL, function (): array {
             $pluck = fn (string $col): array => $this->conn()
                 ->table('employee_profiles')
                 ->whereNotNull($col)
@@ -66,10 +70,26 @@ final class SportEvaluationService
                 ->pluck($col)
                 ->all();
 
+            $sitePairs = $this->conn()
+                ->table('employee_profiles')
+                ->get(['kode_sid', 'site']);
+            $resolvedSites = [];
+            foreach ($sitePairs as $pair) {
+                $site = $this->siteResolver->resolve(
+                    isset($pair->kode_sid) ? (string) $pair->kode_sid : null,
+                    isset($pair->site) ? (string) $pair->site : null,
+                );
+                if ($site !== '') {
+                    $resolvedSites[$site] = true;
+                }
+            }
+            $sites = array_keys($resolvedSites);
+            sort($sites, SORT_STRING);
+
             return [
                 'divisi' => $pluck('divisi'),
                 'perusahaan' => $pluck('nama_perusahaan'),
-                'site' => $pluck('site'),
+                'site' => $sites,
             ];
         });
     }
@@ -293,7 +313,7 @@ final class SportEvaluationService
      */
     public function employeeProfile(int $userId): ?array
     {
-        return Cache::remember("sport_eval:profile:{$userId}", self::CACHE_TTL, function () use ($userId): ?array {
+        return Cache::remember("sport_eval:profile:v2:{$userId}", self::CACHE_TTL, function () use ($userId): ?array {
             $employee = $this->conn()->table('employee_profiles')
                 ->select(['id', 'kode_sid', 'nama', 'divisi', 'departement', 'nama_perusahaan', 'site', 'level_jabatan'])
                 ->where('id', $userId)
@@ -302,6 +322,12 @@ final class SportEvaluationService
             if ($employee === null) {
                 return null;
             }
+
+            $employeeArr = (array) $employee;
+            $employeeArr['site'] = $this->siteResolver->resolve(
+                isset($employee->kode_sid) ? (string) $employee->kode_sid : null,
+                isset($employee->site) ? (string) $employee->site : null,
+            );
 
             $from30 = Carbon::now()->subDays(30)->startOfDay()->format('Y-m-d H:i:s');
             $now = Carbon::now()->endOfDay()->format('Y-m-d H:i:s');
@@ -367,7 +393,7 @@ final class SportEvaluationService
                 ->all();
 
             return [
-                'employee' => (array) $employee,
+                'employee' => $employeeArr,
                 'strava' => [
                     'sesi' => (int) ($strava->sesi ?? 0),
                     'km' => round((float) ($strava->km ?? 0), 1),
@@ -468,10 +494,15 @@ final class SportEvaluationService
      */
     private function applyScope(Builder $query, array $filters): Builder
     {
-        return $query
+        $query
             ->when($filters['divisi'] ?? null, fn (Builder $q, $v) => $q->where('e.divisi', $v))
-            ->when($filters['perusahaan'] ?? null, fn (Builder $q, $v) => $q->where('e.nama_perusahaan', $v))
-            ->when($filters['site'] ?? null, fn (Builder $q, $v) => $q->where('e.site', $v));
+            ->when($filters['perusahaan'] ?? null, fn (Builder $q, $v) => $q->where('e.nama_perusahaan', $v));
+
+        if (($filters['site'] ?? null) !== null && $filters['site'] !== '') {
+            $this->siteResolver->applySiteFilter($query, (string) $filters['site']);
+        }
+
+        return $query;
     }
 
     /**

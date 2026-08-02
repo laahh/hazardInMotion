@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Services\SportEvaluation\BewellConnectionService;
 use App\Services\SportEvaluation\SportEvaluationActiveStatsService;
 use App\Services\SportEvaluation\SportEvaluationInstallStatsService;
+use App\Services\SportEvaluation\SportEvaluationKaryawanWellSiteResolver;
 use App\Support\SpreadsheetExporter;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
@@ -27,6 +28,7 @@ class SportEvaluationDashboardController extends Controller
         private readonly BewellConnectionService $connection,
         private readonly SportEvaluationInstallStatsService $installStatsService,
         private readonly SportEvaluationActiveStatsService $activeStatsService,
+        private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
     ) {}
 
     public function index(Request $request): View
@@ -219,7 +221,10 @@ class SportEvaluationDashboardController extends Controller
                     'id' => (int) $row->id,
                     'nama' => (string) ($row->nama ?: 'User #'.$row->id),
                     'kode_sid' => (string) ($row->kode_sid ?: '-'),
-                    'site' => (string) (trim((string) ($row->site ?? '')) !== '' ? $row->site : '-'),
+                    'site' => $this->siteResolver->resolveOrDash(
+                        isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                        isset($row->site) ? (string) $row->site : null,
+                    ),
                     'company' => (string) (trim((string) ($row->nama_perusahaan ?? '')) !== '' ? $row->nama_perusahaan : '-'),
                     'departement' => (string) (trim((string) ($row->departement ?? '')) !== '' ? $row->departement : '-'),
                     'divisi' => (string) (trim((string) ($row->divisi ?? '')) !== '' ? $row->divisi : '-'),
@@ -302,7 +307,10 @@ class SportEvaluationDashboardController extends Controller
                     $index + 1,
                     (string) ($row->nama ?: '-'),
                     (string) ($row->kode_sid ?: '-'),
-                    (string) (trim((string) ($row->site ?? '')) !== '' ? $row->site : '-'),
+                    $this->siteResolver->resolveOrDash(
+                        isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                        isset($row->site) ? (string) $row->site : null,
+                    ),
                     (string) (trim((string) ($row->nama_perusahaan ?? '')) !== '' ? $row->nama_perusahaan : '-'),
                     (string) (trim((string) ($row->departement ?? '')) !== '' ? $row->departement : '-'),
                     (string) (trim((string) ($row->divisi ?? '')) !== '' ? $row->divisi : '-'),
@@ -1019,32 +1027,40 @@ class SportEvaluationDashboardController extends Controller
         try {
             $db = DB::connection(BewellConnectionService::CONNECTION);
 
-            $siteTotalEmployees = (int) $db->table('employee_profiles')
+            $employees = $db->table('employee_profiles')
                 ->where('status_karyawan', 'AKTIF')
-                ->count();
+                ->get(['kode_sid', 'site']);
 
-            $rows = $db->table('employee_profiles')
-                ->where('status_karyawan', 'AKTIF')
-                ->selectRaw("COALESCE(NULLIF(TRIM(site), ''), 'Tidak diketahui') AS site_name, COUNT(*) AS total")
-                ->groupByRaw("COALESCE(NULLIF(TRIM(site), ''), 'Tidak diketahui')")
-                ->orderByDesc('total')
-                ->orderBy('site_name')
-                ->get();
+            $siteTotalEmployees = $employees->count();
+            $counts = [];
 
+            foreach ($employees as $employee) {
+                $siteName = $this->siteResolver->resolve(
+                    isset($employee->kode_sid) ? (string) $employee->kode_sid : null,
+                    isset($employee->site) ? (string) $employee->site : null,
+                );
+                if ($siteName === '') {
+                    $siteName = 'Tidak diketahui';
+                }
+                $counts[$siteName] = ($counts[$siteName] ?? 0) + 1;
+            }
+
+            arsort($counts);
             $barClasses = ['bg-primary-600', 'bg-orange', 'bg-yellow', 'bg-success-main', 'bg-info-main', 'bg-indigo'];
+            $i = 0;
 
-            foreach ($rows as $i => $row) {
-                $total = (int) $row->total;
+            foreach ($counts as $name => $total) {
                 $pct = $siteTotalEmployees > 0
                     ? round($total / $siteTotalEmployees * 100, 1)
                     : 0.0;
 
                 $siteRows[] = [
-                    'name' => (string) $row->site_name,
+                    'name' => (string) $name,
                     'total' => $total,
                     'percent' => $pct,
                     'barClass' => $barClasses[$i % count($barClasses)],
                 ];
+                $i++;
             }
         } catch (Throwable $e) {
             report($e);
@@ -1221,7 +1237,7 @@ class SportEvaluationDashboardController extends Controller
         }
 
         try {
-            $cached = Cache::remember('evaluasi_well:active_employees_filters_v5', 120, function (): array {
+            $cached = Cache::remember('evaluasi_well:active_employees_filters_v6', 120, function (): array {
                 $base = $this->activeEmployeesBaseQuery();
 
                 $belumInstall = (clone $base)
@@ -1242,16 +1258,23 @@ class SportEvaluationDashboardController extends Controller
                             ->whereColumn('w.user_id', 'e.id');
                     });
 
+                $sitePairs = (clone $base)->get(['e.kode_sid', 'e.site']);
+                $resolvedSites = [];
+                foreach ($sitePairs as $pair) {
+                    $site = $this->siteResolver->resolve(
+                        isset($pair->kode_sid) ? (string) $pair->kode_sid : null,
+                        isset($pair->site) ? (string) $pair->site : null,
+                    );
+                    if ($site !== '') {
+                        $resolvedSites[$site] = true;
+                    }
+                }
+                $sites = array_keys($resolvedSites);
+                sort($sites, SORT_STRING);
+
                 return [
                     'total' => (int) $belumInstall->count(),
-                    'sites' => (clone $base)
-                        ->whereNotNull('e.site')
-                        ->where('e.site', '<>', '')
-                        ->distinct()
-                        ->orderBy('e.site')
-                        ->pluck('e.site')
-                        ->map(static fn (mixed $site): string => (string) $site)
-                        ->all(),
+                    'sites' => $sites,
                     'companies' => (clone $base)
                         ->whereNotNull('e.nama_perusahaan')
                         ->where('e.nama_perusahaan', '<>', '')
@@ -1424,7 +1447,7 @@ class SportEvaluationDashboardController extends Controller
         string $weekEnd = '',
     ): Builder {
         if ($filters['site'] !== '') {
-            $query->where('e.site', $filters['site']);
+            $this->siteResolver->applySiteFilter($query, $filters['site']);
         }
         if ($filters['company'] !== '') {
             $query->where('e.nama_perusahaan', $filters['company']);
@@ -1509,14 +1532,14 @@ class SportEvaluationDashboardController extends Controller
 
         if ($search !== '') {
             $like = '%'.$search.'%';
-            $query->where(function (Builder $inner) use ($like): void {
+            $query->where(function (Builder $inner) use ($like, $search): void {
                 $inner->where('e.nama', 'like', $like)
                     ->orWhere('e.kode_sid', 'like', $like)
-                    ->orWhere('e.site', 'like', $like)
                     ->orWhere('e.nama_perusahaan', 'like', $like)
                     ->orWhere('e.departement', 'like', $like)
                     ->orWhere('e.divisi', 'like', $like)
                     ->orWhere('e.jabatan_fungsional', 'like', $like);
+                $this->siteResolver->orWhereSiteMatchesSearch($inner, $like, $search);
             });
         }
 

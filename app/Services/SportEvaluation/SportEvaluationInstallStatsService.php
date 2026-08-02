@@ -53,6 +53,7 @@ final class SportEvaluationInstallStatsService
 
     public function __construct(
         private readonly BewellConnectionService $connection,
+        private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
     ) {}
 
     /**
@@ -98,7 +99,7 @@ final class SportEvaluationInstallStatsService
 
         try {
             $stats = Cache::remember(
-                'evaluasi_well:install_stats:v2:'.$dimension,
+                'evaluasi_well:install_stats:v3:'.$dimension,
                 self::CACHE_TTL,
                 function () use ($dimension): array {
                     return $this->buildStats($dimension);
@@ -140,14 +141,14 @@ final class SportEvaluationInstallStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:install_stats:overview:v2',
+                'evaluasi_well:install_stats:overview:v3',
                 self::CACHE_TTL,
                 function (): array {
                     $overview = [];
 
                     foreach (array_keys(self::DIMENSION_COLUMNS) as $dimension) {
                         $stats = Cache::remember(
-                            'evaluasi_well:install_stats:v2:'.$dimension,
+                            'evaluasi_well:install_stats:v3:'.$dimension,
                             self::CACHE_TTL,
                             function () use ($dimension): array {
                                 return $this->buildStats($dimension);
@@ -216,6 +217,10 @@ final class SportEvaluationInstallStatsService
      */
     private function buildStats(string $dimension): array
     {
+        if ($dimension === 'site') {
+            return $this->buildStatsByResolvedSite();
+        }
+
         $column = self::DIMENSION_COLUMNS[$dimension];
         $db = DB::connection(BewellConnectionService::CONNECTION);
 
@@ -250,6 +255,143 @@ final class SportEvaluationInstallStatsService
 
         $queryRows = $db->select($sql, ['login_success', 'AKTIF', 'VISITOR']);
 
+        return $this->formatInstallStatRows($dimension, $queryRows);
+    }
+
+    /**
+     * Agregasi install per site memakai site_dedicated (karyawan_well) + fallback e.site.
+     *
+     * @return array{
+     *     available: bool,
+     *     dimension: string,
+     *     dimension_label: string,
+     *     footnote: string,
+     *     message: string|null,
+     *     summary: array{
+     *         total: int,
+     *         installed: int,
+     *         not_installed: int,
+     *         adoption_pct: float,
+     *         kpi_card_total: int,
+     *         groups: int
+     *     },
+     *     overview: list<array{
+     *         dimension: string,
+     *         label: string,
+     *         icon: string,
+     *         groups: int,
+     *         total: int,
+     *         installed: int,
+     *         not_installed: int,
+     *         adoption_pct: float,
+     *         top_name: string,
+     *         top_installed: int,
+     *         top_pct: float
+     *     }>,
+     *     rows: list<array{name: string, total: int, installed: int, not_installed: int, pct: float, bar_class: string}>,
+     *     chart: array{categories: list<string>, installed: list<int>, not_installed: list<int>}
+     * }
+     */
+    private function buildStatsByResolvedSite(): array
+    {
+        $db = DB::connection(BewellConnectionService::CONNECTION);
+
+        $sql = '
+            SELECT
+                e.kode_sid,
+                e.site,
+                CASE WHEN (
+                    EXISTS (
+                        SELECT 1 FROM login_audit a
+                        WHERE a.user_id = e.id AND a.event = ?
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM food_analyses f
+                        WHERE f.user_id = e.id
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM workout_analyses w
+                        WHERE w.user_id = e.id
+                    )
+                ) THEN 1 ELSE 0 END AS is_installed
+            FROM employee_profiles e
+            WHERE e.status_karyawan = ?
+              AND UPPER(TRIM(COALESCE(e.jabatan_fungsional, \'\'))) <> ?
+        ';
+
+        $queryRows = $db->select($sql, ['login_success', 'AKTIF', 'VISITOR']);
+        $aggregated = [];
+
+        foreach ($queryRows as $row) {
+            $siteName = $this->siteResolver->resolve(
+                isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                isset($row->site) ? (string) $row->site : null,
+            );
+            if ($siteName === '') {
+                $siteName = 'Tidak diketahui';
+            }
+
+            if (! isset($aggregated[$siteName])) {
+                $aggregated[$siteName] = (object) [
+                    'dim_name' => $siteName,
+                    'total' => 0,
+                    'installed' => 0,
+                ];
+            }
+
+            $aggregated[$siteName]->total++;
+            if ((int) ($row->is_installed ?? 0) === 1) {
+                $aggregated[$siteName]->installed++;
+            }
+        }
+
+        usort($aggregated, static function (object $a, object $b): int {
+            $installedCmp = ((int) $b->installed) <=> ((int) $a->installed);
+            if ($installedCmp !== 0) {
+                return $installedCmp;
+            }
+
+            return strcmp((string) $a->dim_name, (string) $b->dim_name);
+        });
+
+        return $this->formatInstallStatRows('site', array_values($aggregated));
+    }
+
+    /**
+     * @param  list<object>  $queryRows
+     * @return array{
+     *     available: bool,
+     *     dimension: string,
+     *     dimension_label: string,
+     *     footnote: string,
+     *     message: string|null,
+     *     summary: array{
+     *         total: int,
+     *         installed: int,
+     *         not_installed: int,
+     *         adoption_pct: float,
+     *         kpi_card_total: int,
+     *         groups: int
+     *     },
+     *     overview: list<array{
+     *         dimension: string,
+     *         label: string,
+     *         icon: string,
+     *         groups: int,
+     *         total: int,
+     *         installed: int,
+     *         not_installed: int,
+     *         adoption_pct: float,
+     *         top_name: string,
+     *         top_installed: int,
+     *         top_pct: float
+     *     }>,
+     *     rows: list<array{name: string, total: int, installed: int, not_installed: int, pct: float, bar_class: string}>,
+     *     chart: array{categories: list<string>, installed: list<int>, not_installed: list<int>}
+     * }
+     */
+    private function formatInstallStatRows(string $dimension, array $queryRows): array
+    {
         $rows = [];
         $totalAll = 0;
         $installedAll = 0;

@@ -6,13 +6,13 @@
    <div class="hsecm-card gap-eval-card rounded-2xl p-4 border border-teal-100 bg-teal-50/50">
       <p class="text-[10px] font-bold uppercase tracking-wider text-teal-800">Total Gap</p>
       <p class="text-3xl font-extrabold text-teal-900 mt-1">{{ number_format((int) ($ov['total_gap'] ?? 0)) }}</p>
-      <p class="text-[11px] text-teal-700/80 mt-1">Semua gap distinct (berulang + tidak berulang)</p>
+      <p class="text-[11px] text-teal-700/80 mt-1">Semua gap distinct (masih open + sudah perbaikan)</p>
    </div>
 
    <div class="hsecm-card gap-eval-card rounded-2xl p-4 border border-amber-100 bg-amber-50/50">
       <p class="text-[10px] font-bold uppercase tracking-wider text-amber-800">Total Perulangan</p>
       <p class="text-3xl font-extrabold text-amber-900 mt-1">{{ number_format((int) ($ov['total_perulangan'] ?? 0)) }}</p>
-      <p class="text-[11px] text-amber-800/80 mt-1">Subset gap dengan streak ≥ 2 hari</p>
+      <p class="text-[11px] text-amber-800/80 mt-1">Masih open · streak ≥ 2 hari</p>
    </div>
 
    <div class="hsecm-card gap-eval-card rounded-2xl p-4 border border-emerald-100 bg-emerald-50/50">
@@ -21,7 +21,7 @@
       <div class="mt-3 pt-3 border-t border-emerald-200/80">
          <p class="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Tanpa Perulangan</p>
          <p class="text-xl font-extrabold text-emerald-900 mt-0.5">{{ number_format((int) ($ov['perbaikan_tanpa_perulangan'] ?? 0)) }}</p>
-         <p class="text-[11px] text-emerald-700/80 mt-0.5">Streak &lt; 2 · distinct</p>
+         <p class="text-[11px] text-emerald-700/80 mt-0.5">Subset Total Gap · streak &lt; 2</p>
       </div>
    </div>
 

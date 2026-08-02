@@ -23,6 +23,7 @@ final class SportEvaluationWeeklyUploadService
 
     public function __construct(
         private readonly BewellConnectionService $connection,
+        private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
     ) {}
 
     /**
@@ -73,7 +74,7 @@ final class SportEvaluationWeeklyUploadService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:weekly_uploads:dash:v1:'.sha1(json_encode([
+            $cacheKey = 'evaluasi_well:weekly_uploads:dash:v2:'.sha1(json_encode([
                 $filters,
                 $selectedWeek['key'],
             ], JSON_THROW_ON_ERROR));
@@ -179,7 +180,10 @@ final class SportEvaluationWeeklyUploadService
                     'id' => (int) $row->id,
                     'nama' => (string) ($row->nama ?: 'User #'.$row->id),
                     'kode_sid' => (string) ($row->kode_sid ?: '-'),
-                    'site' => $this->displayOrDash($row->site ?? null),
+                    'site' => $this->siteResolver->resolveOrDash(
+                        isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                        isset($row->site) ? (string) $row->site : null,
+                    ),
                     'company' => $this->displayOrDash($row->nama_perusahaan ?? null),
                     'departement' => $this->displayOrDash($row->departement ?? null),
                     'divisi' => $this->displayOrDash($row->divisi ?? null),
@@ -238,7 +242,10 @@ final class SportEvaluationWeeklyUploadService
             $export[] = [
                 'nama' => (string) ($row->nama ?: '-'),
                 'kode_sid' => (string) ($row->kode_sid ?: '-'),
-                'site' => $this->displayOrDash($row->site ?? null),
+                'site' => $this->siteResolver->resolveOrDash(
+                    isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                    isset($row->site) ? (string) $row->site : null,
+                ),
                 'company' => $this->displayOrDash($row->nama_perusahaan ?? null),
                 'departement' => $this->displayOrDash($row->departement ?? null),
                 'divisi' => $this->displayOrDash($row->divisi ?? null),
@@ -377,18 +384,25 @@ final class SportEvaluationWeeklyUploadService
      */
     private function buildFilterOptions(): array
     {
-        return Cache::remember('evaluasi_well:weekly_uploads:filters_v1', 300, function (): array {
+        return Cache::remember('evaluasi_well:weekly_uploads:filters_v2', 300, function (): array {
             $base = $this->activeEmployeesBaseQuery();
 
+            $sitePairs = (clone $base)->get(['e.kode_sid', 'e.site']);
+            $resolvedSites = [];
+            foreach ($sitePairs as $pair) {
+                $site = $this->siteResolver->resolve(
+                    isset($pair->kode_sid) ? (string) $pair->kode_sid : null,
+                    isset($pair->site) ? (string) $pair->site : null,
+                );
+                if ($site !== '') {
+                    $resolvedSites[$site] = true;
+                }
+            }
+            $sites = array_keys($resolvedSites);
+            sort($sites, SORT_STRING);
+
             return [
-                'sites' => (clone $base)
-                    ->whereNotNull('e.site')
-                    ->where('e.site', '<>', '')
-                    ->distinct()
-                    ->orderBy('e.site')
-                    ->pluck('e.site')
-                    ->map(static fn (mixed $v): string => (string) $v)
-                    ->all(),
+                'sites' => $sites,
                 'companies' => (clone $base)
                     ->whereNotNull('e.nama_perusahaan')
                     ->where('e.nama_perusahaan', '<>', '')
@@ -473,13 +487,13 @@ final class SportEvaluationWeeklyUploadService
 
         $like = '%'.$search.'%';
 
-        return $query->where(function (Builder $inner) use ($like): void {
+        return $query->where(function (Builder $inner) use ($like, $search): void {
             $inner->where('e.nama', 'like', $like)
                 ->orWhere('e.kode_sid', 'like', $like)
-                ->orWhere('e.site', 'like', $like)
                 ->orWhere('e.nama_perusahaan', 'like', $like)
                 ->orWhere('e.departement', 'like', $like)
                 ->orWhere('e.divisi', 'like', $like);
+            $this->siteResolver->orWhereSiteMatchesSearch($inner, $like, $search);
         });
     }
 
@@ -545,7 +559,7 @@ final class SportEvaluationWeeklyUploadService
     private function applyEmployeeFilters(Builder $query, array $filters): Builder
     {
         if ($filters['site'] !== '') {
-            $query->where('e.site', $filters['site']);
+            $this->siteResolver->applySiteFilter($query, $filters['site']);
         }
         if ($filters['company'] !== '') {
             $query->where('e.nama_perusahaan', $filters['company']);

@@ -62,6 +62,7 @@ final class SportEvaluationActiveStatsService
 
     public function __construct(
         private readonly BewellConnectionService $connection,
+        private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
     ) {}
 
     /**
@@ -137,7 +138,7 @@ final class SportEvaluationActiveStatsService
 
         try {
             $stats = Cache::remember(
-                'evaluasi_well:active_stats:v1:'.$dimension.':'.$week['start'],
+                'evaluasi_well:active_stats:v2:'.$dimension.':'.$week['start'],
                 self::CACHE_TTL,
                 function () use ($dimension, $week): array {
                     return $this->buildStats($dimension, $week);
@@ -195,14 +196,14 @@ final class SportEvaluationActiveStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:overview:v1:'.$week['start'],
+                'evaluasi_well:active_stats:overview:v2:'.$week['start'],
                 self::CACHE_TTL,
                 function () use ($week): array {
                     $overview = [];
 
                     foreach (array_keys(self::DIMENSION_COLUMNS) as $dimension) {
                         $stats = Cache::remember(
-                            'evaluasi_well:active_stats:v1:'.$dimension.':'.$week['start'],
+                            'evaluasi_well:active_stats:v2:'.$dimension.':'.$week['start'],
                             self::CACHE_TTL,
                             function () use ($dimension, $week): array {
                                 return $this->buildStats($dimension, $week);
@@ -407,6 +408,10 @@ final class SportEvaluationActiveStatsService
      */
     private function queryDimensionRows(string $dimension, string $from, string $to): array
     {
+        if ($dimension === 'site') {
+            return $this->queryDimensionRowsByResolvedSite($from, $to);
+        }
+
         $column = self::DIMENSION_COLUMNS[$dimension];
         $dimExpr = 'COALESCE(NULLIF(TRIM('.$column.'), \'\'), \'Tidak diketahui\')';
         $db = DB::connection(BewellConnectionService::CONNECTION);
@@ -469,6 +474,114 @@ final class SportEvaluationActiveStatsService
 
     /**
      * @return list<array{
+     *     name: string,
+     *     active_users: int,
+     *     food_evals: int,
+     *     workout_evals: int,
+     *     total_evals: int,
+     *     pct: float,
+     *     bar_class: string
+     * }>
+     */
+    private function queryDimensionRowsByResolvedSite(string $from, string $to): array
+    {
+        $db = DB::connection(BewellConnectionService::CONNECTION);
+
+        $sql = '
+            SELECT
+                e.kode_sid,
+                e.site,
+                a.user_id,
+                COALESCE(f.food_cnt, 0) AS food_evals,
+                COALESCE(w.workout_cnt, 0) AS workout_evals
+            FROM ('.$this->activeUsersUnionSql().') AS a
+            INNER JOIN employee_profiles e ON e.id = a.user_id
+            LEFT JOIN (
+                SELECT user_id, COUNT(*) AS food_cnt
+                FROM food_analyses
+                WHERE source_type = ?
+                  AND user_id IS NOT NULL
+                  AND created_at BETWEEN ? AND ?
+                GROUP BY user_id
+            ) AS f ON f.user_id = a.user_id
+            LEFT JOIN (
+                SELECT user_id, COUNT(*) AS workout_cnt
+                FROM workout_analyses
+                WHERE user_id IS NOT NULL
+                  AND created_at BETWEEN ? AND ?
+                GROUP BY user_id
+            ) AS w ON w.user_id = a.user_id
+            WHERE e.status_karyawan = ?
+              AND UPPER(TRIM(COALESCE(e.jabatan_fungsional, \'\'))) <> ?
+        ';
+
+        $bindings = array_merge(
+            $this->activeUsersUnionBindings($from, $to),
+            ['photo', $from, $to, $from, $to, 'AKTIF', 'VISITOR']
+        );
+
+        $queryRows = $db->select($sql, $bindings);
+        $aggregated = [];
+
+        foreach ($queryRows as $row) {
+            $siteName = $this->siteResolver->resolve(
+                isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                isset($row->site) ? (string) $row->site : null,
+            );
+            if ($siteName === '') {
+                $siteName = 'Tidak diketahui';
+            }
+
+            if (! isset($aggregated[$siteName])) {
+                $aggregated[$siteName] = [
+                    'name' => $siteName,
+                    'user_ids' => [],
+                    'food_evals' => 0,
+                    'workout_evals' => 0,
+                ];
+            }
+
+            $uid = (int) ($row->user_id ?? 0);
+            if ($uid > 0) {
+                $aggregated[$siteName]['user_ids'][$uid] = true;
+            }
+            $aggregated[$siteName]['food_evals'] += (int) ($row->food_evals ?? 0);
+            $aggregated[$siteName]['workout_evals'] += (int) ($row->workout_evals ?? 0);
+        }
+
+        $rows = [];
+        foreach ($aggregated as $bucket) {
+            $food = (int) $bucket['food_evals'];
+            $workout = (int) $bucket['workout_evals'];
+            $rows[] = [
+                'name' => (string) $bucket['name'],
+                'active_users' => count($bucket['user_ids']),
+                'food_evals' => $food,
+                'workout_evals' => $workout,
+                'total_evals' => $food + $workout,
+                'pct' => 0.0,
+                'bar_class' => self::BAR_CLASSES[0],
+            ];
+        }
+
+        usort($rows, static function (array $a, array $b): int {
+            $activeCmp = $b['active_users'] <=> $a['active_users'];
+            if ($activeCmp !== 0) {
+                return $activeCmp;
+            }
+            $evalCmp = $b['total_evals'] <=> $a['total_evals'];
+            if ($evalCmp !== 0) {
+                return $evalCmp;
+            }
+
+            return strcmp($a['name'], $b['name']);
+        });
+
+        return $rows;
+    }
+
+    /**
+     * @return list<array{
      *     rank: int,
      *     user_id: int,
      *     nama: string,
@@ -486,11 +599,12 @@ final class SportEvaluationActiveStatsService
         $db = DB::connection(BewellConnectionService::CONNECTION);
         $limit = self::LEADERBOARD_LIMIT;
 
-        $sql = '
+            $sql = '
             SELECT
                 e.id AS user_id,
                 COALESCE(NULLIF(TRIM(e.nama), \'\'), \'-\') AS nama,
-                COALESCE(NULLIF(TRIM(e.site), \'\'), \'-\') AS site,
+                e.kode_sid,
+                e.site,
                 COALESCE(NULLIF(TRIM(e.nama_perusahaan), \'\'), \'-\') AS perusahaan,
                 COALESCE(NULLIF(TRIM(e.jabatan_fungsional), \'\'), \'-\') AS jabatan,
                 COALESCE(f.food_cnt, 0) AS food_evals,
@@ -542,7 +656,10 @@ final class SportEvaluationActiveStatsService
                 'rank' => $i + 1,
                 'user_id' => (int) ($row->user_id ?? 0),
                 'nama' => (string) ($row->nama ?? '-'),
-                'site' => (string) ($row->site ?? '-'),
+                'site' => $this->siteResolver->resolveOrDash(
+                    isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                    isset($row->site) ? (string) $row->site : null,
+                ),
                 'perusahaan' => (string) ($row->perusahaan ?? '-'),
                 'jabatan' => (string) ($row->jabatan ?? '-'),
                 'food_evals' => $food,
