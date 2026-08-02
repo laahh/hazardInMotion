@@ -79,7 +79,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:v7:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:v8:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             $stats = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($dimension, $filters): array {
                 return $this->buildStats($dimension, $filters);
@@ -118,7 +118,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:overview:v7:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:overview:v8:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters): array {
                 $overview = [];
@@ -175,7 +175,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            return Cache::remember('evaluasi_well:install_stats:filter_options:v3', self::CACHE_TTL, function (): array {
+            return Cache::remember('evaluasi_well:install_stats:filter_options:v4', self::CACHE_TTL, function (): array {
                 $rows = $this->rawEmployeeRows();
                 $sites = [];
                 $companies = [];
@@ -207,12 +207,11 @@ final class SportEvaluationInstallStatsService
                 }
 
                 $siteList = array_keys($sites);
-                $companyList = array_keys($companies);
+                $companyList = $this->sortCompanyNames(array_keys($companies));
                 $deptList = array_keys($departements);
                 $jabatanList = array_keys($jabatans);
                 $divList = array_keys($divisionGroups);
                 sort($siteList, SORT_STRING);
-                sort($companyList, SORT_STRING);
                 sort($deptList, SORT_STRING);
                 sort($jabatanList, SORT_STRING);
                 sort($divList, SORT_STRING);
@@ -354,7 +353,14 @@ final class SportEvaluationInstallStatsService
         }
 
         $list = array_values($aggregated);
-        usort($list, static function (array $a, array $b): int {
+        usort($list, function (array $a, array $b) use ($dimension): int {
+            if ($dimension === 'company') {
+                $pinCmp = $this->companyPinOrder($a['name']) <=> $this->companyPinOrder($b['name']);
+                if ($pinCmp !== 0) {
+                    return $pinCmp;
+                }
+            }
+
             $cmp = $b['installed'] <=> $a['installed'];
             if ($cmp !== 0) {
                 return $cmp;
@@ -842,7 +848,7 @@ final class SportEvaluationInstallStatsService
     }
 
     /**
-     * Perusahaan Minecon (BUMA, KDC, MTL, PAMA, BAR, FAD, MTN).
+     * Perusahaan Minecon + PT Berau Coal.
      */
     private function isMineconCompany(string $companyName): bool
     {
@@ -863,6 +869,45 @@ final class SportEvaluationInstallStatsService
         }
 
         return false;
+    }
+
+    /**
+     * Urutan pin: PT Berau Coal paling atas, lalu mitra sesuai config, sisanya di bawah.
+     */
+    private function companyPinOrder(string $companyName): int
+    {
+        $needle = mb_strtoupper(trim($companyName));
+        /** @var list<string> $allowed */
+        $allowed = config('evaluasi_well_minecon_companies', []);
+
+        foreach ($allowed as $index => $name) {
+            if (! is_string($name)) {
+                continue;
+            }
+            if (mb_strtoupper(trim($name)) === $needle) {
+                return $index;
+            }
+        }
+
+        return 9999;
+    }
+
+    /**
+     * @param  list<string>  $companies
+     * @return list<string>
+     */
+    private function sortCompanyNames(array $companies): array
+    {
+        usort($companies, function (string $a, string $b): int {
+            $pinCmp = $this->companyPinOrder($a) <=> $this->companyPinOrder($b);
+            if ($pinCmp !== 0) {
+                return $pinCmp;
+            }
+
+            return strcmp($a, $b);
+        });
+
+        return $companies;
     }
 
     /**
