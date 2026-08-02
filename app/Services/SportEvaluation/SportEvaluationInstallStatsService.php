@@ -26,7 +26,7 @@ final class SportEvaluationInstallStatsService
     private const DIMENSION_LABELS = [
         'site' => 'Site',
         'divisi' => 'Divisi',
-        'company' => 'Perusahaan',
+        'company' => 'Perusahaan (Minecon)',
         'departement' => 'Departemen',
         'jabatan' => 'Jabatan',
     ];
@@ -78,7 +78,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:v5:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:v6:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             $stats = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($dimension, $filters): array {
                 return $this->buildStats($dimension, $filters);
@@ -117,7 +117,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:overview:v5:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:overview:v6:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters): array {
                 $overview = [];
@@ -174,7 +174,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            return Cache::remember('evaluasi_well:install_stats:filter_options:v1', self::CACHE_TTL, function (): array {
+            return Cache::remember('evaluasi_well:install_stats:filter_options:v2', self::CACHE_TTL, function (): array {
                 $rows = $this->rawEmployeeRows();
                 $sites = [];
                 $companies = [];
@@ -193,7 +193,7 @@ final class SportEvaluationInstallStatsService
                         $divisionGroups[$group] = true;
                     }
 
-                    if ($row['company'] !== '') {
+                    if ($row['company'] !== '' && $this->isMineconCompany($row['company'])) {
                         $companies[$row['company']] = true;
                     }
                     if ($row['departement'] !== '') {
@@ -322,6 +322,10 @@ final class SportEvaluationInstallStatsService
         $aggregated = [];
 
         foreach ($rows as $row) {
+            if ($dimension === 'company' && ! $this->isMineconCompany($row['company'])) {
+                continue;
+            }
+
             $name = match ($dimension) {
                 'site' => $row['resolved_site'] !== '' ? $row['resolved_site'] : 'Tidak diketahui',
                 'divisi' => $row['divisi_group'] !== '' ? $row['divisi_group'] : 'Tidak diketahui',
@@ -830,6 +834,30 @@ final class SportEvaluationInstallStatsService
         $dimension = strtolower(trim($dimension));
 
         return array_key_exists($dimension, self::DIMENSION_LABELS) ? $dimension : 'site';
+    }
+
+    /**
+     * Perusahaan Minecon (BUMA, KDC, MTL, PAMA, BAR, FAD, MTN).
+     */
+    private function isMineconCompany(string $companyName): bool
+    {
+        $needle = mb_strtoupper(trim($companyName));
+        if ($needle === '') {
+            return false;
+        }
+
+        /** @var list<string> $allowed */
+        $allowed = config('evaluasi_well_minecon_companies', []);
+        foreach ($allowed as $name) {
+            if (! is_string($name)) {
+                continue;
+            }
+            if (mb_strtoupper(trim($name)) === $needle) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

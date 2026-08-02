@@ -54,9 +54,9 @@
                 </select>
               </div>
               <div class="col-6 col-md-4 col-xl-2">
-                <label for="install-global-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
+                <label for="install-global-company" class="form-label text-sm fw-medium mb-6">Perusahaan (Minecon)</label>
                 <select id="install-global-company" class="form-select form-select-sm">
-                  <option value="">Semua Perusahaan</option>
+                  <option value="">Semua Minecon</option>
                 </select>
               </div>
               <div class="col-6 col-md-4 col-xl-2">

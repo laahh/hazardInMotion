@@ -957,7 +957,7 @@
     var dimensionLabels = {
         site: 'Site',
         divisi: 'Divisi',
-        company: 'Perusahaan',
+        company: 'Perusahaan (Minecon)',
         departement: 'Departemen',
         jabatan: 'Jabatan'
     };
@@ -1416,7 +1416,7 @@
         fillSelectOptions(globalSiteEl, options.sites || [], 'Semua Site');
         fillSelectOptions(globalDivisionEl, options.division_groups || [], 'Semua Divisi');
         fillSelectOptions(globalJabatanEl, options.jabatans || [], 'Semua Jabatan');
-        fillSelectOptions(globalCompanyEl, options.companies || [], 'Semua Perusahaan');
+        fillSelectOptions(globalCompanyEl, options.companies || [], 'Semua Minecon');
 
         if (globalDepartementListEl) {
             globalDepartementListEl.innerHTML = '';
