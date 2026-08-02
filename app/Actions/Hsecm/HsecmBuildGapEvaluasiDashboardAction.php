@@ -61,24 +61,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
             }
         }
         $tasklist['cards']['hilang_tanpa_tindaklanjut'] = $hilangTanpaTindaklanjut;
-
-        $summaryScrape = $this->buildScrapeMatrix(
-            $scrape['items']['tetap'] ?? [],
-            $scrape['items']['hilang'] ?? [],
-            array_merge($scrape['items']['baru'] ?? [], $scrape['items']['kembali'] ?? []),
-        );
-
-        $summaryTasklist = $this->buildTasklistMatrix(
-            $tasklist['items']['tindaklanjut_berhasil'] ?? [],
-            $tasklist['items']['tindaklanjut_belum_efektif'] ?? [],
-        );
-
-        $sections = $this->buildProgramSections(
-            $scrape['items']['tetap'] ?? [],
-            $scrape['items']['hilang'] ?? [],
-        );
-
-        unset($tasklist['acted_identities'], $scrape['hilang_identities'], $scrape['items'], $tasklist['items']);
+        unset($tasklist['acted_identities'], $scrape['hilang_identities']);
 
         return [
             'filters' => array_merge($filters, [
@@ -95,9 +78,6 @@ final class HsecmBuildGapEvaluasiDashboardAction
             'slots_prev' => $slotsPrev,
             'scrape' => $scrape,
             'tasklist' => $tasklist,
-            'summary_scrape' => $summaryScrape,
-            'summary_tasklist' => $summaryTasklist,
-            'sections' => $sections,
         ];
     }
 
@@ -274,12 +254,6 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'perbaikan_dengan_perulangan' => $perbaikanDenganPerulangan,
             ],
             'hilang_identities' => $hilangIdentities,
-            'items' => [
-                'tetap' => $tetap,
-                'hilang' => $hilang,
-                'baru' => $baru,
-                'kembali' => $kembali,
-            ],
             'details' => [
                 'tetap' => array_slice($tetap, 0, self::DETAIL_LIMIT),
                 'hilang' => array_slice($hilang, 0, self::DETAIL_LIMIT),
@@ -330,17 +304,11 @@ final class HsecmBuildGapEvaluasiDashboardAction
                     'belum_tindaklanjut_masih_gap' => 0,
                     'hilang_tanpa_tindaklanjut' => 0,
                 ],
-                'items' => [
-                    'tindaklanjut_berhasil' => [],
-                    'tindaklanjut_belum_efektif' => [],
-                    'belum_tindaklanjut_masih_gap' => [],
-                ],
                 'details' => [
                     'tindaklanjut_berhasil' => [],
                     'tindaklanjut_belum_efektif' => [],
                     'belum_tindaklanjut_masih_gap' => [],
                 ],
-                'acted_identities' => [],
                 'message' => 'Tabel tasklist belum tersedia.',
             ];
         }
@@ -443,14 +411,9 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'tindaklanjut_berhasil' => count($berhasil),
                 'tindaklanjut_belum_efektif' => count($belumEfektif),
                 'belum_tindaklanjut_masih_gap' => count($belumTindaklanjut),
-                'hilang_tanpa_tindaklanjut' => 0,
+                'hilang_tanpa_tindaklanjut' => 0, // diisi di execute setelah scrape
             ],
             'acted_identities' => $actedIdentities,
-            'items' => [
-                'tindaklanjut_berhasil' => $berhasil,
-                'tindaklanjut_belum_efektif' => $belumEfektif,
-                'belum_tindaklanjut_masih_gap' => $belumTindaklanjut,
-            ],
             'details' => [
                 'tindaklanjut_berhasil' => array_slice($berhasil, 0, self::DETAIL_LIMIT),
                 'tindaklanjut_belum_efektif' => array_slice($belumEfektif, 0, self::DETAIL_LIMIT),
@@ -458,252 +421,5 @@ final class HsecmBuildGapEvaluasiDashboardAction
             ],
             'message' => null,
         ];
-    }
-
-    private const SECTION_DETAIL_LIMIT = 50;
-
-    /**
-     * @param  list<array<string, mixed>>  $tetap
-     * @param  list<array<string, mixed>>  $hilang
-     * @param  list<array<string, mixed>>  $baru
-     * @return array{
-     *     groups: list<array<string, mixed>>,
-     *     columns: list<string>,
-     *     rows: list<array<string, mixed>>,
-     *     mode: string
-     * }
-     */
-    private function buildScrapeMatrix(array $tetap, array $hilang, array $baru): array
-    {
-        /** @var array<string, array<string, true>> $seenPairs */
-        $seenPairs = [];
-        /** @var array<string, array<string, array{sudah: int, belum: int, baru: int}>> $cells */
-        $cells = [];
-
-        foreach ($tetap as $row) {
-            $this->bumpScrapeCell($cells, $seenPairs, $row, 'belum');
-        }
-        foreach ($hilang as $row) {
-            $this->bumpScrapeCell($cells, $seenPairs, $row, 'sudah');
-        }
-        foreach ($baru as $row) {
-            $this->bumpScrapeCell($cells, $seenPairs, $row, 'baru');
-        }
-
-        $header = $this->dashboardService->buildEvaluasiMatrixHeader($seenPairs);
-        $programs = $this->dashboardService->gapEvaluasiMatrixPrograms();
-        $rows = [];
-        foreach ($programs as $program) {
-            $key = $program['key'];
-            $rowCells = [];
-            foreach ($header['columns'] as $col) {
-                $rowCells[$col] = $cells[$key][$col] ?? ['sudah' => 0, 'belum' => 0, 'baru' => 0];
-            }
-            $rows[] = [
-                'key' => $key,
-                'label' => $program['label'],
-                'cells' => $rowCells,
-            ];
-        }
-
-        return [
-            'groups' => $header['groups'],
-            'columns' => $header['columns'],
-            'rows' => $rows,
-            'mode' => 'scrape',
-        ];
-    }
-
-    /**
-     * @param  array<string, array<string, array{sudah: int, belum: int, baru: int}>>  $cells
-     * @param  array<string, array<string, true>>  $seenPairs
-     * @param  array<string, mixed>  $row
-     */
-    private function bumpScrapeCell(array &$cells, array &$seenPairs, array $row, string $metric): void
-    {
-        $programKey = $this->toMatrixProgramKey($row);
-        $pair = $this->dashboardService->resolveEvaluasiMatrixPair(
-            (string) ($row['site'] ?? ''),
-            (string) ($row['perusahaan'] ?? ''),
-        );
-        if ($pair === null) {
-            return;
-        }
-        [$site, $code] = $pair;
-        $col = $this->dashboardService->evaluasiMatrixColumnKey($site, $code);
-        $seenPairs[$site][$code] = true;
-        if (! isset($cells[$programKey][$col])) {
-            $cells[$programKey][$col] = ['sudah' => 0, 'belum' => 0, 'baru' => 0];
-        }
-        $cells[$programKey][$col][$metric]++;
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $berhasil
-     * @param  list<array<string, mixed>>  $belumEfektif
-     * @return array{
-     *     groups: list<array<string, mixed>>,
-     *     columns: list<string>,
-     *     rows: list<array<string, mixed>>,
-     *     mode: string
-     * }
-     */
-    private function buildTasklistMatrix(array $berhasil, array $belumEfektif): array
-    {
-        /** @var array<string, array<string, true>> $seenPairs */
-        $seenPairs = [];
-        /** @var array<string, array<string, array{efektif: int, belum_efektif: int}>> $cells */
-        $cells = [];
-
-        foreach ($berhasil as $row) {
-            $this->bumpTasklistCell($cells, $seenPairs, $row, 'efektif');
-        }
-        foreach ($belumEfektif as $row) {
-            $this->bumpTasklistCell($cells, $seenPairs, $row, 'belum_efektif');
-        }
-
-        $header = $this->dashboardService->buildEvaluasiMatrixHeader($seenPairs);
-        $programs = $this->dashboardService->gapEvaluasiMatrixPrograms();
-        $rows = [];
-        foreach ($programs as $program) {
-            $key = $program['key'];
-            $rowCells = [];
-            foreach ($header['columns'] as $col) {
-                $rowCells[$col] = $cells[$key][$col] ?? ['efektif' => 0, 'belum_efektif' => 0];
-            }
-            $rows[] = [
-                'key' => $key,
-                'label' => $program['label'],
-                'cells' => $rowCells,
-            ];
-        }
-
-        return [
-            'groups' => $header['groups'],
-            'columns' => $header['columns'],
-            'rows' => $rows,
-            'mode' => 'tasklist',
-        ];
-    }
-
-    /**
-     * @param  array<string, array<string, array{efektif: int, belum_efektif: int}>>  $cells
-     * @param  array<string, array<string, true>>  $seenPairs
-     * @param  array<string, mixed>  $row
-     */
-    private function bumpTasklistCell(array &$cells, array &$seenPairs, array $row, string $metric): void
-    {
-        $programKey = $this->toMatrixProgramKey($row);
-        $pair = $this->dashboardService->resolveEvaluasiMatrixPair(
-            (string) ($row['site'] ?? ''),
-            (string) ($row['perusahaan'] ?? ''),
-        );
-        if ($pair === null) {
-            return;
-        }
-        [$site, $code] = $pair;
-        $col = $this->dashboardService->evaluasiMatrixColumnKey($site, $code);
-        $seenPairs[$site][$code] = true;
-        if (! isset($cells[$programKey][$col])) {
-            $cells[$programKey][$col] = ['efektif' => 0, 'belum_efektif' => 0];
-        }
-        $cells[$programKey][$col][$metric]++;
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $tetap
-     * @param  list<array<string, mixed>>  $hilang
-     * @return list<array<string, mixed>>
-     */
-    private function buildProgramSections(array $tetap, array $hilang): array
-    {
-        $programs = $this->dashboardService->gapEvaluasiMatrixPrograms();
-        $sections = [];
-
-        foreach ($programs as $program) {
-            $key = $program['key'];
-            $belumRows = array_values(array_filter(
-                $tetap,
-                fn (array $r): bool => $this->toMatrixProgramKey($r) === $key
-            ));
-            $sudahRows = array_values(array_filter(
-                $hilang,
-                fn (array $r): bool => $this->toMatrixProgramKey($r) === $key
-            ));
-
-            if ($belumRows === [] && $sudahRows === []) {
-                continue;
-            }
-
-            /** @var array<string, array{label: string, belum: int, sudah: int}> $byCompany */
-            $byCompany = [];
-            foreach ($belumRows as $row) {
-                $pair = $this->dashboardService->resolveEvaluasiMatrixPair(
-                    (string) ($row['site'] ?? ''),
-                    (string) ($row['perusahaan'] ?? ''),
-                );
-                $label = $pair !== null ? $pair[1] : (trim((string) ($row['perusahaan'] ?? '')) ?: 'Lainnya');
-                if (! isset($byCompany[$label])) {
-                    $byCompany[$label] = ['label' => $label, 'belum' => 0, 'sudah' => 0];
-                }
-                $byCompany[$label]['belum']++;
-            }
-            foreach ($sudahRows as $row) {
-                $pair = $this->dashboardService->resolveEvaluasiMatrixPair(
-                    (string) ($row['site'] ?? ''),
-                    (string) ($row['perusahaan'] ?? ''),
-                );
-                $label = $pair !== null ? $pair[1] : (trim((string) ($row['perusahaan'] ?? '')) ?: 'Lainnya');
-                if (! isset($byCompany[$label])) {
-                    $byCompany[$label] = ['label' => $label, 'belum' => 0, 'sudah' => 0];
-                }
-                $byCompany[$label]['sudah']++;
-            }
-
-            uasort($byCompany, static fn (array $a, array $b): int => ($b['belum'] + $b['sudah']) <=> ($a['belum'] + $a['sudah']));
-            $chartRows = array_slice(array_values($byCompany), 0, 8);
-
-            $sections[] = [
-                'key' => $key,
-                'label' => $program['label'],
-                'icon' => $program['icon'],
-                'total_belum' => count($belumRows),
-                'total_sudah' => count($sudahRows),
-                'chart_title' => 'Belum vs Sudah per Mitra',
-                'chart_labels' => array_column($chartRows, 'label'),
-                'chart_belum' => array_column($chartRows, 'belum'),
-                'chart_sudah' => array_column($chartRows, 'sudah'),
-                'belum_rows' => array_slice($belumRows, 0, self::SECTION_DETAIL_LIMIT),
-                'sudah_rows' => array_slice($sudahRows, 0, self::SECTION_DETAIL_LIMIT),
-                'belum_truncated' => max(0, count($belumRows) - self::SECTION_DETAIL_LIMIT),
-                'sudah_truncated' => max(0, count($sudahRows) - self::SECTION_DETAIL_LIMIT),
-            ];
-        }
-
-        return $sections;
-    }
-
-    /**
-     * @param  array<string, mixed>  $row
-     */
-    private function toMatrixProgramKey(array $row): string
-    {
-        $dataset = trim((string) ($row['dataset_key'] ?? ''));
-        if ($dataset !== '') {
-            return $dataset;
-        }
-
-        return match (trim((string) ($row['program_key'] ?? ''))) {
-            'layer1-tanpa-sap' => 'sap-rfid',
-            'coverage-area' => 'coverage-cctv',
-            'tbc-blindspot' => 'tbc-blindspot',
-            'hazard-overdue' => 'task-overdue',
-            'hazard-submitted' => 'task-submitted',
-            'ikk-compliance' => 'ikk-work-permit',
-            'aggregator-fill' => 'aggregator',
-            'ftw-merah' => 'fatigue',
-            'hazard-rootcause' => 'hazard-rootcause',
-            default => trim((string) ($row['program_key'] ?? 'other')),
-        };
     }
 }

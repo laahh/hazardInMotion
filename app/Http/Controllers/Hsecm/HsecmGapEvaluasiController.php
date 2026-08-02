@@ -35,9 +35,6 @@ class HsecmGapEvaluasiController extends Controller
             'slotsPrev' => $dashboard['slots_prev'],
             'scrape' => $dashboard['scrape'],
             'tasklist' => $dashboard['tasklist'],
-            'summaryScrape' => $dashboard['summary_scrape'],
-            'summaryTasklist' => $dashboard['summary_tasklist'],
-            'sections' => $dashboard['sections'],
         ]));
     }
 }
