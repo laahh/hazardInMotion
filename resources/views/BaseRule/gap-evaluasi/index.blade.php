@@ -18,28 +18,6 @@
       margin-top: 0.75rem;
       padding-top: 0.65rem;
    }
-   .gap-summary-table th:first-child,
-   .gap-summary-table td:first-child {
-      position: sticky;
-      left: 0;
-      z-index: 2;
-      background: #f8fafc;
-   }
-   .gap-summary-table thead th:first-child { z-index: 3; }
-   .gap-summary-table tbody td:first-child {
-      background: #fff;
-      font-weight: 600;
-   }
-   .gap-summary-table tbody tr.gap-program-row {
-      cursor: pointer;
-   }
-   .gap-summary-table tbody tr.gap-program-row.is-active td:first-child {
-      background: rgba(15, 118, 110, 0.08);
-      color: #0f766e;
-   }
-   .gap-summary-table tbody tr.gap-program-row.is-active td {
-      background: rgba(15, 118, 110, 0.04);
-   }
    .gap-program-strip {
       scroll-margin-top: 5rem;
       transition: box-shadow 0.2s ease, border-color 0.2s ease;
@@ -47,6 +25,11 @@
    .gap-program-strip.is-active {
       border-color: rgba(15, 118, 110, 0.35);
       box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
+   }
+   .gap-nav-chip.is-active {
+      background: rgba(15, 118, 110, 0.14);
+      border-color: rgba(15, 118, 110, 0.35);
+      color: #0f766e;
    }
 </style>
 @endpush
@@ -83,7 +66,18 @@
 
 @include('BaseRule.gap-evaluasi.partials._overview-cards', ['overview' => $overview ?? []])
 
-@include('BaseRule.gap-evaluasi.partials._summary-matrix', ['summary' => $summary ?? []])
+{{-- Navigasi cepat ke parameter --}}
+@if(!empty($programs))
+<div class="mb-6 flex flex-wrap gap-2">
+   @foreach($programs as $navProgram)
+   <a href="#gap-program-{{ $navProgram['key'] }}"
+      class="hsecm-badge gap-nav-chip hover:bg-primary/10 transition"
+      data-gap-program-key="{{ $navProgram['key'] }}">
+      {{ $navProgram['label'] }}
+   </a>
+   @endforeach
+</div>
+@endif
 
 <div class="space-y-8 mb-10" id="gap-program-sections">
    @foreach($programs ?? [] as $program)
@@ -155,16 +149,15 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-   const rows = document.querySelectorAll('[data-gap-program-key]');
+   const chips = document.querySelectorAll('.gap-nav-chip[data-gap-program-key]');
    const strips = document.querySelectorAll('.gap-program-strip');
 
    function activate(key) {
-      rows.forEach(function (row) {
-         row.classList.toggle('is-active', row.getAttribute('data-gap-program-key') === key);
+      chips.forEach(function (chip) {
+         chip.classList.toggle('is-active', chip.getAttribute('data-gap-program-key') === key);
       });
       strips.forEach(function (strip) {
-         const match = strip.getAttribute('data-program-key') === key;
-         strip.classList.toggle('is-active', match);
+         strip.classList.toggle('is-active', strip.getAttribute('data-program-key') === key);
       });
       const target = document.getElementById('gap-program-' + key);
       if (target) {
@@ -172,21 +165,16 @@ document.addEventListener('DOMContentLoaded', function () {
       }
    }
 
-   rows.forEach(function (row) {
-      row.addEventListener('click', function () {
-         activate(row.getAttribute('data-gap-program-key'));
-      });
-      row.addEventListener('keydown', function (e) {
-         if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            activate(row.getAttribute('data-gap-program-key'));
-         }
+   chips.forEach(function (chip) {
+      chip.addEventListener('click', function (e) {
+         e.preventDefault();
+         activate(chip.getAttribute('data-gap-program-key'));
       });
    });
 
-   if (rows.length) {
-      rows[0].classList.add('is-active');
-      const firstKey = rows[0].getAttribute('data-gap-program-key');
+   if (chips.length) {
+      chips[0].classList.add('is-active');
+      const firstKey = chips[0].getAttribute('data-gap-program-key');
       strips.forEach(function (strip) {
          strip.classList.toggle('is-active', strip.getAttribute('data-program-key') === firstKey);
       });

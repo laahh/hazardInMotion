@@ -99,7 +99,6 @@ final class HsecmBuildGapEvaluasiDashboardAction
             $tasklist,
             $hilangStreakByIdentity,
         );
-        $summary = $this->buildSummaryMatrix($scrape['all_details']['tetap'] ?? []);
         $overview = $this->buildOverviewCards($scrape, $tasklist, $programs);
 
         unset(
@@ -124,7 +123,6 @@ final class HsecmBuildGapEvaluasiDashboardAction
             'slots_d' => $slotsD,
             'slots_prev' => $slotsPrev,
             'overview' => $overview,
-            'summary' => $summary,
             'programs' => $programs,
             'scrape' => $scrape,
             'tasklist' => $tasklist,
@@ -370,7 +368,21 @@ final class HsecmBuildGapEvaluasiDashboardAction
      */
     private function buildProgramMetrics(array $allDetails, array $tasklist, array $hilangStreakByIdentity): array
     {
-        /** @var array<string, array{total_gap: int, total_perulangan: int, perbaikan_tanpa_perulangan: int, perbaikan_total: int, tindaklanjut_berhasil: int, tindaklanjut_tanpa_perulangan: int, rows: list<array<string, mixed>>}> $stats */
+        $template = $this->dashboardService->buildGapEvaluasiMatrixTemplate();
+        /** @var list<array{key: string, site: string, company_code: string, company_name: string}> $scopeOrder */
+        $scopeOrder = [];
+        foreach ($template['groups'] as $group) {
+            foreach ($group['companies'] as $company) {
+                $scopeOrder[] = [
+                    'key' => (string) $company['key'],
+                    'site' => (string) $group['site'],
+                    'company_code' => (string) $company['code'],
+                    'company_name' => (string) $company['name'],
+                ];
+            }
+        }
+
+        /** @var array<string, array{total_gap: int, total_perulangan: int, perbaikan_tanpa_perulangan: int, perbaikan_total: int, tindaklanjut_berhasil: int, tindaklanjut_tanpa_perulangan: int, rows: list<array<string, mixed>>, scopes: array<string, array{total_gap: int, total_perulangan: int, perbaikan_tanpa_perulangan: int}>}> $stats */
         $stats = [];
         foreach (array_keys(self::PROGRAM_LABELS) as $key) {
             $stats[$key] = [
@@ -381,6 +393,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'tindaklanjut_berhasil' => 0,
                 'tindaklanjut_tanpa_perulangan' => 0,
                 'rows' => [],
+                'scopes' => [],
             ];
         }
 
@@ -391,10 +404,18 @@ final class HsecmBuildGapEvaluasiDashboardAction
                     continue;
                 }
                 $stats[$key]['total_gap']++;
-                if ($this->isPerulangan($row)) {
+                $isPerulangan = $this->isPerulangan($row);
+                if ($isPerulangan) {
                     $stats[$key]['total_perulangan']++;
                 }
                 $stats[$key]['rows'][] = $row;
+
+                $scopeKey = $this->resolveScopeKeyOrOther($row);
+                $this->ensureScopeBucket($stats[$key]['scopes'], $scopeKey);
+                $stats[$key]['scopes'][$scopeKey]['total_gap']++;
+                if ($isPerulangan) {
+                    $stats[$key]['scopes'][$scopeKey]['total_perulangan']++;
+                }
             }
         }
 
@@ -404,10 +425,17 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 continue;
             }
             $stats[$key]['perbaikan_total']++;
-            if ((int) ($row['day_streak'] ?? 1) <= 1) {
+            $tanpaPerulangan = (int) ($row['day_streak'] ?? 1) <= 1;
+            if ($tanpaPerulangan) {
                 $stats[$key]['perbaikan_tanpa_perulangan']++;
             }
             $stats[$key]['rows'][] = $row;
+
+            $scopeKey = $this->resolveScopeKeyOrOther($row);
+            $this->ensureScopeBucket($stats[$key]['scopes'], $scopeKey);
+            if ($tanpaPerulangan) {
+                $stats[$key]['scopes'][$scopeKey]['perbaikan_tanpa_perulangan']++;
+            }
         }
 
         foreach ($tasklist['berhasil_identities'] ?? [] as $identity) {
@@ -446,6 +474,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 }
             );
 
+            $matrixRows = $this->buildVerticalScopeRows($scopeOrder, $s['scopes']);
             $totalRows = count($rows);
             $programs[] = [
                 'key' => $key,
@@ -456,6 +485,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'perbaikan_total' => $s['perbaikan_total'],
                 'tindaklanjut_berhasil' => $s['tindaklanjut_berhasil'],
                 'tindaklanjut_tanpa_perulangan' => $s['tindaklanjut_tanpa_perulangan'],
+                'matrix_rows' => $matrixRows,
                 'rows' => array_slice($rows, 0, self::DETAIL_LIMIT),
                 'truncated' => max(0, $totalRows - self::DETAIL_LIMIT),
                 'row_total' => $totalRows,
@@ -466,51 +496,80 @@ final class HsecmBuildGapEvaluasiDashboardAction
     }
 
     /**
-     * Matriks: jumlah gap berulang (streak ≥ 2) per program × Site/Perusahaan.
-     *
-     * @param  list<array<string, mixed>>  $tetapRows
-     * @return array{
-     *     groups: list<array{site: string, companies: list<array{code: string, name: string, key: string}>}>,
-     *     columns: list<string>,
-     *     rows: list<array{key: string, label: string, counts: array<string, int>}>
-     * }
+     * @param  array<string, mixed>  $row
      */
-    private function buildSummaryMatrix(array $tetapRows): array
+    private function resolveScopeKeyOrOther(array $row): string
     {
-        $template = $this->dashboardService->buildGapEvaluasiMatrixTemplate();
-        $matrixRows = [];
+        $scopeKey = $this->dashboardService->resolveGapEvaluasiScopeKey(
+            (string) ($row['site'] ?? ''),
+            (string) ($row['perusahaan'] ?? ''),
+        );
 
-        foreach (self::PROGRAM_LABELS as $key => $label) {
-            $counts = [];
-            foreach ($tetapRows as $row) {
-                if ((string) ($row['program_key'] ?? '') !== $key) {
-                    continue;
-                }
-                if (! $this->isPerulangan($row)) {
-                    continue;
-                }
-                $scopeKey = $this->dashboardService->resolveGapEvaluasiScopeKey(
-                    (string) ($row['site'] ?? ''),
-                    (string) ($row['perusahaan'] ?? ''),
-                );
-                if ($scopeKey === null) {
-                    continue;
-                }
-                $counts[$scopeKey] = ($counts[$scopeKey] ?? 0) + 1;
-            }
+        return $scopeKey ?? 'Lainnya|—';
+    }
 
-            $matrixRows[] = [
+    /**
+     * @param  array<string, array{total_gap: int, total_perulangan: int, perbaikan_tanpa_perulangan: int}>  $scopes
+     */
+    private function ensureScopeBucket(array &$scopes, string $scopeKey): void
+    {
+        if (! isset($scopes[$scopeKey])) {
+            $scopes[$scopeKey] = [
+                'total_gap' => 0,
+                'total_perulangan' => 0,
+                'perbaikan_tanpa_perulangan' => 0,
+            ];
+        }
+    }
+
+    /**
+     * Tabel vertikal: Site/Perusahaan ke bawah, metrik ke samping.
+     *
+     * @param  list<array{key: string, site: string, company_code: string, company_name: string}>  $scopeOrder
+     * @param  array<string, array{total_gap: int, total_perulangan: int, perbaikan_tanpa_perulangan: int}>  $scopes
+     * @return list<array{key: string, site: string, company_code: string, company_name: string, total_gap: int, total_perulangan: int, perbaikan_tanpa_perulangan: int}>
+     */
+    private function buildVerticalScopeRows(array $scopeOrder, array $scopes): array
+    {
+        $rows = [];
+        $seen = [];
+
+        foreach ($scopeOrder as $scope) {
+            $key = $scope['key'];
+            $seen[$key] = true;
+            $bucket = $scopes[$key] ?? [
+                'total_gap' => 0,
+                'total_perulangan' => 0,
+                'perbaikan_tanpa_perulangan' => 0,
+            ];
+            $rows[] = [
                 'key' => $key,
-                'label' => $label,
-                'counts' => $counts,
+                'site' => $scope['site'],
+                'company_code' => $scope['company_code'],
+                'company_name' => $scope['company_name'],
+                'total_gap' => (int) $bucket['total_gap'],
+                'total_perulangan' => (int) $bucket['total_perulangan'],
+                'perbaikan_tanpa_perulangan' => (int) $bucket['perbaikan_tanpa_perulangan'],
             ];
         }
 
-        return [
-            'groups' => $template['groups'],
-            'columns' => $template['columns'],
-            'rows' => $matrixRows,
-        ];
+        foreach ($scopes as $key => $bucket) {
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $parts = explode('|', $key, 2);
+            $rows[] = [
+                'key' => $key,
+                'site' => $parts[0] !== '' ? $parts[0] : 'Lainnya',
+                'company_code' => $parts[1] ?? '—',
+                'company_name' => $parts[1] ?? '—',
+                'total_gap' => (int) $bucket['total_gap'],
+                'total_perulangan' => (int) $bucket['total_perulangan'],
+                'perbaikan_tanpa_perulangan' => (int) $bucket['perbaikan_tanpa_perulangan'],
+            ];
+        }
+
+        return $rows;
     }
 
     /**
