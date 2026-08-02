@@ -36,36 +36,36 @@
    <div class="overflow-x-auto">
       <table class="w-full text-sm border-collapse">
          <thead>
-            <tr class="bg-slate-900 text-white">
-               <th class="px-4 py-3 text-left align-top font-semibold border-r border-white/10 w-1/3">
+            <tr class="bg-teal-600 text-white">
+               <th class="px-4 py-3 text-left align-top font-semibold border-r border-white/20 w-1/3">
                   <div class="text-[11px] font-bold uppercase tracking-wider">Total Gap</div>
-                  <div class="text-[10px] font-normal text-white/65 mt-1 normal-case tracking-normal leading-snug">
+                  <div class="text-[10px] font-normal text-teal-50/90 mt-1 normal-case tracking-normal leading-snug">
                      Distinct orang/lokasi/aktivitas (tanpa lihat berulang)
                   </div>
                </th>
-               <th class="px-4 py-3 text-left align-top font-semibold border-r border-white/10 w-1/3">
+               <th class="px-4 py-3 text-left align-top font-semibold border-r border-white/20 w-1/3">
                   <div class="text-[11px] font-bold uppercase tracking-wider">Total Perulangan</div>
-                  <div class="text-[10px] font-normal text-white/65 mt-1 normal-case tracking-normal leading-snug">
+                  <div class="text-[10px] font-normal text-teal-50/90 mt-1 normal-case tracking-normal leading-snug">
                      Distinct tetap (D−1 &amp; D) atau streak ≥ 2
                   </div>
                </th>
                <th class="px-4 py-3 text-left align-top font-semibold w-1/3">
                   <div class="text-[11px] font-bold uppercase tracking-wider">Perbaikan tanpa Perulangan</div>
-                  <div class="text-[10px] font-normal text-white/65 mt-1 normal-case tracking-normal leading-snug">
+                  <div class="text-[10px] font-normal text-teal-50/90 mt-1 normal-case tracking-normal leading-snug">
                      Pernah gap lalu clear · streak &lt; 2 · distinct
                   </div>
                </th>
             </tr>
          </thead>
          <tbody>
-            <tr class="bg-slate-100">
-               <td class="px-4 py-4 text-2xl font-extrabold text-on-background border-r border-slate-200">{{ number_format($totalGap) }}</td>
-               <td class="px-4 py-4 text-2xl font-extrabold text-on-background border-r border-slate-200">{{ number_format($totalPerulangan) }}</td>
-               <td class="px-4 py-4 text-2xl font-extrabold text-on-background">{{ number_format($perbaikanTanpa) }}</td>
+            <tr class="bg-teal-50">
+               <td class="px-4 py-4 text-2xl font-extrabold text-teal-900 border-r border-teal-100">{{ number_format($totalGap) }}</td>
+               <td class="px-4 py-4 text-2xl font-extrabold text-teal-900 border-r border-teal-100">{{ number_format($totalPerulangan) }}</td>
+               <td class="px-4 py-4 text-2xl font-extrabold text-teal-900">{{ number_format($perbaikanTanpa) }}</td>
             </tr>
          </tbody>
          <tfoot>
-            <tr class="bg-slate-900 text-white">
+            <tr class="bg-teal-700 text-white">
                <td colspan="3" class="px-4 py-2 text-center text-sm font-bold tracking-wide">
                   {{ number_format($totalGap) }} / {{ number_format($totalPerulangan) }} / {{ number_format($perbaikanTanpa) }}
                </td>

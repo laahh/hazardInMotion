@@ -7,17 +7,6 @@
 <style>
    .gap-eval-card { min-height: 6.5rem; }
    .gap-eval-table { max-height: 22rem; overflow: auto; }
-   .gap-eval-kpi {
-      background: linear-gradient(145deg, #0f766e 0%, #134e4a 100%);
-      color: #fff;
-      border: none;
-      box-shadow: 0 8px 24px -8px rgba(15, 118, 110, 0.45);
-   }
-   .gap-eval-kpi .gap-eval-kpi-sub {
-      border-top: 1px solid rgba(255, 255, 255, 0.18);
-      margin-top: 0.75rem;
-      padding-top: 0.65rem;
-   }
    .gap-program-strip {
       scroll-margin-top: 5rem;
       transition: box-shadow 0.2s ease, border-color 0.2s ease;
