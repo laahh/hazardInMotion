@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Hsecm\HsecmDashboardController;
 use App\Http\Controllers\Hsecm\HsecmDatasetController;
+use App\Http\Controllers\Hsecm\HsecmGapEvaluasiController;
 use App\Http\Controllers\Hsecm\HsecmGapPerulanganController;
 use App\Http\Controllers\Hsecm\HsecmPjoActionController;
 use App\Http\Controllers\Hsecm\HsecmTasklistManageController;
@@ -43,6 +44,7 @@ Route::middleware(['auth'])
         Route::redirect('/', '/hsecm/dashboard')->name('home');
         Route::get('/dashboard', [HsecmDashboardController::class, 'index'])->name('dashboard');
         Route::get('/gap-perulangan', [HsecmGapPerulanganController::class, 'index'])->name('gap-perulangan');
+        Route::get('/gap-evaluasi', [HsecmGapEvaluasiController::class, 'index'])->name('gap-evaluasi');
         Route::get('/wa-notify', [HsecmWaNotifyController::class, 'index'])->name('wa-notify.index');
         Route::post('/wa-notify/recipients', [HsecmWaNotifyController::class, 'storeRecipient'])
             ->name('wa-notify.recipients.store');

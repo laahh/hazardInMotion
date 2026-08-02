@@ -330,6 +330,130 @@ class HsecmDatabaseRepository
         return $out;
     }
 
+    /**
+     * Tanggal kalender (Y-m-d) yang punya batch_slot, descending.
+     *
+     * @return list<string>
+     */
+    public function listDistinctBatchSlotDates(string $table, int $limit = 60): array
+    {
+        if (! $this->hasBatchSlotSupport($table)) {
+            return [];
+        }
+
+        $limit = max(1, min(365, $limit));
+
+        return Cache::remember(
+            self::cacheKey($table, 'slot_dates.'.$limit),
+            self::CACHE_TTL_SECONDS,
+            function () use ($table, $limit): array {
+                $raw = DB::table($table)
+                    ->selectRaw('DATE(batch_slot) as slot_date')
+                    ->whereNotNull('batch_slot')
+                    ->groupBy(DB::raw('DATE(batch_slot)'))
+                    ->orderByDesc(DB::raw('DATE(batch_slot)'))
+                    ->limit($limit)
+                    ->pluck('slot_date');
+
+                $dates = [];
+                foreach ($raw as $value) {
+                    $ymd = trim((string) $value);
+                    if ($ymd !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $ymd) === 1) {
+                        $dates[] = $ymd;
+                    } else {
+                        try {
+                            $dates[] = Carbon::parse($value)->format('Y-m-d');
+                        } catch (\Throwable) {
+                            // skip
+                        }
+                    }
+                }
+
+                return array_values(array_unique($dates));
+            }
+        );
+    }
+
+    /**
+     * Semua batch_slot pada tanggal kalender (Y-m-d), ascending.
+     *
+     * @return list<string>
+     */
+    public function listBatchSlotsOnDate(string $table, string $ymd): array
+    {
+        if (! $this->hasBatchSlotSupport($table)) {
+            return [];
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $ymd) !== 1) {
+            return [];
+        }
+
+        return Cache::remember(
+            self::cacheKey($table, 'slots_on.'.$ymd),
+            self::CACHE_TTL_SECONDS,
+            function () use ($table, $ymd): array {
+                $start = $ymd.' 00:00:00';
+                $end = $ymd.' 23:59:59';
+                $raw = DB::table($table)
+                    ->whereBetween('batch_slot', [$start, $end])
+                    ->distinct()
+                    ->orderBy('batch_slot')
+                    ->pluck('batch_slot');
+
+                $slots = [];
+                foreach ($raw as $value) {
+                    $normalized = $this->normalizeSlot($value);
+                    if ($normalized !== null) {
+                        $slots[$normalized] = true;
+                    }
+                }
+
+                return array_keys($slots);
+            }
+        );
+    }
+
+    /**
+     * business_key yang pernah muncul di slot sebelum tanggal Y-m-d (00:00).
+     *
+     * @param  list<string>  $businessKeys
+     * @return array<string, true>
+     */
+    public function businessKeysPresentBeforeDate(string $table, array $businessKeys, string $ymd): array
+    {
+        $keys = array_values(array_unique(array_filter(array_map(
+            static fn (string $k): string => trim($k),
+            $businessKeys
+        ), static fn (string $k): bool => $k !== '')));
+
+        if ($keys === [] || ! $this->hasBatchSlotSupport($table) || ! $this->hasBusinessKeySupport($table)) {
+            return [];
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $ymd) !== 1) {
+            return [];
+        }
+
+        $before = $ymd.' 00:00:00';
+        $rows = DB::table($table)
+            ->select('business_key')
+            ->whereIn('business_key', $keys)
+            ->where('batch_slot', '<', $before)
+            ->distinct()
+            ->pluck('business_key');
+
+        $out = [];
+        foreach ($rows as $key) {
+            $trimmed = trim((string) $key);
+            if ($trimmed !== '') {
+                $out[$trimmed] = true;
+            }
+        }
+
+        return $out;
+    }
+
     public function forgetCache(string $table): void
     {
         Cache::forget(self::cacheKey($table, 'all'));

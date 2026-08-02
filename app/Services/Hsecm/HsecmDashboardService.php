@@ -370,6 +370,14 @@ class HsecmDashboardService
     }
 
     /**
+     * @return array{sites: list<string>, companies: list<string>, weeks: list<string>, years: list<string>}
+     */
+    public function getFilterOptions(): array
+    {
+        return $this->buildFilterOptions();
+    }
+
+    /**
      * @param  array{site: string, perusahaan: string, week: string, year: string, date_from: string, date_to: string, q: string}  $filters
      * @return array<string, mixed>
      */
@@ -2088,6 +2096,41 @@ class HsecmDashboardService
      */
     public function extractTasklistItemsFromGaps(array $filters): array
     {
+        return array_map(
+            static function (array $row): array {
+                return [
+                    'program_key' => $row['program_key'],
+                    'title' => $row['title'],
+                    'business_key' => $row['business_key'],
+                    'action_hint' => $row['action_hint'],
+                    'value_label' => $row['value_label'],
+                    'payload' => $row['payload'],
+                ];
+            },
+            $this->extractGapIdentityRows($filters)
+        );
+    }
+
+    /**
+     * Gap action items + identitas scope (untuk evaluasi day-over-day / tasklist).
+     *
+     * @param  array<string, mixed>  $filters
+     * @return list<array{
+     *     identity: string,
+     *     program_key: string,
+     *     title: string,
+     *     business_key: string,
+     *     action_hint: string,
+     *     value_label: string,
+     *     site: string,
+     *     perusahaan: string,
+     *     dataset_key: string,
+     *     table: string,
+     *     payload: array<string, mixed>
+     * }>
+     */
+    public function extractGapIdentityRows(array $filters): array
+    {
         $narrative = $this->buildEmailNarrative($filters, 500);
         $items = [];
 
@@ -2105,6 +2148,8 @@ class HsecmDashboardService
             $title = (string) ($section['title'] ?? $programKey);
             $action = (string) ($section['action'] ?? '');
             $meta = self::DATASETS[$datasetKey];
+            $siteColumn = (string) ($meta['site_column'] ?? '');
+            $companyColumn = $meta['company_column'] !== null ? (string) $meta['company_column'] : '';
 
             $rows = $this->filteredRows($datasetKey, $filters);
             if ($programKey === 'layer1-tanpa-sap') {
@@ -2125,12 +2170,28 @@ class HsecmDashboardService
 
             foreach ($rows as $row) {
                 $businessKey = $this->resolveBusinessKey($row, $datasetKey);
+                $site = $siteColumn !== '' ? trim((string) ($row[$siteColumn] ?? '')) : '';
+                $perusahaan = $companyColumn !== '' ? trim((string) ($row[$companyColumn] ?? '')) : '';
+                if ($site === '' && trim((string) ($filters['site'] ?? '')) !== '') {
+                    $site = trim((string) $filters['site']);
+                }
+                if ($perusahaan === '' && trim((string) ($filters['perusahaan'] ?? '')) !== '') {
+                    $perusahaan = trim((string) $filters['perusahaan']);
+                }
+
+                $identity = strtolower($programKey).'|'.$businessKey.'|'.strtolower($site).'|'.strtolower($perusahaan);
+
                 $items[] = [
+                    'identity' => $identity,
                     'program_key' => $programKey,
                     'title' => $title,
                     'business_key' => $businessKey,
                     'action_hint' => $action,
                     'value_label' => $this->buildItemValueLabel($row, $datasetKey),
+                    'site' => $site,
+                    'perusahaan' => $perusahaan,
+                    'dataset_key' => $datasetKey,
+                    'table' => (string) $meta['table'],
                     'payload' => [
                         'dataset_key' => $datasetKey,
                         'table' => $meta['table'],

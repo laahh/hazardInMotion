@@ -101,28 +101,28 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(15)
             ->appendOutputTo(storage_path('logs/roster-generate-planning.log'));
 
-        // HSECM: 2 shift / hari
+        // HSECM: 2 shift / hari (default channel=both → email + WA Fonnte)
         // Midshift  → 01:00 (slot 00) & 13:00 (slot 12)
         // Endshift  → 07:30 & 20:30 (snapshot latest batch_slot, setelah scrape cut-off)
-        $schedule->command('hsecm:send-midshift-email --shift=night')
+        $schedule->command('hsecm:send-midshift-email --shift=night --channel=both')
             ->timezone('Asia/Makassar')
             ->dailyAt('01:00')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/hsecm-midshift-email.log'));
 
-        $schedule->command('hsecm:send-midshift-email --shift=day')
+        $schedule->command('hsecm:send-midshift-email --shift=day --channel=both')
             ->timezone('Asia/Makassar')
             ->dailyAt('13:00')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/hsecm-midshift-email.log'));
 
-        $schedule->command('hsecm:send-endshift-email --shift=night')
+        $schedule->command('hsecm:send-endshift-email --shift=night --channel=both')
             ->timezone('Asia/Makassar')
             ->dailyAt('07:30')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/hsecm-endshift-email.log'));
 
-        $schedule->command('hsecm:send-endshift-email --shift=day')
+        $schedule->command('hsecm:send-endshift-email --shift=day --channel=both')
             ->timezone('Asia/Makassar')
             ->dailyAt('20:30')
             ->withoutOverlapping()

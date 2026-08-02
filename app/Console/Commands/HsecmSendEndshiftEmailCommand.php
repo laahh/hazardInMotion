@@ -11,24 +11,27 @@ use Throwable;
 class HsecmSendEndshiftEmailCommand extends Command
 {
     protected $signature = 'hsecm:send-endshift-email
-                            {--dry-run : Simulasi tanpa kirim email / buat tasklist}
+                            {--dry-run : Simulasi tanpa kirim email/WA / buat tasklist}
                             {--email= : Batasi hanya ke alamat email ini}
                             {--site= : Scope site jika email belum terdaftar}
                             {--perusahaan= : Scope perusahaan jika email belum terdaftar}
-                            {--shift=auto : auto|day|night — day=18vs12, night=06vs00}';
+                            {--shift=auto : auto|day|night — day=18vs12, night=06vs00}
+                            {--channel=both : email|wa|both — email SMTP dan/atau WA Fonnte}';
 
-    protected $description = 'Kirim email pasca-shift + buat/kirim link Tasklist (snapshot latest batch_slot)';
+    protected $description = 'Kirim notifikasi pasca-shift (email/WA Fonnte) + buat/kirim link Tasklist (snapshot latest batch_slot)';
 
     public function handle(HsecmShiftEmailDispatchService $dispatchService): int
     {
         $dryRun = (bool) $this->option('dry-run');
         $onlyEmail = $this->optionString('email');
         $shift = strtolower(trim((string) $this->option('shift')));
+        $channel = strtolower(trim((string) $this->option('channel')));
         $this->info(
-            'HSECM endshift email'
+            'HSECM endshift'
             .($dryRun ? ' [DRY-RUN]' : '')
             .($onlyEmail ? " [email={$onlyEmail}]" : '')
             ." [shift={$shift}]"
+            ." [channel={$channel}]"
         );
 
         try {
@@ -38,6 +41,7 @@ class HsecmSendEndshiftEmailCommand extends Command
                 overrideSite: $this->optionString('site'),
                 overridePerusahaan: $this->optionString('perusahaan'),
                 shift: $shift,
+                channel: $channel,
             );
         } catch (Throwable $e) {
             $this->error($e->getMessage());

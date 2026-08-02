@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Hsecm;
 
+use App\Actions\Hsecm\HsecmBuildTasklistSubmitMasterSodWaLinksAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Hsecm\HsecmTasklistSubmitRequest;
 use App\Services\Hsecm\HsecmTasklistService;
@@ -16,6 +17,7 @@ class HsecmTasklistPublicController extends Controller
 {
     public function __construct(
         private readonly HsecmTasklistService $tasklistService,
+        private readonly HsecmBuildTasklistSubmitMasterSodWaLinksAction $buildMasterSodWaLinks,
     ) {}
 
     /**
@@ -74,16 +76,30 @@ class HsecmTasklistPublicController extends Controller
         /** @var UploadedFile $sharedEvidence */
         $sharedEvidence = $request->file('evidence_shared');
 
+        $submittedByName = (string) $request->input('submitted_by_name');
+
         $this->tasklistService->submitItems(
             $tasklist,
             $itemIds,
-            (string) $request->input('submitted_by_name'),
+            $submittedByName,
             (string) $request->input('remediation_notes'),
             $sharedEvidence,
         );
 
-        return redirect()
+        $sodWaLinks = $this->buildMasterSodWaLinks->execute(
+            $tasklist,
+            $submittedByName,
+            count($itemIds),
+        );
+
+        $redirect = redirect()
             ->route('hsecm.tasklist.show', ['token' => $token])
             ->with('success', 'Submit berhasil untuk '.count($itemIds).' item. Menunggu ACC dari HSE.');
+
+        if ($sodWaLinks !== []) {
+            $redirect->with('hsecm_sod_wa_links', $sodWaLinks);
+        }
+
+        return $redirect;
     }
 }

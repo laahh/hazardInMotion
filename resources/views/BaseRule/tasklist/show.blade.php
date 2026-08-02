@@ -52,6 +52,21 @@
       @if(session('success'))
         <div class="rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 text-sm">{{ session('success') }}</div>
       @endif
+      @php $sodWaLinks = session('hsecm_sod_wa_links', []); @endphp
+      @if(is_array($sodWaLinks) && count($sodWaLinks) > 0)
+        <div class="rounded-xl bg-teal-50 border border-teal-200 text-teal-900 px-4 py-3 text-sm space-y-2" id="hsecm-sod-wa-panel">
+          <p class="font-semibold">Informasikan ke SOD via WhatsApp (wa.me):</p>
+          <p class="text-xs text-teal-800/80">Jika jendela WhatsApp tidak terbuka otomatis, klik tombol di bawah.</p>
+          <div class="flex flex-wrap gap-2">
+            @foreach($sodWaLinks as $link)
+              <a href="{{ $link['wa_url'] }}" target="_blank" rel="noopener noreferrer"
+                 class="inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-xs font-bold text-white hover:bg-teal-800 hsecm-sod-wa-link">
+                WA · {{ $link['nama'] }}
+              </a>
+            @endforeach
+          </div>
+        </div>
+      @endif
       @if($errors->any())
         <div class="rounded-xl bg-red-50 border border-red-200 text-red-800 px-4 py-3 text-sm">
           <ul class="list-disc pl-4 space-y-1">
@@ -350,6 +365,18 @@
 
     // Default: collapse semua program (ringkas). User bisa "Lihat" per program.
     document.querySelectorAll('.hsecm-program-group').forEach((el) => setGroupOpen(el, false));
+
+    // Setelah submit: buka wa.me ke Master SOD (by site). Popup blocker mungkin menahan tab ke-2+.
+    const sodLinks = Array.from(document.querySelectorAll('.hsecm-sod-wa-link'));
+    if (sodLinks.length > 0) {
+      sodLinks.forEach((el, idx) => {
+        const href = el.getAttribute('href');
+        if (!href) return;
+        window.setTimeout(() => {
+          window.open(href, '_blank', 'noopener,noreferrer');
+        }, idx * 450);
+      });
+    }
   })();
 </script>
 </body>
