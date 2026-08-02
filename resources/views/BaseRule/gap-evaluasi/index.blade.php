@@ -6,14 +6,28 @@
 @include('BaseRule.partials.styles')
 <style>
    .gap-eval-card { min-height: 6.5rem; }
-   .gap-eval-table { max-height: 22rem; overflow: auto; }
+   .gap-eval-table { max-height: 18rem; overflow: auto; }
+   .gap-summary-table th:first-child,
+   .gap-summary-table td:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: #f8fafc;
+   }
+   .gap-summary-table thead th:first-child { z-index: 3; }
+   .gap-summary-table tbody td:first-child {
+      background: #fff;
+      font-weight: 600;
+   }
+   .gap-eval-cell { line-height: 1.15; min-width: 3.25rem; }
+   .gap-eval-cell .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; }
 </style>
 @endpush
 
 @section('content')
 @include('BaseRule.partials.page-header', [
    'title' => 'Gap Evaluasi',
-   'subtitle' => 'Evaluasi harian gap Identifikasi & Intervensi (scrape) + efektivitas pasca tindak lanjut tasklist',
+   'subtitle' => 'Matriks perbaikan per program × site/mitra (scrape D vs D−1) + efektivitas pasca tasklist',
    'breadcrumb' => 'Gap Evaluasi',
 ])
 
@@ -41,60 +55,92 @@
 @endif
 
 <p class="mb-4 text-xs text-on-surface-variant">
-   Pakai <strong>Tanggal Dari</strong> sebagai hari evaluasi (D). Hari pembanding = tanggal scrape sebelumnya.
-   Status tasklist tidak dipakai di Blok A; Blok B menilai perbaikan scrape setelah item di-submit/ACC.
+   <strong>Tanggal Dari</strong> = hari evaluasi (D). Sel matriks scrape: <strong>sudah</strong> (hilang di D) | <strong>belum</strong> (tetap di D).
+   Matriks tasklist: <strong>efektif</strong> (submit/ACC + scrape clear) | <strong>belum efektif</strong>.
 </p>
 
 @include('BaseRule.gap-evaluasi.partials._cards-scrape', ['scrape' => $scrape])
 @include('BaseRule.gap-evaluasi.partials._cards-tasklist', ['tasklist' => $tasklist])
 
-<div class="space-y-8 mt-8">
-   @include('BaseRule.gap-evaluasi.partials._table', [
-      'title' => 'Tidak ada perbaikan — masih berulang (tetap)',
-      'hint' => 'Ada di hari pembanding dan masih muncul di hari evaluasi',
-      'rows' => $scrape['details']['tetap'] ?? [],
-      'truncated' => (int) ($scrape['truncated']['tetap'] ?? 0),
-      'tone' => 'danger',
-   ])
-   @include('BaseRule.gap-evaluasi.partials._table', [
-      'title' => 'Perbaikan scrape (hilang)',
-      'hint' => 'Ada di hari pembanding, tidak muncul lagi di hari evaluasi',
-      'rows' => $scrape['details']['hilang'] ?? [],
-      'truncated' => (int) ($scrape['truncated']['hilang'] ?? 0),
-      'tone' => 'success',
-   ])
-   @include('BaseRule.gap-evaluasi.partials._table', [
-      'title' => 'Gap baru',
-      'hint' => 'Muncul di hari evaluasi, belum ada di hari pembanding',
-      'rows' => $scrape['details']['baru'] ?? [],
-      'truncated' => (int) ($scrape['truncated']['baru'] ?? 0),
-      'tone' => 'warning',
-   ])
-   @include('BaseRule.gap-evaluasi.partials._table', [
-      'title' => 'Kembali muncul (re-open)',
-      'hint' => 'Muncul lagi setelah pernah absen / improve sebelumnya',
-      'rows' => $scrape['details']['kembali'] ?? [],
-      'truncated' => (int) ($scrape['truncated']['kembali'] ?? 0),
-      'tone' => 'warning',
-   ])
+@include('BaseRule.gap-evaluasi.partials._summary-matrix', [
+   'summary' => $summaryScrape,
+   'title' => 'Ringkasan Evaluasi Scrape',
+   'subtitle' => 'Per program · kolom Site → Mitra · sel: sudah diperbaiki | belum',
+])
 
-   @include('BaseRule.gap-evaluasi.partials._table-tasklist', [
-      'title' => 'Ditindaklanjuti + perbaikan scrape',
-      'hint' => 'Sudah submit/ACC tasklist dan key tidak ada di scrape hari evaluasi',
-      'rows' => $tasklist['details']['tindaklanjut_berhasil'] ?? [],
-      'tone' => 'success',
-   ])
-   @include('BaseRule.gap-evaluasi.partials._table-tasklist', [
-      'title' => 'Ditindaklanjuti + masih gap',
-      'hint' => 'Sudah submit/ACC tetapi key masih muncul di scrape hari evaluasi',
-      'rows' => $tasklist['details']['tindaklanjut_belum_efektif'] ?? [],
-      'tone' => 'danger',
-   ])
-   @include('BaseRule.gap-evaluasi.partials._table-tasklist', [
-      'title' => 'Belum ditindaklanjuti + masih gap',
-      'hint' => 'Item tasklist masih open/rejected dan gap masih ada di scrape',
-      'rows' => $tasklist['details']['belum_tindaklanjut_masih_gap'] ?? [],
-      'tone' => 'warning',
-   ])
+@include('BaseRule.gap-evaluasi.partials._summary-matrix', [
+   'summary' => $summaryTasklist,
+   'title' => 'Ringkasan Efektivitas Tasklist',
+   'subtitle' => 'Per program · kolom Site → Mitra · sel: efektif | belum efektif (pasca submit/ACC)',
+])
+
+<div class="space-y-8 mt-8">
+   @forelse($sections as $section)
+      @include('BaseRule.gap-evaluasi.partials._section', ['section' => $section])
+   @empty
+   <div class="hsecm-card rounded-2xl p-8 text-center text-sm text-on-surface-variant">
+      Belum ada detail program untuk periode/filter ini.
+   </div>
+   @endforelse
 </div>
 @endsection
+
+@push('scripts')
+@php
+   $chartPayload = [];
+   foreach ($sections as $s) {
+      $chartPayload[$s['key']] = [
+         'labels' => $s['chart_labels'] ?? [],
+         'belum' => $s['chart_belum'] ?? [],
+         'sudah' => $s['chart_sudah'] ?? [],
+      ];
+   }
+@endphp
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+   const charts = @json($chartPayload);
+   Object.keys(charts).forEach(function (key) {
+      const canvas = document.getElementById('gap-eval-chart-' + key);
+      if (!canvas || typeof Chart === 'undefined') return;
+      const data = charts[key];
+      if (!data.labels.length) return;
+      new Chart(canvas, {
+         type: 'bar',
+         data: {
+            labels: data.labels,
+            datasets: [
+               {
+                  label: 'Belum',
+                  data: data.belum,
+                  backgroundColor: 'rgba(220, 38, 38, 0.75)',
+                  borderColor: '#dc2626',
+                  borderWidth: 1,
+                  borderRadius: 4,
+                  barThickness: 14,
+               },
+               {
+                  label: 'Sudah',
+                  data: data.sudah,
+                  backgroundColor: 'rgba(5, 150, 105, 0.75)',
+                  borderColor: '#059669',
+                  borderWidth: 1,
+                  borderRadius: 4,
+                  barThickness: 14,
+               },
+            ],
+         },
+         options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+            scales: {
+               x: { ticks: { font: { size: 10 } }, grid: { display: false } },
+               y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } },
+            },
+         },
+      });
+   });
+});
+</script>
+@endpush

@@ -378,6 +378,85 @@ class HsecmDashboardService
     }
 
     /**
+     * Baris program untuk matriks evaluasi (urutan = Gap Perulangan).
+     *
+     * @return list<array{key: string, label: string, icon: string}>
+     */
+    public function gapEvaluasiMatrixPrograms(): array
+    {
+        $programs = [];
+        foreach ($this->gapPerulanganDatasets() as $key => $meta) {
+            $programs[] = [
+                'key' => $key,
+                'label' => $this->gapPerulanganProgramLabel($key, (string) ($meta['label'] ?? $key)),
+                'icon' => (string) ($meta['icon'] ?? 'analytics'),
+            ];
+        }
+
+        return $programs;
+    }
+
+    /**
+     * Resolve pasangan site + kode mitra untuk kolom matriks (logika Gap Perulangan).
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    public function resolveEvaluasiMatrixPair(string $site, string $perusahaan): ?array
+    {
+        $siteRaw = trim($site);
+        if ($siteRaw === '' || $this->isAllToken($siteRaw)) {
+            return null;
+        }
+
+        $resolvedSite = $this->resolveGapPerulanganTemplateSite($siteRaw) ?? $siteRaw;
+        $companyRaw = trim($perusahaan);
+        if ($companyRaw === '' || $this->isAllToken($companyRaw)) {
+            return null;
+        }
+
+        $code = FatigueManagementCompanyResolver::companyToPartner($companyRaw);
+        $normalized = FatigueManagementCompanyResolver::normalizeKey($code);
+        if (FatigueManagementCompanyResolver::isKnownPartnerKey($normalized)) {
+            return [$resolvedSite, $normalized];
+        }
+        if (preg_match('/^[A-Z]{2,6}$/', $normalized) === 1) {
+            return [$resolvedSite, $normalized];
+        }
+
+        return null;
+    }
+
+    public function evaluasiMatrixColumnKey(string $site, string $companyCode): string
+    {
+        return $this->gapPerulanganMatrixKey($site, $companyCode);
+    }
+
+    /**
+     * Header groups + columns dari seenPairs (site => [code => true]).
+     *
+     * @param  array<string, array<string, true>>  $seenPairs
+     * @return array{
+     *     groups: list<array{site: string, companies: list<array{code: string, name: string, key: string}>}>,
+     *     columns: list<string>
+     * }
+     */
+    public function buildEvaluasiMatrixHeader(array $seenPairs): array
+    {
+        $groups = $this->buildGapPerulanganHeaderGroups($seenPairs);
+        $columns = [];
+        foreach ($groups as $group) {
+            foreach ($group['companies'] as $company) {
+                $columns[] = $company['key'];
+            }
+        }
+
+        return [
+            'groups' => $groups,
+            'columns' => $columns,
+        ];
+    }
+
+    /**
      * @param  array{site: string, perusahaan: string, week: string, year: string, date_from: string, date_to: string, q: string}  $filters
      * @return array<string, mixed>
      */
