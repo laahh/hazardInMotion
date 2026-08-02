@@ -78,61 +78,11 @@
 <details class="mb-8 group">
    <summary class="cursor-pointer list-none flex items-center gap-2 text-sm font-semibold text-on-background mb-4">
       <span class="material-symbols-outlined text-primary transition group-open:rotate-90">chevron_right</span>
-      Detail klasifikasi scrape & tasklist
+      Ringkasan klasifikasi scrape &amp; tasklist
    </summary>
 
    @include('BaseRule.gap-evaluasi.partials._cards-scrape', ['scrape' => $scrape])
    @include('BaseRule.gap-evaluasi.partials._cards-tasklist', ['tasklist' => $tasklist])
-
-   <div class="space-y-8 mt-6">
-      @include('BaseRule.gap-evaluasi.partials._table', [
-         'title' => 'Tidak ada perbaikan — masih berulang (tetap)',
-         'hint' => 'Ada di hari pembanding dan masih muncul di hari evaluasi',
-         'rows' => $scrape['details']['tetap'] ?? [],
-         'truncated' => (int) ($scrape['truncated']['tetap'] ?? 0),
-         'tone' => 'danger',
-      ])
-      @include('BaseRule.gap-evaluasi.partials._table', [
-         'title' => 'Perbaikan scrape (hilang)',
-         'hint' => 'Ada di hari pembanding, tidak muncul lagi di hari evaluasi',
-         'rows' => $scrape['details']['hilang'] ?? [],
-         'truncated' => (int) ($scrape['truncated']['hilang'] ?? 0),
-         'tone' => 'success',
-      ])
-      @include('BaseRule.gap-evaluasi.partials._table', [
-         'title' => 'Gap baru',
-         'hint' => 'Muncul di hari evaluasi, belum ada di hari pembanding',
-         'rows' => $scrape['details']['baru'] ?? [],
-         'truncated' => (int) ($scrape['truncated']['baru'] ?? 0),
-         'tone' => 'warning',
-      ])
-      @include('BaseRule.gap-evaluasi.partials._table', [
-         'title' => 'Kembali muncul (re-open)',
-         'hint' => 'Muncul lagi setelah pernah absen / improve sebelumnya',
-         'rows' => $scrape['details']['kembali'] ?? [],
-         'truncated' => (int) ($scrape['truncated']['kembali'] ?? 0),
-         'tone' => 'warning',
-      ])
-
-      @include('BaseRule.gap-evaluasi.partials._table-tasklist', [
-         'title' => 'Ditindaklanjuti + perbaikan scrape',
-         'hint' => 'Sudah submit/ACC tasklist dan key tidak ada di scrape hari evaluasi',
-         'rows' => $tasklist['details']['tindaklanjut_berhasil'] ?? [],
-         'tone' => 'success',
-      ])
-      @include('BaseRule.gap-evaluasi.partials._table-tasklist', [
-         'title' => 'Ditindaklanjuti + masih gap',
-         'hint' => 'Sudah submit/ACC tetapi key masih muncul di scrape hari evaluasi',
-         'rows' => $tasklist['details']['tindaklanjut_belum_efektif'] ?? [],
-         'tone' => 'danger',
-      ])
-      @include('BaseRule.gap-evaluasi.partials._table-tasklist', [
-         'title' => 'Belum ditindaklanjuti + masih gap',
-         'hint' => 'Item tasklist masih open/rejected dan gap masih ada di scrape',
-         'rows' => $tasklist['details']['belum_tindaklanjut_masih_gap'] ?? [],
-         'tone' => 'warning',
-      ])
-   </div>
 </details>
 
 {{-- Modal detail gap per Site/Perusahaan --}}
@@ -275,7 +225,7 @@ document.addEventListener('DOMContentLoaded', function () {
          }).join('');
       }
 
-      modalFooter.textContent = rows.length + ' item ditampilkan' + (rows.length >= 100 ? ' (maks. 100 per sel)' : '');
+      modalFooter.textContent = rows.length + ' item ditampilkan' + (rows.length >= 40 ? ' (maks. 40 per sel)' : '');
       modal.classList.remove('hidden');
       modal.setAttribute('aria-hidden', 'false');
       document.body.classList.add('overflow-hidden');

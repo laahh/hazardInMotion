@@ -6,13 +6,13 @@
    <div class="hsecm-card gap-eval-card rounded-2xl p-4 border border-teal-100 bg-teal-50/50">
       <p class="text-[10px] font-bold uppercase tracking-wider text-teal-800">Total Gap</p>
       <p class="text-3xl font-extrabold text-teal-900 mt-1">{{ number_format((int) ($ov['total_gap'] ?? 0)) }}</p>
-      <p class="text-[11px] text-teal-700/80 mt-1">Distinct orang/lokasi/aktivitas (tanpa lihat berulang)</p>
+      <p class="text-[11px] text-teal-700/80 mt-1">Semua gap distinct (berulang + tidak berulang)</p>
    </div>
 
    <div class="hsecm-card gap-eval-card rounded-2xl p-4 border border-amber-100 bg-amber-50/50">
       <p class="text-[10px] font-bold uppercase tracking-wider text-amber-800">Total Perulangan</p>
       <p class="text-3xl font-extrabold text-amber-900 mt-1">{{ number_format((int) ($ov['total_perulangan'] ?? 0)) }}</p>
-      <p class="text-[11px] text-amber-800/80 mt-1">Distinct tetap (D−1 &amp; D) / streak ≥ 2</p>
+      <p class="text-[11px] text-amber-800/80 mt-1">Subset gap dengan streak ≥ 2 hari</p>
    </div>
 
    <div class="hsecm-card gap-eval-card rounded-2xl p-4 border border-emerald-100 bg-emerald-50/50">

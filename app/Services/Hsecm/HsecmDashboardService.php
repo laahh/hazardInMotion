@@ -2196,23 +2196,38 @@ class HsecmDashboardService
      */
     public function extractGapIdentityRows(array $filters): array
     {
-        $narrative = $this->buildEmailNarrative($filters, 500);
+        // Path lean: tanpa buildEmailNarrative (mahal). Digunakan Gap Evaluasi & tasklist.
+        return $this->extractGapIdentityRowsLean($filters);
+    }
+
+    /**
+     * Versi ringan: langsung iterasi dataset gap, tanpa narrative email.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return list<array<string, mixed>>
+     */
+    public function extractGapIdentityRowsLean(array $filters): array
+    {
+        $programs = [
+            'sap-rfid' => ['key' => 'layer1-tanpa-sap', 'title' => 'Layer 1 Tanpa SAP', 'action' => 'Coaching oleh atasan langsung'],
+            'coverage-cctv' => ['key' => 'coverage-area', 'title' => 'Area Kritis belum tercover SAP', 'action' => 'Pemenuhan SAP di shift berikutnya'],
+            'tbc-blindspot' => ['key' => 'tbc-blindspot', 'title' => 'TBC Blindspot', 'action' => 'Wajib dilaksanakan Peer Pressure'],
+            'task-overdue' => ['key' => 'hazard-overdue', 'title' => 'Hazard Overdue', 'action' => 'Coaching oleh atasan langsung'],
+            'task-submitted' => ['key' => 'hazard-submitted', 'title' => 'Hazard Submitted > 24 jam', 'action' => 'Tindaklanjut tasklist'],
+            'ikk-work-permit' => ['key' => 'ikk-compliance', 'title' => 'IKK Compliance', 'action' => 'Suspend IKK & Coaching'],
+            'aggregator' => ['key' => 'aggregator-fill', 'title' => 'Tidak mengisi Aggregator Fit to Work', 'action' => 'Evidence operator tanpa Aggregator'],
+            'fatigue' => ['key' => 'ftw-merah', 'title' => 'Aggregator Fit to Work Merah', 'action' => 'Stop Operasi & istirahatkan operator'],
+            'hazard-rootcause' => ['key' => 'hazard-rootcause', 'title' => 'Hazard Related Rootcause Incident', 'action' => 'Laporkan / tindaklanjuti rootcause'],
+        ];
+
         $items = [];
-
-        foreach ($narrative['gaps'] as $section) {
-            if (! ($section['available'] ?? false) || ! ($section['needs_action'] ?? false)) {
+        foreach ($programs as $datasetKey => $metaProg) {
+            if (! isset(self::DATASETS[$datasetKey]) || ! $this->isDatasetVisible($datasetKey)) {
                 continue;
             }
 
-            $datasetKey = (string) ($section['dataset_key'] ?? '');
-            if ($datasetKey === '' || ! isset(self::DATASETS[$datasetKey])) {
-                continue;
-            }
-
-            $programKey = (string) ($section['key'] ?? $datasetKey);
-            $title = (string) ($section['title'] ?? $programKey);
-            $action = (string) ($section['action'] ?? '');
             $meta = self::DATASETS[$datasetKey];
+            $programKey = $metaProg['key'];
             $siteColumn = (string) ($meta['site_column'] ?? '');
             $companyColumn = $meta['company_column'] !== null ? (string) $meta['company_column'] : '';
 
@@ -2229,6 +2244,9 @@ class HsecmDashboardService
             }
             if ($programKey === 'ikk-compliance') {
                 $rows = $this->filterIkkBelowFullCompliance($rows);
+                if ($rows->isEmpty()) {
+                    continue;
+                }
             }
 
             $rows = $this->dedupeEmailRows($rows, $datasetKey);
@@ -2249,9 +2267,9 @@ class HsecmDashboardService
                 $items[] = [
                     'identity' => $identity,
                     'program_key' => $programKey,
-                    'title' => $title,
+                    'title' => $metaProg['title'],
                     'business_key' => $businessKey,
-                    'action_hint' => $action,
+                    'action_hint' => $metaProg['action'],
                     'value_label' => $this->buildItemValueLabel($row, $datasetKey),
                     'site' => $site,
                     'perusahaan' => $perusahaan,
@@ -2263,7 +2281,6 @@ class HsecmDashboardService
                         'batch_slot' => $row['batch_slot'] ?? ($filters['batch_slot'] ?? null),
                         'gap_count' => $row['gap_count'] ?? null,
                         'row_id' => $row['_row_id'] ?? null,
-                        'preview' => $this->buildItemPreviewCells($row, $datasetKey),
                     ],
                 ];
             }
