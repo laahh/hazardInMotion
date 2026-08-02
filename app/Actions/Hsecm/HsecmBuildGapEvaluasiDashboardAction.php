@@ -105,6 +105,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
             $tasklist,
             $hilangStreakByIdentity,
         );
+        $overview = $this->buildOverviewCards($scrape, $tasklist, $programs);
 
         unset(
             $tasklist['acted_identities'],
@@ -138,6 +139,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
             'slots_d' => $slotsD,
             'slots_prev' => $slotsPrev,
             'range_dates' => $rangeDates,
+            'overview' => $overview,
             'programs' => $programs,
             'scrape' => $scrape,
             'tasklist' => $tasklist,
@@ -712,6 +714,36 @@ final class HsecmBuildGapEvaluasiDashboardAction
         }
 
         return $rows;
+    }
+
+    /**
+     * @param  array<string, mixed>  $scrape
+     * @param  array<string, mixed>  $tasklist
+     * @param  list<array<string, mixed>>  $programs
+     * @return array<string, int>
+     */
+    private function buildOverviewCards(array $scrape, array $tasklist, array $programs): array
+    {
+        $totalGap = 0;
+        $totalPerulangan = 0;
+        $perbaikanTanpaPerulangan = 0;
+        foreach ($programs as $program) {
+            $totalGap += (int) ($program['total_gap'] ?? 0);
+            $totalPerulangan += (int) ($program['total_perulangan'] ?? 0);
+            $perbaikanTanpaPerulangan += (int) ($program['perbaikan_tanpa_perulangan'] ?? 0);
+        }
+
+        $cards = $scrape['cards'] ?? [];
+        $tlCards = $tasklist['cards'] ?? [];
+
+        return [
+            'total_gap' => $totalGap,
+            'total_perulangan' => $totalPerulangan,
+            'perbaikan_total' => (int) ($cards['hilang'] ?? 0),
+            'perbaikan_tanpa_perulangan' => $perbaikanTanpaPerulangan,
+            'tindaklanjut_berhasil' => (int) ($tlCards['tindaklanjut_berhasil'] ?? 0),
+            'tindaklanjut_tanpa_perulangan' => (int) ($tlCards['tindaklanjut_tanpa_perulangan'] ?? 0),
+        ];
     }
 
     /**

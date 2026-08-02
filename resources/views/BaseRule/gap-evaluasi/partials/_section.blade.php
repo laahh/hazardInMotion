@@ -37,8 +37,23 @@
       </span>
    </div>
 
+   {{-- 4 kartu summary khusus parameter ini --}}
+   <div class="px-4 pt-4">
+      @include('BaseRule.gap-evaluasi.partials._overview-cards', [
+         'wrapClass' => 'mb-4',
+         'overview' => [
+            'total_gap' => (int) ($program['total_gap'] ?? 0),
+            'total_perulangan' => (int) ($program['total_perulangan'] ?? 0),
+            'perbaikan_total' => (int) ($program['perbaikan_total'] ?? 0),
+            'perbaikan_tanpa_perulangan' => (int) ($program['perbaikan_tanpa_perulangan'] ?? 0),
+            'tindaklanjut_berhasil' => (int) ($program['tindaklanjut_berhasil'] ?? 0),
+            'tindaklanjut_tanpa_perulangan' => (int) ($program['tindaklanjut_tanpa_perulangan'] ?? 0),
+         ],
+      ])
+   </div>
+
    {{-- Matriks vertikal: Site & Perusahaan ke bawah --}}
-   <div>
+   <div class="border-t border-slate-100">
       <div class="px-5 py-3 border-b border-slate-50">
          <p class="text-xs font-semibold text-on-background">Matriks Site / Perusahaan</p>
       </div>
