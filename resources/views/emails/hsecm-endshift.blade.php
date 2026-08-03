@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
-  <title>Pertengahan Shift — Monitoring & Intervensi</title>
+  <title>Akhir Shift — Tasklist Perbaikan</title>
   <style type="text/css">
     body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
@@ -31,7 +31,7 @@
       ->filter(static fn (array $s): bool => (bool) ($s['available'] ?? true))
       ->values()
       ->all();
-  $slotLabel = $batchSlotLabel !== '' ? $batchSlotLabel : 'slot pertengahan shift';
+  $slotLabel = $batchSlotLabel !== '' ? $batchSlotLabel : 'slot akhir shift';
   $monitoringLink = trim((string) ($monitoringUrl ?? ''));
   $tasklistLink = trim((string) ($tasklistUrl ?? ''));
   if ($tasklistLink === '') {
@@ -45,7 +45,7 @@
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:760px;background:#ffffff;border:1px solid #fde68a;border-radius:16px;overflow:hidden;">
         <tr>
           <td style="background:linear-gradient(135deg,#b45309 0%,#92400e 100%);padding:22px 28px;">
-            <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.85);font-weight:700;">Pertengahan Shift — Monitoring &amp; Intervensi</div>
+            <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.85);font-weight:700;">Akhir Shift — Tasklist Perbaikan</div>
             <div style="margin-top:6px;font-size:13px;color:rgba(255,255,255,.9);">{{ $siteLabel }} · {{ $companyLabel }} · Batch {{ $slotLabel }}</div>
           </td>
         </tr>
@@ -53,71 +53,71 @@
           <td style="padding:28px;">
             <p style="margin:0 0 10px;font-size:15px;color:#0f172a;">Yth. <strong>{{ $nama }}</strong></p>
             <p style="margin:0 0 18px;font-size:13px;line-height:1.65;color:#475569;">
-              {{ $role }} · Berikut ringkasan highlight gap untuk scope site &amp; perusahaan Anda sebagai
-              <strong>Monitoring &amp; Intervensi</strong> berdasarkan kondisi pada <strong>pertengahan shift</strong> yang sedang berjalan.
+              {{ $role }} · Shift telah <strong>berakhir</strong>. Berikut ringkasan gap untuk scope site &amp; perusahaan Anda
+              yang <strong>wajib diperbaiki</strong> melalui Tasklist (upload evidence &amp; submit).
             </p>
 
             <p style="margin:0 0 12px;font-size:13px;line-height:1.6;color:#334155;">
-              Berikut kami sampaikan exposure pada pertengahan shift saat ini:
+              Berikut exposure pada kondisi <strong>akhir shift</strong>:
             </p>
             @foreach($exposure as $i => $section)
               @include('emails.partials.hsecm-section-detail', ['number' => $i + 1, 'section' => $section])
             @endforeach
 
             <p style="margin:22px 0 12px;font-size:13px;line-height:1.6;color:#334155;">
-              Berikut kami sampaikan gap yang menjadi concern agar segera ditindaklanjuti pada pertengahan shift (sebelum akhir shift):
+              Berikut gap yang menjadi concern dan <strong>harus ditindaklanjuti</strong> setelah akhir shift:
             </p>
             @foreach($gaps as $i => $section)
               @include('emails.partials.hsecm-section-detail', ['number' => $i + 1, 'section' => $section])
             @endforeach
 
+            @if($tasklistLink !== '')
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:22px 0 18px;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;">
+              <tr>
+                <td style="padding:16px 18px;">
+                  <p style="margin:0 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#92400e;font-weight:700;">
+                    Wajib — Buka Tasklist
+                  </p>
+                  <p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#334155;">
+                    Klik tombol atau link di bawah. Anda akan diarahkan ke halaman
+                    <strong>inputasi Tasklist</strong> untuk mengisi tindakan perbaikan,
+                    upload evidence, lalu submit untuk scope
+                    <strong>{{ $siteLabel }} · {{ $companyLabel }}</strong>.
+                  </p>
+                  <p style="margin:0 0 14px;text-align:center;">
+                    <a href="{{ $tasklistLink }}" class="btn" target="_blank" rel="noopener">{{ $ctaLabel ?? ('Buka Tasklist — '.$siteLabel.' · '.$companyLabel) }}</a>
+                  </p>
+                  <p style="margin:0;">
+                    <a href="{{ $tasklistLink }}" target="_blank" rel="noopener" style="color:#b45309;font-weight:700;word-break:break-all;font-size:12px;">{{ $tasklistLink }}</a>
+                  </p>
+                </td>
+              </tr>
+            </table>
+            @endif
+
             @if($monitoringLink !== '')
-            <p style="margin:22px 0 10px;font-size:13px;line-height:1.65;color:#334155;">
-              Detail data secara overall dapat diakses pada <strong>Dashboard</strong> berikut:
+            <p style="margin:0 0 10px;font-size:13px;line-height:1.65;color:#334155;">
+              Detail data overall (opsional) dapat dilihat di Dashboard:
             </p>
             <p style="margin:0 0 14px;">
               <a href="{{ $monitoringLink }}" target="_blank" rel="noopener" style="color:#b45309;font-weight:700;word-break:break-all;">{{ $monitoringLink }}</a>
             </p>
-            @endif
-
-            @if($tasklistLink !== '')
-            <p style="margin:16px 0 10px;font-size:13px;line-height:1.65;color:#334155;">
-              Silakan buka <strong>Tasklist</strong> untuk scope
-              <strong>{{ $siteLabel }} · {{ $companyLabel }}</strong>
-              di bawah untuk menindaklanjuti gap (upload evidence &amp; submit perbaikan):
-            </p>
-            <p style="margin:0 0 18px;">
-              <a href="{{ $tasklistLink }}" target="_blank" rel="noopener" style="color:#b45309;font-weight:700;word-break:break-all;">{{ $tasklistLink }}</a>
+            <p style="margin:0 0 18px;text-align:center;">
+              <a href="{{ $monitoringLink }}" class="btn-secondary" target="_blank" rel="noopener">Buka Dashboard</a>
             </p>
             @endif
 
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:18px;">
-              @if($monitoringLink !== '')
-              <tr>
-                <td align="center" style="padding-bottom:10px;">
-                  <a href="{{ $monitoringLink }}" class="btn-secondary" target="_blank" rel="noopener">Buka Dashboard</a>
-                </td>
-              </tr>
-              @endif
-              @if($tasklistLink !== '')
-              <tr>
-                <td align="center">
-                  <a href="{{ $tasklistLink }}" class="btn" target="_blank" rel="noopener">{{ $ctaLabel ?? ('Buka Tasklist — '.$siteLabel.' · '.$companyLabel) }}</a>
-                </td>
-              </tr>
-              @endif
-            </table>
             <p style="margin:0;font-size:13px;line-height:1.65;color:#334155;">
-              Mohon setiap point dari gap yang muncul di atas dapat dikontrol dan ditindaklanjuti melalui tasklist
-              agar tidak terjadi perulangan terhadap gap yang sama hingga akhir shift maupun shift berikutnya.
+              Mohon setiap point gap di atas dikontrol dan diselesaikan melalui Tasklist
+              agar tidak berulang pada shift berikutnya.
             </p>
             <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;text-align:center;">Email digenerate otomatis pada {{ $generatedAt }}.</p>
           </td>
         </tr>
         <tr>
           <td style="background:#0f172a;color:#94a3b8;padding:16px 28px;font-size:11px;line-height:1.6;">
-            <strong style="color:#e2e8f0;">Daily Monitoring Dashboard</strong><br/>
-            Dikirim otomatis dari sistem monitoring HSE.
+            <strong style="color:#e2e8f0;">HSECM — Akhir Shift</strong><br/>
+            Dikirim otomatis dari sistem monitoring HSE. Link Tasklist adalah pintu utama untuk inputasi perbaikan.
           </td>
         </tr>
       </table>

@@ -40,7 +40,7 @@ class HsecmSummaryMail extends Mailable
         $company = ($this->scope['perusahaan'] ?? '') !== '' ? $this->scope['perusahaan'] : 'Semua Perusahaan';
 
         $prefix = match ($this->mode) {
-            'endshift' => 'Pertengahan Shift — Tasklist Monitoring & Intervensi',
+            'endshift' => 'Akhir Shift — Tasklist Perbaikan & Upload Evidence',
             'escalate' => 'Escalate #'.$this->escalateCount.' — Tasklist belum closed',
             default => 'Daily Monitoring & Intervensi',
         };

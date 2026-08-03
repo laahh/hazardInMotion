@@ -699,7 +699,7 @@ class HsecmShiftEmailDispatchService
 
         $modeLabel = match ($mode) {
             'midshift' => 'Midshift',
-            'endshift' => 'Endshift',
+            'endshift' => 'Akhir Shift',
             'escalate' => 'Escalate #'.max(1, $escalateCount),
             default => strtoupper($mode),
         };
@@ -713,8 +713,12 @@ class HsecmShiftEmailDispatchService
             ->values()
             ->all();
 
+        $title = $mode === 'endshift'
+            ? '*Akhir Shift — Tasklist Perbaikan*'
+            : '*Daily Monitoring & Intervensi — '.$modeLabel.'*';
+
         $lines = [
-            '*Daily Monitoring & Intervensi — '.$modeLabel.'*',
+            $title,
             $siteLabel.' · '.$companyLabel,
         ];
 
@@ -725,7 +729,11 @@ class HsecmShiftEmailDispatchService
         $lines[] = '';
         $lines[] = 'Yth. *'.$nama.'*';
         $lines[] = '';
-        $lines[] = $role.' · Ringkasan highlight gap untuk scope Anda.';
+        if ($mode === 'endshift') {
+            $lines[] = $role.' · Shift telah *berakhir*. Berikut gap yang *wajib diperbaiki* melalui Tasklist.';
+        } else {
+            $lines[] = $role.' · Ringkasan highlight gap untuk scope Anda.';
+        }
         $lines[] = '';
         $lines[] = '*Exposure:*';
 
@@ -739,7 +747,7 @@ class HsecmShiftEmailDispatchService
         }
 
         $lines[] = '';
-        $lines[] = '*Gap concern:*';
+        $lines[] = $mode === 'endshift' ? '*Gap yang harus diperbaiki:*' : '*Gap concern:*';
 
         $gapNo = 1;
         foreach ($gaps as $section) {
@@ -753,7 +761,11 @@ class HsecmShiftEmailDispatchService
         $primaryUrl = $tasklistUrl !== '' ? $tasklistUrl : $ctaUrl;
         if ($primaryUrl !== '') {
             $lines[] = '';
-            $lines[] = $ctaLabel.':';
+            if ($mode === 'endshift') {
+                $lines[] = '*WAJIB — Buka Tasklist* (klik link → halaman inputasi, upload evidence & submit):';
+            } else {
+                $lines[] = $ctaLabel.':';
+            }
             $lines[] = $primaryUrl;
         }
 
@@ -764,7 +776,9 @@ class HsecmShiftEmailDispatchService
         }
 
         $lines[] = '';
-        $lines[] = 'Mohon gap di atas dikontrol & ditindaklanjuti agar tidak berulang di shift berikutnya.';
+        $lines[] = $mode === 'endshift'
+            ? 'Mohon selesaikan gap di atas melalui Tasklist agar tidak berulang di shift berikutnya.'
+            : 'Mohon gap di atas dikontrol & ditindaklanjuti agar tidak berulang di shift berikutnya.';
         $lines[] = '';
         $lines[] = '_'.now()->timezone('Asia/Makassar')->format('d/m/Y H:i').' WITA_';
 
