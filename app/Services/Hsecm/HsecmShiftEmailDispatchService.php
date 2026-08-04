@@ -376,10 +376,18 @@ class HsecmShiftEmailDispatchService
         /** @var array<string, HsecmTasklist|null> $tasklistCache */
         $tasklistCache = [];
 
+        if ($createTasklist) {
+            if (! $this->tasklistService->tablesAvailable()) {
+                throw new RuntimeException(
+                    'Tabel tasklist HSECM belum tersedia. Jalankan migration dulu sebelum endshift.'
+                );
+            }
+            $recipients = $this->expandRecipientsForEndshift($recipients, $batchSlot);
+        }
+
         foreach ($recipients as $recipient) {
             $site = $this->normalizeNullable($recipient['site'] ?? null);
             $perusahaan = trim((string) ($recipient['perusahaan'] ?? ''));
-            // Site/perusahaan kosong = agregat semua data (tidak di-skip).
 
             $filters = $this->dashboardService->withBatchContext(
                 $this->baseFilters($site, $perusahaan),
@@ -404,31 +412,26 @@ class HsecmShiftEmailDispatchService
             $tasklistUrl = '';
 
             if ($createTasklist) {
+                if ($perusahaan === '') {
+                    $skipped++;
+                    $details[] = [
+                        'nama' => (string) ($recipient['nama'] ?? ''),
+                        'email' => (string) ($recipient['email'] ?? ''),
+                        'success' => true,
+                        'message' => 'Skip: endshift membutuhkan scope perusahaan untuk generate token tasklist.',
+                    ];
+                    continue;
+                }
+
                 $cacheKey = ($site ?? '').'|'.$perusahaan;
                 if (! array_key_exists($cacheKey, $tasklistCache)) {
-                    if (! $this->tasklistService->tablesAvailable()) {
-                        throw new RuntimeException(
-                            'Tabel tasklist HSECM belum tersedia. Jalankan migration dulu sebelum endshift.'
-                        );
-                    }
-
                     $gapItems = $this->dashboardService->extractTasklistItemsFromGaps($filters);
                     if ($gapItems === []) {
-                        // Tetap coba pakai tasklist existing untuk scope ini (batch terkini).
-                        $tasklistCache[$cacheKey] = $perusahaan !== ''
-                            ? $this->tasklistService->findByScope($site ?? '', $perusahaan, $batchSlot)
-                            : null;
-                    } elseif ($perusahaan === '') {
-                        // Tasklist butuh perusahaan (kolom NOT NULL); agregat hanya kirim email.
-                        $tasklistCache[$cacheKey] = null;
-                        if ($dryRun) {
-                            $details[] = [
-                                'nama' => '(dry-run tasklist)',
-                                'email' => '-',
-                                'success' => true,
-                                'message' => 'Dry-run: scope agregat — email dikirim tanpa buat tasklist ('.count($gapItems).' gap items).',
-                            ];
-                        }
+                        $tasklistCache[$cacheKey] = $this->tasklistService->findByScope(
+                            $site ?? '',
+                            $perusahaan,
+                            $batchSlot
+                        );
                     } elseif ($dryRun) {
                         $existing = $this->tasklistService->findByScope($site ?? '', $perusahaan, $batchSlot);
                         $tasklistCache[$cacheKey] = $existing;
@@ -437,8 +440,8 @@ class HsecmShiftEmailDispatchService
                             'email' => '-',
                             'success' => true,
                             'message' => $existing !== null
-                                ? 'Dry-run: pakai tasklist existing '.$cacheKey.' + CTA tasklist.'
-                                : 'Dry-run: akan buat tasklist '.$cacheKey.' ('.count($gapItems).' items) + CTA tasklist.',
+                                ? 'Dry-run: pakai tasklist existing '.$cacheKey.' + CTA token.'
+                                : 'Dry-run: akan buat tasklist '.$cacheKey.' ('.count($gapItems).' items) + CTA token.',
                         ];
                     } else {
                         $tasklistCache[$cacheKey] = $this->tasklistService->createFromEndshift(
@@ -451,29 +454,20 @@ class HsecmShiftEmailDispatchService
 
                 $tasklist = $tasklistCache[$cacheKey] ?? null;
 
-                // CTA endshift: tasklist scope site + perusahaan (+ dashboard monitoring terpisah).
+                // Endshift CTA: HANYA URL token /hsecm/tasklist/{token} — jangan fallback ke Aksi PJO.
                 if ($tasklist !== null) {
                     $tasklistUrl = $this->tasklistService->publicUrl($tasklist);
                     $ctaUrl = $tasklistUrl;
                     $ctaLabel = 'Buka Tasklist — '.$scopeLabel;
-                } elseif ($perusahaan !== '') {
-                    $tasklistUrl = $this->tasklistService->openUrl($site, $perusahaan, $batchSlot);
-                    $ctaUrl = $tasklistUrl;
-                    $ctaLabel = 'Buka Tasklist — '.$scopeLabel;
-                }
-
-                $hasGapAction = collect($narrative['gaps'] ?? [])->contains(
-                    fn (array $g): bool => ($g['needs_action'] ?? false) && ((int) ($g['total'] ?? 0)) > 0
-                );
-                if (! $hasGapAction && $tasklist === null) {
+                } else {
                     $skipped++;
                     $details[] = [
                         'nama' => (string) ($recipient['nama'] ?? ''),
                         'email' => (string) ($recipient['email'] ?? ''),
                         'success' => true,
-                        'message' => $dataMode === 'still_open'
-                            ? 'Skip: tidak ada gap still-open.'
-                            : 'Skip: tidak ada gap pada snapshot terkini.',
+                        'message' => $dryRun
+                            ? 'Dry-run skip: belum ada tasklist token untuk '.$scopeLabel.' (akan dibuat saat kirim nyata jika ada gap).'
+                            : 'Skip: tidak ada tasklist token untuk '.$scopeLabel.' (tidak ada gap / gagal buat).',
                     ];
                     continue;
                 }
@@ -597,7 +591,7 @@ class HsecmShiftEmailDispatchService
                         escalateCount: $escalateCount,
                         ctaLabel: $ctaLabel,
                         monitoringUrl: $monitoringUrl,
-                        tasklistUrl: $tasklistUrl !== '' ? $tasklistUrl : ($mode === 'endshift' ? $ctaUrl : ''),
+                        tasklistUrl: $tasklistUrl,
                     ));
                     $emailOk = true;
                     $parts[] = 'Email OK';
@@ -758,7 +752,20 @@ class HsecmShiftEmailDispatchService
             $lines[] = '_Tidak ada gap concern._';
         }
 
-        $primaryUrl = $tasklistUrl !== '' ? $tasklistUrl : $ctaUrl;
+        $primaryUrl = $tasklistUrl !== '' ? $tasklistUrl : '';
+        if ($mode === 'endshift') {
+            // Endshift: hanya pakai URL token, jangan fallback ke Aksi PJO.
+            $isToken = $primaryUrl !== ''
+                && str_contains($primaryUrl, '/hsecm/tasklist/')
+                && ! str_contains($primaryUrl, '/hsecm/tasklist/open')
+                && ! str_contains($primaryUrl, '/hsecm/pjo-action');
+            if (! $isToken) {
+                $primaryUrl = '';
+            }
+        } elseif ($primaryUrl === '') {
+            $primaryUrl = $ctaUrl;
+        }
+
         if ($primaryUrl !== '') {
             $lines[] = '';
             if ($mode === 'endshift') {
@@ -1025,5 +1032,92 @@ class HsecmShiftEmailDispatchService
         $perusahaan = trim($perusahaan);
 
         return ($site ?: 'Semua Site').' · '.($perusahaan !== '' ? $perusahaan : 'Semua Perusahaan');
+    }
+
+    /**
+     * Endshift: pecah penerima tanpa perusahaan menjadi 1 kiriman per (site, perusahaan)
+     * yang punya gap di batch_slot — agar tiap email dapat token tasklist sendiri.
+     *
+     * @param  list<array<string, mixed>>  $recipients
+     * @return list<array<string, mixed>>
+     */
+    private function expandRecipientsForEndshift(array $recipients, string $batchSlot): array
+    {
+        /** @var list<array{site: string, perusahaan: string}>|null $allScopes */
+        $allScopes = null;
+        $expanded = [];
+
+        foreach ($recipients as $recipient) {
+            $site = $this->normalizeNullable($recipient['site'] ?? null);
+            $perusahaan = trim((string) ($recipient['perusahaan'] ?? ''));
+
+            if ($perusahaan !== '') {
+                $expanded[] = $recipient;
+                continue;
+            }
+
+            if ($allScopes === null) {
+                $allScopes = $this->discoverEndshiftScopes($batchSlot);
+            }
+
+            $matched = array_values(array_filter(
+                $allScopes,
+                function (array $scope) use ($site): bool {
+                    if ($site === null) {
+                        return true;
+                    }
+
+                    return $this->softEqual($scope['site'], $site);
+                }
+            ));
+
+            if ($matched === []) {
+                // Biarkan loop utama skip dengan pesan yang jelas.
+                $expanded[] = $recipient;
+                continue;
+            }
+
+            foreach ($matched as $scope) {
+                $clone = $recipient;
+                $clone['site'] = $scope['site'] !== '' ? $scope['site'] : null;
+                $clone['perusahaan'] = $scope['perusahaan'];
+                $clone['_expanded_from_aggregate'] = true;
+                $expanded[] = $clone;
+            }
+        }
+
+        return $expanded;
+    }
+
+    /**
+     * Distinct site+perusahaan yang punya gap action item pada batch_slot.
+     *
+     * @return list<array{site: string, perusahaan: string}>
+     */
+    private function discoverEndshiftScopes(string $batchSlot): array
+    {
+        $filters = $this->dashboardService->withBatchContext(
+            $this->baseFilters(null, ''),
+            $batchSlot,
+            'snapshot',
+            null,
+        );
+
+        $rows = $this->dashboardService->extractGapIdentityRows($filters);
+        $map = [];
+        foreach ($rows as $row) {
+            $perusahaan = trim((string) ($row['perusahaan'] ?? ''));
+            if ($perusahaan === '') {
+                continue;
+            }
+            $site = trim((string) ($row['site'] ?? ''));
+            $key = strtolower($site).'|'.strtolower($perusahaan);
+            $map[$key] = [
+                'site' => $site,
+                'perusahaan' => $perusahaan,
+            ];
+        }
+
+        return array_values($map);
     }
 }

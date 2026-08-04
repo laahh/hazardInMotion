@@ -34,9 +34,11 @@
   $slotLabel = $batchSlotLabel !== '' ? $batchSlotLabel : 'slot akhir shift';
   $monitoringLink = trim((string) ($monitoringUrl ?? ''));
   $tasklistLink = trim((string) ($tasklistUrl ?? ''));
-  if ($tasklistLink === '') {
-      $tasklistLink = (string) ($dashboardUrl ?? '');
-  }
+  // Hanya terima URL token tasklist — jangan pakai fallback Aksi PJO / dashboard.
+  $hasTokenTasklist = $tasklistLink !== ''
+      && str_contains($tasklistLink, '/hsecm/tasklist/')
+      && ! str_contains($tasklistLink, '/hsecm/pjo-action')
+      && ! str_contains($tasklistLink, '/hsecm/tasklist/open');
 @endphp
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f4;">
@@ -71,7 +73,7 @@
               @include('emails.partials.hsecm-section-detail', ['number' => $i + 1, 'section' => $section])
             @endforeach
 
-            @if($tasklistLink !== '')
+            @if($hasTokenTasklist)
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:22px 0 18px;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;">
               <tr>
                 <td style="padding:16px 18px;">
