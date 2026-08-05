@@ -24,11 +24,12 @@ class MonitoringSafetyEngineeringRecordUpdateController extends Controller
     public function index(Request $request): View
     {
         $currentYear = (int) now()->format('Y');
-        $periodYear = (int) $request->get('period_year', $currentYear);
+        $periodYear = $request->filled('period_year') ? (int) $request->get('period_year') : null;
 
         return view('MonitoringSafetyEngginering.records.update', $this->monitoringSafetyEngineeringViewData('data-update', [
             'tablesReady' => Schema::hasTable('monitoring_safety_engineering_records'),
             'periodYear' => $periodYear,
+            'currentYear' => $currentYear,
             'planYears' => range($currentYear - 1, $currentYear + 2),
             'gridConfig' => $this->gridService->gridConfig(),
         ]));

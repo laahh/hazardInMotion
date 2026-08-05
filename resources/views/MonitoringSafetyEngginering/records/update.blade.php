@@ -13,8 +13,8 @@
    <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-crm-muted mb-1">Monitoring Safety Engineering</p>
    <h1 class="crm-page-title">Update Data Rekayasa</h1>
    <p class="crm-page-subtitle">
-      Edit data langsung di grid spreadsheet. Semua {{ count($gridConfig['columns'] ?? []) }} kolom tabel
-      <strong>monitoring_safety_engineering_records</strong> ditampilkan dengan grouped header.
+      Edit data langsung seperti spreadsheet. Semua {{ count($gridConfig['columns'] ?? []) }} kolom tabel
+      <strong>monitoring_safety_engineering_records</strong> ditampilkan dengan grouped header — kolom bisa disembunyikan lewat tombol "Kolom".
    </p>
 </div>
 
@@ -27,12 +27,13 @@
 
 <div id="mse-grid-alert" class="crm-grid-alert" role="status"></div>
 
-<!-- <form id="mse-grid-filter" method="GET" action="{{ route('monitoring-safety-engineering.data-update.index') }}" class="crm-filter-bar crm-filter-bar--single mb-4">
+<form id="mse-grid-filter" method="GET" action="{{ route('monitoring-safety-engineering.data-update.index') }}" class="crm-filter-bar crm-filter-bar--single mb-4">
    <div class="crm-filter-field">
       <label class="crm-filter-label" for="mse-filter-year">Tahun Periode</label>
       <select id="mse-filter-year" name="period_year" class="crm-filter-select">
+         <option value="" @selected($periodYear === null)>Semua Tahun</option>
          @foreach($planYears as $year)
-         <option value="{{ $year }}" @selected((int) $periodYear === (int) $year)>{{ $year }}</option>
+         <option value="{{ $year }}" @selected($periodYear !== null && (int) $periodYear === (int) $year)>{{ $year }}</option>
          @endforeach
       </select>
    </div>
@@ -42,7 +43,7 @@
          Terapkan Filter
       </button>
    </div>
-</form> -->
+</form>
 
 <div class="crm-grid-toolbar">
    <div class="crm-grid-toolbar-actions">
@@ -62,6 +63,22 @@
          <span class="material-symbols-outlined text-base">history</span>
          Riwayat
       </button>
+      <div class="crm-col-picker">
+         <button type="button" id="mse-btn-columns" class="crm-grid-btn" @disabled(! $tablesReady)>
+            <span class="material-symbols-outlined text-base">view_column</span>
+            Kolom
+         </button>
+         <div id="mse-col-picker-panel" class="crm-col-picker-panel">
+            <div class="crm-col-picker-head">
+               <span>Tampilkan Kolom</span>
+               <div class="crm-col-picker-head-actions">
+                  <button type="button" id="mse-col-show-all" class="crm-col-picker-link">Semua</button>
+                  <button type="button" id="mse-col-hide-all" class="crm-col-picker-link">Sembunyikan Semua</button>
+               </div>
+            </div>
+            <div id="mse-col-picker-body" class="crm-col-picker-body"></div>
+         </div>
+      </div>
    </div>
    <p id="mse-grid-status" class="crm-grid-status">Siap</p>
 </div>
@@ -98,11 +115,13 @@
 (function () {
    const tablesReady = @json($tablesReady);
    const periodYear = @json($periodYear);
+   const currentYear = @json($currentYear);
    const gridConfig = @json($gridConfig);
    const recordsUrl = @json(route('monitoring-safety-engineering.data-update.records'));
    const saveUrl = @json(route('monitoring-safety-engineering.data-update.save'));
    const historyUrlTemplate = @json(route('monitoring-safety-engineering.data-update.history', ['recordId' => 0]));
    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+   const columnVisibilityStorageKey = 'mse-data-update-hidden-columns';
 
    const statusFields = new Set([
       'kajian_teknis_status',
@@ -333,6 +352,30 @@
       return [groupRow, labelRow];
    }
 
+   function loadHiddenColumns() {
+      try {
+         const raw = window.localStorage.getItem(columnVisibilityStorageKey);
+         const parsed = raw ? JSON.parse(raw) : [];
+         return Array.isArray(parsed) ? parsed.filter(function (n) { return typeof n === 'number'; }) : [];
+      } catch (error) {
+         return [];
+      }
+   }
+
+   function saveHiddenColumns(columns) {
+      try {
+         window.localStorage.setItem(columnVisibilityStorageKey, JSON.stringify(columns));
+      } catch (error) {
+         // localStorage unavailable — ignore, preference just won't persist.
+      }
+   }
+
+   function computeGridHeight() {
+      const toolbar = document.querySelector('.crm-grid-wrap');
+      const top = toolbar ? toolbar.getBoundingClientRect().top : 260;
+      return Math.max(420, Math.floor(window.innerHeight - top - 32));
+   }
+
    function initGrid() {
       if (!tablesReady || !container || typeof Handsontable === 'undefined') {
          return;
@@ -349,6 +392,10 @@
          autoWrapCol: true,
          manualColumnResize: true,
          manualRowResize: true,
+         hiddenColumns: {
+            columns: loadHiddenColumns(),
+            indicators: true,
+         },
          contextMenu: {
             items: {
                row_above: {},
@@ -371,6 +418,9 @@
                   },
                },
                sep2: '---------',
+               hidden_columns_hide: {},
+               hidden_columns_show: {},
+               sep3: '---------',
                copy: {},
                cut: {},
             },
@@ -379,7 +429,7 @@
          filters: true,
          columnSorting: true,
          licenseKey: 'non-commercial-and-evaluation',
-         height: 520,
+         height: computeGridHeight(),
          width: '100%',
          className: 'htMiddle',
          afterChange: function () {
@@ -389,6 +439,21 @@
             const sel = hot?.getSelectedLast?.();
             updateSelectedRecord(sel ? sel[0] : null);
          },
+         afterHideColumns: function (_current, hidden) {
+            saveHiddenColumns(hidden);
+            renderColumnPicker();
+         },
+         afterUnhideColumns: function (_current, hidden) {
+            saveHiddenColumns(hidden);
+            renderColumnPicker();
+         },
+      });
+
+      renderColumnPicker();
+
+      window.addEventListener('resize', function () {
+         if (!hot) return;
+         hot.updateSettings({ height: computeGridHeight() });
       });
    }
 
@@ -399,7 +464,10 @@
       setStatus('Memuat data...', '');
 
       try {
-         const response = await fetch(recordsUrl + '?period_year=' + encodeURIComponent(periodYear), {
+         const query = periodYear === null || periodYear === undefined
+            ? ''
+            : '?period_year=' + encodeURIComponent(periodYear);
+         const response = await fetch(recordsUrl + query, {
             headers: { Accept: 'application/json' },
          });
          const payload = await response.json();
@@ -408,8 +476,10 @@
             throw new Error(payload.message || 'Gagal memuat data.');
          }
 
-         hot.loadData(payload.data || []);
-         setStatus((payload.data || []).length + ' baris · Tahun ' + periodYear, 'success');
+         const rows = payload.data || [];
+         hot.loadData(rows);
+         const yearLabel = periodYear === null || periodYear === undefined ? 'Semua Tahun' : ('Tahun ' + periodYear);
+         setStatus(rows.length + ' baris · ' + yearLabel, 'success');
       } catch (error) {
          showAlert(error.message || 'Gagal memuat data.', 'error');
          setStatus('Gagal memuat', 'error');
@@ -421,7 +491,7 @@
       gridConfig.columns.forEach(function (col) {
          row[col.key] = null;
       });
-      row.period_year = periodYear;
+      row.period_year = periodYear === null || periodYear === undefined ? currentYear : periodYear;
       row.sort_order = hot ? hot.countRows() + 1 : 1;
       row.row_no = hot ? hot.countRows() + 1 : 1;
       row.terkait_hazard = 'Tidak';
@@ -471,7 +541,7 @@
                'X-CSRF-TOKEN': csrfToken,
             },
             body: JSON.stringify({
-               period_year: periodYear,
+               period_year: periodYear === null || periodYear === undefined ? currentYear : periodYear,
                rows: rows,
             }),
          });
@@ -500,6 +570,90 @@
       }
    }
 
+   function columnGroupForIndex(index) {
+      const groups = gridConfig.nested_headers[0] || [];
+      let offset = 0;
+      for (let i = 0; i < groups.length; i++) {
+         const span = groups[i].colspan || 1;
+         if (index < offset + span) return groups[i].label;
+         offset += span;
+      }
+      return '';
+   }
+
+   function renderColumnPicker() {
+      const body = document.getElementById('mse-col-picker-body');
+      if (!body || !hot) return;
+
+      const plugin = hot.getPlugin('hiddenColumns');
+      const hidden = new Set(plugin.getHiddenColumns());
+      let currentGroup = null;
+      let html = '';
+
+      gridConfig.columns.forEach(function (col, index) {
+         const group = columnGroupForIndex(index);
+         if (group !== currentGroup) {
+            currentGroup = group;
+            html += '<p class="crm-col-picker-group">' + escapeHtml(group) + '</p>';
+         }
+         const checked = hidden.has(index) ? '' : 'checked';
+         html += '<label class="crm-col-picker-item">'
+            + '<input type="checkbox" data-col-index="' + index + '" ' + checked + '>'
+            + '<span>' + escapeHtml(col.label) + '</span>'
+            + '</label>';
+      });
+
+      body.innerHTML = html;
+   }
+
+   function toggleColumnPanel(forceState) {
+      const panel = document.getElementById('mse-col-picker-panel');
+      if (!panel) return;
+      const shouldOpen = forceState !== undefined ? forceState : !panel.classList.contains('crm-col-picker-panel--open');
+      panel.classList.toggle('crm-col-picker-panel--open', shouldOpen);
+   }
+
+   document.getElementById('mse-btn-columns')?.addEventListener('click', function (event) {
+      event.stopPropagation();
+      toggleColumnPanel();
+   });
+
+   document.getElementById('mse-col-picker-body')?.addEventListener('change', function (event) {
+      const target = event.target;
+      if (!hot || !(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
+      const index = parseInt(target.getAttribute('data-col-index') || '', 10);
+      if (Number.isNaN(index)) return;
+      const plugin = hot.getPlugin('hiddenColumns');
+      if (target.checked) {
+         plugin.showColumn(index);
+      } else {
+         plugin.hideColumn(index);
+      }
+      hot.render();
+   });
+
+   document.getElementById('mse-col-show-all')?.addEventListener('click', function () {
+      if (!hot) return;
+      hot.getPlugin('hiddenColumns').showColumns(gridConfig.columns.map(function (_c, i) { return i; }));
+      hot.render();
+      renderColumnPicker();
+   });
+
+   document.getElementById('mse-col-hide-all')?.addEventListener('click', function () {
+      if (!hot) return;
+      hot.getPlugin('hiddenColumns').hideColumns(gridConfig.columns.map(function (_c, i) { return i; }));
+      hot.render();
+      renderColumnPicker();
+   });
+
+   document.addEventListener('click', function (event) {
+      const panel = document.getElementById('mse-col-picker-panel');
+      const trigger = document.getElementById('mse-btn-columns');
+      if (!panel || !panel.classList.contains('crm-col-picker-panel--open')) return;
+      if (panel.contains(event.target) || trigger?.contains(event.target)) return;
+      toggleColumnPanel(false);
+   });
+
    document.getElementById('mse-btn-reload')?.addEventListener('click', loadRecords);
    document.getElementById('mse-btn-add-row')?.addEventListener('click', addRow);
    document.getElementById('mse-btn-save')?.addEventListener('click', saveRecords);
@@ -511,7 +665,10 @@
       if (event.target === historyModal) closeHistoryModal();
    });
    document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape') closeHistoryModal();
+      if (event.key === 'Escape') {
+         closeHistoryModal();
+         toggleColumnPanel(false);
+      }
    });
 
    initGrid();

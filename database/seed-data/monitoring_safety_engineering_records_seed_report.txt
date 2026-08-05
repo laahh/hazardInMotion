@@ -1,0 +1,63 @@
+Total baris data disisir: 2194
+Berhasil diparse: 1190
+Gagal (error validasi): 4
+Dilewati (baris kosong): 1000
+Dilewati (baris catatan): 0
+
+--- Daftar error (baris ini TIDAK masuk ke SQL) ---
+Baris 102: SITE wajib diisi.
+Baris 103: SITE wajib diisi.
+Baris 104: SITE wajib diisi.
+Baris 105: SITE wajib diisi.
+
+--- Koreksi manual yang diterapkan (35 sel) ---
+Baris 8, kolom numerik: "LV PAMA : 44
+LV Subkon : 31" -> 75 (dijumlahkan dari sub-kelompok)
+Baris 8, kolom numerik: "LV PAMA : 44
+LV Subkon : 31" -> 75 (dijumlahkan dari sub-kelompok)
+Baris 8, kolom numerik: "LV PAMA : 44
+LV Subkon : 31" -> 75 (dijumlahkan dari sub-kelompok)
+Baris 9, kolom numerik: "A2B : 57
+LD PAMA : 29
+LD Subkon : 59
+A2B Subkon : 59" -> 204 (dijumlahkan dari sub-kelompok)
+Baris 9, kolom numerik: "A2B : 57
+LD PAMA : 29
+LD Subkon : 59
+A2B Subkon : 59" -> 204 (dijumlahkan dari sub-kelompok)
+Baris 9, kolom numerik: "A2B : 44
+LD PAMA : 29
+LD Subkon : 59
+A2B Subkon : 59" -> 191 (dijumlahkan dari sub-kelompok)
+Baris 10, kolom numerik: "HD : 82" -> 82 (dijumlahkan dari sub-kelompok)
+Baris 10, kolom numerik: "HD : 82" -> 82 (dijumlahkan dari sub-kelompok)
+Baris 10, kolom numerik: "HD : 4" -> 4 (dijumlahkan dari sub-kelompok)
+Baris 11, kolom numerik: "LD : 29
+HD : 41" -> 70 (dijumlahkan dari sub-kelompok)
+Baris 11, kolom numerik: "LD : 29
+HD : 41" -> 70 (dijumlahkan dari sub-kelompok)
+Baris 11, kolom numerik: "LD : 1
+HD : 0" -> 1 (dijumlahkan dari sub-kelompok)
+Baris 12, kolom numerik: "1 Crossing selatan" -> 1 (dijumlahkan dari sub-kelompok)
+Baris 13, kolom numerik: "FT : 8" -> 8 (dijumlahkan dari sub-kelompok)
+Baris 20, kolom tanggal: "Q4 2026" -> NULL (bukan tanggal valid)
+Baris 21, kolom tanggal: "Q4 2026" -> NULL (bukan tanggal valid)
+Baris 35, kolom tanggal: "-" -> NULL (bukan tanggal valid)
+Baris 37, kolom tanggal: "-" -> NULL (bukan tanggal valid)
+Baris 64, kolom tanggal: "Tidak bisa diterapkan tahun ini" -> NULL (bukan tanggal valid)
+Baris 64, kolom tanggal: "Tidak bisa diterapkan tahun ini" -> NULL (bukan tanggal valid)
+Baris 98, kolom tanggal: "Belum ada lahan saat" -> NULL (bukan tanggal valid)
+Baris 100, kolom numerik: "LV (75) + BUS (23)" -> 98 (dijumlahkan dari sub-kelompok)
+Baris 100, kolom numerik: "LV (75) + BUS (23)" -> 98 (dijumlahkan dari sub-kelompok)
+Baris 100, kolom numerik: "LV (75) + BUS (23)" -> 98 (dijumlahkan dari sub-kelompok)
+Baris 184, kolom tanggal: "Q2" -> NULL (bukan tanggal valid)
+Baris 184, kolom tanggal: "Q3" -> NULL (bukan tanggal valid)
+Baris 184, kolom tanggal: "Q4" -> NULL (bukan tanggal valid)
+Baris 199, kolom tanggal: "14 Agustsu 2026" -> "14 Agustus 2026"
+Baris 200, kolom tanggal: "14 Agustsu 2026" -> "14 Agustus 2026"
+Baris 201, kolom tanggal: "14 Agustsu 2026" -> "14 Agustus 2026"
+Baris 205, kolom tanggal: "01 Me- 2026" -> "01 Mei 2026"
+Baris 205, kolom tanggal: "01 Me- 2026" -> "01 Mei 2026"
+Baris 205, kolom tanggal: "01 Me- 2026" -> "01 Mei 2026"
+Baris 220, kolom tanggal: "GMO" -> NULL (bukan tanggal valid)
+Baris 221, kolom tanggal: "GMO" -> NULL (bukan tanggal valid)

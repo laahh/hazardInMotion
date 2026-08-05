@@ -153,7 +153,7 @@ final class MonitoringSafetyEngineeringExcelImportService
             'replikasi_aktual' => $this->parseInteger($row[Excel::COL_REP_AKTUAL] ?? 0, 0),
             'deteksi_deviasi' => Mapper::resolveDeteksi(isset($row[Excel::COL_DETEKSI_DEVIASI]) ? (string) $row[Excel::COL_DETEKSI_DEVIASI] : null),
             'intervensi_deviasi' => Mapper::resolveIntervensi(isset($row[Excel::COL_INTERVENSI_DEVIASI]) ? (string) $row[Excel::COL_INTERVENSI_DEVIASI] : null),
-            'prediksi_penurunan_tangga_risiko' => $this->parseNullableInteger($row[Excel::COL_PREDIKSI_RISIKO] ?? null),
+            'prediksi_penurunan_tangga_risiko' => $this->parsePrediksiPenurunanTangga($row[Excel::COL_PREDIKSI_RISIKO] ?? null),
             'terkait_hazard' => Mapper::resolveBoolean(isset($row[Excel::COL_TERKAIT_HAZARD]) ? (string) $row[Excel::COL_TERKAIT_HAZARD] : null, 'TERKAIT HAZARD'),
             'terkait_insiden' => Mapper::resolveBoolean(isset($row[Excel::COL_TERKAIT_INSIDEN]) ? (string) $row[Excel::COL_TERKAIT_INSIDEN] : null, 'TERKAIT INSIDEN'),
             'efektivitas_rekayasa' => Mapper::resolveEfektivitas(isset($row[Excel::COL_EFEKTIVITAS_REKAYASA]) ? (string) $row[Excel::COL_EFEKTIVITAS_REKAYASA] : null),
@@ -210,13 +210,54 @@ final class MonitoringSafetyEngineeringExcelImportService
         }
 
         $string = trim((string) $value);
-        $timestamp = strtotime($string);
+        $timestamp = strtotime($this->translateIndonesianMonths($string));
 
         if ($timestamp === false) {
             throw new \InvalidArgumentException('Format tanggal tidak valid: "' . $string . '".');
         }
 
         return date('Y-m-d', $timestamp);
+    }
+
+    /**
+     * Ganti nama bulan Bahasa Indonesia ("1 Februari 2026") ke Inggris agar bisa di-parse strtotime().
+     */
+    private function translateIndonesianMonths(string $value): string
+    {
+        static $months = [
+            'januari' => 'January',
+            'februari' => 'February',
+            'maret' => 'March',
+            'april' => 'April',
+            'mei' => 'May',
+            'juni' => 'June',
+            'juli' => 'July',
+            'agustus' => 'August',
+            'september' => 'September',
+            'oktober' => 'October',
+            'november' => 'November',
+            'desember' => 'December',
+            // Singkatan umum yang sering dipakai di spreadsheet manual.
+            'jan' => 'January',
+            'feb' => 'February',
+            'mar' => 'March',
+            'mrt' => 'March',
+            'apr' => 'April',
+            'jun' => 'June',
+            'jul' => 'July',
+            'ags' => 'August',
+            'agu' => 'August',
+            'sep' => 'September',
+            'okt' => 'October',
+            'nov' => 'November',
+            'des' => 'December',
+        ];
+
+        return preg_replace_callback(
+            '/[A-Za-z]+/u',
+            static fn (array $m): string => $months[strtolower($m[0])] ?? $m[0],
+            $value,
+        ) ?? $value;
     }
 
     private function parseInteger(mixed $value, int $fallback): int
@@ -230,6 +271,28 @@ final class MonitoringSafetyEngineeringExcelImportService
         }
 
         return max(0, (int) $value);
+    }
+
+    /**
+     * PREDIKSI PENURUNAN TANGGA NILAI RISIKO sering diisi label ("Turun 2 Tangga") selain angka polos,
+     * mengikuti label di config('monitoring_safety_engineering.risk_reduction_matrix.columns').
+     */
+    private function parsePrediksiPenurunanTangga(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return max(0, (int) $value);
+        }
+
+        $string = trim((string) $value);
+        if (preg_match('/turun\s+(\d+)\s+tangga/i', $string, $matches)) {
+            return (int) $matches[1];
+        }
+
+        throw new \InvalidArgumentException('PREDIKSI PENURUNAN TANGGA NILAI RISIKO tidak valid: "' . $string . '".');
     }
 
     private function parseNullableInteger(mixed $value): ?int

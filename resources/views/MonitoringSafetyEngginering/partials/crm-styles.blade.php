@@ -641,7 +641,42 @@
       background: #fff; border: 1px solid #E6E9EB; border-radius: 0.75rem;
       overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
    }
-   .crm-grid-container { width: 100%; min-height: 520px; }
+   .crm-grid-container { width: 100%; min-height: 420px; }
+
+   /* ---- Column visibility picker ---- */
+   .crm-col-picker { position: relative; }
+   .crm-col-picker-panel {
+      display: none; position: absolute; top: calc(100% + 0.4rem); left: 0; z-index: 40;
+      width: 17rem; max-height: 22rem;
+      background: #fff; border: 1px solid #E6E9EB; border-radius: 0.75rem;
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+      overflow: hidden;
+   }
+   .crm-col-picker-panel--open { display: flex; flex-direction: column; }
+   .crm-col-picker-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+      padding: 0.65rem 0.85rem; border-bottom: 1px solid #EEF0F3;
+      font-size: 0.75rem; font-weight: 700; color: #2F2F3A; flex-shrink: 0;
+   }
+   .crm-col-picker-head-actions { display: flex; gap: 0.5rem; }
+   .crm-col-picker-link {
+      border: none; background: none; padding: 0; cursor: pointer;
+      font-size: 0.6875rem; font-weight: 600; color: #7366FF; text-decoration: underline;
+   }
+   .crm-col-picker-link:hover { color: #5f52e0; }
+   .crm-col-picker-body { overflow-y: auto; padding: 0.5rem 0.35rem; }
+   .crm-col-picker-group {
+      margin: 0.5rem 0.5rem 0.2rem; font-size: 0.625rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em; color: #9CA3AF;
+   }
+   .crm-col-picker-group:first-child { margin-top: 0.1rem; }
+   .crm-col-picker-item {
+      display: flex; align-items: center; gap: 0.55rem;
+      padding: 0.35rem 0.5rem; border-radius: 0.5rem; cursor: pointer;
+      font-size: 0.75rem; color: #2F2F3A;
+   }
+   .crm-col-picker-item:hover { background: #F4F7F9; }
+   .crm-col-picker-item input { accent-color: #7366FF; cursor: pointer; }
    .crm-grid-alert {
       padding: 0.65rem 1rem; border-radius: 0.5rem; font-size: 0.8125rem;
       margin-bottom: 1rem; display: none;
