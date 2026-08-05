@@ -45,9 +45,11 @@
          <ul class="list-disc pl-5 space-y-1">
             <li>Baris 1–2: header grup & sub-kolom — <strong>jangan diubah</strong></li>
             <li>Data mulai baris 3</li>
-            <li>Dropdown: SITE, PERUSAHAAN, SUMBER REKAYASA, Status fase (Not Yet / In Progress / Done), dll.</li>
+            <li>Kolom <strong>AKTIVITAS</strong> berada di dekat akhir tabel, setelah kolom Analisis (mengikuti format terbaru)</li>
+            <li>Dropdown: SITE, PERUSAHAAN, SUMBER REKAYASA, Status fase (Not Yet / In Progress / Done), EFEKTIVITAS REKAYASA (L1–L5), dll.</li>
             <li>Evidence: kolom opsional di Excel; upload file evidence nanti via sistem</li>
             <li>Jika POTENSI PENINGKATAN = <strong>Ya</strong>, kolom pengendalian peningkatan efektivitas wajib diisi</li>
+            <li>4 kolom baru di akhir tabel: TOTAL RISIKO SIGNIFIKAN, LINK LIST RISIKO SIGNIFIKAN, JUMLAH & LINK RISIKO SIGNIFIKAN POTENSI TERCOVER REKAYASA</li>
          </ul>
       </div>
 

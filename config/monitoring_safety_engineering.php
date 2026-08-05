@@ -104,6 +104,14 @@ return [
         'manusia' => 'Manusia',
     ],
 
+    'efektivitas_rekayasa' => [
+        'l1_eliminasi' => 'L1 - Eliminasi',
+        'l2_mencegah' => 'L2 - Mencegah',
+        'l3_deteksi_intervensi_manusia' => 'L3 - Mendeteksi & Intervensi Manusia',
+        'l4_mitigasi_pasif' => 'L4 - Mitigasi Pasif',
+        'l5_deteksi_manual' => 'L5 - Deteksi Manual',
+    ],
+
     'replikasi_satuan' => [
         'Titik/Lokasi',
         'Unit',

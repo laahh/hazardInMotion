@@ -66,32 +66,36 @@ final class MonitoringSafetyEngineeringExcelTemplateService
         $sheet->setCellValue('A1', 'NO');
         $sheet->setCellValue('B1', 'SITE');
         $sheet->setCellValue('C1', 'PERUSAHAAN');
-        $sheet->setCellValue('D1', 'AKTIVITAS');
-        $sheet->setCellValue('E1', 'SUMBER REKAYASA');
-        $sheet->setCellValue('F1', 'PELAKSANA REKAYASA');
-        $sheet->setCellValue('G1', 'PENGENDALIAN REKAYASA');
-        $sheet->setCellValue('H1', 'TANGGAL IDEATION');
+        $sheet->setCellValue('D1', 'SUMBER REKAYASA');
+        $sheet->setCellValue('E1', 'PELAKSANA REKAYASA');
+        $sheet->setCellValue('F1', 'PENGENDALIAN REKAYASA');
+        $sheet->setCellValue('G1', 'TANGGAL IDEATION');
 
-        $sheet->mergeCells('I1:K1');
-        $sheet->setCellValue('I1', 'KAJIAN TEKNIS');
-        $sheet->mergeCells('L1:N1');
-        $sheet->setCellValue('L1', 'PENGADAAN');
-        $sheet->mergeCells('O1:Q1');
-        $sheet->setCellValue('O1', 'UJI COBA');
-        $sheet->mergeCells('R1:T1');
-        $sheet->setCellValue('R1', 'STANDARISASI');
-        $sheet->mergeCells('U1:AB1');
-        $sheet->setCellValue('U1', 'REPLIKASI');
+        $sheet->mergeCells('H1:J1');
+        $sheet->setCellValue('H1', 'KAJIAN TEKNIS');
+        $sheet->mergeCells('K1:M1');
+        $sheet->setCellValue('K1', 'PENGADAAN');
+        $sheet->mergeCells('N1:P1');
+        $sheet->setCellValue('N1', 'UJI COBA');
+        $sheet->mergeCells('Q1:S1');
+        $sheet->setCellValue('Q1', 'STANDARISASI');
+        $sheet->mergeCells('T1:AA1');
+        $sheet->setCellValue('T1', 'REPLIKASI');
 
-        $sheet->setCellValue('AC1', 'DETEKSI DEVIASI');
-        $sheet->setCellValue('AD1', 'INTERVENSI DEVIASI');
-        $sheet->setCellValue('AE1', 'PREDIKSI PENURUNAN TANGGA NILAI RISIKO');
-        $sheet->setCellValue('AF1', 'TERKAIT HAZARD');
-        $sheet->setCellValue('AG1', 'TERKAIT INSIDEN');
-        $sheet->setCellValue('AH1', 'BRIEF ANALYSIS/CHALLENGE');
-        $sheet->setCellValue('AI1', 'NEXT TO DO');
-        $sheet->setCellValue('AJ1', 'POTENSI PENINGKATAN LEVEL EFEKTIVITAS');
-        $sheet->setCellValue('AK1', 'PENGENDALIAN REKAYASA (PENINGKATAN LEVEL EFEKTIVITAS)');
+        $sheet->setCellValue('AB1', 'DETEKSI DEVIASI');
+        $sheet->setCellValue('AC1', 'INTERVENSI DEVIASI');
+        $sheet->setCellValue('AD1', 'PREDIKSI PENURUNAN TANGGA NILAI RISIKO');
+        $sheet->setCellValue('AE1', 'TERKAIT HAZARD');
+        $sheet->setCellValue('AF1', 'TERKAIT INSIDEN');
+        $sheet->setCellValue('AG1', 'EFEKTIVITAS REKAYASA');
+        $sheet->setCellValue('AH1', 'NEXT TO DO');
+        $sheet->setCellValue('AI1', 'POTENSI PENINGKATAN LEVEL EFEKTIVITAS');
+        $sheet->setCellValue('AJ1', 'PENGENDALIAN REKAYASA (PENINGKATAN LEVEL EFEKTIVITAS)');
+        $sheet->setCellValue('AK1', 'AKTIVITAS');
+        $sheet->setCellValue('AL1', 'TOTAL RISIKO SIGNIFIKAN');
+        $sheet->setCellValue('AM1', 'LINK LIST RISIKO SIGNIFIKAN');
+        $sheet->setCellValue('AN1', 'JUMLAH RISIKO SIGNIFIKAN POTENSI TERCOVER REKAYASA');
+        $sheet->setCellValue('AO1', 'LINK RISIKO SIGNIFIKAN POTENSI TERCOVER REKAYASA');
 
         foreach (MonitoringSafetyEngineeringExcelStructure::verticalMergeRanges() as [$from, $to]) {
             $sheet->mergeCells($from . ':' . $to);
@@ -107,7 +111,6 @@ final class MonitoringSafetyEngineeringExcelTemplateService
             1,
             'BMO',
             'PAMA',
-            'Hauling',
             'Replikasi 2026',
             'Inisiator',
             'DMS Unit DT',
@@ -137,10 +140,15 @@ final class MonitoringSafetyEngineeringExcelTemplateService
             2,
             'Ya',
             'Tidak',
-            'Keterlambatan pengiriman peralatan DMS.',
+            'L2 - Mencegah',
             'Follow up vendor mingguan.',
             'Ya',
             'Upgrade spesifikasi kamera cabin unit DT.',
+            'Hauling',
+            3,
+            'https://example.com/risk-list',
+            2,
+            'https://example.com/risk-tercover',
         ];
 
         $sheet->fromArray([$exampleRow], null, 'A' . MonitoringSafetyEngineeringExcelStructure::EXCEL_DATA_START_ROW);
@@ -174,12 +182,14 @@ final class MonitoringSafetyEngineeringExcelTemplateService
         $sheet->getRowDimension(2)->setRowHeight(36);
         $sheet->freezePane('A' . MonitoringSafetyEngineeringExcelStructure::EXCEL_DATA_START_ROW);
 
+        $wideColumns = ['F', 'AH', 'AJ', 'AK', 'AM', 'AO'];
+
         foreach (range('A', $lastCol) as $column) {
-            $sheet->getColumnDimension($column)->setWidth($column === 'G' || $column === 'AH' || $column === 'AI' || $column === 'AK' ? 28 : 14);
+            $sheet->getColumnDimension($column)->setWidth(in_array($column, $wideColumns, true) ? 28 : 14);
         }
 
         $sheet->setCellValue('A50', 'Catatan: Baris 1–2 jangan diubah. Evidence di Excel opsional (upload file via sistem). Isi dropdown sesuai sheet Referensi.');
-        $sheet->mergeCells('A50:AK50');
+        $sheet->mergeCells('A50:AO50');
         $sheet->getStyle('A50')->getFont()->setItalic(true)->setSize(9);
     }
 
@@ -202,6 +212,7 @@ final class MonitoringSafetyEngineeringExcelTemplateService
                 ARRAY_FILTER_USE_BOTH,
             )))],
             ['Satuan Rekayasa', implode(', ', config('monitoring_safety_engineering.replikasi_satuan', []))],
+            ['EFEKTIVITAS REKAYASA', implode(', ', array_values(config('monitoring_safety_engineering.efektivitas_rekayasa', [])))],
             ['Ya / Tidak', 'Ya, Tidak'],
             ['Format Tanggal', 'YYYY-MM-DD atau format tanggal Excel'],
         ];

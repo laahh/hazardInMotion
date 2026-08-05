@@ -107,6 +107,42 @@ final class MonitoringSafetyEngineeringExcelValueMapper
     }
 
     /**
+     * @return array<string, string>
+     */
+    public static function efektivitasLabelToValue(): array
+    {
+        $map = [];
+        foreach (config('monitoring_safety_engineering.efektivitas_rekayasa', []) as $value => $label) {
+            $map[self::normalizeKey((string) $label)] = (string) $value;
+            $map[self::normalizeKey((string) $value)] = (string) $value;
+        }
+
+        return $map;
+    }
+
+    /**
+     * Normalisasi nilai efektivitas rekayasa (level L1–L5) ke label kanonik.
+     */
+    public static function resolveEfektivitas(?string $input): ?string
+    {
+        if ($input === null || trim($input) === '') {
+            return null;
+        }
+
+        $trimmed = trim($input);
+        $config = config('monitoring_safety_engineering.efektivitas_rekayasa', []);
+        $key = self::normalizeKey($trimmed);
+
+        foreach ($config as $configKey => $label) {
+            if (self::normalizeKey((string) $label) === $key || self::normalizeKey((string) $configKey) === $key) {
+                return (string) $label;
+            }
+        }
+
+        throw new \InvalidArgumentException('EFEKTIVITAS REKAYASA tidak valid: "' . $input . '".');
+    }
+
+    /**
      * Normalisasi nilai deteksi deviasi ke label kanonik (kolom terpisah dari intervensi).
      */
     public static function resolveDeteksi(?string $input): ?string

@@ -21,75 +21,83 @@ final class MonitoringSafetyEngineeringExcelStructure
 
     public const COL_PERUSAHAAN = 2;
 
-    public const COL_AKTIVITAS = 3;
+    public const COL_SUMBER_REKAYASA = 3;
 
-    public const COL_SUMBER_REKAYASA = 4;
+    public const COL_PELAKSANA_REKAYASA = 4;
 
-    public const COL_PELAKSANA_REKAYASA = 5;
+    public const COL_PENGENDALIAN_REKAYASA = 5;
 
-    public const COL_PENGENDALIAN_REKAYASA = 6;
+    public const COL_TANGGAL_IDEATION = 6;
 
-    public const COL_TANGGAL_IDEATION = 7;
+    public const COL_KT_DUE = 7;
 
-    public const COL_KT_DUE = 8;
+    public const COL_KT_STATUS = 8;
 
-    public const COL_KT_STATUS = 9;
+    public const COL_KT_EVIDENCE = 9;
 
-    public const COL_KT_EVIDENCE = 10;
+    public const COL_PENGADAAN_DUE = 10;
 
-    public const COL_PENGADAAN_DUE = 11;
+    public const COL_PENGADAAN_STATUS = 11;
 
-    public const COL_PENGADAAN_STATUS = 12;
+    public const COL_PENGADAAN_EVIDENCE = 12;
 
-    public const COL_PENGADAAN_EVIDENCE = 13;
+    public const COL_UJI_COBA_DUE = 13;
 
-    public const COL_UJI_COBA_DUE = 14;
+    public const COL_UJI_COBA_STATUS = 14;
 
-    public const COL_UJI_COBA_STATUS = 15;
+    public const COL_UJI_COBA_EVIDENCE = 15;
 
-    public const COL_UJI_COBA_EVIDENCE = 16;
+    public const COL_STD_DUE = 16;
 
-    public const COL_STD_DUE = 17;
+    public const COL_STD_STATUS = 17;
 
-    public const COL_STD_STATUS = 18;
+    public const COL_STD_EVIDENCE = 18;
 
-    public const COL_STD_EVIDENCE = 19;
+    public const COL_REP_DUE = 19;
 
-    public const COL_REP_DUE = 20;
+    public const COL_REP_TOTAL_POPULASI = 20;
 
-    public const COL_REP_TOTAL_POPULASI = 21;
+    public const COL_REP_SATUAN = 21;
 
-    public const COL_REP_SATUAN = 22;
+    public const COL_REP_TARGET = 22;
 
-    public const COL_REP_TARGET = 23;
+    public const COL_REP_DIUSULKAN_PJO = 23;
 
-    public const COL_REP_DIUSULKAN_PJO = 24;
+    public const COL_REP_DITINJAU = 24;
 
-    public const COL_REP_DITINJAU = 25;
+    public const COL_REP_DISETUJUI = 25;
 
-    public const COL_REP_DISETUJUI = 26;
+    public const COL_REP_AKTUAL = 26;
 
-    public const COL_REP_AKTUAL = 27;
+    public const COL_DETEKSI_DEVIASI = 27;
 
-    public const COL_DETEKSI_DEVIASI = 28;
+    public const COL_INTERVENSI_DEVIASI = 28;
 
-    public const COL_INTERVENSI_DEVIASI = 29;
+    public const COL_PREDIKSI_RISIKO = 29;
 
-    public const COL_PREDIKSI_RISIKO = 30;
+    public const COL_TERKAIT_HAZARD = 30;
 
-    public const COL_TERKAIT_HAZARD = 31;
+    public const COL_TERKAIT_INSIDEN = 31;
 
-    public const COL_TERKAIT_INSIDEN = 32;
+    public const COL_EFEKTIVITAS_REKAYASA = 32;
 
-    public const COL_BRIEF = 33;
+    public const COL_NEXT_TODO = 33;
 
-    public const COL_NEXT_TODO = 34;
+    public const COL_POTENSI_EFEKTIVITAS = 34;
 
-    public const COL_POTENSI_EFEKTIVITAS = 35;
+    public const COL_PENGENDALIAN_EFEKTIVITAS = 35;
 
-    public const COL_PENGENDALIAN_EFEKTIVITAS = 36;
+    public const COL_AKTIVITAS = 36;
 
-    public const TOTAL_COLUMNS = 37;
+    public const COL_TOTAL_RISIKO_SIGNIFIKAN = 37;
+
+    public const COL_LINK_LIST_RISIKO_SIGNIFIKAN = 38;
+
+    public const COL_JUMLAH_RISIKO_SIGNIFIKAN_TERCOVER = 39;
+
+    public const COL_LINK_RISIKO_SIGNIFIKAN_TERCOVER = 40;
+
+    public const TOTAL_COLUMNS = 41;
 
     /**
      * @return list<string>
@@ -100,7 +108,6 @@ final class MonitoringSafetyEngineeringExcelStructure
             'NO',
             'SITE',
             'PERUSAHAAN',
-            'AKTIVITAS',
             'SUMBER REKAYASA',
             'PELAKSANA REKAYASA',
             'PENGENDALIAN REKAYASA',
@@ -115,10 +122,15 @@ final class MonitoringSafetyEngineeringExcelStructure
             'PREDIKSI PENURUNAN TANGGA NILAI RISIKO',
             'TERKAIT HAZARD',
             'TERKAIT INSIDEN',
-            'BRIEF ANALYSIS/CHALLENGE',
+            'EFEKTIVITAS REKAYASA',
             'NEXT TO DO',
             'POTENSI PENINGKATAN LEVEL EFEKTIVITAS',
             'PENGENDALIAN REKAYASA (PENINGKATAN LEVEL EFEKTIVITAS)',
+            'AKTIVITAS',
+            'TOTAL RISIKO SIGNIFIKAN',
+            'LINK LIST RISIKO SIGNIFIKAN',
+            'JUMLAH RISIKO SIGNIFIKAN POTENSI TERCOVER REKAYASA',
+            'LINK RISIKO SIGNIFIKAN POTENSI TERCOVER REKAYASA',
         ];
     }
 
@@ -131,7 +143,6 @@ final class MonitoringSafetyEngineeringExcelStructure
             'NO',
             'SITE',
             'PERUSAHAAN',
-            'AKTIVITAS',
             'SUMBER REKAYASA',
             'PELAKSANA REKAYASA',
             'PENGENDALIAN REKAYASA',
@@ -161,10 +172,15 @@ final class MonitoringSafetyEngineeringExcelStructure
             'PREDIKSI PENURUNAN TANGGA NILAI RISIKO',
             'TERKAIT HAZARD',
             'TERKAIT INSIDEN',
-            'BRIEF ANALYSIS/CHALLENGE',
+            'EFEKTIVITAS REKAYASA',
             'NEXT TO DO',
             'POTENSI PENINGKATAN LEVEL EFEKTIVITAS',
             'PENGENDALIAN REKAYASA (PENINGKATAN LEVEL EFEKTIVITAS)',
+            'AKTIVITAS',
+            'TOTAL RISIKO SIGNIFIKAN',
+            'LINK LIST RISIKO SIGNIFIKAN',
+            'JUMLAH RISIKO SIGNIFIKAN POTENSI TERCOVER REKAYASA',
+            'LINK RISIKO SIGNIFIKAN POTENSI TERCOVER REKAYASA',
         ];
     }
 
@@ -183,7 +199,7 @@ final class MonitoringSafetyEngineeringExcelStructure
             ['E1', 'E2'],
             ['F1', 'F2'],
             ['G1', 'G2'],
-            ['H1', 'H2'],
+            ['AB1', 'AB2'],
             ['AC1', 'AC2'],
             ['AD1', 'AD2'],
             ['AE1', 'AE2'],
@@ -193,6 +209,10 @@ final class MonitoringSafetyEngineeringExcelStructure
             ['AI1', 'AI2'],
             ['AJ1', 'AJ2'],
             ['AK1', 'AK2'],
+            ['AL1', 'AL2'],
+            ['AM1', 'AM2'],
+            ['AN1', 'AN2'],
+            ['AO1', 'AO2'],
         ];
     }
 
@@ -201,6 +221,6 @@ final class MonitoringSafetyEngineeringExcelStructure
      */
     public static function lastColumnLetter(): string
     {
-        return 'AK';
+        return 'AO';
     }
 }

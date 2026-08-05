@@ -31,7 +31,7 @@ class MonitoringSafetyEngineeringUploadController extends Controller
         return view('MonitoringSafetyEngginering.upload.index', $this->monitoringSafetyEngineeringViewData('upload', [
             'tablesReady' => Schema::hasTable('monitoring_safety_engineering_records'),
             'planYears' => range($currentYear - 1, $currentYear + 2),
-            'columnCount' => 37,
+            'columnCount' => 41,
         ]));
     }
 

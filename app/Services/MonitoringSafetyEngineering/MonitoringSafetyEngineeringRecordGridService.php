@@ -171,6 +171,14 @@ final class MonitoringSafetyEngineeringRecordGridService
             }
         }
 
+        if ($record->efektivitas_rekayasa !== null && $record->efektivitas_rekayasa !== '') {
+            try {
+                $data['efektivitas_rekayasa'] = Mapper::resolveEfektivitas((string) $record->efektivitas_rekayasa);
+            } catch (\InvalidArgumentException) {
+                $data['efektivitas_rekayasa'] = (string) $record->efektivitas_rekayasa;
+            }
+        }
+
         if ($this->tracingReadyForBatch === true) {
             foreach ($this->phaseStatusLogService->phaseDefinitions() as $definition) {
                 $changedAtField = $definition['changed_at'];
@@ -223,7 +231,6 @@ final class MonitoringSafetyEngineeringRecordGridService
             'row_no' => $rowNo,
             'site' => $site,
             'perusahaan' => $perusahaan,
-            'aktivitas' => trim((string) ($row['aktivitas'] ?? '')),
             'sumber_rekayasa' => Mapper::resolveSumberRekayasa(isset($row['sumber_rekayasa']) ? (string) $row['sumber_rekayasa'] : null)->value,
             'pelaksana_rekayasa' => Mapper::resolvePelaksana(isset($row['pelaksana_rekayasa']) ? (string) $row['pelaksana_rekayasa'] : null)->value,
             'pengendalian_rekayasa' => $pengendalian,
@@ -249,10 +256,16 @@ final class MonitoringSafetyEngineeringRecordGridService
             'prediksi_penurunan_tangga_risiko' => $this->parseNullableInteger($row['prediksi_penurunan_tangga_risiko'] ?? null),
             'terkait_hazard' => Mapper::resolveBoolean(isset($row['terkait_hazard']) ? (string) $row['terkait_hazard'] : null, 'Terkait Hazard'),
             'terkait_insiden' => Mapper::resolveBoolean(isset($row['terkait_insiden']) ? (string) $row['terkait_insiden'] : null, 'Terkait Insiden'),
+            'efektivitas_rekayasa' => Mapper::resolveEfektivitas(isset($row['efektivitas_rekayasa']) ? (string) $row['efektivitas_rekayasa'] : null),
             'brief_analysis_challenge' => $this->nullableString($row['brief_analysis_challenge'] ?? null),
             'next_to_do' => $this->nullableString($row['next_to_do'] ?? null),
             'potensi_peningkatan_efektivitas' => $potensi,
             'pengendalian_peningkatan_efektivitas' => $pengendalianEfektivitas !== '' ? $pengendalianEfektivitas : null,
+            'aktivitas' => trim((string) ($row['aktivitas'] ?? '')),
+            'total_risiko_signifikan' => $this->parseNullableInteger($row['total_risiko_signifikan'] ?? null),
+            'link_list_risiko_signifikan' => $this->nullableString($row['link_list_risiko_signifikan'] ?? null),
+            'jumlah_risiko_signifikan_tercover_rekayasa' => $this->parseNullableInteger($row['jumlah_risiko_signifikan_tercover_rekayasa'] ?? null),
+            'link_risiko_signifikan_tercover_rekayasa' => $this->nullableString($row['link_risiko_signifikan_tercover_rekayasa'] ?? null),
             'period_year' => $periodYear,
             'sort_order' => $this->parseInteger($row['sort_order'] ?? null, $rowNo),
         ];
@@ -341,8 +354,11 @@ final class MonitoringSafetyEngineeringRecordGridService
             'replikasi_due_date', 'replikasi_total_populasi',
             'replikasi_satuan', 'replikasi_target_komitmen', 'replikasi_diusulkan_pjo', 'replikasi_ditinjau',
             'replikasi_disetujui', 'replikasi_aktual', 'deteksi_deviasi', 'intervensi_deviasi',
-            'prediksi_penurunan_tangga_risiko', 'terkait_hazard', 'terkait_insiden', 'brief_analysis_challenge',
+            'prediksi_penurunan_tangga_risiko', 'terkait_hazard', 'terkait_insiden', 'efektivitas_rekayasa',
+            'brief_analysis_challenge',
             'next_to_do', 'potensi_peningkatan_efektivitas', 'pengendalian_peningkatan_efektivitas',
+            'total_risiko_signifikan', 'link_list_risiko_signifikan',
+            'jumlah_risiko_signifikan_tercover_rekayasa', 'link_risiko_signifikan_tercover_rekayasa',
         ];
 
         if ($this->phaseStatusLogService->isTracingReady()) {

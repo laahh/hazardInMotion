@@ -17,7 +17,6 @@ final class MonitoringSafetyEngineeringRecordGridDefinition
         return [
             'site',
             'perusahaan',
-            'aktivitas',
             'sumber_rekayasa',
             'pelaksana_rekayasa',
             'pengendalian_rekayasa',
@@ -43,10 +42,16 @@ final class MonitoringSafetyEngineeringRecordGridDefinition
             'prediksi_penurunan_tangga_risiko',
             'terkait_hazard',
             'terkait_insiden',
-            'brief_analysis_challenge',
+            'efektivitas_rekayasa',
             'next_to_do',
             'potensi_peningkatan_efektivitas',
             'pengendalian_peningkatan_efektivitas',
+            'aktivitas',
+            'total_risiko_signifikan',
+            'link_list_risiko_signifikan',
+            'jumlah_risiko_signifikan_tercover_rekayasa',
+            'link_risiko_signifikan_tercover_rekayasa',
+            'brief_analysis_challenge',
         ];
     }
 
@@ -74,7 +79,6 @@ final class MonitoringSafetyEngineeringRecordGridDefinition
         return [
             ['key' => 'site', 'label' => 'Site', 'type' => 'dropdown', 'width' => 90],
             ['key' => 'perusahaan', 'label' => 'Perusahaan', 'type' => 'dropdown', 'width' => 110],
-            ['key' => 'aktivitas', 'label' => 'Aktivitas', 'type' => 'text', 'width' => 140],
             ['key' => 'sumber_rekayasa', 'label' => 'Sumber Rekayasa', 'type' => 'dropdown', 'width' => 170],
             ['key' => 'pelaksana_rekayasa', 'label' => 'Pelaksana', 'type' => 'dropdown', 'width' => 110],
             ['key' => 'pengendalian_rekayasa', 'label' => 'Pengendalian Rekayasa', 'type' => 'text', 'width' => 260],
@@ -100,10 +104,16 @@ final class MonitoringSafetyEngineeringRecordGridDefinition
             ['key' => 'prediksi_penurunan_tangga_risiko', 'label' => 'Prediksi Risiko', 'type' => 'numeric', 'width' => 105],
             ['key' => 'terkait_hazard', 'label' => 'Hazard', 'type' => 'dropdown', 'width' => 80],
             ['key' => 'terkait_insiden', 'label' => 'Insiden', 'type' => 'dropdown', 'width' => 80],
-            ['key' => 'brief_analysis_challenge', 'label' => 'Brief Analysis', 'type' => 'text', 'width' => 200],
+            ['key' => 'efektivitas_rekayasa', 'label' => 'Efektivitas Rekayasa', 'type' => 'dropdown', 'width' => 200],
             ['key' => 'next_to_do', 'label' => 'Next To Do', 'type' => 'text', 'width' => 200],
             ['key' => 'potensi_peningkatan_efektivitas', 'label' => 'Potensi Efektivitas', 'type' => 'dropdown', 'width' => 120],
             ['key' => 'pengendalian_peningkatan_efektivitas', 'label' => 'Pengendalian Efektivitas', 'type' => 'text', 'width' => 200],
+            ['key' => 'aktivitas', 'label' => 'Aktivitas', 'type' => 'text', 'width' => 140],
+            ['key' => 'total_risiko_signifikan', 'label' => 'Total Risiko Signifikan', 'type' => 'numeric', 'width' => 130],
+            ['key' => 'link_list_risiko_signifikan', 'label' => 'Link List Risiko Signifikan', 'type' => 'text', 'width' => 220],
+            ['key' => 'jumlah_risiko_signifikan_tercover_rekayasa', 'label' => 'Jumlah Risiko Tercover', 'type' => 'numeric', 'width' => 150],
+            ['key' => 'link_risiko_signifikan_tercover_rekayasa', 'label' => 'Link Risiko Tercover', 'type' => 'text', 'width' => 220],
+            ['key' => 'brief_analysis_challenge', 'label' => 'Brief Analysis (Legacy)', 'type' => 'text', 'width' => 200],
         ];
     }
 
@@ -114,15 +124,17 @@ final class MonitoringSafetyEngineeringRecordGridDefinition
     {
         return [
             [
-                ['label' => 'Identitas', 'colspan' => 6],
+                ['label' => 'Identitas', 'colspan' => 5],
                 ['label' => 'Ideation', 'colspan' => 1],
                 ['label' => 'Kajian Teknis', 'colspan' => 2],
                 ['label' => 'Pengadaan', 'colspan' => 2],
                 ['label' => 'Uji Coba', 'colspan' => 2],
                 ['label' => 'Standardisasi', 'colspan' => 2],
                 ['label' => 'Replikasi', 'colspan' => 8],
-                ['label' => 'Deviasi & Risiko', 'colspan' => 5],
+                ['label' => 'Deviasi & Risiko', 'colspan' => 6],
                 ['label' => 'Analisis', 'colspan' => 4],
+                ['label' => 'Risiko Signifikan', 'colspan' => 4],
+                ['label' => 'Legacy', 'colspan' => 1],
             ],
         ];
     }
@@ -150,6 +162,7 @@ final class MonitoringSafetyEngineeringRecordGridDefinition
             )),
             'terkait_hazard' => ['Ya', 'Tidak'],
             'terkait_insiden' => ['Ya', 'Tidak'],
+            'efektivitas_rekayasa' => array_values(config('monitoring_safety_engineering.efektivitas_rekayasa', [])),
             'potensi_peningkatan_efektivitas' => ['Ya', 'Tidak'],
         ];
     }
