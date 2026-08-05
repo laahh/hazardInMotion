@@ -184,6 +184,19 @@ return [
         ],
     ],
 
+    /**
+     * Sumber rekayasa yang dihitung pada KPI "Total Pengendalian" di dashboard komitmen.
+     * Arahan Manajemen = PMR (lihat outside_commitment_categories.arahan_manajemen).
+     */
+    'total_pengendalian_sumber_rekayasa' => [
+        'safety_engineering',
+        'additional_engineering',
+        'replikasi_2026',
+        'pmr_2023',
+        'pmr_2024',
+        'pmr_2025',
+    ],
+
     'outside_commitment_categories' => [
         'arahan_manajemen' => [
             'label' => 'Arahan Manajemen',

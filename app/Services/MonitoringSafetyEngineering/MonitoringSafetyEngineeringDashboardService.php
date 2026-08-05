@@ -40,7 +40,7 @@ class MonitoringSafetyEngineeringDashboardService
         return [
             'filters' => $filters,
             'filter_options' => $this->filterOptions(),
-            'summary' => $this->buildSummary($replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
+            'summary' => $this->buildSummary($records, $replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
             'overdue_summary' => $this->buildOverdueSummary($replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
             'active_category' => $activeCategory,
             'active_items' => $activeItems,
@@ -69,7 +69,7 @@ class MonitoringSafetyEngineeringDashboardService
         return [
             'filters' => $filters,
             'filter_options' => $this->filterOptions(),
-            'summary' => $this->buildSummary($emptyItems, $emptyItems, $emptyItems),
+            'summary' => $this->buildSummary(collect(), $emptyItems, $emptyItems, $emptyItems),
             'overdue_summary' => $this->buildOverdueSummary($emptyItems, $emptyItems, $emptyItems),
             'active_category' => $filters['category'],
             'active_items' => $emptyItems,
@@ -231,6 +231,7 @@ class MonitoringSafetyEngineeringDashboardService
             ?? '';
 
         $percentage = $plan > 0 ? (int) round(($done / $plan) * 100) : 0;
+        $replikasiStatus = $this->resolveReplikasiProgressStatus($record);
 
         return [
             'id' => $record->id,
@@ -243,10 +244,44 @@ class MonitoringSafetyEngineeringDashboardService
             'due_date' => $dueDate,
             'due_date_label' => $dueDate !== '' ? date('d M Y', strtotime($dueDate)) : '-',
             'overdue' => $this->calculateRecordOverdue($record, $percentage),
+            'replikasi_status' => $replikasiStatus,
+            'replikasi_target_komitmen' => (int) $record->replikasi_target_komitmen,
+            'replikasi_aktual' => (int) $record->replikasi_aktual,
+            'replikasi_due_date' => $record->replikasi_due_date?->format('Y-m-d'),
             'due_in_review_week' => $this->recordHasDueDateInReviewWeek($record, $filters),
             'site' => $record->site,
             'perusahaan' => $record->perusahaan,
         ];
+    }
+
+    /**
+     * Status progress khusus field Replikasi:
+     * - selesai: aktual >= target (target harus > 0)
+     * - overdue: aktual < target dan hari ini > replikasi_due_date
+     * - onprogress: aktual < target dan hari ini belum melewati replikasi_due_date (atau tanpa due date)
+     */
+    private function resolveReplikasiProgressStatus(MonitoringSafetyEngineeringRecord $record): string
+    {
+        $target = (int) $record->replikasi_target_komitmen;
+        $aktual = (int) $record->replikasi_aktual;
+
+        if ($target > 0 && $aktual >= $target) {
+            return 'selesai';
+        }
+
+        // Belum selesai (atau belum ada target komitmen)
+        $dueDate = $record->replikasi_due_date;
+
+        if (
+            $target > 0
+            && $aktual < $target
+            && $dueDate !== null
+            && now()->startOfDay()->gt($dueDate->copy()->startOfDay())
+        ) {
+            return 'overdue';
+        }
+
+        return 'onprogress';
     }
 
     /**
@@ -664,26 +699,111 @@ class MonitoringSafetyEngineeringDashboardService
     }
 
     /**
+     * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $records
      * @param  list<array<string, mixed>>  $replikasi
      * @param  list<array<string, mixed>>  $safety
      * @param  list<array<string, mixed>>  $additional
      * @return array<string, mixed>
      */
-    private function buildSummary(array $replikasi, array $safety, array $additional): array
+    private function buildSummary(Collection $records, array $replikasi, array $safety, array $additional): array
     {
-        $totalPlan = count($replikasi) + count($safety) + count($additional);
+        $allowedSumber = $this->totalPengendalianSumberValues();
+
+        $totalPengendalian = $records
+            ->filter(function (MonitoringSafetyEngineeringRecord $record) use ($allowedSumber): bool {
+                return in_array($this->normalizeEnumValue($record->sumber_rekayasa), $allowedSumber, true);
+            })
+            ->count();
 
         return [
-            'total_komitmen' => $totalPlan,
-            'replikasi' => $this->buildCategoryStat($replikasi),
+            'total_komitmen' => $totalPengendalian,
+            'replikasi' => $this->buildReplikasiCategoryStat($replikasi),
             'safety_engineering' => $this->buildCategoryStat($safety),
             'additional_safety_engineering' => $this->buildCategoryStat($additional),
         ];
     }
 
     /**
+     * Sumber rekayasa untuk KPI Total Pengendalian:
+     * Safety Engineering, Additional Engineering, Replikasi 2026, Arahan Manajemen (PMR).
+     *
+     * @return list<string>
+     */
+    private function totalPengendalianSumberValues(): array
+    {
+        $configured = config('monitoring_safety_engineering.total_pengendalian_sumber_rekayasa', []);
+
+        if (! is_array($configured) || $configured === []) {
+            $arahan = config(
+                'monitoring_safety_engineering.outside_commitment_categories.arahan_manajemen.sumber_rekayasa',
+                [],
+            );
+
+            $configured = array_merge(
+                [
+                    'safety_engineering',
+                    'additional_engineering',
+                    'replikasi_2026',
+                ],
+                is_array($arahan) ? $arahan : [],
+            );
+        }
+
+        return array_values(array_unique(array_map(
+            static fn (mixed $value): string => (string) $value,
+            $configured,
+        )));
+    }
+
+    /**
+     * Ringkasan card Total Replikasi berdasarkan status replikasi_*.
+     *
      * @param  list<array<string, mixed>>  $items
-     * @return array{count: int, overdue: int, done: int, plan: int, completed: int, progress: int}
+     * @return array{
+     *     count: int,
+     *     onprogress: int,
+     *     overdue: int,
+     *     selesai: int,
+     *     done: int,
+     *     plan: int,
+     *     completed: int,
+     *     progress: int,
+     *     meta_mode: string
+     * }
+     */
+    private function buildReplikasiCategoryStat(array $items): array
+    {
+        $onprogress = 0;
+        $overdue = 0;
+        $selesai = 0;
+
+        foreach ($items as $item) {
+            match ((string) ($item['replikasi_status'] ?? '')) {
+                'onprogress' => $onprogress++,
+                'overdue' => $overdue++,
+                'selesai' => $selesai++,
+                default => null,
+            };
+        }
+
+        $count = count($items);
+
+        return [
+            'count' => $count,
+            'onprogress' => $onprogress,
+            'overdue' => $overdue,
+            'selesai' => $selesai,
+            'done' => (int) array_sum(array_column($items, 'done')),
+            'plan' => (int) array_sum(array_column($items, 'plan')),
+            'completed' => $selesai,
+            'progress' => $count > 0 ? (int) round(($selesai / $count) * 100) : 0,
+            'meta_mode' => 'replikasi_status',
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @return array{count: int, overdue: int, done: int, plan: int, completed: int, progress: int, meta_mode: string}
      */
     private function buildCategoryStat(array $items): array
     {
@@ -697,6 +817,7 @@ class MonitoringSafetyEngineeringDashboardService
                 static fn (array $item): bool => (int) ($item['percentage'] ?? 0) >= 100,
             )),
             'progress' => $this->calculateOverallProgress($items),
+            'meta_mode' => 'default',
         ];
     }
 

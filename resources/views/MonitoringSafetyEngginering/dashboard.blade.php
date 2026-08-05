@@ -29,12 +29,15 @@
       default => $pct === 0 ? 'Belum Mulai' : 'Kritis',
    };
    $totalItems = $summary['total_komitmen'];
-   $overallProgress = $totalItems > 0
+   $categoryWeight = (int) ($summary['replikasi']['count'] ?? 0)
+      + (int) ($summary['safety_engineering']['count'] ?? 0)
+      + (int) ($summary['additional_safety_engineering']['count'] ?? 0);
+   $overallProgress = $categoryWeight > 0
       ? (int) round(
          ($summary['replikasi']['progress'] * $summary['replikasi']['count']
             + $summary['safety_engineering']['progress'] * $summary['safety_engineering']['count']
             + $summary['additional_safety_engineering']['progress'] * $summary['additional_safety_engineering']['count']
-         ) / $totalItems
+         ) / $categoryWeight
       )
       : 0;
    $categoryStatCards = [
@@ -213,8 +216,14 @@
       <div class="crm-stat-main">
          <p class="crm-stat-value">{{ $stat['count'] ?? 0 }}</p>
          <div class="crm-stat-meta">
+            @if(($stat['meta_mode'] ?? '') === 'replikasi_status')
+            <span>Onprogress {{ $stat['onprogress'] ?? 0 }}</span>
+            <span>overdue {{ $stat['overdue'] ?? 0 }}</span>
+            <span>selesai {{ $stat['selesai'] ?? 0 }}</span>
+            @else
             <span>overdue {{ $stat['overdue'] ?? 0 }}</span>
             <span>selesai {{ $stat['done'] ?? 0 }}/{{ $stat['plan'] ?? 0 }}</span>
+            @endif
          </div>
       </div>
       <span class="crm-stat-trend {{ $trendUp ? 'crm-stat-trend--up' : 'crm-stat-trend--down' }}">
@@ -766,18 +775,35 @@
             + '<span class="crm-category-summary-label">Total</span>'
             + '<span class="crm-category-summary-value crm-category-summary-value--lg">' + escapeHtml(stat.count || 0) + '</span>'
             + '</div>'
-            + '<div class="crm-category-summary-item">'
-            + '<span class="crm-category-summary-label">Overdue</span>'
-            + '<span class="crm-category-summary-value">' + escapeHtml(stat.overdue || 0) + '</span>'
-            + '</div>'
-            + '<div class="crm-category-summary-item">'
-            + '<span class="crm-category-summary-label">Selesai</span>'
-            + '<span class="crm-category-summary-value">' + escapeHtml(stat.done || 0) + '/' + escapeHtml(stat.plan || 0) + '</span>'
-            + '</div>'
-            + '<div class="crm-category-summary-item">'
-            + '<span class="crm-category-summary-label">Progress</span>'
-            + '<span class="crm-category-summary-value">' + escapeHtml(stat.progress || 0) + '%</span>'
-            + '</div>'
+            + (stat.meta_mode === 'replikasi_status'
+               ? (
+                  '<div class="crm-category-summary-item">'
+                  + '<span class="crm-category-summary-label">Onprogress</span>'
+                  + '<span class="crm-category-summary-value">' + escapeHtml(stat.onprogress || 0) + '</span>'
+                  + '</div>'
+                  + '<div class="crm-category-summary-item">'
+                  + '<span class="crm-category-summary-label">Overdue</span>'
+                  + '<span class="crm-category-summary-value">' + escapeHtml(stat.overdue || 0) + '</span>'
+                  + '</div>'
+                  + '<div class="crm-category-summary-item">'
+                  + '<span class="crm-category-summary-label">Selesai</span>'
+                  + '<span class="crm-category-summary-value">' + escapeHtml(stat.selesai || 0) + '</span>'
+                  + '</div>'
+               )
+               : (
+                  '<div class="crm-category-summary-item">'
+                  + '<span class="crm-category-summary-label">Overdue</span>'
+                  + '<span class="crm-category-summary-value">' + escapeHtml(stat.overdue || 0) + '</span>'
+                  + '</div>'
+                  + '<div class="crm-category-summary-item">'
+                  + '<span class="crm-category-summary-label">Selesai</span>'
+                  + '<span class="crm-category-summary-value">' + escapeHtml(stat.done || 0) + '/' + escapeHtml(stat.plan || 0) + '</span>'
+                  + '</div>'
+                  + '<div class="crm-category-summary-item">'
+                  + '<span class="crm-category-summary-label">Progress</span>'
+                  + '<span class="crm-category-summary-value">' + escapeHtml(stat.progress || 0) + '%</span>'
+                  + '</div>'
+               ))
             + '</div>'
             + '<div class="crm-data-table-wrap crm-modal-table-wrap">'
             + '<table class="crm-data-table"><thead><tr>'
