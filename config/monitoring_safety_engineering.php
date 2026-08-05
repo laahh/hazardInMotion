@@ -164,12 +164,7 @@ return [
     'dashboard_categories' => [
         'replikasi' => [
             'sumber_rekayasa' => [
-                'replikasi_2024',
-                'replikasi_2025',
                 'replikasi_2026',
-            ],
-            'pelaksana_rekayasa' => [
-                'replikasi',
             ],
         ],
         'safety_engineering' => [

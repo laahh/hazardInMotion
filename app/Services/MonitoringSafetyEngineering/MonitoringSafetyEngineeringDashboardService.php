@@ -176,6 +176,11 @@ class MonitoringSafetyEngineeringDashboardService
 
         foreach ($records as $record) {
             $category = $this->resolveCategory($record);
+
+            if ($category === null || ! array_key_exists($category, $grouped)) {
+                continue;
+            }
+
             $item = $this->recordToItem($record, $filters);
             $item['detail'] = $this->buildRecordDetail($record, $item);
 
@@ -185,10 +190,9 @@ class MonitoringSafetyEngineeringDashboardService
         return $grouped;
     }
 
-    private function resolveCategory(MonitoringSafetyEngineeringRecord $record): string
+    private function resolveCategory(MonitoringSafetyEngineeringRecord $record): ?string
     {
         $sumber = $this->normalizeEnumValue($record->sumber_rekayasa);
-        $pelaksana = $this->normalizeEnumValue($record->pelaksana_rekayasa);
         $categories = config('monitoring_safety_engineering.dashboard_categories', []);
 
         if (in_array($sumber, $categories['additional_safety_engineering']['sumber_rekayasa'] ?? [], true)) {
@@ -199,14 +203,11 @@ class MonitoringSafetyEngineeringDashboardService
             return 'safety_engineering';
         }
 
-        if (
-            in_array($sumber, $categories['replikasi']['sumber_rekayasa'] ?? [], true)
-            || in_array($pelaksana, $categories['replikasi']['pelaksana_rekayasa'] ?? [], true)
-        ) {
+        if (in_array($sumber, $categories['replikasi']['sumber_rekayasa'] ?? [], true)) {
             return 'replikasi';
         }
 
-        return 'replikasi';
+        return null;
     }
 
     /**
