@@ -9,7 +9,6 @@ use App\Http\Requests\SportEvaluation\SportEvaluationEmployeeProfileStoreRequest
 use App\Http\Requests\SportEvaluation\SportEvaluationEmployeeProfileUpdateRequest;
 use App\Services\SportEvaluation\SportEvaluationEmployeeProfileService;
 use Illuminate\Database\QueryException;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -31,11 +30,6 @@ final class SportEvaluationEmployeeProfileController extends Controller
         $data = $this->service->indexPage($request);
 
         return view('evaluasi-well.users.index', $data);
-    }
-
-    public function data(Request $request): JsonResponse
-    {
-        return response()->json($this->service->datatable($request));
     }
 
     public function create(): View

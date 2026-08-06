@@ -60,8 +60,6 @@ Route::middleware('evaluasi-well.access')
 
         Route::get('/users', [SportEvaluationEmployeeProfileController::class, 'index'])
             ->name('users.index');
-        Route::get('/users/data', [SportEvaluationEmployeeProfileController::class, 'data'])
-            ->name('users.data');
         Route::get('/users/create', [SportEvaluationEmployeeProfileController::class, 'create'])
             ->name('users.create');
         Route::post('/users', [SportEvaluationEmployeeProfileController::class, 'store'])

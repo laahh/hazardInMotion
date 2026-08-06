@@ -91,12 +91,26 @@ final class SportEvaluationEmployeeProfileService
      * @return array{
      *     connectionUp: bool,
      *     filters: array{q:string,site:string,company:string,division:string,status:string},
-     *     filterOptions: array{sites:list<string>,companies:list<string>,divisions:list<string>,statuses:list<string>}
+     *     filterOptions: array{sites:list<string>,companies:list<string>,divisions:list<string>,statuses:list<string>},
+     *     employees: list<array<string,mixed>>,
+     *     total: int,
+     *     page: int,
+     *     perPage: int,
+     *     lastPage: int
      * }
      */
     public function indexPage(Request $request): array
     {
         $filters = $this->readFilters($request);
+        $page = max(1, (int) $request->input('page', 1));
+        $perPage = (int) $request->input('per_page', 15);
+        if ($perPage < 5) {
+            $perPage = 15;
+        }
+        if ($perPage > 100) {
+            $perPage = 100;
+        }
+
         $empty = [
             'connectionUp' => false,
             'filters' => $filters,
@@ -106,6 +120,11 @@ final class SportEvaluationEmployeeProfileService
                 'divisions' => [],
                 'statuses' => self::STATUS_OPTIONS,
             ],
+            'employees' => [],
+            'total' => 0,
+            'page' => $page,
+            'perPage' => $perPage,
+            'lastPage' => 1,
         ];
 
         if (! $this->connection->isUp()) {
@@ -113,10 +132,57 @@ final class SportEvaluationEmployeeProfileService
         }
 
         try {
+            $search = $filters['q'];
+            $base = $this->baseQuery();
+            $filtered = $this->applyFilters(clone $base, $filters, $search);
+            $total = (int) (clone $filtered)->count();
+            $lastPage = max(1, (int) ceil($total / $perPage));
+            if ($page > $lastPage) {
+                $page = $lastPage;
+            }
+            $offset = ($page - 1) * $perPage;
+
+            $rows = $filtered
+                ->orderBy('e.nama')
+                ->offset($offset)
+                ->limit($perPage)
+                ->get([
+                    'e.id',
+                    'e.nama',
+                    'e.kode_sid',
+                    'e.nik',
+                    'e.site',
+                    'e.nama_perusahaan',
+                    'e.divisi',
+                    'e.departement',
+                    'e.jabatan_fungsional',
+                    'e.status_karyawan',
+                ]);
+
+            $employees = $rows->map(static function ($row): array {
+                return [
+                    'id' => (int) $row->id,
+                    'nama' => (string) ($row->nama ?? '-'),
+                    'kode_sid' => (string) ($row->kode_sid ?? '-'),
+                    'nik' => (string) ($row->nik ?? '-'),
+                    'site' => (string) ($row->site ?? '-'),
+                    'company' => (string) ($row->nama_perusahaan ?? '-'),
+                    'divisi' => (string) ($row->divisi ?? '-'),
+                    'departement' => (string) ($row->departement ?? '-'),
+                    'jabatan_fungsional' => (string) ($row->jabatan_fungsional ?? '-'),
+                    'status_karyawan' => (string) ($row->status_karyawan ?? '-'),
+                ];
+            })->all();
+
             return [
                 'connectionUp' => true,
                 'filters' => $filters,
                 'filterOptions' => $this->buildFilterOptions(),
+                'employees' => $employees,
+                'total' => $total,
+                'page' => $page,
+                'perPage' => $perPage,
+                'lastPage' => $lastPage,
             ];
         } catch (Throwable $e) {
             report($e);
