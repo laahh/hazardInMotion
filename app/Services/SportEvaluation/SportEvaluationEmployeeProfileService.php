@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\SportEvaluation;
 
 use Illuminate\Database\Query\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -343,10 +344,73 @@ final class SportEvaluationEmployeeProfileService
         $payload = $this->normalizeWritable($input);
         $this->assertUniqueSidNik($payload['kode_sid'] ?? null, $payload['nik'] ?? null, null);
 
-        $id = $this->db()->table('employee_profiles')->insertGetId($payload);
-        $this->invalidateCaches((int) $id);
+        // id di BeWell bukan AUTO_INCREMENT. Hanya INSERT baris baru (tidak pernah
+        // update/upsert/overwrite). Alokasi id = MAX(id)+1 dengan cek bentrok + retry.
+        $maxAttempts = 8;
+        $lastError = null;
 
-        return (int) $id;
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                $id = (int) $this->db()->transaction(function () use ($payload): int {
+                    $nextId = $this->allocateNextEmployeeProfileId();
+
+                    // Guard ekstra: jangan pernah menulis ke id yang sudah terpakai.
+                    if ($this->db()->table('employee_profiles')->where('id', $nextId)->exists()) {
+                        throw new RuntimeException('Alokasi id bentrok; mencoba ulang.');
+                    }
+
+                    $insertPayload = $payload;
+                    $insertPayload['id'] = $nextId;
+
+                    // INSERT murni — bukan updateOrInsert / upsert.
+                    $this->db()->table('employee_profiles')->insert($insertPayload);
+
+                    return $nextId;
+                });
+
+                $this->invalidateCaches($id);
+
+                return $id;
+            } catch (RuntimeException $e) {
+                $lastError = $e;
+                if (! str_contains($e->getMessage(), 'bentrok')) {
+                    throw $e;
+                }
+            } catch (QueryException $e) {
+                $lastError = $e;
+                // 1062 = duplicate entry (race concurrent insert).
+                if ((int) ($e->errorInfo[1] ?? 0) !== 1062) {
+                    throw $e;
+                }
+            }
+
+            usleep(25_000 * $attempt);
+        }
+
+        report($lastError);
+
+        throw new RuntimeException('Gagal mengalokasikan id karyawan baru tanpa bentrok. Coba lagi.');
+    }
+
+    /**
+     * Ambil id berikutnya setelah id terbesar yang ada (MAX(id) + 1).
+     * Melewati id yang kebetulan sudah terpakai (tidak menimpa).
+     */
+    private function allocateNextEmployeeProfileId(): int
+    {
+        $locked = $this->db()->table('employee_profiles')
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->first(['id']);
+
+        $candidate = $locked !== null ? ((int) $locked->id + 1) : 1;
+
+        // Jika ada gap aneh / race residual, maju sampai slot kosong.
+        while ($this->db()->table('employee_profiles')->where('id', $candidate)->exists()) {
+            $candidate++;
+        }
+
+        return $candidate;
     }
 
     /**

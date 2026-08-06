@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\SportEvaluation\SportEvaluationEmployeeProfileStoreRequest;
 use App\Http\Requests\SportEvaluation\SportEvaluationEmployeeProfileUpdateRequest;
 use App\Services\SportEvaluation\SportEvaluationEmployeeProfileService;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -55,6 +56,13 @@ final class SportEvaluationEmployeeProfileController extends Controller
                 ->back()
                 ->withInput()
                 ->withErrors(['form' => $e->getMessage()]);
+        } catch (QueryException $e) {
+            report($e);
+
+            return redirect()
+                ->back()
+                ->withInput()
+                ->withErrors(['form' => 'Gagal menyimpan karyawan ke BeWell.']);
         } catch (RuntimeException $e) {
             return redirect()
                 ->back()
@@ -99,6 +107,13 @@ final class SportEvaluationEmployeeProfileController extends Controller
                 ->back()
                 ->withInput()
                 ->withErrors(['form' => $e->getMessage()]);
+        } catch (QueryException $e) {
+            report($e);
+
+            return redirect()
+                ->back()
+                ->withInput()
+                ->withErrors(['form' => 'Gagal memperbarui karyawan di BeWell.']);
         } catch (RuntimeException $e) {
             return redirect()
                 ->back()
