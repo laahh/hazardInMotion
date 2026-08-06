@@ -9,6 +9,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -16,7 +17,8 @@ use Throwable;
 /**
  * Create / Read / Update employee_profiles di bewell_db.
  *
- * Tidak menghapus baris, tidak menyentuh password_hash / audit login.
+ * Tidak menghapus baris. password_hash di-set bcrypt(kode_sid) saat create/update
+ * (sesuai login BeWell: password = SID). Hash tidak pernah ditampilkan di UI.
  */
 final class SportEvaluationEmployeeProfileService
 {
@@ -343,6 +345,7 @@ final class SportEvaluationEmployeeProfileService
 
         $payload = $this->normalizeWritable($input);
         $this->assertUniqueSidNik($payload['kode_sid'] ?? null, $payload['nik'] ?? null, null);
+        $payload['password_hash'] = $this->hashPasswordFromSid((string) $payload['kode_sid']);
 
         // id di BeWell bukan AUTO_INCREMENT. Hanya INSERT baris baru (tidak pernah
         // update/upsert/overwrite). Alokasi id = MAX(id)+1 dengan cek bentrok + retry.
@@ -393,6 +396,19 @@ final class SportEvaluationEmployeeProfileService
     }
 
     /**
+     * Password login BeWell = Kode SID (bcrypt). Hash tidak dikembalikan ke UI.
+     */
+    private function hashPasswordFromSid(string $kodeSid): string
+    {
+        $sid = trim($kodeSid);
+        if ($sid === '') {
+            throw new InvalidArgumentException('Kode SID wajib diisi untuk membuat password.');
+        }
+
+        return Hash::make($sid);
+    }
+
+    /**
      * Ambil id berikutnya setelah id terbesar yang ada (MAX(id) + 1).
      * Melewati id yang kebetulan sudah terpakai (tidak menimpa).
      */
@@ -429,6 +445,8 @@ final class SportEvaluationEmployeeProfileService
 
         $payload = $this->normalizeWritable($input);
         $this->assertUniqueSidNik($payload['kode_sid'] ?? null, $payload['nik'] ?? null, $id);
+        // Sync password = SID agar akun bisa login di app BeWell.
+        $payload['password_hash'] = $this->hashPasswordFromSid((string) $payload['kode_sid']);
 
         $this->db()->table('employee_profiles')
             ->where('id', $id)

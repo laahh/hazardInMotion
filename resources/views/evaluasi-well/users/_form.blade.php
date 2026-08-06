@@ -11,7 +11,7 @@
   <iconify-icon icon="solar:danger-triangle-bold" class="icon text-xl mt-1"></iconify-icon>
   <div>
     Perubahan ini menulis langsung ke <strong>database produksi BeWell</strong> (<code>employee_profiles</code>).
-    Password login BeWell tidak dikelola dari panel ini.
+    Password login otomatis di-set sama dengan <strong>Kode SID</strong> (bcrypt), sesuai instruksi app BeWell.
   </div>
 </div>
 

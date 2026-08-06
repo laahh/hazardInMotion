@@ -4,6 +4,13 @@
 
 @section('css')
 <style>
+  .users-datatable,
+  #usersTable,
+  #usersTable_wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
   .dt-container:has(#usersTable) .dt-layout-row,
   #usersTable_wrapper .dt-layout-row {
     display: flex;
@@ -38,7 +45,6 @@
   }
 
   #usersTable {
-    width: 100% !important;
     table-layout: fixed !important;
   }
 
@@ -46,6 +52,16 @@
   #usersTable td {
     vertical-align: middle;
     word-break: break-word;
+    white-space: normal;
+  }
+
+  #usersTable thead th {
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  #usersTable .eu-actions {
+    white-space: nowrap;
   }
 </style>
 @endsection
@@ -71,7 +87,7 @@
     var totalBadge = document.querySelector('#eu-total-badge');
 
     function escapeHtml(value) {
-        return String(value)
+        return String(value == null ? '' : value)
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
@@ -97,6 +113,7 @@
         lengthMenu: [10, 25, 50, 100],
         order: [[0, 'asc']],
         autoWidth: false,
+        scrollX: false,
         layout: {
             topStart: 'pageLength',
             topEnd: 'search',
@@ -116,6 +133,7 @@
         columns: [
             {
                 data: 'nama',
+                width: '18%',
                 render: function (data, type, row) {
                     if (type !== 'display') {
                         return data;
@@ -126,14 +144,15 @@
                         + '</span>';
                 }
             },
-            { data: 'kode_sid' },
-            { data: 'site' },
-            { data: 'company' },
-            { data: 'divisi' },
-            { data: 'departement' },
-            { data: 'jabatan_fungsional' },
+            { data: 'kode_sid', width: '10%' },
+            { data: 'site', width: '8%' },
+            { data: 'company', width: '16%' },
+            { data: 'divisi', width: '12%' },
+            { data: 'departement', width: '12%' },
+            { data: 'jabatan_fungsional', width: '12%' },
             {
                 data: 'status_karyawan',
+                width: '8%',
                 className: 'text-center',
                 render: function (data, type) {
                     if (type !== 'display') {
@@ -150,12 +169,12 @@
             },
             {
                 data: 'id',
+                width: '6%',
                 orderable: false,
                 searchable: false,
-                className: 'text-center',
+                className: 'text-center eu-actions',
                 render: function (data) {
-                    return '<a href="' + editBase + '/' + data + '/edit" class="btn btn-sm btn-outline-primary-600 radius-8 px-12 py-6">'
-                        + 'Edit</a>';
+                    return '<a href="' + editBase + '/' + data + '/edit" class="btn btn-sm btn-outline-primary-600 radius-8 px-12 py-6">Edit</a>';
                 }
             }
         ],
@@ -263,7 +282,7 @@
           <h6 class="text-lg fw-semibold mb-0">Daftar Karyawan BeWell</h6>
           <span id="eu-total-badge" class="bg-primary-50 text-primary-600 text-sm fw-medium px-12 py-2 rounded-pill">0</span>
         </div>
-        <p class="text-sm text-secondary-light mb-0">Create / edit profil di <code>employee_profiles</code>. Tanpa hapus.</p>
+        <p class="text-sm text-secondary-light mb-0">Create / edit profil di <code>employee_profiles</code>. Tanpa hapus. Password login = Kode SID.</p>
       </div>
       <a href="{{ route('evaluasi-well.users.create') }}" class="btn btn-primary-600 radius-8 px-16 py-10">
         <iconify-icon icon="solar:user-plus-outline" class="icon"></iconify-icon>
@@ -272,59 +291,71 @@
     </div>
   </div>
   <div class="card-body p-24">
-    <div class="row g-3 mb-20">
-      <div class="col-md-3">
-        <label for="eu-site" class="form-label text-sm">Site</label>
-        <select id="eu-site" class="form-select">
-          <option value="">Semua</option>
-          @foreach ($opts['sites'] as $site)
-            <option value="{{ $site }}" @selected(($f['site'] ?? '') === $site)>{{ $site }}</option>
-          @endforeach
-        </select>
-      </div>
-      <div class="col-md-3">
-        <label for="eu-company" class="form-label text-sm">Perusahaan</label>
-        <select id="eu-company" class="form-select">
-          <option value="">Semua</option>
-          @foreach ($opts['companies'] as $company)
-            <option value="{{ $company }}" @selected(($f['company'] ?? '') === $company)>{{ $company }}</option>
-          @endforeach
-        </select>
-      </div>
-      <div class="col-md-2">
-        <label for="eu-division" class="form-label text-sm">Divisi</label>
-        <input type="text" id="eu-division" class="form-control" value="{{ $f['division'] ?? '' }}" placeholder="Cari divisi...">
-      </div>
-      <div class="col-md-2">
-        <label for="eu-status" class="form-label text-sm">Status</label>
-        <select id="eu-status" class="form-select">
-          <option value="">Semua</option>
-          @foreach ($opts['statuses'] as $status)
-            <option value="{{ $status }}" @selected(($f['status'] ?? '') === $status)>{{ $status }}</option>
-          @endforeach
-        </select>
-      </div>
-      <div class="col-md-2 d-flex align-items-end gap-2">
-        <button type="button" id="eu-apply-btn" class="btn btn-primary-600 radius-8 px-16 py-10">Terapkan</button>
-        <button type="button" id="eu-reset-btn" class="btn btn-outline-secondary radius-8 px-16 py-10">Reset</button>
+    <div class="bg-neutral-50 border radius-8 p-16 mb-20">
+      <div class="row g-3 align-items-end">
+        <div class="col-xl-2 col-md-4 col-sm-6">
+          <label for="eu-site" class="form-label text-sm fw-medium mb-6">Site</label>
+          <select id="eu-site" class="form-select form-select-sm">
+            <option value="">Semua Site</option>
+            @foreach ($opts['sites'] as $site)
+              <option value="{{ $site }}" @selected(($f['site'] ?? '') === $site)>{{ $site }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-xl-3 col-md-4 col-sm-6">
+          <label for="eu-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
+          <select id="eu-company" class="form-select form-select-sm">
+            <option value="">Semua Perusahaan</option>
+            @foreach ($opts['companies'] as $company)
+              <option value="{{ $company }}" @selected(($f['company'] ?? '') === $company)>{{ $company }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-xl-2 col-md-4 col-sm-6">
+          <label for="eu-division" class="form-label text-sm fw-medium mb-6">Divisi</label>
+          <input
+            type="search"
+            id="eu-division"
+            class="form-control form-control-sm"
+            value="{{ $f['division'] ?? '' }}"
+            placeholder="Cari divisi..."
+            autocomplete="off"
+          >
+        </div>
+        <div class="col-xl-2 col-md-4 col-sm-6">
+          <label for="eu-status" class="form-label text-sm fw-medium mb-6">Status</label>
+          <select id="eu-status" class="form-select form-select-sm">
+            <option value="">Semua</option>
+            @foreach ($opts['statuses'] as $status)
+              <option value="{{ $status }}" @selected(($f['status'] ?? '') === $status)>{{ $status }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-xl-3 col-md-4 col-sm-6">
+          <div class="d-flex gap-2">
+            <button type="button" id="eu-reset-btn" class="btn btn-sm btn-outline-secondary w-100">Reset</button>
+            <button type="button" id="eu-apply-btn" class="btn btn-sm btn-primary-600 w-100">Filter</button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="table-responsive">
-      <table class="table bordered-table mb-0" id="usersTable">
+    <div class="users-datatable w-100">
+      <table id="usersTable" class="table bordered-table mb-0 w-100" style="width:100%">
         <thead>
           <tr>
-            <th>Nama / NIK</th>
-            <th>Kode SID</th>
-            <th>Site</th>
-            <th>Perusahaan</th>
-            <th>Divisi</th>
-            <th>Departemen</th>
-            <th>Jabatan</th>
-            <th class="text-center">Status</th>
-            <th class="text-center">Aksi</th>
+            <th scope="col" style="width:18%">Nama / NIK</th>
+            <th scope="col" style="width:10%">Kode SID</th>
+            <th scope="col" style="width:8%">Site</th>
+            <th scope="col" style="width:16%">Perusahaan</th>
+            <th scope="col" style="width:12%">Divisi</th>
+            <th scope="col" style="width:12%">Departemen</th>
+            <th scope="col" style="width:12%">Jabatan</th>
+            <th scope="col" class="text-center" style="width:8%">Status</th>
+            <th scope="col" class="text-center" style="width:6%">Aksi</th>
           </tr>
         </thead>
+        <tbody></tbody>
       </table>
     </div>
   </div>
