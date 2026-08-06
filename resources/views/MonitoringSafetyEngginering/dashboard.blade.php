@@ -66,6 +66,7 @@
    $categoryModalPayload = collect($categoryStatCards)->mapWithKeys(static function (array $card): array {
       return [
          $card['key'] => [
+            'key' => $card['key'],
             'label' => $card['label'],
             'title' => $card['title'],
             'stat' => $card['stat'],
@@ -80,6 +81,9 @@
                   'percentage_color' => $item['percentage_color'] ?? 'red',
                   'due_date_label' => $item['due_date_label'] ?? '-',
                   'overdue' => $item['overdue'] ?? 0,
+                  'replikasi_status' => $item['replikasi_status'] ?? null,
+                  'replikasi_target_komitmen' => $item['replikasi_target_komitmen'] ?? 0,
+                  'replikasi_aktual' => $item['replikasi_aktual'] ?? 0,
                   'site' => $item['site'] ?? '-',
                   'perusahaan' => $item['perusahaan'] ?? '-',
                ];
@@ -649,6 +653,7 @@
       var riskMatrixCellData = @json($riskMatrixCellPayload);
       var recordDetailById = @json($recordDetailById);
       var categoryModal = document.getElementById('mse-category-detail-modal');
+      var categoryPanel = categoryModal ? categoryModal.querySelector('.crm-category-panel') : null;
       var categoryBody = document.getElementById('mse-category-detail-body');
       var categoryTitle = document.getElementById('mse-category-detail-title');
       var categorySubtitle = document.getElementById('mse-category-detail-subtitle');
@@ -658,6 +663,59 @@
       var detailTitle = document.getElementById('mse-record-detail-title');
       var detailSubtitle = document.getElementById('mse-record-detail-subtitle');
       var detailClose = document.getElementById('mse-record-detail-close');
+      var categoryCharts = [];
+
+      function destroyCategoryCharts() {
+         categoryCharts.forEach(function (chart) {
+            try { chart.destroy(); } catch (e) {}
+         });
+         categoryCharts = [];
+      }
+
+      function setCategoryPanelSize(isXl) {
+         if (!categoryPanel) return;
+         categoryPanel.classList.toggle('crm-category-panel--xl', !!isXl);
+      }
+
+      function statusPill(status) {
+         var key = String(status || '').toLowerCase();
+         var label = key === 'onprogress' ? 'Onprogress'
+            : (key === 'overdue' ? 'Overdue' : (key === 'selesai' ? 'Selesai' : (status || '-')));
+         var cls = key === 'onprogress' || key === 'overdue' || key === 'selesai'
+            ? 'crm-status-pill crm-status-pill--' + key
+            : 'crm-status-pill';
+         return '<span class="' + cls + '">' + escapeHtml(label) + '</span>';
+      }
+
+      function aggregateByKey(items, keyName, valueFn) {
+         var map = {};
+         items.forEach(function (item) {
+            var key = String(item[keyName] || '-');
+            if (!map[key]) map[key] = { label: key, count: 0, plan: 0, done: 0 };
+            map[key].count += 1;
+            map[key].plan += Number(item.plan || 0);
+            map[key].done += Number(item.done || 0);
+            if (typeof valueFn === 'function') valueFn(map[key], item);
+         });
+         return Object.values(map).sort(function (a, b) { return b.count - a.count; });
+      }
+
+      function progressBuckets(items) {
+         var buckets = [
+            { label: '0–25%', count: 0 },
+            { label: '26–50%', count: 0 },
+            { label: '51–75%', count: 0 },
+            { label: '76–100%', count: 0 },
+         ];
+         items.forEach(function (item) {
+            var pct = Math.max(0, Number(item.percentage || 0));
+            if (pct <= 25) buckets[0].count += 1;
+            else if (pct <= 50) buckets[1].count += 1;
+            else if (pct <= 75) buckets[2].count += 1;
+            else buckets[3].count += 1;
+         });
+         return buckets;
+      }
 
       function escapeHtml(value) {
          return String(value ?? '')
@@ -751,6 +809,8 @@
       function renderCategoryModal(payload) {
          var stat = payload.stat || {};
          var items = payload.items || [];
+         var isReplikasi = stat.meta_mode === 'replikasi_status';
+
          var rowsHtml = items.map(function (item, index) {
             var clickable = item.id != null && (recordDetailById[String(item.id)] || recordDetailById[item.id]);
             return '<tr class="' + (clickable ? 'crm-row--clickable' : '') + '"'
@@ -766,16 +826,18 @@
                + '<td class="text-center font-semibold">' + escapeHtml(item.done) + '</td>'
                + '<td class="text-center"><span class="crm-pct ' + pctClass(item.percentage_color) + '">' + escapeHtml(item.percentage) + '%</span></td>'
                + '<td class="text-crm-muted whitespace-nowrap">' + escapeHtml(item.due_date_label) + '</td>'
-               + '<td class="text-center font-bold ' + (Number(item.overdue) > 0 ? 'text-[#FF5B5B]' : 'text-crm-muted') + '">' + escapeHtml(item.overdue) + '</td>'
+               + (isReplikasi
+                  ? '<td class="text-center">' + statusPill(item.replikasi_status) + '</td>'
+                  : '<td class="text-center font-bold ' + (Number(item.overdue) > 0 ? 'text-[#FF5B5B]' : 'text-crm-muted') + '">' + escapeHtml(item.overdue) + '</td>')
                + '</tr>';
          }).join('');
 
-         return '<div class="crm-category-summary">'
+         var summaryHtml = '<div class="crm-category-summary">'
             + '<div class="crm-category-summary-item crm-category-summary-item--accent">'
             + '<span class="crm-category-summary-label">Total</span>'
             + '<span class="crm-category-summary-value crm-category-summary-value--lg">' + escapeHtml(stat.count || 0) + '</span>'
             + '</div>'
-            + (stat.meta_mode === 'replikasi_status'
+            + (isReplikasi
                ? (
                   '<div class="crm-category-summary-item">'
                   + '<span class="crm-category-summary-label">Onprogress</span>'
@@ -804,16 +866,154 @@
                   + '<span class="crm-category-summary-value">' + escapeHtml(stat.progress || 0) + '%</span>'
                   + '</div>'
                ))
-            + '</div>'
+            + '</div>';
+
+         var chartsHtml = '';
+         if (isReplikasi) {
+            chartsHtml = '<div class="crm-category-charts">'
+               + '<div class="crm-category-chart-card">'
+               + '<p class="crm-category-chart-title">Distribusi Status</p>'
+               + '<div class="crm-category-chart-wrap crm-category-chart-wrap--pie"><canvas id="mse-replikasi-pie-chart"></canvas></div>'
+               + '</div>'
+               + '<div class="crm-category-chart-card">'
+               + '<p class="crm-category-chart-title">Plan vs Aktual per Site</p>'
+               + '<div class="crm-category-chart-wrap"><canvas id="mse-replikasi-bar-chart"></canvas></div>'
+               + '</div>'
+               + '<div class="crm-category-chart-card">'
+               + '<p class="crm-category-chart-title">Sebaran Progress</p>'
+               + '<div class="crm-category-chart-wrap"><canvas id="mse-replikasi-progress-chart"></canvas></div>'
+               + '</div>'
+               + '</div>';
+         }
+
+         return summaryHtml
+            + chartsHtml
+            + '<p class="crm-category-section-title">Data Pengendalian' + (isReplikasi ? ' Replikasi 2026' : '') + '</p>'
             + '<div class="crm-data-table-wrap crm-modal-table-wrap">'
             + '<table class="crm-data-table"><thead><tr>'
             + '<th class="crm-modal-col-no">No</th><th>Pengendalian</th><th>Satuan</th>'
             + '<th class="text-center">Plan</th><th class="text-center">Done</th>'
             + '<th class="text-center">%</th><th>Due Date</th>'
-            + '<th class="text-center">Overdue</th>'
+            + '<th class="text-center">' + (isReplikasi ? 'Status' : 'Overdue') + '</th>'
             + '</tr></thead><tbody>'
             + (rowsHtml || '<tr><td colspan="8" class="crm-modal-empty">Tidak ada data untuk kategori ini.</td></tr>')
             + '</tbody></table></div>';
+      }
+
+      function mountReplikasiCategoryCharts(payload) {
+         destroyCategoryCharts();
+         var stat = payload.stat || {};
+         if (stat.meta_mode !== 'replikasi_status') return;
+
+         var items = payload.items || [];
+         var pieEl = document.getElementById('mse-replikasi-pie-chart');
+         var barEl = document.getElementById('mse-replikasi-bar-chart');
+         var progressEl = document.getElementById('mse-replikasi-progress-chart');
+
+         if (pieEl) {
+            categoryCharts.push(new Chart(pieEl, {
+               type: 'pie',
+               data: {
+                  labels: ['Onprogress', 'Overdue', 'Selesai'],
+                  datasets: [{
+                     data: [
+                        Number(stat.onprogress || 0),
+                        Number(stat.overdue || 0),
+                        Number(stat.selesai || 0),
+                     ],
+                     backgroundColor: ['#3B97FF', '#FF5B5B', '#51BB25'],
+                     borderWidth: 0,
+                     hoverOffset: 6,
+                  }],
+               },
+               options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                     legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 10, usePointStyle: true, pointStyle: 'circle', padding: 14 },
+                     },
+                     tooltip: {
+                        callbacks: {
+                           label: function (ctx) {
+                              var total = (ctx.dataset.data || []).reduce(function (s, n) { return s + Number(n || 0); }, 0);
+                              var value = Number(ctx.raw || 0);
+                              var pct = total > 0 ? Math.round((value / total) * 100) : 0;
+                              return ' ' + ctx.label + ': ' + value + ' (' + pct + '%)';
+                           },
+                        },
+                     },
+                  },
+               },
+            }));
+         }
+
+         if (barEl) {
+            var bySite = aggregateByKey(items, 'site').slice(0, 8);
+            categoryCharts.push(new Chart(barEl, {
+               type: 'bar',
+               data: {
+                  labels: bySite.map(function (row) { return row.label; }),
+                  datasets: [
+                     {
+                        label: 'Plan',
+                        data: bySite.map(function (row) { return row.plan; }),
+                        backgroundColor: '#CFC8FF',
+                        borderRadius: 6,
+                        maxBarThickness: 22,
+                     },
+                     {
+                        label: 'Aktual',
+                        data: bySite.map(function (row) { return row.done; }),
+                        backgroundColor: '#7366FF',
+                        borderRadius: 6,
+                        maxBarThickness: 22,
+                     },
+                  ],
+               },
+               options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                     legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 10, usePointStyle: true, pointStyle: 'circle', padding: 12 },
+                     },
+                  },
+                  scales: {
+                     x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, font: { size: 10 } } },
+                     y: { beginAtZero: true, grid: { color: '#F1F2F4' }, ticks: { precision: 0 } },
+                  },
+               },
+            }));
+         }
+
+         if (progressEl) {
+            var buckets = progressBuckets(items);
+            categoryCharts.push(new Chart(progressEl, {
+               type: 'bar',
+               data: {
+                  labels: buckets.map(function (row) { return row.label; }),
+                  datasets: [{
+                     label: 'Jumlah item',
+                     data: buckets.map(function (row) { return row.count; }),
+                     backgroundColor: ['#FF5B5B', '#FFAA05', '#3B97FF', '#51BB25'],
+                     borderRadius: 8,
+                     maxBarThickness: 36,
+                  }],
+               },
+               options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: {
+                     x: { grid: { display: false } },
+                     y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#F1F2F4' } },
+                  },
+               },
+            }));
+         }
       }
 
       function shortRiskTitle(title) {
@@ -886,6 +1086,9 @@
          var payload = riskMatrixCellData[cellId];
          if (!payload || !categoryModal) return;
 
+         destroyCategoryCharts();
+         setCategoryPanelSize(false);
+
          var shortTitle = shortRiskTitle(payload.title || 'Matriks Penurunan Risiko');
          categoryTitle.textContent = shortTitle;
          categoryTitle.setAttribute('title', payload.title || shortTitle);
@@ -900,15 +1103,36 @@
          var payload = categoryModalData[categoryKey];
          if (!payload || !categoryModal) return;
 
-         categoryTitle.textContent = payload.title || 'Detail Kategori';
-         categorySubtitle.textContent = (payload.stat?.count || 0) + ' pengendalian · progress ' + (payload.stat?.progress || 0) + '%';
+         destroyCategoryCharts();
+
+         var isReplikasi = (payload.stat && payload.stat.meta_mode === 'replikasi_status')
+            || categoryKey === 'replikasi';
+         setCategoryPanelSize(isReplikasi);
+
+         categoryTitle.textContent = isReplikasi
+            ? 'Total Replikasi 2026'
+            : (payload.title || 'Detail Kategori');
+         categorySubtitle.textContent = isReplikasi
+            ? ((payload.stat?.count || 0) + ' pengendalian · Onprogress ' + (payload.stat?.onprogress || 0)
+               + ' · Overdue ' + (payload.stat?.overdue || 0)
+               + ' · Selesai ' + (payload.stat?.selesai || 0))
+            : ((payload.stat?.count || 0) + ' pengendalian · progress ' + (payload.stat?.progress || 0) + '%');
+
          categoryBody.innerHTML = renderCategoryModal(payload);
          categoryModal.classList.add('crm-history-modal--open');
          syncBodyScroll();
          bindModalRowClicks(categoryBody);
+
+         if (isReplikasi) {
+            requestAnimationFrame(function () {
+               mountReplikasiCategoryCharts(payload);
+            });
+         }
       }
 
       function closeCategoryModal() {
+         destroyCategoryCharts();
+         setCategoryPanelSize(false);
          categoryModal?.classList.remove('crm-history-modal--open');
          syncBodyScroll();
       }

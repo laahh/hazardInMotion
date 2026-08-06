@@ -114,6 +114,59 @@
       font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em;
    }
    .crm-category-panel { width: min(760px, 100%); }
+   .crm-category-panel--xl {
+      width: min(1120px, 96vw);
+      max-height: 94vh;
+   }
+   .crm-category-charts {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.85rem;
+      margin-bottom: 1rem;
+   }
+   @media (min-width: 900px) {
+      .crm-category-charts {
+         grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 1.1fr);
+      }
+   }
+   .crm-category-chart-card {
+      border: 1px solid #E8EAED;
+      border-radius: 0.75rem;
+      background: #FCFCFD;
+      padding: 0.85rem 0.95rem 0.7rem;
+      min-height: 0;
+   }
+   .crm-category-chart-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #2F2F3A;
+      margin-bottom: 0.55rem;
+      letter-spacing: -0.01em;
+   }
+   .crm-category-chart-wrap {
+      position: relative;
+      height: 210px;
+   }
+   .crm-category-chart-wrap--pie { height: 220px; }
+   .crm-category-section-title {
+      font-size: 0.8125rem;
+      font-weight: 700;
+      color: #2F2F3A;
+      margin: 0.15rem 0 0.65rem;
+   }
+   .crm-status-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.15rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      line-height: 1.3;
+      white-space: nowrap;
+   }
+   .crm-status-pill--onprogress { background: #E8F2FF; color: #2563eb; }
+   .crm-status-pill--overdue { background: #FEECEC; color: #dc2626; }
+   .crm-status-pill--selesai { background: #E8F9E5; color: #15803d; }
    .crm-category-hint {
       display: none;
    }
