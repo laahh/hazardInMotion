@@ -115,8 +115,17 @@
    }
    .crm-category-panel { width: min(760px, 100%); }
    .crm-category-panel--xl {
-      width: min(1120px, 96vw);
-      max-height: 94vh;
+      width: min(1480px, 98vw);
+      max-height: 96vh;
+   }
+   .crm-category-panel--xl .crm-history-body {
+      padding: 1.1rem 1.4rem 1.35rem;
+   }
+   .crm-category-panel--xl .crm-category-chart-wrap {
+      height: 250px;
+   }
+   .crm-category-panel--xl .crm-category-chart-wrap--pie {
+      height: 260px;
    }
    .crm-category-charts {
       display: grid;
@@ -779,7 +788,7 @@
    .crm-history-modal {
       position: fixed; inset: 0; z-index: 1200;
       display: none; align-items: center; justify-content: center;
-      background: rgba(15, 23, 42, 0.48); padding: 1rem;
+      background: rgba(15, 23, 42, 0.48); padding: 0.5rem;
       backdrop-filter: blur(2px);
    }
    #mse-record-detail-modal { z-index: 1210; }
