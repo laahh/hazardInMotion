@@ -664,6 +664,8 @@
       var detailSubtitle = document.getElementById('mse-record-detail-subtitle');
       var detailClose = document.getElementById('mse-record-detail-close');
       var categoryCharts = [];
+      var activeReplikasiPayload = null;
+      var replikasiModalFilters = { site: '', company: '' };
 
       function destroyCategoryCharts() {
          categoryCharts.forEach(function (chart) {
@@ -675,6 +677,79 @@
       function setCategoryPanelSize(isXl) {
          if (!categoryPanel) return;
          categoryPanel.classList.toggle('crm-category-panel--xl', !!isXl);
+      }
+
+      function uniqueSortedValues(items, keyName) {
+         var seen = {};
+         var values = [];
+         (items || []).forEach(function (item) {
+            var value = String(item[keyName] || '').trim();
+            if (value === '' || seen[value]) return;
+            seen[value] = true;
+            values.push(value);
+         });
+         return values.sort(function (a, b) {
+            return a.localeCompare(b, 'id', { sensitivity: 'base', numeric: true });
+         });
+      }
+
+      function filterReplikasiItems(items, filters) {
+         var site = String(filters?.site || '').trim();
+         var company = String(filters?.company || '').trim();
+
+         return (items || []).filter(function (item) {
+            if (site !== '' && String(item.site || '').trim() !== site) return false;
+            if (company !== '' && String(item.perusahaan || '').trim() !== company) return false;
+            return true;
+         });
+      }
+
+      function buildReplikasiStatFromItems(items) {
+         var onprogress = 0;
+         var overdue = 0;
+         var selesai = 0;
+
+         (items || []).forEach(function (item) {
+            var status = String(item.replikasi_status || '');
+            if (status === 'onprogress') onprogress += 1;
+            else if (status === 'overdue') overdue += 1;
+            else if (status === 'selesai') selesai += 1;
+         });
+
+         var count = (items || []).length;
+
+         return {
+            count: count,
+            onprogress: onprogress,
+            overdue: overdue,
+            selesai: selesai,
+            done: (items || []).reduce(function (sum, item) { return sum + Number(item.done || 0); }, 0),
+            plan: (items || []).reduce(function (sum, item) { return sum + Number(item.plan || 0); }, 0),
+            completed: selesai,
+            progress: count > 0 ? Math.round((selesai / count) * 100) : 0,
+            meta_mode: 'replikasi_status',
+         };
+      }
+
+      function buildReplikasiFilterOptions(items, filters) {
+         var allSites = uniqueSortedValues(items, 'site');
+         var companySource = filters.site
+            ? (items || []).filter(function (item) { return String(item.site || '').trim() === filters.site; })
+            : (items || []);
+
+         return {
+            sites: allSites,
+            companies: uniqueSortedValues(companySource, 'perusahaan'),
+         };
+      }
+
+      function renderSelectOptions(values, selected, allLabel) {
+         return '<option value="">' + escapeHtml(allLabel) + '</option>'
+            + (values || []).map(function (value) {
+               return '<option value="' + escapeHtml(value) + '"'
+                  + (selected === value ? ' selected' : '')
+                  + '>' + escapeHtml(value) + '</option>';
+            }).join('');
       }
 
       function statusPill(status) {
@@ -806,10 +881,26 @@
             + todoHtml;
       }
 
-      function renderCategoryModal(payload) {
-         var stat = payload.stat || {};
-         var items = payload.items || [];
-         var isReplikasi = stat.meta_mode === 'replikasi_status';
+      function renderCategoryModal(payload, filters) {
+         var sourceItems = payload.items || [];
+         var isReplikasi = (payload.stat && payload.stat.meta_mode === 'replikasi_status')
+            || payload.key === 'replikasi';
+         var activeFilters = filters || { site: '', company: '' };
+         var items = isReplikasi ? filterReplikasiItems(sourceItems, activeFilters) : sourceItems;
+         var stat = isReplikasi ? buildReplikasiStatFromItems(items) : (payload.stat || {});
+         var filterOptions = isReplikasi
+            ? buildReplikasiFilterOptions(sourceItems, activeFilters)
+            : { sites: [], companies: [] };
+
+         if (
+            activeFilters.company
+            && filterOptions.companies.indexOf(activeFilters.company) === -1
+         ) {
+            activeFilters.company = '';
+            items = filterReplikasiItems(sourceItems, activeFilters);
+            stat = buildReplikasiStatFromItems(items);
+            filterOptions = buildReplikasiFilterOptions(sourceItems, activeFilters);
+         }
 
          var rowsHtml = items.map(function (item, index) {
             var clickable = item.id != null && (recordDetailById[String(item.id)] || recordDetailById[item.id]);
@@ -831,6 +922,22 @@
                   : '<td class="text-center font-bold ' + (Number(item.overdue) > 0 ? 'text-[#FF5B5B]' : 'text-crm-muted') + '">' + escapeHtml(item.overdue) + '</td>')
                + '</tr>';
          }).join('');
+
+         var filterHtml = '';
+         if (isReplikasi) {
+            filterHtml = '<div class="crm-category-modal-filters">'
+               + '<div class="crm-category-modal-filter">'
+               + '<label for="mse-replikasi-filter-site">Site</label>'
+               + '<select id="mse-replikasi-filter-site">'
+               + renderSelectOptions(filterOptions.sites, activeFilters.site, 'Semua Site')
+               + '</select></div>'
+               + '<div class="crm-category-modal-filter">'
+               + '<label for="mse-replikasi-filter-company">Perusahaan</label>'
+               + '<select id="mse-replikasi-filter-company">'
+               + renderSelectOptions(filterOptions.companies, activeFilters.company, 'Semua Perusahaan')
+               + '</select></div>'
+               + '</div>';
+         }
 
          var summaryHtml = '<div class="crm-category-summary">'
             + '<div class="crm-category-summary-item crm-category-summary-item--accent">'
@@ -886,26 +993,32 @@
                + '</div>';
          }
 
-         return summaryHtml
-            + chartsHtml
-            + '<p class="crm-category-section-title">Data Pengendalian' + (isReplikasi ? ' Replikasi 2026' : '') + '</p>'
-            + '<div class="crm-data-table-wrap crm-modal-table-wrap">'
-            + '<table class="crm-data-table"><thead><tr>'
-            + '<th class="crm-modal-col-no">No</th><th>Pengendalian</th><th>Satuan</th>'
-            + '<th class="text-center">Plan</th><th class="text-center">Done</th>'
-            + '<th class="text-center">%</th><th>Due Date</th>'
-            + '<th class="text-center">' + (isReplikasi ? 'Status' : 'Overdue') + '</th>'
-            + '</tr></thead><tbody>'
-            + (rowsHtml || '<tr><td colspan="8" class="crm-modal-empty">Tidak ada data untuk kategori ini.</td></tr>')
-            + '</tbody></table></div>';
+         return {
+            html: filterHtml
+               + summaryHtml
+               + chartsHtml
+               + '<p class="crm-category-section-title">Data Pengendalian' + (isReplikasi ? ' Replikasi 2026' : '') + '</p>'
+               + '<div class="crm-data-table-wrap crm-modal-table-wrap">'
+               + '<table class="crm-data-table"><thead><tr>'
+               + '<th class="crm-modal-col-no">No</th><th>Pengendalian</th><th>Satuan</th>'
+               + '<th class="text-center">Plan</th><th class="text-center">Done</th>'
+               + '<th class="text-center">%</th><th>Due Date</th>'
+               + '<th class="text-center">' + (isReplikasi ? 'Status' : 'Overdue') + '</th>'
+               + '</tr></thead><tbody>'
+               + (rowsHtml || '<tr><td colspan="8" class="crm-modal-empty">Tidak ada data untuk filter ini.</td></tr>')
+               + '</tbody></table></div>',
+            stat: stat,
+            items: items,
+            filters: activeFilters,
+         };
       }
 
-      function mountReplikasiCategoryCharts(payload) {
+      function mountReplikasiCategoryCharts(viewPayload) {
          destroyCategoryCharts();
-         var stat = payload.stat || {};
+         var stat = viewPayload.stat || {};
          if (stat.meta_mode !== 'replikasi_status') return;
 
-         var items = payload.items || [];
+         var items = viewPayload.items || [];
          var pieEl = document.getElementById('mse-replikasi-pie-chart');
          var barEl = document.getElementById('mse-replikasi-bar-chart');
          var progressEl = document.getElementById('mse-replikasi-progress-chart');
@@ -1016,6 +1129,53 @@
          }
       }
 
+      function updateReplikasiSubtitle(stat) {
+         categorySubtitle.textContent = (stat.count || 0) + ' pengendalian · Onprogress ' + (stat.onprogress || 0)
+            + ' · Overdue ' + (stat.overdue || 0)
+            + ' · Selesai ' + (stat.selesai || 0);
+      }
+
+      function bindReplikasiModalFilters() {
+         var siteSelect = document.getElementById('mse-replikasi-filter-site');
+         var companySelect = document.getElementById('mse-replikasi-filter-company');
+
+         if (siteSelect) {
+            siteSelect.addEventListener('change', function () {
+               replikasiModalFilters.site = this.value || '';
+               // Reset perusahaan jika tidak relevan dengan site baru
+               var options = buildReplikasiFilterOptions(activeReplikasiPayload?.items || [], replikasiModalFilters);
+               if (
+                  replikasiModalFilters.company
+                  && options.companies.indexOf(replikasiModalFilters.company) === -1
+               ) {
+                  replikasiModalFilters.company = '';
+               }
+               refreshReplikasiModal();
+            });
+         }
+
+         if (companySelect) {
+            companySelect.addEventListener('change', function () {
+               replikasiModalFilters.company = this.value || '';
+               refreshReplikasiModal();
+            });
+         }
+      }
+
+      function refreshReplikasiModal() {
+         if (!activeReplikasiPayload || !categoryBody) return;
+
+         destroyCategoryCharts();
+         var view = renderCategoryModal(activeReplikasiPayload, replikasiModalFilters);
+         updateReplikasiSubtitle(view.stat);
+         categoryBody.innerHTML = view.html;
+         bindModalRowClicks(categoryBody);
+         bindReplikasiModalFilters();
+         requestAnimationFrame(function () {
+            mountReplikasiCategoryCharts(view);
+         });
+      }
+
       function shortRiskTitle(title) {
          var map = {
             'Full Automasi (Deteksi & Intervensi Alat)': 'Full Automasi',
@@ -1088,6 +1248,8 @@
 
          destroyCategoryCharts();
          setCategoryPanelSize(false);
+         activeReplikasiPayload = null;
+         replikasiModalFilters = { site: '', company: '' };
 
          var shortTitle = shortRiskTitle(payload.title || 'Matriks Penurunan Risiko');
          categoryTitle.textContent = shortTitle;
@@ -1112,27 +1274,37 @@
          categoryTitle.textContent = isReplikasi
             ? 'Total Replikasi 2026'
             : (payload.title || 'Detail Kategori');
-         categorySubtitle.textContent = isReplikasi
-            ? ((payload.stat?.count || 0) + ' pengendalian · Onprogress ' + (payload.stat?.onprogress || 0)
-               + ' · Overdue ' + (payload.stat?.overdue || 0)
-               + ' · Selesai ' + (payload.stat?.selesai || 0))
-            : ((payload.stat?.count || 0) + ' pengendalian · progress ' + (payload.stat?.progress || 0) + '%');
 
-         categoryBody.innerHTML = renderCategoryModal(payload);
+         if (isReplikasi) {
+            activeReplikasiPayload = payload;
+            replikasiModalFilters = { site: '', company: '' };
+            var view = renderCategoryModal(payload, replikasiModalFilters);
+            updateReplikasiSubtitle(view.stat);
+            categoryBody.innerHTML = view.html;
+            categoryModal.classList.add('crm-history-modal--open');
+            syncBodyScroll();
+            bindModalRowClicks(categoryBody);
+            bindReplikasiModalFilters();
+            requestAnimationFrame(function () {
+               mountReplikasiCategoryCharts(view);
+            });
+            return;
+         }
+
+         activeReplikasiPayload = null;
+         var defaultView = renderCategoryModal(payload);
+         categorySubtitle.textContent = ((payload.stat?.count || 0) + ' pengendalian · progress ' + (payload.stat?.progress || 0) + '%');
+         categoryBody.innerHTML = defaultView.html;
          categoryModal.classList.add('crm-history-modal--open');
          syncBodyScroll();
          bindModalRowClicks(categoryBody);
-
-         if (isReplikasi) {
-            requestAnimationFrame(function () {
-               mountReplikasiCategoryCharts(payload);
-            });
-         }
       }
 
       function closeCategoryModal() {
          destroyCategoryCharts();
          setCategoryPanelSize(false);
+         activeReplikasiPayload = null;
+         replikasiModalFilters = { site: '', company: '' };
          categoryModal?.classList.remove('crm-history-modal--open');
          syncBodyScroll();
       }

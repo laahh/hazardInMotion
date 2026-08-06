@@ -123,6 +123,48 @@
    .crm-category-panel--xl .crm-category-chart-wrap--pie {
       height: 280px;
    }
+   .crm-category-modal-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem 0.85rem;
+      align-items: flex-end;
+      margin-bottom: 0.9rem;
+      padding: 0.75rem 0.85rem;
+      border: 1px solid #E8EAED;
+      border-radius: 0.75rem;
+      background: #F8F9FB;
+   }
+   .crm-category-modal-filter {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      min-width: 160px;
+      flex: 1 1 180px;
+      max-width: 260px;
+   }
+   .crm-category-modal-filter label {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      color: #848488;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+   }
+   .crm-category-modal-filter select {
+      width: 100%;
+      appearance: none;
+      border: 1px solid #E6E9EB;
+      background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23848488' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 0.75rem center;
+      border-radius: 0.55rem;
+      padding: 0.5rem 2rem 0.5rem 0.75rem;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: #2F2F3A;
+      outline: none;
+   }
+   .crm-category-modal-filter select:focus {
+      border-color: #CFC8FF;
+      box-shadow: 0 0 0 3px rgba(115, 102, 255, 0.12);
+   }
    .crm-category-charts {
       display: grid;
       grid-template-columns: 1fr;
