@@ -120,6 +120,17 @@
 </div>
 @endif
 
+@if (session('import_errors'))
+<div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-24 radius-8" role="alert">
+  <div class="fw-semibold mb-8">Beberapa baris gagal/dilewati:</div>
+  <ul class="mb-0 ps-18">
+    @foreach (session('import_errors') as $err)
+      <li>{{ $err }}</li>
+    @endforeach
+  </ul>
+</div>
+@endif
+
 @if ($errors->has('form'))
 <div class="alert alert-danger bg-danger-100 text-danger-600 border-danger-100 px-24 py-13 mb-24 radius-8" role="alert">
   {{ $errors->first('form') }}
@@ -142,9 +153,17 @@
         </div>
         <p class="text-sm text-secondary-light mb-0">Tambah / edit profil. Password login = Kode SID.</p>
       </div>
-      <a href="{{ route('evaluasi-well.users.create') }}" class="btn btn-primary-600 radius-8 px-16 py-10">
-        + Tambah Karyawan
-      </a>
+      <div class="d-flex flex-wrap gap-2">
+        <a href="{{ route('evaluasi-well.users.import-template') }}" class="btn btn-outline-secondary radius-8 px-16 py-10">
+          Template Excel
+        </a>
+        <a href="{{ route('evaluasi-well.users.import-form') }}" class="btn btn-outline-primary-600 radius-8 px-16 py-10">
+          Upload Excel
+        </a>
+        <a href="{{ route('evaluasi-well.users.create') }}" class="btn btn-primary-600 radius-8 px-16 py-10">
+          + Tambah Karyawan
+        </a>
+      </div>
     </div>
   </div>
 

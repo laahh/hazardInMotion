@@ -64,6 +64,12 @@ Route::middleware('evaluasi-well.access')
             ->name('users.create');
         Route::post('/users', [SportEvaluationEmployeeProfileController::class, 'store'])
             ->name('users.store');
+        Route::get('/users/import', [SportEvaluationEmployeeProfileController::class, 'importForm'])
+            ->name('users.import-form');
+        Route::get('/users/import/template', [SportEvaluationEmployeeProfileController::class, 'downloadTemplate'])
+            ->name('users.import-template');
+        Route::post('/users/import', [SportEvaluationEmployeeProfileController::class, 'import'])
+            ->name('users.import');
         Route::get('/users/{id}/edit', [SportEvaluationEmployeeProfileController::class, 'edit'])
             ->whereNumber('id')
             ->name('users.edit');

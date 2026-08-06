@@ -460,6 +460,208 @@ final class SportEvaluationEmployeeProfileService
     }
 
     /**
+     * Header kolom template import Excel.
+     *
+     * @return list<string>
+     */
+    public function importTemplateHeaders(): array
+    {
+        return [
+            'nama',
+            'kode_sid',
+            'nik',
+            'status_karyawan',
+            'site',
+            'usia',
+            'divisi',
+            'departement',
+            'dept_dic',
+            'kategori',
+            'masa_kerja',
+            'id_perusahaan',
+            'nama_perusahaan',
+            'level_jabatan',
+            'kategori_karyawan',
+            'jabatan_fungsional',
+            'jabatan_struktural',
+            'membership_tier',
+            'foto',
+            'avatar_url',
+        ];
+    }
+
+    /**
+     * @return list<list<string|int|null>>
+     */
+    public function importTemplateExampleRows(): array
+    {
+        return [
+            [
+                'AGUS CAHYONO',
+                '6H2DF',
+                '61091015',
+                'AKTIF',
+                'GMO',
+                40,
+                'ALL DIVISION',
+                'Site Plant 2',
+                '',
+                '',
+                '',
+                0,
+                'PT Pamapersada Nusantara',
+                '',
+                '',
+                'Foreman/Group Leader',
+                'WHEEL TYPE GL',
+                '',
+                '',
+                '',
+            ],
+        ];
+    }
+
+    /**
+     * Import baris Excel (baris 0 = header).
+     * - kode_sid baru → create
+     * - kode_sid sudah ada → update
+     * Password selalu = bcrypt(kode_sid).
+     *
+     * @param  list<array<int, mixed>>  $rows
+     * @return array{created:int,updated:int,skipped:int,errors:list<string>}
+     */
+    public function importRows(array $rows): array
+    {
+        if (! $this->connection->isUp()) {
+            throw new RuntimeException('Koneksi BeWell tidak tersedia.');
+        }
+
+        if ($rows === []) {
+            throw new InvalidArgumentException('File kosong atau tidak memiliki data.');
+        }
+
+        $header = array_map(
+            static fn ($v): string => strtolower(trim((string) $v)),
+            (array) $rows[0]
+        );
+
+        $namaIdx = $this->findColumnIndex($header, ['nama', 'name']);
+        $sidIdx = $this->findColumnIndex($header, ['kode_sid', 'sid', 'kode sid']);
+
+        if ($namaIdx === null || $sidIdx === null) {
+            throw new InvalidArgumentException(
+                'Kolom wajib: nama dan kode_sid. Unduh template untuk format yang benar.'
+            );
+        }
+
+        $map = [
+            'nik' => $this->findColumnIndex($header, ['nik']),
+            'status_karyawan' => $this->findColumnIndex($header, ['status_karyawan', 'status']),
+            'site' => $this->findColumnIndex($header, ['site']),
+            'usia' => $this->findColumnIndex($header, ['usia']),
+            'divisi' => $this->findColumnIndex($header, ['divisi']),
+            'departement' => $this->findColumnIndex($header, ['departement', 'departemen', 'department']),
+            'dept_dic' => $this->findColumnIndex($header, ['dept_dic']),
+            'kategori' => $this->findColumnIndex($header, ['kategori']),
+            'masa_kerja' => $this->findColumnIndex($header, ['masa_kerja']),
+            'id_perusahaan' => $this->findColumnIndex($header, ['id_perusahaan']),
+            'nama_perusahaan' => $this->findColumnIndex($header, ['nama_perusahaan', 'perusahaan', 'company']),
+            'level_jabatan' => $this->findColumnIndex($header, ['level_jabatan']),
+            'kategori_karyawan' => $this->findColumnIndex($header, ['kategori_karyawan']),
+            'jabatan_fungsional' => $this->findColumnIndex($header, ['jabatan_fungsional', 'jabatan']),
+            'jabatan_struktural' => $this->findColumnIndex($header, ['jabatan_struktural']),
+            'membership_tier' => $this->findColumnIndex($header, ['membership_tier']),
+            'foto' => $this->findColumnIndex($header, ['foto']),
+            'avatar_url' => $this->findColumnIndex($header, ['avatar_url', 'avatar']),
+        ];
+
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+        $errors = [];
+
+        for ($i = 1, $count = count($rows); $i < $count; $i++) {
+            $row = (array) $rows[$i];
+            $line = $i + 1;
+
+            $nama = trim((string) ($row[$namaIdx] ?? ''));
+            $kodeSid = trim((string) ($row[$sidIdx] ?? ''));
+
+            if ($nama === '' && $kodeSid === '') {
+                continue;
+            }
+
+            if ($nama === '' || $kodeSid === '') {
+                $errors[] = "Baris {$line}: nama dan kode_sid wajib diisi.";
+                $skipped++;
+                continue;
+            }
+
+            $payload = [
+                'nama' => $nama,
+                'kode_sid' => $kodeSid,
+                'status_karyawan' => 'AKTIF',
+            ];
+
+            foreach ($map as $field => $idx) {
+                if ($idx === null) {
+                    continue;
+                }
+                $raw = $row[$idx] ?? null;
+                if ($raw === null || trim((string) $raw) === '') {
+                    continue;
+                }
+                $payload[$field] = is_string($raw) ? trim($raw) : $raw;
+            }
+
+            if (! isset($payload['status_karyawan']) || trim((string) $payload['status_karyawan']) === '') {
+                $payload['status_karyawan'] = 'AKTIF';
+            }
+
+            try {
+                $existingId = $this->findIdByKodeSid($kodeSid);
+                if ($existingId !== null) {
+                    $this->update($existingId, $payload);
+                    $updated++;
+                } else {
+                    $this->create($payload);
+                    $created++;
+                }
+            } catch (Throwable $e) {
+                $errors[] = "Baris {$line} ({$kodeSid}): ".$e->getMessage();
+                $skipped++;
+            }
+        }
+
+        return compact('created', 'updated', 'skipped', 'errors');
+    }
+
+    public function findIdByKodeSid(string $kodeSid): ?int
+    {
+        $row = $this->db()->table('employee_profiles')
+            ->where('kode_sid', $kodeSid)
+            ->first(['id']);
+
+        return $row !== null ? (int) $row->id : null;
+    }
+
+    /**
+     * @param  list<string>  $header
+     * @param  list<string>  $possibleNames
+     */
+    private function findColumnIndex(array $header, array $possibleNames): ?int
+    {
+        foreach ($possibleNames as $name) {
+            $idx = array_search($name, $header, true);
+            if ($idx !== false) {
+                return (int) $idx;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Password login BeWell = Kode SID (bcrypt). Hash tidak dikembalikan ke UI.
      */
     private function hashPasswordFromSid(string $kodeSid): string
@@ -485,7 +687,6 @@ final class SportEvaluationEmployeeProfileService
 
         $candidate = $locked !== null ? ((int) $locked->id + 1) : 1;
 
-        // Jika ada gap aneh / race residual, maju sampai slot kosong.
         while ($this->db()->table('employee_profiles')->where('id', $candidate)->exists()) {
             $candidate++;
         }
