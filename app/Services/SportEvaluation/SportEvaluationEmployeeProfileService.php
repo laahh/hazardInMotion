@@ -241,9 +241,7 @@ final class SportEvaluationEmployeeProfileService
                 3 => 'e.site',
                 4 => 'e.nama_perusahaan',
                 5 => 'e.divisi',
-                6 => 'e.departement',
-                7 => 'e.jabatan_fungsional',
-                8 => 'e.status_karyawan',
+                6 => 'e.status_karyawan',
             ];
             $orderBy = $orderable[$orderColumnIndex] ?? 'e.nama';
 

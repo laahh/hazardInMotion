@@ -4,13 +4,6 @@
 
 @section('css')
 <style>
-  .users-datatable,
-  #usersTable,
-  #usersTable_wrapper {
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
   .dt-container:has(#usersTable) .dt-layout-row,
   #usersTable_wrapper .dt-layout-row {
     display: flex;
@@ -44,15 +37,18 @@
     border-radius: 6px !important;
   }
 
+  .dt-container:has(#usersTable),
+  #usersTable_wrapper,
+  .users-datatable,
   #usersTable {
-    table-layout: fixed !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
   #usersTable th,
   #usersTable td {
-    vertical-align: middle;
+    vertical-align: middle !important;
     word-break: break-word;
-    white-space: normal;
   }
 
   #usersTable thead th {
@@ -60,12 +56,9 @@
     font-weight: 600;
   }
 
-  #usersTable .eu-actions {
+  #usersTable td.eu-actions {
     white-space: nowrap;
-  }
-
-  #usersTable .eu-actions .btn {
-    min-width: 4.5rem;
+    width: 90px;
   }
 </style>
 @endsection
@@ -74,7 +67,11 @@
 <script>
 (function () {
     var tableEl = document.querySelector('#usersTable');
-    if (!tableEl || typeof DataTable === 'undefined') {
+    if (!tableEl) {
+        return;
+    }
+    if (typeof DataTable === 'undefined' && (typeof jQuery === 'undefined' || typeof jQuery.fn.DataTable === 'undefined')) {
+        tableEl.insertAdjacentHTML('beforebegin', '<div class="alert alert-danger">DataTables gagal dimuat. Refresh halaman.</div>');
         return;
     }
 
@@ -89,6 +86,7 @@
     var applyBtn = document.querySelector('#eu-apply-btn');
     var resetBtn = document.querySelector('#eu-reset-btn');
     var totalBadge = document.querySelector('#eu-total-badge');
+    var loadErrorEl = document.querySelector('#eu-load-error');
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -108,7 +106,11 @@
         };
     }
 
-    var table = new DataTable(tableEl, {
+    function editUrl(id) {
+        return editBase + '/' + id + '/edit';
+    }
+
+    var options = {
         processing: true,
         serverSide: true,
         searching: true,
@@ -132,62 +134,45 @@
                 d.company = filters.company;
                 d.division = filters.division;
                 d.status = filters.status;
+            },
+            error: function (xhr) {
+                if (loadErrorEl) {
+                    loadErrorEl.classList.remove('d-none');
+                    loadErrorEl.textContent = 'Gagal memuat data karyawan (HTTP ' + xhr.status + '). Pastikan tunnel BeWell aktif, lalu refresh.';
+                }
             }
         },
         columns: [
             {
                 data: 'id',
-                width: '8%',
                 orderable: false,
                 searchable: false,
-                className: 'text-center eu-actions',
+                className: 'eu-actions text-center',
                 render: function (data, type) {
                     if (type !== 'display') {
                         return data;
                     }
-                    return '<a href="' + editBase + '/' + data + '/edit" class="btn btn-sm btn-primary-600 radius-8 px-14 py-6 d-inline-flex align-items-center gap-1">'
-                        + '<iconify-icon icon="solar:pen-bold" class="icon text-sm"></iconify-icon>'
-                        + 'Edit</a>';
+                    return '<a class="btn btn-sm btn-primary-600" href="' + editUrl(data) + '">Edit</a>';
                 }
             },
             {
                 data: 'nama',
-                width: '18%',
                 render: function (data, type, row) {
                     if (type !== 'display') {
                         return data;
                     }
-                    return '<a href="' + editBase + '/' + row.id + '/edit" class="fw-medium text-primary-light hover-text-primary">'
-                        + escapeHtml(data)
-                        + '</a>'
-                        + '<span class="text-sm d-block fw-normal text-secondary-light">'
+                    return '<a class="fw-semibold text-primary-light" href="' + editUrl(row.id) + '">'
+                        + escapeHtml(data || '-')
+                        + '</a><div class="text-secondary-light text-sm">'
                         + escapeHtml(row.nik || '-')
-                        + '</span>';
+                        + '</div>';
                 }
             },
-            { data: 'kode_sid', width: '10%' },
-            { data: 'site', width: '8%' },
-            { data: 'company', width: '16%' },
-            { data: 'divisi', width: '12%' },
-            { data: 'departement', width: '12%' },
-            { data: 'jabatan_fungsional', width: '10%' },
-            {
-                data: 'status_karyawan',
-                width: '8%',
-                className: 'text-center',
-                render: function (data, type) {
-                    if (type !== 'display') {
-                        return data;
-                    }
-                    var status = String(data || '-');
-                    var cls = status.toUpperCase() === 'AKTIF'
-                        ? 'bg-success-100 text-success-600'
-                        : 'bg-neutral-200 text-secondary-light';
-                    return '<span class="text-sm fw-medium px-12 py-2 rounded-pill ' + cls + '">'
-                        + escapeHtml(status)
-                        + '</span>';
-                }
-            }
+            { data: 'kode_sid', defaultContent: '-' },
+            { data: 'site', defaultContent: '-' },
+            { data: 'company', defaultContent: '-' },
+            { data: 'divisi', defaultContent: '-' },
+            { data: 'status_karyawan', defaultContent: '-' }
         ],
         language: {
             processing: 'Memuat...',
@@ -197,6 +182,7 @@
             infoEmpty: 'Tidak ada data',
             infoFiltered: '(difilter dari _MAX_ total data)',
             zeroRecords: 'Tidak ada karyawan ditemukan.',
+            emptyTable: 'Tidak ada data karyawan.',
             paginate: {
                 first: '«',
                 last: '»',
@@ -204,11 +190,21 @@
                 previous: '‹'
             }
         }
-    });
+    };
+
+    var table = typeof DataTable !== 'undefined'
+        ? new DataTable(tableEl, options)
+        : jQuery(tableEl).DataTable(options);
 
     table.on('draw', function () {
         if (totalBadge) {
-            totalBadge.textContent = Number(table.page.info().recordsDisplay || 0).toLocaleString('id-ID');
+            var info = typeof table.page === 'function'
+                ? table.page.info()
+                : table.page.info();
+            totalBadge.textContent = Number((info && info.recordsDisplay) || 0).toLocaleString('id-ID');
+        }
+        if (loadErrorEl) {
+            loadErrorEl.classList.add('d-none');
         }
     });
 
@@ -293,11 +289,10 @@
           <h6 class="text-lg fw-semibold mb-0">Daftar Karyawan BeWell</h6>
           <span id="eu-total-badge" class="bg-primary-50 text-primary-600 text-sm fw-medium px-12 py-2 rounded-pill">0</span>
         </div>
-        <p class="text-sm text-secondary-light mb-0">Create / edit profil di <code>employee_profiles</code>. Tanpa hapus. Password login = Kode SID.</p>
+        <p class="text-sm text-secondary-light mb-0">Tambah / edit profil karyawan. Password login = Kode SID.</p>
       </div>
       <a href="{{ route('evaluasi-well.users.create') }}" class="btn btn-primary-600 radius-8 px-16 py-10">
-        <iconify-icon icon="solar:user-plus-outline" class="icon"></iconify-icon>
-        Tambah Karyawan
+        + Tambah Karyawan
       </a>
     </div>
   </div>
@@ -324,14 +319,7 @@
         </div>
         <div class="col-xl-2 col-md-4 col-sm-6">
           <label for="eu-division" class="form-label text-sm fw-medium mb-6">Divisi</label>
-          <input
-            type="search"
-            id="eu-division"
-            class="form-control form-control-sm"
-            value="{{ $f['division'] ?? '' }}"
-            placeholder="Cari divisi..."
-            autocomplete="off"
-          >
+          <input type="search" id="eu-division" class="form-control form-control-sm" value="{{ $f['division'] ?? '' }}" placeholder="Cari divisi..." autocomplete="off">
         </div>
         <div class="col-xl-2 col-md-4 col-sm-6">
           <label for="eu-status" class="form-label text-sm fw-medium mb-6">Status</label>
@@ -351,19 +339,19 @@
       </div>
     </div>
 
+    <div id="eu-load-error" class="alert alert-danger d-none mb-16" role="alert"></div>
+
     <div class="users-datatable w-100">
       <table id="usersTable" class="table bordered-table mb-0 w-100" style="width:100%">
         <thead>
           <tr>
-            <th scope="col" class="text-center" style="width:8%">Aksi</th>
-            <th scope="col" style="width:18%">Nama / NIK</th>
-            <th scope="col" style="width:10%">Kode SID</th>
-            <th scope="col" style="width:8%">Site</th>
-            <th scope="col" style="width:16%">Perusahaan</th>
-            <th scope="col" style="width:12%">Divisi</th>
-            <th scope="col" style="width:12%">Departemen</th>
-            <th scope="col" style="width:10%">Jabatan</th>
-            <th scope="col" class="text-center" style="width:8%">Status</th>
+            <th scope="col">Aksi</th>
+            <th scope="col">Nama / NIK</th>
+            <th scope="col">Kode SID</th>
+            <th scope="col">Site</th>
+            <th scope="col">Perusahaan</th>
+            <th scope="col">Divisi</th>
+            <th scope="col">Status</th>
           </tr>
         </thead>
         <tbody></tbody>
