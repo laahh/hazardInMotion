@@ -43,7 +43,7 @@
    $categoryStatCards = [
       [
          'key' => 'replikasi',
-         'label' => 'total Replikasi',
+         'label' => 'Total Replikasi',
          'title' => 'Replikasi',
          'stat' => $summary['replikasi'],
          'items' => $replikasiItems ?? [],
@@ -208,32 +208,71 @@
       $stat = $categoryCard['stat'];
       $progress = (int) ($stat['progress'] ?? 0);
       $trendUp = $progress >= 50;
+      $isReplikasiCard = ($categoryCard['key'] ?? '') === 'replikasi'
+         || ($stat['meta_mode'] ?? '') === 'replikasi_status';
+      $onprogressCount = (int) ($stat['onprogress'] ?? 0);
+      $overdueCount = (int) ($stat['overdue'] ?? 0);
+      $selesaiCount = (int) ($stat['selesai'] ?? 0);
+      $totalCount = max(1, (int) ($stat['count'] ?? 0));
+      $selesaiPct = (int) round(($selesaiCount / $totalCount) * 100);
    @endphp
    <div
-      class="crm-card crm-stat-card crm-stat-card--clickable"
+      class="crm-card crm-stat-card crm-stat-card--clickable {{ $isReplikasiCard ? 'crm-stat-card--replikasi' : '' }}"
       role="button"
       tabindex="0"
       data-category-key="{{ $categoryCard['key'] }}"
       aria-label="Lihat detail {{ $categoryCard['title'] }}"
    >
+      @if($isReplikasiCard)
+      <div class="crm-stat-card-head">
+         <p class="crm-stat-label crm-stat-label--strong">Total Replikasi 2026</p>
+         <span class="crm-stat-icon" aria-hidden="true">
+            <span class="material-symbols-outlined">sync_alt</span>
+         </span>
+      </div>
+      <div class="crm-stat-main">
+         <p class="crm-stat-value crm-stat-value--lg">{{ $stat['count'] ?? 0 }}</p>
+         <div class="crm-stat-meta crm-stat-meta--chips">
+            <span class="crm-stat-chip crm-stat-chip--onprogress">
+               <span class="crm-stat-chip-dot"></span>
+               Onprogress {{ $onprogressCount }}
+            </span>
+            <span class="crm-stat-chip crm-stat-chip--overdue">
+               <span class="crm-stat-chip-dot"></span>
+               Overdue {{ $overdueCount }}
+            </span>
+            <span class="crm-stat-chip crm-stat-chip--selesai">
+               <span class="crm-stat-chip-dot"></span>
+               Selesai {{ $selesaiCount }}
+            </span>
+         </div>
+      </div>
+      <div class="crm-stat-foot">
+         <div class="crm-stat-progress">
+            <div class="crm-stat-progress-track">
+               <div class="crm-stat-progress-fill" style="width: {{ min(100, max(0, $selesaiPct)) }}%"></div>
+            </div>
+            <p class="crm-stat-progress-label">{{ $selesaiPct }}% selesai · klik untuk detail</p>
+         </div>
+         <span class="crm-stat-trend crm-stat-trend--compact {{ $trendUp ? 'crm-stat-trend--up' : 'crm-stat-trend--down' }}">
+            <span class="material-symbols-outlined text-sm">{{ $trendUp ? 'arrow_upward' : 'arrow_downward' }}</span>
+            {{ $trendUp ? '+' : '-' }}{{ $progress }}%
+         </span>
+      </div>
+      @else
       <p class="crm-stat-label">{{ $categoryCard['label'] }}</p>
       <div class="crm-stat-main">
          <p class="crm-stat-value">{{ $stat['count'] ?? 0 }}</p>
          <div class="crm-stat-meta">
-            @if(($stat['meta_mode'] ?? '') === 'replikasi_status')
-            <span>Onprogress {{ $stat['onprogress'] ?? 0 }}</span>
-            <span>overdue {{ $stat['overdue'] ?? 0 }}</span>
-            <span>selesai {{ $stat['selesai'] ?? 0 }}</span>
-            @else
             <span>overdue {{ $stat['overdue'] ?? 0 }}</span>
             <span>selesai {{ $stat['done'] ?? 0 }}/{{ $stat['plan'] ?? 0 }}</span>
-            @endif
          </div>
       </div>
       <span class="crm-stat-trend {{ $trendUp ? 'crm-stat-trend--up' : 'crm-stat-trend--down' }}">
          <span class="material-symbols-outlined text-sm">{{ $trendUp ? 'arrow_upward' : 'arrow_downward' }}</span>
          {{ $trendUp ? '+' : '-' }}{{ $progress }}%
       </span>
+      @endif
    </div>
    @endforeach
 </div>

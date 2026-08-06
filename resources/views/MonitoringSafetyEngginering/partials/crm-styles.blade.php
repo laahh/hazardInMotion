@@ -68,8 +68,40 @@
    .crm-stat-card--clickable:focus-visible {
       outline: 2px solid #7366FF; outline-offset: 2px;
    }
+   .crm-stat-card--replikasi {
+      position: relative;
+      overflow: hidden;
+      background:
+         radial-gradient(120% 80% at 100% 0%, rgba(115, 102, 255, 0.10), transparent 55%),
+         linear-gradient(180deg, #FFFFFF 0%, #FAFBFF 100%);
+      border-color: #E4E0FF;
+   }
+   .crm-stat-card--replikasi::before {
+      content: '';
+      position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+      background: linear-gradient(180deg, #7366FF 0%, #3B97FF 100%);
+      border-radius: 1rem 0 0 1rem;
+   }
+   .crm-stat-card--replikasi:hover {
+      border-color: #B8AEFF;
+      box-shadow: 0 12px 28px rgba(115, 102, 255, 0.16);
+   }
+   .crm-stat-card-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+      margin-bottom: 0.75rem;
+   }
+   .crm-stat-card-head .crm-stat-label { margin-bottom: 0; }
+   .crm-stat-icon {
+      width: 2rem; height: 2rem; border-radius: 0.65rem;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #ECE9FF; color: #7366FF; flex-shrink: 0;
+   }
+   .crm-stat-icon .material-symbols-outlined { font-size: 1.15rem; }
    .crm-stat-label {
       font-size: 0.8125rem; font-weight: 500; color: #848488; margin-bottom: 0.5rem;
+   }
+   .crm-stat-label--strong {
+      font-weight: 700; color: #5B5675; letter-spacing: -0.01em;
    }
    .crm-stat-main {
       display: flex; align-items: flex-start; gap: 0.85rem;
@@ -77,15 +109,67 @@
    .crm-stat-value {
       font-size: 1.75rem; font-weight: 700; color: #2F2F3A; line-height: 1.1;
    }
+   .crm-stat-value--lg {
+      font-size: 2rem; font-weight: 800; letter-spacing: -0.03em;
+   }
    .crm-stat-meta {
       display: flex; flex-direction: column; gap: 0.15rem;
       padding-top: 0.2rem;
       font-size: 0.75rem; font-weight: 500; color: #2F2F3A; line-height: 1.25;
    }
+   .crm-stat-meta--chips {
+      gap: 0.35rem; padding-top: 0.1rem; min-width: 0;
+   }
+   .crm-stat-chip {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.18rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.6875rem; font-weight: 700; line-height: 1.2;
+      white-space: nowrap;
+   }
+   .crm-stat-chip-dot {
+      width: 0.4rem; height: 0.4rem; border-radius: 9999px; flex-shrink: 0;
+   }
+   .crm-stat-chip--onprogress {
+      background: #E8F2FF; color: #1D4ED8;
+   }
+   .crm-stat-chip--onprogress .crm-stat-chip-dot { background: #3B97FF; }
+   .crm-stat-chip--overdue {
+      background: #FEECEC; color: #B91C1C;
+   }
+   .crm-stat-chip--overdue .crm-stat-chip-dot { background: #FF5B5B; }
+   .crm-stat-chip--selesai {
+      background: #E8F9E5; color: #15803D;
+   }
+   .crm-stat-chip--selesai .crm-stat-chip-dot { background: #51BB25; }
+   .crm-stat-foot {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+      margin-top: 0.85rem;
+   }
+   .crm-stat-progress {
+      flex: 1; min-width: 0;
+   }
+   .crm-stat-progress-track {
+      height: 6px; border-radius: 9999px; background: #EEF0F5; overflow: hidden;
+   }
+   .crm-stat-progress-fill {
+      height: 100%; border-radius: 9999px;
+      background: linear-gradient(90deg, #7366FF 0%, #51BB25 100%);
+      transition: width 0.35s ease;
+   }
+   .crm-stat-progress-label {
+      margin-top: 0.3rem; font-size: 0.625rem; font-weight: 600; color: #848488;
+   }
+   .crm-stat-hint {
+      display: inline-flex; align-items: center; gap: 0.15rem;
+      font-size: 0.6875rem; font-weight: 600; color: #7366FF; opacity: 0.85;
+   }
+   .crm-stat-card--replikasi:hover .crm-stat-hint { opacity: 1; }
    .crm-stat-trend {
       display: inline-flex; align-items: center; gap: 0.2rem;
       margin-top: 0.65rem; font-size: 0.75rem; font-weight: 600;
    }
+   .crm-stat-trend--compact { margin-top: 0; flex-shrink: 0; }
    .crm-stat-trend--up { color: #51BB25; }
    .crm-stat-trend--down { color: #FF5B5B; }
    .crm-category-summary {
