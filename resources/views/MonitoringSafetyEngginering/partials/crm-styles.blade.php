@@ -86,6 +86,27 @@
       border-color: #B8AEFF;
       box-shadow: 0 12px 28px rgba(115, 102, 255, 0.16);
    }
+   .crm-stat-card--safety {
+      position: relative;
+      overflow: hidden;
+      background:
+         radial-gradient(120% 80% at 100% 0%, rgba(21, 128, 61, 0.10), transparent 55%),
+         linear-gradient(180deg, #FFFFFF 0%, #F7FCF8 100%);
+      border-color: #D8EEDD;
+   }
+   .crm-stat-card--safety::before {
+      content: '';
+      position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+      background: linear-gradient(180deg, #15803D 0%, #51BB25 100%);
+      border-radius: 1rem 0 0 1rem;
+   }
+   .crm-stat-card--safety:hover {
+      border-color: #86EFAC;
+      box-shadow: 0 12px 28px rgba(21, 128, 61, 0.14);
+   }
+   .crm-stat-card--safety .crm-stat-icon {
+      background: #E8F9E5; color: #15803D;
+   }
    .crm-stat-card-head {
       display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
       margin-bottom: 0.75rem;
@@ -156,6 +177,9 @@
       height: 100%; border-radius: 9999px;
       background: linear-gradient(90deg, #7366FF 0%, #51BB25 100%);
       transition: width 0.35s ease;
+   }
+   .crm-stat-progress-fill--safety {
+      background: linear-gradient(90deg, #15803D 0%, #86EFAC 100%);
    }
    .crm-stat-progress-label {
       margin-top: 0.3rem; font-size: 0.625rem; font-weight: 600; color: #848488;
@@ -928,6 +952,14 @@
    .crm-history-panel.crm-category-panel--xl {
       width: min(1680px, 99vw);
       max-height: 98vh;
+   }
+   .crm-history-panel.crm-category-panel--safety .crm-category-summary-item--accent {
+      background: #E8F9E5;
+      border-color: #C6EBC0;
+   }
+   .crm-history-panel.crm-category-panel--safety .crm-category-modal-filters {
+      background: #F7FCF8;
+      border-color: #D8EEDD;
    }
    .crm-history-header {
       display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;

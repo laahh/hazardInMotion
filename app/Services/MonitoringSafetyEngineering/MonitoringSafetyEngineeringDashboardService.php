@@ -181,7 +181,7 @@ class MonitoringSafetyEngineeringDashboardService
                 continue;
             }
 
-            $item = $this->recordToItem($record, $filters);
+            $item = $this->recordToItem($record, $filters, $category);
             $item['detail'] = $this->buildRecordDetail($record, $item);
 
             $grouped[$category][] = $item;
@@ -213,8 +213,11 @@ class MonitoringSafetyEngineeringDashboardService
     /**
      * @return array<string, mixed>
      */
-    private function recordToItem(MonitoringSafetyEngineeringRecord $record, array $filters): array
-    {
+    private function recordToItem(
+        MonitoringSafetyEngineeringRecord $record,
+        array $filters,
+        string $category = '',
+    ): array {
         $plan = (int) $record->replikasi_target_komitmen;
         $done = (int) $record->replikasi_aktual;
 
@@ -224,31 +227,49 @@ class MonitoringSafetyEngineeringDashboardService
             $done = $phaseMetrics['done'];
         }
 
-        $dueDate = $record->replikasi_due_date?->format('Y-m-d')
-            ?? $record->standardisasi_due_date?->format('Y-m-d')
-            ?? $record->uji_coba_due_date?->format('Y-m-d')
-            ?? $record->pengadaan_due_date?->format('Y-m-d')
-            ?? $record->kajian_teknis_due_date?->format('Y-m-d')
-            ?? '';
+        $progressStatus = match ($category) {
+            'replikasi' => $this->resolveReplikasiProgressStatus($record),
+            'safety_engineering' => $this->resolveSafetyEngineeringProgressStatus($record),
+            default => $this->resolveReplikasiProgressStatus($record),
+        };
 
-        $percentage = $plan > 0 ? (int) round(($done / $plan) * 100) : 0;
-        $replikasiStatus = $this->resolveReplikasiProgressStatus($record);
+        if ($category === 'safety_engineering') {
+            $dueDate = $record->standardisasi_due_date?->format('Y-m-d') ?? '';
+            $percentage = $this->resolveStandardisasiPercentage($record);
+            // Plan/Done untuk SE mengacu ke fase standardisasi (1 unit per record)
+            $plan = 1;
+            $done = $progressStatus === 'selesai' ? 1 : 0;
+        } else {
+            $dueDate = $record->replikasi_due_date?->format('Y-m-d')
+                ?? $record->standardisasi_due_date?->format('Y-m-d')
+                ?? $record->uji_coba_due_date?->format('Y-m-d')
+                ?? $record->pengadaan_due_date?->format('Y-m-d')
+                ?? $record->kajian_teknis_due_date?->format('Y-m-d')
+                ?? '';
+            $percentage = $plan > 0 ? (int) round(($done / $plan) * 100) : 0;
+        }
 
         return [
             'id' => $record->id,
             'name' => $record->pengendalian_rekayasa,
-            'unit' => $record->replikasi_satuan !== '' ? $record->replikasi_satuan : 'Kegiatan',
+            'unit' => $category === 'safety_engineering'
+                ? 'Standardisasi'
+                : ($record->replikasi_satuan !== '' ? $record->replikasi_satuan : 'Kegiatan'),
             'plan' => $plan,
             'done' => $done,
             'percentage' => $percentage,
             'percentage_color' => $this->percentageColor($percentage),
             'due_date' => $dueDate,
             'due_date_label' => $dueDate !== '' ? date('d M Y', strtotime($dueDate)) : '-',
-            'overdue' => $this->calculateRecordOverdue($record, $percentage),
-            'replikasi_status' => $replikasiStatus,
+            'overdue' => $progressStatus === 'overdue' ? 1 : 0,
+            'progress_status' => $progressStatus,
+            'replikasi_status' => $progressStatus,
             'replikasi_target_komitmen' => (int) $record->replikasi_target_komitmen,
             'replikasi_aktual' => (int) $record->replikasi_aktual,
             'replikasi_due_date' => $record->replikasi_due_date?->format('Y-m-d'),
+            'standardisasi_status' => $this->normalizeEnumValue($record->standardisasi_status),
+            'standardisasi_due_date' => $record->standardisasi_due_date?->format('Y-m-d'),
+            'standardisasi_status_compliance' => $this->normalizeEnumValue($record->standardisasi_status_compliance),
             'due_in_review_week' => $this->recordHasDueDateInReviewWeek($record, $filters),
             'site' => $record->site,
             'perusahaan' => $record->perusahaan,
@@ -270,7 +291,6 @@ class MonitoringSafetyEngineeringDashboardService
             return 'selesai';
         }
 
-        // Belum selesai (atau belum ada target komitmen)
         $dueDate = $record->replikasi_due_date;
 
         if (
@@ -283,6 +303,38 @@ class MonitoringSafetyEngineeringDashboardService
         }
 
         return 'onprogress';
+    }
+
+    /**
+     * Status progress Safety Engineering dari kolom standardisasi:
+     * - selesai: standardisasi_status = done
+     * - overdue: belum done dan hari ini > standardisasi_due_date
+     * - onprogress: belum done dan belum lewat due date (atau tanpa due date)
+     */
+    private function resolveSafetyEngineeringProgressStatus(MonitoringSafetyEngineeringRecord $record): string
+    {
+        $status = $this->normalizeEnumValue($record->standardisasi_status);
+
+        if ($status === 'done') {
+            return 'selesai';
+        }
+
+        $dueDate = $record->standardisasi_due_date;
+
+        if ($dueDate !== null && now()->startOfDay()->gt($dueDate->copy()->startOfDay())) {
+            return 'overdue';
+        }
+
+        return 'onprogress';
+    }
+
+    private function resolveStandardisasiPercentage(MonitoringSafetyEngineeringRecord $record): int
+    {
+        return match ($this->normalizeEnumValue($record->standardisasi_status)) {
+            'done' => 100,
+            'in_progress' => 50,
+            default => 0,
+        };
     }
 
     /**
@@ -718,8 +770,8 @@ class MonitoringSafetyEngineeringDashboardService
 
         return [
             'total_komitmen' => $totalPengendalian,
-            'replikasi' => $this->buildReplikasiCategoryStat($replikasi),
-            'safety_engineering' => $this->buildCategoryStat($safety),
+            'replikasi' => $this->buildStatusCategoryStat($replikasi, 'replikasi_status'),
+            'safety_engineering' => $this->buildStatusCategoryStat($safety, 'standardisasi_status'),
             'additional_safety_engineering' => $this->buildCategoryStat($additional),
         ];
     }
@@ -757,7 +809,7 @@ class MonitoringSafetyEngineeringDashboardService
     }
 
     /**
-     * Ringkasan card Total Replikasi berdasarkan status replikasi_*.
+     * Ringkasan card berbasis progress_status (Onprogress / Overdue / Selesai).
      *
      * @param  list<array<string, mixed>>  $items
      * @return array{
@@ -772,14 +824,16 @@ class MonitoringSafetyEngineeringDashboardService
      *     meta_mode: string
      * }
      */
-    private function buildReplikasiCategoryStat(array $items): array
+    private function buildStatusCategoryStat(array $items, string $metaMode): array
     {
         $onprogress = 0;
         $overdue = 0;
         $selesai = 0;
 
         foreach ($items as $item) {
-            match ((string) ($item['replikasi_status'] ?? '')) {
+            $status = (string) ($item['progress_status'] ?? $item['replikasi_status'] ?? '');
+
+            match ($status) {
                 'onprogress' => $onprogress++,
                 'overdue' => $overdue++,
                 'selesai' => $selesai++,
@@ -798,8 +852,29 @@ class MonitoringSafetyEngineeringDashboardService
             'plan' => (int) array_sum(array_column($items, 'plan')),
             'completed' => $selesai,
             'progress' => $count > 0 ? (int) round(($selesai / $count) * 100) : 0,
-            'meta_mode' => 'replikasi_status',
+            'meta_mode' => $metaMode,
         ];
+    }
+
+    /**
+     * @deprecated Use buildStatusCategoryStat()
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @return array{
+     *     count: int,
+     *     onprogress: int,
+     *     overdue: int,
+     *     selesai: int,
+     *     done: int,
+     *     plan: int,
+     *     completed: int,
+     *     progress: int,
+     *     meta_mode: string
+     * }
+     */
+    private function buildReplikasiCategoryStat(array $items): array
+    {
+        return $this->buildStatusCategoryStat($items, 'replikasi_status');
     }
 
     /**

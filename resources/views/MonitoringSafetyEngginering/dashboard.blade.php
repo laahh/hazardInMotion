@@ -50,7 +50,7 @@
       ],
       [
          'key' => 'safety_engineering',
-         'label' => 'total safety engineering',
+         'label' => 'Total Safety Engineering',
          'title' => 'Safety Engineering',
          'stat' => $summary['safety_engineering'],
          'items' => $safetyEngineeringItems ?? [],
@@ -71,6 +71,8 @@
             'title' => $card['title'],
             'stat' => $card['stat'],
             'items' => collect($card['items'])->map(static function (array $item): array {
+               $progressStatus = $item['progress_status'] ?? $item['replikasi_status'] ?? null;
+
                return [
                   'id' => $item['id'] ?? null,
                   'name' => $item['name'] ?? '-',
@@ -81,9 +83,12 @@
                   'percentage_color' => $item['percentage_color'] ?? 'red',
                   'due_date_label' => $item['due_date_label'] ?? '-',
                   'overdue' => $item['overdue'] ?? 0,
-                  'replikasi_status' => $item['replikasi_status'] ?? null,
+                  'progress_status' => $progressStatus,
+                  'replikasi_status' => $progressStatus,
                   'replikasi_target_komitmen' => $item['replikasi_target_komitmen'] ?? 0,
                   'replikasi_aktual' => $item['replikasi_aktual'] ?? 0,
+                  'standardisasi_status' => $item['standardisasi_status'] ?? null,
+                  'standardisasi_due_date' => $item['standardisasi_due_date'] ?? null,
                   'site' => $item['site'] ?? '-',
                   'perusahaan' => $item['perusahaan'] ?? '-',
                ];
@@ -208,26 +213,35 @@
       $stat = $categoryCard['stat'];
       $progress = (int) ($stat['progress'] ?? 0);
       $trendUp = $progress >= 50;
-      $isReplikasiCard = ($categoryCard['key'] ?? '') === 'replikasi'
-         || ($stat['meta_mode'] ?? '') === 'replikasi_status';
+      $metaMode = (string) ($stat['meta_mode'] ?? '');
+      $isStatusCard = in_array($metaMode, ['replikasi_status', 'standardisasi_status'], true);
+      $isReplikasiCard = ($categoryCard['key'] ?? '') === 'replikasi' || $metaMode === 'replikasi_status';
+      $isSafetyCard = ($categoryCard['key'] ?? '') === 'safety_engineering' || $metaMode === 'standardisasi_status';
       $onprogressCount = (int) ($stat['onprogress'] ?? 0);
       $overdueCount = (int) ($stat['overdue'] ?? 0);
       $selesaiCount = (int) ($stat['selesai'] ?? 0);
       $totalCount = max(1, (int) ($stat['count'] ?? 0));
       $selesaiPct = (int) round(($selesaiCount / $totalCount) * 100);
+      $cardTitle = $isReplikasiCard
+         ? 'Total Replikasi 2026'
+         : ($isSafetyCard ? 'Total Safety Engineering' : ($categoryCard['label'] ?? 'Kategori'));
+      $cardIcon = $isReplikasiCard ? 'sync_alt' : ($isSafetyCard ? 'engineering' : 'category');
+      $cardClass = $isReplikasiCard
+         ? 'crm-stat-card--replikasi'
+         : ($isSafetyCard ? 'crm-stat-card--safety' : '');
    @endphp
    <div
-      class="crm-card crm-stat-card crm-stat-card--clickable {{ $isReplikasiCard ? 'crm-stat-card--replikasi' : '' }}"
+      class="crm-card crm-stat-card crm-stat-card--clickable {{ $cardClass }}"
       role="button"
       tabindex="0"
       data-category-key="{{ $categoryCard['key'] }}"
       aria-label="Lihat detail {{ $categoryCard['title'] }}"
    >
-      @if($isReplikasiCard)
+      @if($isStatusCard)
       <div class="crm-stat-card-head">
-         <p class="crm-stat-label crm-stat-label--strong">Total Replikasi 2026</p>
+         <p class="crm-stat-label crm-stat-label--strong">{{ $cardTitle }}</p>
          <span class="crm-stat-icon" aria-hidden="true">
-            <span class="material-symbols-outlined">sync_alt</span>
+            <span class="material-symbols-outlined">{{ $cardIcon }}</span>
          </span>
       </div>
       <div class="crm-stat-main">
@@ -250,9 +264,15 @@
       <div class="crm-stat-foot">
          <div class="crm-stat-progress">
             <div class="crm-stat-progress-track">
-               <div class="crm-stat-progress-fill" style="width: {{ min(100, max(0, $selesaiPct)) }}%"></div>
+               <div class="crm-stat-progress-fill {{ $isSafetyCard ? 'crm-stat-progress-fill--safety' : '' }}" style="width: {{ min(100, max(0, $selesaiPct)) }}%"></div>
             </div>
-            <p class="crm-stat-progress-label">{{ $selesaiPct }}% selesai · klik untuk detail</p>
+            <p class="crm-stat-progress-label">
+               {{ $selesaiPct }}% selesai
+               @if($isSafetyCard)
+               · dari standardisasi
+               @endif
+               · klik untuk detail
+            </p>
          </div>
          <span class="crm-stat-trend crm-stat-trend--compact {{ $trendUp ? 'crm-stat-trend--up' : 'crm-stat-trend--down' }}">
             <span class="material-symbols-outlined text-sm">{{ $trendUp ? 'arrow_upward' : 'arrow_downward' }}</span>
@@ -704,7 +724,49 @@
       var detailClose = document.getElementById('mse-record-detail-close');
       var categoryCharts = [];
       var activeReplikasiPayload = null;
-      var replikasiModalFilters = { site: '', company: '' };
+      var activeStatusPayload = null;
+      var categoryModalFilters = { site: '', company: '', status: '' };
+
+      function isStatusBreakdownMode(payload) {
+         var meta = payload?.stat?.meta_mode || '';
+         return meta === 'replikasi_status'
+            || meta === 'standardisasi_status'
+            || payload?.key === 'replikasi'
+            || payload?.key === 'safety_engineering';
+      }
+
+      function isSafetyEngineeringPayload(payload) {
+         return payload?.key === 'safety_engineering'
+            || payload?.stat?.meta_mode === 'standardisasi_status';
+      }
+
+      function statusModalTitle(payload) {
+         return isSafetyEngineeringPayload(payload)
+            ? 'Total Safety Engineering'
+            : 'Total Replikasi 2026';
+      }
+
+      function statusModalSectionTitle(payload) {
+         return isSafetyEngineeringPayload(payload)
+            ? 'Data Pengendalian Safety Engineering'
+            : 'Data Pengendalian Replikasi 2026';
+      }
+
+      function standardisasiStatusLabel(value) {
+         var key = String(value || '').toLowerCase();
+         if (key === 'done') return 'Done';
+         if (key === 'in_progress') return 'In Progress';
+         if (key === 'not_yet') return 'Not Yet';
+         return value ? String(value) : '-';
+      }
+
+      function setCategoryPanelTheme(payload) {
+         if (!categoryPanel) return;
+         var isXl = isStatusBreakdownMode(payload);
+         var isSafety = isSafetyEngineeringPayload(payload);
+         categoryPanel.classList.toggle('crm-category-panel--xl', !!isXl);
+         categoryPanel.classList.toggle('crm-category-panel--safety', !!isSafety);
+      }
 
       function destroyCategoryCharts() {
          categoryCharts.forEach(function (chart) {
@@ -716,6 +778,29 @@
       function setCategoryPanelSize(isXl) {
          if (!categoryPanel) return;
          categoryPanel.classList.toggle('crm-category-panel--xl', !!isXl);
+         if (!isXl) {
+            categoryPanel.classList.remove('crm-category-panel--safety');
+         }
+      }
+
+      function filterCategoryItems(items, filters) {
+         var site = String(filters?.site || '').trim();
+         var company = String(filters?.company || '').trim();
+         var status = String(filters?.status || '').trim();
+
+         return (items || []).filter(function (item) {
+            if (site !== '' && String(item.site || '').trim() !== site) return false;
+            if (company !== '' && String(item.perusahaan || '').trim() !== company) return false;
+            if (status !== '') {
+               var itemStatus = String(item.progress_status || item.replikasi_status || '');
+               if (itemStatus !== status) return false;
+            }
+            return true;
+         });
+      }
+
+      function filterReplikasiItems(items, filters) {
+         return filterCategoryItems(items, filters);
       }
 
       function uniqueSortedValues(items, keyName) {
@@ -732,24 +817,13 @@
          });
       }
 
-      function filterReplikasiItems(items, filters) {
-         var site = String(filters?.site || '').trim();
-         var company = String(filters?.company || '').trim();
-
-         return (items || []).filter(function (item) {
-            if (site !== '' && String(item.site || '').trim() !== site) return false;
-            if (company !== '' && String(item.perusahaan || '').trim() !== company) return false;
-            return true;
-         });
-      }
-
-      function buildReplikasiStatFromItems(items) {
+      function buildReplikasiStatFromItems(items, metaMode) {
          var onprogress = 0;
          var overdue = 0;
          var selesai = 0;
 
          (items || []).forEach(function (item) {
-            var status = String(item.replikasi_status || '');
+            var status = String(item.progress_status || item.replikasi_status || '');
             if (status === 'onprogress') onprogress += 1;
             else if (status === 'overdue') overdue += 1;
             else if (status === 'selesai') selesai += 1;
@@ -766,7 +840,7 @@
             plan: (items || []).reduce(function (sum, item) { return sum + Number(item.plan || 0); }, 0),
             completed: selesai,
             progress: count > 0 ? Math.round((selesai / count) * 100) : 0,
-            meta_mode: 'replikasi_status',
+            meta_mode: metaMode || 'replikasi_status',
          };
       }
 
@@ -922,27 +996,52 @@
 
       function renderCategoryModal(payload, filters) {
          var sourceItems = payload.items || [];
-         var isReplikasi = (payload.stat && payload.stat.meta_mode === 'replikasi_status')
-            || payload.key === 'replikasi';
-         var activeFilters = filters || { site: '', company: '' };
-         var items = isReplikasi ? filterReplikasiItems(sourceItems, activeFilters) : sourceItems;
-         var stat = isReplikasi ? buildReplikasiStatFromItems(items) : (payload.stat || {});
-         var filterOptions = isReplikasi
+         var hasStatusBreakdown = isStatusBreakdownMode(payload);
+         var isSafety = isSafetyEngineeringPayload(payload);
+         var metaMode = payload?.stat?.meta_mode
+            || (isSafety ? 'standardisasi_status' : 'replikasi_status');
+         var activeFilters = Object.assign({ site: '', company: '', status: '' }, filters || {});
+         var items = hasStatusBreakdown ? filterCategoryItems(sourceItems, activeFilters) : sourceItems;
+         var stat = hasStatusBreakdown
+            ? buildReplikasiStatFromItems(items, metaMode)
+            : (payload.stat || {});
+         var filterOptions = hasStatusBreakdown
             ? buildReplikasiFilterOptions(sourceItems, activeFilters)
             : { sites: [], companies: [] };
 
          if (
-            activeFilters.company
+            hasStatusBreakdown
+            && activeFilters.company
             && filterOptions.companies.indexOf(activeFilters.company) === -1
          ) {
             activeFilters.company = '';
-            items = filterReplikasiItems(sourceItems, activeFilters);
-            stat = buildReplikasiStatFromItems(items);
+            items = filterCategoryItems(sourceItems, activeFilters);
+            stat = buildReplikasiStatFromItems(items, metaMode);
             filterOptions = buildReplikasiFilterOptions(sourceItems, activeFilters);
          }
 
          var rowsHtml = items.map(function (item, index) {
             var clickable = item.id != null && (recordDetailById[String(item.id)] || recordDetailById[item.id]);
+            var rowStatus = item.progress_status || item.replikasi_status;
+
+            if (isSafety) {
+               return '<tr class="' + (clickable ? 'crm-row--clickable' : '') + '"'
+                  + (clickable ? ' data-record-id="' + escapeHtml(item.id) + '" role="button" tabindex="0"' : '')
+                  + '>'
+                  + '<td class="crm-modal-col-no">' + (index + 1) + '</td>'
+                  + '<td>'
+                  + '<div class="crm-modal-name"><div class="crm-modal-name-top"><span class="crm-modal-name-title">' + escapeHtml(item.name) + '</span></div></div>'
+                  + '<div class="crm-modal-meta">' + escapeHtml(item.site) + ' · ' + escapeHtml(item.perusahaan) + '</div>'
+                  + '</td>'
+                  + '<td class="text-center"><span class="crm-modal-chip crm-modal-chip--muted">'
+                  + escapeHtml(standardisasiStatusLabel(item.standardisasi_status))
+                  + '</span></td>'
+                  + '<td class="text-crm-muted whitespace-nowrap">' + escapeHtml(item.due_date_label) + '</td>'
+                  + '<td class="text-center"><span class="crm-pct ' + pctClass(item.percentage_color) + '">' + escapeHtml(item.percentage) + '%</span></td>'
+                  + '<td class="text-center">' + statusPill(rowStatus) + '</td>'
+                  + '</tr>';
+            }
+
             return '<tr class="' + (clickable ? 'crm-row--clickable' : '') + '"'
                + (clickable ? ' data-record-id="' + escapeHtml(item.id) + '" role="button" tabindex="0"' : '')
                + '>'
@@ -956,24 +1055,32 @@
                + '<td class="text-center font-semibold">' + escapeHtml(item.done) + '</td>'
                + '<td class="text-center"><span class="crm-pct ' + pctClass(item.percentage_color) + '">' + escapeHtml(item.percentage) + '%</span></td>'
                + '<td class="text-crm-muted whitespace-nowrap">' + escapeHtml(item.due_date_label) + '</td>'
-               + (isReplikasi
-                  ? '<td class="text-center">' + statusPill(item.replikasi_status) + '</td>'
+               + (hasStatusBreakdown
+                  ? '<td class="text-center">' + statusPill(rowStatus) + '</td>'
                   : '<td class="text-center font-bold ' + (Number(item.overdue) > 0 ? 'text-[#FF5B5B]' : 'text-crm-muted') + '">' + escapeHtml(item.overdue) + '</td>')
                + '</tr>';
          }).join('');
 
          var filterHtml = '';
-         if (isReplikasi) {
+         if (hasStatusBreakdown) {
             filterHtml = '<div class="crm-category-modal-filters">'
                + '<div class="crm-category-modal-filter">'
-               + '<label for="mse-replikasi-filter-site">Site</label>'
-               + '<select id="mse-replikasi-filter-site">'
+               + '<label for="mse-category-filter-site">Site</label>'
+               + '<select id="mse-category-filter-site">'
                + renderSelectOptions(filterOptions.sites, activeFilters.site, 'Semua Site')
                + '</select></div>'
                + '<div class="crm-category-modal-filter">'
-               + '<label for="mse-replikasi-filter-company">Perusahaan</label>'
-               + '<select id="mse-replikasi-filter-company">'
+               + '<label for="mse-category-filter-company">Perusahaan</label>'
+               + '<select id="mse-category-filter-company">'
                + renderSelectOptions(filterOptions.companies, activeFilters.company, 'Semua Perusahaan')
+               + '</select></div>'
+               + '<div class="crm-category-modal-filter">'
+               + '<label for="mse-category-filter-status">Status</label>'
+               + '<select id="mse-category-filter-status">'
+               + '<option value="">Semua Status</option>'
+               + '<option value="onprogress"' + (activeFilters.status === 'onprogress' ? ' selected' : '') + '>Onprogress</option>'
+               + '<option value="overdue"' + (activeFilters.status === 'overdue' ? ' selected' : '') + '>Overdue</option>'
+               + '<option value="selesai"' + (activeFilters.status === 'selesai' ? ' selected' : '') + '>Selesai</option>'
                + '</select></div>'
                + '</div>';
          }
@@ -983,7 +1090,7 @@
             + '<span class="crm-category-summary-label">Total</span>'
             + '<span class="crm-category-summary-value crm-category-summary-value--lg">' + escapeHtml(stat.count || 0) + '</span>'
             + '</div>'
-            + (isReplikasi
+            + (hasStatusBreakdown
                ? (
                   '<div class="crm-category-summary-item">'
                   + '<span class="crm-category-summary-label">Onprogress</span>'
@@ -1015,52 +1122,64 @@
             + '</div>';
 
          var chartsHtml = '';
-         if (isReplikasi) {
+         if (hasStatusBreakdown) {
+            var barTitle = isSafety ? 'Selesai vs Belum per Site' : 'Plan vs Aktual per Site';
+            var progressTitle = isSafety ? 'Sebaran Progress Standardisasi' : 'Sebaran Progress';
             chartsHtml = '<div class="crm-category-charts">'
                + '<div class="crm-category-chart-card">'
                + '<p class="crm-category-chart-title">Distribusi Status</p>'
                + '<div class="crm-category-chart-wrap crm-category-chart-wrap--pie"><canvas id="mse-replikasi-pie-chart"></canvas></div>'
                + '</div>'
                + '<div class="crm-category-chart-card">'
-               + '<p class="crm-category-chart-title">Plan vs Aktual per Site</p>'
+               + '<p class="crm-category-chart-title">' + barTitle + '</p>'
                + '<div class="crm-category-chart-wrap"><canvas id="mse-replikasi-bar-chart"></canvas></div>'
                + '</div>'
                + '<div class="crm-category-chart-card">'
-               + '<p class="crm-category-chart-title">Sebaran Progress</p>'
+               + '<p class="crm-category-chart-title">' + progressTitle + '</p>'
                + '<div class="crm-category-chart-wrap"><canvas id="mse-replikasi-progress-chart"></canvas></div>'
                + '</div>'
                + '</div>';
          }
 
+         var tableHead = isSafety
+            ? '<th class="crm-modal-col-no">No</th><th>Pengendalian</th>'
+               + '<th class="text-center">Status Standardisasi</th><th>Due Date</th>'
+               + '<th class="text-center">%</th><th class="text-center">Status</th>'
+            : '<th class="crm-modal-col-no">No</th><th>Pengendalian</th><th>Satuan</th>'
+               + '<th class="text-center">Plan</th><th class="text-center">Done</th>'
+               + '<th class="text-center">%</th><th>Due Date</th>'
+               + '<th class="text-center">' + (hasStatusBreakdown ? 'Status' : 'Overdue') + '</th>';
+
+         var colSpan = isSafety ? 6 : 8;
+
          return {
             html: filterHtml
                + summaryHtml
                + chartsHtml
-               + '<p class="crm-category-section-title">Data Pengendalian' + (isReplikasi ? ' Replikasi 2026' : '') + '</p>'
+               + '<p class="crm-category-section-title">' + (hasStatusBreakdown ? statusModalSectionTitle(payload) : 'Data Pengendalian') + '</p>'
                + '<div class="crm-data-table-wrap crm-modal-table-wrap">'
                + '<table class="crm-data-table"><thead><tr>'
-               + '<th class="crm-modal-col-no">No</th><th>Pengendalian</th><th>Satuan</th>'
-               + '<th class="text-center">Plan</th><th class="text-center">Done</th>'
-               + '<th class="text-center">%</th><th>Due Date</th>'
-               + '<th class="text-center">' + (isReplikasi ? 'Status' : 'Overdue') + '</th>'
+               + tableHead
                + '</tr></thead><tbody>'
-               + (rowsHtml || '<tr><td colspan="8" class="crm-modal-empty">Tidak ada data untuk filter ini.</td></tr>')
+               + (rowsHtml || '<tr><td colspan="' + colSpan + '" class="crm-modal-empty">Tidak ada data untuk filter ini.</td></tr>')
                + '</tbody></table></div>',
             stat: stat,
             items: items,
             filters: activeFilters,
+            payload: payload,
          };
       }
 
       function mountReplikasiCategoryCharts(viewPayload) {
          destroyCategoryCharts();
          var stat = viewPayload.stat || {};
-         if (stat.meta_mode !== 'replikasi_status') return;
+         if (stat.meta_mode !== 'replikasi_status' && stat.meta_mode !== 'standardisasi_status') return;
 
          var items = viewPayload.items || [];
          var pieEl = document.getElementById('mse-replikasi-pie-chart');
          var barEl = document.getElementById('mse-replikasi-bar-chart');
          var progressEl = document.getElementById('mse-replikasi-progress-chart');
+         var isSafety = stat.meta_mode === 'standardisasi_status';
 
          if (pieEl) {
             categoryCharts.push(new Chart(pieEl, {
@@ -1103,26 +1222,55 @@
 
          if (barEl) {
             var bySite = aggregateByKey(items, 'site').slice(0, 8);
+            var barDatasets = isSafety
+               ? [
+                  {
+                     label: 'Selesai',
+                     data: bySite.map(function (row) {
+                        return items.filter(function (item) {
+                           return String(item.site || '-') === row.label
+                              && String(item.progress_status || item.replikasi_status || '') === 'selesai';
+                        }).length;
+                     }),
+                     backgroundColor: '#51BB25',
+                     borderRadius: 6,
+                     maxBarThickness: 22,
+                  },
+                  {
+                     label: 'Belum selesai',
+                     data: bySite.map(function (row) {
+                        return items.filter(function (item) {
+                           return String(item.site || '-') === row.label
+                              && String(item.progress_status || item.replikasi_status || '') !== 'selesai';
+                        }).length;
+                     }),
+                     backgroundColor: '#CFC8FF',
+                     borderRadius: 6,
+                     maxBarThickness: 22,
+                  },
+               ]
+               : [
+                  {
+                     label: 'Plan',
+                     data: bySite.map(function (row) { return row.plan; }),
+                     backgroundColor: '#CFC8FF',
+                     borderRadius: 6,
+                     maxBarThickness: 22,
+                  },
+                  {
+                     label: 'Aktual',
+                     data: bySite.map(function (row) { return row.done; }),
+                     backgroundColor: '#7366FF',
+                     borderRadius: 6,
+                     maxBarThickness: 22,
+                  },
+               ];
+
             categoryCharts.push(new Chart(barEl, {
                type: 'bar',
                data: {
                   labels: bySite.map(function (row) { return row.label; }),
-                  datasets: [
-                     {
-                        label: 'Plan',
-                        data: bySite.map(function (row) { return row.plan; }),
-                        backgroundColor: '#CFC8FF',
-                        borderRadius: 6,
-                        maxBarThickness: 22,
-                     },
-                     {
-                        label: 'Aktual',
-                        data: bySite.map(function (row) { return row.done; }),
-                        backgroundColor: '#7366FF',
-                        borderRadius: 6,
-                        maxBarThickness: 22,
-                     },
-                  ],
+                  datasets: barDatasets,
                },
                options: {
                   responsive: true,
@@ -1175,19 +1323,19 @@
       }
 
       function bindReplikasiModalFilters() {
-         var siteSelect = document.getElementById('mse-replikasi-filter-site');
-         var companySelect = document.getElementById('mse-replikasi-filter-company');
+         var siteSelect = document.getElementById('mse-category-filter-site');
+         var companySelect = document.getElementById('mse-category-filter-company');
+         var statusSelect = document.getElementById('mse-category-filter-status');
 
          if (siteSelect) {
             siteSelect.addEventListener('change', function () {
-               replikasiModalFilters.site = this.value || '';
-               // Reset perusahaan jika tidak relevan dengan site baru
-               var options = buildReplikasiFilterOptions(activeReplikasiPayload?.items || [], replikasiModalFilters);
+               categoryModalFilters.site = this.value || '';
+               var options = buildReplikasiFilterOptions(activeStatusPayload?.items || [], categoryModalFilters);
                if (
-                  replikasiModalFilters.company
-                  && options.companies.indexOf(replikasiModalFilters.company) === -1
+                  categoryModalFilters.company
+                  && options.companies.indexOf(categoryModalFilters.company) === -1
                ) {
-                  replikasiModalFilters.company = '';
+                  categoryModalFilters.company = '';
                }
                refreshReplikasiModal();
             });
@@ -1195,17 +1343,24 @@
 
          if (companySelect) {
             companySelect.addEventListener('change', function () {
-               replikasiModalFilters.company = this.value || '';
+               categoryModalFilters.company = this.value || '';
+               refreshReplikasiModal();
+            });
+         }
+
+         if (statusSelect) {
+            statusSelect.addEventListener('change', function () {
+               categoryModalFilters.status = this.value || '';
                refreshReplikasiModal();
             });
          }
       }
 
       function refreshReplikasiModal() {
-         if (!activeReplikasiPayload || !categoryBody) return;
+         if (!activeStatusPayload || !categoryBody) return;
 
          destroyCategoryCharts();
-         var view = renderCategoryModal(activeReplikasiPayload, replikasiModalFilters);
+         var view = renderCategoryModal(activeStatusPayload, categoryModalFilters);
          updateReplikasiSubtitle(view.stat);
          categoryBody.innerHTML = view.html;
          bindModalRowClicks(categoryBody);
@@ -1287,8 +1442,9 @@
 
          destroyCategoryCharts();
          setCategoryPanelSize(false);
+         activeStatusPayload = null;
          activeReplikasiPayload = null;
-         replikasiModalFilters = { site: '', company: '' };
+         categoryModalFilters = { site: '', company: '', status: '' };
 
          var shortTitle = shortRiskTitle(payload.title || 'Matriks Penurunan Risiko');
          categoryTitle.textContent = shortTitle;
@@ -1306,18 +1462,18 @@
 
          destroyCategoryCharts();
 
-         var isReplikasi = (payload.stat && payload.stat.meta_mode === 'replikasi_status')
-            || categoryKey === 'replikasi';
-         setCategoryPanelSize(isReplikasi);
+         var hasStatusBreakdown = isStatusBreakdownMode(payload);
+         setCategoryPanelTheme(payload);
 
-         categoryTitle.textContent = isReplikasi
-            ? 'Total Replikasi 2026'
+         categoryTitle.textContent = hasStatusBreakdown
+            ? statusModalTitle(payload)
             : (payload.title || 'Detail Kategori');
 
-         if (isReplikasi) {
+         if (hasStatusBreakdown) {
+            activeStatusPayload = payload;
             activeReplikasiPayload = payload;
-            replikasiModalFilters = { site: '', company: '' };
-            var view = renderCategoryModal(payload, replikasiModalFilters);
+            categoryModalFilters = { site: '', company: '', status: '' };
+            var view = renderCategoryModal(payload, categoryModalFilters);
             updateReplikasiSubtitle(view.stat);
             categoryBody.innerHTML = view.html;
             categoryModal.classList.add('crm-history-modal--open');
@@ -1330,6 +1486,7 @@
             return;
          }
 
+         activeStatusPayload = null;
          activeReplikasiPayload = null;
          var defaultView = renderCategoryModal(payload);
          categorySubtitle.textContent = ((payload.stat?.count || 0) + ' pengendalian · progress ' + (payload.stat?.progress || 0) + '%');
@@ -1342,8 +1499,9 @@
       function closeCategoryModal() {
          destroyCategoryCharts();
          setCategoryPanelSize(false);
+         activeStatusPayload = null;
          activeReplikasiPayload = null;
-         replikasiModalFilters = { site: '', company: '' };
+         categoryModalFilters = { site: '', company: '', status: '' };
          categoryModal?.classList.remove('crm-history-modal--open');
          syncBodyScroll();
       }
