@@ -35,6 +35,12 @@
           <span>Upload Mingguan</span>
         </a>
       </li>
+      <li>
+        <a href="{{ route('evaluasi-well.users.index') }}" class="{{ request()->routeIs('evaluasi-well.users.*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:users-group-rounded-outline" class="menu-icon"></iconify-icon>
+          <span>Manajemen User</span>
+        </a>
+      </li>
       <li class="sidebar-menu-group-title">Navigasi</li>
       <li>
         <a href="{{ url('/') }}">

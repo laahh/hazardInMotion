@@ -5,6 +5,7 @@ use App\Http\Controllers\SportEvaluation\NutritionEvaluationController;
 use App\Http\Controllers\SportEvaluation\SportActivitiesController;
 use App\Http\Controllers\SportEvaluation\SportEmployeeController;
 use App\Http\Controllers\SportEvaluation\SportEvaluationDashboardController;
+use App\Http\Controllers\SportEvaluation\SportEvaluationEmployeeProfileController;
 use App\Http\Controllers\SportEvaluation\SportEvaluationWeeklyUploadController;
 use Illuminate\Support\Facades\Route;
 
@@ -12,8 +13,9 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | Modul Evaluasi Olahraga & Aktivitas (BeWell)
 |--------------------------------------------------------------------------
-| Read-only ke koneksi bewell_db (SSH tunnel manual). Di-require di dalam
-| grup middleware 'auth' pada routes/web.php.
+| Akses bewell_db lewat SSH tunnel manual. Metrik/dashboard tetap read-only;
+| manajemen employee_profiles (create/update) diizinkan dari Admin.
+| Di-require di dalam grup middleware 'auth' pada routes/web.php.
 */
 
 Route::middleware('evaluasi-well.access')
@@ -55,6 +57,21 @@ Route::middleware('evaluasi-well.access')
             ->name('weekly-uploads.data');
         Route::get('/weekly-uploads/export', [SportEvaluationWeeklyUploadController::class, 'export'])
             ->name('weekly-uploads.export');
+
+        Route::get('/users', [SportEvaluationEmployeeProfileController::class, 'index'])
+            ->name('users.index');
+        Route::get('/users/data', [SportEvaluationEmployeeProfileController::class, 'data'])
+            ->name('users.data');
+        Route::get('/users/create', [SportEvaluationEmployeeProfileController::class, 'create'])
+            ->name('users.create');
+        Route::post('/users', [SportEvaluationEmployeeProfileController::class, 'store'])
+            ->name('users.store');
+        Route::get('/users/{id}/edit', [SportEvaluationEmployeeProfileController::class, 'edit'])
+            ->whereNumber('id')
+            ->name('users.edit');
+        Route::put('/users/{id}', [SportEvaluationEmployeeProfileController::class, 'update'])
+            ->whereNumber('id')
+            ->name('users.update');
 
         Route::get('/employees/{userId}', [SportEmployeeController::class, 'show'])
             ->whereNumber('userId')

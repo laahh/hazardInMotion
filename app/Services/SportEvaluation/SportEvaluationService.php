@@ -10,9 +10,9 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Layanan baca-saja untuk modul Evaluasi Olahraga & Aktivitas.
- * Semua akses ke DB aplikasi BeWell dilakukan lewat koneksi 'bewell_db'
- * (read-only) dan hasilnya di-cache Redis. TIDAK pernah menulis ke bewell_db.
+ * Layanan baca-saja untuk metrik Evaluasi Olahraga & Aktivitas.
+ * Akses lewat koneksi 'bewell_db', hasil di-cache. Service ini tidak menulis.
+ * Create/update profil karyawan ada di SportEvaluationEmployeeProfileService.
  */
 final class SportEvaluationService
 {
