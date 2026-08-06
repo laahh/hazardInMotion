@@ -230,20 +230,20 @@ final class SportEvaluationEmployeeProfileService
                 $length = 100;
             }
 
-            $orderColumnIndex = (int) data_get($request->input('order'), '0.column', 0);
+            $orderColumnIndex = (int) data_get($request->input('order'), '0.column', 1);
             $orderDir = strtolower((string) data_get($request->input('order'), '0.dir', 'asc')) === 'desc'
                 ? 'desc'
                 : 'asc';
 
             $orderable = [
-                0 => 'e.nama',
-                1 => 'e.kode_sid',
-                2 => 'e.site',
-                3 => 'e.nama_perusahaan',
-                4 => 'e.divisi',
-                5 => 'e.departement',
-                6 => 'e.jabatan_fungsional',
-                7 => 'e.status_karyawan',
+                1 => 'e.nama',
+                2 => 'e.kode_sid',
+                3 => 'e.site',
+                4 => 'e.nama_perusahaan',
+                5 => 'e.divisi',
+                6 => 'e.departement',
+                7 => 'e.jabatan_fungsional',
+                8 => 'e.status_karyawan',
             ];
             $orderBy = $orderable[$orderColumnIndex] ?? 'e.nama';
 

@@ -63,6 +63,10 @@
   #usersTable .eu-actions {
     white-space: nowrap;
   }
+
+  #usersTable .eu-actions .btn {
+    min-width: 4.5rem;
+  }
 </style>
 @endsection
 
@@ -111,7 +115,7 @@
         ordering: true,
         pageLength: 10,
         lengthMenu: [10, 25, 50, 100],
-        order: [[0, 'asc']],
+        order: [[1, 'asc']],
         autoWidth: false,
         scrollX: false,
         layout: {
@@ -132,13 +136,30 @@
         },
         columns: [
             {
+                data: 'id',
+                width: '8%',
+                orderable: false,
+                searchable: false,
+                className: 'text-center eu-actions',
+                render: function (data, type) {
+                    if (type !== 'display') {
+                        return data;
+                    }
+                    return '<a href="' + editBase + '/' + data + '/edit" class="btn btn-sm btn-primary-600 radius-8 px-14 py-6 d-inline-flex align-items-center gap-1">'
+                        + '<iconify-icon icon="solar:pen-bold" class="icon text-sm"></iconify-icon>'
+                        + 'Edit</a>';
+                }
+            },
+            {
                 data: 'nama',
                 width: '18%',
                 render: function (data, type, row) {
                     if (type !== 'display') {
                         return data;
                     }
-                    return '<span class="fw-medium">' + escapeHtml(data) + '</span>'
+                    return '<a href="' + editBase + '/' + row.id + '/edit" class="fw-medium text-primary-light hover-text-primary">'
+                        + escapeHtml(data)
+                        + '</a>'
                         + '<span class="text-sm d-block fw-normal text-secondary-light">'
                         + escapeHtml(row.nik || '-')
                         + '</span>';
@@ -149,7 +170,7 @@
             { data: 'company', width: '16%' },
             { data: 'divisi', width: '12%' },
             { data: 'departement', width: '12%' },
-            { data: 'jabatan_fungsional', width: '12%' },
+            { data: 'jabatan_fungsional', width: '10%' },
             {
                 data: 'status_karyawan',
                 width: '8%',
@@ -165,16 +186,6 @@
                     return '<span class="text-sm fw-medium px-12 py-2 rounded-pill ' + cls + '">'
                         + escapeHtml(status)
                         + '</span>';
-                }
-            },
-            {
-                data: 'id',
-                width: '6%',
-                orderable: false,
-                searchable: false,
-                className: 'text-center eu-actions',
-                render: function (data) {
-                    return '<a href="' + editBase + '/' + data + '/edit" class="btn btn-sm btn-outline-primary-600 radius-8 px-12 py-6">Edit</a>';
                 }
             }
         ],
@@ -344,15 +355,15 @@
       <table id="usersTable" class="table bordered-table mb-0 w-100" style="width:100%">
         <thead>
           <tr>
+            <th scope="col" class="text-center" style="width:8%">Aksi</th>
             <th scope="col" style="width:18%">Nama / NIK</th>
             <th scope="col" style="width:10%">Kode SID</th>
             <th scope="col" style="width:8%">Site</th>
             <th scope="col" style="width:16%">Perusahaan</th>
             <th scope="col" style="width:12%">Divisi</th>
             <th scope="col" style="width:12%">Departemen</th>
-            <th scope="col" style="width:12%">Jabatan</th>
+            <th scope="col" style="width:10%">Jabatan</th>
             <th scope="col" class="text-center" style="width:8%">Status</th>
-            <th scope="col" class="text-center" style="width:6%">Aksi</th>
           </tr>
         </thead>
         <tbody></tbody>
