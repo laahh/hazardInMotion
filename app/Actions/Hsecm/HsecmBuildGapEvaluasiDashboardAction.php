@@ -65,7 +65,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $dates = $this->repository->listDistinctBatchSlotDates($probeTable, 90);
         [$dateFrom, $dateTo] = $this->resolveDateRange($filters, $dates);
 
-        $cacheKey = 'hsecm.gap_eval.v3.'.md5(json_encode([
+        $cacheKey = 'hsecm.gap_eval.v5.'.md5(json_encode([
             'site' => (string) ($filters['site'] ?? ''),
             'perusahaan' => (string) ($filters['perusahaan'] ?? ''),
             'q' => (string) ($filters['q'] ?? ''),
@@ -128,6 +128,8 @@ final class HsecmBuildGapEvaluasiDashboardAction
             $mapD,
             $dateTo,
         );
+
+        $tasklistSummary = $this->buildTasklistSummaryByScope($filters, $dateFrom, $dateTo);
 
         /** @var array<string, int> $hilangStreakByIdentity */
         $hilangStreakByIdentity = $scrape['hilang_streak_by_identity'] ?? [];
@@ -212,6 +214,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
             'programs' => $programs,
             'scrape' => $scrape,
             'tasklist' => $tasklist,
+            'tasklist_summary' => $tasklistSummary,
         ];
     }
 
@@ -678,9 +681,14 @@ final class HsecmBuildGapEvaluasiDashboardAction
             // Hilang = pernah gap lalu clear → tetap bagian dari Total Gap.
             $stats[$key]['total_gap']++;
             $stats[$key]['perbaikan_total']++;
-            $tanpaPerulangan = (int) ($row['day_streak'] ?? 1) <= 1;
+            $isPerulangan = $this->isPerulangan($row);
+            $tanpaPerulangan = ! $isPerulangan;
             if ($tanpaPerulangan) {
                 $stats[$key]['perbaikan_tanpa_perulangan']++;
+            }
+            // Streak ≥ 2 tetap dihitung Total Perulangan meski sudah perbaikan.
+            if ($isPerulangan) {
+                $stats[$key]['total_perulangan']++;
             }
 
             $scopeKey = $this->resolveScopeKeyOrOther($row);
@@ -690,6 +698,10 @@ final class HsecmBuildGapEvaluasiDashboardAction
             if ($tanpaPerulangan) {
                 $stats[$key]['scopes'][$scopeKey]['perbaikan_tanpa_perulangan']++;
                 $this->pushScopeDetail($stats[$key]['scopes'][$scopeKey]['detail_perbaikan'], $row);
+            }
+            if ($isPerulangan) {
+                $stats[$key]['scopes'][$scopeKey]['total_perulangan']++;
+                $this->pushScopeDetail($stats[$key]['scopes'][$scopeKey]['detail_perulangan'], $row);
             }
         }
 
@@ -908,10 +920,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
     }
 
     /**
-     * @param  array<string, mixed>  $row
-     */
-    /**
-     * Perulangan = streak hari ≥ 2 (log berulang).
+     * Perulangan = streak hari ≥ 2 (log berulang), termasuk yang sudah perbaikan.
      * Status "tetap" saja TIDAK otomatis perulangan — tetap dengan streak 1
      * tetap masuk Total Gap, tapi tidak Total Perulangan.
      *
@@ -1049,6 +1058,111 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'belum_tindaklanjut_masih_gap' => array_slice($belumTindaklanjut, 0, self::DETAIL_LIMIT),
             ],
             'message' => null,
+        ];
+    }
+
+    /**
+     * Ringkasan tasklist per Site × Perusahaan: jumlah, submit, approve.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{
+     *     available: bool,
+     *     totals: array<string, int>,
+     *     rows: list<array<string, mixed>>,
+     *     message: ?string
+     * }
+     */
+    private function buildTasklistSummaryByScope(array $filters, string $dateFrom, string $dateTo): array
+    {
+        $empty = [
+            'available' => false,
+            'totals' => [
+                'tasklist_count' => 0,
+                'item_total' => 0,
+                'belum_submit' => 0,
+                'sudah_submit' => 0,
+                'belum_approve' => 0,
+                'sudah_approve' => 0,
+                'menunggu_approve' => 0,
+                'rejected' => 0,
+            ],
+            'rows' => [],
+            'message' => 'Tabel tasklist belum tersedia.',
+        ];
+
+        if (! Schema::hasTable('hsecm_tasklist_items') || ! Schema::hasTable('hsecm_tasklists')) {
+            return $empty;
+        }
+
+        $site = trim((string) ($filters['site'] ?? ''));
+        $perusahaan = trim((string) ($filters['perusahaan'] ?? ''));
+
+        $rows = HsecmTasklistItem::query()
+            ->join('hsecm_tasklists', 'hsecm_tasklists.id', '=', 'hsecm_tasklist_items.tasklist_id')
+            ->when($site !== '', static fn ($q) => $q->where('hsecm_tasklists.site', $site))
+            ->when($perusahaan !== '', static fn ($q) => $q->where('hsecm_tasklists.perusahaan', $perusahaan))
+            ->where(function ($q) use ($dateFrom, $dateTo): void {
+                $q->whereNull('hsecm_tasklists.batch_slot')
+                    ->orWhere(function ($slotQ) use ($dateFrom, $dateTo): void {
+                        $slotQ->whereDate('hsecm_tasklists.batch_slot', '>=', $dateFrom)
+                            ->whereDate('hsecm_tasklists.batch_slot', '<=', $dateTo);
+                    });
+            })
+            ->groupBy('hsecm_tasklists.site', 'hsecm_tasklists.perusahaan')
+            ->orderBy('hsecm_tasklists.site')
+            ->orderBy('hsecm_tasklists.perusahaan')
+            ->selectRaw("
+                hsecm_tasklists.site as site,
+                hsecm_tasklists.perusahaan as perusahaan,
+                COUNT(DISTINCT hsecm_tasklists.id) as tasklist_count,
+                COUNT(hsecm_tasklist_items.id) as item_total,
+                SUM(CASE WHEN hsecm_tasklist_items.status IN ('open', 'rejected') THEN 1 ELSE 0 END) as belum_submit,
+                SUM(CASE WHEN hsecm_tasklist_items.status IN ('submitted', 'approved') THEN 1 ELSE 0 END) as sudah_submit,
+                SUM(CASE WHEN hsecm_tasklist_items.status <> 'approved' THEN 1 ELSE 0 END) as belum_approve,
+                SUM(CASE WHEN hsecm_tasklist_items.status = 'approved' THEN 1 ELSE 0 END) as sudah_approve,
+                SUM(CASE WHEN hsecm_tasklist_items.status = 'submitted' THEN 1 ELSE 0 END) as menunggu_approve,
+                SUM(CASE WHEN hsecm_tasklist_items.status = 'rejected' THEN 1 ELSE 0 END) as rejected
+            ")
+            ->get();
+
+        $mapped = [];
+        $totals = [
+            'tasklist_count' => 0,
+            'item_total' => 0,
+            'belum_submit' => 0,
+            'sudah_submit' => 0,
+            'belum_approve' => 0,
+            'sudah_approve' => 0,
+            'menunggu_approve' => 0,
+            'rejected' => 0,
+        ];
+
+        foreach ($rows as $row) {
+            $siteLabel = trim((string) ($row->site ?? ''));
+            $companyLabel = trim((string) ($row->perusahaan ?? ''));
+            $entry = [
+                'site' => $siteLabel !== '' ? $siteLabel : '—',
+                'perusahaan' => $companyLabel !== '' ? $companyLabel : '—',
+                'tasklist_count' => (int) ($row->tasklist_count ?? 0),
+                'item_total' => (int) ($row->item_total ?? 0),
+                'belum_submit' => (int) ($row->belum_submit ?? 0),
+                'sudah_submit' => (int) ($row->sudah_submit ?? 0),
+                'belum_approve' => (int) ($row->belum_approve ?? 0),
+                'sudah_approve' => (int) ($row->sudah_approve ?? 0),
+                'menunggu_approve' => (int) ($row->menunggu_approve ?? 0),
+                'rejected' => (int) ($row->rejected ?? 0),
+            ];
+            $mapped[] = $entry;
+            foreach ($totals as $k => $_) {
+                $totals[$k] += $entry[$k];
+            }
+        }
+
+        return [
+            'available' => true,
+            'totals' => $totals,
+            'rows' => $mapped,
+            'message' => $mapped === [] ? 'Belum ada tasklist pada periode filter.' : null,
         ];
     }
 }

@@ -56,6 +56,8 @@
 </div>
 @endif
 
+@include('BaseRule.gap-evaluasi.partials._tasklist-summary', ['tasklistSummary' => $tasklistSummary ?? []])
+
 {{-- Navigasi cepat ke parameter --}}
 @if(!empty($programs))
 <div class="mb-6 flex flex-wrap gap-2">

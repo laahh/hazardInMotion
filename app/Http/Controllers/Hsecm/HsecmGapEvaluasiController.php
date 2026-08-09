@@ -38,6 +38,7 @@ class HsecmGapEvaluasiController extends Controller
             'programs' => $dashboard['programs'],
             'scrape' => $dashboard['scrape'],
             'tasklist' => $dashboard['tasklist'],
+            'tasklistSummary' => $dashboard['tasklist_summary'] ?? [],
         ]));
     }
 }
