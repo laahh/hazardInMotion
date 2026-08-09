@@ -8,7 +8,7 @@
    <div class="px-5 py-4 border-b border-slate-100 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
       <div>
          <h2 class="font-headline font-bold text-lg text-on-background">Summary Tasklist</h2>
-         <p class="text-xs text-on-surface-variant mt-0.5">Jumlah tasklist &amp; status item (submit / approve) per Site → Perusahaan · mengikuti filter tanggal</p>
+         <p class="text-xs text-on-surface-variant mt-0.5">Total seluruh tasklist dari awal sampai akhir · status item (submit / approve) per Site → Perusahaan</p>
       </div>
       @if($available)
       <span class="hsecm-badge shrink-0">{{ number_format((int) ($totals['tasklist_count'] ?? 0)) }} tasklist · {{ number_format((int) ($totals['item_total'] ?? 0)) }} item</span>

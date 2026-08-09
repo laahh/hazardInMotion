@@ -65,7 +65,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $dates = $this->repository->listDistinctBatchSlotDates($probeTable, 90);
         [$dateFrom, $dateTo] = $this->resolveDateRange($filters, $dates);
 
-        $cacheKey = 'hsecm.gap_eval.v6.'.md5(json_encode([
+        $cacheKey = 'hsecm.gap_eval.v7.'.md5(json_encode([
             'site' => (string) ($filters['site'] ?? ''),
             'perusahaan' => (string) ($filters['perusahaan'] ?? ''),
             'q' => (string) ($filters['q'] ?? ''),
@@ -132,7 +132,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
             $dateTo,
         );
 
-        $tasklistSummary = $this->buildTasklistSummaryByScope($filters, $dateFrom, $dateTo);
+        $tasklistSummary = $this->buildTasklistSummaryByScope($filters);
 
         /** @var array<string, int> $hilangStreakByIdentity */
         $hilangStreakByIdentity = $scrape['hilang_streak_by_identity'] ?? [];
@@ -1029,6 +1029,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
 
     /**
      * Ringkasan tasklist per Site × Perusahaan: jumlah, submit, approve.
+     * Total seluruh histori (tidak dibatasi tanggal filter).
      *
      * @param  array<string, mixed>  $filters
      * @return array{
@@ -1038,7 +1039,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
      *     message: ?string
      * }
      */
-    private function buildTasklistSummaryByScope(array $filters, string $dateFrom, string $dateTo): array
+    private function buildTasklistSummaryByScope(array $filters): array
     {
         $empty = [
             'available' => false,
@@ -1067,13 +1068,6 @@ final class HsecmBuildGapEvaluasiDashboardAction
             ->join('hsecm_tasklists', 'hsecm_tasklists.id', '=', 'hsecm_tasklist_items.tasklist_id')
             ->when($site !== '', static fn ($q) => $q->where('hsecm_tasklists.site', $site))
             ->when($perusahaan !== '', static fn ($q) => $q->where('hsecm_tasklists.perusahaan', $perusahaan))
-            ->where(function ($q) use ($dateFrom, $dateTo): void {
-                $q->whereNull('hsecm_tasklists.batch_slot')
-                    ->orWhere(function ($slotQ) use ($dateFrom, $dateTo): void {
-                        $slotQ->whereDate('hsecm_tasklists.batch_slot', '>=', $dateFrom)
-                            ->whereDate('hsecm_tasklists.batch_slot', '<=', $dateTo);
-                    });
-            })
             ->groupBy('hsecm_tasklists.site', 'hsecm_tasklists.perusahaan')
             ->orderBy('hsecm_tasklists.site')
             ->orderBy('hsecm_tasklists.perusahaan')
@@ -1128,7 +1122,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
             'available' => true,
             'totals' => $totals,
             'rows' => $mapped,
-            'message' => $mapped === [] ? 'Belum ada tasklist pada periode filter.' : null,
+            'message' => $mapped === [] ? 'Belum ada tasklist.' : null,
         ];
     }
 }
