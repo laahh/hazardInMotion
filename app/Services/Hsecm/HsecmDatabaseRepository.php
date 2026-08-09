@@ -133,10 +133,15 @@ class HsecmDatabaseRepository
 
     /**
      * @param  list<string>|null  $columns  null = SELECT * ; list = SELECT kolom tertentu (lebih ringan)
+     * @param  array<string, string>  $whereEquals  filter equality di SQL (site/perusahaan)
      * @return list<array<string, mixed>>
      */
-    public function rowsForBatchSlot(string $table, ?string $batchSlot = null, ?array $columns = null): array
-    {
+    public function rowsForBatchSlot(
+        string $table,
+        ?string $batchSlot = null,
+        ?array $columns = null,
+        array $whereEquals = [],
+    ): array {
         if (! $this->hasBatchSlotSupport($table)) {
             return $this->rows($table);
         }
@@ -146,16 +151,25 @@ class HsecmDatabaseRepository
             return [];
         }
 
-        $select = $this->normalizeSelectColumns($table, $columns);
+        $select = $this->normalizeSelectColumns($table, $columns, trust: false);
         $colKey = $select === null ? 'allcols' : 'cols.'.md5(implode(',', $select));
+        $whereKey = $whereEquals === [] ? '' : '.w.'.md5((string) json_encode($whereEquals, JSON_THROW_ON_ERROR));
 
         return Cache::remember(
-            self::cacheKey($table, 'slot.'.$slot.'.'.$colKey),
+            self::cacheKey($table, 'slot.'.$slot.'.'.$colKey.$whereKey),
             self::CACHE_TTL_SECONDS,
-            function () use ($table, $slot, $select): array {
-                $query = DB::table($table)->where('batch_slot', $slot)->orderBy('id');
+            function () use ($table, $slot, $select, $whereEquals): array {
+                $query = DB::table($table)->where('batch_slot', $slot);
                 if ($select !== null) {
                     $query->select($select);
+                }
+                foreach ($whereEquals as $column => $value) {
+                    $col = trim((string) $column);
+                    $val = trim((string) $value);
+                    if ($col === '' || $val === '' || ! $this->tableHasColumn($table, $col)) {
+                        continue;
+                    }
+                    $query->where($col, $val);
                 }
 
                 return $this->mapRows($query->get());
@@ -573,10 +587,20 @@ class HsecmDatabaseRepository
      * @param  list<string>|null  $columns
      * @return list<string>|null
      */
-    private function normalizeSelectColumns(string $table, ?array $columns): ?array
+    private function normalizeSelectColumns(string $table, ?array $columns, bool $trust = false): ?array
     {
         if ($columns === null || $columns === []) {
             return null;
+        }
+
+        /** @var array<string, true>|null $available */
+        $available = null;
+        if (! $trust) {
+            try {
+                $available = array_fill_keys(Schema::getColumnListing($table), true);
+            } catch (\Throwable) {
+                $available = null;
+            }
         }
 
         $select = [];
@@ -585,7 +609,7 @@ class HsecmDatabaseRepository
             if ($col === '' || isset($select[$col])) {
                 continue;
             }
-            if (! $this->tableHasColumn($table, $col)) {
+            if ($available !== null && ! isset($available[$col])) {
                 continue;
             }
             $select[$col] = true;
@@ -595,8 +619,7 @@ class HsecmDatabaseRepository
             return null;
         }
 
-        // id selalu ikut untuk _row_id / dedupe.
-        if ($this->tableHasColumn($table, 'id')) {
+        if ($available === null || isset($available['id'])) {
             $select = ['id' => true] + $select;
         }
 

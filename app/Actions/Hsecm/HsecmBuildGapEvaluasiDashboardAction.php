@@ -19,13 +19,13 @@ final class HsecmBuildGapEvaluasiDashboardAction
 {
     private const DETAIL_LIMIT = 40;
 
-    private const SCOPE_DETAIL_LIMIT = 40;
+    private const SCOPE_DETAIL_LIMIT = 20;
 
-    /** Max hari kalender di date range (performa). */
-    private const MAX_RANGE_DAYS = 3;
+    /** Max hari kalender di date range (0 = hanya 1 hari evaluasi, demi performa). */
+    private const MAX_RANGE_DAYS = 0;
 
-    /** Cache hasil dashboard singkat (detik). */
-    private const DASHBOARD_CACHE_TTL = 120;
+    /** Cache hasil dashboard (detik). */
+    private const DASHBOARD_CACHE_TTL = 300;
 
     /**
      * Urutan & label parameter (selaras mockup Gap Evaluasi).
@@ -65,7 +65,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $dates = $this->repository->listDistinctBatchSlotDates($probeTable, 90);
         [$dateFrom, $dateTo] = $this->resolveDateRange($filters, $dates);
 
-        $cacheKey = 'hsecm.gap_eval.v5.'.md5(json_encode([
+        $cacheKey = 'hsecm.gap_eval.v6.'.md5(json_encode([
             'site' => (string) ($filters['site'] ?? ''),
             'perusahaan' => (string) ($filters['perusahaan'] ?? ''),
             'q' => (string) ($filters['q'] ?? ''),
@@ -81,6 +81,9 @@ final class HsecmBuildGapEvaluasiDashboardAction
             self::DASHBOARD_CACHE_TTL,
             fn (): array => $this->buildDashboard($filters, $dates, $dateFrom, $dateTo, $probeTable)
         );
+
+        // Filter dropdown ringan — di luar cache berat scrape.
+        $dashboard['filter_options'] = $this->dashboardService->getGapEvaluasiFilterOptions();
 
         return $dashboard;
     }
@@ -203,7 +206,6 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'date_from' => $dateFrom,
                 'date_to' => $dateTo,
             ]),
-            'filter_options' => $this->dashboardService->getFilterOptions(),
             'period_label' => $periodLabel,
             'eval_date' => $dateTo,
             'prev_date' => $prevDate,
@@ -241,7 +243,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
             [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
         }
 
-        // Batasi rentang agar performa tetap wajar.
+        // Batasi rentang agar performa tetap wajar (0 = paksa 1 hari).
         $from = Carbon::parse($dateFrom, 'Asia/Makassar')->startOfDay();
         $to = Carbon::parse($dateTo, 'Asia/Makassar')->startOfDay();
         if ($from->diffInDays($to) > self::MAX_RANGE_DAYS) {
@@ -362,9 +364,17 @@ final class HsecmBuildGapEvaluasiDashboardAction
                     continue;
                 }
                 if (! isset($map[$identity])) {
-                    // Buang payload berat di memory map (cukup field klasifikasi).
+                    // Buang payload berat; pertahankan gap_count untuk streak tanpa query histori.
+                    $gapCount = (int) ($row['gap_count'] ?? ($row['payload']['gap_count'] ?? 0));
                     unset($row['payload'], $row['action_hint']);
+                    $row['gap_count'] = $gapCount;
                     $map[$identity] = $row;
+                } else {
+                    // Ambil gap_count tertinggi bila identity muncul multi-slot.
+                    $gapCount = (int) ($row['gap_count'] ?? ($row['payload']['gap_count'] ?? 0));
+                    if ($gapCount > (int) ($map[$identity]['gap_count'] ?? 0)) {
+                        $map[$identity]['gap_count'] = $gapCount;
+                    }
                 }
                 if ($slotDate !== null && ($rangeDates === [] || in_array($slotDate, $rangeDates, true))) {
                     $daysByIdentity[$identity][$slotDate] = true;
@@ -420,87 +430,27 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $baru = [];
         $kembali = [];
 
-        $refSlotPrev = $slotsPrev !== [] ? (string) end($slotsPrev) : null;
-
-        /** @var array<string, list<string>> $keysByTable */
-        $keysByTable = [];
-        foreach ($mapPrev as $row) {
-            $table = (string) ($row['table'] ?? '');
-            $bk = trim((string) ($row['business_key'] ?? ''));
-            if ($table !== '' && $bk !== '') {
-                $keysByTable[$table][] = $bk;
-            }
-        }
-
-        /** @var array<string, array<string, int>> $streakByTable */
-        $streakByTable = [];
-        if ($refSlotPrev !== null) {
-            foreach ($keysByTable as $table => $keys) {
-                $streakByTable[$table] = $this->repository->countConsecutiveStreakByKeys(
-                    $table,
-                    array_values(array_unique($keys)),
-                    $refSlotPrev,
-                );
-            }
-        }
-
+        // Streak dari gap_count (kolom scrape) — hindari query histori consecutive yang mahal.
         foreach ($mapPrev as $identity => $row) {
-            $table = (string) ($row['table'] ?? '');
-            $bk = trim((string) ($row['business_key'] ?? ''));
-        // Streak dari repository; fallback 1 (payload sengaja tidak dibawa di map lean).
-            $slotStreak = (int) ($streakByTable[$table][$bk] ?? 1);
-            $dayStreak = max(1, (int) ceil($slotStreak / 2));
-            // Perulangan dalam range: naikkan streak jika muncul multi-hari di periode filter.
-            $rangeDays = (int) ($dayCountByIdentity[$identity] ?? 0);
-            if ($rangeDays > $dayStreak) {
-                $dayStreak = $rangeDays;
-            }
+            $dayStreak = $this->dayStreakFromRow($row, $identity, $dayCountByIdentity);
 
             if (isset($mapD[$identity])) {
-                // Hadir di periode evaluasi + hari pembanding: streak minimal 2
-                // hanya jika memang multi-hari (range atau streak histori).
-                // Streak 1 = gap sekali (tetap masuk Total Gap, bukan Perulangan).
-                $tetap[] = $this->detailRow($row, 'tetap', $dayStreak);
+                // Hadir D dan D-1 → minimal 2 hari (perulangan).
+                $tetap[] = $this->detailRow($row, 'tetap', max(2, $dayStreak));
             } else {
                 $hilang[] = $this->detailRow($row, 'hilang', $dayStreak);
             }
         }
 
-        /** @var array<string, list<string>> $baruKeysByTable */
-        $baruKeysByTable = [];
         foreach ($mapD as $identity => $row) {
             if (isset($mapPrev[$identity])) {
                 continue;
             }
-            $table = (string) ($row['table'] ?? '');
-            $bk = trim((string) ($row['business_key'] ?? ''));
-            if ($table !== '' && $bk !== '') {
-                $baruKeysByTable[$table][] = $bk;
-            }
-        }
-
-        /** @var array<string, array<string, true>> $presentBefore */
-        $presentBefore = [];
-        if ($prevDate !== null) {
-            foreach ($baruKeysByTable as $table => $keys) {
-                $presentBefore[$table] = $this->repository->businessKeysPresentBeforeDate(
-                    $table,
-                    array_values(array_unique($keys)),
-                    $prevDate,
-                );
-            }
-        }
-
-        foreach ($mapD as $identity => $row) {
-            if (isset($mapPrev[$identity])) {
-                continue;
-            }
-            $table = (string) ($row['table'] ?? '');
-            $bk = trim((string) ($row['business_key'] ?? ''));
             $rangeDays = max(1, (int) ($dayCountByIdentity[$identity] ?? 1));
-            $isReopen = $bk !== '' && isset($presentBefore[$table][$bk]);
-            if ($isReopen) {
-                $kembali[] = $this->detailRow($row, 'kembali', $rangeDays);
+            $gapCount = (int) ($row['gap_count'] ?? 0);
+            // Heuristik reopen: gap_count ≥ 2 tanpa hadir di D-1 → kembali muncul.
+            if ($gapCount >= 2) {
+                $kembali[] = $this->detailRow($row, 'kembali', max($rangeDays, (int) ceil($gapCount / 2)));
             } else {
                 $baru[] = $this->detailRow($row, 'baru', $rangeDays);
             }
@@ -560,6 +510,22 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'kembali' => max(0, count($kembali) - self::DETAIL_LIMIT),
             ],
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, int>  $dayCountByIdentity
+     */
+    private function dayStreakFromRow(array $row, string $identity, array $dayCountByIdentity): int
+    {
+        $gapCount = (int) ($row['gap_count'] ?? 0);
+        $dayStreak = $gapCount > 0 ? max(1, (int) ceil($gapCount / 2)) : 1;
+        $rangeDays = (int) ($dayCountByIdentity[$identity] ?? 0);
+        if ($rangeDays > $dayStreak) {
+            $dayStreak = $rangeDays;
+        }
+
+        return max(1, $dayStreak);
     }
 
     /**
@@ -992,7 +958,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
                     });
             });
 
-        $items = $query->orderByDesc('hsecm_tasklist_items.id')->limit(500)->get();
+        $items = $query->orderByDesc('hsecm_tasklist_items.id')->limit(300)->get();
 
         $berhasil = [];
         $belumEfektif = [];

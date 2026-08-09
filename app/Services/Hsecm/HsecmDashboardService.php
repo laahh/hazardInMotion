@@ -380,6 +380,55 @@ class HsecmDashboardService
     }
 
     /**
+     * Filter options ringan khusus Gap Evaluasi (1 tabel probe, tanpa week/year scan).
+     *
+     * @return array{sites: list<string>, companies: list<string>, weeks: list<string>, years: list<string>}
+     */
+    public function getGapEvaluasiFilterOptions(): array
+    {
+        return Cache::remember('hsecm.gap_eval.filter_options.v1', 600, function (): array {
+            $meta = self::DATASETS['sap-rfid'];
+            $table = (string) $meta['table'];
+            $slot = $this->repository->latestBatchSlot($table);
+
+            $sites = $this->repository->distinctColumnValues(
+                $table,
+                (string) $meta['site_column'],
+                $slot,
+            );
+            $companies = $meta['company_column'] !== null
+                ? $this->repository->distinctColumnValues(
+                    $table,
+                    (string) $meta['company_column'],
+                    $slot,
+                )
+                : [];
+
+            // Lengkapi site template agar dropdown selalu punya BMO/GMO/LMO.
+            foreach (array_keys(self::GAP_PERULANGAN_SITE_COMPANIES) as $templateSite) {
+                $sites[] = $templateSite;
+            }
+
+            return [
+                'sites' => collect($sites)
+                    ->filter(fn ($v) => ! $this->isAllToken($v))
+                    ->unique()
+                    ->sort(SORT_NATURAL | SORT_FLAG_CASE)
+                    ->values()
+                    ->all(),
+                'companies' => collect($companies)
+                    ->filter(fn ($v) => ! $this->isAllToken($v))
+                    ->unique()
+                    ->sort(SORT_NATURAL | SORT_FLAG_CASE)
+                    ->values()
+                    ->all(),
+                'weeks' => [],
+                'years' => [],
+            ];
+        });
+    }
+
+    /**
      * @param  array{site: string, perusahaan: string, week: string, year: string, date_from: string, date_to: string, q: string}  $filters
      * @return array<string, mixed>
      */
@@ -2271,6 +2320,26 @@ class HsecmDashboardService
      */
     public function extractGapIdentityRowsLean(array $filters): array
     {
+        $cacheKey = 'hsecm.gap_identity.v2.'.md5(json_encode([
+            'slot' => (string) ($filters['batch_slot'] ?? ''),
+            'mode' => (string) ($filters['data_mode'] ?? 'snapshot'),
+            'site' => (string) ($filters['site'] ?? ''),
+            'perusahaan' => (string) ($filters['perusahaan'] ?? ''),
+            'q' => (string) ($filters['q'] ?? ''),
+        ], JSON_THROW_ON_ERROR));
+
+        /** @var list<array<string, mixed>> $cached */
+        $cached = Cache::remember($cacheKey, 300, fn (): array => $this->buildGapIdentityRowsLean($filters));
+
+        return $cached;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return list<array<string, mixed>>
+     */
+    private function buildGapIdentityRowsLean(array $filters): array
+    {
         $programs = [
             'sap-rfid' => ['key' => 'layer1-tanpa-sap', 'title' => 'Layer 1 Tanpa SAP', 'action' => 'Coaching oleh atasan langsung'],
             'coverage-cctv' => ['key' => 'coverage-area', 'title' => 'Area Kritis belum tercover SAP', 'action' => 'Pemenuhan SAP di shift berikutnya'],
@@ -2341,6 +2410,7 @@ class HsecmDashboardService
                     'perusahaan' => $perusahaan,
                     'dataset_key' => $datasetKey,
                     'table' => (string) $meta['table'],
+                    'gap_count' => (int) ($row['gap_count'] ?? 0),
                     'payload' => [
                         'dataset_key' => $datasetKey,
                         'table' => $meta['table'],
@@ -2367,18 +2437,29 @@ class HsecmDashboardService
             return [];
         }
 
-        $cols = array_keys($meta['columns'] ?? []);
-        foreach (['id', 'business_key', 'batch_slot', 'gap_count'] as $extra) {
-            $cols[] = $extra;
-        }
-        foreach (['site_column', 'company_column', 'week_column', 'year_column', 'date_column'] as $metaKey) {
+        // Hanya kolom yang dipakai identity / label / filter — jangan full columns map.
+        $cols = ['id', 'business_key', 'batch_slot', 'gap_count'];
+        foreach (['site_column', 'company_column', 'date_column'] as $metaKey) {
             $col = $meta[$metaKey] ?? null;
             if (is_string($col) && $col !== '') {
                 $cols[] = $col;
             }
         }
 
-        return array_values(array_unique($cols));
+        $labelCols = match ($datasetKey) {
+            'sap-rfid' => ['pelapor_all_karyawan', 'sid_pelapor_all_karyawan', 'SAP_per_SID', 'date'],
+            'coverage-cctv' => ['Lokasi', 'Detil_Lokasi', 'Day_of_Date'],
+            'tbc-blindspot' => ['blindspot_TBC', 'kategori_TBC', 'Date_for_Join'],
+            'task-overdue' => ['pic', 'sid_pic', 'Task_Number'],
+            'task-submitted' => ['pic', 'sid_pic', 'Task_Number'],
+            'ikk-work-permit' => ['Code', 'Name_Ikk_Work_Permit', 'Compliance_IKK'],
+            'aggregator' => ['Nama', 'Kode_Sid', 'Day_of_Tanggal_Date', 'Tanggal_Date'],
+            'fatigue' => ['Nama', 'Kode_Sid', 'Tanggal_Date'],
+            'hazard-rootcause' => ['Lokasi', 'Detail_Lokasi', 'Ketidaksesuaian', 'Sub_Ketidaksesuaian', 'Week'],
+            default => [],
+        };
+
+        return array_values(array_unique([...$cols, ...$labelCols]));
     }
 
     /**
@@ -2561,10 +2642,27 @@ class HsecmDashboardService
                     static fn ($c): bool => is_string($c) && $c !== ''
                 ));
             }
+
+            /** @var array<string, string> $whereEquals */
+            $whereEquals = [];
+            $siteFilter = trim((string) ($filters['site'] ?? ''));
+            $companyFilter = trim((string) ($filters['perusahaan'] ?? ''));
+            if ($siteFilter !== '' && is_string($meta['site_column'] ?? null) && $meta['site_column'] !== '') {
+                $whereEquals[(string) $meta['site_column']] = $siteFilter;
+            }
+            if (
+                $companyFilter !== ''
+                && is_string($meta['company_column'] ?? null)
+                && $meta['company_column'] !== ''
+            ) {
+                $whereEquals[(string) $meta['company_column']] = $companyFilter;
+            }
+
             $rows = collect($this->repository->rowsForBatchSlot(
                 $meta['table'],
                 $batchSlot !== '' ? $batchSlot : null,
                 $selectColumns,
+                $whereEquals,
             ));
         }
 
