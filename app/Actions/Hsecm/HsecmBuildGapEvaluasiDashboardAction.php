@@ -8,6 +8,7 @@ use App\Models\Hsecm\HsecmTasklistItem;
 use App\Services\Hsecm\HsecmDashboardService;
 use App\Services\Hsecm\HsecmDatabaseRepository;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -21,7 +22,10 @@ final class HsecmBuildGapEvaluasiDashboardAction
     private const SCOPE_DETAIL_LIMIT = 40;
 
     /** Max hari kalender di date range (performa). */
-    private const MAX_RANGE_DAYS = 7;
+    private const MAX_RANGE_DAYS = 3;
+
+    /** Cache hasil dashboard singkat (detik). */
+    private const DASHBOARD_CACHE_TTL = 120;
 
     /**
      * Urutan & label parameter (selaras mockup Gap Evaluasi).
@@ -40,6 +44,12 @@ final class HsecmBuildGapEvaluasiDashboardAction
         'hazard-rootcause' => 'Hazard Related Incident',
     ];
 
+    /** Program tanpa perusahaan — matriks 1 baris per Site. */
+    private const SITE_ONLY_PROGRAMS = [
+        'coverage-area',
+        'hazard-rootcause',
+    ];
+
     public function __construct(
         private readonly HsecmDashboardService $dashboardService,
         private readonly HsecmDatabaseRepository $repository,
@@ -55,6 +65,38 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $dates = $this->repository->listDistinctBatchSlotDates($probeTable, 90);
         [$dateFrom, $dateTo] = $this->resolveDateRange($filters, $dates);
 
+        $cacheKey = 'hsecm.gap_eval.v3.'.md5(json_encode([
+            'site' => (string) ($filters['site'] ?? ''),
+            'perusahaan' => (string) ($filters['perusahaan'] ?? ''),
+            'q' => (string) ($filters['q'] ?? ''),
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+            'week' => (string) ($filters['week'] ?? ''),
+            'year' => (string) ($filters['year'] ?? ''),
+        ], JSON_THROW_ON_ERROR));
+
+        /** @var array<string, mixed> $dashboard */
+        $dashboard = Cache::remember(
+            $cacheKey,
+            self::DASHBOARD_CACHE_TTL,
+            fn (): array => $this->buildDashboard($filters, $dates, $dateFrom, $dateTo, $probeTable)
+        );
+
+        return $dashboard;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @param  list<string>  $dates
+     * @return array<string, mixed>
+     */
+    private function buildDashboard(
+        array $filters,
+        array $dates,
+        string $dateFrom,
+        string $dateTo,
+        string $probeTable,
+    ): array {
         $rangeDates = $this->datesInRange($dates, $dateFrom, $dateTo);
         if ($rangeDates === []) {
             // Tidak ada scrape di range — tetap pakai date_from sebagai titik evaluasi jika ada slot.
@@ -64,9 +106,13 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $prevDate = $this->resolvePreviousDate($dates, $dateFrom);
 
         $slotsD = $this->collectSlotsForDates($probeTable, $rangeDates);
-        $slotsPrev = $prevDate !== null
-            ? $this->repository->listBatchSlotsOnDate($probeTable, $prevDate)
-            : [];
+        $slotsPrev = [];
+        if ($prevDate !== null) {
+            $latestPrev = $this->repository->latestBatchSlotOnDate($probeTable, $prevDate);
+            if ($latestPrev !== null) {
+                $slotsPrev = [$latestPrev];
+            }
+        }
 
         $collected = $this->collectRangeIdentityMap($filters, $slotsD, $rangeDates);
         $mapD = $collected['map'];
@@ -233,11 +279,11 @@ final class HsecmBuildGapEvaluasiDashboardAction
     {
         $slots = [];
         foreach ($dates as $date) {
-            $daySlots = $this->repository->listBatchSlotsOnDate($table, $date);
-            if ($daySlots === []) {
+            $latest = $this->repository->latestBatchSlotOnDate($table, $date);
+            if ($latest === null) {
                 continue;
             }
-            $slots[] = (string) end($daySlots);
+            $slots[] = $latest;
         }
 
         return $slots;
@@ -292,9 +338,12 @@ final class HsecmBuildGapEvaluasiDashboardAction
             'q' => (string) ($filters['q'] ?? ''),
         ];
 
-        foreach ($slots as $slot) {
+        // Newest-first: row display diambil dari scrape terbaru, day_count tetap dihitung semua.
+        $orderedSlots = array_reverse($slots);
+
+        foreach ($orderedSlots as $slot) {
             $slotDate = $this->slotToDate($slot);
-            $cacheKey = $slot.'|'.$baseFilters['site'].'|'.$baseFilters['perusahaan'];
+            $cacheKey = $slot.'|'.$baseFilters['site'].'|'.$baseFilters['perusahaan'].'|'.$baseFilters['q'];
             if (! isset($slotCache[$cacheKey])) {
                 $slotFilters = $this->dashboardService->withBatchContext(
                     $baseFilters,
@@ -553,12 +602,27 @@ final class HsecmBuildGapEvaluasiDashboardAction
      */
     private function buildProgramMetrics(array $allDetails, array $tasklist, array $hilangStreakByIdentity): array
     {
-        $template = $this->dashboardService->buildGapEvaluasiMatrixTemplate();
-        /** @var list<array{key: string, site: string, company_code: string, company_name: string}> $scopeOrder */
-        $scopeOrder = [];
-        foreach ($template['groups'] as $group) {
+        $companyTemplate = $this->dashboardService->buildGapEvaluasiMatrixTemplate();
+        $siteTemplate = $this->dashboardService->buildGapEvaluasiSiteOnlyMatrixTemplate();
+
+        /** @var list<array{key: string, site: string, company_code: string, company_name: string}> $companyScopeOrder */
+        $companyScopeOrder = [];
+        foreach ($companyTemplate['groups'] as $group) {
             foreach ($group['companies'] as $company) {
-                $scopeOrder[] = [
+                $companyScopeOrder[] = [
+                    'key' => (string) $company['key'],
+                    'site' => (string) $group['site'],
+                    'company_code' => (string) $company['code'],
+                    'company_name' => (string) $company['name'],
+                ];
+            }
+        }
+
+        /** @var list<array{key: string, site: string, company_code: string, company_name: string}> $siteScopeOrder */
+        $siteScopeOrder = [];
+        foreach ($siteTemplate['groups'] as $group) {
+            foreach ($group['companies'] as $company) {
+                $siteScopeOrder[] = [
                     'key' => (string) $company['key'],
                     'site' => (string) $group['site'],
                     'company_code' => (string) $company['code'],
@@ -644,10 +708,15 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $programs = [];
         foreach (self::PROGRAM_LABELS as $key => $label) {
             $s = $stats[$key];
-            $matrixRows = $this->buildVerticalScopeRows($scopeOrder, $s['scopes']);
+            $isSiteOnly = in_array($key, self::SITE_ONLY_PROGRAMS, true);
+            $matrixRows = $this->buildVerticalScopeRows(
+                $isSiteOnly ? $siteScopeOrder : $companyScopeOrder,
+                $s['scopes'],
+            );
             $programs[] = [
                 'key' => $key,
                 'label' => $label,
+                'scope_mode' => $isSiteOnly ? 'site' : 'site_company',
                 'total_gap' => $s['total_gap'],
                 'total_perulangan' => $s['total_perulangan'],
                 'perbaikan_tanpa_perulangan' => $s['perbaikan_tanpa_perulangan'],
@@ -666,6 +735,15 @@ final class HsecmBuildGapEvaluasiDashboardAction
      */
     private function resolveScopeKeyOrOther(array $row): string
     {
+        $programKey = (string) ($row['program_key'] ?? '');
+        if (in_array($programKey, self::SITE_ONLY_PROGRAMS, true)) {
+            $scopeKey = $this->dashboardService->resolveGapEvaluasiSiteOnlyScopeKey(
+                (string) ($row['site'] ?? ''),
+            );
+
+            return $scopeKey ?? 'Lainnya|—';
+        }
+
         $scopeKey = $this->dashboardService->resolveGapEvaluasiScopeKey(
             (string) ($row['site'] ?? ''),
             (string) ($row['perusahaan'] ?? ''),
@@ -875,6 +953,9 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $site = trim((string) ($filters['site'] ?? ''));
         $perusahaan = trim((string) ($filters['perusahaan'] ?? ''));
 
+        // Join lebih ringan daripada whereHas subquery; batasi window 45 hari.
+        $windowStart = Carbon::parse($evalDate, 'Asia/Makassar')->subDays(45)->startOfDay();
+
         $query = HsecmTasklistItem::query()
             ->select([
                 'hsecm_tasklist_items.id',
@@ -887,21 +968,22 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'hsecm_tasklist_items.submitted_by_name',
                 'hsecm_tasklist_items.submitted_at',
             ])
-            ->with(['tasklist:id,site,perusahaan,batch_slot,token'])
-            ->whereHas('tasklist', function ($q) use ($site, $perusahaan, $evalDate): void {
-                if ($site !== '') {
-                    $q->where('site', $site);
-                }
-                if ($perusahaan !== '') {
-                    $q->where('perusahaan', $perusahaan);
-                }
-                $q->where(function ($inner) use ($evalDate): void {
-                    $inner->whereNull('batch_slot')
-                        ->orWhereDate('batch_slot', '<=', $evalDate);
-                });
+            ->join('hsecm_tasklists', 'hsecm_tasklists.id', '=', 'hsecm_tasklist_items.tasklist_id')
+            ->addSelect([
+                'hsecm_tasklists.site as tasklist_site',
+                'hsecm_tasklists.perusahaan as tasklist_perusahaan',
+            ])
+            ->when($site !== '', static fn ($q) => $q->where('hsecm_tasklists.site', $site))
+            ->when($perusahaan !== '', static fn ($q) => $q->where('hsecm_tasklists.perusahaan', $perusahaan))
+            ->where(function ($inner) use ($evalDate, $windowStart): void {
+                $inner->whereNull('hsecm_tasklists.batch_slot')
+                    ->orWhere(function ($slotQ) use ($evalDate, $windowStart): void {
+                        $slotQ->whereDate('hsecm_tasklists.batch_slot', '<=', $evalDate)
+                            ->whereDate('hsecm_tasklists.batch_slot', '>=', $windowStart->toDateString());
+                    });
             });
 
-        $items = $query->orderByDesc('hsecm_tasklist_items.id')->limit(800)->get();
+        $items = $query->orderByDesc('hsecm_tasklist_items.id')->limit(500)->get();
 
         $berhasil = [];
         $belumEfektif = [];
@@ -912,13 +994,8 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $berhasilIdentities = [];
 
         foreach ($items as $item) {
-            $tasklist = $item->tasklist;
-            if ($tasklist === null) {
-                continue;
-            }
-
-            $itemSite = trim((string) ($tasklist->site ?? ''));
-            $itemCompany = trim((string) ($tasklist->perusahaan ?? ''));
+            $itemSite = trim((string) ($item->tasklist_site ?? ''));
+            $itemCompany = trim((string) ($item->tasklist_perusahaan ?? ''));
             $programKey = trim((string) $item->program_key);
             $businessKey = trim((string) $item->business_key);
             $identity = strtolower($programKey).'|'.$businessKey.'|'.strtolower($itemSite).'|'.strtolower($itemCompany);

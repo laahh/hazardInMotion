@@ -16,6 +16,7 @@ use App\Models\AutoBannedHsctEmailLog;
 use App\Models\AutoBannedStatusSnapshot;
 use App\Models\AutoBannedUnbanRequest;
 use App\Models\ScrAutoBannedTbcSap;
+use App\Services\Mail\ResilientSmtpMailService;
 use App\Support\AutoBanned\AutoBannedSchema;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
@@ -23,7 +24,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 
 class AutoBannedHsctEmailService
@@ -33,6 +33,7 @@ class AutoBannedHsctEmailService
         private readonly AutoBannedHsctListExcelExporter $excelExporter,
         private readonly AutoBannedScrapPollService $scrapPollService,
         private readonly AutoBannedOverviewService $overviewService,
+        private readonly ResilientSmtpMailService $resilientMail,
     ) {}
 
     public function tablesAvailable(): bool
@@ -1089,7 +1090,7 @@ class AutoBannedHsctEmailService
             );
 
             foreach ($recipients as $email) {
-                Mail::to($email)->send($mailable);
+                $this->resilientMail->send($mailable, $email);
             }
 
             return true;

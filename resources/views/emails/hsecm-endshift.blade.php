@@ -118,8 +118,8 @@
         </tr>
         <tr>
           <td style="background:#0f172a;color:#94a3b8;padding:16px 28px;font-size:11px;line-height:1.6;">
-            <strong style="color:#e2e8f0;">HSECM — Akhir Shift</strong><br/>
-            Dikirim otomatis dari sistem monitoring HSE. Link Tasklist adalah pintu utama untuk inputasi perbaikan.
+            <strong style="color:#e2e8f0;">Akhir Shift</strong><br/>
+            Dikirim otomatis dari sistem monitoring OHS. Link Tasklist adalah pintu utama untuk inputasi perbaikan.
           </td>
         </tr>
       </table>

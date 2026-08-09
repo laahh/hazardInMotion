@@ -46,6 +46,20 @@ return [
             'local_domain' => env('MAIL_EHLO_DOMAIN'),
         ],
 
+        /*
+         * SMTP cadangan: dipakai otomatis saat primary gagal / kena limit.
+         */
+        'smtp_backup' => [
+            'transport' => 'smtp',
+            'host' => env('MAIL_BACKUP_HOST', env('MAIL_HOST', 'smtp.mailgun.org')),
+            'port' => env('MAIL_BACKUP_PORT', env('MAIL_PORT', 587)),
+            'encryption' => env('MAIL_BACKUP_ENCRYPTION', env('MAIL_ENCRYPTION', 'tls')),
+            'username' => env('MAIL_BACKUP_USERNAME'),
+            'password' => env('MAIL_BACKUP_PASSWORD'),
+            'timeout' => null,
+            'local_domain' => env('MAIL_BACKUP_EHLO_DOMAIN', env('MAIL_EHLO_DOMAIN')),
+        ],
+
         'ses' => [
             'transport' => 'ses',
         ],
@@ -82,7 +96,7 @@ return [
             'transport' => 'failover',
             'mailers' => [
                 'smtp',
-                'log',
+                'smtp_backup',
             ],
         ],
     ],
@@ -101,6 +115,21 @@ return [
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', 'Example'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Backup "From" Address
+    |--------------------------------------------------------------------------
+    |
+    | Dipakai saat pengiriman jatuh ke smtp_backup (penting untuk Gmail:
+    | From biasanya harus cocok dengan akun SMTP yang autentikasi).
+    |
+    */
+
+    'backup_from' => [
+        'address' => env('MAIL_BACKUP_FROM_ADDRESS', env('MAIL_FROM_ADDRESS', 'hello@example.com')),
+        'name' => env('MAIL_BACKUP_FROM_NAME', env('MAIL_FROM_NAME', 'Example')),
     ],
 
     /*

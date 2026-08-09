@@ -107,6 +107,7 @@ class HsecmDashboardService
                 'pelapor_all_karyawan' => 'Pelapor',
                 'perusahaan_pelapor_all_karyawan' => 'Perusahaan Pelapor',
                 'pic' => 'PIC',
+                'sid_pic' => 'SID PIC',
                 'perusahaan_pic' => 'Perusahaan PIC',
                 'status3' => 'Status',
                 'Week_of_date_time' => 'Week',
@@ -130,6 +131,7 @@ class HsecmDashboardService
                 'pelapor_all_karyawan' => 'Pelapor',
                 'perusahaan_pelapor_all_karyawan' => 'Perusahaan Pelapor',
                 'pic' => 'PIC',
+                'sid_pic' => 'SID PIC',
                 'perusahaan_pic' => 'Perusahaan PIC',
                 'status3' => 'Status',
                 'Selisih_jam_dari_Submit' => 'Selisih Jam',
@@ -721,6 +723,54 @@ class HsecmDashboardService
         }
 
         return null;
+    }
+
+    /**
+     * Scope per-site saja (program tanpa perusahaan, mis. Coverage Area / Hazard Related).
+     * Kunci: `Site|__SITE__`.
+     */
+    public function resolveGapEvaluasiSiteOnlyScopeKey(string $site): ?string
+    {
+        $siteRaw = trim($site);
+        if ($siteRaw === '' || $this->isAllToken($siteRaw)) {
+            return null;
+        }
+
+        $templateSite = $this->resolveGapPerulanganTemplateSite($siteRaw) ?? $siteRaw;
+
+        return $this->gapPerulanganMatrixKey($templateSite, '__SITE__');
+    }
+
+    /**
+     * Template matriks 1 baris per Site (tanpa breakdown perusahaan).
+     *
+     * @return array{
+     *     groups: list<array{site: string, companies: list<array{code: string, name: string, key: string}>}>,
+     *     columns: list<string>
+     * }
+     */
+    public function buildGapEvaluasiSiteOnlyMatrixTemplate(): array
+    {
+        $groups = [];
+        $columns = [];
+
+        foreach (array_keys(self::GAP_PERULANGAN_SITE_COMPANIES) as $site) {
+            $key = $this->gapPerulanganMatrixKey($site, '__SITE__');
+            $groups[] = [
+                'site' => $site,
+                'companies' => [[
+                    'code' => '—',
+                    'name' => '—',
+                    'key' => $key,
+                ]],
+            ];
+            $columns[] = $key;
+        }
+
+        return [
+            'groups' => $groups,
+            'columns' => $columns,
+        ];
     }
 
     /**
@@ -1799,21 +1849,34 @@ class HsecmDashboardService
      */
     private function buildFilterOptions(): array
     {
-        return Cache::remember('hsecm.filter_options.db.v3', 300, function (): array {
+        return Cache::remember('hsecm.filter_options.db.v4', 300, function (): array {
             $sites = collect();
             $companies = collect();
             $weeks = collect();
             $years = collect();
 
             foreach ($this->visibleDatasets() as $key => $meta) {
-                $rows = collect($this->repository->rows($meta['table']));
+                $table = (string) $meta['table'];
+                $latestSlot = $this->repository->hasBatchSlotSupport($table)
+                    ? $this->repository->latestBatchSlot($table)
+                    : null;
 
-                $sites = $sites->merge($this->uniqueColumnValues($rows, $meta['site_column']));
+                $sites = $sites->merge(
+                    $this->repository->distinctColumnValues($table, (string) $meta['site_column'], $latestSlot)
+                );
+
                 if ($meta['company_column'] !== null) {
-                    $companies = $companies->merge($this->uniqueColumnValues($rows, $meta['company_column']));
+                    $companies = $companies->merge(
+                        $this->repository->distinctColumnValues($table, (string) $meta['company_column'], $latestSlot)
+                    );
                 }
-                $weeks = $weeks->merge($this->uniqueColumnValues($rows, $meta['week_column']));
-                $years = $years->merge($this->uniqueColumnValues($rows, $meta['year_column']));
+
+                $weeks = $weeks->merge(
+                    $this->repository->distinctColumnValues($table, (string) $meta['week_column'], $latestSlot)
+                );
+                $years = $years->merge(
+                    $this->repository->distinctColumnValues($table, (string) $meta['year_column'], $latestSlot)
+                );
             }
 
             return [
@@ -2231,7 +2294,10 @@ class HsecmDashboardService
             $siteColumn = (string) ($meta['site_column'] ?? '');
             $companyColumn = $meta['company_column'] !== null ? (string) $meta['company_column'] : '';
 
-            $rows = $this->filteredRows($datasetKey, $filters);
+            $slotFilters = array_merge($filters, [
+                'select_columns' => $this->gapIdentitySelectColumns($datasetKey),
+            ]);
+            $rows = $this->filteredRows($datasetKey, $slotFilters);
             if ($programKey === 'layer1-tanpa-sap') {
                 $rows = $rows->filter(function (array $row): bool {
                     if ($this->isAllToken($row['SAP_per_SID'] ?? null)) {
@@ -2287,6 +2353,32 @@ class HsecmDashboardService
         }
 
         return $items;
+    }
+
+    /**
+     * Kolom minimal untuk membangun identity gap (hindari SELECT *).
+     *
+     * @return list<string>
+     */
+    private function gapIdentitySelectColumns(string $datasetKey): array
+    {
+        $meta = self::DATASETS[$datasetKey] ?? null;
+        if ($meta === null) {
+            return [];
+        }
+
+        $cols = array_keys($meta['columns'] ?? []);
+        foreach (['id', 'business_key', 'batch_slot', 'gap_count'] as $extra) {
+            $cols[] = $extra;
+        }
+        foreach (['site_column', 'company_column', 'week_column', 'year_column', 'date_column'] as $metaKey) {
+            $col = $meta[$metaKey] ?? null;
+            if (is_string($col) && $col !== '') {
+                $cols[] = $col;
+            }
+        }
+
+        return array_values(array_unique($cols));
     }
 
     /**
@@ -2358,7 +2450,10 @@ class HsecmDashboardService
     {
         return match ($datasetKey) {
             'sap-rfid' => trim((string) ($row['pelapor_all_karyawan'] ?? $row['sid_pelapor_all_karyawan'] ?? '')),
-            'task-overdue', 'task-submitted' => trim((string) ($row['Task_Number'] ?? '')),
+            'task-overdue', 'task-submitted' => trim(implode(' · ', array_filter([
+                trim((string) ($row['pic'] ?? '')),
+                trim((string) ($row['sid_pic'] ?? '')),
+            ], static fn (string $part): bool => $part !== ''))),
             'ikk-work-permit' => trim((string) ($row['Code'] ?? $row['Name_Ikk_Work_Permit'] ?? '')),
             'coverage-cctv' => trim(implode(' · ', array_filter([
                 (string) ($row['Lokasi'] ?? ''),
@@ -2458,9 +2553,18 @@ class HsecmDashboardService
                 $previousSlot !== '' ? $previousSlot : null,
             ));
         } else {
+            $selectColumns = null;
+            if (isset($filters['select_columns']) && is_array($filters['select_columns'])) {
+                /** @var list<string> $selectColumns */
+                $selectColumns = array_values(array_filter(
+                    $filters['select_columns'],
+                    static fn ($c): bool => is_string($c) && $c !== ''
+                ));
+            }
             $rows = collect($this->repository->rowsForBatchSlot(
                 $meta['table'],
                 $batchSlot !== '' ? $batchSlot : null,
+                $selectColumns,
             ));
         }
 

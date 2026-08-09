@@ -2,6 +2,8 @@
 @php
    $key = (string) ($program['key'] ?? '');
    $label = (string) ($program['label'] ?? $key);
+   $scopeMode = (string) ($program['scope_mode'] ?? 'site_company');
+   $isSiteOnly = $scopeMode === 'site';
    $totalGap = (int) ($program['total_gap'] ?? 0);
    $totalPerulangan = (int) ($program['total_perulangan'] ?? 0);
    $perbaikanTanpa = (int) ($program['perbaikan_tanpa_perulangan'] ?? 0);
@@ -15,7 +17,9 @@
    <div class="px-5 py-3 border-b border-slate-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div>
          <h3 class="font-headline font-bold text-base text-on-background">{{ $label }}</h3>
-         <p class="text-xs text-on-surface-variant mt-0.5">Ringkasan per Site → Perusahaan · klik angka untuk detail</p>
+         <p class="text-xs text-on-surface-variant mt-0.5">
+            {{ $isSiteOnly ? 'Ringkasan per Site · klik angka untuk detail' : 'Ringkasan per Site → Perusahaan · klik angka untuk detail' }}
+         </p>
       </div>
       <span class="inline-flex items-center rounded-md bg-teal-600 text-white text-xs font-bold px-2.5 py-1 tracking-wide shrink-0">
          {{ number_format($totalGap) }} / {{ number_format($totalPerulangan) }} / {{ number_format($perbaikanTanpa) }}
@@ -38,14 +42,18 @@
 
    <div class="border-t border-slate-100">
       <div class="px-5 py-3 border-b border-slate-50">
-         <p class="text-xs font-semibold text-on-background">Matriks Site / Perusahaan</p>
+         <p class="text-xs font-semibold text-on-background">
+            {{ $isSiteOnly ? 'Matriks Site' : 'Matriks Site / Perusahaan' }}
+         </p>
       </div>
       <div class="overflow-x-auto">
          <table class="hsecm-table w-full text-sm">
             <thead>
                <tr>
                   <th class="px-4 py-2 text-left">Site</th>
+                  @unless($isSiteOnly)
                   <th class="px-4 py-2 text-left">Perusahaan</th>
+                  @endunless
                   <th class="px-4 py-2 text-right">Total Gap</th>
                   <th class="px-4 py-2 text-right">Total Perulangan</th>
                   <th class="px-4 py-2 text-right">Perbaikan tanpa Perulangan</th>
@@ -58,16 +66,20 @@
                   $p = (int) ($m['total_perulangan'] ?? 0);
                   $b = (int) ($m['perbaikan_tanpa_perulangan'] ?? 0);
                   $scopeKey = (string) ($m['key'] ?? '');
-                  $scopeTitle = trim(($m['site'] ?? '').' · '.($m['company_code'] ?? ''));
+                  $scopeTitle = $isSiteOnly
+                     ? trim((string) ($m['site'] ?? ''))
+                     : trim(($m['site'] ?? '').' · '.($m['company_code'] ?? ''));
                @endphp
                <tr class="border-t border-slate-50">
                   <td class="px-4 py-2 font-semibold text-on-background whitespace-nowrap">{{ $m['site'] }}</td>
+                  @unless($isSiteOnly)
                   <td class="px-4 py-2 whitespace-nowrap" title="{{ $m['company_name'] ?? '' }}">
                      <span class="font-semibold">{{ $m['company_code'] }}</span>
                      @if(($m['company_name'] ?? '') !== '' && ($m['company_name'] ?? '') !== ($m['company_code'] ?? ''))
                         <span class="block text-[11px] text-on-surface-variant">{{ $m['company_name'] }}</span>
                      @endif
                   </td>
+                  @endunless
                   <td class="px-4 py-2 text-right">
                      @if($g > 0)
                      <button type="button" class="gap-eval-open-modal font-semibold text-red-600 underline decoration-red-300 underline-offset-2 hover:text-red-700"
@@ -98,7 +110,7 @@
                </tr>
                @empty
                <tr>
-                  <td colspan="5" class="px-4 py-8 text-center text-on-surface-variant">Belum ada data scope.</td>
+                  <td colspan="{{ $isSiteOnly ? 4 : 5 }}" class="px-4 py-8 text-center text-on-surface-variant">Belum ada data scope.</td>
                </tr>
                @endforelse
             </tbody>

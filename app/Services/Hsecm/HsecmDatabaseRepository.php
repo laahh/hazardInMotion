@@ -20,9 +20,15 @@ class HsecmDatabaseRepository
 {
     private const CACHE_PREFIX = 'hsecm.db.';
 
-    private const CACHE_VERSION = 'v2';
+    private const CACHE_VERSION = 'v3';
 
     private const CACHE_TTL_SECONDS = 300;
+
+    /** Max slot histori untuk hitung streak consecutive (≈30 hari × 2 slot). */
+    private const STREAK_LOOKBACK_SLOTS = 60;
+
+    /** Chunk size untuk whereIn business_key (hindari packet/query terlalu besar). */
+    private const BUSINESS_KEY_CHUNK = 500;
 
     /** @var array<string, bool> */
     private array $columnSupportCache = [];
@@ -126,9 +132,10 @@ class HsecmDatabaseRepository
     }
 
     /**
+     * @param  list<string>|null  $columns  null = SELECT * ; list = SELECT kolom tertentu (lebih ringan)
      * @return list<array<string, mixed>>
      */
-    public function rowsForBatchSlot(string $table, ?string $batchSlot = null): array
+    public function rowsForBatchSlot(string $table, ?string $batchSlot = null, ?array $columns = null): array
     {
         if (! $this->hasBatchSlotSupport($table)) {
             return $this->rows($table);
@@ -139,16 +146,80 @@ class HsecmDatabaseRepository
             return [];
         }
 
+        $select = $this->normalizeSelectColumns($table, $columns);
+        $colKey = $select === null ? 'allcols' : 'cols.'.md5(implode(',', $select));
+
         return Cache::remember(
-            self::cacheKey($table, 'slot.'.$slot),
+            self::cacheKey($table, 'slot.'.$slot.'.'.$colKey),
             self::CACHE_TTL_SECONDS,
-            function () use ($table, $slot): array {
-                return $this->mapRows(
-                    DB::table($table)
-                        ->where('batch_slot', $slot)
-                        ->orderBy('id')
-                        ->get()
-                );
+            function () use ($table, $slot, $select): array {
+                $query = DB::table($table)->where('batch_slot', $slot)->orderBy('id');
+                if ($select !== null) {
+                    $query->select($select);
+                }
+
+                return $this->mapRows($query->get());
+            }
+        );
+    }
+
+    /**
+     * Nilai unik kolom (opsional dibatasi ke satu batch_slot) — untuk filter dropdown.
+     *
+     * @return list<string>
+     */
+    public function distinctColumnValues(string $table, string $column, ?string $batchSlot = null): array
+    {
+        if ($column === '' || ! $this->tableHasColumn($table, $column)) {
+            return [];
+        }
+
+        $slot = $batchSlot !== null ? $this->normalizeSlot($batchSlot) : null;
+        $cacheSuffix = 'dist.'.$column.'.'.($slot ?? 'noslot');
+
+        return Cache::remember(
+            self::cacheKey($table, $cacheSuffix),
+            self::CACHE_TTL_SECONDS,
+            function () use ($table, $column, $slot): array {
+                $query = DB::table($table)
+                    ->whereNotNull($column)
+                    ->where($column, '!=', '');
+
+                if ($slot !== null && $this->hasBatchSlotSupport($table)) {
+                    $query->where('batch_slot', $slot);
+                }
+
+                return $query
+                    ->distinct()
+                    ->orderBy($column)
+                    ->limit(500)
+                    ->pluck($column)
+                    ->map(static fn ($v): string => trim((string) $v))
+                    ->filter(static fn (string $v): bool => $v !== '')
+                    ->values()
+                    ->all();
+            }
+        );
+    }
+
+    /**
+     * Slot terakhir pada tanggal kalender Y-m-d (satu query MAX).
+     */
+    public function latestBatchSlotOnDate(string $table, string $ymd): ?string
+    {
+        if (! $this->hasBatchSlotSupport($table) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $ymd) !== 1) {
+            return null;
+        }
+
+        return Cache::remember(
+            self::cacheKey($table, 'latest_on.'.$ymd),
+            self::CACHE_TTL_SECONDS,
+            function () use ($table, $ymd): ?string {
+                $max = DB::table($table)
+                    ->whereBetween('batch_slot', [$ymd.' 00:00:00', $ymd.' 23:59:59'])
+                    ->max('batch_slot');
+
+                return $this->normalizeSlot($max);
             }
         );
     }
@@ -246,15 +317,17 @@ class HsecmDatabaseRepository
 
         $cacheKey = self::cacheKey(
             $table,
-            'streak_consec.'.md5($current.'|'.implode("\n", $keys))
+            'streak_consec.v2.'.md5($current.'|'.implode("\n", $keys))
         );
 
         /** @var array<string, int> $cached */
         $cached = Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($table, $keys, $current): array {
+            // Hanya lookback terbatas — cukup untuk streak harian; hindari full-table scan histori.
             $rawSlots = DB::table($table)
                 ->where('batch_slot', '<=', $current)
                 ->distinct()
                 ->orderByDesc('batch_slot')
+                ->limit(self::STREAK_LOOKBACK_SLOTS)
                 ->pluck('batch_slot');
 
             $slots = [];
@@ -276,21 +349,25 @@ class HsecmDatabaseRepository
                 return $out;
             }
 
-            $appearRows = DB::table($table)
-                ->select(['business_key', 'batch_slot'])
-                ->whereIn('business_key', $keys)
-                ->where('batch_slot', '<=', $current)
-                ->get();
-
+            $slotMin = $slots[array_key_last($slots)];
             /** @var array<string, array<string, true>> $presence */
             $presence = [];
-            foreach ($appearRows as $row) {
-                $key = trim((string) ($row->business_key ?? ''));
-                $slot = $this->normalizeSlot($row->batch_slot ?? null);
-                if ($key === '' || $slot === null) {
-                    continue;
+
+            foreach (array_chunk($keys, self::BUSINESS_KEY_CHUNK) as $chunk) {
+                $appearRows = DB::table($table)
+                    ->select(['business_key', 'batch_slot'])
+                    ->whereIn('business_key', $chunk)
+                    ->whereBetween('batch_slot', [$slotMin, $current])
+                    ->get();
+
+                foreach ($appearRows as $row) {
+                    $key = trim((string) ($row->business_key ?? ''));
+                    $slot = $this->normalizeSlot($row->batch_slot ?? null);
+                    if ($key === '' || $slot === null) {
+                        continue;
+                    }
+                    $presence[$key][$slot] = true;
                 }
-                $presence[$key][$slot] = true;
             }
 
             $out = [];
@@ -344,32 +421,36 @@ class HsecmDatabaseRepository
         $limit = max(1, min(365, $limit));
 
         return Cache::remember(
-            self::cacheKey($table, 'slot_dates.'.$limit),
+            self::cacheKey($table, 'slot_dates.v2.'.$limit),
             self::CACHE_TTL_SECONDS,
             function () use ($table, $limit): array {
+                // Hindari GROUP BY DATE(batch_slot) (tidak index-friendly).
+                // Ambil slot terbaru lalu unique tanggal di PHP.
                 $raw = DB::table($table)
-                    ->selectRaw('DATE(batch_slot) as slot_date')
                     ->whereNotNull('batch_slot')
-                    ->groupBy(DB::raw('DATE(batch_slot)'))
-                    ->orderByDesc(DB::raw('DATE(batch_slot)'))
-                    ->limit($limit)
-                    ->pluck('slot_date');
+                    ->orderByDesc('batch_slot')
+                    ->limit(max(40, $limit * 4))
+                    ->pluck('batch_slot');
 
                 $dates = [];
                 foreach ($raw as $value) {
-                    $ymd = trim((string) $value);
-                    if ($ymd !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $ymd) === 1) {
-                        $dates[] = $ymd;
-                    } else {
-                        try {
-                            $dates[] = Carbon::parse($value)->format('Y-m-d');
-                        } catch (\Throwable) {
-                            // skip
-                        }
+                    $normalized = $this->normalizeSlot($value);
+                    if ($normalized === null) {
+                        continue;
+                    }
+                    $ymd = substr($normalized, 0, 10);
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $ymd) === 1) {
+                        $dates[$ymd] = true;
+                    }
+                    if (count($dates) >= $limit) {
+                        break;
                     }
                 }
 
-                return array_values(array_unique($dates));
+                $list = array_keys($dates);
+                rsort($list, SORT_STRING);
+
+                return $list;
             }
         );
     }
@@ -436,18 +517,21 @@ class HsecmDatabaseRepository
         }
 
         $before = $ymd.' 00:00:00';
-        $rows = DB::table($table)
-            ->select('business_key')
-            ->whereIn('business_key', $keys)
-            ->where('batch_slot', '<', $before)
-            ->distinct()
-            ->pluck('business_key');
-
         $out = [];
-        foreach ($rows as $key) {
-            $trimmed = trim((string) $key);
-            if ($trimmed !== '') {
-                $out[$trimmed] = true;
+
+        foreach (array_chunk($keys, self::BUSINESS_KEY_CHUNK) as $chunk) {
+            $rows = DB::table($table)
+                ->select('business_key')
+                ->whereIn('business_key', $chunk)
+                ->where('batch_slot', '<', $before)
+                ->distinct()
+                ->pluck('business_key');
+
+            foreach ($rows as $key) {
+                $trimmed = trim((string) $key);
+                if ($trimmed !== '') {
+                    $out[$trimmed] = true;
+                }
             }
         }
 
@@ -483,6 +567,40 @@ class HsecmDatabaseRepository
         }
 
         return $this->columnSupportCache[$cacheKey];
+    }
+
+    /**
+     * @param  list<string>|null  $columns
+     * @return list<string>|null
+     */
+    private function normalizeSelectColumns(string $table, ?array $columns): ?array
+    {
+        if ($columns === null || $columns === []) {
+            return null;
+        }
+
+        $select = [];
+        foreach ($columns as $column) {
+            $col = trim((string) $column);
+            if ($col === '' || isset($select[$col])) {
+                continue;
+            }
+            if (! $this->tableHasColumn($table, $col)) {
+                continue;
+            }
+            $select[$col] = true;
+        }
+
+        if ($select === []) {
+            return null;
+        }
+
+        // id selalu ikut untuk _row_id / dedupe.
+        if ($this->tableHasColumn($table, 'id')) {
+            $select = ['id' => true] + $select;
+        }
+
+        return array_keys($select);
     }
 
     /**

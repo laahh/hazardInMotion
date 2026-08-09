@@ -7,18 +7,19 @@ namespace App\Services\AutoBanned;
 use App\Mail\AutoBannedDailyBannedEmailMail;
 use App\Models\AutoBannedDailyEmailLog;
 use App\Models\ScrDailyBanned;
+use App\Services\Mail\ResilientSmtpMailService;
 use App\Support\AutoBanned\ScrDailyBannedColumns;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 
 class AutoBannedDailyBannedEmailService
 {
     public function __construct(
         private readonly AutoBannedDailyBannedExcelExporter $excelExporter,
+        private readonly ResilientSmtpMailService $resilientMail,
     ) {}
 
     public function tablesAvailable(): bool
@@ -357,7 +358,7 @@ class AutoBannedDailyBannedEmailService
             );
 
             foreach ($recipients as $email) {
-                Mail::to($email)->send($mailable);
+                $this->resilientMail->send($mailable, $email);
             }
 
             return true;
