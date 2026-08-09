@@ -8,7 +8,7 @@
    <div class="px-5 py-4 border-b border-slate-100 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
       <div>
          <h2 class="font-headline font-bold text-lg text-on-background">Summary Tasklist</h2>
-         <p class="text-xs text-on-surface-variant mt-0.5">Total seluruh tasklist dari awal sampai akhir · submit (item) &amp; approve (tasklist) per Site → Perusahaan</p>
+         <p class="text-xs text-on-surface-variant mt-0.5">Total seluruh tasklist dari awal sampai akhir · submit &amp; approve per tasklist · per Site → Perusahaan</p>
       </div>
       @if($available)
       <span class="hsecm-badge shrink-0">{{ number_format((int) ($totals['tasklist_count'] ?? 0)) }} tasklist · {{ number_format((int) ($totals['item_total'] ?? 0)) }} item</span>
@@ -32,12 +32,12 @@
       <div class="rounded-xl bg-amber-50 px-3 py-2 border border-amber-100">
          <p class="text-[10px] font-bold uppercase tracking-wider text-amber-800">Belum Submit</p>
          <p class="text-xl font-extrabold text-amber-900">{{ number_format((int) ($totals['belum_submit'] ?? 0)) }}</p>
-         <p class="text-[10px] text-amber-800/80 mt-0.5">item</p>
+         <p class="text-[10px] text-amber-800/80 mt-0.5">tasklist</p>
       </div>
       <div class="rounded-xl bg-sky-50 px-3 py-2 border border-sky-100">
          <p class="text-[10px] font-bold uppercase tracking-wider text-sky-800">Sudah Submit</p>
          <p class="text-xl font-extrabold text-sky-900">{{ number_format((int) ($totals['sudah_submit'] ?? 0)) }}</p>
-         <p class="text-[10px] text-sky-800/80 mt-0.5">item</p>
+         <p class="text-[10px] text-sky-800/80 mt-0.5">tasklist</p>
       </div>
       <div class="rounded-xl bg-orange-50 px-3 py-2 border border-orange-100">
          <p class="text-[10px] font-bold uppercase tracking-wider text-orange-800">Belum Approve</p>
@@ -59,8 +59,8 @@
                <th class="px-4 py-2 text-left">Perusahaan</th>
                <th class="px-4 py-2 text-right">Tasklist</th>
                <th class="px-4 py-2 text-right">Total Item</th>
-               <th class="px-4 py-2 text-right">Belum Submit <span class="font-normal normal-case tracking-normal text-[10px] text-on-surface-variant">(item)</span></th>
-               <th class="px-4 py-2 text-right">Sudah Submit <span class="font-normal normal-case tracking-normal text-[10px] text-on-surface-variant">(item)</span></th>
+               <th class="px-4 py-2 text-right">Belum Submit <span class="font-normal normal-case tracking-normal text-[10px] text-on-surface-variant">(tasklist)</span></th>
+               <th class="px-4 py-2 text-right">Sudah Submit <span class="font-normal normal-case tracking-normal text-[10px] text-on-surface-variant">(tasklist)</span></th>
                <th class="px-4 py-2 text-right">Belum Approve <span class="font-normal normal-case tracking-normal text-[10px] text-on-surface-variant">(tasklist)</span></th>
                <th class="px-4 py-2 text-right">Sudah Approve <span class="font-normal normal-case tracking-normal text-[10px] text-on-surface-variant">(tasklist)</span></th>
                <th class="px-4 py-2 text-right">Rejected <span class="font-normal normal-case tracking-normal text-[10px] text-on-surface-variant">(item)</span></th>

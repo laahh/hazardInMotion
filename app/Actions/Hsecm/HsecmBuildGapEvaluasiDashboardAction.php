@@ -66,7 +66,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $dates = $this->repository->listDistinctBatchSlotDates($probeTable, 90);
         [$dateFrom, $dateTo] = $this->resolveDateRange($filters, $dates);
 
-        $cacheKey = 'hsecm.gap_eval.v8.'.md5(json_encode([
+        $cacheKey = 'hsecm.gap_eval.v9.'.md5(json_encode([
             'site' => (string) ($filters['site'] ?? ''),
             'perusahaan' => (string) ($filters['perusahaan'] ?? ''),
             'q' => (string) ($filters['q'] ?? ''),
@@ -1030,8 +1030,12 @@ final class HsecmBuildGapEvaluasiDashboardAction
 
     /**
      * Ringkasan tasklist per Site × Perusahaan.
-     * Submit = level item; Approve = level tasklist (closed = sudah approve).
-     * Total seluruh histori (tidak dibatasi tanggal filter).
+     * Submit & Approve dihitung per tasklist:
+     * - belum_submit = status open
+     * - sudah_submit = status partial|closed
+     * - sudah_approve = status closed
+     * - belum_approve = status != closed
+     * Rejected tetap level item.
      *
      * @param  array<string, mixed>  $filters
      * @return array{
@@ -1076,6 +1080,8 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 site,
                 perusahaan,
                 COUNT(*) as tasklist_count,
+                SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as belum_submit,
+                SUM(CASE WHEN status IN ('partial', 'closed') THEN 1 ELSE 0 END) as sudah_submit,
                 SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as sudah_approve,
                 SUM(CASE WHEN status <> 'closed' THEN 1 ELSE 0 END) as belum_approve
             ")
@@ -1093,8 +1099,6 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 hsecm_tasklists.site as site,
                 hsecm_tasklists.perusahaan as perusahaan,
                 COUNT(hsecm_tasklist_items.id) as item_total,
-                SUM(CASE WHEN hsecm_tasklist_items.status IN ('open', 'rejected') THEN 1 ELSE 0 END) as belum_submit,
-                SUM(CASE WHEN hsecm_tasklist_items.status IN ('submitted', 'approved') THEN 1 ELSE 0 END) as sudah_submit,
                 SUM(CASE WHEN hsecm_tasklist_items.status = 'rejected' THEN 1 ELSE 0 END) as rejected
             ")
             ->get()
@@ -1126,8 +1130,8 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'perusahaan' => $companyLabel !== '' ? $companyLabel : '—',
                 'tasklist_count' => (int) ($approve->tasklist_count ?? 0),
                 'item_total' => (int) ($items->item_total ?? 0),
-                'belum_submit' => (int) ($items->belum_submit ?? 0),
-                'sudah_submit' => (int) ($items->sudah_submit ?? 0),
+                'belum_submit' => (int) ($approve->belum_submit ?? 0),
+                'sudah_submit' => (int) ($approve->sudah_submit ?? 0),
                 'belum_approve' => (int) ($approve->belum_approve ?? 0),
                 'sudah_approve' => (int) ($approve->sudah_approve ?? 0),
                 'rejected' => (int) ($items->rejected ?? 0),
