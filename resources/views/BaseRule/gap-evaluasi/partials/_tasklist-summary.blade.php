@@ -8,7 +8,7 @@
    <div class="px-5 py-4 border-b border-slate-100 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
       <div>
          <h2 class="font-headline font-bold text-lg text-on-background">Summary Tasklist</h2>
-         <p class="text-xs text-on-surface-variant mt-0.5">Total seluruh tasklist dari awal sampai akhir · status item (submit / approve) per Site → Perusahaan</p>
+         <p class="text-xs text-on-surface-variant mt-0.5">Total seluruh tasklist dari awal sampai akhir · submit (item) &amp; approve (tasklist) per Site → Perusahaan</p>
       </div>
       @if($available)
       <span class="hsecm-badge shrink-0">{{ number_format((int) ($totals['tasklist_count'] ?? 0)) }} tasklist · {{ number_format((int) ($totals['item_total'] ?? 0)) }} item</span>
@@ -32,19 +32,22 @@
       <div class="rounded-xl bg-amber-50 px-3 py-2 border border-amber-100">
          <p class="text-[10px] font-bold uppercase tracking-wider text-amber-800">Belum Submit</p>
          <p class="text-xl font-extrabold text-amber-900">{{ number_format((int) ($totals['belum_submit'] ?? 0)) }}</p>
+         <p class="text-[10px] text-amber-800/80 mt-0.5">item</p>
       </div>
       <div class="rounded-xl bg-sky-50 px-3 py-2 border border-sky-100">
          <p class="text-[10px] font-bold uppercase tracking-wider text-sky-800">Sudah Submit</p>
          <p class="text-xl font-extrabold text-sky-900">{{ number_format((int) ($totals['sudah_submit'] ?? 0)) }}</p>
+         <p class="text-[10px] text-sky-800/80 mt-0.5">item</p>
       </div>
       <div class="rounded-xl bg-orange-50 px-3 py-2 border border-orange-100">
          <p class="text-[10px] font-bold uppercase tracking-wider text-orange-800">Belum Approve</p>
          <p class="text-xl font-extrabold text-orange-900">{{ number_format((int) ($totals['belum_approve'] ?? 0)) }}</p>
-         <p class="text-[10px] text-orange-800/80 mt-0.5">{{ number_format((int) ($totals['menunggu_approve'] ?? 0)) }} menunggu ACC</p>
+         <p class="text-[10px] text-orange-800/80 mt-0.5">tasklist</p>
       </div>
       <div class="rounded-xl bg-emerald-50 px-3 py-2 border border-emerald-100">
          <p class="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Sudah Approve</p>
          <p class="text-xl font-extrabold text-emerald-900">{{ number_format((int) ($totals['sudah_approve'] ?? 0)) }}</p>
+         <p class="text-[10px] text-emerald-800/80 mt-0.5">tasklist</p>
       </div>
    </div>
 
@@ -56,11 +59,11 @@
                <th class="px-4 py-2 text-left">Perusahaan</th>
                <th class="px-4 py-2 text-right">Tasklist</th>
                <th class="px-4 py-2 text-right">Total Item</th>
-               <th class="px-4 py-2 text-right">Belum Submit</th>
-               <th class="px-4 py-2 text-right">Sudah Submit</th>
-               <th class="px-4 py-2 text-right">Belum Approve</th>
-               <th class="px-4 py-2 text-right">Sudah Approve</th>
-               <th class="px-4 py-2 text-right">Rejected</th>
+               <th class="px-4 py-2 text-right">Belum Submit <span class="font-normal normal-case tracking-normal text-[10px] text-on-surface-variant">(item)</span></th>
+               <th class="px-4 py-2 text-right">Sudah Submit <span class="font-normal normal-case tracking-normal text-[10px] text-on-surface-variant">(item)</span></th>
+               <th class="px-4 py-2 text-right">Belum Approve <span class="font-normal normal-case tracking-normal text-[10px] text-on-surface-variant">(tasklist)</span></th>
+               <th class="px-4 py-2 text-right">Sudah Approve <span class="font-normal normal-case tracking-normal text-[10px] text-on-surface-variant">(tasklist)</span></th>
+               <th class="px-4 py-2 text-right">Rejected <span class="font-normal normal-case tracking-normal text-[10px] text-on-surface-variant">(item)</span></th>
             </tr>
          </thead>
          <tbody>
@@ -78,9 +81,6 @@
                </td>
                <td class="px-4 py-2 text-right {{ (int) $row['belum_approve'] > 0 ? 'text-orange-800 font-semibold' : 'text-on-surface-variant' }}">
                   {{ number_format((int) $row['belum_approve']) }}
-                  @if((int) ($row['menunggu_approve'] ?? 0) > 0)
-                     <span class="block text-[10px] text-orange-700/80">{{ number_format((int) $row['menunggu_approve']) }} menunggu</span>
-                  @endif
                </td>
                <td class="px-4 py-2 text-right {{ (int) $row['sudah_approve'] > 0 ? 'text-emerald-800 font-semibold' : 'text-on-surface-variant' }}">
                   {{ number_format((int) $row['sudah_approve']) }}
@@ -92,7 +92,7 @@
             @empty
             <tr>
                <td colspan="9" class="px-4 py-8 text-center text-on-surface-variant">
-                  {{ $summary['message'] ?? 'Belum ada tasklist pada periode filter.' }}
+                  {{ $summary['message'] ?? 'Belum ada tasklist.' }}
                </td>
             </tr>
             @endforelse

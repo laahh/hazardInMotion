@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Actions\Hsecm;
 
+use App\Models\Hsecm\HsecmTasklist;
 use App\Models\Hsecm\HsecmTasklistItem;
 use App\Services\Hsecm\HsecmDashboardService;
 use App\Services\Hsecm\HsecmDatabaseRepository;
@@ -65,7 +66,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $dates = $this->repository->listDistinctBatchSlotDates($probeTable, 90);
         [$dateFrom, $dateTo] = $this->resolveDateRange($filters, $dates);
 
-        $cacheKey = 'hsecm.gap_eval.v7.'.md5(json_encode([
+        $cacheKey = 'hsecm.gap_eval.v8.'.md5(json_encode([
             'site' => (string) ($filters['site'] ?? ''),
             'perusahaan' => (string) ($filters['perusahaan'] ?? ''),
             'q' => (string) ($filters['q'] ?? ''),
@@ -1028,7 +1029,8 @@ final class HsecmBuildGapEvaluasiDashboardAction
     }
 
     /**
-     * Ringkasan tasklist per Site × Perusahaan: jumlah, submit, approve.
+     * Ringkasan tasklist per Site × Perusahaan.
+     * Submit = level item; Approve = level tasklist (closed = sudah approve).
      * Total seluruh histori (tidak dibatasi tanggal filter).
      *
      * @param  array<string, mixed>  $filters
@@ -1050,7 +1052,6 @@ final class HsecmBuildGapEvaluasiDashboardAction
                 'sudah_submit' => 0,
                 'belum_approve' => 0,
                 'sudah_approve' => 0,
-                'menunggu_approve' => 0,
                 'rejected' => 0,
             ],
             'rows' => [],
@@ -1064,26 +1065,44 @@ final class HsecmBuildGapEvaluasiDashboardAction
         $site = trim((string) ($filters['site'] ?? ''));
         $perusahaan = trim((string) ($filters['perusahaan'] ?? ''));
 
-        $rows = HsecmTasklistItem::query()
+        // Approve dihitung per tasklist (status closed = semua item sudah ACC).
+        $approveRows = HsecmTasklist::query()
+            ->when($site !== '', static fn ($q) => $q->where('site', $site))
+            ->when($perusahaan !== '', static fn ($q) => $q->where('perusahaan', $perusahaan))
+            ->groupBy('site', 'perusahaan')
+            ->orderBy('site')
+            ->orderBy('perusahaan')
+            ->selectRaw("
+                site,
+                perusahaan,
+                COUNT(*) as tasklist_count,
+                SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as sudah_approve,
+                SUM(CASE WHEN status <> 'closed' THEN 1 ELSE 0 END) as belum_approve
+            ")
+            ->get()
+            ->keyBy(static function ($row): string {
+                return trim((string) ($row->site ?? '')).'|'.trim((string) ($row->perusahaan ?? ''));
+            });
+
+        $itemRows = HsecmTasklistItem::query()
             ->join('hsecm_tasklists', 'hsecm_tasklists.id', '=', 'hsecm_tasklist_items.tasklist_id')
             ->when($site !== '', static fn ($q) => $q->where('hsecm_tasklists.site', $site))
             ->when($perusahaan !== '', static fn ($q) => $q->where('hsecm_tasklists.perusahaan', $perusahaan))
             ->groupBy('hsecm_tasklists.site', 'hsecm_tasklists.perusahaan')
-            ->orderBy('hsecm_tasklists.site')
-            ->orderBy('hsecm_tasklists.perusahaan')
             ->selectRaw("
                 hsecm_tasklists.site as site,
                 hsecm_tasklists.perusahaan as perusahaan,
-                COUNT(DISTINCT hsecm_tasklists.id) as tasklist_count,
                 COUNT(hsecm_tasklist_items.id) as item_total,
                 SUM(CASE WHEN hsecm_tasklist_items.status IN ('open', 'rejected') THEN 1 ELSE 0 END) as belum_submit,
                 SUM(CASE WHEN hsecm_tasklist_items.status IN ('submitted', 'approved') THEN 1 ELSE 0 END) as sudah_submit,
-                SUM(CASE WHEN hsecm_tasklist_items.status <> 'approved' THEN 1 ELSE 0 END) as belum_approve,
-                SUM(CASE WHEN hsecm_tasklist_items.status = 'approved' THEN 1 ELSE 0 END) as sudah_approve,
-                SUM(CASE WHEN hsecm_tasklist_items.status = 'submitted' THEN 1 ELSE 0 END) as menunggu_approve,
                 SUM(CASE WHEN hsecm_tasklist_items.status = 'rejected' THEN 1 ELSE 0 END) as rejected
             ")
-            ->get();
+            ->get()
+            ->keyBy(static function ($row): string {
+                return trim((string) ($row->site ?? '')).'|'.trim((string) ($row->perusahaan ?? ''));
+            });
+
+        $keys = $approveRows->keys()->merge($itemRows->keys())->unique()->sort()->values();
 
         $mapped = [];
         $totals = [
@@ -1093,24 +1112,25 @@ final class HsecmBuildGapEvaluasiDashboardAction
             'sudah_submit' => 0,
             'belum_approve' => 0,
             'sudah_approve' => 0,
-            'menunggu_approve' => 0,
             'rejected' => 0,
         ];
 
-        foreach ($rows as $row) {
-            $siteLabel = trim((string) ($row->site ?? ''));
-            $companyLabel = trim((string) ($row->perusahaan ?? ''));
+        foreach ($keys as $key) {
+            $approve = $approveRows->get($key);
+            $items = $itemRows->get($key);
+            $siteLabel = trim((string) ($approve->site ?? $items->site ?? ''));
+            $companyLabel = trim((string) ($approve->perusahaan ?? $items->perusahaan ?? ''));
+
             $entry = [
                 'site' => $siteLabel !== '' ? $siteLabel : '—',
                 'perusahaan' => $companyLabel !== '' ? $companyLabel : '—',
-                'tasklist_count' => (int) ($row->tasklist_count ?? 0),
-                'item_total' => (int) ($row->item_total ?? 0),
-                'belum_submit' => (int) ($row->belum_submit ?? 0),
-                'sudah_submit' => (int) ($row->sudah_submit ?? 0),
-                'belum_approve' => (int) ($row->belum_approve ?? 0),
-                'sudah_approve' => (int) ($row->sudah_approve ?? 0),
-                'menunggu_approve' => (int) ($row->menunggu_approve ?? 0),
-                'rejected' => (int) ($row->rejected ?? 0),
+                'tasklist_count' => (int) ($approve->tasklist_count ?? 0),
+                'item_total' => (int) ($items->item_total ?? 0),
+                'belum_submit' => (int) ($items->belum_submit ?? 0),
+                'sudah_submit' => (int) ($items->sudah_submit ?? 0),
+                'belum_approve' => (int) ($approve->belum_approve ?? 0),
+                'sudah_approve' => (int) ($approve->sudah_approve ?? 0),
+                'rejected' => (int) ($items->rejected ?? 0),
             ];
             $mapped[] = $entry;
             foreach ($totals as $k => $_) {
