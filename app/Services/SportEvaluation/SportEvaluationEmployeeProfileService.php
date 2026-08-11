@@ -646,6 +646,50 @@ final class SportEvaluationEmployeeProfileService
     }
 
     /**
+     * SID yang sudah ada di BeWell (untuk sync append-only).
+     *
+     * @param  list<string>  $kodeSids
+     * @return array<string, true> map UPPER(kode_sid) => true
+     */
+    public function existingKodeSidMap(array $kodeSids): array
+    {
+        $normalized = [];
+        foreach ($kodeSids as $sid) {
+            $sid = mb_strtoupper(trim((string) $sid));
+            if ($sid === '') {
+                continue;
+            }
+            $normalized[$sid] = true;
+        }
+
+        if ($normalized === []) {
+            return [];
+        }
+
+        if (! $this->connection->isUp()) {
+            throw new RuntimeException('Koneksi BeWell tidak tersedia.');
+        }
+
+        $map = [];
+        foreach (array_chunk(array_keys($normalized), 800) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+            $rows = $this->db()->select(
+                'SELECT kode_sid FROM employee_profiles WHERE UPPER(TRIM(kode_sid)) IN ('.$placeholders.')',
+                $chunk
+            );
+
+            foreach ($rows as $row) {
+                $key = mb_strtoupper(trim((string) ($row->kode_sid ?? '')));
+                if ($key !== '') {
+                    $map[$key] = true;
+                }
+            }
+        }
+
+        return $map;
+    }
+
+    /**
      * @param  list<string>  $header
      * @param  list<string>  $possibleNames
      */

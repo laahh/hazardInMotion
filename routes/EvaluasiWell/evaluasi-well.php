@@ -99,6 +99,8 @@ Route::middleware('evaluasi-well.access')
             ->name('users.import-template');
         Route::post('/users/import', [SportEvaluationEmployeeProfileController::class, 'import'])
             ->name('users.import');
+        Route::post('/users/sync-hse', [SportEvaluationEmployeeProfileController::class, 'syncFromHse'])
+            ->name('users.sync-hse');
         Route::get('/users/{id}/edit', [SportEvaluationEmployeeProfileController::class, 'edit'])
             ->whereNumber('id')
             ->name('users.edit');

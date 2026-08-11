@@ -68,4 +68,20 @@ return [
         'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Evaluasi Well — HSE Employee API (sync append-only)
+    |--------------------------------------------------------------------------
+    */
+    'evaluasi_well_hse' => [
+        'base_url' => env('EVALUASI_WELL_HSE_BASE_URL', 'https://hseautomation.beraucoal.co.id'),
+        'login_path' => env('EVALUASI_WELL_HSE_LOGIN_PATH', '/beats/api/mobile/login'),
+        'username' => env('EVALUASI_WELL_HSE_USERNAME'),
+        'password' => env('EVALUASI_WELL_HSE_PASSWORD'),
+        'company_page_size' => (int) env('EVALUASI_WELL_HSE_COMPANY_SIZE', 1000),
+        'employee_page_size' => (int) env('EVALUASI_WELL_HSE_EMPLOYEE_SIZE', 30000),
+        'timeout' => (int) env('EVALUASI_WELL_HSE_TIMEOUT', 120),
+        'detail_delay_ms' => (int) env('EVALUASI_WELL_HSE_DETAIL_DELAY_MS', 50),
+    ],
+
 ];

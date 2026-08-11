@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\SportEvaluation\SportEvaluationEmployeeProfileImportRequest;
 use App\Http\Requests\SportEvaluation\SportEvaluationEmployeeProfileStoreRequest;
 use App\Http\Requests\SportEvaluation\SportEvaluationEmployeeProfileUpdateRequest;
+use App\Jobs\SportEvaluation\SportEvaluationSyncHseEmployeesJob;
 use App\Services\SportEvaluation\SportEvaluationEmployeeProfileService;
 use App\Support\SpreadsheetExporter;
 use Illuminate\Database\QueryException;
@@ -191,5 +192,36 @@ final class SportEvaluationEmployeeProfileController extends Controller
         return redirect()
             ->route('evaluasi-well.users.index')
             ->with('success', $message);
+    }
+
+    public function syncFromHse(): RedirectResponse
+    {
+        $username = trim((string) config('services.evaluasi_well_hse.username', ''));
+        $password = (string) config('services.evaluasi_well_hse.password', '');
+
+        if ($username === '' || $password === '') {
+            return redirect()
+                ->route('evaluasi-well.users.index')
+                ->withErrors([
+                    'form' => 'Kredensial HSE belum diisi di .env (EVALUASI_WELL_HSE_USERNAME / EVALUASI_WELL_HSE_PASSWORD).',
+                ]);
+        }
+
+        if (! $this->service->indexPage(request())['connectionUp']) {
+            return redirect()
+                ->route('evaluasi-well.users.index')
+                ->withErrors([
+                    'form' => 'Koneksi BeWell tidak tersedia. Aktifkan tunnel sebelum sync.',
+                ]);
+        }
+
+        SportEvaluationSyncHseEmployeesJob::dispatch();
+
+        return redirect()
+            ->route('evaluasi-well.users.index')
+            ->with(
+                'success',
+                'Sync HSE diantrikan. Karyawan baru akan ditambahkan; SID yang sudah ada di-skip (append-only). Pantau log queue untuk hasil.'
+            );
     }
 }

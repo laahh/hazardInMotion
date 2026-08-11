@@ -1,0 +1,247 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services\SportEvaluation;
+
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Http;
+use RuntimeException;
+use Throwable;
+
+/**
+ * Client HTTP ke HSE Automation (Beats login + SID2 employee API).
+ */
+final class SportEvaluationHseEmployeeApiClient
+{
+    private const DETAIL_EXPAND = 'employee.functionalPosition,employee.structuralPosition,employee.department,employee.company,dedicatedSite,employee.status,identities,competencies,licences';
+
+    /**
+     * Login Beats → token untuk header x-api-key.
+     */
+    public function login(): string
+    {
+        $username = trim((string) config('services.evaluasi_well_hse.username', ''));
+        $password = (string) config('services.evaluasi_well_hse.password', '');
+
+        if ($username === '' || $password === '') {
+            throw new RuntimeException('Kredensial HSE belum dikonfigurasi (EVALUASI_WELL_HSE_USERNAME / PASSWORD).');
+        }
+
+        $url = $this->url((string) config('services.evaluasi_well_hse.login_path', '/beats/api/mobile/login'));
+
+        try {
+            $response = $this->http()->post($url, [
+                'username' => $username,
+                'password' => $password,
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+
+            throw new RuntimeException('Gagal menghubungi API login Beats: '.$e->getMessage(), 0, $e);
+        }
+
+        if (! $response->successful()) {
+            throw new RuntimeException('Login Beats gagal (HTTP '.$response->status().').');
+        }
+
+        $json = $response->json();
+        if (! is_array($json)) {
+            throw new RuntimeException('Respons login Beats tidak valid.');
+        }
+
+        $token = $this->extractToken($json);
+        if ($token === '') {
+            throw new RuntimeException('Token tidak ditemukan di respons login Beats.');
+        }
+
+        return $token;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function getCompanies(string $token): array
+    {
+        $size = max(1, (int) config('services.evaluasi_well_hse.company_page_size', 1000));
+        $url = $this->url('/sid2/api/ftwApi/getCompany');
+
+        try {
+            $response = $this->http($token)->get($url, [
+                'page' => 1,
+                'size' => $size,
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+
+            throw new RuntimeException('Gagal mengambil daftar perusahaan HSE: '.$e->getMessage(), 0, $e);
+        }
+
+        if (! $response->successful()) {
+            throw new RuntimeException('getCompany gagal (HTTP '.$response->status().').');
+        }
+
+        $json = $response->json();
+
+        return $this->extractList(is_array($json) ? $json : []);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function getEmployees(string $token, int|string $companyId): array
+    {
+        $size = max(1, (int) config('services.evaluasi_well_hse.employee_page_size', 30000));
+        $url = $this->url('/sid2/api/ftwApi/getEmployee');
+
+        try {
+            $response = $this->http($token)->get($url, [
+                'companyId' => $companyId,
+                'page' => 1,
+                'size' => $size,
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+
+            throw new RuntimeException('Gagal mengambil karyawan company '.$companyId.': '.$e->getMessage(), 0, $e);
+        }
+
+        if (! $response->successful()) {
+            throw new RuntimeException('getEmployee gagal untuk company '.$companyId.' (HTTP '.$response->status().').');
+        }
+
+        $json = $response->json();
+
+        return $this->extractList(is_array($json) ? $json : []);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getEmployeeDetailBySid(string $token, string $sid): array
+    {
+        $sid = trim($sid);
+        if ($sid === '') {
+            throw new RuntimeException('SID kosong.');
+        }
+
+        $url = $this->url('/sid2/employeeInfo/bySid/'.rawurlencode($sid));
+
+        try {
+            $response = $this->http($token)->get($url, [
+                'expand' => self::DETAIL_EXPAND,
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+
+            throw new RuntimeException('Gagal mengambil detail SID '.$sid.': '.$e->getMessage(), 0, $e);
+        }
+
+        if (! $response->successful()) {
+            throw new RuntimeException('Detail SID '.$sid.' gagal (HTTP '.$response->status().').');
+        }
+
+        $json = $response->json();
+        if (! is_array($json)) {
+            return [];
+        }
+
+        // Beberapa endpoint membungkus di data / result / content.
+        foreach (['data', 'result', 'content', 'employeeInfo'] as $key) {
+            if (isset($json[$key]) && is_array($json[$key]) && ! array_is_list($json[$key])) {
+                return $json[$key];
+            }
+        }
+
+        return $json;
+    }
+
+    private function http(?string $token = null): PendingRequest
+    {
+        $timeout = max(10, (int) config('services.evaluasi_well_hse.timeout', 120));
+        $request = Http::timeout($timeout)
+            ->acceptJson()
+            ->asJson();
+
+        if ($token !== null && $token !== '') {
+            $request = $request->withHeaders([
+                'x-api-key' => $token,
+            ]);
+        }
+
+        return $request;
+    }
+
+    private function url(string $path): string
+    {
+        $base = rtrim((string) config('services.evaluasi_well_hse.base_url', ''), '/');
+        if ($base === '') {
+            throw new RuntimeException('EVALUASI_WELL_HSE_BASE_URL belum dikonfigurasi.');
+        }
+
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+
+        return $base.'/'.ltrim($path, '/');
+    }
+
+    /**
+     * @param  array<string, mixed>  $json
+     */
+    private function extractToken(array $json): string
+    {
+        $candidates = [
+            data_get($json, 'token'),
+            data_get($json, 'apiKey'),
+            data_get($json, 'api_key'),
+            data_get($json, 'x-api-key'),
+            data_get($json, 'accessToken'),
+            data_get($json, 'access_token'),
+            data_get($json, 'data.token'),
+            data_get($json, 'data.apiKey'),
+            data_get($json, 'data.api_key'),
+            data_get($json, 'data.accessToken'),
+            data_get($json, 'data.access_token'),
+            data_get($json, 'result.token'),
+            data_get($json, 'result.apiKey'),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                return trim($candidate);
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $json
+     * @return list<array<string, mixed>>
+     */
+    private function extractList(array $json): array
+    {
+        foreach (['data', 'content', 'result', 'items', 'rows', 'list'] as $key) {
+            $value = $json[$key] ?? null;
+            if (is_array($value) && array_is_list($value)) {
+                return array_values(array_filter($value, 'is_array'));
+            }
+            // Nested pagination: data.content / data.data
+            if (is_array($value) && ! array_is_list($value)) {
+                foreach (['data', 'content', 'items', 'rows'] as $inner) {
+                    $nested = $value[$inner] ?? null;
+                    if (is_array($nested) && array_is_list($nested)) {
+                        return array_values(array_filter($nested, 'is_array'));
+                    }
+                }
+            }
+        }
+
+        if (array_is_list($json)) {
+            return array_values(array_filter($json, 'is_array'));
+        }
+
+        return [];
+    }
+}
