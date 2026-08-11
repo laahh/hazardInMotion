@@ -9,6 +9,7 @@ use App\Http\Controllers\Hsecm\Concerns\ProvidesHsecmLayout;
 use App\Http\Requests\Hsecm\HsecmWaNotifySendEmailRequest;
 use App\Http\Requests\Hsecm\HsecmWaNotifySendShiftEmailRequest;
 use App\Http\Requests\Hsecm\HsecmWaNotifyStoreRecipientRequest;
+use App\Http\Requests\Hsecm\HsecmWaNotifyUpdateRecipientRequest;
 use App\Services\Hsecm\HsecmDashboardService;
 use App\Services\Hsecm\HsecmShiftEmailDispatchService;
 use App\Services\Hsecm\HsecmWaNotifyService;
@@ -61,6 +62,27 @@ class HsecmWaNotifyController extends Controller
 
         return $this->redirectToIndex($request)
             ->with('success', 'Penerima ditambahkan: '.$recipient['nama'].' ('.$recipient['email'].').');
+    }
+
+    public function updateRecipient(HsecmWaNotifyUpdateRecipientRequest $request, string $id): RedirectResponse
+    {
+        $data = $request->validated();
+        $recipient = $this->waNotifyService->updateRecipient($id, [
+            'nama' => $data['nama'],
+            'email' => $data['email'],
+            'site' => $data['site'] ?? null,
+            'perusahaan' => $data['perusahaan'] ?? '',
+            'role' => $data['role'] ?? '',
+            'no' => $data['no'] ?? '',
+        ]);
+
+        if ($recipient === null) {
+            return $this->redirectToIndex($request)
+                ->with('error', 'Penerima tidak ditemukan.');
+        }
+
+        return $this->redirectToIndex($request)
+            ->with('success', 'Penerima diperbarui: '.$recipient['nama'].' ('.$recipient['email'].').');
     }
 
     public function destroyRecipient(Request $request, string $id): RedirectResponse

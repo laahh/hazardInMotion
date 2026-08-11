@@ -35,6 +35,15 @@ class HsecmWaNotifyService
         return $this->recipientRepository->add($payload);
     }
 
+    /**
+     * @param  array{nama: string, email: string, site?: ?string, perusahaan?: string, role?: string, no?: string}  $payload
+     * @return array<string, mixed>|null
+     */
+    public function updateRecipient(string $id, array $payload): ?array
+    {
+        return $this->recipientRepository->update($id, $payload);
+    }
+
     public function deleteRecipient(string $id): bool
     {
         return $this->recipientRepository->delete($id);
@@ -118,6 +127,7 @@ class HsecmWaNotifyService
                     'id' => (string) ($recipient['id'] ?? ''),
                     'source' => (string) ($recipient['source'] ?? 'config'),
                     'editable' => (bool) ($recipient['editable'] ?? false),
+                    'deletable' => (bool) ($recipient['deletable'] ?? (($recipient['source'] ?? '') === 'custom')),
                     'site' => $site,
                     'perusahaan' => $perusahaan,
                     'role' => (string) ($recipient['role'] ?? ''),

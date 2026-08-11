@@ -52,7 +52,29 @@
       @if(session('success'))
         <div class="rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 text-sm">{{ session('success') }}</div>
       @endif
-      @php $sodWaLinks = session('hsecm_sod_wa_links', []); @endphp
+      @php
+        $sodWaLinks = session('hsecm_sod_wa_links', []);
+        $sodEmailResults = session('hsecm_sod_email_results', []);
+      @endphp
+      @if(is_array($sodEmailResults) && count($sodEmailResults) > 0)
+        <div class="rounded-xl bg-sky-50 border border-sky-200 text-sky-900 px-4 py-3 text-sm space-y-2">
+          <p class="font-semibold">Notifikasi email ke SOD/PJO:</p>
+          <ul class="text-xs space-y-1">
+            @foreach($sodEmailResults as $row)
+              <li>
+                <span class="font-semibold">{{ $row['nama'] ?? '—' }}</span>
+                <span class="text-sky-800/80">({{ $row['email'] ?? '—' }})</span>
+                —
+                @if(($row['status'] ?? '') === 'sent')
+                  <span class="text-emerald-700 font-semibold">terkirim</span>
+                @else
+                  <span class="text-red-700 font-semibold">gagal</span>
+                @endif
+              </li>
+            @endforeach
+          </ul>
+        </div>
+      @endif
       @if(is_array($sodWaLinks) && count($sodWaLinks) > 0)
         <div class="rounded-xl bg-teal-50 border border-teal-200 text-teal-900 px-4 py-3 text-sm space-y-2" id="hsecm-sod-wa-panel">
           <p class="font-semibold">Informasikan ke SOD via WhatsApp (wa.me):</p>

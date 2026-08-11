@@ -41,6 +41,7 @@ class HsecmSummaryMail extends Mailable
 
         $prefix = match ($this->mode) {
             'endshift' => 'Akhir Shift — Tasklist Perbaikan & Upload Evidence',
+            'endshift_summary' => 'Akhir Shift — Summary',
             'escalate' => 'Escalate #'.$this->escalateCount.' — Tasklist belum closed',
             default => 'Daily Monitoring & Intervensi',
         };
@@ -58,6 +59,7 @@ class HsecmSummaryMail extends Mailable
     {
         $view = match ($this->mode) {
             'endshift' => 'emails.hsecm-endshift',
+            'endshift_summary' => 'emails.hsecm-endshift-summary',
             'escalate' => 'emails.hsecm-escalate',
             default => 'emails.hsecm-summary',
         };

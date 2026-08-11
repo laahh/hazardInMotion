@@ -382,12 +382,25 @@ class HsecmShiftEmailDispatchService
                     'Tabel tasklist HSECM belum tersedia. Jalankan migration dulu sebelum endshift.'
                 );
             }
-            $recipients = $this->expandRecipientsForEndshift($recipients, $batchSlot);
+            // Token tasklist tetap dibuat untuk semua scope yang punya gap (escalate/admin),
+            // terlepas dari siapa yang menerima email tasklist.
+            $this->ensureEndshiftTasklists(
+                batchSlot: $batchSlot,
+                dryRun: $dryRun,
+                details: $details,
+                tasklistCache: $tasklistCache,
+            );
         }
 
         foreach ($recipients as $recipient) {
             $site = $this->normalizeNullable($recipient['site'] ?? null);
             $perusahaan = trim((string) ($recipient['perusahaan'] ?? ''));
+            $deliveryKind = $createTasklist
+                ? $this->resolveEndshiftDeliveryKind($site, $perusahaan)
+                : 'snapshot';
+            $sendMode = $deliveryKind === 'tasklist' ? $mode : (
+                $createTasklist ? 'endshift_summary' : $mode
+            );
 
             $filters = $this->dashboardService->withBatchContext(
                 $this->baseFilters($site, $perusahaan),
@@ -411,18 +424,7 @@ class HsecmShiftEmailDispatchService
             $ctaLabel = 'Buka Aksi PJO';
             $tasklistUrl = '';
 
-            if ($createTasklist) {
-                if ($perusahaan === '') {
-                    $skipped++;
-                    $details[] = [
-                        'nama' => (string) ($recipient['nama'] ?? ''),
-                        'email' => (string) ($recipient['email'] ?? ''),
-                        'success' => true,
-                        'message' => 'Skip: endshift membutuhkan scope perusahaan untuk generate token tasklist.',
-                    ];
-                    continue;
-                }
-
+            if ($createTasklist && $deliveryKind === 'tasklist') {
                 $cacheKey = ($site ?? '').'|'.$perusahaan;
                 if (! array_key_exists($cacheKey, $tasklistCache)) {
                     $gapItems = $this->dashboardService->extractTasklistItemsFromGaps($filters);
@@ -471,10 +473,15 @@ class HsecmShiftEmailDispatchService
                     ];
                     continue;
                 }
+            } elseif ($createTasklist) {
+                // Site-only / all-site / perusahaan-only: 1x summary, tanpa email tasklist token.
+                $ctaUrl = $monitoringUrl;
+                $ctaLabel = 'Buka Dashboard';
+                $tasklistUrl = '';
             }
 
             $result = $this->sendOne(
-                mode: $mode,
+                mode: $sendMode,
                 recipient: $recipient,
                 filters: $filters,
                 narrative: $this->rewriteNarrativePublicUrls($narrative),
@@ -550,6 +557,10 @@ class HsecmShiftEmailDispatchService
                 'email' => $email,
                 'success' => true,
                 'message' => 'Dry-run '.$mode.' ['.$channel.'] '.implode('; ', $parts)
+                    .' scope='.$this->scopeLabel(
+                        $this->normalizeNullable($filters['site'] ?? null),
+                        trim((string) ($filters['perusahaan'] ?? ''))
+                    )
                     .' (cta='.$ctaLabel.': '.$ctaUrl
                     .($monitoringUrl !== '' ? "; dashboard={$monitoringUrl}" : '')
                     .($tasklistUrl !== '' ? "; tasklist={$tasklistUrl}" : '')
@@ -694,6 +705,7 @@ class HsecmShiftEmailDispatchService
         $modeLabel = match ($mode) {
             'midshift' => 'Midshift',
             'endshift' => 'Akhir Shift',
+            'endshift_summary' => 'Akhir Shift Summary',
             'escalate' => 'Escalate #'.max(1, $escalateCount),
             default => strtoupper($mode),
         };
@@ -707,9 +719,11 @@ class HsecmShiftEmailDispatchService
             ->values()
             ->all();
 
-        $title = $mode === 'endshift'
-            ? '*Akhir Shift — Tasklist Perbaikan*'
-            : '*Daily Monitoring & Intervensi — '.$modeLabel.'*';
+        $title = match ($mode) {
+            'endshift' => '*Akhir Shift — Tasklist Perbaikan*',
+            'endshift_summary' => '*Akhir Shift — Summary*',
+            default => '*Daily Monitoring & Intervensi — '.$modeLabel.'*',
+        };
 
         $lines = [
             $title,
@@ -725,6 +739,8 @@ class HsecmShiftEmailDispatchService
         $lines[] = '';
         if ($mode === 'endshift') {
             $lines[] = $role.' · Shift telah *berakhir*. Berikut gap yang *wajib diperbaiki* melalui Tasklist.';
+        } elseif ($mode === 'endshift_summary') {
+            $lines[] = $role.' · Shift telah *berakhir*. Berikut ringkasan gap untuk scope Anda (tanpa link Tasklist).';
         } else {
             $lines[] = $role.' · Ringkasan highlight gap untuk scope Anda.';
         }
@@ -754,7 +770,7 @@ class HsecmShiftEmailDispatchService
 
         $primaryUrl = $tasklistUrl !== '' ? $tasklistUrl : '';
         if ($mode === 'endshift') {
-            // Endshift: hanya pakai URL token, jangan fallback ke Aksi PJO.
+            // Endshift tasklist: hanya pakai URL token, jangan fallback ke Aksi PJO.
             $isToken = $primaryUrl !== ''
                 && str_contains($primaryUrl, '/hsecm/tasklist/')
                 && ! str_contains($primaryUrl, '/hsecm/tasklist/open')
@@ -763,7 +779,7 @@ class HsecmShiftEmailDispatchService
                 $primaryUrl = '';
             }
         } elseif ($primaryUrl === '') {
-            $primaryUrl = $ctaUrl;
+            $primaryUrl = $ctaUrl !== '' ? $ctaUrl : $monitoringUrl;
         }
 
         if ($primaryUrl !== '') {
@@ -783,9 +799,11 @@ class HsecmShiftEmailDispatchService
         }
 
         $lines[] = '';
-        $lines[] = $mode === 'endshift'
-            ? 'Mohon selesaikan gap di atas melalui Tasklist agar tidak berulang di shift berikutnya.'
-            : 'Mohon gap di atas dikontrol & ditindaklanjuti agar tidak berulang di shift berikutnya.';
+        $lines[] = match ($mode) {
+            'endshift' => 'Mohon selesaikan gap di atas melalui Tasklist agar tidak berulang di shift berikutnya.',
+            'endshift_summary' => 'Mohon gap di atas dikontrol & ditindaklanjuti. Upload evidence dilakukan oleh PIC per site+perusahaan melalui Tasklist.',
+            default => 'Mohon gap di atas dikontrol & ditindaklanjuti agar tidak berulang di shift berikutnya.',
+        };
         $lines[] = '';
         $lines[] = '_'.now()->timezone('Asia/Makassar')->format('d/m/Y H:i').' WITA_';
 
@@ -1035,58 +1053,83 @@ class HsecmShiftEmailDispatchService
     }
 
     /**
-     * Endshift: pecah penerima tanpa perusahaan menjadi 1 kiriman per (site, perusahaan)
-     * yang punya gap di batch_slot — agar tiap email dapat token tasklist sendiri.
+     * Klasifikasi pengiriman endshift berdasarkan scope penerima.
      *
-     * @param  list<array<string, mixed>>  $recipients
-     * @return list<array<string, mixed>>
+     * - site + perusahaan → email Tasklist Perbaikan & Upload Evidence
+     * - hanya site → 1x summary seluruh perusahaan di site itu
+     * - tanpa site & tanpa perusahaan → 1x summary all site
+     * - hanya perusahaan → 1x summary perusahaan (tanpa tasklist token)
+     *
+     * @return 'tasklist'|'summary'
      */
-    private function expandRecipientsForEndshift(array $recipients, string $batchSlot): array
+    private function resolveEndshiftDeliveryKind(?string $site, string $perusahaan): string
     {
-        /** @var list<array{site: string, perusahaan: string}>|null $allScopes */
-        $allScopes = null;
-        $expanded = [];
-
-        foreach ($recipients as $recipient) {
-            $site = $this->normalizeNullable($recipient['site'] ?? null);
-            $perusahaan = trim((string) ($recipient['perusahaan'] ?? ''));
-
-            if ($perusahaan !== '') {
-                $expanded[] = $recipient;
-                continue;
-            }
-
-            if ($allScopes === null) {
-                $allScopes = $this->discoverEndshiftScopes($batchSlot);
-            }
-
-            $matched = array_values(array_filter(
-                $allScopes,
-                function (array $scope) use ($site): bool {
-                    if ($site === null) {
-                        return true;
-                    }
-
-                    return $this->softEqual($scope['site'], $site);
-                }
-            ));
-
-            if ($matched === []) {
-                // Biarkan loop utama skip dengan pesan yang jelas.
-                $expanded[] = $recipient;
-                continue;
-            }
-
-            foreach ($matched as $scope) {
-                $clone = $recipient;
-                $clone['site'] = $scope['site'] !== '' ? $scope['site'] : null;
-                $clone['perusahaan'] = $scope['perusahaan'];
-                $clone['_expanded_from_aggregate'] = true;
-                $expanded[] = $clone;
-            }
+        if ($site !== null && $perusahaan !== '') {
+            return 'tasklist';
         }
 
-        return $expanded;
+        return 'summary';
+    }
+
+    /**
+     * Pastikan tasklist token tersedia untuk setiap (site, perusahaan) yang punya gap.
+     * Dipanggil sekali di awal endshift agar escalate/admin tetap punya token,
+     * meski email Tasklist hanya dikirim ke penerima site+perusahaan.
+     *
+     * @param  list<array<string, mixed>>  $details
+     * @param  array<string, HsecmTasklist|null>  $tasklistCache
+     */
+    private function ensureEndshiftTasklists(
+        string $batchSlot,
+        bool $dryRun,
+        array &$details,
+        array &$tasklistCache,
+    ): void {
+        foreach ($this->discoverEndshiftScopes($batchSlot) as $scope) {
+            $site = trim((string) ($scope['site'] ?? ''));
+            $perusahaan = trim((string) ($scope['perusahaan'] ?? ''));
+            if ($perusahaan === '') {
+                continue;
+            }
+
+            $cacheKey = $site.'|'.$perusahaan;
+            if (array_key_exists($cacheKey, $tasklistCache)) {
+                continue;
+            }
+
+            $filters = $this->dashboardService->withBatchContext(
+                $this->baseFilters($site !== '' ? $site : null, $perusahaan),
+                $batchSlot,
+                'snapshot',
+                null,
+            );
+            $gapItems = $this->dashboardService->extractTasklistItemsFromGaps($filters);
+
+            if ($gapItems === []) {
+                $tasklistCache[$cacheKey] = $this->tasklistService->findByScope($site, $perusahaan, $batchSlot);
+                continue;
+            }
+
+            if ($dryRun) {
+                $existing = $this->tasklistService->findByScope($site, $perusahaan, $batchSlot);
+                $tasklistCache[$cacheKey] = $existing;
+                $details[] = [
+                    'nama' => '(dry-run tasklist)',
+                    'email' => '-',
+                    'success' => true,
+                    'message' => $existing !== null
+                        ? 'Dry-run: pakai tasklist existing '.$cacheKey.' + CTA token.'
+                        : 'Dry-run: akan buat tasklist '.$cacheKey.' ('.count($gapItems).' items) + CTA token.',
+                ];
+                continue;
+            }
+
+            $tasklistCache[$cacheKey] = $this->tasklistService->createFromEndshift(
+                $batchSlot,
+                ['site' => $site, 'perusahaan' => $perusahaan],
+                $gapItems,
+            );
+        }
     }
 
     /**

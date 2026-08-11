@@ -460,10 +460,13 @@
             @endphp
             <tr
                class="{{ $rowClasses }}"
-               @if($rowClickable) data-record-id="{{ $item['id'] }}" role="button" tabindex="0" aria-label="Lihat detail {{ $item['name'] }}" @endif
+               @if($rowClickable) data-record-id="{{ $item['id'] }}" role="button" tabindex="0" aria-expanded="false" aria-label="Lihat detail {{ $item['name'] }}" @endif
             >
                <td>
                   <div class="crm-table-name">
+                     @if($rowClickable)
+                     <span class="crm-row-expand-icon material-symbols-outlined" aria-hidden="true">expand_more</span>
+                     @endif
                      <span class="crm-table-avatar" style="background:{{ $avatarColors[$index % count($avatarColors)] }}">{{ $initials }}</span>
                      <span class="truncate max-w-[140px]" title="{{ $item['name'] }}">{{ Str::limit($item['name'], 28) }}</span>
                   </div>
@@ -501,7 +504,7 @@
 
    <p class="text-xs text-crm-muted mb-3 flex items-center gap-1">
       <span class="material-symbols-outlined text-sm">touch_app</span>
-      Klik card kategori di atas atau baris tabel untuk melihat detail data.
+      Klik card kategori di atas, atau baris tabel untuk membuka/menutup detail.
    </p>
 
    <div class="crm-data-table-wrap">
@@ -529,14 +532,21 @@
             @endphp
             <tr
                class="{{ $rowClasses }}"
-               @if($rowClickable) data-record-id="{{ $item['id'] }}" role="button" tabindex="0" aria-label="Lihat detail {{ $item['name'] }}" @endif
+               @if($rowClickable) data-record-id="{{ $item['id'] }}" role="button" tabindex="0" aria-expanded="false" aria-label="Lihat detail {{ $item['name'] }}" @endif
             >
                <td class="text-crm-muted font-medium">{{ $index + 1 }}</td>
                <td class="font-medium max-w-xs">
-                  {{ $item['name'] }}
-                  @if(!empty($item['due_in_review_week']))
-                  <span class="crm-review-week-badge">{{ $filters['review_week'] }}</span>
-                  @endif
+                  <span class="inline-flex items-start gap-1.5">
+                     @if($rowClickable)
+                     <span class="crm-row-expand-icon material-symbols-outlined" aria-hidden="true">expand_more</span>
+                     @endif
+                     <span>
+                        {{ $item['name'] }}
+                        @if(!empty($item['due_in_review_week']))
+                        <span class="crm-review-week-badge">{{ $filters['review_week'] }}</span>
+                        @endif
+                     </span>
+                  </span>
                </td>
                <td class="text-crm-muted">{{ $item['unit'] }}</td>
                <td class="text-center font-semibold">{{ $item['plan'] }}</td>
@@ -567,21 +577,6 @@
          <button type="button" id="mse-category-detail-close" class="crm-history-close" aria-label="Tutup">&times;</button>
       </div>
       <div id="mse-category-detail-body" class="crm-history-body">
-         <p class="crm-history-empty">Memuat detail...</p>
-      </div>
-   </div>
-</div>
-
-<div id="mse-record-detail-modal" class="crm-history-modal" role="dialog" aria-modal="true" aria-labelledby="mse-record-detail-title">
-   <div class="crm-history-panel crm-detail-panel">
-      <div class="crm-history-header">
-         <div>
-            <p id="mse-record-detail-title" class="crm-history-title">Detail Pengendalian</p>
-            <p id="mse-record-detail-subtitle" class="crm-history-subtitle">—</p>
-         </div>
-         <button type="button" id="mse-record-detail-close" class="crm-history-close" aria-label="Tutup">&times;</button>
-      </div>
-      <div id="mse-record-detail-body" class="crm-history-body">
          <p class="crm-history-empty">Memuat detail...</p>
       </div>
    </div>
@@ -717,11 +712,6 @@
       var categoryTitle = document.getElementById('mse-category-detail-title');
       var categorySubtitle = document.getElementById('mse-category-detail-subtitle');
       var categoryClose = document.getElementById('mse-category-detail-close');
-      var detailModal = document.getElementById('mse-record-detail-modal');
-      var detailBody = document.getElementById('mse-record-detail-body');
-      var detailTitle = document.getElementById('mse-record-detail-title');
-      var detailSubtitle = document.getElementById('mse-record-detail-subtitle');
-      var detailClose = document.getElementById('mse-record-detail-close');
       var categoryCharts = [];
       var activeReplikasiPayload = null;
       var activeStatusPayload = null;
@@ -921,9 +911,89 @@
       }
 
       function syncBodyScroll() {
-         var anyOpen = categoryModal?.classList.contains('crm-history-modal--open')
-            || detailModal?.classList.contains('crm-history-modal--open');
+         var anyOpen = categoryModal?.classList.contains('crm-history-modal--open');
          document.body.style.overflow = anyOpen ? 'hidden' : '';
+      }
+
+      function closeRowCollapse(row) {
+         if (!row) return;
+         var next = row.nextElementSibling;
+         if (next && next.classList.contains('crm-row-collapse')) {
+            next.remove();
+         }
+         row.classList.remove('crm-row--expanded');
+         row.setAttribute('aria-expanded', 'false');
+      }
+
+      function closeAllRowCollapses(scope) {
+         var root = scope || document;
+         root.querySelectorAll('tr.crm-row--expanded').forEach(function (row) {
+            closeRowCollapse(row);
+         });
+         root.querySelectorAll('tr.crm-row-collapse').forEach(function (el) {
+            el.remove();
+         });
+      }
+
+      function toggleRowDetail(row) {
+         var recordId = row.getAttribute('data-record-id');
+         if (!recordId) return;
+
+         var detail = recordDetailById[String(recordId)] || recordDetailById[recordId];
+         if (!detail) return;
+
+         var tbody = row.parentElement;
+         var next = row.nextElementSibling;
+         var isOpen = next
+            && next.classList.contains('crm-row-collapse')
+            && next.getAttribute('data-detail-for') === String(recordId);
+
+         closeAllRowCollapses(tbody);
+
+         if (isOpen) return;
+
+         var colCount = row.children.length;
+         var subtitle = [detail.site, detail.perusahaan, detail.sumber_rekayasa].filter(Boolean).join(' · ');
+         var detailRow = document.createElement('tr');
+         detailRow.className = 'crm-row-collapse';
+         detailRow.setAttribute('data-detail-for', String(recordId));
+         detailRow.innerHTML = '<td colspan="' + colCount + '">'
+            + '<div class="crm-row-collapse-panel">'
+            + '<div class="crm-row-collapse-head">'
+            + '<div>'
+            + '<p class="crm-row-collapse-title">' + escapeHtml(detail.pengendalian_rekayasa || 'Detail Pengendalian') + '</p>'
+            + (subtitle ? '<p class="crm-row-collapse-subtitle">' + escapeHtml(subtitle) + '</p>' : '')
+            + '</div>'
+            + '<button type="button" class="crm-row-collapse-close" aria-label="Tutup detail">&times;</button>'
+            + '</div>'
+            + '<div class="crm-row-collapse-body">' + renderDetail(detail) + '</div>'
+            + '</div>'
+            + '</td>';
+
+         row.after(detailRow);
+         row.classList.add('crm-row--expanded');
+         row.setAttribute('aria-expanded', 'true');
+
+         var panel = detailRow.querySelector('.crm-row-collapse-panel');
+         requestAnimationFrame(function () {
+            detailRow.classList.add('crm-row-collapse--open');
+            if (panel) {
+               panel.style.maxHeight = panel.scrollHeight + 'px';
+            }
+            try {
+               detailRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } catch (e) {
+               // ignore scroll errors
+            }
+         });
+
+         var closeBtn = detailRow.querySelector('.crm-row-collapse-close');
+         if (closeBtn) {
+            closeBtn.addEventListener('click', function (event) {
+               event.stopPropagation();
+               closeRowCollapse(row);
+            });
+         }
       }
 
       function renderDetail(detail) {
@@ -1026,11 +1096,13 @@
 
             if (isSafety) {
                return '<tr class="' + (clickable ? 'crm-row--clickable' : '') + '"'
-                  + (clickable ? ' data-record-id="' + escapeHtml(item.id) + '" role="button" tabindex="0"' : '')
+                  + (clickable ? ' data-record-id="' + escapeHtml(item.id) + '" role="button" tabindex="0" aria-expanded="false"' : '')
                   + '>'
                   + '<td class="crm-modal-col-no">' + (index + 1) + '</td>'
                   + '<td>'
-                  + '<div class="crm-modal-name"><div class="crm-modal-name-top"><span class="crm-modal-name-title">' + escapeHtml(item.name) + '</span></div></div>'
+                  + '<div class="crm-modal-name"><div class="crm-modal-name-top">'
+                  + (clickable ? '<span class="crm-row-expand-icon material-symbols-outlined" aria-hidden="true">expand_more</span>' : '')
+                  + '<span class="crm-modal-name-title">' + escapeHtml(item.name) + '</span></div></div>'
                   + '<div class="crm-modal-meta">' + escapeHtml(item.site) + ' · ' + escapeHtml(item.perusahaan) + '</div>'
                   + '</td>'
                   + '<td class="text-center"><span class="crm-modal-chip crm-modal-chip--muted">'
@@ -1043,11 +1115,13 @@
             }
 
             return '<tr class="' + (clickable ? 'crm-row--clickable' : '') + '"'
-               + (clickable ? ' data-record-id="' + escapeHtml(item.id) + '" role="button" tabindex="0"' : '')
+               + (clickable ? ' data-record-id="' + escapeHtml(item.id) + '" role="button" tabindex="0" aria-expanded="false"' : '')
                + '>'
                + '<td class="crm-modal-col-no">' + (index + 1) + '</td>'
                + '<td>'
-               + '<div class="crm-modal-name"><div class="crm-modal-name-top"><span class="crm-modal-name-title">' + escapeHtml(item.name) + '</span></div></div>'
+               + '<div class="crm-modal-name"><div class="crm-modal-name-top">'
+               + (clickable ? '<span class="crm-row-expand-icon material-symbols-outlined" aria-hidden="true">expand_more</span>' : '')
+               + '<span class="crm-modal-name-title">' + escapeHtml(item.name) + '</span></div></div>'
                + '<div class="crm-modal-meta">' + escapeHtml(item.site) + ' · ' + escapeHtml(item.perusahaan) + '</div>'
                + '</td>'
                + '<td><span class="crm-modal-chip crm-modal-chip--muted">' + escapeHtml(item.unit) + '</span></td>'
@@ -1392,12 +1466,14 @@
                : '';
 
             return '<tr class="' + (clickable ? 'crm-row--clickable' : '') + '"'
-               + (clickable ? ' data-record-id="' + escapeHtml(item.id) + '" role="button" tabindex="0"' : '')
+               + (clickable ? ' data-record-id="' + escapeHtml(item.id) + '" role="button" tabindex="0" aria-expanded="false"' : '')
                + '>'
                + '<td class="crm-modal-col-no">' + (index + 1) + '</td>'
                + '<td>'
                + '<div class="crm-modal-name">'
-               + '<div class="crm-modal-name-top"><span class="crm-modal-name-title">' + escapeHtml(item.name) + '</span>' + derivedBadge + '</div>'
+               + '<div class="crm-modal-name-top">'
+               + (clickable ? '<span class="crm-row-expand-icon material-symbols-outlined" aria-hidden="true">expand_more</span>' : '')
+               + '<span class="crm-modal-name-title">' + escapeHtml(item.name) + '</span>' + derivedBadge + '</div>'
                + '</div>'
                + '<div class="crm-modal-meta">' + escapeHtml(item.site) + ' · ' + escapeHtml(item.perusahaan) + '</div>'
                + '</td>'
@@ -1425,12 +1501,12 @@
       function bindModalRowClicks(container) {
          container.querySelectorAll('tr.crm-row--clickable[data-record-id]').forEach(function (row) {
             row.addEventListener('click', function () {
-               openDetailModal(this.getAttribute('data-record-id'));
+               toggleRowDetail(this);
             });
             row.addEventListener('keydown', function (event) {
                if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
-                  openDetailModal(this.getAttribute('data-record-id'));
+                  toggleRowDetail(this);
                }
             });
          });
@@ -1502,23 +1578,8 @@
          activeStatusPayload = null;
          activeReplikasiPayload = null;
          categoryModalFilters = { site: '', company: '', status: '' };
+         closeAllRowCollapses(categoryBody);
          categoryModal?.classList.remove('crm-history-modal--open');
-         syncBodyScroll();
-      }
-
-      function openDetailModal(recordId) {
-         var detail = recordDetailById[String(recordId)] || recordDetailById[recordId];
-         if (!detail || !detailModal) return;
-
-         detailTitle.textContent = detail.pengendalian_rekayasa || 'Detail Pengendalian';
-         detailSubtitle.textContent = [detail.site, detail.perusahaan, detail.sumber_rekayasa].filter(Boolean).join(' · ');
-         detailBody.innerHTML = renderDetail(detail);
-         detailModal.classList.add('crm-history-modal--open');
-         syncBodyScroll();
-      }
-
-      function closeDetailModal() {
-         detailModal?.classList.remove('crm-history-modal--open');
          syncBodyScroll();
       }
 
@@ -1547,13 +1608,14 @@
       });
 
       document.querySelectorAll('tr.crm-row--clickable[data-record-id]').forEach(function (row) {
+         row.setAttribute('aria-expanded', 'false');
          row.addEventListener('click', function () {
-            openDetailModal(this.getAttribute('data-record-id'));
+            toggleRowDetail(this);
          });
          row.addEventListener('keydown', function (event) {
             if (event.key === 'Enter' || event.key === ' ') {
                event.preventDefault();
-               openDetailModal(this.getAttribute('data-record-id'));
+               toggleRowDetail(this);
             }
          });
       });
@@ -1562,16 +1624,16 @@
       categoryModal?.addEventListener('click', function (event) {
          if (event.target === categoryModal) closeCategoryModal();
       });
-      detailClose?.addEventListener('click', closeDetailModal);
-      detailModal?.addEventListener('click', function (event) {
-         if (event.target === detailModal) closeDetailModal();
-      });
       document.addEventListener('keydown', function (event) {
          if (event.key !== 'Escape') return;
-         if (detailModal?.classList.contains('crm-history-modal--open')) {
-            closeDetailModal();
+
+         var openCollapse = (categoryBody || document).querySelector('tr.crm-row--expanded')
+            || document.querySelector('.crm-data-table tr.crm-row--expanded, .crm-table tr.crm-row--expanded');
+         if (openCollapse) {
+            closeRowCollapse(openCollapse);
             return;
          }
+
          if (categoryModal?.classList.contains('crm-history-modal--open')) {
             closeCategoryModal();
          }

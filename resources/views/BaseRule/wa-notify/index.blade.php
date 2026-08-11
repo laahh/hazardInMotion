@@ -17,6 +17,19 @@
       bottom: 1rem;
       z-index: 40;
    }
+   .hsecm-edit-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      background: rgba(15, 23, 42, 0.45);
+   }
+   .hsecm-edit-modal.is-open {
+      display: flex;
+   }
 </style>
 @endpush
 
@@ -321,6 +334,23 @@
                         @endif
                         @if(!empty($row['editable']))
                         <button
+                           type="button"
+                           class="hsecm-edit-btn inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                           data-id="{{ $row['id'] }}"
+                           data-nama="{{ $row['nama'] }}"
+                           data-email="{{ $row['email'] }}"
+                           data-no="{{ $row['no'] }}"
+                           data-role="{{ $row['role'] }}"
+                           data-site="{{ $row['site'] ?? '' }}"
+                           data-perusahaan="{{ $row['perusahaan'] }}"
+                           data-source="{{ $row['source'] ?? '' }}"
+                        >
+                           <span class="material-symbols-outlined text-sm">edit</span>
+                           Edit
+                        </button>
+                        @endif
+                        @if(!empty($row['deletable']))
+                        <button
                            type="submit"
                            form="hsecm-delete-{{ $row['index'] }}"
                            class="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-50"
@@ -380,7 +410,7 @@
    <input type="hidden" name="year" value="{{ $filters['year'] ?? '' }}">
 </form>
 @endif
-@if(!empty($row['editable']))
+@if(!empty($row['deletable']))
 <form id="hsecm-delete-{{ $row['index'] }}" method="POST" action="{{ route('hsecm.wa-notify.recipients.destroy', $row['id']) }}" class="hidden">
    @csrf
    @method('DELETE')
@@ -389,6 +419,82 @@
 </form>
 @endif
 @endforeach
+
+{{-- Modal edit penerima --}}
+<div id="hsecm-edit-modal" class="hsecm-edit-modal" aria-hidden="true">
+   <div class="hsecm-card w-full max-w-2xl rounded-2xl p-5 border border-teal-100 shadow-xl bg-white" role="dialog" aria-modal="true" aria-labelledby="hsecm-edit-title">
+      <form method="POST" id="hsecm-edit-form" action="">
+         @csrf
+         @method('PUT')
+         <input type="hidden" name="week" value="{{ $filters['week'] ?? '' }}">
+         <input type="hidden" name="year" value="{{ $filters['year'] ?? '' }}">
+
+         <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+            <div>
+               <h2 id="hsecm-edit-title" class="font-headline font-bold text-lg text-on-background">Edit Penerima</h2>
+               <p class="text-xs text-on-surface-variant mt-0.5">
+                  Ubah nama, email, nomor WA, role, site, atau perusahaan.
+                  <span id="hsecm-edit-source-hint" class="block mt-0.5"></span>
+               </p>
+            </div>
+            <button type="button" id="hsecm-edit-close" class="inline-flex items-center justify-center rounded-xl border border-slate-200 w-9 h-9 text-slate-600 hover:bg-slate-50" aria-label="Tutup">
+               <span class="material-symbols-outlined text-base">close</span>
+            </button>
+         </div>
+
+         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+               <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Nama <span class="text-red-500">*</span></label>
+               <input type="text" name="nama" id="hsecm-edit-nama" required maxlength="150"
+                  class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white">
+            </div>
+            <div>
+               <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Email <span class="text-red-500">*</span></label>
+               <input type="email" name="email" id="hsecm-edit-email" required maxlength="190"
+                  class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white">
+            </div>
+            <div>
+               <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">No. WA</label>
+               <input type="text" name="no" id="hsecm-edit-no" maxlength="30"
+                  class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white">
+            </div>
+            <div>
+               <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Role</label>
+               <input type="text" name="role" id="hsecm-edit-role" maxlength="150"
+                  class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white">
+            </div>
+            <div>
+               <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Site</label>
+               <select name="site" id="hsecm-edit-site" class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white">
+                  <option value="">Semua Site</option>
+                  @foreach($filterOptions['sites'] ?? [] as $site)
+                  <option value="{{ $site }}">{{ $site }}</option>
+                  @endforeach
+               </select>
+            </div>
+            <div>
+               <label class="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant mb-1">Perusahaan</label>
+               <select name="perusahaan" id="hsecm-edit-perusahaan" class="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-semibold bg-white">
+                  <option value="">Semua Perusahaan</option>
+                  @foreach($filterOptions['companies'] ?? [] as $company)
+                  <option value="{{ $company }}">{{ $company }}</option>
+                  @endforeach
+               </select>
+            </div>
+         </div>
+
+         <div class="mt-5 flex flex-wrap items-center justify-end gap-2">
+            <button type="button" id="hsecm-edit-cancel" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">
+               Batal
+            </button>
+            <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:opacity-95">
+               <span class="material-symbols-outlined text-sm">save</span>
+               Simpan Perubahan
+            </button>
+         </div>
+      </form>
+   </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -458,6 +564,64 @@
 
    rowChecks.forEach((el) => el.addEventListener('change', sync));
    sync();
+
+   // Edit modal
+   const editModal = document.getElementById('hsecm-edit-modal');
+   const editForm = document.getElementById('hsecm-edit-form');
+   const editSourceHint = document.getElementById('hsecm-edit-source-hint');
+   const updateUrlTemplate = @json(route('hsecm.wa-notify.recipients.update', ['id' => '__ID__']));
+
+   const ensureSelectValue = (selectEl, value) => {
+      if (!selectEl) return;
+      const normalized = value || '';
+      if (normalized !== '' && !Array.from(selectEl.options).some((opt) => opt.value === normalized)) {
+         const opt = document.createElement('option');
+         opt.value = normalized;
+         opt.textContent = normalized;
+         selectEl.appendChild(opt);
+      }
+      selectEl.value = normalized;
+   };
+
+   const openEditModal = (btn) => {
+      if (!editModal || !editForm) return;
+      const id = btn.getAttribute('data-id') || '';
+      editForm.action = updateUrlTemplate.replace('__ID__', encodeURIComponent(id));
+      document.getElementById('hsecm-edit-nama').value = btn.getAttribute('data-nama') || '';
+      document.getElementById('hsecm-edit-email').value = btn.getAttribute('data-email') || '';
+      document.getElementById('hsecm-edit-no').value = btn.getAttribute('data-no') || '';
+      document.getElementById('hsecm-edit-role').value = btn.getAttribute('data-role') || '';
+      ensureSelectValue(document.getElementById('hsecm-edit-site'), btn.getAttribute('data-site') || '');
+      ensureSelectValue(document.getElementById('hsecm-edit-perusahaan'), btn.getAttribute('data-perusahaan') || '');
+      if (editSourceHint) {
+         editSourceHint.textContent = (btn.getAttribute('data-source') || '') === 'config'
+            ? 'Kontak bawaan: perubahan disimpan sebagai override (tanpa ubah config).'
+            : 'Kontak custom: perubahan langsung disimpan ke storage.';
+      }
+      editModal.classList.add('is-open');
+      editModal.setAttribute('aria-hidden', 'false');
+      document.getElementById('hsecm-edit-nama')?.focus();
+   };
+
+   const closeEditModal = () => {
+      if (!editModal) return;
+      editModal.classList.remove('is-open');
+      editModal.setAttribute('aria-hidden', 'true');
+   };
+
+   document.querySelectorAll('.hsecm-edit-btn').forEach((btn) => {
+      btn.addEventListener('click', () => openEditModal(btn));
+   });
+   document.getElementById('hsecm-edit-close')?.addEventListener('click', closeEditModal);
+   document.getElementById('hsecm-edit-cancel')?.addEventListener('click', closeEditModal);
+   editModal?.addEventListener('click', (e) => {
+      if (e.target === editModal) closeEditModal();
+   });
+   document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && editModal?.classList.contains('is-open')) {
+         closeEditModal();
+      }
+   });
 })();
 </script>
 @endpush

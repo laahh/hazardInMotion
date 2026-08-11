@@ -658,6 +658,72 @@
    .crm-table tbody tr.crm-row--clickable { cursor: pointer; }
    .crm-data-table tbody tr.crm-row--clickable:hover td,
    .crm-table tbody tr.crm-row--clickable:hover td { background: #EEF2FF; }
+   .crm-data-table tbody tr.crm-row--expanded > td,
+   .crm-table tbody tr.crm-row--expanded > td,
+   .crm-modal-table-wrap .crm-data-table tbody tr.crm-row--expanded > td {
+      background: #EEF2FF !important;
+   }
+   .crm-row-expand-icon {
+      font-size: 1.1rem !important;
+      color: #7366FF;
+      line-height: 1;
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+   }
+   .crm-row--expanded .crm-row-expand-icon { transform: rotate(180deg); }
+   .crm-row-collapse > td {
+      padding: 0 !important;
+      background: #F8F9FC !important;
+      border-bottom: 1px solid #E6E9EB !important;
+      vertical-align: top !important;
+   }
+   .crm-row-collapse-panel {
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: max-height 0.35s ease, opacity 0.25s ease, padding 0.25s ease;
+      padding: 0 1rem;
+   }
+   .crm-row-collapse--open .crm-row-collapse-panel {
+      opacity: 1;
+      padding: 1rem 1.1rem 1.15rem;
+   }
+   .crm-row-collapse-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.85rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid #E6E9EB;
+   }
+   .crm-row-collapse-title {
+      margin: 0;
+      font-size: 0.9375rem;
+      font-weight: 800;
+      color: #2F2F3A;
+      line-height: 1.35;
+   }
+   .crm-row-collapse-subtitle {
+      margin: 0.25rem 0 0;
+      font-size: 0.75rem;
+      color: #848488;
+      font-weight: 500;
+   }
+   .crm-row-collapse-close {
+      flex-shrink: 0;
+      width: 1.75rem;
+      height: 1.75rem;
+      border: none;
+      border-radius: 9999px;
+      background: #ECE9FF;
+      color: #5f52e0;
+      font-size: 1.15rem;
+      line-height: 1;
+      cursor: pointer;
+   }
+   .crm-row-collapse-close:hover { background: #CFC8FF; }
+   .crm-row-collapse-body .crm-detail-progress { margin-bottom: 0.85rem; }
    .crm-detail-panel { width: min(860px, 100%); }
    .crm-detail-progress {
       display: flex; align-items: center; gap: 1rem;

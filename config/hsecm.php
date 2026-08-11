@@ -33,7 +33,11 @@ return [
     |--------------------------------------------------------------------------
     | HSECM WA / Email Recipients
     |--------------------------------------------------------------------------
-    | site = null → filter hanya berdasarkan perusahaan.
+    | Endshift delivery:
+    | - site + perusahaan → email "Akhir Shift — Tasklist Perbaikan & Upload Evidence"
+    | - hanya site → 1x "Akhir Shift — Summary" (semua perusahaan di site itu)
+    | - tanpa site & tanpa perusahaan → 1x "Akhir Shift — Summary" all site
+    | - hanya perusahaan → summary perusahaan (tanpa tasklist token)
     */
     'wa_recipients' => [
         [

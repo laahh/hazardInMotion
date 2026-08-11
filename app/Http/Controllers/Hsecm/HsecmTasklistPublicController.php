@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Hsecm;
 
 use App\Actions\Hsecm\HsecmBuildTasklistSubmitMasterSodWaLinksAction;
+use App\Actions\Hsecm\HsecmNotifyTasklistSubmitToSodAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Hsecm\HsecmTasklistSubmitRequest;
 use App\Services\Hsecm\HsecmTasklistService;
@@ -18,6 +19,7 @@ class HsecmTasklistPublicController extends Controller
     public function __construct(
         private readonly HsecmTasklistService $tasklistService,
         private readonly HsecmBuildTasklistSubmitMasterSodWaLinksAction $buildMasterSodWaLinks,
+        private readonly HsecmNotifyTasklistSubmitToSodAction $notifyTasklistSubmitToSod,
     ) {}
 
     /**
@@ -92,12 +94,29 @@ class HsecmTasklistPublicController extends Controller
             count($itemIds),
         );
 
+        $emailNotify = $this->notifyTasklistSubmitToSod->execute(
+            $tasklist,
+            $submittedByName,
+            count($itemIds),
+        );
+
+        $successMessage = 'Submit berhasil untuk '.count($itemIds).' item. Menunggu ACC dari HSE.';
+        if (($emailNotify['sent'] ?? 0) > 0) {
+            $successMessage .= ' Email notifikasi dikirim ke '.(int) $emailNotify['sent'].' SOD/PJO.';
+        } elseif (($emailNotify['failed'] ?? 0) > 0) {
+            $successMessage .= ' Email notifikasi gagal dikirim; coba hubungi SOD via WhatsApp.';
+        }
+
         $redirect = redirect()
             ->route('hsecm.tasklist.show', ['token' => $token])
-            ->with('success', 'Submit berhasil untuk '.count($itemIds).' item. Menunggu ACC dari HSE.');
+            ->with('success', $successMessage);
 
         if ($sodWaLinks !== []) {
             $redirect->with('hsecm_sod_wa_links', $sodWaLinks);
+        }
+
+        if (($emailNotify['recipients'] ?? []) !== []) {
+            $redirect->with('hsecm_sod_email_results', $emailNotify['recipients']);
         }
 
         return $redirect;

@@ -48,6 +48,8 @@ Route::middleware(['auth'])
         Route::get('/wa-notify', [HsecmWaNotifyController::class, 'index'])->name('wa-notify.index');
         Route::post('/wa-notify/recipients', [HsecmWaNotifyController::class, 'storeRecipient'])
             ->name('wa-notify.recipients.store');
+        Route::put('/wa-notify/recipients/{id}', [HsecmWaNotifyController::class, 'updateRecipient'])
+            ->name('wa-notify.recipients.update');
         Route::delete('/wa-notify/recipients/{id}', [HsecmWaNotifyController::class, 'destroyRecipient'])
             ->name('wa-notify.recipients.destroy');
         Route::post('/wa-notify/{index}/send', [HsecmWaNotifyController::class, 'send'])
