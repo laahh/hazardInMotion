@@ -32,6 +32,7 @@ trait ProvidesHsecmLayout
             'navItems' => $this->hsecmNavItems(),
             'programLabel' => 'Daily Monitoring Dashboard',
             'programCode' => 'Daily',
+            'isPublicAccess' => ! auth()->check(),
         ], $extra);
     }
 }

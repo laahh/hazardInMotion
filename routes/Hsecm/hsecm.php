@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Publik — tanpa login (dashboard share link + link dari email PJO)
+| Publik — tanpa login (semua halaman view Daily Monitoring & Intervensi)
 |--------------------------------------------------------------------------
 */
 Route::prefix('hsecm')
@@ -22,7 +22,18 @@ Route::prefix('hsecm')
     ->group(function (): void {
         Route::redirect('/', '/hsecm/dashboard')->name('home');
         Route::get('/dashboard', [HsecmDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/gap-perulangan', [HsecmGapPerulanganController::class, 'index'])->name('gap-perulangan');
+        Route::get('/gap-evaluasi', [HsecmGapEvaluasiController::class, 'index'])->name('gap-evaluasi');
         Route::get('/pjo-action', [HsecmPjoActionController::class, 'index'])->name('pjo-action');
+        Route::get('/wa-notify', [HsecmWaNotifyController::class, 'index'])->name('wa-notify.index');
+        Route::get('/tasklist', [HsecmTasklistManageController::class, 'index'])->name('tasklist.index');
+        Route::get('/tasklist/manage/{id}', [HsecmTasklistManageController::class, 'manage'])
+            ->whereNumber('id')
+            ->name('tasklist.manage');
+        Route::get('/datasets/{dataset}', [HsecmDatasetController::class, 'show'])
+            ->where('dataset', 'sap-rfid|coverage-cctv|tbc-blindspot|task-overdue|task-submitted|ikk-work-permit|aggregator|fatigue|sumber-rfid|hazard-rootcause')
+            ->name('datasets.show');
+
         Route::get('/tasklist/open', [HsecmTasklistPublicController::class, 'open'])
             ->name('tasklist.open');
         Route::get('/tasklist/{token}', [HsecmTasklistPublicController::class, 'show'])
@@ -36,16 +47,13 @@ Route::prefix('hsecm')
 
 /*
 |--------------------------------------------------------------------------
-| Dilindungi auth
+| Dilindungi auth — aksi tulis (kirim WA/email, CRUD penerima, ACC/tolak)
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth'])
     ->prefix('hsecm')
     ->name('hsecm.')
     ->group(function (): void {
-        Route::get('/gap-perulangan', [HsecmGapPerulanganController::class, 'index'])->name('gap-perulangan');
-        Route::get('/gap-evaluasi', [HsecmGapEvaluasiController::class, 'index'])->name('gap-evaluasi');
-        Route::get('/wa-notify', [HsecmWaNotifyController::class, 'index'])->name('wa-notify.index');
         Route::post('/wa-notify/recipients', [HsecmWaNotifyController::class, 'storeRecipient'])
             ->name('wa-notify.recipients.store');
         Route::put('/wa-notify/recipients/{id}', [HsecmWaNotifyController::class, 'updateRecipient'])
@@ -63,10 +71,6 @@ Route::middleware(['auth'])
         Route::post('/wa-notify/send-shift-email', [HsecmWaNotifyController::class, 'sendShiftEmail'])
             ->name('wa-notify.send-shift-email');
 
-        Route::get('/tasklist', [HsecmTasklistManageController::class, 'index'])->name('tasklist.index');
-        Route::get('/tasklist/manage/{id}', [HsecmTasklistManageController::class, 'manage'])
-            ->whereNumber('id')
-            ->name('tasklist.manage');
         Route::post('/tasklist/manage/{id}/approve-bulk', [HsecmTasklistManageController::class, 'approveBulk'])
             ->whereNumber('id')
             ->name('tasklist.approve-bulk');
@@ -79,8 +83,4 @@ Route::middleware(['auth'])
         Route::post('/tasklist/items/{itemId}/reject', [HsecmTasklistManageController::class, 'reject'])
             ->whereNumber('itemId')
             ->name('tasklist.items.reject');
-
-        Route::get('/datasets/{dataset}', [HsecmDatasetController::class, 'show'])
-            ->where('dataset', 'sap-rfid|coverage-cctv|tbc-blindspot|task-overdue|task-submitted|ikk-work-permit|aggregator|fatigue|sumber-rfid|hazard-rootcause')
-            ->name('datasets.show');
     });

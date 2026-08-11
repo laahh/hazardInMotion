@@ -89,7 +89,7 @@ Route::get('/dopmikk/dopm/dashboard/screenshot', function (\Illuminate\Http\Requ
     return app(\App\Http\Controllers\DOPMIKK\DOPMController::class)->dashboard($request);
 })->name('dopm.dashboard.screenshot');
 
-// HSECM: pjo-action publik dulu (sebelum catch-all auth), sisanya auth di file route
+// HSECM: halaman view publik; aksi tulis (kirim/ACC) tetap auth di file route
 require __DIR__ . '/Hsecm/hsecm.php';
 
 // Define a group of routes with 'auth' middleware applied

@@ -37,7 +37,7 @@
             </div>
          @endif
       </div>
-      @if(!empty($section['detail_url']) && empty($isPublicAccess))
+      @if(!empty($section['detail_url']))
          <a href="{{ $section['detail_url'] }}"
             class="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white hover:opacity-95 shrink-0">
             <span class="material-symbols-outlined text-sm">open_in_new</span>
@@ -76,7 +76,7 @@
                </tbody>
             </table>
          </div>
-         @if($truncated && !empty($section['detail_url']) && empty($isPublicAccess))
+         @if($truncated && !empty($section['detail_url']))
             <p class="mt-2 text-[11px] text-on-surface-variant">
                Menampilkan preview {{ count($rows) }} dari {{ number_format($total) }} baris.
                <a href="{{ $section['detail_url'] }}" class="font-bold text-primary hover:underline">Lihat semua</a>

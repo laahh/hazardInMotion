@@ -91,7 +91,14 @@
    </div>
 </form>
 
+@guest
+<div class="hsecm-card rounded-2xl p-4 mb-6 border border-slate-200 bg-slate-50 text-sm text-on-surface-variant">
+   Mode lihat saja — login diperlukan untuk kirim WA/email dan kelola penerima.
+</div>
+@endguest
+
 {{-- Panel kirim terjadwal midshift / endshift (night & day) --}}
+@auth
 <form method="POST" action="{{ route('hsecm.wa-notify.send-shift-email') }}" id="hsecm-shift-email-form" class="hsecm-card rounded-2xl p-5 mb-6 border border-amber-100">
    @csrf
    <input type="hidden" name="week" value="{{ $filters['week'] ?? '' }}">
@@ -151,7 +158,9 @@
       </button>
    </div>
 </form>
+@endauth
 
+@auth
 <form method="POST" action="{{ route('hsecm.wa-notify.recipients.store') }}" class="hsecm-card rounded-2xl p-5 mb-6 border border-teal-100">
    @csrf
    <input type="hidden" name="week" value="{{ $filters['week'] ?? '' }}">
@@ -230,6 +239,7 @@
       <p class="text-[11px] text-on-surface-variant">Wajib: nama &amp; email. Site/perusahaan mengatur scope isi email.</p>
    </div>
 </form>
+@endauth
 
 <form id="hsecm-email-bulk-form" method="POST" action="{{ route('hsecm.wa-notify.send-email-bulk') }}">
    @csrf

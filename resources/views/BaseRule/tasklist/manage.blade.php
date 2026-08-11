@@ -55,6 +55,7 @@
 </div>
 
 @if($submittedCount > 0)
+@auth
 <div class="mb-4 hsecm-card rounded-2xl p-4 border border-amber-100 bg-amber-50/40">
   <div class="flex flex-wrap items-end gap-3">
     <div class="flex-1 min-w-[16rem]">
@@ -78,16 +79,23 @@
   </div>
   <p class="text-[11px] text-on-surface-variant mt-2">Centang item berstatus <strong>submitted</strong>, lalu ACC atau Tolak sekaligus — tidak perlu satu-satu.</p>
 </div>
+@else
+<div class="mb-4 hsecm-card rounded-2xl p-4 border border-slate-200 bg-slate-50 text-sm text-on-surface-variant">
+  Mode lihat saja — login diperlukan untuk ACC / tolak item.
+</div>
+@endauth
 @endif
 
 <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
   <div class="flex flex-wrap items-center gap-3">
+    @auth
     @if($submittedCount > 0)
       <label class="inline-flex items-center gap-2 text-sm font-semibold text-on-background cursor-pointer">
         <input type="checkbox" id="hsecm-select-all" class="rounded border-slate-300 text-teal-700" checked />
         Pilih semua submitted
       </label>
     @endif
+    @endauth
   </div>
   <div class="flex items-center gap-2 text-xs">
     <button type="button" id="hsecm-expand-all" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 font-semibold text-slate-600">
@@ -99,6 +107,7 @@
   </div>
 </div>
 
+@auth
 <form id="hsecm-bulk-approve-form" method="POST" action="{{ route('hsecm.tasklist.approve-bulk', ['id' => $tasklist->id]) }}" class="hidden">
   @csrf
   <div id="hsecm-approve-items-holder"></div>
@@ -107,6 +116,7 @@
   @csrf
   <div id="hsecm-reject-items-holder"></div>
 </form>
+@endauth
 
 <div class="space-y-3" id="hsecm-program-groups">
   @forelse($programGroups as $groupKey => $groupItems)
@@ -122,11 +132,13 @@
     @endphp
     <div class="hsecm-card rounded-2xl overflow-hidden hsecm-program-group" data-group="{{ $panelId }}">
       <div class="bg-slate-50 px-4 py-3 flex items-start gap-3 border-b border-slate-100">
+        @auth
         @if($groupSubmitted->isNotEmpty())
           <label class="inline-flex items-center pt-1 cursor-pointer shrink-0" title="Pilih semua submitted di program ini" onclick="event.stopPropagation()">
             <input type="checkbox" class="hsecm-group-check rounded border-slate-300 text-teal-700" data-group-check="{{ $panelId }}" />
           </label>
         @endif
+        @endauth
         <button type="button"
                 class="hsecm-group-toggle flex-1 min-w-0 text-left flex items-start gap-3"
                 data-target="{{ $panelId }}"
@@ -176,6 +188,7 @@
                 @endphp
                 <tr class="align-top">
                   <td class="px-4 py-3">
+                    @auth
                     @if($canReview)
                       <input type="checkbox" value="{{ $item->id }}"
                              class="hsecm-item-check rounded border-slate-300 text-teal-700"
@@ -184,6 +197,9 @@
                     @else
                       <span class="text-slate-300">—</span>
                     @endif
+                    @else
+                      <span class="text-slate-300">—</span>
+                    @endauth
                   </td>
                   <td class="px-4 py-3">
                     <div class="font-medium text-on-background">{{ $item->value_label ?: $item->business_key }}</div>
