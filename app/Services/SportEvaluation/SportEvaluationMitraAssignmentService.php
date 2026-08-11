@@ -204,6 +204,11 @@ final class SportEvaluationMitraAssignmentService
     }
 
     /**
+     * @var array<string, list<int>|null>
+     */
+    private array $scopedIdsCache = [];
+
+    /**
      * ID employee_profiles dalam scope. Null = tanpa pembatasan.
      *
      * @param  array{site?:string,perusahaan?:string,company?:string}  $scope
@@ -215,7 +220,14 @@ final class SportEvaluationMitraAssignmentService
             return null;
         }
 
+        $cacheKey = $this->cacheKeySuffix($scope);
+        if (array_key_exists($cacheKey, $this->scopedIdsCache)) {
+            return $this->scopedIdsCache[$cacheKey];
+        }
+
         if (! $this->connection->isUp()) {
+            $this->scopedIdsCache[$cacheKey] = [];
+
             return [];
         }
 
@@ -226,13 +238,18 @@ final class SportEvaluationMitraAssignmentService
 
             $this->applyScopeToEmployeeQuery($query, $scope);
 
-            return $query
+            $ids = $query
                 ->pluck('e.id')
                 ->map(static fn (mixed $id): int => (int) $id)
                 ->values()
                 ->all();
+
+            $this->scopedIdsCache[$cacheKey] = $ids;
+
+            return $ids;
         } catch (Throwable $e) {
             report($e);
+            $this->scopedIdsCache[$cacheKey] = [];
 
             return [];
         }

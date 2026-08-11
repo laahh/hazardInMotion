@@ -24,11 +24,12 @@
         </a>
       </li>
       @php
-        $canManageMitraAssignment = auth()->user()
+        $authUser = auth()->user();
+        $canManageMitraAssignment = $authUser
           && (
-            auth()->user()->isAdmin()
-            || auth()->user()->hasRole('hr-pusat')
-            || auth()->user()->hasRole('super-admin')
+            $authUser->isAdmin()
+            || $authUser->hasRole('hr-pusat')
+            || $authUser->hasRole('super-admin')
           );
       @endphp
       @if ($canManageMitraAssignment)

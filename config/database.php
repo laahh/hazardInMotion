@@ -169,8 +169,10 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            // Fail-fast: jangan biarkan PHP menunggu default TCP timeout (bisa 504).
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                PDO::ATTR_TIMEOUT => (int) env('BEWELL_DB_CONNECT_TIMEOUT', 3),
             ]) : [],
             // Referensi tunnel (bukan dibaca otomatis oleh Laravel - tunnel dibuka manual,
             // lihat scripts/bemcu-forward-db.bat di project Deploy, atau start-bewell-tunnel.bat

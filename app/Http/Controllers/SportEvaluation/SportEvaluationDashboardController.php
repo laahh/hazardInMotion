@@ -65,6 +65,18 @@ class SportEvaluationDashboardController extends Controller
             'perusahaan' => trim((string) ($filters['perusahaan'] ?? $filters['company'] ?? '')),
         ];
 
+        // Fail-fast: satu cek koneksi. Saat tunnel down, jangan N× SELECT 1 / query berat.
+        if (! $this->connection->isUp()) {
+            return array_merge(
+                $this->emptyDashboardPayload(),
+                [
+                    'mitraMode' => $this->hasIndexScope(),
+                    'mitraScope' => $this->indexFilters,
+                    'bewellConnectionUp' => false,
+                ]
+            );
+        }
+
         return array_merge(
             $this->newUsersCardData(),
             $this->activeUsersCardData(),
@@ -81,8 +93,62 @@ class SportEvaluationDashboardController extends Controller
             [
                 'mitraMode' => $this->hasIndexScope(),
                 'mitraScope' => $this->indexFilters,
+                'bewellConnectionUp' => true,
             ],
         );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptyDashboardPayload(): array
+    {
+        return [
+            'newUsersTotal' => 0,
+            'newUsersWeekIncrease' => 0,
+            'activeUsersTotal' => 0,
+            'activeUsersWeekIncrease' => 0,
+            'totalStravaConnect' => 0,
+            'totalStravaConnectWeekIncrease' => 0,
+            'totalKomunitas' => 0,
+            'totalKomunitasWeekIncrease' => 0,
+            'totalMainBareng' => 0,
+            'totalMainBarengWeekIncrease' => 0,
+            'totalGoalAktif' => 0,
+            'totalGoalAktifWeekIncrease' => 0,
+            'topKomunitas' => [],
+            'activeTrendLabels' => [],
+            'activeTrendSeries' => [],
+            'activeTrendThisWeek' => 0,
+            'activeTrendWeekIncrease' => 0,
+            'adoptionInstall' => 0,
+            'adoptionLoginSuccess' => 0,
+            'adoptionAktif' => 0,
+            'adoptionChartLabels' => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+            'adoptionChartSeries' => array_fill(0, 12, 0),
+            'compositionOlahraga' => 0,
+            'compositionNutrisi' => 0,
+            'compositionSosial' => 0,
+            'compositionSeries' => [0, 0, 0],
+            'compositionLabels' => ['Olahraga', 'Nutrisi', 'Sosial'],
+            'topUsers' => [],
+            'siteRows' => [],
+            'siteTotalEmployees' => 0,
+            'weeklyMakananTotal' => 0,
+            'weeklyOlahragaTotal' => 0,
+            'weeklySosialTotal' => 0,
+            'weeklyActivityLabels' => ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'],
+            'weeklyMakananSeries' => array_fill(0, 7, 0),
+            'weeklyOlahragaSeries' => array_fill(0, 7, 0),
+            'weeklySosialSeries' => array_fill(0, 7, 0),
+            'notInstalledTotal' => 0,
+            'notInstalledSites' => [],
+            'notInstalledCompanies' => [],
+            'notInstalledDivisions' => [],
+            'notInstalledDepartements' => [],
+            'notInstalledJabatanFungsionals' => [],
+            'notInstalledWeekLabel' => '',
+        ];
     }
 
     /**
@@ -421,41 +487,52 @@ class SportEvaluationDashboardController extends Controller
         }
 
         try {
-            $db = DB::connection(BewellConnectionService::CONNECTION);
-            [$inSql, $inBindings] = $this->scopedUserIdSql('install_signals.user_id');
+            $cached = Cache::remember(
+                'evaluasi_well:new_users_card_v1:'.$this->scopeCacheKey(),
+                300,
+                function (): array {
+                    $db = DB::connection(BewellConnectionService::CONNECTION);
+                    [$inSql, $inBindings] = $this->scopedUserIdSql('install_signals.user_id');
 
-            // Install = pernah login_success ATAU punya aktivitas apa pun
-            // (upload makanan/olahraga tidak mungkin tanpa aplikasi terpasang).
-            $installSignalsSql = '
-                SELECT user_id, created_at FROM login_audit
-                    WHERE event = ? AND user_id IS NOT NULL
-                UNION ALL
-                SELECT user_id, created_at FROM food_analyses
-                    WHERE user_id IS NOT NULL
-                UNION ALL
-                SELECT user_id, created_at FROM workout_analyses
-                    WHERE user_id IS NOT NULL
-            ';
+                    $installSignalsSql = '
+                        SELECT user_id, created_at FROM login_audit
+                            WHERE event = ? AND user_id IS NOT NULL
+                        UNION ALL
+                        SELECT user_id, created_at FROM food_analyses
+                            WHERE user_id IS NOT NULL
+                        UNION ALL
+                        SELECT user_id, created_at FROM workout_analyses
+                            WHERE user_id IS NOT NULL
+                    ';
 
-            $row = $db->selectOne(
-                'SELECT COUNT(DISTINCT user_id) AS c FROM ('.$installSignalsSql.') AS install_signals WHERE 1 = 1'.$inSql,
-                array_merge(['login_success'], $inBindings)
+                    $row = $db->selectOne(
+                        'SELECT COUNT(DISTINCT user_id) AS c FROM ('.$installSignalsSql.') AS install_signals WHERE 1 = 1'.$inSql,
+                        array_merge(['login_success'], $inBindings)
+                    );
+                    $total = (int) ($row->c ?? 0);
+
+                    $weekStart = Carbon::now()->startOfWeek()->format('Y-m-d H:i:s');
+
+                    $row = $db->selectOne(
+                        'SELECT COUNT(*) AS c FROM (
+                            SELECT user_id
+                            FROM ('.$installSignalsSql.') AS install_signals
+                            WHERE 1 = 1'.$inSql.'
+                            GROUP BY user_id
+                            HAVING MIN(created_at) >= ?
+                        ) AS first_install_week',
+                        array_merge(['login_success'], $inBindings, [$weekStart])
+                    );
+
+                    return [
+                        'newUsersTotal' => $total,
+                        'newUsersWeekIncrease' => (int) ($row->c ?? 0),
+                    ];
+                }
             );
-            $newUsersTotal = (int) ($row->c ?? 0);
 
-            $weekStart = Carbon::now()->startOfWeek()->format('Y-m-d H:i:s');
-
-            $row = $db->selectOne(
-                'SELECT COUNT(*) AS c FROM (
-                    SELECT user_id
-                    FROM ('.$installSignalsSql.') AS install_signals
-                    WHERE 1 = 1'.$inSql.'
-                    GROUP BY user_id
-                    HAVING MIN(created_at) >= ?
-                ) AS first_install_week',
-                array_merge(['login_success'], $inBindings, [$weekStart])
-            );
-            $newUsersWeekIncrease = (int) ($row->c ?? 0);
+            $newUsersTotal = (int) $cached['newUsersTotal'];
+            $newUsersWeekIncrease = (int) $cached['newUsersWeekIncrease'];
         } catch (Throwable $e) {
             report($e);
         }
@@ -720,35 +797,13 @@ class SportEvaluationDashboardController extends Controller
         }
 
         try {
-            $now = Carbon::now();
-            $cached = \Illuminate\Support\Facades\Cache::remember(
-                'evaluasi_well:active_users_weekly_trend_v2:'.$this->scopeCacheKey(),
-                300,
-                function () use ($now): array {
-                    $labels = [];
-                    $series = [];
-
-                    for ($i = 11; $i >= 0; $i--) {
-                        $start = $now->copy()->subWeeks($i)->startOfWeek();
-                        $end = $now->copy()->subWeeks($i)->endOfWeek();
-                        $count = $this->activeStatsService->countActiveUsersInRange(
-                            $start->format('Y-m-d H:i:s'),
-                            $end->format('Y-m-d H:i:s'),
-                            $this->indexFilters,
-                        );
-
-                        $labels[] = $start->format('d M');
-                        $series[] = $count;
-                    }
-
-                    return compact('labels', 'series');
-                }
-            );
-
-            $activeTrendLabels = $cached['labels'];
-            $activeTrendSeries = $cached['series'];
-            $activeTrendThisWeek = (int) ($activeTrendSeries[11] ?? 0);
-            $prevWeek = (int) ($activeTrendSeries[10] ?? 0);
+            // Pakai service yang sudah di-cache (hindari 12× query UNION berat per request).
+            $trend = $this->activeStatsService->getWeeklyTrend($this->indexFilters);
+            $activeTrendLabels = $trend['labels'] ?? [];
+            $activeTrendSeries = $trend['active_users'] ?? [];
+            $count = count($activeTrendSeries);
+            $activeTrendThisWeek = $count > 0 ? (int) $activeTrendSeries[$count - 1] : 0;
+            $prevWeek = $count > 1 ? (int) $activeTrendSeries[$count - 2] : 0;
             $activeTrendWeekIncrease = max(0, $activeTrendThisWeek - $prevWeek);
         } catch (Throwable $e) {
             report($e);
