@@ -64,6 +64,7 @@ final class SportEvaluationActiveStatsService
         private readonly BewellConnectionService $connection,
         private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
         private readonly SportEvaluationCompanyAliasResolver $companyAliasResolver,
+        private readonly SportEvaluationMitraAssignmentService $mitraAssignmentService,
     ) {}
 
     /**
@@ -127,47 +128,60 @@ final class SportEvaluationActiveStatsService
      *     }>
      * }
      */
-    public function getStats(string $dimension, ?string $weekStart = null): array
+    /**
+     * @param  array{site?:string,perusahaan?:string,company?:string}  $filters
+     */
+    public function getStats(string $dimension, ?string $weekStart = null, array $filters = []): array
     {
         $dimension = $this->resolveDimension($dimension);
         $week = $this->resolveWeek($weekStart);
+        $scope = $this->normalizeScopeFilters($filters);
         $empty = $this->emptyPayload($dimension, $week, 'Koneksi BeWell belum tersedia.');
+        $empty['filters'] = $scope;
 
         if (! $this->connection->isUp()) {
             return $empty;
         }
 
         try {
+            $scopeKey = $this->mitraAssignmentService->cacheKeySuffix($scope);
             $stats = Cache::remember(
-                'evaluasi_well:active_stats:v3:'.$dimension.':'.$week['start'],
+                'evaluasi_well:active_stats:v4:'.$dimension.':'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
-                function () use ($dimension, $week): array {
-                    return $this->buildStats($dimension, $week);
+                function () use ($dimension, $week, $scope): array {
+                    return $this->buildStats($dimension, $week, $scope);
                 }
             );
 
-            $stats['overview'] = $this->getOverview($week);
-            $stats['weekly_trend'] = $this->getWeeklyTrend();
+            $stats['overview'] = $this->getOverview($week, $scope);
+            $stats['weekly_trend'] = $this->getWeeklyTrend($scope);
             $stats['week_options'] = $this->buildWeekOptions($stats['weekly_trend']);
+            $stats['filters'] = $scope;
 
             return $stats;
         } catch (Throwable $e) {
             report($e);
+            $fallback = $this->emptyPayload($dimension, $week, 'Gagal memuat statistik user aktif.');
+            $fallback['filters'] = $scope;
 
-            return $this->emptyPayload($dimension, $week, 'Gagal memuat statistik user aktif.');
+            return $fallback;
         }
     }
 
     /**
      * Jumlah user aktif (luas) dalam rentang — single source of truth dengan KPI kartu.
+     *
+     * @param  array{site?:string,perusahaan?:string,company?:string}  $filters
      */
-    public function countActiveUsersInRange(string $from, string $to): int
+    public function countActiveUsersInRange(string $from, string $to, array $filters = []): int
     {
         $db = DB::connection(BewellConnectionService::CONNECTION);
+        $scope = $this->normalizeScopeFilters($filters);
+        [$inSql, $inBindings] = $this->userIdInClause('active_users.user_id', $scope);
 
         $row = $db->selectOne(
-            'SELECT COUNT(*) AS c FROM ('.$this->activeUsersUnionSql().') AS active_users',
-            $this->activeUsersUnionBindings($from, $to)
+            'SELECT COUNT(*) AS c FROM ('.$this->activeUsersUnionSql().') AS active_users WHERE 1 = 1'.$inSql,
+            array_merge($this->activeUsersUnionBindings($from, $to), $inBindings)
         );
 
         return (int) ($row->c ?? 0);
@@ -189,25 +203,45 @@ final class SportEvaluationActiveStatsService
      *     top_evals: int
      * }>
      */
-    public function getOverview(array $week): array
+    /**
+     * @param  array{start: string, end: string, label: string, prev_start: string}  $week
+     * @param  array{site:string,company:string}  $scope
+     * @return list<array{
+     *     dimension: string,
+     *     label: string,
+     *     icon: string,
+     *     groups: int,
+     *     active_users: int,
+     *     food_evals: int,
+     *     workout_evals: int,
+     *     total_evals: int,
+     *     top_name: string,
+     *     top_active: int,
+     *     top_evals: int
+     * }>
+     */
+    public function getOverview(array $week, array $scope = []): array
     {
         if (! $this->connection->isUp()) {
             return $this->emptyOverview();
         }
 
+        $scope = $this->normalizeScopeFilters($scope);
+        $scopeKey = $this->mitraAssignmentService->cacheKeySuffix($scope);
+
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:overview:v3:'.$week['start'],
+                'evaluasi_well:active_stats:overview:v4:'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
-                function () use ($week): array {
+                function () use ($week, $scope, $scopeKey): array {
                     $overview = [];
 
                     foreach (array_keys(self::DIMENSION_COLUMNS) as $dimension) {
                         $stats = Cache::remember(
-                            'evaluasi_well:active_stats:v3:'.$dimension.':'.$week['start'],
+                            'evaluasi_well:active_stats:v4:'.$dimension.':'.$week['start'].':'.$scopeKey,
                             self::CACHE_TTL,
-                            function () use ($dimension, $week): array {
-                                return $this->buildStats($dimension, $week);
+                            function () use ($dimension, $week, $scope): array {
+                                return $this->buildStats($dimension, $week, $scope);
                             }
                         );
 
@@ -240,19 +274,23 @@ final class SportEvaluationActiveStatsService
     }
 
     /**
+     * @param  array{site?:string,perusahaan?:string,company?:string}  $filters
      * @return array{labels: list<string>, active_users: list<int>, week_starts: list<string>}
      */
-    public function getWeeklyTrend(): array
+    public function getWeeklyTrend(array $filters = []): array
     {
         if (! $this->connection->isUp()) {
             return ['labels' => [], 'active_users' => [], 'week_starts' => []];
         }
 
+        $scope = $this->normalizeScopeFilters($filters);
+        $scopeKey = $this->mitraAssignmentService->cacheKeySuffix($scope);
+
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:weekly_trend:v1',
+                'evaluasi_well:active_stats:weekly_trend:v2:'.$scopeKey,
                 self::CACHE_TTL,
-                function (): array {
+                function () use ($scope): array {
                     $now = Carbon::now();
                     $labels = [];
                     $activeUsers = [];
@@ -261,14 +299,13 @@ final class SportEvaluationActiveStatsService
                     for ($i = self::TREND_WEEKS - 1; $i >= 0; $i--) {
                         $start = $now->copy()->subWeeks($i)->startOfWeek();
                         $end = $now->copy()->subWeeks($i)->endOfWeek();
-                        $count = $this->countActiveUsersInRange(
+                        $labels[] = $start->format('d M');
+                        $weekStarts[] = $start->toDateString();
+                        $activeUsers[] = $this->countActiveUsersInRange(
                             $start->format('Y-m-d H:i:s'),
                             $end->format('Y-m-d H:i:s'),
+                            $scope,
                         );
-
-                        $labels[] = $start->format('d M');
-                        $activeUsers[] = $count;
-                        $weekStarts[] = $start->toDateString();
                     }
 
                     return [
@@ -347,18 +384,19 @@ final class SportEvaluationActiveStatsService
      *     }>
      * }
      */
-    private function buildStats(string $dimension, array $week): array
+    private function buildStats(string $dimension, array $week, array $scope = []): array
     {
         $from = $week['start'].' 00:00:00';
         $to = Carbon::parse($week['end'])->endOfDay()->format('Y-m-d H:i:s');
         $prevFrom = $week['prev_start'].' 00:00:00';
         $prevTo = Carbon::parse($week['prev_start'])->endOfWeek()->endOfDay()->format('Y-m-d H:i:s');
+        $scope = $this->normalizeScopeFilters($scope);
 
-        $kpiCardTotal = $this->countActiveUsersInRange($from, $to);
-        $prevKpi = $this->countActiveUsersInRange($prevFrom, $prevTo);
+        $kpiCardTotal = $this->countActiveUsersInRange($from, $to, $scope);
+        $prevKpi = $this->countActiveUsersInRange($prevFrom, $prevTo, $scope);
         $weekIncrease = max(0, $kpiCardTotal - $prevKpi);
 
-        $rows = $this->queryDimensionRows($dimension, $from, $to);
+        $rows = $this->queryDimensionRows($dimension, $from, $to, $scope);
         $activeScoped = (int) array_sum(array_column($rows, 'active_users'));
         $foodAll = (int) array_sum(array_column($rows, 'food_evals'));
         $workoutAll = (int) array_sum(array_column($rows, 'workout_evals'));
@@ -392,7 +430,8 @@ final class SportEvaluationActiveStatsService
             'overview' => [],
             'rows' => $rows,
             'chart' => $this->buildChartPayload($rows),
-            'leaderboard' => $this->queryLeaderboard($from, $to),
+            'leaderboard' => $this->queryLeaderboard($from, $to, $scope),
+            'filters' => $scope,
         ];
     }
 
@@ -407,15 +446,16 @@ final class SportEvaluationActiveStatsService
      *     bar_class: string
      * }>
      */
-    private function queryDimensionRows(string $dimension, string $from, string $to): array
+    private function queryDimensionRows(string $dimension, string $from, string $to, array $scope = []): array
     {
         if ($dimension === 'site') {
-            return $this->queryDimensionRowsByResolvedSite($from, $to);
+            return $this->queryDimensionRowsByResolvedSite($from, $to, $scope);
         }
 
         $column = self::DIMENSION_COLUMNS[$dimension];
         $dimExpr = 'COALESCE(NULLIF(TRIM('.$column.'), \'\'), \'Tidak diketahui\')';
         $db = DB::connection(BewellConnectionService::CONNECTION);
+        [$inSql, $inBindings] = $this->userIdInClause('e.id', $scope);
 
         $sql = '
             SELECT
@@ -442,13 +482,15 @@ final class SportEvaluationActiveStatsService
             ) AS w ON w.user_id = a.user_id
             WHERE e.status_karyawan = ?
               AND UPPER(TRIM(COALESCE(e.jabatan_fungsional, \'\'))) <> ?
+              '.$inSql.'
             GROUP BY '.$dimExpr.'
             ORDER BY active_users DESC, food_evals + workout_evals DESC, dim_name ASC
         ';
 
         $bindings = array_merge(
             $this->activeUsersUnionBindings($from, $to),
-            ['photo', $from, $to, $from, $to, 'AKTIF', 'VISITOR']
+            ['photo', $from, $to, $from, $to, 'AKTIF', 'VISITOR'],
+            $inBindings
         );
 
         $queryRows = $db->select($sql, $bindings);
@@ -509,9 +551,10 @@ final class SportEvaluationActiveStatsService
      *     bar_class: string
      * }>
      */
-    private function queryDimensionRowsByResolvedSite(string $from, string $to): array
+    private function queryDimensionRowsByResolvedSite(string $from, string $to, array $scope = []): array
     {
         $db = DB::connection(BewellConnectionService::CONNECTION);
+        [$inSql, $inBindings] = $this->userIdInClause('e.id', $scope);
 
         $sql = '
             SELECT
@@ -539,11 +582,13 @@ final class SportEvaluationActiveStatsService
             ) AS w ON w.user_id = a.user_id
             WHERE e.status_karyawan = ?
               AND UPPER(TRIM(COALESCE(e.jabatan_fungsional, \'\'))) <> ?
+              '.$inSql.'
         ';
 
         $bindings = array_merge(
             $this->activeUsersUnionBindings($from, $to),
-            ['photo', $from, $to, $from, $to, 'AKTIF', 'VISITOR']
+            ['photo', $from, $to, $from, $to, 'AKTIF', 'VISITOR'],
+            $inBindings
         );
 
         $queryRows = $db->select($sql, $bindings);
@@ -620,10 +665,11 @@ final class SportEvaluationActiveStatsService
      *     is_active: bool
      * }>
      */
-    private function queryLeaderboard(string $from, string $to): array
+    private function queryLeaderboard(string $from, string $to, array $scope = []): array
     {
         $db = DB::connection(BewellConnectionService::CONNECTION);
         $limit = self::LEADERBOARD_LIMIT;
+        [$inSql, $inBindings] = $this->userIdInClause('e.id', $scope);
 
             $sql = '
             SELECT
@@ -656,6 +702,7 @@ final class SportEvaluationActiveStatsService
             LEFT JOIN ('.$this->activeUsersUnionSql().') AS a ON a.user_id = e.id
             WHERE e.status_karyawan = ?
               AND UPPER(TRIM(COALESCE(e.jabatan_fungsional, \'\'))) <> ?
+              '.$inSql.'
               AND (
                     COALESCE(f.food_cnt, 0) > 0
                  OR COALESCE(w.workout_cnt, 0) > 0
@@ -668,7 +715,8 @@ final class SportEvaluationActiveStatsService
         $bindings = array_merge(
             ['photo', $from, $to, $from, $to],
             $this->activeUsersUnionBindings($from, $to),
-            ['AKTIF', 'VISITOR']
+            ['AKTIF', 'VISITOR'],
+            $inBindings
         );
 
         $queryRows = $db->select($sql, $bindings);
@@ -996,6 +1044,54 @@ final class SportEvaluationActiveStatsService
                 'workout_evals' => [],
             ],
             'leaderboard' => [],
+            'filters' => ['site' => '', 'company' => ''],
         ];
+    }
+
+    /**
+     * @param  array{site?:string,perusahaan?:string,company?:string}  $filters
+     * @return array{site:string,company:string}
+     */
+    private function normalizeScopeFilters(array $filters): array
+    {
+        $site = trim((string) ($filters['site'] ?? ''));
+        $company = trim((string) ($filters['company'] ?? $filters['perusahaan'] ?? ''));
+
+        return [
+            'site' => mb_substr($site, 0, 180),
+            'company' => mb_substr($company, 0, 180),
+        ];
+    }
+
+    /**
+     * @param  array{site:string,company:string}  $scope
+     * @return array{0:string,1:list<int>}
+     */
+    private function userIdInClause(string $column, array $scope): array
+    {
+        $ids = $this->mitraAssignmentService->scopedEmployeeIds([
+            'site' => $scope['site'] ?? '',
+            'perusahaan' => $scope['company'] ?? '',
+        ]);
+
+        if ($ids === null) {
+            return ['', []];
+        }
+
+        if ($ids === []) {
+            return [' AND 1 = 0', []];
+        }
+
+        $parts = [];
+        $bindings = [];
+        foreach (array_chunk($ids, 800) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+            $parts[] = $column.' IN ('.$placeholders.')';
+            foreach ($chunk as $id) {
+                $bindings[] = $id;
+            }
+        }
+
+        return [' AND ('.implode(' OR ', $parts).')', $bindings];
     }
 }

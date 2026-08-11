@@ -53,6 +53,22 @@ class User extends Authenticatable
     }
 
     /**
+     * Assignment Mitra Kerja Evaluasi Well (satu per user).
+     */
+    public function evaluasiWellMitraAssignment()
+    {
+        return $this->hasOne(EvaluasiWellMitraAssignment::class);
+    }
+
+    /**
+     * Assignment Mitra Kerja aktif.
+     */
+    public function activeEvaluasiWellMitraAssignment()
+    {
+        return $this->hasOne(EvaluasiWellMitraAssignment::class)->where('is_active', true);
+    }
+
+    /**
      * Check if user has a specific role.
      */
     public function hasRole($role): bool

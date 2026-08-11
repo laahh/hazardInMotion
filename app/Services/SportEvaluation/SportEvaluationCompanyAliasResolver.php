@@ -85,4 +85,53 @@ final class SportEvaluationCompanyAliasResolver
 
         return $this->normalizeKey($this->resolve($rawCompany)) === $this->normalizeKey($this->resolve($filter));
     }
+
+    /**
+     * Daftar nilai (canonical + alias) untuk filter SQL case-insensitive IN (...).
+     *
+     * @return list<string>
+     */
+    public function matchingRawNames(string $filterCompany): array
+    {
+        $filter = trim($filterCompany);
+        if ($filter === '') {
+            return [];
+        }
+
+        $targetKey = $this->normalizeKey($this->resolve($filter));
+        $values = [$filter];
+
+        $canonical = $this->resolve($filter);
+        if ($canonical !== '') {
+            $values[] = $canonical;
+        }
+
+        /** @var array<string, list<string>> $groups */
+        $groups = config('evaluasi_well_company_aliases', []);
+        foreach ($groups as $canon => $aliases) {
+            if (! is_string($canon) || ! is_array($aliases)) {
+                continue;
+            }
+            if ($this->normalizeKey($canon) !== $targetKey) {
+                continue;
+            }
+            $values[] = $canon;
+            foreach ($aliases as $alias) {
+                if (is_string($alias) && trim($alias) !== '') {
+                    $values[] = trim($alias);
+                }
+            }
+        }
+
+        $unique = [];
+        foreach ($values as $value) {
+            $trimmed = trim((string) $value);
+            if ($trimmed === '') {
+                continue;
+            }
+            $unique[$this->normalizeKey($trimmed)] = $trimmed;
+        }
+
+        return array_values($unique);
+    }
 }

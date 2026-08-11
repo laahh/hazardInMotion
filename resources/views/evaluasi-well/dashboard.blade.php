@@ -1,6 +1,6 @@
 ﻿@extends('evaluasi-well.layouts.app')
 
-@section('title', 'Dashboard')
+@section('title', ($mitraMode ?? false) ? 'Mitra Kerja' : 'Dashboard')
 
 @section('css')
 <style>
@@ -652,8 +652,10 @@
     }
 
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
-    var dataUrl = @json(route('evaluasi-well.not-installed.data'));
-    var exportUrl = @json(route('evaluasi-well.not-installed.export'));
+    var dataUrl = @json($ajaxRoutes['notInstalledData'] ?? route('evaluasi-well.not-installed.data'));
+    var exportUrl = @json($ajaxRoutes['notInstalledExport'] ?? route('evaluasi-well.not-installed.export'));
+    var mitraMode = @json((bool) ($mitraMode ?? false));
+    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '']);
 
     var siteEl = document.querySelector('#not-installed-site');
     var companyEl = document.querySelector('#not-installed-company');
@@ -667,6 +669,23 @@
     var exportBtn = document.querySelector('#not-installed-export-btn');
     var totalBadge = document.querySelector('#not-installed-total-badge');
 
+    if (mitraMode) {
+        if (siteEl) {
+            if (mitraScope.site && !Array.from(siteEl.options).some(function (opt) { return opt.value === mitraScope.site; })) {
+                siteEl.appendChild(new Option(mitraScope.site, mitraScope.site, true, true));
+            }
+            siteEl.value = mitraScope.site || '';
+            siteEl.disabled = true;
+        }
+        if (companyEl) {
+            if (mitraScope.perusahaan && !Array.from(companyEl.options).some(function (opt) { return opt.value === mitraScope.perusahaan; })) {
+                companyEl.appendChild(new Option(mitraScope.perusahaan, mitraScope.perusahaan, true, true));
+            }
+            companyEl.value = mitraScope.perusahaan || '';
+            companyEl.disabled = true;
+        }
+    }
+
     function escapeHtml(value) {
         return String(value)
             .replace(/&/g, '&amp;')
@@ -678,8 +697,8 @@
 
     function currentFilters() {
         return {
-            site: siteEl ? siteEl.value : '',
-            company: companyEl ? companyEl.value : '',
+            site: mitraMode ? (mitraScope.site || '') : (siteEl ? siteEl.value : ''),
+            company: mitraMode ? (mitraScope.perusahaan || '') : (companyEl ? companyEl.value : ''),
             division: divisionEl ? divisionEl.value.trim() : '',
             departement: departementEl ? departementEl.value.trim() : '',
             jabatan_fungsional: jabatanFungsionalEl ? jabatanFungsionalEl.value : '',
@@ -706,7 +725,11 @@
         }
 
         var query = params.toString();
-        exportBtn.href = query ? (exportUrl + '?' + query) : exportUrl;
+        if (!query) {
+            exportBtn.href = exportUrl;
+            return;
+        }
+        exportBtn.href = exportUrl + (exportUrl.indexOf('?') >= 0 ? '&' : '?') + query;
     }
 
     function badgeHtml(label, className) {
@@ -857,8 +880,8 @@
 
     if (resetBtn) {
         resetBtn.addEventListener('click', function () {
-            if (siteEl) siteEl.value = '';
-            if (companyEl) companyEl.value = '';
+            if (siteEl) siteEl.value = mitraMode ? (mitraScope.site || '') : '';
+            if (companyEl) companyEl.value = mitraMode ? (mitraScope.perusahaan || '') : '';
             if (divisionEl) divisionEl.value = '';
             if (departementEl) departementEl.value = '';
             if (jabatanFungsionalEl) jabatanFungsionalEl.value = '';
@@ -900,9 +923,11 @@
         return;
     }
 
-    var dataUrl = @json(route('evaluasi-well.install-stats'));
-    var peopleDataUrl = @json(route('evaluasi-well.not-installed.data'));
+    var dataUrl = @json($ajaxRoutes['installStats'] ?? route('evaluasi-well.install-stats'));
+    var peopleDataUrl = @json($ajaxRoutes['notInstalledData'] ?? route('evaluasi-well.not-installed.data'));
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
+    var mitraMode = @json((bool) ($mitraMode ?? false));
+    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '']);
     var cache = {};
     var currentDimension = 'site';
     var barChart = null;
@@ -1363,10 +1388,10 @@
 
     function readGlobalFilters() {
         return {
-            site: globalSiteEl ? globalSiteEl.value : '',
+            site: mitraMode ? (mitraScope.site || '') : (globalSiteEl ? globalSiteEl.value : ''),
             division_group: globalDivisionEl ? globalDivisionEl.value : '',
             jabatan: globalJabatanEl ? globalJabatanEl.value : '',
-            company: globalCompanyEl ? globalCompanyEl.value : '',
+            company: mitraMode ? (mitraScope.perusahaan || '') : (globalCompanyEl ? globalCompanyEl.value : ''),
             departement: globalDepartementEl ? globalDepartementEl.value.trim() : '',
             install: globalInstallEl ? globalInstallEl.value : ''
         };
@@ -1426,6 +1451,24 @@
                 globalDepartementListEl.appendChild(opt);
             });
         }
+
+        if (mitraMode) {
+            if (globalSiteEl) {
+                if (mitraScope.site && !Array.from(globalSiteEl.options).some(function (opt) { return opt.value === mitraScope.site; })) {
+                    globalSiteEl.appendChild(new Option(mitraScope.site, mitraScope.site, true, true));
+                }
+                globalSiteEl.value = mitraScope.site || '';
+                globalSiteEl.disabled = true;
+            }
+            if (globalCompanyEl) {
+                if (mitraScope.perusahaan && !Array.from(globalCompanyEl.options).some(function (opt) { return opt.value === mitraScope.perusahaan; })) {
+                    globalCompanyEl.appendChild(new Option(mitraScope.perusahaan, mitraScope.perusahaan, true, true));
+                }
+                globalCompanyEl.value = mitraScope.perusahaan || '';
+                globalCompanyEl.disabled = true;
+            }
+        }
+
         filterOptionsReady = true;
     }
 
@@ -1778,10 +1821,10 @@
     }
 
     function resetGlobalFilters() {
-        if (globalSiteEl) globalSiteEl.value = '';
+        if (globalSiteEl) globalSiteEl.value = mitraMode ? (mitraScope.site || '') : '';
         if (globalDivisionEl) globalDivisionEl.value = '';
         if (globalJabatanEl) globalJabatanEl.value = '';
-        if (globalCompanyEl) globalCompanyEl.value = '';
+        if (globalCompanyEl) globalCompanyEl.value = mitraMode ? (mitraScope.perusahaan || '') : '';
         if (globalDepartementEl) globalDepartementEl.value = '';
         if (globalInstallEl) globalInstallEl.value = '';
     }
@@ -1862,7 +1905,7 @@
         return;
     }
 
-    var dataUrl = @json(route('evaluasi-well.active-stats'));
+    var dataUrl = @json($ajaxRoutes['activeStats'] ?? route('evaluasi-well.active-stats'));
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
     var cache = {};
     var currentDimension = 'site';
@@ -2491,20 +2534,106 @@
 @endsection
 
 @section('content')
+@php
+  $mitraMode = (bool) ($mitraMode ?? false);
+  $mitraNeedsPicker = (bool) ($mitraNeedsPicker ?? false);
+  $mitraIsManager = (bool) ($mitraIsManager ?? false);
+  $mitraScopeLabel = $mitraScopeLabel ?? null;
+  $mitraScope = $mitraScope ?? ['site' => '', 'perusahaan' => ''];
+  $siteOptions = $siteOptions ?? [];
+  $companyOptions = $companyOptions ?? [];
+  $ajaxRoutes = $ajaxRoutes ?? [
+    'notInstalledData' => route('evaluasi-well.not-installed.data'),
+    'notInstalledExport' => route('evaluasi-well.not-installed.export'),
+    'installStats' => route('evaluasi-well.install-stats'),
+    'activeStats' => route('evaluasi-well.active-stats'),
+    'index' => route('evaluasi-well.index'),
+  ];
+@endphp
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
-  <h6 class="fw-semibold mb-0">Dashboard</h6>
+  <div>
+    <h6 class="fw-semibold mb-0">{{ $mitraMode ? 'Mitra Kerja' : 'Dashboard' }}</h6>
+    @if ($mitraMode && $mitraScopeLabel)
+      <div class="text-secondary-light text-sm mt-4">{{ $mitraScopeLabel }}</div>
+    @endif
+  </div>
   <ul class="d-flex align-items-center gap-2">
     <li class="fw-medium">
-      <a href="{{ route('evaluasi-well.index') }}" class="d-flex align-items-center gap-1 hover-text-primary">
+      <a href="{{ $ajaxRoutes['index'] ?? route('evaluasi-well.index') }}" class="d-flex align-items-center gap-1 hover-text-primary">
         <iconify-icon icon="solar:home-smile-angle-outline" class="icon text-lg"></iconify-icon>
-        Dashboard
+        {{ $mitraMode ? 'Mitra Kerja' : 'Dashboard' }}
       </a>
     </li>
     <li>-</li>
     <li class="fw-medium">Evaluasi Olahraga</li>
   </ul>
 </div>
-    
+
+@if ($mitraMode && $mitraNeedsPicker)
+<div class="card radius-8 border-0 shadow-sm mb-24">
+  <div class="card-body p-24">
+    @if ($mitraIsManager)
+      <h6 class="fw-semibold mb-12">Pilih Mitra Kerja</h6>
+      <p class="text-secondary-light text-sm mb-16">Pilih site dan perusahaan untuk menampilkan dashboard scoped.</p>
+      <form method="GET" action="{{ route('evaluasi-well.mitra.index') }}" class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label for="mitra-site" class="form-label text-sm fw-medium mb-6">Site</label>
+          <select id="mitra-site" name="site" class="form-select" required>
+            <option value="">— Pilih site —</option>
+            @foreach ($siteOptions as $site)
+              <option value="{{ $site }}" @selected(($mitraScope['site'] ?? '') === $site)>{{ $site }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label for="mitra-perusahaan" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
+          <select id="mitra-perusahaan" name="perusahaan" class="form-select" required>
+            <option value="">— Pilih perusahaan —</option>
+            @foreach ($companyOptions as $company)
+              <option value="{{ $company }}" @selected(($mitraScope['perusahaan'] ?? '') === $company)>{{ $company }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-md-4">
+          <button type="submit" class="btn btn-primary-600 radius-8 px-20 py-11">Tampilkan Dashboard</button>
+        </div>
+      </form>
+    @else
+      <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-0 radius-8" role="alert">
+        Anda belum di-assign ke site + perusahaan. Hubungi Admin/HR Pusat untuk menambahkan assignment Mitra Kerja.
+      </div>
+    @endif
+  </div>
+</div>
+@elseif ($mitraMode && $mitraIsManager)
+<div class="card radius-8 border-0 shadow-sm mb-24">
+  <div class="card-body p-16 px-24">
+    <form method="GET" action="{{ route('evaluasi-well.mitra.index') }}" class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label for="mitra-site-switch" class="form-label text-sm fw-medium mb-6">Site</label>
+        <select id="mitra-site-switch" name="site" class="form-select form-select-sm" required>
+          @foreach ($siteOptions as $site)
+            <option value="{{ $site }}" @selected(($mitraScope['site'] ?? '') === $site)>{{ $site }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label for="mitra-perusahaan-switch" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
+        <select id="mitra-perusahaan-switch" name="perusahaan" class="form-select form-select-sm" required>
+          @foreach ($companyOptions as $company)
+            <option value="{{ $company }}" @selected(($mitraScope['perusahaan'] ?? '') === $company)>{{ $company }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="col-md-4">
+        <button type="submit" class="btn btn-sm btn-outline-primary-600 radius-8">Ganti Mitra</button>
+      </div>
+    </form>
+  </div>
+</div>
+@endif
+
+@unless ($mitraNeedsPicker)
     <div class="row gy-4">
       <div class="col-xxl-8">
         <div class="row gy-4">
@@ -2927,7 +3056,7 @@
                   Karyawan status AKTIF (exclude VISITOR) · User aktif = upload makanan/olahraga minggu ini ({{ $notInstalledWeekLabel ?? 'Sen–Min' }})
                 </p>
               </div>
-              <a id="not-installed-export-btn" href="{{ route('evaluasi-well.not-installed.export', ['install' => 'belum']) }}" class="btn btn-sm btn-success-600 d-inline-flex align-items-center gap-1">
+              <a id="not-installed-export-btn" href="{{ ($ajaxRoutes['notInstalledExport'] ?? route('evaluasi-well.not-installed.export')) . (str_contains(($ajaxRoutes['notInstalledExport'] ?? ''), '?') ? '&' : '?') . 'install=belum' }}" class="btn btn-sm btn-success-600 d-inline-flex align-items-center gap-1">
                 <iconify-icon icon="solar:file-download-bold" class="icon"></iconify-icon>
                 Download Excel
               </a>
@@ -3043,4 +3172,5 @@
 
 @include('evaluasi-well.partials._install-stats-modal')
 @include('evaluasi-well.partials._active-stats-modal')
+@endunless
 @endsection

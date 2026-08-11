@@ -25,17 +25,45 @@ use Throwable;
  */
 class SportEvaluationDashboardController extends Controller
 {
+    /**
+     * Filter index opsional (dipakai dashboard Mitra Kerja).
+     *
+     * @var array{site:string,perusahaan:string}
+     */
+    protected array $indexFilters = [
+        'site' => '',
+        'perusahaan' => '',
+    ];
+
     public function __construct(
         private readonly BewellConnectionService $connection,
         private readonly SportEvaluationInstallStatsService $installStatsService,
         private readonly SportEvaluationActiveStatsService $activeStatsService,
         private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
         private readonly SportEvaluationDivisiGroupResolver $divisiGroupResolver,
+        private readonly SportEvaluationMitraAssignmentService $mitraAssignmentService,
+        private readonly SportEvaluationCompanyAliasResolver $companyAliasResolver,
     ) {}
 
     public function index(Request $request): View
     {
-        return view('evaluasi-well.dashboard', array_merge(
+        return view('evaluasi-well.dashboard', $this->buildIndexData());
+    }
+
+    /**
+     * Data SSR dashboard utama (global atau scoped mitra).
+     *
+     * @param  array{site?:string,perusahaan?:string,company?:string}  $filters
+     * @return array<string, mixed>
+     */
+    public function buildIndexData(array $filters = []): array
+    {
+        $this->indexFilters = [
+            'site' => trim((string) ($filters['site'] ?? '')),
+            'perusahaan' => trim((string) ($filters['perusahaan'] ?? $filters['company'] ?? '')),
+        ];
+
+        return array_merge(
             $this->newUsersCardData(),
             $this->activeUsersCardData(),
             $this->stravaConnectCardData(),
@@ -48,7 +76,11 @@ class SportEvaluationDashboardController extends Controller
             $this->siteDistributionData(),
             $this->weeklyActivityData(),
             $this->notInstalledFilterData(),
-        ));
+            [
+                'mitraMode' => $this->hasIndexScope(),
+                'mitraScope' => $this->indexFilters,
+            ],
+        );
     }
 
     /**
@@ -388,6 +420,7 @@ class SportEvaluationDashboardController extends Controller
 
         try {
             $db = DB::connection(BewellConnectionService::CONNECTION);
+            [$inSql, $inBindings] = $this->scopedUserIdSql('install_signals.user_id');
 
             // Install = pernah login_success ATAU punya aktivitas apa pun
             // (upload makanan/olahraga tidak mungkin tanpa aplikasi terpasang).
@@ -403,8 +436,8 @@ class SportEvaluationDashboardController extends Controller
             ';
 
             $row = $db->selectOne(
-                'SELECT COUNT(DISTINCT user_id) AS c FROM ('.$installSignalsSql.') AS install_signals',
-                ['login_success']
+                'SELECT COUNT(DISTINCT user_id) AS c FROM ('.$installSignalsSql.') AS install_signals WHERE 1 = 1'.$inSql,
+                array_merge(['login_success'], $inBindings)
             );
             $newUsersTotal = (int) ($row->c ?? 0);
 
@@ -414,10 +447,11 @@ class SportEvaluationDashboardController extends Controller
                 'SELECT COUNT(*) AS c FROM (
                     SELECT user_id
                     FROM ('.$installSignalsSql.') AS install_signals
+                    WHERE 1 = 1'.$inSql.'
                     GROUP BY user_id
                     HAVING MIN(created_at) >= ?
                 ) AS first_install_week',
-                ['login_success', $weekStart]
+                array_merge(['login_success'], $inBindings, [$weekStart])
             );
             $newUsersWeekIncrease = (int) ($row->c ?? 0);
         } catch (Throwable $e) {
@@ -455,10 +489,12 @@ class SportEvaluationDashboardController extends Controller
             $thisWeek = $this->activeStatsService->countActiveUsersInRange(
                 $thisWeekStart->format('Y-m-d H:i:s'),
                 $thisWeekEnd->format('Y-m-d H:i:s'),
+                $this->indexFilters,
             );
             $lastWeek = $this->activeStatsService->countActiveUsersInRange(
                 $lastWeekStart->format('Y-m-d H:i:s'),
                 $lastWeekEnd->format('Y-m-d H:i:s'),
+                $this->indexFilters,
             );
 
             $activeUsersTotal = $thisWeek;
@@ -492,14 +528,19 @@ class SportEvaluationDashboardController extends Controller
             $lastWeekStart = $now->copy()->subWeek()->startOfWeek()->format('Y-m-d H:i:s');
             $lastWeekEnd = $now->copy()->subWeek()->endOfWeek()->format('Y-m-d H:i:s');
 
-            $totalStravaConnect = (int) $db->table('strava_connections')->count();
+            $totalStravaConnect = (int) $this->applyScopedUserIds(
+                $db->table('strava_connections'),
+                'user_id'
+            )->count();
 
-            $thisWeek = (int) $db->table('strava_connections')
-                ->whereBetween('connected_at', [$weekStart, $weekEnd])
-                ->count();
-            $lastWeek = (int) $db->table('strava_connections')
-                ->whereBetween('connected_at', [$lastWeekStart, $lastWeekEnd])
-                ->count();
+            $thisWeek = (int) $this->applyScopedUserIds(
+                $db->table('strava_connections')->whereBetween('connected_at', [$weekStart, $weekEnd]),
+                'user_id'
+            )->count();
+            $lastWeek = (int) $this->applyScopedUserIds(
+                $db->table('strava_connections')->whereBetween('connected_at', [$lastWeekStart, $lastWeekEnd]),
+                'user_id'
+            )->count();
 
             $totalStravaConnectWeekIncrease = max(0, $thisWeek - $lastWeek);
         } catch (Throwable $e) {
@@ -567,17 +608,22 @@ class SportEvaluationDashboardController extends Controller
                 ->count();
             $totalMainBarengWeekIncrease = max(0, $mainBarengThisWeek - $mainBarengLastWeek);
 
-            $totalGoalAktif = (int) $db->table('user_goals')
-                ->where('status', 'active')
-                ->count();
-            $goalThisWeek = (int) $db->table('user_goals')
-                ->where('status', 'active')
-                ->whereBetween('created_at', [$weekStart, $weekEnd])
-                ->count();
-            $goalLastWeek = (int) $db->table('user_goals')
-                ->where('status', 'active')
-                ->whereBetween('created_at', [$lastWeekStart, $lastWeekEnd])
-                ->count();
+            $totalGoalAktif = (int) $this->applyScopedUserIds(
+                $db->table('user_goals')->where('status', 'active'),
+                'user_id'
+            )->count();
+            $goalThisWeek = (int) $this->applyScopedUserIds(
+                $db->table('user_goals')
+                    ->where('status', 'active')
+                    ->whereBetween('created_at', [$weekStart, $weekEnd]),
+                'user_id'
+            )->count();
+            $goalLastWeek = (int) $this->applyScopedUserIds(
+                $db->table('user_goals')
+                    ->where('status', 'active')
+                    ->whereBetween('created_at', [$lastWeekStart, $lastWeekEnd]),
+                'user_id'
+            )->count();
             $totalGoalAktifWeekIncrease = max(0, $goalThisWeek - $goalLastWeek);
         } catch (Throwable $e) {
             report($e);
@@ -674,7 +720,7 @@ class SportEvaluationDashboardController extends Controller
         try {
             $now = Carbon::now();
             $cached = \Illuminate\Support\Facades\Cache::remember(
-                'evaluasi_well:active_users_weekly_trend_v1',
+                'evaluasi_well:active_users_weekly_trend_v2:'.$this->scopeCacheKey(),
                 300,
                 function () use ($now): array {
                     $labels = [];
@@ -686,6 +732,7 @@ class SportEvaluationDashboardController extends Controller
                         $count = $this->activeStatsService->countActiveUsersInRange(
                             $start->format('Y-m-d H:i:s'),
                             $end->format('Y-m-d H:i:s'),
+                            $this->indexFilters,
                         );
 
                         $labels[] = $start->format('d M');
@@ -750,25 +797,32 @@ class SportEvaluationDashboardController extends Controller
             $weekStart = Carbon::now()->startOfWeek()->format('Y-m-d H:i:s');
             $weekEnd = Carbon::now()->endOfWeek()->format('Y-m-d H:i:s');
 
-            $adoptionInstall = (int) $db->table('login_audit')
-                ->where('event', 'login_success')
-                ->whereNotNull('user_id')
-                ->distinct()
-                ->count('user_id');
+            $adoptionInstall = (int) $this->applyScopedUserIds(
+                $db->table('login_audit')
+                    ->where('event', 'login_success')
+                    ->whereNotNull('user_id'),
+                'user_id'
+            )->distinct()->count('user_id');
 
-            $adoptionLoginSuccess = (int) $db->table('login_audit')
-                ->where('event', 'login_success')
-                ->whereBetween('created_at', [$yearStart, $yearEnd])
-                ->count();
+            $adoptionLoginSuccess = (int) $this->applyScopedUserIds(
+                $db->table('login_audit')
+                    ->where('event', 'login_success')
+                    ->whereBetween('created_at', [$yearStart, $yearEnd]),
+                'user_id'
+            )->count();
 
-            $adoptionAktif = $this->activeStatsService->countActiveUsersInRange($weekStart, $weekEnd);
+            $adoptionAktif = $this->activeStatsService->countActiveUsersInRange(
+                $weekStart,
+                $weekEnd,
+                $this->indexFilters,
+            );
 
-            $rows = $db->table('login_audit')
+            $rowsQuery = $db->table('login_audit')
                 ->selectRaw('MONTH(created_at) as m, COUNT(*) as total')
                 ->where('event', 'login_success')
-                ->whereBetween('created_at', [$yearStart, $yearEnd])
-                ->groupByRaw('MONTH(created_at)')
-                ->get();
+                ->whereBetween('created_at', [$yearStart, $yearEnd]);
+            $this->applyScopedUserIds($rowsQuery, 'user_id');
+            $rows = $rowsQuery->groupByRaw('MONTH(created_at)')->get();
 
             foreach ($rows as $row) {
                 $idx = ((int) $row->m) - 1;
@@ -823,19 +877,22 @@ class SportEvaluationDashboardController extends Controller
             $yearStart = Carbon::now()->startOfYear()->format('Y-m-d H:i:s');
             $yearEnd = Carbon::now()->endOfYear()->format('Y-m-d H:i:s');
 
-            $compositionOlahraga = (int) $db->table('workout_analyses')
-                ->whereNotNull('user_id')
-                ->whereBetween('created_at', [$yearStart, $yearEnd])
-                ->distinct()
-                ->count('user_id');
+            $compositionOlahraga = (int) $this->applyScopedUserIds(
+                $db->table('workout_analyses')
+                    ->whereNotNull('user_id')
+                    ->whereBetween('created_at', [$yearStart, $yearEnd]),
+                'user_id'
+            )->distinct()->count('user_id');
 
-            $compositionNutrisi = (int) $db->table('food_analyses')
-                ->where('source_type', 'photo')
-                ->whereNotNull('user_id')
-                ->whereBetween('created_at', [$yearStart, $yearEnd])
-                ->distinct()
-                ->count('user_id');
+            $compositionNutrisi = (int) $this->applyScopedUserIds(
+                $db->table('food_analyses')
+                    ->where('source_type', 'photo')
+                    ->whereNotNull('user_id')
+                    ->whereBetween('created_at', [$yearStart, $yearEnd]),
+                'user_id'
+            )->distinct()->count('user_id');
 
+            [$inSql, $inBindings] = $this->scopedUserIdSql('sosial_users.user_id');
             $sosialRow = $db->selectOne(
                 'SELECT COUNT(*) AS c FROM (
                     SELECT author_user_id AS user_id FROM community_posts
@@ -859,14 +916,17 @@ class SportEvaluationDashboardController extends Controller
                         INNER JOIN open_play_events e ON e.id = p.event_id
                         WHERE p.user_id IS NOT NULL
                           AND e.starts_at BETWEEN ? AND ?
-                ) AS sosial_users',
-                [
-                    $yearStart, $yearEnd,
-                    $yearStart, $yearEnd,
-                    $yearStart, $yearEnd,
-                    $yearStart, $yearEnd,
-                    $yearStart, $yearEnd,
-                ]
+                ) AS sosial_users WHERE 1 = 1'.$inSql,
+                array_merge(
+                    [
+                        $yearStart, $yearEnd,
+                        $yearStart, $yearEnd,
+                        $yearStart, $yearEnd,
+                        $yearStart, $yearEnd,
+                        $yearStart, $yearEnd,
+                    ],
+                    $inBindings
+                )
             );
             $compositionSosial = (int) ($sosialRow->c ?? 0);
 
@@ -902,10 +962,11 @@ class SportEvaluationDashboardController extends Controller
         }
 
         try {
-            $cached = Cache::remember('evaluasi_well:top_users_year', 300, function (): array {
+            $cached = Cache::remember('evaluasi_well:top_users_year:'.$this->scopeCacheKey(), 300, function (): array {
                 $db = DB::connection(BewellConnectionService::CONNECTION);
                 $yearStart = Carbon::now()->startOfYear()->format('Y-m-d H:i:s');
                 $yearEnd = Carbon::now()->endOfYear()->format('Y-m-d H:i:s');
+                [$inSql, $inBindings] = $this->scopedUserIdSql('e.id');
 
                 $rows = $db->select(
                     'SELECT
@@ -977,16 +1038,20 @@ class SportEvaluationDashboardController extends Controller
                         GROUP BY user_id
                     ) s
                     INNER JOIN employee_profiles e ON e.id = s.user_id
+                    WHERE 1 = 1'.$inSql.'
                     ORDER BY s.total_cnt DESC, e.nama ASC
                     LIMIT 6',
-                    [
-                        'photo', $yearStart, $yearEnd,
-                        $yearStart, $yearEnd,
-                        $yearStart, $yearEnd,
-                        $yearStart, $yearEnd,
-                        $yearStart, $yearEnd,
-                        $yearStart, $yearEnd,
-                    ]
+                    array_merge(
+                        [
+                            'photo', $yearStart, $yearEnd,
+                            $yearStart, $yearEnd,
+                            $yearStart, $yearEnd,
+                            $yearStart, $yearEnd,
+                            $yearStart, $yearEnd,
+                            $yearStart, $yearEnd,
+                        ],
+                        $inBindings
+                    )
                 );
 
                 $placeholders = [
@@ -1046,9 +1111,10 @@ class SportEvaluationDashboardController extends Controller
         try {
             $db = DB::connection(BewellConnectionService::CONNECTION);
 
-            $employees = $db->table('employee_profiles')
-                ->where('status_karyawan', 'AKTIF')
-                ->get(['kode_sid', 'site']);
+            $employeesQuery = $db->table('employee_profiles as e')
+                ->where('e.status_karyawan', 'AKTIF');
+            $this->mitraAssignmentService->applyScopeToEmployeeQuery($employeesQuery, $this->indexFilters);
+            $employees = $employeesQuery->get(['e.kode_sid', 'e.site']);
 
             $siteTotalEmployees = $employees->count();
             $counts = [];
@@ -1124,10 +1190,12 @@ class SportEvaluationDashboardController extends Controller
         }
 
         try {
-            $cached = Cache::remember('evaluasi_well:weekly_activity', 300, function (): array {
+            $cached = Cache::remember('evaluasi_well:weekly_activity:'.$this->scopeCacheKey(), 300, function (): array {
                 $db = DB::connection(BewellConnectionService::CONNECTION);
                 $weekStart = Carbon::now()->startOfWeek()->format('Y-m-d H:i:s');
                 $weekEnd = Carbon::now()->endOfWeek()->format('Y-m-d H:i:s');
+                [$foodInSql, $foodInBindings] = $this->scopedUserIdSql('user_id');
+                [$workoutInSql, $workoutInBindings] = $this->scopedUserIdSql('user_id');
 
                 $fillByWeekday = static function (array $rows): array {
                     $series = array_fill(0, 7, 0);
@@ -1146,16 +1214,18 @@ class SportEvaluationDashboardController extends Controller
                      FROM food_analyses
                      WHERE source_type = ?
                        AND created_at BETWEEN ? AND ?
+                       '.$foodInSql.'
                      GROUP BY WEEKDAY(created_at)',
-                    ['photo', $weekStart, $weekEnd]
+                    array_merge(['photo', $weekStart, $weekEnd], $foodInBindings)
                 );
 
                 $olahragaRows = $db->select(
                     'SELECT WEEKDAY(created_at) AS d, COUNT(*) AS total
                      FROM workout_analyses
                      WHERE created_at BETWEEN ? AND ?
+                       '.$workoutInSql.'
                      GROUP BY WEEKDAY(created_at)',
-                    [$weekStart, $weekEnd]
+                    array_merge([$weekStart, $weekEnd], $workoutInBindings)
                 );
 
                 $sosialRows = $db->select(
@@ -1256,7 +1326,7 @@ class SportEvaluationDashboardController extends Controller
         }
 
         try {
-            $cached = Cache::remember('evaluasi_well:active_employees_filters_v6', 120, function (): array {
+            $cached = Cache::remember('evaluasi_well:active_employees_filters_v7:'.$this->scopeCacheKey(), 120, function (): array {
                 $base = $this->activeEmployeesBaseQuery();
 
                 $belumInstall = (clone $base)
@@ -1370,10 +1440,14 @@ class SportEvaluationDashboardController extends Controller
      */
     private function activeEmployeesBaseQuery(): Builder
     {
-        return DB::connection(BewellConnectionService::CONNECTION)
+        $query = DB::connection(BewellConnectionService::CONNECTION)
             ->table('employee_profiles as e')
             ->where('e.status_karyawan', 'AKTIF')
             ->whereRaw('UPPER(TRIM(COALESCE(e.jabatan_fungsional, \'\'))) <> ?', ['VISITOR']);
+
+        $this->mitraAssignmentService->applyScopeToEmployeeQuery($query, $this->indexFilters);
+
+        return $query;
     }
 
     /**
@@ -1470,7 +1544,19 @@ class SportEvaluationDashboardController extends Controller
             $this->siteResolver->applySiteFilter($query, $filters['site']);
         }
         if ($filters['company'] !== '') {
-            $query->where('e.nama_perusahaan', $filters['company']);
+            $names = $this->companyAliasResolver->matchingRawNames($filters['company']);
+            if ($names === []) {
+                $names = [$filters['company']];
+            }
+            $normalized = array_map(
+                static fn (string $name): string => mb_strtoupper(trim($name)),
+                $names
+            );
+            $placeholders = implode(',', array_fill(0, count($normalized), '?'));
+            $query->whereRaw(
+                'UPPER(TRIM(COALESCE(e.nama_perusahaan, \'\'))) IN ('.$placeholders.')',
+                $normalized
+            );
         }
         if (($filters['division_group'] ?? '') !== '') {
             $aliases = $this->divisiGroupResolver->aliasesForGroup($filters['division_group']);
@@ -1583,5 +1669,75 @@ class SportEvaluationDashboardController extends Controller
         }
 
         return $query;
+    }
+
+    /**
+     * @param  array{site?:string,perusahaan?:string,company?:string}  $filters
+     */
+    protected function applyForcedIndexFilters(array $filters): void
+    {
+        $this->indexFilters = [
+            'site' => trim((string) ($filters['site'] ?? '')),
+            'perusahaan' => trim((string) ($filters['perusahaan'] ?? $filters['company'] ?? '')),
+        ];
+    }
+
+    private function hasIndexScope(): bool
+    {
+        return $this->mitraAssignmentService->hasScope($this->indexFilters);
+    }
+
+    private function scopeCacheKey(): string
+    {
+        return $this->mitraAssignmentService->cacheKeySuffix($this->indexFilters);
+    }
+
+    /**
+     * @return array{0:string,1:list<int>}
+     */
+    private function scopedUserIdSql(string $column): array
+    {
+        $ids = $this->mitraAssignmentService->scopedEmployeeIds($this->indexFilters);
+        if ($ids === null) {
+            return ['', []];
+        }
+        if ($ids === []) {
+            return [' AND 1 = 0', []];
+        }
+
+        $parts = [];
+        $bindings = [];
+        foreach (array_chunk($ids, 800) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+            $parts[] = $column.' IN ('.$placeholders.')';
+            foreach ($chunk as $id) {
+                $bindings[] = $id;
+            }
+        }
+
+        return [' AND ('.implode(' OR ', $parts).')', $bindings];
+    }
+
+    private function applyScopedUserIds(Builder $query, string $column): Builder
+    {
+        $ids = $this->mitraAssignmentService->scopedEmployeeIds($this->indexFilters);
+        if ($ids === null) {
+            return $query;
+        }
+        if ($ids === []) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where(function (Builder $outer) use ($column, $ids): void {
+            $first = true;
+            foreach (array_chunk($ids, 800) as $chunk) {
+                if ($first) {
+                    $outer->whereIn($column, $chunk);
+                    $first = false;
+                } else {
+                    $outer->orWhereIn($column, $chunk);
+                }
+            }
+        });
     }
 }

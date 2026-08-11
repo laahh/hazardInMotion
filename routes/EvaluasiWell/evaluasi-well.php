@@ -6,6 +6,8 @@ use App\Http\Controllers\SportEvaluation\SportActivitiesController;
 use App\Http\Controllers\SportEvaluation\SportEmployeeController;
 use App\Http\Controllers\SportEvaluation\SportEvaluationDashboardController;
 use App\Http\Controllers\SportEvaluation\SportEvaluationEmployeeProfileController;
+use App\Http\Controllers\SportEvaluation\SportEvaluationMitraAssignmentController;
+use App\Http\Controllers\SportEvaluation\SportEvaluationMitraDashboardController;
 use App\Http\Controllers\SportEvaluation\SportEvaluationWeeklyUploadController;
 use Illuminate\Support\Facades\Route;
 
@@ -38,6 +40,33 @@ Route::middleware('evaluasi-well.access')
 
         Route::get('/active-stats', [SportEvaluationDashboardController::class, 'activeStats'])
             ->name('active-stats');
+
+        Route::get('/mitra', [SportEvaluationMitraDashboardController::class, 'index'])
+            ->name('mitra.index');
+        Route::get('/mitra/install-stats', [SportEvaluationMitraDashboardController::class, 'installStats'])
+            ->name('mitra.install-stats');
+        Route::get('/mitra/active-stats', [SportEvaluationMitraDashboardController::class, 'activeStats'])
+            ->name('mitra.active-stats');
+        Route::get('/mitra/not-installed/data', [SportEvaluationMitraDashboardController::class, 'notInstalledData'])
+            ->name('mitra.not-installed.data');
+        Route::get('/mitra/not-installed/export', [SportEvaluationMitraDashboardController::class, 'notInstalledExport'])
+            ->name('mitra.not-installed.export');
+
+        Route::get('/mitra-assignments', [SportEvaluationMitraAssignmentController::class, 'index'])
+            ->name('mitra-assignments.index');
+        Route::get('/mitra-assignments/create', [SportEvaluationMitraAssignmentController::class, 'create'])
+            ->name('mitra-assignments.create');
+        Route::post('/mitra-assignments', [SportEvaluationMitraAssignmentController::class, 'store'])
+            ->name('mitra-assignments.store');
+        Route::get('/mitra-assignments/{id}/edit', [SportEvaluationMitraAssignmentController::class, 'edit'])
+            ->whereNumber('id')
+            ->name('mitra-assignments.edit');
+        Route::put('/mitra-assignments/{id}', [SportEvaluationMitraAssignmentController::class, 'update'])
+            ->whereNumber('id')
+            ->name('mitra-assignments.update');
+        Route::delete('/mitra-assignments/{id}', [SportEvaluationMitraAssignmentController::class, 'destroy'])
+            ->whereNumber('id')
+            ->name('mitra-assignments.destroy');
 
         Route::get('/activities', [SportActivitiesController::class, 'index'])->name('activities.index');
         Route::get('/activities/data', [SportActivitiesController::class, 'data'])->name('activities.data');

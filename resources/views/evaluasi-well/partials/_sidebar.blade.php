@@ -18,6 +18,28 @@
         </a>
       </li>
       <li>
+        <a href="{{ route('evaluasi-well.mitra.index') }}" class="{{ request()->routeIs('evaluasi-well.mitra.*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:buildings-2-outline" class="menu-icon"></iconify-icon>
+          <span>Mitra Kerja</span>
+        </a>
+      </li>
+      @php
+        $canManageMitraAssignment = auth()->user()
+          && (
+            auth()->user()->isAdmin()
+            || auth()->user()->hasRole('hr-pusat')
+            || auth()->user()->hasRole('super-admin')
+          );
+      @endphp
+      @if ($canManageMitraAssignment)
+      <li>
+        <a href="{{ route('evaluasi-well.mitra-assignments.index') }}" class="{{ request()->routeIs('evaluasi-well.mitra-assignments.*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:user-speak-outline" class="menu-icon"></iconify-icon>
+          <span>Assignment Mitra</span>
+        </a>
+      </li>
+      @endif
+      <li>
         <a href="{{ route('evaluasi-well.health-nutrition.index') }}" class="{{ request()->routeIs('evaluasi-well.health-nutrition.*') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:heart-pulse-outline" class="menu-icon"></iconify-icon>
           <span>Risiko MCU × Nutrisi</span>
