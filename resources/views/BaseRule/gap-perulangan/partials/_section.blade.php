@@ -50,7 +50,7 @@
                         <td class="px-3 py-2 whitespace-nowrap font-semibold">{{ $row['site'] ?? '—' }}</td>
                         <td class="px-3 py-2 whitespace-nowrap">{{ $row['jabatan'] }}</td>
                         <td class="px-3 py-2 whitespace-nowrap">{{ $row['perusahaan'] }}</td>
-                        <td class="px-3 py-2 text-right font-semibold {{ $row['gap_count'] > 0 ? 'text-red-600' : '' }}">{{ number_format($row['gap_count']) }}</td>
+                        <td class="px-3 py-2 text-right font-semibold {{ $row['gap_count'] > 0 ? 'text-red-600' : '' }}">{{ number_format($row['gap_count']) }}×</td>
                         <td class="px-3 py-2 text-right">{{ $row['sap'] }}</td>
                      </tr>
                      @empty
@@ -113,7 +113,7 @@
                         @foreach($section['table_column_keys'] as $col)
                         <td class="px-3 py-2 whitespace-nowrap max-w-[14rem] truncate" title="{{ $row['cells'][$col] ?? '' }}">{{ $row['cells'][$col] ?? '—' }}</td>
                         @endforeach
-                        <td class="px-3 py-2 text-right font-semibold {{ ($row['gap_count'] ?? 0) > 0 ? 'text-red-600' : '' }}">{{ number_format($row['gap_count'] ?? 0) }}</td>
+                        <td class="px-3 py-2 text-right font-semibold {{ ($row['gap_count'] ?? 0) > 0 ? 'text-red-600' : '' }}">{{ number_format($row['gap_count'] ?? 0) }}×</td>
                      </tr>
                      @empty
                      <tr>

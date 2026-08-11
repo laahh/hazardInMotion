@@ -166,8 +166,8 @@ class HsecmTasklistService
     }
 
     /**
-     * Lengkapi tiap item dengan jumlah slot sebelumnya dalam streak consecutive.
-     * Putus 1 batch_slot → reset; previous = max(0, streak - 1).
+     * Lengkapi tiap item dengan jumlah hari sebelumnya dalam streak consecutive.
+     * Putus 1 batch_slot → reset; previous hari = slotsToPerulanganDays(max(0, streak - 1)).
      *
      * @param  \Illuminate\Support\Collection<int, HsecmTasklistItem>|iterable<HsecmTasklistItem>  $items
      * @return \Illuminate\Support\Collection<int, HsecmTasklistItem>
@@ -222,7 +222,12 @@ class HsecmTasklistService
                 return;
             }
 
-            $item->setAttribute('previous_recurrence_count', max(0, $streak - 1));
+            // streak = slot consecutive; tampilkan hari sebelumnya (4 slot/hari).
+            $previousSlots = max(0, $streak - 1);
+            $item->setAttribute(
+                'previous_recurrence_count',
+                HsecmDashboardService::slotsToPerulanganDays($previousSlots)
+            );
         });
     }
 
@@ -231,8 +236,10 @@ class HsecmTasklistService
         $payload = is_array($item->payload) ? $item->payload : [];
         $gapCount = (int) ($payload['gap_count'] ?? 0);
 
-        // gap_count = streak termasuk slot sekarang → hari sebelumnya = max(0, gap_count - 1)
-        return max(0, $gapCount - 1);
+        // gap_count = streak slot termasuk sekarang → hari sebelumnya (4 slot/hari).
+        $previousSlots = max(0, $gapCount - 1);
+
+        return HsecmDashboardService::slotsToPerulanganDays($previousSlots);
     }
 
     /**

@@ -24,7 +24,7 @@ class HsecmDatabaseRepository
 
     private const CACHE_TTL_SECONDS = 300;
 
-    /** Max slot histori untuk hitung streak consecutive (≈30 hari × 2 slot). */
+    /** Max slot histori untuk hitung streak consecutive (≈15 hari × 4 slot: 00/06/12/18). */
     private const STREAK_LOOKBACK_SLOTS = 60;
 
     /** Chunk size untuk whereIn business_key (hindari packet/query terlalu besar). */

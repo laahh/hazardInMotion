@@ -16,18 +16,6 @@
       'orange' => 'crm-pct--orange',
       default => 'crm-pct--red',
    };
-   $statusDotClass = static fn (string $color): string => match ($color) {
-      'green' => 'crm-status-dot--green',
-      'amber' => 'crm-status-dot--yellow',
-      'orange' => 'crm-status-dot--orange',
-      default => 'crm-status-dot--red',
-   };
-   $statusLabel = static fn (string $color, int $pct): string => match ($color) {
-      'green' => 'Selesai',
-      'amber' => 'On Track',
-      'orange' => 'Berjalan',
-      default => $pct === 0 ? 'Belum Mulai' : 'Kritis',
-   };
    $totalItems = $summary['total_komitmen'];
    $categoryWeight = (int) ($summary['replikasi']['count'] ?? 0)
       + (int) ($summary['safety_engineering']['count'] ?? 0)
@@ -97,20 +85,6 @@
       ];
    })->all();
    $recordDetailById = $recordDetailById ?? ($safetyEngineeringDetailById ?? []);
-   $statusCompleted = $charts['status_breakdown']['data'][0] ?? 0;
-   $statusOnTrack = $charts['status_breakdown']['data'][1] ?? 0;
-   $statusRunning = $charts['status_breakdown']['data'][2] ?? 0;
-   $statusNotStarted = $charts['status_breakdown']['data'][3] ?? 0;
-   $statusTotal = max(1, $statusCompleted + $statusOnTrack + $statusRunning + $statusNotStarted);
-   $avatarColors = ['#7366FF', '#51BB25', '#FFAA05', '#FF5B5B', '#3B97FF', '#9b93ff', '#65a30d', '#c2410c'];
-   $tablePreview = collect($activeItems)->take(5);
-   $weeklyLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-   $weeklyPlan = collect($activeItems)->isNotEmpty()
-      ? collect(range(0, 6))->map(fn ($d) => (int) max(1, round(collect($activeItems)->sum('plan') / 7 * (0.8 + ($d % 3) * 0.15))))
-      : collect([12, 18, 15, 22, 19, 14, 10]);
-   $weeklyDone = collect($activeItems)->isNotEmpty()
-      ? collect(range(0, 6))->map(fn ($d) => (int) max(0, round(collect($activeItems)->sum('done') / 7 * (0.7 + ($d % 4) * 0.12))))
-      : collect([8, 14, 11, 18, 16, 12, 7]);
    $dateFromDisplay = $filters['date_from'] !== '' ? date('d/m/Y', strtotime($filters['date_from'])) : '';
    $dateToDisplay = $filters['date_to'] !== '' ? date('d/m/Y', strtotime($filters['date_to'])) : '';
    $safetyEngineeringDetailById = $safetyEngineeringDetailById ?? [];
@@ -380,129 +354,6 @@
 </div>
 @endif
 
-{{-- Row 2: Donut + Bar + Application Progress --}}
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-   {{-- Distribusi Kategori (Working Format style) --}}
-   <div class="crm-card">
-      <p class="crm-card-title">Distribusi Kategori</p>
-      <div class="crm-chart-wrap">
-         <canvas id="crmCategoryChart"></canvas>
-         <div class="crm-donut-center">
-            <span class="crm-donut-total-label">Total</span>
-            <span class="crm-donut-total-value">{{ $summary['total_komitmen'] }}</span>
-         </div>
-      </div>
-      <div class="crm-legend">
-         @foreach($charts['category_distribution']['labels'] as $i => $label)
-         <span class="crm-legend-item">
-            <span class="crm-legend-dot" style="background:{{ $i === 0 ? '#7366FF' : ($i === 1 ? '#CFC8FF' : '#ECE9FF') }}"></span>
-            {{ $label }}
-         </span>
-         @endforeach
-      </div>
-   </div>
-
-   {{-- Progress Mingguan (Project employment style) --}}
-   <div class="crm-card">
-      <p class="crm-card-title">Progress Mingguan</p>
-      <div class="crm-chart-wrap">
-         <canvas id="crmProgressChart"></canvas>
-      </div>
-      <div class="crm-legend">
-         <span class="crm-legend-item"><span class="crm-legend-dot" style="background:#7366FF"></span>Plan</span>
-         <span class="crm-legend-item"><span class="crm-legend-dot" style="background:#CFC8FF"></span>Done</span>
-      </div>
-   </div>
-
-   {{-- Status Penyelesaian (Total Applications style) --}}
-   <div class="crm-card">
-      <p class="crm-card-title">Status Penyelesaian</p>
-      <div class="crm-app-stack">
-         <div class="crm-app-stack-seg" style="width:{{ round(($statusCompleted / $statusTotal) * 100) }}%;background:#7366FF"></div>
-         <div class="crm-app-stack-seg" style="width:{{ round(($statusOnTrack / $statusTotal) * 100) }}%;background:#51BB25"></div>
-         <div class="crm-app-stack-seg" style="width:{{ round(($statusRunning / $statusTotal) * 100) }}%;background:#FFAA05"></div>
-         <div class="crm-app-stack-seg" style="width:{{ round(($statusNotStarted / $statusTotal) * 100) }}%;background:#FF5B5B"></div>
-      </div>
-      <div class="crm-app-row">
-         <span class="crm-app-row-left"><span class="crm-legend-dot" style="background:#7366FF"></span>Selesai (100%)</span>
-         <span class="crm-app-row-pct">{{ round(($statusCompleted / $statusTotal) * 100) }}%</span>
-      </div>
-      <div class="crm-app-row">
-         <span class="crm-app-row-left"><span class="crm-legend-dot" style="background:#51BB25"></span>On Track (50–99%)</span>
-         <span class="crm-app-row-pct">{{ round(($statusOnTrack / $statusTotal) * 100) }}%</span>
-      </div>
-      <div class="crm-app-row">
-         <span class="crm-app-row-left"><span class="crm-legend-dot" style="background:#FFAA05"></span>Berjalan (1–49%)</span>
-         <span class="crm-app-row-pct">{{ round(($statusRunning / $statusTotal) * 100) }}%</span>
-      </div>
-      <div class="crm-app-row">
-         <span class="crm-app-row-left"><span class="crm-legend-dot" style="background:#FF5B5B"></span>Belum Mulai (0%)</span>
-         <span class="crm-app-row-pct">{{ round(($statusNotStarted / $statusTotal) * 100) }}%</span>
-      </div>
-   </div>
-</div>
-
-{{-- Row 3: Timeline Bar + Recruitment Table --}}
-<div class="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-4 mb-4">
-   {{-- Timeline Due Date (Staff turnover style) --}}
-   <div class="crm-card">
-      <p class="crm-card-title">Timeline Due Date</p>
-      <div class="crm-chart-wrap" style="height:260px">
-         <canvas id="crmTimelineChart"></canvas>
-      </div>
-   </div>
-
-   {{-- Progress Rekayasa (Recruitment progress style) --}}
-   <div class="crm-card">
-      <p class="crm-card-title">Progress Rekayasa</p>
-      <table class="crm-table">
-         <thead>
-            <tr>
-               <th>Pengendalian</th>
-               <th>Satuan</th>
-               <th>Status</th>
-            </tr>
-         </thead>
-         <tbody>
-            @forelse($tablePreview as $index => $item)
-            @php
-               $initials = collect(explode(' ', $item['name']))->map(fn ($w) => mb_substr($w, 0, 1))->take(2)->implode('');
-               $rowClickable = !empty($item['id']) && isset($recordDetailById[$item['id']]);
-               $rowClasses = trim(implode(' ', array_filter([
-                  !empty($item['due_in_review_week']) ? 'crm-row--review-week' : '',
-                  $rowClickable ? 'crm-row--clickable' : '',
-               ])));
-            @endphp
-            <tr
-               class="{{ $rowClasses }}"
-               @if($rowClickable) data-record-id="{{ $item['id'] }}" role="button" tabindex="0" aria-expanded="false" aria-label="Lihat detail {{ $item['name'] }}" @endif
-            >
-               <td>
-                  <div class="crm-table-name">
-                     @if($rowClickable)
-                     <span class="crm-row-expand-icon material-symbols-outlined" aria-hidden="true">expand_more</span>
-                     @endif
-                     <span class="crm-table-avatar" style="background:{{ $avatarColors[$index % count($avatarColors)] }}">{{ $initials }}</span>
-                     <span class="truncate max-w-[140px]" title="{{ $item['name'] }}">{{ Str::limit($item['name'], 28) }}</span>
-                  </div>
-               </td>
-               <td class="text-crm-muted">{{ $item['unit'] }}</td>
-               <td>
-                  <span class="crm-status-dot {{ $statusDotClass($item['percentage_color']) }}">
-                     {{ $statusLabel($item['percentage_color'], $item['percentage']) }}
-                  </span>
-               </td>
-            </tr>
-            @empty
-            <tr>
-               <td colspan="3" class="text-center text-crm-muted py-6">Tidak ada data</td>
-            </tr>
-            @endforelse
-         </tbody>
-      </table>
-   </div>
-</div>
-
 {{-- Full Data Table --}}
 <div class="crm-card">
    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -619,9 +470,6 @@
       var chartsData = @json($charts);
       var categoryTrends = chartsData.category_trends || [];
       var crmPurple = '#7366FF';
-      var crmPurpleLight = '#CFC8FF';
-      var crmPurplePale = '#ECE9FF';
-      var crmBlue = '#3B97FF';
 
       Chart.defaults.font.family = "'Poppins', sans-serif";
       Chart.defaults.color = '#848488';
@@ -691,98 +539,6 @@
             },
          });
       });
-
-      var catEl = document.getElementById('crmCategoryChart');
-      if (catEl) {
-         new Chart(catEl, {
-            type: 'doughnut',
-            data: {
-               labels: chartsData.category_distribution.labels,
-               datasets: [{
-                  data: chartsData.category_distribution.data,
-                  backgroundColor: [crmPurple, crmPurpleLight, crmPurplePale],
-                  borderWidth: 0,
-                  hoverOffset: 4
-               }]
-            },
-            options: {
-               responsive: true,
-               maintainAspectRatio: false,
-               cutout: '72%',
-               plugins: { legend: { display: false } }
-            }
-         });
-      }
-
-      var progEl = document.getElementById('crmProgressChart');
-      if (progEl) {
-         new Chart(progEl, {
-            type: 'bar',
-            data: {
-               labels: @json($weeklyLabels),
-               datasets: [
-                  {
-                     label: 'Plan',
-                     data: @json($weeklyPlan->values()),
-                     backgroundColor: crmPurple,
-                     borderRadius: 4,
-                     maxBarThickness: 14
-                  },
-                  {
-                     label: 'Done',
-                     data: @json($weeklyDone->values()),
-                     backgroundColor: crmPurpleLight,
-                     borderRadius: 4,
-                     maxBarThickness: 14
-                  }
-               ]
-            },
-            options: {
-               responsive: true,
-               maintainAspectRatio: false,
-               plugins: { legend: { display: false } },
-               scales: {
-                  x: { grid: { display: false }, ticks: { font: { size: 10 } } },
-                  y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { precision: 0, font: { size: 10 } } }
-               }
-            }
-         });
-      }
-
-      var tlEl = document.getElementById('crmTimelineChart');
-      if (tlEl) {
-         var tlLabels = chartsData.due_timeline.labels.length ? chartsData.due_timeline.labels : ['Q1', 'Q2', 'Q3', 'Q4'];
-         var tlData = chartsData.due_timeline.datasets.length
-            ? chartsData.due_timeline.datasets.reduce(function (acc, ds) {
-               ds.data.forEach(function (v, i) { acc[i] = (acc[i] || 0) + v; });
-               return acc;
-            }, [])
-            : [4, 8, 6, 10];
-
-         new Chart(tlEl, {
-            type: 'bar',
-            data: {
-               labels: tlLabels,
-               datasets: [{
-                  label: 'Due Items',
-                  data: tlData,
-                  backgroundColor: crmPurple,
-                  borderRadius: { topLeft: 6, topRight: 6 },
-                  borderSkipped: false,
-                  maxBarThickness: 36
-               }]
-            },
-            options: {
-               responsive: true,
-               maintainAspectRatio: false,
-               plugins: { legend: { display: false } },
-               scales: {
-                  x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-                  y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { precision: 0, font: { size: 10 } } }
-               }
-            }
-         });
-      }
 
       var categoryModalData = @json($categoryModalPayload);
       var recordDetailById = @json($recordDetailById);

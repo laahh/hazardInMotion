@@ -1832,6 +1832,13 @@ class HsecmDashboardService
             abort(404);
         }
 
+        $columns = $meta['columns'];
+        $table = (string) ($meta['table'] ?? '');
+        $showPerulangan = $table !== '' && $this->repository->hasGapCountSupport($table);
+        if ($showPerulangan) {
+            $columns = ['_perulangan' => 'Perulangan'] + $columns;
+        }
+
         return [
             'filters' => $filters,
             'filter_options' => $this->buildFilterOptions(),
@@ -1839,10 +1846,11 @@ class HsecmDashboardService
                 'key' => $datasetKey,
                 'label' => $meta['label'],
                 'icon' => $meta['icon'],
-                'columns' => $meta['columns'],
+                'columns' => $columns,
                 'has_company_filter' => $meta['company_column'] !== null,
+                'show_perulangan' => $showPerulangan,
             ],
-            'rows' => $this->paginateDataset($datasetKey, $filters),
+            'rows' => $this->paginateDataset($datasetKey, $filters, $showPerulangan),
             'summary' => $this->buildDatasetSummary($datasetKey, $filters),
         ];
     }
@@ -2225,7 +2233,7 @@ class HsecmDashboardService
     /**
      * @param  array{site: string, perusahaan: string, week: string, year: string, q: string}  $filters
      */
-    private function paginateDataset(string $datasetKey, array $filters): LengthAwarePaginator
+    private function paginateDataset(string $datasetKey, array $filters, bool $showPerulangan = false): LengthAwarePaginator
     {
         $meta = self::DATASETS[$datasetKey];
         $columns = array_keys($meta['columns']);
@@ -2237,8 +2245,12 @@ class HsecmDashboardService
             ->values();
 
         $total = $filtered->count();
-        $slice = $filtered->forPage($page, $perPage)->map(function (array $row) use ($columns): object {
+        $slice = $filtered->forPage($page, $perPage)->map(function (array $row) use ($columns, $showPerulangan): object {
             $item = ['id' => $row['_row_id'] ?? null];
+            if ($showPerulangan) {
+                $days = $this->toPerulanganDisplayCount((int) ($row['gap_count'] ?? 0));
+                $item['_perulangan'] = $days > 0 ? $days.'×' : '—';
+            }
             foreach ($columns as $column) {
                 $item[$column] = $row[$column] ?? null;
             }
@@ -2731,17 +2743,28 @@ class HsecmDashboardService
         return $filtered;
     }
 
+    /** Scrape HSECM: 4 batch_slot per hari (00:00 / 06:00 / 12:00 / 18:00). */
+    public const BATCH_SLOTS_PER_DAY = 4;
+
     /**
-     * Tampilkan perulangan = ceil(total_slot / 2).
-     * 2 batch_slot per hari; jika ganjil diganjilkan dulu (5 → 6 → 3).
+     * Konversi streak batch_slot → jumlah hari perulangan untuk tampilan.
      */
-    private function toPerulanganDisplayCount(int $slotStreak): int
+    public static function slotsToPerulanganDays(int $slotStreak): int
     {
         if ($slotStreak <= 0) {
             return 0;
         }
 
-        return (int) ceil($slotStreak / 2);
+        return (int) ceil($slotStreak / self::BATCH_SLOTS_PER_DAY);
+    }
+
+    /**
+     * Tampilkan perulangan dalam hari = ceil(total_slot / 4).
+     * Scrape HSECM 4 batch_slot per hari (00/06/12/18); contoh: 20–24 slot → 5–6×.
+     */
+    private function toPerulanganDisplayCount(int $slotStreak): int
+    {
+        return self::slotsToPerulanganDays($slotStreak);
     }
 
     /**

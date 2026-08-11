@@ -451,7 +451,7 @@ final class HsecmBuildGapEvaluasiDashboardAction
             $gapCount = (int) ($row['gap_count'] ?? 0);
             // Heuristik reopen: gap_count ≥ 2 tanpa hadir di D-1 → kembali muncul.
             if ($gapCount >= 2) {
-                $kembali[] = $this->detailRow($row, 'kembali', max($rangeDays, (int) ceil($gapCount / 2)));
+                $kembali[] = $this->detailRow($row, 'kembali', max($rangeDays, HsecmDashboardService::slotsToPerulanganDays($gapCount)));
             } else {
                 $baru[] = $this->detailRow($row, 'baru', $rangeDays);
             }
@@ -520,7 +520,10 @@ final class HsecmBuildGapEvaluasiDashboardAction
     private function dayStreakFromRow(array $row, string $identity, array $dayCountByIdentity): int
     {
         $gapCount = (int) ($row['gap_count'] ?? 0);
-        $dayStreak = $gapCount > 0 ? max(1, (int) ceil($gapCount / 2)) : 1;
+        // gap_count = streak batch_slot; 4 slot/hari (00/06/12/18).
+        $dayStreak = $gapCount > 0
+            ? max(1, HsecmDashboardService::slotsToPerulanganDays($gapCount))
+            : 1;
         $rangeDays = (int) ($dayCountByIdentity[$identity] ?? 0);
         if ($rangeDays > $dayStreak) {
             $dayStreak = $rangeDays;
