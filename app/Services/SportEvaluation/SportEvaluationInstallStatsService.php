@@ -79,7 +79,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:v8:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:v9:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             $stats = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($dimension, $filters): array {
                 return $this->buildStats($dimension, $filters);
@@ -118,7 +118,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:overview:v8:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:overview:v9:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters): array {
                 $overview = [];
@@ -325,7 +325,13 @@ final class SportEvaluationInstallStatsService
         foreach ($rows as $row) {
             $company = $this->companyAliasResolver->resolve($row['company']);
 
-            if ($dimension === 'company' && ! $this->isMineconCompany($company)) {
+            // Dimensi perusahaan di dashboard global hanya Minecon;
+            // jika filter perusahaan aktif (mis. Mitra Kerja), izinkan perusahaan tersebut.
+            if (
+                $dimension === 'company'
+                && ! $this->isMineconCompany($company)
+                && ($filters['company'] === '' || ! $this->companyAliasResolver->matchesFilter($company, $filters['company']))
+            ) {
                 continue;
             }
 

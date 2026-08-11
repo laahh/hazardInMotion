@@ -219,19 +219,12 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
      */
     private function ajaxRoutes(?array $scope = null): array
     {
-        $query = [];
-        if ($scope !== null) {
-            $query = [
-                'site' => $scope['site'],
-                'perusahaan' => $scope['perusahaan'],
-            ];
-        }
-
+        // Base URL tanpa query — scope dikirim dari JS agar tidak bentrok `?` ganda.
         return [
-            'notInstalledData' => route('evaluasi-well.mitra.not-installed.data', $query),
-            'notInstalledExport' => route('evaluasi-well.mitra.not-installed.export', $query),
-            'installStats' => route('evaluasi-well.mitra.install-stats', $query),
-            'activeStats' => route('evaluasi-well.mitra.active-stats', $query),
+            'notInstalledData' => route('evaluasi-well.mitra.not-installed.data'),
+            'notInstalledExport' => route('evaluasi-well.mitra.not-installed.export'),
+            'installStats' => route('evaluasi-well.mitra.install-stats'),
+            'activeStats' => route('evaluasi-well.mitra.active-stats'),
             'index' => route('evaluasi-well.mitra.index'),
         ];
     }

@@ -22,7 +22,7 @@
 <div class="row g-3">
   <div class="col-md-6">
     <label for="user_id" class="form-label">User <span class="text-danger">*</span></label>
-    <select class="form-select @error('user_id') is-invalid @enderror" id="user_id" name="user_id" required>
+    <select class="form-select js-mitra-searchable @error('user_id') is-invalid @enderror" id="user_id" name="user_id" required data-placeholder="Cari user…">
       <option value="">— Pilih user —</option>
       @foreach ($userOptions as $user)
         <option value="{{ $user['id'] }}" @selected($currentUserId === (int) $user['id'])>{{ $user['label'] }}</option>
@@ -33,7 +33,7 @@
 
   <div class="col-md-6">
     <label for="site" class="form-label">Site <span class="text-danger">*</span></label>
-    <select class="form-select @error('site') is-invalid @enderror" id="site" name="site" required>
+    <select class="form-select js-mitra-searchable @error('site') is-invalid @enderror" id="site" name="site" required data-placeholder="Cari site…">
       <option value="">— Pilih site —</option>
       @foreach ($siteOptions as $site)
         <option value="{{ $site }}" @selected($currentSite === $site)>{{ $site }}</option>
@@ -47,7 +47,7 @@
 
   <div class="col-md-6">
     <label for="perusahaan" class="form-label">Perusahaan <span class="text-danger">*</span></label>
-    <select class="form-select @error('perusahaan') is-invalid @enderror" id="perusahaan" name="perusahaan" required>
+    <select class="form-select js-mitra-searchable @error('perusahaan') is-invalid @enderror" id="perusahaan" name="perusahaan" required data-placeholder="Cari perusahaan…">
       <option value="">— Pilih perusahaan —</option>
       @foreach ($companyOptions as $company)
         <option value="{{ $company }}" @selected($currentCompany === $company)>{{ $company }}</option>

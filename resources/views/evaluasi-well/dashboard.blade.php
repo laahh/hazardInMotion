@@ -3,6 +3,24 @@
 @section('title', ($mitraMode ?? false) ? 'Mitra Kerja' : 'Dashboard')
 
 @section('css')
+@if ($mitraMode ?? false)
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+<style>
+  .select2-container .select2-selection--single {
+    height: 38px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 4px 8px;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 28px;
+    color: #111827;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 36px;
+  }
+</style>
+@endif
 <style>
   .not-installed-datatable + .dt-layout-row,
   .dt-container:has(#notInstalledTable) .dt-layout-row,
@@ -718,6 +736,9 @@
                 params.set(key, filters[key]);
             }
         });
+        if (mitraMode && mitraScope.perusahaan) {
+            params.set('perusahaan', mitraScope.perusahaan);
+        }
 
         var search = table.search();
         if (search) {
@@ -768,6 +789,9 @@
                 var filters = currentFilters();
                 d.site = filters.site;
                 d.company = filters.company;
+                if (mitraMode && filters.company) {
+                    d.perusahaan = filters.company;
+                }
                 d.division = filters.division;
                 d.departement = filters.departement;
                 d.jabatan_fungsional = filters.jabatan_fungsional;
@@ -936,6 +960,18 @@
     var peopleTable = null;
     var latestRows = [];
     var filterOptionsReady = false;
+
+    function appendQuery(baseUrl, params) {
+        var url = new URL(baseUrl, window.location.origin);
+        Object.keys(params || {}).forEach(function (key) {
+            var value = params[key];
+            if (value === null || value === undefined || value === '') {
+                return;
+            }
+            url.searchParams.set(key, value);
+        });
+        return url.pathname + url.search + url.hash;
+    }
 
     var loadingEl = document.getElementById('install-stats-loading');
     var unavailableEl = document.getElementById('install-stats-unavailable');
@@ -1525,6 +1561,9 @@
                     var filters = readGlobalFilters();
                     d.site = filters.site;
                     d.company = filters.company;
+                    if (mitraMode && filters.company) {
+                        d.perusahaan = filters.company;
+                    }
                     d.division_group = filters.division_group;
                     d.division = '';
                     d.departement = filters.departement;
@@ -1776,16 +1815,20 @@
         }
 
         setLoading(true);
-        var params = new URLSearchParams();
-        params.set('dimension', dimension);
-        if (filters.site) params.set('site', filters.site);
-        if (filters.division_group) params.set('division_group', filters.division_group);
-        if (filters.jabatan) params.set('jabatan', filters.jabatan);
-        if (filters.company) params.set('company', filters.company);
-        if (filters.departement) params.set('departement', filters.departement);
-        if (filters.install) params.set('install', filters.install);
+        var params = {
+            dimension: dimension
+        };
+        if (filters.site) params.site = filters.site;
+        if (filters.division_group) params.division_group = filters.division_group;
+        if (filters.jabatan) params.jabatan = filters.jabatan;
+        if (filters.company) {
+            params.company = filters.company;
+            params.perusahaan = filters.company;
+        }
+        if (filters.departement) params.departement = filters.departement;
+        if (filters.install) params.install = filters.install;
 
-        fetch(dataUrl + '?' + params.toString(), {
+        fetch(appendQuery(dataUrl, params), {
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
         })
@@ -1907,6 +1950,8 @@
 
     var dataUrl = @json($ajaxRoutes['activeStats'] ?? route('evaluasi-well.active-stats'));
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
+    var mitraMode = @json((bool) ($mitraMode ?? false));
+    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '']);
     var cache = {};
     var currentDimension = 'site';
     var currentWeekStart = '';
@@ -1914,6 +1959,18 @@
     var trendChart = null;
     var overviewRendered = false;
     var weekOptionsFilled = false;
+
+    function appendQuery(baseUrl, params) {
+        var url = new URL(baseUrl, window.location.origin);
+        Object.keys(params || {}).forEach(function (key) {
+            var value = params[key];
+            if (value === null || value === undefined || value === '') {
+                return;
+            }
+            url.searchParams.set(key, value);
+        });
+        return url.pathname + url.search + url.hash;
+    }
 
     var loadingEl = document.getElementById('active-stats-loading');
     var unavailableEl = document.getElementById('active-stats-unavailable');
@@ -2411,12 +2468,21 @@
         }
 
         setLoading(true);
-        var url = dataUrl + '?dimension=' + encodeURIComponent(dimension);
+        var params = {
+            dimension: dimension
+        };
         if (weekStart) {
-            url += '&week_start=' + encodeURIComponent(weekStart);
+            params.week_start = weekStart;
+        }
+        if (mitraMode) {
+            if (mitraScope.site) params.site = mitraScope.site;
+            if (mitraScope.perusahaan) {
+                params.perusahaan = mitraScope.perusahaan;
+                params.company = mitraScope.perusahaan;
+            }
         }
 
-        fetch(url, {
+        fetch(appendQuery(dataUrl, params), {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
@@ -2578,7 +2644,7 @@
       <form method="GET" action="{{ route('evaluasi-well.mitra.index') }}" class="row g-3 align-items-end">
         <div class="col-md-4">
           <label for="mitra-site" class="form-label text-sm fw-medium mb-6">Site</label>
-          <select id="mitra-site" name="site" class="form-select" required>
+          <select id="mitra-site" name="site" class="form-select js-mitra-searchable" required data-placeholder="Cari site…">
             <option value="">— Pilih site —</option>
             @foreach ($siteOptions as $site)
               <option value="{{ $site }}" @selected(($mitraScope['site'] ?? '') === $site)>{{ $site }}</option>
@@ -2587,7 +2653,7 @@
         </div>
         <div class="col-md-4">
           <label for="mitra-perusahaan" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
-          <select id="mitra-perusahaan" name="perusahaan" class="form-select" required>
+          <select id="mitra-perusahaan" name="perusahaan" class="form-select js-mitra-searchable" required data-placeholder="Cari perusahaan…">
             <option value="">— Pilih perusahaan —</option>
             @foreach ($companyOptions as $company)
               <option value="{{ $company }}" @selected(($mitraScope['perusahaan'] ?? '') === $company)>{{ $company }}</option>
@@ -2611,7 +2677,7 @@
     <form method="GET" action="{{ route('evaluasi-well.mitra.index') }}" class="row g-3 align-items-end">
       <div class="col-md-4">
         <label for="mitra-site-switch" class="form-label text-sm fw-medium mb-6">Site</label>
-        <select id="mitra-site-switch" name="site" class="form-select form-select-sm" required>
+        <select id="mitra-site-switch" name="site" class="form-select form-select-sm js-mitra-searchable" required data-placeholder="Cari site…">
           @foreach ($siteOptions as $site)
             <option value="{{ $site }}" @selected(($mitraScope['site'] ?? '') === $site)>{{ $site }}</option>
           @endforeach
@@ -2619,7 +2685,7 @@
       </div>
       <div class="col-md-4">
         <label for="mitra-perusahaan-switch" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
-        <select id="mitra-perusahaan-switch" name="perusahaan" class="form-select form-select-sm" required>
+        <select id="mitra-perusahaan-switch" name="perusahaan" class="form-select form-select-sm js-mitra-searchable" required data-placeholder="Cari perusahaan…">
           @foreach ($companyOptions as $company)
             <option value="{{ $company }}" @selected(($mitraScope['perusahaan'] ?? '') === $company)>{{ $company }}</option>
           @endforeach
@@ -3173,4 +3239,26 @@
 @include('evaluasi-well.partials._install-stats-modal')
 @include('evaluasi-well.partials._active-stats-modal')
 @endunless
+@endsection
+
+@section('scripts')
+@if ($mitraMode ?? false)
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+(function ($) {
+  $('.js-mitra-searchable').each(function () {
+    var $el = $(this);
+    $el.select2({
+      width: '100%',
+      placeholder: $el.data('placeholder') || 'Cari…',
+      allowClear: ! $el.prop('required'),
+      language: {
+        noResults: function () { return 'Tidak ditemukan'; },
+        searching: function () { return 'Mencari…'; }
+      }
+    });
+  });
+})(jQuery);
+</script>
+@endif
 @endsection

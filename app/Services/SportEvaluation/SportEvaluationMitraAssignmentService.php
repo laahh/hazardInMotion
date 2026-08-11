@@ -8,6 +8,7 @@ use App\Models\EvaluasiWellMitraAssignment;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -113,48 +114,76 @@ final class SportEvaluationMitraAssignmentService
      */
     public function filterOptions(): array
     {
-        $companies = config('evaluasi_well_minecon_companies', []);
-        if (! is_array($companies)) {
-            $companies = [];
-        }
-        $companyList = [];
-        foreach ($companies as $company) {
-            if (! is_string($company)) {
-                continue;
-            }
-            $trimmed = trim($company);
-            if ($trimmed === '') {
-                continue;
-            }
-            $companyList[] = $this->companyAliasResolver->resolve($trimmed) ?: $trimmed;
-        }
-        $companyList = array_values(array_unique($companyList));
-        sort($companyList, SORT_STRING);
+        return Cache::remember('evaluasi_well:mitra_filter_options_v2', 300, function (): array {
+            $sites = $this->siteResolver->distinctDedicatedSites();
+            $companyList = [];
 
-        $sites = $this->siteResolver->distinctDedicatedSites();
-        if ($this->connection->isUp()) {
-            try {
-                $fallbackSites = DB::connection(BewellConnectionService::CONNECTION)
-                    ->table('employee_profiles')
-                    ->whereNotNull('site')
-                    ->where('site', '<>', '')
-                    ->distinct()
-                    ->orderBy('site')
-                    ->pluck('site')
-                    ->map(static fn (mixed $site): string => trim((string) $site))
-                    ->filter(static fn (string $site): bool => $site !== '')
-                    ->values()
-                    ->all();
-                $sites = $this->siteResolver->mergeFilterSites($fallbackSites);
-            } catch (Throwable $e) {
-                report($e);
-            }
-        }
+            if ($this->connection->isUp()) {
+                try {
+                    $db = DB::connection(BewellConnectionService::CONNECTION);
 
-        return [
-            'sites' => $sites,
-            'companies' => $companyList,
-        ];
+                    $fallbackSites = $db->table('employee_profiles')
+                        ->whereNotNull('site')
+                        ->where('site', '<>', '')
+                        ->distinct()
+                        ->orderBy('site')
+                        ->pluck('site')
+                        ->map(static fn (mixed $site): string => trim((string) $site))
+                        ->filter(static fn (string $site): bool => $site !== '')
+                        ->values()
+                        ->all();
+                    $sites = $this->siteResolver->mergeFilterSites($fallbackSites);
+
+                    $rawCompanies = $db->table('employee_profiles')
+                        ->whereNotNull('nama_perusahaan')
+                        ->where('nama_perusahaan', '<>', '')
+                        ->distinct()
+                        ->orderBy('nama_perusahaan')
+                        ->pluck('nama_perusahaan')
+                        ->map(static fn (mixed $company): string => trim((string) $company))
+                        ->filter(static fn (string $company): bool => $company !== '')
+                        ->values()
+                        ->all();
+
+                    foreach ($rawCompanies as $company) {
+                        $resolved = $this->companyAliasResolver->resolve($company) ?: $company;
+                        if ($resolved !== '') {
+                            $companyList[$resolved] = true;
+                        }
+                    }
+                } catch (Throwable $e) {
+                    report($e);
+                }
+            }
+
+            // Fallback: daftar Minecon jika BeWell down / kosong.
+            if ($companyList === []) {
+                $fallback = config('evaluasi_well_minecon_companies', []);
+                if (is_array($fallback)) {
+                    foreach ($fallback as $company) {
+                        if (! is_string($company)) {
+                            continue;
+                        }
+                        $trimmed = trim($company);
+                        if ($trimmed === '') {
+                            continue;
+                        }
+                        $resolved = $this->companyAliasResolver->resolve($trimmed) ?: $trimmed;
+                        if ($resolved !== '') {
+                            $companyList[$resolved] = true;
+                        }
+                    }
+                }
+            }
+
+            $companies = array_keys($companyList);
+            sort($companies, SORT_STRING);
+
+            return [
+                'sites' => $sites,
+                'companies' => $companies,
+            ];
+        });
     }
 
     /**
