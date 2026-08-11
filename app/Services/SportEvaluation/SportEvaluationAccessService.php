@@ -82,6 +82,44 @@ final class SportEvaluationAccessService
     }
 
     /**
+     * User Mitra Kerja (punya assignment aktif) yang bukan Admin/HR.
+     * Hanya boleh mengakses fitur /evaluasi-well/mitra.
+     */
+    public function isMitraOnlyUser(?User $user): bool
+    {
+        if ($user === null || $this->isMitraManager($user)) {
+            return false;
+        }
+
+        $scope = $this->scopeFor($user);
+
+        return isset($scope['site'], $scope['perusahaan'])
+            && trim((string) $scope['site']) !== ''
+            && trim((string) $scope['perusahaan']) !== '';
+    }
+
+    /**
+     * Route yang diizinkan untuk user Mitra-only.
+     */
+    public function isMitraAllowedRoute(?string $routeName): bool
+    {
+        if ($routeName === null || $routeName === '') {
+            return false;
+        }
+
+        if (str_starts_with($routeName, 'evaluasi-well.mitra.')) {
+            return true;
+        }
+
+        return in_array($routeName, [
+            'evaluasi-well.employees.show',
+            'logout',
+            'password.confirm',
+            'password.update',
+        ], true);
+    }
+
+    /**
      * Scope wajib dari assignment aktif user (kosong untuk manager tanpa assignment).
      *
      * @return array{site?:string,perusahaan?:string}

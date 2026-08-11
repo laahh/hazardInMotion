@@ -66,5 +66,6 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'fatigue.management' => \App\Http\Middleware\FatigueManagementAccess::class,
         'evaluasi-well.access' => \App\Http\Middleware\SportEvaluationAccess::class,
+        'evaluasi-well.mitra-only' => \App\Http\Middleware\SportEvaluationMitraOnlyAccess::class,
     ];
 }

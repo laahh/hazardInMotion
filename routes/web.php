@@ -93,7 +93,7 @@ Route::get('/dopmikk/dopm/dashboard/screenshot', function (\Illuminate\Http\Requ
 require __DIR__ . '/Hsecm/hsecm.php';
 
 // Define a group of routes with 'auth' middleware applied
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     // Define a GET route for the root URL ('/')
     Route::get('/', [HomeController::class, 'index'])->name('index');
     

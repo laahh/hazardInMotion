@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Providers\RouteServiceProvider;
+use App\Services\SportEvaluation\SportEvaluationAccessService;
 use Illuminate\Foundation\Auth\AuthenticatesUsers;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 
 class LoginController extends Controller
 {
@@ -36,5 +39,17 @@ class LoginController extends Controller
     public function __construct()
     {
         $this->middleware('guest')->except('logout');
+    }
+
+    /**
+     * User Mitra Kerja langsung ke dashboard scoped.
+     */
+    protected function authenticated(Request $request, mixed $user): ?RedirectResponse
+    {
+        if (app(SportEvaluationAccessService::class)->isMitraOnlyUser($user)) {
+            return redirect()->route('evaluasi-well.mitra.index');
+        }
+
+        return null;
     }
 }

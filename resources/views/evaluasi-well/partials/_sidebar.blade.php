@@ -3,7 +3,16 @@
     <iconify-icon icon="radix-icons:cross-2"></iconify-icon>
   </button>
   <div>
-    <a href="{{ route('evaluasi-well.index') }}" class="sidebar-logo">
+    @php
+      $authUser = auth()->user();
+      $accessService = app(\App\Services\SportEvaluation\SportEvaluationAccessService::class);
+      $isMitraOnlyUser = $accessService->isMitraOnlyUser($authUser);
+      $canManageMitraAssignment = $accessService->canManageAssignments($authUser);
+      $homeRoute = $isMitraOnlyUser
+        ? route('evaluasi-well.mitra.index')
+        : route('evaluasi-well.index');
+    @endphp
+    <a href="{{ $homeRoute }}" class="sidebar-logo">
       <img src="{{ asset('evaluasi-well-assets/images/logo.png') }}" alt="site logo" class="light-logo">
       <img src="{{ asset('evaluasi-well-assets/images/logo-light.png') }}" alt="site logo" class="dark-logo">
       <img src="{{ asset('evaluasi-well-assets/images/logo-icon.png') }}" alt="site logo" class="logo-icon">
@@ -11,6 +20,14 @@
   </div>
   <div class="sidebar-menu-area">
     <ul class="sidebar-menu" id="sidebar-menu">
+      @if ($isMitraOnlyUser)
+      <li>
+        <a href="{{ route('evaluasi-well.mitra.index') }}" class="{{ request()->routeIs('evaluasi-well.mitra.*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:buildings-2-outline" class="menu-icon"></iconify-icon>
+          <span>Mitra Kerja</span>
+        </a>
+      </li>
+      @else
       <li>
         <a href="{{ route('evaluasi-well.index') }}" class="{{ request()->routeIs('evaluasi-well.index') || request()->routeIs('evaluasi-well.summary') || request()->routeIs('evaluasi-well.trend') || request()->routeIs('evaluasi-well.distribution') || request()->routeIs('evaluasi-well.leaderboard') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:home-smile-angle-outline" class="menu-icon"></iconify-icon>
@@ -23,15 +40,6 @@
           <span>Mitra Kerja</span>
         </a>
       </li>
-      @php
-        $authUser = auth()->user();
-        $canManageMitraAssignment = $authUser
-          && (
-            $authUser->isAdmin()
-            || $authUser->hasRole('hr-pusat')
-            || $authUser->hasRole('super-admin')
-          );
-      @endphp
       @if ($canManageMitraAssignment)
       <li>
         <a href="{{ route('evaluasi-well.mitra-assignments.index') }}" class="{{ request()->routeIs('evaluasi-well.mitra-assignments.*') ? 'active-page' : '' }}">
@@ -71,6 +79,7 @@
           <span>Kembali ke Panel</span>
         </a>
       </li>
+      @endif
     </ul>
   </div>
 </aside>

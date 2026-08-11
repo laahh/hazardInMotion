@@ -67,6 +67,21 @@
       
         <!--navigation-->
         <ul class="metismenu" id="sidenav">
+          @php
+            $isMitraOnlyUser = Auth::check()
+              && app(\App\Services\SportEvaluation\SportEvaluationAccessService::class)->isMitraOnlyUser(Auth::user());
+          @endphp
+
+          @if ($isMitraOnlyUser)
+          <li class="menu-label">Health / BeWell</li>
+          <li>
+            <a href="{{ route('evaluasi-well.mitra.index') }}">
+              <div class="parent-icon"><i class="material-icons-outlined">business</i>
+              </div>
+              <div class="menu-title">Mitra Kerja</div>
+            </a>
+          </li>
+          @else
           @if(Auth::check() && Auth::user()->hasRole('admin-hazard-motion'))
           <li>
             <a href="{{ route('hazard-detection.index') }}">
@@ -358,6 +373,7 @@
             </a>
             <ul>
               <li><a href="{{ route('evaluasi-well.index') }}"><i class="material-icons-outlined">arrow_right</i>Dashboard</a></li>
+              <li><a href="{{ route('evaluasi-well.mitra.index') }}"><i class="material-icons-outlined">arrow_right</i>Mitra Kerja</a></li>
               <li><a href="{{ route('evaluasi-well.activities.index') }}"><i class="material-icons-outlined">arrow_right</i>Detail Aktivitas</a></li>
             </ul>
           </li>
@@ -366,6 +382,7 @@
        
           
        
+         @endif
          </ul>
         <!--end navigation-->
     </div>
