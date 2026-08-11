@@ -14,12 +14,14 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Publik — tanpa login (link dari email PJO)
+| Publik — tanpa login (dashboard share link + link dari email PJO)
 |--------------------------------------------------------------------------
 */
 Route::prefix('hsecm')
     ->name('hsecm.')
     ->group(function (): void {
+        Route::redirect('/', '/hsecm/dashboard')->name('home');
+        Route::get('/dashboard', [HsecmDashboardController::class, 'index'])->name('dashboard');
         Route::get('/pjo-action', [HsecmPjoActionController::class, 'index'])->name('pjo-action');
         Route::get('/tasklist/open', [HsecmTasklistPublicController::class, 'open'])
             ->name('tasklist.open');
@@ -41,8 +43,6 @@ Route::middleware(['auth'])
     ->prefix('hsecm')
     ->name('hsecm.')
     ->group(function (): void {
-        Route::redirect('/', '/hsecm/dashboard')->name('home');
-        Route::get('/dashboard', [HsecmDashboardController::class, 'index'])->name('dashboard');
         Route::get('/gap-perulangan', [HsecmGapPerulanganController::class, 'index'])->name('gap-perulangan');
         Route::get('/gap-evaluasi', [HsecmGapEvaluasiController::class, 'index'])->name('gap-evaluasi');
         Route::get('/wa-notify', [HsecmWaNotifyController::class, 'index'])->name('wa-notify.index');

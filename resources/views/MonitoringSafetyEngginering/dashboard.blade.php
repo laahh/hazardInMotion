@@ -57,7 +57,7 @@
       ],
       [
          'key' => 'additional_safety_engineering',
-         'label' => 'total additional safety',
+         'label' => 'Total Additional Safety',
          'title' => 'Additional Safety',
          'stat' => $summary['additional_safety_engineering'],
          'items' => $additionalSafetyItems ?? [],
@@ -97,20 +97,6 @@
       ];
    })->all();
    $recordDetailById = $recordDetailById ?? ($safetyEngineeringDetailById ?? []);
-   $riskReductionMatrix = $riskReductionMatrix ?? ['columns' => [], 'rows' => [], 'total' => 0, 'without_prediksi' => 0];
-   $riskMatrixCellPayload = [];
-   foreach ($riskReductionMatrix['rows'] ?? [] as $row) {
-      foreach ($riskReductionMatrix['columns'] ?? [] as $column) {
-         $cell = $row['cells'][$column['key']] ?? ['count' => 0, 'items' => []];
-         $cellId = $row['key'].'-'.$column['key'];
-         $riskMatrixCellPayload[$cellId] = [
-            'title' => $row['label'],
-            'subtitle' => $column['label'],
-            'count' => (int) ($cell['count'] ?? 0),
-            'items' => $cell['items'] ?? [],
-         ];
-      }
-   }
    $statusCompleted = $charts['status_breakdown']['data'][0] ?? 0;
    $statusOnTrack = $charts['status_breakdown']['data'][1] ?? 0;
    $statusRunning = $charts['status_breakdown']['data'][2] ?? 0;
@@ -199,24 +185,72 @@
 <p class="text-xs text-crm-muted mb-4 -mt-2">Menampilkan progres YTD tahun {{ $filters['period_year'] }}. Baris dengan highlight = due date di {{ $filters['review_week'] }}.</p>
 
 {{-- Row 1: Total + Category Stat Cards --}}
+@php
+   $replikasiStat = $summary['replikasi'] ?? [];
+   $safetyStat = $summary['safety_engineering'] ?? [];
+   $additionalStat = $summary['additional_safety_engineering'] ?? [];
+
+   // Total Pengendalian = agregat 3 card kategori utama saja
+   $totalPengendalian = (int) ($replikasiStat['count'] ?? 0)
+      + (int) ($safetyStat['count'] ?? 0)
+      + (int) ($additionalStat['count'] ?? 0);
+   $totalOnprogress = (int) ($replikasiStat['onprogress'] ?? 0)
+      + (int) ($safetyStat['onprogress'] ?? 0)
+      + (int) ($additionalStat['onprogress'] ?? 0);
+   $totalOverdue = (int) ($replikasiStat['overdue'] ?? 0)
+      + (int) ($safetyStat['overdue'] ?? 0)
+      + (int) ($additionalStat['overdue'] ?? 0);
+   $totalSelesai = (int) ($replikasiStat['selesai'] ?? 0)
+      + (int) ($safetyStat['selesai'] ?? 0)
+      + (int) ($additionalStat['selesai'] ?? 0);
+   $totalSelesaiPct = $totalPengendalian > 0
+      ? (int) round(($totalSelesai / $totalPengendalian) * 100)
+      : 0;
+@endphp
 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
-   <div class="crm-card crm-stat-card">
-      <p class="crm-stat-label">Total Pengendalian</p>
-      <p class="crm-stat-value">{{ $summary['total_komitmen'] }}</p>
-      <span class="crm-stat-trend crm-stat-trend--up">
-         <span class="material-symbols-outlined text-sm">arrow_upward</span>
-         +{{ $overallProgress }}%
-      </span>
+   <div class="crm-card crm-kpi-card crm-kpi-card--total">
+      <div class="crm-kpi-head">
+         <div>
+            <p class="crm-kpi-label">Total Pengendalian</p>
+            <p class="crm-kpi-subtitle">Replikasi + Safety + Additional</p>
+         </div>
+         <span class="crm-kpi-icon" aria-hidden="true">
+            <span class="material-symbols-outlined">analytics</span>
+         </span>
+      </div>
+      <div class="crm-kpi-value-row">
+         <p class="crm-kpi-value">{{ $totalPengendalian }}</p>
+         <span class="crm-kpi-badge">{{ $totalSelesaiPct }}% selesai</span>
+      </div>
+      <div class="crm-kpi-metrics" role="list">
+         <div class="crm-kpi-metric" role="listitem">
+            <span class="crm-kpi-metric-label">On Progress</span>
+            <span class="crm-kpi-metric-value crm-kpi-metric-value--info">{{ $totalOnprogress }}</span>
+         </div>
+         <div class="crm-kpi-metric" role="listitem">
+            <span class="crm-kpi-metric-label">Overdue</span>
+            <span class="crm-kpi-metric-value crm-kpi-metric-value--danger">{{ $totalOverdue }}</span>
+         </div>
+         <div class="crm-kpi-metric" role="listitem">
+            <span class="crm-kpi-metric-label">Selesai</span>
+            <span class="crm-kpi-metric-value crm-kpi-metric-value--success">{{ $totalSelesai }}</span>
+         </div>
+      </div>
+      <div class="crm-kpi-foot">
+         <div class="crm-kpi-progress-track" aria-hidden="true">
+            <div class="crm-kpi-progress-fill" style="width: {{ min(100, max(0, $totalSelesaiPct)) }}%"></div>
+         </div>
+         <p class="crm-kpi-foot-text">Agregat dari 3 kategori utama</p>
+      </div>
    </div>
+
    @foreach($categoryStatCards as $categoryCard)
    @php
       $stat = $categoryCard['stat'];
-      $progress = (int) ($stat['progress'] ?? 0);
-      $trendUp = $progress >= 50;
-      $metaMode = (string) ($stat['meta_mode'] ?? '');
-      $isStatusCard = in_array($metaMode, ['replikasi_status', 'standardisasi_status'], true);
-      $isReplikasiCard = ($categoryCard['key'] ?? '') === 'replikasi' || $metaMode === 'replikasi_status';
-      $isSafetyCard = ($categoryCard['key'] ?? '') === 'safety_engineering' || $metaMode === 'standardisasi_status';
+      $cardKey = (string) ($categoryCard['key'] ?? '');
+      $isReplikasiCard = $cardKey === 'replikasi';
+      $isSafetyCard = $cardKey === 'safety_engineering';
+      $isAdditionalCard = $cardKey === 'additional_safety_engineering';
       $onprogressCount = (int) ($stat['onprogress'] ?? 0);
       $overdueCount = (int) ($stat['overdue'] ?? 0);
       $selesaiCount = (int) ($stat['selesai'] ?? 0);
@@ -224,146 +258,127 @@
       $selesaiPct = (int) round(($selesaiCount / $totalCount) * 100);
       $cardTitle = $isReplikasiCard
          ? 'Total Replikasi 2026'
-         : ($isSafetyCard ? 'Total Safety Engineering' : ($categoryCard['label'] ?? 'Kategori'));
-      $cardIcon = $isReplikasiCard ? 'sync_alt' : ($isSafetyCard ? 'engineering' : 'category');
-      $cardClass = $isReplikasiCard
-         ? 'crm-stat-card--replikasi'
-         : ($isSafetyCard ? 'crm-stat-card--safety' : '');
+         : ($isSafetyCard
+            ? 'Total Safety Engineering'
+            : ($isAdditionalCard ? 'Total Additional Safety' : ($categoryCard['label'] ?? 'Kategori')));
+      $cardSubtitle = $isReplikasiCard
+         ? 'Monitoring replikasi'
+         : ($isSafetyCard
+            ? 'Berbasis standardisasi'
+            : ($isAdditionalCard ? 'Additional engineering' : 'Kategori pengendalian'));
+      $cardIcon = $isReplikasiCard
+         ? 'sync_alt'
+         : ($isSafetyCard ? 'engineering' : ($isAdditionalCard ? 'add_moderator' : 'category'));
+      $cardTheme = $isReplikasiCard
+         ? 'replikasi'
+         : ($isSafetyCard ? 'safety' : ($isAdditionalCard ? 'additional' : 'default'));
    @endphp
    <div
-      class="crm-card crm-stat-card crm-stat-card--clickable {{ $cardClass }}"
+      class="crm-card crm-kpi-card crm-kpi-card--{{ $cardTheme }} crm-kpi-card--clickable"
       role="button"
       tabindex="0"
       data-category-key="{{ $categoryCard['key'] }}"
       aria-label="Lihat detail {{ $categoryCard['title'] }}"
    >
-      @if($isStatusCard)
-      <div class="crm-stat-card-head">
-         <p class="crm-stat-label crm-stat-label--strong">{{ $cardTitle }}</p>
-         <span class="crm-stat-icon" aria-hidden="true">
+      <div class="crm-kpi-head">
+         <div>
+            <p class="crm-kpi-label">{{ $cardTitle }}</p>
+            <p class="crm-kpi-subtitle">{{ $cardSubtitle }}</p>
+         </div>
+         <span class="crm-kpi-icon" aria-hidden="true">
             <span class="material-symbols-outlined">{{ $cardIcon }}</span>
          </span>
       </div>
-      <div class="crm-stat-main">
-         <p class="crm-stat-value crm-stat-value--lg">{{ $stat['count'] ?? 0 }}</p>
-         <div class="crm-stat-meta crm-stat-meta--chips">
-            <span class="crm-stat-chip crm-stat-chip--onprogress">
-               <span class="crm-stat-chip-dot"></span>
-               Onprogress {{ $onprogressCount }}
-            </span>
-            <span class="crm-stat-chip crm-stat-chip--overdue">
-               <span class="crm-stat-chip-dot"></span>
-               Overdue {{ $overdueCount }}
-            </span>
-            <span class="crm-stat-chip crm-stat-chip--selesai">
-               <span class="crm-stat-chip-dot"></span>
-               Selesai {{ $selesaiCount }}
-            </span>
+      <div class="crm-kpi-value-row">
+         <p class="crm-kpi-value">{{ $stat['count'] ?? 0 }}</p>
+         <span class="crm-kpi-badge">{{ $selesaiPct }}% selesai</span>
+      </div>
+      <div class="crm-kpi-metrics" role="list">
+         <div class="crm-kpi-metric" role="listitem">
+            <span class="crm-kpi-metric-label">On Progress</span>
+            <span class="crm-kpi-metric-value crm-kpi-metric-value--info">{{ $onprogressCount }}</span>
+         </div>
+         <div class="crm-kpi-metric" role="listitem">
+            <span class="crm-kpi-metric-label">Overdue</span>
+            <span class="crm-kpi-metric-value crm-kpi-metric-value--danger">{{ $overdueCount }}</span>
+         </div>
+         <div class="crm-kpi-metric" role="listitem">
+            <span class="crm-kpi-metric-label">Selesai</span>
+            <span class="crm-kpi-metric-value crm-kpi-metric-value--success">{{ $selesaiCount }}</span>
          </div>
       </div>
-      <div class="crm-stat-foot">
-         <div class="crm-stat-progress">
-            <div class="crm-stat-progress-track">
-               <div class="crm-stat-progress-fill {{ $isSafetyCard ? 'crm-stat-progress-fill--safety' : '' }}" style="width: {{ min(100, max(0, $selesaiPct)) }}%"></div>
-            </div>
-            <p class="crm-stat-progress-label">
-               {{ $selesaiPct }}% selesai
-               @if($isSafetyCard)
-               · dari standardisasi
-               @endif
-               · klik untuk detail
-            </p>
+      <div class="crm-kpi-foot">
+         <div class="crm-kpi-progress-track" aria-hidden="true">
+            <div class="crm-kpi-progress-fill" style="width: {{ min(100, max(0, $selesaiPct)) }}%"></div>
          </div>
-         <span class="crm-stat-trend crm-stat-trend--compact {{ $trendUp ? 'crm-stat-trend--up' : 'crm-stat-trend--down' }}">
-            <span class="material-symbols-outlined text-sm">{{ $trendUp ? 'arrow_upward' : 'arrow_downward' }}</span>
-            {{ $trendUp ? '+' : '-' }}{{ $progress }}%
-         </span>
+         <p class="crm-kpi-foot-text">Klik untuk membuka detail</p>
       </div>
-      @else
-      <p class="crm-stat-label">{{ $categoryCard['label'] }}</p>
-      <div class="crm-stat-main">
-         <p class="crm-stat-value">{{ $stat['count'] ?? 0 }}</p>
-         <div class="crm-stat-meta">
-            <span>overdue {{ $stat['overdue'] ?? 0 }}</span>
-            <span>selesai {{ $stat['done'] ?? 0 }}/{{ $stat['plan'] ?? 0 }}</span>
-         </div>
-      </div>
-      <span class="crm-stat-trend {{ $trendUp ? 'crm-stat-trend--up' : 'crm-stat-trend--down' }}">
-         <span class="material-symbols-outlined text-sm">{{ $trendUp ? 'arrow_upward' : 'arrow_downward' }}</span>
-         {{ $trendUp ? '+' : '-' }}{{ $progress }}%
-      </span>
-      @endif
    </div>
    @endforeach
 </div>
 
-{{-- Matriks Penurunan Risiko (Deteksi & Intervensi Deviasi) --}}
-<div class="crm-card mb-4">
-   <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
-      <div>
-         <p class="crm-card-title mb-1">Matriks Penurunan Risiko</p>
-         <p class="text-xs text-crm-muted">
-            Baris diklasifikasi dari Deteksi &amp; Intervensi Deviasi. Kolom dari Prediksi Penurunan Tangga Risiko.
-         </p>
+{{-- Trend per Kategori --}}
+@php
+   $categoryTrends = $charts['category_trends'] ?? [];
+@endphp
+@if(count($categoryTrends) > 0)
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+   @foreach($categoryTrends as $trend)
+   @php
+      $trendTheme = match ((string) ($trend['key'] ?? '')) {
+         'replikasi' => 'replikasi',
+         'safety_engineering' => 'safety',
+         'additional_safety_engineering' => 'additional',
+         default => 'default',
+      };
+      $trendDelta = (int) ($trend['trend_delta'] ?? 0);
+      $trendUp = (bool) ($trend['trend_up'] ?? ($trendDelta >= 0));
+      $canvasId = 'mse-trend-chart-'.($trend['key'] ?? $loop->index);
+   @endphp
+   <div class="crm-card crm-trend-card crm-trend-card--{{ $trendTheme }}">
+      <div class="crm-trend-card-head">
+         <div>
+            <p class="crm-trend-card-label">Trend {{ $trend['label'] }}</p>
+            <p class="crm-trend-card-subtitle">Plan vs Done · 6 bulan (due date)</p>
+         </div>
+         <span class="crm-trend-delta {{ $trendUp ? 'crm-trend-delta--up' : 'crm-trend-delta--down' }}">
+            <span class="material-symbols-outlined text-sm">{{ $trendUp ? 'trending_up' : 'trending_down' }}</span>
+            {{ $trendDelta >= 0 ? '+' : '' }}{{ $trendDelta }}%
+         </span>
       </div>
-      <div class="text-xs text-crm-muted whitespace-nowrap">
-         Terpetakan: <strong class="text-crm-ink">{{ $riskReductionMatrix['total'] ?? 0 }}</strong>
-         @if(($riskReductionMatrix['without_prediksi'] ?? 0) > 0)
-         · Estimasi hierarki (belum isi prediksi): <strong class="text-[#FFAA05]">{{ $riskReductionMatrix['without_prediksi'] }}</strong>
-         @endif
+
+      <div class="crm-trend-card-main">
+         <div>
+            <p class="crm-trend-progress-value">{{ (int) ($trend['progress'] ?? 0) }}%</p>
+            <p class="crm-trend-progress-label">selesai dari {{ (int) ($trend['count'] ?? 0) }} item</p>
+         </div>
+         <div class="crm-trend-mini-metrics">
+            <span class="crm-trend-chip crm-trend-chip--info">OP {{ (int) ($trend['onprogress'] ?? 0) }}</span>
+            <span class="crm-trend-chip crm-trend-chip--danger">OV {{ (int) ($trend['overdue'] ?? 0) }}</span>
+            <span class="crm-trend-chip crm-trend-chip--success">OK {{ (int) ($trend['selesai'] ?? 0) }}</span>
+         </div>
+      </div>
+
+      <div class="crm-trend-chart-wrap">
+         <canvas
+            id="{{ $canvasId }}"
+            class="mse-category-trend-chart"
+            data-trend-key="{{ $trend['key'] }}"
+         ></canvas>
+      </div>
+
+      <div class="crm-trend-card-foot">
+         <span>Plan <strong>{{ number_format((int) ($trend['plan'] ?? 0)) }}</strong></span>
+         <span>Done <strong>{{ number_format((int) ($trend['done'] ?? 0)) }}</strong></span>
+         <span class="crm-trend-legend">
+            <i style="background:{{ $trend['color'] }}"></i> Done
+            <i class="crm-trend-legend-plan"></i> Plan
+         </span>
       </div>
    </div>
-   <div class="overflow-x-auto">
-      <table class="crm-matrix-table crm-risk-matrix-table">
-         <thead>
-            <tr>
-               <th></th>
-               @foreach($riskReductionMatrix['columns'] ?? [] as $column)
-               <th class="text-center">{{ $column['label'] }}</th>
-               @endforeach
-            </tr>
-         </thead>
-         <tbody>
-            @forelse($riskReductionMatrix['rows'] ?? [] as $row)
-            <tr>
-               <th scope="row" class="crm-risk-matrix-row-label">{{ $row['label'] }}</th>
-               @foreach($riskReductionMatrix['columns'] ?? [] as $column)
-               @php
-                  $cell = $row['cells'][$column['key']] ?? ['count' => 0, 'items' => []];
-                  $count = (int) ($cell['count'] ?? 0);
-                  $cellId = $row['key'].'-'.$column['key'];
-               @endphp
-               <td class="text-center {{ $count > 0 ? 'crm-risk-matrix-cell--clickable' : '' }}"
-                  @if($count > 0)
-                  role="button"
-                  tabindex="0"
-                  data-risk-cell="{{ $cellId }}"
-                  aria-label="Lihat {{ $count }} item {{ $row['label'] }} — {{ $column['label'] }}"
-                  @endif
-               >
-                  @if($count > 0)
-                  <span class="crm-risk-matrix-count">{{ $count }}</span>
-                  @else
-                  <span class="text-crm-muted">—</span>
-                  @endif
-               </td>
-               @endforeach
-            </tr>
-            @empty
-            <tr>
-               <td colspan="{{ max(1, count($riskReductionMatrix['columns'] ?? []) + 1) }}" class="text-center py-8 text-crm-muted">
-                  Belum ada data matriks penurunan risiko.
-               </td>
-            </tr>
-            @endforelse
-         </tbody>
-      </table>
-   </div>
-   <p class="text-xs text-crm-muted mt-3 flex items-center gap-1">
-      <span class="material-symbols-outlined text-sm">info</span>
-      Jika Prediksi Penurunan Tangga belum diisi, sistem memakai estimasi dari hierarki Deteksi→Intervensi. Klik angka untuk detail.
-   </p>
+   @endforeach
 </div>
+@endif
 
 {{-- Row 2: Donut + Bar + Application Progress --}}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
@@ -602,6 +617,7 @@
       });
 
       var chartsData = @json($charts);
+      var categoryTrends = chartsData.category_trends || [];
       var crmPurple = '#7366FF';
       var crmPurpleLight = '#CFC8FF';
       var crmPurplePale = '#ECE9FF';
@@ -610,6 +626,71 @@
       Chart.defaults.font.family = "'Poppins', sans-serif";
       Chart.defaults.color = '#848488';
       Chart.defaults.animation.duration = 800;
+
+      categoryTrends.forEach(function (trend) {
+         var canvas = document.querySelector('.mse-category-trend-chart[data-trend-key="' + trend.key + '"]');
+         if (!canvas) return;
+
+         var color = trend.color || crmPurple;
+         new Chart(canvas, {
+            type: 'line',
+            data: {
+               labels: trend.labels || [],
+               datasets: [
+                  {
+                     label: 'Plan',
+                     data: trend.plan_series || [],
+                     borderColor: '#C9CDD4',
+                     backgroundColor: 'rgba(201, 205, 212, 0.12)',
+                     borderWidth: 2,
+                     pointRadius: 2.5,
+                     pointHoverRadius: 4,
+                     tension: 0.35,
+                     fill: false,
+                  },
+                  {
+                     label: 'Done',
+                     data: trend.done_series || [],
+                     borderColor: color,
+                     backgroundColor: color + '22',
+                     borderWidth: 2.5,
+                     pointRadius: 3,
+                     pointHoverRadius: 5,
+                     tension: 0.35,
+                     fill: true,
+                  },
+               ],
+            },
+            options: {
+               responsive: true,
+               maintainAspectRatio: false,
+               interaction: { mode: 'index', intersect: false },
+               plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                     callbacks: {
+                        afterBody: function (items) {
+                           var idx = items[0] ? items[0].dataIndex : 0;
+                           var completion = (trend.completion_series || [])[idx];
+                           return typeof completion === 'number' ? 'Selesai rate: ' + completion + '%' : '';
+                        },
+                     },
+                  },
+               },
+               scales: {
+                  x: {
+                     grid: { display: false },
+                     ticks: { font: { size: 10, weight: '600' }, color: '#8B8F98' },
+                  },
+                  y: {
+                     beginAtZero: true,
+                     grid: { color: 'rgba(0,0,0,0.04)' },
+                     ticks: { precision: 0, font: { size: 10 }, color: '#8B8F98' },
+                  },
+               },
+            },
+         });
+      });
 
       var catEl = document.getElementById('crmCategoryChart');
       if (catEl) {
@@ -704,7 +785,6 @@
       }
 
       var categoryModalData = @json($categoryModalPayload);
-      var riskMatrixCellData = @json($riskMatrixCellPayload);
       var recordDetailById = @json($recordDetailById);
       var categoryModal = document.getElementById('mse-category-detail-modal');
       var categoryPanel = categoryModal ? categoryModal.querySelector('.crm-category-panel') : null;
@@ -716,13 +796,18 @@
       var activeReplikasiPayload = null;
       var activeStatusPayload = null;
       var categoryModalFilters = { site: '', company: '', status: '' };
+      var siteMatrixTipStore = {};
+      var siteMatrixFloatTip = null;
+      var siteMatrixTipBound = false;
 
       function isStatusBreakdownMode(payload) {
          var meta = payload?.stat?.meta_mode || '';
          return meta === 'replikasi_status'
             || meta === 'standardisasi_status'
+            || meta === 'additional_status'
             || payload?.key === 'replikasi'
-            || payload?.key === 'safety_engineering';
+            || payload?.key === 'safety_engineering'
+            || payload?.key === 'additional_safety_engineering';
       }
 
       function isSafetyEngineeringPayload(payload) {
@@ -730,16 +815,26 @@
             || payload?.stat?.meta_mode === 'standardisasi_status';
       }
 
+      function isAdditionalSafetyPayload(payload) {
+         return payload?.key === 'additional_safety_engineering'
+            || payload?.stat?.meta_mode === 'additional_status';
+      }
+
+      function isReplikasiPayload(payload) {
+         return payload?.key === 'replikasi'
+            || payload?.stat?.meta_mode === 'replikasi_status';
+      }
+
       function statusModalTitle(payload) {
-         return isSafetyEngineeringPayload(payload)
-            ? 'Total Safety Engineering'
-            : 'Total Replikasi 2026';
+         if (isSafetyEngineeringPayload(payload)) return 'Total Safety Engineering';
+         if (isAdditionalSafetyPayload(payload)) return 'Total Additional Safety';
+         return 'Total Replikasi 2026';
       }
 
       function statusModalSectionTitle(payload) {
-         return isSafetyEngineeringPayload(payload)
-            ? 'Data Pengendalian Safety Engineering'
-            : 'Data Pengendalian Replikasi 2026';
+         if (isSafetyEngineeringPayload(payload)) return 'Data Pengendalian Safety Engineering';
+         if (isAdditionalSafetyPayload(payload)) return 'Data Pengendalian Additional Safety';
+         return 'Data Pengendalian Replikasi 2026';
       }
 
       function standardisasiStatusLabel(value) {
@@ -754,8 +849,10 @@
          if (!categoryPanel) return;
          var isXl = isStatusBreakdownMode(payload);
          var isSafety = isSafetyEngineeringPayload(payload);
+         var isAdditional = isAdditionalSafetyPayload(payload);
          categoryPanel.classList.toggle('crm-category-panel--xl', !!isXl);
          categoryPanel.classList.toggle('crm-category-panel--safety', !!isSafety);
+         categoryPanel.classList.toggle('crm-category-panel--additional', !!isAdditional);
       }
 
       function destroyCategoryCharts() {
@@ -770,6 +867,7 @@
          categoryPanel.classList.toggle('crm-category-panel--xl', !!isXl);
          if (!isXl) {
             categoryPanel.classList.remove('crm-category-panel--safety');
+            categoryPanel.classList.remove('crm-category-panel--additional');
          }
       }
 
@@ -844,6 +942,337 @@
             sites: allSites,
             companies: uniqueSortedValues(companySource, 'perusahaan'),
          };
+      }
+
+      function emptySiteCompanyBucket() {
+         return {
+            plan: 0,
+            done: 0,
+            onprogress: 0,
+            overdue: 0,
+            selesai: 0,
+            count: 0,
+            items: [],
+         };
+      }
+
+      function resolveCellStatus(bucket) {
+         if (!bucket || bucket.count <= 0) return '';
+         if (Number(bucket.overdue || 0) > 0) return 'overdue';
+         if (Number(bucket.onprogress || 0) > 0) return 'onprogress';
+         if (Number(bucket.selesai || 0) > 0) return 'selesai';
+         return '';
+      }
+
+      function buildReplikasiSiteCompanyMatrix(items) {
+         var siteMap = {};
+
+         (items || []).forEach(function (item) {
+            var site = String(item.site || '').trim() || '-';
+            var company = String(item.perusahaan || '').trim() || '-';
+            if (!siteMap[site]) siteMap[site] = {};
+            if (!siteMap[site][company]) siteMap[site][company] = emptySiteCompanyBucket();
+
+            var bucket = siteMap[site][company];
+            bucket.plan += Number(item.plan || 0);
+            bucket.done += Number(item.done || 0);
+            bucket.count += 1;
+
+            var status = String(item.progress_status || item.replikasi_status || '');
+            if (status === 'onprogress') bucket.onprogress += 1;
+            else if (status === 'overdue') bucket.overdue += 1;
+            else if (status === 'selesai') bucket.selesai += 1;
+
+            bucket.items.push({
+               id: item.id ?? null,
+               name: item.name || '-',
+               plan: Number(item.plan || 0),
+               done: Number(item.done || 0),
+               unit: item.unit || '-',
+               status: status,
+               percentage: Number(item.percentage || 0),
+            });
+         });
+
+         var groups = Object.keys(siteMap).sort(function (a, b) {
+            return a.localeCompare(b, 'id', { sensitivity: 'base', numeric: true });
+         }).map(function (site) {
+            var companies = Object.keys(siteMap[site]).sort(function (a, b) {
+               return a.localeCompare(b, 'id', { sensitivity: 'base', numeric: true });
+            }).map(function (company) {
+               var stats = siteMap[site][company];
+               stats.items.sort(function (a, b) {
+                  return String(a.name).localeCompare(String(b.name), 'id', { sensitivity: 'base' });
+               });
+
+               return {
+                  code: company,
+                  name: company,
+                  key: site + '||' + company,
+                  site: site,
+                  stats: stats,
+               };
+            });
+
+            return { site: site, companies: companies };
+         });
+
+         var columns = [];
+         groups.forEach(function (group) {
+            group.companies.forEach(function (company) {
+               columns.push(company);
+            });
+         });
+
+         return { groups: groups, columns: columns };
+      }
+
+      function ensureSiteMatrixFloatTip() {
+         if (siteMatrixFloatTip && document.body.contains(siteMatrixFloatTip)) {
+            return siteMatrixFloatTip;
+         }
+
+         siteMatrixFloatTip = document.createElement('div');
+         siteMatrixFloatTip.id = 'mse-site-matrix-float-tip';
+         siteMatrixFloatTip.className = 'crm-site-matrix-float-tip';
+         siteMatrixFloatTip.setAttribute('role', 'tooltip');
+         document.body.appendChild(siteMatrixFloatTip);
+         return siteMatrixFloatTip;
+      }
+
+      function hideSiteMatrixFloatTip() {
+         if (!siteMatrixFloatTip) return;
+         siteMatrixFloatTip.classList.remove('crm-site-matrix-float-tip--open');
+         siteMatrixFloatTip.innerHTML = '';
+      }
+
+      function renderSiteMatrixTipHtml(payload) {
+         var items = payload.items || [];
+         var stats = payload.stats || emptySiteCompanyBucket();
+         var listHtml = items.map(function (item, index) {
+            return '<li class="crm-site-matrix-tip-item">'
+               + '<div class="crm-site-matrix-tip-item-top">'
+               + '<span class="crm-site-matrix-tip-no">' + (index + 1) + '.</span>'
+               + '<span class="crm-site-matrix-tip-name">' + escapeHtml(item.name) + '</span>'
+               + statusPill(item.status)
+               + '</div>'
+               + '<div class="crm-site-matrix-tip-meta">'
+               + 'Plan ' + escapeHtml(item.plan)
+               + ' · Done ' + escapeHtml(item.done)
+               + ' · ' + escapeHtml(item.percentage) + '%'
+               + (item.unit ? ' · ' + escapeHtml(item.unit) : '')
+               + '</div>'
+               + '</li>';
+         }).join('');
+
+         return '<div class="crm-site-matrix-tip-head">'
+            + '<p class="crm-site-matrix-tip-title">' + escapeHtml(payload.site) + ' · ' + escapeHtml(payload.company) + '</p>'
+            + '<p class="crm-site-matrix-tip-subtitle">'
+            + escapeHtml(stats.count) + ' item · Plan ' + escapeHtml(stats.plan)
+            + ' · Done ' + escapeHtml(stats.done)
+            + '</p>'
+            + '</div>'
+            + '<ul class="crm-site-matrix-tip-list">'
+            + (listHtml || '<li class="crm-site-matrix-tip-empty">Tidak ada item</li>')
+            + '</ul>';
+      }
+
+      function positionSiteMatrixFloatTip(anchor) {
+         var tip = ensureSiteMatrixFloatTip();
+         var rect = anchor.getBoundingClientRect();
+         var tipWidth = Math.min(360, window.innerWidth - 24);
+         tip.style.width = tipWidth + 'px';
+         tip.style.visibility = 'hidden';
+         tip.classList.add('crm-site-matrix-float-tip--open');
+
+         var tipRect = tip.getBoundingClientRect();
+         var left = rect.left + (rect.width / 2) - (tipRect.width / 2);
+         left = Math.max(12, Math.min(left, window.innerWidth - tipRect.width - 12));
+
+         var top = rect.bottom + 8;
+         if (top + tipRect.height > window.innerHeight - 12) {
+            top = rect.top - tipRect.height - 8;
+         }
+         top = Math.max(12, top);
+
+         tip.style.left = left + 'px';
+         tip.style.top = top + 'px';
+         tip.style.visibility = 'visible';
+      }
+
+      function showSiteMatrixFloatTip(anchor) {
+         var key = anchor.getAttribute('data-matrix-key');
+         var payload = siteMatrixTipStore[key];
+         if (!payload || !payload.items || payload.items.length === 0) {
+            hideSiteMatrixFloatTip();
+            return;
+         }
+
+         var tip = ensureSiteMatrixFloatTip();
+         tip.innerHTML = renderSiteMatrixTipHtml(payload);
+         positionSiteMatrixFloatTip(anchor);
+      }
+
+      function bindSiteMatrixHover(container) {
+         if (!container) return;
+         var tip = ensureSiteMatrixFloatTip();
+
+         if (!siteMatrixTipBound) {
+            tip.addEventListener('mouseenter', function () {
+               tip.classList.add('crm-site-matrix-float-tip--open');
+            });
+            tip.addEventListener('mouseleave', function () {
+               hideSiteMatrixFloatTip();
+            });
+            siteMatrixTipBound = true;
+         }
+
+         container.querySelectorAll('[data-matrix-key]').forEach(function (el) {
+            el.addEventListener('mouseenter', function () {
+               showSiteMatrixFloatTip(this);
+            });
+            el.addEventListener('mouseleave', function (event) {
+               var related = event.relatedTarget;
+               if (siteMatrixFloatTip && related && siteMatrixFloatTip.contains(related)) {
+                  return;
+               }
+               hideSiteMatrixFloatTip();
+            });
+            el.addEventListener('focus', function () {
+               showSiteMatrixFloatTip(this);
+            });
+            el.addEventListener('blur', function () {
+               hideSiteMatrixFloatTip();
+            });
+         });
+      }
+
+      function matrixCellAttrs(column, extraClass) {
+         var classes = ['crm-site-matrix-cell', 'crm-site-matrix-hoverable'];
+         if (extraClass) classes.push(extraClass);
+         return ' class="' + classes.join(' ') + '"'
+            + ' data-matrix-key="' + escapeHtml(column.key) + '"'
+            + ' tabindex="0"'
+            + ' aria-label="Detail ' + escapeHtml(column.site) + ' ' + escapeHtml(column.code) + '"';
+      }
+
+      function matrixMetricClass(metricKey, value) {
+         var num = Number(value || 0);
+         if (num <= 0) return 'crm-site-matrix-cell--muted';
+         if (metricKey === 'overdue') return 'crm-site-matrix-cell--danger';
+         if (metricKey === 'selesai') return 'crm-site-matrix-cell--success';
+         if (metricKey === 'onprogress') return 'crm-site-matrix-cell--info';
+         return 'crm-site-matrix-cell--strong';
+      }
+
+      function renderSiteCompanyProgressMatrix(items, options) {
+         var opts = options || {};
+         var title = opts.title || 'Ringkasan Plan / Done per Site';
+         var subtitle = opts.subtitle
+            || 'Kolom Site → Perusahaan · hover sel untuk melihat daftar item';
+         var matrix = buildReplikasiSiteCompanyMatrix(items);
+         var groups = matrix.groups || [];
+         var columns = matrix.columns || [];
+         var columnCount = columns.length;
+
+         siteMatrixTipStore = {};
+         columns.forEach(function (column) {
+            siteMatrixTipStore[column.key] = {
+               site: column.site,
+               company: column.code,
+               stats: column.stats,
+               items: (column.stats && column.stats.items) ? column.stats.items : [],
+            };
+         });
+
+         if (columnCount === 0) {
+            return '<div class="crm-site-matrix-card">'
+               + '<div class="crm-site-matrix-head">'
+               + '<div><p class="crm-site-matrix-title">' + escapeHtml(title) + '</p>'
+               + '<p class="crm-site-matrix-subtitle">' + escapeHtml(subtitle) + '</p></div>'
+               + '</div>'
+               + '<p class="crm-history-empty">Tidak ada data untuk matrix ini.</p>'
+               + '</div>';
+         }
+
+         var metricRows = [
+            { key: 'plan', label: 'Plan', type: 'number' },
+            { key: 'done', label: 'Done', type: 'number' },
+            { key: 'onprogress', label: 'On Progress', type: 'number' },
+            { key: 'overdue', label: 'Overdue', type: 'number' },
+            { key: 'selesai', label: 'Selesai', type: 'number' },
+            { key: 'status', label: 'Status Dominan', type: 'status' },
+         ];
+
+         var siteHeader = groups.map(function (group) {
+            return '<th colspan="' + Math.max(1, group.companies.length) + '" class="crm-site-matrix-site">'
+               + escapeHtml(group.site)
+               + '</th>';
+         }).join('');
+
+         var companyHeader = groups.map(function (group) {
+            return group.companies.map(function (company) {
+               return '<th class="crm-site-matrix-company crm-site-matrix-hoverable"'
+                  + ' data-matrix-key="' + escapeHtml(company.key) + '"'
+                  + ' tabindex="0"'
+                  + ' title="Hover untuk detail item"'
+                  + ' aria-label="Detail ' + escapeHtml(group.site) + ' ' + escapeHtml(company.code) + '">'
+                  + escapeHtml(company.code)
+                  + '</th>';
+            }).join('');
+         }).join('');
+
+         var bodyRows = metricRows.map(function (metric) {
+            var cells = columns.map(function (column) {
+               var stats = column.stats || emptySiteCompanyBucket();
+
+               if (metric.type === 'status') {
+                  var status = resolveCellStatus(stats);
+                  return '<td' + matrixCellAttrs(column, 'crm-site-matrix-cell--status') + '>'
+                     + (status ? statusPill(status) : '<span class="crm-site-matrix-empty">—</span>')
+                     + '</td>';
+               }
+
+               var value = Number(stats[metric.key] || 0);
+               return '<td' + matrixCellAttrs(column, matrixMetricClass(metric.key, value)) + '>'
+                  + escapeHtml(value)
+                  + '</td>';
+            }).join('');
+
+            return '<tr>'
+               + '<th scope="row" class="crm-site-matrix-metric">' + escapeHtml(metric.label) + '</th>'
+               + cells
+               + '</tr>';
+         }).join('');
+
+         return '<div class="crm-site-matrix-card">'
+            + '<div class="crm-site-matrix-head">'
+            + '<div>'
+            + '<p class="crm-site-matrix-title">' + escapeHtml(title) + '</p>'
+            + '<p class="crm-site-matrix-subtitle">' + escapeHtml(subtitle) + ' · hover sel untuk detail item</p>'
+            + '</div>'
+            + '<span class="crm-site-matrix-badge">' + columnCount + ' kolom</span>'
+            + '</div>'
+            + '<div class="crm-site-matrix-wrap">'
+            + '<table class="crm-site-matrix-table">'
+            + '<thead>'
+            + '<tr>'
+            + '<th rowspan="2" class="crm-site-matrix-corner">Metrik</th>'
+            + siteHeader
+            + '</tr>'
+            + '<tr>' + companyHeader + '</tr>'
+            + '</thead>'
+            + '<tbody>' + bodyRows + '</tbody>'
+            + '</table>'
+            + '</div>'
+            + '</div>';
+      }
+
+      function renderReplikasiSiteCompanyMatrix(items) {
+         return renderSiteCompanyProgressMatrix(items, {
+            title: 'Ringkasan Plan / Done per Site',
+            subtitle: 'Kolom Site → Perusahaan · Plan, Done, On Progress, Overdue, Selesai',
+         });
       }
 
       function renderSelectOptions(values, selected, allLabel) {
@@ -1069,7 +1498,7 @@
          var hasStatusBreakdown = isStatusBreakdownMode(payload);
          var isSafety = isSafetyEngineeringPayload(payload);
          var metaMode = payload?.stat?.meta_mode
-            || (isSafety ? 'standardisasi_status' : 'replikasi_status');
+            || (isSafety ? 'standardisasi_status' : (isAdditionalSafetyPayload(payload) ? 'additional_status' : 'replikasi_status'));
          var activeFilters = Object.assign({ site: '', company: '', status: '' }, filters || {});
          var items = hasStatusBreakdown ? filterCategoryItems(sourceItems, activeFilters) : sourceItems;
          var stat = hasStatusBreakdown
@@ -1225,10 +1654,30 @@
                + '<th class="text-center">' + (hasStatusBreakdown ? 'Status' : 'Overdue') + '</th>';
 
          var colSpan = isSafety ? 6 : 8;
+         var isReplikasi = isReplikasiPayload(payload);
+         var isAdditional = isAdditionalSafetyPayload(payload);
+         var matrixHtml = '';
+         if (hasStatusBreakdown && isReplikasi) {
+            matrixHtml = renderSiteCompanyProgressMatrix(items, {
+               title: 'Ringkasan Plan / Done per Site',
+               subtitle: 'Kolom Site → Perusahaan · Plan, Done, On Progress, Overdue, Selesai',
+            });
+         } else if (hasStatusBreakdown && isSafety) {
+            matrixHtml = renderSiteCompanyProgressMatrix(items, {
+               title: 'Ringkasan Progress per Site',
+               subtitle: 'Kolom Site → Perusahaan · Plan/Done standardisasi · On Progress, Overdue, Selesai',
+            });
+         } else if (hasStatusBreakdown && isAdditional) {
+            matrixHtml = renderSiteCompanyProgressMatrix(items, {
+               title: 'Ringkasan Plan / Done per Site',
+               subtitle: 'Kolom Site → Perusahaan · Plan, Done, On Progress, Overdue, Selesai',
+            });
+         }
 
          return {
             html: filterHtml
                + summaryHtml
+               + matrixHtml
                + chartsHtml
                + '<p class="crm-category-section-title">' + (hasStatusBreakdown ? statusModalSectionTitle(payload) : 'Data Pengendalian') + '</p>'
                + '<div class="crm-data-table-wrap crm-modal-table-wrap">'
@@ -1247,7 +1696,11 @@
       function mountReplikasiCategoryCharts(viewPayload) {
          destroyCategoryCharts();
          var stat = viewPayload.stat || {};
-         if (stat.meta_mode !== 'replikasi_status' && stat.meta_mode !== 'standardisasi_status') return;
+         if (
+            stat.meta_mode !== 'replikasi_status'
+            && stat.meta_mode !== 'standardisasi_status'
+            && stat.meta_mode !== 'additional_status'
+         ) return;
 
          var items = viewPayload.items || [];
          var pieEl = document.getElementById('mse-replikasi-pie-chart');
@@ -1438,64 +1891,11 @@
          updateReplikasiSubtitle(view.stat);
          categoryBody.innerHTML = view.html;
          bindModalRowClicks(categoryBody);
+         bindSiteMatrixHover(categoryBody);
          bindReplikasiModalFilters();
          requestAnimationFrame(function () {
             mountReplikasiCategoryCharts(view);
          });
-      }
-
-      function shortRiskTitle(title) {
-         var map = {
-            'Full Automasi (Deteksi & Intervensi Alat)': 'Full Automasi',
-            'Deteksi & Intervensi Manusia': 'Intervensi Manusia',
-            'Menahan & Mengurangi': 'Menahan & Mengurangi',
-            'Hybrid (Alat & Manusia)': 'Hybrid',
-            'Eliminasi': 'Eliminasi'
-         };
-         return map[title] || title;
-      }
-
-      function renderRiskMatrixModal(payload) {
-         var items = payload.items || [];
-         var derivedCount = items.filter(function (item) { return !!item.is_derived; }).length;
-
-         var rowsHtml = items.map(function (item, index) {
-            var clickable = item.id != null && (recordDetailById[String(item.id)] || recordDetailById[item.id]);
-            var derivedBadge = item.is_derived
-               ? '<span class="crm-modal-badge crm-modal-badge--warn">estimasi</span>'
-               : '';
-
-            return '<tr class="' + (clickable ? 'crm-row--clickable' : '') + '"'
-               + (clickable ? ' data-record-id="' + escapeHtml(item.id) + '" role="button" tabindex="0" aria-expanded="false"' : '')
-               + '>'
-               + '<td class="crm-modal-col-no">' + (index + 1) + '</td>'
-               + '<td>'
-               + '<div class="crm-modal-name">'
-               + '<div class="crm-modal-name-top">'
-               + (clickable ? '<span class="crm-row-expand-icon material-symbols-outlined" aria-hidden="true">expand_more</span>' : '')
-               + '<span class="crm-modal-name-title">' + escapeHtml(item.name) + '</span>' + derivedBadge + '</div>'
-               + '</div>'
-               + '<div class="crm-modal-meta">' + escapeHtml(item.site) + ' · ' + escapeHtml(item.perusahaan) + '</div>'
-               + '</td>'
-               + '<td class="crm-modal-col-side"><span class="crm-modal-chip crm-modal-chip--muted">' + escapeHtml(item.intervensi_deviasi) + '</span></td>'
-               + '</tr>';
-         }).join('');
-
-         return '<div class="crm-modal-toolbar">'
-            + '<span class="crm-modal-stat-pill"><strong>' + escapeHtml(payload.count || items.length) + '</strong> item</span>'
-            + '<span class="crm-modal-stat-pill">' + escapeHtml(payload.subtitle || '') + '</span>'
-            + (derivedCount > 0
-               ? '<span class="crm-modal-stat-pill crm-modal-stat-pill--soft">' + derivedCount + ' estimasi hierarki</span>'
-               : '')
-            + '</div>'
-            + '<div class="crm-data-table-wrap crm-modal-table-wrap">'
-            + '<table class="crm-data-table"><thead><tr>'
-            + '<th class="crm-modal-col-no">No</th>'
-            + '<th>Pengendalian Rekayasa</th>'
-            + '<th class="crm-modal-col-side">Intervensi</th>'
-            + '</tr></thead><tbody>'
-            + (rowsHtml || '<tr><td colspan="3" class="crm-modal-empty">Tidak ada data pada sel ini.</td></tr>')
-            + '</tbody></table></div>';
       }
 
       function bindModalRowClicks(container) {
@@ -1510,26 +1910,6 @@
                }
             });
          });
-      }
-
-      function openRiskMatrixModal(cellId) {
-         var payload = riskMatrixCellData[cellId];
-         if (!payload || !categoryModal) return;
-
-         destroyCategoryCharts();
-         setCategoryPanelSize(false);
-         activeStatusPayload = null;
-         activeReplikasiPayload = null;
-         categoryModalFilters = { site: '', company: '', status: '' };
-
-         var shortTitle = shortRiskTitle(payload.title || 'Matriks Penurunan Risiko');
-         categoryTitle.textContent = shortTitle;
-         categoryTitle.setAttribute('title', payload.title || shortTitle);
-         categorySubtitle.textContent = (payload.subtitle || '') + ' · ' + (payload.count || 0) + ' pengendalian';
-         categoryBody.innerHTML = renderRiskMatrixModal(payload);
-         categoryModal.classList.add('crm-history-modal--open');
-         syncBodyScroll();
-         bindModalRowClicks(categoryBody);
       }
 
       function openCategoryModal(categoryKey) {
@@ -1555,6 +1935,7 @@
             categoryModal.classList.add('crm-history-modal--open');
             syncBodyScroll();
             bindModalRowClicks(categoryBody);
+            bindSiteMatrixHover(categoryBody);
             bindReplikasiModalFilters();
             requestAnimationFrame(function () {
                mountReplikasiCategoryCharts(view);
@@ -1570,6 +1951,7 @@
          categoryModal.classList.add('crm-history-modal--open');
          syncBodyScroll();
          bindModalRowClicks(categoryBody);
+         bindSiteMatrixHover(categoryBody);
       }
 
       function closeCategoryModal() {
@@ -1579,11 +1961,13 @@
          activeReplikasiPayload = null;
          categoryModalFilters = { site: '', company: '', status: '' };
          closeAllRowCollapses(categoryBody);
+         hideSiteMatrixFloatTip();
+         siteMatrixTipStore = {};
          categoryModal?.classList.remove('crm-history-modal--open');
          syncBodyScroll();
       }
 
-      document.querySelectorAll('.crm-stat-card--clickable[data-category-key]').forEach(function (card) {
+      document.querySelectorAll('.crm-kpi-card--clickable[data-category-key]').forEach(function (card) {
          card.addEventListener('click', function () {
             openCategoryModal(this.getAttribute('data-category-key'));
          });
@@ -1591,18 +1975,6 @@
             if (event.key === 'Enter' || event.key === ' ') {
                event.preventDefault();
                openCategoryModal(this.getAttribute('data-category-key'));
-            }
-         });
-      });
-
-      document.querySelectorAll('[data-risk-cell]').forEach(function (cell) {
-         cell.addEventListener('click', function () {
-            openRiskMatrixModal(this.getAttribute('data-risk-cell'));
-         });
-         cell.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter' || event.key === ' ') {
-               event.preventDefault();
-               openRiskMatrixModal(this.getAttribute('data-risk-cell'));
             }
          });
       });

@@ -580,9 +580,9 @@ class MonitoringSafetyEngineeringDashboardService
     private function buildCharts(array $replikasi, array $safety, array $additional): array
     {
         $categories = [
-            'replikasi' => ['label' => 'Replikasi', 'color' => '#2563eb', 'items' => $replikasi],
-            'safety_engineering' => ['label' => 'Safety Engineering', 'color' => '#15803d', 'items' => $safety],
-            'additional_safety_engineering' => ['label' => 'Additional Safety Engineering', 'color' => '#65a30d', 'items' => $additional],
+            'replikasi' => ['label' => 'Replikasi 2026', 'color' => '#7366FF', 'items' => $replikasi],
+            'safety_engineering' => ['label' => 'Safety Engineering', 'color' => '#15803D', 'items' => $safety],
+            'additional_safety_engineering' => ['label' => 'Additional Safety', 'color' => '#65A30D', 'items' => $additional],
         ];
 
         return [
@@ -602,7 +602,115 @@ class MonitoringSafetyEngineeringDashboardService
             ],
             'status_breakdown' => $this->buildStatusBreakdown(array_merge($replikasi, $safety, $additional)),
             'due_timeline' => $this->buildDueTimeline($categories),
+            'category_trends' => $this->buildCategoryTrends($categories),
         ];
+    }
+
+    /**
+     * Trend Plan/Done bulanan per kategori (6 bulan terakhir berdasarkan due date).
+     *
+     * @param  array<string, array{label: string, color: string, items: list<array<string, mixed>>}>  $categories
+     * @return list<array<string, mixed>>
+     */
+    private function buildCategoryTrends(array $categories): array
+    {
+        $monthKeys = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $monthKeys[] = now()->startOfMonth()->subMonths($i)->format('Y-m');
+        }
+
+        $trends = [];
+
+        foreach ($categories as $key => $category) {
+            $items = $category['items'];
+            $count = count($items);
+            $onprogress = 0;
+            $overdue = 0;
+            $selesai = 0;
+            $planTotal = 0;
+            $doneTotal = 0;
+
+            $monthlyPlan = array_fill_keys($monthKeys, 0);
+            $monthlyDone = array_fill_keys($monthKeys, 0);
+            $monthlySelesai = array_fill_keys($monthKeys, 0);
+            $monthlyCount = array_fill_keys($monthKeys, 0);
+
+            foreach ($items as $item) {
+                $planTotal += (int) ($item['plan'] ?? 0);
+                $doneTotal += (int) ($item['done'] ?? 0);
+
+                $status = (string) ($item['progress_status'] ?? $item['replikasi_status'] ?? '');
+                match ($status) {
+                    'onprogress' => $onprogress++,
+                    'overdue' => $overdue++,
+                    'selesai' => $selesai++,
+                    default => null,
+                };
+
+                $dueDate = (string) ($item['due_date'] ?? '');
+                $monthKey = null;
+                if ($dueDate !== '') {
+                    $timestamp = strtotime($dueDate);
+                    if ($timestamp !== false) {
+                        $monthKey = date('Y-m', $timestamp);
+                    }
+                }
+
+                if ($monthKey === null || ! array_key_exists($monthKey, $monthlyPlan)) {
+                    continue;
+                }
+
+                $monthlyPlan[$monthKey] += (int) ($item['plan'] ?? 0);
+                $monthlyDone[$monthKey] += (int) ($item['done'] ?? 0);
+                $monthlyCount[$monthKey] += 1;
+                if ($status === 'selesai') {
+                    $monthlySelesai[$monthKey] += 1;
+                }
+            }
+
+            $planSeries = array_values($monthlyPlan);
+            $doneSeries = array_values($monthlyDone);
+            $completionSeries = [];
+            foreach ($monthKeys as $monthKey) {
+                $monthCount = max(1, $monthlyCount[$monthKey]);
+                $completionSeries[] = (int) round(($monthlySelesai[$monthKey] / $monthCount) * 100);
+            }
+
+            $firstHalfDone = array_sum(array_slice($doneSeries, 0, 3));
+            $firstHalfPlan = array_sum(array_slice($planSeries, 0, 3));
+            $secondHalfDone = array_sum(array_slice($doneSeries, 3, 3));
+            $secondHalfPlan = array_sum(array_slice($planSeries, 3, 3));
+
+            $firstRate = $firstHalfPlan > 0 ? ($firstHalfDone / $firstHalfPlan) * 100 : 0.0;
+            $secondRate = $secondHalfPlan > 0 ? ($secondHalfDone / $secondHalfPlan) * 100 : 0.0;
+            $trendDelta = (int) round($secondRate - $firstRate);
+
+            $progress = $count > 0 ? (int) round(($selesai / $count) * 100) : 0;
+
+            $trends[] = [
+                'key' => $key,
+                'label' => $category['label'],
+                'color' => $category['color'],
+                'count' => $count,
+                'plan' => $planTotal,
+                'done' => $doneTotal,
+                'onprogress' => $onprogress,
+                'overdue' => $overdue,
+                'selesai' => $selesai,
+                'progress' => $progress,
+                'trend_delta' => $trendDelta,
+                'trend_up' => $trendDelta >= 0,
+                'labels' => array_map(
+                    static fn (string $month): string => date('M', strtotime($month . '-01') ?: time()),
+                    $monthKeys,
+                ),
+                'plan_series' => $planSeries,
+                'done_series' => $doneSeries,
+                'completion_series' => $completionSeries,
+            ];
+        }
+
+        return $trends;
     }
 
     /**
@@ -772,7 +880,7 @@ class MonitoringSafetyEngineeringDashboardService
             'total_komitmen' => $totalPengendalian,
             'replikasi' => $this->buildStatusCategoryStat($replikasi, 'replikasi_status'),
             'safety_engineering' => $this->buildStatusCategoryStat($safety, 'standardisasi_status'),
-            'additional_safety_engineering' => $this->buildCategoryStat($additional),
+            'additional_safety_engineering' => $this->buildStatusCategoryStat($additional, 'additional_status'),
         ];
     }
 
