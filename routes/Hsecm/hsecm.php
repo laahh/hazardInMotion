@@ -31,7 +31,7 @@ Route::prefix('hsecm')
             ->whereNumber('id')
             ->name('tasklist.manage');
         Route::get('/datasets/{dataset}', [HsecmDatasetController::class, 'show'])
-            ->where('dataset', 'sap-rfid|coverage-cctv|tbc-blindspot|task-overdue|task-submitted|ikk-work-permit|aggregator|fatigue|sumber-rfid|hazard-rootcause')
+            ->where('dataset', 'sap-rfid|coverage-cctv|tbc-blindspot|task-overdue|task-submitted|ikk-work-permit|implementasi-ikk|aggregator|fatigue|sumber-rfid|hazard-rootcause')
             ->name('datasets.show');
 
         Route::get('/tasklist/open', [HsecmTasklistPublicController::class, 'open'])

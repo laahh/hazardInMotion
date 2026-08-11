@@ -239,6 +239,68 @@ class HsecmDatabaseRepository
     }
 
     /**
+     * Baris untuk rentang tanggal kalender berdasarkan batch_slot (Y-m-d inclusive).
+     * Dipakai filter Tanggal Dari–Sampai di halaman dataset.
+     * Salah satu ujung boleh kosong (open-ended).
+     *
+     * @param  list<string>|null  $columns
+     * @param  array<string, string>  $whereEquals
+     * @return list<array<string, mixed>>
+     */
+    public function rowsForBatchSlotDateRange(
+        string $table,
+        string $dateFrom,
+        string $dateTo,
+        ?array $columns = null,
+        array $whereEquals = [],
+    ): array {
+        if (! $this->hasBatchSlotSupport($table)) {
+            return $this->rows($table);
+        }
+
+        $from = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom) === 1 ? $dateFrom : '';
+        $to = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo) === 1 ? $dateTo : '';
+        if ($from === '' && $to === '') {
+            return $this->rows($table);
+        }
+        if ($from !== '' && $to !== '' && $from > $to) {
+            [$from, $to] = [$to, $from];
+        }
+
+        $select = $this->normalizeSelectColumns($table, $columns, trust: false);
+        $colKey = $select === null ? 'allcols' : 'cols.'.md5(implode(',', $select));
+        $whereKey = $whereEquals === [] ? '' : '.w.'.md5((string) json_encode($whereEquals, JSON_THROW_ON_ERROR));
+        $rangeKey = ($from !== '' ? $from : 'open').'_'.($to !== '' ? $to : 'open');
+
+        return Cache::remember(
+            self::cacheKey($table, 'slot_range.'.$rangeKey.'.'.$colKey.$whereKey),
+            self::CACHE_TTL_SECONDS,
+            function () use ($table, $from, $to, $select, $whereEquals): array {
+                $query = DB::table($table);
+                if ($from !== '') {
+                    $query->where('batch_slot', '>=', $from.' 00:00:00');
+                }
+                if ($to !== '') {
+                    $query->where('batch_slot', '<=', $to.' 23:59:59');
+                }
+                if ($select !== null) {
+                    $query->select($select);
+                }
+                foreach ($whereEquals as $column => $value) {
+                    $col = trim((string) $column);
+                    $val = trim((string) $value);
+                    if ($col === '' || $val === '' || ! $this->tableHasColumn($table, $col)) {
+                        continue;
+                    }
+                    $query->where($col, $val);
+                }
+
+                return $this->mapRows($query->orderBy('id')->get());
+            }
+        );
+    }
+
+    /**
      * Item still-open: intersection business_key vs slot sebelumnya.
      * Fallback tanpa previous: gap_count >= 2, atau seluruh snapshot jika gap_count tidak ada.
      *

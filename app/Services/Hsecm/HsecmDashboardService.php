@@ -264,8 +264,10 @@ class HsecmDashboardService
             'company_column' => null,
             'week_column' => 'Week',
             'year_column' => 'filter_year',
+            // Tidak ada kolom tanggal bisnis; filter tanggal memakai batch_slot scrape.
             'date_column' => null,
             'columns' => [
+                'batch_slot' => 'Tanggal Scrape',
                 'Site' => 'Site',
                 'Lokasi' => 'Lokasi',
                 'Detail_Lokasi' => 'Detail Lokasi',
@@ -321,7 +323,9 @@ class HsecmDashboardService
      *     q: string,
      *     batch_slot: string,
      *     data_mode: string,
-     *     previous_batch_slot: string
+     *     previous_batch_slot: string,
+     *     sort_by: string,
+     *     sort_dir: string
      * }
      */
     public function resolveFilters(Request $request): array
@@ -344,6 +348,11 @@ class HsecmDashboardService
             $dataMode = 'snapshot';
         }
 
+        $sortDir = strtolower(trim((string) $request->query('sort_dir', $request->input('sort_dir', 'asc'))));
+        if (! in_array($sortDir, ['asc', 'desc'], true)) {
+            $sortDir = 'asc';
+        }
+
         return [
             'site' => trim((string) $request->query('site', $request->input('site', ''))),
             'perusahaan' => trim((string) $request->query('perusahaan', $request->input('perusahaan', ''))),
@@ -355,6 +364,8 @@ class HsecmDashboardService
             'batch_slot' => trim((string) $request->query('batch_slot', $request->input('batch_slot', ''))),
             'data_mode' => $dataMode,
             'previous_batch_slot' => trim((string) $request->query('previous_batch_slot', $request->input('previous_batch_slot', ''))),
+            'sort_by' => trim((string) $request->query('sort_by', $request->input('sort_by', ''))),
+            'sort_dir' => $sortDir,
         ];
     }
 
@@ -2240,9 +2251,25 @@ class HsecmDashboardService
         $page = max(1, (int) request()->query('page', 1));
         $perPage = 25;
 
-        $filtered = $this->filteredRows($datasetKey, $filters)
-            ->sortByDesc('_row_id')
-            ->values();
+        $sortBy = trim((string) ($filters['sort_by'] ?? ''));
+        $sortDir = strtolower(trim((string) ($filters['sort_dir'] ?? 'asc')));
+        $sortDesc = $sortDir === 'desc';
+
+        // Hanya izinkan sort berdasarkan kolom yang memang ada di dataset ini.
+        $allowedSortColumns = array_keys($meta['columns']);
+        if ($sortBy !== '' && in_array($sortBy, $allowedSortColumns, true)) {
+            $filtered = $this->filteredRows($datasetKey, $filters)
+                ->sortBy(
+                    static fn (array $row) => Str::lower(trim((string) ($row[$sortBy] ?? ''))),
+                    SORT_NATURAL | SORT_FLAG_CASE,
+                    $sortDesc
+                )
+                ->values();
+        } else {
+            $filtered = $this->filteredRows($datasetKey, $filters)
+                ->sortByDesc('_row_id')
+                ->values();
+        }
 
         $total = $filtered->count();
         $slice = $filtered->forPage($page, $perPage)->map(function (array $row) use ($columns, $showPerulangan): object {
@@ -2252,7 +2279,19 @@ class HsecmDashboardService
                 $item['_perulangan'] = $days > 0 ? $days.'×' : '—';
             }
             foreach ($columns as $column) {
-                $item[$column] = $row[$column] ?? null;
+                $raw = $row[$column] ?? null;
+                if ($column === 'batch_slot') {
+                    $ymd = $this->parseFlexibleDate($raw);
+                    $item[$column] = $ymd !== null
+                        ? Carbon::parse($ymd)->format('d/m/Y').(
+                            is_string($raw) && preg_match('/\d{2}:\d{2}/', $raw, $hm) === 1
+                                ? ' '.$hm[0]
+                                : ''
+                        )
+                        : $raw;
+                } else {
+                    $item[$column] = $raw;
+                }
             }
 
             return (object) $item;
@@ -2625,60 +2664,70 @@ class HsecmDashboardService
         $batchSlot = trim((string) ($filters['batch_slot'] ?? ''));
         $previousSlot = trim((string) ($filters['previous_batch_slot'] ?? ''));
         $hasDateFilter = ($filters['date_from'] ?? '') !== '' || ($filters['date_to'] ?? '') !== '';
+        $table = (string) $meta['table'];
+        $dateColumn = is_string($meta['date_column'] ?? null) ? (string) $meta['date_column'] : null;
 
-        // Filter tanggal hanya relevan bila dataset punya date_column.
-        // Tanpa date_column (mis. hazard-rootcause), tetap snapshot batch terkini.
-        if (
-            $hasDateFilter
-            && $dataMode === 'snapshot'
-            && $batchSlot === ''
-            && ($meta['date_column'] ?? null) !== null
-        ) {
-            $dataMode = 'all';
+        // Filter tanggal: keluar dari snapshot single-slot.
+        // - Ada date_column bisnis → load all, filter di PHP (tanggal bisnis bisa beda dari scrape).
+        // - Tanpa date_column → load by batch_slot range (efisien).
+        if ($hasDateFilter && $dataMode === 'snapshot' && $batchSlot === '') {
+            $dataMode = ($dateColumn !== null && $dateColumn !== '')
+                ? 'all'
+                : ($this->repository->hasBatchSlotSupport($table) ? 'date_range' : 'all');
         }
 
-        if ($dataMode === 'all' || ! $this->repository->hasBatchSlotSupport($meta['table'])) {
-            $rows = collect($this->repository->rows($meta['table']));
+        /** @var array<string, string> $whereEquals */
+        $whereEquals = [];
+        $siteFilter = trim((string) ($filters['site'] ?? ''));
+        $companyFilter = trim((string) ($filters['perusahaan'] ?? ''));
+        if ($siteFilter !== '' && is_string($meta['site_column'] ?? null) && $meta['site_column'] !== '') {
+            $whereEquals[(string) $meta['site_column']] = $siteFilter;
+        }
+        if (
+            $companyFilter !== ''
+            && is_string($meta['company_column'] ?? null)
+            && $meta['company_column'] !== ''
+        ) {
+            $whereEquals[(string) $meta['company_column']] = $companyFilter;
+        }
+
+        $selectColumns = null;
+        if (isset($filters['select_columns']) && is_array($filters['select_columns'])) {
+            /** @var list<string> $selectColumns */
+            $selectColumns = array_values(array_filter(
+                $filters['select_columns'],
+                static fn ($c): bool => is_string($c) && $c !== ''
+            ));
+        }
+
+        if ($dataMode === 'date_range' && $this->repository->hasBatchSlotSupport($table)) {
+            $from = (string) ($filters['date_from'] ?? '');
+            $to = (string) ($filters['date_to'] ?? '');
+            $rows = collect($this->repository->rowsForBatchSlotDateRange(
+                $table,
+                $from,
+                $to,
+                $selectColumns,
+                $whereEquals,
+            ));
+        } elseif ($dataMode === 'all' || ! $this->repository->hasBatchSlotSupport($table)) {
+            $rows = collect($this->repository->rows($table));
         } elseif ($dataMode === 'still_open') {
             $rows = collect($this->repository->rowsStillOpen(
-                $meta['table'],
+                $table,
                 $batchSlot !== '' ? $batchSlot : null,
                 $previousSlot !== '' ? $previousSlot : null,
             ));
         } else {
-            $selectColumns = null;
-            if (isset($filters['select_columns']) && is_array($filters['select_columns'])) {
-                /** @var list<string> $selectColumns */
-                $selectColumns = array_values(array_filter(
-                    $filters['select_columns'],
-                    static fn ($c): bool => is_string($c) && $c !== ''
-                ));
-            }
-
-            /** @var array<string, string> $whereEquals */
-            $whereEquals = [];
-            $siteFilter = trim((string) ($filters['site'] ?? ''));
-            $companyFilter = trim((string) ($filters['perusahaan'] ?? ''));
-            if ($siteFilter !== '' && is_string($meta['site_column'] ?? null) && $meta['site_column'] !== '') {
-                $whereEquals[(string) $meta['site_column']] = $siteFilter;
-            }
-            if (
-                $companyFilter !== ''
-                && is_string($meta['company_column'] ?? null)
-                && $meta['company_column'] !== ''
-            ) {
-                $whereEquals[(string) $meta['company_column']] = $companyFilter;
-            }
-
             $rows = collect($this->repository->rowsForBatchSlot(
-                $meta['table'],
+                $table,
                 $batchSlot !== '' ? $batchSlot : null,
                 $selectColumns,
                 $whereEquals,
             ));
         }
 
-        $filtered = $rows->filter(function (array $row) use ($meta, $filters): bool {
+        $filtered = $rows->filter(function (array $row) use ($meta, $filters, $dateColumn, $hasDateFilter): bool {
             if ($filters['site'] !== '') {
                 if (! $this->valueEquals($row[$meta['site_column']] ?? null, $filters['site'])) {
                     return false;
@@ -2703,9 +2752,8 @@ class HsecmDashboardService
                 }
             }
 
-            $dateColumn = $meta['date_column'] ?? null;
-            if ($dateColumn !== null && (($filters['date_from'] ?? '') !== '' || ($filters['date_to'] ?? '') !== '')) {
-                $rowDate = $this->parseFlexibleDate($row[$dateColumn] ?? null);
+            if ($hasDateFilter) {
+                $rowDate = $this->resolveRowDateYmd($row, $dateColumn);
                 if ($rowDate === null) {
                     return false;
                 }
@@ -2735,12 +2783,36 @@ class HsecmDashboardService
             return true;
         })->values();
 
-        // Mode all + filter tanggal bisa menumpuk batch_slot yang sama → dedupe identity.
-        if ($hasDateFilter && $dataMode === 'all') {
+        // Mode range/all + filter tanggal bisa menumpuk batch_slot yang sama → dedupe identity.
+        if ($hasDateFilter && in_array($dataMode, ['all', 'date_range'], true)) {
             return $this->dedupeRowsByBusinessKey($filtered);
         }
 
         return $filtered;
+    }
+
+    /**
+     * Tanggal efektif baris (Y-m-d): kolom bisnis → batch_slot → scraped_at.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function resolveRowDateYmd(array $row, ?string $dateColumn): ?string
+    {
+        if ($dateColumn !== null && $dateColumn !== '') {
+            $ymd = $this->parseFlexibleDate($row[$dateColumn] ?? null);
+            if ($ymd !== null) {
+                return $ymd;
+            }
+        }
+
+        foreach (['batch_slot', 'scraped_at'] as $fallbackKey) {
+            $ymd = $this->parseFlexibleDate($row[$fallbackKey] ?? null);
+            if ($ymd !== null) {
+                return $ymd;
+            }
+        }
+
+        return null;
     }
 
     /** Scrape HSECM: 4 batch_slot per hari (00:00 / 06:00 / 12:00 / 18:00). */

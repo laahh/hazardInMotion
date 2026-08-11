@@ -364,7 +364,7 @@
                            type="submit"
                            form="hsecm-delete-{{ $row['index'] }}"
                            class="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-50"
-                           onclick="return confirm('Hapus penerima custom {{ $row['nama'] }}?')"
+                           onclick="return confirm('Hapus penerima {{ $row['nama'] }} dari daftar?')"
                         >
                            <span class="material-symbols-outlined text-sm">delete</span>
                            Hapus

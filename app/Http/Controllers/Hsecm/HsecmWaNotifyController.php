@@ -93,8 +93,8 @@ class HsecmWaNotifyController extends Controller
             ->with(
                 $deleted ? 'success' : 'error',
                 $deleted
-                    ? 'Penerima custom berhasil dihapus.'
-                    : 'Penerima tidak ditemukan atau tidak bisa dihapus (kontak bawaan config).'
+                    ? 'Penerima berhasil dihapus dari daftar.'
+                    : 'Penerima tidak ditemukan.'
             );
     }
 

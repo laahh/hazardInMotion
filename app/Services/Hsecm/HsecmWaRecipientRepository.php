@@ -10,12 +10,15 @@ use Illuminate\Support\Str;
 /**
  * Penerima WA/Email HSECM: config bawaan + custom (storage JSON, tanpa migrate).
  * Override config disimpan di JSON terpisah agar email/nama bisa diedit tanpa ubah config.
+ * Hapus kontak bawaan = soft-hide (JSON), tanpa ubah config/hsecm.php.
  */
 class HsecmWaRecipientRepository
 {
     private const STORAGE_RELATIVE = 'hsecm/wa_recipients.json';
 
     private const OVERRIDES_RELATIVE = 'hsecm/wa_recipient_overrides.json';
+
+    private const HIDDEN_RELATIVE = 'hsecm/wa_recipient_hidden.json';
 
     public function path(): string
     {
@@ -27,14 +30,21 @@ class HsecmWaRecipientRepository
         return storage_path('app/'.self::OVERRIDES_RELATIVE);
     }
 
+    public function hiddenPath(): string
+    {
+        return storage_path('app/'.self::HIDDEN_RELATIVE);
+    }
+
     /**
      * Semua penerima (config + custom), urutan stabil untuk index kirim.
+     * Kontak config yang di-hide tidak ikut.
      *
      * @return list<array<string, mixed>>
      */
     public function all(): array
     {
         $overrides = $this->overridesRaw();
+        $hidden = $this->hiddenIds();
 
         $fromConfig = collect(config('hsecm.wa_recipients', []))
             ->values()
@@ -46,9 +56,11 @@ class HsecmWaRecipientRepository
                     'id' => $id,
                     'source' => 'config',
                     'editable' => true,
-                    'deletable' => false,
+                    'deletable' => true,
                 ]);
             })
+            ->reject(static fn (array $row): bool => in_array((string) $row['id'], $hidden, true))
+            ->values()
             ->all();
 
         $fromCustom = collect($this->customRaw())
@@ -221,14 +233,17 @@ class HsecmWaRecipientRepository
             'id' => $id,
             'source' => 'config',
             'editable' => true,
-            'deletable' => false,
+            'deletable' => true,
         ]);
     }
 
+    /**
+     * Hapus custom (hard) atau hide kontak bawaan config (soft, tanpa ubah config).
+     */
     public function delete(string $id): bool
     {
         if (str_starts_with($id, 'config-')) {
-            return false;
+            return $this->hideConfigRecipient($id);
         }
 
         $rows = $this->customRaw();
@@ -244,6 +259,77 @@ class HsecmWaRecipientRepository
         $this->writeCustom($filtered);
 
         return true;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function hiddenIds(): array
+    {
+        $path = $this->hiddenPath();
+        if (! is_file($path)) {
+            return [];
+        }
+
+        $decoded = json_decode((string) file_get_contents($path), true);
+        if (! is_array($decoded)) {
+            return [];
+        }
+
+        return collect($decoded)
+            ->filter(static fn ($id): bool => is_string($id) && $id !== '')
+            ->map(static fn (string $id): string => $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function hideConfigRecipient(string $id): bool
+    {
+        $index = (int) Str::after($id, 'config-');
+        $configRows = array_values(config('hsecm.wa_recipients', []));
+        if (! isset($configRows[$index]) || ! is_array($configRows[$index])) {
+            return false;
+        }
+
+        $hidden = $this->hiddenIds();
+        if (in_array($id, $hidden, true)) {
+            return true;
+        }
+
+        $hidden[] = $id;
+        $this->writeHidden($hidden);
+
+        // bersihkan override yang tidak relevan lagi
+        $overrides = $this->overridesRaw();
+        if (isset($overrides[$id])) {
+            unset($overrides[$id]);
+            $this->writeOverrides($overrides);
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  list<string>  $ids
+     */
+    private function writeHidden(array $ids): void
+    {
+        $path = $this->hiddenPath();
+        $dir = dirname($path);
+        if (! is_dir($dir)) {
+            File::makeDirectory($dir, 0755, true);
+        }
+
+        $payload = array_values(array_unique(array_filter(
+            $ids,
+            static fn ($id): bool => is_string($id) && $id !== ''
+        )));
+
+        File::put(
+            $path,
+            json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)."\n"
+        );
     }
 
     public function findById(string $id): ?array
@@ -326,7 +412,7 @@ class HsecmWaRecipientRepository
             'id' => (string) ($meta['id'] ?? $row['id'] ?? Str::uuid()),
             'source' => $source,
             'editable' => (bool) ($meta['editable'] ?? $row['editable'] ?? true),
-            'deletable' => (bool) ($meta['deletable'] ?? $row['deletable'] ?? ($source === 'custom')),
+            'deletable' => (bool) ($meta['deletable'] ?? $row['deletable'] ?? true),
             'site' => $site,
             'perusahaan' => trim((string) ($row['perusahaan'] ?? '')),
             'role' => trim((string) ($row['role'] ?? '')),
