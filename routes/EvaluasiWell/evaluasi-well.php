@@ -8,6 +8,7 @@ use App\Http\Controllers\SportEvaluation\SportEvaluationDashboardController;
 use App\Http\Controllers\SportEvaluation\SportEvaluationEmployeeProfileController;
 use App\Http\Controllers\SportEvaluation\SportEvaluationMitraAssignmentController;
 use App\Http\Controllers\SportEvaluation\SportEvaluationMitraDashboardController;
+use App\Http\Controllers\SportEvaluation\SportEvaluationPvtDashboardController;
 use App\Http\Controllers\SportEvaluation\SportEvaluationWeeklyUploadController;
 use Illuminate\Support\Facades\Route;
 
@@ -79,6 +80,13 @@ Route::middleware('evaluasi-well.access')
             ->name('health-nutrition.data');
         Route::get('/health-nutrition/export', [HealthNutritionRiskController::class, 'export'])
             ->name('health-nutrition.export');
+
+        Route::get('/pvt', [SportEvaluationPvtDashboardController::class, 'index'])
+            ->name('pvt.index');
+        Route::get('/pvt/data', [SportEvaluationPvtDashboardController::class, 'data'])
+            ->name('pvt.data');
+        Route::get('/pvt/export', [SportEvaluationPvtDashboardController::class, 'export'])
+            ->name('pvt.export');
 
         Route::get('/weekly-uploads', [SportEvaluationWeeklyUploadController::class, 'index'])
             ->name('weekly-uploads.index');

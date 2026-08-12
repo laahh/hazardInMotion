@@ -61,6 +61,12 @@
         </a>
       </li>
       <li>
+        <a href="{{ route('evaluasi-well.pvt.index') }}" class="{{ request()->routeIs('evaluasi-well.pvt.*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:eye-scan-outline" class="menu-icon"></iconify-icon>
+          <span>Evaluasi PVT</span>
+        </a>
+      </li>
+      <li>
         <a href="{{ route('evaluasi-well.weekly-uploads.index') }}" class="{{ request()->routeIs('evaluasi-well.weekly-uploads.*') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:calendar-mark-outline" class="menu-icon"></iconify-icon>
           <span>Upload Mingguan</span>
