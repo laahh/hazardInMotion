@@ -113,18 +113,14 @@ final class SportEvaluationPvtDashboardService
 
             $orderable = [
                 0 => 'nama',
-                1 => 'site',
-                2 => 'company',
-                3 => 'jabatan',
-                4 => 'gate',
-                5 => 'checked_in_at',
-                6 => 'status_lolos',
-                7 => 'pvt_status',
-                8 => 'mean_rt_ms',
-                9 => 'lapses',
-                10 => 'tested_at',
+                1 => 'kode_sid',
+                2 => 'site',
+                3 => 'company',
+                4 => 'pvt_status',
+                5 => 'pvt_status',
+                6 => 'checked_in_at',
             ];
-            $orderKey = $orderable[$orderColumnIndex] ?? 'checked_in_at';
+            $orderKey = $orderable[$orderColumnIndex] ?? 'nama';
             usort($rows, static function (array $a, array $b) use ($orderKey, $orderDir): int {
                 $left = $a[$orderKey] ?? '';
                 $right = $b[$orderKey] ?? '';
@@ -670,10 +666,16 @@ final class SportEvaluationPvtDashboardService
     private function presentRow(array $row): array
     {
         $status = (string) ($row['pvt_status'] ?? 'belum');
+        $evalLabel = trim((string) ($row['evaluation_label'] ?? ''));
         $statusLabel = match ($status) {
             'lulus' => 'Lulus',
             'tidak_lulus' => 'Tidak lulus',
             default => 'Belum tes',
+        };
+        $resultLabel = match ($status) {
+            'lulus' => $evalLabel !== '' ? $evalLabel : 'Memenuhi skrining PVT',
+            'tidak_lulus' => $evalLabel !== '' ? $evalLabel : 'Di bawah ambang skrining PVT',
+            default => 'Belum dilaksanakan',
         };
 
         return [
@@ -689,12 +691,14 @@ final class SportEvaluationPvtDashboardService
             'status_lolos' => (string) ($row['status_lolos'] ?: '-'),
             'pvt_status' => $status,
             'pvt_status_label' => $statusLabel,
+            'pvt_done_label' => $status === 'belum' ? 'Belum' : 'Sudah',
+            'pvt_result_label' => $resultLabel,
             'mean_rt_ms' => $row['mean_rt_ms'] === null ? '' : (string) $row['mean_rt_ms'],
             'median_rt_ms' => $row['median_rt_ms'] === null ? '' : (string) $row['median_rt_ms'],
             'lapses' => $row['lapses'] === null ? '' : (string) $row['lapses'],
             'false_starts' => $row['false_starts'] === null ? '' : (string) $row['false_starts'],
             'tested_at' => $this->formatDateTime((string) ($row['tested_at'] ?? '')),
-            'evaluation_label' => (string) ($row['evaluation_label'] ?: '-'),
+            'evaluation_label' => $evalLabel !== '' ? $evalLabel : '-',
         ];
     }
 

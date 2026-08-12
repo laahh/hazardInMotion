@@ -33,14 +33,20 @@
     justify-content: center;
     border-radius: 6px !important;
   }
+  .pvt-operators-datatable,
   #pvtOperatorsTable {
     width: 100% !important;
-    table-layout: fixed !important;
   }
   #pvtOperatorsTable th,
   #pvtOperatorsTable td {
     vertical-align: middle;
-    word-break: break-word;
+    white-space: nowrap;
+  }
+  #pvtOperatorsTable td.pvt-col-nama,
+  #pvtOperatorsTable td.pvt-col-company,
+  #pvtOperatorsTable td.pvt-col-result {
+    white-space: normal;
+    min-width: 140px;
   }
 </style>
 @endsection
@@ -124,8 +130,9 @@
         ordering: true,
         pageLength: 10,
         lengthMenu: [10, 25, 50, 100],
-        order: [[5, 'asc']],
+        order: [[0, 'asc']],
         autoWidth: false,
+        scrollX: true,
         layout: {
             topStart: 'pageLength',
             topEnd: 'search',
@@ -145,48 +152,40 @@
         columns: [
             {
                 data: 'nama',
+                className: 'pvt-col-nama',
                 render: function (data, type, row) {
                     if (type !== 'display') return data;
                     var href = employeeShowBase + '/' + encodeURIComponent(row.id);
-                    return '<div class="fw-medium"><a href="' + href + '" class="text-primary-light hover-text-primary">'
-                        + escapeHtml(data || '-') + '</a></div>'
-                        + '<div class="text-xs text-secondary-light">' + escapeHtml(row.kode_sid || '-') + '</div>';
+                    return '<a href="' + href + '" class="text-primary-light hover-text-primary fw-semibold">'
+                        + escapeHtml(data || '-') + '</a>';
                 }
             },
+            { data: 'kode_sid' },
             { data: 'site' },
-            { data: 'company' },
-            { data: 'jabatan' },
-            { data: 'gate' },
-            { data: 'checked_in_at' },
-            { data: 'status_lolos' },
+            { data: 'company', className: 'pvt-col-company' },
             {
-                data: 'pvt_status_label',
-                render: function (data, type, row) {
-                    if (type !== 'display') return data;
-                    return badgeHtml(row.pvt_status, data || 'Belum tes');
-                }
-            },
-            {
-                data: 'mean_rt_ms',
+                data: 'pvt_done_label',
                 className: 'text-center',
                 render: function (data, type, row) {
                     if (type !== 'display') return data;
-                    var mean = data || '-';
-                    var median = row.median_rt_ms || '-';
-                    return escapeHtml(String(mean)) + '<div class="text-xs text-secondary-light">med ' + escapeHtml(String(median)) + '</div>';
+                    var sudah = row.pvt_status !== 'belum';
+                    return badgeHtml(sudah ? 'lulus' : 'belum', sudah ? 'Sudah' : 'Belum');
                 }
             },
             {
-                data: 'lapses',
-                className: 'text-center',
+                data: 'pvt_result_label',
+                className: 'pvt-col-result',
                 render: function (data, type, row) {
                     if (type !== 'display') return data;
-                    var lapses = data === '' || data === null ? '-' : data;
-                    var fs = row.false_starts === '' || row.false_starts === null ? '-' : row.false_starts;
-                    return escapeHtml(String(lapses)) + '<div class="text-xs text-secondary-light">FS ' + escapeHtml(String(fs)) + '</div>';
+                    var label = data || 'Belum dilaksanakan';
+                    var extra = '';
+                    if (row.pvt_status !== 'belum' && row.tested_at && row.tested_at !== '-') {
+                        extra = '<div class="text-xs text-secondary-light mt-4">' + escapeHtml(row.tested_at) + '</div>';
+                    }
+                    return badgeHtml(row.pvt_status, label) + extra;
                 }
             },
-            { data: 'tested_at' }
+            { data: 'checked_in_at' }
         ],
         language: {
             processing: 'Memuat...',
@@ -482,21 +481,17 @@
       </div>
     </div>
 
-    <div class="pvt-operators-datatable w-100">
+    <div class="table-responsive pvt-operators-datatable w-100">
       <table id="pvtOperatorsTable" class="table bordered-table mb-0 w-100" style="width:100%">
         <thead>
           <tr>
-            <th scope="col" style="width:16%">Karyawan</th>
-            <th scope="col" style="width:8%">Site</th>
-            <th scope="col" style="width:14%">Perusahaan</th>
-            <th scope="col" style="width:12%">Jabatan</th>
-            <th scope="col" style="width:8%">Gate</th>
-            <th scope="col" style="width:10%">Check-in</th>
-            <th scope="col" style="width:8%">Lolos</th>
-            <th scope="col" style="width:8%">PVT</th>
-            <th scope="col" style="width:8%">RT ms</th>
-            <th scope="col" style="width:7%">Lapse</th>
-            <th scope="col" style="width:9%">Jam tes</th>
+            <th scope="col">Nama</th>
+            <th scope="col">SID</th>
+            <th scope="col">Site</th>
+            <th scope="col">Perusahaan</th>
+            <th scope="col">PVT</th>
+            <th scope="col">Hasil</th>
+            <th scope="col">Jam check-in</th>
           </tr>
         </thead>
         <tbody></tbody>
