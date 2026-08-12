@@ -90,6 +90,9 @@ return [
             'prefix_indexes' => true,
             'search_path' => env('PG_SCHEMA_SEARCH_PATH', 'bcbeats,public,bcsid,datamart'),
             'sslmode' => 'prefer',
+            'options' => [
+                PDO::ATTR_TIMEOUT => (int) env('PG_CONNECT_TIMEOUT', 3),
+            ],
             // SSH Configuration (setup-ssh-tunnel.bat / start-bemcu-tunnel.bat)
             'ssh_host' => env('SSH_HOST', '13.212.87.127'),
             'ssh_port' => env('SSH_PORT', 22),
@@ -105,14 +108,17 @@ return [
             'driver' => 'pgsql',
             'host' => env('PG_HOST', 'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com'),
             'port' => env('PG_PORT', '5432'),
-            'database' => env('PG_DATABASE', 'hse_automation'),
-            'username' => env('PG_USER', 'safety_evaluator_2'),
-            'password' => env('PG_PASSWORD', 'safety123'),
+            'database' => env('PG_SSH_DATABASE', env('PG_DATABASE', 'hse_automation')),
+            'username' => env('PG_SSH_USER', env('PG_USER', 'safety_evaluator_2')),
+            'password' => env('PG_SSH_PASSWORD', env('PG_PASSWORD', 'safety123')),
             'charset' => 'utf8',
             'prefix' => '',
             'prefix_indexes' => true,
-            'search_path' => 'public, datamart',
+            'search_path' => env('PG_SCHEMA_SEARCH_PATH', 'bcbeats,public,bcsid,datamart'),
             'sslmode' => 'prefer',
+            'options' => [
+                PDO::ATTR_TIMEOUT => (int) env('PG_CONNECT_TIMEOUT', 3),
+            ],
         ],
 
         'clickhouse' => [

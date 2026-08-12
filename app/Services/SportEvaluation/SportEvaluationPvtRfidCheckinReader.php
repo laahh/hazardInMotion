@@ -5,17 +5,30 @@ declare(strict_types=1);
 namespace App\Services\SportEvaluation;
 
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * Pembaca read-only check-IN lolos dari bcsid.mv_checkinout_rfid (pgsql_ssh).
+ * Pembaca read-only check-IN lolos dari bcsid.mv_checkinout_rfid.
+ * Koneksi: tunnel pgsql_ssh (PG_SSH_HOST:PG_SSH_LOCAL_PORT), fallback PG_HOST:PG_PORT
+ * dengan kredensial PG_SSH_DATABASE / PG_SSH_USER / PG_SSH_PASSWORD.
  */
 final class SportEvaluationPvtRfidCheckinReader
 {
     public const TABLE = 'bcsid.mv_checkinout_rfid';
 
+    public const CONNECTION_TUNNEL = 'pgsql_ssh';
+
+    public const CONNECTION_DIRECT = 'pgsql_direct';
+
     private const SID_CHUNK = 800;
+
+    private const UP_CACHE_KEY = 'evaluasi_well:pvt_rfid_connection_v1';
+
+    private const UP_CACHE_TTL = 20;
+
+    private ?string $activeConnection = null;
 
     /**
      * @var list<string>
@@ -44,13 +57,52 @@ final class SportEvaluationPvtRfidCheckinReader
         'Y',
     ];
 
-    public function __construct(
-        private readonly McuConnectionService $mcuConnection,
-    ) {}
-
     public function isUp(): bool
     {
-        return $this->mcuConnection->isUp();
+        return $this->connectionName() !== null;
+    }
+
+    /**
+     * Nama koneksi hidup: tunnel dulu, lalu direct RDS.
+     */
+    public function connectionName(): ?string
+    {
+        if ($this->activeConnection !== null) {
+            return $this->activeConnection !== '' ? $this->activeConnection : null;
+        }
+
+        try {
+            $cached = Cache::remember(self::UP_CACHE_KEY, self::UP_CACHE_TTL, function (): string {
+                if ($this->ping(self::CONNECTION_TUNNEL)) {
+                    return self::CONNECTION_TUNNEL;
+                }
+                if ($this->ping(self::CONNECTION_DIRECT)) {
+                    return self::CONNECTION_DIRECT;
+                }
+
+                return '';
+            });
+        } catch (Throwable $e) {
+            report($e);
+            $cached = $this->ping(self::CONNECTION_TUNNEL)
+                ? self::CONNECTION_TUNNEL
+                : ($this->ping(self::CONNECTION_DIRECT) ? self::CONNECTION_DIRECT : '');
+        }
+
+        $this->activeConnection = is_string($cached) ? $cached : '';
+
+        return $this->activeConnection !== '' ? $this->activeConnection : null;
+    }
+
+    private function ping(string $connection): bool
+    {
+        try {
+            DB::connection($connection)->select('SELECT 1');
+
+            return true;
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**
@@ -148,7 +200,11 @@ final class SportEvaluationPvtRfidCheckinReader
         );
 
         try {
-            $rows = DB::connection(McuConnectionService::CONNECTION)->select($sql, $bindings);
+            $connection = $this->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+            $rows = DB::connection($connection)->select($sql, $bindings);
         } catch (Throwable $e) {
             report($e);
 
