@@ -220,9 +220,20 @@ final class SportEvaluationPvtRfidCheckinReader
 
             $checkedInAt = $row->tanggal_checkinout ?? null;
             if ($checkedInAt instanceof \DateTimeInterface) {
-                $checkedInAt = Carbon::instance($checkedInAt)->format('Y-m-d H:i:s');
+                $checkedInAt = Carbon::instance($checkedInAt)
+                    ->timezone((string) config('app.timezone'))
+                    ->format('Y-m-d H:i:s');
             } else {
                 $checkedInAt = trim((string) $checkedInAt);
+                if ($checkedInAt !== '') {
+                    try {
+                        $checkedInAt = Carbon::parse($checkedInAt, config('app.timezone'))
+                            ->timezone((string) config('app.timezone'))
+                            ->format('Y-m-d H:i:s');
+                    } catch (Throwable) {
+                        // biarkan string mentah; matcher akan parse ulang
+                    }
+                }
             }
             if ($checkedInAt === '') {
                 continue;

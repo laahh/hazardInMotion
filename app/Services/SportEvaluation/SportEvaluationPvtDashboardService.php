@@ -250,7 +250,7 @@ final class SportEvaluationPvtDashboardService
      */
     private function cohortRows(array $filters): array
     {
-        $cacheKey = 'evaluasi_well:pvt_cohort:v1:'.sha1((string) json_encode([
+        $cacheKey = 'evaluasi_well:pvt_cohort:v3:'.sha1((string) json_encode([
             $filters['date'],
             $filters['site'],
             $filters['company'],
@@ -310,15 +310,15 @@ final class SportEvaluationPvtDashboardService
             return [];
         }
 
-        $pvtByUser = $this->loadPvtByUser(
-            array_map(static fn (array $row): int => $row['id'], $onsite),
+        $pvtBySid = $this->loadPvtBySid(
+            array_map(static fn (array $row): string => $row['kode_sid'], $onsite),
             $filters['date'],
         );
 
         $cohort = [];
         foreach ($onsite as $row) {
-            $matched = $this->matchPvtAfterCheckin(
-                $pvtByUser[$row['id']] ?? [],
+            $matched = $this->matchPvtForCheckin(
+                $pvtBySid[mb_strtoupper($row['kode_sid'])] ?? [],
                 $row['checked_in_at'],
             );
             $status = $this->resolvePvtStatus($matched);
@@ -411,39 +411,57 @@ final class SportEvaluationPvtDashboardService
     }
 
     /**
-     * @param  list<int>  $userIds
-     * @return array<int, list<array<string, mixed>>>
+     * Hasil PVT hari itu, dikelompokkan per SID (bukan hanya employee_profiles.id)
+     * supaya tes yang tersimpan di profil duplikat SID yang sama tetap ketemu.
+     *
+     * Window query diperlebar ±12 jam untuk mengantisipasi tested_at naive UTC,
+     * lalu difilter ulang ke tanggal kalender Asia/Makassar.
+     *
+     * @param  list<string>  $sids
+     * @return array<string, list<array<string, mixed>>>
      */
-    private function loadPvtByUser(array $userIds, string $date): array
+    private function loadPvtBySid(array $sids, string $date): array
     {
-        $userIds = array_values(array_unique(array_filter($userIds, static fn (int $id): bool => $id > 0)));
-        if ($userIds === []) {
+        $upperSids = [];
+        foreach ($sids as $sid) {
+            $trimmed = trim((string) $sid);
+            if ($trimmed === '') {
+                continue;
+            }
+            $upperSids[mb_strtoupper($trimmed)] = true;
+        }
+        $upperSids = array_keys($upperSids);
+        if ($upperSids === []) {
             return [];
         }
 
-        $day = Carbon::parse($date, config('app.timezone'))->startOfDay();
-        $start = $day->format('Y-m-d H:i:s');
-        $end = $day->copy()->addDay()->format('Y-m-d H:i:s');
+        $tz = (string) config('app.timezone');
+        $day = Carbon::parse($date, $tz)->startOfDay();
+        $start = $day->copy()->subHours(12)->format('Y-m-d H:i:s');
+        $end = $day->copy()->addDay()->addHours(12)->format('Y-m-d H:i:s');
 
         $rows = collect();
         try {
-            foreach (array_chunk($userIds, 800) as $chunk) {
+            foreach (array_chunk($upperSids, 800) as $chunk) {
+                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
                 $chunkRows = DB::connection(BewellConnectionService::CONNECTION)
-                    ->table('cognitive_pvt_results')
+                    ->table('cognitive_pvt_results as p')
+                    ->join('employee_profiles as e', 'e.id', '=', 'p.user_id')
                     ->select([
-                        'user_id',
-                        'tested_at',
-                        'passed',
-                        'evaluation_label',
-                        'mean_rt_ms',
-                        'median_rt_ms',
-                        'lapses',
-                        'false_starts',
+                        'e.kode_sid',
+                        'p.user_id',
+                        'p.tested_at',
+                        'p.passed',
+                        'p.evaluation_label',
+                        'p.mean_rt_ms',
+                        'p.median_rt_ms',
+                        'p.lapses',
+                        'p.false_starts',
                     ])
-                    ->whereIn('user_id', $chunk)
-                    ->where('tested_at', '>=', $start)
-                    ->where('tested_at', '<', $end)
-                    ->orderBy('tested_at')
+                    ->where('p.tested_at', '>=', $start)
+                    ->where('p.tested_at', '<', $end)
+                    ->whereRaw('UPPER(TRIM(e.kode_sid)) IN ('.$placeholders.')', $chunk)
+                    ->orderBy('p.tested_at')
                     ->get();
                 $rows = $rows->concat($chunkRows);
             }
@@ -455,19 +473,18 @@ final class SportEvaluationPvtDashboardService
 
         $grouped = [];
         foreach ($rows as $row) {
-            $userId = (int) $row->user_id;
-            $testedAt = $row->tested_at ?? null;
-            if ($testedAt instanceof \DateTimeInterface) {
-                $testedAt = Carbon::instance($testedAt)->format('Y-m-d H:i:s');
-            } else {
-                $testedAt = trim((string) $testedAt);
-            }
-            if ($testedAt === '') {
+            $sid = mb_strtoupper(trim((string) ($row->kode_sid ?? '')));
+            if ($sid === '') {
                 continue;
             }
 
-            $grouped[$userId][] = [
-                'tested_at' => $testedAt,
+            $testedLocal = $this->testedAtOnDate($row->tested_at ?? null, $date);
+            if ($testedLocal === null) {
+                continue;
+            }
+
+            $grouped[$sid][] = [
+                'tested_at' => $testedLocal->format('Y-m-d H:i:s'),
                 'passed' => $row->passed === null ? null : (int) $row->passed,
                 'evaluation_label' => trim((string) ($row->evaluation_label ?? '')),
                 'mean_rt_ms' => $row->mean_rt_ms === null ? null : (int) $row->mean_rt_ms,
@@ -481,28 +498,95 @@ final class SportEvaluationPvtDashboardService
     }
 
     /**
+     * Ambil PVT terakhir di hari yang sama. Utamakan tes setelah check-in;
+     * jika belum ada (tes biasanya di klinik sebelum gate), pakai tes terakhir hari itu.
+     *
      * @param  list<array<string, mixed>>  $candidates
      * @return array<string, mixed>|null
      */
-    private function matchPvtAfterCheckin(array $candidates, string $checkedInAt): ?array
+    private function matchPvtForCheckin(array $candidates, string $checkedInAt): ?array
     {
         if ($candidates === []) {
             return null;
         }
 
-        $checkinTs = Carbon::parse($checkedInAt, config('app.timezone'))->timestamp;
-        $matched = null;
+        $checkin = $this->parseAppDateTime($checkedInAt);
+        $afterCheckin = [];
         foreach ($candidates as $candidate) {
-            $testedTs = Carbon::parse((string) $candidate['tested_at'], config('app.timezone'))->timestamp;
-            if ($testedTs < $checkinTs) {
+            $tested = $this->parseAppDateTime($candidate['tested_at'] ?? null);
+            if ($tested === null) {
                 continue;
             }
-            if ($matched === null || $testedTs >= Carbon::parse((string) $matched['tested_at'], config('app.timezone'))->timestamp) {
+            if ($checkin === null || $tested->timestamp >= $checkin->timestamp) {
+                $afterCheckin[] = $candidate;
+            }
+        }
+
+        $pool = $afterCheckin !== [] ? $afterCheckin : $candidates;
+
+        $matched = null;
+        $matchedTs = null;
+        foreach ($pool as $candidate) {
+            $tested = $this->parseAppDateTime($candidate['tested_at'] ?? null);
+            if ($tested === null) {
+                continue;
+            }
+            if ($matched === null || $tested->timestamp >= $matchedTs) {
                 $matched = $candidate;
+                $matchedTs = $tested->timestamp;
             }
         }
 
         return $matched;
+    }
+
+    private function parseAppDateTime(mixed $value): ?Carbon
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value)->timezone((string) config('app.timezone'));
+        }
+
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return null;
+        }
+
+        try {
+            $tz = (string) config('app.timezone');
+            $hasOffset = preg_match('/(Z|[+-]\d{2}:?\d{2})$/i', $raw) === 1;
+            $parsed = $hasOffset ? Carbon::parse($raw) : Carbon::parse($raw, $tz);
+
+            return $parsed->timezone($tz);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * tested_at MySQL DATETIME bersifat naive: bisa lokal Makassar atau UTC.
+     * Terima baris jika salah satu interpretasi jatuh di tanggal filter.
+     */
+    private function testedAtOnDate(mixed $value, string $date): ?Carbon
+    {
+        $asLocal = $this->parseAppDateTime($value);
+        if ($asLocal !== null && $asLocal->toDateString() === $date) {
+            return $asLocal;
+        }
+
+        $raw = $value instanceof \DateTimeInterface
+            ? $value->format('Y-m-d H:i:s')
+            : trim((string) $value);
+        if ($raw === '' || preg_match('/(Z|[+-]\d{2}:?\d{2})$/i', $raw) === 1) {
+            return null;
+        }
+
+        try {
+            $asUtc = Carbon::parse($raw, 'UTC')->timezone((string) config('app.timezone'));
+
+            return $asUtc->toDateString() === $date ? $asUtc : null;
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -514,7 +598,14 @@ final class SportEvaluationPvtDashboardService
             return 'belum';
         }
 
-        return ((int) ($pvt['passed'] ?? 0) === 1) ? 'lulus' : 'tidak_lulus';
+        $passed = $pvt['passed'] ?? null;
+        if ($passed === null) {
+            $label = mb_strtolower((string) ($pvt['evaluation_label'] ?? ''));
+
+            return str_contains($label, 'memenuhi') ? 'lulus' : 'tidak_lulus';
+        }
+
+        return ((int) $passed === 1) ? 'lulus' : 'tidak_lulus';
     }
 
     /**
