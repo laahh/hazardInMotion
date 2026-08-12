@@ -353,6 +353,100 @@
    }
    .crm-trend-legend-plan { background: #C9CDD4 !important; }
 
+   /* ---- Phase Funnel Cards ---- */
+   .crm-funnel-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      padding: 1.15rem 1.2rem 1.05rem;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(180deg, #F7FBF4 0%, #FFFFFF 42%);
+   }
+   .crm-funnel-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      border-radius: 1rem 0 0 1rem;
+      background: #C9CDD4;
+   }
+   .crm-funnel-card--replikasi::before { background: #7366FF; }
+   .crm-funnel-card--safety::before { background: #15803D; }
+   .crm-funnel-card--additional::before { background: #65A30D; }
+   .crm-funnel-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+   }
+   .crm-funnel-card-label {
+      margin: 0;
+      font-size: 0.875rem;
+      font-weight: 800;
+      color: #2F2F3A;
+      letter-spacing: -0.01em;
+   }
+   .crm-funnel-card-subtitle {
+      margin: 0.2rem 0 0;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      color: #8B8F98;
+   }
+   .crm-funnel-count {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.28rem 0.55rem;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      background: #EEF2F7;
+      color: #4B5563;
+      white-space: nowrap;
+   }
+   .crm-funnel-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+   }
+   .crm-funnel-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: #6B7280;
+   }
+   .crm-funnel-swatch {
+      width: 0.65rem;
+      height: 0.65rem;
+      border-radius: 0.15rem;
+      display: inline-block;
+   }
+   .crm-funnel-swatch--done { background: #166534; }
+   .crm-funnel-swatch--overdue { background: #DC2626; }
+   .crm-funnel-swatch--progress { background: #86EFAC; }
+   .crm-funnel-chart-wrap {
+      position: relative;
+      height: 240px;
+   }
+   .crm-funnel-card-foot {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+   }
+   .crm-funnel-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.22rem 0.5rem;
+      border-radius: 0.4rem;
+      font-size: 0.6875rem;
+      font-weight: 700;
+   }
+   .crm-funnel-chip--success { background: #E8F9E5; color: #15803D; }
+   .crm-funnel-chip--danger { background: #FEECEC; color: #DC2626; }
+   .crm-funnel-chip--progress { background: #ECFDF3; color: #15803D; }
+
    /* Legacy stat-card hooks (kept for other pages) */
    .crm-stat-card { padding: 1.35rem 1.25rem; }
    .crm-stat-card--clickable {

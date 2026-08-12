@@ -16,8 +16,9 @@ use Throwable;
 
 /**
  * Kirim email notifikasi ke SOD terkait setelah submit tasklist berhasil.
- * Sumber penerima: Master SOD (by site) di-resolve email-nya dari HSECM recipients,
- * plus penerima HSECM yang match site + perusahaan tasklist.
+ * Sumber penerima:
+ * 1) Penerima HSECM (wa-notify) yang role/jabatan mengandung "SOD" + match site tasklist
+ * 2) Master SOD (by site) di-resolve email-nya dari HSECM recipients (match nama / no HP)
  */
 final class HsecmNotifyTasklistSubmitToSodAction
 {
@@ -122,10 +123,9 @@ final class HsecmNotifyTasklistSubmitToSodAction
         $byEmail = [];
 
         $site = trim((string) ($tasklist->site ?? ''));
-        $perusahaan = trim((string) ($tasklist->perusahaan ?? ''));
 
-        // 1) Penerima HSECM (punya email) untuk site + perusahaan tasklist.
-        foreach ($this->matchRecipients($site, $perusahaan) as $recipient) {
+        // 1) Penerima HSECM (wa-notify) dengan jabatan/role SOD + match site tasklist.
+        foreach ($this->matchSodRecipientsBySite($site) as $recipient) {
             $email = $this->normalizeEmail($recipient['email'] ?? null);
             if ($email === null) {
                 continue;
@@ -161,15 +161,22 @@ final class HsecmNotifyTasklistSubmitToSodAction
     }
 
     /**
+     * Penerima wa-notify yang jabatan/role mengandung "SOD" dan site-nya match tasklist.
+     * SOD bersifat site-level (bukan per mitra), jadi perusahaan tidak ikut difilter.
+     *
      * @return list<array<string, mixed>>
      */
-    private function matchRecipients(string $site, string $perusahaan): array
+    private function matchSodRecipientsBySite(string $site): array
     {
         return collect($this->recipientRepository->all())
-            ->filter(function (array $r) use ($site, $perusahaan): bool {
-                if ($perusahaan !== '' && ! $this->softEqual((string) ($r['perusahaan'] ?? ''), $perusahaan)) {
+            ->filter(function (array $r) use ($site): bool {
+                if (! $this->isSodRole((string) ($r['role'] ?? ''))) {
                     return false;
                 }
+                if ($this->normalizeEmail($r['email'] ?? null) === null) {
+                    return false;
+                }
+
                 $rSite = trim((string) ($r['site'] ?? ''));
                 if ($site === '') {
                     return $rSite === '';
@@ -182,6 +189,11 @@ final class HsecmNotifyTasklistSubmitToSodAction
             })
             ->values()
             ->all();
+    }
+
+    private function isSodRole(string $role): bool
+    {
+        return str_contains(mb_strtoupper(trim($role)), 'SOD');
     }
 
     /**

@@ -49,7 +49,7 @@ class MonitoringSafetyEngineeringDashboardService
             'additional_safety_items' => $additionalSafetyItems,
             'brief_analysis' => $this->buildBriefAnalysis($records, $replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
             'next_todo' => $this->buildNextTodo($records),
-            'charts' => $this->buildCharts($replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
+            'charts' => $this->buildCharts($replikasiItems, $safetyEngineeringItems, $additionalSafetyItems, $records),
             'risk_reduction_matrix' => $this->buildRiskReductionMatrix($records),
         ];
     }
@@ -83,7 +83,7 @@ class MonitoringSafetyEngineeringDashboardService
                 ],
             ],
             'next_todo' => ['Upload atau input data rekayasa melalui menu Update Data.'],
-            'charts' => $this->buildCharts($emptyItems, $emptyItems, $emptyItems),
+            'charts' => $this->buildCharts($emptyItems, $emptyItems, $emptyItems, collect()),
             'risk_reduction_matrix' => $this->buildRiskReductionMatrix(collect()),
         ];
     }
@@ -575,9 +575,10 @@ class MonitoringSafetyEngineeringDashboardService
      * @param  list<array<string, mixed>>  $replikasi
      * @param  list<array<string, mixed>>  $safety
      * @param  list<array<string, mixed>>  $additional
+     * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $records
      * @return array<string, mixed>
      */
-    private function buildCharts(array $replikasi, array $safety, array $additional): array
+    private function buildCharts(array $replikasi, array $safety, array $additional, Collection $records): array
     {
         $categories = [
             'replikasi' => ['label' => 'Replikasi 2026', 'color' => '#7366FF', 'items' => $replikasi],
@@ -603,7 +604,313 @@ class MonitoringSafetyEngineeringDashboardService
             'status_breakdown' => $this->buildStatusBreakdown(array_merge($replikasi, $safety, $additional)),
             'due_timeline' => $this->buildDueTimeline($categories),
             'category_trends' => $this->buildCategoryTrends($categories),
+            'phase_funnels' => $this->buildPhaseFunnels($records),
         ];
+    }
+
+    /**
+     * Stacked bar funnel per kategori: Done / Overdue / On Progress per tahap proses.
+     *
+     * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $records
+     * @return list<array<string, mixed>>
+     */
+    private function buildPhaseFunnels(Collection $records): array
+    {
+        $grouped = [
+            'replikasi' => collect(),
+            'safety_engineering' => collect(),
+            'additional_safety_engineering' => collect(),
+        ];
+
+        foreach ($records as $record) {
+            $category = $this->resolveCategory($record);
+
+            if ($category === null || ! array_key_exists($category, $grouped)) {
+                continue;
+            }
+
+            $grouped[$category]->push($record);
+        }
+
+        $meta = [
+            'replikasi' => ['label' => 'Replikasi 2026', 'color' => '#7366FF'],
+            'safety_engineering' => ['label' => 'Safety Engineering', 'color' => '#15803D'],
+            'additional_safety_engineering' => ['label' => 'Additional Safety', 'color' => '#65A30D'],
+        ];
+
+        $funnels = [];
+
+        foreach ($grouped as $key => $categoryRecords) {
+            $funnels[] = array_merge(
+                [
+                    'key' => $key,
+                    'label' => $meta[$key]['label'],
+                    'color' => $meta[$key]['color'],
+                    'count' => $categoryRecords->count(),
+                ],
+                $this->buildPhaseFunnelChart($categoryRecords),
+            );
+        }
+
+        return $funnels;
+    }
+
+    /**
+     * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $records
+     * @return array{
+     *     labels: list<string>,
+     *     done: list<int>,
+     *     overdue: list<int>,
+     *     progress: list<int>,
+     *     callouts: list<?string>,
+     *     totals: list<int>
+     * }
+     */
+    private function buildPhaseFunnelChart(Collection $records): array
+    {
+        $all = $records->values();
+
+        $ide = $this->countIdeationStage($all);
+        $kajian = $this->countTracePhaseStage($all, 'kajian_teknis_status', 'kajian_teknis_due_date');
+        $ujiCoba = $this->countUjiCobaFunnelStage($all);
+
+        $ujiCobaDone = $all->filter(
+            fn (MonitoringSafetyEngineeringRecord $record): bool => $this->isTracePhaseDone($record, 'uji_coba_status')
+        )->values();
+        $standarisasi = $this->countStandarisasiFunnelStage($ujiCobaDone, $all);
+
+        $standarisasiDone = $all->filter(
+            fn (MonitoringSafetyEngineeringRecord $record): bool => $this->isTracePhaseDone($record, 'standardisasi_status')
+        )->values();
+        $replikasi = $this->countReplikasiFunnelStage($standarisasiDone);
+
+        $stages = [$ide, $kajian, $ujiCoba, $standarisasi, $replikasi];
+
+        return [
+            'labels' => ['Tahap Ide', 'Kajian Teknis', 'Uji Coba', 'Standarisasi', 'Replikasi'],
+            'done' => array_map(static fn (array $s): int => $s['done'], $stages),
+            'overdue' => array_map(static fn (array $s): int => $s['overdue'], $stages),
+            'progress' => array_map(static fn (array $s): int => $s['progress'], $stages),
+            'callouts' => array_map(static fn (array $s): ?string => $s['callout'], $stages),
+            'totals' => array_map(
+                static fn (array $s): int => $s['done'] + $s['overdue'] + $s['progress'],
+                $stages,
+            ),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $records
+     * @return array{done: int, overdue: int, progress: int, callout: ?string}
+     */
+    private function countIdeationStage(Collection $records): array
+    {
+        $done = 0;
+        $progress = 0;
+
+        foreach ($records as $record) {
+            if ($record->tanggal_ideation !== null) {
+                $done++;
+            } else {
+                $progress++;
+            }
+        }
+
+        return [
+            'done' => $done,
+            'overdue' => 0,
+            'progress' => $progress,
+            'callout' => null,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $records
+     * @return array{done: int, overdue: int, progress: int, callout: ?string}
+     */
+    private function countTracePhaseStage(Collection $records, string $statusField, string $dueField): array
+    {
+        $done = 0;
+        $overdue = 0;
+        $progress = 0;
+
+        foreach ($records as $record) {
+            match ($this->classifyTracePhase($record, $statusField, $dueField)) {
+                'done' => $done++,
+                'overdue' => $overdue++,
+                default => $progress++,
+            };
+        }
+
+        return [
+            'done' => $done,
+            'overdue' => $overdue,
+            'progress' => $progress,
+            'callout' => null,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $records
+     * @return array{done: int, overdue: int, progress: int, callout: ?string}
+     */
+    private function countUjiCobaFunnelStage(Collection $records): array
+    {
+        $done = 0;
+        $overdue = 0;
+        $progress = 0;
+        $pengadaanNotes = 0;
+
+        foreach ($records as $record) {
+            $ujiClass = $this->classifyTracePhase($record, 'uji_coba_status', 'uji_coba_due_date');
+
+            if ($ujiClass === 'done') {
+                $done++;
+
+                continue;
+            }
+
+            if ($ujiClass === 'overdue') {
+                $overdue++;
+
+                continue;
+            }
+
+            $progress++;
+
+            if (! $this->isTracePhaseDone($record, 'pengadaan_status')) {
+                $pengadaanNotes++;
+            }
+        }
+
+        $callout = null;
+        if ($progress > 0) {
+            $callout = $pengadaanNotes >= (int) ceil($progress / 2)
+                ? 'Proses pengadaan'
+                : 'Dalam proses uji coba';
+        }
+
+        return [
+            'done' => $done,
+            'overdue' => $overdue,
+            'progress' => $progress,
+            'callout' => $callout,
+        ];
+    }
+
+    /**
+     * Universe utama: item yang uji coba sudah done.
+     * Progress pada bar ini bisa mewakili item yang masih di uji coba
+     * jika dihitung dari seluruh record yang sudah lewat pengadaan.
+     *
+     * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $ujiCobaDone
+     * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $all
+     * @return array{done: int, overdue: int, progress: int, callout: ?string}
+     */
+    private function countStandarisasiFunnelStage(Collection $ujiCobaDone, Collection $all): array
+    {
+        $done = 0;
+        $overdue = 0;
+        $progressStd = 0;
+        $stillUjiCoba = 0;
+
+        // Item yang sudah selesai uji coba → klasifikasi standardisasi.
+        foreach ($ujiCobaDone as $record) {
+            match ($this->classifyTracePhase($record, 'standardisasi_status', 'standardisasi_due_date')) {
+                'done' => $done++,
+                'overdue' => $overdue++,
+                default => $progressStd++,
+            };
+        }
+
+        // Item pengadaan selesai tapi uji coba belum done → masih "Dalam proses ujicoba".
+        foreach ($all as $record) {
+            if ($this->isTracePhaseDone($record, 'uji_coba_status')) {
+                continue;
+            }
+
+            if (! $this->isTracePhaseDone($record, 'pengadaan_status')) {
+                continue;
+            }
+
+            $stillUjiCoba++;
+        }
+
+        $progress = $progressStd + $stillUjiCoba;
+        $callout = null;
+        if ($progress > 0) {
+            $callout = $stillUjiCoba >= $progressStd
+                ? 'Dalam proses ujicoba'
+                : 'Dalam proses standarisasi';
+        }
+
+        return [
+            'done' => $done,
+            'overdue' => $overdue,
+            'progress' => $progress,
+            'callout' => $callout,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, MonitoringSafetyEngineeringRecord>  $records
+     * @return array{done: int, overdue: int, progress: int, callout: ?string}
+     */
+    private function countReplikasiFunnelStage(Collection $records): array
+    {
+        $done = 0;
+        $overdue = 0;
+        $progress = 0;
+
+        foreach ($records as $record) {
+            $status = $this->resolveReplikasiProgressStatus($record);
+
+            // Tanpa target replikasi: anggap siap direplikasi (on progress).
+            if ((int) $record->replikasi_target_komitmen <= 0) {
+                $progress++;
+
+                continue;
+            }
+
+            match ($status) {
+                'selesai' => $done++,
+                'overdue' => $overdue++,
+                default => $progress++,
+            };
+        }
+
+        return [
+            'done' => $done,
+            'overdue' => $overdue,
+            'progress' => $progress,
+            'callout' => $progress > 0 ? 'SIAP direplikasi' : null,
+        ];
+    }
+
+    private function isTracePhaseDone(MonitoringSafetyEngineeringRecord $record, string $statusField): bool
+    {
+        return $this->normalizeEnumValue($record->{$statusField} ?? null) === 'done';
+    }
+
+    /**
+     * @return 'done'|'overdue'|'progress'
+     */
+    private function classifyTracePhase(
+        MonitoringSafetyEngineeringRecord $record,
+        string $statusField,
+        string $dueField,
+    ): string {
+        if ($this->isTracePhaseDone($record, $statusField)) {
+            return 'done';
+        }
+
+        $dueDate = $record->{$dueField} ?? null;
+
+        if ($dueDate !== null && now()->startOfDay()->gt($dueDate->copy()->startOfDay())) {
+            return 'overdue';
+        }
+
+        return 'progress';
     }
 
     /**

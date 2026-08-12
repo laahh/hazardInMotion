@@ -102,7 +102,7 @@ class HsecmTasklistPublicController extends Controller
 
         $successMessage = 'Submit berhasil untuk '.count($itemIds).' item. Menunggu ACC dari HSE.';
         if (($emailNotify['sent'] ?? 0) > 0) {
-            $successMessage .= ' Email notifikasi dikirim ke '.(int) $emailNotify['sent'].' SOD/PJO.';
+            $successMessage .= ' Email notifikasi dikirim ke '.(int) $emailNotify['sent'].' SOD.';
         } elseif (($emailNotify['failed'] ?? 0) > 0) {
             $successMessage .= ' Email notifikasi gagal dikirim; coba hubungi SOD via WhatsApp.';
         }

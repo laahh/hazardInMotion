@@ -354,6 +354,58 @@
 </div>
 @endif
 
+{{-- Phase Funnel Stacked Bars --}}
+@php
+   $phaseFunnels = $charts['phase_funnels'] ?? [];
+@endphp
+@if(count($phaseFunnels) > 0)
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+   @foreach($phaseFunnels as $funnel)
+   @php
+      $funnelTheme = match ((string) ($funnel['key'] ?? '')) {
+         'replikasi' => 'replikasi',
+         'safety_engineering' => 'safety',
+         'additional_safety_engineering' => 'additional',
+         default => 'default',
+      };
+      $funnelCanvasId = 'mse-phase-funnel-'.($funnel['key'] ?? $loop->index);
+      $lastDone = (int) (($funnel['done'] ?? [])[4] ?? 0);
+      $lastOverdue = (int) (($funnel['overdue'] ?? [])[4] ?? 0);
+      $lastProgress = (int) (($funnel['progress'] ?? [])[4] ?? 0);
+   @endphp
+   <div class="crm-card crm-funnel-card crm-funnel-card--{{ $funnelTheme }}">
+      <div class="crm-funnel-card-head">
+         <div>
+            <p class="crm-funnel-card-label">{{ $funnel['label'] }}</p>
+            <p class="crm-funnel-card-subtitle">Funnel tahap proses · Done / Overdue / On Progress</p>
+         </div>
+         <span class="crm-funnel-count">{{ (int) ($funnel['count'] ?? 0) }} item</span>
+      </div>
+
+      <div class="crm-funnel-legend">
+         <span class="crm-funnel-legend-item"><i class="crm-funnel-swatch crm-funnel-swatch--done"></i> Done</span>
+         <span class="crm-funnel-legend-item"><i class="crm-funnel-swatch crm-funnel-swatch--overdue"></i> Overdue</span>
+         <span class="crm-funnel-legend-item"><i class="crm-funnel-swatch crm-funnel-swatch--progress"></i> On Progress</span>
+      </div>
+
+      <div class="crm-funnel-chart-wrap">
+         <canvas
+            id="{{ $funnelCanvasId }}"
+            class="mse-phase-funnel-chart"
+            data-funnel-key="{{ $funnel['key'] }}"
+         ></canvas>
+      </div>
+
+      <div class="crm-funnel-card-foot">
+         <span class="crm-funnel-chip crm-funnel-chip--success">Replikasi Done {{ number_format($lastDone) }}</span>
+         <span class="crm-funnel-chip crm-funnel-chip--danger">OV {{ number_format($lastOverdue) }}</span>
+         <span class="crm-funnel-chip crm-funnel-chip--progress">SIAP {{ number_format($lastProgress) }}</span>
+      </div>
+   </div>
+   @endforeach
+</div>
+@endif
+
 {{-- Full Data Table --}}
 <div class="crm-card">
    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -537,6 +589,127 @@
                   },
                },
             },
+         });
+      });
+
+      var phaseFunnels = chartsData.phase_funnels || [];
+      var funnelDoneColor = '#166534';
+      var funnelOverdueColor = '#DC2626';
+      var funnelProgressColor = '#86EFAC';
+
+      var mseFunnelStackLabels = {
+         id: 'mseFunnelStackLabels',
+         afterDatasetsDraw: function (chart) {
+            var ctx = chart.ctx;
+            chart.data.datasets.forEach(function (dataset, datasetIndex) {
+               var meta = chart.getDatasetMeta(datasetIndex);
+               if (meta.hidden) return;
+               meta.data.forEach(function (bar, index) {
+                  var value = Number(dataset.data[index] || 0);
+                  if (!value || !bar || typeof bar.getProps !== 'function') return;
+                  var props = bar.getProps(['x', 'y', 'base'], true);
+                  var height = Math.abs(props.base - props.y);
+                  if (height < 14) return;
+                  ctx.save();
+                  ctx.fillStyle = datasetIndex === 2 ? '#14532D' : '#FFFFFF';
+                  ctx.font = "700 11px 'Poppins', sans-serif";
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'middle';
+                  ctx.fillText(String(value), props.x, (props.y + props.base) / 2);
+                  ctx.restore();
+               });
+            });
+         },
+      };
+
+      phaseFunnels.forEach(function (funnel) {
+         var canvas = document.querySelector('.mse-phase-funnel-chart[data-funnel-key="' + funnel.key + '"]');
+         if (!canvas) return;
+
+         new Chart(canvas, {
+            type: 'bar',
+            data: {
+               labels: funnel.labels || [],
+               datasets: [
+                  {
+                     label: 'Done',
+                     data: funnel.done || [],
+                     backgroundColor: funnelDoneColor,
+                     borderSkipped: false,
+                     borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 },
+                     barPercentage: 0.72,
+                     categoryPercentage: 0.78,
+                  },
+                  {
+                     label: 'Overdue',
+                     data: funnel.overdue || [],
+                     backgroundColor: funnelOverdueColor,
+                     borderSkipped: false,
+                     borderRadius: 0,
+                     barPercentage: 0.72,
+                     categoryPercentage: 0.78,
+                  },
+                  {
+                     label: 'On Progress',
+                     data: funnel.progress || [],
+                     backgroundColor: funnelProgressColor,
+                     borderSkipped: false,
+                     borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+                     barPercentage: 0.72,
+                     categoryPercentage: 0.78,
+                  },
+               ],
+            },
+            options: {
+               responsive: true,
+               maintainAspectRatio: false,
+               interaction: { mode: 'index', intersect: false },
+               layout: { padding: { top: 8, bottom: 2 } },
+               plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                     callbacks: {
+                        afterBody: function (items) {
+                           var idx = items[0] ? items[0].dataIndex : 0;
+                           var done = Number((funnel.done || [])[idx] || 0);
+                           var overdue = Number((funnel.overdue || [])[idx] || 0);
+                           var progress = Number((funnel.progress || [])[idx] || 0);
+                           var total = Number((funnel.totals || [])[idx] || (done + overdue + progress));
+                           var note = (funnel.callouts || [])[idx];
+                           var lines = [
+                              'Total: ' + total,
+                              'Done: ' + done,
+                              'Overdue: ' + overdue,
+                              'On Progress: ' + progress,
+                           ];
+                           if (note) lines.push('Detail: ' + note);
+                           return lines;
+                        },
+                     },
+                  },
+               },
+               scales: {
+                  x: {
+                     stacked: true,
+                     grid: { display: false },
+                     border: { display: true, color: '#111827', width: 1.5 },
+                     ticks: {
+                        font: { size: 9, weight: '700' },
+                        color: '#374151',
+                        maxRotation: 0,
+                        autoSkip: false,
+                     },
+                  },
+                  y: {
+                     stacked: true,
+                     beginAtZero: true,
+                     display: false,
+                     grid: { display: false },
+                     border: { display: false },
+                  },
+               },
+            },
+            plugins: [mseFunnelStackLabels],
          });
       });
 
