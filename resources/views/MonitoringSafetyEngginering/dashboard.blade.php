@@ -720,6 +720,14 @@
          return '';
       }
 
+      function statusLabelText(status) {
+         var key = String(status || '').toLowerCase();
+         if (key === 'onprogress') return 'On Progress';
+         if (key === 'overdue') return 'Overdue';
+         if (key === 'selesai') return 'Selesai';
+         return status ? String(status) : '-';
+      }
+
       function buildReplikasiSiteCompanyMatrix(items) {
          var siteMap = {};
 
@@ -813,10 +821,9 @@
                + statusPill(item.status)
                + '</div>'
                + '<div class="crm-site-matrix-tip-meta">'
-               + 'Plan ' + escapeHtml(item.plan)
-               + ' · Done ' + escapeHtml(item.done)
-               + ' · ' + escapeHtml(item.percentage) + '%'
+               + statusLabelText(item.status)
                + (item.unit ? ' · ' + escapeHtml(item.unit) : '')
+               + (item.percentage != null ? ' · ' + escapeHtml(item.percentage) + '%' : '')
                + '</div>'
                + '</li>';
          }).join('');
@@ -824,8 +831,10 @@
          return '<div class="crm-site-matrix-tip-head">'
             + '<p class="crm-site-matrix-tip-title">' + escapeHtml(payload.site) + ' · ' + escapeHtml(payload.company) + '</p>'
             + '<p class="crm-site-matrix-tip-subtitle">'
-            + escapeHtml(stats.count) + ' item · Plan ' + escapeHtml(stats.plan)
-            + ' · Done ' + escapeHtml(stats.done)
+            + escapeHtml(stats.count) + ' item'
+            + ' · Done/Selesai ' + escapeHtml(stats.selesai)
+            + ' · On Progress ' + escapeHtml(stats.onprogress)
+            + ' · Overdue ' + escapeHtml(stats.overdue)
             + '</p>'
             + '</div>'
             + '<ul class="crm-site-matrix-tip-list">'
@@ -916,16 +925,16 @@
          var num = Number(value || 0);
          if (num <= 0) return 'crm-site-matrix-cell--muted';
          if (metricKey === 'overdue') return 'crm-site-matrix-cell--danger';
-         if (metricKey === 'selesai') return 'crm-site-matrix-cell--success';
+         if (metricKey === 'selesai' || metricKey === 'done') return 'crm-site-matrix-cell--success';
          if (metricKey === 'onprogress') return 'crm-site-matrix-cell--info';
          return 'crm-site-matrix-cell--strong';
       }
 
       function renderSiteCompanyProgressMatrix(items, options) {
          var opts = options || {};
-         var title = opts.title || 'Ringkasan Plan / Done per Site';
+         var title = opts.title || 'Ringkasan Item per Site';
          var subtitle = opts.subtitle
-            || 'Kolom Site → Perusahaan · hover sel untuk melihat daftar item';
+            || 'Kolom Site → Perusahaan · jumlah item dan status';
          var matrix = buildReplikasiSiteCompanyMatrix(items);
          var groups = matrix.groups || [];
          var columns = matrix.columns || [];
@@ -952,8 +961,8 @@
          }
 
          var metricRows = [
-            { key: 'plan', label: 'Plan', type: 'number' },
-            { key: 'done', label: 'Done', type: 'number' },
+            { key: 'count', label: 'Item', type: 'number' },
+            { key: 'selesai', label: 'Done', type: 'number' },
             { key: 'onprogress', label: 'On Progress', type: 'number' },
             { key: 'overdue', label: 'Overdue', type: 'number' },
             { key: 'selesai', label: 'Selesai', type: 'number' },
@@ -1026,8 +1035,8 @@
 
       function renderReplikasiSiteCompanyMatrix(items) {
          return renderSiteCompanyProgressMatrix(items, {
-            title: 'Ringkasan Plan / Done per Site',
-            subtitle: 'Kolom Site → Perusahaan · Plan, Done, On Progress, Overdue, Selesai',
+            title: 'Ringkasan Item per Site',
+            subtitle: 'Kolom Site → Perusahaan · Item, Done, On Progress, Overdue, Selesai',
          });
       }
 
@@ -1415,18 +1424,18 @@
          var matrixHtml = '';
          if (hasStatusBreakdown && isReplikasi) {
             matrixHtml = renderSiteCompanyProgressMatrix(items, {
-               title: 'Ringkasan Plan / Done per Site',
-               subtitle: 'Kolom Site → Perusahaan · Plan, Done, On Progress, Overdue, Selesai',
+               title: 'Ringkasan Item per Site',
+               subtitle: 'Kolom Site → Perusahaan · jumlah item dan status Done / On Progress / Overdue / Selesai',
             });
          } else if (hasStatusBreakdown && isSafety) {
             matrixHtml = renderSiteCompanyProgressMatrix(items, {
-               title: 'Ringkasan Progress per Site',
-               subtitle: 'Kolom Site → Perusahaan · Plan/Done standardisasi · On Progress, Overdue, Selesai',
+               title: 'Ringkasan Item per Site',
+               subtitle: 'Kolom Site → Perusahaan · jumlah item dan status Done / On Progress / Overdue / Selesai',
             });
          } else if (hasStatusBreakdown && isAdditional) {
             matrixHtml = renderSiteCompanyProgressMatrix(items, {
-               title: 'Ringkasan Plan / Done per Site',
-               subtitle: 'Kolom Site → Perusahaan · Plan, Done, On Progress, Overdue, Selesai',
+               title: 'Ringkasan Item per Site',
+               subtitle: 'Kolom Site → Perusahaan · jumlah item dan status Done / On Progress / Overdue / Selesai',
             });
          }
 
