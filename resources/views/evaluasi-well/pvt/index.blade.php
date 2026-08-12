@@ -163,7 +163,10 @@
         return '<span class="' + cls + ' px-12 py-4 rounded-pill fw-medium text-sm">' + escapeHtml(label) + '</span>';
     }
 
-    var chartPayload = @json($checkinChart ?? ['categories' => [], 'dates' => [], 'checkin' => [], 'lulus' => [], 'tidak_lulus' => [], 'belum' => [], 'pct_sudah' => []]);
+    var chartPayload = @json($checkinChart ?? null);
+    if (!chartPayload || typeof chartPayload !== 'object') {
+        chartPayload = { categories: [], dates: [], checkin: [], lulus: [], tidak_lulus: [], belum: [], pct_sudah: [] };
+    }
     var chartEl = document.querySelector('#pvtCheckinChart');
     var chartEmptyEl = document.querySelector('#pvtCheckinChartEmpty');
     if (chartEl && typeof ApexCharts !== 'undefined') {
