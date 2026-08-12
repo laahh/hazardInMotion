@@ -12,7 +12,46 @@
   }
   .pvt-breakdown-row { cursor: pointer; }
   .pvt-breakdown-row:hover { background: rgba(72, 127, 255, 0.06); }
-  .pvt-breakdown-row.is-selected { background: rgba(72, 127, 255, 0.12); }
+  .pvt-breakdown-row.is-selected {
+    background: rgba(72, 127, 255, 0.10);
+    outline: 1px solid #487fff;
+  }
+  .pvt-breakdown-list {
+    max-height: 420px;
+    overflow-y: auto;
+  }
+  .pvt-breakdown-list .pvt-breakdown-row + .pvt-breakdown-row {
+    margin-top: 8px;
+  }
+  .pvt-stack-bar {
+    display: flex;
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: #eef2f7;
+  }
+  .pvt-stack-seg { display: block; height: 100%; }
+  .pvt-stack-seg.is-lulus { background: #56A353; }
+  .pvt-stack-seg.is-tidak { background: #F4A444; }
+  .pvt-stack-seg.is-belum { background: #D1D5DB; }
+  .pvt-stack-seg.is-empty { background: #E5E7EB; }
+  .pvt-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .pvt-dot.is-lulus { background: #56A353; }
+  .pvt-dot.is-tidak { background: #F4A444; }
+  .pvt-dot.is-belum { background: #D1D5DB; }
+  .pvt-mini-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #4b5563;
+  }
 
   .dt-container:has(#pvtOperatorsTable) .dt-layout-row,
   #pvtOperatorsTable_wrapper .dt-layout-row {
@@ -368,16 +407,25 @@
         });
     });
 
-    document.querySelectorAll('[data-pvt-site]').forEach(function (el) {
-        el.addEventListener('click', function () {
-            reloadWithFilters({ site: el.getAttribute('data-pvt-site') || '' });
+    function bindBreakdown(selector, key) {
+        document.querySelectorAll(selector).forEach(function (el) {
+            el.addEventListener('click', function () {
+                var value = el.getAttribute(key === 'site' ? 'data-pvt-site' : 'data-pvt-company') || '';
+                var current = currentFilters()[key] || '';
+                var extra = {};
+                extra[key] = current === value ? '' : value;
+                reloadWithFilters(extra);
+            });
+            el.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    el.click();
+                }
+            });
         });
-    });
-    document.querySelectorAll('[data-pvt-company]').forEach(function (el) {
-        el.addEventListener('click', function () {
-            reloadWithFilters({ company: el.getAttribute('data-pvt-company') || '' });
-        });
-    });
+    }
+    bindBreakdown('[data-pvt-site]', 'site');
+    bindBreakdown('[data-pvt-company]', 'company');
 
     updateExportHref();
 })();
@@ -470,35 +518,6 @@
   </div>
 </div>
 
-<div class="card radius-8 border-0 shadow-sm mb-24">
-  <div class="card-header border-bottom bg-base py-16 px-24">
-    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
-      <div>
-        <h6 class="text-lg fw-semibold mb-0">Check-in operator 7 hari</h6>
-        <p class="text-sm text-secondary-light mb-0">
-          Jumlah karyawan yang masuk (RFID IN lolos) · batang = Lulus / Tidak lulus / Belum tes · angka atas = total masuk · % di batang hijau = % sudah PVT
-          @if (($f['site'] ?? '') !== '' || ($f['company'] ?? '') !== '')
-            · filter
-            @if (($f['site'] ?? '') !== '')
-              site <strong>{{ $f['site'] }}</strong>
-            @endif
-            @if (($f['company'] ?? '') !== '')
-              perusahaan <strong>{{ $f['company'] }}</strong>
-            @endif
-          @endif
-        </p>
-      </div>
-      <span class="text-xs text-secondary-light">Klik batang untuk membuka tanggal itu</span>
-    </div>
-  </div>
-  <div class="card-body p-24">
-    <div id="pvtCheckinChartEmpty" class="text-center text-secondary-light py-40 {{ collect($chart['checkin'] ?? [])->sum() > 0 ? 'd-none' : '' }}">
-      Belum ada data check-in operator pada 7 hari ini.
-    </div>
-    <div id="pvtCheckinChart" class="{{ collect($chart['checkin'] ?? [])->sum() > 0 ? '' : 'd-none' }}"></div>
-  </div>
-</div>
-
 <div class="row gy-4 mb-24">
   <div class="col">
     <div class="card p-3 shadow-none radius-8 border h-100 bg-gradient-start-1 pvt-kpi-card {{ ($f['pvt_status'] ?? '') === '' ? 'is-active' : '' }}" role="button" tabindex="0" data-pvt-status="" title="Semua check-in">
@@ -542,93 +561,82 @@
   </div>
 </div>
 
-<div class="row gy-4 mb-24">
-  <div class="col-xxl-6">
-    <div class="card radius-8 border-0 shadow-sm h-100">
-      <div class="card-header border-bottom bg-base py-16 px-24">
-        <h6 class="text-lg fw-semibold mb-0">Distribusi Site</h6>
-        <p class="text-sm text-secondary-light mb-0">Klik baris untuk memfilter site</p>
+<div class="card radius-8 border-0 shadow-sm mb-24">
+  <div class="card-header border-bottom bg-base py-16 px-24">
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
+      <div>
+        <h6 class="text-lg fw-semibold mb-0">Check-in operator 7 hari</h6>
+        <p class="text-sm text-secondary-light mb-0">
+          Jumlah karyawan yang masuk (RFID IN lolos) · batang = Lulus / Tidak lulus / Belum tes · angka atas = total masuk · % di batang hijau = % sudah PVT
+          @if (($f['site'] ?? '') !== '' || ($f['company'] ?? '') !== '')
+            · filter
+            @if (($f['site'] ?? '') !== '')
+              site <strong>{{ $f['site'] }}</strong>
+            @endif
+            @if (($f['company'] ?? '') !== '')
+              perusahaan <strong>{{ $f['company'] }}</strong>
+            @endif
+          @endif
+        </p>
       </div>
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table bordered-table mb-0">
-            <thead>
-              <tr>
-                <th>Site</th>
-                <th class="text-center">Check-in</th>
-                <th class="text-center">Sudah</th>
-                <th class="text-center">Belum</th>
-                <th class="text-center">Lulus</th>
-                <th class="text-center">Tidak lulus</th>
-                <th class="text-center">% PVT</th>
-                <th class="text-center">% Lulus</th>
-              </tr>
-            </thead>
-            <tbody>
-              @forelse ($siteRows as $row)
-              <tr class="pvt-breakdown-row {{ ($f['site'] ?? '') === $row['name'] ? 'is-selected' : '' }}" data-pvt-site="{{ $row['name'] }}">
-                <td class="fw-medium">{{ $row['name'] }}</td>
-                <td class="text-center">{{ number_format($row['checkin']) }}</td>
-                <td class="text-center">{{ number_format($row['sudah_pvt']) }}</td>
-                <td class="text-center">{{ number_format($row['belum_pvt']) }}</td>
-                <td class="text-center">{{ number_format($row['lulus']) }}</td>
-                <td class="text-center">{{ number_format($row['tidak_lulus']) }}</td>
-                <td class="text-center">{{ number_format($row['pct_pvt'], 1) }}%</td>
-                <td class="text-center">{{ number_format($row['pct_lulus'], 1) }}%</td>
-              </tr>
-              @empty
-              <tr>
-                <td colspan="8" class="text-center text-secondary-light py-20">Belum ada check-in operator.</td>
-              </tr>
-              @endforelse
-            </tbody>
-          </table>
+      <span class="text-xs text-secondary-light">Klik batang untuk membuka tanggal itu</span>
+    </div>
+  </div>
+  <div class="card-body p-24">
+    <div id="pvtCheckinChartEmpty" class="text-center text-secondary-light py-40 {{ collect($chart['checkin'] ?? [])->sum() > 0 ? 'd-none' : '' }}">
+      Belum ada data check-in operator pada 7 hari ini.
+    </div>
+    <div id="pvtCheckinChart" class="{{ collect($chart['checkin'] ?? [])->sum() > 0 ? '' : 'd-none' }}"></div>
+  </div>
+</div>
+
+<div class="row gy-4 mb-24 align-items-start">
+  <div class="col-xxl-6">
+    <div class="card radius-8 border-0 shadow-sm">
+      <div class="card-header border-bottom bg-base py-16 px-24">
+        <div class="d-flex align-items-start justify-content-between gap-2">
+          <div>
+            <h6 class="text-lg fw-semibold mb-0">Distribusi Site</h6>
+            <p class="text-sm text-secondary-light mb-0">Komposisi PVT per site · klik untuk filter</p>
+          </div>
+          <span class="bg-neutral-100 text-secondary-light text-xs fw-medium px-12 py-2 rounded-pill">{{ number_format(count($siteRows)) }} site</span>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-3 mt-8 text-xs text-secondary-light">
+          <span class="pvt-mini-stat"><span class="pvt-dot is-lulus"></span>Lulus</span>
+          <span class="pvt-mini-stat"><span class="pvt-dot is-tidak"></span>Tidak lulus</span>
+          <span class="pvt-mini-stat"><span class="pvt-dot is-belum"></span>Belum tes</span>
         </div>
       </div>
+      @include('evaluasi-well.pvt._breakdown-list', [
+        'rows' => $siteRows,
+        'attr' => 'data-pvt-site',
+        'selected' => $f['site'] ?? '',
+        'totalCheckin' => (int) ($kpi['checkin'] ?? 0),
+      ])
     </div>
   </div>
   <div class="col-xxl-6">
-    <div class="card radius-8 border-0 shadow-sm h-100">
+    <div class="card radius-8 border-0 shadow-sm">
       <div class="card-header border-bottom bg-base py-16 px-24">
-        <h6 class="text-lg fw-semibold mb-0">Distribusi Perusahaan</h6>
-        <p class="text-sm text-secondary-light mb-0">Klik baris untuk memfilter perusahaan</p>
-      </div>
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table bordered-table mb-0">
-            <thead>
-              <tr>
-                <th>Perusahaan</th>
-                <th class="text-center">Check-in</th>
-                <th class="text-center">Sudah</th>
-                <th class="text-center">Belum</th>
-                <th class="text-center">Lulus</th>
-                <th class="text-center">Tidak lulus</th>
-                <th class="text-center">% PVT</th>
-                <th class="text-center">% Lulus</th>
-              </tr>
-            </thead>
-            <tbody>
-              @forelse ($companyRows as $row)
-              <tr class="pvt-breakdown-row {{ ($f['company'] ?? '') === $row['name'] ? 'is-selected' : '' }}" data-pvt-company="{{ $row['name'] }}">
-                <td class="fw-medium">{{ $row['name'] }}</td>
-                <td class="text-center">{{ number_format($row['checkin']) }}</td>
-                <td class="text-center">{{ number_format($row['sudah_pvt']) }}</td>
-                <td class="text-center">{{ number_format($row['belum_pvt']) }}</td>
-                <td class="text-center">{{ number_format($row['lulus']) }}</td>
-                <td class="text-center">{{ number_format($row['tidak_lulus']) }}</td>
-                <td class="text-center">{{ number_format($row['pct_pvt'], 1) }}%</td>
-                <td class="text-center">{{ number_format($row['pct_lulus'], 1) }}%</td>
-              </tr>
-              @empty
-              <tr>
-                <td colspan="8" class="text-center text-secondary-light py-20">Belum ada check-in operator.</td>
-              </tr>
-              @endforelse
-            </tbody>
-          </table>
+        <div class="d-flex align-items-start justify-content-between gap-2">
+          <div>
+            <h6 class="text-lg fw-semibold mb-0">Distribusi Perusahaan</h6>
+            <p class="text-sm text-secondary-light mb-0">Komposisi PVT per perusahaan · klik untuk filter</p>
+          </div>
+          <span class="bg-neutral-100 text-secondary-light text-xs fw-medium px-12 py-2 rounded-pill">{{ number_format(count($companyRows)) }} perusahaan</span>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-3 mt-8 text-xs text-secondary-light">
+          <span class="pvt-mini-stat"><span class="pvt-dot is-lulus"></span>Lulus</span>
+          <span class="pvt-mini-stat"><span class="pvt-dot is-tidak"></span>Tidak lulus</span>
+          <span class="pvt-mini-stat"><span class="pvt-dot is-belum"></span>Belum tes</span>
         </div>
       </div>
+      @include('evaluasi-well.pvt._breakdown-list', [
+        'rows' => $companyRows,
+        'attr' => 'data-pvt-company',
+        'selected' => $f['company'] ?? '',
+        'totalCheckin' => (int) ($kpi['checkin'] ?? 0),
+      ])
     </div>
   </div>
 </div>
