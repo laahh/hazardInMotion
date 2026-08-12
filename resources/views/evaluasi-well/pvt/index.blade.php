@@ -3,6 +3,7 @@
 @section('title', 'Evaluasi PVT')
 
 @section('css')
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
 <style>
   .pvt-kpi-card { cursor: pointer; }
   .pvt-kpi-card.is-active {
@@ -48,17 +49,33 @@
     white-space: normal;
     min-width: 140px;
   }
+  .select2-container .select2-selection--single {
+    height: 31px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 2px 8px;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 25px;
+    color: #111827;
+    font-size: 0.875rem;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 29px;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__placeholder {
+    color: #6b7280;
+  }
+  #pvtCheckinChart {
+    min-height: 320px;
+  }
 </style>
 @endsection
 
 @section('page-scripts')
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
 (function () {
-    var tableEl = document.querySelector('#pvtOperatorsTable');
-    if (!tableEl || typeof DataTable === 'undefined') {
-        return;
-    }
-
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
     var dataUrl = @json(route('evaluasi-well.pvt.data'));
     var exportUrl = @json(route('evaluasi-well.pvt.export'));
@@ -72,6 +89,22 @@
     var resetBtn = document.querySelector('#pvt-reset-btn');
     var exportBtn = document.querySelector('#pvt-export-btn');
     var totalBadge = document.querySelector('#pvt-total-badge');
+    var tableEl = document.querySelector('#pvtOperatorsTable');
+
+    if (window.jQuery) {
+        window.jQuery('.js-pvt-searchable').each(function () {
+            var $el = window.jQuery(this);
+            $el.select2({
+                width: '100%',
+                placeholder: $el.data('placeholder') || 'Cari…',
+                allowClear: true,
+                language: {
+                    noResults: function () { return 'Tidak ditemukan'; },
+                    searching: function () { return 'Mencari…'; }
+                }
+            });
+        });
+    }
 
     function escapeHtml(value) {
         return String(value)
@@ -106,11 +139,18 @@
         return params.toString();
     }
 
+    function reloadWithFilters(extra) {
+        var query = filterQuery(extra || null);
+        window.location.href = indexUrl + (query ? ('?' + query) : '');
+    }
+
     function updateExportHref() {
         if (!exportBtn) return;
         var params = new URLSearchParams(filterQuery());
-        var search = table.search();
-        if (search) params.set('search', search);
+        if (table && typeof table.search === 'function') {
+            var search = table.search();
+            if (search) params.set('search', search);
+        }
         var query = params.toString();
         exportBtn.href = exportUrl + (query ? ('?' + query) : '');
     }
@@ -123,7 +163,105 @@
         return '<span class="' + cls + ' px-12 py-4 rounded-pill fw-medium text-sm">' + escapeHtml(label) + '</span>';
     }
 
-    var table = new DataTable(tableEl, {
+    var chartPayload = @json($checkinChart ?? ['categories' => [], 'dates' => [], 'checkin' => [], 'lulus' => [], 'tidak_lulus' => [], 'belum' => [], 'pct_sudah' => []]);
+    var chartEl = document.querySelector('#pvtCheckinChart');
+    var chartEmptyEl = document.querySelector('#pvtCheckinChartEmpty');
+    if (chartEl && typeof ApexCharts !== 'undefined') {
+        var categories = chartPayload.categories || [];
+        var dates = chartPayload.dates || [];
+        var checkin = chartPayload.checkin || [];
+        var lulus = chartPayload.lulus || [];
+        var tidakLulus = chartPayload.tidak_lulus || [];
+        var belum = chartPayload.belum || [];
+        var pctSudah = chartPayload.pct_sudah || [];
+        var hasChartData = categories.length > 0 && checkin.some(function (n) { return Number(n) > 0; });
+
+        if (chartEmptyEl) {
+            chartEmptyEl.classList.toggle('d-none', hasChartData);
+        }
+        chartEl.classList.toggle('d-none', !hasChartData);
+
+        if (hasChartData) {
+            new ApexCharts(chartEl, {
+                series: [
+                    { name: 'Lulus PVT', data: lulus },
+                    { name: 'Tidak lulus', data: tidakLulus },
+                    { name: 'Belum tes', data: belum }
+                ],
+                colors: ['#56A353', '#F4A444', '#D1D5DB'],
+                chart: {
+                    type: 'bar',
+                    height: 320,
+                    stacked: true,
+                    toolbar: { show: false },
+                    fontFamily: 'inherit',
+                    events: {
+                        dataPointSelection: function (event, ctx, config) {
+                            var picked = dates[config.dataPointIndex] || '';
+                            if (picked) {
+                                reloadWithFilters({ date: picked });
+                            }
+                        }
+                    }
+                },
+                plotOptions: {
+                    bar: {
+                        columnWidth: '88%',
+                        borderRadius: 2,
+                        dataLabels: {
+                            total: {
+                                enabled: true,
+                                formatter: function (val) {
+                                    return Number(val).toLocaleString('id-ID');
+                                },
+                                style: { fontSize: '11px', fontWeight: 700, color: '#111827' }
+                            }
+                        }
+                    }
+                },
+                dataLabels: {
+                    enabled: true,
+                    formatter: function (val, opts) {
+                        if (opts.seriesIndex !== 0) return '';
+                        var total = Number(checkin[opts.dataPointIndex] || 0);
+                        var pct = Number(pctSudah[opts.dataPointIndex] || 0);
+                        if (total < 1 || pct < 12) return '';
+                        return pct.toFixed(2) + '%';
+                    },
+                    style: { fontSize: '11px', fontWeight: 700, colors: ['#ffffff'] }
+                },
+                grid: { borderColor: '#E5E7EB', strokeDashArray: 4, padding: { top: 16 } },
+                xaxis: {
+                    categories: categories,
+                    axisBorder: { show: false },
+                    axisTicks: { show: false }
+                },
+                yaxis: {
+                    labels: {
+                        formatter: function (value) {
+                            return Number(value).toLocaleString('id-ID');
+                        }
+                    }
+                },
+                legend: { position: 'top', horizontalAlign: 'left' },
+                tooltip: {
+                    shared: true,
+                    intersect: false,
+                    y: {
+                        formatter: function (val, opts) {
+                            var total = Number(checkin[opts.dataPointIndex] || 0);
+                            var pct = total > 0 ? (Number(val) / total * 100).toFixed(1) : '0.0';
+                            return Number(val).toLocaleString('id-ID') + ' orang (' + pct + '%)';
+                        }
+                    }
+                }
+            }).render();
+        }
+    }
+
+    var table = null;
+    if (tableEl && typeof DataTable !== 'undefined') {
+    table = new DataTable(tableEl, {
         processing: true,
         serverSide: true,
         searching: true,
@@ -206,10 +344,6 @@
         updateExportHref();
     });
     table.on('search.dt', updateExportHref);
-
-    function reloadWithFilters(extra) {
-        var query = filterQuery(extra || null);
-        window.location.href = indexUrl + (query ? ('?' + query) : '');
     }
 
     if (applyBtn) {
@@ -254,13 +388,14 @@
   $kpi = $kpi ?? ['checkin' => 0, 'sudah_pvt' => 0, 'belum_pvt' => 0, 'lulus' => 0, 'tidak_lulus' => 0];
   $siteRows = $siteRows ?? [];
   $companyRows = $companyRows ?? [];
+  $chart = $checkinChart ?? ['categories' => [], 'dates' => [], 'checkin' => [], 'lulus' => [], 'tidak_lulus' => [], 'belum' => [], 'pct_sudah' => []];
 @endphp
 
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
   <div>
     <h6 class="fw-semibold mb-0">Evaluasi PVT</h6>
     <p class="text-sm text-secondary-light mb-0 mt-4">
-      Operator yang check-IN lolos pada {{ $dateLabel ?? 'hari ini' }} · PVT dihitung jika tes dilakukan setelah jam check-in di hari yang sama
+      Operator yang check-IN lolos pada {{ $dateLabel ?? 'hari ini' }} · PVT = tes terakhir di hari yang sama (sebelum atau sesudah gate)
     </p>
   </div>
   <ul class="d-flex align-items-center gap-2">
@@ -287,6 +422,79 @@
   <div>Koneksi RFID HSE (Postgres) tidak tersedia. Pastikan <code>setup-ssh-tunnel.bat</code> berjalan (port 5433).</div>
 </div>
 @endunless
+
+<div class="card radius-8 border-0 shadow-sm mb-24">
+  <div class="card-body p-20">
+    <div class="row g-3 align-items-end">
+      <div class="col-xl-2 col-md-4 col-sm-6">
+        <label for="pvt-date" class="form-label text-sm fw-medium mb-6">Tanggal</label>
+        <input id="pvt-date" type="date" class="form-control form-control-sm" value="{{ $f['date'] ?? '' }}">
+      </div>
+      <div class="col-xl-3 col-md-4 col-sm-6">
+        <label for="pvt-site" class="form-label text-sm fw-medium mb-6">Site</label>
+        <select id="pvt-site" class="form-select form-select-sm js-pvt-searchable" data-placeholder="Semua Site">
+          <option value="">Semua Site</option>
+          @foreach (($opts['sites'] ?? []) as $site)
+            <option value="{{ $site }}" @selected(($f['site'] ?? '') === $site)>{{ $site }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="col-xl-3 col-md-4 col-sm-6">
+        <label for="pvt-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
+        <select id="pvt-company" class="form-select form-select-sm js-pvt-searchable" data-placeholder="Semua Perusahaan">
+          <option value="">Semua Perusahaan</option>
+          @foreach (($opts['companies'] ?? []) as $company)
+            <option value="{{ $company }}" @selected(($f['company'] ?? '') === $company)>{{ $company }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="col-xl-2 col-md-4 col-sm-6">
+        <label for="pvt-status" class="form-label text-sm fw-medium mb-6">Status PVT</label>
+        <select id="pvt-status" class="form-select form-select-sm">
+          <option value="">Semua</option>
+          <option value="belum" @selected(($f['pvt_status'] ?? '') === 'belum')>Belum tes</option>
+          <option value="lulus" @selected(($f['pvt_status'] ?? '') === 'lulus')>Lulus</option>
+          <option value="tidak_lulus" @selected(($f['pvt_status'] ?? '') === 'tidak_lulus')>Tidak lulus</option>
+        </select>
+      </div>
+      <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="d-flex gap-2">
+          <button type="button" id="pvt-reset-btn" class="btn btn-sm btn-outline-secondary w-100">Reset</button>
+          <button type="button" id="pvt-apply-btn" class="btn btn-sm btn-primary-600 w-100">Filter</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card radius-8 border-0 shadow-sm mb-24">
+  <div class="card-header border-bottom bg-base py-16 px-24">
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
+      <div>
+        <h6 class="text-lg fw-semibold mb-0">Check-in operator 7 hari</h6>
+        <p class="text-sm text-secondary-light mb-0">
+          Jumlah karyawan yang masuk (RFID IN lolos) · batang = Lulus / Tidak lulus / Belum tes · angka atas = total masuk · % di batang hijau = % sudah PVT
+          @if (($f['site'] ?? '') !== '' || ($f['company'] ?? '') !== '')
+            · filter
+            @if (($f['site'] ?? '') !== '')
+              site <strong>{{ $f['site'] }}</strong>
+            @endif
+            @if (($f['company'] ?? '') !== '')
+              perusahaan <strong>{{ $f['company'] }}</strong>
+            @endif
+          @endif
+        </p>
+      </div>
+      <span class="text-xs text-secondary-light">Klik batang untuk membuka tanggal itu</span>
+    </div>
+  </div>
+  <div class="card-body p-24">
+    <div id="pvtCheckinChartEmpty" class="text-center text-secondary-light py-40 {{ collect($chart['checkin'] ?? [])->sum() > 0 ? 'd-none' : '' }}">
+      Belum ada data check-in operator pada 7 hari ini.
+    </div>
+    <div id="pvtCheckinChart" class="{{ collect($chart['checkin'] ?? [])->sum() > 0 ? '' : 'd-none' }}"></div>
+  </div>
+</div>
 
 <div class="row gy-4 mb-24">
   <div class="col">
@@ -430,7 +638,7 @@
           <h6 class="text-lg fw-semibold mb-0">Operator Check-in</h6>
           <span id="pvt-total-badge" class="bg-primary-50 text-primary-600 text-sm fw-medium px-12 py-2 rounded-pill">{{ number_format($kpi['checkin'] ?? 0) }}</span>
         </div>
-        <p class="text-sm text-secondary-light mb-0">Satu baris per SID · check-IN lolos pertama · PVT terakhir setelah jam masuk</p>
+        <p class="text-sm text-secondary-light mb-0">Satu baris per SID · check-IN lolos pertama · PVT terakhir di hari yang sama</p>
       </div>
       <a id="pvt-export-btn" href="{{ route('evaluasi-well.pvt.export', request()->query()) }}" class="btn btn-sm btn-success-600 d-inline-flex align-items-center gap-1">
         <iconify-icon icon="solar:file-download-bold" class="icon"></iconify-icon>
@@ -439,48 +647,6 @@
     </div>
   </div>
   <div class="card-body p-24">
-    <div class="bg-neutral-50 border radius-8 p-16 mb-20">
-      <div class="row g-3 align-items-end">
-        <div class="col-xl-2 col-md-4 col-sm-6">
-          <label for="pvt-date" class="form-label text-sm fw-medium mb-6">Tanggal</label>
-          <input id="pvt-date" type="date" class="form-control form-control-sm" value="{{ $f['date'] ?? '' }}">
-        </div>
-        <div class="col-xl-3 col-md-4 col-sm-6">
-          <label for="pvt-site" class="form-label text-sm fw-medium mb-6">Site</label>
-          <select id="pvt-site" class="form-select form-select-sm">
-            <option value="">Semua Site</option>
-            @foreach (($opts['sites'] ?? []) as $site)
-              <option value="{{ $site }}" @selected(($f['site'] ?? '') === $site)>{{ $site }}</option>
-            @endforeach
-          </select>
-        </div>
-        <div class="col-xl-3 col-md-4 col-sm-6">
-          <label for="pvt-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
-          <select id="pvt-company" class="form-select form-select-sm">
-            <option value="">Semua Perusahaan</option>
-            @foreach (($opts['companies'] ?? []) as $company)
-              <option value="{{ $company }}" @selected(($f['company'] ?? '') === $company)>{{ $company }}</option>
-            @endforeach
-          </select>
-        </div>
-        <div class="col-xl-2 col-md-4 col-sm-6">
-          <label for="pvt-status" class="form-label text-sm fw-medium mb-6">Status PVT</label>
-          <select id="pvt-status" class="form-select form-select-sm">
-            <option value="">Semua</option>
-            <option value="belum" @selected(($f['pvt_status'] ?? '') === 'belum')>Belum tes</option>
-            <option value="lulus" @selected(($f['pvt_status'] ?? '') === 'lulus')>Lulus</option>
-            <option value="tidak_lulus" @selected(($f['pvt_status'] ?? '') === 'tidak_lulus')>Tidak lulus</option>
-          </select>
-        </div>
-        <div class="col-xl-2 col-md-4 col-sm-6">
-          <div class="d-flex gap-2">
-            <button type="button" id="pvt-reset-btn" class="btn btn-sm btn-outline-secondary w-100">Reset</button>
-            <button type="button" id="pvt-apply-btn" class="btn btn-sm btn-primary-600 w-100">Filter</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div class="table-responsive pvt-operators-datatable w-100">
       <table id="pvtOperatorsTable" class="table bordered-table mb-0 w-100" style="width:100%">
         <thead>

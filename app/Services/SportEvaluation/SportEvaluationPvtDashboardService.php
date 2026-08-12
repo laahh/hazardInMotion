@@ -45,6 +45,12 @@ final class SportEvaluationPvtDashboardService
 
         try {
             $cohort = $this->cohortRows($filters);
+            try {
+                $chart = $this->checkinChart($filters);
+            } catch (Throwable $chartError) {
+                report($chartError);
+                $chart = $this->emptyCheckinChart();
+            }
 
             return [
                 'bewellUp' => true,
@@ -54,6 +60,7 @@ final class SportEvaluationPvtDashboardService
                 'kpi' => $this->buildKpi($cohort),
                 'siteRows' => $this->aggregateBy($cohort, 'site'),
                 'companyRows' => $this->aggregateBy($cohort, 'company'),
+                'checkinChart' => $chart,
                 'filterOptions' => $this->buildFilterOptions(),
             ];
         } catch (Throwable $e) {
@@ -397,7 +404,12 @@ final class SportEvaluationPvtDashboardService
                 isset($row->nama_perusahaan) ? (string) $row->nama_perusahaan : null
             );
 
-            $operators[] = [
+            $upper = mb_strtoupper($sid);
+            if (isset($operators[$upper])) {
+                continue;
+            }
+
+            $operators[$upper] = [
                 'id' => (int) $row->id,
                 'nama' => trim((string) ($row->nama ?? '')),
                 'kode_sid' => $sid,
@@ -407,7 +419,7 @@ final class SportEvaluationPvtDashboardService
             ];
         }
 
-        return $operators;
+        return array_values($operators);
     }
 
     /**
@@ -420,7 +432,7 @@ final class SportEvaluationPvtDashboardService
      * @param  list<string>  $sids
      * @return array<string, list<array<string, mixed>>>
      */
-    private function loadPvtBySid(array $sids, string $date): array
+    private function loadPvtBySid(array $sids, string $date, ?string $toDate = null): array
     {
         $upperSids = [];
         foreach ($sids as $sid) {
@@ -436,9 +448,14 @@ final class SportEvaluationPvtDashboardService
         }
 
         $tz = (string) config('app.timezone');
-        $day = Carbon::parse($date, $tz)->startOfDay();
-        $start = $day->copy()->subHours(12)->format('Y-m-d H:i:s');
-        $end = $day->copy()->addDay()->addHours(12)->format('Y-m-d H:i:s');
+        $fromDay = Carbon::parse($date, $tz)->startOfDay();
+        $toDay = Carbon::parse($toDate ?? $date, $tz)->startOfDay();
+        $dateSet = [];
+        for ($cursor = $fromDay->copy(); $cursor->lte($toDay); $cursor->addDay()) {
+            $dateSet[$cursor->toDateString()] = true;
+        }
+        $start = $fromDay->copy()->subHours(12)->format('Y-m-d H:i:s');
+        $end = $toDay->copy()->addDay()->addHours(12)->format('Y-m-d H:i:s');
 
         $rows = collect();
         try {
@@ -478,7 +495,7 @@ final class SportEvaluationPvtDashboardService
                 continue;
             }
 
-            $testedLocal = $this->testedAtOnDate($row->tested_at ?? null, $date);
+            $testedLocal = $this->testedAtInDates($row->tested_at ?? null, $dateSet);
             if ($testedLocal === null) {
                 continue;
             }
@@ -564,12 +581,14 @@ final class SportEvaluationPvtDashboardService
 
     /**
      * tested_at MySQL DATETIME bersifat naive: bisa lokal Makassar atau UTC.
-     * Terima baris jika salah satu interpretasi jatuh di tanggal filter.
+     * Terima baris jika salah satu interpretasi jatuh di salah satu tanggal filter.
+     *
+     * @param  array<string, bool>  $dateSet
      */
-    private function testedAtOnDate(mixed $value, string $date): ?Carbon
+    private function testedAtInDates(mixed $value, array $dateSet): ?Carbon
     {
         $asLocal = $this->parseAppDateTime($value);
-        if ($asLocal !== null && $asLocal->toDateString() === $date) {
+        if ($asLocal !== null && isset($dateSet[$asLocal->toDateString()])) {
             return $asLocal;
         }
 
@@ -583,7 +602,7 @@ final class SportEvaluationPvtDashboardService
         try {
             $asUtc = Carbon::parse($raw, 'UTC')->timezone((string) config('app.timezone'));
 
-            return $asUtc->toDateString() === $date ? $asUtc : null;
+            return isset($dateSet[$asUtc->toDateString()]) ? $asUtc : null;
         } catch (Throwable) {
             return null;
         }
@@ -836,10 +855,194 @@ final class SportEvaluationPvtDashboardService
             ],
             'siteRows' => [],
             'companyRows' => [],
+            'checkinChart' => $this->emptyCheckinChart(),
             'filterOptions' => [
                 'sites' => [],
                 'companies' => [],
             ],
+        ];
+    }
+
+    /**
+     * @param  array{date:string,site:string,company:string,pvt_status:string}  $filters
+     * @return array{
+     *     categories: list<string>,
+     *     dates: list<string>,
+     *     checkin: list<int>,
+     *     lulus: list<int>,
+     *     tidak_lulus: list<int>,
+     *     belum: list<int>,
+     *     pct_sudah: list<float>
+     * }
+     */
+    private function checkinChart(array $filters): array
+    {
+        $cacheKey = 'evaluasi_well:pvt_checkin_chart:v1:'.sha1((string) json_encode([
+            $filters['date'],
+            $filters['site'],
+            $filters['company'],
+        ], JSON_THROW_ON_ERROR));
+
+        /** @var array{categories: list<string>, dates: list<string>, checkin: list<int>, lulus: list<int>, tidak_lulus: list<int>, belum: list<int>, pct_sudah: list<float>} */
+        return Cache::remember($cacheKey, self::CACHE_TTL, fn (): array => $this->buildCheckinChart($filters));
+    }
+
+    /**
+     * @param  array{date:string,site:string,company:string,pvt_status:string}  $filters
+     * @return array{
+     *     categories: list<string>,
+     *     dates: list<string>,
+     *     checkin: list<int>,
+     *     lulus: list<int>,
+     *     tidak_lulus: list<int>,
+     *     belum: list<int>,
+     *     pct_sudah: list<float>
+     * }
+     */
+    private function buildCheckinChart(array $filters): array
+    {
+        $tz = (string) config('app.timezone');
+        $end = Carbon::parse($filters['date'], $tz)->startOfDay();
+        $start = $end->copy()->subDays(6);
+        $dates = [];
+        for ($cursor = $start->copy(); $cursor->lte($end); $cursor->addDay()) {
+            $dates[] = $cursor->toDateString();
+        }
+
+        $empty = $this->presentCheckinChart($dates, []);
+        if (! $this->rfidReader->isUp()) {
+            return $empty;
+        }
+
+        $operators = $this->loadOperators([
+            'date' => $filters['date'],
+            'site' => $filters['site'],
+            'company' => $filters['company'],
+            'pvt_status' => '',
+        ]);
+        if ($operators === []) {
+            return $empty;
+        }
+
+        $sids = array_map(static fn (array $op): string => $op['kode_sid'], $operators);
+        $byDay = $this->rfidReader->firstPassedCheckinsByDayForSids(
+            $start->toDateString(),
+            $end->toDateString(),
+            $sids,
+        );
+        $pvtBySid = $this->loadPvtBySid($sids, $start->toDateString(), $end->toDateString());
+
+        $operatorSids = [];
+        foreach ($operators as $operator) {
+            $operatorSids[mb_strtoupper($operator['kode_sid'])] = true;
+        }
+
+        $dayStats = [];
+        foreach ($dates as $date) {
+            $stats = [
+                'checkin' => 0,
+                'lulus' => 0,
+                'tidak_lulus' => 0,
+                'belum' => 0,
+            ];
+            foreach (($byDay[$date] ?? []) as $upper => $checkin) {
+                if (! isset($operatorSids[$upper])) {
+                    continue;
+                }
+                $candidates = [];
+                foreach ($pvtBySid[$upper] ?? [] as $pvt) {
+                    if (str_starts_with((string) ($pvt['tested_at'] ?? ''), $date)) {
+                        $candidates[] = $pvt;
+                    }
+                }
+                $matched = $this->matchPvtForCheckin($candidates, (string) ($checkin['checked_in_at'] ?? ''));
+                $status = $this->resolvePvtStatus($matched);
+                $stats['checkin']++;
+                if ($status === 'lulus') {
+                    $stats['lulus']++;
+                } elseif ($status === 'tidak_lulus') {
+                    $stats['tidak_lulus']++;
+                } else {
+                    $stats['belum']++;
+                }
+            }
+            $dayStats[$date] = $stats;
+        }
+
+        return $this->presentCheckinChart($dates, $dayStats);
+    }
+
+    /**
+     * @param  list<string>  $dates
+     * @param  array<string, array{checkin:int,lulus:int,tidak_lulus:int,belum:int}>  $dayStats
+     * @return array{
+     *     categories: list<string>,
+     *     dates: list<string>,
+     *     checkin: list<int>,
+     *     lulus: list<int>,
+     *     tidak_lulus: list<int>,
+     *     belum: list<int>,
+     *     pct_sudah: list<float>
+     * }
+     */
+    private function presentCheckinChart(array $dates, array $dayStats): array
+    {
+        $categories = [];
+        $checkin = [];
+        $lulus = [];
+        $tidakLulus = [];
+        $belum = [];
+        $pctSudah = [];
+
+        foreach ($dates as $date) {
+            $stats = $dayStats[$date] ?? [
+                'checkin' => 0,
+                'lulus' => 0,
+                'tidak_lulus' => 0,
+                'belum' => 0,
+            ];
+            $total = (int) $stats['checkin'];
+            $sudah = (int) $stats['lulus'] + (int) $stats['tidak_lulus'];
+            $categories[] = Carbon::parse($date, config('app.timezone'))->translatedFormat('d M');
+            $checkin[] = $total;
+            $lulus[] = (int) $stats['lulus'];
+            $tidakLulus[] = (int) $stats['tidak_lulus'];
+            $belum[] = (int) $stats['belum'];
+            $pctSudah[] = $total > 0 ? round($sudah / $total * 100, 2) : 0.0;
+        }
+
+        return [
+            'categories' => $categories,
+            'dates' => $dates,
+            'checkin' => $checkin,
+            'lulus' => $lulus,
+            'tidak_lulus' => $tidakLulus,
+            'belum' => $belum,
+            'pct_sudah' => $pctSudah,
+        ];
+    }
+
+    /**
+     * @return array{
+     *     categories: list<string>,
+     *     dates: list<string>,
+     *     checkin: list<int>,
+     *     lulus: list<int>,
+     *     tidak_lulus: list<int>,
+     *     belum: list<int>,
+     *     pct_sudah: list<float>
+     * }
+     */
+    private function emptyCheckinChart(): array
+    {
+        return [
+            'categories' => [],
+            'dates' => [],
+            'checkin' => [],
+            'lulus' => [],
+            'tidak_lulus' => [],
+            'belum' => [],
+            'pct_sudah' => [],
         ];
     }
 }

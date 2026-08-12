@@ -143,8 +143,11 @@ final class SportEvaluationPvtRfidCheckinReader
 
         $merged = [];
         foreach (array_chunk(array_keys($normalized), self::SID_CHUNK) as $chunk) {
-            foreach ($this->queryChunk($start, $end, $chunk) as $upper => $row) {
-                $merged[$upper] = $row;
+            foreach ($this->queryChunk($start, $end, $chunk, true) as $row) {
+                $upper = mb_strtoupper($row['kode_sid']);
+                if (! isset($merged[$upper])) {
+                    $merged[$upper] = $row;
+                }
             }
         }
 
@@ -152,8 +155,61 @@ final class SportEvaluationPvtRfidCheckinReader
     }
 
     /**
+     * Check-IN lolos pertama per SID per hari dalam rentang tanggal (inklusif).
+     *
+     * @param  list<string>  $sids
+     * @return array<string, array<string, array{
+     *     kode_sid: string,
+     *     checked_in_at: string,
+     *     nama_karyawan: string,
+     *     perusahaan: string,
+     *     gate: string,
+     *     jenis_checkinout: string,
+     *     status_lolos: string
+     * }>>
+     */
+    public function firstPassedCheckinsByDayForSids(string $fromDate, string $toDateInclusive, array $sids): array
+    {
+        if (! $this->isUp() || $sids === []) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($sids as $sid) {
+            $trimmed = trim((string) $sid);
+            if ($trimmed === '') {
+                continue;
+            }
+            $normalized[mb_strtoupper($trimmed)] = $trimmed;
+        }
+        if ($normalized === []) {
+            return [];
+        }
+
+        $tz = (string) config('app.timezone');
+        $start = Carbon::parse($fromDate, $tz)->startOfDay()->format('Y-m-d H:i:s');
+        $end = Carbon::parse($toDateInclusive, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+
+        $byDay = [];
+        foreach (array_chunk(array_keys($normalized), self::SID_CHUNK) as $chunk) {
+            foreach ($this->queryChunk($start, $end, $chunk, false) as $row) {
+                $day = substr($row['checked_in_at'], 0, 10);
+                if ($day === '') {
+                    continue;
+                }
+                $upper = mb_strtoupper($row['kode_sid']);
+                if (! isset($byDay[$day][$upper])) {
+                    $byDay[$day][$upper] = $row;
+                }
+            }
+        }
+
+        return $byDay;
+    }
+
+    /**
      * @param  list<string>  $upperSids
-     * @return array<string, array{
+     * @return list<array{
      *     kode_sid: string,
      *     checked_in_at: string,
      *     nama_karyawan: string,
@@ -163,14 +219,21 @@ final class SportEvaluationPvtRfidCheckinReader
      *     status_lolos: string
      * }>
      */
-    private function queryChunk(string $start, string $end, array $upperSids): array
+    private function queryChunk(string $start, string $end, array $upperSids, bool $firstPerSidOnly): array
     {
         $sidPlaceholders = implode(',', array_fill(0, count($upperSids), '?'));
         $typePlaceholders = implode(',', array_fill(0, count(self::CHECKIN_TYPES), '?'));
         $statusPlaceholders = implode(',', array_fill(0, count(self::PASSED_STATUSES), '?'));
 
+        $selectHead = $firstPerSidOnly
+            ? 'SELECT DISTINCT ON (UPPER(TRIM(kode_sid)))'
+            : 'SELECT';
+        $orderBy = $firstPerSidOnly
+            ? 'ORDER BY UPPER(TRIM(kode_sid)), tanggal_checkinout ASC'
+            : 'ORDER BY tanggal_checkinout ASC';
+
         $sql = '
-            SELECT DISTINCT ON (UPPER(TRIM(kode_sid)))
+            '.$selectHead.'
                 TRIM(kode_sid) AS kode_sid,
                 tanggal_checkinout,
                 TRIM(COALESCE(nama_karyawan::text, \'\')) AS nama_karyawan,
@@ -189,7 +252,7 @@ final class SportEvaluationPvtRfidCheckinReader
                  OR REPLACE(REPLACE(UPPER(TRIM(jenis_checkinout::text)), \' \', \'\'), \'-\', \'\') IN (\'IN\', \'CHECKIN\', \'MASUK\')
               )
               AND REPLACE(REPLACE(UPPER(TRIM(status_lolos::text)), \' \', \'\'), \'-\', \'\') IN ('.$statusPlaceholders.')
-            ORDER BY UPPER(TRIM(kode_sid)), tanggal_checkinout ASC
+            '.$orderBy.'
         ';
 
         $bindings = array_merge(
@@ -211,45 +274,64 @@ final class SportEvaluationPvtRfidCheckinReader
             return [];
         }
 
-        $map = [];
+        $list = [];
         foreach ($rows as $row) {
-            $sid = trim((string) ($row->kode_sid ?? ''));
-            if ($sid === '') {
-                continue;
+            $mapped = $this->mapCheckinRow($row);
+            if ($mapped !== null) {
+                $list[] = $mapped;
             }
-
-            $checkedInAt = $row->tanggal_checkinout ?? null;
-            if ($checkedInAt instanceof \DateTimeInterface) {
-                $checkedInAt = Carbon::instance($checkedInAt)
-                    ->timezone((string) config('app.timezone'))
-                    ->format('Y-m-d H:i:s');
-            } else {
-                $checkedInAt = trim((string) $checkedInAt);
-                if ($checkedInAt !== '') {
-                    try {
-                        $checkedInAt = Carbon::parse($checkedInAt, config('app.timezone'))
-                            ->timezone((string) config('app.timezone'))
-                            ->format('Y-m-d H:i:s');
-                    } catch (Throwable) {
-                        // biarkan string mentah; matcher akan parse ulang
-                    }
-                }
-            }
-            if ($checkedInAt === '') {
-                continue;
-            }
-
-            $map[mb_strtoupper($sid)] = [
-                'kode_sid' => $sid,
-                'checked_in_at' => $checkedInAt,
-                'nama_karyawan' => trim((string) ($row->nama_karyawan ?? '')),
-                'perusahaan' => trim((string) ($row->perusahaan ?? '')),
-                'gate' => trim((string) ($row->gate ?? '')),
-                'jenis_checkinout' => trim((string) ($row->jenis_checkinout ?? '')),
-                'status_lolos' => trim((string) ($row->status_lolos ?? '')),
-            ];
         }
 
-        return $map;
+        return $list;
+    }
+
+    /**
+     * @return array{
+     *     kode_sid: string,
+     *     checked_in_at: string,
+     *     nama_karyawan: string,
+     *     perusahaan: string,
+     *     gate: string,
+     *     jenis_checkinout: string,
+     *     status_lolos: string
+     * }|null
+     */
+    private function mapCheckinRow(object $row): ?array
+    {
+        $sid = trim((string) ($row->kode_sid ?? ''));
+        if ($sid === '') {
+            return null;
+        }
+
+        $checkedInAt = $row->tanggal_checkinout ?? null;
+        if ($checkedInAt instanceof \DateTimeInterface) {
+            $checkedInAt = Carbon::instance($checkedInAt)
+                ->timezone((string) config('app.timezone'))
+                ->format('Y-m-d H:i:s');
+        } else {
+            $checkedInAt = trim((string) $checkedInAt);
+            if ($checkedInAt !== '') {
+                try {
+                    $checkedInAt = Carbon::parse($checkedInAt, config('app.timezone'))
+                        ->timezone((string) config('app.timezone'))
+                        ->format('Y-m-d H:i:s');
+                } catch (Throwable) {
+                    // biarkan string mentah
+                }
+            }
+        }
+        if ($checkedInAt === '') {
+            return null;
+        }
+
+        return [
+            'kode_sid' => $sid,
+            'checked_in_at' => $checkedInAt,
+            'nama_karyawan' => trim((string) ($row->nama_karyawan ?? '')),
+            'perusahaan' => trim((string) ($row->perusahaan ?? '')),
+            'gate' => trim((string) ($row->gate ?? '')),
+            'jenis_checkinout' => trim((string) ($row->jenis_checkinout ?? '')),
+            'status_lolos' => trim((string) ($row->status_lolos ?? '')),
+        ];
     }
 }
