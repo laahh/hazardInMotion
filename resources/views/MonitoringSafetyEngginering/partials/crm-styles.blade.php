@@ -1417,6 +1417,19 @@
    .crm-level-chip--warn { background: #FFF8E6; color: #FFAA05; }
    .crm-level-chip--bad { background: #FFECEC; color: #FF5B5B; }
    .crm-level-chip--neutral { background: #F4F7F9; color: #848488; }
+   .crm-level-chip--derived {
+      background: #EEF2FF;
+      color: #4338CA;
+      border: 1px solid #C7D2FE;
+   }
+   .crm-level-chip-hint {
+      margin-left: 0.25rem;
+      font-size: 0.625rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      opacity: 0.75;
+   }
 
    .crm-matrix-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
    .crm-matrix-table th {
@@ -1509,6 +1522,854 @@
    .crm-insight-icon--green { background: #E8F9E5; color: #51BB25; }
    .crm-insight-value { font-size: 1.25rem; font-weight: 800; color: #2F2F3A; line-height: 1.1; }
    .crm-insight-label { font-size: 0.625rem; font-weight: 600; color: #848488; margin-top: 0.1rem; }
+
+   /* ---- PMR Evaluation workspace ---- */
+   .mse-eval-hero {
+      display: grid;
+      gap: 1.25rem;
+      padding: 1.35rem 1.4rem;
+      border-radius: 1rem;
+      border: 1px solid #E6E9EB;
+      background:
+         linear-gradient(135deg, rgba(115, 102, 255, 0.08) 0%, rgba(255, 255, 255, 0.95) 42%, #F7FBF4 100%);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+   }
+   @media (min-width: 900px) {
+      .mse-eval-hero { grid-template-columns: 1.6fr 0.9fr; align-items: center; }
+   }
+   .mse-eval-kicker {
+      margin: 0;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #7366FF;
+   }
+   .mse-eval-title {
+      margin: 0.35rem 0 0.45rem;
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: #1F2430;
+      line-height: 1.2;
+   }
+   .mse-eval-desc {
+      margin: 0;
+      max-width: 42rem;
+      font-size: 0.8125rem;
+      line-height: 1.55;
+      color: #6B7280;
+   }
+   .mse-eval-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.1rem;
+      margin-top: 0.95rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #4B5563;
+   }
+   .mse-eval-meta span { display: inline-flex; align-items: center; gap: 0.3rem; }
+   .mse-eval-hero-score {
+      padding: 1rem 1.1rem;
+      border-radius: 0.9rem;
+      background: #fff;
+      border: 1px solid #E8EAF0;
+   }
+   .mse-eval-score-label {
+      margin: 0;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      color: #8B8F98;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+   }
+   .mse-eval-score-value {
+      margin: 0.35rem 0 0.55rem;
+      font-size: 2.35rem;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      color: #1F2430;
+      line-height: 1;
+   }
+   .mse-eval-score-track {
+      height: 0.45rem;
+      border-radius: 9999px;
+      background: #EEF2F7;
+      overflow: hidden;
+   }
+   .mse-eval-score-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #7366FF, #51BB25);
+   }
+   .mse-eval-score-note {
+      margin: 0.55rem 0 0;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #6B7280;
+   }
+
+   .mse-eval-score-card {
+      padding: 1rem 1.05rem;
+      border-radius: 0.9rem;
+      border: 1px solid #E6E9EB;
+      background: #fff;
+      position: relative;
+      overflow: hidden;
+   }
+   .mse-eval-score-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+   }
+   .mse-eval-score-card--l3::before { background: #15803D; }
+   .mse-eval-score-card--l2::before { background: #65A30D; }
+   .mse-eval-score-card--l1::before { background: #CA8A04; }
+   .mse-eval-score-card--none::before { background: #9CA3AF; }
+   .mse-eval-score-card-hint {
+      margin: 0;
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #9CA3AF;
+   }
+   .mse-eval-score-card-label {
+      margin: 0.2rem 0 0;
+      font-size: 0.8125rem;
+      font-weight: 700;
+      color: #374151;
+   }
+   .mse-eval-score-card-value {
+      margin: 0.45rem 0 0;
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: #1F2430;
+      line-height: 1;
+   }
+   .mse-eval-score-card-pct {
+      margin: 0.4rem 0 0;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: #8B8F98;
+   }
+
+   .mse-eval-section-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.85rem;
+   }
+   .mse-eval-section-head--table {
+      flex-wrap: wrap;
+      align-items: center;
+   }
+   .mse-eval-section-sub {
+      margin: 0.25rem 0 0;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      color: #8B8F98;
+   }
+   .mse-eval-result-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.55rem;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      white-space: nowrap;
+   }
+   .mse-eval-result-pill--high { background: #E8F9E5; color: #15803D; }
+   .mse-eval-result-pill--mid { background: #FFF8E6; color: #B45309; }
+   .mse-eval-chart-wrap { height: 220px; }
+   .mse-eval-exposure {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.25rem;
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid #EEF1F4;
+      font-size: 0.75rem;
+      color: #6B7280;
+   }
+   .mse-eval-exposure div { display: inline-flex; align-items: center; gap: 0.35rem; }
+   .mse-eval-exposure strong { color: #1F2430; }
+
+   .mse-eval-cohort { border-left: 3px solid var(--cohort, #7366FF); }
+   .mse-eval-cohort-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+   }
+   .mse-eval-cohort-label {
+      margin: 0;
+      font-size: 0.9375rem;
+      font-weight: 800;
+      color: #1F2430;
+   }
+   .mse-eval-cohort-sub {
+      margin: 0.2rem 0 0;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      color: #8B8F98;
+   }
+   .mse-eval-cohort-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.55rem;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      background: #F3F4F6;
+      color: #4B5563;
+   }
+   .mse-eval-stack {
+      display: flex;
+      height: 0.55rem;
+      border-radius: 9999px;
+      overflow: hidden;
+      background: #EEF2F7;
+      margin-bottom: 0.7rem;
+   }
+   .mse-eval-stack i { display: block; height: 100%; }
+   .mse-eval-cohort-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.35rem 0.75rem;
+      font-size: 0.6875rem;
+      color: #6B7280;
+   }
+   .mse-eval-cohort-metrics b { color: #1F2430; margin-right: 0.2rem; }
+   .mse-eval-cohort-foot {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.75rem;
+      padding-top: 0.65rem;
+      border-top: 1px dashed #E6E9EB;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: #8B8F98;
+   }
+
+   .mse-eval-table-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+   }
+   .mse-eval-filter-btn {
+      border: 1px solid #E6E9EB;
+      background: #fff;
+      color: #6B7280;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      padding: 0.35rem 0.65rem;
+      border-radius: 9999px;
+      cursor: pointer;
+   }
+   .mse-eval-filter-btn.is-active {
+      background: #ECE9FF;
+      border-color: #C9C2FF;
+      color: #5B52D6;
+   }
+   .mse-eval-item-meta {
+      margin: 0.2rem 0 0;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      color: #9CA3AF;
+   }
+   .mse-eval-io {
+      display: inline-flex;
+      max-width: 100%;
+      padding: 0.2rem 0.45rem;
+      border-radius: 0.4rem;
+      background: #F8FAFC;
+      border: 1px solid #E8ECF1;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #374151;
+   }
+   .mse-eval-io--empty {
+      background: #FFF7ED;
+      border-color: #FED7AA;
+      color: #C2410C;
+   }
+   .mse-eval-table-note {
+      margin: 0.85rem 0 0;
+      font-size: 0.6875rem;
+      color: #8B8F98;
+   }
+
+   /* ---- Company Overview Scorecard ---- */
+   .mse-co-hero {
+      display: grid;
+      gap: 1.25rem;
+      padding: 1.35rem 1.4rem;
+      border-radius: 1rem;
+      border: 1px solid #E6E9EB;
+      background:
+         linear-gradient(135deg, rgba(115, 102, 255, 0.09) 0%, #FFFFFF 45%, #F4FBF8 100%);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+   }
+   @media (min-width: 900px) {
+      .mse-co-hero { grid-template-columns: 1.55fr 1fr; align-items: stretch; }
+   }
+   .mse-co-kicker {
+      margin: 0;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #7366FF;
+   }
+   .mse-co-title {
+      margin: 0.35rem 0 0.45rem;
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: #1F2430;
+      line-height: 1.2;
+   }
+   .mse-co-desc {
+      margin: 0;
+      max-width: 40rem;
+      font-size: 0.8125rem;
+      line-height: 1.55;
+      color: #6B7280;
+   }
+   .mse-co-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.1rem;
+      margin-top: 0.95rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #4B5563;
+   }
+   .mse-co-meta span { display: inline-flex; align-items: center; gap: 0.3rem; }
+   .mse-co-hero-score {
+      padding: 1rem 1.1rem;
+      border-radius: 0.9rem;
+      background: #fff;
+      border: 1px solid #E8EAF0;
+   }
+   .mse-co-score-label {
+      margin: 0;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      color: #8B8F98;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+   }
+   .mse-co-score-value {
+      margin: 0.3rem 0 0.75rem;
+      font-size: 2.4rem;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      color: #1F2430;
+      line-height: 1;
+   }
+   .mse-co-score-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.55rem 0.75rem;
+   }
+   .mse-co-score-grid div {
+      padding: 0.45rem 0.55rem;
+      border-radius: 0.55rem;
+      background: #F8FAFC;
+      border: 1px solid #EEF2F7;
+   }
+   .mse-co-score-grid b {
+      display: block;
+      font-size: 0.9375rem;
+      font-weight: 800;
+      color: #1F2430;
+      line-height: 1.1;
+   }
+   .mse-co-score-grid span {
+      font-size: 0.625rem;
+      font-weight: 600;
+      color: #8B8F98;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+   }
+   .mse-co-section-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.85rem;
+   }
+   .mse-co-section-head--table { align-items: center; flex-wrap: wrap; }
+   .mse-co-section-sub {
+      margin: 0.25rem 0 0;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      color: #8B8F98;
+   }
+   .mse-co-chart-wrap { height: 280px; }
+   .mse-co-rank-row { cursor: pointer; transition: background 0.15s ease; }
+   .mse-co-rank-row:hover { background: #F8F7FF; }
+   .mse-co-rank-row.is-active {
+      background: #F1EFFF;
+      box-shadow: inset 3px 0 0 #7366FF;
+   }
+   .mse-co-row-meta {
+      margin: 0.15rem 0 0;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      color: #9CA3AF;
+   }
+   .mse-co-eff-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.15rem 0.45rem;
+      border-radius: 0.4rem;
+      background: #ECFDF3;
+      color: #15803D;
+      font-size: 0.75rem;
+      font-weight: 700;
+   }
+   .mse-co-band {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      white-space: nowrap;
+   }
+   .mse-band--excellent { background: #E8F9E5; color: #15803D; }
+   .mse-band--ontrack { background: #ECE9FF; color: #5B52D6; }
+   .mse-band--watch { background: #FFF8E6; color: #B45309; }
+   .mse-band--critical { background: #FFECEC; color: #DC2626; }
+   .mse-co-details summary { list-style: none; }
+   .mse-co-details summary::-webkit-details-marker { display: none; }
+   .mse-co-details-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      cursor: pointer;
+   }
+   .mse-co-details[open] .mse-co-details-summary .material-symbols-outlined {
+      transform: rotate(180deg);
+   }
+   .mse-co-details-summary .material-symbols-outlined {
+      color: #8B8F98;
+      transition: transform 0.15s ease;
+   }
+
+   /* ---- PMR Effectiveness Evaluation Dashboard ---- */
+   .mse-eff-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1rem 1.5rem;
+      padding: 1.1rem 1.25rem;
+      border-radius: 1rem;
+      border: 1px solid #D9E2EC;
+      background: linear-gradient(120deg, #F0FDFA 0%, #FFFFFF 48%, #F8FAFC 100%);
+   }
+   .mse-eff-kicker {
+      margin: 0;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #0F766E;
+   }
+   .mse-eff-title {
+      margin: 0.25rem 0 0.3rem;
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: #0F172A;
+      line-height: 1.2;
+   }
+   .mse-eff-subtitle {
+      margin: 0;
+      font-size: 0.8125rem;
+      color: #64748B;
+      max-width: 40rem;
+   }
+   .mse-eff-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: flex-end;
+   }
+   .mse-eff-kpi {
+      padding: 0.95rem 1rem;
+      border-radius: 0.85rem;
+      border: 1px solid #E2E8F0;
+      background: #fff;
+      position: relative;
+      overflow: hidden;
+   }
+   .mse-eff-kpi::before {
+      content: '';
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 4px;
+   }
+   .mse-eff-kpi--total::before { background: #334155; }
+   .mse-eff-kpi--l1::before { background: #0891B2; }
+   .mse-eff-kpi--l2::before { background: #D97706; }
+   .mse-eff-kpi--l3::before { background: #BE123C; }
+   .mse-eff-kpi--none::before { background: #64748B; }
+   .mse-eff-kpi--upgrade::before { background: #0F766E; }
+   .mse-eff-kpi--total { background: #F8FAFC; }
+   .mse-eff-kpi--l1 { background: #ECFEFF; }
+   .mse-eff-kpi--l2 { background: #FFFBEB; }
+   .mse-eff-kpi--l3 { background: #FFF1F2; }
+   .mse-eff-kpi--none { background: #F1F5F9; }
+   .mse-eff-kpi--upgrade { background: #F0FDFA; }
+   .mse-eff-kpi-label {
+      margin: 0;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      color: #475569;
+      line-height: 1.35;
+      min-height: 2.1em;
+   }
+   .mse-eff-kpi-value {
+      margin: 0.45rem 0 0.15rem;
+      font-size: 1.65rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: #0F172A;
+      line-height: 1;
+   }
+   .mse-eff-kpi-sub {
+      margin: 0;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #64748B;
+   }
+   .mse-eff-card-title {
+      margin: 0 0 0.35rem;
+      font-size: 0.875rem;
+      font-weight: 800;
+      color: #0F172A;
+   }
+   .mse-eff-card-sub {
+      margin: 0 0 0.75rem;
+      font-size: 0.6875rem;
+      color: #64748B;
+   }
+   .mse-eff-split {
+      display: grid;
+      gap: 0.85rem;
+   }
+   @media (min-width: 640px) {
+      .mse-eff-split { grid-template-columns: 0.9fr 1.1fr; align-items: center; }
+   }
+   .mse-eff-donut-wrap {
+      position: relative;
+      height: 170px;
+   }
+   .mse-eff-donut-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+   }
+   .mse-eff-donut-center span {
+      font-size: 0.625rem;
+      font-weight: 700;
+      color: #94A3B8;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+   }
+   .mse-eff-donut-center strong {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #0F172A;
+      line-height: 1.1;
+   }
+   .mse-eff-mini-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75rem;
+   }
+   .mse-eff-mini-table th {
+      text-align: left;
+      font-size: 0.625rem;
+      font-weight: 700;
+      color: #94A3B8;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      padding: 0.35rem 0.25rem;
+      border-bottom: 1px solid #E2E8F0;
+   }
+   .mse-eff-mini-table td {
+      padding: 0.4rem 0.25rem;
+      border-bottom: 1px solid #F1F5F9;
+      color: #334155;
+      vertical-align: middle;
+   }
+   .mse-eff-mini-table tbody tr:nth-child(even) td { background: #F8FAFC; }
+   .mse-eff-dot {
+      display: inline-block;
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 9999px;
+      margin-right: 0.4rem;
+      vertical-align: middle;
+   }
+   .mse-eff-dot--l1 { background: #0891B2; }
+   .mse-eff-dot--l2 { background: #D97706; }
+   .mse-eff-dot--l3 { background: #BE123C; }
+   .mse-eff-dot--none, .mse-eff-dot--needs { background: #64748B; }
+   .mse-eff-dot--effective { background: #0F766E; }
+   .mse-eff-dot--partial { background: #CA8A04; }
+   .mse-eff-dot--ineffective { background: #E11D48; }
+   .mse-eff-matrix {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75rem;
+   }
+   .mse-eff-matrix th {
+      background: #F0FDFA;
+      color: #0F766E;
+      font-size: 0.625rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      padding: 0.55rem 0.45rem;
+      border-bottom: 1px solid #CCFBF1;
+      text-align: left;
+   }
+   .mse-eff-matrix td {
+      padding: 0.55rem 0.45rem;
+      border-bottom: 1px solid #E2E8F0;
+      color: #334155;
+   }
+   .mse-eff-matrix tbody tr:nth-child(even) td { background: #F8FAFC; }
+   .mse-eff-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.18rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      white-space: nowrap;
+   }
+   .mse-eff-badge--effective { background: #CCFBF1; color: #0F766E; }
+   .mse-eff-badge--partial { background: #FEF3C7; color: #B45309; }
+   .mse-eff-badge--ineffective { background: #FFE4E6; color: #BE123C; }
+   .mse-eff-badge--needs_data, .mse-eff-badge--needs { background: #E2E8F0; color: #475569; }
+   .mse-eff-badge--level0 { background: #E2E8F0; color: #475569; }
+   .mse-eff-badge--level1 { background: #CFFAFE; color: #0E7490; }
+   .mse-eff-badge--level2 { background: #FEF3C7; color: #B45309; }
+   .mse-eff-badge--level3 { background: #FFE4E6; color: #BE123C; }
+   .mse-eff-flag {
+      display: inline-flex;
+      min-width: 4.5rem;
+      justify-content: center;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.35rem;
+      font-size: 0.6875rem;
+      font-weight: 700;
+   }
+   .mse-eff-flag--yes { background: #FFE4E6; color: #BE123C; }
+   .mse-eff-flag--no { background: #ECFDF5; color: #047857; }
+   .mse-eff-bar-wrap { height: 180px; }
+   .mse-eff-fokus-list { display: grid; gap: 0.65rem; }
+   .mse-eff-fokus-item {
+      display: flex;
+      gap: 0.65rem;
+      align-items: flex-start;
+      padding: 0.65rem 0.7rem;
+      border-radius: 0.7rem;
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+   }
+   .mse-eff-fokus-icon {
+      width: 1.85rem;
+      height: 1.85rem;
+      border-radius: 0.5rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #CCFBF1;
+      color: #0F766E;
+      flex-shrink: 0;
+   }
+   .mse-eff-fokus-icon .material-symbols-outlined { font-size: 1.05rem; }
+   .mse-eff-fokus-item p {
+      margin: 0;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #334155;
+      line-height: 1.45;
+   }
+   .mse-eff-priority-table td { font-size: 0.8125rem; }
+   .mse-eff-footnote {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0.75rem 1.5rem;
+      padding: 0.9rem 1rem;
+      border-radius: 0.85rem;
+      border: 1px dashed #CBD5E1;
+      background: #F8FAFC;
+      font-size: 0.75rem;
+      color: #64748B;
+      margin-bottom: 0.5rem;
+   }
+   .mse-eff-footnote strong { color: #0F172A; }
+   .mse-eff-footnote-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: #94A3B8;
+      text-align: right;
+   }
+
+   /* ---- Overall Perusahaan Progress Dashboard ---- */
+   .mse-ov-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 1rem 1.5rem;
+      align-items: flex-end;
+      padding: 1rem 1.15rem;
+      border-radius: 1rem;
+      border: 1px solid #DBEAFE;
+      background: linear-gradient(120deg, #EFF6FF 0%, #FFFFFF 55%, #F0FDF4 100%);
+   }
+   .mse-ov-title {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #1E3A8A;
+      line-height: 1.25;
+   }
+   .mse-ov-sub {
+      margin: 0.3rem 0 0;
+      font-size: 0.75rem;
+      color: #64748B;
+   }
+   .mse-ov-header-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.45rem;
+   }
+   .mse-ov-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      justify-content: flex-end;
+   }
+   .mse-ov-filters .crm-filter-select {
+      min-width: 10rem;
+      font-size: 0.75rem;
+   }
+   .mse-ov-meta-text {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: #64748B;
+      text-align: right;
+   }
+   .mse-ov-meta-text span { display: inline-flex; align-items: center; gap: 0.25rem; justify-content: flex-end; }
+   .mse-ov-kpi {
+      padding: 0.85rem 0.8rem;
+      border-radius: 0.85rem;
+      border: 1px solid #E2E8F0;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      min-height: 7.2rem;
+   }
+   .mse-ov-kpi-icon {
+      width: 1.85rem;
+      height: 1.85rem;
+      border-radius: 0.5rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+   }
+   .mse-ov-kpi-icon .material-symbols-outlined { font-size: 1.05rem; }
+   .mse-ov-kpi--blue .mse-ov-kpi-icon { background: #DBEAFE; color: #1D4ED8; }
+   .mse-ov-kpi--slate .mse-ov-kpi-icon { background: #E2E8F0; color: #334155; }
+   .mse-ov-kpi--indigo .mse-ov-kpi-icon { background: #E0E7FF; color: #4338CA; }
+   .mse-ov-kpi--green .mse-ov-kpi-icon { background: #DCFCE7; color: #15803D; }
+   .mse-ov-kpi--teal .mse-ov-kpi-icon { background: #CCFBF1; color: #0F766E; }
+   .mse-ov-kpi--rose .mse-ov-kpi-icon { background: #FFE4E6; color: #E11D48; }
+   .mse-ov-kpi--red .mse-ov-kpi-icon { background: #FEE2E2; color: #DC2626; }
+   .mse-ov-kpi--emerald .mse-ov-kpi-icon { background: #D1FAE5; color: #047857; }
+   .mse-ov-kpi-value {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: #0F172A;
+      line-height: 1.15;
+   }
+   .mse-ov-kpi-label {
+      margin: 0;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: #64748B;
+      line-height: 1.35;
+   }
+   .mse-ov-table td, .mse-ov-table th { font-size: 0.75rem; }
+   .mse-ov-total-row td { background: #EFF6FF !important; }
+   .mse-prog {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+   }
+   .mse-prog-track {
+      flex: 1;
+      height: 0.4rem;
+      border-radius: 9999px;
+      background: #E2E8F0;
+      overflow: hidden;
+   }
+   .mse-prog-bar { height: 100%; border-radius: inherit; }
+   .mse-prog-bar--green { background: #16A34A; }
+   .mse-prog-bar--amber { background: #CA8A04; }
+   .mse-prog-bar--orange { background: #EA580C; }
+   .mse-prog-bar--red { background: #DC2626; }
+   .mse-prog-pct {
+      min-width: 2.4rem;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      color: #475569;
+      text-align: right;
+   }
+   .mse-ov-chart-wrap { height: 280px; }
+   .mse-ov-footnote {
+      padding: 0.85rem 1rem;
+      border-radius: 0.75rem;
+      border: 1px dashed #CBD5E1;
+      background: #F8FAFC;
+      font-size: 0.75rem;
+      color: #64748B;
+      margin-bottom: 0.25rem;
+   }
+   .mse-ov-footnote strong { color: #0F172A; }
 
    /* ---- Handsontable grid (Update Data) ---- */
    .crm-grid-toolbar {

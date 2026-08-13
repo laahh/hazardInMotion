@@ -16,6 +16,10 @@ class MonitoringSafetyEngineeringDashboardService
 {
     use BuildsMonitoringSafetyEngineeringItems;
 
+    public function __construct(
+        private readonly MonitoringSafetyEngineeringRiskReductionCalculator $riskReductionCalculator,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -1370,7 +1374,7 @@ class MonitoringSafetyEngineeringDashboardService
         $withoutPrediksi = 0;
 
         foreach ($records as $record) {
-            $rowKey = $this->resolveRiskControlRowKey(
+            $rowKey = $this->riskReductionCalculator->resolveControlRowKey(
                 $record->deteksi_deviasi !== null ? (string) $record->deteksi_deviasi : null,
                 $record->intervensi_deviasi !== null ? (string) $record->intervensi_deviasi : null,
             );
@@ -1382,7 +1386,7 @@ class MonitoringSafetyEngineeringDashboardService
             $isDerived = false;
 
             if ($prediksi === null || ! isset($columnLabels[$prediksi])) {
-                $derived = $this->defaultPrediksiForRiskRow($rowKey);
+                $derived = $this->riskReductionCalculator->defaultPrediksiForRiskRow($rowKey);
                 if ($derived === null) {
                     $withoutPrediksi++;
                     continue;
@@ -1432,93 +1436,5 @@ class MonitoringSafetyEngineeringDashboardService
             'total' => $total,
             'without_prediksi' => $withoutPrediksi,
         ];
-    }
-
-    /**
-     * Klasifikasi baris matriks dari DETEKSI + INTERVENSI (kolom terpisah).
-     * Mendukung juga format legacy "Deteksi -> Intervensi" di kolom intervensi saja.
-     */
-    private function resolveRiskControlRowKey(?string $deteksi, ?string $intervensi): string
-    {
-        $deteksiLevel = $this->normalizeRiskControlLevel((string) ($deteksi ?? ''));
-        $intervensiLevel = $this->normalizeRiskControlLevel((string) ($intervensi ?? ''));
-
-        // Legacy: "Alat -> Manusia" tersimpan hanya di intervensi_deviasi
-        if (
-            ($deteksiLevel === '' || $deteksiLevel === '0')
-            && preg_match('/^(.+?)\s*->\s*(.+)$/u', (string) ($intervensi ?? ''), $matches) === 1
-        ) {
-            $deteksiLevel = $this->normalizeRiskControlLevel($matches[1]);
-            $intervensiLevel = $this->normalizeRiskControlLevel($matches[2]);
-        }
-
-        if ($deteksiLevel === 'eliminasi' || $intervensiLevel === 'eliminasi') {
-            return 'eliminasi';
-        }
-
-        if ($deteksiLevel === 'alat' && $intervensiLevel === 'alat') {
-            return 'full_automasi';
-        }
-
-        if (
-            ($deteksiLevel === 'alat' && $intervensiLevel === 'manusia')
-            || ($deteksiLevel === 'manusia' && $intervensiLevel === 'alat')
-        ) {
-            return 'hybrid';
-        }
-
-        if ($deteksiLevel === 'manusia' && $intervensiLevel === 'manusia') {
-            return 'manusia';
-        }
-
-        if (
-            $deteksiLevel === 'tidak_mendeteksi'
-            || $intervensiLevel === 'menahan_mengurangi'
-            || $intervensiLevel === 'menahan'
-        ) {
-            return 'menahan_mengurangi';
-        }
-
-        if ($deteksiLevel === '' && $intervensiLevel === '') {
-            return 'menahan_mengurangi';
-        }
-
-        return match ($intervensiLevel !== '' ? $intervensiLevel : $deteksiLevel) {
-            'alat' => 'full_automasi',
-            'manusia' => 'manusia',
-            default => 'menahan_mengurangi',
-        };
-    }
-
-    private function normalizeRiskControlLevel(string $value): string
-    {
-        $normalized = strtolower(trim($value));
-        $normalized = str_replace(['–', '—', '→', '⇒'], '->', $normalized);
-        $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
-        $normalized = str_replace([' ', '-', '/'], '_', $normalized);
-
-        return match ($normalized) {
-            'eliminasi', 'eliminate', 'elimination' => 'eliminasi',
-            'alat', 'machine', 'equipment', 'tool' => 'alat',
-            'manusia', 'human', 'people' => 'manusia',
-            'tidak_mendeteksi', 'tidak_ada_deteksi', 'tidakmendeteksi' => 'tidak_mendeteksi',
-            'menahan_mengurangi', 'menahan_mengurangi_dampak', 'menahan_mengurangi_dampak_' => 'menahan_mengurangi',
-            'menahan', 'mengurangi' => 'menahan_mengurangi',
-            default => $normalized,
-        };
-    }
-
-    /**
-     * Fallback prediksi tangga bila kolom prediksi belum diisi,
-     * berdasarkan hierarki Deteksi/Intervensi.
-     */
-    private function defaultPrediksiForRiskRow(string $rowKey): ?int
-    {
-        return match ($rowKey) {
-            'eliminasi', 'full_automasi' => 3,
-            'hybrid' => 2,
-            'manusia', 'menahan_mengurangi' => 1,
-            default => null,
-        };
     }
 }

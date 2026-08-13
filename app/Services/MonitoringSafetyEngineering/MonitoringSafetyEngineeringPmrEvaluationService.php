@@ -13,6 +13,10 @@ use Illuminate\Support\Facades\Schema;
 
 class MonitoringSafetyEngineeringPmrEvaluationService
 {
+    public function __construct(
+        private readonly MonitoringSafetyEngineeringRiskReductionCalculator $riskReductionCalculator,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -27,17 +31,25 @@ class MonitoringSafetyEngineeringPmrEvaluationService
 
         $records = $this->fetchFilteredRecords($filters);
         $items = $records->map(fn (MonitoringSafetyEngineeringRecord $record): array => $this->recordToItem($record))->all();
+        $summary = $this->buildSummary($items, $pmrGroups);
+        $validationMatrix = $this->validationMatrixDefinition();
+        $followUpSummary = $this->buildFollowUpSummary($items);
+        $priorityItems = $this->buildPriorityUpgradeItems($items);
 
         return [
             'filters' => $filters,
             'filter_options' => $this->filterOptions(),
-            'summary' => $this->buildSummary($items, $pmrGroups),
+            'summary' => $summary,
             'items' => $items,
             'pmr_groups' => $pmrGroups,
             'effectiveness_levels' => $this->effectivenessLevels(),
+            'validation_matrix' => $validationMatrix,
+            'follow_up_summary' => $followUpSummary,
+            'priority_items' => $priorityItems,
+            'fokus_analisis' => $this->fokusAnalisisPoints(),
             'brief_analysis' => $this->buildBriefAnalysis($records, $items),
             'next_todo' => $this->buildNextTodo($records),
-            'charts' => $this->buildCharts($items, $pmrGroups),
+            'charts' => $this->buildCharts($items, $pmrGroups, $summary, $followUpSummary),
         ];
     }
 
@@ -52,13 +64,20 @@ class MonitoringSafetyEngineeringPmrEvaluationService
      */
     private function emptyDashboard(array $filters, array $pmrGroups): array
     {
+        $summary = $this->buildSummary([], $pmrGroups);
+        $followUpSummary = $this->buildFollowUpSummary([]);
+
         return [
             'filters' => $filters,
             'filter_options' => $this->filterOptions(),
-            'summary' => $this->buildSummary([], $pmrGroups),
+            'summary' => $summary,
             'items' => [],
             'pmr_groups' => $pmrGroups,
             'effectiveness_levels' => $this->effectivenessLevels(),
+            'validation_matrix' => $this->validationMatrixDefinition(),
+            'follow_up_summary' => $followUpSummary,
+            'priority_items' => [],
+            'fokus_analisis' => $this->fokusAnalisisPoints(),
             'brief_analysis' => [
                 [
                     'title' => 'Status Evaluasi',
@@ -66,7 +85,7 @@ class MonitoringSafetyEngineeringPmrEvaluationService
                 ],
             ],
             'next_todo' => ['Upload atau input data rekayasa melalui menu Update Data.'],
-            'charts' => $this->buildCharts([], $pmrGroups),
+            'charts' => $this->buildCharts([], $pmrGroups, $summary, $followUpSummary),
         ];
     }
 
@@ -153,23 +172,122 @@ class MonitoringSafetyEngineeringPmrEvaluationService
      */
     private function recordToItem(MonitoringSafetyEngineeringRecord $record): array
     {
-        $prediksi = $record->prediksi_penurunan_tangga_risiko;
+        $deteksiRaw = $record->deteksi_deviasi !== null ? (string) $record->deteksi_deviasi : null;
+        $intervensiRaw = $record->intervensi_deviasi !== null ? (string) $record->intervensi_deviasi : null;
+        $storedPrediksi = $record->prediksi_penurunan_tangga_risiko;
+        $prediksi = $this->riskReductionCalculator->resolveEffectivePrediksi(
+            $storedPrediksi,
+            $deteksiRaw,
+            $intervensiRaw,
+        );
+        $isDerived = $this->riskReductionCalculator->isDerivedPrediksi(
+            $storedPrediksi,
+            $deteksiRaw,
+            $intervensiRaw,
+        );
+
+        $hazard = $record->terkait_hazard ? 1 : 0;
+        $insiden = $record->terkait_insiden ? 1 : 0;
+        $level = $prediksi ?? 0;
+        $validation = $this->resolveEffectivenessValidation($level, $hazard, $insiden);
 
         return [
             'id' => $record->id,
             'name' => $record->pengendalian_rekayasa,
             'icon' => $this->resolveIcon($record->pengendalian_rekayasa),
             'pmr' => $this->resolvePmrGroup($record),
-            'level' => $prediksi ?? 0,
+            'level' => $level,
             'level_label' => $this->levelLabel($prediksi),
-            'hazard' => $record->terkait_hazard ? 1 : 0,
-            'insiden' => $record->terkait_insiden ? 1 : 0,
+            'prediksi_is_derived' => $isDerived,
+            'hazard' => $hazard,
+            'insiden' => $insiden,
+            'hazard_label' => $hazard > 0 ? 'Ada' : 'Tidak Ada',
+            'insiden_label' => $insiden > 0 ? 'Ada' : 'Tidak Ada',
+            'validation_status' => $validation['status'],
+            'validation_label' => $validation['label'],
+            'follow_up' => $validation['follow_up'],
+            'upgrade_potential' => $validation['upgrade_potential'],
             'site' => $record->site,
             'perusahaan' => $record->perusahaan,
-            'deteksi_deviasi' => $record->deteksi_deviasi,
-            'intervensi_deviasi' => $record->intervensi_deviasi,
+            'deteksi_deviasi' => $this->formatDeteksiLabel($deteksiRaw),
+            'intervensi_deviasi' => $this->formatIntervensiLabel($intervensiRaw),
             'sumber_rekayasa' => $this->normalizeEnumValue($record->sumber_rekayasa),
         ];
+    }
+
+    /**
+     * Validasi efektivitas berbasis Hazard × Incident setelah rekayasa.
+     *
+     * @return array{status: string, label: string, follow_up: string, upgrade_potential: bool}
+     */
+    private function resolveEffectivenessValidation(int $level, int $hazard, int $insiden): array
+    {
+        if ($level <= 0) {
+            return [
+                'status' => 'needs_data',
+                'label' => 'Perlu Validasi Data',
+                'follow_up' => 'Lengkapi Prediksi',
+                'upgrade_potential' => false,
+            ];
+        }
+
+        if ($hazard === 0 && $insiden === 0) {
+            return [
+                'status' => 'effective',
+                'label' => 'Efektif',
+                'follow_up' => 'Pertahankan Level',
+                'upgrade_potential' => false,
+            ];
+        }
+
+        if ($hazard === 1 && $insiden === 0) {
+            return [
+                'status' => 'partial',
+                'label' => 'Sebagian Efektif',
+                'follow_up' => 'Pertahankan + Monitoring',
+                'upgrade_potential' => $level < 3,
+            ];
+        }
+
+        if ($hazard === 0 && $insiden === 1) {
+            return [
+                'status' => 'partial',
+                'label' => 'Sebagian Efektif',
+                'follow_up' => 'Naikkan Level',
+                'upgrade_potential' => true,
+            ];
+        }
+
+        return [
+            'status' => 'ineffective',
+            'label' => 'Tidak Efektif',
+            'follow_up' => 'Re-evaluasi',
+            'upgrade_potential' => true,
+        ];
+    }
+
+    private function formatDeteksiLabel(?string $value): string
+    {
+        if ($value === null || trim($value) === '') {
+            return '—';
+        }
+
+        $labels = config('monitoring_safety_engineering.deteksi_deviasi', []);
+        $key = $this->normalizeEnumValue($value);
+
+        return (string) ($labels[$key] ?? $value);
+    }
+
+    private function formatIntervensiLabel(?string $value): string
+    {
+        if ($value === null || trim($value) === '') {
+            return '—';
+        }
+
+        $labels = config('monitoring_safety_engineering.intervensi_deviasi', []);
+        $key = $this->normalizeEnumValue($value);
+
+        return (string) ($labels[$key] ?? $value);
     }
 
     private function resolvePmrGroup(MonitoringSafetyEngineeringRecord $record): string
@@ -183,10 +301,15 @@ class MonitoringSafetyEngineeringPmrEvaluationService
             }
         }
 
-        foreach (['PMR 1', 'PMR 2', 'PMR 3'] as $pmrLabel) {
+        foreach (['PMR 2023', 'PMR 2024', 'PMR 2025', 'PMR 1', 'PMR 2', 'PMR 3'] as $pmrLabel) {
             if (stripos($record->pengendalian_rekayasa, $pmrLabel) !== false
                 || stripos((string) $record->aktivitas, $pmrLabel) !== false) {
-                return $pmrLabel;
+                return match ($pmrLabel) {
+                    'PMR 1' => 'PMR 2023',
+                    'PMR 2' => 'PMR 2024',
+                    'PMR 3' => 'PMR 2025',
+                    default => $pmrLabel,
+                };
             }
         }
 
@@ -237,14 +360,77 @@ class MonitoringSafetyEngineeringPmrEvaluationService
      */
     private function buildSummary(array $items, array $pmrGroups): array
     {
+        $total = count($items);
         $summary = [
-            'total' => count($items),
+            'total' => $total,
             'total_hazard' => (int) array_sum(array_column($items, 'hazard')),
             'total_insiden' => (int) array_sum(array_column($items, 'insiden')),
+            'evaluated_count' => 0,
+            'incomplete_count' => 0,
+            'auto_count' => 0,
+            'manual_count' => 0,
+            'upgrade_potential_count' => 0,
+            'level_counts' => [
+                3 => 0,
+                2 => 0,
+                1 => 0,
+                0 => 0,
+            ],
+            'validation_counts' => [
+                'effective' => 0,
+                'partial' => 0,
+                'ineffective' => 0,
+                'needs_data' => 0,
+            ],
         ];
 
         foreach ($pmrGroups as $pmr) {
             $summary[$pmr] = count(array_filter($items, static fn (array $item): bool => $item['pmr'] === $pmr));
+        }
+
+        foreach ($items as $item) {
+            $level = (int) ($item['level'] ?? 0);
+            if ($level >= 1 && $level <= 3) {
+                $summary['level_counts'][$level]++;
+                $summary['evaluated_count']++;
+            } else {
+                $summary['level_counts'][0]++;
+                $summary['incomplete_count']++;
+            }
+
+            if (! empty($item['prediksi_is_derived'])) {
+                $summary['auto_count']++;
+            } elseif ($level > 0) {
+                $summary['manual_count']++;
+            }
+
+            if (! empty($item['upgrade_potential'])) {
+                $summary['upgrade_potential_count']++;
+            }
+
+            $status = (string) ($item['validation_status'] ?? 'needs_data');
+            if (array_key_exists($status, $summary['validation_counts'])) {
+                $summary['validation_counts'][$status]++;
+            }
+        }
+
+        $summary['evaluated_pct'] = $total > 0
+            ? (int) round(($summary['evaluated_count'] / $total) * 100)
+            : 0;
+        $summary['upgrade_potential_pct'] = $total > 0
+            ? round(($summary['upgrade_potential_count'] / $total) * 100, 1)
+            : 0.0;
+
+        foreach ([3, 2, 1, 0] as $lvl) {
+            $summary['level_pct'][$lvl] = $total > 0
+                ? round(($summary['level_counts'][$lvl] / $total) * 100, 1)
+                : 0.0;
+        }
+
+        foreach ($summary['validation_counts'] as $key => $count) {
+            $summary['validation_pct'][$key] = $total > 0
+                ? round(($count / $total) * 100, 1)
+                : 0.0;
         }
 
         $prediksiCounts = [];
@@ -259,6 +445,127 @@ class MonitoringSafetyEngineeringPmrEvaluationService
         $summary['dominant_level_count'] = $prediksiCounts[$dominantLabel] ?? 0;
 
         return $summary;
+    }
+
+    /**
+     * Matriks referensi Hazard × Incident → status validasi & tindak lanjut.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function validationMatrixDefinition(): array
+    {
+        return [
+            [
+                'hazard' => 'Tidak Ada',
+                'insiden' => 'Tidak Ada',
+                'status' => 'Efektif',
+                'status_key' => 'effective',
+                'follow_up' => 'Pertahankan Level',
+            ],
+            [
+                'hazard' => 'Ada',
+                'insiden' => 'Tidak Ada',
+                'status' => 'Sebagian Efektif',
+                'status_key' => 'partial',
+                'follow_up' => 'Pertahankan + Monitoring',
+            ],
+            [
+                'hazard' => 'Tidak Ada',
+                'insiden' => 'Ada',
+                'status' => 'Sebagian Efektif',
+                'status_key' => 'partial',
+                'follow_up' => 'Naikkan Level',
+            ],
+            [
+                'hazard' => 'Ada',
+                'insiden' => 'Ada',
+                'status' => 'Tidak Efektif',
+                'status_key' => 'ineffective',
+                'follow_up' => 'Re-evaluasi',
+            ],
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array{key: string, label: string, count: int}>
+     */
+    private function buildFollowUpSummary(array $items): array
+    {
+        $order = [
+            'Pertahankan Level' => 0,
+            'Pertahankan + Monitoring' => 0,
+            'Naikkan Level' => 0,
+            'Re-evaluasi' => 0,
+            'Lengkapi Prediksi' => 0,
+        ];
+
+        foreach ($items as $item) {
+            $action = (string) ($item['follow_up'] ?? 'Lengkapi Prediksi');
+            if (! array_key_exists($action, $order)) {
+                $order[$action] = 0;
+            }
+            $order[$action]++;
+        }
+
+        $rows = [];
+        foreach ($order as $label => $count) {
+            $rows[] = [
+                'key' => strtolower(str_replace([' ', '+', '/'], ['_', '', '_'], $label)),
+                'label' => $label,
+                'count' => $count,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Prioritas upgrade: item dengan potensi naik level / tidak efektif / turun 1.
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    private function buildPriorityUpgradeItems(array $items): array
+    {
+        $priority = array_values(array_filter(
+            $items,
+            static fn (array $item): bool => ! empty($item['upgrade_potential'])
+                || in_array((string) ($item['validation_status'] ?? ''), ['ineffective', 'partial'], true)
+                || (int) ($item['level'] ?? 0) === 1,
+        ));
+
+        usort($priority, static function (array $a, array $b): int {
+            $rank = static function (array $item): int {
+                return match ((string) ($item['validation_status'] ?? '')) {
+                    'ineffective' => 3,
+                    'partial' => 2,
+                    'needs_data' => 1,
+                    default => 0,
+                } * 10
+                    + (int) ($item['insiden'] ?? 0) * 5
+                    + (int) ($item['hazard'] ?? 0) * 2
+                    + ((int) ($item['level'] ?? 0) === 1 ? 1 : 0);
+            };
+
+            return $rank($b) <=> $rank($a);
+        });
+
+        return array_slice($priority, 0, 40);
+    }
+
+    /**
+     * @return list<array{icon: string, text: string}>
+     */
+    private function fokusAnalisisPoints(): array
+    {
+        return [
+            ['icon' => 'track_changes', 'text' => 'Apakah prediksi penurunan tangga sudah selaras dengan Deteksi × Intervensi?'],
+            ['icon' => 'analytics', 'text' => 'Rekayasa mana yang masih Turun 1 Tangga dan berpotensi naik level?'],
+            ['icon' => 'warning', 'text' => 'Item mana yang masih punya hazard terkait setelah rekayasa?'],
+            ['icon' => 'report', 'text' => 'Item mana yang terkait insiden dan perlu re-evaluasi segera?'],
+            ['icon' => 'settings_suggest', 'text' => 'Tindak lanjut mana yang paling banyak muncul untuk upgrade pengendalian?'],
+        ];
     }
 
     /**
@@ -293,28 +600,42 @@ class MonitoringSafetyEngineeringPmrEvaluationService
 
         $total = count($items);
         $withPrediksi = count(array_filter($items, static fn (array $item): bool => $item['level'] > 0));
+        $incomplete = $total - $withPrediksi;
         $withInsiden = count(array_filter($items, static fn (array $item): bool => $item['insiden'] > 0));
-        $maxHazardItem = collect($items)->sortByDesc('hazard')->first();
+        $autoCount = count(array_filter($items, static fn (array $item): bool => ! empty($item['prediksi_is_derived'])));
+        $weakItems = array_values(array_filter(
+            $items,
+            static fn (array $item): bool => (int) ($item['level'] ?? 0) === 1 || (int) ($item['level'] ?? 0) === 0,
+        ));
+        $priority = collect($weakItems)
+            ->sortByDesc(static fn (array $item): int => ((int) $item['insiden'] * 10) + (int) $item['hazard'])
+            ->first();
 
         $points = [
             sprintf(
-                'Terdapat %d pengendalian rekayasa standar PMR, %d item memiliki prediksi penurunan tangga risiko.',
-                $total,
+                'Cakupan evaluasi: %d dari %d item (%d%%) sudah punya prediksi penurunan tangga risiko.',
                 $withPrediksi,
+                $total,
+                $total > 0 ? (int) round(($withPrediksi / $total) * 100) : 0,
             ),
             sprintf(
-                'Total exposure hazard terkait: %s, dengan %d item memiliki insiden terkait.',
+                '%d item belum lengkap (Deteksi/Intervensi/Prediksi). %d prediksi dihitung otomatis dari matriks.',
+                $incomplete,
+                $autoCount,
+            ),
+            sprintf(
+                'Exposure: %s hazard terkait, %d item terkait insiden.',
                 number_format((int) array_sum(array_column($items, 'hazard'))),
                 $withInsiden,
             ),
         ];
 
-        if (is_array($maxHazardItem) && ($maxHazardItem['hazard'] ?? 0) > 0) {
+        if (is_array($priority)) {
             $points[] = sprintf(
-                'Prioritas evaluasi: %s (hazard %s%s).',
-                $maxHazardItem['name'],
-                number_format((int) $maxHazardItem['hazard']),
-                ($maxHazardItem['insiden'] ?? 0) > 0 ? ', terdapat insiden terkait' : '',
+                'Prioritas perbaikan: %s (%s · %s).',
+                $priority['name'],
+                $priority['level_label'],
+                ($priority['insiden'] ?? 0) > 0 ? 'ada insiden terkait' : 'hazard terkait',
             );
         }
 
@@ -333,7 +654,7 @@ class MonitoringSafetyEngineeringPmrEvaluationService
 
         return [
             [
-                'title' => 'Status Evaluasi',
+                'title' => 'Temuan Evaluasi',
                 'points' => $points,
             ],
         ];
@@ -371,42 +692,45 @@ class MonitoringSafetyEngineeringPmrEvaluationService
     /**
      * @param  list<array<string, mixed>>  $items
      * @param  list<string>  $pmrGroups
+     * @param  array<string, mixed>  $summary
+     * @param  list<array{key: string, label: string, count: int}>  $followUpSummary
      * @return array<string, mixed>
      */
-    private function buildCharts(array $items, array $pmrGroups): array
+    private function buildCharts(array $items, array $pmrGroups, array $summary, array $followUpSummary): array
     {
-        $groupColors = config('monitoring_safety_engineering.pmr_evaluation.group_colors', []);
-        $palette = ['#7366FF', '#CFC8FF', '#51BB25', '#FFAA05', '#3B97FF'];
+        $levelCounts = $summary['level_counts'] ?? [3 => 0, 2 => 0, 1 => 0, 0 => 0];
+        $validationCounts = $summary['validation_counts'] ?? [
+            'effective' => 0,
+            'partial' => 0,
+            'ineffective' => 0,
+            'needs_data' => 0,
+        ];
 
         return [
-            'category_distribution' => [
-                'labels' => $pmrGroups,
-                'data' => array_map(
-                    static fn (string $pmr): int => count(array_filter($items, static fn (array $item): bool => $item['pmr'] === $pmr)),
-                    $pmrGroups,
-                ),
-                'colors' => array_map(
-                    static fn (string $pmr): string => (string) ($groupColors[$pmr] ?? '#7366FF'),
-                    $pmrGroups,
-                ),
+            'prediction_distribution' => [
+                'labels' => ['Turun 1 Tangga', 'Turun 2 Tangga', 'Turun 3 Tangga', 'Belum Ada Prediksi'],
+                'data' => [
+                    (int) ($levelCounts[1] ?? 0),
+                    (int) ($levelCounts[2] ?? 0),
+                    (int) ($levelCounts[3] ?? 0),
+                    (int) ($levelCounts[0] ?? 0),
+                ],
+                'colors' => ['#0891B2', '#D97706', '#BE123C', '#64748B'],
             ],
-            'hazard_by_item' => [
-                'labels' => array_map(
-                    static fn (array $item): string => mb_strlen((string) $item['name']) > 24
-                        ? mb_substr((string) $item['name'], 0, 24) . '…'
-                        : (string) $item['name'],
-                    $items,
-                ),
-                'data' => array_column($items, 'hazard'),
-                'colors' => array_map(
-                    static fn (int $index): string => $palette[$index % count($palette)],
-                    array_keys($items),
-                ),
+            'validation_distribution' => [
+                'labels' => ['Efektif', 'Sebagian Efektif', 'Tidak Efektif', 'Perlu Validasi Data'],
+                'data' => [
+                    (int) ($validationCounts['effective'] ?? 0),
+                    (int) ($validationCounts['partial'] ?? 0),
+                    (int) ($validationCounts['ineffective'] ?? 0),
+                    (int) ($validationCounts['needs_data'] ?? 0),
+                ],
+                'colors' => ['#0F766E', '#CA8A04', '#E11D48', '#94A3B8'],
             ],
-            'insiden_by_item' => [
-                'labels' => array_column($items, 'name'),
-                'data' => array_column($items, 'insiden'),
-                'colors' => array_fill(0, count($items), '#b91c1c'),
+            'follow_up_distribution' => [
+                'labels' => array_column($followUpSummary, 'label'),
+                'data' => array_map(static fn (array $row): int => (int) $row['count'], $followUpSummary),
+                'colors' => ['#0F766E', '#0284C7', '#EA580C', '#BE123C', '#64748B'],
             ],
         ];
     }
@@ -450,7 +774,7 @@ class MonitoringSafetyEngineeringPmrEvaluationService
 
         return [
             'companies' => array_merge(
-                ['' => 'Semua Perusahaan'],
+                ['' => 'Semua Perusahaan Inisiator'],
                 array_combine($companies, $companies) ?: [],
             ),
         ];

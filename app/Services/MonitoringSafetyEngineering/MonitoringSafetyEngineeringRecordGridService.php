@@ -18,6 +18,7 @@ final class MonitoringSafetyEngineeringRecordGridService
     public function __construct(
         private readonly MonitoringSafetyEngineeringPhaseStatusLogService $phaseStatusLogService,
         private readonly MonitoringSafetyEngineeringRecordChangeLogService $changeLogService,
+        private readonly MonitoringSafetyEngineeringRiskReductionCalculator $riskReductionCalculator,
     ) {}
 
     /**
@@ -251,9 +252,13 @@ final class MonitoringSafetyEngineeringRecordGridService
             'replikasi_ditinjau' => $this->nullableString($row['replikasi_ditinjau'] ?? null),
             'replikasi_disetujui' => $this->nullableString($row['replikasi_disetujui'] ?? null),
             'replikasi_aktual' => $this->parseInteger($row['replikasi_aktual'] ?? 0, 0),
-            'deteksi_deviasi' => Mapper::resolveDeteksi(isset($row['deteksi_deviasi']) ? (string) $row['deteksi_deviasi'] : null),
-            'intervensi_deviasi' => Mapper::resolveIntervensi(isset($row['intervensi_deviasi']) ? (string) $row['intervensi_deviasi'] : null),
-            'prediksi_penurunan_tangga_risiko' => $this->parseNullableInteger($row['prediksi_penurunan_tangga_risiko'] ?? null),
+            'deteksi_deviasi' => $deteksi = Mapper::resolveDeteksi(isset($row['deteksi_deviasi']) ? (string) $row['deteksi_deviasi'] : null),
+            'intervensi_deviasi' => $intervensi = Mapper::resolveIntervensi(isset($row['intervensi_deviasi']) ? (string) $row['intervensi_deviasi'] : null),
+            'prediksi_penurunan_tangga_risiko' => $this->resolvePrediksiPenurunanTangga(
+                $this->parseNullableInteger($row['prediksi_penurunan_tangga_risiko'] ?? null),
+                $deteksi,
+                $intervensi,
+            ),
             'terkait_hazard' => Mapper::resolveBoolean(isset($row['terkait_hazard']) ? (string) $row['terkait_hazard'] : null, 'Terkait Hazard'),
             'terkait_insiden' => Mapper::resolveBoolean(isset($row['terkait_insiden']) ? (string) $row['terkait_insiden'] : null, 'Terkait Insiden'),
             'efektivitas_rekayasa' => Mapper::resolveEfektivitas(isset($row['efektivitas_rekayasa']) ? (string) $row['efektivitas_rekayasa'] : null),
@@ -331,6 +336,14 @@ final class MonitoringSafetyEngineeringRecordGridService
         }
 
         return max(0, (int) $value);
+    }
+
+    private function resolvePrediksiPenurunanTangga(
+        ?int $stored,
+        ?string $deteksi,
+        ?string $intervensi,
+    ): ?int {
+        return $this->riskReductionCalculator->resolveEffectivePrediksi($stored, $deteksi, $intervensi);
     }
 
     private function nullableString(mixed $value): ?string
