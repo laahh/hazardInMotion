@@ -2519,7 +2519,7 @@
       .mse-ov2-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
    }
    @media (min-width: 1280px) {
-      .mse-ov2-kpi-grid { grid-template-columns: 1.35fr repeat(5, minmax(0, 1fr)); }
+      .mse-ov2-kpi-grid { grid-template-columns: 1.35fr repeat(4, minmax(0, 1fr)); }
    }
    .mse-ov2-kpi {
       background: var(--ov2-surface);

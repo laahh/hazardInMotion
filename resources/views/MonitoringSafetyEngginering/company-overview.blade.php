@@ -78,11 +78,6 @@
       <p class="mse-ov2-kpi-hint">{{ number_format((int) ($stats['selesai'] ?? 0)) }} selesai dari {{ number_format((int) ($stats['items_count'] ?? 0)) }} item</p>
    </div>
    <div class="mse-ov2-kpi">
-      <p class="mse-ov2-kpi-label">Site</p>
-      <p class="mse-ov2-kpi-value">{{ number_format((int) ($stats['sites_count'] ?? 0)) }}</p>
-      <p class="mse-ov2-kpi-hint">lokasi aktif</p>
-   </div>
-   <div class="mse-ov2-kpi">
       <p class="mse-ov2-kpi-label">Perusahaan</p>
       <p class="mse-ov2-kpi-value">{{ number_format((int) ($stats['companies_count'] ?? 0)) }}</p>
       <p class="mse-ov2-kpi-hint">mitra / DIC</p>
