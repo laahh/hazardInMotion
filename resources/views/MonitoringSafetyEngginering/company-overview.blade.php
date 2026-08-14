@@ -8,23 +8,12 @@
 
 @section('content')
 @php
-   $pctClass = static fn (int $progress): string => match (true) {
-      $progress >= 100 => 'crm-pct--green',
-      $progress >= 70 => 'crm-pct--amber',
-      $progress >= 40 => 'crm-pct--orange',
-      default => 'crm-pct--red',
-   };
-   $barClass = static fn (int $progress): string => match (true) {
-      $progress >= 100 => 'mse-prog-bar--green',
-      $progress >= 70 => 'mse-prog-bar--amber',
-      $progress >= 40 => 'mse-prog-bar--orange',
-      default => 'mse-prog-bar--red',
-   };
-   $toneClass = static fn (int $progress): string => match (true) {
-      $progress >= 100 => 'good',
-      $progress >= 70 => 'warn',
+   $barTone = static fn (int $progress): string => match (true) {
+      $progress >= 100 => 'full',
+      $progress >= 70 => 'high',
       $progress >= 40 => 'mid',
-      default => 'low',
+      $progress > 0 => 'low',
+      default => 'empty',
    };
    $dateFromDisplay = ($filters['date_from'] ?? '') !== '' ? date('d/m/Y', strtotime($filters['date_from'])) : '';
    $dateToDisplay = ($filters['date_to'] ?? '') !== '' ? date('d/m/Y', strtotime($filters['date_to'])) : '';
@@ -33,13 +22,14 @@
    $siteRows = $siteRows ?? [];
    $charts = $charts ?? ['site_progress' => ['labels' => [], 'data' => []], 'company_progress' => ['labels' => [], 'data' => []]];
    $categoryCols = [
-      ['key' => 'total', 'label' => 'Total', 'tone' => 'total'],
-      ['key' => 'replikasi', 'label' => 'Replikasi', 'tone' => 'replikasi'],
-      ['key' => 'safety_engineering', 'label' => 'Safety Eng.', 'tone' => 'safety'],
-      ['key' => 'additional_safety_engineering', 'label' => 'Additional', 'tone' => 'additional'],
+      ['key' => 'total', 'label' => 'Total'],
+      ['key' => 'replikasi', 'label' => 'Replikasi'],
+      ['key' => 'safety_engineering', 'label' => 'Safety Eng.'],
+      ['key' => 'additional_safety_engineering', 'label' => 'Additional'],
    ];
 @endphp
 
+<div class="mse-ov2-mono">
 <form method="GET" action="{{ route('monitoring-safety-engineering.company-overview') }}" class="crm-filter-bar">
    <div class="crm-filter-field crm-filter-field--bar">
       <label class="crm-filter-label" for="mse-ov-filter-bar">Site</label>
@@ -80,9 +70,9 @@
    <div class="mse-ov2-kpi mse-ov2-kpi--primary">
       <p class="mse-ov2-kpi-label">Overall Progress</p>
       <p class="mse-ov2-kpi-value">{{ (int) ($stats['progress'] ?? 0) }}%</p>
-      <div class="mse-prog mt-2">
-         <div class="mse-prog-track mse-prog-track--lg">
-            <div class="mse-prog-bar {{ $barClass((int) ($stats['progress'] ?? 0)) }}" style="width: {{ min(100, max(0, (int) ($stats['progress'] ?? 0))) }}%"></div>
+      <div class="mse-ov2-bar mt-2">
+         <div class="mse-ov2-bar-track">
+            <div class="mse-ov2-bar-fill mse-ov2-bar-fill--{{ $barTone((int) ($stats['progress'] ?? 0)) }}" style="width: {{ min(100, max(0, (int) ($stats['progress'] ?? 0))) }}%"></div>
          </div>
       </div>
       <p class="mse-ov2-kpi-hint">{{ number_format((int) ($stats['selesai'] ?? 0)) }} selesai dari {{ number_format((int) ($stats['items_count'] ?? 0)) }} item</p>
@@ -99,17 +89,17 @@
    </div>
    <div class="mse-ov2-kpi">
       <p class="mse-ov2-kpi-label">On Progress</p>
-      <p class="mse-ov2-kpi-value text-[#3B82F6]">{{ number_format((int) ($stats['onprogress'] ?? 0)) }}</p>
+      <p class="mse-ov2-kpi-value">{{ number_format((int) ($stats['onprogress'] ?? 0)) }}</p>
       <p class="mse-ov2-kpi-hint">item berjalan</p>
    </div>
    <div class="mse-ov2-kpi">
       <p class="mse-ov2-kpi-label">Overdue</p>
-      <p class="mse-ov2-kpi-value text-[#DC2626]">{{ number_format((int) ($stats['overdue'] ?? 0)) }}</p>
+      <p class="mse-ov2-kpi-value">{{ number_format((int) ($stats['overdue'] ?? 0)) }}</p>
       <p class="mse-ov2-kpi-hint">melewati due date</p>
    </div>
    <div class="mse-ov2-kpi">
       <p class="mse-ov2-kpi-label">Selesai</p>
-      <p class="mse-ov2-kpi-value text-[#16A34A]">{{ number_format((int) ($stats['selesai'] ?? 0)) }}</p>
+      <p class="mse-ov2-kpi-value">{{ number_format((int) ($stats['selesai'] ?? 0)) }}</p>
       <p class="mse-ov2-kpi-hint">item selesai 100%</p>
    </div>
 </div>
@@ -117,19 +107,19 @@
 {{-- Progress per kategori --}}
 <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
    @foreach([
-      ['label' => 'Replikasi', 'progress' => (int) ($stats['replikasi_progress'] ?? 0), 'tone' => 'replikasi', 'icon' => 'sync_alt'],
-      ['label' => 'Safety Engineering', 'progress' => (int) ($stats['safety_progress'] ?? 0), 'tone' => 'safety', 'icon' => 'engineering'],
-      ['label' => 'Additional Safety', 'progress' => (int) ($stats['additional_progress'] ?? 0), 'tone' => 'additional', 'icon' => 'add_moderator'],
+      ['label' => 'Replikasi', 'progress' => (int) ($stats['replikasi_progress'] ?? 0), 'icon' => 'sync_alt'],
+      ['label' => 'Safety Engineering', 'progress' => (int) ($stats['safety_progress'] ?? 0), 'icon' => 'engineering'],
+      ['label' => 'Additional Safety', 'progress' => (int) ($stats['additional_progress'] ?? 0), 'icon' => 'add_moderator'],
    ] as $cat)
-   <div class="mse-ov2-cat mse-ov2-cat--{{ $cat['tone'] }}">
+   <div class="mse-ov2-cat">
       <div class="mse-ov2-cat-head">
          <span class="material-symbols-outlined">{{ $cat['icon'] }}</span>
          <span>{{ $cat['label'] }}</span>
       </div>
       <p class="mse-ov2-cat-value">{{ $cat['progress'] }}%</p>
-      <div class="mse-prog">
-         <div class="mse-prog-track">
-            <div class="mse-prog-bar {{ $barClass($cat['progress']) }}" style="width: {{ min(100, max(0, $cat['progress'])) }}%"></div>
+      <div class="mse-ov2-bar">
+         <div class="mse-ov2-bar-track">
+            <div class="mse-ov2-bar-fill mse-ov2-bar-fill--{{ $barTone($cat['progress']) }}" style="width: {{ min(100, max(0, $cat['progress'])) }}%"></div>
          </div>
       </div>
    </div>
@@ -137,7 +127,7 @@
 </div>
 
 {{-- Kartu per Site --}}
-<div class="crm-card mb-4">
+<div class="crm-card mse-ov2-card mb-4">
    <div class="flex items-center justify-between gap-2 mb-3">
       <div>
          <p class="crm-card-title mb-0">Progress per Site</p>
@@ -151,14 +141,14 @@
    <div class="mse-ov2-site-grid">
       @foreach($siteRows as $site)
       @php $progress = (int) ($site['total']['progress'] ?? 0); @endphp
-      <div class="mse-ov2-site-card mse-ov2-site-card--{{ $toneClass($progress) }}">
+      <div class="mse-ov2-site-card">
          <div class="mse-ov2-site-card-top">
             <p class="mse-ov2-site-name">{{ $site['site'] }}</p>
-            <span class="mse-ov2-site-pct {{ $pctClass($progress) }}">{{ $progress }}%</span>
+            <span class="mse-ov2-site-pct">{{ $progress }}%</span>
          </div>
-         <div class="mse-prog mb-2">
-            <div class="mse-prog-track">
-               <div class="mse-prog-bar {{ $barClass($progress) }}" style="width: {{ min(100, max(0, $progress)) }}%"></div>
+         <div class="mse-ov2-bar mb-2">
+            <div class="mse-ov2-bar-track">
+               <div class="mse-ov2-bar-fill mse-ov2-bar-fill--{{ $barTone($progress) }}" style="width: {{ min(100, max(0, $progress)) }}%"></div>
             </div>
          </div>
          <div class="mse-ov2-site-meta">
@@ -166,9 +156,9 @@
             <span>{{ (int) ($site['total']['count'] ?? 0) }} item</span>
          </div>
          <div class="mse-ov2-site-status">
-            <span class="crm-trend-chip crm-trend-chip--info">OP {{ (int) ($site['total']['onprogress'] ?? 0) }}</span>
-            <span class="crm-trend-chip crm-trend-chip--danger">OV {{ (int) ($site['total']['overdue'] ?? 0) }}</span>
-            <span class="crm-trend-chip crm-trend-chip--success">OK {{ (int) ($site['total']['selesai'] ?? 0) }}</span>
+            <span class="mse-ov2-chip">OP {{ (int) ($site['total']['onprogress'] ?? 0) }}</span>
+            <span class="mse-ov2-chip">OV {{ (int) ($site['total']['overdue'] ?? 0) }}</span>
+            <span class="mse-ov2-chip mse-ov2-chip--strong">OK {{ (int) ($site['total']['selesai'] ?? 0) }}</span>
          </div>
          <div class="mse-ov2-site-cats">
             <div><span>Rep</span><strong>{{ (int) ($site['replikasi']['progress'] ?? 0) }}%</strong></div>
@@ -183,13 +173,13 @@
 
 {{-- Charts + ranking --}}
 <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4">
-   <div class="crm-card xl:col-span-7">
+   <div class="crm-card mse-ov2-card xl:col-span-7">
       <p class="crm-card-title">Perbandingan Progress Site</p>
       <div class="mse-ov2-chart-wrap">
          <canvas id="mse-ov-site-chart" height="220"></canvas>
       </div>
    </div>
-   <div class="crm-card xl:col-span-5">
+   <div class="crm-card mse-ov2-card xl:col-span-5">
       <p class="crm-card-title">Perlu Perhatian</p>
       <p class="text-xs text-crm-muted mb-3">Perusahaan dengan progress terendah (punya item)</p>
       <div class="mse-ov2-rank-list">
@@ -201,11 +191,11 @@
                <span class="mse-ov2-rank-site">{{ $row['site'] ?? '-' }}</span>
             </div>
             <div class="mse-ov2-rank-prog">
-               <div class="mse-prog">
-                  <div class="mse-prog-track">
-                     <div class="mse-prog-bar {{ $barClass($progress) }}" style="width: {{ min(100, max(0, $progress)) }}%"></div>
+               <div class="mse-ov2-bar">
+                  <div class="mse-ov2-bar-track">
+                     <div class="mse-ov2-bar-fill mse-ov2-bar-fill--{{ $barTone($progress) }}" style="width: {{ min(100, max(0, $progress)) }}%"></div>
                   </div>
-                  <span class="mse-prog-pct {{ $pctClass($progress) }}">{{ $progress }}%</span>
+                  <span class="mse-ov2-pct">{{ $progress }}%</span>
                </div>
             </div>
          </div>
@@ -217,12 +207,12 @@
 </div>
 
 {{-- Tabel per site → perusahaan --}}
-<div class="crm-card">
+<div class="crm-card mse-ov2-card">
    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
       <div>
          <p class="crm-card-title mb-0">Detail Progress per Site &amp; Perusahaan</p>
          <p class="text-xs text-crm-muted mt-1">
-            Dikembangkan dari Dashboard Komitmen · OP / OV / OK &amp; % selesai
+            Data sama dengan Dashboard Komitmen · OP / OV / OK &amp; % selesai
          </p>
       </div>
    </div>
@@ -245,11 +235,11 @@
             </div>
          </div>
          <div class="mse-ov2-site-block-progress">
-            <div class="mse-prog">
-               <div class="mse-prog-track mse-prog-track--lg">
-                  <div class="mse-prog-bar {{ $barClass($siteProgress) }}" style="width: {{ min(100, max(0, $siteProgress)) }}%"></div>
+            <div class="mse-ov2-bar">
+               <div class="mse-ov2-bar-track mse-ov2-bar-track--lg">
+                  <div class="mse-ov2-bar-fill mse-ov2-bar-fill--{{ $barTone($siteProgress) }}" style="width: {{ min(100, max(0, $siteProgress)) }}%"></div>
                </div>
-               <span class="mse-prog-pct {{ $pctClass($siteProgress) }}">{{ $siteProgress }}%</span>
+               <span class="mse-ov2-pct">{{ $siteProgress }}%</span>
             </div>
          </div>
       </div>
@@ -261,49 +251,48 @@
                   <th class="w-10 text-center">No</th>
                   <th>Perusahaan</th>
                   @foreach($categoryCols as $col)
-                  <th class="text-center mse-ov-group mse-ov-group--{{ $col['tone'] }}">{{ $col['label'] }}</th>
+                  <th class="text-center">{{ $col['label'] }}</th>
                   @endforeach
                   <th class="text-center">Status</th>
                </tr>
             </thead>
             <tbody>
                @foreach($group['companies'] as $index => $row)
-               @php $progress = (int) ($row['total']['progress'] ?? 0); @endphp
                <tr>
                   <td class="text-center text-crm-muted">{{ $index + 1 }}</td>
-                  <td class="font-semibold text-[#1E293B]">{{ $row['perusahaan'] }}</td>
+                  <td class="font-semibold">{{ $row['perusahaan'] }}</td>
                   @foreach($categoryCols as $col)
                   @php $p = (int) ($row[$col['key']]['progress'] ?? 0); @endphp
                   <td>
-                     <div class="mse-prog">
-                        <div class="mse-prog-track">
-                           <div class="mse-prog-bar {{ $barClass($p) }}" style="width: {{ min(100, max(0, $p)) }}%"></div>
+                     <div class="mse-ov2-bar">
+                        <div class="mse-ov2-bar-track">
+                           <div class="mse-ov2-bar-fill mse-ov2-bar-fill--{{ $barTone($p) }}" style="width: {{ min(100, max(0, $p)) }}%"></div>
                         </div>
-                        <span class="mse-prog-pct {{ $pctClass($p) }}">{{ $p }}%</span>
+                        <span class="mse-ov2-pct">{{ $p }}%</span>
                      </div>
                   </td>
                   @endforeach
                   <td>
                      <div class="mse-ov2-mini-status">
-                        <span class="crm-trend-chip crm-trend-chip--info">{{ (int) ($row['total']['onprogress'] ?? 0) }}</span>
-                        <span class="crm-trend-chip crm-trend-chip--danger">{{ (int) ($row['total']['overdue'] ?? 0) }}</span>
-                        <span class="crm-trend-chip crm-trend-chip--success">{{ (int) ($row['total']['selesai'] ?? 0) }}</span>
+                        <span class="mse-ov2-chip">OP {{ (int) ($row['total']['onprogress'] ?? 0) }}</span>
+                        <span class="mse-ov2-chip">OV {{ (int) ($row['total']['overdue'] ?? 0) }}</span>
+                        <span class="mse-ov2-chip mse-ov2-chip--strong">OK {{ (int) ($row['total']['selesai'] ?? 0) }}</span>
                      </div>
                   </td>
                </tr>
                @endforeach
-               <tr class="mse-ov-total-row">
+               <tr class="mse-ov2-subtotal-row">
                   <td></td>
-                  <td class="font-bold text-[#1E3A8A]">Subtotal {{ $group['site'] }}</td>
+                  <td class="font-semibold">Subtotal {{ $group['site'] }}</td>
                   @foreach($categoryCols as $col)
                   @php $p = (int) ($group[$col['key']]['progress'] ?? 0); @endphp
-                  <td class="font-bold text-[#1E3A8A]">{{ $p }}%</td>
+                  <td class="font-semibold text-center">{{ $p }}%</td>
                   @endforeach
                   <td>
                      <div class="mse-ov2-mini-status">
-                        <span class="crm-trend-chip crm-trend-chip--info">{{ (int) ($group['total']['onprogress'] ?? 0) }}</span>
-                        <span class="crm-trend-chip crm-trend-chip--danger">{{ (int) ($group['total']['overdue'] ?? 0) }}</span>
-                        <span class="crm-trend-chip crm-trend-chip--success">{{ (int) ($group['total']['selesai'] ?? 0) }}</span>
+                        <span class="mse-ov2-chip">OP {{ (int) ($group['total']['onprogress'] ?? 0) }}</span>
+                        <span class="mse-ov2-chip">OV {{ (int) ($group['total']['overdue'] ?? 0) }}</span>
+                        <span class="mse-ov2-chip mse-ov2-chip--strong">OK {{ (int) ($group['total']['selesai'] ?? 0) }}</span>
                      </div>
                   </td>
                </tr>
@@ -316,7 +305,6 @@
    @endforelse
 
    @if(count($siteGroups) > 0)
-   @php $totalProgress = (int) ($totals['total']['progress'] ?? 0); @endphp
    <div class="mse-ov2-grand-total">
       <div>
          <p class="mse-ov2-grand-label">TOTAL KESELURUHAN</p>
@@ -328,7 +316,7 @@
       </div>
       <div class="mse-ov2-grand-metrics">
          @foreach($categoryCols as $col)
-         <div class="mse-ov2-grand-metric mse-ov2-grand-metric--{{ $col['tone'] }}">
+         <div class="mse-ov2-grand-metric">
             <span>{{ $col['label'] }}</span>
             <strong>{{ (int) ($totals[$col['key']]['progress'] ?? 0) }}%</strong>
          </div>
@@ -336,6 +324,7 @@
       </div>
    </div>
    @endif
+</div>
 </div>
 @endsection
 
@@ -362,10 +351,11 @@ document.addEventListener('DOMContentLoaded', function () {
    if (siteChartEl && window.Chart) {
       var siteData = @json($charts['site_progress'] ?? ['labels' => [], 'data' => []]);
       var colors = (siteData.data || []).map(function (v) {
-         if (v >= 100) return '#16A34A';
-         if (v >= 70) return '#CA8A04';
-         if (v >= 40) return '#EA580C';
-         return '#DC2626';
+         if (v >= 100) return '#111827';
+         if (v >= 70) return '#374151';
+         if (v >= 40) return '#6B7280';
+         if (v > 0) return '#9CA3AF';
+         return '#E5E7EB';
       });
       new Chart(siteChartEl, {
          type: 'bar',
@@ -375,8 +365,8 @@ document.addEventListener('DOMContentLoaded', function () {
                label: 'Progress %',
                data: siteData.data || [],
                backgroundColor: colors,
-               borderRadius: 8,
-               maxBarThickness: 42
+               borderRadius: 4,
+               maxBarThickness: 36
             }]
          },
          options: {
@@ -394,10 +384,16 @@ document.addEventListener('DOMContentLoaded', function () {
                y: {
                   beginAtZero: true,
                   max: 100,
-                  ticks: { callback: function (v) { return v + '%'; } },
-                  grid: { color: '#F1F5F9' }
+                  ticks: {
+                     color: '#6B7280',
+                     callback: function (v) { return v + '%'; }
+                  },
+                  grid: { color: '#F3F4F6' }
                },
-               x: { grid: { display: false } }
+               x: {
+                  ticks: { color: '#6B7280' },
+                  grid: { display: false }
+               }
             }
          }
       });
