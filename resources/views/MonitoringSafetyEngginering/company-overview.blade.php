@@ -78,7 +78,7 @@
       <div>
          <p class="crm-card-title mb-0">Overall Progress per Perusahaan</p>
          <p class="text-xs text-crm-muted mt-1">
-            Data progres sama dengan Dashboard Komitmen (Replikasi, Safety Engineering, Additional Safety) · OP = On Progress · OV = Overdue · OK = Selesai
+            Persentase penyelesaian per perusahaan — sama dengan Dashboard Komitmen (Replikasi, Safety Engineering, Additional Safety)
          </p>
       </div>
       <p class="text-xs text-crm-muted">
@@ -87,24 +87,15 @@
    </div>
 
    <div class="crm-data-table-wrap overflow-x-auto">
-      <table class="crm-data-table mse-ov-table mse-ov-company-table">
+      <table class="crm-data-table mse-ov-table mse-ov-company-table mse-ov-company-table--progress-only">
          <thead>
             <tr>
-               <th rowspan="2" class="w-10 text-center">No</th>
-               <th rowspan="2" class="mse-ov-col-company">Perusahaan</th>
-               <th colspan="5" class="text-center mse-ov-group mse-ov-group--total">Total Komitmen</th>
-               <th colspan="5" class="text-center mse-ov-group mse-ov-group--replikasi">Replikasi</th>
-               <th colspan="5" class="text-center mse-ov-group mse-ov-group--safety">Safety Engineering</th>
-               <th colspan="5" class="text-center mse-ov-group mse-ov-group--additional">Additional Safety</th>
-            </tr>
-            <tr>
-               @foreach(['total', 'replikasi', 'safety', 'additional'] as $group)
-               <th class="text-center">Item</th>
-               <th class="text-center">OP</th>
-               <th class="text-center">OV</th>
-               <th class="text-center">OK</th>
-               <th class="text-center" style="min-width:6.5rem">Progress</th>
-               @endforeach
+               <th class="w-10 text-center">No</th>
+               <th class="mse-ov-col-company">Perusahaan</th>
+               <th class="text-center mse-ov-group mse-ov-group--total" style="min-width:9rem">Total Komitmen</th>
+               <th class="text-center mse-ov-group mse-ov-group--replikasi" style="min-width:9rem">Replikasi</th>
+               <th class="text-center mse-ov-group mse-ov-group--safety" style="min-width:9rem">Safety Engineering</th>
+               <th class="text-center mse-ov-group mse-ov-group--additional" style="min-width:9rem">Additional Safety</th>
             </tr>
          </thead>
          <tbody>
@@ -122,16 +113,6 @@
                <td class="font-semibold text-[#1E293B]">{{ $row['perusahaan'] }}</td>
                @foreach($groups as $stat)
                @php $progress = (int) ($stat['progress'] ?? 0); @endphp
-               <td class="text-center">{{ number_format((int) ($stat['count'] ?? 0)) }}</td>
-               <td class="text-center">
-                  <span class="crm-trend-chip crm-trend-chip--info">{{ (int) ($stat['onprogress'] ?? 0) }}</span>
-               </td>
-               <td class="text-center">
-                  <span class="crm-trend-chip crm-trend-chip--danger">{{ (int) ($stat['overdue'] ?? 0) }}</span>
-               </td>
-               <td class="text-center">
-                  <span class="crm-trend-chip crm-trend-chip--success">{{ (int) ($stat['selesai'] ?? 0) }}</span>
-               </td>
                <td>
                   <div class="mse-prog">
                      <div class="mse-prog-track">
@@ -144,7 +125,7 @@
             </tr>
             @empty
             <tr>
-               <td colspan="22" class="text-center text-crm-muted py-8">
+               <td colspan="6" class="text-center text-crm-muted py-8">
                   Belum ada data komitmen untuk filter yang dipilih.
                </td>
             </tr>
@@ -164,11 +145,14 @@
                <td class="font-bold text-[#1E3A8A]">TOTAL</td>
                @foreach($totalGroups as $stat)
                @php $progress = (int) ($stat['progress'] ?? 0); @endphp
-               <td class="text-center font-bold">{{ number_format((int) ($stat['count'] ?? 0)) }}</td>
-               <td class="text-center font-bold">{{ (int) ($stat['onprogress'] ?? 0) }}</td>
-               <td class="text-center font-bold">{{ (int) ($stat['overdue'] ?? 0) }}</td>
-               <td class="text-center font-bold">{{ (int) ($stat['selesai'] ?? 0) }}</td>
-               <td class="font-bold text-[#1E3A8A]">{{ $progress }}%</td>
+               <td>
+                  <div class="mse-prog">
+                     <div class="mse-prog-track">
+                        <div class="mse-prog-bar {{ $barClass($progress) }}" style="width: {{ min(100, max(0, $progress)) }}%"></div>
+                     </div>
+                     <span class="mse-prog-pct font-bold text-[#1E3A8A]">{{ $progress }}%</span>
+                  </div>
+               </td>
                @endforeach
             </tr>
             @endif

@@ -70,6 +70,9 @@ final class MonitoringSafetyEngineeringExcelValueMapper
 
         $map[self::normalizeKey('not yet')] = MonitoringSafetyEngineeringPhaseStatus::NotYet->value;
         $map[self::normalizeKey('in progress')] = MonitoringSafetyEngineeringPhaseStatus::InProgress->value;
+        $map[self::normalizeKey('reject')] = MonitoringSafetyEngineeringPhaseStatus::Reject->value;
+        $map[self::normalizeKey('rejected')] = MonitoringSafetyEngineeringPhaseStatus::Reject->value;
+        $map[self::normalizeKey('ditolak')] = MonitoringSafetyEngineeringPhaseStatus::Reject->value;
 
         return $map;
     }

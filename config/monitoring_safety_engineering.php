@@ -41,6 +41,7 @@ return [
         'not_yet' => 'Not Yet',
         'in_progress' => 'In Progress',
         'done' => 'Done',
+        'reject' => 'Reject',
     ],
 
     'status_compliance' => [

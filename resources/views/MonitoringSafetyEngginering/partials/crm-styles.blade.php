@@ -1,5 +1,17 @@
 <style>
    /* ---- CRM Layout ---- */
+   .crm-brand-link {
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+   }
+   .crm-brand-logo {
+      display: block;
+      height: 2.75rem;
+      width: auto;
+      max-width: 11.5rem;
+      object-fit: contain;
+   }
    .crm-avatar {
       display: flex; align-items: center; justify-content: center;
       width: 2rem; height: 2rem; border-radius: 9999px;

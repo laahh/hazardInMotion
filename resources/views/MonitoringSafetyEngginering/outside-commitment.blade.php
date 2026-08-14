@@ -769,6 +769,7 @@
          if (key === 'done') return 'Done';
          if (key === 'in_progress') return 'In Progress';
          if (key === 'not_yet') return 'Not Yet';
+         if (key === 'reject' || key === 'rejected') return 'Reject';
          return value ? String(value) : '-';
       }
 

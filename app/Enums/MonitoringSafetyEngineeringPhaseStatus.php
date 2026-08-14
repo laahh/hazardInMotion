@@ -9,6 +9,7 @@ enum MonitoringSafetyEngineeringPhaseStatus: string
     case NotYet = 'not_yet';
     case InProgress = 'in_progress';
     case Done = 'done';
+    case Reject = 'reject';
 
     public function label(): string
     {
@@ -16,6 +17,7 @@ enum MonitoringSafetyEngineeringPhaseStatus: string
             self::NotYet => 'Not Yet',
             self::InProgress => 'In Progress',
             self::Done => 'Done',
+            self::Reject => 'Reject',
         };
     }
 

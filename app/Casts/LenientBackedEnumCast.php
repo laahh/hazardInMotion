@@ -43,7 +43,12 @@ final class LenientBackedEnumCast implements CastsAttributes
         try {
             return $this->enumClass::from($stringValue);
         } catch (ValueError) {
-            return $this->resolveLegacy($stringValue);
+            try {
+                return $this->resolveLegacy($stringValue);
+            } catch (\InvalidArgumentException|ValueError) {
+                // Nilai legacy tidak dikenal: jangan crash halaman baca.
+                return null;
+            }
         }
     }
 
@@ -62,7 +67,11 @@ final class LenientBackedEnumCast implements CastsAttributes
         try {
             return $this->enumClass::from($stringValue)->value;
         } catch (ValueError) {
-            $resolved = $this->resolveLegacy($stringValue);
+            try {
+                $resolved = $this->resolveLegacy($stringValue);
+            } catch (\InvalidArgumentException|ValueError) {
+                return null;
+            }
 
             if ($resolved === null) {
                 return null;

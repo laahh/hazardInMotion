@@ -352,6 +352,7 @@ class MonitoringSafetyEngineeringOutsideCommitmentService
         return match ($this->normalizeEnumValue($record->standardisasi_status)) {
             'done' => 100,
             'in_progress' => 50,
+            'reject' => 0,
             default => 0,
         };
     }
