@@ -2334,6 +2334,31 @@
       line-height: 1.35;
    }
    .mse-ov-table td, .mse-ov-table th { font-size: 0.75rem; }
+   .mse-ov-company-table thead th {
+      white-space: nowrap;
+      vertical-align: middle;
+   }
+   .mse-ov-col-company {
+      min-width: 11rem;
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: #fff;
+   }
+   .mse-ov-company-table tbody td:nth-child(2) {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      background: #fff;
+   }
+   .mse-ov-company-table .mse-ov-total-row td:nth-child(2) {
+      background: #EFF6FF !important;
+   }
+   .mse-ov-group { font-weight: 700; letter-spacing: 0.01em; }
+   .mse-ov-group--total { background: #F1F5F9 !important; color: #334155; }
+   .mse-ov-group--replikasi { background: #F1EFFF !important; color: #5B52D6; }
+   .mse-ov-group--safety { background: #ECFDF5 !important; color: #15803D; }
+   .mse-ov-group--additional { background: #F7FEE7 !important; color: #4D7C0F; }
    .mse-ov-total-row td { background: #EFF6FF !important; }
    .mse-prog {
       display: flex;

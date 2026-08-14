@@ -25,13 +25,8 @@ class MonitoringSafetyEngineeringCompanyOverviewController extends Controller
         return view('MonitoringSafetyEngginering.company-overview', $this->monitoringSafetyEngineeringViewData('company-overview', [
             'filters' => $dashboard['filters'],
             'filterOptions' => $dashboard['filter_options'],
+            'companyRows' => $dashboard['company_rows'],
             'totals' => $dashboard['totals'],
-            'mitraRows' => $dashboard['mitra_rows'],
-            'sumberProgramRows' => $dashboard['sumber_program_rows'],
-            'topOverdue' => $dashboard['top_overdue'],
-            'trend' => $dashboard['trend'],
-            'briefAnalysis' => $dashboard['brief_analysis'],
-            'nextTodo' => $dashboard['next_todo'],
         ]));
     }
 }
