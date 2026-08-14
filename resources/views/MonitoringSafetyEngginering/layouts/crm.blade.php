@@ -118,20 +118,12 @@
                </div>
             </div>
             <div class="flex items-center gap-1.5 shrink-0">
-               <button type="button" class="crm-icon-btn"><span class="material-symbols-outlined text-[20px]">notifications</span></button>
-               <button type="button" class="crm-icon-btn hidden sm:inline-flex"><span class="material-symbols-outlined text-[20px]">calendar_month</span></button>
-               <button type="button" class="crm-icon-btn hidden md:inline-flex"><span class="material-symbols-outlined text-[20px]">folder</span></button>
-               <button type="button" class="crm-icon-btn hidden md:inline-flex"><span class="material-symbols-outlined text-[20px]">shopping_cart</span></button>
-               <button type="button" class="crm-icon-btn hidden md:inline-flex"><span class="material-symbols-outlined text-[20px]">chat</span></button>
-               <button type="button" class="crm-icon-btn hidden lg:inline-flex"><span class="material-symbols-outlined text-[20px]">flag</span></button>
-               <button type="button" class="crm-icon-btn hidden xl:inline-flex"><span class="material-symbols-outlined text-[20px]">fullscreen</span></button>
-               <div class="flex items-center gap-2 pl-2 ml-1 border-l border-crm-border">
+               <div class="flex items-center gap-2">
                   <div class="crm-avatar">{{ $userInitials }}</div>
                   <div class="hidden sm:block text-left">
                      <p class="text-xs font-semibold text-crm-text leading-tight">{{ $userName }}</p>
                      <p class="text-[10px] text-crm-muted">Berau Coal</p>
                   </div>
-                  <span class="material-symbols-outlined text-crm-muted text-lg hidden sm:inline">expand_more</span>
                </div>
             </div>
          </div>
