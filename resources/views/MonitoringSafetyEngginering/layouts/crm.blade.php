@@ -92,13 +92,6 @@
             </li>
             @endforeach
          </ul>
-
-         <p class="px-3 mt-6 mb-2 text-[10px] font-bold uppercase tracking-widest text-crm-muted">Components</p>
-         <ul class="space-y-0.5">
-            <li><a href="#" class="crm-nav-link"><span class="material-symbols-outlined text-[20px]">widgets</span>Features <span class="material-symbols-outlined text-sm ml-auto">expand_more</span></a></li>
-            <li><a href="#" class="crm-nav-link"><span class="material-symbols-outlined text-[20px]">table_chart</span>Forms, Tables &amp; Charts <span class="material-symbols-outlined text-sm ml-auto">expand_more</span></a></li>
-            <li><a href="#" class="crm-nav-link"><span class="material-symbols-outlined text-[20px]">apps</span>Apps &amp; Widgets <span class="material-symbols-outlined text-sm ml-auto">expand_more</span></a></li>
-         </ul>
       </nav>
 
       <div class="p-4 mt-auto">
