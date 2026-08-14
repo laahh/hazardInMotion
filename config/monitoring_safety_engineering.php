@@ -30,6 +30,7 @@ return [
         'replikasi_2026' => 'Replikasi 2026',
         'rekom_insiden' => 'Rekom Insiden',
         'rekom_gr' => 'Rekom GR',
+        'arahan_manajemen' => 'Arahan Manajemen',
     ],
 
     'pelaksana_rekayasa' => [
@@ -182,7 +183,6 @@ return [
 
     /**
      * Sumber rekayasa yang dihitung pada KPI "Total Pengendalian" di dashboard komitmen.
-     * Arahan Manajemen = PMR (lihat outside_commitment_categories.arahan_manajemen).
      */
     'total_pengendalian_sumber_rekayasa' => [
         'safety_engineering',
@@ -198,9 +198,7 @@ return [
             'label' => 'Arahan Manajemen',
             'color' => '#1e3a5f',
             'sumber_rekayasa' => [
-                'pmr_2023',
-                'pmr_2024',
-                'pmr_2025',
+                'arahan_manajemen',
             ],
         ],
         'rekom_insiden' => [

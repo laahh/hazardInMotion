@@ -3,14 +3,28 @@
    .crm-brand-link {
       display: inline-flex;
       align-items: center;
+      gap: 0.65rem;
       text-decoration: none;
    }
    .crm-brand-logo {
       display: block;
-      height: 2.75rem;
+      height: 2.5rem;
       width: auto;
-      max-width: 11.5rem;
+      max-width: 2.75rem;
       object-fit: contain;
+      flex-shrink: 0;
+   }
+   .crm-brand-text {
+      font-family: Poppins, sans-serif;
+      font-size: 1.125rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #2F2F3A;
+      line-height: 1.1;
+      white-space: nowrap;
+   }
+   .crm-brand-text-accent {
+      color: #7366FF;
    }
    .crm-avatar {
       display: flex; align-items: center; justify-content: center;

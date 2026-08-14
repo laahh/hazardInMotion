@@ -247,12 +247,11 @@ class MonitoringSafetyEngineeringOutsideCommitmentService
         }
 
         $progressStatus = match ($category) {
-            'arahan_manajemen' => $this->resolveReplikasiProgressStatus($record),
-            'rekom_insiden', 'rekom_gr' => $this->resolveSafetyEngineeringProgressStatus($record),
+            'arahan_manajemen', 'rekom_insiden', 'rekom_gr' => $this->resolveSafetyEngineeringProgressStatus($record),
             default => $this->resolveReplikasiProgressStatus($record),
         };
 
-        if (in_array($category, ['rekom_insiden', 'rekom_gr'], true)) {
+        if (in_array($category, ['arahan_manajemen', 'rekom_insiden', 'rekom_gr'], true)) {
             $dueDate = $record->standardisasi_due_date?->format('Y-m-d') ?? '';
             $percentage = $this->resolveStandardisasiPercentage($record);
             // Plan/Done untuk SE mengacu ke fase standardisasi (1 unit per record)
@@ -271,7 +270,7 @@ class MonitoringSafetyEngineeringOutsideCommitmentService
         return [
             'id' => $record->id,
             'name' => $record->pengendalian_rekayasa,
-            'unit' => in_array($category, ['rekom_insiden', 'rekom_gr'], true)
+            'unit' => in_array($category, ['arahan_manajemen', 'rekom_insiden', 'rekom_gr'], true)
                 ? 'Standardisasi'
                 : ($record->replikasi_satuan !== '' ? $record->replikasi_satuan : 'Kegiatan'),
             'plan' => $plan,
@@ -1237,7 +1236,7 @@ class MonitoringSafetyEngineeringOutsideCommitmentService
 
         return [
             'total_komitmen' => $totalPengendalian,
-            'arahan_manajemen' => $this->buildStatusCategoryStat($replikasi, 'replikasi_status'),
+            'arahan_manajemen' => $this->buildStatusCategoryStat($replikasi, 'standardisasi_status'),
             'rekom_insiden' => $this->buildStatusCategoryStat($safety, 'standardisasi_status'),
             'rekom_gr' => $this->buildStatusCategoryStat($additional, 'standardisasi_status'),
         ];

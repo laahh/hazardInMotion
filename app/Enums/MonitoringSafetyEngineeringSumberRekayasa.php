@@ -16,6 +16,7 @@ enum MonitoringSafetyEngineeringSumberRekayasa: string
     case Replikasi2026 = 'replikasi_2026';
     case RekomInsiden = 'rekom_insiden';
     case RekomGr = 'rekom_gr';
+    case ArahanManajemen = 'arahan_manajemen';
 
     public function label(): string
     {
@@ -30,6 +31,7 @@ enum MonitoringSafetyEngineeringSumberRekayasa: string
             self::Replikasi2026 => 'Replikasi 2026',
             self::RekomInsiden => 'Rekom Insiden',
             self::RekomGr => 'Rekom GR',
+            self::ArahanManajemen => 'Arahan Manajemen',
         };
     }
 

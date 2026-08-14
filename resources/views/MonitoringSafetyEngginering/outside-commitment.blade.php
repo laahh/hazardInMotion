@@ -236,7 +236,7 @@
             ? 'Total Rekom. Insiden'
             : ($isAdditionalCard ? 'Total Rekom Pelanggaran GR' : ($categoryCard['label'] ?? 'Kategori')));
       $cardSubtitle = $isReplikasiCard
-         ? 'PMR 2023 / 2024 / 2025'
+         ? 'Sumber rekayasa: Arahan Manajemen'
          : ($isSafetyCard
             ? 'Rekomendasi insiden'
             : ($isAdditionalCard ? 'Rekomendasi pelanggaran GR' : 'Kategori pengendalian'));
@@ -739,6 +739,10 @@
             || payload?.key === 'rekom_gr';
       }
 
+      function isArahanManajemenPayload(payload) {
+         return payload?.key === 'arahan_manajemen';
+      }
+
       function isSafetyEngineeringPayload(payload) {
          return payload?.key === 'rekom_insiden';
       }
@@ -747,18 +751,25 @@
          return payload?.key === 'rekom_gr';
       }
 
+      function usesStandardisasiColumns(payload) {
+         return isArahanManajemenPayload(payload)
+            || isSafetyEngineeringPayload(payload)
+            || isAdditionalSafetyPayload(payload);
+      }
+
       function isReplikasiPayload(payload) {
-         return payload?.key === 'arahan_manajemen'
-            || payload?.stat?.meta_mode === 'replikasi_status';
+         return false;
       }
 
       function statusModalTitle(payload) {
+         if (isArahanManajemenPayload(payload)) return 'Total Arahan Manajemen';
          if (isSafetyEngineeringPayload(payload)) return 'Total Rekom. Insiden';
          if (isAdditionalSafetyPayload(payload)) return 'Total Rekom Pelanggaran GR';
          return 'Total Arahan Manajemen';
       }
 
       function statusModalSectionTitle(payload) {
+         if (isArahanManajemenPayload(payload)) return 'Data Pengendalian Arahan Manajemen';
          if (isSafetyEngineeringPayload(payload)) return 'Data Pengendalian Rekom. Insiden';
          if (isAdditionalSafetyPayload(payload)) return 'Data Pengendalian Rekom Pelanggaran GR';
          return 'Data Pengendalian Arahan Manajemen';
@@ -1433,9 +1444,9 @@
       function renderCategoryModal(payload, filters) {
          var sourceItems = payload.items || [];
          var hasStatusBreakdown = isStatusBreakdownMode(payload);
-         var isSafety = isSafetyEngineeringPayload(payload);
+         var isSafety = usesStandardisasiColumns(payload);
          var metaMode = payload?.stat?.meta_mode
-            || (isSafety ? 'standardisasi_status' : (isAdditionalSafetyPayload(payload) ? 'additional_status' : 'replikasi_status'));
+            || (usesStandardisasiColumns(payload) ? 'standardisasi_status' : 'replikasi_status');
          var activeFilters = Object.assign({ site: '', company: '', status: '' }, filters || {});
          var items = hasStatusBreakdown ? filterCategoryItems(sourceItems, activeFilters) : sourceItems;
          var stat = hasStatusBreakdown

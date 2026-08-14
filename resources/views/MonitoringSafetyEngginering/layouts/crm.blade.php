@@ -46,12 +46,13 @@
    {{-- Sidebar --}}
    <aside class="crm-sidebar hidden lg:flex lg:flex-col lg:w-[260px] lg:shrink-0 bg-white border-r border-crm-border fixed inset-y-0 left-0 z-40">
       <div class="px-5 pt-6 pb-4">
-         <a href="{{ route('monitoring-safety-engineering.dashboard') }}" class="crm-brand-link flex items-center gap-2.5">
+         <a href="{{ route('monitoring-safety-engineering.dashboard') }}" class="crm-brand-link">
             <img
                src="{{ URL::asset('build/images/logo-berau.png') }}"
-               alt="Berau Coal"
+               alt=""
                class="crm-brand-logo"
             >
+            <span class="crm-brand-text">Berau<span class="crm-brand-text-accent"> Coal</span></span>
          </a>
       </div>
 
