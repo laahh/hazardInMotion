@@ -2440,6 +2440,296 @@
       color: #475569;
       text-align: right;
    }
+   .mse-prog-track--lg { height: 0.55rem; }
+
+   /* ---- Overall Perusahaan v2 ---- */
+   .mse-ov2-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+   }
+   @media (min-width: 768px) {
+      .mse-ov2-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+   }
+   @media (min-width: 1280px) {
+      .mse-ov2-kpi-grid { grid-template-columns: 1.4fr repeat(5, minmax(0, 1fr)); }
+   }
+   .mse-ov2-kpi {
+      background: #fff;
+      border: 1px solid #E6E9EB;
+      border-radius: 0.9rem;
+      padding: 1rem 1.1rem;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+   }
+   .mse-ov2-kpi--primary {
+      background: linear-gradient(160deg, #F8F7FF 0%, #FFFFFF 55%);
+      border-color: #DDD8FF;
+   }
+   .mse-ov2-kpi-label {
+      margin: 0;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+   }
+   .mse-ov2-kpi-value {
+      margin: 0.35rem 0 0;
+      font-size: 1.65rem;
+      font-weight: 800;
+      color: #0F172A;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+   }
+   .mse-ov2-kpi-hint {
+      margin: 0.45rem 0 0;
+      font-size: 0.7rem;
+      color: #94A3B8;
+   }
+   .mse-ov2-cat {
+      background: #fff;
+      border: 1px solid #E6E9EB;
+      border-radius: 0.9rem;
+      padding: 0.95rem 1.1rem;
+      border-top: 3px solid #CBD5E1;
+   }
+   .mse-ov2-cat--replikasi { border-top-color: #7366FF; }
+   .mse-ov2-cat--safety { border-top-color: #15803D; }
+   .mse-ov2-cat--additional { border-top-color: #65A30D; }
+   .mse-ov2-cat-head {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #475569;
+   }
+   .mse-ov2-cat-head .material-symbols-outlined { font-size: 1.1rem; }
+   .mse-ov2-cat--replikasi .mse-ov2-cat-head { color: #5B52D6; }
+   .mse-ov2-cat--safety .mse-ov2-cat-head { color: #15803D; }
+   .mse-ov2-cat--additional .mse-ov2-cat-head { color: #4D7C0F; }
+   .mse-ov2-cat-value {
+      margin: 0.45rem 0 0.55rem;
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #0F172A;
+      letter-spacing: -0.03em;
+   }
+   .mse-ov2-site-grid {
+      display: grid;
+      grid-template-columns: repeat(1, minmax(0, 1fr));
+      gap: 0.85rem;
+   }
+   @media (min-width: 640px) {
+      .mse-ov2-site-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+   }
+   @media (min-width: 1100px) {
+      .mse-ov2-site-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+   }
+   .mse-ov2-site-card {
+      border: 1px solid #E6E9EB;
+      border-radius: 0.85rem;
+      padding: 0.95rem 1rem;
+      background: #FAFBFC;
+   }
+   .mse-ov2-site-card--good { background: #F0FDF4; border-color: #BBF7D0; }
+   .mse-ov2-site-card--warn { background: #FFFBEB; border-color: #FDE68A; }
+   .mse-ov2-site-card--mid { background: #FFF7ED; border-color: #FED7AA; }
+   .mse-ov2-site-card--low { background: #FEF2F2; border-color: #FECACA; }
+   .mse-ov2-site-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.55rem;
+   }
+   .mse-ov2-site-name {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #0F172A;
+   }
+   .mse-ov2-site-pct { font-size: 0.9rem; font-weight: 800; }
+   .mse-ov2-site-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.7rem;
+      color: #64748B;
+      margin-bottom: 0.55rem;
+   }
+   .mse-ov2-site-status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-bottom: 0.65rem;
+   }
+   .mse-ov2-site-cats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.4rem;
+      border-top: 1px dashed #E2E8F0;
+      padding-top: 0.55rem;
+   }
+   .mse-ov2-site-cats div {
+      text-align: center;
+      background: rgba(255,255,255,0.7);
+      border-radius: 0.5rem;
+      padding: 0.35rem 0.2rem;
+   }
+   .mse-ov2-site-cats span {
+      display: block;
+      font-size: 0.62rem;
+      color: #94A3B8;
+      font-weight: 600;
+      text-transform: uppercase;
+   }
+   .mse-ov2-site-cats strong {
+      font-size: 0.85rem;
+      color: #0F172A;
+   }
+   .mse-ov2-chart-wrap { height: 260px; position: relative; }
+   .mse-ov2-rank-list { display: flex; flex-direction: column; gap: 0.65rem; }
+   .mse-ov2-rank-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(7rem, 0.9fr);
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.55rem 0.65rem;
+      border-radius: 0.65rem;
+      background: #F8FAFC;
+      border: 1px solid #EEF2F7;
+   }
+   .mse-ov2-rank-name {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #0F172A;
+   }
+   .mse-ov2-rank-site {
+      display: block;
+      font-size: 0.68rem;
+      color: #94A3B8;
+      margin-top: 0.1rem;
+   }
+   .mse-ov2-site-block {
+      border: 1px solid #E6E9EB;
+      border-radius: 0.9rem;
+      overflow: hidden;
+      margin-bottom: 1rem;
+      background: #fff;
+   }
+   .mse-ov2-site-block:last-child { margin-bottom: 0; }
+   .mse-ov2-site-block-head {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      padding: 0.9rem 1rem;
+      background: #F8FAFC;
+      border-bottom: 1px solid #E6E9EB;
+   }
+   @media (min-width: 768px) {
+      .mse-ov2-site-block-head {
+         flex-direction: row;
+         align-items: center;
+         justify-content: space-between;
+      }
+      .mse-ov2-site-block-progress { min-width: 14rem; }
+   }
+   .mse-ov2-site-block-title {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.55rem;
+   }
+   .mse-ov2-site-block-title .material-symbols-outlined {
+      color: #7366FF;
+      margin-top: 0.1rem;
+   }
+   .mse-ov2-site-block-name {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #0F172A;
+   }
+   .mse-ov2-site-block-sub {
+      margin: 0.15rem 0 0;
+      font-size: 0.7rem;
+      color: #64748B;
+   }
+   .mse-ov2-detail-table thead th {
+      background: #F1F5F9 !important;
+      color: #334155 !important;
+      font-size: 0.68rem;
+   }
+   .mse-ov2-detail-table.crm-data-table thead th.mse-ov-group--total { background: #E2E8F0 !important; color: #334155 !important; }
+   .mse-ov2-detail-table.crm-data-table thead th.mse-ov-group--replikasi { background: #EDE9FE !important; color: #5B52D6 !important; }
+   .mse-ov2-detail-table.crm-data-table thead th.mse-ov-group--safety { background: #DCFCE7 !important; color: #15803D !important; }
+   .mse-ov2-detail-table.crm-data-table thead th.mse-ov-group--additional { background: #ECFCCB !important; color: #4D7C0F !important; }
+   .mse-ov2-mini-status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      justify-content: center;
+   }
+   .mse-ov2-grand-total {
+      margin-top: 1rem;
+      padding: 1rem 1.1rem;
+      border-radius: 0.9rem;
+      background: linear-gradient(135deg, #EEF2FF 0%, #F8FAFC 100%);
+      border: 1px solid #Dbe4FF;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+   }
+   @media (min-width: 900px) {
+      .mse-ov2-grand-total {
+         flex-direction: row;
+         align-items: center;
+         justify-content: space-between;
+      }
+   }
+   .mse-ov2-grand-label {
+      margin: 0;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: #1E3A8A;
+   }
+   .mse-ov2-grand-sub {
+      margin: 0.2rem 0 0;
+      font-size: 0.72rem;
+      color: #64748B;
+   }
+   .mse-ov2-grand-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem;
+   }
+   @media (min-width: 640px) {
+      .mse-ov2-grand-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+   }
+   .mse-ov2-grand-metric {
+      background: #fff;
+      border-radius: 0.65rem;
+      padding: 0.55rem 0.7rem;
+      border: 1px solid #E2E8F0;
+      min-width: 6.5rem;
+   }
+   .mse-ov2-grand-metric span {
+      display: block;
+      font-size: 0.65rem;
+      color: #64748B;
+      font-weight: 600;
+   }
+   .mse-ov2-grand-metric strong {
+      display: block;
+      margin-top: 0.15rem;
+      font-size: 1.05rem;
+      color: #0F172A;
+   }
+   .mse-ov2-grand-metric--replikasi strong { color: #5B52D6; }
+   .mse-ov2-grand-metric--safety strong { color: #15803D; }
+   .mse-ov2-grand-metric--additional strong { color: #4D7C0F; }
+
    .mse-ov-chart-wrap { height: 280px; }
    .mse-ov-footnote {
       padding: 0.85rem 1rem;
