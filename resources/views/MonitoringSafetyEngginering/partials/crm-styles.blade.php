@@ -2341,24 +2341,54 @@
    .mse-ov-col-company {
       min-width: 11rem;
       position: sticky;
-      left: 0;
-      z-index: 2;
-      background: #fff;
+      left: 2.5rem;
+      z-index: 3;
+      background: #7366FF;
+      color: #fff;
    }
-   .mse-ov-company-table tbody td:nth-child(2) {
+   .mse-ov-company-table thead th:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 3;
+      background: #7366FF;
+   }
+   .mse-ov-company-table tbody td:first-child {
       position: sticky;
       left: 0;
       z-index: 1;
       background: #fff;
    }
+   .mse-ov-company-table tbody td:nth-child(2) {
+      position: sticky;
+      left: 2.5rem;
+      z-index: 1;
+      background: #fff;
+   }
+   .mse-ov-company-table tbody tr:nth-child(even) td:first-child,
+   .mse-ov-company-table tbody tr:nth-child(even) td:nth-child(2) {
+      background: #FAFBFC;
+   }
+   .mse-ov-company-table .mse-ov-total-row td:first-child,
    .mse-ov-company-table .mse-ov-total-row td:nth-child(2) {
       background: #EFF6FF !important;
    }
-   .mse-ov-group { font-weight: 700; letter-spacing: 0.01em; }
-   .mse-ov-group--total { background: #F1F5F9 !important; color: #334155; }
-   .mse-ov-group--replikasi { background: #F1EFFF !important; color: #5B52D6; }
-   .mse-ov-group--safety { background: #ECFDF5 !important; color: #15803D; }
-   .mse-ov-group--additional { background: #F7FEE7 !important; color: #4D7C0F; }
+   .mse-ov-company-table.crm-data-table thead th.mse-ov-group {
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      color: #fff !important;
+   }
+   .mse-ov-company-table.crm-data-table thead th.mse-ov-group--total {
+      background: #475569 !important;
+   }
+   .mse-ov-company-table.crm-data-table thead th.mse-ov-group--replikasi {
+      background: #5B52D6 !important;
+   }
+   .mse-ov-company-table.crm-data-table thead th.mse-ov-group--safety {
+      background: #15803D !important;
+   }
+   .mse-ov-company-table.crm-data-table thead th.mse-ov-group--additional {
+      background: #4D7C0F !important;
+   }
    .mse-ov-total-row td { background: #EFF6FF !important; }
    .mse-prog {
       display: flex;
