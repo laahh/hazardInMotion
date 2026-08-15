@@ -10,7 +10,8 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * User Mitra Kerja (assignment aktif, non-manager) hanya boleh ke /evaluasi-well/mitra (+ detail karyawan).
+ * User Mitra Kerja (assignment aktif, non-manager) hanya boleh ke /evaluasi-well/mitra
+ * dan /evaluasi-well/pvt (+ detail karyawan).
  */
 final class SportEvaluationMitraOnlyAccess
 {
@@ -32,7 +33,7 @@ final class SportEvaluationMitraOnlyAccess
 
         if ($request->expectsJson()) {
             return response()->json([
-                'message' => 'Akses terbatas ke dashboard Mitra Kerja.',
+                'message' => 'Akses terbatas ke dashboard Mitra Kerja dan Evaluasi PVT.',
             ], 403);
         }
 

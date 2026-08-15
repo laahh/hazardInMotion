@@ -27,6 +27,12 @@
           <span>Mitra Kerja</span>
         </a>
       </li>
+      <li>
+        <a href="{{ route('evaluasi-well.pvt.index') }}" class="{{ request()->routeIs('evaluasi-well.pvt.*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:eye-scan-outline" class="menu-icon"></iconify-icon>
+          <span>Evaluasi PVT</span>
+        </a>
+      </li>
       @else
       <li>
         <a href="{{ route('evaluasi-well.index') }}" class="{{ request()->routeIs('evaluasi-well.index') || request()->routeIs('evaluasi-well.summary') || request()->routeIs('evaluasi-well.trend') || request()->routeIs('evaluasi-well.distribution') || request()->routeIs('evaluasi-well.leaderboard') ? 'active-page' : '' }}">

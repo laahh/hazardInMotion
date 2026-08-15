@@ -83,7 +83,7 @@ final class SportEvaluationAccessService
 
     /**
      * User Mitra Kerja (punya assignment aktif) yang bukan Admin/HR.
-     * Hanya boleh mengakses fitur /evaluasi-well/mitra.
+     * Hanya boleh mengakses fitur /evaluasi-well/mitra dan /evaluasi-well/pvt.
      */
     public function isMitraOnlyUser(?User $user): bool
     {
@@ -107,7 +107,9 @@ final class SportEvaluationAccessService
             return false;
         }
 
-        if (str_starts_with($routeName, 'evaluasi-well.mitra.')) {
+        if (str_starts_with($routeName, 'evaluasi-well.mitra.')
+            || str_starts_with($routeName, 'evaluasi-well.pvt.')
+        ) {
             return true;
         }
 

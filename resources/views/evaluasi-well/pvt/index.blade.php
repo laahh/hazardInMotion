@@ -440,6 +440,10 @@
   $siteRows = $siteRows ?? [];
   $companyRows = $companyRows ?? [];
   $chart = $checkinChart ?? ['categories' => [], 'dates' => [], 'checkin' => [], 'lulus' => [], 'tidak_lulus' => [], 'belum' => [], 'pct_sudah' => []];
+  $isMitraOnlyUser = app(\App\Services\SportEvaluation\SportEvaluationAccessService::class)
+      ->isMitraOnlyUser(auth()->user());
+  $homeUrl = $isMitraOnlyUser ? route('evaluasi-well.mitra.index') : route('evaluasi-well.index');
+  $homeLabel = $isMitraOnlyUser ? 'Mitra Kerja' : 'Dashboard';
 @endphp
 
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
@@ -451,9 +455,9 @@
   </div>
   <ul class="d-flex align-items-center gap-2">
     <li class="fw-medium">
-      <a href="{{ route('evaluasi-well.index') }}" class="d-flex align-items-center gap-1 hover-text-primary">
+      <a href="{{ $homeUrl }}" class="d-flex align-items-center gap-1 hover-text-primary">
         <iconify-icon icon="solar:home-smile-angle-outline" class="icon text-lg"></iconify-icon>
-        Dashboard
+        {{ $homeLabel }}
       </a>
     </li>
     <li>-</li>

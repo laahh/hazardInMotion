@@ -81,6 +81,13 @@
               <div class="menu-title">Mitra Kerja</div>
             </a>
           </li>
+          <li>
+            <a href="{{ route('evaluasi-well.pvt.index') }}">
+              <div class="parent-icon"><i class="material-icons-outlined">visibility</i>
+              </div>
+              <div class="menu-title">Evaluasi PVT</div>
+            </a>
+          </li>
           @else
           @if(Auth::check() && Auth::user()->hasRole('admin-hazard-motion'))
           <li>
