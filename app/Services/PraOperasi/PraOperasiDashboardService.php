@@ -23,6 +23,7 @@ final class PraOperasiDashboardService
         private readonly PraOperasiFatigueCheckReader $fatigueReader,
         private readonly PraOperasiDmsAlertReader $dmsAlertReader,
         private readonly PraOperasiPvtStatusReader $pvtReader,
+        private readonly PraOperasiFatigueTrendReader $trendReader,
     ) {}
 
     /**
@@ -126,11 +127,50 @@ final class PraOperasiDashboardService
                 'aggregatorVsDms' => $this->buildAggregatorVsDmsBreakdown($rows),
                 'companyOptions' => $this->buildCompanyOptions($checkins),
                 'checklistParams' => $this->checklistParameters(),
+                'insights' => $this->buildInsights($filters['date']),
             ];
         } catch (Throwable $e) {
             report($e);
 
             return $this->emptyPayload($filters, $rfidUp, $pvtUp);
+        }
+    }
+
+    /**
+     * 8 panel wawasan fatigue (trend, breakdown, ranking) — company-wide,
+     * window 14 hari berakhir di tanggal filter. Terpisah dari try/catch utama
+     * supaya kalau salah satu panel gagal, watchlist harian tetap tampil.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildInsights(string $untilDate): array
+    {
+        $empty = [
+            'up' => false,
+            'alertTrend' => ['categories' => [], 'true_count' => [], 'false_count' => [], 'null_count' => [], 'operator_count' => []],
+            'ftwTrend' => ['categories' => [], 'hijau' => [], 'kuning' => [], 'merah' => []],
+            'deviation' => ['sobriety_unfit' => 0, 'kurang_tidur' => 0, 'sakit' => 0, 'ada_tindakan_unfit' => 0, 'total' => 0],
+            'criticalIllness' => ['total_penyakit_kritis' => 0, 'ada_alert_fatigue' => 0],
+            'topRepeat' => [],
+        ];
+
+        if (! $this->trendReader->isUp()) {
+            return $empty;
+        }
+
+        try {
+            return [
+                'up' => true,
+                'alertTrend' => $this->trendReader->alertTrend($untilDate),
+                'ftwTrend' => $this->trendReader->fitToWorkTrend($untilDate),
+                'deviation' => $this->trendReader->deviationBreakdown($untilDate),
+                'criticalIllness' => $this->trendReader->criticalIllnessVsAlert($untilDate),
+                'topRepeat' => $this->trendReader->topRepeatOperators($untilDate, 10),
+            ];
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
         }
     }
 
@@ -378,6 +418,7 @@ final class PraOperasiDashboardService
             ],
             'companyOptions' => [],
             'checklistParams' => $this->checklistParameters(),
+            'insights' => $this->buildInsights($filters['date']),
         ];
     }
 }
