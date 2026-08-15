@@ -226,12 +226,13 @@
       </div>
       <div class="card-body">
         <div id="poAlertTrendChart"></div>
-        <p class="text-secondary-light text-xs mt-8 mb-0">
+        <p class="text-secondary-light text-xs mt-8 mb-4">
           <b class="text-success-600">Hijau (Dikonfirmasi Nyata)</b> = sudah dicek petugas dan memang benar mengantuk/lelah &middot;
           <b class="text-secondary-light">Abu (Alarm Palsu)</b> = ternyata bukan kelelahan (mis. silau kamera) &middot;
-          <b class="text-warning-600">Kuning (Belum Diperiksa)</b> = menunggu dicek petugas &middot;
-          garis biru = jumlah operator berbeda yang kena peringatan hari itu.
+          <b class="text-warning-600">Kuning (Belum Diperiksa)</b> = menunggu dicek petugas.
         </p>
+        <div id="poAlertOperatorChart" class="mt-8"></div>
+        <p class="text-secondary-light text-xs mt-4 mb-0">Jumlah operator berbeda yang kena peringatan hari itu (skalanya beda dari grafik di atas, jadi ditampilkan terpisah).</p>
       </div>
     </div>
   </div>
@@ -537,27 +538,37 @@
   var alertEl = document.querySelector('#poAlertTrendChart');
   if (alertEl && insights.alertTrend && insights.alertTrend.categories.length) {
     new ApexCharts(alertEl, {
-      chart: { height: 300, type: 'line', toolbar: { show:false } },
+      chart: { height: 260, type: 'bar', stacked: true, toolbar: { show:false } },
       series: [
-        { name: 'Dikonfirmasi Nyata', type: 'column', data: insights.alertTrend.true_count },
-        { name: 'Alarm Palsu', type: 'column', data: insights.alertTrend.false_count },
-        { name: 'Belum Diperiksa', type: 'column', data: insights.alertTrend.null_count },
-        { name: 'Operator Berbeda', type: 'line', data: insights.alertTrend.operator_count }
+        { name: 'Dikonfirmasi Nyata', data: insights.alertTrend.true_count },
+        { name: 'Alarm Palsu', data: insights.alertTrend.false_count },
+        { name: 'Belum Diperiksa', data: insights.alertTrend.null_count }
       ],
-      colors: ['#45B369', '#9CA3AF', '#FF9F29', '#487FFF'],
-      stroke: { width: [0,0,0,3], curve: 'smooth' },
+      colors: ['#45B369', '#9CA3AF', '#FF9F29'],
       plotOptions: { bar: { columnWidth: '70%', borderRadius: 2 } },
-      fill: { opacity: [1,1,1,1] },
-      markers: { size: [0,0,0,4] },
       xaxis: { categories: insights.alertTrend.categories, labels: { style: { fontSize: '10.5px' } } },
-      yaxis: [
-        { title: { text: 'Jumlah peringatan' } },
-        { opposite: true, title: { text: 'Jumlah operator' }, seriesName: 'Operator Berbeda' }
-      ],
+      yaxis: { title: { text: 'Jumlah peringatan' } },
       legend: { position: 'top', horizontalAlign: 'left', fontSize: '12px' },
       grid: { borderColor: '#E5E7EB', strokeDashArray: 4 },
       dataLabels: { enabled: false },
       tooltip: { shared: true, intersect: false }
+    }).render();
+  }
+
+  var alertOpEl = document.querySelector('#poAlertOperatorChart');
+  if (alertOpEl && insights.alertTrend && insights.alertTrend.categories.length) {
+    new ApexCharts(alertOpEl, {
+      chart: { height: 120, type: 'area', toolbar: { show:false }, sparkline: { enabled: false } },
+      series: [{ name: 'Operator Berbeda', data: insights.alertTrend.operator_count }],
+      colors: ['#487FFF'],
+      stroke: { width: 2.5, curve: 'smooth' },
+      fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0.02, stops: [0,90,100] } },
+      xaxis: { categories: insights.alertTrend.categories, labels: { style: { fontSize: '10px' } } },
+      yaxis: { labels: { style: { fontSize: '10px' } } },
+      grid: { borderColor: '#E5E7EB', strokeDashArray: 4 },
+      dataLabels: { enabled: false },
+      markers: { size: 0, hover: { size: 4 } },
+      tooltip: { y: { formatter: function(v){ return v + ' operator'; } } }
     }).render();
   }
 
