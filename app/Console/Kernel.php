@@ -127,6 +127,15 @@ class Kernel extends ConsoleKernel
             ->dailyAt('20:30')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/hsecm-endshift-email.log'));
+
+        // Pra Operasi: pre-warm cache roster operator tiap 6 jam supaya scan berat
+        // m_karyawan (6GB, tanpa index kode_sid/id_jabatan) tidak terjadi sinkron
+        // di request HTTP dashboard (penyebab 504 sebelumnya).
+        $schedule->command('pra-operasi:sync-operator-roster')
+            ->timezone('Asia/Makassar')
+            ->everySixHours()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/pra-operasi-sync-roster.log'));
     }
 
     /**

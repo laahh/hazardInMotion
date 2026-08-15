@@ -93,6 +93,7 @@ final class PraOperasiDashboardService
                     'perusahaan' => $row['perusahaan'] !== '' ? $row['perusahaan'] : 'Tidak diketahui',
                     'gate' => $row['gate'],
                     'checked_in_at' => $row['checked_in_at'],
+                    'checked_out_at' => $row['checked_out_at'] ?? null,
                     'fatigue_done' => $fatigueDone,
                     'fatigue_tier' => $fatigueTier,
                     'fatigue_score' => $fatigue['kesiapan_score'] ?? null,
@@ -204,6 +205,7 @@ final class PraOperasiDashboardService
             'fatigue_hijau' => 0, 'fatigue_kuning' => 0, 'fatigue_merah' => 0, 'fatigue_belum' => 0,
             'pvt_lulus' => 0, 'pvt_tidak_lulus' => 0, 'pvt_belum' => 0,
             'ada_alert_dms' => 0,
+            'masih_di_site' => 0, 'sudah_checkout' => 0,
         ];
 
         foreach ($rows as $row) {
@@ -221,6 +223,12 @@ final class PraOperasiDashboardService
 
             if ((int) $row['dms_alert_count'] > 0) {
                 $kpi['ada_alert_dms']++;
+            }
+
+            if (empty($row['checked_out_at'])) {
+                $kpi['masih_di_site']++;
+            } else {
+                $kpi['sudah_checkout']++;
             }
         }
 
@@ -358,6 +366,7 @@ final class PraOperasiDashboardService
             'kpi' => [
                 'checkin' => 0, 'fatigue_hijau' => 0, 'fatigue_kuning' => 0, 'fatigue_merah' => 0, 'fatigue_belum' => 0,
                 'pvt_lulus' => 0, 'pvt_tidak_lulus' => 0, 'pvt_belum' => 0, 'ada_alert_dms' => 0,
+                'masih_di_site' => 0, 'sudah_checkout' => 0,
             ],
             'rows' => [],
             'totalRows' => 0,

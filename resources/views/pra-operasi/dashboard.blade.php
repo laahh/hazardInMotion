@@ -186,6 +186,19 @@
       </div>
     </div>
   </div>
+  <div class="col-xxl col-sm-6">
+    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
+      <div class="card-body p-0">
+        <div class="d-flex align-items-center gap-2 mb-8">
+          <span class="w-48-px h-48-px flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle" style="background:var(--cyan)">
+            <iconify-icon icon="solar:map-point-wave-bold" class="icon text-xl"></iconify-icon>
+          </span>
+          <div><span class="mb-2 fw-medium text-secondary-light text-sm d-block">Masih di Site</span><h6 class="fw-semibold mb-0">{{ number_format($kpi['masih_di_site']) }}</h6></div>
+        </div>
+        <p class="text-sm mb-0 text-secondary-light">{{ number_format($kpi['sudah_checkout']) }} sudah checkout</p>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="row gy-4">
@@ -203,7 +216,7 @@
           <table class="table bordered-table mb-0 po-table">
             <thead>
               <tr>
-                <th>Kode SID</th><th>Operator</th><th>Perusahaan</th><th>Checkin</th>
+                <th>Kode SID</th><th>Operator</th><th>Perusahaan</th><th>Checkin</th><th>Checkout</th>
                 <th>Fatigue Test</th><th>PVT</th><th>Alert DMS</th>
               </tr>
             </thead>
@@ -218,6 +231,13 @@
                 </td>
                 <td class="text-sm">{{ $row['perusahaan'] }}</td>
                 <td class="text-sm">{{ \Illuminate\Support\Carbon::parse($row['checked_in_at'])->translatedFormat('d M H:i') }}</td>
+                <td class="text-sm">
+                  @if(!empty($row['checked_out_at']))
+                    {{ \Illuminate\Support\Carbon::parse($row['checked_out_at'])->translatedFormat('d M H:i') }}
+                  @else
+                    <span class="bg-neutral-200 text-neutral-600 px-8 py-2 rounded-pill text-xs fw-medium">Belum keluar</span>
+                  @endif
+                </td>
                 <td>
                   <span class="{{ $tm['badge'] }} px-10 py-4 rounded-pill fw-medium text-sm">{{ $tm['label'] }}</span>
                   @if($row['fatigue_score'] !== null)<span class="text-xs text-secondary-light ms-1">({{ $row['fatigue_score'] }}/10)</span>@endif
@@ -232,7 +252,7 @@
                 </td>
               </tr>
               @empty
-              <tr><td colspan="7" class="text-center text-secondary-light py-5">Tidak ada operator checkin untuk filter ini.</td></tr>
+              <tr><td colspan="8" class="text-center text-secondary-light py-5">Tidak ada operator checkin untuk filter ini.</td></tr>
               @endforelse
             </tbody>
           </table>

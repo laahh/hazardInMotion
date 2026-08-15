@@ -45,6 +45,18 @@ final class SportEvaluationPvtRfidCheckinReader
     /**
      * @var list<string>
      */
+    private const CHECKOUT_TYPES = [
+        'OUT',
+        'CHECKOUT',
+        'CHECK-OUT',
+        'CHECK_OUT',
+        'CHECK OUT',
+        'KELUAR',
+    ];
+
+    /**
+     * @var list<string>
+     */
     private const PASSED_STATUSES = [
         'PASSED',
         'PASS',
@@ -208,7 +220,54 @@ final class SportEvaluationPvtRfidCheckinReader
     }
 
     /**
+     * Check-OUT lolos terakhir per SID pada tanggal (Asia/Makassar). Sama persis
+     * dengan firstPassedCheckinsForSids, hanya tipe event & arah urutan (ambil
+     * yang TERAKHIR, bukan pertama — checkout yang relevan adalah saat pulang).
+     *
+     * @param  list<string>  $sids
+     * @return array<string, array{
+     *     kode_sid: string, checked_in_at: string, nama_karyawan: string,
+     *     perusahaan: string, gate: string, jenis_checkinout: string, status_lolos: string
+     * }>
+     */
+    public function lastPassedCheckoutsForSids(string $date, array $sids): array
+    {
+        if (! $this->isUp() || $sids === []) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($sids as $sid) {
+            $trimmed = trim((string) $sid);
+            if ($trimmed === '') {
+                continue;
+            }
+            $normalized[mb_strtoupper($trimmed)] = $trimmed;
+        }
+        if ($normalized === []) {
+            return [];
+        }
+
+        $day = Carbon::parse($date, config('app.timezone'))->startOfDay();
+        $start = $day->format('Y-m-d H:i:s');
+        $end = $day->copy()->addDay()->format('Y-m-d H:i:s');
+
+        $merged = [];
+        foreach (array_chunk(array_keys($normalized), self::SID_CHUNK) as $chunk) {
+            foreach ($this->queryChunk($start, $end, $chunk, true, self::CHECKOUT_TYPES, 'DESC') as $row) {
+                $upper = mb_strtoupper($row['kode_sid']);
+                if (! isset($merged[$upper])) {
+                    $merged[$upper] = $row;
+                }
+            }
+        }
+
+        return $merged;
+    }
+
+    /**
      * @param  list<string>  $upperSids
+     * @param  list<string>  $types  daftar sinonim jenis_checkinout (IN atau OUT)
      * @return list<array{
      *     kode_sid: string,
      *     checked_in_at: string,
@@ -219,18 +278,26 @@ final class SportEvaluationPvtRfidCheckinReader
      *     status_lolos: string
      * }>
      */
-    private function queryChunk(string $start, string $end, array $upperSids, bool $firstPerSidOnly): array
+    private function queryChunk(string $start, string $end, array $upperSids, bool $firstPerSidOnly, ?array $types = null, string $direction = 'ASC'): array
     {
+        $types ??= self::CHECKIN_TYPES;
+        $direction = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
+
         $sidPlaceholders = implode(',', array_fill(0, count($upperSids), '?'));
-        $typePlaceholders = implode(',', array_fill(0, count(self::CHECKIN_TYPES), '?'));
+        $typePlaceholders = implode(',', array_fill(0, count($types), '?'));
         $statusPlaceholders = implode(',', array_fill(0, count(self::PASSED_STATUSES), '?'));
+        $compactTypes = array_map(
+            static fn (string $t): string => str_replace([' ', '-'], '', strtoupper($t)),
+            $types
+        );
+        $compactPlaceholders = implode(',', array_fill(0, count($compactTypes), '?'));
 
         $selectHead = $firstPerSidOnly
             ? 'SELECT DISTINCT ON (UPPER(TRIM(kode_sid)))'
             : 'SELECT';
         $orderBy = $firstPerSidOnly
-            ? 'ORDER BY UPPER(TRIM(kode_sid)), tanggal_checkinout ASC'
-            : 'ORDER BY tanggal_checkinout ASC';
+            ? 'ORDER BY UPPER(TRIM(kode_sid)), tanggal_checkinout '.$direction
+            : 'ORDER BY tanggal_checkinout '.$direction;
 
         $sql = '
             '.$selectHead.'
@@ -249,7 +316,7 @@ final class SportEvaluationPvtRfidCheckinReader
               AND UPPER(TRIM(kode_sid)) IN ('.$sidPlaceholders.')
               AND (
                     UPPER(TRIM(jenis_checkinout::text)) IN ('.$typePlaceholders.')
-                 OR REPLACE(REPLACE(UPPER(TRIM(jenis_checkinout::text)), \' \', \'\'), \'-\', \'\') IN (\'IN\', \'CHECKIN\', \'MASUK\')
+                 OR REPLACE(REPLACE(UPPER(TRIM(jenis_checkinout::text)), \' \', \'\'), \'-\', \'\') IN ('.$compactPlaceholders.')
               )
               AND REPLACE(REPLACE(UPPER(TRIM(status_lolos::text)), \' \', \'\'), \'-\', \'\') IN ('.$statusPlaceholders.')
             '.$orderBy.'
@@ -258,7 +325,8 @@ final class SportEvaluationPvtRfidCheckinReader
         $bindings = array_merge(
             [$start, $end],
             $upperSids,
-            self::CHECKIN_TYPES,
+            $types,
+            $compactTypes,
             self::PASSED_STATUSES,
         );
 
