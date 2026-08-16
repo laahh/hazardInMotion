@@ -235,4 +235,83 @@ final class PraOperasiFatigueCheckReader
             return $out;
         });
     }
+
+    /**
+     * Riwayat detail LENGKAP Fit to Work (bukan cuma skor) untuk SATU SID,
+     * default 7 hari terakhir termasuk tanggal acuan — dipakai di panel detail
+     * operator supaya sobriety test/kondisi/jam tidur/tindakan unfit bisa
+     * ditelusuri seminggu ke belakang, bukan cuma hari ini.
+     *
+     * @return list<array{
+     *     date:string, kesiapan_score:int|null, tier:string|null, hasil_sobriety_test:string,
+     *     kondisi_karyawan:string, tindakan_unfit:string, jumlah_jam_tidur:string, checked_at:string
+     * }>  urut tanggal DESC (terbaru dulu)
+     */
+    public function detailHistoryForSid(string $kodeSid, string $untilDate, int $days = 7): array
+    {
+        if (! $this->isUp()) {
+            return [];
+        }
+
+        $upper = mb_strtoupper(trim($kodeSid));
+        if ($upper === '') {
+            return [];
+        }
+
+        $cacheKey = 'pra_operasi:fatigue_detail_history:v1:'.$untilDate.':'.$days.':'.$upper;
+
+        return Cache::remember($cacheKey, 300, function () use ($upper, $untilDate, $days): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $from = \Illuminate\Support\Carbon::parse($untilDate)->subDays($days - 1)->toDateString();
+
+            $sql = '
+                SELECT
+                    tanggal_pemeriksaan, jam_pemeriksaan, kesiapan_bekerja_fisik_dan_mental,
+                    hasil_sobriety_test, kondisi_karyawan, tindakan_unfit, jumlah_jam_tidur
+                FROM bcsid.clean_data_fatigue_check
+                WHERE UPPER(TRIM(sid)) = ?
+                  AND tanggal_pemeriksaan >= ? AND tanggal_pemeriksaan <= ?
+                ORDER BY tanggal_pemeriksaan DESC, uploaded_at ASC
+            ';
+
+            try {
+                $rows = DB::connection($connection)->select($sql, [$upper, $from, $untilDate]);
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            // Kalau ada >1 submission di hari yang sama, baris terakhir (uploaded_at ASC) menang.
+            $byDate = [];
+            foreach ($rows as $row) {
+                $date = (string) ($row->tanggal_pemeriksaan ?? '');
+                if ($date === '') {
+                    continue;
+                }
+                $scoreRaw = trim((string) ($row->kesiapan_bekerja_fisik_dan_mental ?? ''));
+                $score = ctype_digit($scoreRaw) ? (int) $scoreRaw : null;
+
+                $byDate[$date] = [
+                    'date' => $date,
+                    'kesiapan_score' => $score,
+                    'tier' => self::tierFromScore($score),
+                    'hasil_sobriety_test' => trim((string) ($row->hasil_sobriety_test ?? '')),
+                    'kondisi_karyawan' => trim((string) ($row->kondisi_karyawan ?? '')),
+                    'tindakan_unfit' => trim((string) ($row->tindakan_unfit ?? '')),
+                    'jumlah_jam_tidur' => trim((string) ($row->jumlah_jam_tidur ?? '')),
+                    'checked_at' => $date.' '.trim((string) ($row->jam_pemeriksaan ?? '')),
+                ];
+            }
+
+            $out = array_values($byDate);
+            usort($out, static fn (array $a, array $b): int => strcmp($b['date'], $a['date']));
+
+            return $out;
+        });
+    }
 }

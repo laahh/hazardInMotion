@@ -630,8 +630,8 @@
       <div id="poDrawerIllnessBanner" class="d-none mb-24"></div>
 
       <div class="mb-24">
-        <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Detail Pengecekan Fatigue Test Hari Ini</h6>
-        <div id="poDrawerFatigueDetail" class="border rounded-8 p-12"></div>
+        <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Detail Pengecekan Fatigue Test (7 Hari Terakhir)</h6>
+        <div id="poDrawerFatigueDetail"></div>
       </div>
 
       <div class="mb-24">
@@ -823,6 +823,46 @@
     kritis: { label: 'Kritis', color: '#EF4A00' }
   };
 
+  // Riwayat detail Fit to Work 7 hari terakhir (sobriety test, kondisi, jam
+  // tidur, tindakan unfit), bukan cuma hari ini.
+  function renderFatigueCheckHistory(containerId, list) {
+    var el = document.getElementById(containerId);
+    if (!list.length) {
+      el.innerHTML = '<div class="text-secondary-light text-sm text-center py-8">Belum ada pengecekan Fatigue Test 7 hari terakhir.</div>';
+      return;
+    }
+    var accordionId = containerId + 'Accordion';
+    el.innerHTML = '<div class="accordion" id="' + accordionId + '">' + list.map(function(day, idx){
+      var itemId = accordionId + idx;
+      var tm = day.tier ? tierMeta[day.tier] : null;
+      var tierText = tm ? tm.label : 'Belum Tes';
+      var badgeCls = tm ? tm.badge : 'bg-neutral-200 text-neutral-600';
+      var detailRows = [
+        ['Skor Kesiapan', day.kesiapan_score !== null ? day.kesiapan_score + '/10' : '-'],
+        ['Hasil Tes Sobriety (Alkohol)', day.hasil_sobriety_test || '-'],
+        ['Kondisi Karyawan', day.kondisi_karyawan || '-'],
+        ['Jumlah Jam Tidur', day.jumlah_jam_tidur || '-'],
+        ['Tindakan Unfit', day.tindakan_unfit || '-'],
+        ['Waktu Pemeriksaan', day.checked_at || '-']
+      ];
+      return '<div class="accordion-item">' +
+        '<h2 class="accordion-header"><button class="accordion-button ' + (idx === 0 ? '' : 'collapsed') + ' text-sm py-8 px-12" type="button" data-bs-toggle="collapse" data-bs-target="#' + itemId + '">' +
+          '<span class="flex-grow-1">' + escapeHtml(day.date) + '</span>' +
+          '<span class="' + badgeCls + ' px-8 py-2 rounded-pill text-xs fw-medium ms-8">' + escapeHtml(tierText) + '</span>' +
+        '</button></h2>' +
+        '<div id="' + itemId + '" class="accordion-collapse collapse ' + (idx === 0 ? 'show' : '') + '" data-bs-parent="#' + accordionId + '">' +
+          '<div class="accordion-body py-8 px-12">' +
+            detailRows.map(function(r){
+              return '<div class="d-flex justify-content-between text-sm py-4 border-bottom">' +
+                '<span class="text-secondary-light">' + escapeHtml(r[0]) + '</span>' +
+                '<span class="fw-medium text-end" style="max-width:60%">' + escapeHtml(r[1]) + '</span></div>';
+            }).join('') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+  }
+
   function renderProfile(profile) {
     document.getElementById('poDrawerLoading').classList.add('d-none');
     document.getElementById('poDrawerContent').classList.remove('d-none');
@@ -900,27 +940,7 @@
       illnessEl.innerHTML = '';
     }
 
-    // Detail pengecekan Fit to Work hari ini — sobriety test (alkohol), kondisi
-    // karyawan, tindakan unfit, jam tidur.
-    var fatigueDetailEl = document.getElementById('poDrawerFatigueDetail');
-    var tfc = profile.todayFatigueCheck;
-    if (!tfc || !tfc.done) {
-      fatigueDetailEl.innerHTML = '<div class="text-secondary-light text-sm text-center py-8">Belum ada pengecekan Fatigue Test hari ini.</div>';
-    } else {
-      var detailRows = [
-        ['Skor Kesiapan', tfc.kesiapan_score !== null ? tfc.kesiapan_score + '/10' : '-'],
-        ['Hasil Tes Sobriety (Alkohol)', tfc.hasil_sobriety_test || '-'],
-        ['Kondisi Karyawan', tfc.kondisi_karyawan || '-'],
-        ['Jumlah Jam Tidur', tfc.jumlah_jam_tidur || '-'],
-        ['Tindakan Unfit', tfc.tindakan_unfit || '-'],
-        ['Waktu Pemeriksaan', tfc.checked_at || '-']
-      ];
-      fatigueDetailEl.innerHTML = detailRows.map(function(r){
-        return '<div class="d-flex justify-content-between text-sm py-4 border-bottom">' +
-          '<span class="text-secondary-light">' + escapeHtml(r[0]) + '</span>' +
-          '<span class="fw-medium text-end" style="max-width:60%">' + escapeHtml(r[1]) + '</span></div>';
-      }).join('');
-    }
+    renderFatigueCheckHistory('poDrawerFatigueDetail', profile.fatigueCheckHistory || []);
 
     // Grafik tren Fatigue Test personal + pita baseline
     var history = profile.fatigueHistory || [];
