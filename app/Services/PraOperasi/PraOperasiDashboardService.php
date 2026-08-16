@@ -24,6 +24,8 @@ final class PraOperasiDashboardService
         private readonly PraOperasiDmsAlertReader $dmsAlertReader,
         private readonly PraOperasiPvtStatusReader $pvtReader,
         private readonly PraOperasiFatigueTrendReader $trendReader,
+        private readonly PraOperasiCriticalIllnessReader $criticalIllnessReader,
+        private readonly PraOperasiRiskScoreService $riskScoreService,
     ) {}
 
     /**
@@ -109,6 +111,7 @@ final class PraOperasiDashboardService
                 ];
             }
 
+            $rows = $this->attachRiskScores($rows, $filters['date']);
             $rows = $this->sortByPriority($rows);
             $totalRows = count($rows);
             $truncated = $totalRows > self::ROW_LIMIT;
@@ -211,12 +214,52 @@ final class PraOperasiDashboardService
      * @param  list<array<string, mixed>>  $rows
      * @return list<array<string, mixed>>
      */
+    /**
+     * Ambil data pendukung skor risiko (riwayat penyakit kritis, statistik alert
+     * terkonfirmasi 30 hari, riwayat skor Fatigue Test) untuk SELURUH operator di
+     * $rows sekaligus (batch, bukan per-baris) lalu hitung skor komposit tiap orang.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function attachRiskScores(array $rows, string $untilDate): array
+    {
+        $sids = array_map(static fn (array $r): string => $r['kode_sid'], $rows);
+        if ($sids === []) {
+            return $rows;
+        }
+
+        $criticalIllnessBySid = $this->criticalIllnessReader->statusForSids($sids, $untilDate);
+        $alertStatsBySid = $this->dmsAlertReader->confirmedAlertStatsForSids($sids, $untilDate);
+        $historyBySid = $this->fatigueReader->scoreHistoryForSids($sids, $untilDate);
+
+        foreach ($rows as &$row) {
+            $upper = mb_strtoupper($row['kode_sid']);
+            $result = $this->riskScoreService->score(
+                $row,
+                $criticalIllnessBySid[$upper] ?? null,
+                $alertStatsBySid[$upper] ?? null,
+                $historyBySid[$upper] ?? [],
+                $untilDate,
+            );
+            $row['risk_tier'] = $result['tier'];
+            $row['risk_reasons'] = $result['reasons'];
+        }
+        unset($row);
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
     private function sortByPriority(array $rows): array
     {
-        $rank = ['merah' => 0, null => 1, 'kuning' => 2, 'hijau' => 3];
+        $rank = ['merah' => 0, 'kuning' => 1, 'hijau' => 2];
         usort($rows, static function (array $a, array $b) use ($rank): int {
-            $ra = $rank[$a['fatigue_tier']] ?? 1;
-            $rb = $rank[$b['fatigue_tier']] ?? 1;
+            $ra = $rank[$a['risk_tier'] ?? 'kuning'] ?? 1;
+            $rb = $rank[$b['risk_tier'] ?? 'kuning'] ?? 1;
             if ($ra !== $rb) {
                 return $ra <=> $rb;
             }

@@ -762,6 +762,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     // Pra Operasi — checkin RFID Operator x Fatigue Test (Fit to Work) x PVT x Alert DMS
     Route::prefix('pra-operasi')->name('pra-operasi.')->group(function () {
         Route::get('/', [\App\Http\Controllers\PraOperasi\PraOperasiDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/operator/{kodeSid}', [\App\Http\Controllers\PraOperasi\PraOperasiDashboardController::class, 'operatorProfile'])->name('operator-profile');
     });
 
     // Route modul VALIDASI TBC & Score Card

@@ -15,6 +15,20 @@
         'belum' => ['label' => 'Belum', 'badge' => 'bg-neutral-200 text-neutral-600'],
     ];
     $fatigueOf = static fn (array $row): string => $row['fatigue_done'] ? ($row['fatigue_tier'] ?? 'hijau') : 'belum';
+
+    if (! function_exists('shape_svg')) {
+        function shape_svg(string $kind, string $color, int $size = 9): string
+        {
+            $c = $size / 2;
+            return match ($kind) {
+                'circle' => sprintf('<svg width="%1$d" height="%1$d"><circle cx="%2$s" cy="%2$s" r="%3$s" fill="%4$s"/></svg>', $size, $c, $c - 1, $color),
+                'triangle' => sprintf('<svg width="%1$d" height="%1$d"><polygon points="%2$s,1 %3$d,%3$d 1,%3$d" fill="%4$s"/></svg>', $size, $c, $size - 1, $color),
+                'diamond' => sprintf('<svg width="%1$d" height="%1$d"><polygon points="%2$s,0.5 %3$s,%2$s %2$s,%3$s 0.5,%2$s" fill="%4$s"/></svg>', $size, $c, $size - 0.5, $color),
+                'square' => sprintf('<svg width="%1$d" height="%1$d"><rect x="1" y="1" width="%2$d" height="%2$d" fill="%3$s"/></svg>', $size, $size - 2, $color),
+                default => '',
+            };
+        }
+    }
 @endphp
 
 @section('css')
@@ -27,6 +41,9 @@
   .po-warn-banner{background:var(--warning-100,#fff3e0);border:1px solid var(--warning-200,#ffe0b2);color:var(--warning-600,#b45309);
     border-radius:10px;padding:12px 16px;font-size:13px;display:flex;gap:10px;align-items:flex-start;}
   .po-table tbody tr.is-merah{background:rgba(239,74,0,0.05);}
+  .po-row-clickable{cursor:pointer;transition:background .12s ease;}
+  .po-row-clickable:hover{background:rgba(72,127,255,0.06) !important;}
+  .po-row-clickable:focus-visible{outline:2px solid var(--primary-600);outline-offset:-2px;}
   .po-table tbody tr.is-belum{background:rgba(156,163,175,0.06);}
   .po-shape{flex:none;display:block;}
   .po-matrix{display:grid;grid-template-columns:96px repeat(3,110px);gap:8px;}
@@ -325,14 +342,25 @@
           <table class="table bordered-table mb-0 po-table">
             <thead>
               <tr>
-                <th>Kode SID</th><th>Operator</th><th>Perusahaan</th><th>Checkin</th><th>Checkout</th>
+                <th>Level Risiko</th><th>Kode SID</th><th>Operator</th><th>Perusahaan</th><th>Checkin</th><th>Checkout</th>
                 <th>Fatigue Test</th><th>PVT</th><th>Alert DMS</th>
               </tr>
             </thead>
             <tbody>
               @forelse($rows as $row)
-              @php $ft = $fatigueOf($row); $tm = $tierMeta[$ft]; $pm = $pvtMeta[$row['pvt_status']]; @endphp
-              <tr class="{{ $ft==='merah' ? 'is-merah' : ($ft==='belum' ? 'is-belum' : '') }}">
+              @php
+                $ft = $fatigueOf($row);
+                $tm = $tierMeta[$ft];
+                $pm = $pvtMeta[$row['pvt_status']];
+                $rt = $row['risk_tier'] ?? 'kuning';
+                $rm = $tierMeta[$rt];
+              @endphp
+              <tr class="po-row-clickable {{ $ft==='merah' ? 'is-merah' : ($ft==='belum' ? 'is-belum' : '') }}"
+                  data-po-sid="{{ $row['kode_sid'] }}" data-po-date="{{ $filters['date'] }}"
+                  data-po-reasons="{{ json_encode($row['risk_reasons'] ?? []) }}" role="button" tabindex="0">
+                <td>
+                  <span class="{{ $rm['badge'] }} px-10 py-4 rounded-pill fw-semibold text-sm d-inline-flex align-items-center gap-1">{!! shape_svg($rm['shape'], $rm['color']) !!}{{ $rm['label'] }}</span>
+                </td>
                 <td class="fw-medium">{{ $row['kode_sid'] }}</td>
                 <td>
                   <span class="fw-semibold d-block">{{ $row['nama'] }}</span>
@@ -361,7 +389,7 @@
                 </td>
               </tr>
               @empty
-              <tr><td colspan="8" class="text-center text-secondary-light py-5">Tidak ada operator checkin untuk filter ini.</td></tr>
+              <tr><td colspan="9" class="text-center text-secondary-light py-5">Tidak ada operator checkin untuk filter ini.</td></tr>
               @endforelse
             </tbody>
           </table>
@@ -503,6 +531,47 @@
   </div>
 </div>
 @endif
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="poOperatorDrawer" style="width:480px">
+  <div class="offcanvas-header border-bottom">
+    <div>
+      <span class="text-secondary-light text-sm mono" id="poDrawerSid">-</span>
+      <h6 class="mb-0 mt-2" id="poDrawerName">-</h6>
+      <div id="poDrawerRiskBadge" class="mt-8"></div>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Tutup"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="poDrawerLoading" class="text-center text-secondary-light py-40">
+      <div class="spinner-border spinner-border-sm text-primary-600 mb-8" role="status"></div>
+      <div class="text-sm">Memuat profil operator...</div>
+    </div>
+    <div id="poDrawerContent" class="d-none">
+
+      <div class="mb-24">
+        <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Kenapa Level Risiko Ini?</h6>
+        <ul id="poDrawerReasons" class="ps-16 mb-0 text-sm"></ul>
+      </div>
+
+      <div id="poDrawerIllnessBanner" class="d-none mb-24"></div>
+
+      <div class="mb-24">
+        <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Tren Fatigue Test Personal (30 Hari)</h6>
+        <div id="poDrawerTrendChart"></div>
+        <p id="poDrawerBaselineNote" class="text-xs text-secondary-light mt-8 mb-0"></p>
+      </div>
+
+      <div>
+        <div class="d-flex align-items-center justify-content-between mb-8">
+          <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-0">Riwayat Alert DMS (30 Hari)</h6>
+          <span id="poDrawerAlertSummary" class="text-xs text-secondary-light"></span>
+        </div>
+        <div id="poDrawerAlertList" class="d-flex flex-column gap-2" style="max-height:320px;overflow-y:auto"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('page-scripts')
@@ -612,6 +681,164 @@
       tooltip: { y: { formatter: function(v){ return v + ' kasus'; } } }
     }).render();
   }
+})();
+</script>
+<script>
+(function(){
+  var drawerEl = document.getElementById('poOperatorDrawer');
+  if (!drawerEl || typeof bootstrap === 'undefined') return;
+
+  var drawer = new bootstrap.Offcanvas(drawerEl);
+  var profileUrlBase = @json(url('/pra-operasi/operator'));
+  var tierMeta = {
+    hijau: { label: 'Hijau', badge: 'bg-success-focus text-success-main' },
+    kuning: { label: 'Kuning', badge: 'bg-warning-focus text-warning-main' },
+    merah: { label: 'Merah', badge: 'bg-danger-focus text-danger-main' }
+  };
+  var alertStatusMeta = {
+    nyata: { label: 'Dikonfirmasi Nyata', cls: 'bg-success-focus text-success-main' },
+    palsu: { label: 'Alarm Palsu', cls: 'bg-neutral-200 text-neutral-600' },
+    belum: { label: 'Belum Diperiksa', cls: 'bg-warning-focus text-warning-main' }
+  };
+  var currentChart = null;
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function openDrawer(sid, nama, riskTier, date) {
+    document.getElementById('poDrawerSid').textContent = sid;
+    document.getElementById('poDrawerName').textContent = nama;
+    var rt = tierMeta[riskTier] || tierMeta.kuning;
+    document.getElementById('poDrawerRiskBadge').innerHTML =
+      '<span class="' + rt.badge + ' px-12 py-4 rounded-pill fw-semibold text-sm">Level Risiko: ' + rt.label + '</span>';
+
+    document.getElementById('poDrawerLoading').classList.remove('d-none');
+    document.getElementById('poDrawerContent').classList.add('d-none');
+    drawer.show();
+
+    fetch(profileUrlBase + '/' + encodeURIComponent(sid) + '?date=' + encodeURIComponent(date))
+      .then(function(r){ return r.json(); })
+      .then(renderProfile)
+      .catch(function(){
+        document.getElementById('poDrawerLoading').innerHTML = '<div class="text-danger-600 text-sm">Gagal memuat profil operator.</div>';
+      });
+  }
+
+  function renderProfile(profile) {
+    document.getElementById('poDrawerLoading').classList.add('d-none');
+    document.getElementById('poDrawerContent').classList.remove('d-none');
+
+    // Alasan skor risiko diisi dari luar (data-po-reasons) karena tidak dikirim ulang oleh endpoint profil.
+    var reasonsEl = document.getElementById('poDrawerReasons');
+    if (reasonsEl.dataset.filled !== '1') {
+      // fallback kosong; diisi oleh caller lewat window.__poCurrentReasons
+    }
+    if (window.__poCurrentReasons) {
+      reasonsEl.innerHTML = window.__poCurrentReasons.map(function(r){ return '<li>' + escapeHtml(r) + '</li>'; }).join('');
+    }
+
+    // Banner penyakit kritis
+    var illnessEl = document.getElementById('poDrawerIllnessBanner');
+    if (profile.criticalIllness && profile.criticalIllness.has_critical_illness) {
+      var followed = profile.criticalIllness.followed_up;
+      illnessEl.classList.remove('d-none');
+      illnessEl.innerHTML =
+        '<div class="' + (followed ? 'bg-success-100 text-success-600 border-success-100' : 'bg-danger-100 text-danger-600 border-danger-100') + ' border px-16 py-13 rounded-8 d-flex gap-2 align-items-start text-sm">' +
+          '<iconify-icon icon="solar:heart-pulse-bold" class="icon text-lg flex-shrink-0 mt-2"></iconify-icon>' +
+          '<span>Riwayat penyakit kritis terkonfirmasi <b>' + escapeHtml(profile.criticalIllness.confirmed_date || '-') + '</b>. ' +
+          (followed ? 'Sudah ada Fatigue Test follow-up sejak tanggal itu.' : '<b>Belum ada Fatigue Test follow-up</b> sejak tanggal itu.') +
+          '</span></div>';
+    } else {
+      illnessEl.classList.add('d-none');
+      illnessEl.innerHTML = '';
+    }
+
+    // Grafik tren Fatigue Test personal + pita baseline
+    var history = profile.fatigueHistory || [];
+    var baseline = profile.baseline;
+    var chartEl = document.getElementById('poDrawerTrendChart');
+    var noteEl = document.getElementById('poDrawerBaselineNote');
+    if (currentChart) { currentChart.destroy(); currentChart = null; }
+
+    if (history.length === 0) {
+      chartEl.innerHTML = '<div class="text-secondary-light text-sm text-center py-24">Belum ada riwayat Fatigue Test pada 30 hari terakhir.</div>';
+      noteEl.textContent = '';
+    } else if (typeof ApexCharts !== 'undefined') {
+      var categories = history.map(function(h){ return h.date.slice(5); });
+      var scores = history.map(function(h){ return h.score; });
+      var annotations = { yaxis: [] };
+      if (baseline) {
+        annotations.yaxis.push({
+          y: baseline.mean, borderColor: '#9CA3AF', strokeDashArray: 4,
+          label: { text: 'Baseline ' + baseline.mean, style: { background: '#9CA3AF', color: '#fff', fontSize: '10px' } }
+        });
+        noteEl.textContent = 'Baseline dihitung dari ' + baseline.n + ' tes sebelumnya: rata-rata ' + baseline.mean + ', deviasi ' + baseline.std + '.';
+      } else {
+        noteEl.textContent = 'Riwayat belum cukup (minimal 5 tes) untuk menghitung baseline personal.';
+      }
+
+      currentChart = new ApexCharts(chartEl, {
+        chart: { height: 200, type: 'line', toolbar: { show:false } },
+        series: [{ name: 'Skor Kesiapan', data: scores }],
+        colors: ['#487FFF'],
+        stroke: { curve: 'smooth', width: 2.5 },
+        markers: { size: 3 },
+        xaxis: { categories: categories, labels: { style: { fontSize: '10px' } } },
+        yaxis: { min: 0, max: 10 },
+        annotations: annotations,
+        grid: { borderColor: '#E5E7EB', strokeDashArray: 4 },
+        dataLabels: { enabled: false },
+        tooltip: { y: { formatter: function(v){ return v + '/10'; } } }
+      });
+      currentChart.render();
+    }
+
+    // Riwayat alert
+    var listEl = document.getElementById('poDrawerAlertList');
+    var summaryEl = document.getElementById('poDrawerAlertSummary');
+    var s = profile.alertSummary || { nyata:0, palsu:0, belum:0, total:0 };
+    summaryEl.textContent = s.total + ' alert · ' + s.nyata + ' nyata · ' + s.belum + ' belum diperiksa';
+
+    if (!profile.alertTimeline || profile.alertTimeline.length === 0) {
+      listEl.innerHTML = '<div class="text-secondary-light text-sm text-center py-16">Tidak ada alert fatigue pada 30 hari terakhir.</div>';
+    } else {
+      listEl.innerHTML = profile.alertTimeline.map(function(a){
+        var meta = alertStatusMeta[a.status] || alertStatusMeta.belum;
+        return '<div class="d-flex align-items-center justify-content-between border rounded-8 px-12 py-8">' +
+          '<div><div class="text-sm fw-medium">' + escapeHtml(a.name) + '</div><div class="text-xs text-secondary-light">' + escapeHtml(a.date) + '</div></div>' +
+          '<span class="' + meta.cls + ' px-10 py-4 rounded-pill fw-medium text-xs">' + meta.label + '</span>' +
+          '</div>';
+      }).join('');
+    }
+  }
+
+  document.querySelectorAll('.po-row-clickable').forEach(function(tr){
+    tr.addEventListener('click', function(){
+      var sid = tr.getAttribute('data-po-sid');
+      var date = tr.getAttribute('data-po-date');
+      var nama = tr.querySelector('.fw-semibold').textContent;
+      var riskBadge = tr.querySelector('td:first-child span');
+      var riskTier = 'kuning';
+      if (riskBadge) {
+        var txt = riskBadge.textContent.trim().toLowerCase();
+        if (txt.indexOf('merah') !== -1) riskTier = 'merah';
+        else if (txt.indexOf('hijau') !== -1) riskTier = 'hijau';
+      }
+      window.__poCurrentReasons = null;
+      var reasonsAttr = tr.getAttribute('data-po-reasons');
+      if (reasonsAttr) {
+        try { window.__poCurrentReasons = JSON.parse(reasonsAttr); } catch (e) { window.__poCurrentReasons = null; }
+      }
+      document.getElementById('poDrawerReasons').innerHTML = window.__poCurrentReasons
+        ? window.__poCurrentReasons.map(function(r){ return '<li>' + escapeHtml(r) + '</li>'; }).join('')
+        : '';
+      openDrawer(sid, nama, riskTier, date);
+    });
+    tr.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tr.click(); }
+    });
+  });
 })();
 </script>
 @endsection

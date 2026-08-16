@@ -138,4 +138,71 @@ final class PraOperasiFatigueCheckReader
             return $merged;
         });
     }
+
+    /**
+     * Riwayat skor kesiapan (kesiapan_bekerja_fisik_dan_mental) per SID dalam
+     * window (default 30 hari, TIDAK termasuk tanggal acuan) — dipakai untuk
+     * menghitung baseline personal (mean & std) di skor risiko komposit.
+     *
+     * @param  list<string>  $sids
+     * @return array<string, list<array{date:string, score:int}>>  keyed by UPPER(kode_sid), urut tanggal ASC
+     */
+    public function scoreHistoryForSids(array $sids, string $untilDate, int $days = 30): array
+    {
+        if (! $this->isUp() || $sids === []) {
+            return [];
+        }
+
+        $upperSids = array_values(array_unique(array_filter(array_map(
+            static fn (string $s): string => mb_strtoupper(trim($s)),
+            $sids
+        ), static fn (string $s): bool => $s !== '')));
+        if ($upperSids === []) {
+            return [];
+        }
+
+        $cacheKey = 'pra_operasi:fatigue_history:v1:'.$untilDate.':'.$days.':'.md5(implode(',', $upperSids));
+
+        return Cache::remember($cacheKey, 1800, function () use ($upperSids, $untilDate, $days): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $from = \Illuminate\Support\Carbon::parse($untilDate)->subDays($days)->toDateString();
+
+            $out = [];
+            foreach (array_chunk($upperSids, self::SID_CHUNK) as $chunk) {
+                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+                $sql = "
+                    SELECT UPPER(TRIM(sid)) AS sid, tanggal_pemeriksaan, kesiapan_bekerja_fisik_dan_mental
+                    FROM bcsid.clean_data_fatigue_check
+                    WHERE UPPER(TRIM(sid)) IN ({$placeholders})
+                      AND tanggal_pemeriksaan >= ? AND tanggal_pemeriksaan <= ?
+                      AND kesiapan_bekerja_fisik_dan_mental ~ '^[0-9]+$'
+                    ORDER BY tanggal_pemeriksaan ASC
+                ";
+
+                try {
+                    $rows = DB::connection($connection)->select($sql, array_merge($chunk, [$from, $untilDate]));
+                } catch (Throwable $e) {
+                    report($e);
+                    continue;
+                }
+
+                foreach ($rows as $row) {
+                    $sid = trim((string) ($row->sid ?? ''));
+                    if ($sid === '') {
+                        continue;
+                    }
+                    $out[$sid][] = [
+                        'date' => (string) $row->tanggal_pemeriksaan,
+                        'score' => (int) $row->kesiapan_bekerja_fisik_dan_mental,
+                    ];
+                }
+            }
+
+            return $out;
+        });
+    }
 }
