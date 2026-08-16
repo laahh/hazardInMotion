@@ -70,6 +70,62 @@ final class PraOperasiPvtStatusReader
     }
 
     /**
+     * Riwayat hasil PVT satu SID selama N hari terakhir (untuk panel detail
+     * operator) — beda dari statusForCheckins() yang hanya mencocokkan SATU
+     * hasil per hari ke waktu check-in.
+     *
+     * @return list<array{date:string, status:string, mean_rt_ms:int|null, lapses:int|null, evaluation_label:string, tested_at:string}>
+     */
+    public function historyForSid(string $kodeSid, string $untilDate, int $days = 30): array
+    {
+        if (! $this->isUp()) {
+            return [];
+        }
+
+        $tz = (string) config('app.timezone');
+        $end = Carbon::parse($untilDate, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+        $start = Carbon::parse($untilDate, $tz)->startOfDay()->subDays($days)->format('Y-m-d H:i:s');
+
+        try {
+            $rows = DB::connection(BewellConnectionService::CONNECTION)
+                ->table('cognitive_pvt_results as p')
+                ->join('employee_profiles as e', 'e.id', '=', 'p.user_id')
+                ->select(['p.tested_at', 'p.passed', 'p.evaluation_label', 'p.mean_rt_ms', 'p.lapses'])
+                ->where('p.tested_at', '>=', $start)
+                ->where('p.tested_at', '<', $end)
+                ->whereRaw('UPPER(TRIM(e.kode_sid)) = ?', [mb_strtoupper($kodeSid)])
+                ->orderByDesc('p.tested_at')
+                ->limit(30)
+                ->get();
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            $tested = $this->parseAppDateTime($row->tested_at ?? null);
+            if ($tested === null) {
+                continue;
+            }
+            $out[] = [
+                'date' => $tested->toDateString(),
+                'status' => $this->resolveStatus([
+                    'passed' => $row->passed === null ? null : (int) $row->passed,
+                    'evaluation_label' => $row->evaluation_label,
+                ]),
+                'mean_rt_ms' => $row->mean_rt_ms === null ? null : (int) $row->mean_rt_ms,
+                'lapses' => $row->lapses === null ? null : (int) $row->lapses,
+                'evaluation_label' => trim((string) ($row->evaluation_label ?? '')),
+                'tested_at' => $tested->format('Y-m-d H:i'),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  list<string>  $upperSids
      * @return array<string, list<array<string, mixed>>>
      */

@@ -640,6 +640,11 @@
         <p class="text-xs text-secondary-light mt-8 mb-0">Tiap kotak = 1 hari kerja &middot; hijau=Baik, kuning=Perlu Pembinaan, merah=Kritis, abu=tidak checkin</p>
       </div>
 
+      <div class="mb-24">
+        <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Riwayat PVT (30 Hari)</h6>
+        <div id="poDrawerPvtList" class="d-flex flex-column gap-2" style="max-height:200px;overflow-y:auto"></div>
+      </div>
+
       <div>
         <div class="d-flex align-items-center justify-content-between mb-8">
           <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-0">Riwayat Alert DMS (30 Hari)</h6>
@@ -923,6 +928,26 @@
         tooltip: { y: { formatter: function(v){ return v + '/10'; } } }
       });
       currentChart.render();
+    }
+
+    // Riwayat PVT
+    var pvtListEl = document.getElementById('poDrawerPvtList');
+    var pvtStatusMeta = {
+      lulus: { label: 'Lulus', cls: 'bg-success-focus text-success-main' },
+      tidak_lulus: { label: 'Tidak Lulus', cls: 'bg-danger-focus text-danger-main' },
+      belum: { label: 'Belum Tes', cls: 'bg-neutral-200 text-neutral-600' }
+    };
+    if (!profile.pvtHistory || profile.pvtHistory.length === 0) {
+      pvtListEl.innerHTML = '<div class="text-secondary-light text-sm text-center py-16">Tidak ada riwayat PVT pada 30 hari terakhir.</div>';
+    } else {
+      pvtListEl.innerHTML = profile.pvtHistory.map(function(p){
+        var meta = pvtStatusMeta[p.status] || pvtStatusMeta.belum;
+        return '<div class="d-flex align-items-center justify-content-between border rounded-8 px-12 py-8">' +
+          '<div><div class="text-sm fw-medium">' + escapeHtml(p.tested_at) + '</div>' +
+          (p.mean_rt_ms !== null ? '<div class="text-xs text-secondary-light">Mean RT ' + p.mean_rt_ms + 'ms &middot; Lapses ' + (p.lapses ?? '-') + '</div>' : '') + '</div>' +
+          '<span class="' + meta.cls + ' px-10 py-4 rounded-pill fw-medium text-xs">' + meta.label + '</span>' +
+          '</div>';
+      }).join('');
     }
 
     // Riwayat alert

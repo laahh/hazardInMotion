@@ -9,15 +9,16 @@
   .so-warn-banner{background:var(--warning-100,#fff3e0);border:1px solid var(--warning-200,#ffe0b2);color:var(--warning-600,#b45309);
     border-radius:10px;padding:12px 16px;font-size:13px;display:flex;gap:10px;align-items:flex-start;}
   .so-redflag-panel{ border:1px dashed var(--danger-main); background:rgba(239,74,0,0.05); border-radius:10px; padding:16px; margin-bottom:24px; }
-  .so-card { border-radius:10px; border:1px solid var(--neutral-200,#e5e7eb); padding:14px 16px; height:100%; border-left-width:4px; border-left-style:solid; background:#fff; }
-  .so-card.st-fit { border-left-color:#45B369; }
-  .so-card.st-fit_pantau { border-left-color:#45B369; }
-  .so-card.st-perlu_perhatian { border-left-color:#FF9F29; }
-  .so-card.st-tarik { border-left-color:#EF4A00; background:rgba(239,74,0,0.03); }
-  .so-badge { font-size:11px; font-weight:600; padding:4px 10px; border-radius:999px; display:inline-block; }
+  .so-badge { font-size:11px; font-weight:600; padding:4px 10px; border-radius:999px; display:inline-block; white-space:nowrap; }
   .so-badge.st-fit, .so-badge.st-fit_pantau { background:#e8f8ee; color:#0f7a3d; }
   .so-badge.st-perlu_perhatian { background:#fff3e0; color:#b45309; }
   .so-badge.st-tarik { background:#fde8e0; color:#b91c1c; }
+  .so-row { cursor:pointer; border-left:4px solid transparent; }
+  .so-row:hover { background:var(--neutral-50,#f9fafb); }
+  .so-row.st-tarik { border-left-color:#EF4A00; background:rgba(239,74,0,0.03); }
+  .so-row.st-perlu_perhatian { border-left-color:#FF9F29; }
+  .so-row.st-fit, .so-row.st-fit_pantau { border-left-color:#45B369; }
+  .so-row.is-redflag { background:rgba(124,58,237,0.05); }
 </style>
 @endsection
 
@@ -60,8 +61,19 @@
         <h6 class="text-lg mb-0">Operator Sedang Beroperasi</h6>
         <span class="text-secondary-light text-sm" id="soCardCount">0 operator</span>
       </div>
-      <div class="card-body">
-        <div class="row gy-3" id="soCardGrid"></div>
+      <div class="card-body p-0">
+        <div class="table-responsive scroll-sm" style="max-height:640px;overflow-y:auto">
+          <table class="table bordered-table mb-0">
+            <thead>
+              <tr>
+                <th>Status</th><th>Operator</th><th>Checkin</th>
+                <th>Fatigue Test</th><th>PVT</th><th>Alert Hari Ini</th><th>Tindak Lanjut</th>
+              </tr>
+            </thead>
+            <tbody id="soTableBody"></tbody>
+          </table>
+        </div>
+        <p class="text-secondary-light text-xs px-16 py-12 mb-0">Klik baris untuk melihat riwayat pengecekan Fatigue Test, PVT, dan alert operator tersebut.</p>
       </div>
     </div>
   </div>
@@ -97,14 +109,60 @@
     </div>
   </div>
 </div>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="soOperatorDrawer" style="width:480px">
+  <div class="offcanvas-header border-bottom">
+    <div>
+      <span class="text-secondary-light text-sm mono" id="soDrawerSid">-</span>
+      <h6 class="mb-0 mt-2" id="soDrawerName">-</h6>
+      <div class="d-flex flex-wrap gap-2 mt-8">
+        <div id="soDrawerStatusBadge"></div>
+        <span id="soDrawerRosterBadge" class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-8 text-xs fw-medium"></span>
+      </div>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Tutup"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="soDrawerLoading" class="text-center text-secondary-light py-40">
+      <div class="spinner-border spinner-border-sm text-primary-600 mb-8" role="status"></div>
+      <div class="text-sm">Memuat profil operator...</div>
+    </div>
+    <div id="soDrawerContent" class="d-none">
+
+      <div id="soDrawerIllnessBanner" class="d-none mb-24"></div>
+
+      <div class="mb-24">
+        <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Tren Fatigue Test Personal (30 Hari)</h6>
+        <div id="soDrawerTrendChart"></div>
+        <p id="soDrawerBaselineNote" class="text-xs text-secondary-light mt-8 mb-0"></p>
+      </div>
+
+      <div class="mb-24">
+        <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Riwayat PVT (30 Hari)</h6>
+        <div id="soDrawerPvtList" class="d-flex flex-column gap-2" style="max-height:200px;overflow-y:auto"></div>
+      </div>
+
+      <div>
+        <div class="d-flex align-items-center justify-content-between mb-8">
+          <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-0">Riwayat Alert DMS (30 Hari)</h6>
+          <span id="soDrawerAlertSummary" class="text-xs text-secondary-light"></span>
+        </div>
+        <div id="soDrawerAlertList" class="d-flex flex-column gap-2" style="max-height:320px;overflow-y:auto"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('page-scripts')
 <script>
 (function(){
   var dataUrl = @json(route('pra-operasi.saat-operasi.data'));
+  var profileUrlBase = @json(url('/pra-operasi/operator'));
   var date = @json(request()->query('date'));
   var POLL_MS = 20000;
+  var latestCardsBySid = {};
 
   var statusMeta = {
     fit: { label: 'Fit', cls: 'st-fit' },
@@ -113,6 +171,7 @@
     tarik: { label: 'Tarik dari Unit', cls: 'st-tarik' }
   };
   var tierLabel = { hijau: 'Hijau', kuning: 'Kuning', merah: 'Merah' };
+  var pvtStatusLabel = { lulus: 'Lulus', tidak_lulus: 'Tidak Lulus', belum: 'Belum Tes' };
 
   function escapeHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -135,44 +194,40 @@
     }).join('');
   }
 
-  function operatorCard(op) {
+  function operatorRow(op) {
     var meta = statusMeta[op.status] || statusMeta.perlu_perhatian;
     var tier = op.fatigue_tier ? tierLabel[op.fatigue_tier] : 'Belum Tes';
     var needsAction = op.status === 'tarik' || op.status === 'perlu_perhatian';
-    var actionHtml = '';
+    var actionHtml = '-';
     if (needsAction) {
       if (op.sudah_ditindaklanjuti) {
-        actionHtml = '<div class="mt-8 text-xs text-success-600 d-flex align-items-center gap-1">' +
+        actionHtml = '<span class="text-xs text-success-600 d-flex align-items-center gap-1">' +
           '<iconify-icon icon="solar:check-circle-bold"></iconify-icon>Ditindaklanjuti' +
           (op.catatan_tindak_lanjut && op.catatan_tindak_lanjut.ditandai_pada ? ' (' + escapeHtml(op.catatan_tindak_lanjut.ditandai_pada) + ')' : '') +
-          '</div>';
+          '</span>';
       } else {
-        actionHtml = '<button type="button" class="btn btn-outline-danger btn-sm w-100 mt-8 so-tl-btn" data-sid="' + escapeHtml(op.kode_sid) + '" data-nama="' + escapeHtml(op.nama) + '">Tandai Ditindaklanjuti</button>';
+        actionHtml = '<button type="button" class="btn btn-outline-danger btn-sm so-tl-btn" data-sid="' + escapeHtml(op.kode_sid) + '" data-nama="' + escapeHtml(op.nama) + '">Tandai</button>';
       }
     }
-    return '<div class="col-xxl-3 col-md-4 col-sm-6">' +
-      '<div class="so-card ' + meta.cls + '">' +
-        '<div class="d-flex align-items-start justify-content-between mb-8">' +
-          '<div><span class="fw-semibold d-block">' + escapeHtml(op.nama) + '</span><span class="text-xs text-secondary-light">' + escapeHtml(op.kode_sid) + '</span></div>' +
-          '<span class="so-badge ' + meta.cls + '">' + meta.label + '</span>' +
-        '</div>' +
-        '<div class="text-xs text-secondary-light mb-8">' + escapeHtml(op.perusahaan) + '</div>' +
-        '<div class="d-flex justify-content-between text-sm mb-4"><span class="text-secondary-light">Fatigue Test Pagi</span><span class="fw-medium">' + tier + (op.fatigue_score !== null ? ' (' + op.fatigue_score + '/10)' : '') + '</span></div>' +
-        '<div class="d-flex justify-content-between text-sm"><span class="text-secondary-light">Alert Hari Ini</span><span class="fw-medium">' +
-          '<span class="text-danger-600">' + op.alert_nyata + '</span> nyata &middot; <span class="text-warning-600">' + op.alert_belum + '</span> belum diperiksa</span></div>' +
-        actionHtml +
-      '</div>' +
-    '</div>';
+    var pvtLabel = pvtStatusLabel[op.pvt_status] || 'Belum Tes';
+    return '<tr class="so-row ' + meta.cls + (op.is_red_flag ? ' is-redflag' : '') + '" data-sid="' + escapeHtml(op.kode_sid) + '" tabindex="0">' +
+      '<td><span class="so-badge ' + meta.cls + '">' + meta.label + '</span>' + (op.is_red_flag ? ' <iconify-icon icon="solar:flag-bold" class="text-danger-600" title="Red Flag Proses"></iconify-icon>' : '') + '</td>' +
+      '<td><span class="fw-semibold d-block">' + escapeHtml(op.nama) + '</span><span class="text-xs text-secondary-light">' + escapeHtml(op.kode_sid) + ' &middot; ' + escapeHtml(op.perusahaan) + '</span></td>' +
+      '<td class="text-sm">' + escapeHtml(op.checked_in_at ? op.checked_in_at.slice(11,16) : '-') + '</td>' +
+      '<td class="text-sm">' + tier + (op.fatigue_score !== null ? ' (' + op.fatigue_score + '/10)' : '') + '</td>' +
+      '<td class="text-sm">' + pvtLabel + '</td>' +
+      '<td class="text-sm"><span class="text-danger-600">' + op.alert_nyata + '</span> nyata &middot; <span class="text-warning-600">' + op.alert_belum + '</span> belum</td>' +
+      '<td onclick="event.stopPropagation()">' + actionHtml + '</td>' +
+    '</tr>';
   }
 
   function renderRedFlags(redFlags) {
     var wrap = document.getElementById('soRedFlagWrap');
     if (!redFlags || !redFlags.length) { wrap.innerHTML = ''; return; }
     wrap.innerHTML = '<div class="so-redflag-panel">' +
-      '<div class="d-flex align-items-center gap-2 mb-12"><iconify-icon icon="solar:flag-bold" class="text-danger-600 text-xl"></iconify-icon>' +
-      '<h6 class="mb-0 text-danger-600">Red Flag Proses &mdash; Fatigue Test Merah/Belum Tapi Tetap Beroperasi</h6></div>' +
-      '<p class="text-sm text-secondary-light mb-12">Operator ini seharusnya sudah dicegat di Pra Operasi pagi tadi &mdash; ini indikasi kegagalan kontrol, bukan cuma risiko rutin.</p>' +
-      '<div class="row gy-3">' + redFlags.map(operatorCard).join('') + '</div>' +
+      '<div class="d-flex align-items-center gap-2 mb-4"><iconify-icon icon="solar:flag-bold" class="text-danger-600 text-xl"></iconify-icon>' +
+      '<h6 class="mb-0 text-danger-600">Red Flag Proses &mdash; Fatigue Test Merah/Belum Tapi Tetap Beroperasi (' + redFlags.length + ' orang)</h6></div>' +
+      '<p class="text-sm text-secondary-light mb-0">Operator ini seharusnya sudah dicegat di Pra Operasi pagi tadi &mdash; ini indikasi kegagalan kontrol, bukan cuma risiko rutin. Lihat baris bertanda ungu di tabel.</p>' +
     '</div>';
   }
 
@@ -206,13 +261,16 @@
     renderRedFlags(payload.redFlags);
     renderAlertFeed(payload.alertFeed);
 
-    var nonRedFlagCards = (payload.cards || []).filter(function(c){ return !c.is_red_flag; });
-    document.getElementById('soCardCount').textContent = (payload.cards || []).length + ' operator';
-    var grid = document.getElementById('soCardGrid');
-    if (!nonRedFlagCards.length) {
-      grid.innerHTML = '<div class="col-12 text-center text-secondary-light py-40">Tidak ada operator lain yang sedang beroperasi saat ini.</div>';
+    var cards = payload.cards || [];
+    latestCardsBySid = {};
+    cards.forEach(function(c){ latestCardsBySid[c.kode_sid.toUpperCase()] = c; });
+
+    document.getElementById('soCardCount').textContent = cards.length + ' operator';
+    var body = document.getElementById('soTableBody');
+    if (!cards.length) {
+      body.innerHTML = '<tr><td colspan="7" class="text-center text-secondary-light py-40">Tidak ada operator yang sedang beroperasi saat ini.</td></tr>';
     } else {
-      grid.innerHTML = nonRedFlagCards.map(operatorCard).join('');
+      body.innerHTML = cards.map(operatorRow).join('');
     }
   }
 
@@ -221,20 +279,170 @@
     fetch(url).then(function(r){ return r.json(); }).then(render).catch(function(){});
   }
 
-  // Modal "Tandai Ditindaklanjuti" — event delegation karena kartu dirender ulang tiap poll.
+  // Modal "Tandai Ditindaklanjuti" — event delegation karena baris dirender ulang tiap poll.
   var tlModalEl = document.getElementById('soTindakLanjutModal');
   var tlModal = (typeof bootstrap !== 'undefined') ? new bootstrap.Modal(tlModalEl) : null;
   var tlUrl = @json(route('pra-operasi.saat-operasi.tindak-lanjut'));
   var csrfToken = document.querySelector('meta[name="csrf-token"]');
   csrfToken = csrfToken ? csrfToken.getAttribute('content') : '';
 
+  // Drawer detail operator — riwayat Fatigue Test, PVT, dan alert.
+  var drawerEl = document.getElementById('soOperatorDrawer');
+  var drawer = (drawerEl && typeof bootstrap !== 'undefined') ? new bootstrap.Offcanvas(drawerEl) : null;
+  var currentChart = null;
+  var pvtStatusMeta = {
+    lulus: { label: 'Lulus', cls: 'bg-success-focus text-success-main' },
+    tidak_lulus: { label: 'Tidak Lulus', cls: 'bg-danger-focus text-danger-main' },
+    belum: { label: 'Belum Tes', cls: 'bg-neutral-200 text-neutral-600' }
+  };
+  var alertStatusMeta = {
+    nyata: { label: 'Dikonfirmasi Nyata', cls: 'bg-success-focus text-success-main' },
+    palsu: { label: 'Alarm Palsu', cls: 'bg-neutral-200 text-neutral-600' },
+    belum: { label: 'Belum Diperiksa', cls: 'bg-warning-focus text-warning-main' }
+  };
+
+  function openDrawer(sid) {
+    if (!drawer) return;
+    var op = latestCardsBySid[sid.toUpperCase()] || {};
+    var meta = statusMeta[op.status] || statusMeta.perlu_perhatian;
+    document.getElementById('soDrawerSid').textContent = sid;
+    document.getElementById('soDrawerName').textContent = op.nama || '-';
+    document.getElementById('soDrawerStatusBadge').innerHTML =
+      '<span class="so-badge ' + meta.cls + '">' + meta.label + '</span>';
+    document.getElementById('soDrawerRosterBadge').textContent = '';
+
+    document.getElementById('soDrawerLoading').classList.remove('d-none');
+    document.getElementById('soDrawerContent').classList.add('d-none');
+    drawer.show();
+
+    fetch(profileUrlBase + '/' + encodeURIComponent(sid) + '?date=' + encodeURIComponent(date))
+      .then(function(r){ return r.json(); })
+      .then(renderProfile)
+      .catch(function(){
+        document.getElementById('soDrawerLoading').innerHTML = '<div class="text-danger-600 text-sm">Gagal memuat profil operator.</div>';
+      });
+  }
+
+  function renderProfile(profile) {
+    document.getElementById('soDrawerLoading').classList.add('d-none');
+    document.getElementById('soDrawerContent').classList.remove('d-none');
+
+    var roster = profile.roster || {};
+    if (roster.hari_ke !== null && roster.hari_ke !== undefined) {
+      document.getElementById('soDrawerRosterBadge').textContent = 'Hari ke-' + roster.hari_ke + (roster.shift ? ' · Shift ' + roster.shift : '');
+    }
+
+    var illnessEl = document.getElementById('soDrawerIllnessBanner');
+    if (profile.criticalIllness && profile.criticalIllness.has_critical_illness) {
+      var followed = profile.criticalIllness.followed_up;
+      illnessEl.classList.remove('d-none');
+      illnessEl.innerHTML =
+        '<div class="' + (followed ? 'bg-success-100 text-success-600 border-success-100' : 'bg-danger-100 text-danger-600 border-danger-100') + ' border px-16 py-13 rounded-8 d-flex gap-2 align-items-start text-sm">' +
+          '<iconify-icon icon="solar:heart-pulse-bold" class="icon text-lg flex-shrink-0 mt-2"></iconify-icon>' +
+          '<span>Riwayat penyakit kritis terkonfirmasi <b>' + escapeHtml(profile.criticalIllness.confirmed_date || '-') + '</b>. ' +
+          (followed ? 'Sudah ada Fatigue Test follow-up sejak tanggal itu.' : '<b>Belum ada Fatigue Test follow-up</b> sejak tanggal itu.') +
+          '</span></div>';
+    } else {
+      illnessEl.classList.add('d-none');
+      illnessEl.innerHTML = '';
+    }
+
+    // Grafik tren Fatigue Test personal + pita baseline
+    var history = profile.fatigueHistory || [];
+    var baseline = profile.baseline;
+    var chartEl = document.getElementById('soDrawerTrendChart');
+    var noteEl = document.getElementById('soDrawerBaselineNote');
+    if (currentChart) { currentChart.destroy(); currentChart = null; }
+
+    if (history.length === 0) {
+      chartEl.innerHTML = '<div class="text-secondary-light text-sm text-center py-24">Belum ada riwayat Fatigue Test pada 30 hari terakhir.</div>';
+      noteEl.textContent = '';
+    } else if (typeof ApexCharts !== 'undefined') {
+      var categories = history.map(function(h){ return h.date.slice(5); });
+      var scores = history.map(function(h){ return h.score; });
+      var annotations = { yaxis: [] };
+      if (baseline) {
+        annotations.yaxis.push({
+          y: baseline.mean, borderColor: '#9CA3AF', strokeDashArray: 4,
+          label: { text: 'Baseline ' + baseline.mean, style: { background: '#9CA3AF', color: '#fff', fontSize: '10px' } }
+        });
+        noteEl.textContent = 'Baseline dihitung dari ' + baseline.n + ' tes sebelumnya: rata-rata ' + baseline.mean + ', deviasi ' + baseline.std + '.';
+      } else {
+        noteEl.textContent = 'Riwayat belum cukup (minimal 5 tes) untuk menghitung baseline personal.';
+      }
+
+      currentChart = new ApexCharts(chartEl, {
+        chart: { height: 200, type: 'line', toolbar: { show:false } },
+        series: [{ name: 'Skor Kesiapan', data: scores }],
+        colors: ['#487FFF'],
+        stroke: { curve: 'smooth', width: 2.5 },
+        markers: { size: 3 },
+        xaxis: { categories: categories, labels: { style: { fontSize: '10px' } } },
+        yaxis: { min: 0, max: 10 },
+        annotations: annotations,
+        grid: { borderColor: '#E5E7EB', strokeDashArray: 4 },
+        dataLabels: { enabled: false },
+        tooltip: { y: { formatter: function(v){ return v + '/10'; } } }
+      });
+      currentChart.render();
+    }
+
+    // Riwayat PVT
+    var pvtListEl = document.getElementById('soDrawerPvtList');
+    if (!profile.pvtHistory || profile.pvtHistory.length === 0) {
+      pvtListEl.innerHTML = '<div class="text-secondary-light text-sm text-center py-16">Tidak ada riwayat PVT pada 30 hari terakhir.</div>';
+    } else {
+      pvtListEl.innerHTML = profile.pvtHistory.map(function(p){
+        var meta = pvtStatusMeta[p.status] || pvtStatusMeta.belum;
+        return '<div class="d-flex align-items-center justify-content-between border rounded-8 px-12 py-8">' +
+          '<div><div class="text-sm fw-medium">' + escapeHtml(p.tested_at) + '</div>' +
+          (p.mean_rt_ms !== null ? '<div class="text-xs text-secondary-light">Mean RT ' + p.mean_rt_ms + 'ms &middot; Lapses ' + (p.lapses ?? '-') + '</div>' : '') + '</div>' +
+          '<span class="' + meta.cls + ' px-10 py-4 rounded-pill fw-medium text-xs">' + meta.label + '</span>' +
+          '</div>';
+      }).join('');
+    }
+
+    // Riwayat alert
+    var listEl = document.getElementById('soDrawerAlertList');
+    var summaryEl = document.getElementById('soDrawerAlertSummary');
+    var s = profile.alertSummary || { nyata:0, palsu:0, belum:0, total:0 };
+    summaryEl.textContent = s.total + ' alert · ' + s.nyata + ' nyata · ' + s.belum + ' belum diperiksa';
+
+    if (!profile.alertTimeline || profile.alertTimeline.length === 0) {
+      listEl.innerHTML = '<div class="text-secondary-light text-sm text-center py-16">Tidak ada alert fatigue pada 30 hari terakhir.</div>';
+    } else {
+      listEl.innerHTML = profile.alertTimeline.map(function(a){
+        var meta = alertStatusMeta[a.status] || alertStatusMeta.belum;
+        return '<div class="d-flex align-items-center justify-content-between border rounded-8 px-12 py-8">' +
+          '<div><div class="text-sm fw-medium">' + escapeHtml(a.name) + '</div><div class="text-xs text-secondary-light">' + escapeHtml(a.date) + '</div></div>' +
+          '<span class="' + meta.cls + ' px-10 py-4 rounded-pill fw-medium text-xs">' + meta.label + '</span>' +
+          '</div>';
+      }).join('');
+    }
+  }
+
   document.addEventListener('click', function(e){
-    var btn = e.target.closest('.so-tl-btn');
-    if (!btn || !tlModal) return;
-    document.getElementById('soTlSid').textContent = btn.getAttribute('data-sid');
-    document.getElementById('soTlNama').textContent = btn.getAttribute('data-nama');
-    document.getElementById('soTlCatatan').value = '';
-    tlModal.show();
+    var tlBtn = e.target.closest('.so-tl-btn');
+    if (tlBtn && tlModal) {
+      document.getElementById('soTlSid').textContent = tlBtn.getAttribute('data-sid');
+      document.getElementById('soTlNama').textContent = tlBtn.getAttribute('data-nama');
+      document.getElementById('soTlCatatan').value = '';
+      tlModal.show();
+      return;
+    }
+
+    var row = e.target.closest('.so-row');
+    if (row) {
+      openDrawer(row.getAttribute('data-sid'));
+    }
+  });
+
+  document.getElementById('soTableBody').addEventListener('keydown', function(e){
+    var row = e.target.closest('.so-row');
+    if (row && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      openDrawer(row.getAttribute('data-sid'));
+    }
   });
 
   var tlSubmitBtn = document.getElementById('soTlSubmit');

@@ -28,6 +28,7 @@ final class PraOperasiOperatorProfileReader
         private readonly PraOperasiCriticalIllnessReader $criticalIllnessReader,
         private readonly PraOperasiFatigueCheckReader $fatigueCheckReader,
         private readonly PraOperasiDmsAlertReader $dmsAlertReader,
+        private readonly PraOperasiPvtStatusReader $pvtReader,
     ) {}
 
     public function isUp(): bool
@@ -45,7 +46,8 @@ final class PraOperasiOperatorProfileReader
      *     fatigueHistory: list<array{date:string, score:int}>,
      *     baseline: array{mean:float,std:float,n:int}|null,
      *     evaluasiKemarin: array{kategori:string, alasan:list<string>}|null,
-     *     evaluasiHistory: list<array{date:string, kategori:string}>
+     *     evaluasiHistory: list<array{date:string, kategori:string}>,
+     *     pvtHistory: list<array{date:string, status:string, mean_rt_ms:int|null, lapses:int|null, evaluation_label:string, tested_at:string}>
      * }
      */
     public function profile(string $kodeSid, string $untilDate, int $days = 30): array
@@ -60,6 +62,7 @@ final class PraOperasiOperatorProfileReader
             'baseline' => null,
             'evaluasiKemarin' => null,
             'evaluasiHistory' => [],
+            'pvtHistory' => [],
         ];
 
         if (! $this->isUp()) {
@@ -95,6 +98,7 @@ final class PraOperasiOperatorProfileReader
                 'baseline' => $baseline,
                 'evaluasiKemarin' => $this->lookupEvaluasiKemarin($kodeSid, $untilDate),
                 'evaluasiHistory' => $this->evaluasiHistory($kodeSid, $untilDate, 90),
+                'pvtHistory' => $this->pvtReader->historyForSid($kodeSid, $untilDate, $days),
             ];
         } catch (Throwable $e) {
             report($e);

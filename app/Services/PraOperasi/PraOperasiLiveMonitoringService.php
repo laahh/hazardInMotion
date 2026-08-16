@@ -27,6 +27,7 @@ final class PraOperasiLiveMonitoringService
         private readonly PraOperasiCheckinReader $checkinReader,
         private readonly PraOperasiFatigueCheckReader $fatigueReader,
         private readonly PraOperasiDmsAlertReader $dmsAlertReader,
+        private readonly PraOperasiPvtStatusReader $pvtReader,
         private readonly PraOperasiFitToContinueService $fitToContinue,
     ) {}
 
@@ -88,6 +89,11 @@ final class PraOperasiLiveMonitoringService
             $fatigueBySid = $this->fatigueReader->statusForSidsOnDate($sids, $date);
             $alertBySid = $this->dmsAlertReader->dailyAlertBreakdownForSids($sids, $date);
             $tindakLanjutBySid = $this->lookupTindakLanjut($sids, $date);
+            $checkinAtBySid = array_combine(
+                array_map(static fn (array $r): string => mb_strtoupper($r['kode_sid']), $operating),
+                array_map(static fn (array $r): string => $r['checked_in_at'], $operating),
+            );
+            $pvtBySid = $this->pvtReader->statusForCheckins($checkinAtBySid, $date);
 
             $cards = [];
             foreach ($operating as $row) {
@@ -96,6 +102,7 @@ final class PraOperasiLiveMonitoringService
                 $alert = $alertBySid[$upper] ?? ['nyata' => 0, 'palsu' => 0, 'belum' => 0];
                 $tier = $fatigue['tier'] ?? null;
                 $tindakLanjut = $tindakLanjutBySid[$upper] ?? null;
+                $pvt = $pvtBySid[$upper] ?? null;
 
                 $cards[] = [
                     'kode_sid' => $row['kode_sid'],
@@ -104,6 +111,9 @@ final class PraOperasiLiveMonitoringService
                     'checked_in_at' => $row['checked_in_at'],
                     'fatigue_tier' => $tier,
                     'fatigue_score' => $fatigue['kesiapan_score'] ?? null,
+                    'pvt_status' => $pvt['status'] ?? 'belum',
+                    'pvt_mean_rt_ms' => $pvt['mean_rt_ms'] ?? null,
+                    'pvt_lapses' => $pvt['lapses'] ?? null,
                     'alert_nyata' => $alert['nyata'],
                     'alert_palsu' => $alert['palsu'],
                     'alert_belum' => $alert['belum'],
