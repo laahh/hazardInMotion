@@ -18,9 +18,32 @@ use RuntimeException;
 
 class HsecmTasklistService
 {
+    /** Sesuai VARCHAR di hsecm_tasklist_items (tanpa alter schema). */
+    public const BUSINESS_KEY_STORAGE_MAX = 255;
+
+    public const TITLE_STORAGE_MAX = 255;
+
+    public const VALUE_LABEL_STORAGE_MAX = 255;
+
+    public const PROGRAM_KEY_STORAGE_MAX = 64;
+
     public function __construct(
         private readonly HsecmDatabaseRepository $repository,
     ) {}
+
+    /**
+     * Kunci penyimpanan VARCHAR(255): narasi TBC/CCTV yang kebanyakan di-hash SHA-256.
+     * Deterministik supaya unique index & lookup item tetap konsisten.
+     */
+    public function compactBusinessKey(string $raw): string
+    {
+        $raw = trim($raw);
+        if ($raw === '' || Str::length($raw) <= self::BUSINESS_KEY_STORAGE_MAX) {
+            return $raw;
+        }
+
+        return 'sha256:'.hash('sha256', $raw);
+    }
 
     public function tablesAvailable(): bool
     {
@@ -77,11 +100,29 @@ class HsecmTasklistService
             $tasklist->save();
 
             foreach ($gapItems as $item) {
-                $businessKey = trim((string) ($item['business_key'] ?? ''));
-                $programKey = trim((string) ($item['program_key'] ?? ''));
-                if ($businessKey === '' || $programKey === '') {
+                $rawBusinessKey = trim((string) ($item['business_key'] ?? ''));
+                $programKey = $this->limitStorageString(
+                    trim((string) ($item['program_key'] ?? '')),
+                    self::PROGRAM_KEY_STORAGE_MAX
+                );
+                if ($rawBusinessKey === '' || $programKey === '') {
                     continue;
                 }
+
+                $businessKey = $this->compactBusinessKey($rawBusinessKey);
+                $payload = is_array($item['payload'] ?? null) ? $item['payload'] : [];
+                if ($businessKey !== $rawBusinessKey) {
+                    $payload['business_key_raw'] = $rawBusinessKey;
+                }
+
+                $title = $this->limitStorageString(
+                    (string) ($item['title'] ?? $programKey),
+                    self::TITLE_STORAGE_MAX
+                );
+                $valueLabel = $this->limitStorageString(
+                    (string) ($item['value_label'] ?? ''),
+                    self::VALUE_LABEL_STORAGE_MAX
+                );
 
                 $existing = HsecmTasklistItem::query()
                     ->where('tasklist_id', $tasklist->id)
@@ -95,10 +136,10 @@ class HsecmTasklistService
                         continue;
                     }
                     $existing->fill([
-                        'title' => (string) ($item['title'] ?? $existing->title),
+                        'title' => $title !== '' ? $title : $existing->title,
                         'action_hint' => (string) ($item['action_hint'] ?? $existing->action_hint),
-                        'value_label' => (string) ($item['value_label'] ?? $existing->value_label),
-                        'payload' => $item['payload'] ?? $existing->payload,
+                        'value_label' => $valueLabel !== '' ? $valueLabel : $existing->value_label,
+                        'payload' => $payload !== [] ? $payload : $existing->payload,
                     ])->save();
 
                     continue;
@@ -107,11 +148,11 @@ class HsecmTasklistService
                 HsecmTasklistItem::query()->create([
                     'tasklist_id' => $tasklist->id,
                     'program_key' => $programKey,
-                    'title' => (string) ($item['title'] ?? $programKey),
+                    'title' => $title !== '' ? $title : $programKey,
                     'business_key' => $businessKey,
                     'action_hint' => (string) ($item['action_hint'] ?? ''),
-                    'value_label' => (string) ($item['value_label'] ?? ''),
-                    'payload' => $item['payload'] ?? [],
+                    'value_label' => $valueLabel,
+                    'payload' => $payload,
                     'status' => 'open',
                 ]);
             }
@@ -187,7 +228,7 @@ class HsecmTasklistService
         foreach ($collection as $item) {
             $payload = is_array($item->payload) ? $item->payload : [];
             $table = trim((string) ($payload['table'] ?? ''));
-            $businessKey = trim((string) ($item->business_key ?? ''));
+            $businessKey = $this->scrapeBusinessKeyFromItem($item);
             if ($table === '' || $businessKey === '') {
                 continue;
             }
@@ -207,7 +248,7 @@ class HsecmTasklistService
         return $collection->each(function (HsecmTasklistItem $item) use ($streaksByTable): void {
             $payload = is_array($item->payload) ? $item->payload : [];
             $table = trim((string) ($payload['table'] ?? ''));
-            $businessKey = trim((string) ($item->business_key ?? ''));
+            $businessKey = $this->scrapeBusinessKeyFromItem($item);
 
             if ($table === '' || $businessKey === '' || ! isset($streaksByTable[$table])) {
                 $item->setAttribute('previous_recurrence_count', $this->fallbackPreviousFromPayload($item));
@@ -691,5 +732,28 @@ class HsecmTasklistService
             ->startOfDay()
             ->addDay()
             ->setTime(8, 0, 0);
+    }
+
+    /**
+     * Kunci scrape (bukan hash storage) untuk hitung streak di tabel scr_hsecm_*.
+     */
+    private function scrapeBusinessKeyFromItem(HsecmTasklistItem $item): string
+    {
+        $payload = is_array($item->payload) ? $item->payload : [];
+        $raw = trim((string) ($payload['business_key_raw'] ?? ''));
+        if ($raw !== '') {
+            return $raw;
+        }
+
+        return trim((string) ($item->business_key ?? ''));
+    }
+
+    private function limitStorageString(string $value, int $max): string
+    {
+        if ($max <= 0 || Str::length($value) <= $max) {
+            return $value;
+        }
+
+        return Str::limit($value, $max, '');
     }
 }

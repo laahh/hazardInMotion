@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 class HsecmShiftEmailDispatchService
 {
@@ -446,10 +447,12 @@ class HsecmShiftEmailDispatchService
                                 : 'Dry-run: akan buat tasklist '.$cacheKey.' ('.count($gapItems).' items) + CTA token.',
                         ];
                     } else {
-                        $tasklistCache[$cacheKey] = $this->tasklistService->createFromEndshift(
+                        $tasklistCache[$cacheKey] = $this->createEndshiftTasklistSafely(
                             $batchSlot,
-                            ['site' => $site ?? '', 'perusahaan' => $perusahaan],
+                            $site ?? '',
+                            $perusahaan,
                             $gapItems,
+                            $details,
                         );
                     }
                 }
@@ -1124,11 +1127,47 @@ class HsecmShiftEmailDispatchService
                 continue;
             }
 
-            $tasklistCache[$cacheKey] = $this->tasklistService->createFromEndshift(
+            $tasklistCache[$cacheKey] = $this->createEndshiftTasklistSafely(
+                $batchSlot,
+                $site,
+                $perusahaan,
+                $gapItems,
+                $details,
+            );
+        }
+    }
+
+    /**
+     * Satu scope gagal (mis. data terlalu panjang) tidak boleh mematikan seluruh batch email.
+     *
+     * @param  list<array<string, mixed>>  $gapItems
+     * @param  list<array<string, mixed>>  $details
+     */
+    private function createEndshiftTasklistSafely(
+        string $batchSlot,
+        string $site,
+        string $perusahaan,
+        array $gapItems,
+        array &$details,
+    ): ?HsecmTasklist {
+        $cacheKey = $site.'|'.$perusahaan;
+
+        try {
+            return $this->tasklistService->createFromEndshift(
                 $batchSlot,
                 ['site' => $site, 'perusahaan' => $perusahaan],
                 $gapItems,
             );
+        } catch (Throwable $e) {
+            report($e);
+            $details[] = [
+                'nama' => '(tasklist)',
+                'email' => '-',
+                'success' => false,
+                'message' => 'Gagal buat tasklist '.$cacheKey.': '.$e->getMessage(),
+            ];
+
+            return $this->tasklistService->findByScope($site, $perusahaan, $batchSlot);
         }
     }
 
