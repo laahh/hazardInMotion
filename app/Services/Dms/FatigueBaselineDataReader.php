@@ -38,9 +38,66 @@ final class FatigueBaselineDataReader
     }
 
     /**
+     * Jumlah TOTAL SID yang memenuhi syarat watchlist (minimal $minAlertDays
+     * hari punya alert dalam window) — dipakai untuk transparansi "menampilkan
+     * top N dari total X operator", supaya limit tampilan tidak diam-diam
+     * menyembunyikan berapa banyak yang sebenarnya memenuhi kriteria.
+     */
+    public function countEligibleSids(string $untilDate, int $lookbackDays, int $minAlertDays): int
+    {
+        if (! $this->isUp()) {
+            return 0;
+        }
+
+        $cacheKey = 'dms:fatigue_baseline:eligible_count:v1:'.$untilDate.':'.$lookbackDays.':'.$minAlertDays;
+
+        return Cache::remember($cacheKey, 900, function () use ($untilDate, $lookbackDays, $minAlertDays): int {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return 0;
+            }
+
+            $tz = (string) config('app.timezone');
+            $end = Carbon::parse($untilDate, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+            $start = Carbon::parse($untilDate, $tz)->startOfDay()->subDays($lookbackDays)->format('Y-m-d H:i:s');
+            $namePlaceholders = implode(',', array_fill(0, count(self::FATIGUE_ALERT_NAMES), '?'));
+
+            $sql = '
+                SELECT count(*) AS total FROM (
+                    SELECT UPPER(TRIM(kode_sid)) AS sid, count(DISTINCT date(waktu_deteksi)) AS hari_ada_alert
+                    FROM bcsid.mv_dms_alert
+                    WHERE nama_pelanggaran IN ('.$namePlaceholders.')
+                      AND sudah_direview_l1 = true AND l1_model_status = true
+                      AND waktu_deteksi >= ? AND waktu_deteksi < ?
+                      AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> \'\'
+                      AND (nama_driver_dms IS NULL OR nama_driver_dms NOT ILIKE \'%Bukan Operator%\')
+                    GROUP BY 1
+                ) t
+                WHERE hari_ada_alert >= ?
+            ';
+
+            try {
+                $rows = DB::connection($connection)->select(
+                    $sql,
+                    array_merge(self::FATIGUE_ALERT_NAMES, [$start, $end, $minAlertDays])
+                );
+            } catch (Throwable $e) {
+                report($e);
+
+                return 0;
+            }
+
+            return (int) ($rows[0]->total ?? 0);
+        });
+    }
+
+    /**
      * Kandidat watchlist: SID dengan alert fatigue terkonfirmasi nyata
      * terbanyak dalam window, dan minimal $minAlertDays hari punya alert
      * (supaya cukup data untuk baseline, bukan cuma satu insiden liar).
+     * $limit di sini HANYA batas pengaman kueri (bukan batas tampilan) —
+     * pemanggil menghitung statistik lengkap untuk SEMUA baris yang
+     * dikembalikan lalu baru memutuskan berapa yang ditampilkan.
      *
      * @return list<string>  UPPER(kode_sid), urut total alert terbanyak dulu
      */

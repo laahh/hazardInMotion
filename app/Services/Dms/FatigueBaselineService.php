@@ -20,7 +20,11 @@ final class FatigueBaselineService
 
     private const MIN_ALERT_DAYS = 5;
 
-    private const CANDIDATE_LIMIT = 40;
+    /** Batas pengaman query, BUKAN batas tampilan — lihat DISPLAY_LIMIT. */
+    private const CANDIDATE_SAFETY_CAP = 5000;
+
+    /** Berapa banyak yang benar-benar ditampilkan di watchlist, dari yang PALING berisiko. */
+    private const DISPLAY_LIMIT = 150;
 
     public function __construct(
         private readonly FatigueBaselineDataReader $reader,
@@ -33,6 +37,7 @@ final class FatigueBaselineService
      *     operators: list<array<string, mixed>>,
      *     totalCandidates: int,
      *     shownCount: int,
+     *     truncated: bool,
      *     params: array{lookbackDays:int, trendDays:int, thresholdSigma:float, alpha:float, minAlertDays:int}
      * }
      */
@@ -52,6 +57,7 @@ final class FatigueBaselineService
             'operators' => [],
             'totalCandidates' => 0,
             'shownCount' => 0,
+            'truncated' => false,
             'params' => $params,
         ];
 
@@ -60,7 +66,8 @@ final class FatigueBaselineService
         }
 
         try {
-            $sids = $this->reader->topFatigueSids($date, self::LOOKBACK_DAYS, self::MIN_ALERT_DAYS, self::CANDIDATE_LIMIT);
+            $totalEligible = $this->reader->countEligibleSids($date, self::LOOKBACK_DAYS, self::MIN_ALERT_DAYS);
+            $sids = $this->reader->topFatigueSids($date, self::LOOKBACK_DAYS, self::MIN_ALERT_DAYS, self::CANDIDATE_SAFETY_CAP);
             if ($sids === []) {
                 return array_merge($empty, ['up' => true]);
             }
@@ -104,6 +111,11 @@ final class FatigueBaselineService
                 ];
             }
 
+            // Diurutkan berdasarkan risiko SEBENARNYA (bukan proksi volume alert
+            // yang dipakai topFatigueSids cuma untuk membatasi query) — supaya
+            // operator dengan tren tajam tapi volume total belum tinggi tetap
+            // naik ke atas, bukan tenggelam di bawah operator volume tinggi
+            // yang justru sudah stabil.
             usort($operators, static function (array $a, array $b): int {
                 $order = ['extreme' => 0, 'high' => 1, 'medium' => 2, 'low' => 3];
                 $oa = $order[$a['riskBucket']] ?? 2;
@@ -117,12 +129,16 @@ final class FatigueBaselineService
                 return $zb <=> $za;
             });
 
+            $totalCandidates = max($totalEligible, count($operators));
+            $displayed = array_slice($operators, 0, self::DISPLAY_LIMIT);
+
             return [
                 'up' => true,
                 'dateLabel' => $this->dateLabel($date),
-                'operators' => $operators,
-                'totalCandidates' => count($sids),
-                'shownCount' => count($operators),
+                'operators' => $displayed,
+                'totalCandidates' => $totalCandidates,
+                'shownCount' => count($displayed),
+                'truncated' => $totalCandidates > count($displayed),
                 'params' => $params,
             ];
         } catch (Throwable $e) {

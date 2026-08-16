@@ -29,6 +29,41 @@
             };
         }
     }
+
+    // Ringkasan naratif hari ini — headline yang menggambarkan kondisi
+    // pra operasi secara singkat, dibangun dari KPI yang sudah dihitung
+    // di service (total, bukan dari baris yang terpotong ROW_LIMIT).
+    $needMerah = $kpi['fatigue_merah'] ?? 0;
+    $needTerlambat = $kpi['fatigue_belum_terlambat'] ?? 0;
+    $needAlert = $kpi['ada_alert_dms'] ?? 0;
+
+    $narrativeParts = [];
+    if ($needMerah > 0) {
+        $narrativeParts[] = "{$needMerah} orang Fatigue Test Merah";
+    }
+    if ($needTerlambat > 0) {
+        $narrativeParts[] = "{$needTerlambat} orang belum tes lebih dari 1 jam sejak checkin";
+    }
+    if ($needAlert > 0) {
+        $narrativeParts[] = "{$needAlert} orang kena alert DMS fatigue";
+    }
+
+    if ($narrativeParts !== []) {
+        $narrative = 'Perlu perhatian sebelum mulai kerja: '.implode(', ', $narrativeParts).'.';
+    } elseif (($kpi['checkin'] ?? 0) > 0) {
+        $narrative = 'Tidak ada indikasi darurat dari data yang masuk sejauh ini — tetap pantau watchlist di bawah.';
+    } else {
+        $narrative = 'Belum ada operator checkin untuk filter yang dipilih.';
+    }
+
+    $heroChips = [
+        ['icon' => 'solar:danger-triangle-bold', 'color' => '#EF4A00', 'bg' => 'rgba(239,74,0,0.08)', 'value' => $kpi['fatigue_merah'] ?? 0, 'label' => 'Fatigue Merah'],
+        ['icon' => 'solar:clock-circle-bold', 'color' => '#b45309', 'bg' => 'rgba(255,159,41,0.12)', 'value' => $kpi['fatigue_belum_terlambat'] ?? 0, 'label' => 'Belum Tes &gt;1 Jam'],
+        ['icon' => 'solar:clipboard-list-bold', 'color' => '#6b7280', 'bg' => '#f3f4f6', 'value' => $kpi['fatigue_belum'] ?? 0, 'label' => 'Belum Fatigue Test'],
+        ['icon' => 'solar:cursor-bold', 'color' => '#6b7280', 'bg' => '#f3f4f6', 'value' => $kpi['pvt_belum'] ?? 0, 'label' => $pvtUp ? 'Belum PVT' : 'PVT Tidak Tersedia'],
+        ['icon' => 'solar:eye-scan-bold', 'color' => '#b45309', 'bg' => 'rgba(255,159,41,0.12)', 'value' => $kpi['ada_alert_dms'] ?? 0, 'label' => 'Ada Alert DMS'],
+        ['icon' => 'solar:calendar-mark-bold', 'color' => '#7C3AED', 'bg' => 'rgba(124,58,237,0.1)', 'value' => $kpi['roster_tinggi'] ?? 0, 'label' => 'Roster &ge;7 Hari'],
+    ];
 @endphp
 
 @section('css')
@@ -59,6 +94,32 @@
   .po-param-group{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-secondary-light);font-weight:700;margin-top:14px;margin-bottom:6px;}
   .po-param-item{display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 0;border-bottom:1px dashed var(--neutral-200,#e5e7eb);}
   .po-param-item:last-child{border-bottom:none;}
+
+  /* --- Hero ringkasan hari ini --- */
+  .po-hero{
+    border-radius:16px;border:1px solid var(--neutral-200,#e5e7eb);
+    background:linear-gradient(135deg,#ffffff 0%,#f5f8ff 100%);
+    padding:26px 28px;margin-bottom:28px;
+  }
+  .po-hero-number{font-size:42px;font-weight:700;line-height:1;color:var(--text-primary-light,#111827);}
+  .po-hero-chip{
+    display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--neutral-200,#e5e7eb);
+    border-radius:12px;padding:10px 14px;height:100%;
+  }
+  .po-hero-chip .ic{
+    width:36px;height:36px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;
+  }
+  .po-hero-chip .val{font-size:19px;font-weight:700;line-height:1.1;}
+  .po-hero-chip .lbl{font-size:11px;color:var(--text-secondary-light);font-weight:500;}
+
+  /* --- Section dividers, supaya narasi/urutan halaman jelas --- */
+  .po-section{margin-top:36px;margin-bottom:16px;}
+  .po-section-title{font-size:16px;font-weight:700;color:var(--text-primary-light,#111827);margin-bottom:2px;}
+  .po-section-sub{font-size:12.5px;color:var(--text-secondary-light);max-width:760px;}
+  .po-section-icon{
+    width:34px;height:34px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;
+    background:var(--primary-50,#eef4ff);color:var(--primary-600,#487FFF);font-size:17px;margin-right:10px;flex-shrink:0;
+  }
 </style>
 @endsection
 
@@ -137,109 +198,157 @@
   </div>
 </form>
 
-<div class="row gy-4 mb-4">
-  <div class="col-xxl col-sm-6">
-    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
-      <div class="card-body p-0">
-        <div class="d-flex align-items-center gap-2 mb-8">
-          <span class="w-48-px h-48-px flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle" style="background:var(--primary-600)">
-            <iconify-icon icon="solar:users-group-rounded-bold" class="icon text-xl"></iconify-icon>
-          </span>
-          <div><span class="mb-2 fw-medium text-secondary-light text-sm d-block">Operator Checkin</span><h6 class="fw-semibold mb-0">{{ number_format($kpi['checkin']) }}</h6></div>
-        </div>
-        <p class="text-sm mb-0 text-secondary-light">{{ $filters['company'] ?: 'Semua perusahaan' }}</p>
+{{-- ============================================================ --}}
+{{-- RINGKASAN HARI INI — headline naratif, baca sekali langsung paham --}}
+{{-- ============================================================ --}}
+<div class="po-hero">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-4 mb-20">
+    <div>
+      <span class="text-secondary-light text-xs fw-semibold text-uppercase" style="letter-spacing:.06em">Ringkasan Hari Ini</span>
+      <div class="d-flex align-items-baseline gap-2 mt-4">
+        <span class="po-hero-number">{{ number_format($kpi['checkin'] ?? 0) }}</span>
+        <span class="text-secondary-light">operator checkin{{ $filters['company'] ? ' · '.$filters['company'] : '' }}</span>
       </div>
+      <p class="mb-0 mt-8 fw-medium" style="max-width:620px;color:{{ ($needMerah + $needTerlambat) > 0 ? '#b91c1c' : 'var(--text-secondary-light)' }}">
+        {{ $narrative }}
+      </p>
+    </div>
+    <div class="text-end text-secondary-light text-sm">
+      <div><iconify-icon icon="solar:map-point-wave-bold" class="me-1"></iconify-icon>{{ number_format($kpi['masih_di_site'] ?? 0) }} masih di site</div>
+      <div class="mt-2"><iconify-icon icon="solar:logout-2-bold" class="me-1"></iconify-icon>{{ number_format($kpi['sudah_checkout'] ?? 0) }} sudah checkout</div>
     </div>
   </div>
-  <div class="col-xxl col-sm-6">
-    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
-      <div class="card-body p-0">
-        <div class="d-flex align-items-center gap-2 mb-8">
-          <span class="w-48-px h-48-px flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle" style="background:#9CA3AF">
-            <iconify-icon icon="solar:clipboard-list-bold" class="icon text-xl"></iconify-icon>
-          </span>
-          <div><span class="mb-2 fw-medium text-secondary-light text-sm d-block">Belum Fatigue Test</span><h6 class="fw-semibold mb-0">{{ number_format($kpi['fatigue_belum']) }}</h6></div>
+
+  <div class="row g-3">
+    @foreach($heroChips as $chip)
+    <div class="col-xxl col-md-4 col-6">
+      <div class="po-hero-chip">
+        <span class="ic" style="background:{{ $chip['bg'] }};color:{{ $chip['color'] }}">
+          <iconify-icon icon="{{ $chip['icon'] }}"></iconify-icon>
+        </span>
+        <div>
+          <div class="val">{{ number_format($chip['value']) }}</div>
+          <div class="lbl">{!! $chip['label'] !!}</div>
         </div>
-        <p class="text-sm mb-0 text-secondary-light">
-          belum mengisi Fit to Work
-          @if(($kpi['fatigue_belum_terlambat'] ?? 0) > 0)
-            &middot; <span class="text-danger-600 fw-semibold">{{ $kpi['fatigue_belum_terlambat'] }} terlambat</span> (&gt;1 jam sejak checkin)
-          @endif
-        </p>
       </div>
     </div>
+    @endforeach
   </div>
-  <div class="col-xxl col-sm-6">
-    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
-      <div class="card-body p-0">
-        <div class="d-flex align-items-center gap-2 mb-8">
-          <span class="w-48-px h-48-px flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle" style="background:var(--danger-main)">
-            <iconify-icon icon="solar:danger-triangle-bold" class="icon text-xl"></iconify-icon>
-          </span>
-          <div><span class="mb-2 fw-medium text-secondary-light text-sm d-block">Fatigue Merah</span><h6 class="fw-semibold mb-0">{{ number_format($kpi['fatigue_merah']) }}</h6></div>
-        </div>
-        <p class="text-sm mb-0 text-secondary-light">skor kesiapan &le; 4</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-xxl col-sm-6">
-    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
-      <div class="card-body p-0">
-        <div class="d-flex align-items-center gap-2 mb-8">
-          <span class="w-48-px h-48-px flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle" style="background:#9CA3AF">
-            <iconify-icon icon="solar:cursor-bold" class="icon text-xl"></iconify-icon>
-          </span>
-          <div><span class="mb-2 fw-medium text-secondary-light text-sm d-block">Belum PVT</span><h6 class="fw-semibold mb-0">{{ number_format($kpi['pvt_belum']) }}</h6></div>
-        </div>
-        <p class="text-sm mb-0 text-secondary-light">{{ $pvtUp ? 'dari operator checkin' : 'status tidak tersedia' }}</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-xxl col-sm-6">
-    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
-      <div class="card-body p-0">
-        <div class="d-flex align-items-center gap-2 mb-8">
-          <span class="w-48-px h-48-px flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle" style="background:var(--warning-main)">
-            <iconify-icon icon="solar:eye-scan-bold" class="icon text-xl"></iconify-icon>
-          </span>
-          <div><span class="mb-2 fw-medium text-secondary-light text-sm d-block">Ada Alert DMS Fatigue</span><h6 class="fw-semibold mb-0">{{ number_format($kpi['ada_alert_dms']) }}</h6></div>
-        </div>
-        <p class="text-sm mb-0 text-secondary-light">Menutup Mata/Menguap/Menunduk</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-xxl col-sm-6">
-    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
-      <div class="card-body p-0">
-        <div class="d-flex align-items-center gap-2 mb-8">
-          <span class="w-48-px h-48-px flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle" style="background:var(--cyan)">
-            <iconify-icon icon="solar:map-point-wave-bold" class="icon text-xl"></iconify-icon>
-          </span>
-          <div><span class="mb-2 fw-medium text-secondary-light text-sm d-block">Masih di Site</span><h6 class="fw-semibold mb-0">{{ number_format($kpi['masih_di_site']) }}</h6></div>
-        </div>
-        <p class="text-sm mb-0 text-secondary-light">{{ number_format($kpi['sudah_checkout']) }} sudah checkout</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-xxl col-sm-6">
-    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
-      <div class="card-body p-0">
-        <div class="d-flex align-items-center gap-2 mb-8">
-          <span class="w-48-px h-48-px flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle" style="background:#8B5CF6">
-            <iconify-icon icon="solar:calendar-mark-bold" class="icon text-xl"></iconify-icon>
-          </span>
-          <div><span class="mb-2 fw-medium text-secondary-light text-sm d-block">Roster Tinggi</span><h6 class="fw-semibold mb-0">{{ number_format($kpi['roster_tinggi']) }}</h6></div>
-        </div>
-        <p class="text-sm mb-0 text-secondary-light">hari kerja ke-7 atau lebih tanpa jeda</p>
-      </div>
+</div>
+
+{{-- ============================================================ --}}
+{{-- WATCHLIST PRIORITAS — siapa yang perlu diperiksa/ditindaklanjuti --}}
+{{-- ============================================================ --}}
+<div class="po-section">
+  <div class="d-flex align-items-center">
+    <span class="po-section-icon"><iconify-icon icon="solar:checklist-minimalistic-bold"></iconify-icon></span>
+    <div>
+      <div class="po-section-title">Watchlist Prioritas</div>
+      <div class="po-section-sub">Operator checkin hari ini, diurutkan dari level risiko tertinggi &mdash; klik baris untuk melihat riwayat lengkap seorang operator.</div>
     </div>
   </div>
 </div>
 
+<div class="card radius-8 border">
+  <div class="card-header border-bottom bg-transparent d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <h6 class="text-lg mb-0">Operator Checkin</h6>
+    <span class="text-secondary-light text-sm">
+      {{ number_format($totalRows) }} operator
+      @if($truncated) &middot; menampilkan {{ count($rows) }} teratas berdasarkan prioritas risiko @endif
+    </span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive scroll-sm" style="max-height:600px;overflow-y:auto">
+      <table class="table bordered-table mb-0 po-table">
+        <thead>
+          <tr>
+            <th>Level Risiko</th><th>Kode SID</th><th>Operator</th><th>Roster</th><th>Perusahaan</th><th>Checkin</th><th>Checkout</th>
+            <th>Fatigue Test</th><th>PVT</th><th>Alert DMS</th>
+          </tr>
+        </thead>
+        <tbody>
+          @forelse($rows as $row)
+          @php
+            $ft = $fatigueOf($row);
+            $tm = $tierMeta[$ft];
+            $pm = $pvtMeta[$row['pvt_status']];
+            $rt = $row['risk_tier'] ?? 'kuning';
+            $rm = $tierMeta[$rt];
+          @endphp
+          <tr class="po-row-clickable {{ $ft==='merah' ? 'is-merah' : ($ft==='belum' ? 'is-belum' : '') }}"
+              data-po-sid="{{ $row['kode_sid'] }}" data-po-date="{{ $filters['date'] }}"
+              data-po-reasons="{{ json_encode($row['risk_reasons'] ?? []) }}" role="button" tabindex="0">
+            <td>
+              <span class="{{ $rm['badge'] }} px-10 py-4 rounded-pill fw-semibold text-sm d-inline-flex align-items-center gap-1">{!! shape_svg($rm['shape'], $rm['color']) !!}{{ $rm['label'] }}</span>
+            </td>
+            <td class="fw-medium">{{ $row['kode_sid'] }}</td>
+            <td>
+              <span class="fw-semibold d-block">{{ $row['nama'] }}</span>
+              <span class="text-xs text-secondary-light">{{ $row['jabatan'] }}</span>
+              @if($row['evaluasi_kemarin'])
+                @php $ek = $row['evaluasi_kemarin']; $ekMeta = ['baik'=>['Baik','bg-success-focus text-success-main'],'perlu_pembinaan'=>['Perlu Pembinaan','bg-warning-focus text-warning-main'],'kritis'=>['Kritis','bg-danger-focus text-danger-main']][$ek['kategori']] ?? null; @endphp
+                @if($ekMeta)
+                <span class="{{ $ekMeta[1] }} px-8 py-2 rounded-pill text-xs fw-medium d-inline-block mt-2" title="{{ implode('; ', $ek['alasan']) }}">Kemarin: {{ $ekMeta[0] }}</span>
+                @endif
+              @endif
+            </td>
+            <td class="text-sm">
+              @if($row['hari_ke'] !== null)
+                <span class="{{ $row['roster_tinggi'] ? 'text-danger-600 fw-semibold' : '' }}">Hari ke-{{ $row['hari_ke'] }}</span>
+              @else
+                <span class="text-secondary-light">-</span>
+              @endif
+              @if($row['shift'])
+                <span class="d-block text-xs text-secondary-light">Shift {{ $row['shift'] }}</span>
+              @endif
+              @if(!empty($row['roster_code']))
+                <span class="d-block text-xs text-secondary-light">Roster {{ $row['roster_code'] }}</span>
+              @endif
+            </td>
+            <td class="text-sm">{{ $row['perusahaan'] }}</td>
+            <td class="text-sm">{{ \Illuminate\Support\Carbon::parse($row['checked_in_at'])->translatedFormat('d M H:i') }}</td>
+            <td class="text-sm">
+              @if(!empty($row['checked_out_at']))
+                {{ \Illuminate\Support\Carbon::parse($row['checked_out_at'])->translatedFormat('d M H:i') }}
+              @else
+                <span class="bg-neutral-200 text-neutral-600 px-8 py-2 rounded-pill text-xs fw-medium">Belum keluar</span>
+              @endif
+            </td>
+            <td>
+              <span class="{{ $tm['badge'] }} px-10 py-4 rounded-pill fw-medium text-sm">{{ $tm['label'] }}</span>
+              @if($row['fatigue_score'] !== null)<span class="text-xs text-secondary-light ms-1">({{ $row['fatigue_score'] }}/10)</span>@endif
+            </td>
+            <td><span class="{{ $pm['badge'] }} px-10 py-4 rounded-pill fw-medium text-sm">{{ $pm['label'] }}</span></td>
+            <td>
+              @if($row['dms_alert_count'] > 0)
+                <span class="bg-danger-focus text-danger-main px-10 py-4 rounded-pill fw-medium text-sm">{{ $row['dms_alert_count'] }}x</span>
+              @else
+                <span class="text-secondary-light text-sm">-</span>
+              @endif
+            </td>
+          </tr>
+          @empty
+          <tr><td colspan="10" class="text-center text-secondary-light py-5">Tidak ada operator checkin untuk filter ini.</td></tr>
+          @endforelse
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{{-- ============================================================ --}}
+{{-- ANALISIS & TREN — pola 14 hari terakhir, bukan snapshot hari ini --}}
+{{-- ============================================================ --}}
 @php $insights = $insights ?? ['up' => false]; @endphp
-<div class="d-flex align-items-center gap-2 mt-4 mb-16">
-  <h6 class="mb-0">Wawasan Fatigue &middot; 14 Hari Terakhir</h6>
-  <span class="bg-neutral-100 text-secondary-light text-xs fw-medium px-10 py-2 rounded-pill">berakhir {{ $dateLabel }}</span>
+
+<div class="po-section">
+  <div class="d-flex align-items-center">
+    <span class="po-section-icon"><iconify-icon icon="solar:chart-2-bold"></iconify-icon></span>
+    <div>
+      <div class="po-section-title">Analisis &amp; Tren &mdash; 14 Hari Terakhir</div>
+      <div class="po-section-sub">Bagian ini melihat POLA dari waktu ke waktu, bukan kondisi hari ini saja &mdash; dipakai untuk menilai apakah kondisi kelelahan menyeluruh membaik atau memburuk. Berakhir {{ $dateLabel }}.</div>
+    </div>
+  </div>
 </div>
 
 @unless($insights['up'] ?? false)
@@ -253,10 +362,7 @@
   <div class="col-xxl-6">
     <div class="card radius-8 border h-100">
       <div class="card-header border-bottom bg-transparent">
-        <div class="d-flex align-items-center gap-2">
-          <span class="bg-primary-50 text-primary-600 w-24-px h-24-px rounded-circle d-flex justify-content-center align-items-center text-xs fw-bold flex-shrink-0">1</span>
-          <h6 class="text-lg mb-0">Tren Peringatan Kelelahan Kamera (DMS)</h6>
-        </div>
+        <h6 class="text-lg mb-0">Tren Peringatan Kelelahan Kamera (DMS)</h6>
         <span class="text-secondary-light text-sm">Berapa banyak peringatan per hari, dan mana yang sungguhan</span>
       </div>
       <div class="card-body">
@@ -275,10 +381,7 @@
   <div class="col-xxl-6">
     <div class="card radius-8 border h-100">
       <div class="card-header border-bottom bg-transparent">
-        <div class="d-flex align-items-center gap-2">
-          <span class="bg-primary-50 text-primary-600 w-24-px h-24-px rounded-circle d-flex justify-content-center align-items-center text-xs fw-bold flex-shrink-0">3</span>
-          <h6 class="text-lg mb-0">Tren Hasil Fatigue Test (Fit to Work)</h6>
-        </div>
+        <h6 class="text-lg mb-0">Tren Hasil Fatigue Test (Fit to Work)</h6>
         <span class="text-secondary-light text-sm">Proporsi Hijau/Kuning/Merah dari semua yang tes tiap hari</span>
       </div>
       <div class="card-body">
@@ -295,10 +398,7 @@
   <div class="col-xxl-6">
     <div class="card radius-8 border h-100">
       <div class="card-header border-bottom bg-transparent">
-        <div class="d-flex align-items-center gap-2">
-          <span class="bg-primary-50 text-primary-600 w-24-px h-24-px rounded-circle d-flex justify-content-center align-items-center text-xs fw-bold flex-shrink-0">4</span>
-          <h6 class="text-lg mb-0">Penyebab Paling Sering Fatigue Test Bermasalah</h6>
-        </div>
+        <h6 class="text-lg mb-0">Penyebab Paling Sering Fatigue Test Bermasalah</h6>
         <span class="text-secondary-light text-sm">Dari {{ number_format($insights['deviation']['total'] ?? 0) }} pemeriksaan, 14 hari terakhir</span>
       </div>
       <div class="card-body">
@@ -310,10 +410,7 @@
   <div class="col-xxl-6">
     <div class="card radius-8 border h-100">
       <div class="card-header border-bottom bg-transparent">
-        <div class="d-flex align-items-center gap-2">
-          <span class="bg-primary-50 text-primary-600 w-24-px h-24-px rounded-circle d-flex justify-content-center align-items-center text-xs fw-bold flex-shrink-0">5</span>
-          <h6 class="text-lg mb-0">Riwayat Penyakit Kritis vs Peringatan Kelelahan</h6>
-        </div>
+        <h6 class="text-lg mb-0">Riwayat Penyakit Kritis vs Peringatan Kelelahan</h6>
         <span class="text-secondary-light text-sm">Apakah karyawan sakit kritis juga lebih sering kena peringatan?</span>
       </div>
       <div class="card-body d-flex flex-column justify-content-center h-100">
@@ -340,158 +437,12 @@
     </div>
   </div>
 </div>
-@endunless
 
-<div class="row gy-4">
-  <div class="col-xxl-8">
-    <div class="card h-100 radius-8 border">
-      <div class="card-header border-bottom bg-transparent d-flex align-items-center justify-content-between">
-        <div class="d-flex align-items-center gap-2">
-          <span class="bg-primary-50 text-primary-600 w-24-px h-24-px rounded-circle d-flex justify-content-center align-items-center text-xs fw-bold flex-shrink-0">6</span>
-          <h6 class="text-lg mb-0">Watchlist Operator Checkin</h6>
-        </div>
-        <span class="text-secondary-light text-sm">
-          {{ number_format($totalRows) }} operator
-          @if($truncated) &middot; menampilkan {{ count($rows) }} teratas berdasarkan prioritas risiko @endif
-        </span>
-      </div>
-      <div class="card-body p-0">
-        <div class="table-responsive scroll-sm" style="max-height:600px;overflow-y:auto">
-          <table class="table bordered-table mb-0 po-table">
-            <thead>
-              <tr>
-                <th>Level Risiko</th><th>Kode SID</th><th>Operator</th><th>Roster</th><th>Perusahaan</th><th>Checkin</th><th>Checkout</th>
-                <th>Fatigue Test</th><th>PVT</th><th>Alert DMS</th>
-              </tr>
-            </thead>
-            <tbody>
-              @forelse($rows as $row)
-              @php
-                $ft = $fatigueOf($row);
-                $tm = $tierMeta[$ft];
-                $pm = $pvtMeta[$row['pvt_status']];
-                $rt = $row['risk_tier'] ?? 'kuning';
-                $rm = $tierMeta[$rt];
-              @endphp
-              <tr class="po-row-clickable {{ $ft==='merah' ? 'is-merah' : ($ft==='belum' ? 'is-belum' : '') }}"
-                  data-po-sid="{{ $row['kode_sid'] }}" data-po-date="{{ $filters['date'] }}"
-                  data-po-reasons="{{ json_encode($row['risk_reasons'] ?? []) }}" role="button" tabindex="0">
-                <td>
-                  <span class="{{ $rm['badge'] }} px-10 py-4 rounded-pill fw-semibold text-sm d-inline-flex align-items-center gap-1">{!! shape_svg($rm['shape'], $rm['color']) !!}{{ $rm['label'] }}</span>
-                </td>
-                <td class="fw-medium">{{ $row['kode_sid'] }}</td>
-                <td>
-                  <span class="fw-semibold d-block">{{ $row['nama'] }}</span>
-                  <span class="text-xs text-secondary-light">{{ $row['jabatan'] }}</span>
-                  @if($row['evaluasi_kemarin'])
-                    @php $ek = $row['evaluasi_kemarin']; $ekMeta = ['baik'=>['Baik','bg-success-focus text-success-main'],'perlu_pembinaan'=>['Perlu Pembinaan','bg-warning-focus text-warning-main'],'kritis'=>['Kritis','bg-danger-focus text-danger-main']][$ek['kategori']] ?? null; @endphp
-                    @if($ekMeta)
-                    <span class="{{ $ekMeta[1] }} px-8 py-2 rounded-pill text-xs fw-medium d-inline-block mt-2" title="{{ implode('; ', $ek['alasan']) }}">Kemarin: {{ $ekMeta[0] }}</span>
-                    @endif
-                  @endif
-                </td>
-                <td class="text-sm">
-                  @if($row['hari_ke'] !== null)
-                    <span class="{{ $row['roster_tinggi'] ? 'text-danger-600 fw-semibold' : '' }}">Hari ke-{{ $row['hari_ke'] }}</span>
-                  @else
-                    <span class="text-secondary-light">-</span>
-                  @endif
-                  @if($row['shift'])
-                    <span class="d-block text-xs text-secondary-light">Shift {{ $row['shift'] }}</span>
-                  @endif
-                  @if(!empty($row['roster_code']))
-                    <span class="d-block text-xs text-secondary-light">Roster {{ $row['roster_code'] }}</span>
-                  @endif
-                </td>
-                <td class="text-sm">{{ $row['perusahaan'] }}</td>
-                <td class="text-sm">{{ \Illuminate\Support\Carbon::parse($row['checked_in_at'])->translatedFormat('d M H:i') }}</td>
-                <td class="text-sm">
-                  @if(!empty($row['checked_out_at']))
-                    {{ \Illuminate\Support\Carbon::parse($row['checked_out_at'])->translatedFormat('d M H:i') }}
-                  @else
-                    <span class="bg-neutral-200 text-neutral-600 px-8 py-2 rounded-pill text-xs fw-medium">Belum keluar</span>
-                  @endif
-                </td>
-                <td>
-                  <span class="{{ $tm['badge'] }} px-10 py-4 rounded-pill fw-medium text-sm">{{ $tm['label'] }}</span>
-                  @if($row['fatigue_score'] !== null)<span class="text-xs text-secondary-light ms-1">({{ $row['fatigue_score'] }}/10)</span>@endif
-                </td>
-                <td><span class="{{ $pm['badge'] }} px-10 py-4 rounded-pill fw-medium text-sm">{{ $pm['label'] }}</span></td>
-                <td>
-                  @if($row['dms_alert_count'] > 0)
-                    <span class="bg-danger-focus text-danger-main px-10 py-4 rounded-pill fw-medium text-sm">{{ $row['dms_alert_count'] }}x</span>
-                  @else
-                    <span class="text-secondary-light text-sm">-</span>
-                  @endif
-                </td>
-              </tr>
-              @empty
-              <tr><td colspan="10" class="text-center text-secondary-light py-5">Tidak ada operator checkin untuk filter ini.</td></tr>
-              @endforelse
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-xxl-4">
-    <div class="card h-100 radius-8 border">
-      <div class="card-header border-bottom bg-transparent">
-        <h6 class="text-lg mb-0">Parameter Pengecekan Pra Operasi</h6>
-        <span class="text-secondary-light text-sm">Wajib dijalani sebelum operator mengoperasikan unit</span>
-      </div>
-      <div class="card-body">
-        @php $grouped = collect($checklistParams)->groupBy('group'); @endphp
-        @foreach($grouped as $group => $items)
-          <div class="po-param-group">{{ $group }}</div>
-          @foreach($items as $item)
-          <div class="po-param-item">
-            <iconify-icon icon="solar:check-circle-outline" class="text-primary-600"></iconify-icon>
-            {{ $item['label'] }}
-          </div>
-          @endforeach
-        @endforeach
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="row gy-4 mt-1">
+<div class="row gy-4 mb-4">
   <div class="col-xxl-6">
     <div class="card radius-8 border h-100">
       <div class="card-header border-bottom bg-transparent">
-        <h6 class="text-lg mb-0">Matriks Fatigue Test &times; PVT</h6>
-        <span class="text-secondary-light text-sm">Kondisi kelengkapan pengecekan pra operasi</span>
-      </div>
-      <div class="card-body">
-        <div class="po-matrix">
-          <div></div><div class="po-matrix-col">Belum PVT</div><div class="po-matrix-col">PVT Tidak Lulus</div><div class="po-matrix-col">PVT Lulus</div>
-          @foreach(['belum'=>'Belum','merah'=>'Merah','kuning'=>'Kuning','hijau'=>'Hijau'] as $fKey => $fLabel)
-          <div class="po-matrix-axis">{{ $fLabel }}</div>
-          @foreach(['belum','tidak_lulus','lulus'] as $pKey)
-            @php
-              $cell = collect($matrix)->firstWhere(fn($m) => $m['fatigue']===$fKey && $m['pvt']===$pKey);
-              $count = $cell['count'] ?? 0;
-            @endphp
-            <div class="po-matrix-cell po-cell-{{ $fKey }}">
-              <span class="count">{{ $count }}</span>
-              <span class="label">orang</span>
-            </div>
-          @endforeach
-          @endforeach
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-xxl-6">
-    <div class="card radius-8 border h-100">
-      <div class="card-header border-bottom bg-transparent">
-        <div class="d-flex align-items-center gap-2">
-          <span class="bg-primary-50 text-primary-600 w-24-px h-24-px rounded-circle d-flex justify-content-center align-items-center text-xs fw-bold flex-shrink-0">2</span>
-          <h6 class="text-lg mb-0">Pencapaian Pengisian Fatigue Test vs Alert DMS</h6>
-        </div>
+        <h6 class="text-lg mb-0">Pencapaian Pengisian Fatigue Test vs Alert DMS</h6>
         <span class="text-secondary-light text-sm">Apakah operator yang kena peringatan DMS sudah discreening hari ini?</span>
       </div>
       <div class="card-body">
@@ -499,11 +450,9 @@
       </div>
     </div>
   </div>
-</div>
 
-<div class="row gy-4 mt-1">
-  <div class="col-12">
-    <div class="card radius-8 border">
+  <div class="col-xxl-6">
+    <div class="card radius-8 border h-100">
       <div class="card-header border-bottom bg-transparent">
         <h6 class="text-lg mb-0">Kesiapan Menyeluruh &mdash; Fatigue Test &times; Roster</h6>
         <span class="text-secondary-light text-sm">Apakah Kuning/Merah terkonsentrasi di hari-hari akhir roster? (pola kelelahan akumulatif)</span>
@@ -512,7 +461,7 @@
         <div class="d-flex gap-24 flex-wrap">
           @foreach(['hijau'=>'Hijau','kuning'=>'Kuning','merah'=>'Merah'] as $tKey => $tLabel)
           @php $tMeta = $tierMeta[$tKey]; @endphp
-          <div style="min-width:180px">
+          <div style="min-width:150px">
             <div class="d-flex align-items-center gap-2 mb-8">
               <span class="{{ $tMeta['badge'] }} px-8 py-2 rounded-pill fw-semibold text-xs">{{ $tLabel }}</span>
             </div>
@@ -534,19 +483,12 @@
   </div>
 </div>
 
-@if($insights['up'] ?? false)
-<div class="row gy-4 mt-1">
+<div class="row gy-4 mb-4">
   <div class="col-12">
     <div class="card radius-8 border">
-      <div class="card-header border-bottom bg-transparent d-flex align-items-center justify-content-between flex-wrap gap-2">
-        <div>
-          <div class="d-flex align-items-center gap-2">
-            <span class="bg-primary-50 text-primary-600 w-24-px h-24-px rounded-circle d-flex justify-content-center align-items-center text-xs fw-bold flex-shrink-0">7</span>
-            <span class="bg-primary-50 text-primary-600 w-24-px h-24-px rounded-circle d-flex justify-content-center align-items-center text-xs fw-bold flex-shrink-0">8</span>
-            <h6 class="text-lg mb-0">Operator Paling Sering Kena Peringatan &amp; Arah Trennya</h6>
-          </div>
-          <span class="text-secondary-light text-sm">10 operator dengan peringatan kelelahan terkonfirmasi terbanyak (14 hari) &middot; tren = bandingkan minggu ini vs minggu lalu</span>
-        </div>
+      <div class="card-header border-bottom bg-transparent">
+        <h6 class="text-lg mb-0">Operator Paling Sering Kena Peringatan &amp; Arah Trennya</h6>
+        <span class="text-secondary-light text-sm">10 operator dengan peringatan kelelahan terkonfirmasi terbanyak (14 hari) &middot; tren = bandingkan minggu ini vs minggu lalu</span>
       </div>
       <div class="card-body p-0">
         <div class="table-responsive scroll-sm">
@@ -600,7 +542,70 @@
     </div>
   </div>
 </div>
-@endif
+@endunless
+
+{{-- ============================================================ --}}
+{{-- REFERENSI — checklist wajib & kelengkapan pengecekan --}}
+{{-- ============================================================ --}}
+<div class="po-section">
+  <div class="d-flex align-items-center">
+    <span class="po-section-icon"><iconify-icon icon="solar:document-text-bold"></iconify-icon></span>
+    <div>
+      <div class="po-section-title">Referensi</div>
+      <div class="po-section-sub">Checklist wajib dan status kelengkapan pengecekan Pra Operasi &mdash; bukan data harian, jadi diletakkan terpisah dari watchlist di atas.</div>
+    </div>
+  </div>
+</div>
+
+<div class="row gy-4">
+  <div class="col-xxl-5">
+    <div class="card h-100 radius-8 border">
+      <div class="card-header border-bottom bg-transparent">
+        <h6 class="text-lg mb-0">Parameter Pengecekan Pra Operasi</h6>
+        <span class="text-secondary-light text-sm">Wajib dijalani sebelum operator mengoperasikan unit</span>
+      </div>
+      <div class="card-body">
+        @php $grouped = collect($checklistParams)->groupBy('group'); @endphp
+        @foreach($grouped as $group => $items)
+          <div class="po-param-group">{{ $group }}</div>
+          @foreach($items as $item)
+          <div class="po-param-item">
+            <iconify-icon icon="solar:check-circle-outline" class="text-primary-600"></iconify-icon>
+            {{ $item['label'] }}
+          </div>
+          @endforeach
+        @endforeach
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xxl-7">
+    <div class="card radius-8 border h-100">
+      <div class="card-header border-bottom bg-transparent">
+        <h6 class="text-lg mb-0">Matriks Fatigue Test &times; PVT</h6>
+        <span class="text-secondary-light text-sm">Kondisi kelengkapan pengecekan pra operasi</span>
+      </div>
+      <div class="card-body">
+        <div class="po-matrix">
+          <div></div><div class="po-matrix-col">Belum PVT</div><div class="po-matrix-col">PVT Tidak Lulus</div><div class="po-matrix-col">PVT Lulus</div>
+          @foreach(['belum'=>'Belum','merah'=>'Merah','kuning'=>'Kuning','hijau'=>'Hijau'] as $fKey => $fLabel)
+          <div class="po-matrix-axis">{{ $fLabel }}</div>
+          @foreach(['belum','tidak_lulus','lulus'] as $pKey)
+            @php
+              $cell = collect($matrix)->firstWhere(fn($m) => $m['fatigue']===$fKey && $m['pvt']===$pKey);
+              $count = $cell['count'] ?? 0;
+            @endphp
+            <div class="po-matrix-cell po-cell-{{ $fKey }}">
+              <span class="count">{{ $count }}</span>
+              <span class="label">orang</span>
+            </div>
+          @endforeach
+          @endforeach
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="poOperatorDrawer" style="width:480px">
   <div class="offcanvas-header border-bottom">
@@ -695,7 +700,7 @@
   var insights = @json($insights ?? ['up' => false]);
   if (!insights.up || typeof ApexCharts === 'undefined') return;
 
-  // Panel #1 — Tren Alert Fatigue (bar True/False/Null + line jumlah operator)
+  // Panel — Tren Alert Fatigue (bar True/False/Null + line jumlah operator)
   var alertEl = document.querySelector('#poAlertTrendChart');
   if (alertEl && insights.alertTrend && insights.alertTrend.categories.length) {
     new ApexCharts(alertEl, {
@@ -733,7 +738,7 @@
     }).render();
   }
 
-  // Panel #3 — Tren Fit to Work (100% stacked, supaya proporsi kuning/merah kelihatan)
+  // Panel — Tren Fit to Work (100% stacked, supaya proporsi kuning/merah kelihatan)
   var ftwEl = document.querySelector('#poFtwTrendChart');
   if (ftwEl && insights.ftwTrend && insights.ftwTrend.categories.length) {
     new ApexCharts(ftwEl, {
@@ -757,7 +762,7 @@
     }).render();
   }
 
-  // Panel #4 — Breakdown Deviasi Fit to Work
+  // Panel — Breakdown Deviasi Fit to Work
   var devEl = document.querySelector('#poDeviationChart');
   if (devEl && insights.deviation) {
     var d = insights.deviation;

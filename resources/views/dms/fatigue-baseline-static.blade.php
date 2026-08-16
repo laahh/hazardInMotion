@@ -71,6 +71,13 @@
 </div>
 @else
 
+@if($truncated)
+<div class="text-secondary-light text-sm mb-16">
+  <iconify-icon icon="solar:info-circle-bold" class="align-middle me-1"></iconify-icon>
+  Menampilkan top {{ number_format($shownCount) }} operator paling berisiko dari total {{ number_format($totalCandidates) }} yang memenuhi kriteria (minimal {{ $params['minAlertDays'] }} hari punya alert dalam {{ $params['lookbackDays'] }} hari terakhir).
+</div>
+@endif
+
 <div class="d-flex flex-wrap gap-2 mb-24" id="fmSiteChips"></div>
 
 <div class="row gy-4 mb-4" id="fmKpiRow"></div>

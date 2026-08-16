@@ -123,7 +123,7 @@ final class FatigueTrendCalculator
                 'status' => 'already_over',
                 'days' => null,
                 'date' => null,
-                'message' => 'Sudah berada di atas ambang risiko (>2\u{03c3} dari baseline pribadi) saat ini.',
+                'message' => 'Sudah berada di atas ambang risiko (>2σ dari baseline pribadi) saat ini.',
             ];
         }
 
@@ -145,7 +145,7 @@ final class FatigueTrendCalculator
                 'status' => 'already_over',
                 'days' => null,
                 'date' => null,
-                'message' => 'Sudah berada di atas ambang risiko (>2\u{03c3} dari baseline pribadi) saat ini.',
+                'message' => 'Sudah berada di atas ambang risiko (>2σ dari baseline pribadi) saat ini.',
             ];
         }
 
@@ -166,7 +166,7 @@ final class FatigueTrendCalculator
             'status' => 'projected',
             'days' => $days,
             'date' => $date,
-            'message' => 'Diperkirakan mencapai ambang risiko (>2\u{03c3} dari baseline pribadi) sekitar '.Carbon::parse($date)->translatedFormat('d M Y')." (~{$days} hari lagi) jika tren 14 hari terakhir berlanjut.",
+            'message' => 'Diperkirakan mencapai ambang risiko (>2σ dari baseline pribadi) sekitar '.Carbon::parse($date)->translatedFormat('d M Y')." (~{$days} hari lagi) jika tren 14 hari terakhir berlanjut.",
         ];
     }
 
