@@ -152,6 +152,22 @@ final class PraOperasiLiveMonitoringService
                     return $ra <=> $rb;
                 }
 
+                // Dalam grup status yang sama: paling urgent = tidak ada kontrol
+                // sama sekali (belum Fatigue Test DAN belum PVT) digabung dengan
+                // volume alert hari ini — inilah yang paling perlu segera dicek
+                // langsung ke lapangan, bukan sekadar diurutkan abjad.
+                $ua = self::lackOfControlScore($a);
+                $ub = self::lackOfControlScore($b);
+                if ($ua !== $ub) {
+                    return $ub <=> $ua;
+                }
+
+                $alertA = $a['alert_nyata'] + $a['alert_belum'];
+                $alertB = $b['alert_nyata'] + $b['alert_belum'];
+                if ($alertA !== $alertB) {
+                    return $alertB <=> $alertA;
+                }
+
                 return strcmp((string) $a['nama'], (string) $b['nama']);
             });
 
@@ -191,6 +207,15 @@ final class PraOperasiLiveMonitoringService
         } catch (Throwable) {
             return $date;
         }
+    }
+
+    /**
+     * 2 = belum Fatigue Test DAN belum PVT (tidak ada kontrol sama sekali hari
+     * ini), 1 = salah satu belum, 0 = keduanya sudah dilakukan.
+     */
+    private static function lackOfControlScore(array $card): int
+    {
+        return ($card['fatigue_tier'] === null ? 1 : 0) + ($card['pvt_status'] === 'belum' ? 1 : 0);
     }
 
     /**
