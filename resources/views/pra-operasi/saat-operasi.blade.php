@@ -132,6 +132,11 @@
       <div id="soDrawerIllnessBanner" class="d-none mb-24"></div>
 
       <div class="mb-24">
+        <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Detail Pengecekan Fatigue Test Hari Ini</h6>
+        <div id="soDrawerFatigueDetail" class="border rounded-8 p-12"></div>
+      </div>
+
+      <div class="mb-24">
         <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Tren Fatigue Test Personal (30 Hari)</h6>
         <div id="soDrawerTrendChart"></div>
         <p id="soDrawerBaselineNote" class="text-xs text-secondary-light mt-8 mb-0"></p>
@@ -350,6 +355,28 @@
     } else {
       illnessEl.classList.add('d-none');
       illnessEl.innerHTML = '';
+    }
+
+    // Detail pengecekan Fit to Work hari ini — sobriety test (alkohol), kondisi
+    // karyawan, tindakan unfit, jam tidur.
+    var fatigueDetailEl = document.getElementById('soDrawerFatigueDetail');
+    var tfc = profile.todayFatigueCheck;
+    if (!tfc || !tfc.done) {
+      fatigueDetailEl.innerHTML = '<div class="text-secondary-light text-sm text-center py-8">Belum ada pengecekan Fatigue Test hari ini.</div>';
+    } else {
+      var detailRows = [
+        ['Skor Kesiapan', tfc.kesiapan_score !== null ? tfc.kesiapan_score + '/10' : '-'],
+        ['Hasil Tes Sobriety (Alkohol)', tfc.hasil_sobriety_test || '-'],
+        ['Kondisi Karyawan', tfc.kondisi_karyawan || '-'],
+        ['Jumlah Jam Tidur', tfc.jumlah_jam_tidur || '-'],
+        ['Tindakan Unfit', tfc.tindakan_unfit || '-'],
+        ['Waktu Pemeriksaan', tfc.checked_at || '-']
+      ];
+      fatigueDetailEl.innerHTML = detailRows.map(function(r){
+        return '<div class="d-flex justify-content-between text-sm py-4 border-bottom">' +
+          '<span class="text-secondary-light">' + escapeHtml(r[0]) + '</span>' +
+          '<span class="fw-medium text-end" style="max-width:60%">' + escapeHtml(r[1]) + '</span></div>';
+      }).join('');
     }
 
     // Grafik tren Fatigue Test personal + pita baseline
