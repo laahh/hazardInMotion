@@ -763,6 +763,11 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     Route::prefix('pra-operasi')->name('pra-operasi.')->group(function () {
         Route::get('/', [\App\Http\Controllers\PraOperasi\PraOperasiDashboardController::class, 'index'])->name('dashboard');
         Route::get('/operator/{kodeSid}', [\App\Http\Controllers\PraOperasi\PraOperasiDashboardController::class, 'operatorProfile'])->name('operator-profile');
+        Route::get('/evaluasi-harian', [\App\Http\Controllers\PraOperasi\PraOperasiEvaluationController::class, 'index'])->name('evaluasi-harian');
+        Route::get('/saat-operasi', [\App\Http\Controllers\PraOperasi\PraOperasiLiveController::class, 'index'])->name('saat-operasi');
+        Route::get('/saat-operasi/data', [\App\Http\Controllers\PraOperasi\PraOperasiLiveController::class, 'data'])->name('saat-operasi.data');
+        Route::post('/saat-operasi/tindak-lanjut', [\App\Http\Controllers\PraOperasi\PraOperasiLiveController::class, 'tindakLanjut'])->name('saat-operasi.tindak-lanjut');
+        Route::get('/evaluasi-harian/export', [\App\Http\Controllers\PraOperasi\PraOperasiEvaluationController::class, 'export'])->name('evaluasi-harian.export');
     });
 
     // Route modul VALIDASI TBC & Score Card

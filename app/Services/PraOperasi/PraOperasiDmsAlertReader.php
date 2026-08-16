@@ -198,4 +198,158 @@ final class PraOperasiDmsAlertReader
             return $out;
         });
     }
+
+    /**
+     * Breakdown status alert (nyata/palsu/belum) untuk SATU tanggal spesifik per
+     * SID — dipakai untuk Evaluasi Harian (Fase 3), beda dari
+     * confirmedAlertStatsForSids() yang window 30 hari & hanya menghitung yang nyata.
+     *
+     * @param  list<string>  $sids
+     * @return array<string, array{nyata:int, palsu:int, belum:int}>  keyed by UPPER(kode_sid)
+     */
+    public function dailyAlertBreakdownForSids(array $sids, string $date): array
+    {
+        if (! $this->isUp() || $sids === []) {
+            return [];
+        }
+
+        $upperSids = array_values(array_unique(array_filter(array_map(
+            static fn (string $s): string => mb_strtoupper(trim($s)),
+            $sids
+        ), static fn (string $s): bool => $s !== '')));
+        if ($upperSids === []) {
+            return [];
+        }
+
+        $cacheKey = 'pra_operasi:dms_daily_breakdown:v1:'.$date.':'.md5(implode(',', $upperSids));
+
+        return Cache::remember($cacheKey, 300, function () use ($upperSids, $date): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $tz = (string) config('app.timezone');
+            $start = Carbon::parse($date, $tz)->startOfDay()->format('Y-m-d H:i:s');
+            $end = Carbon::parse($date, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+            $namePlaceholders = implode(',', array_fill(0, count(self::FATIGUE_ALERT_NAMES), '?'));
+
+            $out = [];
+            foreach (array_chunk($upperSids, self::SID_CHUNK) as $chunk) {
+                $sidPlaceholders = implode(',', array_fill(0, count($chunk), '?'));
+                $sql = '
+                    SELECT UPPER(TRIM(kode_sid)) AS sid,
+                        count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_model_status = true) AS nyata,
+                        count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_model_status = false) AS palsu,
+                        count(*) FILTER (WHERE sudah_direview_l1 = false OR sudah_direview_l1 IS NULL) AS belum
+                    FROM bcsid.mv_dms_alert
+                    WHERE nama_pelanggaran IN ('.$namePlaceholders.')
+                      AND waktu_deteksi >= ? AND waktu_deteksi < ?
+                      AND UPPER(TRIM(kode_sid)) IN ('.$sidPlaceholders.')
+                    GROUP BY UPPER(TRIM(kode_sid))
+                ';
+
+                $bindings = array_merge(self::FATIGUE_ALERT_NAMES, [$start, $end], $chunk);
+
+                try {
+                    $rows = DB::connection($connection)->select($sql, $bindings);
+                } catch (Throwable $e) {
+                    report($e);
+                    continue;
+                }
+
+                foreach ($rows as $row) {
+                    $sid = trim((string) ($row->sid ?? ''));
+                    if ($sid === '') {
+                        continue;
+                    }
+                    $out[$sid] = [
+                        'nyata' => (int) $row->nyata,
+                        'palsu' => (int) $row->palsu,
+                        'belum' => (int) $row->belum,
+                    ];
+                }
+            }
+
+            return $out;
+        });
+    }
+
+    /**
+     * Fase 2 (Saat Operasi) — feed alert terbaru (kronologis, terbaru di atas)
+     * lintas beberapa SID sekaligus, untuk papan pemantauan live. TIDAK
+     * di-cache lama (30 detik saja) karena memang dipakai untuk polling live.
+     *
+     * @param  list<string>  $sids
+     * @return list<array{kode_sid:string, nama:string, waktu:string, name:string, status:string}>  terbaru dulu
+     */
+    public function recentAlertsForSids(array $sids, string $date, int $limit = 25): array
+    {
+        if (! $this->isUp() || $sids === []) {
+            return [];
+        }
+
+        $upperSids = array_values(array_unique(array_filter(array_map(
+            static fn (string $s): string => mb_strtoupper(trim($s)),
+            $sids
+        ), static fn (string $s): bool => $s !== '')));
+        if ($upperSids === []) {
+            return [];
+        }
+
+        $cacheKey = 'pra_operasi:dms_recent_feed:v1:'.$date.':'.md5(implode(',', $upperSids)).':'.$limit;
+
+        return Cache::remember($cacheKey, 30, function () use ($upperSids, $date, $limit): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $tz = (string) config('app.timezone');
+            $start = Carbon::parse($date, $tz)->startOfDay()->format('Y-m-d H:i:s');
+            $end = Carbon::parse($date, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+            $namePlaceholders = implode(',', array_fill(0, count(self::FATIGUE_ALERT_NAMES), '?'));
+            $sidPlaceholders = implode(',', array_fill(0, count($upperSids), '?'));
+
+            $sql = '
+                SELECT kode_sid, nama_driver_dms, waktu_deteksi, nama_pelanggaran, l1_model_status, sudah_direview_l1
+                FROM bcsid.mv_dms_alert
+                WHERE nama_pelanggaran IN ('.$namePlaceholders.')
+                  AND waktu_deteksi >= ? AND waktu_deteksi < ?
+                  AND UPPER(TRIM(kode_sid)) IN ('.$sidPlaceholders.')
+                ORDER BY waktu_deteksi DESC
+                LIMIT ?
+            ';
+
+            $bindings = array_merge(self::FATIGUE_ALERT_NAMES, [$start, $end], $upperSids, [$limit]);
+
+            try {
+                $rows = DB::connection($connection)->select($sql, $bindings);
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            $out = [];
+            foreach ($rows as $row) {
+                $reviewed = (bool) ($row->sudah_direview_l1 ?? false);
+                $status = ! $reviewed ? 'belum' : (((bool) $row->l1_model_status) ? 'nyata' : 'palsu');
+                $waktu = $row->waktu_deteksi ?? null;
+                $tanggal = $waktu instanceof \DateTimeInterface
+                    ? Carbon::instance($waktu)->timezone($tz)->format('H:i:s')
+                    : (string) $waktu;
+
+                $out[] = [
+                    'kode_sid' => trim((string) ($row->kode_sid ?? '')),
+                    'nama' => trim((string) ($row->nama_driver_dms ?? '')) ?: '-',
+                    'waktu' => $tanggal,
+                    'name' => trim((string) ($row->nama_pelanggaran ?? '')),
+                    'status' => $status,
+                ];
+            }
+
+            return $out;
+        });
+    }
 }

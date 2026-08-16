@@ -37,9 +37,21 @@
         </a>
       </li>
       <li>
-        <a href="{{ route('pra-operasi.dashboard') }}" class="{{ request()->routeIs('pra-operasi.*') ? 'active-page' : '' }}">
+        <a href="{{ route('pra-operasi.dashboard') }}" class="{{ request()->routeIs('pra-operasi.dashboard') || request()->routeIs('pra-operasi.operator-profile') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:clipboard-check-outline" class="menu-icon"></iconify-icon>
           <span>Pra Operasi</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('pra-operasi.saat-operasi') }}" class="{{ request()->routeIs('pra-operasi.saat-operasi') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:steering-wheel-outline" class="menu-icon"></iconify-icon>
+          <span>Saat Operasi</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('pra-operasi.evaluasi-harian') }}" class="{{ request()->routeIs('pra-operasi.evaluasi-harian') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:document-text-outline" class="menu-icon"></iconify-icon>
+          <span>Evaluasi Harian</span>
         </a>
       </li>
       <li class="sidebar-menu-group-title">Navigasi</li>

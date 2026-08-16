@@ -27,6 +27,21 @@ final class PraOperasiFatigueCheckReader
 
     private const TIER_KUNING_MIN = 5;
 
+    /**
+     * hari_ke >= ini dianggap "roster tinggi" — berbasis distribusi riil 15 Agu 2026:
+     * populasi mayoritas (~95%) ada di hari_ke 1-6, turun drastis mulai hari_ke 7
+     * (414 orang di hari-6 → 53 orang di hari-7).
+     */
+    public const ROSTER_HIGH_THRESHOLD = 7;
+
+    /**
+     * Mapping kode shift → label, dikonfirmasi EMPIRIS dari jam pemeriksaan riil
+     * (bukan asumsi): shift 1 puncak pemeriksaan jam 05:00-07:00 (sebelum mulai
+     * shift siang ~06:00), shift 2 puncak jam 17:00-18:00 (sebelum mulai shift
+     * malam ~18:00) — pola rotasi 12 jam standar tambang.
+     */
+    private const SHIFT_LABELS = ['1' => 'Siang', '2' => 'Malam'];
+
     public function __construct(
         private readonly SportEvaluationPvtRfidCheckinReader $connectionSource,
     ) {}
@@ -51,12 +66,22 @@ final class PraOperasiFatigueCheckReader
         return 'merah';
     }
 
+    public static function shiftLabel(string $shiftCode): ?string
+    {
+        return self::SHIFT_LABELS[$shiftCode] ?? null;
+    }
+
+    public static function isRosterHigh(?int $hariKe): bool
+    {
+        return $hariKe !== null && $hariKe >= self::ROSTER_HIGH_THRESHOLD;
+    }
+
     /**
      * @param  list<string>  $sids
      * @return array<string, array{
      *     kesiapan_score: int|null, tier: string|null, hasil_sobriety_test: string,
      *     kondisi_karyawan: string, tindakan_unfit: string, jumlah_jam_tidur: string,
-     *     checked_at: string
+     *     checked_at: string, hari_ke: int|null, shift: string|null
      * }>  keyed by UPPER(kode_sid)
      */
     public function statusForSidsOnDate(array $sids, string $date): array
@@ -77,7 +102,7 @@ final class PraOperasiFatigueCheckReader
             return [];
         }
 
-        $cacheKey = 'pra_operasi:fatigue_check:v1:'.$date.':'.md5(implode(',', $upperSids));
+        $cacheKey = 'pra_operasi:fatigue_check:v2:'.$date.':'.md5(implode(',', $upperSids));
 
         return Cache::remember($cacheKey, 30, function () use ($upperSids, $date): array {
             $connection = $this->connectionSource->connectionName();
@@ -98,7 +123,9 @@ final class PraOperasiFatigueCheckReader
                         jumlah_jam_tidur,
                         tanggal_pemeriksaan,
                         jam_pemeriksaan,
-                        uploaded_at
+                        uploaded_at,
+                        hari_ke,
+                        shift
                     FROM bcsid.clean_data_fatigue_check
                     WHERE tanggal_pemeriksaan = ?
                       AND sid IS NOT NULL
@@ -121,6 +148,7 @@ final class PraOperasiFatigueCheckReader
 
                     $scoreRaw = trim((string) ($row->kesiapan_bekerja_fisik_dan_mental ?? ''));
                     $score = ctype_digit($scoreRaw) ? (int) $scoreRaw : null;
+                    $hariKeRaw = trim((string) ($row->hari_ke ?? ''));
 
                     // Baris terakhir (uploaded_at ASC) menang jika ada >1 submission hari itu.
                     $merged[$sid] = [
@@ -131,6 +159,8 @@ final class PraOperasiFatigueCheckReader
                         'tindakan_unfit' => trim((string) ($row->tindakan_unfit ?? '')),
                         'jumlah_jam_tidur' => trim((string) ($row->jumlah_jam_tidur ?? '')),
                         'checked_at' => trim((string) ($row->tanggal_pemeriksaan ?? '')).' '.trim((string) ($row->jam_pemeriksaan ?? '')),
+                        'hari_ke' => ctype_digit($hariKeRaw) ? (int) $hariKeRaw : null,
+                        'shift' => self::shiftLabel(trim((string) ($row->shift ?? ''))),
                     ];
                 }
             }

@@ -136,6 +136,14 @@ class Kernel extends ConsoleKernel
             ->everySixHours()
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/pra-operasi-sync-roster.log'));
+
+        // Pra Operasi Fase 3: tutup buku evaluasi harian kemarin, jam 01:00
+        // (memberi jeda supaya seluruh checkin shift malam kemarin sudah pasti selesai).
+        $schedule->command('pra-operasi:evaluate-day')
+            ->timezone('Asia/Makassar')
+            ->dailyAt('01:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/pra-operasi-evaluate-day.log'));
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\PraOperasi;
 
+use App\Models\PraOperasi\PraOperasiEvaluasiHarian;
 use App\Services\SportEvaluation\SportEvaluationPvtRfidCheckinReader;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -37,22 +38,28 @@ final class PraOperasiOperatorProfileReader
     /**
      * @return array{
      *     kode_sid:string,
+     *     roster: array{hari_ke:int|null, shift:string|null},
      *     alertTimeline: list<array{date:string, name:string, status:string}>,
      *     alertSummary: array{nyata:int, palsu:int, belum:int, total:int, trend:string},
      *     criticalIllness: array{has_critical_illness:bool, confirmed_date:string|null, followed_up:bool},
      *     fatigueHistory: list<array{date:string, score:int}>,
-     *     baseline: array{mean:float,std:float,n:int}|null
+     *     baseline: array{mean:float,std:float,n:int}|null,
+     *     evaluasiKemarin: array{kategori:string, alasan:list<string>}|null,
+     *     evaluasiHistory: list<array{date:string, kategori:string}>
      * }
      */
     public function profile(string $kodeSid, string $untilDate, int $days = 30): array
     {
         $empty = [
             'kode_sid' => $kodeSid,
+            'roster' => ['hari_ke' => null, 'shift' => null],
             'alertTimeline' => [],
             'alertSummary' => ['nyata' => 0, 'palsu' => 0, 'belum' => 0, 'total' => 0, 'trend' => 'stabil'],
             'criticalIllness' => ['has_critical_illness' => false, 'confirmed_date' => null, 'followed_up' => false],
             'fatigueHistory' => [],
             'baseline' => null,
+            'evaluasiKemarin' => null,
+            'evaluasiHistory' => [],
         ];
 
         if (! $this->isUp()) {
@@ -74,18 +81,81 @@ final class PraOperasiOperatorProfileReader
             $baselineHistory = array_values(array_filter($fatigueHistory, static fn (array $h): bool => $h['date'] !== $untilDate));
             $baseline = PraOperasiBaselineCalculator::compute($baselineHistory);
 
+            $todayStatus = $this->fatigueCheckReader->statusForSidsOnDate([$kodeSid], $untilDate);
+            $today = $todayStatus[mb_strtoupper($kodeSid)] ?? null;
+            $roster = ['hari_ke' => $today['hari_ke'] ?? null, 'shift' => $today['shift'] ?? null];
+
             return [
                 'kode_sid' => $kodeSid,
+                'roster' => $roster,
                 'alertTimeline' => $timeline,
                 'alertSummary' => $summary,
                 'criticalIllness' => $illnessStatus,
                 'fatigueHistory' => $fatigueHistory,
                 'baseline' => $baseline,
+                'evaluasiKemarin' => $this->lookupEvaluasiKemarin($kodeSid, $untilDate),
+                'evaluasiHistory' => $this->evaluasiHistory($kodeSid, $untilDate, 90),
             ];
         } catch (Throwable $e) {
             report($e);
 
             return $empty;
+        }
+    }
+
+    /**
+     * @return array{kategori:string, alasan:list<string>}|null
+     */
+    private function lookupEvaluasiKemarin(string $kodeSid, string $untilDate): ?array
+    {
+        try {
+            $yesterday = Carbon::parse($untilDate)->subDay()->toDateString();
+            $row = PraOperasiEvaluasiHarian::query()
+                ->whereRaw('UPPER(kode_sid) = ?', [mb_strtoupper($kodeSid)])
+                ->whereDate('tanggal', $yesterday)
+                ->first(['kategori_evaluasi', 'alasan']);
+
+            if ($row === null) {
+                return null;
+            }
+
+            return [
+                'kategori' => $row->kategori_evaluasi,
+                'alasan' => is_array($row->alasan) ? array_values((array) $row->alasan) : [],
+            ];
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    /**
+     * Riwayat kategori evaluasi harian (Fase 3) — bahan grafik kalender/heatmap.
+     * Query ke tabel LOKAL (bukan hse_automation), jadi murah/cepat.
+     *
+     * @return list<array{date:string, kategori:string}>
+     */
+    private function evaluasiHistory(string $kodeSid, string $untilDate, int $days): array
+    {
+        try {
+            $from = Carbon::parse($untilDate)->subDays($days)->toDateString();
+
+            return PraOperasiEvaluasiHarian::query()
+                ->whereRaw('UPPER(kode_sid) = ?', [mb_strtoupper($kodeSid)])
+                ->whereBetween('tanggal', [$from, $untilDate])
+                ->orderBy('tanggal')
+                ->get(['tanggal', 'kategori_evaluasi'])
+                ->map(static fn ($r): array => [
+                    'date' => Carbon::parse($r->tanggal)->toDateString(),
+                    'kategori' => $r->kategori_evaluasi,
+                ])
+                ->values()
+                ->all();
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
         }
     }
 

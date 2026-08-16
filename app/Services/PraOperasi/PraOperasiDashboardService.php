@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\PraOperasi;
 
+use App\Models\PraOperasi\PraOperasiEvaluasiHarian;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Throwable;
@@ -68,6 +69,7 @@ final class PraOperasiDashboardService
                 $checkinAtBySid[mb_strtoupper($row['kode_sid'])] = $row['checked_in_at'];
             }
             $pvtBySid = $this->pvtReader->statusForCheckins($checkinAtBySid, $filters['date']);
+            $evaluasiKemarinBySid = $this->lookupEvaluasiKemarin($sids, $filters['date']);
 
             $rows = [];
             foreach ($checkins as $row) {
@@ -89,6 +91,8 @@ final class PraOperasiDashboardService
                     continue;
                 }
 
+                $hariKe = $fatigue['hari_ke'] ?? null;
+
                 $rows[] = [
                     'kode_sid' => $row['kode_sid'],
                     'nama' => $row['nama'] !== '' ? $row['nama'] : '-',
@@ -104,10 +108,14 @@ final class PraOperasiDashboardService
                     'fatigue_kondisi' => $fatigue['kondisi_karyawan'] ?? '',
                     'fatigue_tindakan_unfit' => $fatigue['tindakan_unfit'] ?? '',
                     'fatigue_jam_tidur' => $fatigue['jumlah_jam_tidur'] ?? '',
+                    'hari_ke' => $hariKe,
+                    'roster_tinggi' => PraOperasiFatigueCheckReader::isRosterHigh($hariKe),
+                    'shift' => $fatigue['shift'] ?? null,
                     'pvt_status' => $pvt['status'],
                     'pvt_mean_rt' => $pvt['mean_rt_ms'],
                     'pvt_lapses' => $pvt['lapses'],
                     'dms_alert_count' => $dmsAlertCount,
+                    'evaluasi_kemarin' => $evaluasiKemarinBySid[$upper] ?? null,
                 ];
             }
 
@@ -131,12 +139,97 @@ final class PraOperasiDashboardService
                 'companyOptions' => $this->buildCompanyOptions($checkins),
                 'checklistParams' => $this->checklistParameters(),
                 'insights' => $this->buildInsights($filters['date']),
+                'rosterMatrix' => $this->buildRosterMatrix($rows),
             ];
         } catch (Throwable $e) {
             report($e);
 
             return $this->emptyPayload($filters, $rfidUp, $pvtUp);
         }
+    }
+
+    /**
+     * Ambil hasil Evaluasi Harian (Fase 3) tanggal SEBELUM $date, untuk
+     * ditampilkan sebagai "Evaluasi Kemarin" di watchlist. Tabel lokal
+     * (pra_operasi_evaluasi_harian) — dibungkus try/catch supaya kalau
+     * migration belum dijalankan atau koneksi lokal bermasalah, dashboard
+     * utama tetap tampil (bukan fitur ini yang wajib).
+     *
+     * @param  list<string>  $sids
+     * @return array<string, array{kategori:string, alasan:list<string>}>  keyed by UPPER(kode_sid)
+     */
+    private function lookupEvaluasiKemarin(array $sids, string $date): array
+    {
+        if ($sids === []) {
+            return [];
+        }
+
+        try {
+            $yesterday = Carbon::parse($date)->subDay()->toDateString();
+            $upperSids = array_map(static fn (string $s): string => mb_strtoupper(trim($s)), $sids);
+
+            $out = [];
+            PraOperasiEvaluasiHarian::query()
+                ->whereDate('tanggal', $yesterday)
+                ->whereIn(\Illuminate\Support\Facades\DB::raw('UPPER(kode_sid)'), $upperSids)
+                ->get(['kode_sid', 'kategori_evaluasi', 'alasan'])
+                ->each(function ($row) use (&$out): void {
+                    $out[mb_strtoupper($row->kode_sid)] = [
+                        'kategori' => $row->kategori_evaluasi,
+                        'alasan' => is_array($row->alasan) ? array_values((array) $row->alasan) : [],
+                    ];
+                });
+
+            return $out;
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+    }
+
+    /**
+     * Panel "Kesiapan Menyeluruh": tier Fatigue Test x kelompok hari roster
+     * (1-3 / 4-6 / 7+) — melihat apakah Kuning/Merah terkonsentrasi di
+     * roster hari-hari akhir (pola kelelahan akumulatif).
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array{tier:string, kelompok:string, count:int}>
+     */
+    private function buildRosterMatrix(array $rows): array
+    {
+        $tiers = ['hijau', 'kuning', 'merah'];
+        $groups = ['1-3', '4-6', '7+'];
+        $grid = [];
+        foreach ($tiers as $t) {
+            foreach ($groups as $g) {
+                $grid[$t.'|'.$g] = 0;
+            }
+        }
+
+        foreach ($rows as $row) {
+            if (! $row['fatigue_done']) {
+                continue;
+            }
+            $tier = $row['fatigue_tier'] ?? 'hijau';
+            $hariKe = $row['hari_ke'] ?? null;
+            if ($hariKe === null) {
+                continue;
+            }
+            $group = $hariKe <= 3 ? '1-3' : ($hariKe <= 6 ? '4-6' : '7+');
+            $key = $tier.'|'.$group;
+            if (isset($grid[$key])) {
+                $grid[$key]++;
+            }
+        }
+
+        $out = [];
+        foreach ($grid as $key => $count) {
+            [$tier, $group] = explode('|', $key);
+            $out[] = ['tier' => $tier, 'kelompok' => $group, 'count' => $count];
+        }
+
+        return $out;
     }
 
     /**
@@ -286,14 +379,29 @@ final class PraOperasiDashboardService
         $kpi = [
             'checkin' => count($rows),
             'fatigue_hijau' => 0, 'fatigue_kuning' => 0, 'fatigue_merah' => 0, 'fatigue_belum' => 0,
+            'fatigue_belum_terlambat' => 0,
             'pvt_lulus' => 0, 'pvt_tidak_lulus' => 0, 'pvt_belum' => 0,
             'ada_alert_dms' => 0,
             'masih_di_site' => 0, 'sudah_checkout' => 0,
+            'roster_tinggi' => 0,
         ];
+        $now = Carbon::now(config('app.timezone'));
 
         foreach ($rows as $row) {
             if (! $row['fatigue_done']) {
                 $kpi['fatigue_belum']++;
+                // "Terlambat" = sudah checkin lebih dari 1 jam tapi belum juga Fatigue Test —
+                // proksi dari checked_in_at, karena jadwal shift resmi belum ada di sumber data ini.
+                // Pakai selisih epoch eksplisit (bukan diffInMinutes) supaya tidak bergantung
+                // pada konvensi tanda yang berubah-ubah antar versi Carbon.
+                try {
+                    $minutesSinceCheckin = ($now->getTimestamp() - Carbon::parse($row['checked_in_at'])->getTimestamp()) / 60;
+                    if ($minutesSinceCheckin >= 60) {
+                        $kpi['fatigue_belum_terlambat']++;
+                    }
+                } catch (Throwable) {
+                    // biarkan, bukan fatal
+                }
             } else {
                 $kpi['fatigue_'.($row['fatigue_tier'] ?? 'hijau')]++;
             }
@@ -306,6 +414,10 @@ final class PraOperasiDashboardService
 
             if ((int) $row['dms_alert_count'] > 0) {
                 $kpi['ada_alert_dms']++;
+            }
+
+            if (! empty($row['roster_tinggi'])) {
+                $kpi['roster_tinggi']++;
             }
 
             if (empty($row['checked_out_at'])) {
@@ -448,8 +560,9 @@ final class PraOperasiDashboardService
             'dateLabel' => $this->dateLabel($filters['date']),
             'kpi' => [
                 'checkin' => 0, 'fatigue_hijau' => 0, 'fatigue_kuning' => 0, 'fatigue_merah' => 0, 'fatigue_belum' => 0,
+                'fatigue_belum_terlambat' => 0,
                 'pvt_lulus' => 0, 'pvt_tidak_lulus' => 0, 'pvt_belum' => 0, 'ada_alert_dms' => 0,
-                'masih_di_site' => 0, 'sudah_checkout' => 0,
+                'masih_di_site' => 0, 'sudah_checkout' => 0, 'roster_tinggi' => 0,
             ],
             'rows' => [],
             'totalRows' => 0,
@@ -462,6 +575,7 @@ final class PraOperasiDashboardService
             'companyOptions' => [],
             'checklistParams' => $this->checklistParameters(),
             'insights' => $this->buildInsights($filters['date']),
+            'rosterMatrix' => [],
         ];
     }
 }

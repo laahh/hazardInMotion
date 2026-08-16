@@ -160,7 +160,12 @@
           </span>
           <div><span class="mb-2 fw-medium text-secondary-light text-sm d-block">Belum Fatigue Test</span><h6 class="fw-semibold mb-0">{{ number_format($kpi['fatigue_belum']) }}</h6></div>
         </div>
-        <p class="text-sm mb-0 text-secondary-light">belum mengisi Fit to Work</p>
+        <p class="text-sm mb-0 text-secondary-light">
+          belum mengisi Fit to Work
+          @if(($kpi['fatigue_belum_terlambat'] ?? 0) > 0)
+            &middot; <span class="text-danger-600 fw-semibold">{{ $kpi['fatigue_belum_terlambat'] }} terlambat</span> (&gt;1 jam sejak checkin)
+          @endif
+        </p>
       </div>
     </div>
   </div>
@@ -213,6 +218,19 @@
           <div><span class="mb-2 fw-medium text-secondary-light text-sm d-block">Masih di Site</span><h6 class="fw-semibold mb-0">{{ number_format($kpi['masih_di_site']) }}</h6></div>
         </div>
         <p class="text-sm mb-0 text-secondary-light">{{ number_format($kpi['sudah_checkout']) }} sudah checkout</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-xxl col-sm-6">
+    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
+      <div class="card-body p-0">
+        <div class="d-flex align-items-center gap-2 mb-8">
+          <span class="w-48-px h-48-px flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle" style="background:#8B5CF6">
+            <iconify-icon icon="solar:calendar-mark-bold" class="icon text-xl"></iconify-icon>
+          </span>
+          <div><span class="mb-2 fw-medium text-secondary-light text-sm d-block">Roster Tinggi</span><h6 class="fw-semibold mb-0">{{ number_format($kpi['roster_tinggi']) }}</h6></div>
+        </div>
+        <p class="text-sm mb-0 text-secondary-light">hari kerja ke-7 atau lebih tanpa jeda</p>
       </div>
     </div>
   </div>
@@ -342,7 +360,7 @@
           <table class="table bordered-table mb-0 po-table">
             <thead>
               <tr>
-                <th>Level Risiko</th><th>Kode SID</th><th>Operator</th><th>Perusahaan</th><th>Checkin</th><th>Checkout</th>
+                <th>Level Risiko</th><th>Kode SID</th><th>Operator</th><th>Roster</th><th>Perusahaan</th><th>Checkin</th><th>Checkout</th>
                 <th>Fatigue Test</th><th>PVT</th><th>Alert DMS</th>
               </tr>
             </thead>
@@ -365,6 +383,22 @@
                 <td>
                   <span class="fw-semibold d-block">{{ $row['nama'] }}</span>
                   <span class="text-xs text-secondary-light">{{ $row['jabatan'] }}</span>
+                  @if($row['evaluasi_kemarin'])
+                    @php $ek = $row['evaluasi_kemarin']; $ekMeta = ['baik'=>['Baik','bg-success-focus text-success-main'],'perlu_pembinaan'=>['Perlu Pembinaan','bg-warning-focus text-warning-main'],'kritis'=>['Kritis','bg-danger-focus text-danger-main']][$ek['kategori']] ?? null; @endphp
+                    @if($ekMeta)
+                    <span class="{{ $ekMeta[1] }} px-8 py-2 rounded-pill text-xs fw-medium d-inline-block mt-2" title="{{ implode('; ', $ek['alasan']) }}">Kemarin: {{ $ekMeta[0] }}</span>
+                    @endif
+                  @endif
+                </td>
+                <td class="text-sm">
+                  @if($row['hari_ke'] !== null)
+                    <span class="{{ $row['roster_tinggi'] ? 'text-danger-600 fw-semibold' : '' }}">Hari ke-{{ $row['hari_ke'] }}</span>
+                  @else
+                    <span class="text-secondary-light">-</span>
+                  @endif
+                  @if($row['shift'])
+                    <span class="d-block text-xs text-secondary-light">Shift {{ $row['shift'] }}</span>
+                  @endif
                 </td>
                 <td class="text-sm">{{ $row['perusahaan'] }}</td>
                 <td class="text-sm">{{ \Illuminate\Support\Carbon::parse($row['checked_in_at'])->translatedFormat('d M H:i') }}</td>
@@ -389,7 +423,7 @@
                 </td>
               </tr>
               @empty
-              <tr><td colspan="9" class="text-center text-secondary-light py-5">Tidak ada operator checkin untuk filter ini.</td></tr>
+              <tr><td colspan="10" class="text-center text-secondary-light py-5">Tidak ada operator checkin untuk filter ini.</td></tr>
               @endforelse
             </tbody>
           </table>
@@ -459,6 +493,39 @@
       </div>
       <div class="card-body">
         <div id="poAggregatorDmsChart"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row gy-4 mt-1">
+  <div class="col-12">
+    <div class="card radius-8 border">
+      <div class="card-header border-bottom bg-transparent">
+        <h6 class="text-lg mb-0">Kesiapan Menyeluruh &mdash; Fatigue Test &times; Roster</h6>
+        <span class="text-secondary-light text-sm">Apakah Kuning/Merah terkonsentrasi di hari-hari akhir roster? (pola kelelahan akumulatif)</span>
+      </div>
+      <div class="card-body">
+        <div class="d-flex gap-24 flex-wrap">
+          @foreach(['hijau'=>'Hijau','kuning'=>'Kuning','merah'=>'Merah'] as $tKey => $tLabel)
+          @php $tMeta = $tierMeta[$tKey]; @endphp
+          <div style="min-width:180px">
+            <div class="d-flex align-items-center gap-2 mb-8">
+              <span class="{{ $tMeta['badge'] }} px-8 py-2 rounded-pill fw-semibold text-xs">{{ $tLabel }}</span>
+            </div>
+            @foreach(['1-3','4-6','7+'] as $grp)
+              @php
+                $cell = collect($rosterMatrix)->firstWhere(fn($m) => $m['tier']===$tKey && $m['kelompok']===$grp);
+                $count = $cell['count'] ?? 0;
+              @endphp
+              <div class="d-flex align-items-center justify-content-between text-sm py-4 border-bottom">
+                <span class="text-secondary-light">Hari ke-{{ $grp }}</span>
+                <span class="fw-semibold {{ $grp === '7+' && $count > 0 ? 'text-danger-600' : '' }}">{{ $count }} orang</span>
+              </div>
+            @endforeach
+          </div>
+          @endforeach
+        </div>
       </div>
     </div>
   </div>
@@ -537,7 +604,11 @@
     <div>
       <span class="text-secondary-light text-sm mono" id="poDrawerSid">-</span>
       <h6 class="mb-0 mt-2" id="poDrawerName">-</h6>
-      <div id="poDrawerRiskBadge" class="mt-8"></div>
+      <div class="d-flex flex-wrap gap-2 mt-8">
+        <div id="poDrawerRiskBadge"></div>
+        <span id="poDrawerRosterBadge" class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-8 text-xs fw-medium"></span>
+        <span id="poDrawerKemarinBadge"></span>
+      </div>
     </div>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Tutup"></button>
   </div>
@@ -559,6 +630,14 @@
         <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Tren Fatigue Test Personal (30 Hari)</h6>
         <div id="poDrawerTrendChart"></div>
         <p id="poDrawerBaselineNote" class="text-xs text-secondary-light mt-8 mb-0"></p>
+      </div>
+
+      <div class="mb-24">
+        <div class="d-flex align-items-center justify-content-between mb-8">
+          <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-0">Riwayat Evaluasi Harian (90 Hari)</h6>
+        </div>
+        <div id="poDrawerEvalHeatmap" class="d-flex flex-wrap gap-2"></div>
+        <p class="text-xs text-secondary-light mt-8 mb-0">Tiap kotak = 1 hari kerja &middot; hijau=Baik, kuning=Perlu Pembinaan, merah=Kritis, abu=tidak checkin</p>
       </div>
 
       <div>
@@ -725,6 +804,12 @@
       });
   }
 
+  var evalKategoriMeta = {
+    baik: { label: 'Baik', color: '#45B369' },
+    perlu_pembinaan: { label: 'Perlu Pembinaan', color: '#FF9F29' },
+    kritis: { label: 'Kritis', color: '#EF4A00' }
+  };
+
   function renderProfile(profile) {
     document.getElementById('poDrawerLoading').classList.add('d-none');
     document.getElementById('poDrawerContent').classList.remove('d-none');
@@ -736,6 +821,52 @@
     }
     if (window.__poCurrentReasons) {
       reasonsEl.innerHTML = window.__poCurrentReasons.map(function(r){ return '<li>' + escapeHtml(r) + '</li>'; }).join('');
+    }
+
+    // Roster (hari ke-N + shift)
+    var rosterEl = document.getElementById('poDrawerRosterBadge');
+    var roster = profile.roster || {};
+    if (roster.hari_ke !== null && roster.hari_ke !== undefined) {
+      rosterEl.textContent = 'Hari ke-' + roster.hari_ke + (roster.shift ? ' · Shift ' + roster.shift : '');
+    } else {
+      rosterEl.textContent = '';
+    }
+
+    // Evaluasi kemarin
+    var kemarinEl = document.getElementById('poDrawerKemarinBadge');
+    if (profile.evaluasiKemarin) {
+      var ekMeta = evalKategoriMeta[profile.evaluasiKemarin.kategori];
+      if (ekMeta) {
+        kemarinEl.innerHTML = '<span class="px-10 py-2 rounded-8 text-xs fw-medium" style="background:' + ekMeta.color + '22;color:' + ekMeta.color + '" title="' +
+          escapeHtml((profile.evaluasiKemarin.alasan || []).join('; ')) + '">Kemarin: ' + ekMeta.label + '</span>';
+      } else {
+        kemarinEl.innerHTML = '';
+      }
+    } else {
+      kemarinEl.innerHTML = '';
+    }
+
+    // Heatmap riwayat evaluasi harian (90 hari)
+    var heatmapEl = document.getElementById('poDrawerEvalHeatmap');
+    var evalHistory = profile.evaluasiHistory || [];
+    if (!evalHistory.length) {
+      heatmapEl.innerHTML = '<div class="text-secondary-light text-sm">Belum ada riwayat evaluasi harian.</div>';
+    } else {
+      var byDate = {};
+      evalHistory.forEach(function(h){ byDate[h.date] = h.kategori; });
+      var cells = [];
+      var cursor = new Date(evalHistory[0].date + 'T00:00:00');
+      var end = new Date(evalHistory[evalHistory.length - 1].date + 'T00:00:00');
+      while (cursor <= end) {
+        var key = cursor.toISOString().slice(0, 10);
+        var kategori = byDate[key];
+        var meta = evalKategoriMeta[kategori];
+        var color = meta ? meta.color : '#E5E7EB';
+        var title = meta ? (key + ': ' + meta.label) : (key + ': tidak checkin');
+        cells.push('<span title="' + escapeHtml(title) + '" style="width:14px;height:14px;border-radius:3px;background:' + color + ';display:inline-block"></span>');
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      heatmapEl.innerHTML = cells.join('');
     }
 
     // Banner penyakit kritis
