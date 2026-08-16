@@ -215,6 +215,7 @@
       '<td><span class="fw-semibold d-block">' + escapeHtml(op.nama) + '</span><span class="text-xs text-secondary-light">' + escapeHtml(op.kode_sid) + ' &middot; ' + escapeHtml(op.perusahaan) + '</span></td>' +
       '<td class="text-sm">' + escapeHtml(op.checked_in_at ? op.checked_in_at.slice(11,16) : '-') + '</td>' +
       '<td class="text-sm">' + (op.shift_label ? escapeHtml(op.shift_label) : '-') +
+        (op.roster_code ? '<span class="d-block text-xs text-secondary-light">Roster ' + escapeHtml(op.roster_code) + '</span>' : '') +
         (op.shift_source === 'pattern' ? ' <iconify-icon icon="solar:clock-circle-linear" class="text-secondary-light" title="Dari pola jam checkin, roster DMS tidak tersedia"></iconify-icon>' : '') + '</td>' +
       '<td class="text-sm">' + tier + (op.fatigue_score !== null ? ' (' + op.fatigue_score + '/10)' : '') + '</td>' +
       '<td class="text-sm">' + pvtLabel + '</td>' +
@@ -331,7 +332,9 @@
 
     var roster = profile.roster || {};
     if (roster.hari_ke !== null && roster.hari_ke !== undefined) {
-      document.getElementById('soDrawerRosterBadge').textContent = 'Hari ke-' + roster.hari_ke + (roster.shift ? ' · Shift ' + roster.shift : '');
+      document.getElementById('soDrawerRosterBadge').textContent = 'Hari ke-' + roster.hari_ke +
+        (roster.shift ? ' · Shift ' + roster.shift : '') +
+        (roster.roster_code ? ' · Roster ' + roster.roster_code : '');
     }
 
     var illnessEl = document.getElementById('soDrawerIllnessBanner');

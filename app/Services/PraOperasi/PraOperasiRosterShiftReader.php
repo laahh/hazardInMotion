@@ -128,7 +128,7 @@ final class PraOperasiRosterShiftReader
      * jam checkin murni kalau tidak ada baris roster sama sekali.
      *
      * @param  array<string, string>  $checkinAtBySid  UPPER(kode_sid) => waktu checkin (Y-m-d H:i:s)
-     * @return array<string, array{shift:string, source:string}>  source: roster|pattern
+     * @return array<string, array{shift:string, source:string, roster_code:string|null}>  source: roster|pattern; roster_code mis. "D1"/"N3" (kolom day_or_night dms_roster)
      */
     public function resolveForCheckins(array $checkinAtBySid, string $date): array
     {
@@ -151,25 +151,28 @@ final class PraOperasiRosterShiftReader
             $rows = $roster[$upper] ?? [];
 
             if ($rows === []) {
-                $out[$upper] = ['shift' => $pattern, 'source' => 'pattern'];
+                $out[$upper] = ['shift' => $pattern, 'source' => 'pattern', 'roster_code' => null];
 
                 continue;
             }
 
-            $matched = null;
+            $matchedRow = null;
             foreach ($rows as $row) {
                 $rosterShift = str_starts_with($row['shift_type'], '1') ? self::SHIFT_1 : self::SHIFT_2;
                 if ($rosterShift === $pattern) {
-                    $matched = $rosterShift;
+                    $matchedRow = $row;
                     break;
                 }
             }
 
-            if ($matched === null) {
-                $matched = str_starts_with($rows[0]['shift_type'], '1') ? self::SHIFT_1 : self::SHIFT_2;
-            }
+            $matchedRow ??= $rows[0];
+            $matched = str_starts_with($matchedRow['shift_type'], '1') ? self::SHIFT_1 : self::SHIFT_2;
 
-            $out[$upper] = ['shift' => $matched, 'source' => 'roster'];
+            $out[$upper] = [
+                'shift' => $matched,
+                'source' => 'roster',
+                'roster_code' => $matchedRow['day_or_night'] !== '' ? $matchedRow['day_or_night'] : null,
+            ];
         }
 
         return $out;

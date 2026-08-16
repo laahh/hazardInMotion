@@ -399,6 +399,9 @@
                   @if($row['shift'])
                     <span class="d-block text-xs text-secondary-light">Shift {{ $row['shift'] }}</span>
                   @endif
+                  @if(!empty($row['roster_code']))
+                    <span class="d-block text-xs text-secondary-light">Roster {{ $row['roster_code'] }}</span>
+                  @endif
                 </td>
                 <td class="text-sm">{{ $row['perusahaan'] }}</td>
                 <td class="text-sm">{{ \Illuminate\Support\Carbon::parse($row['checked_in_at'])->translatedFormat('d M H:i') }}</td>
@@ -832,7 +835,9 @@
     var rosterEl = document.getElementById('poDrawerRosterBadge');
     var roster = profile.roster || {};
     if (roster.hari_ke !== null && roster.hari_ke !== undefined) {
-      rosterEl.textContent = 'Hari ke-' + roster.hari_ke + (roster.shift ? ' · Shift ' + roster.shift : '');
+      rosterEl.textContent = 'Hari ke-' + roster.hari_ke +
+        (roster.shift ? ' · Shift ' + roster.shift : '') +
+        (roster.roster_code ? ' · Roster ' + roster.roster_code : '');
     } else {
       rosterEl.textContent = '';
     }

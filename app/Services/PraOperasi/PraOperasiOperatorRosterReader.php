@@ -13,6 +13,15 @@ use Throwable;
  * Roster karyawan berjabatan "Operator" dari bcsid.m_karyawan ⋈ bcsid.m_jabatan
  * (hse_automation/Postgres).
  *
+ * SENGAJA hanya jabatan STRUKTURAL (id_jabatan_tipe ⋈ m_jabatan_tipe.nama =
+ * 'STRUKTURAL') yang mengandung kata "Operator" — bukan jabatan FUNGSIONAL.
+ * Dicek langsung ke data: hanya ADA SATU jabatan "Operator" bertipe FUNGSIONAL
+ * (nama generik "Operator", id 28536) sedangkan ratusan jabatan operator
+ * sungguhan (mis. "Operator Excavator", "Operator Bulldozer 155", "Plant
+ * Operator", dst) semuanya STRUKTURAL. Jabatan fungsional generik semacam itu
+ * bukan role lapangan yang benar-benar mengoperasikan unit, jadi harus
+ * dikecualikan dari roster Pra Operasi.
+ *
  * CATATAN PERFORMA (root cause 504 Gateway Timeout):
  * bcsid.m_karyawan berukuran ~6 GB untuk ±68 ribu baris dan HANYA punya index
  * primary key (id) — tidak ada index di kode_sid atau id_jabatan. Query apa pun
@@ -32,7 +41,7 @@ final class PraOperasiOperatorRosterReader
 {
     private const CACHE_TTL_SECONDS = 6 * 3600;
 
-    private const CACHE_KEY = 'pra_operasi:operator_roster:v2';
+    private const CACHE_KEY = 'pra_operasi:operator_roster:v3';
 
     public function __construct(
         private readonly SportEvaluationPvtRfidCheckinReader $connectionSource,
@@ -80,7 +89,12 @@ final class PraOperasiOperatorRosterReader
 
         try {
             $jabatanRows = DB::connection($connection)->select(
-                "SELECT id, nama FROM bcsid.m_jabatan WHERE UPPER(nama) LIKE '%OPERATOR%' AND UPPER(nama) <> 'VISITOR'"
+                "SELECT j.id, j.nama
+                 FROM bcsid.m_jabatan j
+                 JOIN bcsid.m_jabatan_tipe jt ON jt.id = j.id_jabatan_tipe
+                 WHERE UPPER(j.nama) LIKE '%OPERATOR%'
+                   AND UPPER(j.nama) <> 'VISITOR'
+                   AND UPPER(jt.nama) = 'STRUKTURAL'"
             );
         } catch (Throwable $e) {
             report($e);

@@ -41,7 +41,7 @@ final class PraOperasiOperatorProfileReader
     /**
      * @return array{
      *     kode_sid:string,
-     *     roster: array{hari_ke:int|null, shift:string|null},
+     *     roster: array{hari_ke:int|null, shift:string|null, roster_code:string|null},
      *     alertTimeline: list<array{date:string, name:string, status:string}>,
      *     alertSummary: array{nyata:int, palsu:int, belum:int, total:int, trend:string},
      *     criticalIllness: array{has_critical_illness:bool, confirmed_date:string|null, followed_up:bool},
@@ -56,7 +56,7 @@ final class PraOperasiOperatorProfileReader
     {
         $empty = [
             'kode_sid' => $kodeSid,
-            'roster' => ['hari_ke' => null, 'shift' => null],
+            'roster' => ['hari_ke' => null, 'shift' => null, 'roster_code' => null],
             'alertTimeline' => [],
             'alertSummary' => ['nyata' => 0, 'palsu' => 0, 'belum' => 0, 'total' => 0, 'trend' => 'stabil'],
             'criticalIllness' => ['has_critical_illness' => false, 'confirmed_date' => null, 'followed_up' => false],
@@ -88,21 +88,23 @@ final class PraOperasiOperatorProfileReader
 
             $todayStatus = $this->fatigueCheckReader->statusForSidsOnDate([$kodeSid], $untilDate);
             $today = $todayStatus[mb_strtoupper($kodeSid)] ?? null;
-            $roster = ['hari_ke' => $today['hari_ke'] ?? null, 'shift' => $today['shift'] ?? null];
+            $roster = ['hari_ke' => $today['hari_ke'] ?? null, 'shift' => $today['shift'] ?? null, 'roster_code' => null];
 
-            // Form Fit to Work belum tentu diisi (mis. "Belum Tes") — kalau shift-nya
-            // kosong, jangan biarkan roster kosong; jatuhkan ke dms_roster/pola jam
-            // checkin (lihat PraOperasiRosterShiftReader) supaya tetap informatif.
-            if ($roster['shift'] === null) {
-                $checkinAt = $this->findCheckinAt($kodeSid, $untilDate);
-                if ($checkinAt !== null) {
-                    $resolved = $this->rosterShiftReader->resolveForCheckins(
-                        [mb_strtoupper($kodeSid) => $checkinAt],
-                        $untilDate
-                    );
-                    $shiftCode = $resolved[mb_strtoupper($kodeSid)]['shift'] ?? null;
-                    if ($shiftCode !== null) {
-                        $roster['shift'] = PraOperasiFatigueCheckReader::shiftLabel($shiftCode);
+            // dms_roster (kode roster mis. "D1"/"N3") tidak ada di form Fit to Work
+            // sama sekali, jadi selalu dicoba — bukan cuma fallback saat shift kosong.
+            // Kalau form-nya juga belum diisi ("Belum Tes"), shift ikut jatuh ke
+            // dms_roster/pola jam checkin (lihat PraOperasiRosterShiftReader).
+            $checkinAt = $this->findCheckinAt($kodeSid, $untilDate);
+            if ($checkinAt !== null) {
+                $resolved = $this->rosterShiftReader->resolveForCheckins(
+                    [mb_strtoupper($kodeSid) => $checkinAt],
+                    $untilDate
+                );
+                $shiftInfo = $resolved[mb_strtoupper($kodeSid)] ?? null;
+                if ($shiftInfo !== null) {
+                    $roster['roster_code'] = $shiftInfo['roster_code'];
+                    if ($roster['shift'] === null) {
+                        $roster['shift'] = PraOperasiFatigueCheckReader::shiftLabel($shiftInfo['shift']);
                     }
                 }
             }

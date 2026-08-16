@@ -125,6 +125,7 @@ final class PraOperasiDashboardService
                     'roster_tinggi' => PraOperasiFatigueCheckReader::isRosterHigh($hariKe),
                     'shift' => $shift,
                     'shift_source' => $shiftSource,
+                    'roster_code' => $shiftBySid[$upper]['roster_code'] ?? null,
                     'pvt_status' => $pvt['status'],
                     'pvt_mean_rt' => $pvt['mean_rt_ms'],
                     'pvt_lapses' => $pvt['lapses'],

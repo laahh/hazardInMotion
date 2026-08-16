@@ -128,6 +128,7 @@ final class PraOperasiLiveMonitoringService
                     'shift' => $shiftCode,
                     'shift_label' => $shiftCode !== null ? PraOperasiFatigueCheckReader::shiftLabel($shiftCode) : null,
                     'shift_source' => $shiftInfo['source'] ?? null,
+                    'roster_code' => $shiftInfo['roster_code'] ?? null,
                     'fatigue_tier' => $tier,
                     'fatigue_score' => $fatigue['kesiapan_score'] ?? null,
                     'pvt_status' => $pvt['status'] ?? 'belum',
