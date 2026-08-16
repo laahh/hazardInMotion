@@ -27,6 +27,7 @@ final class PraOperasiDashboardService
         private readonly PraOperasiFatigueTrendReader $trendReader,
         private readonly PraOperasiCriticalIllnessReader $criticalIllnessReader,
         private readonly PraOperasiRiskScoreService $riskScoreService,
+        private readonly PraOperasiRosterShiftReader $rosterShiftReader,
     ) {}
 
     /**
@@ -70,6 +71,9 @@ final class PraOperasiDashboardService
             }
             $pvtBySid = $this->pvtReader->statusForCheckins($checkinAtBySid, $filters['date']);
             $evaluasiKemarinBySid = $this->lookupEvaluasiKemarin($sids, $filters['date']);
+            // Fallback shift kalau form Fit to Work belum diisi (tidak butuh checkout —
+            // lihat PraOperasiRosterShiftReader): utamakan bcsid.dms_roster, lalu pola jam checkin.
+            $shiftBySid = $this->rosterShiftReader->resolveForCheckins($checkinAtBySid, $filters['date']);
 
             $rows = [];
             foreach ($checkins as $row) {
@@ -92,6 +96,15 @@ final class PraOperasiDashboardService
                 }
 
                 $hariKe = $fatigue['hari_ke'] ?? null;
+                $shift = $fatigue['shift'] ?? null;
+                $shiftSource = $shift !== null ? 'form' : null;
+                if ($shift === null) {
+                    $shiftCode = $shiftBySid[$upper]['shift'] ?? null;
+                    if ($shiftCode !== null) {
+                        $shift = PraOperasiFatigueCheckReader::shiftLabel($shiftCode);
+                        $shiftSource = $shiftBySid[$upper]['source'];
+                    }
+                }
 
                 $rows[] = [
                     'kode_sid' => $row['kode_sid'],
@@ -110,7 +123,8 @@ final class PraOperasiDashboardService
                     'fatigue_jam_tidur' => $fatigue['jumlah_jam_tidur'] ?? '',
                     'hari_ke' => $hariKe,
                     'roster_tinggi' => PraOperasiFatigueCheckReader::isRosterHigh($hariKe),
-                    'shift' => $fatigue['shift'] ?? null,
+                    'shift' => $shift,
+                    'shift_source' => $shiftSource,
                     'pvt_status' => $pvt['status'],
                     'pvt_mean_rt' => $pvt['mean_rt_ms'],
                     'pvt_lapses' => $pvt['lapses'],

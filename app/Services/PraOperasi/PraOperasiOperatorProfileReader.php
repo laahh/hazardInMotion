@@ -29,6 +29,8 @@ final class PraOperasiOperatorProfileReader
         private readonly PraOperasiFatigueCheckReader $fatigueCheckReader,
         private readonly PraOperasiDmsAlertReader $dmsAlertReader,
         private readonly PraOperasiPvtStatusReader $pvtReader,
+        private readonly PraOperasiCheckinReader $checkinReader,
+        private readonly PraOperasiRosterShiftReader $rosterShiftReader,
     ) {}
 
     public function isUp(): bool
@@ -88,6 +90,23 @@ final class PraOperasiOperatorProfileReader
             $today = $todayStatus[mb_strtoupper($kodeSid)] ?? null;
             $roster = ['hari_ke' => $today['hari_ke'] ?? null, 'shift' => $today['shift'] ?? null];
 
+            // Form Fit to Work belum tentu diisi (mis. "Belum Tes") — kalau shift-nya
+            // kosong, jangan biarkan roster kosong; jatuhkan ke dms_roster/pola jam
+            // checkin (lihat PraOperasiRosterShiftReader) supaya tetap informatif.
+            if ($roster['shift'] === null) {
+                $checkinAt = $this->findCheckinAt($kodeSid, $untilDate);
+                if ($checkinAt !== null) {
+                    $resolved = $this->rosterShiftReader->resolveForCheckins(
+                        [mb_strtoupper($kodeSid) => $checkinAt],
+                        $untilDate
+                    );
+                    $shiftCode = $resolved[mb_strtoupper($kodeSid)]['shift'] ?? null;
+                    if ($shiftCode !== null) {
+                        $roster['shift'] = PraOperasiFatigueCheckReader::shiftLabel($shiftCode);
+                    }
+                }
+            }
+
             return [
                 'kode_sid' => $kodeSid,
                 'roster' => $roster,
@@ -105,6 +124,22 @@ final class PraOperasiOperatorProfileReader
 
             return $empty;
         }
+    }
+
+    /**
+     * Waktu checkin SID ini pada tanggal tsb, dari daftar checkin harian yang
+     * sudah di-cache (PraOperasiCheckinReader) — tidak menambah query baru.
+     */
+    private function findCheckinAt(string $kodeSid, string $date): ?string
+    {
+        $upper = mb_strtoupper($kodeSid);
+        foreach ($this->checkinReader->operatorCheckinsForDate($date) as $row) {
+            if (mb_strtoupper($row['kode_sid']) === $upper) {
+                return $row['checked_in_at'];
+            }
+        }
+
+        return null;
     }
 
     /**

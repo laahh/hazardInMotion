@@ -66,7 +66,7 @@
           <table class="table bordered-table mb-0">
             <thead>
               <tr>
-                <th>Status</th><th>Operator</th><th>Checkin</th>
+                <th>Status</th><th>Operator</th><th>Checkin</th><th>Shift</th>
                 <th>Fatigue Test</th><th>PVT</th><th>Alert Hari Ini</th><th>Tindak Lanjut</th>
               </tr>
             </thead>
@@ -214,9 +214,11 @@
       '<td><span class="so-badge ' + meta.cls + '">' + meta.label + '</span>' + (op.is_red_flag ? ' <iconify-icon icon="solar:flag-bold" class="text-danger-600" title="Red Flag Proses"></iconify-icon>' : '') + '</td>' +
       '<td><span class="fw-semibold d-block">' + escapeHtml(op.nama) + '</span><span class="text-xs text-secondary-light">' + escapeHtml(op.kode_sid) + ' &middot; ' + escapeHtml(op.perusahaan) + '</span></td>' +
       '<td class="text-sm">' + escapeHtml(op.checked_in_at ? op.checked_in_at.slice(11,16) : '-') + '</td>' +
+      '<td class="text-sm">' + (op.shift_label ? escapeHtml(op.shift_label) : '-') +
+        (op.shift_source === 'pattern' ? ' <iconify-icon icon="solar:clock-circle-linear" class="text-secondary-light" title="Dari pola jam checkin, roster DMS tidak tersedia"></iconify-icon>' : '') + '</td>' +
       '<td class="text-sm">' + tier + (op.fatigue_score !== null ? ' (' + op.fatigue_score + '/10)' : '') + '</td>' +
       '<td class="text-sm">' + pvtLabel + '</td>' +
-      '<td class="text-sm"><span class="text-danger-600">' + op.alert_nyata + '</span> nyata &middot; <span class="text-warning-600">' + op.alert_belum + '</span> belum</td>' +
+      '<td class="text-sm"><span class="text-danger-600">' + op.alert_nyata + '</span> true alert &middot; <span class="text-warning-600">' + op.alert_belum + '</span> belum</td>' +
       '<td onclick="event.stopPropagation()">' + actionHtml + '</td>' +
     '</tr>';
   }
@@ -232,8 +234,8 @@
   }
 
   var alertStatusMeta2 = {
-    nyata: { label: 'Nyata', cls: 'bg-danger-focus text-danger-main' },
-    palsu: { label: 'Palsu', cls: 'bg-neutral-200 text-neutral-600' },
+    nyata: { label: 'True Alert', cls: 'bg-danger-focus text-danger-main' },
+    palsu: { label: 'False Alert', cls: 'bg-neutral-200 text-neutral-600' },
     belum: { label: 'Belum Diperiksa', cls: 'bg-warning-focus text-warning-main' }
   };
 
@@ -268,7 +270,7 @@
     document.getElementById('soCardCount').textContent = cards.length + ' operator';
     var body = document.getElementById('soTableBody');
     if (!cards.length) {
-      body.innerHTML = '<tr><td colspan="7" class="text-center text-secondary-light py-40">Tidak ada operator yang sedang beroperasi saat ini.</td></tr>';
+      body.innerHTML = '<tr><td colspan="8" class="text-center text-secondary-light py-40">Tidak ada operator yang sedang beroperasi saat ini.</td></tr>';
     } else {
       body.innerHTML = cards.map(operatorRow).join('');
     }
@@ -296,8 +298,8 @@
     belum: { label: 'Belum Tes', cls: 'bg-neutral-200 text-neutral-600' }
   };
   var alertStatusMeta = {
-    nyata: { label: 'Dikonfirmasi Nyata', cls: 'bg-success-focus text-success-main' },
-    palsu: { label: 'Alarm Palsu', cls: 'bg-neutral-200 text-neutral-600' },
+    nyata: { label: 'True Alert', cls: 'bg-success-focus text-success-main' },
+    palsu: { label: 'False Alert', cls: 'bg-neutral-200 text-neutral-600' },
     belum: { label: 'Belum Diperiksa', cls: 'bg-warning-focus text-warning-main' }
   };
 
@@ -406,7 +408,7 @@
     var listEl = document.getElementById('soDrawerAlertList');
     var summaryEl = document.getElementById('soDrawerAlertSummary');
     var s = profile.alertSummary || { nyata:0, palsu:0, belum:0, total:0 };
-    summaryEl.textContent = s.total + ' alert · ' + s.nyata + ' nyata · ' + s.belum + ' belum diperiksa';
+    summaryEl.textContent = s.total + ' alert · ' + s.nyata + ' true alert · ' + s.belum + ' belum diperiksa';
 
     if (!profile.alertTimeline || profile.alertTimeline.length === 0) {
       listEl.innerHTML = '<div class="text-secondary-light text-sm text-center py-16">Tidak ada alert fatigue pada 30 hari terakhir.</div>';

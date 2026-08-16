@@ -13,21 +13,22 @@ use Throwable;
  * memproses operator yang MASIH beroperasi hari itu, gabungan hasil Fatigue
  * Test pagi + kondisi alert DMS hari itu, dinilai lewat PraOperasiFitToContinueService.
  *
- * "Masih beroperasi" = checked_out_at kosong DAN belum melewati
- * MAX_OPERATING_HOURS sejak checkin (shift standar tambang 12 jam; batas 16
- * jam memberi ruang lembur wajar tanpa salah anggap orang yang lupa tap
- * keluar 20+ jam lalu sebagai "masih beroperasi"). Jawaban untuk pertanyaan
- * terbuka #3 di docs/pra-operasi-safety-framework.md.
+ * "Masih beroperasi" = checked_out_at kosong DAN belum melewati batas akhir
+ * jendela shift-nya (lihat PraOperasiRosterShiftReader::operatingWindowEnd).
+ * SENGAJA tidak lagi memakai jumlah jam tetap sejak checkin — banyak
+ * karyawan tidak pernah tap checkout, jadi batas waktu harus mengikuti shift
+ * (Shift 1 Siang 06-18, Shift 2 Malam 18-06 + toleransi lembur), bukan jarak
+ * waktu generik dari satu checkin. Jawaban untuk pertanyaan terbuka #3 di
+ * docs/pra-operasi-safety-framework.md.
  */
 final class PraOperasiLiveMonitoringService
 {
-    private const MAX_OPERATING_HOURS = 16;
-
     public function __construct(
         private readonly PraOperasiCheckinReader $checkinReader,
         private readonly PraOperasiFatigueCheckReader $fatigueReader,
         private readonly PraOperasiDmsAlertReader $dmsAlertReader,
         private readonly PraOperasiPvtStatusReader $pvtReader,
+        private readonly PraOperasiRosterShiftReader $rosterShiftReader,
         private readonly PraOperasiFitToContinueService $fitToContinue,
     ) {}
 
@@ -65,19 +66,32 @@ final class PraOperasiLiveMonitoringService
         try {
             $checkins = $this->checkinReader->operatorCheckinsForDate($date);
             $now = Carbon::now(config('app.timezone'));
+            $tz = (string) config('app.timezone');
+
+            $allCheckinAtBySid = array_combine(
+                array_map(static fn (array $r): string => mb_strtoupper($r['kode_sid']), $checkins),
+                array_map(static fn (array $r): string => $r['checked_in_at'], $checkins),
+            );
+            $shiftBySid = $this->rosterShiftReader->resolveForCheckins($allCheckinAtBySid, $date);
+
             $operating = array_values(array_filter(
                 $checkins,
-                function (array $r) use ($now): bool {
+                function (array $r) use ($now, $tz, $shiftBySid): bool {
                     if (! empty($r['checked_out_at'])) {
                         return false;
                     }
+                    $upper = mb_strtoupper($r['kode_sid']);
+                    $shift = $shiftBySid[$upper]['shift'] ?? null;
                     try {
-                        $hoursSinceCheckin = ($now->getTimestamp() - Carbon::parse($r['checked_in_at'])->getTimestamp()) / 3600;
+                        $checkinAt = Carbon::parse($r['checked_in_at'], $tz);
                     } catch (Throwable) {
                         return true;
                     }
+                    if ($shift === null) {
+                        return true;
+                    }
 
-                    return $hoursSinceCheckin <= self::MAX_OPERATING_HOURS;
+                    return $now->lessThanOrEqualTo(PraOperasiRosterShiftReader::operatingWindowEnd($checkinAt, $shift));
                 }
             ));
 
@@ -103,12 +117,17 @@ final class PraOperasiLiveMonitoringService
                 $tier = $fatigue['tier'] ?? null;
                 $tindakLanjut = $tindakLanjutBySid[$upper] ?? null;
                 $pvt = $pvtBySid[$upper] ?? null;
+                $shiftInfo = $shiftBySid[$upper] ?? null;
+                $shiftCode = $shiftInfo['shift'] ?? null;
 
                 $cards[] = [
                     'kode_sid' => $row['kode_sid'],
                     'nama' => $row['nama'] !== '' ? $row['nama'] : '-',
                     'perusahaan' => $row['perusahaan'] !== '' ? $row['perusahaan'] : 'Tidak diketahui',
                     'checked_in_at' => $row['checked_in_at'],
+                    'shift' => $shiftCode,
+                    'shift_label' => $shiftCode !== null ? PraOperasiFatigueCheckReader::shiftLabel($shiftCode) : null,
+                    'shift_source' => $shiftInfo['source'] ?? null,
                     'fatigue_tier' => $tier,
                     'fatigue_score' => $fatigue['kesiapan_score'] ?? null,
                     'pvt_status' => $pvt['status'] ?? 'belum',

@@ -136,7 +136,7 @@ final class PraOperasiEvaluationController extends Controller
 
         return response()->streamDownload(function () use ($rows): void {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['Kode SID', 'Nama', 'Perusahaan', 'Shift', 'Hari Ke', 'Skor Fatigue Test', 'Status PVT', 'Alert Nyata', 'Alert Palsu', 'Alert Belum Diperiksa', 'Durasi Kerja (menit)', 'Z-score Baseline', 'Kategori Evaluasi', 'Alasan']);
+            fputcsv($handle, ['Kode SID', 'Nama', 'Perusahaan', 'Shift', 'Hari Ke', 'Skor Fatigue Test', 'Status PVT', 'True Alert', 'False Alert', 'Alert Belum Diperiksa', 'Durasi Kerja (menit)', 'Z-score Baseline', 'Kategori Evaluasi', 'Alasan']);
 
             foreach ($rows as $row) {
                 fputcsv($handle, [

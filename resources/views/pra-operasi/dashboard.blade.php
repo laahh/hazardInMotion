@@ -262,8 +262,8 @@
       <div class="card-body">
         <div id="poAlertTrendChart"></div>
         <p class="text-secondary-light text-xs mt-8 mb-4">
-          <b class="text-success-600">Hijau (Dikonfirmasi Nyata)</b> = sudah dicek petugas dan memang benar mengantuk/lelah &middot;
-          <b class="text-secondary-light">Abu (Alarm Palsu)</b> = ternyata bukan kelelahan (mis. silau kamera) &middot;
+          <b class="text-success-600">Hijau (True Alert)</b> = sudah dicek petugas dan memang benar mengantuk/lelah &middot;
+          <b class="text-secondary-light">Abu (False Alert)</b> = ternyata bukan kelelahan (mis. silau kamera) &middot;
           <b class="text-warning-600">Kuning (Belum Diperiksa)</b> = menunggu dicek petugas.
         </p>
         <div id="poAlertOperatorChart" class="mt-8"></div>
@@ -693,8 +693,8 @@
     new ApexCharts(alertEl, {
       chart: { height: 260, type: 'bar', stacked: true, toolbar: { show:false } },
       series: [
-        { name: 'Dikonfirmasi Nyata', data: insights.alertTrend.true_count },
-        { name: 'Alarm Palsu', data: insights.alertTrend.false_count },
+        { name: 'True Alert', data: insights.alertTrend.true_count },
+        { name: 'False Alert', data: insights.alertTrend.false_count },
         { name: 'Belum Diperiksa', data: insights.alertTrend.null_count }
       ],
       colors: ['#45B369', '#9CA3AF', '#FF9F29'],
@@ -780,8 +780,8 @@
     merah: { label: 'Merah', badge: 'bg-danger-focus text-danger-main' }
   };
   var alertStatusMeta = {
-    nyata: { label: 'Dikonfirmasi Nyata', cls: 'bg-success-focus text-success-main' },
-    palsu: { label: 'Alarm Palsu', cls: 'bg-neutral-200 text-neutral-600' },
+    nyata: { label: 'True Alert', cls: 'bg-success-focus text-success-main' },
+    palsu: { label: 'False Alert', cls: 'bg-neutral-200 text-neutral-600' },
     belum: { label: 'Belum Diperiksa', cls: 'bg-warning-focus text-warning-main' }
   };
   var currentChart = null;
@@ -954,7 +954,7 @@
     var listEl = document.getElementById('poDrawerAlertList');
     var summaryEl = document.getElementById('poDrawerAlertSummary');
     var s = profile.alertSummary || { nyata:0, palsu:0, belum:0, total:0 };
-    summaryEl.textContent = s.total + ' alert · ' + s.nyata + ' nyata · ' + s.belum + ' belum diperiksa';
+    summaryEl.textContent = s.total + ' alert · ' + s.nyata + ' true alert · ' + s.belum + ' belum diperiksa';
 
     if (!profile.alertTimeline || profile.alertTimeline.length === 0) {
       listEl.innerHTML = '<div class="text-secondary-light text-sm text-center py-16">Tidak ada alert fatigue pada 30 hari terakhir.</div>';

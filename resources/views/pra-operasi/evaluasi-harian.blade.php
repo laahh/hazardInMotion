@@ -125,7 +125,7 @@
         <thead>
           <tr>
             <th>Operator</th><th>Roster</th><th>Skor FT</th><th>PVT</th>
-            <th>Alert (Nyata/Palsu/Belum)</th><th>Durasi Kerja</th><th>Kategori Evaluasi</th>
+            <th>Alert (True/False/Belum)</th><th>Durasi Kerja</th><th>Kategori Evaluasi</th>
           </tr>
         </thead>
         <tbody>
