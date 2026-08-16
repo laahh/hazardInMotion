@@ -754,9 +754,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         Route::get('/dashboard-static', function () {
             return view('dms.dashboard-static');
         })->name('dashboard-static');
-        Route::get('/fatigue-baseline-static', function () {
-            return view('dms.fatigue-baseline-static');
-        })->name('fatigue-baseline-static');
+        Route::get('/fatigue-baseline-static', [\App\Http\Controllers\DMS\FatigueBaselineController::class, 'index'])->name('fatigue-baseline-static');
     });
 
     // Pra Operasi — checkin RFID Operator x Fatigue Test (Fit to Work) x PVT x Alert DMS

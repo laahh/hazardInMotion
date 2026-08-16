@@ -2,91 +2,10 @@
 
 @section('title', 'Fatigue Baseline Monitor')
 
-@php
-    // ---------------------------------------------------------------------
-    // MOCKUP DATA — dummy, deterministik (bukan dari database).
-    // Begitu desain disetujui, ganti blok ini dengan query ke bcsid.dms_alert
-    // (baseline per driver_sid per shift) dan hapus badge "Data Dummy" di header.
-    // ---------------------------------------------------------------------
-    function fmGenerateHistory(string $seed, int $n, float $mean, float $std, float $startFactor, float $endFactor, float $noise): array
-    {
-        mt_srand(crc32($seed));
-        $start = $mean + $startFactor * $std;
-        $end = $mean + $endFactor * $std;
-        $out = [];
-        for ($i = 0; $i < $n; $i++) {
-            $t = $i / ($n - 1);
-            $base = $start + ($end - $start) * $t;
-            $wobble = ((mt_rand(0, 1000) / 1000) - 0.5) * 2 * $noise * $std;
-            $v = $base + $wobble;
-            if ($v < 0) {
-                $v = abs($v * 0.4);
-            }
-            $out[] = round($v, 3);
-        }
-        $out[$n - 1] = round($end, 3);
-        mt_srand();
-        return $out;
-    }
-
-    function fmEwma(array $hist, float $alpha): array
-    {
-        $out = [];
-        $prev = null;
-        foreach ($hist as $i => $v) {
-            $prev = $i === 0 ? $v : $alpha * $v + (1 - $alpha) * $prev;
-            $out[] = round($prev, 3);
-        }
-        return $out;
-    }
-
-    $N = 24;
-    $ALPHA = 0.2;
-
-    $rawOperators = [
-        ['sid' => 'X7QRT', 'nama' => 'Rudi Hartono', 'site' => 'LMO', 'unit' => 'Heavy Dump Truck', 'mean' => 0.15, 'std' => 0.06, 'sf' => -0.6, 'ef' => 6.2, 'freq' => 2, 'sev' => 2, 'noise' => 0.55],
-        ['sid' => 'M2VDA', 'nama' => 'Slamet Wijaya', 'site' => 'LMO', 'unit' => 'Heavy Dump Truck', 'mean' => 0.20, 'std' => 0.07, 'sf' => -0.4, 'ef' => 1.9, 'freq' => 1, 'sev' => 2, 'noise' => 0.6],
-        ['sid' => 'D9KRP', 'nama' => 'Yusuf Maulana', 'site' => 'BMO 1', 'unit' => 'Prime Mover', 'mean' => 0.22, 'std' => 0.06, 'sf' => -0.3, 'ef' => 3.3, 'freq' => 2, 'sev' => 1, 'noise' => 0.6],
-        ['sid' => 'B4LNC', 'nama' => 'Hendra Saputra', 'site' => 'BMO 1', 'unit' => 'Double Trailer', 'mean' => 0.18, 'std' => 0.08, 'sf' => 0.1, 'ef' => 0.25, 'freq' => 0, 'sev' => 1, 'noise' => 0.7],
-        ['sid' => 'F6WZE', 'nama' => 'Dian Permata', 'site' => 'BMO 2', 'unit' => 'Light Vehicle', 'mean' => 0.10, 'std' => 0.05, 'sf' => -0.2, 'ef' => 1.4, 'freq' => 1, 'sev' => 0, 'noise' => 0.7],
-        ['sid' => 'K1PXM', 'nama' => 'Wahyu Setiadi', 'site' => 'GMO', 'unit' => 'Heavy Dump Truck', 'mean' => 0.19, 'std' => 0.06, 'sf' => -0.5, 'ef' => 1.6, 'freq' => 1, 'sev' => 2, 'noise' => 0.6],
-        ['sid' => 'T8HDV', 'nama' => 'Bambang Kurniawan', 'site' => 'GMO', 'unit' => 'Bus', 'mean' => 0.06, 'std' => 0.03, 'sf' => 0.2, 'ef' => -0.3, 'freq' => 0, 'sev' => 0, 'noise' => 0.8],
-        ['sid' => 'Q3JBS', 'nama' => 'Irfan Hidayat', 'site' => 'SMO', 'unit' => 'Prime Mover', 'mean' => 0.21, 'std' => 0.07, 'sf' => -0.4, 'ef' => 3.0, 'freq' => 2, 'sev' => 1, 'noise' => 0.6],
-        ['sid' => 'R5NPY', 'nama' => 'Taufik Ramadhan', 'site' => 'SMO', 'unit' => 'Light Vehicle', 'mean' => 0.09, 'std' => 0.04, 'sf' => -0.3, 'ef' => 2.2, 'freq' => 2, 'sev' => 0, 'noise' => 0.7],
-    ];
-
-    $riskLookup = [
-        0 => ['low', 'low', 'medium'],
-        1 => ['low', 'medium', 'high'],
-        2 => ['medium', 'high', 'extreme'],
-    ];
-
-    $operators = [];
-    foreach ($rawOperators as $o) {
-        $hist = fmGenerateHistory($o['sid'], $N, $o['mean'], $o['std'], $o['sf'], $o['ef'], $o['noise']);
-        $ewma = fmEwma($hist, $ALPHA);
-        $rate = end($hist);
-        $z = round(($rate - $o['mean']) / $o['std'], 2);
-        $risk = $riskLookup[$o['freq']][$o['sev']];
-        $operators[] = array_merge($o, [
-            'id' => $o['sid'],
-            'hist' => $hist,
-            'ewma' => $ewma,
-            'rate' => $rate,
-            'z' => $z,
-            'risk' => $risk,
-        ]);
-    }
-@endphp
-
 @section('css')
 <style>
-  .fm-mockup-badge {
-    display: inline-flex; align-items: center; gap: 6px; margin-left: 10px;
-    font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
-    background: var(--warning-100, #fff3e0); color: var(--warning-600, #b45309);
-    border: 1px solid var(--warning-200, #ffe0b2); padding: 4px 10px; border-radius: 999px;
-  }
+  .fm-warn-banner{background:var(--warning-100,#fff3e0);border:1px solid var(--warning-200,#ffe0b2);color:var(--warning-600,#b45309);
+    border-radius:10px;padding:12px 16px;font-size:13px;display:flex;gap:10px;align-items:flex-start;}
   .fm-chip { border: 1px solid var(--neutral-300, #d1d5db); background: #fff; color: var(--text-secondary-light);
     font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 7px 16px; cursor: pointer;
     transition: background .15s ease, color .15s ease, border-color .15s ease; }
@@ -104,30 +23,29 @@
   .fm-op-sub { font-size: 11px; color: var(--text-secondary-light); }
   .fm-shape { flex: none; display: block; }
 
-  .fm-matrix-grid { display: grid; grid-template-columns: 84px repeat(3, 96px); grid-auto-rows: 28px 72px 72px 72px; gap: 8px; }
-  .fm-matrix-axis { font-size: 11px; color: var(--text-secondary-light); font-weight: 600; display: flex; align-items: center; }
-  .fm-matrix-col { font-size: 11px; color: var(--text-secondary-light); font-weight: 600; text-align: center; align-self: end; padding-bottom: 4px; }
-  .fm-matrix-cell {
-    border-radius: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  .fm-pred-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .fm-pred-cell {
+    flex: 1 1 160px; border-radius: 10px; cursor: pointer; padding: 14px; display: flex; flex-direction: column; gap: 4px;
     transition: transform .15s ease, box-shadow .15s ease; border: 1px solid transparent;
   }
-  .fm-matrix-cell:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(15,23,42,0.1); }
-  .fm-matrix-cell.is-active { outline: 2px solid var(--primary-600, #487FFF); outline-offset: 2px; }
-  .fm-matrix-cell .count { font-size: 20px; font-weight: 700; }
-  .fm-matrix-cell .label { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; opacity: .9; }
-  .fm-matrix-cell.m-low { background: var(--success-focus); color: var(--success-600, #166534); }
-  .fm-matrix-cell.m-medium { background: var(--warning-focus); color: var(--warning-600, #b45309); }
-  .fm-matrix-cell.m-high { background: var(--danger-focus); color: var(--danger-600, #b91c1c); }
-  .fm-matrix-cell.m-extreme { background: var(--danger-main); color: #fff; }
-  .fm-legend-row { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--text-secondary-light); }
+  .fm-pred-cell:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(15,23,42,0.1); }
+  .fm-pred-cell.is-active { outline: 2px solid var(--primary-600, #487FFF); outline-offset: 2px; }
+  .fm-pred-cell .count { font-size: 22px; font-weight: 700; }
+  .fm-pred-cell .label { font-size: 12px; font-weight: 600; }
+  .fm-pred-cell.p-already { background: var(--danger-main); color: #fff; }
+  .fm-pred-cell.p-within7 { background: var(--danger-focus); color: var(--danger-600, #b91c1c); }
+  .fm-pred-cell.p-within30 { background: var(--warning-focus); color: var(--warning-600, #b45309); }
+  .fm-pred-cell.p-aman { background: var(--success-focus); color: var(--success-600, #166534); }
+
+  .fm-prediction-panel { border-radius: 8px; padding: 12px 14px; }
 </style>
 @endsection
 
 @section('content')
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
   <div>
-    <h6 class="fw-semibold mb-0">Fatigue Baseline Monitor<span class="fm-mockup-badge">Mockup &middot; Data Dummy</span></h6>
-    <div class="text-secondary-light text-sm mt-4">Baseline personal per operator dari pola alert DMS &middot; dihitung tiap shift selesai</div>
+    <h6 class="fw-semibold mb-0">Fatigue Baseline Monitor</h6>
+    <div class="text-secondary-light text-sm mt-4">Baseline personal per operator dari pola alert DMS &middot; {{ $dateLabel }}</div>
   </div>
   <ul class="d-flex align-items-center gap-2">
     <li class="fw-medium">
@@ -140,6 +58,18 @@
     <li class="fw-medium">Fatigue Baseline</li>
   </ul>
 </div>
+
+<div id="fmWarnBanner" class="fm-warn-banner mb-24 {{ $up ? 'd-none' : '' }}">
+  <iconify-icon icon="solar:danger-circle-bold" class="icon text-lg flex-shrink-0"></iconify-icon>
+  <div>Koneksi ke hse_automation (bcsid.mv_dms_alert) tidak tersedia saat ini.</div>
+</div>
+
+@if($up && $shownCount === 0)
+<div class="text-center text-secondary-light py-64">
+  <iconify-icon icon="solar:chart-2-outline" class="text-4xl mb-8 d-block"></iconify-icon>
+  Belum ada operator dengan pola alert fatigue yang cukup (minimal {{ $params['minAlertDays'] }} hari punya alert dalam {{ $params['lookbackDays'] }} hari terakhir).
+</div>
+@else
 
 <div class="d-flex flex-wrap gap-2 mb-24" id="fmSiteChips"></div>
 
@@ -163,7 +93,7 @@
                 <th scope="col">Rate&nbsp;skrg</th>
                 <th scope="col">Baseline</th>
                 <th scope="col">Z-score</th>
-                <th scope="col">Tren&nbsp;4pk</th>
+                <th scope="col">Prediksi Kapan Fatigue</th>
                 <th scope="col">Tier</th>
               </tr>
             </thead>
@@ -186,12 +116,14 @@
           <div id="fmDetailRiskPill"></div>
         </div>
 
+        <div id="fmDetailPredictionPanel" class="fm-prediction-panel mb-16"></div>
+
         <div class="row g-2 mb-16" id="fmDetailStats"></div>
 
         <div id="fmApexChart"></div>
         <p class="text-secondary-light text-sm mt-8 mb-0" style="line-height:1.6">
-          Pita kuning = 1&ndash;2&sigma; dari baseline pribadi (30 shift terakhir), pita merah = &gt;2&sigma;.
-          Garis putus-putus ungu = EWMA (&alpha;=0,2).
+          Pita kuning = 1&ndash;2&sigma; dari baseline pribadi ({{ $params['lookbackDays'] - $params['trendDays'] }} hari sebelum tren), pita merah = &gt;2&sigma;.
+          Garis putus-putus ungu = EWMA (&alpha;={{ $params['alpha'] }}).
         </p>
 
         <div class="mt-16" id="fmDetailRecommend"></div>
@@ -202,29 +134,25 @@
 
 <div class="card radius-8 border mt-4">
   <div class="card-header border-bottom bg-transparent">
-    <h6 class="text-lg mb-0">Matriks Risiko &mdash; Kekerapan &times; Keparahan</h6>
-    <span class="text-secondary-light text-sm">Metodologi selaras HIRA (kal_matrix_resiko)</span>
+    <h6 class="text-lg mb-0">Distribusi Prediksi &mdash; Kapan Kemungkinan Fatigue</h6>
+    <span class="text-secondary-light text-sm">Proyeksi tren linear {{ $params['trendDays'] }} hari terakhir terhadap ambang {{ $params['thresholdSigma'] }}&sigma;, horizon maks {{ \App\Services\Dms\FatigueTrendCalculator::PREDICTION_HORIZON_DAYS }} hari</span>
   </div>
-  <div class="card-body d-flex flex-wrap gap-4">
-    <div class="fm-matrix-grid" id="fmMatrixGrid"></div>
-    <div class="d-flex flex-column gap-3 justify-content-center" style="min-width:230px">
-      <div class="fm-legend-row"><span class="w-16-px h-16-px rounded-circle d-inline-block" style="background:var(--success-main)"></span> Low &mdash; monitoring rutin</div>
-      <div class="fm-legend-row"><span class="w-16-px h-16-px rounded-circle d-inline-block" style="background:var(--warning-main)"></span> Medium &mdash; catat &amp; review mingguan</div>
-      <div class="fm-legend-row"><span class="w-16-px h-16-px rounded-circle d-inline-block" style="background:var(--danger-main)"></span> High &mdash; pantau ketat, percepat review L2</div>
-      <div class="fm-legend-row"><span class="w-16-px h-16-px rounded-circle d-inline-block" style="background:#6b0f2d"></span> Extreme &mdash; tarik dari unit, wajib istirahat</div>
-    </div>
+  <div class="card-body">
+    <div class="fm-pred-grid" id="fmPredGrid"></div>
   </div>
 </div>
 
 <div class="d-flex flex-wrap gap-3 mt-24 pt-16 border-top text-secondary-light text-sm">
   <span><b class="text-primary-light">Parameter model</b></span>
-  <span>Window baseline W = 30 shift</span>
-  <span>EWMA &alpha; = 0,2</span>
+  <span>Window baseline = {{ $params['lookbackDays'] - $params['trendDays'] }} hari (sebelum tren)</span>
+  <span>Window tren/proyeksi = {{ $params['trendDays'] }} hari terakhir</span>
+  <span>EWMA &alpha; = {{ $params['alpha'] }}</span>
   <span>Ambang: Kuning &gt;1&sigma; &middot; Merah &gt;2&sigma;</span>
-  <span>Alert disaring: hanya lolos review L1+L2</span>
+  <span>Alert disaring: hanya terkonfirmasi nyata (review L1)</span>
   <span>Kategori fatigue: Menutup Mata, Menguap, Menunduk</span>
-  <span class="text-warning-600 fw-semibold">&mdash; seluruh nama, kode SID, dan angka pada halaman ini adalah data dummy untuk keperluan desain.</span>
+  <span class="text-warning-600 fw-semibold">&mdash; prediksi adalah proyeksi tren linear sederhana, bukan forecast tervalidasi &mdash; gunakan sebagai sinyal awal, bukan kepastian.</span>
 </div>
+@endif
 @endsection
 
 @section('page-scripts')
@@ -232,9 +160,9 @@
 (function(){
   "use strict";
   const OPERATORS = @json($operators);
+  if (!OPERATORS.length) return;
+
   const RISK_LABEL = { low:'Low', medium:'Medium', high:'High', extreme:'Extreme' };
-  const RISK_LOOKUP = { 0:{0:'low',1:'low',2:'medium'}, 1:{0:'low',1:'medium',2:'high'}, 2:{0:'medium',1:'high',2:'extreme'} };
-  const SEV_LABEL = ['Rendah','Sedang','Tinggi'];
   const TIER_META = {
     0:{ label:'Hijau', badgeClass:'bg-success-focus text-success-main', shape:'circle', color:'#45B369' },
     1:{ label:'Kuning', badgeClass:'bg-warning-focus text-warning-main', shape:'triangle', color:'#FF9F29' },
@@ -248,13 +176,24 @@
   };
   const RECOMMEND = {
     low: 'Tidak ada tindakan tambahan &mdash; lanjutkan monitoring rutin melalui siklus review normal.',
-    medium: 'Catat pada log mingguan supervisor &mdash; belum perlu intervensi langsung, pantau tren 2&ndash;3 shift ke depan.',
-    high: 'Pantau ketat &mdash; percepat proses review L2 dan informasikan ke supervisor lapangan sebelum shift berikutnya.',
+    medium: 'Catat pada log mingguan supervisor &mdash; belum perlu intervensi langsung, pantau proyeksi tren beberapa hari ke depan.',
+    high: 'Pantau ketat &mdash; percepat proses review L2 dan informasikan ke supervisor lapangan sebelum shift berikutnya, proyeksi menunjukkan ambang tercapai dalam waktu dekat.',
     extreme: 'Tarik dari unit pada kesempatan pertama, wajib istirahat, dan lakukan wawancara langsung oleh supervisor/approver DMS.'
   };
-  const SITES = ['ALL','LMO','BMO 1','BMO 2','GMO','SMO'];
+  const PREDICTION_META = {
+    already_over: { cls:'bg-danger-100 text-danger-600', icon:'solar:danger-triangle-bold' },
+    projected: { cls:'bg-warning-100 text-warning-600', icon:'solar:clock-circle-bold' },
+    no_trend: { cls:'bg-success-100 text-success-600', icon:'solar:check-circle-bold' },
+    no_imminent: { cls:'bg-success-100 text-success-600', icon:'solar:check-circle-bold' },
+    insufficient_data: { cls:'bg-neutral-100 text-secondary-light', icon:'solar:info-circle-bold' }
+  };
 
-  const state = { site:'ALL', cell:null, selected: OPERATORS[0].id };
+  const SITES = ['ALL', ...Array.from(new Set(OPERATORS.map(o=>o.site))).sort()];
+  const state = { site:'ALL', predBucket:null, selected: OPERATORS[0].id };
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
 
   function shapeSvg(kind, color, size){
     size = size || 10; const c = size/2;
@@ -264,29 +203,26 @@
     return '';
   }
 
-  function sparkline(hist, dotColor){
-    const w=76,h=26,pad=2;
-    const slice = hist.slice(-10);
-    const min=Math.min(...slice), max=Math.max(...slice), span=(max-min)||1;
-    const pts = slice.map((v,i)=>{
-      const x = pad + (i/(slice.length-1))*(w-2*pad);
-      const y = h-pad-((v-min)/span)*(h-2*pad);
-      return [x,y];
-    });
-    const d = pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
-    const last = pts[pts.length-1];
-    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-      <path d="${d}" fill="none" stroke="#d1d5db" stroke-width="1.4"/>
-      <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3" fill="${dotColor}" stroke="#fff" stroke-width="1.5"/>
-    </svg>`;
+  function predictionBucket(op) {
+    if (op.prediction.status === 'already_over') return 'already';
+    if (op.prediction.status === 'projected' && op.prediction.days <= 7) return 'within7';
+    if (op.prediction.status === 'projected') return 'within30';
+    return 'aman';
+  }
+
+  function predictionShortLabel(op) {
+    if (op.prediction.status === 'already_over') return 'Sudah lewat ambang';
+    if (op.prediction.status === 'projected') return '~' + op.prediction.days + ' hari lagi (' + op.prediction.date + ')';
+    if (op.prediction.status === 'insufficient_data') return 'Data belum cukup';
+    return 'Tidak mendesak';
   }
 
   /* ---- site chips ---- */
   const chipsEl = document.getElementById('fmSiteChips');
-  chipsEl.innerHTML = SITES.map(s=>`<button type="button" class="fm-chip" data-site="${s}">${s==='ALL'?'Semua Site':s}</button>`).join('');
+  chipsEl.innerHTML = SITES.map(s=>`<button type="button" class="fm-chip" data-site="${escapeHtml(s)}">${s==='ALL'?'Semua Site':escapeHtml(s)}</button>`).join('');
   chipsEl.addEventListener('click', e=>{
     const b = e.target.closest('[data-site]'); if(!b) return;
-    state.site = b.getAttribute('data-site'); state.cell = null; render();
+    state.site = b.getAttribute('data-site'); state.predBucket = null; render();
   });
 
   /* ---- kpi ---- */
@@ -309,13 +245,14 @@
     </div>`;
   }
   function renderKPI(siteSet){
-    const merah = siteSet.filter(o=>o.freq===2).length;
-    const kuning = siteSet.filter(o=>o.freq===1).length;
+    const merah = siteSet.filter(o=>o.riskBucket==='extreme'||o.riskBucket==='high').length;
+    const kuning = siteSet.filter(o=>o.riskBucket==='medium').length;
+    const proj7 = siteSet.filter(o=>o.prediction.status==='projected' && o.prediction.days<=7).length;
     document.getElementById('fmKpiRow').innerHTML =
       kpiCard('Operator Dipantau', siteSet.length, state.site==='ALL' ? 'Seluruh site' : state.site, 'var(--primary-600)', 'solar:users-group-rounded-bold') +
       kpiCard('Tier Merah &mdash; Butuh Tindakan', merah, 'z-score &gt; 2&sigma; dari baseline pribadi', 'var(--danger-main)', 'solar:danger-triangle-bold') +
       kpiCard('Tier Kuning &mdash; Pantau Ketat', kuning, '1&sigma;&ndash;2&sigma; dari baseline pribadi', 'var(--warning-main)', 'solar:shield-warning-bold') +
-      kpiCard('Alert Belum Tertaut Operator', '1.842', '30 hari terakhir &middot; driver_sid kosong', 'var(--cyan)', 'mdi:link-off');
+      kpiCard('Diproyeksi &le;7 Hari Lagi', proj7, 'Berdasarkan tren alert terkini', 'var(--cyan)', 'solar:clock-circle-bold');
   }
 
   /* ---- table ---- */
@@ -323,15 +260,15 @@
     document.getElementById('fmWatchlistNote').textContent = `${list.length} operator diurutkan berdasarkan risiko`;
     const tbody = document.getElementById('fmTableBody');
     tbody.innerHTML = list.map(o=>{
-      const tm = TIER_META[o.freq];
-      return `<tr class="${o.id===state.selected?'is-selected':''}" data-id="${o.id}">
-        <td class="fw-medium">${o.sid}</td>
-        <td><span class="fm-op-name">${o.nama}</span><span class="fm-op-sub">${o.site}</span></td>
-        <td>${o.unit}</td>
-        <td>${o.rate.toFixed(2)}</td>
-        <td>${o.mean.toFixed(2)}&plusmn;${o.std.toFixed(2)}</td>
-        <td>${o.z>=0?'+':''}${o.z.toFixed(1)}&sigma;</td>
-        <td>${sparkline(o.hist, tm.color)}</td>
+      const tm = TIER_META[o.tier];
+      return `<tr class="${o.id===state.selected?'is-selected':''}" data-id="${escapeHtml(o.id)}">
+        <td class="fw-medium">${escapeHtml(o.sid)}</td>
+        <td><span class="fm-op-name">${escapeHtml(o.nama)}</span><span class="fm-op-sub">${escapeHtml(o.site)}</span></td>
+        <td>${escapeHtml(o.unit)}</td>
+        <td>${o.rate.toFixed(1)}/hari</td>
+        <td>${o.mean !== null ? o.mean.toFixed(2)+'&plusmn;'+o.std.toFixed(2) : '-'}</td>
+        <td>${o.z !== null ? (o.z>=0?'+':'')+o.z.toFixed(1)+'&sigma;' : '-'}</td>
+        <td class="text-sm">${escapeHtml(predictionShortLabel(o))}</td>
         <td><span class="${tm.badgeClass} px-12 py-4 rounded-pill fw-medium text-sm d-inline-flex align-items-center gap-1">${shapeSvg(tm.shape, tm.color, 9)}${tm.label}</span></td>
       </tr>`;
     }).join('') || `<tr><td colspan="8" class="text-center text-secondary-light py-5">Tidak ada operator pada kombinasi filter ini.</td></tr>`;
@@ -347,31 +284,41 @@
     const op = OPERATORS.find(o=>o.id===state.selected && list.some(l=>l.id===o.id)) || list[0];
     const idEl=document.getElementById('fmDetailId'), nameEl=document.getElementById('fmDetailName'),
           tagsEl=document.getElementById('fmDetailTags'), riskEl=document.getElementById('fmDetailRiskPill'),
-          statsEl=document.getElementById('fmDetailStats'), recEl=document.getElementById('fmDetailRecommend');
+          statsEl=document.getElementById('fmDetailStats'), recEl=document.getElementById('fmDetailRecommend'),
+          predEl=document.getElementById('fmDetailPredictionPanel');
 
     if(!op){
-      idEl.textContent=''; nameEl.textContent='Tidak ada operator terpilih'; tagsEl.innerHTML=''; riskEl.innerHTML=''; statsEl.innerHTML=''; recEl.innerHTML='';
+      idEl.textContent=''; nameEl.textContent='Tidak ada operator terpilih'; tagsEl.innerHTML=''; riskEl.innerHTML='';
+      statsEl.innerHTML=''; recEl.innerHTML=''; predEl.innerHTML='';
       if(chart){ chart.destroy(); chart=null; }
       return;
     }
     state.selected = op.id;
     idEl.textContent = op.sid;
     nameEl.textContent = op.nama;
-    tagsEl.innerHTML = `<span class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-8 text-xs fw-medium">${op.site}</span><span class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-8 text-xs fw-medium">${op.unit}</span><span class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-8 text-xs fw-medium">Keparahan: ${SEV_LABEL[op.sev]}</span>`;
-    const ra = RISK_ALERT[op.risk];
-    riskEl.innerHTML = `<span class="${ra.cls} px-14 py-6 rounded-8 fw-semibold text-sm d-inline-flex align-items-center gap-1" ${ra.style?`style="${ra.style}"`:''}><iconify-icon icon="${ra.icon}" class="icon"></iconify-icon>${RISK_LABEL[op.risk]} risk</span>`;
+    tagsEl.innerHTML = `<span class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-8 text-xs fw-medium">${escapeHtml(op.site)}</span><span class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-8 text-xs fw-medium">${escapeHtml(op.unit)}</span>`;
+    const ra = RISK_ALERT[op.riskBucket] || RISK_ALERT.low;
+    riskEl.innerHTML = `<span class="${ra.cls} px-14 py-6 rounded-8 fw-semibold text-sm d-inline-flex align-items-center gap-1" ${ra.style?`style="${ra.style}"`:''}><iconify-icon icon="${ra.icon}" class="icon"></iconify-icon>${RISK_LABEL[op.riskBucket] || '-'} risk</span>`;
+
+    const pm = PREDICTION_META[op.prediction.status] || PREDICTION_META.insufficient_data;
+    predEl.className = 'fm-prediction-panel mb-16 ' + pm.cls;
+    predEl.innerHTML = `<div class="d-flex gap-2 align-items-start">
+      <iconify-icon icon="${pm.icon}" class="icon text-lg flex-shrink-0 mt-2"></iconify-icon>
+      <div><div class="text-xs fw-semibold text-uppercase mb-2" style="opacity:.75">Prediksi Kapan Fatigue</div>
+      <div class="fw-semibold">${escapeHtml(op.prediction.message)}</div></div>
+    </div>`;
 
     const stats = [
-      ['Baseline Pribadi', op.mean.toFixed(2)+' &plusmn; '+op.std.toFixed(2)+' /jam'],
-      ['Rate Shift Ini', op.rate.toFixed(2)+' /jam'],
-      ['Z-score', (op.z>=0?'+':'')+op.z.toFixed(2)+'&sigma;'],
-      ['EWMA (&alpha;=0,2)', op.ewma[op.ewma.length-1].toFixed(2)+' /jam']
+      ['Baseline Pribadi', op.mean !== null ? op.mean.toFixed(2)+' &plusmn; '+op.std.toFixed(2)+' /hari' : '-'],
+      ['Rate Hari Ini', op.rate.toFixed(1)+' /hari'],
+      ['Z-score', op.z !== null ? (op.z>=0?'+':'')+op.z.toFixed(2)+'&sigma;' : '-'],
+      ['EWMA (&alpha;=0,2)', op.ewma[op.ewma.length-1].toFixed(2)+' /hari']
     ];
     statsEl.innerHTML = stats.map(([k,v])=>`<div class="col-6"><div class="fm-stat-mini"><div class="k">${k}</div><div class="v">${v}</div></div></div>`).join('');
 
     recEl.innerHTML = `<div class="${ra.cls} px-16 py-13 rounded-8 d-flex gap-2 align-items-start text-sm" ${ra.style?`style="${ra.style}"`:''}>
       <iconify-icon icon="${ra.icon}" class="icon text-lg flex-shrink-0 mt-4"></iconify-icon>
-      <span><b>Rekomendasi &mdash; ${RISK_LABEL[op.risk]}:</b> ${RECOMMEND[op.risk]}</span>
+      <span><b>Rekomendasi &mdash; ${RISK_LABEL[op.riskBucket] || '-'}:</b> ${RECOMMEND[op.riskBucket] || RECOMMEND.low}</span>
     </div>`;
 
     renderChart(op);
@@ -379,42 +326,47 @@
 
   function renderChart(op){
     const n = op.hist.length;
-    const categories = op.hist.map((_,i)=> i===n-1 ? 'Ini' : ('-'+(n-1-i)));
-    const chartMax = Math.max(op.mean + 2.6*op.std, Math.max(...op.hist), Math.max(...op.ewma)) * 1.12;
-    const bandTop = op.mean + op.std, bandMid = op.mean + 2*op.std;
+    const categories = op.dates.map(d => {
+      const parts = d.split('-');
+      return parts[2] + '/' + parts[1];
+    });
+    const baselineMean = op.mean !== null ? op.mean : Math.min(...op.hist);
+    const baselineStd = op.std !== null ? op.std : 0;
+    const chartMax = Math.max(baselineMean + 2.6*baselineStd, Math.max(...op.hist), Math.max(...op.ewma), 1) * 1.12;
+    const bandTop = baselineMean + baselineStd, bandMid = baselineMean + 2*baselineStd;
 
     const options = {
       chart: { type:'line', height: 300, toolbar:{show:false}, animations:{ enabled:true, easing:'easeinout', speed:400 } },
       series: [
-        { name:'Rate aktual (alert/jam)', type:'area', data: op.hist },
+        { name:'Alert per hari (aktual)', type:'area', data: op.hist },
         { name:'EWMA (α=0,2)', type:'line', data: op.ewma }
       ],
       colors: ['#487FFF', '#8252E9'],
       stroke: { curve:'smooth', width:[2.5, 2], dashArray:[0, 5] },
       fill: { type:['gradient','solid'], gradient:{ shadeIntensity:1, opacityFrom:0.3, opacityTo:0.02, stops:[0,90,100] } },
       grid: { borderColor:'#E5E7EB', strokeDashArray:4, padding:{ left:8, right:8 } },
-      xaxis: { categories, labels:{ style:{ fontSize:'10.5px' } }, axisBorder:{show:false}, axisTicks:{show:false} },
-      yaxis: { min:0, max: chartMax, labels:{ formatter:v=>v.toFixed(2), style:{ fontSize:'10.5px' } } },
+      xaxis: { categories, labels:{ style:{ fontSize:'9.5px' }, rotate:-45 }, axisBorder:{show:false}, axisTicks:{show:false}, tickAmount: 12 },
+      yaxis: { min:0, max: chartMax, labels:{ formatter:v=>v.toFixed(1), style:{ fontSize:'10.5px' } } },
       markers: { size:0, hover:{ size:5 }, strokeWidth:2, strokeColors:'#fff' },
       legend: { fontSize:'12px', position:'top', horizontalAlign:'left' },
-      annotations: {
+      annotations: op.mean !== null ? {
         yaxis: [
           { y: bandTop, y2: bandMid, borderColor:'transparent', fillColor:'#FF9F29', opacity:0.12 },
           { y: bandMid, y2: chartMax, borderColor:'transparent', fillColor:'#EF4A00', opacity:0.10 },
-          { y: op.mean, borderColor:'#9CA3AF', strokeDashArray:4,
-            label:{ text:'Baseline '+op.mean.toFixed(2), position:'left', style:{ background:'#9CA3AF', color:'#fff', fontSize:'10px' } } }
+          { y: baselineMean, borderColor:'#9CA3AF', strokeDashArray:4,
+            label:{ text:'Baseline '+baselineMean.toFixed(2), position:'left', style:{ background:'#9CA3AF', color:'#fff', fontSize:'10px' } } }
         ]
-      },
+      } : {},
       tooltip: {
         shared:true, intersect:false,
         custom: function({ series, dataPointIndex }){
-          const z = ((op.hist[dataPointIndex]-op.mean)/op.std).toFixed(1);
-          const label = categories[dataPointIndex]==='Ini' ? 'Shift ini' : ('Shift '+categories[dataPointIndex]);
+          const label = op.dates[dataPointIndex];
+          const z = op.std ? ((op.hist[dataPointIndex]-op.mean)/op.std).toFixed(1) : '-';
           return `<div style="padding:10px 13px;font-size:12px;line-height:1.6">
             <div style="font-weight:600;margin-bottom:3px">${label}</div>
-            <div>Rate&nbsp;&nbsp;: <b>${series[0][dataPointIndex].toFixed(2)}</b>/jam</div>
-            <div>EWMA&nbsp;: <b>${series[1][dataPointIndex].toFixed(2)}</b>/jam</div>
-            <div>Z-score: <b>${z>=0?'+':''}${z}&sigma;</b></div>
+            <div>Alert&nbsp;: <b>${series[0][dataPointIndex].toFixed(0)}</b>/hari</div>
+            <div>EWMA&nbsp;&nbsp;: <b>${series[1][dataPointIndex].toFixed(2)}</b>/hari</div>
+            <div>Z-score: <b>${z}&sigma;</b></div>
           </div>`;
         }
       }
@@ -425,32 +377,38 @@
     chart.render();
   }
 
-  /* ---- matrix ---- */
-  function renderMatrix(siteSet){
-    const grid = document.getElementById('fmMatrixGrid');
-    let html = `<div></div><div class="fm-matrix-col">Rendah</div><div class="fm-matrix-col">Sedang</div><div class="fm-matrix-col">Tinggi</div>`;
-    const rowLabels = { 2:'Merah', 1:'Kuning', 0:'Hijau' };
-    for(let f=2; f>=0; f--){
-      html += `<div class="fm-matrix-axis">${rowLabels[f]}</div>`;
-      for(let s=0; s<3; s++){
-        const count = siteSet.filter(o=>o.freq===f && o.sev===s).length;
-        const risk = RISK_LOOKUP[f][s];
-        const active = state.cell && state.cell.f===f && state.cell.s===s ? 'is-active' : '';
-        html += `<div class="fm-matrix-cell m-${risk} ${active}" data-f="${f}" data-s="${s}">
-          <span class="count">${count}</span>
-          <span class="label">${RISK_LABEL[risk]}</span>
-        </div>`;
-      }
-    }
-    grid.innerHTML = html;
-    grid.querySelectorAll('.fm-matrix-cell').forEach(el=>{
+  /* ---- distribusi prediksi ---- */
+  function renderPredictionGrid(siteSet){
+    const grid = document.getElementById('fmPredGrid');
+    const buckets = [
+      { key:'already', cls:'p-already', label:'Sudah Lewat Ambang', pred:o=>o.prediction.status==='already_over' },
+      { key:'within7', cls:'p-within7', label:'&le;7 Hari Lagi', pred:o=>o.prediction.status==='projected' && o.prediction.days<=7 },
+      { key:'within30', cls:'p-within30', label:'8&ndash;30 Hari Lagi', pred:o=>o.prediction.status==='projected' && o.prediction.days>7 },
+      { key:'aman', cls:'p-aman', label:'Tidak Ada Tren Mendesak', pred:o=>['no_trend','no_imminent','insufficient_data'].includes(o.prediction.status) }
+    ];
+    grid.innerHTML = buckets.map(b=>{
+      const count = siteSet.filter(b.pred).length;
+      const active = state.predBucket===b.key ? 'is-active' : '';
+      return `<div class="fm-pred-cell ${b.cls} ${active}" data-bucket="${b.key}">
+        <span class="count">${count}</span>
+        <span class="label">${b.label}</span>
+      </div>`;
+    }).join('');
+    grid.querySelectorAll('.fm-pred-cell').forEach(el=>{
       el.addEventListener('click', ()=>{
-        const f = +el.getAttribute('data-f'), s = +el.getAttribute('data-s');
-        state.cell = (state.cell && state.cell.f===f && state.cell.s===s) ? null : { f, s };
+        const key = el.getAttribute('data-bucket');
+        state.predBucket = state.predBucket===key ? null : key;
         render();
       });
     });
   }
+
+  const BUCKET_PREDICATES = {
+    already: o=>o.prediction.status==='already_over',
+    within7: o=>o.prediction.status==='projected' && o.prediction.days<=7,
+    within30: o=>o.prediction.status==='projected' && o.prediction.days>7,
+    aman: o=>['no_trend','no_imminent','insufficient_data'].includes(o.prediction.status)
+  };
 
   /* ---- main render ---- */
   function render(){
@@ -459,9 +417,9 @@
     });
     const siteSet = state.site==='ALL' ? OPERATORS : OPERATORS.filter(o=>o.site===state.site);
     renderKPI(siteSet);
-    renderMatrix(siteSet);
-    const tableSet = state.cell ? siteSet.filter(o=>o.freq===state.cell.f && o.sev===state.cell.s) : siteSet;
-    const sorted = [...tableSet].sort((a,b)=> b.freq-a.freq || b.z-a.z);
+    renderPredictionGrid(siteSet);
+    const tableSet = state.predBucket ? siteSet.filter(BUCKET_PREDICATES[state.predBucket]) : siteSet;
+    const sorted = [...tableSet].sort((a,b)=> b.tier-a.tier || (b.z ?? -999)-(a.z ?? -999));
     if(!sorted.find(o=>o.id===state.selected)) state.selected = sorted[0] ? sorted[0].id : null;
     renderTable(sorted);
     renderDetail(sorted);
