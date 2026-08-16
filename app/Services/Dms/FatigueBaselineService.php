@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services\Dms;
 
+use App\Services\PraOperasi\PraOperasiDmsAlertReader;
+use App\Services\PraOperasi\PraOperasiFatigueCheckReader;
+use App\Services\PraOperasi\PraOperasiPvtStatusReader;
 use Illuminate\Support\Carbon;
 use Throwable;
 
@@ -26,8 +29,20 @@ final class FatigueBaselineService
     /** Berapa banyak yang benar-benar ditampilkan di watchlist, dari yang PALING berisiko. */
     private const DISPLAY_LIMIT = 150;
 
+    /** Window riwayat Fatigue Check & PVT yang ditampilkan di panel detail operator. */
+    private const DETAIL_HISTORY_DAYS = 14;
+
+    private const PVT_HISTORY_DAYS = 30;
+
+    private const ALERT_TIMELINE_DAYS = 30;
+
+    private const ALERT_TIMELINE_LIMIT = 50;
+
     public function __construct(
         private readonly FatigueBaselineDataReader $reader,
+        private readonly PraOperasiFatigueCheckReader $fatigueCheckReader,
+        private readonly PraOperasiPvtStatusReader $pvtReader,
+        private readonly PraOperasiDmsAlertReader $dmsAlertReader,
     ) {}
 
     /**
@@ -140,6 +155,36 @@ final class FatigueBaselineService
                 'shownCount' => count($displayed),
                 'truncated' => $totalCandidates > count($displayed),
                 'params' => $params,
+            ];
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        }
+    }
+
+    /**
+     * Detail on-demand SATU operator (dipanggil saat baris watchlist diklik,
+     * bukan untuk semua operator sekaligus) — statistik Fatigue Check
+     * (Fit to Work), status PVT, dan riwayat alert individual. Melengkapi
+     * baseline/prediksi alert yang sudah dihitung di dashboard() dengan
+     * konteks pemeriksaan pra-shift operator itu sendiri.
+     *
+     * @return array{
+     *     fatigueCheckHistory: list<array{date:string, kesiapan_score:int|null, tier:string|null, hasil_sobriety_test:string, kondisi_karyawan:string, tindakan_unfit:string, jumlah_jam_tidur:string, checked_at:string}>,
+     *     pvtHistory: list<array{date:string, status:string, mean_rt_ms:int|null, lapses:int|null, evaluation_label:string, tested_at:string}>,
+     *     alertTimeline: list<array{date:string, name:string, status:string}>
+     * }
+     */
+    public function operatorDetail(string $sid, string $date): array
+    {
+        $empty = ['fatigueCheckHistory' => [], 'pvtHistory' => [], 'alertTimeline' => []];
+
+        try {
+            return [
+                'fatigueCheckHistory' => $this->fatigueCheckReader->detailHistoryForSid($sid, $date, self::DETAIL_HISTORY_DAYS),
+                'pvtHistory' => $this->pvtReader->historyForSid($sid, $date, self::PVT_HISTORY_DAYS),
+                'alertTimeline' => $this->dmsAlertReader->alertTimelineForSid($sid, $date, self::ALERT_TIMELINE_DAYS, self::ALERT_TIMELINE_LIMIT),
             ];
         } catch (Throwable $e) {
             report($e);

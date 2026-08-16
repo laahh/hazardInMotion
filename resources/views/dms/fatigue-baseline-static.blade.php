@@ -133,7 +133,22 @@
           Garis putus-putus ungu = EWMA (&alpha;={{ $params['alpha'] }}).
         </p>
 
-        <div class="mt-16" id="fmDetailRecommend"></div>
+        <div class="mt-16 mb-24" id="fmDetailRecommend"></div>
+
+        <div class="mb-24">
+          <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Statistik Fatigue Check (14 Hari &mdash; Sobriety, Kondisi, Jam Tidur)</h6>
+          <div id="fmDetailFatigueCheck"></div>
+        </div>
+
+        <div class="mb-24">
+          <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Statistik PVT (30 Hari)</h6>
+          <div id="fmDetailPvt" class="d-flex flex-column gap-2" style="max-height:220px;overflow-y:auto"></div>
+        </div>
+
+        <div>
+          <h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Riwayat Alert DMS (30 Hari)</h6>
+          <div id="fmDetailAlertTimeline" class="d-flex flex-column gap-2" style="max-height:300px;overflow-y:auto"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -197,6 +212,26 @@
 
   const SITES = ['ALL', ...Array.from(new Set(OPERATORS.map(o=>o.site))).sort()];
   const state = { site:'ALL', predBucket:null, selected: OPERATORS[0].id };
+
+  const detailUrlBase = @json(url('/dms/fatigue-baseline-static/operator'));
+  const detailCache = {};
+  let lastDetailSid = null;
+
+  const FC_TIER_META = {
+    hijau: { label:'Hijau', badge:'bg-success-focus text-success-main' },
+    kuning: { label:'Kuning', badge:'bg-warning-focus text-warning-main' },
+    merah: { label:'Merah', badge:'bg-danger-focus text-danger-main' }
+  };
+  const PVT_STATUS_META = {
+    lulus: { label:'Lulus', cls:'bg-success-focus text-success-main' },
+    tidak_lulus: { label:'Tidak Lulus', cls:'bg-danger-focus text-danger-main' },
+    belum: { label:'Belum Tes', cls:'bg-neutral-200 text-neutral-600' }
+  };
+  const ALERT_STATUS_META = {
+    nyata: { label:'True Alert', cls:'bg-success-focus text-success-main' },
+    palsu: { label:'False Alert', cls:'bg-neutral-200 text-neutral-600' },
+    belum: { label:'Belum Diperiksa', cls:'bg-warning-focus text-warning-main' }
+  };
 
   function escapeHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -297,6 +332,10 @@
     if(!op){
       idEl.textContent=''; nameEl.textContent='Tidak ada operator terpilih'; tagsEl.innerHTML=''; riskEl.innerHTML='';
       statsEl.innerHTML=''; recEl.innerHTML=''; predEl.innerHTML='';
+      document.getElementById('fmDetailFatigueCheck').innerHTML='';
+      document.getElementById('fmDetailPvt').innerHTML='';
+      document.getElementById('fmDetailAlertTimeline').innerHTML='';
+      lastDetailSid = null;
       if(chart){ chart.destroy(); chart=null; }
       return;
     }
@@ -329,6 +368,113 @@
     </div>`;
 
     renderChart(op);
+
+    if (lastDetailSid !== op.id) {
+      lastDetailSid = op.id;
+      var untilDate = op.dates[op.dates.length - 1];
+      fetchOperatorDetail(op.id, untilDate);
+    }
+  }
+
+  /* ---- statistik fatigue check / pvt / riwayat alert (on-demand per operator) ---- */
+  function loadingPlaceholder(containerId){
+    document.getElementById(containerId).innerHTML = '<div class="text-center text-secondary-light py-16"><div class="spinner-border spinner-border-sm text-primary-600" role="status"></div></div>';
+  }
+
+  function renderFatigueCheckHistory(list){
+    var el = document.getElementById('fmDetailFatigueCheck');
+    if (!list.length) {
+      el.innerHTML = '<div class="text-secondary-light text-sm text-center py-8">Belum ada pengecekan Fatigue Test 14 hari terakhir.</div>';
+      return;
+    }
+    var accordionId = 'fmFatigueAccordion';
+    el.innerHTML = '<div class="accordion" id="' + accordionId + '">' + list.map(function(day, idx){
+      var itemId = accordionId + idx;
+      var tm = day.tier ? FC_TIER_META[day.tier] : null;
+      var tierText = tm ? tm.label : 'Belum Tes';
+      var badgeCls = tm ? tm.badge : 'bg-neutral-200 text-neutral-600';
+      var rows = [
+        ['Skor Kesiapan', day.kesiapan_score !== null ? day.kesiapan_score + '/10' : '-'],
+        ['Hasil Tes Sobriety (Alkohol)', day.hasil_sobriety_test || '-'],
+        ['Kondisi Karyawan', day.kondisi_karyawan || '-'],
+        ['Jumlah Jam Tidur', day.jumlah_jam_tidur || '-'],
+        ['Tindakan Unfit', day.tindakan_unfit || '-'],
+        ['Waktu Pemeriksaan', day.checked_at || '-']
+      ];
+      return '<div class="accordion-item">' +
+        '<h2 class="accordion-header"><button class="accordion-button ' + (idx===0?'':'collapsed') + ' text-sm py-8 px-12" type="button" data-bs-toggle="collapse" data-bs-target="#' + itemId + '">' +
+          '<span class="flex-grow-1">' + escapeHtml(day.date) + '</span>' +
+          '<span class="' + badgeCls + ' px-8 py-2 rounded-pill text-xs fw-medium ms-8">' + escapeHtml(tierText) + '</span>' +
+        '</button></h2>' +
+        '<div id="' + itemId + '" class="accordion-collapse collapse ' + (idx===0?'show':'') + '" data-bs-parent="#' + accordionId + '">' +
+          '<div class="accordion-body py-8 px-12">' +
+            rows.map(function(r){
+              return '<div class="d-flex justify-content-between text-sm py-4 border-bottom"><span class="text-secondary-light">' + escapeHtml(r[0]) + '</span><span class="fw-medium text-end" style="max-width:60%">' + escapeHtml(r[1]) + '</span></div>';
+            }).join('') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+  }
+
+  function renderPvtHistory(list){
+    var el = document.getElementById('fmDetailPvt');
+    if (!list.length) {
+      el.innerHTML = '<div class="text-secondary-light text-sm text-center py-16">Tidak ada riwayat PVT pada 30 hari terakhir.</div>';
+      return;
+    }
+    el.innerHTML = list.map(function(p){
+      var meta = PVT_STATUS_META[p.status] || PVT_STATUS_META.belum;
+      return '<div class="d-flex align-items-center justify-content-between border rounded-8 px-12 py-8">' +
+        '<div><div class="text-sm fw-medium">' + escapeHtml(p.tested_at) + '</div>' +
+        (p.mean_rt_ms !== null ? '<div class="text-xs text-secondary-light">Mean RT ' + p.mean_rt_ms + 'ms &middot; Lapses ' + (p.lapses !== null ? p.lapses : '-') + '</div>' : '') + '</div>' +
+        '<span class="' + meta.cls + ' px-10 py-4 rounded-pill fw-medium text-xs">' + meta.label + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  function renderAlertTimeline(list){
+    var el = document.getElementById('fmDetailAlertTimeline');
+    if (!list.length) {
+      el.innerHTML = '<div class="text-secondary-light text-sm text-center py-16">Tidak ada alert fatigue pada 30 hari terakhir.</div>';
+      return;
+    }
+    el.innerHTML = list.map(function(a){
+      var meta = ALERT_STATUS_META[a.status] || ALERT_STATUS_META.belum;
+      return '<div class="d-flex align-items-center justify-content-between border rounded-8 px-12 py-8">' +
+        '<div><div class="text-sm fw-medium">' + escapeHtml(a.name) + '</div><div class="text-xs text-secondary-light">' + escapeHtml(a.date) + '</div></div>' +
+        '<span class="' + meta.cls + ' px-10 py-4 rounded-pill fw-medium text-xs">' + meta.label + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  function fetchOperatorDetail(sid, date){
+    if (detailCache[sid]) {
+      var cached = detailCache[sid];
+      renderFatigueCheckHistory(cached.fatigueCheckHistory || []);
+      renderPvtHistory(cached.pvtHistory || []);
+      renderAlertTimeline(cached.alertTimeline || []);
+      return;
+    }
+    loadingPlaceholder('fmDetailFatigueCheck');
+    loadingPlaceholder('fmDetailPvt');
+    loadingPlaceholder('fmDetailAlertTimeline');
+    fetch(detailUrlBase + '/' + encodeURIComponent(sid) + '?date=' + encodeURIComponent(date))
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        detailCache[sid] = data;
+        if (state.selected !== sid) return; // pengguna sudah pindah baris sebelum fetch selesai
+        renderFatigueCheckHistory(data.fatigueCheckHistory || []);
+        renderPvtHistory(data.pvtHistory || []);
+        renderAlertTimeline(data.alertTimeline || []);
+      })
+      .catch(function(){
+        if (state.selected !== sid) return;
+        var msg = '<div class="text-danger-600 text-sm text-center py-8">Gagal memuat.</div>';
+        document.getElementById('fmDetailFatigueCheck').innerHTML = msg;
+        document.getElementById('fmDetailPvt').innerHTML = msg;
+        document.getElementById('fmDetailAlertTimeline').innerHTML = msg;
+      });
   }
 
   function renderChart(op){

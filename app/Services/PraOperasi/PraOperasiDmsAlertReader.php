@@ -352,4 +352,77 @@ final class PraOperasiDmsAlertReader
             return $out;
         });
     }
+
+    /**
+     * Riwayat alert individual (bukan agregat harian) untuk SATU SID selama
+     * N hari terakhir — dipakai panel detail operator (mis. fatigue-baseline
+     * dashboard) untuk menelusuri kronologi kejadian, bukan cuma jumlahnya.
+     *
+     * @return list<array{date:string, name:string, status:string}>  terbaru dulu
+     */
+    public function alertTimelineForSid(string $kodeSid, string $untilDate, int $days = 30, int $limit = 50): array
+    {
+        if (! $this->isUp()) {
+            return [];
+        }
+
+        $upper = mb_strtoupper(trim($kodeSid));
+        if ($upper === '') {
+            return [];
+        }
+
+        $cacheKey = 'pra_operasi:dms_alert_timeline:v1:'.$untilDate.':'.$days.':'.$upper.':'.$limit;
+
+        return Cache::remember($cacheKey, 300, function () use ($upper, $untilDate, $days, $limit): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $tz = (string) config('app.timezone');
+            $end = Carbon::parse($untilDate, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+            $start = Carbon::parse($untilDate, $tz)->startOfDay()->subDays($days)->format('Y-m-d H:i:s');
+            $namePlaceholders = implode(',', array_fill(0, count(self::FATIGUE_ALERT_NAMES), '?'));
+
+            $sql = '
+                SELECT waktu_deteksi, nama_pelanggaran, l1_model_status, sudah_direview_l1
+                FROM bcsid.mv_dms_alert
+                WHERE UPPER(TRIM(kode_sid)) = ?
+                  AND nama_pelanggaran IN ('.$namePlaceholders.')
+                  AND waktu_deteksi >= ? AND waktu_deteksi < ?
+                ORDER BY waktu_deteksi DESC
+                LIMIT ?
+            ';
+
+            try {
+                $rows = DB::connection($connection)->select(
+                    $sql,
+                    array_merge([$upper], self::FATIGUE_ALERT_NAMES, [$start, $end, $limit])
+                );
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            $out = [];
+            foreach ($rows as $row) {
+                $reviewed = (bool) ($row->sudah_direview_l1 ?? false);
+                $status = ! $reviewed ? 'belum' : (((bool) $row->l1_model_status) ? 'nyata' : 'palsu');
+
+                $waktu = $row->waktu_deteksi ?? null;
+                $tanggal = $waktu instanceof \DateTimeInterface
+                    ? Carbon::instance($waktu)->timezone($tz)->format('Y-m-d H:i')
+                    : (string) $waktu;
+
+                $out[] = [
+                    'date' => $tanggal,
+                    'name' => trim((string) ($row->nama_pelanggaran ?? '')),
+                    'status' => $status,
+                ];
+            }
+
+            return $out;
+        });
+    }
 }
