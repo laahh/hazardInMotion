@@ -17,7 +17,17 @@ final class SportEvaluationPvtDashboardService
 {
     private const CACHE_TTL = 45;
 
+    /**
+     * Chart 7-hari itu data HISTORIS, tidak perlu sesegar cohort "hari ini" —
+     * cache lebih lama supaya query berat (rentang multi-hari) tidak diulang
+     * tiap 45 detik di bawah traffic nyata.
+     */
+    private const CHART_CACHE_TTL = 600;
+
     private const PVT_STATUSES = ['belum', 'lulus', 'tidak_lulus'];
+
+    /** @var array<string, list<array{id:int,nama:string,kode_sid:string,site:string,company:string,jabatan:string}>> */
+    private array $operatorsMemo = [];
 
     public function __construct(
         private readonly BewellConnectionService $bewell,
@@ -349,11 +359,21 @@ final class SportEvaluationPvtDashboardService
     }
 
     /**
+     * Daftar operator TIDAK bergantung pada 'date' atau 'pvt_status' (hanya
+     * site/company yang memengaruhi query) — dashboard() memanggil ini dari
+     * cohortRows() dan checkinChart() dengan hasil yang pasti identik, jadi
+     * di-memoize per request supaya query BeWell ini tidak dobel tiap load.
+     *
      * @param  array{date:string,site:string,company:string,pvt_status:string}  $filters
      * @return list<array{id:int,nama:string,kode_sid:string,site:string,company:string,jabatan:string}>
      */
     private function loadOperators(array $filters): array
     {
+        $memoKey = $filters['site'].'|'.$filters['company'];
+        if (isset($this->operatorsMemo[$memoKey])) {
+            return $this->operatorsMemo[$memoKey];
+        }
+
         $query = DB::connection(BewellConnectionService::CONNECTION)
             ->table('employee_profiles as e')
             ->select([
@@ -419,7 +439,7 @@ final class SportEvaluationPvtDashboardService
             ];
         }
 
-        return array_values($operators);
+        return $this->operatorsMemo[$memoKey] = array_values($operators);
     }
 
     /**
@@ -884,7 +904,7 @@ final class SportEvaluationPvtDashboardService
         ], JSON_THROW_ON_ERROR));
 
         /** @var array{categories: list<string>, dates: list<string>, checkin: list<int>, lulus: list<int>, tidak_lulus: list<int>, belum: list<int>, pct_sudah: list<float>} */
-        return Cache::remember($cacheKey, self::CACHE_TTL, fn (): array => $this->buildCheckinChart($filters));
+        return Cache::remember($cacheKey, self::CHART_CACHE_TTL, fn (): array => $this->buildCheckinChart($filters));
     }
 
     /**

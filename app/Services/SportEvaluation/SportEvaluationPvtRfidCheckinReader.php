@@ -232,9 +232,17 @@ final class SportEvaluationPvtRfidCheckinReader
         $start = Carbon::parse($fromDate, $tz)->startOfDay()->format('Y-m-d H:i:s');
         $end = Carbon::parse($toDateInclusive, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
 
+        // Dedup PERTAMA-PER-HARI-PER-SID didorong ke SQL (DISTINCT ON) alih-alih
+        // ambil SEMUA baris mentah lalu buang sebagian besar di PHP — untuk
+        // rentang 7 hari, tabel ini bisa punya 100 ribu+ baris mentah (setiap
+        // scan gate, termasuk yang gagal/berulang), padahal yang benar-benar
+        // dipakai cuma satu baris per (hari, SID). Ditambah lagi query lama ini
+        // TANPA dedup SQL menjadi jauh lebih berat sejak koneksi langsung ke
+        // RDS (tanpa tunnel) — transfer data sebesar itu lewat jalur langsung
+        // adalah kandidat kuat penyebab timeout/koneksi putus di tengah jalan.
         $byDay = [];
         foreach (array_chunk(array_keys($normalized), self::SID_CHUNK) as $chunk) {
-            foreach ($this->queryChunk($start, $end, $chunk, false) as $row) {
+            foreach ($this->queryChunk($start, $end, $chunk, false, firstPerDayPerSid: true) as $row) {
                 $day = substr($row['checked_in_at'], 0, 10);
                 if ($day === '') {
                     continue;
@@ -308,7 +316,7 @@ final class SportEvaluationPvtRfidCheckinReader
      *     status_lolos: string
      * }>
      */
-    private function queryChunk(string $start, string $end, array $upperSids, bool $firstPerSidOnly, ?array $types = null, string $direction = 'ASC'): array
+    private function queryChunk(string $start, string $end, array $upperSids, bool $firstPerSidOnly, ?array $types = null, string $direction = 'ASC', bool $firstPerDayPerSid = false): array
     {
         $types ??= self::CHECKIN_TYPES;
         $direction = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
@@ -322,12 +330,19 @@ final class SportEvaluationPvtRfidCheckinReader
         );
         $compactPlaceholders = implode(',', array_fill(0, count($compactTypes), '?'));
 
-        $selectHead = $firstPerSidOnly
-            ? 'SELECT DISTINCT ON (UPPER(TRIM(kode_sid)))'
-            : 'SELECT';
-        $orderBy = $firstPerSidOnly
-            ? 'ORDER BY UPPER(TRIM(kode_sid)), tanggal_checkinout '.$direction
-            : 'ORDER BY tanggal_checkinout '.$direction;
+        if ($firstPerDayPerSid) {
+            // Rentang multi-hari (mis. chart 7 hari terakhir): dedup ke SATU
+            // baris per (tanggal, SID) langsung di database, bukan ambil semua
+            // baris mentah lalu dibuang di PHP — lihat catatan pemanggil.
+            $selectHead = 'SELECT DISTINCT ON (date(tanggal_checkinout), UPPER(TRIM(kode_sid)))';
+            $orderBy = 'ORDER BY date(tanggal_checkinout), UPPER(TRIM(kode_sid)), tanggal_checkinout '.$direction;
+        } elseif ($firstPerSidOnly) {
+            $selectHead = 'SELECT DISTINCT ON (UPPER(TRIM(kode_sid)))';
+            $orderBy = 'ORDER BY UPPER(TRIM(kode_sid)), tanggal_checkinout '.$direction;
+        } else {
+            $selectHead = 'SELECT';
+            $orderBy = 'ORDER BY tanggal_checkinout '.$direction;
+        }
 
         $sql = '
             '.$selectHead.'
