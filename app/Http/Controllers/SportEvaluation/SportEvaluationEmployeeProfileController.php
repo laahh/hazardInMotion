@@ -196,14 +196,15 @@ final class SportEvaluationEmployeeProfileController extends Controller
 
     public function syncFromHse(): RedirectResponse
     {
+        $apiKey = trim((string) config('services.evaluasi_well_hse.api_key', ''));
         $username = trim((string) config('services.evaluasi_well_hse.username', ''));
         $password = (string) config('services.evaluasi_well_hse.password', '');
 
-        if ($username === '' || $password === '') {
+        if ($apiKey === '' && ($username === '' || $password === '')) {
             return redirect()
                 ->route('evaluasi-well.users.index')
                 ->withErrors([
-                    'form' => 'Kredensial HSE belum diisi di .env (EVALUASI_WELL_HSE_USERNAME / EVALUASI_WELL_HSE_PASSWORD).',
+                    'form' => 'Kredensial HSE belum diisi di .env. Isi EVALUASI_WELL_HSE_API_KEY atau fallback legacy EVALUASI_WELL_HSE_USERNAME / EVALUASI_WELL_HSE_PASSWORD.',
                 ]);
         }
 

@@ -76,6 +76,7 @@ return [
     'evaluasi_well_hse' => [
         'base_url' => env('EVALUASI_WELL_HSE_BASE_URL', 'https://hseautomation.beraucoal.co.id'),
         'login_path' => env('EVALUASI_WELL_HSE_LOGIN_PATH', '/beats/api/mobile/login'),
+        'api_key' => env('EVALUASI_WELL_HSE_API_KEY'),
         'username' => env('EVALUASI_WELL_HSE_USERNAME'),
         'password' => env('EVALUASI_WELL_HSE_PASSWORD'),
         'company_page_size' => (int) env('EVALUASI_WELL_HSE_COMPANY_SIZE', 1000),

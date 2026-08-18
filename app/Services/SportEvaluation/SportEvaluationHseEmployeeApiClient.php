@@ -10,22 +10,31 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Client HTTP ke HSE Automation (Beats login + SID2 employee API).
+ * Client HTTP ke HSE Automation (API key statis atau login Beats legacy).
  */
 final class SportEvaluationHseEmployeeApiClient
 {
     private const DETAIL_EXPAND = 'employee.functionalPosition,employee.structuralPosition,employee.department,employee.company,dedicatedSite,employee.status,identities,competencies,licences';
 
     /**
-     * Login Beats → token untuk header x-api-key.
+     * Ambil token untuk header x-api-key.
+     *
+     * Prioritas:
+     * 1. API key statis dari env
+     * 2. Login Beats legacy
      */
     public function login(): string
     {
+        $apiKey = trim((string) config('services.evaluasi_well_hse.api_key', ''));
+        if ($apiKey !== '') {
+            return $apiKey;
+        }
+
         $username = trim((string) config('services.evaluasi_well_hse.username', ''));
         $password = (string) config('services.evaluasi_well_hse.password', '');
 
         if ($username === '' || $password === '') {
-            throw new RuntimeException('Kredensial HSE belum dikonfigurasi (EVALUASI_WELL_HSE_USERNAME / PASSWORD).');
+            throw new RuntimeException('Kredensial HSE belum dikonfigurasi. Isi EVALUASI_WELL_HSE_API_KEY atau fallback legacy EVALUASI_WELL_HSE_USERNAME / EVALUASI_WELL_HSE_PASSWORD.');
         }
 
         $url = $this->url((string) config('services.evaluasi_well_hse.login_path', '/beats/api/mobile/login'));

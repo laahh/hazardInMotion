@@ -54,6 +54,12 @@
           <span>Evaluasi Harian</span>
         </a>
       </li>
+      <li>
+        <a href="{{ route('pra-operasi.dms-monitoring') }}" class="{{ request()->routeIs('pra-operasi.dms-monitoring*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:shield-warning-outline" class="menu-icon"></iconify-icon>
+          <span>Monitoring Alert DMS</span>
+        </a>
+      </li>
       <li class="sidebar-menu-group-title">Navigasi</li>
       <li>
         <a href="{{ url('/') }}">

@@ -767,6 +767,12 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         Route::get('/saat-operasi/data', [\App\Http\Controllers\PraOperasi\PraOperasiLiveController::class, 'data'])->name('saat-operasi.data');
         Route::post('/saat-operasi/tindak-lanjut', [\App\Http\Controllers\PraOperasi\PraOperasiLiveController::class, 'tindakLanjut'])->name('saat-operasi.tindak-lanjut');
         Route::get('/evaluasi-harian/export', [\App\Http\Controllers\PraOperasi\PraOperasiEvaluationController::class, 'export'])->name('evaluasi-harian.export');
+
+        // Monitoring alert DMS L1/L2 (bukan Fatigue Test) — kuadran, rasio per unit/orang,
+        // funnel layer vs RFID, Post Event, sampling QA false negative (Slovin), performa control room.
+        Route::get('/dashboard', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'index'])->name('dms-monitoring');
+        Route::post('/dashboard/qa-sample/generate', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'generateQaSample'])->name('dms-monitoring.qa-sample.generate');
+        Route::post('/dashboard/qa-sample/verdict', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'submitQaVerdict'])->name('dms-monitoring.qa-sample.verdict');
     });
 
     // Route modul VALIDASI TBC & Score Card
