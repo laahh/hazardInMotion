@@ -11,8 +11,10 @@ use Throwable;
 
 /**
  * Pembaca read-only check-IN lolos dari bcsid.mv_checkinout_rfid.
- * Koneksi: tunnel pgsql_ssh (PG_SSH_HOST:PG_SSH_LOCAL_PORT), fallback PG_HOST:PG_PORT
- * dengan kredensial PG_SSH_DATABASE / PG_SSH_USER / PG_SSH_PASSWORD.
+ * Koneksi: LANGSUNG ke RDS (PG_HOST:PG_PORT) dengan kredensial
+ * PG_SSH_DATABASE / PG_SSH_USER / PG_SSH_PASSWORD — tunnel SSH/jump host
+ * (pgsql_ssh) sengaja TIDAK dipakai lagi atas permintaan eksplisit (tunnel
+ * di server tidak selalu aktif, langsung akses RDS lebih andal).
  */
 final class SportEvaluationPvtRfidCheckinReader
 {
@@ -75,7 +77,8 @@ final class SportEvaluationPvtRfidCheckinReader
     }
 
     /**
-     * Nama koneksi hidup: tunnel dulu, lalu direct RDS.
+     * Nama koneksi hidup: LANGSUNG ke RDS saja (tunnel/jump host sengaja
+     * dilewati — lihat catatan kelas di atas).
      */
     public function connectionName(): ?string
     {
@@ -85,20 +88,11 @@ final class SportEvaluationPvtRfidCheckinReader
 
         try {
             $cached = Cache::remember(self::UP_CACHE_KEY, self::UP_CACHE_TTL, function (): string {
-                if ($this->ping(self::CONNECTION_TUNNEL)) {
-                    return self::CONNECTION_TUNNEL;
-                }
-                if ($this->ping(self::CONNECTION_DIRECT)) {
-                    return self::CONNECTION_DIRECT;
-                }
-
-                return '';
+                return $this->ping(self::CONNECTION_DIRECT) ? self::CONNECTION_DIRECT : '';
             });
         } catch (Throwable $e) {
             report($e);
-            $cached = $this->ping(self::CONNECTION_TUNNEL)
-                ? self::CONNECTION_TUNNEL
-                : ($this->ping(self::CONNECTION_DIRECT) ? self::CONNECTION_DIRECT : '');
+            $cached = $this->ping(self::CONNECTION_DIRECT) ? self::CONNECTION_DIRECT : '';
         }
 
         $this->activeConnection = is_string($cached) ? $cached : '';
