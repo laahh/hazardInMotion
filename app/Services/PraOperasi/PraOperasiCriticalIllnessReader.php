@@ -20,8 +20,6 @@ use Throwable;
  */
 final class PraOperasiCriticalIllnessReader
 {
-    private const SID_CHUNK = 300;
-
     private const SENTINEL_FLOOR = '2020-01-01';
 
     public function __construct(
@@ -59,33 +57,38 @@ final class PraOperasiCriticalIllnessReader
                 return [];
             }
 
+            // Satu query TANPA chunk untuk KEDUA sub-query di bawah —
+            // bcsid.clean_data_fatigue_check adalah foreign table (FDW) yang
+            // dicek langsung via EXPLAIN: filter apa pun (UPPER(TRIM(sid))
+            // IN (...), regex, perbandingan tanggal) TIDAK push-down ke sisi
+            // remote, jadi cost-nya flat ~65-90rb terlepas dari jumlah SID.
+            // Chunking di sini mengalikan beban itu per chunk — akar penyebab
+            // 504 Gateway Timeout di /pra-operasi.
             $confirmedBySid = [];
-            foreach (array_chunk($upperSids, self::SID_CHUNK) as $chunk) {
-                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-                $sql = "
-                    SELECT UPPER(TRIM(sid)) AS sid, max(tanggal_terkonfirmasi_penyakit_kritis) AS tgl_konfirmasi
-                    FROM bcsid.clean_data_fatigue_check
-                    WHERE UPPER(TRIM(sid)) IN ({$placeholders})
-                      AND tanggal_terkonfirmasi_penyakit_kritis ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                      AND tanggal_terkonfirmasi_penyakit_kritis::date >= ?
-                      AND tanggal_terkonfirmasi_penyakit_kritis::date <= ?
-                    GROUP BY UPPER(TRIM(sid))
-                ";
+            $placeholders = implode(',', array_fill(0, count($upperSids), '?'));
+            $sql = "
+                SELECT UPPER(TRIM(sid)) AS sid, max(tanggal_terkonfirmasi_penyakit_kritis) AS tgl_konfirmasi
+                FROM bcsid.clean_data_fatigue_check
+                WHERE UPPER(TRIM(sid)) IN ({$placeholders})
+                  AND tanggal_terkonfirmasi_penyakit_kritis ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                  AND tanggal_terkonfirmasi_penyakit_kritis::date >= ?
+                  AND tanggal_terkonfirmasi_penyakit_kritis::date <= ?
+                GROUP BY UPPER(TRIM(sid))
+            ";
 
-                try {
-                    $rows = DB::connection($connection)->select($sql, array_merge($chunk, [self::SENTINEL_FLOOR, $untilDate]));
-                } catch (Throwable $e) {
-                    report($e);
+            try {
+                $rows = DB::connection($connection)->select($sql, array_merge($upperSids, [self::SENTINEL_FLOOR, $untilDate]));
+            } catch (Throwable $e) {
+                report($e);
+                $rows = [];
+            }
+
+            foreach ($rows as $row) {
+                $sid = trim((string) ($row->sid ?? ''));
+                if ($sid === '') {
                     continue;
                 }
-
-                foreach ($rows as $row) {
-                    $sid = trim((string) ($row->sid ?? ''));
-                    if ($sid === '') {
-                        continue;
-                    }
-                    $confirmedBySid[$sid] = (string) $row->tgl_konfirmasi;
-                }
+                $confirmedBySid[$sid] = (string) $row->tgl_konfirmasi;
             }
 
             if ($confirmedBySid === []) {
@@ -94,30 +97,29 @@ final class PraOperasiCriticalIllnessReader
 
             // Follow-up: ada baris Fatigue Test dengan tanggal_pemeriksaan SETELAH tanggal konfirmasi.
             $followUpBySid = [];
-            foreach (array_chunk(array_keys($confirmedBySid), self::SID_CHUNK) as $chunk) {
-                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-                $sql = "
-                    SELECT UPPER(TRIM(sid)) AS sid, max(tanggal_pemeriksaan) AS tgl_terakhir
-                    FROM bcsid.clean_data_fatigue_check
-                    WHERE UPPER(TRIM(sid)) IN ({$placeholders})
-                      AND tanggal_pemeriksaan <= ?
-                    GROUP BY UPPER(TRIM(sid))
-                ";
+            $confirmedSids = array_keys($confirmedBySid);
+            $followUpPlaceholders = implode(',', array_fill(0, count($confirmedSids), '?'));
+            $followUpSql = "
+                SELECT UPPER(TRIM(sid)) AS sid, max(tanggal_pemeriksaan) AS tgl_terakhir
+                FROM bcsid.clean_data_fatigue_check
+                WHERE UPPER(TRIM(sid)) IN ({$followUpPlaceholders})
+                  AND tanggal_pemeriksaan <= ?
+                GROUP BY UPPER(TRIM(sid))
+            ";
 
-                try {
-                    $rows = DB::connection($connection)->select($sql, array_merge($chunk, [$untilDate]));
-                } catch (Throwable $e) {
-                    report($e);
+            try {
+                $followUpRows = DB::connection($connection)->select($followUpSql, array_merge($confirmedSids, [$untilDate]));
+            } catch (Throwable $e) {
+                report($e);
+                $followUpRows = [];
+            }
+
+            foreach ($followUpRows as $row) {
+                $sid = trim((string) ($row->sid ?? ''));
+                if ($sid === '') {
                     continue;
                 }
-
-                foreach ($rows as $row) {
-                    $sid = trim((string) ($row->sid ?? ''));
-                    if ($sid === '') {
-                        continue;
-                    }
-                    $followUpBySid[$sid] = (string) $row->tgl_terakhir;
-                }
+                $followUpBySid[$sid] = (string) $row->tgl_terakhir;
             }
 
             $out = [];

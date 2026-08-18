@@ -110,59 +110,68 @@ final class PraOperasiFatigueCheckReader
                 return [];
             }
 
-            $merged = [];
-            foreach (array_chunk($upperSids, self::SID_CHUNK) as $chunk) {
-                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-                $sql = '
-                    SELECT
-                        TRIM(sid) AS sid,
-                        kesiapan_bekerja_fisik_dan_mental,
-                        hasil_sobriety_test,
-                        kondisi_karyawan,
-                        tindakan_unfit,
-                        jumlah_jam_tidur,
-                        tanggal_pemeriksaan,
-                        jam_pemeriksaan,
-                        uploaded_at,
-                        hari_ke,
-                        shift
-                    FROM bcsid.clean_data_fatigue_check
-                    WHERE tanggal_pemeriksaan = ?
-                      AND sid IS NOT NULL
-                      AND UPPER(TRIM(sid)) IN ('.$placeholders.')
-                    ORDER BY uploaded_at ASC
-                ';
+            // SENGAJA satu query TANPA di-chunk: bcsid.clean_data_fatigue_check
+            // adalah foreign table (FDW) yang TIDAK bisa push-down filter apa pun
+            // (UPPER(TRIM(sid)) IN (...), regex, bahkan tanggal_pemeriksaan = ?) —
+            // dicek langsung lewat EXPLAIN, cost-nya tetap ~65-90rb terlepas dari
+            // selektivitas filter (1 SID maupun 3000 SID sama saja, karena FDW-nya
+            // scan penuh sisi remote). Artinya chunking di sini BUKAN mengurangi
+            // beban per query, tapi malah MENGALIKAN beban itu sebanyak jumlah
+            // chunk — inilah penyebab 504. Satu query untuk SEMUA SID sekaligus
+            // (placeholder ratusan/ribuan tidak masalah untuk Postgres) memangkas
+            // beban total sebanyak jumlah chunk yang sebelumnya dijalankan.
+            $placeholders = implode(',', array_fill(0, count($upperSids), '?'));
+            $sql = '
+                SELECT
+                    TRIM(sid) AS sid,
+                    kesiapan_bekerja_fisik_dan_mental,
+                    hasil_sobriety_test,
+                    kondisi_karyawan,
+                    tindakan_unfit,
+                    jumlah_jam_tidur,
+                    tanggal_pemeriksaan,
+                    jam_pemeriksaan,
+                    uploaded_at,
+                    hari_ke,
+                    shift
+                FROM bcsid.clean_data_fatigue_check
+                WHERE tanggal_pemeriksaan = ?
+                  AND sid IS NOT NULL
+                  AND UPPER(TRIM(sid)) IN ('.$placeholders.')
+                ORDER BY uploaded_at ASC
+            ';
 
-                try {
-                    $rows = DB::connection($connection)->select($sql, array_merge([$date], $chunk));
-                } catch (Throwable $e) {
-                    report($e);
+            try {
+                $rows = DB::connection($connection)->select($sql, array_merge([$date], $upperSids));
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            $merged = [];
+            foreach ($rows as $row) {
+                $sid = mb_strtoupper(trim((string) ($row->sid ?? '')));
+                if ($sid === '') {
                     continue;
                 }
 
-                foreach ($rows as $row) {
-                    $sid = mb_strtoupper(trim((string) ($row->sid ?? '')));
-                    if ($sid === '') {
-                        continue;
-                    }
+                $scoreRaw = trim((string) ($row->kesiapan_bekerja_fisik_dan_mental ?? ''));
+                $score = ctype_digit($scoreRaw) ? (int) $scoreRaw : null;
+                $hariKeRaw = trim((string) ($row->hari_ke ?? ''));
 
-                    $scoreRaw = trim((string) ($row->kesiapan_bekerja_fisik_dan_mental ?? ''));
-                    $score = ctype_digit($scoreRaw) ? (int) $scoreRaw : null;
-                    $hariKeRaw = trim((string) ($row->hari_ke ?? ''));
-
-                    // Baris terakhir (uploaded_at ASC) menang jika ada >1 submission hari itu.
-                    $merged[$sid] = [
-                        'kesiapan_score' => $score,
-                        'tier' => self::tierFromScore($score),
-                        'hasil_sobriety_test' => trim((string) ($row->hasil_sobriety_test ?? '')),
-                        'kondisi_karyawan' => trim((string) ($row->kondisi_karyawan ?? '')),
-                        'tindakan_unfit' => trim((string) ($row->tindakan_unfit ?? '')),
-                        'jumlah_jam_tidur' => trim((string) ($row->jumlah_jam_tidur ?? '')),
-                        'checked_at' => trim((string) ($row->tanggal_pemeriksaan ?? '')).' '.trim((string) ($row->jam_pemeriksaan ?? '')),
-                        'hari_ke' => ctype_digit($hariKeRaw) ? (int) $hariKeRaw : null,
-                        'shift' => self::shiftLabel(trim((string) ($row->shift ?? ''))),
-                    ];
-                }
+                // Baris terakhir (uploaded_at ASC) menang jika ada >1 submission hari itu.
+                $merged[$sid] = [
+                    'kesiapan_score' => $score,
+                    'tier' => self::tierFromScore($score),
+                    'hasil_sobriety_test' => trim((string) ($row->hasil_sobriety_test ?? '')),
+                    'kondisi_karyawan' => trim((string) ($row->kondisi_karyawan ?? '')),
+                    'tindakan_unfit' => trim((string) ($row->tindakan_unfit ?? '')),
+                    'jumlah_jam_tidur' => trim((string) ($row->jumlah_jam_tidur ?? '')),
+                    'checked_at' => trim((string) ($row->tanggal_pemeriksaan ?? '')).' '.trim((string) ($row->jam_pemeriksaan ?? '')),
+                    'hari_ke' => ctype_digit($hariKeRaw) ? (int) $hariKeRaw : null,
+                    'shift' => self::shiftLabel(trim((string) ($row->shift ?? ''))),
+                ];
             }
 
             return $merged;
@@ -201,35 +210,38 @@ final class PraOperasiFatigueCheckReader
 
             $from = \Illuminate\Support\Carbon::parse($untilDate)->subDays($days)->toDateString();
 
-            $out = [];
-            foreach (array_chunk($upperSids, self::SID_CHUNK) as $chunk) {
-                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-                $sql = "
-                    SELECT UPPER(TRIM(sid)) AS sid, tanggal_pemeriksaan, kesiapan_bekerja_fisik_dan_mental
-                    FROM bcsid.clean_data_fatigue_check
-                    WHERE UPPER(TRIM(sid)) IN ({$placeholders})
-                      AND tanggal_pemeriksaan >= ? AND tanggal_pemeriksaan <= ?
-                      AND kesiapan_bekerja_fisik_dan_mental ~ '^[0-9]+$'
-                    ORDER BY tanggal_pemeriksaan ASC
-                ";
+            // Satu query TANPA chunk — lihat catatan di statusForSidsOnDate() soal
+            // clean_data_fatigue_check (FDW) yang cost-nya flat ~65-90rb terlepas
+            // dari jumlah SID yang difilter; chunking di sini justru mengalikan
+            // beban itu, bukan menguranginya.
+            $placeholders = implode(',', array_fill(0, count($upperSids), '?'));
+            $sql = "
+                SELECT UPPER(TRIM(sid)) AS sid, tanggal_pemeriksaan, kesiapan_bekerja_fisik_dan_mental
+                FROM bcsid.clean_data_fatigue_check
+                WHERE UPPER(TRIM(sid)) IN ({$placeholders})
+                  AND tanggal_pemeriksaan >= ? AND tanggal_pemeriksaan <= ?
+                  AND kesiapan_bekerja_fisik_dan_mental ~ '^[0-9]+$'
+                ORDER BY tanggal_pemeriksaan ASC
+            ";
 
-                try {
-                    $rows = DB::connection($connection)->select($sql, array_merge($chunk, [$from, $untilDate]));
-                } catch (Throwable $e) {
-                    report($e);
+            try {
+                $rows = DB::connection($connection)->select($sql, array_merge($upperSids, [$from, $untilDate]));
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            $out = [];
+            foreach ($rows as $row) {
+                $sid = trim((string) ($row->sid ?? ''));
+                if ($sid === '') {
                     continue;
                 }
-
-                foreach ($rows as $row) {
-                    $sid = trim((string) ($row->sid ?? ''));
-                    if ($sid === '') {
-                        continue;
-                    }
-                    $out[$sid][] = [
-                        'date' => (string) $row->tanggal_pemeriksaan,
-                        'score' => (int) $row->kesiapan_bekerja_fisik_dan_mental,
-                    ];
-                }
+                $out[$sid][] = [
+                    'date' => (string) $row->tanggal_pemeriksaan,
+                    'score' => (int) $row->kesiapan_bekerja_fisik_dan_mental,
+                ];
             }
 
             return $out;
