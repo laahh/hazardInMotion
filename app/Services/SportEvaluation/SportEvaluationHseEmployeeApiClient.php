@@ -72,6 +72,12 @@ final class SportEvaluationHseEmployeeApiClient
 
         $token = $this->extractToken($json);
         if ($token === '') {
+            Log::error('HSE Automation login Beats: token tidak ditemukan di respons', [
+                'url' => $url,
+                'keys' => array_keys($json),
+                'body' => mb_substr((string) $response->body(), 0, self::ERROR_BODY_PREVIEW_LENGTH),
+            ]);
+
             throw new RuntimeException('Token tidak ditemukan di respons login Beats.');
         }
 
