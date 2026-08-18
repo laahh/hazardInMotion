@@ -109,6 +109,18 @@ final class SportEvaluationHseEmployeeSyncService
         foreach ($newSids as $index => $sid) {
             try {
                 $detail = $this->apiClient->getEmployeeDetailBySid($token, $sid);
+
+                if ($index === 0) {
+                    // Cuplikan sekali di awal sync agar asumsi nama field (mapDetailToWritable)
+                    // bisa diverifikasi terhadap bentuk respons API yang sebenarnya, bukan tebakan.
+                    $employeeSample = data_get($detail, 'employee');
+                    Log::info('evaluasi_well.hse_sync.detail_sample', [
+                        'sid' => $sid,
+                        'detail_keys' => array_keys($detail),
+                        'employee_keys' => is_array($employeeSample) ? array_keys($employeeSample) : null,
+                    ]);
+                }
+
                 $payload = $this->mapDetailToWritable($detail, $sid);
 
                 if ($payload === null) {
@@ -175,10 +187,12 @@ final class SportEvaluationHseEmployeeSyncService
     {
         $candidates = [
             data_get($row, 'sid'),
+            data_get($row, 'sidCode'),
             data_get($row, 'kodeSid'),
             data_get($row, 'kode_sid'),
             data_get($row, 'employeeSid'),
             data_get($row, 'employee.sid'),
+            data_get($row, 'employee.sidCode'),
             data_get($row, 'employee.kodeSid'),
             data_get($row, 'employee.kode_sid'),
         ];
@@ -208,7 +222,9 @@ final class SportEvaluationHseEmployeeSyncService
 
         $sid = $this->firstNonEmptyString([
             data_get($detail, 'sid'),
+            data_get($detail, 'sidCode'),
             data_get($employee, 'sid'),
+            data_get($employee, 'sidCode'),
             data_get($employee, 'kodeSid'),
             data_get($employee, 'kode_sid'),
             $fallbackSid,

@@ -310,7 +310,7 @@ final class SportEvaluationHseEmployeeApiClient
      */
     private function extractList(array $json): array
     {
-        foreach (['data', 'content', 'result', 'items', 'rows', 'list'] as $key) {
+        foreach (['results', 'data', 'content', 'result', 'items', 'rows', 'list'] as $key) {
             $value = $json[$key] ?? null;
             if (is_array($value) && array_is_list($value)) {
                 return array_values(array_filter($value, 'is_array'));
