@@ -100,8 +100,23 @@ final class SportEvaluationPvtRfidCheckinReader
         return $this->activeConnection !== '' ? $this->activeConnection : null;
     }
 
+    private const SOCKET_TIMEOUT_SECONDS = 3;
+
     private function ping(string $connection): bool
     {
+        // Cek TCP-level dulu (fsockopen, timeout pendek) SEBELUM mencoba
+        // koneksi PDO penuh. PDO::ATTR_TIMEOUT (dipakai di config/database.php)
+        // TIDAK selalu ditegakkan andal oleh driver pgsql untuk fase awal
+        // koneksi di semua kombinasi OS/versi PHP — kalau host RDS memang
+        // tidak terjangkau (mis. security group menahan paket tanpa membalas,
+        // bukan menolak), percobaan PDO bisa menggantung puluhan detik sampai
+        // akhirnya memicu 504 Gateway Timeout. fsockopen() menghormati
+        // timeout-nya secara konsisten di level socket OS, jadi kalau host
+        // tidak terjangkau, ini gagal cepat dalam hitungan detik.
+        if (! $this->isHostReachable($connection)) {
+            return false;
+        }
+
         try {
             DB::connection($connection)->select('SELECT 1');
 
@@ -109,6 +124,27 @@ final class SportEvaluationPvtRfidCheckinReader
         } catch (Throwable) {
             return false;
         }
+    }
+
+    private function isHostReachable(string $connection): bool
+    {
+        $host = config("database.connections.{$connection}.host");
+        $port = config("database.connections.{$connection}.port");
+
+        if (! is_string($host) || $host === '' || ! is_numeric($port) || (int) $port <= 0) {
+            // Konfigurasi tidak lengkap/tidak biasa — biarkan PDO yang memutuskan,
+            // bukan menganggap host tidak terjangkau begitu saja.
+            return true;
+        }
+
+        $socket = @fsockopen($host, (int) $port, $errno, $errstr, self::SOCKET_TIMEOUT_SECONDS);
+        if ($socket === false) {
+            return false;
+        }
+
+        fclose($socket);
+
+        return true;
     }
 
     /**
