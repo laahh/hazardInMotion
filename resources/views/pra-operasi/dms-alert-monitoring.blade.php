@@ -43,21 +43,25 @@
     $growth = $growth ?? ['title' => 'Alert Last 4 Week', 'subtitle' => 'Weekly Report', 'total' => '0', 'delta' => ['class' => 'bg-success-focus text-success-main', 'text' => '+0'], 'series' => [], 'labels' => []];
     $statistic = $statistic ?? [
         'title' => 'Matriks Site',
-        'subtitle' => 'Check-in vs Alert / Orang (ukuran = Total Alert)',
+        'subtitle' => 'Exposure vs Alert Intensity per Site',
         'mode' => 'quadrant',
         'total' => '0',
         'confirmed' => '0',
         'dismissed' => '0.00',
         'x_median' => 0,
         'y_median' => 0,
+        'overall' => ['checkin' => 0, 'alert' => 0, 'ratio' => 0.0],
+        'quadrants' => [],
         'points' => [],
         'series' => [],
         'labels' => [],
     ];
     $statistic['mode'] = $statistic['mode'] ?? 'quadrant';
     $statistic['points'] = $statistic['points'] ?? [];
+    $statistic['quadrants'] = $statistic['quadrants'] ?? [];
     $statistic['x_median'] = $statistic['x_median'] ?? 0;
     $statistic['y_median'] = $statistic['y_median'] ?? 0;
+    $quadrantOrder = ['q2', 'q1', 'q4', 'q3'];
     $overview = $overview ?? ['confirmed' => 0, 'dismissed' => 0, 'pending' => 0];
     $weeklyStatus = $weeklyStatus ?? ['confirmed' => [], 'pending' => [], 'dismissed' => [], 'labels' => [], 'totals' => ['confirmed' => 0, 'pending' => 0, 'dismissed' => 0]];
     $filters = $filters ?? ['start' => '', 'end' => '', 'site' => '', 'perusahaan' => ''];
@@ -66,6 +70,49 @@
 
 @section('css')
 <link rel="stylesheet" href="{{ asset('evaluasi-well-assets/css/lib/jquery-jvectormap-2.0.5.css') }}">
+<style>
+  .dms-quadrant-wrap { position: relative; padding: 0 8px 8px 36px; }
+  .dms-quadrant-y-title {
+    position: absolute; left: 0; top: 50%; transform: rotate(-90deg) translateX(-50%);
+    transform-origin: left center; font-size: 11px; font-weight: 600; color: #6B7280;
+    white-space: nowrap;
+  }
+  .dms-quadrant-x-title {
+    text-align: center; font-size: 11px; font-weight: 600; color: #6B7280; margin-top: 8px;
+  }
+  .dms-quadrant-grid {
+    display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+    gap: 0; min-height: 360px; border: 1px dashed #D1D5DB; border-radius: 12px; overflow: hidden; position: relative;
+  }
+  .dms-quadrant-cell {
+    padding: 14px 12px 12px; display: flex; flex-direction: column; justify-content: space-between;
+    border: 1px dashed #D1D5DB; min-height: 180px;
+  }
+  .dms-quadrant-cell-head { display: flex; align-items: flex-start; gap: 8px; }
+  .dms-quadrant-cell-icon {
+    width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .dms-quadrant-cell-title { font-size: 12px; font-weight: 700; line-height: 1.3; margin-bottom: 2px; }
+  .dms-quadrant-cell-desc { font-size: 10px; color: #6B7280; line-height: 1.35; }
+  .dms-quadrant-sites { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-content: flex-end; }
+  .dms-quadrant-pill {
+    display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; background: #fff; border: 1.5px solid currentColor; white-space: nowrap;
+  }
+  .dms-quadrant-center {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 54px; height: 54px; border-radius: 50%; background: #111827; color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700;
+    z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  }
+  .dms-quadrant-axis-hint {
+    display: flex; justify-content: space-between; font-size: 10px; color: #9CA3AF; margin-top: 4px; padding: 0 2px;
+  }
+  @media (max-width: 767px) {
+    .dms-quadrant-grid { min-height: 420px; }
+    .dms-quadrant-cell { min-height: 210px; }
+  }
+</style>
 @endsection
 
 @section('content')
@@ -242,13 +289,58 @@
           </div>
         </div>
 
-        <div class="mt-12 d-flex justify-content-center flex-wrap gap-3 text-xs text-secondary-light">
-          <span><span class="d-inline-block w-10-px h-10-px rounded-circle me-1" style="background:#ef4a00;"></span>Rasio naik (WoW)</span>
-          <span><span class="d-inline-block w-10-px h-10-px rounded-circle me-1" style="background:#45b369;"></span>Rasio turun (WoW)</span>
-          <span><span class="d-inline-block w-10-px h-10-px rounded-circle me-1" style="background:#487fff;"></span>Stabil</span>
+        <div class="mt-12 text-xs text-secondary-light text-center">
+          Median check-in: <strong>{{ number_format((float) ($statistic['x_median'] ?? 0), 0) }}</strong>
+          &nbsp;·&nbsp;
+          Median alert/orang: <strong>{{ number_format((float) ($statistic['y_median'] ?? 0), 2) }}</strong>
         </div>
 
-        <div id="barChart" class="barChart mt-12"></div>
+        <div class="dms-quadrant-wrap mt-16">
+          <div class="dms-quadrant-y-title">Alert Intensity – Rasio Alert / Orang</div>
+          <div class="dms-quadrant-axis-hint mb-4"><span>Tinggi</span></div>
+          <div class="dms-quadrant-grid">
+            @foreach($quadrantOrder as $qKey)
+              @php
+                $q = $statistic['quadrants'][$qKey] ?? [
+                  'label' => $qKey,
+                  'description' => '',
+                  'bg' => '#f9fafb',
+                  'border' => '#9CA3AF',
+                  'text' => '#374151',
+                  'icon' => 'solar:map-point-bold',
+                  'sites' => [],
+                ];
+              @endphp
+              <div class="dms-quadrant-cell" style="background: {{ $q['bg'] }};">
+                <div>
+                  <div class="dms-quadrant-cell-head">
+                    <span class="dms-quadrant-cell-icon" style="background: {{ $q['bg'] }}; color: {{ $q['text'] }}; border: 1.5px solid {{ $q['border'] }};">
+                      <iconify-icon icon="{{ $q['icon'] }}" class="icon"></iconify-icon>
+                    </span>
+                    <div>
+                      <div class="dms-quadrant-cell-title" style="color: {{ $q['text'] }};">{{ $q['label'] }}</div>
+                      <div class="dms-quadrant-cell-desc">{{ $q['description'] }}</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="dms-quadrant-sites">
+                  @forelse($q['sites'] ?? [] as $siteRow)
+                    <span
+                      class="dms-quadrant-pill"
+                      style="color: {{ $q['text'] }};"
+                      title="Check-in: {{ number_format($siteRow['checkin_count'] ?? 0) }} | Alert: {{ number_format($siteRow['alert_count'] ?? 0) }} | Rasio: {{ number_format((float) ($siteRow['ratio'] ?? 0), 2) }} | WoW: {{ ($siteRow['wow'] ?? 0) >= 0 ? '+' : '' }}{{ number_format((float) ($siteRow['wow'] ?? 0), 2) }}"
+                    >{{ $siteRow['site'] ?? '-' }} {{ $siteRow['arrow'] ?? '' }}</span>
+                  @empty
+                    <span class="text-xs text-secondary-light">—</span>
+                  @endforelse
+                </div>
+              </div>
+            @endforeach
+            <div class="dms-quadrant-center" title="Overall: {{ $statistic['confirmed'] }} check-in, {{ $statistic['total'] }} alert, {{ $statistic['dismissed'] }} alert/orang">Overall</div>
+          </div>
+          <div class="dms-quadrant-axis-hint"><span>Rendah</span><span>Tinggi</span></div>
+          <div class="dms-quadrant-x-title">Exposure – Total Orang Check-in</div>
+        </div>
       </div>
     </div>
   </div>
@@ -573,120 +665,6 @@
       yaxis: { labels: { show: false } },
       tooltip: { y: { formatter: function (v) { return v + ' alert'; } } }
     }).render();
-  }
-
-  var barEl = document.querySelector('#barChart');
-  if (barEl && typeof ApexCharts !== 'undefined') {
-    var points = Array.isArray(statistic.points) ? statistic.points : [];
-    if (!points.length) {
-      barEl.innerHTML = '<div class="text-center text-secondary-light text-sm py-40">Belum ada data site untuk matriks kuadran pada periode ini.</div>';
-    } else {
-    var xMedian = Number(statistic.x_median || 0);
-    var yMedian = Number(statistic.y_median || 0);
-    var bubbleSeries = points.map(function (p) {
-      return {
-        name: p.site || '-',
-        data: [[Number(p.x || 0), Number(p.y || 0), Number(p.z || 1)]]
-      };
-    });
-    var bubbleColors = points.map(function (p) { return p.color || '#487fff'; });
-    var maxX = 0;
-    var maxY = 0;
-    points.forEach(function (p) {
-      maxX = Math.max(maxX, Number(p.x || 0));
-      maxY = Math.max(maxY, Number(p.y || 0));
-    });
-    if (maxX <= 0) maxX = 10;
-    if (maxY <= 0) maxY = 1;
-
-    new ApexCharts(barEl, {
-      series: bubbleSeries,
-      chart: {
-        type: 'bubble',
-        height: 320,
-        toolbar: { show: false },
-        zoom: { enabled: false }
-      },
-      colors: bubbleColors,
-      dataLabels: {
-        enabled: true,
-        formatter: function (_val, opts) {
-          return (opts.w.config.series[opts.seriesIndex] || {}).name || '';
-        },
-        style: { fontSize: '10px', fontWeight: 600, colors: ['#111827'] },
-        background: { enabled: false }
-      },
-      fill: { opacity: 0.72 },
-      legend: { show: false },
-      grid: {
-        show: true,
-        borderColor: '#D1D5DB',
-        strokeDashArray: 4,
-        xaxis: { lines: { show: true } },
-        yaxis: { lines: { show: true } }
-      },
-      annotations: {
-        xaxis: xMedian > 0 ? [{
-          x: xMedian,
-          borderColor: '#9CA3AF',
-          strokeDashArray: 4,
-          label: {
-            text: 'Median check-in',
-            style: { color: '#6B7280', background: '#F3F4F6', fontSize: '10px' }
-          }
-        }] : [],
-        yaxis: yMedian > 0 ? [{
-          y: yMedian,
-          borderColor: '#9CA3AF',
-          strokeDashArray: 4,
-          label: {
-            text: 'Median alert/orang',
-            style: { color: '#6B7280', background: '#F3F4F6', fontSize: '10px' }
-          }
-        }] : []
-      },
-      xaxis: {
-        type: 'numeric',
-        tickAmount: 6,
-        min: 0,
-        max: Math.ceil(maxX * 1.15) || 10,
-        title: { text: 'Total Orang Check-in', style: { fontSize: '12px', color: '#6B7280' } },
-        labels: {
-          formatter: function (v) { return Math.round(Number(v)); }
-        }
-      },
-      yaxis: {
-        min: 0,
-        max: Math.ceil(maxY * 1.25 * 100) / 100 || 1,
-        tickAmount: 5,
-        title: { text: 'Alert / Orang', style: { fontSize: '12px', color: '#6B7280' } },
-        labels: {
-          formatter: function (v) { return Number(v).toFixed(2); }
-        }
-      },
-      tooltip: {
-        custom: function (ctx) {
-          var idx = ctx.seriesIndex;
-          var p = points[idx] || {};
-          var wow = Number(p.wow || 0);
-          var wowText = (wow > 0 ? '+' : '') + wow.toFixed(2);
-          return '<div class="p-12 text-sm">'
-            + '<div class="fw-bold mb-4">' + (p.site || '-') + ' ' + (p.arrow || '') + '</div>'
-            + '<div>Check-in: <strong>' + (p.checkin_count || 0) + '</strong></div>'
-            + '<div>Total Alert: <strong>' + (p.alert_count || 0) + '</strong></div>'
-            + '<div>Alert / Orang: <strong>' + Number(p.ratio || 0).toFixed(2) + '</strong></div>'
-            + '<div>WoW rasio: <strong>' + wowText + '</strong></div>'
-            + '</div>';
-        }
-      },
-      plotOptions: {
-        bubble: {
-          minBubbleRadius: 8,
-          maxBubbleRadius: 36
-        }
-      }
-    }).render();
-    }
   }
 
   var donutEl = document.querySelector('#donutChart');

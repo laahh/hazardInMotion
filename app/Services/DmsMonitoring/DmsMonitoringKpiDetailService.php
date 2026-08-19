@@ -1070,16 +1070,36 @@ class DmsMonitoringKpiDetailService
             }
 
             $overallRatio = $totalCheckin > 0 ? round($totalAlert / $totalCheckin, 2) : 0.0;
+            $xMedian = $this->median($xValues);
+            $yMedian = $this->median($yValues);
+
+            foreach ($points as &$point) {
+                $highX = (float) $point['x'] >= $xMedian;
+                $highY = (float) $point['y'] >= $yMedian;
+                $point['quadrant'] = match (true) {
+                    $highX && $highY => 'q1',
+                    ! $highX && $highY => 'q2',
+                    $highX && ! $highY => 'q3',
+                    default => 'q4',
+                };
+            }
+            unset($point);
 
             return [
                 'title' => 'Matriks Site',
-                'subtitle' => 'Check-in vs Alert / Orang (ukuran = Total Alert)',
+                'subtitle' => 'Exposure vs Alert Intensity per Site',
                 'mode' => 'quadrant',
                 'total' => number_format($totalAlert),
                 'confirmed' => number_format($totalCheckin),
                 'dismissed' => number_format($overallRatio, 2),
-                'x_median' => $this->median($xValues),
-                'y_median' => $this->median($yValues),
+                'x_median' => $xMedian,
+                'y_median' => $yMedian,
+                'overall' => [
+                    'checkin' => $totalCheckin,
+                    'alert' => $totalAlert,
+                    'ratio' => $overallRatio,
+                ],
+                'quadrants' => $this->buildQuadrantGroups($points),
                 'points' => $points,
                 'labels' => [],
                 'series' => [],
@@ -1092,19 +1112,89 @@ class DmsMonitoringKpiDetailService
     }
 
     /**
+     * @param  list<array<string, mixed>>  $points
+     * @return array<string, array<string, mixed>>
+     */
+    private function buildQuadrantGroups(array $points): array
+    {
+        $defs = [
+            'q2' => [
+                'key' => 'q2',
+                'label' => 'Q2 – Localized High Risk',
+                'description' => 'Orang relatif sedikit, tetapi alert per orang tinggi',
+                'bg' => '#fff7ed',
+                'border' => '#f97316',
+                'text' => '#c2410c',
+                'icon' => 'solar:danger-triangle-bold',
+            ],
+            'q1' => [
+                'key' => 'q1',
+                'label' => 'Q1 – Critical Exposure',
+                'description' => 'Orang tinggi dan alert per orang tinggi',
+                'bg' => '#fef2f2',
+                'border' => '#ef4444',
+                'text' => '#b91c1c',
+                'icon' => 'solar:shield-warning-bold',
+            ],
+            'q4' => [
+                'key' => 'q4',
+                'label' => 'Q4 – Low Exposure, Controlled',
+                'description' => 'Orang rendah dan alert per orang rendah',
+                'bg' => '#ecfdf5',
+                'border' => '#22c55e',
+                'text' => '#15803d',
+                'icon' => 'solar:shield-check-bold',
+            ],
+            'q3' => [
+                'key' => 'q3',
+                'label' => 'Q3 – High Exposure, Controlled',
+                'description' => 'Exposure tinggi namun intensity terkendali',
+                'bg' => '#eff6ff',
+                'border' => '#3b82f6',
+                'text' => '#1d4ed8',
+                'icon' => 'solar:shield-check-bold',
+            ],
+        ];
+
+        $groups = [];
+        foreach ($defs as $key => $def) {
+            $groups[$key] = $def + ['sites' => []];
+        }
+
+        foreach ($points as $point) {
+            $key = (string) ($point['quadrant'] ?? 'q4');
+            if (! isset($groups[$key])) {
+                $key = 'q4';
+            }
+            $groups[$key]['sites'][] = [
+                'site' => (string) ($point['site'] ?? '-'),
+                'checkin_count' => (int) ($point['checkin_count'] ?? 0),
+                'alert_count' => (int) ($point['alert_count'] ?? 0),
+                'ratio' => (float) ($point['ratio'] ?? 0),
+                'wow' => (float) ($point['wow'] ?? 0),
+                'arrow' => (string) ($point['arrow'] ?? '→'),
+            ];
+        }
+
+        return $groups;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function emptyQuadrantPayload(): array
     {
         return [
             'title' => 'Matriks Site',
-            'subtitle' => 'Check-in vs Alert / Orang (ukuran = Total Alert)',
+            'subtitle' => 'Exposure vs Alert Intensity per Site',
             'mode' => 'quadrant',
             'total' => '0',
             'confirmed' => '0',
             'dismissed' => '0.00',
             'x_median' => 0.0,
             'y_median' => 0.0,
+            'overall' => ['checkin' => 0, 'alert' => 0, 'ratio' => 0.0],
+            'quadrants' => $this->buildQuadrantGroups([]),
             'points' => [],
             'labels' => [],
             'series' => [],

@@ -15,8 +15,13 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
         $this->assertStringContainsString('Alert Last 4 Week', $html);
         $this->assertStringContainsString('Matriks Site', $html);
         $this->assertStringContainsString('Total Check-in', $html);
-        $this->assertStringContainsString('Rasio naik (WoW)', $html);
-        $this->assertStringContainsString("type: 'bubble'", $html);
+        $this->assertStringContainsString('Q1 – Critical Exposure', $html);
+        $this->assertStringContainsString('Q2 – Localized High Risk', $html);
+        $this->assertStringContainsString('Q3 – High Exposure, Controlled', $html);
+        $this->assertStringContainsString('Q4 – Low Exposure, Controlled', $html);
+        $this->assertStringContainsString('dms-quadrant-grid', $html);
+        $this->assertStringContainsString('Exposure – Total Orang Check-in', $html);
+        $this->assertStringContainsString('Overall', $html);
         $this->assertStringContainsString('Campaigns', $html);
         $this->assertStringContainsString('Customer Overview', $html);
         $this->assertStringContainsString('Client Payment Status', $html);
@@ -68,28 +73,32 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
             'growth' => ['title' => 'Alert Last 4 Week', 'subtitle' => 'Weekly Report', 'total' => '40', 'delta' => $delta, 'labels' => ['22 Jul', '29 Jul', '5 Agu', '12 Agu'], 'series' => [10, 12, 8, 10]],
             'statistic' => [
                 'title' => 'Matriks Site',
-                'subtitle' => 'Check-in vs Alert / Orang',
+                'subtitle' => 'Exposure vs Alert Intensity per Site',
                 'mode' => 'quadrant',
                 'total' => '40',
                 'confirmed' => '10',
                 'dismissed' => '4.00',
                 'x_median' => 5,
                 'y_median' => 1.5,
-                'points' => [
-                    [
-                        'site' => 'Binungan',
-                        'x' => 8,
-                        'y' => 2.0,
-                        'z' => 16,
-                        'alert_count' => 16,
-                        'checkin_count' => 8,
-                        'ratio' => 2.0,
-                        'wow' => 0.3,
-                        'direction' => 'up',
-                        'color' => '#ef4a00',
-                        'arrow' => '↑',
+                'overall' => ['checkin' => 10, 'alert' => 40, 'ratio' => 4.0],
+                'quadrants' => [
+                    'q1' => [
+                        'key' => 'q1',
+                        'label' => 'Q1 – Critical Exposure',
+                        'description' => 'Orang tinggi dan alert per orang tinggi',
+                        'bg' => '#fef2f2',
+                        'border' => '#ef4444',
+                        'text' => '#b91c1c',
+                        'icon' => 'solar:shield-warning-bold',
+                        'sites' => [
+                            ['site' => 'Binungan', 'checkin_count' => 8, 'alert_count' => 16, 'ratio' => 2.0, 'wow' => 0.3, 'arrow' => '↑'],
+                        ],
                     ],
+                    'q2' => ['key' => 'q2', 'label' => 'Q2 – Localized High Risk', 'description' => 'Orang relatif sedikit, tetapi alert per orang tinggi', 'bg' => '#fff7ed', 'border' => '#f97316', 'text' => '#c2410c', 'icon' => 'solar:danger-triangle-bold', 'sites' => []],
+                    'q3' => ['key' => 'q3', 'label' => 'Q3 – High Exposure, Controlled', 'description' => 'Exposure tinggi namun intensity terkendali', 'bg' => '#eff6ff', 'border' => '#3b82f6', 'text' => '#1d4ed8', 'icon' => 'solar:shield-check-bold', 'sites' => []],
+                    'q4' => ['key' => 'q4', 'label' => 'Q4 – Low Exposure, Controlled', 'description' => 'Orang rendah dan alert per orang rendah', 'bg' => '#ecfdf5', 'border' => '#22c55e', 'text' => '#15803d', 'icon' => 'solar:shield-check-bold', 'sites' => []],
                 ],
+                'points' => [],
                 'labels' => [],
                 'series' => [],
             ],
