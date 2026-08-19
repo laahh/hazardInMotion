@@ -1,538 +1,658 @@
 @extends('dms.layouts.app')
 
-@section('title', 'Monitoring Alert DMS L1/L2')
+@section('title', 'Dashboard')
+
+@php
+    $kpiList = $kpis ?? [];
+    $kpiDeltaLabel = $kpiDeltaLabel ?? 'this week';
+    $campaignIcons = [
+        ['icon' => 'majesticons:mail', 'textClass' => 'text-orange', 'barClass' => 'bg-orange'],
+        ['icon' => 'eva:globe-2-fill', 'textClass' => 'text-success-main', 'barClass' => 'bg-success-main'],
+        ['icon' => 'fa6-brands:square-facebook', 'textClass' => 'text-info-main', 'barClass' => 'bg-info-main'],
+        ['icon' => 'fluent:location-off-20-filled', 'textClass' => 'text-indigo', 'barClass' => 'bg-indigo'],
+    ];
+    $campaigns = [];
+    foreach ($campaignIcons as $i => $style) {
+        $row = $categories[$i] ?? ['name' => ['Email', 'Website', 'Facebook', 'Email'][$i], 'pct' => 0, 'total' => 0];
+        $campaigns[] = $style + $row;
+    }
+    $flagFiles = ['flag1.png', 'flag2.png', 'flag3.png', 'flag4.png'];
+    $countryBars = ['bg-primary-600', 'bg-orange', 'bg-yellow', 'bg-success-main'];
+    $countryRows = [];
+    for ($i = 0; $i < 4; $i++) {
+        $site = $sites[$i] ?? ['site' => ['USA', 'Japan', 'France', 'Germany'][$i], 'total' => 0, 'pct' => 0];
+        $countryRows[] = $site + ['flag' => $flagFiles[$i], 'barClass' => $countryBars[$i]];
+    }
+    $userFiles = ['user1.png', 'user2.png', 'user3.png', 'user4.png', 'user5.png', 'user1.png'];
+    $performers = [];
+    for ($i = 0; $i < 6; $i++) {
+        $op = $topOperators[$i] ?? ['nama' => '-', 'kode_sid' => '-', 'confirmed' => 0, 'total' => 0];
+        $performers[] = $op + ['photo' => $userFiles[$i]];
+    }
+    $allItems = $recentAll ?? [];
+    $bestMatch = $recentConfirmed ?? [];
+    $transactions = $recentReviews ?? [];
+@endphp
 
 @section('css')
-<style>
-  .dam-warn-banner{background:var(--warning-100,#fff3e0);border:1px solid var(--warning-200,#ffe0b2);color:var(--warning-600,#b45309);
-    border-radius:10px;padding:12px 16px;font-size:13px;display:flex;gap:10px;align-items:flex-start;}
-  .dam-ok-banner{background:var(--success-100,#e8f8ee);border:1px solid var(--success-200,#bdeccf);color:var(--success-700,#0f7a3d);
-    border-radius:10px;padding:12px 16px;font-size:13px;display:flex;gap:10px;align-items:flex-start;}
-  .dam-hero{border-radius:16px;border:1px solid var(--neutral-200,#e5e7eb);background:linear-gradient(135deg,#ffffff 0%,#f5f8ff 100%);padding:26px 28px;margin-bottom:28px;}
-  .dam-hero-number{font-size:38px;font-weight:700;line-height:1;color:var(--text-primary-light,#111827);}
-  .dam-section{margin-top:36px;margin-bottom:16px;}
-  .dam-section-title{font-size:16px;font-weight:700;color:var(--text-primary-light,#111827);margin-bottom:2px;}
-  .dam-section-sub{font-size:12.5px;color:var(--text-secondary-light);max-width:760px;}
-  .dam-section-icon{width:34px;height:34px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;background:var(--primary-50,#eef4ff);color:var(--primary-600,#487FFF);font-size:17px;margin-right:10px;flex-shrink:0;}
-  .dam-funnel-row{display:flex;align-items:center;gap:10px;}
-  .dam-funnel-bar{height:34px;border-radius:8px;background:var(--primary-600,#487FFF);display:flex;align-items:center;padding:0 12px;color:#fff;font-weight:600;font-size:12.5px;white-space:nowrap;transition:width .3s ease;}
-  .dam-funnel-label{width:150px;flex-shrink:0;font-size:12.5px;color:var(--text-secondary-light);}
-  .dam-funnel-drop{font-size:11px;color:var(--danger-600,#b91c1c);flex-shrink:0;width:110px;}
-  .dam-stat-mini{background:var(--neutral-50,#f8fafc);border-radius:8px;padding:10px 12px;}
-  .dam-stat-mini .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-secondary-light);font-weight:600;}
-  .dam-stat-mini .v{font-size:18px;font-weight:700;margin-top:3px;color:var(--text-primary-light);}
-  .dam-qa-row.is-audited{background:rgba(69,179,105,0.06);}
-  .dam-kpi-card{border-radius:14px;border:1px solid var(--neutral-200,#e5e7eb);background:#fff;padding:16px 18px;display:flex;align-items:center;gap:14px;height:100%;}
-  .dam-kpi-icon{width:44px;height:44px;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:var(--primary-50,#eef4ff);color:var(--primary-600,#487FFF);font-size:21px;flex-shrink:0;}
-  .dam-kpi-label{font-size:12px;color:var(--text-secondary-light);font-weight:600;}
-  .dam-kpi-value{font-size:24px;font-weight:700;color:var(--text-primary-light,#111827);line-height:1.25;}
-</style>
+<link rel="stylesheet" href="{{ asset('evaluasi-well-assets/css/lib/jquery-jvectormap-2.0.5.css') }}">
 @endsection
 
 @section('content')
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
-  <div>
-    <h6 class="fw-semibold mb-0">Monitoring Alert DMS &mdash; L1 &amp; L2</h6>
-    <div class="text-secondary-light text-sm mt-4">Kuadran kategori, rasio per unit/orang, funnel review, Post Event, dan performa control room &middot; {{ $dateLabel }}</div>
-  </div>
+  <h6 class="fw-semibold mb-0">Dashboard</h6>
   <ul class="d-flex align-items-center gap-2">
     <li class="fw-medium">
-      <a href="{{ route('pra-operasi.dashboard') }}" class="d-flex align-items-center gap-1 hover-text-primary">
-        <iconify-icon icon="solar:clipboard-check-outline" class="icon text-lg"></iconify-icon>
-        Pra Operasi
+      <a href="{{ route('pra-operasi.dms-monitoring') }}" class="d-flex align-items-center gap-1 hover-text-primary">
+        <iconify-icon icon="solar:home-smile-angle-outline" class="icon text-lg"></iconify-icon>
+        Dashboard
       </a>
     </li>
     <li>-</li>
-    <li class="fw-medium">Monitoring Alert DMS</li>
+    <li class="fw-medium">CRM</li>
   </ul>
 </div>
 
-@if(session('status'))
-<div class="dam-ok-banner mb-24"><iconify-icon icon="solar:check-circle-bold" class="icon text-lg flex-shrink-0"></iconify-icon><div>{{ session('status') }}</div></div>
-@endif
-@if(session('error'))
-<div class="dam-warn-banner mb-24"><iconify-icon icon="solar:danger-circle-bold" class="icon text-lg flex-shrink-0"></iconify-icon><div>{{ session('error') }}</div></div>
-@endif
-
-<div id="damWarnBanner" class="dam-warn-banner mb-24 {{ $up ? 'd-none' : '' }}">
-  <iconify-icon icon="solar:danger-circle-bold" class="icon text-lg flex-shrink-0"></iconify-icon>
-  <div>Koneksi ke hse_automation tidak tersedia saat ini.</div>
-</div>
-
-<form method="GET" class="row g-2 align-items-end mb-24">
-  <div class="col-auto">
-    <label class="form-label text-sm fw-medium mb-1">Dari Tanggal</label>
-    <input type="date" name="start" value="{{ $filters['start'] }}" class="form-control form-control-sm" style="min-width:150px">
-  </div>
-  <div class="col-auto">
-    <label class="form-label text-sm fw-medium mb-1">Sampai Tanggal</label>
-    <input type="date" name="end" value="{{ $filters['end'] }}" class="form-control form-control-sm" style="min-width:150px">
-  </div>
-  <div class="col-auto">
-    <button type="submit" class="btn btn-primary-600 btn-sm radius-8 px-16">
-      <iconify-icon icon="solar:filter-bold" class="me-1"></iconify-icon>Terapkan
-    </button>
-  </div>
-</form>
-
-@unless($up)
-@else
-
-{{-- ============================================================ --}}
-{{-- SNAPSHOT HARI INI — 4 KARTU PALING ATAS --}}
-{{-- ============================================================ --}}
-<div class="mb-24">
-  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-12">
-    <div class="dam-section-title mb-0">Snapshot Hari Ini &middot; {{ $today['date_label'] }}</div>
-    <span class="text-secondary-light text-xs">Real-time &mdash; terpisah dari filter tanggal di bawah</span>
-  </div>
-  <div class="row g-3">
-    <div class="col-xxl-3 col-md-6">
-      <div class="dam-kpi-card">
-        <span class="dam-kpi-icon"><iconify-icon icon="solar:wheel-bold"></iconify-icon></span>
-        <div>
-          <div class="dam-kpi-label">Unit Beroperasi</div>
-          <div class="dam-kpi-value">{{ number_format($today['units_operating']) }}</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-xxl-3 col-md-6">
-      <div class="dam-kpi-card">
-        <span class="dam-kpi-icon"><iconify-icon icon="solar:users-group-rounded-bold"></iconify-icon></span>
-        <div>
-          <div class="dam-kpi-label">Operator Checkin</div>
-          <div class="dam-kpi-value">{{ number_format($today['operators_checked_in']) }}</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-xxl-3 col-md-6">
-      <div class="dam-kpi-card">
-        <span class="dam-kpi-icon"><iconify-icon icon="solar:danger-triangle-bold"></iconify-icon></span>
-        <div>
-          <div class="dam-kpi-label">Rasio Alert / Unit</div>
-          <div class="dam-kpi-value">{{ number_format($today['ratio_per_unit'], 2) }}</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-xxl-3 col-md-6">
-      <div class="dam-kpi-card">
-        <span class="dam-kpi-icon"><iconify-icon icon="solar:user-id-bold"></iconify-icon></span>
-        <div>
-          <div class="dam-kpi-label">Rasio Alert / Orang</div>
-          <div class="dam-kpi-value">{{ number_format($today['ratio_per_operator'], 2) }}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <p class="text-secondary-light text-xs mt-8 mb-0">Dari {{ number_format($today['total_alerts']) }} alert hari ini, dibagi jumlah unit dan orang yang aktif hari ini juga.</p>
-</div>
-
-{{-- ============================================================ --}}
-{{-- RINGKASAN --}}
-{{-- ============================================================ --}}
-@php
-    $l1Pct = $summary['total'] > 0 ? round($summary['l1_reviewed'] / $summary['total'] * 100, 1) : 0;
-    $l2Pct = $summary['total'] > 0 ? round($summary['l2_reviewed'] / $summary['total'] * 100, 1) : 0;
-    $confirmRate = $summary['l1_reviewed'] > 0 ? round($summary['l1_confirmed'] / $summary['l1_reviewed'] * 100, 1) : 0;
-@endphp
-<div class="dam-hero">
-  <div class="d-flex flex-wrap align-items-start justify-content-between gap-4 mb-20">
-    <div>
-      <span class="text-secondary-light text-xs fw-semibold text-uppercase" style="letter-spacing:.06em">Total Alert Masuk</span>
-      <div class="d-flex align-items-baseline gap-2 mt-4">
-        <span class="dam-hero-number">{{ number_format($summary['total']) }}</span>
-        <span class="text-secondary-light">alert &middot; {{ $dateLabel }}</span>
-      </div>
-      <p class="mb-0 mt-8 text-secondary-light" style="max-width:640px">
-        {{ number_format($summary['l1_reviewed']) }} ({{ $l1Pct }}%) sudah direview L1 &middot;
-        {{ number_format($summary['l2_reviewed']) }} ({{ $l2Pct }}%) sampai direview L2 &middot;
-        dari yang direview L1, {{ $confirmRate }}% terbukti pelanggaran nyata.
-      </p>
-    </div>
-    <div class="text-end text-secondary-light text-sm">
-      <div><iconify-icon icon="solar:wheel-bold" class="me-1"></iconify-icon>{{ number_format($unitsOperating) }} unit online (30 menit terakhir)</div>
-    </div>
-  </div>
-
-  <div class="row g-3">
-    <div class="col-xxl col-md-4 col-6">
-      <div class="dam-stat-mini"><div class="k">False Positive (L1 Dismiss)</div><div class="v text-secondary-light">{{ number_format($summary['l1_dismissed']) }}</div></div>
-    </div>
-    <div class="col-xxl col-md-4 col-6">
-      <div class="dam-stat-mini"><div class="k">Belum Direview L1</div><div class="v text-warning-600">{{ number_format($summary['l1_belum']) }}</div></div>
-    </div>
-    <div class="col-xxl col-md-4 col-6">
-      <div class="dam-stat-mini"><div class="k">Eligible Post Event</div><div class="v text-primary-600">{{ number_format($summary['post_event_eligible']) }}</div></div>
-    </div>
-    <div class="col-xxl col-md-4 col-6">
-      <div class="dam-stat-mini"><div class="k">Post Event Terkirim</div><div class="v">{{ number_format($postEvent['total']) }}</div></div>
-    </div>
-    <div class="col-xxl col-md-4 col-6">
-      <div class="dam-stat-mini"><div class="k">False Negative (Estimasi QA)</div>
-        <div class="v {{ ($qaSummary['false_negative_rate'] ?? 0) > 0 ? 'text-danger-600' : '' }}">
-          {{ $qaSummary['false_negative_rate'] !== null ? $qaSummary['false_negative_rate'].'%' : 'Belum diaudit' }}
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-{{-- ============================================================ --}}
-{{-- FUNNEL LAYER --}}
-{{-- ============================================================ --}}
-<div class="dam-section">
-  <div class="d-flex align-items-center">
-    <span class="dam-section-icon"><iconify-icon icon="solar:filter-bold"></iconify-icon></span>
-    <div>
-      <div class="dam-section-title">Funnel Layer &mdash; Layer Mana yang Paling Banyak "Bocor"</div>
-      <div class="dam-section-sub">Membandingkan populasi ORANG (bukan baris alert) di tiap tahap: checkin RFID &rarr; punya alert DMS &rarr; direview L1 &rarr; direview L2 &rarr; Post Event. Drop-off paling besar menunjukkan layer mana yang paling perlu diperbaiki.</div>
-    </div>
-  </div>
-</div>
-
-<div class="card radius-8 border">
-  <div class="card-body">
-    @php $funnelMax = collect($funnel)->max('count') ?: 1; @endphp
-    <div class="d-flex flex-column gap-2">
-      @foreach($funnel as $i => $f)
-      @php
-        $pct = $funnelMax > 0 ? max(4, round($f['count'] / $funnelMax * 100)) : 4;
-        $prev = $i > 0 ? $funnel[$i-1]['count'] : null;
-        $drop = $prev !== null && $prev > 0 ? round((1 - $f['count'] / $prev) * 100, 1) : null;
-      @endphp
-      <div class="dam-funnel-row">
-        <span class="dam-funnel-label">{{ $f['label'] }}</span>
-        <div class="flex-grow-1">
-          <div class="dam-funnel-bar" style="width:{{ $pct }}%">{{ number_format($f['count']) }}</div>
-        </div>
-        <span class="dam-funnel-drop">{{ $drop !== null ? '-'.$drop.'%' : '' }}</span>
-      </div>
-      @endforeach
-    </div>
-    <p class="text-secondary-light text-xs mt-16 mb-0">Persentase merah = penurunan dari tahap sebelumnya. Kalau penurunan terbesar ada di "Punya Alert DMS", itu artinya masalahnya di cakupan/kalibrasi perangkat DMS, bukan di kinerja reviewer L1/L2.</p>
-  </div>
-</div>
-
-{{-- ============================================================ --}}
-{{-- KUADRAN KATEGORI PELANGGARAN --}}
-{{-- ============================================================ --}}
-<div class="dam-section">
-  <div class="d-flex align-items-center">
-    <span class="dam-section-icon"><iconify-icon icon="solar:widget-5-bold"></iconify-icon></span>
-    <div>
-      <div class="dam-section-title">Kuadran Kategori Pelanggaran</div>
-      <div class="dam-section-sub">Dihitung langsung dari data (bukan tabel referensi statis): sumbu-X = volume alert, sumbu-Y = persentase dikonfirmasi nyata oleh L1. Kategori di kanan-atas = volume tinggi &amp; benar-benar nyata (prioritas utama); kanan-bawah = volume tinggi tapi kebanyakan false alarm (kandidat kalibrasi ulang kamera/model).</div>
-    </div>
-  </div>
-</div>
-
-<div class="card radius-8 border">
-  <div class="card-body">
-    <div id="damQuadrantChart"></div>
-  </div>
-</div>
-
-{{-- ============================================================ --}}
-{{-- RASIO PER UNIT & PER ORANG --}}
-{{-- ============================================================ --}}
-<div class="dam-section">
-  <div class="d-flex align-items-center">
-    <span class="dam-section-icon"><iconify-icon icon="solar:ranking-bold"></iconify-icon></span>
-    <div>
-      <div class="dam-section-title">Rasio Alert per Unit &amp; per Orang</div>
-      <div class="dam-section-sub">20 teratas, diurutkan dari jumlah alert terbanyak &mdash; untuk melihat unit/DMS bermasalah atau operator yang perlu perhatian khusus.</div>
-    </div>
-  </div>
-</div>
-
 <div class="row gy-4">
-  <div class="col-xxl-6">
-    <div class="card radius-8 border h-100">
-      <div class="card-header border-bottom bg-transparent">
-        <h6 class="text-lg mb-0">Rasio Alert per Unit</h6>
-      </div>
-      <div class="card-body p-0">
-        <div class="table-responsive scroll-sm" style="max-height:420px;overflow-y:auto">
-          <table class="table bordered-table mb-0">
-            <thead><tr><th>Unit</th><th>Site</th><th>Total</th><th>Terkonfirmasi</th></tr></thead>
-            <tbody>
-              @forelse($byUnit as $row)
-              <tr>
-                <td class="fw-medium">{{ $row['unit'] }}</td>
-                <td class="text-sm">{{ $row['site'] }}</td>
-                <td>{{ number_format($row['total']) }}</td>
-                <td><span class="bg-danger-focus text-danger-main px-8 py-2 rounded-pill text-xs fw-medium">{{ number_format($row['confirmed']) }}</span></td>
-              </tr>
-              @empty
-              <tr><td colspan="4" class="text-center text-secondary-light py-5">Tidak ada data.</td></tr>
-              @endforelse
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-xxl-6">
-    <div class="card radius-8 border h-100">
-      <div class="card-header border-bottom bg-transparent">
-        <h6 class="text-lg mb-0">Rasio Alert per Orang</h6>
-      </div>
-      <div class="card-body p-0">
-        <div class="table-responsive scroll-sm" style="max-height:420px;overflow-y:auto">
-          <table class="table bordered-table mb-0">
-            <thead><tr><th>Operator</th><th>Kode SID</th><th>Total</th><th>Terkonfirmasi</th></tr></thead>
-            <tbody>
-              @forelse($byOperator as $row)
-              <tr>
-                <td class="fw-medium">{{ $row['nama'] }}</td>
-                <td class="text-sm">{{ $row['kode_sid'] }}</td>
-                <td>{{ number_format($row['total']) }}</td>
-                <td><span class="bg-danger-focus text-danger-main px-8 py-2 rounded-pill text-xs fw-medium">{{ number_format($row['confirmed']) }}</span></td>
-              </tr>
-              @empty
-              <tr><td colspan="4" class="text-center text-secondary-light py-5">Tidak ada data.</td></tr>
-              @endforelse
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+  <div class="col-xxl-8">
+    <div class="row gy-4">
 
-{{-- ============================================================ --}}
-{{-- SLOVIN SAMPLING COVERAGE & ORANG BELUM POST EVENT --}}
-{{-- ============================================================ --}}
-<div class="dam-section">
-  <div class="d-flex align-items-center">
-    <span class="dam-section-icon"><iconify-icon icon="solar:chart-square-bold"></iconify-icon></span>
-    <div>
-      <div class="dam-section-title">Cakupan Sampling vs Rumus Slovin</div>
-      <div class="dam-section-sub">Ukuran sampel minimum (n) dihitung dari populasi total alert (N) pakai rumus Slovin (margin of error {{ $slovin['margin_of_error'] * 100 }}%), dibandingkan dengan jumlah yang BENAR-BENAR direview di tiap layer.</div>
-    </div>
-  </div>
-</div>
-
-<div class="row gy-4">
-  <div class="col-xxl-7">
-    <div class="card radius-8 border h-100">
-      <div class="card-body">
-        <div class="row g-3 mb-16">
-          <div class="col-4"><div class="dam-stat-mini"><div class="k">Populasi (N)</div><div class="v">{{ number_format($slovin['population']) }}</div></div></div>
-          <div class="col-4"><div class="dam-stat-mini"><div class="k">Target Sampel Slovin (n)</div><div class="v text-primary-600">{{ number_format($slovin['target_sample_size']) }}</div></div></div>
-          <div class="col-4"><div class="dam-stat-mini"><div class="k">Margin of Error</div><div class="v">{{ $slovin['margin_of_error'] * 100 }}%</div></div></div>
-        </div>
-        <div id="damSlovinChart"></div>
-      </div>
-    </div>
-  </div>
-  <div class="col-xxl-5">
-    <div class="card radius-8 border h-100">
-      <div class="card-header border-bottom bg-transparent">
-        <h6 class="text-lg mb-0">Orang yang Belum Pernah Post Event</h6>
-        <span class="text-secondary-light text-sm">Window {{ $neverPostEvent['window_days'] }} hari terakhir</span>
-      </div>
-      <div class="card-body d-flex flex-column justify-content-center">
-        <div class="d-flex align-items-center gap-3 mb-16">
-          <div class="text-center flex-fill">
-            <div class="fs-2 fw-bold text-primary-light">{{ number_format($neverPostEvent['total_dengan_alert']) }}</div>
-            <div class="text-secondary-light text-sm">orang punya alert</div>
-          </div>
-          <iconify-icon icon="solar:arrow-right-bold" class="text-secondary-light text-2xl flex-shrink-0"></iconify-icon>
-          <div class="text-center flex-fill">
-            <div class="fs-2 fw-bold text-danger-600">{{ number_format($neverPostEvent['total_belum_post_event']) }}</div>
-            <div class="text-secondary-light text-sm">belum pernah kena Post Event</div>
-          </div>
-        </div>
-        <div class="progress" style="height:10px;border-radius:999px">
-          <div class="progress-bar bg-danger-main" style="width:{{ min(100, $neverPostEvent['persentase']) }}%;border-radius:999px"></div>
-        </div>
-        <p class="text-secondary-light text-xs mt-8 mb-0">{{ $neverPostEvent['persentase'] }}% dari orang yang punya alert dalam {{ $neverPostEvent['window_days'] }} hari terakhir tidak pernah tercatat Post Event sama sekali.</p>
-      </div>
-    </div>
-  </div>
-</div>
-
-{{-- ============================================================ --}}
-{{-- QA SAMPLING FALSE NEGATIVE --}}
-{{-- ============================================================ --}}
-<div class="dam-section">
-  <div class="d-flex align-items-center">
-    <span class="dam-section-icon"><iconify-icon icon="solar:shield-check-bold"></iconify-icon></span>
-    <div>
-      <div class="dam-section-title">QA Sampling &mdash; False Negative L1</div>
-      <div class="dam-section-sub">hse_automation TIDAK punya data ground-truth soal alert mana yang salah di-dismiss L1. Satu-satunya cara tahu: audit ulang manual atas sampel alert yang di-dismiss (ukuran sampel dari rumus Slovin di atas). Tandai tiap sampel di bawah setelah dicek ulang videonya.</div>
-    </div>
-  </div>
-</div>
-
-<div class="card radius-8 border">
-  <div class="card-header border-bottom bg-transparent d-flex align-items-center justify-content-between flex-wrap gap-2">
-    <div class="d-flex flex-wrap gap-3 text-sm">
-      <span>Sampel: <b>{{ number_format($qaSummary['total_sampled']) }}</b> / target <b>{{ number_format($qaSummary['target_sample_size']) }}</b></span>
-      <span>Sudah diaudit: <b>{{ number_format($qaSummary['total_audited']) }}</b></span>
-      <span>Benar dismiss: <b class="text-success-600">{{ number_format($qaSummary['benar_dismiss']) }}</b></span>
-      <span>False negative: <b class="text-danger-600">{{ number_format($qaSummary['false_negative']) }}</b></span>
-      @if($qaSummary['false_negative_rate'] !== null)
-      <span>Rate: <b class="text-danger-600">{{ $qaSummary['false_negative_rate'] }}%</b> (estimasi populasi: {{ number_format($qaSummary['estimated_false_negative_count']) }} alert)</span>
-      @endif
-    </div>
-    <form method="POST" action="{{ route('pra-operasi.dms-monitoring.qa-sample.generate') }}">
-      @csrf
-      <input type="hidden" name="start" value="{{ $filters['start'] }}">
-      <input type="hidden" name="end" value="{{ $filters['end'] }}">
-      <button type="submit" class="btn btn-sm btn-primary-600 radius-8">
-        <iconify-icon icon="solar:magic-stick-3-bold" class="me-1"></iconify-icon>Generate Sampel QA Periode Ini
-      </button>
-    </form>
-  </div>
-  <div class="card-body p-0">
-    <div class="table-responsive scroll-sm" style="max-height:480px;overflow-y:auto">
-      <table class="table bordered-table mb-0" id="damQaTable">
-        <thead>
-          <tr><th>Waktu Deteksi</th><th>Operator</th><th>Pelanggaran</th><th>Unit</th><th>Site</th><th>Verdict</th></tr>
-        </thead>
-        <tbody>
-          @forelse($qaPending as $sample)
-          <tr class="dam-qa-row" data-sample-id="{{ $sample['id'] }}">
-            <td class="text-sm">{{ $sample['waktu_deteksi'] ?? '-' }}</td>
-            <td class="text-sm">{{ $sample['kode_sid'] ?? '-' }}</td>
-            <td class="text-sm">{{ $sample['nama_pelanggaran'] ?? '-' }}</td>
-            <td class="text-sm">{{ $sample['unit'] ?? '-' }}</td>
-            <td class="text-sm">{{ $sample['site'] ?? '-' }}</td>
-            <td>
-              <div class="btn-group btn-group-sm dam-qa-verdict-group">
-                <button type="button" class="btn btn-outline-success dam-qa-verdict-btn" data-verdict="benar_dismiss">Benar Dismiss</button>
-                <button type="button" class="btn btn-outline-danger dam-qa-verdict-btn" data-verdict="false_negative">False Negative</button>
-                <button type="button" class="btn btn-outline-secondary dam-qa-verdict-btn" data-verdict="tidak_jelas">Tidak Jelas</button>
+      <div class="col-xxl-4 col-sm-6">
+        <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-1">
+          <div class="card-body p-0">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+              <div class="d-flex align-items-center gap-2">
+                <span class="mb-0 w-48-px h-48-px bg-primary-600 flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+                  <iconify-icon icon="mingcute:user-follow-fill" class="icon"></iconify-icon>
+                </span>
+                <div>
+                  <span class="mb-2 fw-medium text-secondary-light text-sm">New Users</span>
+                  <h6 class="fw-semibold">{{ $kpiList[0]['value'] ?? '0' }}</h6>
+                </div>
               </div>
-            </td>
-          </tr>
-          @empty
-          <tr><td colspan="6" class="text-center text-secondary-light py-5">Belum ada sampel pending untuk periode ini &mdash; klik "Generate Sampel QA" di atas.</td></tr>
-          @endforelse
-        </tbody>
-      </table>
+              <div id="new-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+            </div>
+            <p class="text-sm mb-0">Increase by  <span class="{{ $kpiList[0]['delta']['class'] ?? 'bg-success-focus text-success-main' }} px-1 rounded-2 fw-medium text-sm">{{ $kpiList[0]['delta']['text'] ?? '+0' }}</span> this week</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xxl-4 col-sm-6">
+        <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-2">
+          <div class="card-body p-0">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+              <div class="d-flex align-items-center gap-2">
+                <span class="mb-0 w-48-px h-48-px bg-success-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6">
+                  <iconify-icon icon="mingcute:user-follow-fill" class="icon"></iconify-icon>
+                </span>
+                <div>
+                  <span class="mb-2 fw-medium text-secondary-light text-sm">Active Users</span>
+                  <h6 class="fw-semibold">{{ $kpiList[1]['value'] ?? '0' }}</h6>
+                </div>
+              </div>
+              <div id="active-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+            </div>
+            <p class="text-sm mb-0">Increase by  <span class="{{ $kpiList[1]['delta']['class'] ?? 'bg-success-focus text-success-main' }} px-1 rounded-2 fw-medium text-sm">{{ $kpiList[1]['delta']['text'] ?? '+0' }}</span> this week</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xxl-4 col-sm-6">
+        <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-3">
+          <div class="card-body p-0">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+              <div class="d-flex align-items-center gap-2">
+                <span class="mb-0 w-48-px h-48-px bg-yellow text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
+                  <iconify-icon icon="iconamoon:discount-fill" class="icon"></iconify-icon>
+                </span>
+                <div>
+                  <span class="mb-2 fw-medium text-secondary-light text-sm">Total Sales</span>
+                  <h6 class="fw-semibold">{{ $kpiList[2]['value'] ?? '0' }}</h6>
+                </div>
+              </div>
+              <div id="total-sales-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+            </div>
+            <p class="text-sm mb-0">Increase by  <span class="{{ $kpiList[2]['delta']['class'] ?? 'bg-danger-focus text-danger-main' }} px-1 rounded-2 fw-medium text-sm">{{ $kpiList[2]['delta']['text'] ?? '+0' }}</span> this week</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xxl-4 col-sm-6">
+        <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-4">
+          <div class="card-body p-0">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+              <div class="d-flex align-items-center gap-2">
+                <span class="mb-0 w-48-px h-48-px bg-purple text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
+                  <iconify-icon icon="mdi:message-text" class="icon"></iconify-icon>
+                </span>
+                <div>
+                  <span class="mb-2 fw-medium text-secondary-light text-sm">Conversion</span>
+                  <h6 class="fw-semibold">{{ $kpiList[3]['value'] ?? '0%' }}</h6>
+                </div>
+              </div>
+              <div id="conversion-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+            </div>
+            <p class="text-sm mb-0">Increase by  <span class="{{ $kpiList[3]['delta']['class'] ?? 'bg-success-focus text-success-main' }} px-1 rounded-2 fw-medium text-sm">{{ $kpiList[3]['delta']['text'] ?? '+0' }}</span> this week</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xxl-4 col-sm-6">
+        <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-5">
+          <div class="card-body p-0">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+              <div class="d-flex align-items-center gap-2">
+                <span class="mb-0 w-48-px h-48-px bg-pink text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
+                  <iconify-icon icon="mdi:leads" class="icon"></iconify-icon>
+                </span>
+                <div>
+                  <span class="mb-2 fw-medium text-secondary-light text-sm">Leads</span>
+                  <h6 class="fw-semibold">{{ $kpiList[4]['value'] ?? '0' }}</h6>
+                </div>
+              </div>
+              <div id="leads-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+            </div>
+            <p class="text-sm mb-0">Increase by  <span class="{{ $kpiList[4]['delta']['class'] ?? 'bg-success-focus text-success-main' }} px-1 rounded-2 fw-medium text-sm">{{ $kpiList[4]['delta']['text'] ?? '+0' }}</span> this week</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xxl-4 col-sm-6">
+        <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-6">
+          <div class="card-body p-0">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+              <div class="d-flex align-items-center gap-2">
+                <span class="mb-0 w-48-px h-48-px bg-cyan text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
+                  <iconify-icon icon="streamline:bag-dollar-solid" class="icon"></iconify-icon>
+                </span>
+                <div>
+                  <span class="mb-2 fw-medium text-secondary-light text-sm">Total Profit</span>
+                  <h6 class="fw-semibold">{{ $kpiList[5]['value'] ?? '0' }}</h6>
+                </div>
+              </div>
+              <div id="total-profit-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+            </div>
+            <p class="text-sm mb-0">Increase by  <span class="{{ $kpiList[5]['delta']['class'] ?? 'bg-success-focus text-success-main' }} px-1 rounded-2 fw-medium text-sm">{{ $kpiList[5]['delta']['text'] ?? '+0' }}</span> this week</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="col-xxl-4">
+    <div class="card h-100 radius-8 border">
+      <div class="card-body p-24">
+        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+          <div>
+            <h6 class="mb-2 fw-bold text-lg">Revenue Growth</h6>
+            <span class="text-sm fw-medium text-secondary-light">Weekly Report</span>
+          </div>
+          <div class="text-end">
+            <h6 class="mb-2 fw-bold text-lg">{{ $growth['total'] ?? '0' }}</h6>
+            <span class="{{ $growth['delta']['class'] ?? 'bg-success-focus text-success-main' }} ps-12 pe-12 pt-2 pb-2 rounded-2 fw-medium text-sm">{{ $growth['delta']['text'] ?? '+0' }}</span>
+          </div>
+        </div>
+        <div id="revenue-chart" class="mt-28"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xxl-8">
+    <div class="card h-100 radius-8 border-0">
+      <div class="card-body p-24">
+        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+          <div>
+            <h6 class="mb-2 fw-bold text-lg">Earning Statistic</h6>
+            <span class="text-sm fw-medium text-secondary-light">Yearly earning overview</span>
+          </div>
+          <div class="">
+            <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
+              <option>Yearly</option>
+              <option>Monthly</option>
+              <option>Weekly</option>
+              <option>Today</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-20 d-flex justify-content-center flex-wrap gap-3">
+          <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
+            <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
+              <iconify-icon icon="fluent:cart-16-filled" class="icon"></iconify-icon>
+            </span>
+            <div>
+              <span class="text-secondary-light text-sm fw-medium">Sales</span>
+              <h6 class="text-md fw-semibold mb-0">{{ $statistic['total'] ?? '0' }}</h6>
+            </div>
+          </div>
+          <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
+            <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
+              <iconify-icon icon="uis:chart" class="icon"></iconify-icon>
+            </span>
+            <div>
+              <span class="text-secondary-light text-sm fw-medium">Income</span>
+              <h6 class="text-md fw-semibold mb-0">{{ $statistic['confirmed'] ?? '0' }}</h6>
+            </div>
+          </div>
+          <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
+            <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
+              <iconify-icon icon="ph:arrow-fat-up-fill" class="icon"></iconify-icon>
+            </span>
+            <div>
+              <span class="text-secondary-light text-sm fw-medium">Profit</span>
+              <h6 class="text-md fw-semibold mb-0">{{ $statistic['dismissed'] ?? '0' }}</h6>
+            </div>
+          </div>
+        </div>
+
+        <div id="barChart" class="barChart"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xxl-4">
+    <div class="row gy-4">
+      <div class="col-xxl-12 col-sm-6">
+        <div class="card h-100 radius-8 border-0">
+          <div class="card-body p-24">
+            <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+              <h6 class="mb-2 fw-bold text-lg">Campaigns</h6>
+              <div class="">
+                <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
+                  <option>Yearly</option>
+                  <option>Monthly</option>
+                  <option>Weekly</option>
+                  <option>Today</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="mt-3">
+              @foreach($campaigns as $i => $cat)
+              <div class="d-flex align-items-center justify-content-between gap-3 {{ $i < 3 ? 'mb-12' : '' }}">
+                <div class="d-flex align-items-center">
+                  <span class="text-xxl line-height-1 d-flex align-content-center flex-shrink-0 {{ $cat['textClass'] }}">
+                    <iconify-icon icon="{{ $cat['icon'] }}" class="icon"></iconify-icon>
+                  </span>
+                  <span class="text-primary-light fw-medium text-sm ps-12">{{ $cat['name'] }}</span>
+                </div>
+                <div class="d-flex align-items-center gap-2 w-100">
+                  <div class="w-100 max-w-66 ms-auto">
+                    <div class="progress progress-sm rounded-pill" role="progressbar" aria-valuenow="{{ $cat['pct'] }}" aria-valuemin="0" aria-valuemax="100">
+                      <div class="progress-bar {{ $cat['barClass'] }} rounded-pill" style="width: {{ $cat['pct'] }}%;"></div>
+                    </div>
+                  </div>
+                  <span class="text-secondary-light font-xs fw-semibold">{{ $cat['pct'] }}%</span>
+                </div>
+              </div>
+              @endforeach
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-xxl-12 col-sm-6">
+        <div class="card h-100 radius-8 border-0 overflow-hidden">
+          <div class="card-body p-24">
+            <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+              <h6 class="mb-2 fw-bold text-lg">Customer Overview</h6>
+              <div class="">
+                <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
+                  <option>Yearly</option>
+                  <option>Monthly</option>
+                  <option>Weekly</option>
+                  <option>Today</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="d-flex flex-wrap align-items-center mt-3">
+              <ul class="flex-shrink-0">
+                <li class="d-flex align-items-center gap-2 mb-28">
+                  <span class="w-12-px h-12-px rounded-circle bg-success-main"></span>
+                  <span class="text-secondary-light text-sm fw-medium">Total: {{ number_format(($overview['confirmed'] ?? 0) + ($overview['dismissed'] ?? 0) + ($overview['pending'] ?? 0)) }}</span>
+                </li>
+                <li class="d-flex align-items-center gap-2 mb-28">
+                  <span class="w-12-px h-12-px rounded-circle bg-warning-main"></span>
+                  <span class="text-secondary-light text-sm fw-medium">New: {{ number_format($overview['pending'] ?? 0) }}</span>
+                </li>
+                <li class="d-flex align-items-center gap-2">
+                  <span class="w-12-px h-12-px rounded-circle bg-primary-600"></span>
+                  <span class="text-secondary-light text-sm fw-medium">Active: {{ number_format($overview['confirmed'] ?? 0) }}</span>
+                </li>
+              </ul>
+              <div id="donutChart" class="flex-grow-1 apexcharts-tooltip-z-none title-style circle-none"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xxl-4 col-sm-6">
+    <div class="card h-100 radius-8 border-0">
+      <div class="card-body p-24">
+        <h6 class="mb-2 fw-bold text-lg">Client Payment Status</h6>
+        <span class="text-sm fw-medium text-secondary-light">Weekly Report</span>
+
+        <ul class="d-flex flex-wrap align-items-center justify-content-center mt-32">
+          <li class="d-flex align-items-center gap-2 me-28">
+            <span class="w-12-px h-12-px rounded-circle bg-success-main"></span>
+            <span class="text-secondary-light text-sm fw-medium">Paid: {{ number_format($weeklyStatus['totals']['confirmed'] ?? 0) }}</span>
+          </li>
+          <li class="d-flex align-items-center gap-2 me-28">
+            <span class="w-12-px h-12-px rounded-circle bg-info-main"></span>
+            <span class="text-secondary-light text-sm fw-medium">Pending: {{ number_format($weeklyStatus['totals']['pending'] ?? 0) }}</span>
+          </li>
+          <li class="d-flex align-items-center gap-2">
+            <span class="w-12-px h-12-px rounded-circle bg-warning-main"></span>
+            <span class="text-secondary-light text-sm fw-medium">Overdue: {{ number_format($weeklyStatus['totals']['dismissed'] ?? 0) }}</span>
+          </li>
+        </ul>
+        <div class="mt-40">
+          <div id="paymentStatusChart" class="margin-16-minus"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xxl-4 col-sm-6">
+    <div class="card radius-8 border-0">
+      <div class="card-body">
+        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+          <h6 class="mb-2 fw-bold text-lg">Countries Status</h6>
+          <div class="">
+            <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
+              <option>Yearly</option>
+              <option>Monthly</option>
+              <option>Weekly</option>
+              <option>Today</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="world-map"></div>
+
+      <div class="card-body p-24 max-h-266-px scroll-sm overflow-y-auto">
+        <div class="">
+          @foreach($countryRows as $i => $site)
+          <div class="d-flex align-items-center justify-content-between gap-3 {{ $i < 3 ? 'mb-3 pb-2' : '' }}">
+            <div class="d-flex align-items-center w-100">
+              <img src="{{ asset('evaluasi-well-assets/images/flags/'.$site['flag']) }}" alt="" class="w-40-px h-40-px rounded-circle flex-shrink-0 me-12 overflow-hidden">
+              <div class="flex-grow-1">
+                <h6 class="text-sm mb-0">{{ $site['site'] }}</h6>
+                <span class="text-xs text-secondary-light fw-medium">{{ number_format($site['total']) }} Users</span>
+              </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 w-100">
+              <div class="w-100 max-w-66 ms-auto">
+                <div class="progress progress-sm rounded-pill" role="progressbar" aria-valuenow="{{ $site['pct'] }}" aria-valuemin="0" aria-valuemax="100">
+                  <div class="progress-bar {{ $site['barClass'] }} rounded-pill" style="width: {{ $site['pct'] }}%;"></div>
+                </div>
+              </div>
+              <span class="text-secondary-light font-xs fw-semibold">{{ $site['pct'] }}%</span>
+            </div>
+          </div>
+          @endforeach
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xxl-4">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+          <h6 class="mb-2 fw-bold text-lg mb-0">Top Performer</h6>
+          <a href="javascript:void(0)" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
+            View All
+            <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
+          </a>
+        </div>
+
+        <div class="mt-32">
+          @foreach($performers as $i => $op)
+          <div class="d-flex align-items-center justify-content-between gap-3 {{ $i < 5 ? 'mb-32' : '' }}">
+            <div class="d-flex align-items-center">
+              <img src="{{ asset('evaluasi-well-assets/images/users/'.$op['photo']) }}" alt="" class="w-40-px h-40-px rounded-circle flex-shrink-0 me-12 overflow-hidden">
+              <div class="flex-grow-1">
+                <h6 class="text-md mb-0">{{ $op['nama'] }}</h6>
+                <span class="text-sm text-secondary-light fw-medium">Agent ID: {{ $op['kode_sid'] }}</span>
+              </div>
+            </div>
+            <span class="text-primary-light text-md fw-medium">{{ $op['confirmed'] }}/{{ $op['total'] }}</span>
+          </div>
+          @endforeach
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xxl-6">
+    <div class="card h-100">
+      <div class="card-header border-bottom bg-base ps-0 py-0 pe-24 d-flex align-items-center justify-content-between">
+        <ul class="nav bordered-tab nav-pills mb-0" id="pills-tab" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="pills-to-do-list-tab" data-bs-toggle="pill" data-bs-target="#pills-to-do-list" type="button" role="tab" aria-controls="pills-to-do-list" aria-selected="true">All Item</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="pills-recent-leads-tab" data-bs-toggle="pill" data-bs-target="#pills-recent-leads" type="button" role="tab" aria-controls="pills-recent-leads" aria-selected="false" tabindex="-1">Best Match</button>
+          </li>
+        </ul>
+        <a href="javascript:void(0)" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
+          View All
+          <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
+        </a>
+      </div>
+      <div class="card-body p-24">
+        <div class="tab-content" id="pills-tabContent">
+          <div class="tab-pane fade show active" id="pills-to-do-list" role="tabpanel" aria-labelledby="pills-to-do-list-tab" tabindex="0">
+            @include('pra-operasi.partials._wowdash-task-table', ['rows' => $allItems])
+          </div>
+          <div class="tab-pane fade" id="pills-recent-leads" role="tabpanel" aria-labelledby="pills-recent-leads-tab" tabindex="0">
+            @include('pra-operasi.partials._wowdash-task-table', ['rows' => $bestMatch])
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xxl-6">
+    <div class="card h-100">
+      <div class="card-header border-bottom bg-base py-16 px-24 d-flex align-items-center justify-content-between">
+        <h6 class="text-lg fw-semibold mb-0">Last Transaction</h6>
+        <a href="javascript:void(0)" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
+          View All
+          <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
+        </a>
+      </div>
+      <div class="card-body p-24">
+        <div class="table-responsive scroll-sm">
+          <table class="table bordered-table mb-0">
+            <thead>
+              <tr>
+                <th scope="col">Transaction ID</th>
+                <th scope="col">Date</th>
+                <th scope="col">Status</th>
+                <th scope="col">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              @forelse($transactions as $row)
+              <tr>
+                <td>{{ \Illuminate\Support\Str::limit($row['id_alert'], 16) }}</td>
+                <td>{{ $row['waktu'] }}</td>
+                <td> <span class="{{ $row['status_class'] }} px-24 py-4 rounded-pill fw-medium text-sm">{{ $row['status_label'] }}</span> </td>
+                <td>{{ $row['site'] }}</td>
+              </tr>
+              @empty
+              <tr>
+                <td colspan="4" class="text-center text-secondary-light">No data</td>
+              </tr>
+              @endforelse
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </div>
-
-{{-- ============================================================ --}}
-{{-- PERFORMA CONTROL ROOM --}}
-{{-- ============================================================ --}}
-<div class="dam-section">
-  <div class="d-flex align-items-center">
-    <span class="dam-section-icon"><iconify-icon icon="solar:headphones-round-sound-bold"></iconify-icon></span>
-    <div>
-      <div class="dam-section-title">Performa Control Room</div>
-      <div class="dam-section-sub">Rata-rata waktu tanggap dari deteksi alert sampai direview, per site (identitas reviewer per-orang belum ditampilkan di versi ini karena sumber datanya berat/tidak stabil untuk dikueri langsung).</div>
-    </div>
-  </div>
-</div>
-
-<div class="card radius-8 border">
-  <div class="card-body p-0">
-    <div class="table-responsive scroll-sm">
-      <table class="table bordered-table mb-0">
-        <thead><tr><th>Site</th><th>Total Direview L1</th><th>Rata-rata Waktu Tanggap L1</th><th>Rata-rata Waktu Tanggap L2</th></tr></thead>
-        <tbody>
-          @forelse($turnaround as $row)
-          <tr>
-            <td class="fw-medium">{{ $row['site'] }}</td>
-            <td>{{ number_format($row['total_direview']) }}</td>
-            <td class="text-sm">{{ $row['avg_menit_l1'] !== null ? number_format($row['avg_menit_l1'], 1).' menit' : '-' }}</td>
-            <td class="text-sm">{{ $row['avg_menit_l2'] !== null ? number_format($row['avg_menit_l2'], 1).' menit' : '-' }}</td>
-          </tr>
-          @empty
-          <tr><td colspan="4" class="text-center text-secondary-light py-5">Tidak ada data.</td></tr>
-          @endforelse
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-@endunless
 @endsection
 
-@section('page-scripts')
+@section('scripts')
+<script src="{{ asset('evaluasi-well-assets/js/lib/jquery-ui.min.js') }}"></script>
+<script src="{{ asset('evaluasi-well-assets/js/lib/jquery-jvectormap-2.0.5.min.js') }}"></script>
+<script src="{{ asset('evaluasi-well-assets/js/lib/jquery-jvectormap-world-mill-en.js') }}"></script>
 <script>
-(function(){
-  if (typeof ApexCharts === 'undefined') return;
+(function () {
+  var kpis = @json($kpiList);
+  var growth = @json($growth ?? ['series' => [], 'labels' => []]);
+  var statistic = @json($statistic ?? ['series' => [], 'labels' => []]);
+  var overview = @json($overview ?? ['confirmed' => 0, 'dismissed' => 0, 'pending' => 0]);
+  var weeklyStatus = @json($weeklyStatus ?? ['confirmed' => [], 'pending' => [], 'dismissed' => [], 'labels' => []]);
 
-  var quadrant = @json($quadrant ?? []);
-  var quadEl = document.querySelector('#damQuadrantChart');
-  if (quadEl && quadrant.length) {
-    var maxTotal = Math.max.apply(null, quadrant.map(function(q){ return q.total; }).concat([1]));
-    new ApexCharts(quadEl, {
-      chart: { type: 'bubble', height: 380, toolbar: { show:false } },
-      series: [{ name: 'Kategori', data: quadrant.map(function(q){
-        return { x: q.total, y: q.confirmation_rate, z: Math.max(6, Math.round(q.confirmed / (maxTotal||1) * 40)) };
-      }) }],
-      colors: ['#487FFF'],
-      xaxis: { title: { text: 'Volume Alert (Total)' }, labels: { style: { fontSize: '10.5px' } } },
-      yaxis: { title: { text: '% Dikonfirmasi Nyata (L1)' }, min: 0, max: 100 },
-      grid: { borderColor: '#E5E7EB', strokeDashArray: 4 },
+  function createChart(chartId, chartColor, data) {
+    var el = document.querySelector('#' + chartId);
+    if (!el || typeof ApexCharts === 'undefined') return;
+    var currentYear = new Date().getFullYear();
+    new ApexCharts(el, {
+      series: [{ name: 'series1', data: data && data.length ? data : [35, 45, 38, 41, 36, 43, 37, 55, 40] }],
+      chart: { type: 'area', width: 80, height: 42, sparkline: { enabled: true }, toolbar: { show: false }, padding: { left: 0, right: 0, top: 0, bottom: 0 } },
       dataLabels: { enabled: false },
-      tooltip: {
-        custom: function(opts){
-          var d = quadrant[opts.dataPointIndex];
-          if (!d) return '';
-          return '<div style="padding:10px 13px;font-size:12px;line-height:1.6">' +
-            '<div style="font-weight:600;margin-bottom:3px">' + d.nama_pelanggaran + '</div>' +
-            '<div>Total: <b>' + d.total.toLocaleString() + '</b></div>' +
-            '<div>Terkonfirmasi: <b>' + d.confirmed.toLocaleString() + '</b></div>' +
-            '<div>Tingkat konfirmasi: <b>' + d.confirmation_rate + '%</b></div></div>';
+      stroke: { curve: 'smooth', width: 2, colors: [chartColor], lineCap: 'round' },
+      grid: {
+        show: true, borderColor: 'transparent', strokeDashArray: 0, position: 'back',
+        xaxis: { lines: { show: false } }, yaxis: { lines: { show: false } },
+        padding: { top: -3, right: 0, bottom: 0, left: 0 }
+      },
+      fill: {
+        type: 'gradient', colors: [chartColor],
+        gradient: { shade: 'light', type: 'vertical', shadeIntensity: 0.5, gradientToColors: [chartColor + '00'], inverseColors: false, opacityFrom: .75, opacityTo: 0.3, stops: [0, 100] }
+      },
+      markers: { colors: [chartColor], strokeWidth: 2, size: 0, hover: { size: 8 } },
+      xaxis: { labels: { show: false }, categories: ['Jan ' + currentYear, 'Feb ' + currentYear, 'Mar ' + currentYear, 'Apr ' + currentYear, 'May ' + currentYear, 'Jun ' + currentYear, 'Jul ' + currentYear, 'Aug ' + currentYear, 'Sep ' + currentYear, 'Oct ' + currentYear, 'Nov ' + currentYear, 'Dec ' + currentYear], tooltip: { enabled: false } },
+      yaxis: { labels: { show: false } }
+    }).render();
+  }
+
+  createChart('new-user-chart', '#487fff', (kpis[0] && kpis[0].sparkline) || []);
+  createChart('active-user-chart', '#45b369', (kpis[1] && kpis[1].sparkline) || []);
+  createChart('total-sales-chart', '#f4941e', (kpis[2] && kpis[2].sparkline) || []);
+  createChart('conversion-user-chart', '#8252e9', (kpis[3] && kpis[3].sparkline) || []);
+  createChart('leads-chart', '#de3ace', (kpis[4] && kpis[4].sparkline) || []);
+  createChart('total-profit-chart', '#00b8f2', (kpis[5] && kpis[5].sparkline) || []);
+
+  var revenueEl = document.querySelector('#revenue-chart');
+  if (revenueEl && typeof ApexCharts !== 'undefined') {
+    new ApexCharts(revenueEl, {
+      series: [{ name: 'This Day', data: growth.series && growth.series.length ? growth.series : [4, 18, 13, 40, 30, 50, 30, 60, 40, 75, 45, 90] }],
+      chart: { type: 'area', width: '100%', height: 162, toolbar: { show: false }, padding: { left: 0, right: 0, top: 0, bottom: 0 } },
+      dataLabels: { enabled: false },
+      stroke: { curve: 'smooth', width: 2, colors: ['#487fff'], lineCap: 'round' },
+      grid: {
+        show: true, borderColor: 'red', strokeDashArray: 0, position: 'back',
+        xaxis: { lines: { show: false } }, yaxis: { lines: { show: false } },
+        padding: { top: -30, right: 0, bottom: -10, left: 0 }
+      },
+      fill: {
+        type: 'gradient', colors: ['#487fff'],
+        gradient: { shade: 'light', type: 'vertical', shadeIntensity: 0.5, gradientToColors: ['#487fff00'], inverseColors: false, opacityFrom: .6, opacityTo: 0.3, stops: [0, 100] }
+      },
+      markers: { colors: ['#487fff'], strokeWidth: 3, size: 0, hover: { size: 10 } },
+      xaxis: { categories: growth.labels && growth.labels.length ? growth.labels : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], labels: { show: false } },
+      yaxis: { labels: { show: false } }
+    }).render();
+  }
+
+  var barEl = document.querySelector('#barChart');
+  if (barEl && typeof ApexCharts !== 'undefined') {
+    var labels = statistic.labels && statistic.labels.length ? statistic.labels : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var series = statistic.series && statistic.series.length ? statistic.series : [85000,70000,40000,50000,60000,50000,40000,50000,40000,60000,30000,50000];
+    var barData = labels.map(function (label, i) { return { x: label, y: series[i] || 0 }; });
+    new ApexCharts(barEl, {
+      series: [{ name: 'Sales', data: barData }],
+      chart: { type: 'bar', height: 310, toolbar: { show: false } },
+      plotOptions: { bar: { borderRadius: 4, horizontal: false, columnWidth: '23%', endingShape: 'rounded' } },
+      dataLabels: { enabled: false },
+      fill: {
+        type: 'gradient', colors: ['#487FFF'],
+        gradient: { shade: 'light', type: 'vertical', shadeIntensity: 0.5, gradientToColors: ['#487FFF'], inverseColors: false, opacityFrom: 1, opacityTo: 1, stops: [0, 100] }
+      },
+      grid: { show: true, borderColor: '#D1D5DB', strokeDashArray: 4, position: 'back' },
+      xaxis: { type: 'category', categories: labels }
+    }).render();
+  }
+
+  var donutEl = document.querySelector('#donutChart');
+  if (donutEl && typeof ApexCharts !== 'undefined') {
+    var total = (overview.confirmed || 0) + (overview.dismissed || 0) + (overview.pending || 0);
+    new ApexCharts(donutEl, {
+      series: [total || 0, overview.pending || 0, overview.confirmed || 0],
+      colors: ['#45B369', '#FF9F29', '#487FFF'],
+      labels: ['Active', 'New', 'Total'],
+      legend: { show: false },
+      chart: { type: 'donut', height: 300, sparkline: { enabled: true }, margin: { top: -100, right: -100, bottom: -100, left: -100 }, padding: { top: -100, right: -100, bottom: -100, left: -100 } },
+      stroke: { width: 0 },
+      dataLabels: { enabled: false },
+      plotOptions: {
+        pie: {
+          startAngle: -90, endAngle: 90, offsetY: 10, customScale: 0.8,
+          donut: { size: '70%', labels: { show: true, total: { showAlways: true, show: true, label: 'Customer Report' } } }
         }
       }
     }).render();
   }
 
-  var slovin = @json($slovin ?? null);
-  var slovinEl = document.querySelector('#damSlovinChart');
-  if (slovinEl && slovin) {
-    new ApexCharts(slovinEl, {
-      chart: { type: 'bar', height: 220, toolbar: { show:false } },
-      series: [{ name: 'Jumlah', data: [slovin.target_sample_size, slovin.l1_reviewed, slovin.l2_reviewed, slovin.post_event] }],
-      colors: ['#9CA3AF'],
-      plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '55%',
-        colors: { ranges: [{ from: 0, to: 0, color: '#9CA3AF' }] } } },
-      xaxis: { categories: ['Target Slovin (n)', 'Direview L1', 'Direview L2', 'Post Event'] },
-      dataLabels: { enabled: true },
-      grid: { borderColor: '#E5E7EB', strokeDashArray: 4 },
-      legend: { show: false }
+  var statusEl = document.querySelector('#paymentStatusChart');
+  if (statusEl && typeof ApexCharts !== 'undefined') {
+    new ApexCharts(statusEl, {
+      series: [
+        { name: 'Net Profit', data: weeklyStatus.confirmed && weeklyStatus.confirmed.length ? weeklyStatus.confirmed : [44, 100, 40, 56, 30, 58, 50] },
+        { name: 'Revenue', data: weeklyStatus.pending && weeklyStatus.pending.length ? weeklyStatus.pending : [90, 140, 80, 125, 70, 140, 110] },
+        { name: 'Free Cash', data: weeklyStatus.dismissed && weeklyStatus.dismissed.length ? weeklyStatus.dismissed : [60, 120, 60, 90, 50, 95, 90] }
+      ],
+      colors: ['#45B369', '#144bd6', '#FF9F29'],
+      legend: { show: false },
+      chart: { type: 'bar', height: 350, toolbar: { show: false } },
+      grid: { show: true, borderColor: '#D1D5DB', strokeDashArray: 4, position: 'back' },
+      plotOptions: { bar: { borderRadius: 4, columnWidth: 8 } },
+      dataLabels: { enabled: false },
+      states: { hover: { filter: { type: 'none' } } },
+      stroke: { show: true, width: 0, colors: ['transparent'] },
+      xaxis: { categories: weeklyStatus.labels && weeklyStatus.labels.length ? weeklyStatus.labels : ['Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat', 'Sun'] },
+      fill: { opacity: 1, width: 18 }
     }).render();
   }
-})();
-</script>
-<script>
-(function(){
-  var csrfToken = document.querySelector('meta[name="csrf-token"]');
-  csrfToken = csrfToken ? csrfToken.getAttribute('content') : '';
-  var verdictUrl = @json(route('pra-operasi.dms-monitoring.qa-sample.verdict'));
 
-  document.querySelectorAll('.dam-qa-verdict-btn').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var row = btn.closest('.dam-qa-row');
-      var sampleId = row.getAttribute('data-sample-id');
-      var verdict = btn.getAttribute('data-verdict');
-      var group = row.querySelectorAll('.dam-qa-verdict-btn');
-      group.forEach(function(b){ b.disabled = true; });
-
-      fetch(verdictUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-        body: JSON.stringify({ sample_id: sampleId, verdict: verdict })
-      }).then(function(r){ return r.json(); }).then(function(){
-        row.classList.add('is-audited');
-        row.style.opacity = '0.5';
-        row.querySelector('td:last-child').innerHTML = '<span class="text-success-600 text-sm"><iconify-icon icon="solar:check-circle-bold"></iconify-icon> Tersimpan</span>';
-      }).catch(function(){
-        alert('Gagal menyimpan verdict. Coba lagi.');
-        group.forEach(function(b){ b.disabled = false; });
-      });
+  if (window.jQuery && jQuery.fn.vectorMap && document.getElementById('world-map')) {
+    jQuery('#world-map').vectorMap({
+      map: 'world_mill_en',
+      backgroundColor: 'transparent',
+      borderColor: '#fff',
+      borderOpacity: 0.25,
+      borderWidth: 0,
+      color: '#000000',
+      regionStyle: { initial: { fill: '#D1D5DB' } },
+      markerStyle: { initial: { r: 5, fill: '#fff', 'fill-opacity': 1, stroke: '#000', 'stroke-width': 1, 'stroke-opacity': 0.4 } },
+      markers: [
+        { latLng: [35.8617, 104.1954], name: 'China : 250' },
+        { latLng: [25.2744, 133.7751], name: 'Australia : 250' },
+        { latLng: [36.77, -119.41], name: 'USA : 82%' },
+        { latLng: [55.37, -3.41], name: 'UK : 250' },
+        { latLng: [25.20, 55.27], name: 'UAE : 250' }
+      ],
+      series: { regions: [{ values: { US: '#487FFF', SA: '#487FFF', AU: '#487FFF', CN: '#487FFF', GB: '#487FFF', ID: '#487FFF' }, attribute: 'fill' }] },
+      hoverOpacity: null,
+      normalizeFunction: 'linear',
+      zoomOnScroll: false,
+      scaleColors: ['#000000', '#000000'],
+      selectedColor: '#000000',
+      selectedRegions: [],
+      enableZoom: false,
+      hoverColor: '#fff'
     });
-  });
+  }
 })();
 </script>
 @endsection

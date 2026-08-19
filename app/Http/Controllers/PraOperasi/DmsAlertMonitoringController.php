@@ -27,13 +27,7 @@ final class DmsAlertMonitoringController extends Controller
     {
         $filters = $this->readDateFilters($request);
         $payload = $this->overview->dashboard($filters['start'], $filters['end']);
-        $payload['filters'] = $filters;
-        $payload['showDateFilter'] = true;
-        $payload['pageTitle'] = 'Dashboard';
-        $payload['breadcrumbCurrent'] = 'CRM';
-        $payload['breadcrumbParentUrl'] = route('pra-operasi.dms-monitoring');
-
-        return view('dms.dashboard', $payload);
+        return view('pra-operasi.dms-alert-monitoring', $payload);
     }
 
     /**
