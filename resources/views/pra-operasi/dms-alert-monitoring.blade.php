@@ -22,6 +22,10 @@
   .dam-stat-mini .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-secondary-light);font-weight:600;}
   .dam-stat-mini .v{font-size:18px;font-weight:700;margin-top:3px;color:var(--text-primary-light);}
   .dam-qa-row.is-audited{background:rgba(69,179,105,0.06);}
+  .dam-kpi-card{border-radius:14px;border:1px solid var(--neutral-200,#e5e7eb);background:#fff;padding:16px 18px;display:flex;align-items:center;gap:14px;height:100%;}
+  .dam-kpi-icon{width:44px;height:44px;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:var(--primary-50,#eef4ff);color:var(--primary-600,#487FFF);font-size:21px;flex-shrink:0;}
+  .dam-kpi-label{font-size:12px;color:var(--text-secondary-light);font-weight:600;}
+  .dam-kpi-value{font-size:24px;font-weight:700;color:var(--text-primary-light,#111827);line-height:1.25;}
 </style>
 @endsection
 
@@ -73,6 +77,55 @@
 
 @unless($up)
 @else
+
+{{-- ============================================================ --}}
+{{-- SNAPSHOT HARI INI — 4 KARTU PALING ATAS --}}
+{{-- ============================================================ --}}
+<div class="mb-24">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-12">
+    <div class="dam-section-title mb-0">Snapshot Hari Ini &middot; {{ $today['date_label'] }}</div>
+    <span class="text-secondary-light text-xs">Real-time &mdash; terpisah dari filter tanggal di bawah</span>
+  </div>
+  <div class="row g-3">
+    <div class="col-xxl-3 col-md-6">
+      <div class="dam-kpi-card">
+        <span class="dam-kpi-icon"><iconify-icon icon="solar:wheel-bold"></iconify-icon></span>
+        <div>
+          <div class="dam-kpi-label">Unit Beroperasi</div>
+          <div class="dam-kpi-value">{{ number_format($today['units_operating']) }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xxl-3 col-md-6">
+      <div class="dam-kpi-card">
+        <span class="dam-kpi-icon"><iconify-icon icon="solar:users-group-rounded-bold"></iconify-icon></span>
+        <div>
+          <div class="dam-kpi-label">Operator Checkin</div>
+          <div class="dam-kpi-value">{{ number_format($today['operators_checked_in']) }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xxl-3 col-md-6">
+      <div class="dam-kpi-card">
+        <span class="dam-kpi-icon"><iconify-icon icon="solar:danger-triangle-bold"></iconify-icon></span>
+        <div>
+          <div class="dam-kpi-label">Rasio Alert / Unit</div>
+          <div class="dam-kpi-value">{{ number_format($today['ratio_per_unit'], 2) }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xxl-3 col-md-6">
+      <div class="dam-kpi-card">
+        <span class="dam-kpi-icon"><iconify-icon icon="solar:user-id-bold"></iconify-icon></span>
+        <div>
+          <div class="dam-kpi-label">Rasio Alert / Orang</div>
+          <div class="dam-kpi-value">{{ number_format($today['ratio_per_operator'], 2) }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="text-secondary-light text-xs mt-8 mb-0">Dari {{ number_format($today['total_alerts']) }} alert hari ini, dibagi jumlah unit dan orang yang aktif hari ini juga.</p>
+</div>
 
 {{-- ============================================================ --}}
 {{-- RINGKASAN --}}

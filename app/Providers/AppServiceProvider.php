@@ -17,6 +17,10 @@ class AppServiceProvider extends ServiceProvider
     {
         // Register ChatbotRuleService as singleton
         $this->app->singleton(\App\Services\ChatbotRuleService::class);
+        $this->app->bind(
+            \App\Services\Dms\DmsDashboardDataSource::class,
+            \App\Services\DmsMonitoring\DmsAlertMonitoringDataReader::class
+        );
     }
 
     /**

@@ -1,836 +1,527 @@
-@extends('layouts.master')
+@extends('dms.layouts.app')
 
-@section('title', 'DMS Dashboard')
+@section('title', 'Dashboard DMS')
+
 @section('content')
-<x-page-title title="DMS Dashboard" pagetitle="Driver Monitoring System - Real-time Monitoring" />
-
-<style>
-    .operator-card {
-        border-radius: 16px;
-        border: 1px solid #e5e7eb;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        transition: all 0.3s ease;
-        background: #ffffff;
-        overflow: hidden;
-        position: relative;
-        margin-bottom: 24px;
-    }
-    .operator-card:hover {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-    .operator-header {
-        padding: 20px 24px;
-        border-bottom: 1px solid #f3f4f6;
-        background: #ffffff;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .operator-title {
-        font-size: 20px;
-        font-weight: 600;
-        color: #111827;
-        margin: 0;
-    }
-    .status-badge {
-        padding: 6px 16px;
-        border-radius: 20px;
-        font-size: 13px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    .status-badge.safe {
-        background: #d1fae5;
-        color: #065f46;
-    }
-    .status-badge.caution {
-        background: #fed7aa;
-        color: #92400e;
-    }
-    .status-badge.attention {
-        background: #fee2e2;
-        color: #991b1b;
-    }
-    .status-badge.medium {
-        background: #fef3c7;
-        color: #78350f;
-    }
-    .operator-body {
-        padding: 24px;
-    }
-    .metrics-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 16px;
-        margin-bottom: 20px;
-    }
-    .metric-item {
-        display: flex;
-        flex-direction: column;
-        padding: 12px;
-        background: #f9fafb;
-        border-radius: 8px;
-        border: 1px solid #e5e7eb;
-        transition: all 0.2s ease;
-    }
-    .metric-item:hover {
-        background: #f3f4f6;
-        border-color: #d1d5db;
-    }
-    .metric-label {
-        font-size: 11px;
-        color: #6b7280;
-        margin-bottom: 6px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    .metric-value {
-        font-size: 22px;
-        font-weight: 700;
-        color: #111827;
-        line-height: 1.2;
-    }
-    .metric-value.orange {
-        color: #f97316;
-        font-size: 28px;
-    }
-    .metric-value.small {
-        font-size: 16px;
-        font-weight: 600;
-    }
-    .indicator-section {
-        margin-top: 16px;
-        padding-top: 16px;
-        border-top: 1px solid #e5e7eb;
-    }
-    .indicator-item {
-        margin-bottom: 12px;
-    }
-    .indicator-item:last-child {
-        margin-bottom: 0;
-    }
-    .indicator-label {
-        font-size: 11px;
-        color: #6b7280;
-        margin-bottom: 4px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    .indicator-value {
-        font-size: 14px;
-        color: #9ca3af;
-        font-style: italic;
-    }
-    .chart-container {
-        position: relative;
-        height: 250px;
-        margin-top: 16px;
-        background: #ffffff;
-        border-radius: 12px;
-        padding: 16px;
-        border: 1px solid #e5e7eb;
-    }
-    .chart-wrapper {
-        position: relative;
-        height: 100%;
-        width: 100%;
-    }
-    .chart-wrapper canvas {
-        width: 100%;
-        height: 100%;
-        border-radius: 8px;
-    }
-    .detail-btn {
-        margin-top: 20px;
-        padding: 12px 20px;
-        background: #ffffff;
-        border: 1.5px solid #e5e7eb;
-        border-radius: 8px;
-        color: #374151;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-    }
-    .detail-btn:hover {
-        background: #f9fafb;
-        border-color: #3b82f6;
-        color: #3b82f6;
-        transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-    .detail-btn:active {
-        transform: translateY(0);
-    }
-    .empty-state {
-        text-align: center;
-        padding: 60px 20px;
-        color: #6b7280;
-    }
-    .empty-state-icon {
-        font-size: 48px;
-        margin-bottom: 16px;
-        opacity: 0.5;
-    }
-    .loading-spinner {
-        display: inline-block;
-        width: 20px;
-        height: 20px;
-        border: 3px solid #f3f3f3;
-        border-top: 3px solid #3b82f6;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-    }
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-    .threshold-line {
-        stroke-dasharray: 5,5;
-        stroke-width: 2;
-    }
-</style>
-
-<div class="row">
-    <div class="col-12">
-        <div class="card rounded-4">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <div>
-                        <h5 class="mb-1">Real-time Monitoring</h5>
-                        <p class="text-muted mb-0">Data diperbarui setiap 2 detik</p>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="loading-spinner" id="loadingIndicator"></span>
-                        <span class="text-muted small" id="lastUpdate">Memuat data...</span>
-                    </div>
-                </div>
-
-                <div id="operatorsContainer">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">📊</div>
-                        <p>Memuat data operator...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
+  <h6 class="fw-semibold mb-0">Dashboard</h6>
+  <ul class="d-flex align-items-center gap-2">
+    <li class="fw-medium">
+      <a href="{{ route('dms.dashboard') }}" class="d-flex align-items-center gap-1 hover-text-primary">
+        <iconify-icon icon="solar:home-smile-angle-outline" class="icon text-lg"></iconify-icon>
+        Dashboard
+      </a>
+    </li>
+    <li>-</li>
+    <li class="fw-medium">DMS</li>
+  </ul>
 </div>
 
-<!-- Modal for Driver Details -->
-<div class="modal fade" id="driverDetailModal" tabindex="-1" aria-labelledby="driverDetailModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="driverDetailModalLabel">Detail Safety Score Logs</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div id="driverDetailLoading" class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2 text-muted">Memuat data...</p>
-                </div>
-                <div id="driverDetailContent" style="display: none;">
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-striped table-hover" id="driverLogsTable">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Driver ID</th>
-                                    <th>Timestamp</th>
-                                    <th>EAR</th>
-                                    <th>PERCLOS (60s)</th>
-                                    <th>Blink (60s)</th>
-                                    <th>Microsleep (60s)</th>
-                                    <th>Fatigue</th>
-                                    <th>Drift</th>
-                                    <th>Safety Score</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="driverLogsTableBody">
-                                <!-- Data will be loaded here -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div id="driverDetailError" style="display: none;" class="alert alert-danger">
-                    <p class="mb-0">Gagal memuat data. Silakan coba lagi.</p>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
-            </div>
-        </div>
-    </div>
+@unless($up)
+<div class="alert alert-warning radius-8 mb-24 d-flex align-items-start gap-2">
+  <iconify-icon icon="solar:danger-circle-bold" class="icon text-xl flex-shrink-0"></iconify-icon>
+  <div>Koneksi ke hse_automation (bcsid.mv_dms_alert) tidak tersedia saat ini. Kartu di bawah menampilkan angka kosong sampai koneksi tersambung.</div>
 </div>
+@endunless
 
-<script>
-    let canvasData = {};
-    let updateInterval;
-
-    // Function to get status badge class
-    function getStatusClass(status) {
-        const statusLower = (status || '').toLowerCase();
-        if (statusLower === 'safe') return 'safe';
-        if (statusLower === 'caution') return 'caution';
-        if (statusLower === 'attention') return 'attention';
-        return 'medium';
-    }
-
-    // Function to format status text
-    function formatStatus(status) {
-        const statusLower = (status || '').toLowerCase();
-        if (statusLower === 'safe') return 'Safe';
-        if (statusLower === 'caution') return 'Caution';
-        if (statusLower === 'attention') return 'Attention';
-        return 'Medium';
-    }
-
-    // Function to draw EAR waveform chart on canvas
-    function drawEARChart(canvasId, earData, timeData, threshold, earBandLow, earBandHigh) {
-        const canvas = document.getElementById(canvasId);
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        // Set canvas size based on container
-        const container = canvas.parentElement;
-        let W, H;
-        
-        if (container) {
-            const rect = container.getBoundingClientRect();
-            const dpr = window.devicePixelRatio || 1;
-            const displayWidth = rect.width;
-            const displayHeight = rect.height;
-            
-            // Set internal size (scaled for device pixel ratio)
-            canvas.width = displayWidth * dpr;
-            canvas.height = displayHeight * dpr;
-            
-            // Set display size (CSS pixels)
-            canvas.style.width = displayWidth + 'px';
-            canvas.style.height = displayHeight + 'px';
-            
-            // Scale context to match device pixel ratio
-            ctx.scale(dpr, dpr);
-            
-            // Use display dimensions for drawing
-            W = displayWidth;
-            H = displayHeight;
-        } else {
-            // Fallback
-            const rect = canvas.getBoundingClientRect();
-            W = rect.width;
-            H = rect.height;
-            canvas.width = W;
-            canvas.height = H;
-        }
-
-        // Clear canvas
-        ctx.clearRect(0, 0, W, H);
-
-        // Draw grid background (optimized)
-        ctx.strokeStyle = '#e5e7eb';
-        ctx.lineWidth = 1;
-        
-        // Batch draw vertical lines
-        ctx.beginPath();
-        for (let x = 0; x < W; x += 10) {
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, H);
-        }
-        ctx.stroke();
-        
-        // Batch draw horizontal lines
-        ctx.beginPath();
-        for (let y = 0; y < H; y += 10) {
-            ctx.moveTo(0, y);
-            ctx.lineTo(W, y);
-        }
-        ctx.stroke();
-
-        if (!earData || earData.length === 0) return;
-
-        // EAR range
-        const minEAR = 0.05;
-        const maxEAR = 0.4;
-
-        // Convert EAR value to Y coordinate
-        const yOf = (v) => H - ((v - minEAR) / (maxEAR - minEAR)) * H;
-
-        // Draw EAR band area (green semi-transparent)
-        if (earBandLow !== null && earBandHigh !== null) {
-            ctx.fillStyle = '#a7f3d0';
-            ctx.globalAlpha = 0.25;
-            const yHigh = yOf(earBandLow);
-            const yLow = yOf(earBandHigh);
-            ctx.fillRect(0, Math.min(yHigh, yLow), W, Math.abs(yLow - yHigh));
-            ctx.globalAlpha = 1;
-        }
-
-        // Draw threshold line (orange dashed)
-        if (threshold !== null) {
-            ctx.setLineDash([4, 4]);
-            ctx.strokeStyle = '#f59e0b';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            const yThr = yOf(threshold);
-            ctx.moveTo(0, yThr);
-            ctx.lineTo(W, yThr);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
-
-        // Draw EAR data line (dark grey/black)
-        ctx.strokeStyle = '#111827';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-
-        for (let i = 0; i < earData.length; i++) {
-            const x = (i / earData.length) * W;
-            const y = yOf(earData[i]);
-
-            if (i === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
-            }
-        }
-        ctx.stroke();
-
-        // Store data for later use (events, etc.)
-        canvasData[canvasId] = {
-            earData,
-            timeData,
-            threshold,
-            earBandLow,
-            earBandHigh,
-            W,
-            H,
-            minEAR,
-            maxEAR
-        };
-    }
-
-    // Helper function to safely format numbers
-    function safeToFixed(value, decimals = 0) {
-        if (value === null || value === undefined || isNaN(value)) {
-            return '0';
-        }
-        const num = parseFloat(value);
-        if (isNaN(num)) {
-            return '0';
-        }
-        return num.toFixed(decimals);
-    }
-
-    // Helper function to safely get number value
-    function safeNumber(value, defaultValue = 0) {
-        if (value === null || value === undefined || isNaN(value)) {
-            return defaultValue;
-        }
-        const num = parseFloat(value);
-        return isNaN(num) ? defaultValue : num;
-    }
-
-    // Function to render operator card
-    function renderOperatorCard(operatorData) {
-        const { driver_id, latest, chart_data } = operatorData;
-        const statusClass = getStatusClass(latest.status);
-        const statusText = formatStatus(latest.status);
-        const canvasId = `chart-${driver_id.replace(/\s+/g, '-')}`;
-
-        // Calculate threshold (60 for safety score)
-        const threshold = 60;
-
-        // Safely get values with defaults
-        const safetyScore = safeNumber(latest.safety_score, 0);
-        const fatigue = safeNumber(latest.fatigue, 0);
-        const drift = safeNumber(latest.drift, 0);
-        const perclos = safeNumber(latest.perclos_60s, 0);
-        const slopeEar = safeNumber(latest.slope_ear_per_min, 0);
-        const blinkCount = safeNumber(latest.blink_60s, 0);
-        const microsleep = safeNumber(latest.microsleep_60s, 0);
-
-        return `
-            <div class="operator-card" id="operator-card-${driver_id.replace(/\s+/g, '-')}">
-                <div class="operator-header">
-                    <h3 class="operator-title">${driver_id}</h3>
-                    <span class="status-badge ${statusClass}">${statusText}</span>
+<div class="row gy-4">
+  <div class="col-xxl-8">
+    <div class="row gy-4">
+      @foreach($kpis as $kpi)
+      <div class="col-xxl-4 col-sm-6">
+        <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 {{ $kpi['gradient'] }}">
+          <div class="card-body p-0">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+              <div class="d-flex align-items-center gap-2">
+                <span class="mb-0 w-48-px h-48-px {{ $kpi['bg'] }} flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+                  <iconify-icon icon="{{ $kpi['icon'] }}" class="icon"></iconify-icon>
+                </span>
+                <div>
+                  <span class="mb-2 fw-medium text-secondary-light text-sm">{{ $kpi['label'] }}</span>
+                  <h6 class="fw-semibold">{{ $kpi['value'] }}</h6>
                 </div>
-                <div class="operator-body">
-                    <div class="chart-container">
-                        <div class="chart-wrapper">
-                            <canvas id="${canvasId}" style="width: 100%; height: 100%;"></canvas>
-                        </div>
-                    </div>
-                    <div class="metrics-grid mt-2">
-                        <div class="metric-item" data-metric="safety-score">
-                            <div class="metric-label">Safety Score</div>
-                            <div class="metric-value orange">${safeToFixed(safetyScore, 0)}</div>
-                        </div>
-                        <div class="metric-item" data-metric="safety-band">
-                            <div class="metric-label">Safety Band</div>
-                            <div class="metric-value small">${statusText}</div>
-                        </div>
-                        <div class="metric-item" data-metric="fatigue">
-                            <div class="metric-label">Fatigue</div>
-                            <div class="metric-value">${safeToFixed(fatigue, 0)}</div>
-                        </div>
-                        <div class="metric-item" data-metric="drift">
-                            <div class="metric-label">Drift</div>
-                            <div class="metric-value">${safeToFixed(drift, 0)}</div>
-                        </div>
-                        <div class="metric-item" data-metric="perclos">
-                            <div class="metric-label">PERCLOS</div>
-                            <div class="metric-value">${safeToFixed(perclos * 100, 1)}%</div>
-                        </div>
-                        <div class="metric-item" data-metric="slope-ear">
-                            <div class="metric-label">Slope EAR (/MIN)</div>
-                            <div class="metric-value">${safeToFixed(slopeEar, 4)}</div>
-                        </div>
-                        <div class="metric-item" data-metric="blink-count">
-                            <div class="metric-label">Blink Count (60s)</div>
-                            <div class="metric-value">${blinkCount}</div>
-                        </div>
-                        <div class="metric-item" data-metric="microsleep">
-                            <div class="metric-label">Microsleep (60s)</div>
-                            <div class="metric-value">${microsleep}</div>
-                        </div>
-                    </div>
-                    <div class="indicator-section">
-                        <div class="indicator-item" data-indicator="fatigue">
-                            <div class="indicator-label">Indikator Fatigue</div>
-                            <div class="indicator-value">-</div>
-                        </div>
-                        <div class="indicator-item" data-indicator="drift">
-                            <div class="indicator-label">Drift Pattern</div>
-                            <div class="indicator-value">-</div>
-                        </div>
-                    </div>
-                    <button class="detail-btn w-100" onclick="viewDetails('${driver_id}')">
-                        <span>Lihat detail</span>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 8px;">
-                            <path d="M5 12h14M12 5l7 7-7 7"/>
-                        </svg>
-                    </button>
-                </div>
+              </div>
+              <div id="{{ $kpi['chart'] }}" class="remove-tooltip-title rounded-tooltip-value"></div>
             </div>
-        `;
-    }
+            <p class="text-sm mb-0">vs kemarin <span class="{{ $kpi['delta']['class'] }} px-1 rounded-2 fw-medium text-sm">{{ $kpi['delta']['text'] }}</span></p>
+          </div>
+        </div>
+      </div>
+      @endforeach
+    </div>
+  </div>
 
-    // Function to update operator card data without recreating HTML
-    function updateOperatorCard(driverId, latest, chartData) {
-        const cardId = `operator-card-${driverId.replace(/\s+/g, '-')}`;
-        const card = document.getElementById(cardId);
-        
-        if (!card) return false; // Card doesn't exist, need to create it
-        
-        // Update metrics without recreating the card
-        const safetyScore = safeNumber(latest.safety_score, 0);
-        const fatigue = safeNumber(latest.fatigue, 0);
-        const drift = safeNumber(latest.drift, 0);
-        const perclos = safeNumber(latest.perclos_60s, 0);
-        const slopeEar = safeNumber(latest.slope_ear_per_min, 0);
-        const blinkCount = safeNumber(latest.blink_60s, 0);
-        const microsleep = safeNumber(latest.microsleep_60s, 0);
-        const statusText = formatStatus(latest.status);
-        const statusClass = getStatusClass(latest.status);
-        
-        // Update status badge
-        const badge = card.querySelector('.status-badge');
-        if (badge) {
-            badge.className = `status-badge ${statusClass}`;
-            badge.textContent = statusText;
-        }
-        
-        // Update metric values using data attributes
-        const updateMetric = (metricName, value) => {
-            const metricItem = card.querySelector(`[data-metric="${metricName}"]`);
-            if (metricItem) {
-                const valueEl = metricItem.querySelector('.metric-value');
-                if (valueEl) valueEl.textContent = value;
-            }
-        };
-        
-        // Update indicator values
-        const updateIndicator = (indicatorName, value) => {
-            const indicatorItem = card.querySelector(`[data-indicator="${indicatorName}"]`);
-            if (indicatorItem) {
-                const valueEl = indicatorItem.querySelector('.indicator-value');
-                if (valueEl) valueEl.textContent = value || '-';
-            }
-        };
-        
-        updateMetric('safety-score', safeToFixed(safetyScore, 0));
-        updateMetric('safety-band', statusText);
-        updateMetric('fatigue', safeToFixed(fatigue, 0));
-        updateMetric('drift', safeToFixed(drift, 0));
-        updateMetric('perclos', safeToFixed(perclos * 100, 1) + '%');
-        updateMetric('slope-ear', safeToFixed(slopeEar, 4));
-        updateMetric('blink-count', blinkCount);
-        updateMetric('microsleep', microsleep);
-        
-        // Update indicators (currently empty, but ready for future data)
-        updateIndicator('fatigue', '-');
-        updateIndicator('drift', '-');
-        
-        // Update chart smoothly - only if data changed
-        const canvasId = `chart-${driverId.replace(/\s+/g, '-')}`;
-        const threshold = latest.ear_threshold || 0.2;
-        const earBandLow = latest.ear_band_low || 0.22;
-        const earBandHigh = latest.ear_band_high || 0.3;
-        
-        // Check if canvas exists
-        const canvas = document.getElementById(canvasId);
-        if (canvas) {
-            // Use requestAnimationFrame for smooth update
-            requestAnimationFrame(() => {
-                drawEARChart(
-                    canvasId,
-                    chartData.ear || [],
-                    chartData.labels || [],
-                    threshold,
-                    earBandLow,
-                    earBandHigh
-                );
-            });
-        }
-        
-        return true;
-    }
+  <div class="col-xxl-4">
+    <div class="card h-100 radius-8 border">
+      <div class="card-body p-24">
+        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+          <div>
+            <h6 class="mb-2 fw-bold text-lg">{{ $growth['title'] }}</h6>
+            <span class="text-sm fw-medium text-secondary-light">{{ $growth['subtitle'] }}</span>
+          </div>
+          <div class="text-end">
+            <h6 class="mb-2 fw-bold text-lg">{{ $growth['total'] }}</h6>
+            <span class="{{ $growth['delta']['class'] }} ps-12 pe-12 pt-2 pb-2 rounded-2 fw-medium text-sm">{{ $growth['delta']['text'] }}</span>
+          </div>
+        </div>
+        <div id="revenue-chart" class="mt-28"></div>
+      </div>
+    </div>
+  </div>
 
-    // Function to fetch and update data
-    async function fetchRealtimeData() {
-        try {
-            const response = await fetch('/api/dms/dashboard/realtime?minutes=60&limit=100');
-            const result = await response.json();
+  <div class="col-xxl-8">
+    <div class="card h-100 radius-8 border-0">
+      <div class="card-body p-24">
+        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+          <div>
+            <h6 class="mb-2 fw-bold text-lg">{{ $statistic['title'] }}</h6>
+            <span class="text-sm fw-medium text-secondary-light">{{ $statistic['subtitle'] }}</span>
+          </div>
+          <div>
+            <span class="form-select form-select-sm w-auto bg-base border text-secondary-light d-inline-block pe-none">{{ $dateLabel }}</span>
+          </div>
+        </div>
 
-            if (result.success && result.data) {
-                const container = document.getElementById('operatorsContainer');
-                
-                if (result.data.length === 0) {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <div class="empty-state-icon">📊</div>
-                            <p>Tidak ada data operator saat ini</p>
-                        </div>
-                    `;
-                    return;
-                }
+        <div class="mt-20 d-flex justify-content-center flex-wrap gap-3">
+          <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
+            <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
+              <iconify-icon icon="solar:danger-triangle-bold" class="icon"></iconify-icon>
+            </span>
+            <div>
+              <span class="text-secondary-light text-sm fw-medium">Total</span>
+              <h6 class="text-md fw-semibold mb-0">{{ $statistic['total'] }}</h6>
+            </div>
+          </div>
+          <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
+            <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
+              <iconify-icon icon="solar:shield-check-bold" class="icon"></iconify-icon>
+            </span>
+            <div>
+              <span class="text-secondary-light text-sm fw-medium">Confirmed</span>
+              <h6 class="text-md fw-semibold mb-0">{{ $statistic['confirmed'] }}</h6>
+            </div>
+          </div>
+          <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
+            <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
+              <iconify-icon icon="solar:check-circle-bold" class="icon"></iconify-icon>
+            </span>
+            <div>
+              <span class="text-secondary-light text-sm fw-medium">Dismissed</span>
+              <h6 class="text-md fw-semibold mb-0">{{ $statistic['dismissed'] }}</h6>
+            </div>
+          </div>
+        </div>
 
-                // Track which cards exist
-                const existingCards = new Set();
-                result.data.forEach(operatorData => {
-                    const cardId = `operator-card-${operatorData.driver_id.replace(/\s+/g, '-')}`;
-                    const card = document.getElementById(cardId);
-                    if (card) {
-                        existingCards.add(operatorData.driver_id);
-                    }
-                });
+        <div id="barChart" class="barChart"></div>
+      </div>
+    </div>
+  </div>
 
-                // Update existing cards or create new ones
-                const newCards = [];
-                result.data.forEach(operatorData => {
-                    const { driver_id, latest, chart_data } = operatorData;
-                    
-                    // Try to update existing card
-                    const updated = updateOperatorCard(driver_id, latest, chart_data);
-                    
-                    if (!updated) {
-                        // Card doesn't exist, need to create it
-                        newCards.push(operatorData);
-                    }
-                });
+  <div class="col-xxl-4">
+    <div class="row gy-4">
+      <div class="col-xxl-12 col-sm-6">
+        <div class="card h-100 radius-8 border-0">
+          <div class="card-body p-24">
+            <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+              <h6 class="mb-2 fw-bold text-lg">Kategori Alert</h6>
+              <span class="text-sm text-secondary-light">7 hari</span>
+            </div>
+            <div class="mt-3">
+              @forelse($categories as $i => $cat)
+              <div class="d-flex align-items-center justify-content-between gap-3 {{ $i < count($categories) - 1 ? 'mb-12' : '' }}">
+                <div class="d-flex align-items-center" style="min-width: 120px;">
+                  <span class="text-xxl line-height-1 d-flex align-content-center flex-shrink-0 {{ $cat['textClass'] }}">
+                    <iconify-icon icon="{{ $cat['icon'] }}" class="icon"></iconify-icon>
+                  </span>
+                  <span class="text-primary-light fw-medium text-sm ps-12 text-truncate" title="{{ $cat['name'] }}">{{ $cat['name'] }}</span>
+                </div>
+                <div class="d-flex align-items-center gap-2 w-100">
+                  <div class="w-100 max-w-66 ms-auto">
+                    <div class="progress progress-sm rounded-pill" role="progressbar" aria-valuenow="{{ $cat['pct'] }}" aria-valuemin="0" aria-valuemax="100">
+                      <div class="progress-bar {{ $cat['barClass'] }} rounded-pill" style="width: {{ $cat['pct'] }}%;"></div>
+                    </div>
+                  </div>
+                  <span class="text-secondary-light font-xs fw-semibold">{{ number_format($cat['total']) }}</span>
+                </div>
+              </div>
+              @empty
+              <p class="text-secondary-light text-sm mb-0">Belum ada kategori alert.</p>
+              @endforelse
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-xxl-12 col-sm-6">
+        <div class="card h-100 radius-8 border-0 overflow-hidden">
+          <div class="card-body p-24">
+            <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+              <h6 class="mb-2 fw-bold text-lg">Ringkasan Review</h6>
+              <span class="text-sm fw-medium text-secondary-light">7 hari</span>
+            </div>
+            <div class="d-flex flex-wrap align-items-center mt-3">
+              <ul class="flex-shrink-0">
+                <li class="d-flex align-items-center gap-2 mb-28">
+                  <span class="w-12-px h-12-px rounded-circle bg-danger-main"></span>
+                  <span class="text-secondary-light text-sm fw-medium">Confirmed: {{ number_format($overview['confirmed']) }}</span>
+                </li>
+                <li class="d-flex align-items-center gap-2 mb-28">
+                  <span class="w-12-px h-12-px rounded-circle bg-success-main"></span>
+                  <span class="text-secondary-light text-sm fw-medium">Dismissed: {{ number_format($overview['dismissed']) }}</span>
+                </li>
+                <li class="d-flex align-items-center gap-2">
+                  <span class="w-12-px h-12-px rounded-circle bg-warning-main"></span>
+                  <span class="text-secondary-light text-sm fw-medium">Pending: {{ number_format($overview['pending']) }}</span>
+                </li>
+              </ul>
+              <div id="donutChart" class="flex-grow-1 apexcharts-tooltip-z-none title-style circle-none"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-                // Create new cards if any
-                if (newCards.length > 0) {
-                    newCards.forEach(operatorData => {
-                        const { driver_id, latest, chart_data } = operatorData;
-                        const cardHtml = renderOperatorCard(operatorData);
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = cardHtml;
-                        const card = tempDiv.firstElementChild;
-                        if (card) {
-                            container.appendChild(card);
-                            
-                            // Draw chart for new card
-                            const canvasId = `chart-${driver_id.replace(/\s+/g, '-')}`;
-                            const threshold = latest.ear_threshold || 0.2;
-                            const earBandLow = latest.ear_band_low || 0.22;
-                            const earBandHigh = latest.ear_band_high || 0.3;
-                            
-                            setTimeout(() => {
-                                drawEARChart(
-                                    canvasId,
-                                    chart_data.ear || [],
-                                    chart_data.labels || [],
-                                    threshold,
-                                    earBandLow,
-                                    earBandHigh
-                                );
-                            }, 50);
-                        }
-                    });
-                }
+  <div class="col-xxl-4 col-sm-6">
+    <div class="card h-100 radius-8 border-0">
+      <div class="card-body p-24">
+        <h6 class="mb-2 fw-bold text-lg">Status Review Harian</h6>
+        <span class="text-sm fw-medium text-secondary-light">7 hari terakhir</span>
+        <ul class="d-flex flex-wrap align-items-center justify-content-center mt-32">
+          <li class="d-flex align-items-center gap-2 me-28">
+            <span class="w-12-px h-12-px rounded-circle bg-danger-main"></span>
+            <span class="text-secondary-light text-sm fw-medium">Confirmed: {{ number_format($weeklyStatus['totals']['confirmed']) }}</span>
+          </li>
+          <li class="d-flex align-items-center gap-2 me-28">
+            <span class="w-12-px h-12-px rounded-circle bg-info-main"></span>
+            <span class="text-secondary-light text-sm fw-medium">Pending: {{ number_format($weeklyStatus['totals']['pending']) }}</span>
+          </li>
+          <li class="d-flex align-items-center gap-2">
+            <span class="w-12-px h-12-px rounded-circle bg-success-main"></span>
+            <span class="text-secondary-light text-sm fw-medium">Dismissed: {{ number_format($weeklyStatus['totals']['dismissed']) }}</span>
+          </li>
+        </ul>
+        <div class="mt-40">
+          <div id="paymentStatusChart" class="margin-16-minus"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-                // Remove cards that no longer exist
-                const currentDrivers = new Set(result.data.map(d => d.driver_id));
-                const allCards = container.querySelectorAll('.operator-card');
-                allCards.forEach(card => {
-                    const cardId = card.id;
-                    const driverId = cardId.replace('operator-card-', '').replace(/-/g, ' ');
-                    if (!currentDrivers.has(driverId)) {
-                        card.remove();
-                    }
-                });
+  <div class="col-xxl-4 col-sm-6">
+    <div class="card radius-8 border-0 h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+          <h6 class="mb-2 fw-bold text-lg">Status Site</h6>
+          <span class="text-sm text-secondary-light">7 hari</span>
+        </div>
+      </div>
+      <div class="card-body pt-0">
+        <div id="siteShareChart"></div>
+      </div>
+      <div class="card-body p-24 pt-0 max-h-266-px scroll-sm overflow-y-auto">
+        @forelse($sites as $i => $site)
+        <div class="d-flex align-items-center justify-content-between gap-3 {{ $i < count($sites) - 1 ? 'mb-3 pb-2' : '' }}">
+          <div class="d-flex align-items-center w-100">
+            <span class="w-40-px h-40-px rounded-circle flex-shrink-0 me-12 overflow-hidden {{ $site['barClass'] }} text-white d-flex justify-content-center align-items-center fw-semibold">{{ $site['initials'] }}</span>
+            <div class="flex-grow-1">
+              <h6 class="text-sm mb-0">{{ $site['site'] }}</h6>
+              <span class="text-xs text-secondary-light fw-medium">{{ number_format($site['total']) }} alert &middot; {{ number_format($site['confirmed']) }} confirmed</span>
+            </div>
+          </div>
+          <div class="d-flex align-items-center gap-2 w-100">
+            <div class="w-100 max-w-66 ms-auto">
+              <div class="progress progress-sm rounded-pill" role="progressbar" aria-valuenow="{{ $site['pct'] }}" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar {{ $site['barClass'] }} rounded-pill" style="width: {{ $site['pct'] }}%;"></div>
+              </div>
+            </div>
+            <span class="text-secondary-light font-xs fw-semibold">{{ $site['pct'] }}%</span>
+          </div>
+        </div>
+        @empty
+        <p class="text-secondary-light text-sm mb-0">Belum ada data site.</p>
+        @endforelse
+      </div>
+    </div>
+  </div>
 
-                // Update last update time
-                const now = new Date();
-                document.getElementById('lastUpdate').textContent = 
-                    `Terakhir diperbarui: ${now.toLocaleTimeString('id-ID')}`;
-            }
-        } catch (error) {
-            console.error('Error fetching realtime data:', error);
-        }
-    }
+  <div class="col-xxl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+          <h6 class="mb-2 fw-bold text-lg mb-0">Operator Teratas</h6>
+          <a href="{{ route('pra-operasi.dms-monitoring') }}" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
+            Lihat semua
+            <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
+          </a>
+        </div>
+        <div class="mt-32">
+          @forelse($topOperators as $i => $op)
+          <div class="d-flex align-items-center justify-content-between gap-3 {{ $i < count($topOperators) - 1 ? 'mb-32' : '' }}">
+            <div class="d-flex align-items-center">
+              <span class="w-40-px h-40-px rounded-circle flex-shrink-0 me-12 overflow-hidden text-white d-flex justify-content-center align-items-center fw-semibold" style="background: {{ $op['color'] }};">{{ $op['initials'] }}</span>
+              <div class="flex-grow-1">
+                <h6 class="text-md mb-0">{{ $op['nama'] }}</h6>
+                <span class="text-sm text-secondary-light fw-medium">SID: {{ $op['kode_sid'] }}</span>
+              </div>
+            </div>
+            <span class="text-primary-light text-md fw-medium">{{ $op['confirmed'] }}/{{ $op['total'] }}</span>
+          </div>
+          @empty
+          <p class="text-secondary-light text-sm mb-0">Belum ada operator dengan alert.</p>
+          @endforelse
+        </div>
+      </div>
+    </div>
+  </div>
 
-    // Function to view details
-    async function viewDetails(driverId) {
-        const modalElement = document.getElementById('driverDetailModal');
-        const modalTitle = document.getElementById('driverDetailModalLabel');
-        const loadingDiv = document.getElementById('driverDetailLoading');
-        const contentDiv = document.getElementById('driverDetailContent');
-        const errorDiv = document.getElementById('driverDetailError');
-        const tableBody = document.getElementById('driverLogsTableBody');
+  <div class="col-xxl-6">
+    <div class="card h-100">
+      <div class="card-header border-bottom bg-base ps-0 py-0 pe-24 d-flex align-items-center justify-content-between">
+        <ul class="nav bordered-tab nav-pills mb-0" id="pills-tab" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="pills-to-do-list-tab" data-bs-toggle="pill" data-bs-target="#pills-to-do-list" type="button" role="tab" aria-controls="pills-to-do-list" aria-selected="true">Semua Alert</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="pills-recent-leads-tab" data-bs-toggle="pill" data-bs-target="#pills-recent-leads" type="button" role="tab" aria-controls="pills-recent-leads" aria-selected="false" tabindex="-1">Confirmed</button>
+          </li>
+        </ul>
+        <a href="{{ route('pra-operasi.dms-monitoring') }}" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
+          Lihat semua
+          <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
+        </a>
+      </div>
+      <div class="card-body p-24">
+        <div class="tab-content" id="pills-tabContent">
+          <div class="tab-pane fade show active" id="pills-to-do-list" role="tabpanel" aria-labelledby="pills-to-do-list-tab" tabindex="0">
+            @include('dms.partials._dashboard-alert-table', ['rows' => $recentAll])
+          </div>
+          <div class="tab-pane fade" id="pills-recent-leads" role="tabpanel" aria-labelledby="pills-recent-leads-tab" tabindex="0">
+            @include('dms.partials._dashboard-alert-table', ['rows' => $recentConfirmed])
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        // Set modal title
-        modalTitle.textContent = `Detail Safety Score Logs - ${driverId}`;
-
-        // Show loading, hide content and error
-        loadingDiv.style.display = 'block';
-        contentDiv.style.display = 'none';
-        errorDiv.style.display = 'none';
-        tableBody.innerHTML = '';
-
-        // Show modal using Bootstrap 5
-        let modal;
-        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-            modal = bootstrap.Modal.getOrCreateInstance(modalElement);
-            modal.show();
-        } else {
-            // Fallback if Bootstrap is not available
-            console.error('Bootstrap Modal is not available');
-            return;
-        }
-
-        try {
-            // Fetch driver logs
-            const response = await fetch(`/api/dms/dashboard/driver-logs?driver_id=${encodeURIComponent(driverId)}&limit=1000`);
-            const result = await response.json();
-
-            if (result.success && result.data) {
-                // Hide loading
-                loadingDiv.style.display = 'none';
-
-                if (result.data.length === 0) {
-                    tableBody.innerHTML = `
-                        <tr>
-                            <td colspan="11" class="text-center text-muted py-4">
-                                Tidak ada data tersedia untuk driver ini
-                            </td>
-                        </tr>
-                    `;
-                } else {
-                    // Build table rows
-                    const rows = result.data.map(log => {
-                        const statusClass = getStatusClass(log.status);
-                        return `
-                            <tr>
-                                <td>${log.id || '-'}</td>
-                                <td>${log.driver_id || '-'}</td>
-                                <td>${log.timestamp || '-'}</td>
-                                <td>${log.ear || '-'}</td>
-                                <td>${log.perclos_60s || '-'}</td>
-                                <td>${log.blink_60s || '-'}</td>
-                                <td>${log.microsleep_60s || '-'}</td>
-                                <td>${log.fatigue || '-'}</td>
-                                <td>${log.drift || '-'}</td>
-                                <td>${log.safety_score || '-'}</td>
-                                <td><span class="status-badge ${statusClass}">${log.status || '-'}</span></td>
-                            </tr>
-                        `;
-                    }).join('');
-
-                    tableBody.innerHTML = rows;
-                }
-
-                // Show content
-                contentDiv.style.display = 'block';
-            } else {
-                // Show error
-                loadingDiv.style.display = 'none';
-                errorDiv.style.display = 'block';
-                errorDiv.querySelector('p').textContent = result.message || 'Gagal memuat data. Silakan coba lagi.';
-            }
-        } catch (error) {
-            console.error('Error fetching driver logs:', error);
-            // Show error
-            loadingDiv.style.display = 'none';
-            errorDiv.style.display = 'block';
-            errorDiv.querySelector('p').textContent = 'Terjadi kesalahan saat memuat data. Silakan coba lagi.';
-        }
-    }
-
-    // Initialize on page load
-    document.addEventListener('DOMContentLoaded', function() {
-        // Fetch data immediately
-        fetchRealtimeData();
-
-        // Set up interval for realtime updates (2 seconds)
-        updateInterval = setInterval(fetchRealtimeData, 2000);
-
-        // Handle window resize with debounce
-        let resizeTimeout;
-        window.addEventListener('resize', function() {
-            clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(function() {
-                // Redraw all charts on resize
-                Object.keys(canvasData).forEach(canvasId => {
-                    const data = canvasData[canvasId];
-                    if (data) {
-                        drawEARChart(
-                            canvasId,
-                            data.earData,
-                            data.timeData,
-                            data.threshold,
-                            data.earBandLow,
-                            data.earBandHigh
-                        );
-                    }
-                });
-            }, 250);
-        });
-
-        // Clean up on page unload
-        window.addEventListener('beforeunload', function() {
-            if (updateInterval) {
-                clearInterval(updateInterval);
-            }
-        });
-    });
-</script>
-
+  <div class="col-xxl-6">
+    <div class="card h-100">
+      <div class="card-header border-bottom bg-base py-16 px-24 d-flex align-items-center justify-content-between">
+        <h6 class="text-lg fw-semibold mb-0">Review Terbaru</h6>
+        <a href="{{ route('dms.dashboard-static') }}" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
+          Realtime
+          <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
+        </a>
+      </div>
+      <div class="card-body p-24">
+        <div class="table-responsive scroll-sm">
+          <table class="table bordered-table mb-0">
+            <thead>
+              <tr>
+                <th scope="col">ID Alert</th>
+                <th scope="col">Waktu</th>
+                <th scope="col">Status</th>
+                <th scope="col">Site</th>
+              </tr>
+            </thead>
+            <tbody>
+              @forelse($recentReviews as $row)
+              <tr>
+                <td class="text-sm">{{ \Illuminate\Support\Str::limit($row['id_alert'], 18) }}</td>
+                <td>{{ $row['waktu'] }}</td>
+                <td><span class="{{ $row['status_class'] }} px-24 py-4 rounded-pill fw-medium text-sm">{{ $row['status_label'] }}</span></td>
+                <td>{{ $row['site'] }}</td>
+              </tr>
+              @empty
+              <tr>
+                <td colspan="4" class="text-center text-secondary-light">Belum ada review.</td>
+              </tr>
+              @endforelse
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
 
+@section('scripts')
+<script>
+(function () {
+  var kpis = @json($kpis);
+  var growth = @json($growth);
+  var statistic = @json($statistic);
+  var overview = @json($overview);
+  var weeklyStatus = @json($weeklyStatus);
+  var sites = @json($sites);
+
+  function createSparkline(chartId, chartColor, data) {
+    var el = document.querySelector('#' + chartId);
+    if (!el || typeof ApexCharts === 'undefined') return;
+
+    new ApexCharts(el, {
+      series: [{ name: 'series1', data: data && data.length ? data : [0, 0, 0, 0, 0, 0, 0, 0, 0] }],
+      chart: {
+        type: 'area',
+        width: 80,
+        height: 42,
+        sparkline: { enabled: true },
+        toolbar: { show: false }
+      },
+      dataLabels: { enabled: false },
+      stroke: { curve: 'smooth', width: 2, colors: [chartColor], lineCap: 'round' },
+      grid: { show: false },
+      fill: {
+        type: 'gradient',
+        colors: [chartColor],
+        gradient: {
+          shade: 'light',
+          type: 'vertical',
+          shadeIntensity: 0.5,
+          gradientToColors: [chartColor + '00'],
+          inverseColors: false,
+          opacityFrom: 0.75,
+          opacityTo: 0.3,
+          stops: [0, 100]
+        }
+      },
+      markers: { colors: [chartColor], strokeWidth: 2, size: 0, hover: { size: 8 } },
+      tooltip: { enabled: false }
+    }).render();
+  }
+
+  kpis.forEach(function (kpi) {
+    createSparkline(kpi.chart, kpi.color, kpi.sparkline);
+  });
+
+  var revenueEl = document.querySelector('#revenue-chart');
+  if (revenueEl && typeof ApexCharts !== 'undefined') {
+    new ApexCharts(revenueEl, {
+      series: [{ name: 'Alert', data: growth.series || [] }],
+      chart: { type: 'area', width: '100%', height: 162, toolbar: { show: false } },
+      dataLabels: { enabled: false },
+      stroke: { curve: 'smooth', width: 2, colors: ['#487fff'], lineCap: 'round' },
+      grid: {
+        show: true,
+        borderColor: 'transparent',
+        strokeDashArray: 0,
+        xaxis: { lines: { show: false } },
+        yaxis: { lines: { show: false } },
+        padding: { top: -30, right: 0, bottom: -10, left: 0 }
+      },
+      fill: {
+        type: 'gradient',
+        colors: ['#487fff'],
+        gradient: {
+          shade: 'light',
+          type: 'vertical',
+          shadeIntensity: 0.5,
+          gradientToColors: ['#487fff00'],
+          inverseColors: false,
+          opacityFrom: 0.6,
+          opacityTo: 0.3,
+          stops: [0, 100]
+        }
+      },
+      markers: { colors: ['#487fff'], strokeWidth: 3, size: 0, hover: { size: 10 } },
+      xaxis: { categories: growth.labels || [], labels: { show: false } },
+      yaxis: { labels: { show: false } },
+      tooltip: { y: { formatter: function (v) { return v + ' alert'; } } }
+    }).render();
+  }
+
+  var barEl = document.querySelector('#barChart');
+  if (barEl && typeof ApexCharts !== 'undefined') {
+    var barData = (statistic.labels || []).map(function (label, i) {
+      return { x: label, y: (statistic.series || [])[i] || 0 };
+    });
+    new ApexCharts(barEl, {
+      series: [{ name: 'Alert', data: barData }],
+      chart: { type: 'bar', height: 310, toolbar: { show: false } },
+      plotOptions: { bar: { borderRadius: 4, horizontal: false, columnWidth: '23%' } },
+      dataLabels: { enabled: false },
+      fill: {
+        type: 'gradient',
+        colors: ['#487FFF'],
+        gradient: {
+          shade: 'light',
+          type: 'vertical',
+          shadeIntensity: 0.5,
+          gradientToColors: ['#487FFF'],
+          inverseColors: false,
+          opacityFrom: 1,
+          opacityTo: 1,
+          stops: [0, 100]
+        }
+      },
+      grid: { show: true, borderColor: '#D1D5DB', strokeDashArray: 4, position: 'back' },
+      xaxis: { type: 'category', categories: statistic.labels || [] },
+      tooltip: { y: { formatter: function (v) { return v + ' alert'; } } }
+    }).render();
+  }
+
+  var donutEl = document.querySelector('#donutChart');
+  if (donutEl && typeof ApexCharts !== 'undefined') {
+    new ApexCharts(donutEl, {
+      series: [overview.confirmed || 0, overview.dismissed || 0, overview.pending || 0],
+      colors: ['#EF4A00', '#45B369', '#FF9F29'],
+      labels: ['Confirmed', 'Dismissed', 'Pending'],
+      legend: { show: false },
+      chart: { type: 'donut', height: 300, sparkline: { enabled: true } },
+      stroke: { width: 0 },
+      dataLabels: { enabled: false },
+      plotOptions: {
+        pie: {
+          startAngle: -90,
+          endAngle: 90,
+          offsetY: 10,
+          customScale: 0.8,
+          donut: {
+            size: '70%',
+            labels: {
+              show: true,
+              total: { showAlways: true, show: true, label: 'Review L1' }
+            }
+          }
+        }
+      }
+    }).render();
+  }
+
+  var statusEl = document.querySelector('#paymentStatusChart');
+  if (statusEl && typeof ApexCharts !== 'undefined') {
+    new ApexCharts(statusEl, {
+      series: [
+        { name: 'Confirmed', data: weeklyStatus.confirmed || [] },
+        { name: 'Pending', data: weeklyStatus.pending || [] },
+        { name: 'Dismissed', data: weeklyStatus.dismissed || [] }
+      ],
+      colors: ['#EF4A00', '#144bd6', '#45B369'],
+      legend: { show: false },
+      chart: { type: 'bar', height: 350, toolbar: { show: false } },
+      grid: { show: true, borderColor: '#D1D5DB', strokeDashArray: 4, position: 'back' },
+      plotOptions: { bar: { borderRadius: 4, columnWidth: 8 } },
+      dataLabels: { enabled: false },
+      states: { hover: { filter: { type: 'none' } } },
+      stroke: { show: true, width: 0, colors: ['transparent'] },
+      xaxis: { categories: weeklyStatus.labels || [] },
+      fill: { opacity: 1 }
+    }).render();
+  }
+
+  var siteEl = document.querySelector('#siteShareChart');
+  if (siteEl && typeof ApexCharts !== 'undefined' && sites.length) {
+    new ApexCharts(siteEl, {
+      series: sites.map(function (s) { return s.total; }),
+      labels: sites.map(function (s) { return s.site; }),
+      colors: ['#487fff', '#f4941e', '#ff9f29', '#45b369', '#00b8f2', '#8252e9'],
+      legend: { show: false },
+      chart: { type: 'donut', height: 180, sparkline: { enabled: true } },
+      stroke: { width: 0 },
+      dataLabels: { enabled: false },
+      plotOptions: { pie: { donut: { size: '68%' } } }
+    }).render();
+  }
+})();
+</script>
+@endsection

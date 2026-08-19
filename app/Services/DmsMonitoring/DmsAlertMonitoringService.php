@@ -55,11 +55,13 @@ final class DmsAlertMonitoringService
             $slovin = $this->buildSlovinCoverage($summary, $postEvent);
             $qaSummary = $this->qaService->summaryForPeriod($filters['start'], $filters['end']);
             $qaPending = $this->qaService->pendingSamples($filters['start'], $filters['end']);
+            $today = $this->buildTodaySnapshot($tz);
 
             return [
                 'up' => true,
                 'filters' => $filters,
                 'dateLabel' => $this->dateRangeLabel($filters['start'], $filters['end']),
+                'today' => $today,
                 'summary' => $summary,
                 'byUnit' => $byUnit,
                 'byOperator' => $byOperator,
@@ -166,6 +168,32 @@ final class DmsAlertMonitoringService
     }
 
     /**
+     * Snapshot HARI INI (bukan window filter start/end) — untuk 4 kartu paling
+     * atas: unit yang beroperasi, orang yang checkin, dan rasio alert per
+     * unit/per orang, semuanya diskop ke hari berjalan saja.
+     *
+     * @return array{date_label:string, units_operating:int, operators_checked_in:int, total_alerts:int, ratio_per_unit:float, ratio_per_operator:float}
+     */
+    private function buildTodaySnapshot(string $tz): array
+    {
+        $todayStart = Carbon::now($tz)->startOfDay()->format('Y-m-d H:i:s');
+        $todayEnd = Carbon::now($tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+
+        $unitsOperating = $this->reader->unitsOperatingInRange($todayStart, $todayEnd);
+        $operatorsCheckedIn = count($this->reader->distinctCheckinSids($todayStart, $todayEnd));
+        $totalAlerts = $this->reader->alertSummary($todayStart, $todayEnd)['total'] ?? 0;
+
+        return [
+            'date_label' => Carbon::now($tz)->translatedFormat('d M Y'),
+            'units_operating' => $unitsOperating,
+            'operators_checked_in' => $operatorsCheckedIn,
+            'total_alerts' => $totalAlerts,
+            'ratio_per_unit' => $unitsOperating > 0 ? round($totalAlerts / $unitsOperating, 2) : 0.0,
+            'ratio_per_operator' => $operatorsCheckedIn > 0 ? round($totalAlerts / $operatorsCheckedIn, 2) : 0.0,
+        ];
+    }
+
+    /**
      * @return array{start:string, end:string}
      */
     private function readFilters(Request $request): array
@@ -214,6 +242,7 @@ final class DmsAlertMonitoringService
             'up' => false,
             'filters' => $filters,
             'dateLabel' => $this->dateRangeLabel($filters['start'], $filters['end']),
+            'today' => ['date_label' => '-', 'units_operating' => 0, 'operators_checked_in' => 0, 'total_alerts' => 0, 'ratio_per_unit' => 0.0, 'ratio_per_operator' => 0.0],
             'summary' => ['total' => 0, 'l1_reviewed' => 0, 'l1_confirmed' => 0, 'l1_dismissed' => 0, 'l1_belum' => 0, 'l2_reviewed' => 0, 'l2_confirmed' => 0, 'post_event_eligible' => 0],
             'byUnit' => [],
             'byOperator' => [],

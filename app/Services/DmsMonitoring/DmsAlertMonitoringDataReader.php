@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\DmsMonitoring;
 
+use App\Services\Dms\DmsDashboardDataSource;
 use App\Services\SportEvaluation\SportEvaluationPvtRfidCheckinReader;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +29,7 @@ use Throwable;
  *     harusnya butuh ini (mis. performa per-reviewer) diganti dengan agregat
  *     per site dari mv_dms_alert saja.
  */
-final class DmsAlertMonitoringDataReader
+final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 {
     /** Batas jumlah kategori pelanggaran yang ditampilkan di kuadran. */
     private const CATEGORY_LIMIT = 500;
@@ -336,6 +337,39 @@ final class DmsAlertMonitoringDataReader
     }
 
     /**
+     * Unit yang beroperasi dalam rentang tanggal tertentu (mis. hari ini) —
+     * agregat TUNGGAL ke bcsid.dms_vehicle_status_alerts, sama seperti
+     * unitsOperatingNow() tapi diskop ke window tanggal, bukan "N menit terakhir".
+     */
+    public function unitsOperatingInRange(string $start, string $end): int
+    {
+        $cacheKey = 'dms_monitoring:units_operating_range:'.md5($start.'|'.$end);
+
+        return Cache::remember($cacheKey, 300, function () use ($start, $end): int {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return 0;
+            }
+
+            $sql = '
+                SELECT count(DISTINCT vehicle_no) AS total
+                FROM bcsid.dms_vehicle_status_alerts
+                WHERE last_online_at >= ? AND last_online_at < ?
+            ';
+
+            try {
+                $row = DB::connection($connection)->selectOne($sql, [$start, $end]);
+            } catch (Throwable $e) {
+                report($e);
+
+                return 0;
+            }
+
+            return (int) ($row->total ?? 0);
+        });
+    }
+
+    /**
      * Unit yang sedang online — agregat TUNGGAL ke bcsid.dms_vehicle_status_alerts.
      */
     public function unitsOperatingNow(int $withinMinutes = 30): int
@@ -460,6 +494,181 @@ final class DmsAlertMonitoringDataReader
             'site' => $r->site !== null ? trim((string) $r->site) : null,
             'waktu_deteksi' => $r->waktu_deteksi !== null ? (string) $r->waktu_deteksi : null,
         ], $rows);
+    }
+
+    /**
+     * Tren harian alert (total / confirmed / dismissed / pending / operator unik).
+     *
+     * @return list<array{hari:string, total:int, confirmed:int, dismissed:int, pending:int, operators:int}>
+     */
+    public function dailyAlertSeries(string $start, string $end): array
+    {
+        return $this->remember('dashboard.daily_series', $start, $end, function () use ($start, $end): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $sql = "
+                SELECT
+                    date(waktu_deteksi) AS hari,
+                    count(*) AS total,
+                    count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = true) AS confirmed,
+                    count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = false) AS dismissed,
+                    count(*) FILTER (WHERE sudah_direview_l1 = false OR sudah_direview_l1 IS NULL) AS pending,
+                    count(DISTINCT UPPER(TRIM(kode_sid))) FILTER (
+                        WHERE kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
+                    ) AS operators
+                FROM bcsid.mv_dms_alert
+                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                GROUP BY 1
+                ORDER BY 1
+            ";
+
+            try {
+                $rows = DB::connection($connection)->select($sql, [$start, $end]);
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            return array_map(static function ($r): array {
+                $hari = $r->hari;
+                if ($hari instanceof \DateTimeInterface) {
+                    $hari = $hari->format('Y-m-d');
+                }
+
+                return [
+                    'hari' => (string) $hari,
+                    'total' => (int) $r->total,
+                    'confirmed' => (int) $r->confirmed,
+                    'dismissed' => (int) $r->dismissed,
+                    'pending' => (int) $r->pending,
+                    'operators' => (int) $r->operators,
+                ];
+            }, $rows);
+        });
+    }
+
+    /**
+     * Agregat alert per site untuk kartu "Status Site".
+     *
+     * @return list<array{site:string, total:int, confirmed:int}>
+     */
+    public function alertsBySite(string $start, string $end, int $limit = 8): array
+    {
+        return $this->remember('dashboard.by_site.'.$limit, $start, $end, function () use ($start, $end, $limit): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $sql = "
+                SELECT
+                    COALESCE(NULLIF(TRIM(site::text), ''), '-') AS site,
+                    count(*) AS total,
+                    count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = true) AS confirmed
+                FROM bcsid.mv_dms_alert
+                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                GROUP BY 1
+                ORDER BY total DESC
+                LIMIT ?
+            ";
+
+            try {
+                $rows = DB::connection($connection)->select($sql, [$start, $end, $limit]);
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            return array_map(static fn ($r): array => [
+                'site' => (string) $r->site,
+                'total' => (int) $r->total,
+                'confirmed' => (int) $r->confirmed,
+            ], $rows);
+        });
+    }
+
+    /**
+     * Alert terbaru dalam window — untuk tabel dashboard. WAJIB LIMIT.
+     *
+     * @return list<array{id_alert:string, kode_sid:string, nama:string, nama_pelanggaran:string, unit:string, site:string, waktu_deteksi:string|null, sudah_direview_l1:bool, l1_confirmed:bool|null}>
+     */
+    public function recentAlerts(string $start, string $end, int $limit = 10, bool $confirmedOnly = false): array
+    {
+        $cacheSuffix = $confirmedOnly ? 'confirmed' : 'all';
+
+        return $this->remember('dashboard.recent.'.$cacheSuffix.'.'.$limit, $start, $end, function () use ($start, $end, $limit, $confirmedOnly): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $confirmedSql = $confirmedOnly
+                ? ' AND sudah_direview_l1 = true AND l1_context_status = true'
+                : '';
+
+            $sql = "
+                SELECT
+                    id_alert,
+                    UPPER(TRIM(kode_sid)) AS kode_sid,
+                    COALESCE(NULLIF(TRIM(nama_driver_dms::text), ''), '-') AS nama,
+                    COALESCE(NULLIF(TRIM(nama_pelanggaran::text), ''), '-') AS nama_pelanggaran,
+                    COALESCE(NULLIF(TRIM(unit::text), ''), '-') AS unit,
+                    COALESCE(NULLIF(TRIM(site::text), ''), '-') AS site,
+                    waktu_deteksi,
+                    sudah_direview_l1,
+                    l1_context_status
+                FROM bcsid.mv_dms_alert
+                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                  {$confirmedSql}
+                ORDER BY waktu_deteksi DESC
+                LIMIT ?
+            ";
+
+            try {
+                $rows = DB::connection($connection)->select($sql, [$start, $end, $limit]);
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            return array_map(static function ($r): array {
+                $asBool = static function (mixed $value): bool {
+                    if (is_bool($value)) {
+                        return $value;
+                    }
+                    if ($value === null) {
+                        return false;
+                    }
+
+                    return in_array(strtolower(trim((string) $value)), ['1', 't', 'true', 'y', 'yes'], true);
+                };
+
+                $reviewed = $asBool($r->sudah_direview_l1 ?? false);
+                $confirmedRaw = $r->l1_context_status;
+                $waktu = $r->waktu_deteksi;
+                if ($waktu instanceof \DateTimeInterface) {
+                    $waktu = $waktu->format('Y-m-d H:i:s');
+                }
+
+                return [
+                    'id_alert' => (string) $r->id_alert,
+                    'kode_sid' => $r->kode_sid !== null ? (string) $r->kode_sid : '-',
+                    'nama' => (string) $r->nama,
+                    'nama_pelanggaran' => (string) $r->nama_pelanggaran,
+                    'unit' => (string) $r->unit,
+                    'site' => (string) $r->site,
+                    'waktu_deteksi' => $waktu !== null && $waktu !== '' ? (string) $waktu : null,
+                    'sudah_direview_l1' => $reviewed,
+                    'l1_confirmed' => $confirmedRaw === null ? null : $asBool($confirmedRaw),
+                ];
+            }, $rows);
+        });
     }
 
     /**

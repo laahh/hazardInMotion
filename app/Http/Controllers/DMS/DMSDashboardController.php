@@ -1,22 +1,29 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\DMS;
 
 use App\Http\Controllers\Controller;
 use App\Models\SafetyScoreLog;
 use App\Models\DmsCalibration;
+use App\Services\Dms\DmsDashboardOverviewService;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class DMSDashboardController extends Controller
 {
+    public function __construct(
+        private readonly DmsDashboardOverviewService $overview,
+    ) {}
+
     /**
-     * Display DMS Dashboard
+     * Display DMS Dashboard (layout WowDash CRM, data mv_dms_alert).
      */
-    public function index()
+    public function index(): View
     {
-        return view('dms.dashboard');
+        return view('dms.dashboard', $this->overview->dashboard());
     }
 
     /**
