@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\PraOperasi;
 
 use App\Http\Controllers\Controller;
-use App\Services\Dms\DmsDashboardOverviewService;
 use App\Services\DmsMonitoring\DmsAlertMonitoringService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -13,21 +12,18 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 /**
- * /pra-operasi/dashboard — dashboard WowDash CRM untuk monitoring alert DMS.
- * Data dari bcsid.mv_dms_alert via DmsDashboardOverviewService.
+ * /pra-operasi/dashboard — monitoring alert DMS L1/L2 (layout WowDash).
+ * Data operasional dari DmsAlertMonitoringService (mv_dms_alert, RFID, Post Event, QA Slovin).
  */
 final class DmsAlertMonitoringController extends Controller
 {
     public function __construct(
         private readonly DmsAlertMonitoringService $service,
-        private readonly DmsDashboardOverviewService $overview,
     ) {}
 
     public function index(Request $request): View
     {
-        $filters = $this->readDateFilters($request);
-        $payload = $this->overview->dashboard($filters['start'], $filters['end']);
-        return view('pra-operasi.dms-alert-monitoring', $payload);
+        return view('pra-operasi.dms-alert-monitoring', $this->service->dashboard($request));
     }
 
     /**
@@ -66,31 +62,5 @@ final class DmsAlertMonitoringController extends Controller
         }
 
         return response()->json(['message' => 'Tersimpan.']);
-    }
-
-    /**
-     * @return array{start:string, end:string}
-     */
-    private function readDateFilters(Request $request): array
-    {
-        $read = static fn (mixed $v): string => is_string($v) ? mb_substr(trim($v), 0, 10) : '';
-        $tz = (string) config('app.timezone');
-        $today = now($tz)->toDateString();
-
-        $end = $read($request->query('end', ''));
-        if ($end === '' || preg_match('/^\d{4}-\d{2}-\d{2}$/', $end) !== 1) {
-            $end = $today;
-        }
-
-        $start = $read($request->query('start', ''));
-        if ($start === '' || preg_match('/^\d{4}-\d{2}-\d{2}$/', $start) !== 1) {
-            $start = now($tz)->subDays(6)->toDateString();
-        }
-
-        if ($start > $end) {
-            [$start, $end] = [$end, $start];
-        }
-
-        return ['start' => $start, 'end' => $end];
     }
 }

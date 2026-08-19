@@ -62,6 +62,7 @@ final class DmsAlertMonitoringService
                 'filters' => $filters,
                 'dateLabel' => $this->dateRangeLabel($filters['start'], $filters['end']),
                 'today' => $today,
+                'kpis' => $this->buildKpis($today, $summary, $qaSummary, $unitsOperating),
                 'summary' => $summary,
                 'byUnit' => $byUnit,
                 'byOperator' => $byOperator,
@@ -168,9 +169,76 @@ final class DmsAlertMonitoringService
     }
 
     /**
-     * Snapshot HARI INI (bukan window filter start/end) — untuk 4 kartu paling
-     * atas: unit yang beroperasi, orang yang checkin, dan rasio alert per
-     * unit/per orang, semuanya diskop ke hari berjalan saja.
+     * Enam kartu KPI WowDash — angka operasional, bukan label CRM dummy.
+     *
+     * @param  array{date_label:string, units_operating:int, operators_checked_in:int, total_alerts:int, ratio_per_unit:float, ratio_per_operator:float}  $today
+     * @param  array{total:int, l1_dismissed:int}  $summary
+     * @param  array{false_negative:int, false_negative_rate:float|null, estimated_false_negative_count:int|null}  $qaSummary
+     * @return list<array{label:string, value:string, hint:string, icon:string, bg:string, gradient:string}>
+     */
+    private function buildKpis(array $today, array $summary, array $qaSummary, int $unitsOnline): array
+    {
+        $falseNegativeRate = $qaSummary['false_negative_rate'] ?? null;
+        $estimatedFn = $qaSummary['estimated_false_negative_count'] ?? null;
+        $falseNegativeHint = $falseNegativeRate === null
+            ? 'audit sampel Slovin atas dismiss L1'
+            : 'rate '.$falseNegativeRate.'%'.($estimatedFn !== null ? ' · estimasi '.number_format((int) $estimatedFn).' di populasi' : '');
+
+        return [
+            [
+                'label' => 'Total Alert Masuk',
+                'value' => number_format((int) ($summary['total'] ?? 0)),
+                'hint' => 'periode filter',
+                'icon' => 'solar:danger-triangle-bold',
+                'bg' => 'bg-primary-600',
+                'gradient' => 'bg-gradient-end-1',
+            ],
+            [
+                'label' => 'Unit Beroperasi',
+                'value' => number_format((int) ($today['units_operating'] ?? 0)),
+                'hint' => 'hari ini'.($unitsOnline > 0 ? ' · '.$unitsOnline.' online 30 mnt' : ''),
+                'icon' => 'solar:wheel-bold',
+                'bg' => 'bg-success-main',
+                'gradient' => 'bg-gradient-end-2',
+            ],
+            [
+                'label' => 'Rasio Alert / Unit',
+                'value' => number_format((float) ($today['ratio_per_unit'] ?? 0), 2),
+                'hint' => (string) ($today['date_label'] ?? 'hari ini'),
+                'icon' => 'solar:bus-bold',
+                'bg' => 'bg-yellow',
+                'gradient' => 'bg-gradient-end-3',
+            ],
+            [
+                'label' => 'Rasio Alert / Orang',
+                'value' => number_format((float) ($today['ratio_per_operator'] ?? 0), 2),
+                'hint' => number_format((int) ($today['operators_checked_in'] ?? 0)).' orang check-in RFID',
+                'icon' => 'mingcute:user-follow-fill',
+                'bg' => 'bg-purple',
+                'gradient' => 'bg-gradient-end-4',
+            ],
+            [
+                'label' => 'False Positif (L1 Dismiss)',
+                'value' => number_format((int) ($summary['l1_dismissed'] ?? 0)),
+                'hint' => 'alert DMS yang L1 anggap bukan pelanggaran',
+                'icon' => 'solar:close-circle-bold',
+                'bg' => 'bg-pink',
+                'gradient' => 'bg-gradient-end-5',
+            ],
+            [
+                'label' => 'False Negatif (QA L1)',
+                'value' => number_format((int) ($qaSummary['false_negative'] ?? 0)),
+                'hint' => $falseNegativeHint,
+                'icon' => 'solar:shield-warning-bold',
+                'bg' => 'bg-cyan',
+                'gradient' => 'bg-gradient-end-6',
+            ],
+        ];
+    }
+
+    /**
+     * Snapshot HARI INI (bukan window filter start/end) — untuk kartu unit
+     * beroperasi dan rasio alert per unit/per orang.
      *
      * @return array{date_label:string, units_operating:int, operators_checked_in:int, total_alerts:int, ratio_per_unit:float, ratio_per_operator:float}
      */
@@ -243,6 +311,12 @@ final class DmsAlertMonitoringService
             'filters' => $filters,
             'dateLabel' => $this->dateRangeLabel($filters['start'], $filters['end']),
             'today' => ['date_label' => '-', 'units_operating' => 0, 'operators_checked_in' => 0, 'total_alerts' => 0, 'ratio_per_unit' => 0.0, 'ratio_per_operator' => 0.0],
+            'kpis' => $this->buildKpis(
+                ['date_label' => '-', 'units_operating' => 0, 'operators_checked_in' => 0, 'total_alerts' => 0, 'ratio_per_unit' => 0.0, 'ratio_per_operator' => 0.0],
+                ['total' => 0, 'l1_dismissed' => 0],
+                ['false_negative' => 0, 'false_negative_rate' => null, 'estimated_false_negative_count' => null],
+                0,
+            ),
             'summary' => ['total' => 0, 'l1_reviewed' => 0, 'l1_confirmed' => 0, 'l1_dismissed' => 0, 'l1_belum' => 0, 'l2_reviewed' => 0, 'l2_confirmed' => 0, 'post_event_eligible' => 0],
             'byUnit' => [],
             'byOperator' => [],
