@@ -968,6 +968,169 @@ class DmsMonitoringKpiDetailService
     }
 
     /**
+     * Matriks kuadran site untuk widget "Earning Statistic":
+     * X = check-in, Y = alert/orang, Z = total alert, warna = WoW rasio.
+     *
+     * @param  array{start:string, end:string, site?:string, perusahaan?:string}  $filters
+     * @return array<string, mixed>
+     */
+    public function siteQuadrantMatrix(array $filters): array
+    {
+        $empty = $this->emptyQuadrantPayload();
+        $tz = (string) config('app.timezone');
+        $siteFilter = trim((string) ($filters['site'] ?? ''));
+        $companyFilter = trim((string) ($filters['perusahaan'] ?? ''));
+
+        $this->reader->applyScope(
+            $siteFilter !== '' ? $siteFilter : null,
+            $companyFilter !== '' ? $companyFilter : null,
+        );
+
+        if (! $this->reader->isUp()) {
+            return $empty;
+        }
+
+        try {
+            $startDay = Carbon::parse((string) $filters['start'], $tz)->startOfDay();
+            $endDay = Carbon::parse((string) $filters['end'], $tz)->startOfDay();
+            if ($startDay->gt($endDay)) {
+                [$startDay, $endDay] = [$endDay->copy(), $startDay->copy()];
+            }
+
+            $periodDays = max(1, $startDay->diffInDays($endDay) + 1);
+            $start = $startDay->format('Y-m-d H:i:s');
+            $end = $endDay->copy()->addDay()->format('Y-m-d H:i:s');
+
+            $prevEndDay = $startDay->copy()->subDay();
+            $prevStartDay = $prevEndDay->copy()->subDays($periodDays - 1);
+            $prevStart = $prevStartDay->format('Y-m-d H:i:s');
+            $prevEnd = $startDay->format('Y-m-d H:i:s');
+
+            $currentCohort = $this->filterCohort(
+                $this->operatorCheckinCohort($start, $end),
+                $siteFilter !== '' ? $siteFilter : null,
+                $companyFilter !== '' ? $companyFilter : null,
+            );
+            $prevCohort = $this->filterCohort(
+                $this->operatorCheckinCohort($prevStart, $prevEnd),
+                $siteFilter !== '' ? $siteFilter : null,
+                $companyFilter !== '' ? $companyFilter : null,
+            );
+
+            $currentRows = $this->ratioRowsBySite($start, $end, $currentCohort);
+            $prevBySite = [];
+            foreach ($this->ratioRowsBySite($prevStart, $prevEnd, $prevCohort) as $row) {
+                $prevBySite[(string) $row['site']] = (float) $row['value'];
+            }
+
+            usort($currentRows, static fn (array $a, array $b): int => ((int) ($b['alert_count'] ?? 0) <=> (int) ($a['alert_count'] ?? 0)));
+            $currentRows = array_slice($currentRows, 0, 20);
+
+            $points = [];
+            $xValues = [];
+            $yValues = [];
+            $totalCheckin = 0;
+            $totalAlert = 0;
+
+            foreach ($currentRows as $row) {
+                $site = (string) ($row['site'] ?? '-');
+                $checkin = (int) ($row['checkin_count'] ?? 0);
+                $alert = (int) ($row['alert_count'] ?? 0);
+                $ratio = (float) ($row['value'] ?? 0);
+                $prevRatio = $prevBySite[$site] ?? null;
+                $wow = $prevRatio !== null ? round($ratio - $prevRatio, 2) : 0.0;
+                $direction = $wow > 0.01 ? 'up' : ($wow < -0.01 ? 'down' : 'flat');
+                $color = match ($direction) {
+                    'up' => '#ef4a00',
+                    'down' => '#45b369',
+                    default => '#487fff',
+                };
+
+                $points[] = [
+                    'site' => $site,
+                    'x' => $checkin,
+                    'y' => $ratio,
+                    'z' => max($alert, 1),
+                    'alert_count' => $alert,
+                    'checkin_count' => $checkin,
+                    'ratio' => $ratio,
+                    'wow' => $wow,
+                    'direction' => $direction,
+                    'color' => $color,
+                    'arrow' => match ($direction) {
+                        'up' => '↑',
+                        'down' => '↓',
+                        default => '→',
+                    },
+                ];
+                $xValues[] = $checkin;
+                $yValues[] = $ratio;
+                $totalCheckin += $checkin;
+                $totalAlert += $alert;
+            }
+
+            $overallRatio = $totalCheckin > 0 ? round($totalAlert / $totalCheckin, 2) : 0.0;
+
+            return [
+                'title' => 'Matriks Site',
+                'subtitle' => 'Check-in vs Alert / Orang (ukuran = Total Alert)',
+                'mode' => 'quadrant',
+                'total' => number_format($totalAlert),
+                'confirmed' => number_format($totalCheckin),
+                'dismissed' => number_format($overallRatio, 2),
+                'x_median' => $this->median($xValues),
+                'y_median' => $this->median($yValues),
+                'points' => $points,
+                'labels' => [],
+                'series' => [],
+            ];
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptyQuadrantPayload(): array
+    {
+        return [
+            'title' => 'Matriks Site',
+            'subtitle' => 'Check-in vs Alert / Orang (ukuran = Total Alert)',
+            'mode' => 'quadrant',
+            'total' => '0',
+            'confirmed' => '0',
+            'dismissed' => '0.00',
+            'x_median' => 0.0,
+            'y_median' => 0.0,
+            'points' => [],
+            'labels' => [],
+            'series' => [],
+        ];
+    }
+
+    /**
+     * @param  list<float|int>  $values
+     */
+    private function median(array $values): float
+    {
+        if ($values === []) {
+            return 0.0;
+        }
+
+        sort($values);
+        $count = count($values);
+        $mid = intdiv($count, 2);
+        if ($count % 2 === 1) {
+            return round((float) $values[$mid], 2);
+        }
+
+        return round(((float) $values[$mid - 1] + (float) $values[$mid]) / 2, 2);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function errorPayload(string $message): array

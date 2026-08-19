@@ -76,4 +76,9 @@ class DmsMonitoringKpiDetailTest extends TestCase
 
         $response->assertNotFound();
     }
+
+    public function test_kpi_detail_service_exposes_site_quadrant_matrix(): void
+    {
+        $this->assertTrue(method_exists(DmsMonitoringKpiDetailService::class, 'siteQuadrantMatrix'));
+    }
 }

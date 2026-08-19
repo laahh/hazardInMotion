@@ -40,8 +40,24 @@
     $allItems = $recentAll ?? [];
     $bestMatch = $recentConfirmed ?? [];
     $transactions = $recentReviews ?? [];
-    $growth = $growth ?? ['title' => 'Revenue Growth', 'subtitle' => 'Weekly Report', 'total' => '0', 'delta' => ['class' => 'bg-success-focus text-success-main', 'text' => '+0'], 'series' => [], 'labels' => []];
-    $statistic = $statistic ?? ['title' => 'Earning Statistic', 'subtitle' => 'Yearly earning overview', 'total' => '0', 'confirmed' => '0', 'dismissed' => '0', 'series' => [], 'labels' => []];
+    $growth = $growth ?? ['title' => 'Alert Last 4 Week', 'subtitle' => 'Weekly Report', 'total' => '0', 'delta' => ['class' => 'bg-success-focus text-success-main', 'text' => '+0'], 'series' => [], 'labels' => []];
+    $statistic = $statistic ?? [
+        'title' => 'Matriks Site',
+        'subtitle' => 'Check-in vs Alert / Orang (ukuran = Total Alert)',
+        'mode' => 'quadrant',
+        'total' => '0',
+        'confirmed' => '0',
+        'dismissed' => '0.00',
+        'x_median' => 0,
+        'y_median' => 0,
+        'points' => [],
+        'series' => [],
+        'labels' => [],
+    ];
+    $statistic['mode'] = $statistic['mode'] ?? 'quadrant';
+    $statistic['points'] = $statistic['points'] ?? [];
+    $statistic['x_median'] = $statistic['x_median'] ?? 0;
+    $statistic['y_median'] = $statistic['y_median'] ?? 0;
     $overview = $overview ?? ['confirmed' => 0, 'dismissed' => 0, 'pending' => 0];
     $weeklyStatus = $weeklyStatus ?? ['confirmed' => [], 'pending' => [], 'dismissed' => [], 'labels' => [], 'totals' => ['confirmed' => 0, 'pending' => 0, 'dismissed' => 0]];
     $filters = $filters ?? ['start' => '', 'end' => '', 'site' => '', 'perusahaan' => ''];
@@ -170,8 +186,8 @@
       <div class="card-body p-24">
         <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
           <div>
-            <h6 class="mb-2 fw-bold text-lg">Revenue Growth</h6>
-            <span class="text-sm fw-medium text-secondary-light">Weekly Report</span>
+            <h6 class="mb-2 fw-bold text-lg">{{ $growth['title'] ?? 'Alert Last 4 Week' }}</h6>
+            <span class="text-sm fw-medium text-secondary-light">{{ $growth['subtitle'] ?? 'Weekly Report' }}</span>
           </div>
           <div class="text-end">
             <h6 class="mb-2 fw-bold text-lg">{{ $growth['total'] }}</h6>
@@ -188,8 +204,8 @@
       <div class="card-body p-24">
         <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
           <div>
-            <h6 class="mb-2 fw-bold text-lg">Earning Statistic</h6>
-            <span class="text-sm fw-medium text-secondary-light">Yearly earning overview</span>
+            <h6 class="mb-2 fw-bold text-lg">{{ $statistic['title'] ?? 'Matriks Site' }}</h6>
+            <span class="text-sm fw-medium text-secondary-light">{{ $statistic['subtitle'] ?? 'Check-in vs Alert / Orang' }}</span>
           </div>
           <div>
             <span class="form-select form-select-sm w-auto bg-base border text-secondary-light d-inline-block pe-none">{{ $dateLabel }}</span>
@@ -199,34 +215,40 @@
         <div class="mt-20 d-flex justify-content-center flex-wrap gap-3">
           <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
             <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
-              <iconify-icon icon="solar:danger-triangle-bold" class="icon"></iconify-icon>
+              <iconify-icon icon="mingcute:user-follow-fill" class="icon"></iconify-icon>
             </span>
             <div>
-              <span class="text-secondary-light text-sm fw-medium">Sales</span>
-              <h6 class="text-md fw-semibold mb-0">{{ $statistic['total'] }}</h6>
-            </div>
-          </div>
-          <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
-            <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
-              <iconify-icon icon="solar:shield-check-bold" class="icon"></iconify-icon>
-            </span>
-            <div>
-              <span class="text-secondary-light text-sm fw-medium">Income</span>
+              <span class="text-secondary-light text-sm fw-medium">Total Check-in</span>
               <h6 class="text-md fw-semibold mb-0">{{ $statistic['confirmed'] }}</h6>
             </div>
           </div>
           <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
             <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
-              <iconify-icon icon="solar:check-circle-bold" class="icon"></iconify-icon>
+              <iconify-icon icon="solar:danger-triangle-bold" class="icon"></iconify-icon>
             </span>
             <div>
-              <span class="text-secondary-light text-sm fw-medium">Profit</span>
+              <span class="text-secondary-light text-sm fw-medium">Total Alert</span>
+              <h6 class="text-md fw-semibold mb-0">{{ $statistic['total'] }}</h6>
+            </div>
+          </div>
+          <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
+            <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
+              <iconify-icon icon="solar:chart-2-bold" class="icon"></iconify-icon>
+            </span>
+            <div>
+              <span class="text-secondary-light text-sm fw-medium">Alert / Orang</span>
               <h6 class="text-md fw-semibold mb-0">{{ $statistic['dismissed'] }}</h6>
             </div>
           </div>
         </div>
 
-        <div id="barChart" class="barChart"></div>
+        <div class="mt-12 d-flex justify-content-center flex-wrap gap-3 text-xs text-secondary-light">
+          <span><span class="d-inline-block w-10-px h-10-px rounded-circle me-1" style="background:#ef4a00;"></span>Rasio naik (WoW)</span>
+          <span><span class="d-inline-block w-10-px h-10-px rounded-circle me-1" style="background:#45b369;"></span>Rasio turun (WoW)</span>
+          <span><span class="d-inline-block w-10-px h-10-px rounded-circle me-1" style="background:#487fff;"></span>Stabil</span>
+        </div>
+
+        <div id="barChart" class="barChart mt-12"></div>
       </div>
     </div>
   </div>
@@ -547,7 +569,7 @@
         }
       },
       markers: { colors: ['#487fff'], strokeWidth: 3, size: 0, hover: { size: 10 } },
-      xaxis: { categories: growth.labels || [], labels: { show: false } },
+      xaxis: { categories: growth.labels || [], labels: { show: true, style: { fontSize: '10px', colors: '#6B7280' } } },
       yaxis: { labels: { show: false } },
       tooltip: { y: { formatter: function (v) { return v + ' alert'; } } }
     }).render();
@@ -555,32 +577,116 @@
 
   var barEl = document.querySelector('#barChart');
   if (barEl && typeof ApexCharts !== 'undefined') {
-    var barData = (statistic.labels || []).map(function (label, i) {
-      return { x: label, y: (statistic.series || [])[i] || 0 };
+    var points = Array.isArray(statistic.points) ? statistic.points : [];
+    if (!points.length) {
+      barEl.innerHTML = '<div class="text-center text-secondary-light text-sm py-40">Belum ada data site untuk matriks kuadran pada periode ini.</div>';
+    } else {
+    var xMedian = Number(statistic.x_median || 0);
+    var yMedian = Number(statistic.y_median || 0);
+    var bubbleSeries = points.map(function (p) {
+      return {
+        name: p.site || '-',
+        data: [[Number(p.x || 0), Number(p.y || 0), Number(p.z || 1)]]
+      };
     });
+    var bubbleColors = points.map(function (p) { return p.color || '#487fff'; });
+    var maxX = 0;
+    var maxY = 0;
+    points.forEach(function (p) {
+      maxX = Math.max(maxX, Number(p.x || 0));
+      maxY = Math.max(maxY, Number(p.y || 0));
+    });
+    if (maxX <= 0) maxX = 10;
+    if (maxY <= 0) maxY = 1;
+
     new ApexCharts(barEl, {
-      series: [{ name: 'Alert', data: barData }],
-      chart: { type: 'bar', height: 310, toolbar: { show: false } },
-      plotOptions: { bar: { borderRadius: 4, horizontal: false, columnWidth: '23%' } },
-      dataLabels: { enabled: false },
-      fill: {
-        type: 'gradient',
-        colors: ['#487FFF'],
-        gradient: {
-          shade: 'light',
-          type: 'vertical',
-          shadeIntensity: 0.5,
-          gradientToColors: ['#487FFF'],
-          inverseColors: false,
-          opacityFrom: 1,
-          opacityTo: 1,
-          stops: [0, 100]
+      series: bubbleSeries,
+      chart: {
+        type: 'bubble',
+        height: 320,
+        toolbar: { show: false },
+        zoom: { enabled: false }
+      },
+      colors: bubbleColors,
+      dataLabels: {
+        enabled: true,
+        formatter: function (_val, opts) {
+          return (opts.w.config.series[opts.seriesIndex] || {}).name || '';
+        },
+        style: { fontSize: '10px', fontWeight: 600, colors: ['#111827'] },
+        background: { enabled: false }
+      },
+      fill: { opacity: 0.72 },
+      legend: { show: false },
+      grid: {
+        show: true,
+        borderColor: '#D1D5DB',
+        strokeDashArray: 4,
+        xaxis: { lines: { show: true } },
+        yaxis: { lines: { show: true } }
+      },
+      annotations: {
+        xaxis: xMedian > 0 ? [{
+          x: xMedian,
+          borderColor: '#9CA3AF',
+          strokeDashArray: 4,
+          label: {
+            text: 'Median check-in',
+            style: { color: '#6B7280', background: '#F3F4F6', fontSize: '10px' }
+          }
+        }] : [],
+        yaxis: yMedian > 0 ? [{
+          y: yMedian,
+          borderColor: '#9CA3AF',
+          strokeDashArray: 4,
+          label: {
+            text: 'Median alert/orang',
+            style: { color: '#6B7280', background: '#F3F4F6', fontSize: '10px' }
+          }
+        }] : []
+      },
+      xaxis: {
+        type: 'numeric',
+        tickAmount: 6,
+        min: 0,
+        max: Math.ceil(maxX * 1.15) || 10,
+        title: { text: 'Total Orang Check-in', style: { fontSize: '12px', color: '#6B7280' } },
+        labels: {
+          formatter: function (v) { return Math.round(Number(v)); }
         }
       },
-      grid: { show: true, borderColor: '#D1D5DB', strokeDashArray: 4, position: 'back' },
-      xaxis: { type: 'category', categories: statistic.labels || [] },
-      tooltip: { y: { formatter: function (v) { return v + ' alert'; } } }
+      yaxis: {
+        min: 0,
+        max: Math.ceil(maxY * 1.25 * 100) / 100 || 1,
+        tickAmount: 5,
+        title: { text: 'Alert / Orang', style: { fontSize: '12px', color: '#6B7280' } },
+        labels: {
+          formatter: function (v) { return Number(v).toFixed(2); }
+        }
+      },
+      tooltip: {
+        custom: function (ctx) {
+          var idx = ctx.seriesIndex;
+          var p = points[idx] || {};
+          var wow = Number(p.wow || 0);
+          var wowText = (wow > 0 ? '+' : '') + wow.toFixed(2);
+          return '<div class="p-12 text-sm">'
+            + '<div class="fw-bold mb-4">' + (p.site || '-') + ' ' + (p.arrow || '') + '</div>'
+            + '<div>Check-in: <strong>' + (p.checkin_count || 0) + '</strong></div>'
+            + '<div>Total Alert: <strong>' + (p.alert_count || 0) + '</strong></div>'
+            + '<div>Alert / Orang: <strong>' + Number(p.ratio || 0).toFixed(2) + '</strong></div>'
+            + '<div>WoW rasio: <strong>' + wowText + '</strong></div>'
+            + '</div>';
+        }
+      },
+      plotOptions: {
+        bubble: {
+          minBubbleRadius: 8,
+          maxBubbleRadius: 36
+        }
+      }
     }).render();
+    }
   }
 
   var donutEl = document.querySelector('#donutChart');

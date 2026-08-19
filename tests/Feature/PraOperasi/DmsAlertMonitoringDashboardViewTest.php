@@ -12,8 +12,11 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
     {
         $html = view('pra-operasi.dms-alert-monitoring', $this->payload())->render();
 
-        $this->assertStringContainsString('Revenue Growth', $html);
-        $this->assertStringContainsString('Earning Statistic', $html);
+        $this->assertStringContainsString('Alert Last 4 Week', $html);
+        $this->assertStringContainsString('Matriks Site', $html);
+        $this->assertStringContainsString('Total Check-in', $html);
+        $this->assertStringContainsString('Rasio naik (WoW)', $html);
+        $this->assertStringContainsString("type: 'bubble'", $html);
         $this->assertStringContainsString('Campaigns', $html);
         $this->assertStringContainsString('Customer Overview', $html);
         $this->assertStringContainsString('Client Payment Status', $html);
@@ -62,8 +65,34 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
                 ['label' => 'Total Alert', 'value' => '120', 'icon' => 'solar:danger-triangle-bold', 'bg' => 'bg-pink', 'gradient' => 'bg-gradient-end-5', 'chart' => 'leads-chart', 'color' => '#de3ace', 'sparkline' => [1, 2, 3], 'delta' => $delta],
                 ['label' => 'Rasio Alert / Unit', 'value' => '0.36', 'icon' => 'solar:bus-bold', 'bg' => 'bg-cyan', 'gradient' => 'bg-gradient-end-6', 'chart' => 'total-profit-chart', 'color' => '#00b8f2', 'sparkline' => [1, 2, 3], 'delta' => $delta],
             ],
-            'growth' => ['title' => 'Revenue Growth', 'subtitle' => 'Weekly Report', 'total' => '40', 'delta' => $delta, 'labels' => ['Mon'], 'series' => [4]],
-            'statistic' => ['title' => 'Earning Statistic', 'subtitle' => 'Yearly', 'total' => '40', 'confirmed' => '10', 'dismissed' => '8', 'labels' => ['Jan'], 'series' => [10]],
+            'growth' => ['title' => 'Alert Last 4 Week', 'subtitle' => 'Weekly Report', 'total' => '40', 'delta' => $delta, 'labels' => ['22 Jul', '29 Jul', '5 Agu', '12 Agu'], 'series' => [10, 12, 8, 10]],
+            'statistic' => [
+                'title' => 'Matriks Site',
+                'subtitle' => 'Check-in vs Alert / Orang',
+                'mode' => 'quadrant',
+                'total' => '40',
+                'confirmed' => '10',
+                'dismissed' => '4.00',
+                'x_median' => 5,
+                'y_median' => 1.5,
+                'points' => [
+                    [
+                        'site' => 'Binungan',
+                        'x' => 8,
+                        'y' => 2.0,
+                        'z' => 16,
+                        'alert_count' => 16,
+                        'checkin_count' => 8,
+                        'ratio' => 2.0,
+                        'wow' => 0.3,
+                        'direction' => 'up',
+                        'color' => '#ef4a00',
+                        'arrow' => '↑',
+                    ],
+                ],
+                'labels' => [],
+                'series' => [],
+            ],
             'categories' => [],
             'campaigns' => [
                 ['name' => 'Checkin RFID', 'total' => 80, 'pct' => 100, 'icon' => 'majesticons:mail', 'barClass' => 'bg-orange', 'textClass' => 'text-orange'],

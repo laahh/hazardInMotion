@@ -18,6 +18,8 @@ final class DmsDashboardOverviewService
 
     private const WEEK_DAYS = 7;
 
+    private const GROWTH_WEEKS = 4;
+
     private const SPARKLINE_DAYS = 9;
 
     public function __construct(
@@ -225,22 +227,14 @@ final class DmsDashboardOverviewService
             ],
         ];
 
-        $weekTotal = array_sum(array_column($weekDaily, 'total'));
-        $prevWeekTotal = $prevWeek['total'];
+        $growth = $this->buildFourWeekGrowth($windows['todayEnd'], $tz);
 
         return [
             'up' => true,
             'dateLabel' => $windows['dateLabel'] ?? $now->translatedFormat('d M Y'),
             'kpiDeltaLabel' => $windows['kpiDeltaLabel'] ?? 'vs kemarin',
             'kpis' => $kpis,
-            'growth' => [
-                'title' => 'Tren Alert',
-                'subtitle' => '7 hari terakhir',
-                'total' => number_format($weekTotal),
-                'delta' => $this->delta($weekTotal, $prevWeekTotal, true),
-                'labels' => array_column($weekDaily, 'short'),
-                'series' => array_column($weekDaily, 'total'),
-            ],
+            'growth' => $growth,
             'statistic' => [
                 'title' => 'Statistik Alert',
                 'subtitle' => self::CHART_DAYS.' hari terakhir',
@@ -273,6 +267,49 @@ final class DmsDashboardOverviewService
             'recentAll' => $recentAll,
             'recentConfirmed' => $recentConfirmed,
             'recentReviews' => $recentAll,
+        ];
+    }
+
+    /**
+     * Agregasi alert per minggu untuk 4 minggu terakhir (berakhir di hari sebelum $endExclusive).
+     *
+     * @return array{title:string, subtitle:string, total:string, delta:array{text:string, class:string}, labels:list<string>, series:list<int>}
+     */
+    private function buildFourWeekGrowth(string $endExclusive, string $tz): array
+    {
+        $endDay = Carbon::parse($endExclusive, $tz)->startOfDay()->subDay();
+        $startDay = $endDay->copy()->subDays((self::GROWTH_WEEKS * self::WEEK_DAYS) - 1);
+        $start = $startDay->format('Y-m-d H:i:s');
+        $end = Carbon::parse($endExclusive, $tz)->startOfDay()->format('Y-m-d H:i:s');
+
+        $dailyRaw = $this->reader->dailyAlertSeries($start, $end);
+        $daily = $this->fillDailySeries($start, $end, $dailyRaw, $tz);
+
+        $labels = [];
+        $series = [];
+        for ($week = 0; $week < self::GROWTH_WEEKS; $week++) {
+            $chunk = array_slice($daily, $week * self::WEEK_DAYS, self::WEEK_DAYS);
+            $weekTotal = array_sum(array_column($chunk, 'total'));
+            $first = $chunk[0]['hari'] ?? null;
+            $label = 'W'.($week + 1);
+            if (is_string($first) && $first !== '') {
+                $label = Carbon::parse($first, $tz)->isoFormat('D MMM');
+            }
+            $labels[] = $label;
+            $series[] = $weekTotal;
+        }
+
+        $fourWeekTotal = array_sum($series);
+        $latestWeek = (int) ($series[self::GROWTH_WEEKS - 1] ?? 0);
+        $previousWeek = (int) ($series[self::GROWTH_WEEKS - 2] ?? 0);
+
+        return [
+            'title' => 'Alert Last 4 Week',
+            'subtitle' => 'Weekly Report',
+            'total' => number_format($fourWeekTotal),
+            'delta' => $this->delta($latestWeek, $previousWeek, true),
+            'labels' => $labels,
+            'series' => $series,
         ];
     }
 
@@ -645,7 +682,7 @@ final class DmsDashboardOverviewService
             'dateLabel' => $windows['dateLabel'] ?? $now->translatedFormat('d M Y'),
             'kpiDeltaLabel' => $windows['kpiDeltaLabel'] ?? 'vs kemarin',
             'kpis' => $kpis,
-            'growth' => ['title' => 'Tren Alert', 'subtitle' => '7 hari terakhir', 'total' => '0', 'delta' => $zeroDelta, 'labels' => $weekLabels, 'series' => $emptyWeek],
+            'growth' => ['title' => 'Alert Last 4 Week', 'subtitle' => 'Weekly Report', 'total' => '0', 'delta' => $zeroDelta, 'labels' => ['W1', 'W2', 'W3', 'W4'], 'series' => [0, 0, 0, 0]],
             'statistic' => ['title' => 'Statistik Alert', 'subtitle' => self::CHART_DAYS.' hari terakhir', 'total' => '0', 'confirmed' => '0', 'dismissed' => '0', 'labels' => $chartLabels, 'series' => $emptyChart],
             'categories' => [],
             'overview' => ['confirmed' => 0, 'dismissed' => 0, 'pending' => 0, 'rate' => 0.0],

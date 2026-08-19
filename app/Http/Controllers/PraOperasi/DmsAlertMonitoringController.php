@@ -36,6 +36,16 @@ final class DmsAlertMonitoringController extends Controller
             is_string($filters['perusahaan'] ?? null) && $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null,
         );
 
+        $quadrantFilters = [
+            'start' => (string) ($filters['start'] ?? ''),
+            'end' => (string) ($filters['end'] ?? ''),
+            'site' => (string) ($filters['site'] ?? ''),
+            'perusahaan' => (string) ($filters['perusahaan'] ?? ''),
+        ];
+        if ($quadrantFilters['start'] !== '' && $quadrantFilters['end'] !== '') {
+            $crm['statistic'] = $this->kpiDetail->siteQuadrantMatrix($quadrantFilters);
+        }
+
         return view('pra-operasi.dms-alert-monitoring', $this->mergeCrmPayload($crm, $monitoring));
     }
 

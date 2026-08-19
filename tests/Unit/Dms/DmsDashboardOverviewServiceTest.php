@@ -93,6 +93,9 @@ class DmsDashboardOverviewServiceTest extends TestCase
         $this->assertSame('Total Alert', $payload['kpis'][4]['label']);
         $this->assertSame('2.40', $payload['kpis'][5]['value']);
         $this->assertSame('Rasio Alert / Unit', $payload['kpis'][5]['label']);
+        $this->assertSame('Alert Last 4 Week', $payload['growth']['title']);
+        $this->assertCount(4, $payload['growth']['series']);
+        $this->assertCount(4, $payload['growth']['labels']);
         $this->assertSame('Menutup Mata', $payload['categories'][0]['name']);
         $this->assertSame('Binungan', $payload['sites'][0]['site']);
         $this->assertSame('Budi Santoso', $payload['topOperators'][0]['nama']);
