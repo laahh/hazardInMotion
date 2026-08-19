@@ -27,6 +27,7 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
         $this->assertStringContainsString('Total Alert', $html);
         $this->assertStringContainsString('Rasio Alert / Orang', $html);
         $this->assertStringContainsString('Unit Beroperasi', $html);
+        $this->assertStringContainsString('Rasio Alert / Unit', $html);
         $this->assertStringContainsString('Checkin RFID', $html);
         $this->assertStringContainsString('Site', $html);
         $this->assertStringContainsString('Perusahaan', $html);
@@ -53,7 +54,9 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
                 ['label' => 'Total Orang Checkin', 'value' => '80', 'icon' => 'mingcute:user-follow-fill', 'bg' => 'bg-primary-600', 'gradient' => 'bg-gradient-end-1', 'chart' => 'new-user-chart', 'color' => '#487fff', 'sparkline' => [1, 2, 3], 'delta' => $delta],
                 ['label' => 'Total Alert', 'value' => '120', 'icon' => 'solar:danger-triangle-bold', 'bg' => 'bg-success-main', 'gradient' => 'bg-gradient-end-2', 'chart' => 'active-user-chart', 'color' => '#45b369', 'sparkline' => [1, 2, 3], 'delta' => $delta],
                 ['label' => 'Rasio Alert / Orang', 'value' => '1.50', 'icon' => 'solar:chart-2-bold', 'bg' => 'bg-yellow', 'gradient' => 'bg-gradient-end-3', 'chart' => 'total-sales-chart', 'color' => '#f4941e', 'sparkline' => [1, 2, 3], 'delta' => $delta],
-                ['label' => 'Unit Beroperasi', 'value' => '12', 'icon' => 'solar:wheel-bold', 'bg' => 'bg-purple', 'gradient' => 'bg-gradient-end-4', 'chart' => 'conversion-user-chart', 'color' => '#8252e9', 'sparkline' => [1, 2, 3], 'delta' => $delta],
+                ['label' => 'Unit Beroperasi', 'value' => '335', 'icon' => 'solar:wheel-bold', 'bg' => 'bg-purple', 'gradient' => 'bg-gradient-end-4', 'chart' => 'conversion-user-chart', 'color' => '#8252e9', 'sparkline' => [1, 2, 3], 'delta' => $delta],
+                ['label' => 'Total Alert', 'value' => '120', 'icon' => 'solar:danger-triangle-bold', 'bg' => 'bg-pink', 'gradient' => 'bg-gradient-end-5', 'chart' => 'leads-chart', 'color' => '#de3ace', 'sparkline' => [1, 2, 3], 'delta' => $delta],
+                ['label' => 'Rasio Alert / Unit', 'value' => '0.36', 'icon' => 'solar:bus-bold', 'bg' => 'bg-cyan', 'gradient' => 'bg-gradient-end-6', 'chart' => 'total-profit-chart', 'color' => '#00b8f2', 'sparkline' => [1, 2, 3], 'delta' => $delta],
             ],
             'growth' => ['title' => 'Revenue Growth', 'subtitle' => 'Weekly Report', 'total' => '40', 'delta' => $delta, 'labels' => ['Mon'], 'series' => [4]],
             'statistic' => ['title' => 'Earning Statistic', 'subtitle' => 'Yearly', 'total' => '40', 'confirmed' => '10', 'dismissed' => '8', 'labels' => ['Jan'], 'series' => [10]],

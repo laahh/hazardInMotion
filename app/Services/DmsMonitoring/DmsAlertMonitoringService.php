@@ -58,6 +58,7 @@ final class DmsAlertMonitoringService
             $qaPending = $this->qaService->pendingSamples($filters['start'], $filters['end']);
             $today = $this->buildTodaySnapshot($tz);
             $operatorsCheckedIn = $this->reader->countOperatorCheckinsInRange($start, $end);
+            $unitsInPeriod = $this->reader->unitsOperatingInRange($start, $end);
             $filterOptions = $this->reader->filterOptions($start, $end);
 
             return [
@@ -66,7 +67,7 @@ final class DmsAlertMonitoringService
                 'filterOptions' => $filterOptions,
                 'dateLabel' => $this->dateRangeLabel($filters['start'], $filters['end']),
                 'today' => $today,
-                'kpis' => $this->buildKpis($today, $summary, $qaSummary, $unitsOperating, $operatorsCheckedIn),
+                'kpis' => $this->buildKpis($summary, $unitsOperating, $operatorsCheckedIn, $unitsInPeriod),
                 'summary' => $summary,
                 'byUnit' => $byUnit,
                 'byOperator' => $byOperator,
@@ -173,23 +174,17 @@ final class DmsAlertMonitoringService
     }
 
     /**
-     * Enam kartu KPI WowDash — tiga pertama: check-in operator, total alert, rasio.
+     * Enam kartu KPI WowDash — baris 1: check-in/alert/rasio per orang;
+     * baris 2: unit beroperasi/total alert/rasio per unit.
      *
-     * @param  array{date_label:string, units_operating:int, operators_checked_in:int, total_alerts:int, ratio_per_unit:float, ratio_per_operator:float}  $today
      * @param  array{total:int, l1_dismissed:int}  $summary
-     * @param  array{false_negative:int, false_negative_rate:float|null, estimated_false_negative_count:int|null}  $qaSummary
      * @return list<array{label:string, value:string, hint:string, icon:string, bg:string, gradient:string}>
      */
-    private function buildKpis(array $today, array $summary, array $qaSummary, int $unitsOnline, int $operatorsCheckedIn): array
+    private function buildKpis(array $summary, int $unitsOnline, int $operatorsCheckedIn, int $unitsInPeriod): array
     {
-        $falseNegativeRate = $qaSummary['false_negative_rate'] ?? null;
-        $estimatedFn = $qaSummary['estimated_false_negative_count'] ?? null;
-        $falseNegativeHint = $falseNegativeRate === null
-            ? 'audit sampel Slovin atas dismiss L1'
-            : 'rate '.$falseNegativeRate.'%'.($estimatedFn !== null ? ' · estimasi '.number_format((int) $estimatedFn).' di populasi' : '');
-
         $totalAlerts = (int) ($summary['total'] ?? 0);
         $ratioPerOperator = $operatorsCheckedIn > 0 ? round($totalAlerts / $operatorsCheckedIn, 2) : 0.0;
+        $ratioPerUnit = $unitsInPeriod > 0 ? round($totalAlerts / $unitsInPeriod, 2) : 0.0;
 
         return [
             [
@@ -218,25 +213,25 @@ final class DmsAlertMonitoringService
             ],
             [
                 'label' => 'Unit Beroperasi',
-                'value' => number_format((int) ($today['units_operating'] ?? 0)),
-                'hint' => 'hari ini'.($unitsOnline > 0 ? ' · '.$unitsOnline.' online 30 mnt' : ''),
+                'value' => number_format($unitsInPeriod),
+                'hint' => 'periode filter'.($unitsOnline > 0 ? ' · '.$unitsOnline.' online 30 mnt' : ''),
                 'icon' => 'solar:wheel-bold',
                 'bg' => 'bg-purple',
                 'gradient' => 'bg-gradient-end-4',
             ],
             [
-                'label' => 'False Positif (L1 Dismiss)',
-                'value' => number_format((int) ($summary['l1_dismissed'] ?? 0)),
-                'hint' => 'alert DMS yang L1 anggap bukan pelanggaran',
-                'icon' => 'solar:close-circle-bold',
+                'label' => 'Total Alert',
+                'value' => number_format($totalAlerts),
+                'hint' => 'periode filter',
+                'icon' => 'solar:danger-triangle-bold',
                 'bg' => 'bg-pink',
                 'gradient' => 'bg-gradient-end-5',
             ],
             [
-                'label' => 'False Negatif (QA L1)',
-                'value' => number_format((int) ($qaSummary['false_negative'] ?? 0)),
-                'hint' => $falseNegativeHint,
-                'icon' => 'solar:shield-warning-bold',
+                'label' => 'Rasio Alert / Unit',
+                'value' => number_format($ratioPerUnit, 2),
+                'hint' => 'alert ÷ unit beroperasi',
+                'icon' => 'solar:bus-bold',
                 'bg' => 'bg-cyan',
                 'gradient' => 'bg-gradient-end-6',
             ],
@@ -330,13 +325,7 @@ final class DmsAlertMonitoringService
             'filterOptions' => ['sites' => [], 'companies' => []],
             'dateLabel' => $this->dateRangeLabel($filters['start'], $filters['end']),
             'today' => ['date_label' => '-', 'units_operating' => 0, 'operators_checked_in' => 0, 'total_alerts' => 0, 'ratio_per_unit' => 0.0, 'ratio_per_operator' => 0.0],
-            'kpis' => $this->buildKpis(
-                ['date_label' => '-', 'units_operating' => 0, 'operators_checked_in' => 0, 'total_alerts' => 0, 'ratio_per_unit' => 0.0, 'ratio_per_operator' => 0.0],
-                ['total' => 0, 'l1_dismissed' => 0],
-                ['false_negative' => 0, 'false_negative_rate' => null, 'estimated_false_negative_count' => null],
-                0,
-                0,
-            ),
+            'kpis' => $this->buildKpis(['total' => 0, 'l1_dismissed' => 0], 0, 0, 0),
             'summary' => ['total' => 0, 'l1_reviewed' => 0, 'l1_confirmed' => 0, 'l1_dismissed' => 0, 'l1_belum' => 0, 'l2_reviewed' => 0, 'l2_confirmed' => 0, 'post_event_eligible' => 0],
             'byUnit' => [],
             'byOperator' => [],

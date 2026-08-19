@@ -134,6 +134,7 @@ final class DmsDashboardOverviewService
         $weekDaily = array_slice($daily, -self::WEEK_DAYS);
         $sparkline = array_slice($daily, -self::SPARKLINE_DAYS);
         $operatorCheckinSparkline = $this->operatorCheckinSparkline($sparkline, $tz);
+        $unitOperatingSparkline = $this->unitOperatingSparkline($sparkline, $tz);
 
         $categories = $this->mapCategories($this->reader->categoryQuadrant($windows['weekStart'], $windows['todayEnd']));
         $sites = $this->mapSites($this->reader->alertsBySite($windows['weekStart'], $windows['todayEnd'], 6));
@@ -185,37 +186,42 @@ final class DmsDashboardOverviewService
                 ),
             ],
             [
-                'label' => 'Rasio Konfirmasi',
-                'value' => $confirmRate.'%',
-                'icon' => 'solar:chart-2-bold',
+                'label' => 'Unit Beroperasi',
+                'value' => number_format($unitsOnline > 0 ? $unitsOnline : $unitsToday),
+                'icon' => 'solar:wheel-bold',
                 'bg' => 'bg-purple',
                 'gradient' => 'bg-gradient-end-4',
                 'chart' => 'conversion-user-chart',
                 'color' => '#8252e9',
-                'sparkline' => $this->rateSparkline($sparkline),
-                'delta' => $this->deltaFloat($confirmRate, $confirmRateYesterday, false, '%'),
+                'sparkline' => $unitOperatingSparkline,
+                'delta' => $this->delta($unitsToday, $unitsYesterday, false),
             ],
             [
-                'label' => 'Belum Review L1',
-                'value' => number_format($today['l1_belum']),
-                'icon' => 'solar:clipboard-list-bold',
+                'label' => 'Total Alert',
+                'value' => number_format($today['total']),
+                'icon' => 'solar:danger-triangle-bold',
                 'bg' => 'bg-pink',
                 'gradient' => 'bg-gradient-end-5',
                 'chart' => 'leads-chart',
                 'color' => '#de3ace',
-                'sparkline' => array_column($sparkline, 'pending'),
-                'delta' => $this->delta($today['l1_belum'], $yesterday['l1_belum'], true),
+                'sparkline' => array_column($sparkline, 'total'),
+                'delta' => $this->delta($today['total'], $yesterday['total'], true),
             ],
             [
-                'label' => 'Unit Online',
-                'value' => number_format($unitsOnline > 0 ? $unitsOnline : $unitsToday),
-                'icon' => 'solar:wheel-bold',
+                'label' => 'Rasio Alert / Unit',
+                'value' => number_format($unitsToday > 0 ? $today['total'] / $unitsToday : 0, 2),
+                'icon' => 'solar:bus-bold',
                 'bg' => 'bg-cyan',
                 'gradient' => 'bg-gradient-end-6',
                 'chart' => 'total-profit-chart',
                 'color' => '#00b8f2',
-                'sparkline' => array_column($sparkline, 'total'),
-                'delta' => $this->delta($unitsToday, $unitsYesterday, false),
+                'sparkline' => $this->alertPerUnitSparkline($sparkline, $unitOperatingSparkline),
+                'delta' => $this->deltaFloat(
+                    $unitsToday > 0 ? round($today['total'] / $unitsToday, 2) : 0.0,
+                    $unitsYesterday > 0 ? round($yesterday['total'] / $unitsYesterday, 2) : 0.0,
+                    true,
+                    '',
+                ),
             ],
         ];
 
@@ -485,6 +491,49 @@ final class DmsDashboardOverviewService
     }
 
     /**
+     * @param  list<array{hari:string, total?:int}>  $days
+     * @param  list<int>  $unitCounts
+     * @return list<float>
+     */
+    private function alertPerUnitSparkline(array $days, array $unitCounts): array
+    {
+        $out = [];
+        foreach ($days as $i => $day) {
+            $units = (int) ($unitCounts[$i] ?? 0);
+            $total = (int) ($day['total'] ?? 0);
+            $out[] = $units > 0 ? round($total / $units, 2) : 0.0;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array{hari:string}>  $days
+     * @return list<int>
+     */
+    private function unitOperatingSparkline(array $days, string $tz): array
+    {
+        $out = [];
+        foreach ($days as $day) {
+            $hari = (string) ($day['hari'] ?? '');
+            if ($hari === '') {
+                $out[] = 0;
+                continue;
+            }
+            try {
+                $start = Carbon::parse($hari, $tz)->startOfDay()->format('Y-m-d H:i:s');
+                $end = Carbon::parse($hari, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+            } catch (Throwable) {
+                $out[] = 0;
+                continue;
+            }
+            $out[] = $this->reader->unitsOperatingInRange($start, $end);
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  list<array{hari:string}>  $days
      * @return list<int>
      */
@@ -586,9 +635,9 @@ final class DmsDashboardOverviewService
             ['label' => 'Total Orang Checkin', 'value' => '0', 'icon' => 'mingcute:user-follow-fill', 'bg' => 'bg-primary-600', 'gradient' => 'bg-gradient-end-1', 'chart' => 'new-user-chart', 'color' => '#487fff', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
             ['label' => 'Total Alert', 'value' => '0', 'icon' => 'solar:danger-triangle-bold', 'bg' => 'bg-success-main', 'gradient' => 'bg-gradient-end-2', 'chart' => 'active-user-chart', 'color' => '#45b369', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
             ['label' => 'Rasio Alert / Orang', 'value' => '0.00', 'icon' => 'solar:chart-2-bold', 'bg' => 'bg-yellow', 'gradient' => 'bg-gradient-end-3', 'chart' => 'total-sales-chart', 'color' => '#f4941e', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
-            ['label' => 'Rasio Konfirmasi', 'value' => '0%', 'icon' => 'solar:chart-2-bold', 'bg' => 'bg-purple', 'gradient' => 'bg-gradient-end-4', 'chart' => 'conversion-user-chart', 'color' => '#8252e9', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
-            ['label' => 'Belum Review L1', 'value' => '0', 'icon' => 'solar:clipboard-list-bold', 'bg' => 'bg-pink', 'gradient' => 'bg-gradient-end-5', 'chart' => 'leads-chart', 'color' => '#de3ace', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
-            ['label' => 'Unit Online', 'value' => '0', 'icon' => 'solar:wheel-bold', 'bg' => 'bg-cyan', 'gradient' => 'bg-gradient-end-6', 'chart' => 'total-profit-chart', 'color' => '#00b8f2', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
+            ['label' => 'Unit Beroperasi', 'value' => '0', 'icon' => 'solar:wheel-bold', 'bg' => 'bg-purple', 'gradient' => 'bg-gradient-end-4', 'chart' => 'conversion-user-chart', 'color' => '#8252e9', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
+            ['label' => 'Total Alert', 'value' => '0', 'icon' => 'solar:danger-triangle-bold', 'bg' => 'bg-pink', 'gradient' => 'bg-gradient-end-5', 'chart' => 'leads-chart', 'color' => '#de3ace', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
+            ['label' => 'Rasio Alert / Unit', 'value' => '0.00', 'icon' => 'solar:bus-bold', 'bg' => 'bg-cyan', 'gradient' => 'bg-gradient-end-6', 'chart' => 'total-profit-chart', 'color' => '#00b8f2', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
         ];
 
         return [
