@@ -35,7 +35,7 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
         $this->assertStringContainsString('Lead Time intervensi alert real time (Under 5 Menit)', $html);
         $this->assertStringContainsString('dms-cr-table', $html);
         $this->assertStringContainsString('PT BAR', $html);
-        $this->assertStringContainsString('BMO 3', $html);
+        $this->assertStringContainsString('dms-cr-company-name', $html);
         $this->assertStringContainsString('All Item', $html);
         $this->assertStringContainsString('Last Transaction', $html);
         $this->assertStringContainsString('Total Orang Checkin', $html);
@@ -115,43 +115,33 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
             ],
             'controlRoom' => [
                 'title' => 'Performa Control Room',
-                'subtitle' => 'Intervensi alert & lead time real time per perusahaan / site',
+                'subtitle' => 'Intervensi alert & lead time real time per perusahaan',
                 'companies' => [
-                    [
-                        'name' => 'PT BAR',
-                        'columns' => [
-                            ['key' => 'PT BAR|BMO 3', 'company' => 'PT BAR', 'site' => 'BMO 3'],
-                            ['key' => 'PT BAR|SMO', 'company' => 'PT BAR', 'site' => 'SMO'],
-                        ],
-                    ],
+                    ['perusahaan' => 'PT BAR', 'total_alert' => 19564, 'alert_intervened' => 13528, 'total_unit' => 44, 'unit_intervened' => 41, 'alert_under_5min' => 3223, 'sites' => ['BMO 3', 'SMO']],
                 ],
                 'columns' => [
-                    ['key' => 'PT BAR|BMO 3', 'company' => 'PT BAR', 'site' => 'BMO 3'],
-                    ['key' => 'PT BAR|SMO', 'company' => 'PT BAR', 'site' => 'SMO'],
+                    ['key' => 'PT BAR', 'company' => 'PT BAR', 'sites' => ['BMO 3', 'SMO']],
                 ],
                 'rows' => [
                     [
                         'key' => 'alert_intervention',
                         'label' => '% Alert yang diintervensi',
                         'cells' => [
-                            'PT BAR|BMO 3' => ['pct' => 82.0, 'pct_label' => '82%', 'numerator' => 10485, 'denominator' => 12810, 'tone' => 'good'],
-                            'PT BAR|SMO' => ['pct' => 45.0, 'pct_label' => '45%', 'numerator' => 3043, 'denominator' => 6754, 'tone' => 'bad'],
+                            'PT BAR' => ['pct' => 69.14, 'pct_label' => '69.14%', 'numerator' => 13528, 'denominator' => 19564, 'tone' => 'warn'],
                         ],
                     ],
                     [
                         'key' => 'unit_intervention',
                         'label' => '% Unit yang diintervensi',
                         'cells' => [
-                            'PT BAR|BMO 3' => ['pct' => 100.0, 'pct_label' => '100%', 'numerator' => 30, 'denominator' => 30, 'tone' => 'excellent'],
-                            'PT BAR|SMO' => ['pct' => 79.0, 'pct_label' => '79%', 'numerator' => 11, 'denominator' => 14, 'tone' => 'warn'],
+                            'PT BAR' => ['pct' => 93.18, 'pct_label' => '93.18%', 'numerator' => 41, 'denominator' => 44, 'tone' => 'excellent'],
                         ],
                     ],
                     [
                         'key' => 'lead_time_under_5min',
                         'label' => 'Lead Time intervensi alert real time (Under 5 Menit)',
                         'cells' => [
-                            'PT BAR|BMO 3' => ['pct' => 30.76, 'pct_label' => '30.76%', 'numerator' => 3219, 'denominator' => 10465, 'tone' => 'bad'],
-                            'PT BAR|SMO' => ['pct' => 0.13, 'pct_label' => '0.13%', 'numerator' => 4, 'denominator' => 3043, 'tone' => 'critical'],
+                            'PT BAR' => ['pct' => 23.83, 'pct_label' => '23.83%', 'numerator' => 3223, 'denominator' => 13528, 'tone' => 'critical'],
                         ],
                     ],
                 ],

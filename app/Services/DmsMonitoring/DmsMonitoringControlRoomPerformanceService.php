@@ -78,44 +78,37 @@ class DmsMonitoringControlRoomPerformanceService
      */
     private function buildMatrix(array $rawRows): array
     {
-        $indexed = [];
-        $companies = [];
-
+        // Agregasi per perusahaan — sum semua site dalam satu perusahaan
+        $byCompany = [];
         foreach ($rawRows as $row) {
             $company = (string) ($row['perusahaan'] ?? '-');
-            $site = (string) ($row['site'] ?? '-');
-            $key = $this->columnKey($company, $site);
-            $indexed[$key] = $row;
-
-            if (! isset($companies[$company])) {
-                $companies[$company] = [];
-            }
-            $companies[$company][$site] = $site;
-        }
-
-        ksort($companies);
-        $columns = [];
-        foreach ($companies as $company => $sites) {
-            ksort($sites);
-            foreach ($sites as $site) {
-                $columns[] = [
-                    'key' => $this->columnKey($company, $site),
-                    'company' => $company,
-                    'site' => $site,
+            if (! isset($byCompany[$company])) {
+                $byCompany[$company] = [
+                    'perusahaan' => $company,
+                    'total_alert' => 0,
+                    'alert_intervened' => 0,
+                    'total_unit' => 0,
+                    'unit_intervened' => 0,
+                    'alert_under_5min' => 0,
+                    'sites' => [],
                 ];
             }
+            $byCompany[$company]['total_alert'] += (int) ($row['total_alert'] ?? 0);
+            $byCompany[$company]['alert_intervened'] += (int) ($row['alert_intervened'] ?? 0);
+            $byCompany[$company]['total_unit'] += (int) ($row['total_unit'] ?? 0);
+            $byCompany[$company]['unit_intervened'] += (int) ($row['unit_intervened'] ?? 0);
+            $byCompany[$company]['alert_under_5min'] += (int) ($row['alert_under_5min'] ?? 0);
+            $byCompany[$company]['sites'][] = (string) ($row['site'] ?? '-');
         }
 
-        $companyGroups = [];
-        foreach ($columns as $column) {
-            $companyGroups[$column['company']][] = $column;
-        }
+        ksort($byCompany);
 
-        $groupedCompanies = [];
-        foreach ($companyGroups as $company => $cols) {
-            $groupedCompanies[] = [
-                'name' => $company,
-                'columns' => $cols,
+        $columns = [];
+        foreach ($byCompany as $company => $data) {
+            $columns[] = [
+                'key' => $company,
+                'company' => $company,
+                'sites' => $data['sites'],
             ];
         }
 
@@ -123,7 +116,7 @@ class DmsMonitoringControlRoomPerformanceService
         foreach (self::METRICS as $metric) {
             $cells = [];
             foreach ($columns as $column) {
-                $cells[$column['key']] = $this->buildCell($metric['key'], $indexed[$column['key']] ?? null);
+                $cells[$column['key']] = $this->buildCell($metric['key'], $byCompany[$column['company']] ?? null);
             }
             $rows[] = [
                 'key' => $metric['key'],
@@ -134,9 +127,9 @@ class DmsMonitoringControlRoomPerformanceService
 
         return [
             'title' => 'Performa Control Room',
-            'subtitle' => 'Intervensi alert & lead time real time per perusahaan / site',
+            'subtitle' => 'Intervensi alert & lead time real time per perusahaan',
             'metrics' => self::METRICS,
-            'companies' => $groupedCompanies,
+            'companies' => array_values($byCompany),
             'columns' => $columns,
             'rows' => $rows,
         ];
@@ -227,11 +220,6 @@ class DmsMonitoringControlRoomPerformanceService
         return 'critical';
     }
 
-    private function columnKey(string $company, string $site): string
-    {
-        return $company.'|'.$site;
-    }
-
     /**
      * @return array<string, mixed>
      */
@@ -239,7 +227,7 @@ class DmsMonitoringControlRoomPerformanceService
     {
         return [
             'title' => 'Performa Control Room',
-            'subtitle' => 'Intervensi alert & lead time real time per perusahaan / site',
+            'subtitle' => 'Intervensi alert & lead time real time per perusahaan',
             'metrics' => self::METRICS,
             'companies' => [],
             'columns' => [],
