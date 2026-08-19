@@ -57,6 +57,7 @@ final class DmsAlertMonitoringService
             $qaSummary = $this->qaService->summaryForPeriod($filters['start'], $filters['end']);
             $qaPending = $this->qaService->pendingSamples($filters['start'], $filters['end']);
             $today = $this->buildTodaySnapshot($tz);
+            $operatorsCheckedIn = $this->reader->countOperatorCheckinsInRange($start, $end);
             $filterOptions = $this->reader->filterOptions($start, $end);
 
             return [
@@ -65,7 +66,7 @@ final class DmsAlertMonitoringService
                 'filterOptions' => $filterOptions,
                 'dateLabel' => $this->dateRangeLabel($filters['start'], $filters['end']),
                 'today' => $today,
-                'kpis' => $this->buildKpis($today, $summary, $qaSummary, $unitsOperating),
+                'kpis' => $this->buildKpis($today, $summary, $qaSummary, $unitsOperating, $operatorsCheckedIn),
                 'summary' => $summary,
                 'byUnit' => $byUnit,
                 'byOperator' => $byOperator,
@@ -172,14 +173,14 @@ final class DmsAlertMonitoringService
     }
 
     /**
-     * Enam kartu KPI WowDash — angka operasional, bukan label CRM dummy.
+     * Enam kartu KPI WowDash — tiga pertama: check-in operator, total alert, rasio.
      *
      * @param  array{date_label:string, units_operating:int, operators_checked_in:int, total_alerts:int, ratio_per_unit:float, ratio_per_operator:float}  $today
      * @param  array{total:int, l1_dismissed:int}  $summary
      * @param  array{false_negative:int, false_negative_rate:float|null, estimated_false_negative_count:int|null}  $qaSummary
      * @return list<array{label:string, value:string, hint:string, icon:string, bg:string, gradient:string}>
      */
-    private function buildKpis(array $today, array $summary, array $qaSummary, int $unitsOnline): array
+    private function buildKpis(array $today, array $summary, array $qaSummary, int $unitsOnline, int $operatorsCheckedIn): array
     {
         $falseNegativeRate = $qaSummary['false_negative_rate'] ?? null;
         $estimatedFn = $qaSummary['estimated_false_negative_count'] ?? null;
@@ -187,36 +188,39 @@ final class DmsAlertMonitoringService
             ? 'audit sampel Slovin atas dismiss L1'
             : 'rate '.$falseNegativeRate.'%'.($estimatedFn !== null ? ' · estimasi '.number_format((int) $estimatedFn).' di populasi' : '');
 
+        $totalAlerts = (int) ($summary['total'] ?? 0);
+        $ratioPerOperator = $operatorsCheckedIn > 0 ? round($totalAlerts / $operatorsCheckedIn, 2) : 0.0;
+
         return [
             [
-                'label' => 'Total Alert Masuk',
-                'value' => number_format((int) ($summary['total'] ?? 0)),
-                'hint' => 'periode filter',
-                'icon' => 'solar:danger-triangle-bold',
+                'label' => 'Total Orang Checkin',
+                'value' => number_format($operatorsCheckedIn),
+                'hint' => 'jabatan Operator · periode filter',
+                'icon' => 'mingcute:user-follow-fill',
                 'bg' => 'bg-primary-600',
                 'gradient' => 'bg-gradient-end-1',
+            ],
+            [
+                'label' => 'Total Alert',
+                'value' => number_format($totalAlerts),
+                'hint' => 'periode filter',
+                'icon' => 'solar:danger-triangle-bold',
+                'bg' => 'bg-success-main',
+                'gradient' => 'bg-gradient-end-2',
+            ],
+            [
+                'label' => 'Rasio Alert / Orang',
+                'value' => number_format($ratioPerOperator, 2),
+                'hint' => 'alert ÷ orang check-in operator',
+                'icon' => 'solar:chart-2-bold',
+                'bg' => 'bg-yellow',
+                'gradient' => 'bg-gradient-end-3',
             ],
             [
                 'label' => 'Unit Beroperasi',
                 'value' => number_format((int) ($today['units_operating'] ?? 0)),
                 'hint' => 'hari ini'.($unitsOnline > 0 ? ' · '.$unitsOnline.' online 30 mnt' : ''),
                 'icon' => 'solar:wheel-bold',
-                'bg' => 'bg-success-main',
-                'gradient' => 'bg-gradient-end-2',
-            ],
-            [
-                'label' => 'Rasio Alert / Unit',
-                'value' => number_format((float) ($today['ratio_per_unit'] ?? 0), 2),
-                'hint' => (string) ($today['date_label'] ?? 'hari ini'),
-                'icon' => 'solar:bus-bold',
-                'bg' => 'bg-yellow',
-                'gradient' => 'bg-gradient-end-3',
-            ],
-            [
-                'label' => 'Rasio Alert / Orang',
-                'value' => number_format((float) ($today['ratio_per_operator'] ?? 0), 2),
-                'hint' => number_format((int) ($today['operators_checked_in'] ?? 0)).' orang check-in RFID',
-                'icon' => 'mingcute:user-follow-fill',
                 'bg' => 'bg-purple',
                 'gradient' => 'bg-gradient-end-4',
             ],
@@ -240,8 +244,7 @@ final class DmsAlertMonitoringService
     }
 
     /**
-     * Snapshot HARI INI (bukan window filter start/end) — untuk kartu unit
-     * beroperasi dan rasio alert per unit/per orang.
+     * Snapshot HARI INI (bukan window filter start/end) — untuk kartu unit beroperasi.
      *
      * @return array{date_label:string, units_operating:int, operators_checked_in:int, total_alerts:int, ratio_per_unit:float, ratio_per_operator:float}
      */
@@ -331,6 +334,7 @@ final class DmsAlertMonitoringService
                 ['date_label' => '-', 'units_operating' => 0, 'operators_checked_in' => 0, 'total_alerts' => 0, 'ratio_per_unit' => 0.0, 'ratio_per_operator' => 0.0],
                 ['total' => 0, 'l1_dismissed' => 0],
                 ['false_negative' => 0, 'false_negative_rate' => null, 'estimated_false_negative_count' => null],
+                0,
                 0,
             ),
             'summary' => ['total' => 0, 'l1_reviewed' => 0, 'l1_confirmed' => 0, 'l1_dismissed' => 0, 'l1_belum' => 0, 'l2_reviewed' => 0, 'l2_confirmed' => 0, 'post_event_eligible' => 0],

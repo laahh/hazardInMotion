@@ -123,8 +123,8 @@ final class DmsDashboardOverviewService
         $week = $this->reader->alertSummary($windows['weekStart'], $windows['todayEnd']);
         $prevWeek = $this->reader->alertSummary($windows['prevWeekStart'], $windows['prevWeekEnd']);
 
-        $operatorsToday = count($this->reader->distinctAlertSids($windows['todayStart'], $windows['todayEnd']));
-        $operatorsYesterday = count($this->reader->distinctAlertSids($windows['yesterdayStart'], $windows['todayStart']));
+        $operatorsToday = $this->reader->countOperatorCheckinsInRange($windows['todayStart'], $windows['todayEnd']);
+        $operatorsYesterday = $this->reader->countOperatorCheckinsInRange($windows['yesterdayStart'], $windows['todayStart']);
         $unitsToday = $this->reader->unitsOperatingInRange($windows['todayStart'], $windows['todayEnd']);
         $unitsYesterday = $this->reader->unitsOperatingInRange($windows['yesterdayStart'], $windows['todayStart']);
         $unitsOnline = $this->reader->unitsOperatingNow(30);
@@ -133,6 +133,7 @@ final class DmsDashboardOverviewService
         $daily = $this->fillDailySeries($windows['chartStart'], $windows['todayEnd'], $dailyRaw, $tz);
         $weekDaily = array_slice($daily, -self::WEEK_DAYS);
         $sparkline = array_slice($daily, -self::SPARKLINE_DAYS);
+        $operatorCheckinSparkline = $this->operatorCheckinSparkline($sparkline, $tz);
 
         $categories = $this->mapCategories($this->reader->categoryQuadrant($windows['weekStart'], $windows['todayEnd']));
         $sites = $this->mapSites($this->reader->alertsBySite($windows['weekStart'], $windows['todayEnd'], 6));
@@ -146,37 +147,42 @@ final class DmsDashboardOverviewService
 
         $kpis = [
             [
-                'label' => 'Total Alert',
-                'value' => number_format($today['total']),
-                'icon' => 'solar:danger-triangle-bold',
+                'label' => 'Total Orang Checkin',
+                'value' => number_format($operatorsToday),
+                'icon' => 'mingcute:user-follow-fill',
                 'bg' => 'bg-primary-600',
                 'gradient' => 'bg-gradient-end-1',
                 'chart' => 'new-user-chart',
                 'color' => '#487fff',
-                'sparkline' => array_column($sparkline, 'total'),
-                'delta' => $this->delta($today['total'], $yesterday['total'], true),
+                'sparkline' => $operatorCheckinSparkline,
+                'delta' => $this->delta($operatorsToday, $operatorsYesterday, false),
             ],
             [
-                'label' => 'Operator Alert',
-                'value' => number_format($operatorsToday),
-                'icon' => 'mingcute:user-follow-fill',
+                'label' => 'Total Alert',
+                'value' => number_format($today['total']),
+                'icon' => 'solar:danger-triangle-bold',
                 'bg' => 'bg-success-main',
                 'gradient' => 'bg-gradient-end-2',
                 'chart' => 'active-user-chart',
                 'color' => '#45b369',
-                'sparkline' => array_column($sparkline, 'operators'),
-                'delta' => $this->delta($operatorsToday, $operatorsYesterday, true),
+                'sparkline' => array_column($sparkline, 'total'),
+                'delta' => $this->delta($today['total'], $yesterday['total'], true),
             ],
             [
-                'label' => 'Confirmed L1',
-                'value' => number_format($today['l1_confirmed']),
-                'icon' => 'solar:shield-check-bold',
+                'label' => 'Rasio Alert / Orang',
+                'value' => number_format($operatorsToday > 0 ? $today['total'] / $operatorsToday : 0, 2),
+                'icon' => 'solar:chart-2-bold',
                 'bg' => 'bg-yellow',
                 'gradient' => 'bg-gradient-end-3',
                 'chart' => 'total-sales-chart',
                 'color' => '#f4941e',
-                'sparkline' => array_column($sparkline, 'confirmed'),
-                'delta' => $this->delta($today['l1_confirmed'], $yesterday['l1_confirmed'], true),
+                'sparkline' => $this->alertPerPersonSparkline($sparkline, $operatorCheckinSparkline),
+                'delta' => $this->deltaFloat(
+                    $operatorsToday > 0 ? round($today['total'] / $operatorsToday, 2) : 0.0,
+                    $operatorsYesterday > 0 ? round($yesterday['total'] / $operatorsYesterday, 2) : 0.0,
+                    true,
+                    '',
+                ),
             ],
             [
                 'label' => 'Rasio Konfirmasi',
@@ -462,6 +468,49 @@ final class DmsDashboardOverviewService
     }
 
     /**
+     * @param  list<array{hari:string, total?:int}>  $days
+     * @param  list<int>  $checkinCounts
+     * @return list<float>
+     */
+    private function alertPerPersonSparkline(array $days, array $checkinCounts): array
+    {
+        $out = [];
+        foreach ($days as $i => $day) {
+            $people = (int) ($checkinCounts[$i] ?? 0);
+            $total = (int) ($day['total'] ?? 0);
+            $out[] = $people > 0 ? round($total / $people, 2) : 0.0;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array{hari:string}>  $days
+     * @return list<int>
+     */
+    private function operatorCheckinSparkline(array $days, string $tz): array
+    {
+        $out = [];
+        foreach ($days as $day) {
+            $hari = (string) ($day['hari'] ?? '');
+            if ($hari === '') {
+                $out[] = 0;
+                continue;
+            }
+            try {
+                $start = Carbon::parse($hari, $tz)->startOfDay()->format('Y-m-d H:i:s');
+                $end = Carbon::parse($hari, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+            } catch (Throwable) {
+                $out[] = 0;
+                continue;
+            }
+            $out[] = $this->reader->countOperatorCheckinsInRange($start, $end);
+        }
+
+        return $out;
+    }
+
+    /**
      * @return array{text:string, class:string, raw:int}
      */
     private function delta(int $current, int $previous, bool $increaseIsBad): array
@@ -534,9 +583,9 @@ final class DmsDashboardOverviewService
         }
 
         $kpis = [
-            ['label' => 'Total Alert', 'value' => '0', 'icon' => 'solar:danger-triangle-bold', 'bg' => 'bg-primary-600', 'gradient' => 'bg-gradient-end-1', 'chart' => 'new-user-chart', 'color' => '#487fff', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
-            ['label' => 'Operator Alert', 'value' => '0', 'icon' => 'mingcute:user-follow-fill', 'bg' => 'bg-success-main', 'gradient' => 'bg-gradient-end-2', 'chart' => 'active-user-chart', 'color' => '#45b369', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
-            ['label' => 'Confirmed L1', 'value' => '0', 'icon' => 'solar:shield-check-bold', 'bg' => 'bg-yellow', 'gradient' => 'bg-gradient-end-3', 'chart' => 'total-sales-chart', 'color' => '#f4941e', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
+            ['label' => 'Total Orang Checkin', 'value' => '0', 'icon' => 'mingcute:user-follow-fill', 'bg' => 'bg-primary-600', 'gradient' => 'bg-gradient-end-1', 'chart' => 'new-user-chart', 'color' => '#487fff', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
+            ['label' => 'Total Alert', 'value' => '0', 'icon' => 'solar:danger-triangle-bold', 'bg' => 'bg-success-main', 'gradient' => 'bg-gradient-end-2', 'chart' => 'active-user-chart', 'color' => '#45b369', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
+            ['label' => 'Rasio Alert / Orang', 'value' => '0.00', 'icon' => 'solar:chart-2-bold', 'bg' => 'bg-yellow', 'gradient' => 'bg-gradient-end-3', 'chart' => 'total-sales-chart', 'color' => '#f4941e', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
             ['label' => 'Rasio Konfirmasi', 'value' => '0%', 'icon' => 'solar:chart-2-bold', 'bg' => 'bg-purple', 'gradient' => 'bg-gradient-end-4', 'chart' => 'conversion-user-chart', 'color' => '#8252e9', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
             ['label' => 'Belum Review L1', 'value' => '0', 'icon' => 'solar:clipboard-list-bold', 'bg' => 'bg-pink', 'gradient' => 'bg-gradient-end-5', 'chart' => 'leads-chart', 'color' => '#de3ace', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],
             ['label' => 'Unit Online', 'value' => '0', 'icon' => 'solar:wheel-bold', 'bg' => 'bg-cyan', 'gradient' => 'bg-gradient-end-6', 'chart' => 'total-profit-chart', 'color' => '#00b8f2', 'sparkline' => $emptySpark, 'delta' => $zeroDelta],

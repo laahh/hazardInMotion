@@ -27,6 +27,11 @@ interface DmsDashboardDataSource
      */
     public function distinctAlertSids(string $start, string $end): array;
 
+    /**
+     * Jumlah operator (jabatan struktural) yang check-in RFID lolos dalam window.
+     */
+    public function countOperatorCheckinsInRange(string $start, string $end): int;
+
     public function unitsOperatingInRange(string $start, string $end): int;
 
     public function unitsOperatingNow(int $withinMinutes = 30): int;

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\DmsMonitoring;
 
 use App\Services\Dms\DmsDashboardDataSource;
+use App\Services\PraOperasi\PraOperasiOperatorRosterReader;
 use App\Services\SportEvaluation\SportEvaluationPvtRfidCheckinReader;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +41,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
     public function __construct(
         private readonly SportEvaluationPvtRfidCheckinReader $connectionSource,
+        private readonly PraOperasiOperatorRosterReader $rosterReader,
     ) {}
 
     public function isUp(): bool
@@ -267,6 +269,85 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             }
 
             return array_map(static fn ($r): string => (string) $r->sid, $rows);
+        });
+    }
+
+    /**
+     * Jumlah operator (jabatan struktural) yang check-in RFID lolos dalam window.
+     */
+    public function countOperatorCheckinsInRange(string $start, string $end): int
+    {
+        $roster = $this->rosterReader->operatorRoster();
+        if ($roster === []) {
+            return 0;
+        }
+
+        $sids = [];
+        foreach ($roster as $operator) {
+            $sids[] = (string) ($operator['kode_sid'] ?? '');
+        }
+
+        return $this->countDistinctOperatorCheckins($start, $end, $sids);
+    }
+
+    /**
+     * Jumlah SID unik yang check-in RFID lolos, dibatasi daftar SID operator
+     * (roster jabatan struktural "Operator"). Chunk SID — jangan JOIN m_karyawan.
+     *
+     * @param  list<string>  $operatorSids
+     */
+    public function countDistinctOperatorCheckins(string $start, string $end, array $operatorSids): int
+    {
+        $normalized = [];
+        foreach ($operatorSids as $sid) {
+            $upper = strtoupper(trim((string) $sid));
+            if ($upper !== '') {
+                $normalized[$upper] = true;
+            }
+        }
+        if ($normalized === []) {
+            return 0;
+        }
+
+        $sidHash = md5(implode(',', array_keys($normalized)));
+        $cacheKey = 'dms_monitoring:rfid_operator_count:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix().'|'.$sidHash);
+
+        return (int) Cache::remember($cacheKey, 1800, function () use ($start, $end, $normalized): int {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return 0;
+            }
+
+            $total = 0;
+            foreach (array_chunk(array_keys($normalized), 800) as $chunk) {
+                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+                $sql = "
+                    SELECT COUNT(DISTINCT UPPER(TRIM(kode_sid))) AS total
+                    FROM bcsid.mv_checkinout_rfid
+                    WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
+                      AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
+                      AND UPPER(TRIM(jenis_checkinout::text)) IN ('IN','CHECKIN','CHECK-IN','CHECK_IN','CHECK IN','MASUK')
+                      AND REPLACE(REPLACE(UPPER(TRIM(status_lolos::text)), ' ', ''), '-', '') IN ('PASSED','PASS','LOLOS','YA','YES','1','TRUE','T','Y')
+                      AND UPPER(TRIM(kode_sid)) IN ({$placeholders})
+                ";
+                $bindings = array_merge([$start, $end], $chunk);
+                if ($this->scopePerusahaan !== null) {
+                    $sql .= ' AND TRIM(perusahaan::text) = ?';
+                    $bindings[] = $this->scopePerusahaan;
+                }
+
+                try {
+                    $row = DB::connection($connection)->selectOne($sql, $bindings);
+                } catch (Throwable $e) {
+                    report($e);
+
+                    return 0;
+                }
+
+                $total += (int) ($row->total ?? 0);
+            }
+
+            return $total;
         });
     }
 

@@ -62,6 +62,7 @@ class DmsDashboardOverviewServiceTest extends TestCase
         ];
 
         $reader->shouldReceive('alertSummary')->andReturn($today, $empty, $today, $empty);
+        $reader->shouldReceive('countOperatorCheckinsInRange')->zeroOrMoreTimes()->andReturn(2);
         $reader->shouldReceive('distinctAlertSids')->andReturn(['A', 'B'], []);
         $reader->shouldReceive('unitsOperatingInRange')->andReturn(5, 3);
         $reader->shouldReceive('unitsOperatingNow')->andReturn(4);
@@ -80,10 +81,12 @@ class DmsDashboardOverviewServiceTest extends TestCase
         $payload = (new DmsDashboardOverviewService($reader))->dashboard();
 
         $this->assertTrue($payload['up']);
-        $this->assertSame('12', $payload['kpis'][0]['value']);
-        $this->assertSame('Total Alert', $payload['kpis'][0]['label']);
-        $this->assertSame('2', $payload['kpis'][1]['value']);
-        $this->assertSame('4', $payload['kpis'][2]['value']);
+        $this->assertSame('2', $payload['kpis'][0]['value']);
+        $this->assertSame('Total Orang Checkin', $payload['kpis'][0]['label']);
+        $this->assertSame('12', $payload['kpis'][1]['value']);
+        $this->assertSame('Total Alert', $payload['kpis'][1]['label']);
+        $this->assertSame('6.00', $payload['kpis'][2]['value']);
+        $this->assertSame('Rasio Alert / Orang', $payload['kpis'][2]['label']);
         $this->assertSame('40%', $payload['kpis'][3]['value']);
         $this->assertSame('2', $payload['kpis'][4]['value']);
         $this->assertSame('4', $payload['kpis'][5]['value']);
