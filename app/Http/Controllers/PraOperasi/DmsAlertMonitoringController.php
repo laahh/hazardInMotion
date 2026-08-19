@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\PraOperasi;
 
 use App\Http\Controllers\Controller;
+use App\Services\Dms\DmsDashboardOverviewService;
 use App\Services\DmsMonitoring\DmsAlertMonitoringService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -12,18 +13,21 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 /**
- * /pra-operasi/dashboard — monitoring alert DMS L1/L2 (layout WowDash).
- * Data operasional dari DmsAlertMonitoringService (mv_dms_alert, RFID, Post Event, QA Slovin).
+ * /pra-operasi/dashboard — layout WowDash CRM, angka dari monitoring DMS.
  */
 final class DmsAlertMonitoringController extends Controller
 {
     public function __construct(
         private readonly DmsAlertMonitoringService $service,
+        private readonly DmsDashboardOverviewService $overview,
     ) {}
 
     public function index(Request $request): View
     {
-        return view('pra-operasi.dms-alert-monitoring', $this->service->dashboard($request));
+        $monitoring = $this->service->dashboard($request);
+        $crm = $this->overview->dashboard($monitoring['filters']['start'] ?? null, $monitoring['filters']['end'] ?? null);
+
+        return view('pra-operasi.dms-alert-monitoring', $this->mergeCrmPayload($crm, $monitoring));
     }
 
     /**
@@ -62,5 +66,83 @@ final class DmsAlertMonitoringController extends Controller
         }
 
         return response()->json(['message' => 'Tersimpan.']);
+    }
+
+    /**
+     * Layout CRM tetap; overlay angka operasional ke slot widget.
+     *
+     * @param  array<string, mixed>  $crm
+     * @param  array<string, mixed>  $monitoring
+     * @return array<string, mixed>
+     */
+    private function mergeCrmPayload(array $crm, array $monitoring): array
+    {
+        $kpis = $crm['kpis'] ?? [];
+        foreach ($monitoring['kpis'] ?? [] as $i => $kpi) {
+            if (! is_array($kpi)) {
+                continue;
+            }
+            if (! isset($kpis[$i]) || ! is_array($kpis[$i])) {
+                $kpis[$i] = $kpi;
+                continue;
+            }
+            $kpis[$i]['label'] = $kpi['label'] ?? $kpis[$i]['label'];
+            $kpis[$i]['value'] = $kpi['value'] ?? $kpis[$i]['value'];
+            $kpis[$i]['icon'] = $kpi['icon'] ?? $kpis[$i]['icon'];
+            $kpis[$i]['bg'] = $kpi['bg'] ?? $kpis[$i]['bg'];
+            $kpis[$i]['gradient'] = $kpi['gradient'] ?? $kpis[$i]['gradient'];
+        }
+
+        $campaigns = $this->mapFunnelCampaigns($monitoring['funnel'] ?? []);
+        if ($campaigns === []) {
+            $campaigns = $crm['categories'] ?? [];
+        }
+
+        return array_merge($crm, [
+            'up' => (bool) ($crm['up'] ?? false) || (bool) ($monitoring['up'] ?? false),
+            'filters' => $monitoring['filters'] ?? ['start' => '', 'end' => ''],
+            'kpis' => array_values($kpis),
+            'campaigns' => $campaigns,
+            'kpiDeltaLabel' => 'this week',
+        ]);
+    }
+
+    /**
+     * @param  list<array{label?:string, count?:int}>  $funnel
+     * @return list<array{name:string, total:int, pct:int, icon:string, barClass:string, textClass:string}>
+     */
+    private function mapFunnelCampaigns(array $funnel): array
+    {
+        $styles = [
+            ['icon' => 'majesticons:mail', 'textClass' => 'text-orange', 'barClass' => 'bg-orange'],
+            ['icon' => 'eva:globe-2-fill', 'textClass' => 'text-success-main', 'barClass' => 'bg-success-main'],
+            ['icon' => 'fa6-brands:square-facebook', 'textClass' => 'text-info-main', 'barClass' => 'bg-info-main'],
+            ['icon' => 'fluent:location-off-20-filled', 'textClass' => 'text-indigo', 'barClass' => 'bg-indigo'],
+            ['icon' => 'solar:shield-check-bold', 'textClass' => 'text-primary-600', 'barClass' => 'bg-primary-600'],
+        ];
+
+        $max = 1;
+        foreach ($funnel as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $max = max($max, (int) ($row['count'] ?? 0));
+        }
+
+        $out = [];
+        foreach ($funnel as $i => $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $style = $styles[$i] ?? $styles[0];
+            $count = (int) ($row['count'] ?? 0);
+            $out[] = $style + [
+                'name' => (string) ($row['label'] ?? '-'),
+                'total' => $count,
+                'pct' => (int) round($count / $max * 100),
+            ];
+        }
+
+        return $out;
     }
 }
