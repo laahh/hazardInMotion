@@ -5,22 +5,27 @@
 @php
     $kpiList = $kpis ?? [];
     $kpiDeltaLabel = $kpiDeltaLabel ?? 'this week';
+    $categories = $categories ?? [];
+    $sites = $sites ?? [];
+    $topOperators = $topOperators ?? [];
     $campaignIcons = [
         ['icon' => 'majesticons:mail', 'textClass' => 'text-orange', 'barClass' => 'bg-orange'],
         ['icon' => 'eva:globe-2-fill', 'textClass' => 'text-success-main', 'barClass' => 'bg-success-main'],
         ['icon' => 'fa6-brands:square-facebook', 'textClass' => 'text-info-main', 'barClass' => 'bg-info-main'],
         ['icon' => 'fluent:location-off-20-filled', 'textClass' => 'text-indigo', 'barClass' => 'bg-indigo'],
     ];
+    $campaignFallbacks = ['Email', 'Website', 'Facebook', 'Email'];
     $campaigns = [];
     foreach ($campaignIcons as $i => $style) {
-        $row = $categories[$i] ?? ['name' => ['Email', 'Website', 'Facebook', 'Email'][$i], 'pct' => 0, 'total' => 0];
+        $row = $categories[$i] ?? ['name' => $campaignFallbacks[$i], 'pct' => 0, 'total' => 0];
         $campaigns[] = $style + $row;
     }
     $flagFiles = ['flag1.png', 'flag2.png', 'flag3.png', 'flag4.png'];
     $countryBars = ['bg-primary-600', 'bg-orange', 'bg-yellow', 'bg-success-main'];
+    $countryFallbacks = ['USA', 'Japan', 'France', 'Germany'];
     $countryRows = [];
     for ($i = 0; $i < 4; $i++) {
-        $site = $sites[$i] ?? ['site' => ['USA', 'Japan', 'France', 'Germany'][$i], 'total' => 0, 'pct' => 0];
+        $site = $sites[$i] ?? ['site' => $countryFallbacks[$i], 'total' => 0, 'pct' => 0];
         $countryRows[] = $site + ['flag' => $flagFiles[$i], 'barClass' => $countryBars[$i]];
     }
     $userFiles = ['user1.png', 'user2.png', 'user3.png', 'user4.png', 'user5.png', 'user1.png'];
@@ -32,6 +37,10 @@
     $allItems = $recentAll ?? [];
     $bestMatch = $recentConfirmed ?? [];
     $transactions = $recentReviews ?? [];
+    $growth = $growth ?? ['series' => [], 'labels' => []];
+    $statistic = $statistic ?? ['series' => [], 'labels' => []];
+    $overview = $overview ?? ['confirmed' => 0, 'dismissed' => 0, 'pending' => 0];
+    $weeklyStatus = $weeklyStatus ?? ['confirmed' => [], 'pending' => [], 'dismissed' => [], 'labels' => []];
 @endphp
 
 @section('css')
@@ -507,10 +516,10 @@
 <script>
 (function () {
   var kpis = @json($kpiList);
-  var growth = @json($growth ?? ['series' => [], 'labels' => []]);
-  var statistic = @json($statistic ?? ['series' => [], 'labels' => []]);
-  var overview = @json($overview ?? ['confirmed' => 0, 'dismissed' => 0, 'pending' => 0]);
-  var weeklyStatus = @json($weeklyStatus ?? ['confirmed' => [], 'pending' => [], 'dismissed' => [], 'labels' => []]);
+  var growth = @json($growth);
+  var statistic = @json($statistic);
+  var overview = @json($overview);
+  var weeklyStatus = @json($weeklyStatus);
 
   function createChart(chartId, chartColor, data) {
     var el = document.querySelector('#' + chartId);
