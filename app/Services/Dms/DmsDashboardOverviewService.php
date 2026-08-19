@@ -27,27 +27,11 @@ final class DmsDashboardOverviewService
     /**
      * @return array<string, mixed>
      */
-    public function dashboard(): array
+    public function dashboard(?string $startDate = null, ?string $endDate = null): array
     {
         $tz = (string) config('app.timezone');
         $now = Carbon::now($tz);
-        $todayStart = $now->copy()->startOfDay();
-        $todayEnd = $todayStart->copy()->addDay();
-        $yesterdayStart = $todayStart->copy()->subDay();
-        $chartStart = $todayStart->copy()->subDays(self::CHART_DAYS - 1);
-        $weekStart = $todayStart->copy()->subDays(self::WEEK_DAYS - 1);
-        $prevWeekStart = $weekStart->copy()->subDays(self::WEEK_DAYS);
-        $prevWeekEnd = $weekStart->copy();
-
-        $windows = [
-            'todayStart' => $todayStart->format('Y-m-d H:i:s'),
-            'todayEnd' => $todayEnd->format('Y-m-d H:i:s'),
-            'yesterdayStart' => $yesterdayStart->format('Y-m-d H:i:s'),
-            'chartStart' => $chartStart->format('Y-m-d H:i:s'),
-            'weekStart' => $weekStart->format('Y-m-d H:i:s'),
-            'prevWeekStart' => $prevWeekStart->format('Y-m-d H:i:s'),
-            'prevWeekEnd' => $prevWeekEnd->format('Y-m-d H:i:s'),
-        ];
+        $windows = $this->buildWindows($now, $tz, $startDate, $endDate);
 
         if (! $this->reader->isUp()) {
             return $this->emptyPayload($now, $windows);
@@ -60,6 +44,71 @@ final class DmsDashboardOverviewService
 
             return $this->emptyPayload($now, $windows);
         }
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function buildWindows(Carbon $now, string $tz, ?string $startDate, ?string $endDate): array
+    {
+        $periodMode = $this->isValidDate($startDate) && $this->isValidDate($endDate);
+        $todayStart = $now->copy()->startOfDay();
+        $todayEnd = $todayStart->copy()->addDay();
+        $yesterdayStart = $todayStart->copy()->subDay();
+        $chartStart = $todayStart->copy()->subDays(self::CHART_DAYS - 1);
+        $weekStart = $todayStart->copy()->subDays(self::WEEK_DAYS - 1);
+        $prevWeekStart = $weekStart->copy()->subDays(self::WEEK_DAYS);
+        $prevWeekEnd = $weekStart->copy();
+        $kpiDeltaLabel = 'vs kemarin';
+        $dateLabel = $now->translatedFormat('d M Y');
+
+        if ($periodMode) {
+            $endDay = Carbon::parse((string) $endDate, $tz)->startOfDay();
+            $startDay = Carbon::parse((string) $startDate, $tz)->startOfDay();
+            if ($startDay->gt($endDay)) {
+                [$startDay, $endDay] = [$endDay->copy(), $startDay->copy()];
+            }
+
+            $periodDays = max(1, $startDay->diffInDays($endDay) + 1);
+            $periodEnd = $endDay->copy()->addDay();
+            $prevStart = $startDay->copy()->subDays($periodDays);
+
+            $todayStart = $startDay->copy();
+            $todayEnd = $periodEnd->copy();
+            $yesterdayStart = $prevStart->copy();
+            $weekStart = $periodDays >= self::WEEK_DAYS
+                ? $endDay->copy()->subDays(self::WEEK_DAYS - 1)
+                : $startDay->copy();
+            $chartStart = $periodDays > 31
+                ? $endDay->copy()->subDays(30)
+                : $startDay->copy();
+            if ($chartStart->diffInDays($endDay) + 1 < self::CHART_DAYS) {
+                $chartStart = $endDay->copy()->subDays(self::CHART_DAYS - 1);
+            }
+            $prevWeekStart = $weekStart->copy()->subDays(self::WEEK_DAYS);
+            $prevWeekEnd = $weekStart->copy();
+            $kpiDeltaLabel = 'vs periode sebelumnya';
+            $dateLabel = $startDay->equalTo($endDay)
+                ? $startDay->translatedFormat('d M Y')
+                : $startDay->translatedFormat('d M Y').' - '.$endDay->translatedFormat('d M Y');
+        }
+
+        return [
+            'todayStart' => $todayStart->format('Y-m-d H:i:s'),
+            'todayEnd' => $todayEnd->format('Y-m-d H:i:s'),
+            'yesterdayStart' => $yesterdayStart->format('Y-m-d H:i:s'),
+            'chartStart' => $chartStart->format('Y-m-d H:i:s'),
+            'weekStart' => $weekStart->format('Y-m-d H:i:s'),
+            'prevWeekStart' => $prevWeekStart->format('Y-m-d H:i:s'),
+            'prevWeekEnd' => $prevWeekEnd->format('Y-m-d H:i:s'),
+            'kpiDeltaLabel' => $kpiDeltaLabel,
+            'dateLabel' => $dateLabel,
+        ];
+    }
+
+    private function isValidDate(?string $date): bool
+    {
+        return is_string($date) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) === 1;
     }
 
     /**
@@ -168,7 +217,8 @@ final class DmsDashboardOverviewService
 
         return [
             'up' => true,
-            'dateLabel' => $now->translatedFormat('d M Y'),
+            'dateLabel' => $windows['dateLabel'] ?? $now->translatedFormat('d M Y'),
+            'kpiDeltaLabel' => $windows['kpiDeltaLabel'] ?? 'vs kemarin',
             'kpis' => $kpis,
             'growth' => [
                 'title' => 'Tren Alert',
@@ -493,7 +543,8 @@ final class DmsDashboardOverviewService
 
         return [
             'up' => false,
-            'dateLabel' => $now->translatedFormat('d M Y'),
+            'dateLabel' => $windows['dateLabel'] ?? $now->translatedFormat('d M Y'),
+            'kpiDeltaLabel' => $windows['kpiDeltaLabel'] ?? 'vs kemarin',
             'kpis' => $kpis,
             'growth' => ['title' => 'Tren Alert', 'subtitle' => '7 hari terakhir', 'total' => '0', 'delta' => $zeroDelta, 'labels' => $weekLabels, 'series' => $emptyWeek],
             'statistic' => ['title' => 'Statistik Alert', 'subtitle' => self::CHART_DAYS.' hari terakhir', 'total' => '0', 'confirmed' => '0', 'dismissed' => '0', 'labels' => $chartLabels, 'series' => $emptyChart],

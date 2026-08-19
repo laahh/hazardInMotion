@@ -1,21 +1,37 @@
 @extends('dms.layouts.app')
 
-@section('title', 'Dashboard DMS')
+@section('title', $pageTitle ?? 'Dashboard DMS')
 
 @section('content')
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
-  <h6 class="fw-semibold mb-0">Dashboard</h6>
+  <h6 class="fw-semibold mb-0">{{ $pageTitle ?? 'Dashboard' }}</h6>
   <ul class="d-flex align-items-center gap-2">
     <li class="fw-medium">
-      <a href="{{ route('dms.dashboard') }}" class="d-flex align-items-center gap-1 hover-text-primary">
+      <a href="{{ $breadcrumbParentUrl ?? route('dms.dashboard') }}" class="d-flex align-items-center gap-1 hover-text-primary">
         <iconify-icon icon="solar:home-smile-angle-outline" class="icon text-lg"></iconify-icon>
         Dashboard
       </a>
     </li>
     <li>-</li>
-    <li class="fw-medium">DMS</li>
+    <li class="fw-medium">{{ $breadcrumbCurrent ?? 'DMS' }}</li>
   </ul>
 </div>
+
+@if(!empty($showDateFilter) && !empty($filters))
+<form method="GET" class="d-flex flex-wrap align-items-end gap-2 mb-24">
+  <div>
+    <label class="form-label text-sm fw-medium mb-1">Dari Tanggal</label>
+    <input type="date" name="start" value="{{ $filters['start'] }}" class="form-control form-control-sm" style="min-width:150px">
+  </div>
+  <div>
+    <label class="form-label text-sm fw-medium mb-1">Sampai Tanggal</label>
+    <input type="date" name="end" value="{{ $filters['end'] }}" class="form-control form-control-sm" style="min-width:150px">
+  </div>
+  <button type="submit" class="btn btn-primary-600 btn-sm radius-8 px-16">
+    <iconify-icon icon="solar:filter-bold" class="me-1"></iconify-icon>Terapkan
+  </button>
+</form>
+@endif
 
 @unless($up)
 <div class="alert alert-warning radius-8 mb-24 d-flex align-items-start gap-2">
@@ -43,7 +59,7 @@
               </div>
               <div id="{{ $kpi['chart'] }}" class="remove-tooltip-title rounded-tooltip-value"></div>
             </div>
-            <p class="text-sm mb-0">vs kemarin <span class="{{ $kpi['delta']['class'] }} px-1 rounded-2 fw-medium text-sm">{{ $kpi['delta']['text'] }}</span></p>
+            <p class="text-sm mb-0">{{ $kpiDeltaLabel ?? 'vs kemarin' }} <span class="{{ $kpi['delta']['class'] }} px-1 rounded-2 fw-medium text-sm">{{ $kpi['delta']['text'] }}</span></p>
           </div>
         </div>
       </div>

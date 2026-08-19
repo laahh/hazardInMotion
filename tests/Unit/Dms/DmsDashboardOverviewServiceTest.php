@@ -91,4 +91,16 @@ class DmsDashboardOverviewServiceTest extends TestCase
         $this->assertSame('BS', $payload['topOperators'][0]['initials']);
         $this->assertSame(2, $payload['topOperators'][0]['confirmed']);
     }
+
+    public function test_period_filter_uses_range_delta_label(): void
+    {
+        $reader = Mockery::mock(DmsDashboardDataSource::class);
+        $reader->shouldReceive('isUp')->andReturn(false);
+
+        $payload = (new DmsDashboardOverviewService($reader))->dashboard('2026-08-13', '2026-08-19');
+
+        $this->assertSame('vs periode sebelumnya', $payload['kpiDeltaLabel']);
+        $this->assertStringContainsString('2026', $payload['dateLabel']);
+        $this->assertStringContainsString(' - ', $payload['dateLabel']);
+    }
 }
