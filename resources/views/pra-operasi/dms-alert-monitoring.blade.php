@@ -106,13 +106,12 @@
     .dms-quadrant-cell { min-height: 210px; }
   }
   .dms-cr-wrap { overflow-x: auto; }
-  .dms-cr-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 700px; }
-  .dms-cr-table th, .dms-cr-table td { border: 1px solid #E5E7EB; padding: 10px 8px; vertical-align: middle; text-align: center; font-size: 12px; }
+  .dms-cr-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 960px; }
+  .dms-cr-table th, .dms-cr-table td { border: 1px solid #E5E7EB; padding: 8px 6px; vertical-align: middle; text-align: center; font-size: 12px; }
   .dms-cr-table thead th { background: #F3F4F6; font-weight: 700; color: #374151; }
   .dms-cr-metric { text-align: left; min-width: 220px; font-weight: 600; color: #111827; background: #fff; }
-  .dms-cr-company { background: #F3F4F6; min-width: 110px; }
-  .dms-cr-company-name { font-size: 12px; font-weight: 700; letter-spacing: .01em; color: #111827; }
-  .dms-cr-site-list { font-size: 10px; font-weight: 400; color: #6B7280; margin-top: 2px; white-space: normal; line-height: 1.3; }
+  .dms-cr-company { background: #EFF6FF; font-size: 11px; font-weight: 700; letter-spacing: .01em; color: #1d4ed8; padding: 6px 4px; }
+  .dms-cr-site { background: #F9FAFB; font-size: 11px; font-weight: 600; color: #374151; min-width: 90px; }
   .dms-cr-pct { font-size: 18px; font-weight: 800; line-height: 1.1; margin-bottom: 4px; }
   .dms-cr-frac { font-size: 10px; color: rgba(17, 24, 39, .72); }
   .dms-cr-tone-excellent { background: #16a34a; color: #fff; }
@@ -451,15 +450,17 @@
           @else
             <table class="dms-cr-table">
               <thead>
+                {{-- Baris 1: nama perusahaan (colspan = jumlah site) --}}
                 <tr>
-                  <th class="dms-cr-metric">Metrik</th>
+                  <th rowspan="2" class="dms-cr-metric">Metrik</th>
+                  @foreach($controlRoom['companies'] ?? [] as $company)
+                    <th colspan="{{ count($company['columns'] ?? []) }}" class="dms-cr-company">{{ $company['name'] ?? '-' }}</th>
+                  @endforeach
+                </tr>
+                {{-- Baris 2: nama site --}}
+                <tr>
                   @foreach($controlRoomColumns as $column)
-                    <th class="dms-cr-company">
-                      <div class="dms-cr-company-name">{{ $column['company'] ?? '-' }}</div>
-                      @if(!empty($column['sites']))
-                        <div class="dms-cr-site-list">{{ implode(' · ', $column['sites']) }}</div>
-                      @endif
-                    </th>
+                    <th class="dms-cr-site">{{ $column['site'] ?? '-' }}</th>
                   @endforeach
                 </tr>
               </thead>
@@ -470,10 +471,10 @@
                     @foreach($controlRoomColumns as $column)
                       @php
                         $cell = ($row['cells'] ?? [])[$column['key'] ?? ''] ?? [
-                          'pct_label' => '0%',
-                          'numerator' => 0,
+                          'pct_label'   => '0%',
+                          'numerator'   => 0,
                           'denominator' => 0,
-                          'tone' => 'empty',
+                          'tone'        => 'empty',
                         ];
                       @endphp
                       <td class="dms-cr-tone-{{ $cell['tone'] ?? 'empty' }}">

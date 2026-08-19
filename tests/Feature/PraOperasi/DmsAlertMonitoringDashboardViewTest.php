@@ -34,8 +34,12 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
         $this->assertStringContainsString('% Unit yang diintervensi', $html);
         $this->assertStringContainsString('Lead Time intervensi alert real time (Under 5 Menit)', $html);
         $this->assertStringContainsString('dms-cr-table', $html);
-        $this->assertStringContainsString('PT BAR', $html);
-        $this->assertStringContainsString('dms-cr-company-name', $html);
+        $this->assertStringContainsString('PT Pamapersada Nusantara', $html);
+        $this->assertStringContainsString('PT Bukit Makmur Mandiri Utama', $html);
+        $this->assertStringContainsString('dms-cr-company', $html);
+        $this->assertStringContainsString('dms-cr-site', $html);
+        $this->assertStringContainsString('BMO 3', $html);
+        $this->assertStringContainsString('LMO', $html);
         $this->assertStringContainsString('All Item', $html);
         $this->assertStringContainsString('Last Transaction', $html);
         $this->assertStringContainsString('Total Orang Checkin', $html);
@@ -114,34 +118,54 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
                 ['name' => 'Checkin RFID', 'total' => 80, 'pct' => 100, 'conversion_label' => 'baseline', 'icon' => 'majesticons:mail', 'barClass' => 'bg-orange', 'textClass' => 'text-orange'],
             ],
             'controlRoom' => [
-                'title' => 'Performa Control Room',
-                'subtitle' => 'Intervensi alert & lead time real time per perusahaan',
+                'title'     => 'Performa Control Room',
+                'subtitle'  => 'Intervensi alert & lead time real time per perusahaan / site',
                 'companies' => [
-                    ['perusahaan' => 'PT BAR', 'total_alert' => 19564, 'alert_intervened' => 13528, 'total_unit' => 44, 'unit_intervened' => 41, 'alert_under_5min' => 3223, 'sites' => ['BMO 3', 'SMO']],
+                    [
+                        'name'    => 'PT Pamapersada Nusantara',
+                        'columns' => [
+                            ['key' => 'PT Pamapersada Nusantara|BMO 3', 'company' => 'PT Pamapersada Nusantara', 'site' => 'BMO 3'],
+                            ['key' => 'PT Pamapersada Nusantara|SMO',   'company' => 'PT Pamapersada Nusantara', 'site' => 'SMO'],
+                        ],
+                    ],
+                    [
+                        'name'    => 'PT Bukit Makmur Mandiri Utama',
+                        'columns' => [
+                            ['key' => 'PT Bukit Makmur Mandiri Utama|LMO', 'company' => 'PT Bukit Makmur Mandiri Utama', 'site' => 'LMO'],
+                        ],
+                    ],
                 ],
                 'columns' => [
-                    ['key' => 'PT BAR', 'company' => 'PT BAR', 'sites' => ['BMO 3', 'SMO']],
+                    ['key' => 'PT Pamapersada Nusantara|BMO 3', 'company' => 'PT Pamapersada Nusantara', 'site' => 'BMO 3'],
+                    ['key' => 'PT Pamapersada Nusantara|SMO',   'company' => 'PT Pamapersada Nusantara', 'site' => 'SMO'],
+                    ['key' => 'PT Bukit Makmur Mandiri Utama|LMO', 'company' => 'PT Bukit Makmur Mandiri Utama', 'site' => 'LMO'],
                 ],
                 'rows' => [
                     [
-                        'key' => 'alert_intervention',
+                        'key'   => 'alert_intervention',
                         'label' => '% Alert yang diintervensi',
                         'cells' => [
-                            'PT BAR' => ['pct' => 69.14, 'pct_label' => '69.14%', 'numerator' => 13528, 'denominator' => 19564, 'tone' => 'warn'],
+                            'PT Pamapersada Nusantara|BMO 3'     => ['pct' => 82.0,  'pct_label' => '82%',    'numerator' => 10485, 'denominator' => 12810, 'tone' => 'good'],
+                            'PT Pamapersada Nusantara|SMO'        => ['pct' => 45.0,  'pct_label' => '45%',    'numerator' => 3043,  'denominator' => 6754,  'tone' => 'bad'],
+                            'PT Bukit Makmur Mandiri Utama|LMO'  => ['pct' => 91.0,  'pct_label' => '91%',    'numerator' => 8200,  'denominator' => 9010,  'tone' => 'excellent'],
                         ],
                     ],
                     [
-                        'key' => 'unit_intervention',
+                        'key'   => 'unit_intervention',
                         'label' => '% Unit yang diintervensi',
                         'cells' => [
-                            'PT BAR' => ['pct' => 93.18, 'pct_label' => '93.18%', 'numerator' => 41, 'denominator' => 44, 'tone' => 'excellent'],
+                            'PT Pamapersada Nusantara|BMO 3'     => ['pct' => 100.0, 'pct_label' => '100%',   'numerator' => 30, 'denominator' => 30, 'tone' => 'excellent'],
+                            'PT Pamapersada Nusantara|SMO'        => ['pct' => 79.0,  'pct_label' => '79%',    'numerator' => 11, 'denominator' => 14, 'tone' => 'warn'],
+                            'PT Bukit Makmur Mandiri Utama|LMO'  => ['pct' => 85.0,  'pct_label' => '85%',    'numerator' => 17, 'denominator' => 20, 'tone' => 'good'],
                         ],
                     ],
                     [
-                        'key' => 'lead_time_under_5min',
+                        'key'   => 'lead_time_under_5min',
                         'label' => 'Lead Time intervensi alert real time (Under 5 Menit)',
                         'cells' => [
-                            'PT BAR' => ['pct' => 23.83, 'pct_label' => '23.83%', 'numerator' => 3223, 'denominator' => 13528, 'tone' => 'critical'],
+                            'PT Pamapersada Nusantara|BMO 3'     => ['pct' => 30.76, 'pct_label' => '30.76%', 'numerator' => 3219, 'denominator' => 10465, 'tone' => 'bad'],
+                            'PT Pamapersada Nusantara|SMO'        => ['pct' => 0.13,  'pct_label' => '0.13%',  'numerator' => 4,    'denominator' => 3043,  'tone' => 'critical'],
+                            'PT Bukit Makmur Mandiri Utama|LMO'  => ['pct' => 55.0,  'pct_label' => '55%',    'numerator' => 4510, 'denominator' => 8200,  'tone' => 'warn'],
                         ],
                     ],
                 ],
