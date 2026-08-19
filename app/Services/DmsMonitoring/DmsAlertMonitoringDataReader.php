@@ -32,6 +32,9 @@ use Throwable;
  */
 final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 {
+    /** Batas lead time intervensi real time (detik) — 5 menit. */
+    private const LEAD_TIME_THRESHOLD_SECONDS = 300;
+
     /** Batas jumlah kategori pelanggaran yang ditampilkan di kuadran. */
     private const CATEGORY_LIMIT = 500;
 
@@ -488,6 +491,70 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             }
 
             return (int) ($row->total ?? 0);
+        });
+    }
+
+    /**
+     * Agregat performa control room per perusahaan × site.
+     *
+     * @return list<array{
+     *     perusahaan:string,
+     *     site:string,
+     *     total_alert:int,
+     *     alert_intervened:int,
+     *     total_unit:int,
+     *     unit_intervened:int,
+     *     alert_under_5min:int
+     * }>
+     */
+    public function controlRoomPerformanceRows(string $start, string $end): array
+    {
+        return $this->remember('control_room_matrix', $start, $end, function () use ($start, $end): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $sql = "
+                SELECT
+                    COALESCE(NULLIF(TRIM(perusahaan::text), ''), '-') AS perusahaan,
+                    COALESCE(NULLIF(TRIM(site::text), ''), '-') AS site,
+                    count(*) AS total_alert,
+                    count(*) FILTER (WHERE sudah_direview_l1 = true) AS alert_intervened,
+                    count(DISTINCT NULLIF(TRIM(unit::text), '')) AS total_unit,
+                    count(DISTINCT NULLIF(TRIM(unit::text), '')) FILTER (WHERE sudah_direview_l1 = true) AS unit_intervened,
+                    count(*) FILTER (
+                        WHERE sudah_direview_l1 = true
+                          AND waktu_review_l1 IS NOT NULL
+                          AND waktu_deteksi IS NOT NULL
+                          AND EXTRACT(EPOCH FROM (waktu_review_l1 - waktu_deteksi)) <= ?
+                    ) AS alert_under_5min
+                FROM bcsid.mv_dms_alert
+                WHERE {$this->alertDateWhere()}
+                GROUP BY 1, 2
+                ORDER BY 1, 2
+            ";
+
+            try {
+                $rows = DB::connection($connection)->select(
+                    $sql,
+                    array_merge([self::LEAD_TIME_THRESHOLD_SECONDS], $this->alertDateBindings($start, $end)),
+                );
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            return array_map(static fn ($r): array => [
+                'perusahaan' => (string) $r->perusahaan,
+                'site' => (string) $r->site,
+                'total_alert' => (int) $r->total_alert,
+                'alert_intervened' => (int) $r->alert_intervened,
+                'total_unit' => (int) $r->total_unit,
+                'unit_intervened' => (int) $r->unit_intervened,
+                'alert_under_5min' => (int) $r->alert_under_5min,
+            ], $rows);
         });
     }
 

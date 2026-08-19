@@ -29,13 +29,15 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
         $this->assertStringContainsString('Belum Review', $html);
         $this->assertStringContainsString('Confirmed L1', $html);
         $this->assertStringContainsString('Dismissed L1', $html);
-        $this->assertStringContainsString('Client Payment Status', $html);
-        $this->assertStringContainsString('Countries Status', $html);
-        $this->assertStringContainsString('Top Performer', $html);
+        $this->assertStringContainsString('Performa Control Room', $html);
+        $this->assertStringContainsString('% Alert yang diintervensi', $html);
+        $this->assertStringContainsString('% Unit yang diintervensi', $html);
+        $this->assertStringContainsString('Lead Time intervensi alert real time (Under 5 Menit)', $html);
+        $this->assertStringContainsString('dms-cr-table', $html);
+        $this->assertStringContainsString('PT BAR', $html);
+        $this->assertStringContainsString('BMO 3', $html);
         $this->assertStringContainsString('All Item', $html);
         $this->assertStringContainsString('Last Transaction', $html);
-        $this->assertStringContainsString('world-map', $html);
-
         $this->assertStringContainsString('Total Orang Checkin', $html);
         $this->assertStringContainsString('Total Alert', $html);
         $this->assertStringContainsString('Rasio Alert / Orang', $html);
@@ -110,6 +112,49 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
             'categories' => [],
             'campaigns' => [
                 ['name' => 'Checkin RFID', 'total' => 80, 'pct' => 100, 'conversion_label' => 'baseline', 'icon' => 'majesticons:mail', 'barClass' => 'bg-orange', 'textClass' => 'text-orange'],
+            ],
+            'controlRoom' => [
+                'title' => 'Performa Control Room',
+                'subtitle' => 'Intervensi alert & lead time real time per perusahaan / site',
+                'companies' => [
+                    [
+                        'name' => 'PT BAR',
+                        'columns' => [
+                            ['key' => 'PT BAR|BMO 3', 'company' => 'PT BAR', 'site' => 'BMO 3'],
+                            ['key' => 'PT BAR|SMO', 'company' => 'PT BAR', 'site' => 'SMO'],
+                        ],
+                    ],
+                ],
+                'columns' => [
+                    ['key' => 'PT BAR|BMO 3', 'company' => 'PT BAR', 'site' => 'BMO 3'],
+                    ['key' => 'PT BAR|SMO', 'company' => 'PT BAR', 'site' => 'SMO'],
+                ],
+                'rows' => [
+                    [
+                        'key' => 'alert_intervention',
+                        'label' => '% Alert yang diintervensi',
+                        'cells' => [
+                            'PT BAR|BMO 3' => ['pct' => 82.0, 'pct_label' => '82%', 'numerator' => 10485, 'denominator' => 12810, 'tone' => 'good'],
+                            'PT BAR|SMO' => ['pct' => 45.0, 'pct_label' => '45%', 'numerator' => 3043, 'denominator' => 6754, 'tone' => 'bad'],
+                        ],
+                    ],
+                    [
+                        'key' => 'unit_intervention',
+                        'label' => '% Unit yang diintervensi',
+                        'cells' => [
+                            'PT BAR|BMO 3' => ['pct' => 100.0, 'pct_label' => '100%', 'numerator' => 30, 'denominator' => 30, 'tone' => 'excellent'],
+                            'PT BAR|SMO' => ['pct' => 79.0, 'pct_label' => '79%', 'numerator' => 11, 'denominator' => 14, 'tone' => 'warn'],
+                        ],
+                    ],
+                    [
+                        'key' => 'lead_time_under_5min',
+                        'label' => 'Lead Time intervensi alert real time (Under 5 Menit)',
+                        'cells' => [
+                            'PT BAR|BMO 3' => ['pct' => 30.76, 'pct_label' => '30.76%', 'numerator' => 3219, 'denominator' => 10465, 'tone' => 'bad'],
+                            'PT BAR|SMO' => ['pct' => 0.13, 'pct_label' => '0.13%', 'numerator' => 4, 'denominator' => 3043, 'tone' => 'critical'],
+                        ],
+                    ],
+                ],
             ],
             'overview' => ['confirmed' => 10, 'dismissed' => 8, 'pending' => 5, 'rate' => 50.0],
             'weeklyStatus' => ['confirmed' => [1], 'pending' => [2], 'dismissed' => [3], 'labels' => ['Mon'], 'totals' => ['confirmed' => 1, 'pending' => 2, 'dismissed' => 3]],

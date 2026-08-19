@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\DmsMonitoring\DmsMonitoringKpiDetailRequest;
 use App\Services\Dms\DmsDashboardOverviewService;
 use App\Services\DmsMonitoring\DmsAlertMonitoringService;
+use App\Services\DmsMonitoring\DmsMonitoringControlRoomPerformanceService;
 use App\Services\DmsMonitoring\DmsMonitoringKpiDetailService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -23,6 +24,7 @@ final class DmsAlertMonitoringController extends Controller
         private readonly DmsAlertMonitoringService $service,
         private readonly DmsDashboardOverviewService $overview,
         private readonly DmsMonitoringKpiDetailService $kpiDetail,
+        private readonly DmsMonitoringControlRoomPerformanceService $controlRoom,
     ) {}
 
     public function index(Request $request): View
@@ -44,6 +46,7 @@ final class DmsAlertMonitoringController extends Controller
         ];
         if ($quadrantFilters['start'] !== '' && $quadrantFilters['end'] !== '') {
             $crm['statistic'] = $this->kpiDetail->siteQuadrantMatrix($quadrantFilters);
+            $crm['controlRoom'] = $this->controlRoom->matrix($quadrantFilters);
         }
 
         return view('pra-operasi.dms-alert-monitoring', $this->mergeCrmPayload($crm, $monitoring));

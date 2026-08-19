@@ -22,21 +22,6 @@
     }
     $kpiDeltaLabel = $kpiDeltaLabel ?? 'this week';
     $campaigns = $campaigns ?? ($categories ?? []);
-    $flagFiles = ['flag1.png', 'flag2.png', 'flag3.png', 'flag4.png'];
-    $countryBars = ['bg-primary-600', 'bg-orange', 'bg-yellow', 'bg-success-main'];
-    $countryRows = [];
-    $sites = $sites ?? [];
-    for ($i = 0; $i < 4; $i++) {
-        $site = $sites[$i] ?? ['site' => '-', 'total' => 0, 'pct' => 0, 'confirmed' => 0];
-        $countryRows[] = $site + ['flag' => $flagFiles[$i], 'barClass' => $site['barClass'] ?? $countryBars[$i]];
-    }
-    $userFiles = ['user1.png', 'user2.png', 'user3.png', 'user4.png', 'user5.png', 'user1.png'];
-    $performers = [];
-    $topOperators = $topOperators ?? [];
-    for ($i = 0; $i < 6; $i++) {
-        $op = $topOperators[$i] ?? ['nama' => '-', 'kode_sid' => '-', 'confirmed' => 0, 'total' => 0];
-        $performers[] = $op + ['photo' => $userFiles[$i]];
-    }
     $allItems = $recentAll ?? [];
     $bestMatch = $recentConfirmed ?? [];
     $transactions = $recentReviews ?? [];
@@ -62,6 +47,15 @@
     $statistic['x_median'] = $statistic['x_median'] ?? 0;
     $statistic['y_median'] = $statistic['y_median'] ?? 0;
     $quadrantOrder = ['q2', 'q1', 'q4', 'q3'];
+    $controlRoom = $controlRoom ?? [
+        'title' => 'Performa Control Room',
+        'subtitle' => 'Intervensi alert & lead time real time per perusahaan / site',
+        'companies' => [],
+        'columns' => [],
+        'rows' => [],
+    ];
+    $controlRoomColumns = $controlRoom['columns'] ?? [];
+    $controlRoomRows = $controlRoom['rows'] ?? [];
     $overview = $overview ?? ['confirmed' => 0, 'dismissed' => 0, 'pending' => 0];
     $weeklyStatus = $weeklyStatus ?? ['confirmed' => [], 'pending' => [], 'dismissed' => [], 'labels' => [], 'totals' => ['confirmed' => 0, 'pending' => 0, 'dismissed' => 0]];
     $filters = $filters ?? ['start' => '', 'end' => '', 'site' => '', 'perusahaan' => ''];
@@ -69,7 +63,6 @@
 @endphp
 
 @section('css')
-<link rel="stylesheet" href="{{ asset('evaluasi-well-assets/css/lib/jquery-jvectormap-2.0.5.css') }}">
 <style>
   .dms-quadrant-wrap { position: relative; padding: 0 8px 8px 36px; }
   .dms-quadrant-y-title {
@@ -112,6 +105,21 @@
     .dms-quadrant-grid { min-height: 420px; }
     .dms-quadrant-cell { min-height: 210px; }
   }
+  .dms-cr-wrap { overflow-x: auto; }
+  .dms-cr-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 960px; }
+  .dms-cr-table th, .dms-cr-table td { border: 1px solid #E5E7EB; padding: 10px 8px; vertical-align: middle; text-align: center; font-size: 12px; }
+  .dms-cr-table thead th { background: #F9FAFB; font-weight: 700; color: #374151; }
+  .dms-cr-metric { text-align: left; min-width: 220px; font-weight: 600; color: #111827; background: #fff; }
+  .dms-cr-company { background: #F3F4F6; font-size: 11px; letter-spacing: .02em; }
+  .dms-cr-site { background: #FAFAFA; font-size: 11px; font-weight: 600; }
+  .dms-cr-pct { font-size: 18px; font-weight: 800; line-height: 1.1; margin-bottom: 4px; }
+  .dms-cr-frac { font-size: 10px; color: rgba(17, 24, 39, .72); }
+  .dms-cr-tone-excellent { background: #16a34a; color: #fff; }
+  .dms-cr-tone-good { background: #86efac; color: #14532d; }
+  .dms-cr-tone-warn { background: #fde047; color: #713f12; }
+  .dms-cr-tone-bad { background: #fdba74; color: #7c2d12; }
+  .dms-cr-tone-critical { background: #ef4444; color: #fff; }
+  .dms-cr-tone-empty { background: #F3F4F6; color: #6B7280; }
 </style>
 @endsection
 
@@ -425,98 +433,58 @@
     </div>
   </div>
 
-  <div class="col-xxl-4 col-sm-6">
+  <div class="col-12">
     <div class="card h-100 radius-8 border-0">
       <div class="card-body p-24">
-        <h6 class="mb-2 fw-bold text-lg">Client Payment Status</h6>
-        <span class="text-sm fw-medium text-secondary-light">Weekly Report</span>
-        <ul class="d-flex flex-wrap align-items-center justify-content-center mt-32">
-          <li class="d-flex align-items-center gap-2 me-28">
-            <span class="w-12-px h-12-px rounded-circle bg-success-main"></span>
-            <span class="text-secondary-light text-sm fw-medium">Paid: {{ number_format($weeklyStatus['totals']['confirmed'] ?? 0) }}</span>
-          </li>
-          <li class="d-flex align-items-center gap-2 me-28">
-            <span class="w-12-px h-12-px rounded-circle bg-info-main"></span>
-            <span class="text-secondary-light text-sm fw-medium">Pending: {{ number_format($weeklyStatus['totals']['pending'] ?? 0) }}</span>
-          </li>
-          <li class="d-flex align-items-center gap-2">
-            <span class="w-12-px h-12-px rounded-circle bg-warning-main"></span>
-            <span class="text-secondary-light text-sm fw-medium">Overdue: {{ number_format($weeklyStatus['totals']['dismissed'] ?? 0) }}</span>
-          </li>
-        </ul>
-        <div class="mt-40">
-          <div id="paymentStatusChart" class="margin-16-minus"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-xxl-4 col-sm-6">
-    <div class="card radius-8 border-0">
-      <div class="card-body">
-        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-          <h6 class="mb-2 fw-bold text-lg">Countries Status</h6>
+        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between mb-16">
           <div>
-            <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
-              <option>Yearly</option>
-              <option>Monthly</option>
-              <option>Weekly</option>
-              <option>Today</option>
-            </select>
+            <h6 class="mb-2 fw-bold text-lg">{{ $controlRoom['title'] ?? 'Performa Control Room' }}</h6>
+            <span class="text-sm fw-medium text-secondary-light">{{ $controlRoom['subtitle'] ?? 'Intervensi alert & lead time real time per perusahaan / site' }}</span>
           </div>
-        </div>
-      </div>
-
-      <div id="world-map"></div>
-
-      <div class="card-body p-24 max-h-266-px scroll-sm overflow-y-auto">
-        @foreach($countryRows as $i => $site)
-        <div class="d-flex align-items-center justify-content-between gap-3 {{ $i < 3 ? 'mb-3 pb-2' : '' }}">
-          <div class="d-flex align-items-center w-100">
-            <img src="{{ asset('evaluasi-well-assets/images/flags/'.$site['flag']) }}" alt="" class="w-40-px h-40-px rounded-circle flex-shrink-0 me-12 overflow-hidden">
-            <div class="flex-grow-1">
-              <h6 class="text-sm mb-0">{{ $site['site'] }}</h6>
-              <span class="text-xs text-secondary-light fw-medium">{{ number_format($site['total']) }} Users</span>
-            </div>
-          </div>
-          <div class="d-flex align-items-center gap-2 w-100">
-            <div class="w-100 max-w-66 ms-auto">
-              <div class="progress progress-sm rounded-pill" role="progressbar" aria-valuenow="{{ $site['pct'] }}" aria-valuemin="0" aria-valuemax="100">
-                <div class="progress-bar {{ $site['barClass'] }} rounded-pill" style="width: {{ $site['pct'] }}%;"></div>
-              </div>
-            </div>
-            <span class="text-secondary-light font-xs fw-semibold">{{ $site['pct'] }}%</span>
-          </div>
-        </div>
-        @endforeach
-      </div>
-    </div>
-  </div>
-
-  <div class="col-xxl-4">
-    <div class="card">
-      <div class="card-body">
-        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-          <h6 class="mb-2 fw-bold text-lg mb-0">Top Performer</h6>
-          <a href="javascript:void(0)" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
-            View All
-            <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
-          </a>
+          <span class="form-select form-select-sm w-auto bg-base border text-secondary-light d-inline-block pe-none">{{ $dateLabel }}</span>
         </div>
 
-        <div class="mt-32">
-          @foreach($performers as $i => $op)
-          <div class="d-flex align-items-center justify-content-between gap-3 {{ $i < 5 ? 'mb-32' : '' }}">
-            <div class="d-flex align-items-center">
-              <img src="{{ asset('evaluasi-well-assets/images/users/'.$op['photo']) }}" alt="" class="w-40-px h-40-px rounded-circle flex-shrink-0 me-12 overflow-hidden">
-              <div class="flex-grow-1">
-                <h6 class="text-md mb-0">{{ $op['nama'] }}</h6>
-                <span class="text-sm text-secondary-light fw-medium">Agent ID: {{ $op['kode_sid'] }}</span>
-              </div>
-            </div>
-            <span class="text-primary-light text-md fw-medium">{{ $op['confirmed'] }}/{{ $op['total'] }}</span>
-          </div>
-          @endforeach
+        <div class="dms-cr-wrap">
+          @if(($controlRoomColumns ?? []) === [])
+            <p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data performa control room untuk periode ini.</p>
+          @else
+            <table class="dms-cr-table">
+              <thead>
+                <tr>
+                  <th rowspan="2" class="dms-cr-metric">Metrik</th>
+                  @foreach($controlRoom['companies'] ?? [] as $company)
+                    <th colspan="{{ count($company['columns'] ?? []) }}" class="dms-cr-company">{{ $company['name'] ?? '-' }}</th>
+                  @endforeach
+                </tr>
+                <tr>
+                  @foreach($controlRoomColumns as $column)
+                    <th class="dms-cr-site">{{ $column['site'] ?? '-' }}</th>
+                  @endforeach
+                </tr>
+              </thead>
+              <tbody>
+                @foreach($controlRoomRows as $row)
+                  <tr>
+                    <td class="dms-cr-metric">{{ $row['label'] ?? '-' }}</td>
+                    @foreach($controlRoomColumns as $column)
+                      @php
+                        $cell = ($row['cells'] ?? [])[$column['key'] ?? ''] ?? [
+                          'pct_label' => '0%',
+                          'numerator' => 0,
+                          'denominator' => 0,
+                          'tone' => 'empty',
+                        ];
+                      @endphp
+                      <td class="dms-cr-tone-{{ $cell['tone'] ?? 'empty' }}">
+                        <div class="dms-cr-pct">{{ $cell['pct_label'] ?? '0%' }}</div>
+                        <div class="dms-cr-frac">({{ number_format((int) ($cell['numerator'] ?? 0)) }} / {{ number_format((int) ($cell['denominator'] ?? 0)) }})</div>
+                      </td>
+                    @endforeach
+                  </tr>
+                @endforeach
+              </tbody>
+            </table>
+          @endif
         </div>
       </div>
     </div>
@@ -596,17 +564,12 @@
 @endsection
 
 @section('scripts')
-<script src="{{ asset('evaluasi-well-assets/js/lib/jquery-ui.min.js') }}"></script>
-<script src="{{ asset('evaluasi-well-assets/js/lib/jquery-jvectormap-2.0.5.min.js') }}"></script>
-<script src="{{ asset('evaluasi-well-assets/js/lib/jquery-jvectormap-world-mill-en.js') }}"></script>
 <script>
 (function () {
   var kpis = @json($kpis);
   var growth = @json($growth);
   var statistic = @json($statistic);
   var overview = @json($overview);
-  var weeklyStatus = @json($weeklyStatus);
-  var sites = @json($sites);
 
   function createSparkline(chartId, chartColor, data) {
     var el = document.querySelector('#' + chartId);
@@ -726,56 +689,6 @@
         }
       }
     }).render();
-  }
-
-  var statusEl = document.querySelector('#paymentStatusChart');
-  if (statusEl && typeof ApexCharts !== 'undefined') {
-    new ApexCharts(statusEl, {
-      series: [
-        { name: 'Net Profit', data: weeklyStatus.confirmed || [] },
-        { name: 'Revenue', data: weeklyStatus.pending || [] },
-        { name: 'Free Cash', data: weeklyStatus.dismissed || [] }
-      ],
-      colors: ['#45B369', '#144bd6', '#FF9F29'],
-      legend: { show: false },
-      chart: { type: 'bar', height: 350, toolbar: { show: false } },
-      grid: { show: true, borderColor: '#D1D5DB', strokeDashArray: 4, position: 'back' },
-      plotOptions: { bar: { borderRadius: 4, columnWidth: 8 } },
-      dataLabels: { enabled: false },
-      states: { hover: { filter: { type: 'none' } } },
-      stroke: { show: true, width: 0, colors: ['transparent'] },
-      xaxis: { categories: weeklyStatus.labels || [] },
-      fill: { opacity: 1 }
-    }).render();
-  }
-
-  if (window.jQuery && jQuery.fn.vectorMap && document.getElementById('world-map')) {
-    jQuery('#world-map').vectorMap({
-      map: 'world_mill_en',
-      backgroundColor: 'transparent',
-      borderColor: '#fff',
-      borderOpacity: 0.25,
-      borderWidth: 0,
-      color: '#000000',
-      regionStyle: { initial: { fill: '#D1D5DB' } },
-      markerStyle: { initial: { r: 5, fill: '#fff', 'fill-opacity': 1, stroke: '#000', 'stroke-width': 1, 'stroke-opacity': 0.4 } },
-      markers: [
-        { latLng: [35.8617, 104.1954], name: 'China : 250' },
-        { latLng: [25.2744, 133.7751], name: 'Australia : 250' },
-        { latLng: [36.77, -119.41], name: 'USA : 82%' },
-        { latLng: [55.37, -3.41], name: 'UK : 250' },
-        { latLng: [25.20, 55.27], name: 'UAE : 250' }
-      ],
-      series: { regions: [{ values: { US: '#487FFF', SA: '#487FFF', AU: '#487FFF', CN: '#487FFF', GB: '#487FFF', ID: '#487FFF' }, attribute: 'fill' }] },
-      hoverOpacity: null,
-      normalizeFunction: 'linear',
-      zoomOnScroll: false,
-      scaleColors: ['#000000', '#000000'],
-      selectedColor: '#000000',
-      selectedRegions: [],
-      enableZoom: false,
-      hoverColor: '#fff'
-    });
   }
 
   var dmsKpiFilters = @json($filters);
