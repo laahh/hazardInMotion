@@ -26,7 +26,12 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
         $this->assertStringContainsString('Total Alert Masuk', $html);
         $this->assertStringContainsString('Unit Beroperasi', $html);
         $this->assertStringContainsString('Checkin RFID', $html);
-        $this->assertStringContainsString('DT-01', $html);
+        $this->assertStringContainsString('Site', $html);
+        $this->assertStringContainsString('Perusahaan', $html);
+        $this->assertStringContainsString('Semua Site', $html);
+        $this->assertStringContainsString('Semua Perusahaan', $html);
+        $this->assertStringContainsString('Binungan', $html);
+        $this->assertStringContainsString('PT Example', $html);
     }
 
     /**
@@ -38,7 +43,8 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
 
         return [
             'up' => true,
-            'filters' => ['start' => '2026-08-13', 'end' => '2026-08-19'],
+            'filters' => ['start' => '2026-08-13', 'end' => '2026-08-19', 'site' => 'Binungan', 'perusahaan' => 'PT Example'],
+            'filterOptions' => ['sites' => ['Binungan', 'Lati'], 'companies' => ['PT Example', 'PT Lain']],
             'dateLabel' => '13 Agu 2026 - 19 Agu 2026',
             'kpiDeltaLabel' => 'this week',
             'kpis' => [

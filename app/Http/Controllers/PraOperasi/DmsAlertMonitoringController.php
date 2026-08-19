@@ -25,7 +25,13 @@ final class DmsAlertMonitoringController extends Controller
     public function index(Request $request): View
     {
         $monitoring = $this->service->dashboard($request);
-        $crm = $this->overview->dashboard($monitoring['filters']['start'] ?? null, $monitoring['filters']['end'] ?? null);
+        $filters = $monitoring['filters'] ?? ['start' => null, 'end' => null, 'site' => null, 'perusahaan' => null];
+        $crm = $this->overview->dashboard(
+            is_string($filters['start'] ?? null) ? $filters['start'] : null,
+            is_string($filters['end'] ?? null) ? $filters['end'] : null,
+            is_string($filters['site'] ?? null) && $filters['site'] !== '' ? $filters['site'] : null,
+            is_string($filters['perusahaan'] ?? null) && $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null,
+        );
 
         return view('pra-operasi.dms-alert-monitoring', $this->mergeCrmPayload($crm, $monitoring));
     }
@@ -100,7 +106,8 @@ final class DmsAlertMonitoringController extends Controller
 
         return array_merge($crm, [
             'up' => (bool) ($crm['up'] ?? false) || (bool) ($monitoring['up'] ?? false),
-            'filters' => $monitoring['filters'] ?? ['start' => '', 'end' => ''],
+            'filters' => $monitoring['filters'] ?? ['start' => '', 'end' => '', 'site' => '', 'perusahaan' => ''],
+            'filterOptions' => $monitoring['filterOptions'] ?? ['sites' => [], 'companies' => []],
             'kpis' => array_values($kpis),
             'campaigns' => $campaigns,
             'kpiDeltaLabel' => 'this week',

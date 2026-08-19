@@ -21,6 +21,7 @@ class DmsDashboardOverviewServiceTest extends TestCase
     {
         $reader = Mockery::mock(DmsDashboardDataSource::class);
         $reader->shouldReceive('isUp')->once()->andReturn(false);
+        $reader->shouldReceive('applyScope')->zeroOrMoreTimes();
 
         $payload = (new DmsDashboardOverviewService($reader))->dashboard();
 
@@ -37,6 +38,7 @@ class DmsDashboardOverviewServiceTest extends TestCase
     {
         $reader = Mockery::mock(DmsDashboardDataSource::class);
         $reader->shouldReceive('isUp')->andReturn(true);
+        $reader->shouldReceive('applyScope')->zeroOrMoreTimes();
 
         $empty = [
             'total' => 0,
@@ -96,6 +98,7 @@ class DmsDashboardOverviewServiceTest extends TestCase
     {
         $reader = Mockery::mock(DmsDashboardDataSource::class);
         $reader->shouldReceive('isUp')->andReturn(false);
+        $reader->shouldReceive('applyScope')->zeroOrMoreTimes();
 
         $payload = (new DmsDashboardOverviewService($reader))->dashboard('2026-08-13', '2026-08-19');
 

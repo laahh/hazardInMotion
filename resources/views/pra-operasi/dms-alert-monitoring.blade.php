@@ -42,7 +42,8 @@
     $statistic = $statistic ?? ['title' => 'Earning Statistic', 'subtitle' => 'Yearly earning overview', 'total' => '0', 'confirmed' => '0', 'dismissed' => '0', 'series' => [], 'labels' => []];
     $overview = $overview ?? ['confirmed' => 0, 'dismissed' => 0, 'pending' => 0];
     $weeklyStatus = $weeklyStatus ?? ['confirmed' => [], 'pending' => [], 'dismissed' => [], 'labels' => [], 'totals' => ['confirmed' => 0, 'pending' => 0, 'dismissed' => 0]];
-    $filters = $filters ?? ['start' => '', 'end' => ''];
+    $filters = $filters ?? ['start' => '', 'end' => '', 'site' => '', 'perusahaan' => ''];
+    $filterOptions = $filterOptions ?? ['sites' => [], 'companies' => []];
 @endphp
 
 @section('css')
@@ -77,19 +78,49 @@
 </div>
 @endif
 
-<form method="GET" class="d-flex flex-wrap align-items-end gap-2 mb-24">
-  <div>
-    <label class="form-label text-sm fw-medium mb-1">Dari Tanggal</label>
-    <input type="date" name="start" value="{{ $filters['start'] }}" class="form-control form-control-sm" style="min-width:150px">
+<div class="card radius-8 border-0 shadow-2 mb-24">
+  <div class="card-body p-20">
+    <form method="GET" action="{{ route('pra-operasi.dms-monitoring') }}" class="row g-3 align-items-end">
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6">
+        <label for="filter-start" class="form-label text-sm fw-medium text-secondary-light mb-8">Dari Tanggal</label>
+        <input id="filter-start" type="date" name="start" value="{{ $filters['start'] }}" class="form-control radius-8">
+      </div>
+      <div class="col-xl-2 col-lg-4 col-md-6 col-sm-6">
+        <label for="filter-end" class="form-label text-sm fw-medium text-secondary-light mb-8">Sampai Tanggal</label>
+        <input id="filter-end" type="date" name="end" value="{{ $filters['end'] }}" class="form-control radius-8">
+      </div>
+      <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+        <label for="filter-site" class="form-label text-sm fw-medium text-secondary-light mb-8">Site</label>
+        <select id="filter-site" name="site" class="form-select radius-8">
+          <option value="">Semua Site</option>
+          @foreach($filterOptions['sites'] as $siteOption)
+          <option value="{{ $siteOption }}" @selected(($filters['site'] ?? '') === $siteOption)>{{ $siteOption }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+        <label for="filter-perusahaan" class="form-label text-sm fw-medium text-secondary-light mb-8">Perusahaan</label>
+        <select id="filter-perusahaan" name="perusahaan" class="form-select radius-8">
+          <option value="">Semua Perusahaan</option>
+          @foreach($filterOptions['companies'] as $companyOption)
+          <option value="{{ $companyOption }}" @selected(($filters['perusahaan'] ?? '') === $companyOption)>{{ $companyOption }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="col-xl-2 col-lg-4 col-md-12">
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary-600 radius-8 flex-grow-1 d-inline-flex align-items-center justify-content-center gap-1">
+            <iconify-icon icon="solar:filter-bold" class="icon"></iconify-icon>
+            Terapkan
+          </button>
+          <a href="{{ route('pra-operasi.dms-monitoring') }}" class="btn btn-outline-secondary radius-8 d-inline-flex align-items-center justify-content-center px-12" title="Reset filter">
+            <iconify-icon icon="solar:restart-bold" class="icon"></iconify-icon>
+          </a>
+        </div>
+      </div>
+    </form>
   </div>
-  <div>
-    <label class="form-label text-sm fw-medium mb-1">Sampai Tanggal</label>
-    <input type="date" name="end" value="{{ $filters['end'] }}" class="form-control form-control-sm" style="min-width:150px">
-  </div>
-  <button type="submit" class="btn btn-primary-600 btn-sm radius-8 px-16">
-    <iconify-icon icon="solar:filter-bold" class="me-1"></iconify-icon>Terapkan
-  </button>
-</form>
+</div>
 
 @unless($up)
 <div class="alert alert-warning radius-8 mb-24 d-flex align-items-start gap-2">

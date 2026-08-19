@@ -12,6 +12,8 @@ interface DmsDashboardDataSource
 {
     public function isUp(): bool;
 
+    public function applyScope(?string $site, ?string $perusahaan): void;
+
     /**
      * @return array{
      *     total:int, l1_reviewed:int, l1_confirmed:int, l1_dismissed:int, l1_belum:int,

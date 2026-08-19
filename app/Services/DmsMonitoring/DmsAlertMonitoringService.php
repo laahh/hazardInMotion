@@ -33,6 +33,7 @@ final class DmsAlertMonitoringService
     {
         $filters = $this->readFilters($request);
         $tz = (string) config('app.timezone');
+        $this->reader->applyScope($filters['site'], $filters['perusahaan']);
 
         if (! $this->reader->isUp()) {
             return $this->emptyPayload($filters);
@@ -56,10 +57,12 @@ final class DmsAlertMonitoringService
             $qaSummary = $this->qaService->summaryForPeriod($filters['start'], $filters['end']);
             $qaPending = $this->qaService->pendingSamples($filters['start'], $filters['end']);
             $today = $this->buildTodaySnapshot($tz);
+            $filterOptions = $this->reader->filterOptions($start, $end);
 
             return [
                 'up' => true,
                 'filters' => $filters,
+                'filterOptions' => $filterOptions,
                 'dateLabel' => $this->dateRangeLabel($filters['start'], $filters['end']),
                 'today' => $today,
                 'kpis' => $this->buildKpis($today, $summary, $qaSummary, $unitsOperating),
@@ -262,11 +265,18 @@ final class DmsAlertMonitoringService
     }
 
     /**
-     * @return array{start:string, end:string}
+     * @return array{start:string, end:string, site:string, perusahaan:string}
      */
     private function readFilters(Request $request): array
     {
         $read = static fn (mixed $v): string => is_string($v) ? mb_substr(trim($v), 0, 10) : '';
+        $readName = static function (mixed $v): string {
+            if (! is_string($v)) {
+                return '';
+            }
+
+            return mb_substr(trim($v), 0, 80);
+        };
         $tz = (string) config('app.timezone');
         $today = Carbon::now($tz)->toDateString();
 
@@ -284,7 +294,12 @@ final class DmsAlertMonitoringService
             [$start, $end] = [$end, $start];
         }
 
-        return ['start' => $start, 'end' => $end];
+        return [
+            'start' => $start,
+            'end' => $end,
+            'site' => $readName($request->query('site', '')),
+            'perusahaan' => $readName($request->query('perusahaan', '')),
+        ];
     }
 
     private function dateRangeLabel(string $start, string $end): string
@@ -301,7 +316,7 @@ final class DmsAlertMonitoringService
     }
 
     /**
-     * @param  array{start:string, end:string}  $filters
+     * @param  array{start:string, end:string, site?:string, perusahaan?:string}  $filters
      * @return array<string, mixed>
      */
     private function emptyPayload(array $filters): array
@@ -309,6 +324,7 @@ final class DmsAlertMonitoringService
         return [
             'up' => false,
             'filters' => $filters,
+            'filterOptions' => ['sites' => [], 'companies' => []],
             'dateLabel' => $this->dateRangeLabel($filters['start'], $filters['end']),
             'today' => ['date_label' => '-', 'units_operating' => 0, 'operators_checked_in' => 0, 'total_alerts' => 0, 'ratio_per_unit' => 0.0, 'ratio_per_operator' => 0.0],
             'kpis' => $this->buildKpis(

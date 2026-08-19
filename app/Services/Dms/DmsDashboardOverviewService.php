@@ -27,8 +27,9 @@ final class DmsDashboardOverviewService
     /**
      * @return array<string, mixed>
      */
-    public function dashboard(?string $startDate = null, ?string $endDate = null): array
+    public function dashboard(?string $startDate = null, ?string $endDate = null, ?string $site = null, ?string $perusahaan = null): array
     {
+        $this->reader->applyScope($site, $perusahaan);
         $tz = (string) config('app.timezone');
         $now = Carbon::now($tz);
         $windows = $this->buildWindows($now, $tz, $startDate, $endDate);

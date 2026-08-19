@@ -34,6 +34,10 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     /** Batas jumlah kategori pelanggaran yang ditampilkan di kuadran. */
     private const CATEGORY_LIMIT = 500;
 
+    private ?string $scopeSite = null;
+
+    private ?string $scopePerusahaan = null;
+
     public function __construct(
         private readonly SportEvaluationPvtRfidCheckinReader $connectionSource,
     ) {}
@@ -41,6 +45,12 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     public function isUp(): bool
     {
         return $this->connectionSource->isUp();
+    }
+
+    public function applyScope(?string $site, ?string $perusahaan): void
+    {
+        $this->scopeSite = $this->sanitizeFilter($site);
+        $this->scopePerusahaan = $this->sanitizeFilter($perusahaan);
     }
 
     /**
@@ -70,11 +80,11 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                     count(*) FILTER (WHERE sudah_direview_l2 = true AND l2_context_status = true) AS l2_confirmed,
                     count(*) FILTER (WHERE dihitung_untuk_laporan_pelanggaran = true) AS post_event_eligible
                 FROM bcsid.mv_dms_alert
-                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                WHERE {$this->alertDateWhere()}
             ";
 
             try {
-                $row = DB::connection($connection)->selectOne($sql, [$start, $end]);
+                $row = DB::connection($connection)->selectOne($sql, $this->alertDateBindings($start, $end));
             } catch (Throwable $e) {
                 report($e);
 
@@ -112,14 +122,14 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                     count(*) AS total,
                     count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = true) AS confirmed
                 FROM bcsid.mv_dms_alert
-                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                WHERE {$this->alertDateWhere()}
                 GROUP BY 1, 2
                 ORDER BY total DESC
                 LIMIT ?
             ";
 
             try {
-                $rows = DB::connection($connection)->select($sql, [$start, $end, $limit]);
+                $rows = DB::connection($connection)->select($sql, array_merge($this->alertDateBindings($start, $end), [$limit]));
             } catch (Throwable $e) {
                 report($e);
 
@@ -153,7 +163,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                     count(*) AS total,
                     count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = true) AS confirmed
                 FROM bcsid.mv_dms_alert
-                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                WHERE {$this->alertDateWhere()}
                   AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
                 GROUP BY 1, 2
                 ORDER BY total DESC
@@ -161,7 +171,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             ";
 
             try {
-                $rows = DB::connection($connection)->select($sql, [$start, $end, $limit]);
+                $rows = DB::connection($connection)->select($sql, array_merge($this->alertDateBindings($start, $end), [$limit]));
             } catch (Throwable $e) {
                 report($e);
 
@@ -200,14 +210,14 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                     count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = true) AS confirmed,
                     count(*) FILTER (WHERE sudah_direview_l1 = true) AS reviewed
                 FROM bcsid.mv_dms_alert
-                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                WHERE {$this->alertDateWhere()}
                 GROUP BY 1
                 ORDER BY total DESC
                 LIMIT " . self::CATEGORY_LIMIT . "
             ";
 
             try {
-                $rows = DB::connection($connection)->select($sql, [$start, $end]);
+                $rows = DB::connection($connection)->select($sql, $this->alertDateBindings($start, $end));
             } catch (Throwable $e) {
                 report($e);
 
@@ -274,12 +284,12 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             $sql = "
                 SELECT DISTINCT UPPER(TRIM(kode_sid)) AS sid
                 FROM bcsid.mv_dms_alert
-                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                WHERE {$this->alertDateWhere()}
                   AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
             ";
 
             try {
-                $rows = DB::connection($connection)->select($sql, [$start, $end]);
+                $rows = DB::connection($connection)->select($sql, $this->alertDateBindings($start, $end));
             } catch (Throwable $e) {
                 report($e);
 
@@ -422,13 +432,13 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                     avg(EXTRACT(EPOCH FROM (waktu_review_l1 - waktu_deteksi)) / 60.0) FILTER (WHERE sudah_direview_l1 = true AND waktu_review_l1 IS NOT NULL) AS avg_menit_l1,
                     avg(EXTRACT(EPOCH FROM (waktu_review_l2 - waktu_deteksi)) / 60.0) FILTER (WHERE sudah_direview_l2 = true AND waktu_review_l2 IS NOT NULL) AS avg_menit_l2
                 FROM bcsid.mv_dms_alert
-                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                WHERE {$this->alertDateWhere()}
                 GROUP BY 1
                 ORDER BY total_direview DESC
             ";
 
             try {
-                $rows = DB::connection($connection)->select($sql, [$start, $end]);
+                $rows = DB::connection($connection)->select($sql, $this->alertDateBindings($start, $end));
             } catch (Throwable $e) {
                 report($e);
 
@@ -460,7 +470,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         }
 
         $excludeSql = '';
-        $bindings = [$start, $end];
+        $bindings = $this->alertDateBindings($start, $end);
         if ($excludeAlertIds !== []) {
             $placeholders = implode(',', array_fill(0, count($excludeAlertIds), '?'));
             $excludeSql = " AND id_alert NOT IN ({$placeholders})";
@@ -471,7 +481,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         $sql = "
             SELECT id_alert, UPPER(TRIM(kode_sid)) AS kode_sid, nama_pelanggaran, unit, site, waktu_deteksi
             FROM bcsid.mv_dms_alert
-            WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+            WHERE {$this->alertDateWhere()}
               AND sudah_direview_l1 = true AND l1_context_status = false
               {$excludeSql}
             ORDER BY random()
@@ -520,13 +530,13 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                         WHERE kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
                     ) AS operators
                 FROM bcsid.mv_dms_alert
-                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                WHERE {$this->alertDateWhere()}
                 GROUP BY 1
                 ORDER BY 1
             ";
 
             try {
-                $rows = DB::connection($connection)->select($sql, [$start, $end]);
+                $rows = DB::connection($connection)->select($sql, $this->alertDateBindings($start, $end));
             } catch (Throwable $e) {
                 report($e);
 
@@ -570,14 +580,14 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                     count(*) AS total,
                     count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = true) AS confirmed
                 FROM bcsid.mv_dms_alert
-                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                WHERE {$this->alertDateWhere()}
                 GROUP BY 1
                 ORDER BY total DESC
                 LIMIT ?
             ";
 
             try {
-                $rows = DB::connection($connection)->select($sql, [$start, $end, $limit]);
+                $rows = DB::connection($connection)->select($sql, array_merge($this->alertDateBindings($start, $end), [$limit]));
             } catch (Throwable $e) {
                 report($e);
 
@@ -623,14 +633,14 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                     sudah_direview_l1,
                     l1_context_status
                 FROM bcsid.mv_dms_alert
-                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                WHERE {$this->alertDateWhere()}
                   {$confirmedSql}
                 ORDER BY waktu_deteksi DESC
                 LIMIT ?
             ";
 
             try {
-                $rows = DB::connection($connection)->select($sql, [$start, $end, $limit]);
+                $rows = DB::connection($connection)->select($sql, array_merge($this->alertDateBindings($start, $end), [$limit]));
             } catch (Throwable $e) {
                 report($e);
 
@@ -680,7 +690,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             return 0;
         }
 
-        $cacheKey = 'dms_monitoring:dismissed_l1_count:'.md5($start.'|'.$end);
+        $cacheKey = 'dms_monitoring:dismissed_l1_count:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix());
 
         return Cache::remember($cacheKey, 1800, function () use ($start, $end): int {
             $connection = $this->connectionSource->connectionName();
@@ -688,14 +698,14 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 return 0;
             }
 
-            $sql = '
+            $sql = "
                 SELECT count(*) AS total FROM bcsid.mv_dms_alert
-                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                WHERE {$this->alertDateWhere()}
                   AND sudah_direview_l1 = true AND l1_context_status = false
-            ';
+            ";
 
             try {
-                $row = DB::connection($connection)->selectOne($sql, [$start, $end]);
+                $row = DB::connection($connection)->selectOne($sql, $this->alertDateBindings($start, $end));
             } catch (Throwable $e) {
                 report($e);
 
@@ -706,13 +716,125 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         });
     }
 
+    /**
+     * Opsi dropdown Site / Perusahaan dari window tanggal (tidak di-scope
+     * oleh filter yang sedang dipilih, supaya user masih bisa ganti opsi).
+     *
+     * @return array{sites:list<string>, companies:list<string>}
+     */
+    public function filterOptions(string $start, string $end): array
+    {
+        $empty = ['sites' => [], 'companies' => []];
+        if (! $this->isUp()) {
+            return $empty;
+        }
+
+        $cacheKey = 'dms_monitoring:filter_options:'.md5($start.'|'.$end);
+
+        /** @var array{sites:list<string>, companies:list<string>} */
+        return Cache::remember($cacheKey, 1800, function () use ($start, $end, $empty): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return $empty;
+            }
+
+            $siteSql = "
+                SELECT DISTINCT TRIM(site::text) AS v
+                FROM bcsid.mv_dms_alert
+                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                  AND site IS NOT NULL AND TRIM(site::text) <> '' AND TRIM(site::text) <> '-'
+                ORDER BY 1
+                LIMIT 200
+            ";
+            $companySql = "
+                SELECT DISTINCT TRIM(perusahaan::text) AS v
+                FROM bcsid.mv_dms_alert
+                WHERE waktu_deteksi >= ? AND waktu_deteksi < ?
+                  AND perusahaan IS NOT NULL AND TRIM(perusahaan::text) <> '' AND TRIM(perusahaan::text) <> '-'
+                ORDER BY 1
+                LIMIT 200
+            ";
+
+            try {
+                $siteRows = DB::connection($connection)->select($siteSql, [$start, $end]);
+                $companyRows = DB::connection($connection)->select($companySql, [$start, $end]);
+            } catch (Throwable $e) {
+                report($e);
+
+                return $empty;
+            }
+
+            $pick = static function (array $rows): array {
+                $out = [];
+                foreach ($rows as $row) {
+                    $value = trim((string) ($row->v ?? ''));
+                    if ($value !== '') {
+                        $out[] = $value;
+                    }
+                }
+
+                return $out;
+            };
+
+            return [
+                'sites' => $pick($siteRows),
+                'companies' => $pick($companyRows),
+            ];
+        });
+    }
+
+    private function sanitizeFilter(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $trimmed = mb_substr(trim($value), 0, 80);
+
+        return $trimmed === '' ? null : $trimmed;
+    }
+
+    private function alertDateWhere(): string
+    {
+        $sql = 'waktu_deteksi >= ? AND waktu_deteksi < ?';
+        if ($this->scopeSite !== null) {
+            $sql .= ' AND TRIM(site::text) = ?';
+        }
+        if ($this->scopePerusahaan !== null) {
+            $sql .= ' AND TRIM(perusahaan::text) = ?';
+        }
+
+        return $sql;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function alertDateBindings(string $start, string $end): array
+    {
+        $bindings = [$start, $end];
+        if ($this->scopeSite !== null) {
+            $bindings[] = $this->scopeSite;
+        }
+        if ($this->scopePerusahaan !== null) {
+            $bindings[] = $this->scopePerusahaan;
+        }
+
+        return $bindings;
+    }
+
+    private function scopeCacheSuffix(): string
+    {
+        return ($this->scopeSite ?? '').'|'.($this->scopePerusahaan ?? '');
+    }
+
     private function remember(string $key, string $start, string $end, \Closure $callback): array
     {
         if (! $this->isUp()) {
             return [];
         }
 
-        $cacheKey = 'dms_monitoring:'.$key.':'.md5($start.'|'.$end);
+        $cacheKey = 'dms_monitoring:'.$key.':'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix());
 
         /** @var array<mixed> */
         return Cache::remember($cacheKey, 1800, $callback);
