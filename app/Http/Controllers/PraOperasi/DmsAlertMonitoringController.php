@@ -145,7 +145,7 @@ final class DmsAlertMonitoringController extends Controller
 
     /**
      * @param  list<array{label?:string, count?:int}>  $funnel
-     * @return list<array{name:string, total:int, pct:int, icon:string, barClass:string, textClass:string}>
+     * @return list<array{name:string, total:int, pct:int, icon:string, barClass:string, textClass:string, conversion_label:string}>
      */
     private function mapFunnelCampaigns(array $funnel): array
     {
@@ -157,26 +157,24 @@ final class DmsAlertMonitoringController extends Controller
             ['icon' => 'solar:shield-check-bold', 'textClass' => 'text-primary-600', 'barClass' => 'bg-primary-600'],
         ];
 
-        $max = 1;
-        foreach ($funnel as $row) {
-            if (! is_array($row)) {
-                continue;
-            }
-            $max = max($max, (int) ($row['count'] ?? 0));
-        }
-
         $out = [];
+        $previous = null;
         foreach ($funnel as $i => $row) {
             if (! is_array($row)) {
                 continue;
             }
             $style = $styles[$i] ?? $styles[0];
             $count = (int) ($row['count'] ?? 0);
+            $pct = $previous === null || $previous <= 0
+                ? 100
+                : (int) round(($count / $previous) * 100);
             $out[] = $style + [
                 'name' => (string) ($row['label'] ?? '-'),
                 'total' => $count,
-                'pct' => (int) round($count / $max * 100),
+                'pct' => max(0, min(100, $pct)),
+                'conversion_label' => $previous === null ? 'baseline' : 'vs tahap sebelumnya',
             ];
+            $previous = max(0, $count);
         }
 
         return $out;

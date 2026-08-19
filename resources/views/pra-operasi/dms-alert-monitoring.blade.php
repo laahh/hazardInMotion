@@ -351,8 +351,11 @@
         <div class="card h-100 radius-8 border-0">
           <div class="card-body p-24">
             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-              <h6 class="mb-2 fw-bold text-lg">Campaigns</h6>
-              <span class="text-sm text-secondary-light">Weekly</span>
+              <div>
+                <h6 class="mb-2 fw-bold text-lg">Funnel Tindakan Alert</h6>
+                <span class="text-sm text-secondary-light">Konversi antar tahap</span>
+              </div>
+              <span class="text-sm text-secondary-light">{{ $dateLabel }}</span>
             </div>
             <div class="mt-3">
               @forelse($campaigns as $i => $cat)
@@ -361,7 +364,10 @@
                   <span class="text-xxl line-height-1 d-flex align-content-center flex-shrink-0 {{ $cat['textClass'] }}">
                     <iconify-icon icon="{{ $cat['icon'] }}" class="icon"></iconify-icon>
                   </span>
-                  <span class="text-primary-light fw-medium text-sm ps-12 text-truncate" title="{{ $cat['name'] }}">{{ $cat['name'] }}</span>
+                  <div class="ps-12">
+                    <span class="d-block text-primary-light fw-medium text-sm text-truncate" title="{{ $cat['name'] }}">{{ $cat['name'] }}</span>
+                    <span class="d-block text-xs text-secondary-light">{{ number_format($cat['total']) }} orang</span>
+                  </div>
                 </div>
                 <div class="d-flex align-items-center gap-2 w-100">
                   <div class="w-100 max-w-66 ms-auto">
@@ -369,7 +375,10 @@
                       <div class="progress-bar {{ $cat['barClass'] }} rounded-pill" style="width: {{ $cat['pct'] }}%;"></div>
                     </div>
                   </div>
-                  <span class="text-secondary-light font-xs fw-semibold">{{ $cat['pct'] }}%</span>
+                  <div class="text-end" style="min-width: 58px;">
+                    <span class="d-block text-secondary-light font-xs fw-semibold">{{ $cat['pct'] }}%</span>
+                    <span class="d-block text-xs text-secondary-light">{{ $cat['conversion_label'] ?? 'vs tahap sebelumnya' }}</span>
+                  </div>
                 </div>
               </div>
               @empty
@@ -383,22 +392,29 @@
         <div class="card h-100 radius-8 border-0 overflow-hidden">
           <div class="card-body p-24">
             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-              <h6 class="mb-2 fw-bold text-lg">Customer Overview</h6>
-              <span class="text-sm fw-medium text-secondary-light">Weekly</span>
+              <div>
+                <h6 class="mb-2 fw-bold text-lg">Status Review Alert</h6>
+                <span class="text-sm fw-medium text-secondary-light">Distribusi status review L1</span>
+              </div>
+              <span class="text-sm fw-medium text-secondary-light">{{ $dateLabel }}</span>
             </div>
             <div class="d-flex flex-wrap align-items-center mt-3">
               <ul class="flex-shrink-0">
                 <li class="d-flex align-items-center gap-2 mb-28">
                   <span class="w-12-px h-12-px rounded-circle bg-danger-main"></span>
-                  <span class="text-secondary-light text-sm fw-medium">Total: {{ number_format(($overview['confirmed'] ?? 0) + ($overview['dismissed'] ?? 0) + ($overview['pending'] ?? 0)) }}</span>
+                  <span class="text-secondary-light text-sm fw-medium">Total Alert: {{ number_format(($overview['confirmed'] ?? 0) + ($overview['dismissed'] ?? 0) + ($overview['pending'] ?? 0)) }}</span>
                 </li>
                 <li class="d-flex align-items-center gap-2 mb-28">
                   <span class="w-12-px h-12-px rounded-circle bg-warning-main"></span>
-                  <span class="text-secondary-light text-sm fw-medium">New: {{ number_format($overview['pending'] ?? 0) }}</span>
+                  <span class="text-secondary-light text-sm fw-medium">Belum Review: {{ number_format($overview['pending'] ?? 0) }}</span>
                 </li>
                 <li class="d-flex align-items-center gap-2">
                   <span class="w-12-px h-12-px rounded-circle bg-primary-600"></span>
-                  <span class="text-secondary-light text-sm fw-medium">Active: {{ number_format($overview['confirmed'] ?? 0) }}</span>
+                  <span class="text-secondary-light text-sm fw-medium">Confirmed L1: {{ number_format($overview['confirmed'] ?? 0) }}</span>
+                </li>
+                <li class="d-flex align-items-center gap-2 mt-28">
+                  <span class="w-12-px h-12-px rounded-circle bg-success-main"></span>
+                  <span class="text-secondary-light text-sm fw-medium">Dismissed L1: {{ number_format($overview['dismissed'] ?? 0) }}</span>
                 </li>
               </ul>
               <div id="donutChart" class="flex-grow-1 apexcharts-tooltip-z-none title-style circle-none"></div>
@@ -669,14 +685,20 @@
 
   var donutEl = document.querySelector('#donutChart');
   if (donutEl && typeof ApexCharts !== 'undefined') {
+    var totalAlerts = (overview.confirmed || 0) + (overview.dismissed || 0) + (overview.pending || 0);
     new ApexCharts(donutEl, {
-      series: [((overview.confirmed || 0) + (overview.dismissed || 0) + (overview.pending || 0)), overview.pending || 0, overview.confirmed || 0],
-      colors: ['#45B369', '#FF9F29', '#487FFF'],
-      labels: ['Active', 'New', 'Total'],
+      series: [overview.pending || 0, overview.confirmed || 0, overview.dismissed || 0],
+      colors: ['#FF9F29', '#487FFF', '#45B369'],
+      labels: ['Belum Review', 'Confirmed L1', 'Dismissed L1'],
       legend: { show: false },
       chart: { type: 'donut', height: 300, sparkline: { enabled: true } },
       stroke: { width: 0 },
       dataLabels: { enabled: false },
+      tooltip: {
+        y: {
+          formatter: function (v) { return v + ' alert'; }
+        }
+      },
       plotOptions: {
         pie: {
           startAngle: -90,
@@ -687,7 +709,18 @@
             size: '70%',
             labels: {
               show: true,
-              total: { showAlways: true, show: true, label: 'Customer Report' }
+              name: { show: true, offsetY: 18 },
+              value: {
+                show: true,
+                offsetY: -12,
+                formatter: function (val) { return Math.round(Number(val || 0)).toLocaleString('en-US'); }
+              },
+              total: {
+                showAlways: true,
+                show: true,
+                label: 'Total Alert',
+                formatter: function () { return totalAlerts.toLocaleString('en-US'); }
+              }
             }
           }
         }

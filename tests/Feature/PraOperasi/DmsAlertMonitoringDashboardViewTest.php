@@ -22,8 +22,13 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
         $this->assertStringContainsString('dms-quadrant-grid', $html);
         $this->assertStringContainsString('Exposure – Total Orang Check-in', $html);
         $this->assertStringContainsString('Overall', $html);
-        $this->assertStringContainsString('Campaigns', $html);
-        $this->assertStringContainsString('Customer Overview', $html);
+        $this->assertStringContainsString('Funnel Tindakan Alert', $html);
+        $this->assertStringContainsString('Konversi antar tahap', $html);
+        $this->assertStringContainsString('Status Review Alert', $html);
+        $this->assertStringContainsString('Distribusi status review L1', $html);
+        $this->assertStringContainsString('Belum Review', $html);
+        $this->assertStringContainsString('Confirmed L1', $html);
+        $this->assertStringContainsString('Dismissed L1', $html);
         $this->assertStringContainsString('Client Payment Status', $html);
         $this->assertStringContainsString('Countries Status', $html);
         $this->assertStringContainsString('Top Performer', $html);
@@ -104,7 +109,7 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
             ],
             'categories' => [],
             'campaigns' => [
-                ['name' => 'Checkin RFID', 'total' => 80, 'pct' => 100, 'icon' => 'majesticons:mail', 'barClass' => 'bg-orange', 'textClass' => 'text-orange'],
+                ['name' => 'Checkin RFID', 'total' => 80, 'pct' => 100, 'conversion_label' => 'baseline', 'icon' => 'majesticons:mail', 'barClass' => 'bg-orange', 'textClass' => 'text-orange'],
             ],
             'overview' => ['confirmed' => 10, 'dismissed' => 8, 'pending' => 5, 'rate' => 50.0],
             'weeklyStatus' => ['confirmed' => [1], 'pending' => [2], 'dismissed' => [3], 'labels' => ['Mon'], 'totals' => ['confirmed' => 1, 'pending' => 2, 'dismissed' => 3]],
