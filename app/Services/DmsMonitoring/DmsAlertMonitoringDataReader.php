@@ -763,6 +763,472 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
+     * Total alert per site (drill-down KPI level sites).
+     *
+     * @return list<array{site:string, value:int}>
+     */
+    public function alertCountBySite(string $start, string $end, int $limit = 200): array
+    {
+        return $this->remember('kpi.alert_by_site.'.$limit, $start, $end, function () use ($start, $end, $limit): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $sql = "
+                SELECT
+                    COALESCE(NULLIF(TRIM(site::text), ''), '-') AS site,
+                    count(*) AS value
+                FROM bcsid.mv_dms_alert
+                WHERE {$this->alertDateWhere()}
+                GROUP BY 1
+                ORDER BY value DESC
+                LIMIT ?
+            ";
+
+            try {
+                $rows = DB::connection($connection)->select($sql, array_merge($this->alertDateBindings($start, $end), [$limit]));
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            return array_map(static fn ($r): array => [
+                'site' => (string) $r->site,
+                'value' => (int) $r->value,
+            ], $rows);
+        });
+    }
+
+    /**
+     * Total alert per perusahaan dalam satu site (drill-down level companies).
+     *
+     * @return list<array{perusahaan:string, value:int}>
+     */
+    public function alertCountBySiteAndCompany(string $start, string $end, string $site, int $limit = 200): array
+    {
+        $siteKey = md5($site);
+
+        return $this->remember('kpi.alert_by_company.'.$siteKey.'.'.$limit, $start, $end, function () use ($start, $end, $site, $limit): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $sql = "
+                SELECT
+                    COALESCE(NULLIF(TRIM(perusahaan::text), ''), '-') AS perusahaan,
+                    count(*) AS value
+                FROM bcsid.mv_dms_alert
+                WHERE {$this->alertDateWhere()}
+                  AND TRIM(site::text) = ?
+                GROUP BY 1
+                ORDER BY value DESC
+                LIMIT ?
+            ";
+
+            try {
+                $rows = DB::connection($connection)->select(
+                    $sql,
+                    array_merge($this->alertDateBindings($start, $end), [$site, $limit]),
+                );
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            return array_map(static fn ($r): array => [
+                'perusahaan' => (string) $r->perusahaan,
+                'value' => (int) $r->value,
+            ], $rows);
+        });
+    }
+
+    /**
+     * Unit unik dengan aktivitas alert per site.
+     *
+     * @return list<array{site:string, value:int}>
+     */
+    public function distinctUnitsBySite(string $start, string $end, int $limit = 200): array
+    {
+        return $this->remember('kpi.units_by_site.'.$limit, $start, $end, function () use ($start, $end, $limit): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $sql = "
+                SELECT
+                    COALESCE(NULLIF(TRIM(site::text), ''), '-') AS site,
+                    count(DISTINCT NULLIF(TRIM(unit::text), '')) AS value
+                FROM bcsid.mv_dms_alert
+                WHERE {$this->alertDateWhere()}
+                  AND unit IS NOT NULL AND TRIM(unit::text) <> ''
+                GROUP BY 1
+                ORDER BY value DESC
+                LIMIT ?
+            ";
+
+            try {
+                $rows = DB::connection($connection)->select($sql, array_merge($this->alertDateBindings($start, $end), [$limit]));
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            return array_map(static fn ($r): array => [
+                'site' => (string) $r->site,
+                'value' => (int) $r->value,
+            ], $rows);
+        });
+    }
+
+    /**
+     * Unit unik dengan aktivitas alert per perusahaan dalam site.
+     *
+     * @return list<array{perusahaan:string, value:int}>
+     */
+    public function distinctUnitsBySiteAndCompany(string $start, string $end, string $site, int $limit = 200): array
+    {
+        $siteKey = md5($site);
+
+        return $this->remember('kpi.units_by_company.'.$siteKey.'.'.$limit, $start, $end, function () use ($start, $end, $site, $limit): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $sql = "
+                SELECT
+                    COALESCE(NULLIF(TRIM(perusahaan::text), ''), '-') AS perusahaan,
+                    count(DISTINCT NULLIF(TRIM(unit::text), '')) AS value
+                FROM bcsid.mv_dms_alert
+                WHERE {$this->alertDateWhere()}
+                  AND TRIM(site::text) = ?
+                  AND unit IS NOT NULL AND TRIM(unit::text) <> ''
+                GROUP BY 1
+                ORDER BY value DESC
+                LIMIT ?
+            ";
+
+            try {
+                $rows = DB::connection($connection)->select(
+                    $sql,
+                    array_merge($this->alertDateBindings($start, $end), [$site, $limit]),
+                );
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            return array_map(static fn ($r): array => [
+                'perusahaan' => (string) $r->perusahaan,
+                'value' => (int) $r->value,
+            ], $rows);
+        });
+    }
+
+    /**
+     * Total alert per operator (SID) — untuk rasio per orang.
+     *
+     * @return array<string, int> UPPER(kode_sid) => count
+     */
+    public function alertCountByOperatorSid(string $start, string $end, ?string $site = null, ?string $perusahaan = null): array
+    {
+        if (! $this->isUp()) {
+            return [];
+        }
+
+        $extra = ($site ?? '').'|'.($perusahaan ?? '');
+        $cacheKey = 'dms_monitoring:kpi.alert_by_sid:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix().'|'.$extra);
+
+        /** @var array<string, int> */
+        return Cache::remember($cacheKey, 1800, function () use ($start, $end, $site, $perusahaan): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $extraWhere = '';
+            $extraBindings = [];
+            if ($site !== null && $site !== '') {
+                $extraWhere .= ' AND TRIM(site::text) = ?';
+                $extraBindings[] = $site;
+            }
+            if ($perusahaan !== null && $perusahaan !== '') {
+                $extraWhere .= ' AND TRIM(perusahaan::text) = ?';
+                $extraBindings[] = $perusahaan;
+            }
+
+            $sql = "
+                SELECT UPPER(TRIM(kode_sid)) AS sid, count(*) AS total
+                FROM bcsid.mv_dms_alert
+                WHERE {$this->alertDateWhere()}
+                  AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
+                  {$extraWhere}
+                GROUP BY 1
+            ";
+
+            try {
+                $rows = DB::connection($connection)->select(
+                    $sql,
+                    array_merge($this->alertDateBindings($start, $end), $extraBindings),
+                );
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            }
+
+            $map = [];
+            foreach ($rows as $row) {
+                $map[(string) $row->sid] = (int) ($row->total ?? 0);
+            }
+
+            return $map;
+        });
+    }
+
+    /**
+     * Daftar alert paginated untuk drill-down level rows.
+     *
+     * @return array{total:int, rows:list<array{id_alert:string, kode_sid:string, nama:string, nama_pelanggaran:string, unit:string, site:string, perusahaan:string, waktu_deteksi:string|null, status_label:string}>}
+     */
+    public function alertDetailRows(
+        string $start,
+        string $end,
+        ?string $site,
+        ?string $perusahaan,
+        int $page,
+        int $perPage,
+    ): array {
+        $empty = ['total' => 0, 'rows' => []];
+        if (! $this->isUp()) {
+            return $empty;
+        }
+
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return $empty;
+        }
+
+        $extraWhere = '';
+        $extraBindings = [];
+        if ($site !== null && $site !== '') {
+            $extraWhere .= ' AND TRIM(site::text) = ?';
+            $extraBindings[] = $site;
+        }
+        if ($perusahaan !== null && $perusahaan !== '') {
+            $extraWhere .= ' AND TRIM(perusahaan::text) = ?';
+            $extraBindings[] = $perusahaan;
+        }
+
+        $baseBindings = array_merge($this->alertDateBindings($start, $end), $extraBindings);
+        $offset = max(0, ($page - 1) * $perPage);
+
+        $countSql = "
+            SELECT count(*) AS total FROM bcsid.mv_dms_alert
+            WHERE {$this->alertDateWhere()} {$extraWhere}
+        ";
+
+        $dataSql = "
+            SELECT
+                id_alert,
+                UPPER(TRIM(kode_sid)) AS kode_sid,
+                COALESCE(NULLIF(TRIM(nama_driver_dms::text), ''), '-') AS nama,
+                COALESCE(NULLIF(TRIM(nama_pelanggaran::text), ''), '-') AS nama_pelanggaran,
+                COALESCE(NULLIF(TRIM(unit::text), ''), '-') AS unit,
+                COALESCE(NULLIF(TRIM(site::text), ''), '-') AS site,
+                COALESCE(NULLIF(TRIM(perusahaan::text), ''), '-') AS perusahaan,
+                waktu_deteksi,
+                sudah_direview_l1,
+                l1_context_status
+            FROM bcsid.mv_dms_alert
+            WHERE {$this->alertDateWhere()} {$extraWhere}
+            ORDER BY waktu_deteksi DESC
+            LIMIT ? OFFSET ?
+        ";
+
+        try {
+            $countRow = DB::connection($connection)->selectOne($countSql, $baseBindings);
+            $rows = DB::connection($connection)->select($dataSql, array_merge($baseBindings, [$perPage, $offset]));
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        }
+
+        return [
+            'total' => (int) ($countRow->total ?? 0),
+            'rows' => array_map(static function ($r): array {
+                $reviewed = filter_var($r->sudah_direview_l1 ?? false, FILTER_VALIDATE_BOOLEAN);
+                $confirmed = $r->l1_context_status;
+                $statusLabel = ! $reviewed ? 'Belum L1' : (filter_var($confirmed, FILTER_VALIDATE_BOOLEAN) ? 'Confirmed' : 'Dismissed');
+                $waktu = $r->waktu_deteksi;
+                if ($waktu instanceof \DateTimeInterface) {
+                    $waktu = $waktu->format('Y-m-d H:i:s');
+                }
+
+                return [
+                    'id_alert' => (string) $r->id_alert,
+                    'kode_sid' => (string) ($r->kode_sid ?? '-'),
+                    'nama' => (string) $r->nama,
+                    'nama_pelanggaran' => (string) $r->nama_pelanggaran,
+                    'unit' => (string) $r->unit,
+                    'site' => (string) $r->site,
+                    'perusahaan' => (string) $r->perusahaan,
+                    'waktu_deteksi' => $waktu !== null && $waktu !== '' ? (string) $waktu : null,
+                    'status_label' => $statusLabel,
+                ];
+            }, $rows),
+        ];
+    }
+
+    /**
+     * Daftar unit dengan total alert — drill-down level rows.
+     *
+     * @return array{total:int, rows:list<array{unit:string, site:string, perusahaan:string, value:int}>}
+     */
+    public function unitDetailRows(
+        string $start,
+        string $end,
+        ?string $site,
+        ?string $perusahaan,
+        int $page,
+        int $perPage,
+    ): array {
+        $empty = ['total' => 0, 'rows' => []];
+        if (! $this->isUp()) {
+            return $empty;
+        }
+
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return $empty;
+        }
+
+        $extraWhere = ' AND unit IS NOT NULL AND TRIM(unit::text) <> \'\'';
+        $extraBindings = [];
+        if ($site !== null && $site !== '') {
+            $extraWhere .= ' AND TRIM(site::text) = ?';
+            $extraBindings[] = $site;
+        }
+        if ($perusahaan !== null && $perusahaan !== '') {
+            $extraWhere .= ' AND TRIM(perusahaan::text) = ?';
+            $extraBindings[] = $perusahaan;
+        }
+
+        $baseBindings = array_merge($this->alertDateBindings($start, $end), $extraBindings);
+        $offset = max(0, ($page - 1) * $perPage);
+
+        $countSql = "
+            SELECT count(*) AS total FROM (
+                SELECT 1 FROM bcsid.mv_dms_alert
+                WHERE {$this->alertDateWhere()} {$extraWhere}
+                GROUP BY TRIM(unit::text), TRIM(site::text), TRIM(perusahaan::text)
+            ) AS grouped
+        ";
+
+        $dataSql = "
+            SELECT
+                COALESCE(NULLIF(TRIM(unit::text), ''), '-') AS unit,
+                COALESCE(NULLIF(TRIM(site::text), ''), '-') AS site,
+                COALESCE(NULLIF(TRIM(perusahaan::text), ''), '-') AS perusahaan,
+                count(*) AS value
+            FROM bcsid.mv_dms_alert
+            WHERE {$this->alertDateWhere()} {$extraWhere}
+            GROUP BY 1, 2, 3
+            ORDER BY value DESC
+            LIMIT ? OFFSET ?
+        ";
+
+        try {
+            $countRow = DB::connection($connection)->selectOne($countSql, $baseBindings);
+            $rows = DB::connection($connection)->select($dataSql, array_merge($baseBindings, [$perPage, $offset]));
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        }
+
+        return [
+            'total' => (int) ($countRow->total ?? 0),
+            'rows' => array_map(static fn ($r): array => [
+                'unit' => (string) $r->unit,
+                'site' => (string) $r->site,
+                'perusahaan' => (string) $r->perusahaan,
+                'value' => (int) $r->value,
+            ], $rows),
+        ];
+    }
+
+    /**
+     * Jumlah alert per site untuk perhitungan rasio (pasangan dengan check-in per site).
+     *
+     * @return array<string, int> site => count
+     */
+    public function alertCountMapBySite(string $start, string $end): array
+    {
+        $rows = $this->alertCountBySite($start, $end, 500);
+        $map = [];
+        foreach ($rows as $row) {
+            $map[$row['site']] = $row['value'];
+        }
+
+        return $map;
+    }
+
+    /**
+     * Jumlah alert per site+perusahaan dalam satu site.
+     *
+     * @return array<string, int> perusahaan => count
+     */
+    public function alertCountMapByCompanyInSite(string $start, string $end, string $site): array
+    {
+        $rows = $this->alertCountBySiteAndCompany($start, $end, $site, 500);
+        $map = [];
+        foreach ($rows as $row) {
+            $map[$row['perusahaan']] = $row['value'];
+        }
+
+        return $map;
+    }
+
+    /**
+     * Jumlah unit unik per site (map).
+     *
+     * @return array<string, int>
+     */
+    public function unitCountMapBySite(string $start, string $end): array
+    {
+        $rows = $this->distinctUnitsBySite($start, $end, 500);
+        $map = [];
+        foreach ($rows as $row) {
+            $map[$row['site']] = $row['value'];
+        }
+
+        return $map;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public function unitCountMapByCompanyInSite(string $start, string $end, string $site): array
+    {
+        $rows = $this->distinctUnitsBySiteAndCompany($start, $end, $site, 500);
+        $map = [];
+        foreach ($rows as $row) {
+            $map[$row['perusahaan']] = $row['value'];
+        }
+
+        return $map;
+    }
+
+    /**
      * Jumlah alert dismissed L1 dalam window — dipakai sebagai populasi (N) rumus Slovin.
      */
     public function dismissedL1Count(string $start, string $end): int

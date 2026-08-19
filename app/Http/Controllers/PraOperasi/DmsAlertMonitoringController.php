@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Http\Controllers\PraOperasi;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\DmsMonitoring\DmsMonitoringKpiDetailRequest;
 use App\Services\Dms\DmsDashboardOverviewService;
 use App\Services\DmsMonitoring\DmsAlertMonitoringService;
+use App\Services\DmsMonitoring\DmsMonitoringKpiDetailService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -20,6 +22,7 @@ final class DmsAlertMonitoringController extends Controller
     public function __construct(
         private readonly DmsAlertMonitoringService $service,
         private readonly DmsDashboardOverviewService $overview,
+        private readonly DmsMonitoringKpiDetailService $kpiDetail,
     ) {}
 
     public function index(Request $request): View
@@ -34,6 +37,22 @@ final class DmsAlertMonitoringController extends Controller
         );
 
         return view('pra-operasi.dms-alert-monitoring', $this->mergeCrmPayload($crm, $monitoring));
+    }
+
+    public function kpiDetail(DmsMonitoringKpiDetailRequest $request): JsonResponse
+    {
+        $payload = $this->kpiDetail->detail(
+            $request->metricKey(),
+            $request->filters(),
+            $request->level(),
+            $request->parentSite(),
+            $request->parentCompany(),
+            $request->page(),
+        );
+
+        $status = ($payload['ok'] ?? false) ? 200 : 422;
+
+        return response()->json($payload, $status);
     }
 
     /**

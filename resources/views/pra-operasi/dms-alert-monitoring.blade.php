@@ -3,11 +3,13 @@
 @section('title', 'Dashboard')
 
 @php
+    $kpiMetrics = ['operator_checkin', 'total_alert', 'ratio_per_person', 'units_operating', 'total_alert', 'ratio_per_unit'];
     $kpis = $kpis ?? [];
     foreach ($kpis as $i => $kpi) {
         if (! is_array($kpi)) {
             continue;
         }
+        $kpis[$i]['metric'] = $kpi['metric'] ?? ($kpiMetrics[$i] ?? 'total_alert');
         $kpis[$i]['delta'] = $kpi['delta'] ?? ['class' => 'bg-success-focus text-success-main', 'text' => '+0'];
         $kpis[$i]['chart'] = $kpi['chart'] ?? 'kpi-chart-'.$i;
         $kpis[$i]['color'] = $kpi['color'] ?? '#487fff';
@@ -134,7 +136,14 @@
     <div class="row gy-4">
       @foreach($kpis as $kpi)
       <div class="col-xxl-4 col-sm-6">
-        <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 {{ $kpi['gradient'] }}">
+        <div
+          class="card p-3 shadow-2 radius-8 border input-form-light h-100 {{ $kpi['gradient'] }} dms-kpi-card cursor-pointer"
+          role="button"
+          tabindex="0"
+          data-kpi-metric="{{ $kpi['metric'] ?? 'total_alert' }}"
+          data-kpi-label="{{ $kpi['label'] ?? 'KPI' }}"
+          aria-label="Lihat detail {{ $kpi['label'] ?? 'KPI' }}"
+        >
           <div class="card-body p-0">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
               <div class="d-flex align-items-center gap-2">
@@ -452,6 +461,8 @@
     </div>
   </div>
 </div>
+
+@include('pra-operasi.partials._dms-kpi-detail-modal')
 @endsection
 
 @section('scripts')
@@ -649,6 +660,230 @@
       hoverColor: '#fff'
     });
   }
+
+  var dmsKpiFilters = @json($filters);
+  var dmsKpiDetailUrl = @json(route('pra-operasi.dms-monitoring.kpi-detail', ['metric' => '__METRIC__']));
+  var dmsKpiModalEl = document.getElementById('dmsKpiDetailModal');
+  var dmsKpiModal = dmsKpiModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(dmsKpiModalEl) : null;
+  var dmsKpiState = { metric: '', level: 'sites', parentSite: '', parentCompany: '', page: 1 };
+
+  function dmsKpiDetailEndpoint(metric) {
+    return dmsKpiDetailUrl.replace('__METRIC__', encodeURIComponent(metric));
+  }
+
+  function dmsKpiSetLoading(show) {
+    var loading = document.getElementById('dms-kpi-detail-loading');
+    if (loading) loading.classList.toggle('d-none', !show);
+    if (loading) loading.classList.toggle('d-flex', show);
+  }
+
+  function dmsKpiRenderBreadcrumb(crumbs) {
+    var ol = document.querySelector('#dms-kpi-detail-breadcrumb ol');
+    if (!ol) return;
+    ol.innerHTML = '';
+    (crumbs || []).forEach(function (crumb, idx) {
+      var li = document.createElement('li');
+      li.className = 'breadcrumb-item' + (idx === crumbs.length - 1 ? ' active' : '');
+      if (idx === crumbs.length - 1) {
+        li.textContent = crumb.label;
+        li.setAttribute('aria-current', 'page');
+      } else {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-link btn-sm p-0 text-decoration-none';
+        btn.textContent = crumb.label;
+        btn.addEventListener('click', function () {
+          dmsKpiState.level = crumb.level || 'sites';
+          dmsKpiState.parentSite = crumb.parent_site || '';
+          dmsKpiState.parentCompany = crumb.parent_company || '';
+          dmsKpiState.page = 1;
+          dmsKpiLoadDetail();
+        });
+        li.appendChild(btn);
+      }
+      ol.appendChild(li);
+    });
+  }
+
+  function dmsKpiRenderSummary(summary, metric) {
+    var wrap = document.getElementById('dms-kpi-detail-summary');
+    var footnote = document.getElementById('dms-kpi-detail-footnote');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!summary || !summary.length) {
+      wrap.classList.add('d-none');
+      if (footnote) footnote.classList.add('d-none');
+      return;
+    }
+    wrap.classList.remove('d-none');
+    if (footnote) footnote.classList.toggle('d-none', metric !== 'units_operating');
+    summary.forEach(function (item) {
+      var col = document.createElement('div');
+      col.className = 'col-md-4';
+      col.innerHTML = '<div class="border radius-8 p-16 h-100"><div class="text-sm text-secondary-light mb-4">' + item.label + '</div><div class="fw-bold text-lg">' + item.value + '</div><div class="text-xs text-secondary-light mt-4">' + (item.hint || '') + '</div></div>';
+      wrap.appendChild(col);
+    });
+  }
+
+  function dmsKpiMetaText(meta) {
+    if (!meta) return '';
+    var parts = [];
+    if (meta.alert_count != null) parts.push('Alert: ' + meta.alert_count);
+    if (meta.checkin_count != null) parts.push('Check-in: ' + meta.checkin_count);
+    if (meta.unit_count != null) parts.push('Unit: ' + meta.unit_count);
+    return parts.join(' · ');
+  }
+
+  function dmsKpiRenderTable(payload) {
+    var head = document.getElementById('dms-kpi-detail-head');
+    var body = document.getElementById('dms-kpi-detail-body');
+    var empty = document.getElementById('dms-kpi-detail-empty');
+    if (!head || !body) return;
+
+    head.innerHTML = '';
+    body.innerHTML = '';
+    (payload.columns || []).forEach(function (col) {
+      var th = document.createElement('th');
+      th.scope = 'col';
+      th.textContent = col.label;
+      head.appendChild(th);
+    });
+
+    var rows = payload.rows || [];
+    if (!rows.length) {
+      if (empty) empty.classList.remove('d-none');
+      return;
+    }
+    if (empty) empty.classList.add('d-none');
+
+    rows.forEach(function (row) {
+      var tr = document.createElement('tr');
+      if (payload.drillable && row.drill) {
+        tr.className = 'cursor-pointer';
+        tr.addEventListener('click', function () {
+          dmsKpiState.level = row.drill.level;
+          dmsKpiState.parentSite = row.drill.parent_site || '';
+          dmsKpiState.parentCompany = row.drill.parent_company || '';
+          dmsKpiState.page = 1;
+          dmsKpiLoadDetail();
+        });
+      }
+
+      if (payload.level === 'sites' || payload.level === 'companies') {
+        var tdLabel = document.createElement('td');
+        tdLabel.innerHTML = '<div class="fw-medium">' + (row.label || '-') + '</div><div class="text-xs text-secondary-light">' + dmsKpiMetaText(row.meta) + '</div>';
+        tr.appendChild(tdLabel);
+        var tdValue = document.createElement('td');
+        tdValue.className = 'text-end fw-semibold';
+        tdValue.textContent = row.value != null ? row.value : '-';
+        tr.appendChild(tdValue);
+      } else {
+        (payload.columns || []).forEach(function (col) {
+          var td = document.createElement('td');
+          td.textContent = row[col.key] != null ? row[col.key] : '-';
+          tr.appendChild(td);
+        });
+      }
+
+      body.appendChild(tr);
+    });
+  }
+
+  function dmsKpiRenderPagination(pagination) {
+    var wrap = document.getElementById('dms-kpi-detail-pagination');
+    var info = document.getElementById('dms-kpi-detail-page-info');
+    var prev = document.getElementById('dms-kpi-detail-prev');
+    var next = document.getElementById('dms-kpi-detail-next');
+    if (!wrap) return;
+
+    if (!pagination) {
+      wrap.classList.add('d-none');
+      return;
+    }
+
+    wrap.classList.remove('d-none');
+    if (info) info.textContent = 'Halaman ' + pagination.page + ' / ' + pagination.total_pages + ' (' + pagination.total_rows + ' baris)';
+    if (prev) prev.disabled = pagination.page <= 1;
+    if (next) next.disabled = pagination.page >= pagination.total_pages;
+  }
+
+  function dmsKpiLoadDetail() {
+    if (!dmsKpiState.metric) return;
+    dmsKpiSetLoading(true);
+    document.getElementById('dms-kpi-detail-error').classList.add('d-none');
+
+    var params = new URLSearchParams({
+      start: dmsKpiFilters.start || '',
+      end: dmsKpiFilters.end || '',
+      site: dmsKpiFilters.site || '',
+      perusahaan: dmsKpiFilters.perusahaan || '',
+      level: dmsKpiState.level,
+      page: String(dmsKpiState.page)
+    });
+    if (dmsKpiState.parentSite) params.set('parent_site', dmsKpiState.parentSite);
+    if (dmsKpiState.parentCompany) params.set('parent_company', dmsKpiState.parentCompany);
+
+    fetch(dmsKpiDetailEndpoint(dmsKpiState.metric) + '?' + params.toString(), {
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (result) {
+        dmsKpiSetLoading(false);
+        if (!result.data.ok) {
+          document.getElementById('dms-kpi-detail-error').classList.remove('d-none');
+          document.getElementById('dms-kpi-detail-error-message').textContent = result.data.message || 'Gagal memuat detail.';
+          return;
+        }
+        var payload = result.data;
+        document.getElementById('dmsKpiDetailModalLabel').textContent = payload.label || 'Detail KPI';
+        document.getElementById('dms-kpi-detail-subtitle').textContent = (dmsKpiFilters.start || '') + ' s/d ' + (dmsKpiFilters.end || '');
+        document.getElementById('dms-kpi-detail-total').textContent = payload.total || '0';
+        document.getElementById('dms-kpi-detail-hint').textContent = payload.level === 'rows'
+          ? 'Klik baris site/perusahaan di level atas untuk drill-down.'
+          : (payload.drillable ? 'Klik baris untuk lihat breakdown berikutnya.' : '');
+        dmsKpiRenderBreadcrumb(payload.breadcrumb || []);
+        dmsKpiRenderSummary(payload.summary || [], payload.metric || '');
+        dmsKpiRenderTable(payload);
+        dmsKpiRenderPagination(payload.pagination || null);
+      })
+      .catch(function () {
+        dmsKpiSetLoading(false);
+        document.getElementById('dms-kpi-detail-error').classList.remove('d-none');
+        document.getElementById('dms-kpi-detail-error-message').textContent = 'Gagal memuat detail KPI.';
+      });
+  }
+
+  function dmsKpiOpenDetail(metric, label) {
+    dmsKpiState.metric = metric;
+    dmsKpiState.level = 'sites';
+    dmsKpiState.parentSite = '';
+    dmsKpiState.parentCompany = '';
+    dmsKpiState.page = 1;
+    document.getElementById('dmsKpiDetailModalLabel').textContent = label || 'Detail KPI';
+    if (dmsKpiModal) dmsKpiModal.show();
+    dmsKpiLoadDetail();
+  }
+
+  document.querySelectorAll('.dms-kpi-card').forEach(function (card) {
+    card.addEventListener('click', function () {
+      dmsKpiOpenDetail(card.getAttribute('data-kpi-metric'), card.getAttribute('data-kpi-label'));
+    });
+    card.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        dmsKpiOpenDetail(card.getAttribute('data-kpi-metric'), card.getAttribute('data-kpi-label'));
+      }
+    });
+  });
+
+  var prevBtn = document.getElementById('dms-kpi-detail-prev');
+  var nextBtn = document.getElementById('dms-kpi-detail-next');
+  if (prevBtn) prevBtn.addEventListener('click', function () {
+    if (dmsKpiState.page > 1) { dmsKpiState.page--; dmsKpiLoadDetail(); }
+  });
+  if (nextBtn) nextBtn.addEventListener('click', function () {
+    dmsKpiState.page++; dmsKpiLoadDetail();
+  });
 })();
 </script>
 @endsection
