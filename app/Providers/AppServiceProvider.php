@@ -2,11 +2,14 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\View;
-use Illuminate\Support\Facades\URL; // ⬅️ Tambahkan ini di bagian atas
+use App\Database\Connectors\DwhRedshiftConnector;
 use App\Models\CctvData;
+use Illuminate\Database\Connection;
+use Illuminate\Database\PostgresConnection;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\View;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -21,6 +24,11 @@ class AppServiceProvider extends ServiceProvider
             \App\Services\Dms\DmsDashboardDataSource::class,
             \App\Services\DmsMonitoring\DmsAlertMonitoringDataReader::class
         );
+
+        $this->app->bind('db.connector.redshift', DwhRedshiftConnector::class);
+        Connection::resolverFor('redshift', function ($connection, $database, $prefix, $config) {
+            return new PostgresConnection($connection, $database, $prefix, $config);
+        });
     }
 
     /**
@@ -29,6 +37,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->ensureOpenSslCaBundle();
+
+        // libpq (PHP 8+) mencoba GSSAPI dulu; Redshift tidak support → timeout.
+        putenv('PGGSSENCMODE=disable');
 
         // 🔑 Force HTTPS for asset URLs in production
         if ($this->app->environment('production')) {

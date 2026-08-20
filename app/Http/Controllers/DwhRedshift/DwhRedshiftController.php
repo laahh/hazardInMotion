@@ -29,14 +29,19 @@ final class DwhRedshiftController extends Controller
         $ping = $this->dwhRedshiftQueryService->ping();
 
         if (! $ping['connected']) {
+            $hint = $ping['tcp_reachable']
+                ? 'Port 5439 reachable (PrivateLink/VPN), tapi handshake Postgres timeout. GSSAPI sudah dimatikan dan timeout 30 detik. Refresh halaman. Jika masih timeout, pastikan VPN/Cloudflare WARP ke VPC endpoint tetap aktif.'
+                : 'TCP ke host:port gagal. Cluster ini PrivateLink (bukan publik). Aktifkan VPN/WARP yang sama saat Test-NetConnection ke 5439 berhasil.';
+
             return response()->json([
                 'connected' => false,
+                'tcp_reachable' => $ping['tcp_reachable'],
                 'host' => config('database.connections.redshift.host'),
                 'port' => (int) config('database.connections.redshift.port'),
                 'database' => config('database.connections.redshift.database'),
                 'username' => config('database.connections.redshift.username'),
                 'error' => $ping['error'],
-                'hint' => 'Jika gagal karena database tidak ditemukan, set REDSHIFT_DATABASE di .env lalu php artisan config:clear.',
+                'hint' => $hint,
             ], 503);
         }
 

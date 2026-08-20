@@ -23,10 +23,12 @@ final class DwhRedshiftQueryService
     public const MAX_PREVIEW_LIMIT = 100;
 
     /**
-     * @return array{connected: bool, database: string|null, username: string|null, version: string|null, error: string|null}
+     * @return array{connected: bool, tcp_reachable: bool, database: string|null, username: string|null, version: string|null, error: string|null}
      */
     public function ping(): array
     {
+        $tcpReachable = $this->isTcpReachable();
+
         try {
             $row = DB::connection(self::CONNECTION)->selectOne(
                 'SELECT current_database() AS database, current_user AS username, version() AS version'
@@ -34,6 +36,7 @@ final class DwhRedshiftQueryService
 
             return [
                 'connected' => true,
+                'tcp_reachable' => $tcpReachable,
                 'database' => $row->database ?? null,
                 'username' => $row->username ?? null,
                 'version' => $row->version ?? null,
@@ -44,12 +47,31 @@ final class DwhRedshiftQueryService
 
             return [
                 'connected' => false,
+                'tcp_reachable' => $tcpReachable,
                 'database' => null,
                 'username' => null,
                 'version' => null,
                 'error' => $e->getMessage(),
             ];
         }
+    }
+
+    public function isTcpReachable(): bool
+    {
+        $host = (string) config('database.connections.'.self::CONNECTION.'.host', '');
+        $port = (int) config('database.connections.'.self::CONNECTION.'.port', 5439);
+        if ($host === '' || $port < 1) {
+            return false;
+        }
+
+        $connection = @fsockopen($host, $port, $errno, $errstr, 3);
+        if (is_resource($connection)) {
+            fclose($connection);
+
+            return true;
+        }
+
+        return false;
     }
 
     /**
