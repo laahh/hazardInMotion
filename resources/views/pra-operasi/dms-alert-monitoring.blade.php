@@ -611,11 +611,13 @@
   var dmsOverallState = { page: 1, status: 'with_alert' };
   var dmsOverallControlChart = null;
   var dmsOverallTopUnitsChart = null;
+  var dmsOverallDailyBarChart = null;
   var dmsOverallPeopleModalEl = document.getElementById('dmsOverallPeopleModal');
   var dmsOverallPeopleModal = dmsOverallPeopleModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(dmsOverallPeopleModalEl) : null;
   var dmsOverallPeopleState = { page: 1, status: 'with_alert' };
   var dmsOverallPeopleControlChart = null;
   var dmsOverallPeopleTopChart = null;
+  var dmsOverallPeopleDailyBarChart = null;
 
   function dmsOverallSetLoading(show) {
     var loading = document.getElementById('dms-overall-loading');
@@ -626,6 +628,7 @@
   function dmsOverallDestroyCharts() {
     if (dmsOverallControlChart) { dmsOverallControlChart.destroy(); dmsOverallControlChart = null; }
     if (dmsOverallTopUnitsChart) { dmsOverallTopUnitsChart.destroy(); dmsOverallTopUnitsChart = null; }
+    if (dmsOverallDailyBarChart) { dmsOverallDailyBarChart.destroy(); dmsOverallDailyBarChart = null; }
   }
 
   function dmsOverallRenderSummary(cards) {
@@ -679,7 +682,7 @@
     var legend = document.getElementById('dms-overall-control-legend');
     if (!el || typeof ApexCharts === 'undefined') return;
 
-    dmsOverallDestroyCharts();
+    if (dmsOverallControlChart) { dmsOverallControlChart.destroy(); dmsOverallControlChart = null; }
 
     if (legend) {
       legend.innerHTML =
@@ -720,6 +723,7 @@
       return;
     }
     el.innerHTML = '';
+    if (dmsOverallTopUnitsChart) { dmsOverallTopUnitsChart.destroy(); dmsOverallTopUnitsChart = null; }
     dmsOverallTopUnitsChart = new ApexCharts(el, {
       series: chartData.series,
       chart: { type: 'line', height: 280, toolbar: { show: false }, zoom: { enabled: false } },
@@ -730,6 +734,44 @@
       tooltip: { shared: true },
     });
     dmsOverallTopUnitsChart.render();
+  }
+
+  function dmsRenderDailyBarChart(el, chartRefName, chartData, color) {
+    if (!el || typeof ApexCharts === 'undefined') return null;
+    el.innerHTML = '';
+    if (!chartData || !chartData.series || !chartData.series.length) {
+      el.innerHTML = '<p class="text-sm text-secondary-light mb-0">Tidak ada data harian pada periode ini.</p>';
+      return null;
+    }
+    var chart = new ApexCharts(el, {
+      series: [{ name: chartData.name || 'Total', data: chartData.series }],
+      chart: { type: 'bar', height: 280, toolbar: { show: false }, zoom: { enabled: false } },
+      colors: [color || '#487fff'],
+      plotOptions: { bar: { borderRadius: 6, columnWidth: '55%', dataLabels: { position: 'top' } } },
+      dataLabels: {
+        enabled: true,
+        offsetY: -16,
+        style: { fontSize: '11px', colors: ['#6B7280'] },
+        formatter: function (v) { return Number(v || 0).toLocaleString('id-ID'); }
+      },
+      xaxis: { categories: chartData.labels || [], labels: { rotate: -45, style: { fontSize: '10px' } } },
+      yaxis: { labels: { formatter: function (v) { return Math.round(v); } } },
+      tooltip: {
+        y: { formatter: function (v) { return Number(v || 0).toLocaleString('id-ID'); } }
+      }
+    });
+    chart.render();
+    return chart;
+  }
+
+  function dmsOverallRenderDailyBar(chartData) {
+    var el = document.getElementById('dms-overall-daily-bar');
+    var totalEl = document.getElementById('dms-overall-daily-bar-total');
+    if (dmsOverallDailyBarChart) { dmsOverallDailyBarChart.destroy(); dmsOverallDailyBarChart = null; }
+    if (totalEl) {
+      totalEl.textContent = 'Total ' + Number((chartData && chartData.total) || 0).toLocaleString('id-ID') + ' unit-hari';
+    }
+    dmsOverallDailyBarChart = dmsRenderDailyBarChart(el, 'unit', chartData || {}, '#8252e9');
   }
 
   function dmsOverallRenderTable(table) {
@@ -916,6 +958,7 @@
           (payload.period && payload.period.end ? payload.period.end : '');
 
         dmsOverallRenderSummary(payload.summary || []);
+        dmsOverallRenderDailyBar(payload.daily_bar || {});
         dmsOverallRenderTopUnits(payload.top_units || []);
         dmsOverallRenderControlChart(payload.control_chart || {});
         dmsOverallRenderTopUnitsChart(payload.top_units_chart || {});
@@ -950,6 +993,7 @@
   function dmsOverallPeopleDestroyCharts() {
     if (dmsOverallPeopleControlChart) { dmsOverallPeopleControlChart.destroy(); dmsOverallPeopleControlChart = null; }
     if (dmsOverallPeopleTopChart) { dmsOverallPeopleTopChart.destroy(); dmsOverallPeopleTopChart = null; }
+    if (dmsOverallPeopleDailyBarChart) { dmsOverallPeopleDailyBarChart.destroy(); dmsOverallPeopleDailyBarChart = null; }
   }
 
   function dmsOverallPeopleRenderSummary(cards) {
@@ -1002,7 +1046,7 @@
     var el = document.getElementById('dms-overall-people-control-chart');
     var legend = document.getElementById('dms-overall-people-control-legend');
     if (!el || typeof ApexCharts === 'undefined') return;
-    dmsOverallPeopleDestroyCharts();
+    if (dmsOverallPeopleControlChart) { dmsOverallPeopleControlChart.destroy(); dmsOverallPeopleControlChart = null; }
     if (legend) {
       legend.innerHTML =
         '<span><span class="d-inline-block rounded-circle me-4" style="width:8px;height:8px;background:#487fff"></span> Alert harian</span>' +
@@ -1038,6 +1082,7 @@
       return;
     }
     el.innerHTML = '';
+    if (dmsOverallPeopleTopChart) { dmsOverallPeopleTopChart.destroy(); dmsOverallPeopleTopChart = null; }
     dmsOverallPeopleTopChart = new ApexCharts(el, {
       series: chartData.series,
       chart: { type: 'line', height: 280, toolbar: { show: false }, zoom: { enabled: false } },
@@ -1048,6 +1093,16 @@
       tooltip: { shared: true }
     });
     dmsOverallPeopleTopChart.render();
+  }
+
+  function dmsOverallPeopleRenderDailyBar(chartData) {
+    var el = document.getElementById('dms-overall-people-daily-bar');
+    var totalEl = document.getElementById('dms-overall-people-daily-bar-total');
+    if (dmsOverallPeopleDailyBarChart) { dmsOverallPeopleDailyBarChart.destroy(); dmsOverallPeopleDailyBarChart = null; }
+    if (totalEl) {
+      totalEl.textContent = 'Total ' + Number((chartData && chartData.total) || 0).toLocaleString('id-ID') + ' orang-hari';
+    }
+    dmsOverallPeopleDailyBarChart = dmsRenderDailyBarChart(el, 'people', chartData || {}, '#487fff');
   }
 
   function dmsOverallPeopleRenderTable(table) {
@@ -1197,6 +1252,7 @@
         document.getElementById('dmsOverallPeopleModalLabel').textContent = payload.label || 'Overview Orang & Alert';
         document.getElementById('dms-overall-people-subtitle').textContent = (payload.period && payload.period.start ? payload.period.start : '') + ' s/d ' + (payload.period && payload.period.end ? payload.period.end : '');
         dmsOverallPeopleRenderSummary(payload.summary || []);
+        dmsOverallPeopleRenderDailyBar(payload.daily_bar || {});
         dmsOverallPeopleRenderTop(payload.top_units || []);
         dmsOverallPeopleRenderControlChart(payload.control_chart || {});
         dmsOverallPeopleRenderTopChart(payload.top_units_chart || {});

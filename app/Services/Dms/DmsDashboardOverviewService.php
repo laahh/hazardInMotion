@@ -159,12 +159,8 @@ final class DmsDashboardOverviewService
         $operatorsYesterday = $deferGrowth
             ? 0
             : $this->reader->countOperatorCheckinsInRange($windows['yesterdayStart'], $windows['todayStart']);
-        $unitsToday = $deferGrowth
-            ? 0
-            : $this->reader->unitsOperatingInRange($windows['todayStart'], $windows['todayEnd']);
-        $unitsYesterday = $deferGrowth
-            ? 0
-            : $this->reader->unitsOperatingInRange($windows['yesterdayStart'], $windows['todayStart']);
+        $unitsToday = $this->reader->unitsOperatingInRange($windows['todayStart'], $windows['todayEnd']);
+        $unitsYesterday = $this->reader->unitsOperatingInRange($windows['yesterdayStart'], $windows['todayStart']);
         $unitsOnline = $deferGrowth ? 0 : $this->reader->unitsOperatingNow(30);
 
         $dailyRaw = $this->reader->dailyAlertSeries(
@@ -175,9 +171,10 @@ final class DmsDashboardOverviewService
         $weekDaily = array_slice($daily, -self::WEEK_DAYS);
         $sparkline = array_slice($daily, -self::SPARKLINE_DAYS);
 
-        $dailyUnitsRaw = $deferGrowth
-            ? []
-            : $this->reader->dailyOperatingUnitSeries($windows['chartStart'], $windows['todayEnd']);
+        $dailyUnitsRaw = $this->reader->dailyOperatingUnitSeries(
+            $deferGrowth ? $windows['todayStart'] : $windows['chartStart'],
+            $windows['todayEnd'],
+        );
         $dailyUnitsIndexed = [];
         foreach ($dailyUnitsRaw as $unitRow) {
             $dailyUnitsIndexed[(string) $unitRow['hari']] = (int) $unitRow['units'];

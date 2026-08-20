@@ -263,7 +263,7 @@ class DmsMonitoringKpiDetailService
 
         $summary = [
             ['label' => 'Unit bergerak (30 mnt)', 'value' => number_format($unitsMoving), 'hint' => 'dms_vehicle_statuses jika ada data; fallback dms_vehicle_status_alerts'],
-            ['label' => 'Unit bergerak (periode)', 'value' => number_format($unitsInPeriod), 'hint' => 'dms_vehicle_statuses jika ada data; fallback dms_vehicle_status_alerts'],
+            ['label' => 'Unit-hari beroperasi (periode)', 'value' => number_format($unitsInPeriod), 'hint' => 'unit unik per hari, dijumlah di range filter'],
             ['label' => 'Unit dengan alert', 'value' => number_format($alertUnitsTotal), 'hint' => 'Per site — mv_dms_alert'],
         ];
 

@@ -36,7 +36,7 @@ final class DmsMonitoringOverallModalService
             return $this->errorPayload('Koneksi ke hse_automation tidak tersedia.');
         }
 
-        $cacheKey = 'dms_monitoring:overall_unit.payload:'.md5(json_encode([
+        $cacheKey = 'dms_monitoring:overall_unit.payload.v2:'.md5(json_encode([
             $filters,
             $page,
             $status,
@@ -99,6 +99,15 @@ final class DmsMonitoringOverallModalService
         $start = Carbon::parse($filters['start'], $tz)->startOfDay()->format('Y-m-d H:i:s');
         $end = Carbon::parse($filters['end'], $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
 
+        $dailyBar = $this->buildDailyBarChart(
+            $start,
+            $end,
+            $tz,
+            $this->reader->dailyOperatingUnitSeries($start, $end),
+            'units',
+            'Unit beroperasi',
+        );
+
         $summary = $this->reader->overallOperatingUnitsSummary($start, $end);
         $table = $this->reader->overallOperatingUnitsTable($start, $end, $page, self::PER_PAGE, $status);
         $controlChart = $this->buildControlChart($start, $end, $tz);
@@ -123,7 +132,7 @@ final class DmsMonitoringOverallModalService
                     'key' => 'units_operating',
                     'label' => 'Unit Beroperasi',
                     'value' => number_format((int) ($summary['units_operating'] ?? 0)),
-                    'hint' => 'Unit unik online/bergerak dalam periode',
+                    'hint' => 'Unit unik di tabel; batang harian = unit-hari',
                     'icon' => 'solar:wheel-bold',
                     'color' => '#8252e9',
                 ],
@@ -155,6 +164,7 @@ final class DmsMonitoringOverallModalService
             'top_units' => $summary['top_units'] ?? [],
             'control_chart' => $controlChart,
             'top_units_chart' => $topUnitsChart,
+            'daily_bar' => $dailyBar,
             'table' => [
                 'columns' => [
                     ['key' => 'unit', 'label' => 'Unit'],
@@ -276,6 +286,42 @@ final class DmsMonitoringOverallModalService
         }
 
         return $out;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{labels:list<string>, series:list<int>, total:int, name:string}
+     */
+    private function buildDailyBarChart(
+        string $start,
+        string $end,
+        string $tz,
+        array $rows,
+        string $valueKey,
+        string $name,
+    ): array {
+        $indexed = [];
+        foreach ($rows as $row) {
+            $indexed[(string) ($row['hari'] ?? '')] = (int) ($row[$valueKey] ?? 0);
+        }
+
+        $labels = [];
+        $values = [];
+        $cursor = Carbon::parse($start, $tz)->startOfDay();
+        $until = Carbon::parse($end, $tz)->startOfDay();
+        while ($cursor->lt($until)) {
+            $key = $cursor->toDateString();
+            $labels[] = $cursor->isoFormat('D MMM');
+            $values[] = (int) ($indexed[$key] ?? 0);
+            $cursor->addDay();
+        }
+
+        return [
+            'labels' => $labels,
+            'series' => $values,
+            'total' => array_sum($values),
+            'name' => $name,
+        ];
     }
 
     /**

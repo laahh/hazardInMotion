@@ -38,7 +38,7 @@ final class DmsAlertMonitoringPageService
      */
     public function cachedPayload(array $filters): array
     {
-        $cacheKey = 'dms_dashboard_page:v9:'.md5(json_encode($filters));
+        $cacheKey = 'dms_dashboard_page:v13:'.md5(json_encode($filters));
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && ($cached['up'] ?? false) === true) {
             return $cached;

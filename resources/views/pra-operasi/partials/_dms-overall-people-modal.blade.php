@@ -27,6 +27,19 @@
         <div id="dms-overall-people-content" class="d-none">
           <div id="dms-overall-people-summary" class="row g-3 mb-24"></div>
 
+          <div class="card border radius-8 mb-24">
+            <div class="card-body p-20">
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-12">
+                <div>
+                  <h6 class="fw-bold text-md mb-4">Orang Checkin per Hari</h6>
+                  <p class="text-xs text-secondary-light mb-0">SID unik tiap hari. Total kartu KPI = jumlah batang.</p>
+                </div>
+                <span id="dms-overall-people-daily-bar-total" class="badge bg-primary-50 text-primary-600 px-12 py-6">Total 0</span>
+              </div>
+              <div id="dms-overall-people-daily-bar" class="dms-overall-main-chart"></div>
+            </div>
+          </div>
+
           <div class="row g-3 mb-24">
             <div class="col-xl-5">
               <div class="card border radius-8 h-100">

@@ -39,7 +39,7 @@ final class DmsMonitoringOverallPeopleModalService
             return $this->errorPayload('Koneksi ke sumber data operator tidak tersedia.');
         }
 
-        $cacheKey = 'dms_monitoring:overall_people.payload:'.md5(json_encode([
+        $cacheKey = 'dms_monitoring:overall_people.payload.v2:'.md5(json_encode([
             $filters,
             $page,
             $status,
@@ -97,6 +97,15 @@ final class DmsMonitoringOverallPeopleModalService
             $start = Carbon::parse($filters['start'], $tz)->startOfDay()->format('Y-m-d H:i:s');
             $end = Carbon::parse($filters['end'], $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
 
+            $dailyBar = $this->buildDailyBarChart(
+                $start,
+                $end,
+                $tz,
+                $this->reader->dailyOperatorCheckinSeries($start, $end),
+                'operators',
+                'Orang checkin',
+            );
+
             $cohort = $this->filterCohort(
                 $this->operatorCheckinCohort($start, $end),
                 $filters['site'],
@@ -126,7 +135,7 @@ final class DmsMonitoringOverallPeopleModalService
                 'label' => 'Overview Orang & Alert',
                 'period' => ['start' => $filters['start'], 'end' => $filters['end']],
                 'summary' => [
-                    ['key' => 'people_checkin', 'label' => 'Orang Checkin RFID', 'value' => number_format($summary['checkin_total']), 'hint' => 'Operator unik yang lolos check-in', 'icon' => 'mingcute:user-follow-fill', 'color' => '#487fff'],
+                    ['key' => 'people_checkin', 'label' => 'Orang Checkin RFID', 'value' => number_format($summary['checkin_total']), 'hint' => 'Operator unik di tabel; batang harian = orang-hari', 'icon' => 'mingcute:user-follow-fill', 'color' => '#487fff'],
                     ['key' => 'people_without_alert', 'label' => 'Orang Tanpa Alert', 'value' => number_format($summary['without_alert']), 'hint' => 'Sudah check-in namun tanpa alert DMS', 'icon' => 'solar:shield-check-bold', 'color' => '#45b369'],
                     ['key' => 'people_with_alert', 'label' => 'Orang Dengan Alert', 'value' => number_format($summary['with_alert']), 'hint' => 'Operator check-in yang punya alert', 'icon' => 'solar:danger-triangle-bold', 'color' => '#f4941e'],
                     ['key' => 'ratio', 'label' => 'Rasio Alert / Orang', 'value' => number_format($summary['ratio_per_person'], 2), 'hint' => number_format($summary['total_alerts']).' total alert', 'icon' => 'solar:chart-2-bold', 'color' => '#8252e9'],
@@ -139,6 +148,7 @@ final class DmsMonitoringOverallPeopleModalService
                 ], $topPeople),
                 'top_units_chart' => $this->reader->dailyAlertsForTopOperatorSids($start, $end, $topSids),
                 'control_chart' => $controlChart,
+                'daily_bar' => $dailyBar,
                 'table' => [
                     'rows' => $tableResult['rows'],
                 ],
@@ -465,6 +475,42 @@ final class DmsMonitoringOverallPeopleModalService
             'mean_series' => array_fill(0, $n, $mean),
             'ucl_series' => array_fill(0, $n, $ucl),
             'lcl_series' => array_fill(0, $n, $lcl),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{labels:list<string>, series:list<int>, total:int, name:string}
+     */
+    private function buildDailyBarChart(
+        string $start,
+        string $end,
+        string $tz,
+        array $rows,
+        string $valueKey,
+        string $name,
+    ): array {
+        $indexed = [];
+        foreach ($rows as $row) {
+            $indexed[(string) ($row['hari'] ?? '')] = (int) ($row[$valueKey] ?? 0);
+        }
+
+        $labels = [];
+        $values = [];
+        $cursor = Carbon::parse($start, $tz)->startOfDay();
+        $until = Carbon::parse($end, $tz)->startOfDay();
+        while ($cursor->lt($until)) {
+            $key = $cursor->toDateString();
+            $labels[] = $cursor->isoFormat('D MMM');
+            $values[] = (int) ($indexed[$key] ?? 0);
+            $cursor->addDay();
+        }
+
+        return [
+            'labels' => $labels,
+            'series' => $values,
+            'total' => array_sum($values),
+            'name' => $name,
         ];
     }
 

@@ -44,7 +44,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     private const OPERATING_MAX_SPEED = 80.0;
 
     /** Versi cache/logika unit beroperasi — bump saat sumber atau fallback berubah. */
-    private const OPERATING_LOGIC_VERSION = 'v5';
+    private const OPERATING_LOGIC_VERSION = 'v7';
 
     /** Batas jumlah kategori pelanggaran yang ditampilkan di kuadran. */
     private const CATEGORY_LIMIT = 500;
@@ -293,52 +293,28 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
-     * Jumlah SID unik yang check-in RFID dalam window, diiris jabatan_fungsional
-     * yang namanya mengandung "Operator".
+     * Total orang-hari check-in RFID: SID unik per hari kalender, lalu dijumlah
+     * di seluruh window. Orang yang check-in 7 hari dihitung 7, bukan 1.
      *
-     * Join ke snapshot karyawan aktif (crontable_bep_vw_m_karyawan_aktif, ~17 MB)
-     * — BUKAN seq-scan bcsid.m_karyawan (~6 GB) dan BUKAN dump ribuan SID ke PHP.
-     * RFID memakai index tanggal + kode_sid. Tidak memfilter jenis_checkinout
-     * maupun status_lolos.
+     * Diiris jabatan_fungsional yang namanya mengandung "Operator".
+     * Filter site: gate RFID mengandung kode site (mis. BMO 3, LMO) ATAU
+     * site_dedicated karyawan. Filter perusahaan: RFID.perusahaan ATAU
+     * nama_perusahaan karyawan. Tidak memfilter jenis_checkinout / status_lolos.
      */
     public function countOperatorCheckinsInRange(string $start, string $end): int
     {
-        return $this->rememberScalarInt('rfid_fungsional_checkin_v2', $start, $end, function () use ($start, $end): int {
+        return $this->rememberScalarInt('rfid_fungsional_checkin_v4', $start, $end, function () use ($start, $end): int {
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return 0;
             }
 
-            $sql = "
-                WITH ops AS MATERIALIZED (
-                    SELECT kode_sid
-                    FROM bcsid.crontable_bep_vw_m_karyawan_aktif
-                    WHERE kode_sid IS NOT NULL
-                      AND TRIM(kode_sid) <> ''
-                      AND UPPER(TRIM(COALESCE(jabatan_fungsional, ''))) LIKE '%OPERATOR%'
-                      AND UPPER(TRIM(COALESCE(jabatan_fungsional, ''))) <> 'VISITOR'
-                ),
-                rfid AS MATERIALIZED (
-                    SELECT DISTINCT kode_sid
-                    FROM bcsid.mv_checkinout_rfid
-                    WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
-                      AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
-            ";
-            $bindings = [$start, $end];
-            if ($this->scopePerusahaan !== null) {
-                $sql .= ' AND TRIM(perusahaan::text) = ?';
-                $bindings[] = $this->scopePerusahaan;
-            }
-            $sql .= '
-                )
-                SELECT count(*) AS total
-                FROM rfid r
-                INNER JOIN ops o ON o.kode_sid = r.kode_sid
-            ';
+            $matched = $this->fungsionalOperatorCheckinMatchedSql($start, $end);
+            $sql = $matched['sql'].' SELECT count(*) AS total FROM matched';
 
             $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
             try {
-                $row = DB::connection($connection)->selectOne($sql, $bindings);
+                $row = DB::connection($connection)->selectOne($sql, $matched['bindings']);
             } catch (Throwable $e) {
                 report($e);
 
@@ -348,6 +324,53 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             }
 
             return (int) ($row->total ?? 0);
+        });
+    }
+
+    /**
+     * Orang-hari check-in per hari kalender (SID unik per hari).
+     * Agregat SQL tunggal — jangan loop per SID.
+     *
+     * @return list<array{hari:string, operators:int}>
+     */
+    public function dailyOperatorCheckinSeries(string $start, string $end): array
+    {
+        return $this->remember('rfid_fungsional_checkin_daily_v1', $start, $end, function () use ($start, $end): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $matched = $this->fungsionalOperatorCheckinMatchedSql($start, $end);
+            $sql = $matched['sql'].'
+                SELECT hari, count(*) AS operators
+                FROM matched
+                GROUP BY 1
+                ORDER BY 1
+            ';
+
+            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+            try {
+                $rows = DB::connection($connection)->select($sql, $matched['bindings']);
+            } catch (Throwable $e) {
+                report($e);
+
+                return [];
+            } finally {
+                $this->clearStatementTimeout($connection);
+            }
+
+            return array_map(static function ($r): array {
+                $hari = $r->hari;
+                if ($hari instanceof \DateTimeInterface) {
+                    $hari = $hari->format('Y-m-d');
+                }
+
+                return [
+                    'hari' => (string) $hari,
+                    'operators' => (int) ($r->operators ?? 0),
+                ];
+            }, $rows);
         });
     }
 
@@ -592,12 +615,12 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
-     * Unit beroperasi dalam rentang tanggal — unit unik dengan speed_gps > 0
-     * di bcsid.dms_vehicle_statuses (proxy pergerakan GPS).
+     * Unit-hari beroperasi: unit unik per hari kalender, lalu dijumlah di window.
+     * Unit yang online 7 hari dihitung 7, bukan 1.
      */
     public function unitsOperatingInRange(string $start, string $end): int
     {
-        $cacheKey = 'dms_monitoring:units_operating_range:'.self::OPERATING_LOGIC_VERSION.':'.md5($start.'|'.$end);
+        $cacheKey = 'dms_monitoring:units_operating_range:'.self::OPERATING_LOGIC_VERSION.':'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix());
 
         return Cache::remember($cacheKey, 300, function () use ($start, $end): int {
             return $this->resolveOperatingUnitCount($start, $end);
@@ -646,9 +669,12 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      */
     public function dailyOperatingUnitSeries(string $start, string $end): array
     {
-        return $this->remember('dashboard.daily_units.v6', $start, $end, function () use ($start, $end): array {
+        return $this->remember('dashboard.daily_units.v8', $start, $end, function () use ($start, $end): array {
             if (! $this->shouldSkipGpsStatusesQuery($start) && $this->hasGpsMovingUnitsInRange($start, $end)) {
-                return $this->dailyMovingUnitsFromStatuses($start, $end);
+                $gpsRows = $this->dailyMovingUnitsFromStatuses($start, $end);
+                if ($gpsRows !== []) {
+                    return $gpsRows;
+                }
             }
 
             return $this->dailyOnlineUnitsFromAlerts($start, $end);
@@ -709,14 +735,13 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             } else {
                 $operatingSql = "
                     SELECT DISTINCT
-                        TRIM(dv.no_register) AS unit,
-                        COALESCE(NULLIF(TRIM(dv.site::text), ''), '-') AS site,
-                        COALESCE(NULLIF(TRIM(dv.company_owner::text), ''), '-') AS perusahaan
-                    FROM bcsid.dms_vehicle_status_alerts vsa
-                    INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
-                    WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
-                      AND vsa.vehicle_no IS NOT NULL AND TRIM(vsa.vehicle_no) <> ''
-                      {$scopeWhereVehicle}
+                        TRIM(vehicle_no) AS unit,
+                        COALESCE(NULLIF(TRIM(mine_operation_name::text), ''), '-') AS site,
+                        COALESCE(NULLIF(TRIM(contractor_name::text), ''), '-') AS perusahaan
+                    FROM bcsid.dms_vehicle_status_alerts
+                    WHERE last_online_at >= ? AND last_online_at < ?
+                      AND vehicle_no IS NOT NULL AND TRIM(vehicle_no) <> ''
+                      {$this->vehicleStatusAlertScopeWhere()}
                 ";
                 $operatingBindings = array_merge([$start, $end], $this->vehicleScopeBindings());
             }
@@ -751,6 +776,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 FROM joined
             ";
 
+            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
             try {
                 $summaryRow = DB::connection($connection)->selectOne(
                     $sql,
@@ -780,6 +806,8 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 report($e);
 
                 return $empty;
+            } finally {
+                $this->clearStatementTimeout($connection);
             }
 
             $unitsOperating = (int) ($summaryRow->units_operating ?? 0);
@@ -877,18 +905,17 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             $operatingBindings = array_merge([$start, $end], $this->vehicleScopeBindings());
         } else {
             $operatingSql = "
-                SELECT TRIM(dv.no_register) AS unit,
-                    COALESCE(NULLIF(TRIM(dv.site::text), ''), '-') AS site,
-                    COALESCE(NULLIF(TRIM(dv.company_owner::text), ''), '-') AS perusahaan,
+                SELECT TRIM(vehicle_no) AS unit,
+                    COALESCE(NULLIF(TRIM(mine_operation_name::text), ''), '-') AS site,
+                    COALESCE(NULLIF(TRIM(contractor_name::text), ''), '-') AS perusahaan,
                     'Online DMS' AS evidence_source,
-                    max(vsa.last_online_at) AS evidence_at,
+                    max(last_online_at) AS evidence_at,
                     null::numeric AS evidence_value
-                FROM bcsid.dms_vehicle_status_alerts vsa
-                INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
-                WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
-                  AND vsa.vehicle_no IS NOT NULL AND TRIM(vsa.vehicle_no) <> ''
-                  {$scopeWhereVehicle}
-                GROUP BY 1, 2, 3, 4, 6
+                FROM bcsid.dms_vehicle_status_alerts
+                WHERE last_online_at >= ? AND last_online_at < ?
+                  AND vehicle_no IS NOT NULL AND TRIM(vehicle_no) <> ''
+                  {$this->vehicleStatusAlertScopeWhere()}
+                GROUP BY 1, 2, 3, 4
             ";
             $operatingBindings = array_merge([$start, $end], $this->vehicleScopeBindings());
         }
@@ -931,6 +958,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             LIMIT ? OFFSET ?
         ";
 
+        $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
         try {
             $countRow = DB::connection($connection)->selectOne($countSql, $baseBindings);
             $rows = DB::connection($connection)->select(
@@ -941,6 +969,8 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             report($e);
 
             return $empty;
+        } finally {
+            $this->clearStatementTimeout($connection);
         }
 
         $mappedRows = array_map(static fn ($r): array => [
@@ -2382,6 +2412,69 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         return $trimmed === '' ? null : $trimmed;
     }
 
+    /**
+     * Pola POSIX untuk match kode site di nama gate RFID.
+     * "BMO 1" cocok "Pos KM 25 PT PAMA BMO" / "BMO1", tidak cocok "BMO 2" atau "HOTE" vs "HO".
+     */
+    private function rfidSiteGatePattern(string $site): string
+    {
+        $upper = mb_strtoupper(trim($site));
+        $escaped = preg_quote($upper, '/');
+        $escaped = preg_replace('/\s+/', ' ?', $escaped) ?? $escaped;
+
+        return '(^|[^A-Z0-9])'.$escaped.'([^A-Z0-9]|$)';
+    }
+
+    /**
+     * CTE orang-hari operator fungsional (hari + SID unik). Dipakai total dan seri harian.
+     *
+     * @return array{sql:string, bindings:list<mixed>}
+     */
+    private function fungsionalOperatorCheckinMatchedSql(string $start, string $end): array
+    {
+        $sql = "
+            WITH ops AS MATERIALIZED (
+                SELECT kode_sid, site_dedicated, nama_perusahaan
+                FROM bcsid.crontable_bep_vw_m_karyawan_aktif
+                WHERE kode_sid IS NOT NULL
+                  AND TRIM(kode_sid) <> ''
+                  AND UPPER(TRIM(COALESCE(jabatan_fungsional, ''))) LIKE '%OPERATOR%'
+                  AND UPPER(TRIM(COALESCE(jabatan_fungsional, ''))) <> 'VISITOR'
+            ),
+            rfid AS MATERIALIZED (
+                SELECT
+                    (tanggal_checkinout)::date AS hari,
+                    kode_sid,
+                    TRIM(gate::text) AS gate,
+                    TRIM(perusahaan::text) AS perusahaan
+                FROM bcsid.mv_checkinout_rfid
+                WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
+                  AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
+            ),
+            matched AS (
+                SELECT DISTINCT r.hari, r.kode_sid
+                FROM rfid r
+                INNER JOIN ops o ON o.kode_sid = r.kode_sid
+                WHERE 1=1
+        ";
+        $bindings = [$start, $end];
+        if ($this->scopeSite !== null) {
+            $sql .= ' AND (UPPER(TRIM(COALESCE(r.gate, \'\'))) ~ ? OR UPPER(TRIM(COALESCE(o.site_dedicated, \'\'))) = ?)';
+            $bindings[] = $this->rfidSiteGatePattern((string) $this->scopeSite);
+            $bindings[] = mb_strtoupper((string) $this->scopeSite);
+        }
+        if ($this->scopePerusahaan !== null) {
+            $sql .= ' AND (TRIM(COALESCE(r.perusahaan, \'\')) = ? OR TRIM(COALESCE(o.nama_perusahaan, \'\')) = ?)';
+            $bindings[] = $this->scopePerusahaan;
+            $bindings[] = $this->scopePerusahaan;
+        }
+        $sql .= '
+            )
+        ';
+
+        return ['sql' => $sql, 'bindings' => $bindings];
+    }
+
     private function alertDateWhere(): string
     {
         $sql = 'waktu_deteksi >= ? AND waktu_deteksi < ?';
@@ -2422,6 +2515,87 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         }
 
         return $sql;
+    }
+
+    /**
+     * Filter site/perusahaan di FDW dms_vehicle_status_alerts tanpa JOIN dms_vehicle.
+     */
+    private function vehicleStatusAlertScopeWhere(): string
+    {
+        return $this->vehicleScopeWhere('mine_operation_name', 'contractor_name');
+    }
+
+    /**
+     * Fallback unit-hari dari mv_dms_alert bila FDW timeout / kosong.
+     */
+    private function countDistinctAlertUnitsInRange(string $start, string $end): int
+    {
+        return $this->rememberScalarInt('alert_units_count_v3', $start, $end, function () use ($start, $end): int {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return 0;
+            }
+
+            $sql = "
+                SELECT count(*) AS total
+                FROM (
+                    SELECT DISTINCT date(waktu_deteksi) AS hari, TRIM(unit::text) AS unit
+                    FROM bcsid.mv_dms_alert
+                    WHERE {$this->alertDateWhere()}
+                      AND unit IS NOT NULL AND TRIM(unit::text) <> ''
+                ) d
+            ";
+
+            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+            try {
+                $row = DB::connection($connection)->selectOne($sql, $this->alertDateBindings($start, $end));
+            } catch (Throwable $e) {
+                report($e);
+
+                return 0;
+            } finally {
+                $this->clearStatementTimeout($connection);
+            }
+
+            return (int) ($row->total ?? 0);
+        });
+    }
+
+    /**
+     * Unit unik per hari dari mv_dms_alert — fallback aman tanpa FDW.
+     *
+     * @return list<array{hari:string, units:int}>
+     */
+    private function dailyAlertUnitsFromMv(string $start, string $end): array
+    {
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return [];
+        }
+
+        $sql = "
+            SELECT
+                date(waktu_deteksi) AS hari,
+                count(DISTINCT TRIM(unit::text)) AS units
+            FROM bcsid.mv_dms_alert
+            WHERE {$this->alertDateWhere()}
+              AND unit IS NOT NULL AND TRIM(unit::text) <> ''
+            GROUP BY 1
+            ORDER BY 1
+        ";
+
+        $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+        try {
+            $rows = DB::connection($connection)->select($sql, $this->alertDateBindings($start, $end));
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        } finally {
+            $this->clearStatementTimeout($connection);
+        }
+
+        return $this->mapDailyUnitRows($rows);
     }
 
     /**
@@ -2498,18 +2672,24 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
         $unitKey = $this->vehicleRegisterKeyExpr('vs.vehicle_no');
         $sql = "
-            SELECT count(DISTINCT {$unitKey}) AS total
-            FROM bcsid.dms_vehicle_statuses vs
-            WHERE vs.created_at >= ? AND vs.created_at < ?
-              AND {$this->movingVehicleSpeedWhere('vs')}
+            SELECT count(*) AS total
+            FROM (
+                SELECT DISTINCT vs.created_at::date AS hari, {$unitKey} AS unit
+                FROM bcsid.dms_vehicle_statuses vs
+                WHERE vs.created_at >= ? AND vs.created_at < ?
+                  AND {$this->movingVehicleSpeedWhere('vs')}
+            ) d
         ";
 
+        $this->applyStatementTimeout($connection, self::FDW_STATEMENT_TIMEOUT_MS);
         try {
             $row = DB::connection($connection)->selectOne($sql, [$start, $end]);
         } catch (Throwable $e) {
             report($e);
 
             return 0;
+        } finally {
+            $this->clearStatementTimeout($connection);
         }
 
         return (int) ($row->total ?? 0);
@@ -2522,27 +2702,17 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             return 0;
         }
 
-        $hasScope = $this->scopeSite !== null || $this->scopePerusahaan !== null;
-        if ($hasScope) {
-            $scopeWhere = $this->vehicleScopeWhere('dv.site', 'dv.company_owner');
-            $sql = "
-                SELECT count(DISTINCT TRIM(vsa.vehicle_no)) AS total
-                FROM bcsid.dms_vehicle_status_alerts vsa
-                INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
-                WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
-                  AND vsa.vehicle_no IS NOT NULL AND TRIM(vsa.vehicle_no) <> ''
-                  {$scopeWhere}
-            ";
-            $bindings = array_merge([$start, $end], $this->vehicleScopeBindings());
-        } else {
-            $sql = "
-                SELECT count(DISTINCT TRIM(vehicle_no)) AS total
+        $sql = "
+            SELECT count(*) AS total
+            FROM (
+                SELECT DISTINCT (last_online_at)::date AS hari, TRIM(vehicle_no) AS unit
                 FROM bcsid.dms_vehicle_status_alerts
                 WHERE last_online_at >= ? AND last_online_at < ?
                   AND vehicle_no IS NOT NULL AND TRIM(vehicle_no) <> ''
-            ";
-            $bindings = [$start, $end];
-        }
+                  {$this->vehicleStatusAlertScopeWhere()}
+            ) d
+        ";
+        $bindings = array_merge([$start, $end], $this->vehicleScopeBindings());
 
         $this->applyStatementTimeout($connection, self::FDW_STATEMENT_TIMEOUT_MS);
         try {
@@ -2550,12 +2720,14 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         } catch (Throwable $e) {
             report($e);
 
-            return 0;
+            return $this->countDistinctAlertUnitsInRange($start, $end);
         } finally {
             $this->clearStatementTimeout($connection);
         }
 
-        return (int) ($row->total ?? 0);
+        $total = (int) ($row?->total ?? 0);
+
+        return $total > 0 ? $total : $this->countDistinctAlertUnitsInRange($start, $end);
     }
 
     /**
@@ -2568,20 +2740,19 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             return [];
         }
 
-        $scopeWhere = $this->vehicleScopeWhere('dv.site', 'dv.company_owner');
         $sql = "
             SELECT
-                date(vsa.last_online_at) AS hari,
-                count(DISTINCT TRIM(vsa.vehicle_no)) AS units
-            FROM bcsid.dms_vehicle_status_alerts vsa
-            INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
-            WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
-              AND vsa.vehicle_no IS NOT NULL AND TRIM(vsa.vehicle_no) <> ''
-              {$scopeWhere}
+                date(last_online_at) AS hari,
+                count(DISTINCT TRIM(vehicle_no)) AS units
+            FROM bcsid.dms_vehicle_status_alerts
+            WHERE last_online_at >= ? AND last_online_at < ?
+              AND vehicle_no IS NOT NULL AND TRIM(vehicle_no) <> ''
+              {$this->vehicleStatusAlertScopeWhere()}
             GROUP BY 1
             ORDER BY 1
         ";
 
+        $this->applyStatementTimeout($connection, self::FDW_STATEMENT_TIMEOUT_MS);
         try {
             $rows = DB::connection($connection)->select(
                 $sql,
@@ -2590,10 +2761,14 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         } catch (Throwable $e) {
             report($e);
 
-            return [];
+            return $this->dailyAlertUnitsFromMv($start, $end);
+        } finally {
+            $this->clearStatementTimeout($connection);
         }
 
-        return $this->mapDailyUnitRows($rows);
+        $mapped = $this->mapDailyUnitRows($rows);
+
+        return $mapped !== [] ? $mapped : $this->dailyAlertUnitsFromMv($start, $end);
     }
 
     /**
@@ -2607,29 +2782,45 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         }
 
         $unitKey = $this->vehicleRegisterKeyExpr('vs.vehicle_no');
-        $scopeWhere = $this->vehicleScopeWhere('dv.site', 'dv.company_owner');
-        $sql = "
-            SELECT
-                date(vs.created_at) AS hari,
-                count(DISTINCT {$unitKey}) AS units
-            FROM bcsid.dms_vehicle_statuses vs
-            INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = {$unitKey}
-            WHERE vs.created_at >= ? AND vs.created_at < ?
-              AND {$this->movingVehicleSpeedWhere('vs')}
-              {$scopeWhere}
-            GROUP BY 1
-            ORDER BY 1
-        ";
+        $hasScope = $this->scopeSite !== null || $this->scopePerusahaan !== null;
+        if ($hasScope) {
+            $scopeWhere = $this->vehicleScopeWhere('dv.site', 'dv.company_owner');
+            $sql = "
+                SELECT
+                    date(vs.created_at) AS hari,
+                    count(DISTINCT {$unitKey}) AS units
+                FROM bcsid.dms_vehicle_statuses vs
+                INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = {$unitKey}
+                WHERE vs.created_at >= ? AND vs.created_at < ?
+                  AND {$this->movingVehicleSpeedWhere('vs')}
+                  {$scopeWhere}
+                GROUP BY 1
+                ORDER BY 1
+            ";
+            $bindings = array_merge([$start, $end], $this->vehicleScopeBindings());
+        } else {
+            $sql = "
+                SELECT
+                    date(vs.created_at) AS hari,
+                    count(DISTINCT {$unitKey}) AS units
+                FROM bcsid.dms_vehicle_statuses vs
+                WHERE vs.created_at >= ? AND vs.created_at < ?
+                  AND {$this->movingVehicleSpeedWhere('vs')}
+                GROUP BY 1
+                ORDER BY 1
+            ";
+            $bindings = [$start, $end];
+        }
 
+        $this->applyStatementTimeout($connection, self::FDW_STATEMENT_TIMEOUT_MS);
         try {
-            $rows = DB::connection($connection)->select(
-                $sql,
-                array_merge([$start, $end], $this->vehicleScopeBindings()),
-            );
+            $rows = DB::connection($connection)->select($sql, $bindings);
         } catch (Throwable $e) {
             report($e);
 
             return [];
+        } finally {
+            $this->clearStatementTimeout($connection);
         }
 
         return $this->mapDailyUnitRows($rows);

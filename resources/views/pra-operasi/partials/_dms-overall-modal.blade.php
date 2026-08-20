@@ -29,6 +29,19 @@
           {{-- Summary cards --}}
           <div id="dms-overall-summary" class="row g-3 mb-24"></div>
 
+          <div class="card border radius-8 mb-24">
+            <div class="card-body p-20">
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-12">
+                <div>
+                  <h6 class="fw-bold text-md mb-4">Unit Beroperasi per Hari</h6>
+                  <p class="text-xs text-secondary-light mb-0">Unit unik tiap hari. Total kartu KPI = jumlah batang.</p>
+                </div>
+                <span id="dms-overall-daily-bar-total" class="fw-semibold text-sm" style="color:#8252e9">Total 0</span>
+              </div>
+              <div id="dms-overall-daily-bar" class="dms-overall-main-chart"></div>
+            </div>
+          </div>
+
           {{-- Top units + control chart (2 kolom di layar lebar) --}}
           <div class="row g-3 mb-24">
             <div class="col-xl-5">

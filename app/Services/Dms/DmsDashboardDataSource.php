@@ -28,10 +28,15 @@ interface DmsDashboardDataSource
     public function distinctAlertSids(string $start, string $end): array;
 
     /**
-     * Jumlah SID unik di RFID dalam window (tanpa filter roster jabatan).
+     * Total orang-hari check-in RFID: SID unik per hari, dijumlah di window.
+     * Menghormati filter site dan perusahaan.
      */
     public function countOperatorCheckinsInRange(string $start, string $end): int;
 
+    /**
+     * Total unit-hari beroperasi: unit unik per hari kalender, lalu dijumlah di window.
+     * Menghormati filter site dan perusahaan.
+     */
     public function unitsOperatingInRange(string $start, string $end): int;
 
     public function unitsOperatingNow(int $withinMinutes = 30): int;
