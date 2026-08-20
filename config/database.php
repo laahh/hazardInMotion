@@ -122,8 +122,8 @@ return [
         ],
 
         /*
-        | Amazon Redshift DWH via PrivateLink (PostgreSQL wire protocol, SSL wajib).
-        | Kredensial hanya dari .env. Driver custom menonaktifkan GSSAPI (timeout libpq).
+        | Amazon Redshift DWH — koneksi langsung ke host (tanpa SSH jump).
+        | gssencmode=disable wajib: libpq PHP mencoba GSSAPI dulu dan timeout.
         */
         'redshift' => [
             'driver' => 'redshift',
@@ -136,10 +136,10 @@ return [
             'prefix_indexes' => true,
             'search_path' => env('REDSHIFT_SEARCH_PATH', 'public'),
             'sslmode' => env('REDSHIFT_SSLMODE', 'require'),
-            'gssencmode' => env('REDSHIFT_GSSENCMODE', 'disable'),
-            'connect_timeout' => (int) env('REDSHIFT_CONNECT_TIMEOUT', 30),
+            'gssencmode' => 'disable',
+            'connect_timeout' => (int) env('REDSHIFT_CONNECT_TIMEOUT', 8),
             'options' => [
-                PDO::ATTR_TIMEOUT => (int) env('REDSHIFT_CONNECT_TIMEOUT', 30),
+                PDO::ATTR_TIMEOUT => (int) env('REDSHIFT_CONNECT_TIMEOUT', 8),
             ],
         ],
 
