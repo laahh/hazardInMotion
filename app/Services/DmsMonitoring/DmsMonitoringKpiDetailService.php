@@ -346,11 +346,11 @@ class DmsMonitoringKpiDetailService
             return [];
         }
 
-        $cacheKey = 'dms_monitoring:kpi.operator_cohort:'.md5($start.'|'.$end);
+        $cacheKey = 'dms_monitoring:kpi.operator_cohort.fungsional:'.md5($start.'|'.$end);
 
         /** @var list<array{kode_sid:string, nama:string, jabatan:string, perusahaan:string, site:string, checked_in_at:string, gate:string}> */
         return Cache::remember($cacheKey, 900, function () use ($start, $end): array {
-            $roster = $this->rosterReader->operatorRoster();
+            $roster = $this->rosterReader->fungsionalOperatorRoster();
             if ($roster === []) {
                 return [];
             }

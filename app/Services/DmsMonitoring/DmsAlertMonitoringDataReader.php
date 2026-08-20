@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\DmsMonitoring;
 
 use App\Services\Dms\DmsDashboardDataSource;
+use App\Services\PraOperasi\PraOperasiOperatorRosterReader;
 use App\Services\SportEvaluation\SportEvaluationPvtRfidCheckinReader;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -58,6 +59,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
     public function __construct(
         private readonly SportEvaluationPvtRfidCheckinReader $connectionSource,
+        private readonly PraOperasiOperatorRosterReader $rosterReader,
     ) {}
 
     public function isUp(): bool
@@ -287,21 +289,31 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
-     * Jumlah SID unik yang muncul di RFID dalam window — semua jabatan.
+     * Jumlah SID unik yang check-in RFID dalam window, diiris roster
+     * jabatan FUNGSIONAL yang namanya mengandung "Operator"
+     * (kolom m_karyawan.id_jabatan_fungsional).
+     *
+     * Tidak memfilter jenis_checkinout maupun status_lolos.
      */
     public function countOperatorCheckinsInRange(string $start, string $end): int
     {
-        return $this->countDistinctCheckinSids($start, $end);
+        $roster = $this->rosterReader->fungsionalOperatorRoster();
+        if ($roster === []) {
+            return 0;
+        }
+
+        $sids = array_map(static fn (array $row): string => (string) ($row['kode_sid'] ?? ''), $roster);
+
+        return $this->countDistinctOperatorCheckins($start, $end, $sids);
     }
 
     /**
-     * Jumlah SID unik yang ada di RFID, dibatasi daftar SID operator
-     * (roster jabatan struktural "Operator").
+     * Jumlah SID unik yang ada di RFID, dibatasi daftar SID operator.
      *
      * Tidak memfilter jenis_checkinout maupun status_lolos — semua baris RFID
      * dalam window dihitung.
      *
-     * COUNT DISTINCT per-chunk SID operator (bukan dump semua SID RFID ke PHP)
+     * COUNT DISTINCT di Postgres (bukan dump semua SID RFID ke PHP)
      * plus statement_timeout, supaya load dashboard tidak 504.
      *
      * @param  list<string>  $operatorSids
@@ -321,7 +333,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
         $sidList = array_keys($normalized);
         $sidHash = md5(implode(',', $sidList));
-        $cacheKey = 'dms_monitoring:rfid_operator_count_v3:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix().'|'.$sidHash);
+        $cacheKey = 'dms_monitoring:rfid_operator_count_v4:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix().'|'.$sidHash);
 
         $cached = Cache::get($cacheKey);
         if (is_int($cached)) {

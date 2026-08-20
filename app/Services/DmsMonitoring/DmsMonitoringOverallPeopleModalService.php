@@ -166,10 +166,10 @@ final class DmsMonitoringOverallPeopleModalService
      */
     private function operatorCheckinCohort(string $start, string $end): array
     {
-        $cacheKey = 'dms_monitoring:kpi.operator_cohort:'.md5($start.'|'.$end);
+        $cacheKey = 'dms_monitoring:kpi.operator_cohort.fungsional:'.md5($start.'|'.$end);
 
         return Cache::remember($cacheKey, 900, function () use ($start, $end): array {
-            $roster = $this->rosterReader->operatorRoster();
+            $roster = $this->rosterReader->fungsionalOperatorRoster();
             if ($roster === []) {
                 return [];
             }

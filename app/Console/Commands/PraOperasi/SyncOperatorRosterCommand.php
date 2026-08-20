@@ -30,12 +30,17 @@ final class SyncOperatorRosterCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info('Mengambil roster operator dari bcsid.m_karyawan x m_jabatan ...');
+        $this->info('Mengambil roster operator STRUKTURAL ...');
         $started = microtime(true);
         $roster = $reader->refresh();
         $elapsed = round(microtime(true) - $started, 2);
+        $this->info("STRUKTURAL: {$this->pluralCount(count($roster))} dalam {$elapsed} detik.");
 
-        $this->info("Selesai: {$this->pluralCount(count($roster))} dalam {$elapsed} detik.");
+        $this->info('Mengambil roster operator FUNGSIONAL ...');
+        $startedFungsional = microtime(true);
+        $fungsional = $reader->refreshFungsional();
+        $elapsedFungsional = round(microtime(true) - $startedFungsional, 2);
+        $this->info("FUNGSIONAL: {$this->pluralCount(count($fungsional))} dalam {$elapsedFungsional} detik.");
 
         return self::SUCCESS;
     }
