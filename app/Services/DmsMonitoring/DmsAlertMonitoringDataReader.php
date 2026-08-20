@@ -307,7 +307,11 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
     /**
      * Jumlah SID unik yang check-in RFID lolos, dibatasi daftar SID operator
-     * (roster jabatan struktural "Operator"). Chunk SID — jangan JOIN m_karyawan.
+     * (roster jabatan struktural "Operator").
+     *
+     * Optimasi: lakukan SATU scan DISTINCT pada window RFID lalu intersect di PHP.
+     * Ini jauh lebih stabil daripada query per-chunk SID saat user memilih hari
+     * yang belum hangat di cache.
      *
      * @param  list<string>  $operatorSids
      */
@@ -333,33 +337,34 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 return 0;
             }
 
+            $sql = "
+                SELECT DISTINCT UPPER(TRIM(kode_sid)) AS sid
+                FROM bcsid.mv_checkinout_rfid
+                WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
+                  AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
+                  AND UPPER(TRIM(jenis_checkinout::text)) IN ('IN','CHECKIN','CHECK-IN','CHECK_IN','CHECK IN','MASUK')
+                  AND REPLACE(REPLACE(UPPER(TRIM(status_lolos::text)), ' ', ''), '-', '') IN ('PASSED','PASS','LOLOS','YA','YES','1','TRUE','T','Y')
+            ";
+            $bindings = [$start, $end];
+            if ($this->scopePerusahaan !== null) {
+                $sql .= ' AND TRIM(perusahaan::text) = ?';
+                $bindings[] = $this->scopePerusahaan;
+            }
+
+            try {
+                $rows = DB::connection($connection)->select($sql, $bindings);
+            } catch (Throwable $e) {
+                report($e);
+
+                return 0;
+            }
+
             $total = 0;
-            foreach (array_chunk(array_keys($normalized), 800) as $chunk) {
-                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-                $sql = "
-                    SELECT COUNT(DISTINCT UPPER(TRIM(kode_sid))) AS total
-                    FROM bcsid.mv_checkinout_rfid
-                    WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
-                      AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
-                      AND UPPER(TRIM(jenis_checkinout::text)) IN ('IN','CHECKIN','CHECK-IN','CHECK_IN','CHECK IN','MASUK')
-                      AND REPLACE(REPLACE(UPPER(TRIM(status_lolos::text)), ' ', ''), '-', '') IN ('PASSED','PASS','LOLOS','YA','YES','1','TRUE','T','Y')
-                      AND UPPER(TRIM(kode_sid)) IN ({$placeholders})
-                ";
-                $bindings = array_merge([$start, $end], $chunk);
-                if ($this->scopePerusahaan !== null) {
-                    $sql .= ' AND TRIM(perusahaan::text) = ?';
-                    $bindings[] = $this->scopePerusahaan;
+            foreach ($rows as $row) {
+                $sid = strtoupper(trim((string) ($row->sid ?? '')));
+                if ($sid !== '' && isset($normalized[$sid])) {
+                    $total++;
                 }
-
-                try {
-                    $row = DB::connection($connection)->selectOne($sql, $bindings);
-                } catch (Throwable $e) {
-                    report($e);
-
-                    return 0;
-                }
-
-                $total += (int) ($row->total ?? 0);
             }
 
             return $total;
@@ -736,11 +741,11 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
-     * Tabel unit beroperasi + jumlah alert per unit (modal overall).
+     * Tabel unit beroperasi tanpa alert (modal overall).
      *
      * @return array{
      *     total:int,
-     *     rows:list<array{unit:string, site:string, perusahaan:string, alert_count:int, pct_of_total:float}>
+     *     rows:list<array{unit:string, site:string, perusahaan:string, alert_count:int}>
      * }
      */
     public function overallOperatingUnitsTable(
@@ -804,7 +809,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 FROM operating o
                 LEFT JOIN unit_alerts ua ON TRIM(o.unit) = TRIM(ua.unit) AND TRIM(o.site) = TRIM(ua.site)
             )
-            SELECT count(*) AS total FROM joined
+            SELECT count(*) AS total FROM joined WHERE alert_count = 0
         ";
 
         $dataSql = "
@@ -814,18 +819,15 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 FROM bcsid.mv_dms_alert WHERE {$scopeWhereAlert} AND unit IS NOT NULL AND TRIM(unit::text) <> ''
                 GROUP BY 1, 2
             ),
-            alert_total AS (
-                SELECT COALESCE(sum(alert_count), 0) AS grand_total FROM unit_alerts
-            ),
             joined AS (
                 SELECT o.unit, o.site, o.perusahaan, COALESCE(ua.alert_count, 0) AS alert_count
                 FROM operating o
                 LEFT JOIN unit_alerts ua ON TRIM(o.unit) = TRIM(ua.unit) AND TRIM(o.site) = TRIM(ua.site)
             )
-            SELECT j.unit, j.site, j.perusahaan, j.alert_count,
-                CASE WHEN at.grand_total > 0 THEN round((j.alert_count::numeric / at.grand_total) * 100, 2) ELSE 0 END AS pct_of_total
-            FROM joined j CROSS JOIN alert_total at
-            ORDER BY j.alert_count DESC, j.unit ASC
+            SELECT j.unit, j.site, j.perusahaan, j.alert_count
+            FROM joined j
+            WHERE j.alert_count = 0
+            ORDER BY j.unit ASC
             LIMIT ? OFFSET ?
         ";
 
@@ -848,7 +850,6 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 'site' => (string) $r->site,
                 'perusahaan' => (string) $r->perusahaan,
                 'alert_count' => (int) $r->alert_count,
-                'pct_of_total' => (float) ($r->pct_of_total ?? 0),
             ], $rows),
         ];
     }

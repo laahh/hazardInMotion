@@ -99,9 +99,7 @@ final class DmsMonitoringOverallModalService
                         ['key' => 'unit', 'label' => 'Unit'],
                         ['key' => 'site', 'label' => 'Site'],
                         ['key' => 'perusahaan', 'label' => 'Perusahaan'],
-                        ['key' => 'alert_count', 'label' => 'Alert'],
-                        ['key' => 'pct_of_total', 'label' => '% Total Alert'],
-                        ['key' => 'bar', 'label' => 'Distribusi'],
+                        ['key' => 'status', 'label' => 'Status Alert'],
                     ],
                     'rows' => $table['rows'] ?? [],
                 ],
@@ -179,7 +177,7 @@ final class DmsMonitoringOverallModalService
         return [
             'mean' => round($mean, 2),
             'ucl' => round($mean + (3 * $std), 2),
-            'lcl' => round(max(0, $mean - (3 * $std)), 2),
+            'lcl' => round($mean - (3 * $std), 2),
         ];
     }
 

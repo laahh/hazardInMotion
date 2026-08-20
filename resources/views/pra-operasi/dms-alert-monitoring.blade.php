@@ -724,7 +724,7 @@
     dmsOverallTopUnitsChart.render();
   }
 
-  function dmsOverallRenderTable(table, maxAlert) {
+  function dmsOverallRenderTable(table) {
     var body = document.getElementById('dms-overall-table-body');
     var empty = document.getElementById('dms-overall-table-empty');
     if (!body) return;
@@ -735,23 +735,14 @@
       return;
     }
     if (empty) empty.classList.add('d-none');
-    var barMax = maxAlert > 0 ? maxAlert : Math.max.apply(null, rows.map(function (r) { return r.alert_count || 0; }).concat([1]));
 
     rows.forEach(function (row) {
       var tr = document.createElement('tr');
-      var pct = Number(row.pct_of_total || 0);
-      var alerts = Number(row.alert_count || 0);
-      var barWidth = barMax > 0 ? Math.round((alerts / barMax) * 100) : 0;
-      var barColor = alerts <= 0 ? '#45b369' : (pct >= 10 ? '#ef4a00' : '#487fff');
       tr.innerHTML =
         '<td class="fw-medium">' + (row.unit || '-') + '</td>' +
         '<td>' + (row.site || '-') + '</td>' +
         '<td>' + (row.perusahaan || '-') + '</td>' +
-        '<td class="text-end fw-semibold">' + alerts.toLocaleString('id-ID') + '</td>' +
-        '<td class="text-end">' + pct.toFixed(2) + '%</td>' +
-        '<td><div class="dms-overall-bar bg-neutral-100 radius-4 overflow-hidden" style="height:8px;">' +
-          '<div style="width:' + barWidth + '%;height:100%;background:' + barColor + ';border-radius:4px;"></div>' +
-        '</td>';
+        '<td><span class="badge bg-success-focus text-success-main border border-success-main px-12 py-6">Tidak ada alert</span></td>';
       body.appendChild(tr);
     });
   }
@@ -807,9 +798,7 @@
         dmsOverallRenderControlChart(payload.control_chart || {});
         dmsOverallRenderTopUnitsChart(payload.top_units_chart || {});
 
-        var maxAlert = 0;
-        (payload.top_units || []).forEach(function (u) { maxAlert = Math.max(maxAlert, u.alert_count || 0); });
-        dmsOverallRenderTable(payload.table || {}, maxAlert);
+        dmsOverallRenderTable(payload.table || {});
         dmsOverallRenderPagination(payload.pagination || null);
 
         document.getElementById('dms-overall-content').classList.remove('d-none');
