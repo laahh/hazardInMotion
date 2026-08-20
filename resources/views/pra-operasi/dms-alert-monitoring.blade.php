@@ -19,6 +19,7 @@
         $kpis[$i]['icon'] = $kpi['icon'] ?? 'solar:danger-triangle-bold';
         $kpis[$i]['label'] = $kpi['label'] ?? 'KPI';
         $kpis[$i]['value'] = $kpi['value'] ?? '0';
+        $kpis[$i]['modal_group'] = $kpi['modal_group'] ?? ($i < 3 ? 'people' : 'unit');
     }
     $kpiDeltaLabel = $kpiDeltaLabel ?? 'this week';
     $campaigns = $campaigns ?? ($categories ?? []);
@@ -250,6 +251,7 @@
           role="button"
           tabindex="0"
           data-kpi-metric="{{ $kpi['metric'] ?? 'total_alert' }}"
+          data-kpi-group="{{ $kpi['modal_group'] ?? 'unit' }}"
           data-kpi-label="{{ $kpi['label'] ?? 'KPI' }}"
           aria-label="Lihat detail {{ $kpi['label'] ?? 'KPI' }}"
         >
@@ -477,6 +479,7 @@
 </div>
 
 @include('pra-operasi.partials._dms-overall-modal')
+@include('pra-operasi.partials._dms-overall-people-modal')
 @endsection
 
 @section('scripts')
@@ -604,11 +607,18 @@
   var dmsOverallFilters = @json($filters);
   var dmsOverallUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall'));
   var dmsOverallUnitAlertsUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall.unit-alerts'));
+  var dmsOverallPeopleUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall.people'));
+  var dmsOverallPeopleAlertsUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall.people-alerts'));
   var dmsOverallModalEl = document.getElementById('dmsOverallModal');
   var dmsOverallModal = dmsOverallModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(dmsOverallModalEl) : null;
   var dmsOverallState = { page: 1, status: 'with_alert' };
   var dmsOverallControlChart = null;
   var dmsOverallTopUnitsChart = null;
+  var dmsOverallPeopleModalEl = document.getElementById('dmsOverallPeopleModal');
+  var dmsOverallPeopleModal = dmsOverallPeopleModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(dmsOverallPeopleModalEl) : null;
+  var dmsOverallPeopleState = { page: 1, status: 'with_alert' };
+  var dmsOverallPeopleControlChart = null;
+  var dmsOverallPeopleTopChart = null;
 
   function dmsOverallSetLoading(show) {
     var loading = document.getElementById('dms-overall-loading');
@@ -934,10 +944,302 @@
     dmsOverallLoad();
   }
 
+  function dmsOverallPeopleSetLoading(show) {
+    var loading = document.getElementById('dms-overall-people-loading');
+    if (loading) loading.classList.toggle('d-none', !show);
+    if (loading) loading.classList.toggle('d-flex', show);
+  }
+
+  function dmsOverallPeopleDestroyCharts() {
+    if (dmsOverallPeopleControlChart) { dmsOverallPeopleControlChart.destroy(); dmsOverallPeopleControlChart = null; }
+    if (dmsOverallPeopleTopChart) { dmsOverallPeopleTopChart.destroy(); dmsOverallPeopleTopChart = null; }
+  }
+
+  function dmsOverallPeopleRenderSummary(cards) {
+    var wrap = document.getElementById('dms-overall-people-summary');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    (cards || []).forEach(function (card) {
+      var col = document.createElement('div');
+      col.className = 'col-sm-6 col-xl-3';
+      col.innerHTML =
+        '<div class="border radius-8 p-16 h-100 d-flex align-items-start gap-12">' +
+          '<span class="w-40-px h-40-px radius-circle d-flex align-items-center justify-content-center flex-shrink-0" style="background:' + (card.color || '#487fff') + '20;color:' + (card.color || '#487fff') + '">' +
+            '<iconify-icon icon="' + (card.icon || 'solar:chart-2-bold') + '" class="icon text-lg"></iconify-icon>' +
+          '</span>' +
+          '<div class="min-w-0">' +
+            '<div class="text-sm text-secondary-light mb-4">' + (card.label || '-') + '</div>' +
+            '<div class="fw-bold text-xl">' + (card.value || '0') + '</div>' +
+            '<div class="text-xs text-secondary-light mt-4">' + (card.hint || '') + '</div>' +
+          '</div>' +
+        '</div>';
+      wrap.appendChild(col);
+    });
+  }
+
+  function dmsOverallPeopleRenderTop(topRows) {
+    var wrap = document.getElementById('dms-overall-people-top');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!topRows || !topRows.length) {
+      wrap.innerHTML = '<div class="col-12 text-sm text-secondary-light">Tidak ada orang dengan alert.</div>';
+      return;
+    }
+    topRows.forEach(function (row, idx) {
+      var col = document.createElement('div');
+      col.className = 'col-md-6 col-xl-4';
+      col.innerHTML =
+        '<div class="border radius-8 p-12 h-100">' +
+          '<div class="d-flex align-items-center gap-8 mb-4">' +
+            '<span class="badge bg-primary-600 text-white radius-4 px-8 py-4">#' + (idx + 1) + '</span>' +
+            '<span class="fw-semibold text-sm text-truncate">' + (row.unit || '-') + '</span>' +
+          '</div>' +
+          '<div class="text-xs text-secondary-light">' + (row.site || '-') + ' · ' + (row.perusahaan || '-') + '</div>' +
+          '<div class="fw-bold text-lg mt-4">' + Number(row.alert_count || 0).toLocaleString('id-ID') + ' <span class="text-sm fw-normal text-secondary-light">alert</span></div>' +
+        '</div>';
+      wrap.appendChild(col);
+    });
+  }
+
+  function dmsOverallPeopleRenderControlChart(chartData) {
+    var el = document.getElementById('dms-overall-people-control-chart');
+    var legend = document.getElementById('dms-overall-people-control-legend');
+    if (!el || typeof ApexCharts === 'undefined') return;
+    dmsOverallPeopleDestroyCharts();
+    if (legend) {
+      legend.innerHTML =
+        '<span><span class="d-inline-block rounded-circle me-4" style="width:8px;height:8px;background:#487fff"></span> Alert harian</span>' +
+        '<span><span class="d-inline-block rounded-circle me-4" style="width:8px;height:8px;background:#45b369"></span> Mean: ' + (chartData.mean || 0) + '</span>' +
+        '<span><span class="d-inline-block rounded-circle me-4" style="width:8px;height:8px;background:#ef4a00"></span> UCL: ' + (chartData.ucl || 0) + '</span>' +
+        '<span><span class="d-inline-block rounded-circle me-4" style="width:8px;height:8px;background:#8252e9"></span> LCL: ' + (chartData.lcl || 0) + '</span>';
+    }
+    dmsOverallPeopleControlChart = new ApexCharts(el, {
+      series: [
+        { name: 'Total Alert', type: 'area', data: chartData.series || [] },
+        { name: 'Mean', type: 'line', data: chartData.mean_series || [] },
+        { name: 'UCL', type: 'line', data: chartData.ucl_series || [] },
+        { name: 'LCL', type: 'line', data: chartData.lcl_series || [] }
+      ],
+      chart: { height: 380, type: 'line', toolbar: { show: false }, zoom: { enabled: false } },
+      colors: ['#487fff', '#45b369', '#ef4a00', '#8252e9'],
+      stroke: { width: [2, 2, 2, 2], curve: 'smooth', dashArray: [0, 6, 4, 4] },
+      fill: { type: ['gradient', 'solid', 'solid', 'solid'], gradient: { shadeIntensity: 0.4, opacityFrom: 0.45, opacityTo: 0.05, stops: [0, 100] } },
+      dataLabels: { enabled: false },
+      xaxis: { categories: chartData.labels || [], labels: { rotate: -45, style: { fontSize: '10px' } } },
+      yaxis: { labels: { formatter: function (v) { return Math.round(v); } } },
+      legend: { show: false },
+      tooltip: { shared: true, intersect: false }
+    });
+    dmsOverallPeopleControlChart.render();
+  }
+
+  function dmsOverallPeopleRenderTopChart(chartData) {
+    var el = document.getElementById('dms-overall-people-top-chart');
+    if (!el || typeof ApexCharts === 'undefined') return;
+    if (!chartData || !chartData.series || !chartData.series.length) {
+      el.innerHTML = '<p class="text-sm text-secondary-light mb-0">Grafik tren orang teratas tidak tersedia.</p>';
+      return;
+    }
+    el.innerHTML = '';
+    dmsOverallPeopleTopChart = new ApexCharts(el, {
+      series: chartData.series,
+      chart: { type: 'line', height: 280, toolbar: { show: false }, zoom: { enabled: false } },
+      stroke: { curve: 'smooth', width: 2 },
+      dataLabels: { enabled: false },
+      xaxis: { categories: chartData.labels || [], labels: { rotate: -45, style: { fontSize: '10px' } } },
+      legend: { position: 'top', horizontalAlign: 'left', fontSize: '11px' },
+      tooltip: { shared: true }
+    });
+    dmsOverallPeopleTopChart.render();
+  }
+
+  function dmsOverallPeopleRenderTable(table) {
+    var body = document.getElementById('dms-overall-people-table-body');
+    var empty = document.getElementById('dms-overall-people-table-empty');
+    if (!body) return;
+    body.innerHTML = '';
+    var rows = (table && table.rows) ? table.rows : [];
+    if (!rows.length) {
+      if (empty) empty.classList.remove('d-none');
+      return;
+    }
+    if (empty) empty.classList.add('d-none');
+
+    rows.forEach(function (row) {
+      var tr = document.createElement('tr');
+      var alerts = Number(row.alert_count || 0);
+      var hasAlert = !!row.has_alert && alerts > 0;
+      var detailId = 'dms-overall-people-alerts-' + (row.kode_sid || '-').replace(/[^a-zA-Z0-9_-]/g, '_');
+      var evidenceHtml = '<div class="fw-medium text-sm">' + (row.evidence_source || 'RFID Check-in') + '</div>' +
+        '<div class="text-xs text-secondary-light">' + (row.evidence_at || '-') + '</div>' +
+        '<div class="text-xs text-primary-600 mt-4">' + (row.evidence_note || '') + '</div>';
+      var badge = hasAlert
+        ? '<span class="badge bg-warning-focus text-warning-main border border-warning-main px-12 py-6">Ada alert</span>'
+        : '<span class="badge bg-success-focus text-success-main border border-success-main px-12 py-6">Tidak ada alert</span>';
+      var detailButton = hasAlert
+        ? '<button type="button" class="btn btn-sm btn-outline-primary dms-overall-people-toggle" data-target="' + detailId + '" data-sid="' + (row.kode_sid || '-') + '">Lihat alert</button>'
+        : '<span class="text-xs text-secondary-light">-</span>';
+      tr.innerHTML =
+        '<td class="fw-medium">' + (row.nama || '-') + '</td>' +
+        '<td>' + (row.kode_sid || '-') + '</td>' +
+        '<td>' + (row.jabatan || '-') + '</td>' +
+        '<td>' + (row.perusahaan || '-') + '</td>' +
+        '<td>' + (row.site || '-') + '</td>' +
+        '<td>' + evidenceHtml + '</td>' +
+        '<td>' + badge + '</td>' +
+        '<td class="text-end fw-semibold">' + alerts.toLocaleString('id-ID') + '</td>' +
+        '<td>' + detailButton + '</td>';
+      body.appendChild(tr);
+
+      if (hasAlert) {
+        var detailTr = document.createElement('tr');
+        detailTr.id = detailId;
+        detailTr.className = 'd-none';
+        detailTr.innerHTML = '<td colspan="9" class="bg-neutral-50"><div class="p-12"><div class="text-xs text-secondary-light mb-8">Jenis alert pada orang ini</div><div class="d-flex flex-wrap gap-2" data-role="alert-list"><span class="text-sm text-secondary-light">Klik "Lihat alert" untuk memuat detail.</span></div></div></td>';
+        body.appendChild(detailTr);
+      }
+    });
+
+    body.querySelectorAll('.dms-overall-people-toggle').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var targetId = button.getAttribute('data-target');
+        var sid = button.getAttribute('data-sid') || '';
+        var detailRow = targetId ? document.getElementById(targetId) : null;
+        if (!detailRow) return;
+        var isHidden = detailRow.classList.contains('d-none');
+        if (isHidden) {
+          detailRow.classList.remove('d-none');
+          button.textContent = 'Memuat...';
+          button.disabled = true;
+          var listEl = detailRow.querySelector('[data-role="alert-list"]');
+          var params = new URLSearchParams({
+            start: dmsOverallFilters.start || '',
+            end: dmsOverallFilters.end || '',
+            site: dmsOverallFilters.site || '',
+            perusahaan: dmsOverallFilters.perusahaan || '',
+            sid: sid
+          });
+          fetch(dmsOverallPeopleAlertsUrl + '?' + params.toString(), { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+            .then(function (result) {
+              if (!listEl) return;
+              if (!result.ok || !result.data.ok) {
+                listEl.innerHTML = '<span class="text-sm text-danger-main">Gagal memuat detail alert.</span>';
+                button.textContent = 'Lihat alert';
+                return;
+              }
+              var items = result.data.alerts || [];
+              listEl.innerHTML = items.length
+                ? items.map(function (item) { return '<span class="badge bg-primary-50 text-primary-600 border border-primary-100 px-12 py-6">' + (item.name || '-') + ' <span class="fw-semibold">(' + Number(item.total || 0).toLocaleString('id-ID') + ')</span></span>'; }).join('')
+                : '<span class="text-sm text-secondary-light">Tidak ada detail alert.</span>';
+              button.textContent = 'Sembunyikan alert';
+            })
+            .catch(function () {
+              if (listEl) listEl.innerHTML = '<span class="text-sm text-danger-main">Gagal memuat detail alert.</span>';
+              button.textContent = 'Lihat alert';
+            })
+            .finally(function () { button.disabled = false; });
+        } else {
+          detailRow.classList.add('d-none');
+          button.textContent = 'Lihat alert';
+        }
+      });
+    });
+  }
+
+  function dmsOverallPeopleRenderTabs(tabs, activeKey) {
+    var wrap = document.getElementById('dms-overall-people-table-tabs');
+    if (!wrap) return;
+    (tabs || []).forEach(function (tab) {
+      var button = wrap.querySelector('[data-status="' + (tab.key || '') + '"]');
+      if (!button) return;
+      var isActive = (tab.key || '') === activeKey;
+      button.classList.toggle('btn-primary', isActive);
+      button.classList.toggle('btn-outline-secondary', !isActive);
+      var countEl = button.querySelector('span');
+      if (countEl) countEl.textContent = Number(tab.count || 0).toLocaleString('id-ID');
+    });
+  }
+
+  function dmsOverallPeopleRenderPagination(pagination) {
+    var wrap = document.getElementById('dms-overall-people-pagination');
+    var info = document.getElementById('dms-overall-people-page-info');
+    var prev = document.getElementById('dms-overall-people-prev');
+    var next = document.getElementById('dms-overall-people-next');
+    var count = document.getElementById('dms-overall-people-table-count');
+    if (!wrap || !pagination) return;
+    wrap.classList.remove('d-none');
+    if (count) count.textContent = Number(pagination.total_rows || 0).toLocaleString('id-ID') + ' orang';
+    if (info) info.textContent = 'Halaman ' + pagination.page + ' / ' + pagination.total_pages;
+    if (prev) prev.disabled = pagination.page <= 1;
+    if (next) next.disabled = pagination.page >= pagination.total_pages;
+  }
+
+  function dmsOverallPeopleLoad() {
+    dmsOverallPeopleSetLoading(true);
+    document.getElementById('dms-overall-people-error').classList.add('d-none');
+    document.getElementById('dms-overall-people-content').classList.add('d-none');
+    var params = new URLSearchParams({
+      start: dmsOverallFilters.start || '',
+      end: dmsOverallFilters.end || '',
+      site: dmsOverallFilters.site || '',
+      perusahaan: dmsOverallFilters.perusahaan || '',
+      page: String(dmsOverallPeopleState.page),
+      status: dmsOverallPeopleState.status || 'with_alert'
+    });
+    fetch(dmsOverallPeopleUrl + '?' + params.toString(), { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (result) {
+        dmsOverallPeopleSetLoading(false);
+        if (!result.data.ok) {
+          document.getElementById('dms-overall-people-error').classList.remove('d-none');
+          document.getElementById('dms-overall-people-error-message').textContent = result.data.message || 'Gagal memuat overview orang.';
+          return;
+        }
+        var payload = result.data;
+        document.getElementById('dmsOverallPeopleModalLabel').textContent = payload.label || 'Overview Orang & Alert';
+        document.getElementById('dms-overall-people-subtitle').textContent = (payload.period && payload.period.start ? payload.period.start : '') + ' s/d ' + (payload.period && payload.period.end ? payload.period.end : '');
+        dmsOverallPeopleRenderSummary(payload.summary || []);
+        dmsOverallPeopleRenderTop(payload.top_units || []);
+        dmsOverallPeopleRenderControlChart(payload.control_chart || {});
+        dmsOverallPeopleRenderTopChart(payload.top_units_chart || {});
+        dmsOverallPeopleRenderTable(payload.table || {});
+        dmsOverallPeopleRenderTabs(payload.table_tabs || [], payload.table_active || 'with_alert');
+        dmsOverallPeopleRenderPagination(payload.pagination || null);
+        document.getElementById('dms-overall-people-content').classList.remove('d-none');
+      })
+      .catch(function () {
+        dmsOverallPeopleSetLoading(false);
+        document.getElementById('dms-overall-people-error').classList.remove('d-none');
+        document.getElementById('dms-overall-people-error-message').textContent = 'Gagal memuat overview orang & alert.';
+      });
+  }
+
+  function dmsOverallPeopleOpen() {
+    dmsOverallPeopleState.page = 1;
+    dmsOverallPeopleState.status = 'with_alert';
+    dmsOverallPeopleDestroyCharts();
+    if (dmsOverallPeopleModal) dmsOverallPeopleModal.show();
+    dmsOverallPeopleLoad();
+  }
+
   document.querySelectorAll('.dms-kpi-card').forEach(function (card) {
-    card.addEventListener('click', function () { dmsOverallOpen(); });
+    card.addEventListener('click', function () {
+      if ((card.getAttribute('data-kpi-group') || 'unit') === 'people') {
+        dmsOverallPeopleOpen();
+      } else {
+        dmsOverallOpen();
+      }
+    });
     card.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dmsOverallOpen(); }
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if ((card.getAttribute('data-kpi-group') || 'unit') === 'people') {
+          dmsOverallPeopleOpen();
+        } else {
+          dmsOverallOpen();
+        }
+      }
     });
   });
 
@@ -963,9 +1265,36 @@
     });
   }
 
+  var overallPeoplePrev = document.getElementById('dms-overall-people-prev');
+  var overallPeopleNext = document.getElementById('dms-overall-people-next');
+  if (overallPeoplePrev) overallPeoplePrev.addEventListener('click', function () {
+    if (dmsOverallPeopleState.page > 1) { dmsOverallPeopleState.page--; dmsOverallPeopleLoad(); }
+  });
+  if (overallPeopleNext) overallPeopleNext.addEventListener('click', function () {
+    dmsOverallPeopleState.page++; dmsOverallPeopleLoad();
+  });
+
+  var overallPeopleTabWrap = document.getElementById('dms-overall-people-table-tabs');
+  if (overallPeopleTabWrap) {
+    overallPeopleTabWrap.querySelectorAll('[data-status]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var nextStatus = button.getAttribute('data-status') || 'with_alert';
+        if (nextStatus === dmsOverallPeopleState.status) return;
+        dmsOverallPeopleState.status = nextStatus;
+        dmsOverallPeopleState.page = 1;
+        dmsOverallPeopleLoad();
+      });
+    });
+  }
+
   if (dmsOverallModalEl) {
     dmsOverallModalEl.addEventListener('hidden.bs.modal', function () {
       dmsOverallDestroyCharts();
+    });
+  }
+  if (dmsOverallPeopleModalEl) {
+    dmsOverallPeopleModalEl.addEventListener('hidden.bs.modal', function () {
+      dmsOverallPeopleDestroyCharts();
     });
   }
 

@@ -1001,6 +1001,122 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
+     * Tren harian alert untuk operator teratas (multi-series chart).
+     *
+     * @param  list<string>  $sids
+     * @return array{labels:list<string>, series:list<array{name:string, data:list<int>}>}
+     */
+    public function dailyAlertsForTopOperatorSids(string $start, string $end, array $sids): array
+    {
+        $empty = ['labels' => [], 'series' => []];
+        if ($sids === [] || ! $this->isUp()) {
+            return $empty;
+        }
+
+        $cacheKey = 'dms_monitoring:overall.top_operator_daily:'.md5($start.'|'.$end.'|'.implode(',', $sids).'|'.$this->scopeCacheSuffix());
+
+        return Cache::remember($cacheKey, 1800, function () use ($start, $end, $sids, $empty): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return $empty;
+            }
+
+            $placeholders = implode(',', array_fill(0, count($sids), '?'));
+            $sql = "
+                SELECT date(waktu_deteksi) AS hari, UPPER(TRIM(kode_sid)) AS sid, count(*) AS total
+                FROM bcsid.mv_dms_alert
+                WHERE {$this->alertDateWhere()}
+                  AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
+                  AND UPPER(TRIM(kode_sid)) IN ({$placeholders})
+                GROUP BY 1, 2
+                ORDER BY 1
+            ";
+
+            try {
+                $rows = DB::connection($connection)->select(
+                    $sql,
+                    array_merge($this->alertDateBindings($start, $end), $sids),
+                );
+            } catch (Throwable $e) {
+                report($e);
+
+                return $empty;
+            }
+
+            $labels = [];
+            $indexed = [];
+            foreach ($rows as $row) {
+                $hari = $row->hari;
+                if ($hari instanceof \DateTimeInterface) {
+                    $hari = $hari->format('Y-m-d');
+                }
+                $hari = (string) $hari;
+                $labels[$hari] = true;
+                $indexed[(string) $row->sid][$hari] = (int) $row->total;
+            }
+
+            $sortedLabels = array_keys($labels);
+            sort($sortedLabels);
+
+            $series = [];
+            foreach ($sids as $sid) {
+                $data = [];
+                foreach ($sortedLabels as $label) {
+                    $data[] = (int) ($indexed[$sid][$label] ?? 0);
+                }
+                $series[] = ['name' => $sid, 'data' => $data];
+            }
+
+            return ['labels' => $sortedLabels, 'series' => $series];
+        });
+    }
+
+    /**
+     * @return list<array{name:string,total:int}>
+     */
+    public function operatorAlertDetails(string $start, string $end, string $sid): array
+    {
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return [];
+        }
+
+        $bindings = $this->alertDateBindings($start, $end);
+        $bindings[] = strtoupper(trim($sid));
+
+        $sql = "
+            SELECT COALESCE(NULLIF(TRIM(nama_pelanggaran::text), ''), '-') AS alert_name, count(*) AS total
+            FROM bcsid.mv_dms_alert
+            WHERE {$this->alertDateWhere()}
+              AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
+              AND UPPER(TRIM(kode_sid)) = ?
+            GROUP BY 1
+            ORDER BY total DESC, alert_name ASC
+        ";
+
+        try {
+            $rows = DB::connection($connection)->select($sql, $bindings);
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            if (count($out) >= 8) {
+                break;
+            }
+            $out[] = [
+                'name' => (string) $row->alert_name,
+                'total' => (int) ($row->total ?? 0),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * Agregat performa control room per perusahaan × site.
      *
      * @return list<array{

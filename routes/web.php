@@ -776,8 +776,12 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         Route::get('/dashboard/widgets/growth', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'widgetGrowth'])->name('dms-monitoring.widget.growth');
         Route::get('/dashboard/kpi-overall', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'overallModal'])
             ->name('dms-monitoring.kpi-overall');
+        Route::get('/dashboard/kpi-overall/people', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'overallPeopleModal'])
+            ->name('dms-monitoring.kpi-overall.people');
         Route::get('/dashboard/kpi-overall/unit-alerts', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'overallModalUnitAlerts'])
             ->name('dms-monitoring.kpi-overall.unit-alerts');
+        Route::get('/dashboard/kpi-overall/people-alerts', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'overallPeopleModalAlerts'])
+            ->name('dms-monitoring.kpi-overall.people-alerts');
         Route::get('/dashboard/kpi/{metric}/detail', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'kpiDetail'])
             ->where('metric', 'operator_checkin|total_alert|ratio_per_person|units_operating|ratio_per_unit')
             ->name('dms-monitoring.kpi-detail');

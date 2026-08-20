@@ -6,6 +6,7 @@ namespace App\Http\Controllers\PraOperasi;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DmsMonitoring\DmsMonitoringOverallModalRequest;
+use App\Http\Requests\DmsMonitoring\DmsMonitoringPersonAlertDetailRequest;
 use App\Http\Requests\DmsMonitoring\DmsMonitoringUnitAlertDetailRequest;
 use App\Services\Dms\DmsDashboardOverviewService;
 use App\Services\DmsMonitoring\DmsAlertMonitoringPageService;
@@ -13,6 +14,7 @@ use App\Services\DmsMonitoring\DmsAlertMonitoringService;
 use App\Services\DmsMonitoring\DmsMonitoringControlRoomPerformanceService;
 use App\Services\DmsMonitoring\DmsMonitoringKpiDetailService;
 use App\Services\DmsMonitoring\DmsMonitoringOverallModalService;
+use App\Services\DmsMonitoring\DmsMonitoringOverallPeopleModalService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -29,6 +31,7 @@ final class DmsAlertMonitoringController extends Controller
         private readonly DmsDashboardOverviewService $overview,
         private readonly DmsMonitoringKpiDetailService $kpiDetail,
         private readonly DmsMonitoringOverallModalService $overallModal,
+        private readonly DmsMonitoringOverallPeopleModalService $overallPeopleModal,
         private readonly DmsMonitoringControlRoomPerformanceService $controlRoom,
     ) {}
 
@@ -99,6 +102,19 @@ final class DmsAlertMonitoringController extends Controller
         return response()->json($payload, $status);
     }
 
+    public function overallPeopleModal(DmsMonitoringOverallModalRequest $request): JsonResponse
+    {
+        $payload = $this->overallPeopleModal->payload(
+            $request->filters(),
+            $request->page(),
+            $request->status(),
+        );
+
+        $status = ($payload['ok'] ?? false) ? 200 : 422;
+
+        return response()->json($payload, $status);
+    }
+
     public function overallModalUnitAlerts(DmsMonitoringUnitAlertDetailRequest $request): JsonResponse
     {
         $payload = $this->overallModal->unitAlertDetails(
@@ -106,6 +122,18 @@ final class DmsAlertMonitoringController extends Controller
             $request->unit(),
             $request->unitSite(),
             $request->unitPerusahaan(),
+        );
+
+        $status = ($payload['ok'] ?? false) ? 200 : 422;
+
+        return response()->json($payload, $status);
+    }
+
+    public function overallPeopleModalAlerts(DmsMonitoringPersonAlertDetailRequest $request): JsonResponse
+    {
+        $payload = $this->overallPeopleModal->personAlertDetails(
+            $request->filters(),
+            $request->sid(),
         );
 
         $status = ($payload['ok'] ?? false) ? 200 : 422;
