@@ -61,7 +61,7 @@
           </div>
 
           <p id="dms-kpi-detail-footnote" class="text-xs text-secondary-light mt-16 mb-0 d-none">
-            Unit online diambil dari <code>dms_vehicle_status_alerts</code> (global). Breakdown site/perusahaan untuk unit aktivitas alert dari <code>mv_dms_alert</code>.
+            Unit beroperasi diambil dari <code>dms_vehicle_statuses</code> (speed_gps &gt; 0, join <code>dms_vehicle</code>). Unit dengan alert dari <code>mv_dms_alert</code>.
           </p>
         </div>
       </div>

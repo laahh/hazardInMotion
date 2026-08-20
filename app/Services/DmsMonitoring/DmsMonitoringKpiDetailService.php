@@ -257,14 +257,14 @@ class DmsMonitoringKpiDetailService
         int $page,
         array $filters,
     ): array {
-        $unitsOnline = $this->reader->unitsOperatingNow(30);
+        $unitsMoving = $this->reader->unitsOperatingNow(30);
         $unitsInPeriod = $this->reader->unitsOperatingInRange($start, $end);
-        $activityTotal = array_sum(array_column($this->reader->distinctUnitsBySite($start, $end), 'value'));
+        $alertUnitsTotal = array_sum(array_column($this->reader->distinctAlertUnitsBySite($start, $end), 'value'));
 
         $summary = [
-            ['label' => 'Unit online (30 mnt)', 'value' => number_format($unitsOnline), 'hint' => 'Global — dms_vehicle_status_alerts'],
-            ['label' => 'Unit online (periode)', 'value' => number_format($unitsInPeriod), 'hint' => 'Global — dms_vehicle_status_alerts'],
-            ['label' => 'Unit aktivitas alert', 'value' => number_format($activityTotal), 'hint' => 'Per site/perusahaan — mv_dms_alert'],
+            ['label' => 'Unit bergerak (30 mnt)', 'value' => number_format($unitsMoving), 'hint' => 'Global — dms_vehicle_statuses (speed_gps > 0)'],
+            ['label' => 'Unit bergerak (periode)', 'value' => number_format($unitsInPeriod), 'hint' => 'Global — dms_vehicle_statuses (speed_gps > 0)'],
+            ['label' => 'Unit dengan alert', 'value' => number_format($alertUnitsTotal), 'hint' => 'Per site — mv_dms_alert'],
         ];
 
         $base = match ($level) {
@@ -274,7 +274,7 @@ class DmsMonitoringKpiDetailService
                     'site' => $r['site'],
                     'value' => $r['value'],
                 ], $this->reader->distinctUnitsBySite($start, $end)),
-                $activityTotal,
+                array_sum(array_column($this->reader->distinctUnitsBySite($start, $end), 'value')),
                 $filters,
                 false,
                 $summary,
@@ -291,7 +291,7 @@ class DmsMonitoringKpiDetailService
                 false,
                 $summary,
             ),
-            'rows' => $this->wrapUnitRows($start, $end, $parentSite, $parentCompany, $page, $filters, $summary),
+            'rows' => $this->wrapOperatingUnitRows($start, $end, $parentSite, $parentCompany, $page, $filters, $summary),
             default => $this->errorPayload('Level tidak valid.'),
         };
 
@@ -688,6 +688,45 @@ class DmsMonitoringKpiDetailService
                 ['key' => 'status_label', 'label' => 'Status L1'],
             ],
         );
+    }
+
+    /**
+     * @param  list<array{label:string, value:string, hint:string}>  $summary
+     * @return array<string, mixed>
+     */
+    private function wrapOperatingUnitRows(
+        string $start,
+        string $end,
+        ?string $parentSite,
+        ?string $parentCompany,
+        int $page,
+        array $filters,
+        array $summary = [],
+    ): array {
+        $result = $this->reader->operatingUnitDetailRows($start, $end, $parentSite, $parentCompany, $page, self::PER_PAGE);
+
+        $payload = $this->wrapRowsLevel(
+            'units_operating',
+            $parentSite,
+            $parentCompany,
+            $result['rows'],
+            $result['total'],
+            $page,
+            $filters,
+            [
+                ['key' => 'unit', 'label' => 'Unit'],
+                ['key' => 'site', 'label' => 'Site'],
+                ['key' => 'perusahaan', 'label' => 'Perusahaan'],
+                ['key' => 'value', 'label' => 'Beroperasi'],
+            ],
+            false,
+        );
+
+        if ($summary !== []) {
+            $payload['summary'] = $summary;
+        }
+
+        return $payload;
     }
 
     /**

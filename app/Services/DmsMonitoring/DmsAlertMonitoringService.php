@@ -214,7 +214,7 @@ final class DmsAlertMonitoringService
             [
                 'label' => 'Unit Beroperasi',
                 'value' => number_format($unitsInPeriod),
-                'hint' => 'periode filter'.($unitsOnline > 0 ? ' · '.$unitsOnline.' online 30 mnt' : ''),
+                'hint' => 'unit bergerak GPS (speed > 0) · periode filter'.($unitsOnline > 0 ? ' · '.$unitsOnline.' bergerak 30 mnt' : ''),
                 'icon' => 'solar:wheel-bold',
                 'bg' => 'bg-purple',
                 'gradient' => 'bg-gradient-end-4',
