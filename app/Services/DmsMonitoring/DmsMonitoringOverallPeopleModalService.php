@@ -105,7 +105,7 @@ final class DmsMonitoringOverallPeopleModalService
             return $this->errorPayload('Tanggal detail di luar range filter.');
         }
 
-        $cacheKey = 'dms_monitoring:overall_people.day.v1:'.md5(json_encode([
+        $cacheKey = 'dms_monitoring:overall_people.day.v2:'.md5(json_encode([
             $filters,
             $day,
             $status,

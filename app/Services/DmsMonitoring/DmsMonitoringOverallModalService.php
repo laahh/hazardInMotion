@@ -36,7 +36,7 @@ final class DmsMonitoringOverallModalService
             return $this->errorPayload('Koneksi ke hse_automation tidak tersedia.');
         }
 
-        $cacheKey = 'dms_monitoring:overall_unit.payload.v2:'.md5(json_encode([
+        $cacheKey = 'dms_monitoring:overall_unit.payload.v3:'.md5(json_encode([
             $filters,
             $page,
             $status,
@@ -93,20 +93,79 @@ final class DmsMonitoringOverallModalService
      * @param  array{start:string, end:string, site:string, perusahaan:string}  $filters
      * @return array<string, mixed>
      */
+    public function dayPayload(array $filters, string $day, string $status = 'without_alert', int $page = 1): array
+    {
+        $this->reader->applyScope(
+            $filters['site'] !== '' ? $filters['site'] : null,
+            $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null,
+        );
+
+        if (! $this->reader->isUp()) {
+            return $this->errorPayload('Koneksi ke hse_automation tidak tersedia.');
+        }
+
+        if ($day < $filters['start'] || $day > $filters['end']) {
+            return $this->errorPayload('Tanggal detail di luar range filter.');
+        }
+
+        $cacheKey = 'dms_monitoring:overall_unit.day.v1:'.md5(json_encode([
+            $filters,
+            $day,
+            $status,
+            $page,
+            $this->reader->scopeCacheSuffixForKey(),
+        ]));
+
+        try {
+            /** @var array<string, mixed> */
+            return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters, $day, $status, $page): array {
+                $tz = (string) config('app.timezone');
+                $dayStart = Carbon::parse($day, $tz)->startOfDay()->format('Y-m-d H:i:s');
+                $dayEnd = Carbon::parse($day, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+                $table = $this->reader->operatingUnitsForDay($dayStart, $dayEnd, $status, $page, self::PER_PAGE);
+                $statusLabel = match ($status) {
+                    'with_alert' => 'dengan alert',
+                    'all' => 'beroperasi',
+                    default => 'tanpa alert',
+                };
+
+                return [
+                    'ok' => true,
+                    'day' => $day,
+                    'status' => $status,
+                    'label' => 'Unit '.$statusLabel.' pada '.Carbon::parse($day, $tz)->translatedFormat('d M Y'),
+                    'table' => ['rows' => $table['rows']],
+                    'pagination' => [
+                        'page' => $page,
+                        'per_page' => self::PER_PAGE,
+                        'total_rows' => (int) ($table['total'] ?? 0),
+                        'total_pages' => max(1, (int) ceil(($table['total'] ?? 0) / self::PER_PAGE)),
+                    ],
+                ];
+            });
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->errorPayload('Gagal memuat detail unit harian.');
+        }
+    }
+
+    /**
+     * @param  array{start:string, end:string, site:string, perusahaan:string}  $filters
+     * @return array<string, mixed>
+     */
     private function buildPayload(array $filters, int $page, string $status): array
     {
         $tz = (string) config('app.timezone');
         $start = Carbon::parse($filters['start'], $tz)->startOfDay()->format('Y-m-d H:i:s');
         $end = Carbon::parse($filters['end'], $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
 
-        $dailyBar = $this->buildDailyBarChart(
-            $start,
-            $end,
-            $tz,
-            $this->reader->dailyOperatingUnitSeries($start, $end),
-            'units',
-            'Unit beroperasi',
-        );
+        $breakdown = $this->reader->operatingUnitAlertBreakdown($start, $end);
+        $alertTotal = (int) ($this->reader->alertSummary($start, $end)['total'] ?? 0);
+        $unitsTotal = (int) ($breakdown['units_total'] ?? 0);
+        $withAlert = (int) ($breakdown['with_alert'] ?? 0);
+        $withoutAlert = (int) ($breakdown['without_alert'] ?? 0);
+        $dailyBar = $this->buildDailyUnitChart($start, $end, $tz, $breakdown['days'] ?? []);
 
         $summary = $this->reader->overallOperatingUnitsSummary($start, $end);
         $table = $this->reader->overallOperatingUnitsTable($start, $end, $page, self::PER_PAGE, $status);
@@ -131,32 +190,32 @@ final class DmsMonitoringOverallModalService
                 [
                     'key' => 'units_operating',
                     'label' => 'Unit Beroperasi',
-                    'value' => number_format((int) ($summary['units_operating'] ?? 0)),
-                    'hint' => 'Unit unik di tabel; batang harian = unit-hari',
+                    'value' => number_format($unitsTotal),
+                    'hint' => 'Unit-hari di range filter (sama dengan kartu KPI)',
                     'icon' => 'solar:wheel-bold',
                     'color' => '#8252e9',
                 ],
                 [
                     'key' => 'units_without_alert',
                     'label' => 'Beroperasi Tanpa Alert',
-                    'value' => number_format((int) ($summary['units_without_alert'] ?? 0)),
-                    'hint' => 'Unit aktif tanpa alert DMS',
+                    'value' => number_format($withoutAlert),
+                    'hint' => 'Unit-hari beroperasi tanpa alert di hari yang sama',
                     'icon' => 'solar:shield-check-bold',
                     'color' => '#45b369',
                 ],
                 [
                     'key' => 'units_with_alert',
                     'label' => 'Unit Dengan Alert',
-                    'value' => number_format((int) ($summary['units_with_alert'] ?? 0)),
-                    'hint' => 'Unit aktif yang memiliki alert',
+                    'value' => number_format($withAlert),
+                    'hint' => 'Unit-hari beroperasi yang punya alert di hari yang sama',
                     'icon' => 'solar:danger-triangle-bold',
                     'color' => '#f4941e',
                 ],
                 [
                     'key' => 'ratio',
                     'label' => 'Rasio Alert / Unit',
-                    'value' => number_format((float) ($summary['ratio_per_unit'] ?? 0), 2),
-                    'hint' => number_format((int) ($summary['total_alerts'] ?? 0)).' total alert',
+                    'value' => number_format($unitsTotal > 0 ? $alertTotal / $unitsTotal : 0, 2),
+                    'hint' => number_format($alertTotal).' alert ÷ '.$unitsTotal.' unit-hari',
                     'icon' => 'solar:chart-2-bold',
                     'color' => '#487fff',
                 ],
@@ -321,6 +380,56 @@ final class DmsMonitoringOverallModalService
             'series' => $values,
             'total' => array_sum($values),
             'name' => $name,
+        ];
+    }
+
+    /**
+     * @param  list<array{hari:string, units:int, with_alert:int, without_alert:int}>  $rows
+     * @return array{
+     *     labels:list<string>,
+     *     iso_dates:list<string>,
+     *     series:list<array{name:string, data:list<int>}>,
+     *     totals:array{units:int, with_alert:int, without_alert:int}
+     * }
+     */
+    private function buildDailyUnitChart(string $start, string $end, string $tz, array $rows): array
+    {
+        $indexed = [];
+        foreach ($rows as $row) {
+            $indexed[(string) ($row['hari'] ?? '')] = $row;
+        }
+
+        $labels = [];
+        $isoDates = [];
+        $units = [];
+        $withAlert = [];
+        $withoutAlert = [];
+        $cursor = Carbon::parse($start, $tz)->startOfDay();
+        $until = Carbon::parse($end, $tz)->startOfDay();
+        while ($cursor->lt($until)) {
+            $key = $cursor->toDateString();
+            $hit = $indexed[$key] ?? [];
+            $labels[] = $cursor->isoFormat('D MMM');
+            $isoDates[] = $key;
+            $units[] = (int) ($hit['units'] ?? 0);
+            $withAlert[] = (int) ($hit['with_alert'] ?? 0);
+            $withoutAlert[] = (int) ($hit['without_alert'] ?? 0);
+            $cursor->addDay();
+        }
+
+        return [
+            'labels' => $labels,
+            'iso_dates' => $isoDates,
+            'series' => [
+                ['name' => 'Unit beroperasi', 'data' => $units],
+                ['name' => 'Dengan alert', 'data' => $withAlert],
+                ['name' => 'Tanpa alert', 'data' => $withoutAlert],
+            ],
+            'totals' => [
+                'units' => array_sum($units),
+                'with_alert' => array_sum($withAlert),
+                'without_alert' => array_sum($withoutAlert),
+            ],
         ];
     }
 

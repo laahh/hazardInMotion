@@ -480,8 +480,8 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
         $identity = $this->fungsionalOperatorCheckinIdentitySql($dayStart, $dayEnd);
         $statusWhere = match ($status) {
-            'without_alert' => ' WHERE COALESCE(a.alert_count, 0) = 0',
-            'with_alert' => ' WHERE COALESCE(a.alert_count, 0) > 0',
+            'without_alert' => ' WHERE alert_count = 0',
+            'with_alert' => ' WHERE alert_count > 0',
             default => '',
         };
         $offset = max(0, ($page - 1) * $perPage);
@@ -858,6 +858,172 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
             return $this->dailyOnlineUnitsFromAlerts($start, $end);
         });
+    }
+
+    /**
+     * Unit-hari beroperasi vs alert di hari yang sama.
+     *
+     * @return array{
+     *     days:list<array{hari:string, units:int, with_alert:int, without_alert:int}>,
+     *     units_total:int,
+     *     with_alert:int,
+     *     without_alert:int
+     * }
+     */
+    public function operatingUnitAlertBreakdown(string $start, string $end): array
+    {
+        $empty = ['days' => [], 'units_total' => 0, 'with_alert' => 0, 'without_alert' => 0];
+
+        /** @var array{days:list<array{hari:string, units:int, with_alert:int, without_alert:int}>, units_total:int, with_alert:int, without_alert:int} */
+        return $this->rememberScalar('unit_alert_daily_v1', $start, $end, function () use ($start, $end, $empty): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return $empty;
+            }
+
+            $scopeWhere = $this->vehicleStatusAlertScopeWhere();
+            $alertWhere = $this->alertDateWhere();
+            $sql = "
+                WITH operating AS (
+                    SELECT DISTINCT (last_online_at)::date AS hari, TRIM(vehicle_no) AS unit
+                    FROM bcsid.dms_vehicle_status_alerts
+                    WHERE last_online_at >= ? AND last_online_at < ?
+                      AND vehicle_no IS NOT NULL AND TRIM(vehicle_no) <> ''
+                      {$scopeWhere}
+                ),
+                alert_days AS (
+                    SELECT date(waktu_deteksi) AS hari, TRIM(unit::text) AS unit
+                    FROM bcsid.mv_dms_alert
+                    WHERE {$alertWhere}
+                      AND unit IS NOT NULL AND TRIM(unit::text) <> ''
+                    GROUP BY 1, 2
+                )
+                SELECT
+                    o.hari,
+                    count(*) AS units,
+                    count(*) FILTER (WHERE a.unit IS NOT NULL) AS with_alert,
+                    count(*) FILTER (WHERE a.unit IS NULL) AS without_alert
+                FROM operating o
+                LEFT JOIN alert_days a ON a.hari = o.hari AND a.unit = o.unit
+                GROUP BY 1
+                ORDER BY 1
+            ";
+            $bindings = array_merge(
+                [$start, $end],
+                $this->vehicleScopeBindings(),
+                $this->alertDateBindings($start, $end),
+            );
+
+            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+            try {
+                $rows = DB::connection($connection)->select($sql, $bindings);
+            } catch (Throwable $e) {
+                report($e);
+
+                return $this->operatingUnitAlertBreakdownFromMv($start, $end, $empty);
+            } finally {
+                $this->clearStatementTimeout($connection);
+            }
+
+            $mapped = $this->mapUnitAlertBreakdownRows($rows);
+            if ($mapped['days'] === []) {
+                return $this->operatingUnitAlertBreakdownFromMv($start, $end, $empty);
+            }
+
+            return $mapped;
+        }, $empty);
+    }
+
+    /**
+     * Daftar unit beroperasi di satu hari, dengan/tanpa alert di hari itu.
+     *
+     * @return array{total:int, rows:list<array<string, mixed>>}
+     */
+    public function operatingUnitsForDay(
+        string $dayStart,
+        string $dayEnd,
+        string $status,
+        int $page,
+        int $perPage,
+    ): array {
+        $empty = ['total' => 0, 'rows' => []];
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return $empty;
+        }
+
+        $statusWhere = match ($status) {
+            'without_alert' => ' WHERE alert_count = 0',
+            'with_alert' => ' WHERE alert_count > 0',
+            default => '',
+        };
+        $offset = max(0, ($page - 1) * $perPage);
+        $scopeWhere = $this->vehicleStatusAlertScopeWhere();
+        $alertWhere = $this->alertDateWhere();
+        $sqlBody = "
+            WITH operating AS (
+                SELECT DISTINCT ON (TRIM(vehicle_no))
+                    TRIM(vehicle_no) AS unit,
+                    COALESCE(NULLIF(TRIM(mine_operation_name::text), ''), '-') AS site,
+                    COALESCE(NULLIF(TRIM(contractor_name::text), ''), '-') AS perusahaan,
+                    last_online_at
+                FROM bcsid.dms_vehicle_status_alerts
+                WHERE last_online_at >= ? AND last_online_at < ?
+                  AND vehicle_no IS NOT NULL AND TRIM(vehicle_no) <> ''
+                  {$scopeWhere}
+                ORDER BY TRIM(vehicle_no), last_online_at DESC
+            ),
+            alert_days AS (
+                SELECT TRIM(unit::text) AS unit, count(*) AS alert_count
+                FROM bcsid.mv_dms_alert
+                WHERE {$alertWhere}
+                  AND unit IS NOT NULL AND TRIM(unit::text) <> ''
+                GROUP BY 1
+            ),
+            tagged AS (
+                SELECT
+                    o.unit,
+                    o.site,
+                    o.perusahaan,
+                    o.last_online_at,
+                    COALESCE(a.alert_count, 0) AS alert_count
+                FROM operating o
+                LEFT JOIN alert_days a ON a.unit = o.unit
+            )
+        ";
+        $bindings = array_merge(
+            [$dayStart, $dayEnd],
+            $this->vehicleScopeBindings(),
+            $this->alertDateBindings($dayStart, $dayEnd),
+        );
+
+        $countSql = $sqlBody.' SELECT count(*) AS total FROM tagged'.$statusWhere;
+        $dataSql = $sqlBody.'
+            SELECT unit, site, perusahaan, last_online_at, alert_count
+            FROM tagged'.$statusWhere.'
+            ORDER BY alert_count DESC, unit ASC
+            LIMIT ? OFFSET ?
+        ';
+
+        $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+        try {
+            $countRow = DB::connection($connection)->selectOne($countSql, $bindings);
+            $rows = DB::connection($connection)->select($dataSql, array_merge($bindings, [$perPage, $offset]));
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->operatingUnitsForDayFromMv($dayStart, $dayEnd, $status, $page, $perPage, $empty);
+        } finally {
+            $this->clearStatementTimeout($connection);
+        }
+
+        $mapped = $this->mapOperatingUnitDayRows($rows);
+        $total = (int) ($countRow->total ?? 0);
+        if ($total === 0 && $mapped === [] && $status !== 'without_alert') {
+            return $this->operatingUnitsForDayFromMv($dayStart, $dayEnd, $status, $page, $perPage, $empty);
+        }
+
+        return ['total' => $total, 'rows' => $mapped];
     }
 
     /**
@@ -3063,6 +3229,171 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         }
 
         return $this->mapDailyUnitRows($rows);
+    }
+
+    /**
+     * @param  list<object>  $rows
+     * @return array{
+     *     days:list<array{hari:string, units:int, with_alert:int, without_alert:int}>,
+     *     units_total:int,
+     *     with_alert:int,
+     *     without_alert:int
+     * }
+     */
+    private function mapUnitAlertBreakdownRows(array $rows): array
+    {
+        $days = [];
+        $unitsTotal = 0;
+        $withAlert = 0;
+        $withoutAlert = 0;
+        foreach ($rows as $row) {
+            $hari = $row->hari;
+            if ($hari instanceof \DateTimeInterface) {
+                $hari = $hari->format('Y-m-d');
+            }
+            $units = (int) ($row->units ?? 0);
+            $with = (int) ($row->with_alert ?? 0);
+            $without = (int) ($row->without_alert ?? 0);
+            $unitsTotal += $units;
+            $withAlert += $with;
+            $withoutAlert += $without;
+            $days[] = [
+                'hari' => (string) $hari,
+                'units' => $units,
+                'with_alert' => $with,
+                'without_alert' => $without,
+            ];
+        }
+
+        return [
+            'days' => $days,
+            'units_total' => $unitsTotal,
+            'with_alert' => $withAlert,
+            'without_alert' => $withoutAlert,
+        ];
+    }
+
+    /**
+     * @param  array{days:list<array{hari:string, units:int, with_alert:int, without_alert:int}>, units_total:int, with_alert:int, without_alert:int}  $empty
+     * @return array{days:list<array{hari:string, units:int, with_alert:int, without_alert:int}>, units_total:int, with_alert:int, without_alert:int}
+     */
+    private function operatingUnitAlertBreakdownFromMv(string $start, string $end, array $empty): array
+    {
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return $empty;
+        }
+
+        $sql = "
+            SELECT
+                date(waktu_deteksi) AS hari,
+                count(DISTINCT TRIM(unit::text)) AS units,
+                count(DISTINCT TRIM(unit::text)) AS with_alert,
+                0 AS without_alert
+            FROM bcsid.mv_dms_alert
+            WHERE {$this->alertDateWhere()}
+              AND unit IS NOT NULL AND TRIM(unit::text) <> ''
+            GROUP BY 1
+            ORDER BY 1
+        ";
+
+        $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+        try {
+            $rows = DB::connection($connection)->select($sql, $this->alertDateBindings($start, $end));
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        } finally {
+            $this->clearStatementTimeout($connection);
+        }
+
+        return $this->mapUnitAlertBreakdownRows($rows);
+    }
+
+    /**
+     * @param  list<object>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function mapOperatingUnitDayRows(array $rows): array
+    {
+        return array_map(static function ($r): array {
+            $evidenceAt = $r->last_online_at ?? $r->evidence_at ?? null;
+            if ($evidenceAt instanceof \DateTimeInterface) {
+                $evidenceAt = $evidenceAt->format('Y-m-d H:i:s');
+            }
+
+            return [
+                'unit' => (string) ($r->unit ?? '-'),
+                'site' => (string) ($r->site ?? '-'),
+                'perusahaan' => (string) ($r->perusahaan ?? '-'),
+                'evidence_source' => 'Online DMS',
+                'evidence_at' => $evidenceAt !== null ? (string) $evidenceAt : '-',
+                'alert_count' => (int) ($r->alert_count ?? 0),
+                'has_alert' => (int) ($r->alert_count ?? 0) > 0,
+            ];
+        }, $rows);
+    }
+
+    /**
+     * @param  array{total:int, rows:list<array<string, mixed>>}  $empty
+     * @return array{total:int, rows:list<array<string, mixed>>}
+     */
+    private function operatingUnitsForDayFromMv(
+        string $dayStart,
+        string $dayEnd,
+        string $status,
+        int $page,
+        int $perPage,
+        array $empty,
+    ): array {
+        if ($status === 'without_alert') {
+            return $empty;
+        }
+
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return $empty;
+        }
+
+        $offset = max(0, ($page - 1) * $perPage);
+        $sql = "
+            WITH tagged AS (
+                SELECT
+                    TRIM(unit::text) AS unit,
+                    COALESCE(NULLIF(TRIM(site::text), ''), '-') AS site,
+                    COALESCE(NULLIF(TRIM(perusahaan::text), ''), '-') AS perusahaan,
+                    max(waktu_deteksi) AS last_online_at,
+                    count(*) AS alert_count
+                FROM bcsid.mv_dms_alert
+                WHERE {$this->alertDateWhere()}
+                  AND unit IS NOT NULL AND TRIM(unit::text) <> ''
+                GROUP BY 1, 2, 3
+            )
+            SELECT unit, site, perusahaan, last_online_at, alert_count, count(*) OVER() AS total
+            FROM tagged
+            ORDER BY alert_count DESC, unit ASC
+            LIMIT ? OFFSET ?
+        ";
+
+        $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+        try {
+            $rows = DB::connection($connection)->select(
+                $sql,
+                array_merge($this->alertDateBindings($dayStart, $dayEnd), [$perPage, $offset]),
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        } finally {
+            $this->clearStatementTimeout($connection);
+        }
+
+        return [
+            'total' => (int) ($rows[0]->total ?? 0),
+            'rows' => $this->mapOperatingUnitDayRows($rows),
+        ];
     }
 
     /**

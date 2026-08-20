@@ -34,11 +34,52 @@
               <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-12">
                 <div>
                   <h6 class="fw-bold text-md mb-4">Unit Beroperasi per Hari</h6>
-                  <p class="text-xs text-secondary-light mb-0">Unit unik tiap hari. Total kartu KPI = jumlah batang.</p>
+                  <p class="text-xs text-secondary-light mb-0">Unit unik tiap hari. Klik batang <strong>Tanpa alert</strong> untuk melihat daftar unitnya.</p>
                 </div>
                 <span id="dms-overall-daily-bar-total" class="fw-semibold text-sm" style="color:#8252e9">Total 0</span>
               </div>
               <div id="dms-overall-daily-bar" class="dms-overall-main-chart"></div>
+            </div>
+          </div>
+
+          <div class="card border radius-8 mb-24" id="dms-overall-day-card">
+            <div class="card-body p-20">
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-12">
+                <div>
+                  <h6 class="fw-bold text-md mb-4" id="dms-overall-day-title">Detail Unit Harian</h6>
+                  <p class="text-xs text-secondary-light mb-0" id="dms-overall-day-hint">Klik batang hari di chart untuk memuat daftar unit.</p>
+                </div>
+                <span id="dms-overall-day-count" class="text-sm text-secondary-light"></span>
+              </div>
+              <div id="dms-overall-day-loading" class="d-none text-center py-16">
+                <div class="spinner-border spinner-border-sm text-primary-600" role="status" aria-hidden="true"></div>
+                <span class="text-sm text-secondary-light ms-8">Memuat detail hari…</span>
+              </div>
+              <div class="table-responsive border radius-8">
+                <table class="table table-hover mb-0 align-middle">
+                  <thead class="bg-neutral-50">
+                    <tr>
+                      <th scope="col">Unit</th>
+                      <th scope="col">Site</th>
+                      <th scope="col">Perusahaan</th>
+                      <th scope="col">Bukti Operasi</th>
+                      <th scope="col">Status Alert</th>
+                      <th scope="col" class="text-end">Total Alert</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dms-overall-day-body"></tbody>
+                </table>
+              </div>
+              <div id="dms-overall-day-empty" class="text-center py-24 text-secondary-light text-sm">
+                Belum ada hari yang dipilih.
+              </div>
+              <div id="dms-overall-day-pagination" class="d-none align-items-center justify-content-between flex-wrap gap-2 mt-16">
+                <span id="dms-overall-day-page-info" class="text-sm text-secondary-light"></span>
+                <div class="d-flex gap-2">
+                  <button type="button" id="dms-overall-day-prev" class="btn btn-sm btn-outline-secondary" disabled>Sebelumnya</button>
+                  <button type="button" id="dms-overall-day-next" class="btn btn-sm btn-outline-secondary" disabled>Berikutnya</button>
+                </div>
+              </div>
             </div>
           </div>
 

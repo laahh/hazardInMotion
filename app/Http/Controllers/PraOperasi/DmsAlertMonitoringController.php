@@ -103,6 +103,20 @@ final class DmsAlertMonitoringController extends Controller
         return response()->json($payload, $status);
     }
 
+    public function overallModalDay(DmsMonitoringPeopleDayRequest $request): JsonResponse
+    {
+        $payload = $this->overallModal->dayPayload(
+            $request->filters(),
+            $request->day(),
+            $request->status(),
+            $request->page(),
+        );
+
+        $status = ($payload['ok'] ?? false) ? 200 : 422;
+
+        return response()->json($payload, $status);
+    }
+
     public function overallPeopleModal(DmsMonitoringOverallModalRequest $request): JsonResponse
     {
         $payload = $this->overallPeopleModal->payload(

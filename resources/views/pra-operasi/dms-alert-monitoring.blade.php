@@ -603,6 +603,7 @@
 
   var dmsOverallFilters = @json($filters);
   var dmsOverallUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall'));
+  var dmsOverallUnitDayUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall.unit-day'));
   var dmsOverallUnitAlertsUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall.unit-alerts'));
   var dmsOverallPeopleUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall.people'));
   var dmsOverallPeopleDayUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall.people-day'));
@@ -610,6 +611,7 @@
   var dmsOverallModalEl = document.getElementById('dmsOverallModal');
   var dmsOverallModal = dmsOverallModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(dmsOverallModalEl) : null;
   var dmsOverallState = { page: 1, status: 'with_alert' };
+  var dmsOverallDayState = { day: '', status: 'without_alert', page: 1 };
   var dmsOverallControlChart = null;
   var dmsOverallTopUnitsChart = null;
   var dmsOverallDailyBarChart = null;
@@ -770,10 +772,163 @@
     var el = document.getElementById('dms-overall-daily-bar');
     var totalEl = document.getElementById('dms-overall-daily-bar-total');
     if (dmsOverallDailyBarChart) { dmsOverallDailyBarChart.destroy(); dmsOverallDailyBarChart = null; }
+    var totals = (chartData && chartData.totals) ? chartData.totals : {};
     if (totalEl) {
-      totalEl.textContent = 'Total ' + Number((chartData && chartData.total) || 0).toLocaleString('id-ID') + ' unit-hari';
+      totalEl.textContent = 'Tanpa alert ' + Number(totals.without_alert || 0).toLocaleString('id-ID') + ' / beroperasi ' + Number(totals.units || 0).toLocaleString('id-ID');
     }
-    dmsOverallDailyBarChart = dmsRenderDailyBarChart(el, 'unit', chartData || {}, '#8252e9');
+    if (!el || typeof ApexCharts === 'undefined') return;
+    el.innerHTML = '';
+    var series = (chartData && chartData.series) ? chartData.series : [];
+    if (!series.length || !series[0] || !series[0].data) {
+      el.innerHTML = '<p class="text-sm text-secondary-light mb-0">Tidak ada data harian pada periode ini.</p>';
+      return;
+    }
+    dmsOverallDailyBarChart = new ApexCharts(el, {
+      series: series,
+      chart: {
+        type: 'bar',
+        height: 300,
+        toolbar: { show: false },
+        zoom: { enabled: false },
+        events: {
+          click: function (event, ctx, config) {
+            if (config.dataPointIndex == null || config.dataPointIndex < 0) return;
+            var isoDates = (chartData && chartData.iso_dates) ? chartData.iso_dates : [];
+            var day = isoDates[config.dataPointIndex] || '';
+            if (!day) return;
+            var status = 'without_alert';
+            if (config.seriesIndex === 1) status = 'with_alert';
+            if (config.seriesIndex === 0) status = 'all';
+            dmsOverallLoadDay(day, status, 1);
+          }
+        }
+      },
+      colors: ['#8252e9', '#f4941e', '#45b369'],
+      plotOptions: { bar: { borderRadius: 4, columnWidth: '60%' } },
+      dataLabels: { enabled: false },
+      xaxis: { categories: (chartData && chartData.labels) ? chartData.labels : [], labels: { rotate: -45, style: { fontSize: '10px' } } },
+      yaxis: { labels: { formatter: function (v) { return Math.round(v); } } },
+      legend: { position: 'top', horizontalAlign: 'left', fontSize: '12px' },
+      tooltip: { y: { formatter: function (v) { return Number(v || 0).toLocaleString('id-ID') + ' unit'; } } }
+    });
+    dmsOverallDailyBarChart.render();
+  }
+
+  function dmsOverallSetDayLoading(show) {
+    var loading = document.getElementById('dms-overall-day-loading');
+    if (loading) loading.classList.toggle('d-none', !show);
+  }
+
+  function dmsOverallResetDayCard() {
+    dmsOverallDayState = { day: '', status: 'without_alert', page: 1 };
+    var title = document.getElementById('dms-overall-day-title');
+    var hint = document.getElementById('dms-overall-day-hint');
+    var count = document.getElementById('dms-overall-day-count');
+    var body = document.getElementById('dms-overall-day-body');
+    var empty = document.getElementById('dms-overall-day-empty');
+    var pagination = document.getElementById('dms-overall-day-pagination');
+    if (title) title.textContent = 'Detail Unit Harian';
+    if (hint) hint.textContent = 'Klik batang hari di chart untuk memuat daftar unit.';
+    if (count) count.textContent = '';
+    if (body) body.innerHTML = '';
+    if (empty) {
+      empty.classList.remove('d-none');
+      empty.textContent = 'Belum ada hari yang dipilih.';
+    }
+    if (pagination) {
+      pagination.classList.add('d-none');
+      pagination.classList.remove('d-flex');
+    }
+  }
+
+  function dmsOverallRenderDayTable(payload) {
+    var body = document.getElementById('dms-overall-day-body');
+    var empty = document.getElementById('dms-overall-day-empty');
+    var title = document.getElementById('dms-overall-day-title');
+    var hint = document.getElementById('dms-overall-day-hint');
+    var count = document.getElementById('dms-overall-day-count');
+    var pagination = document.getElementById('dms-overall-day-pagination');
+    var info = document.getElementById('dms-overall-day-page-info');
+    var prev = document.getElementById('dms-overall-day-prev');
+    var next = document.getElementById('dms-overall-day-next');
+    if (title) title.textContent = payload.label || 'Detail Unit Harian';
+    if (hint) hint.textContent = 'Hasil sesuai range filter dan tanggal batang yang diklik.';
+    if (!body) return;
+    body.innerHTML = '';
+    var rows = (payload.table && payload.table.rows) ? payload.table.rows : [];
+    if (!rows.length) {
+      if (empty) {
+        empty.classList.remove('d-none');
+        empty.textContent = 'Tidak ada unit untuk filter hari ini.';
+      }
+    } else {
+      if (empty) empty.classList.add('d-none');
+      rows.forEach(function (row) {
+        var alerts = Number(row.alert_count || 0);
+        var hasAlert = !!row.has_alert && alerts > 0;
+        var badge = hasAlert
+          ? '<span class="badge bg-warning-focus text-warning-main border border-warning-main px-12 py-6">Ada alert</span>'
+          : '<span class="badge bg-success-focus text-success-main border border-success-main px-12 py-6">Tidak ada alert</span>';
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td class="fw-medium">' + (row.unit || '-') + '</td>' +
+          '<td>' + (row.site || '-') + '</td>' +
+          '<td>' + (row.perusahaan || '-') + '</td>' +
+          '<td><div class="fw-medium text-sm">' + (row.evidence_source || 'Online DMS') + '</div>' +
+            '<div class="text-xs text-secondary-light">' + (row.evidence_at || '-') + '</div></td>' +
+          '<td>' + badge + '</td>' +
+          '<td class="text-end fw-semibold">' + alerts.toLocaleString('id-ID') + '</td>';
+        body.appendChild(tr);
+      });
+    }
+    var paginationData = payload.pagination || {};
+    if (count) count.textContent = Number(paginationData.total_rows || 0).toLocaleString('id-ID') + ' unit';
+    if (pagination) {
+      pagination.classList.remove('d-none');
+      pagination.classList.add('d-flex');
+    }
+    if (info) info.textContent = 'Halaman ' + (paginationData.page || 1) + ' / ' + (paginationData.total_pages || 1);
+    if (prev) prev.disabled = (paginationData.page || 1) <= 1;
+    if (next) next.disabled = (paginationData.page || 1) >= (paginationData.total_pages || 1);
+  }
+
+  function dmsOverallLoadDay(day, status, page) {
+    dmsOverallDayState.day = day || dmsOverallDayState.day;
+    dmsOverallDayState.status = status || dmsOverallDayState.status || 'without_alert';
+    dmsOverallDayState.page = page || 1;
+    if (!dmsOverallDayState.day) return;
+    dmsOverallSetDayLoading(true);
+    var params = new URLSearchParams({
+      start: dmsOverallFilters.start || '',
+      end: dmsOverallFilters.end || '',
+      site: dmsOverallFilters.site || '',
+      perusahaan: dmsOverallFilters.perusahaan || '',
+      day: dmsOverallDayState.day,
+      status: dmsOverallDayState.status,
+      page: String(dmsOverallDayState.page)
+    });
+    fetch(dmsOverallUnitDayUrl + '?' + params.toString(), { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (result) {
+        dmsOverallSetDayLoading(false);
+        if (!result.data.ok) {
+          var empty = document.getElementById('dms-overall-day-empty');
+          if (empty) {
+            empty.classList.remove('d-none');
+            empty.textContent = result.data.message || 'Gagal memuat detail hari.';
+          }
+          return;
+        }
+        dmsOverallRenderDayTable(result.data);
+      })
+      .catch(function () {
+        dmsOverallSetDayLoading(false);
+        var empty = document.getElementById('dms-overall-day-empty');
+        if (empty) {
+          empty.classList.remove('d-none');
+          empty.textContent = 'Gagal memuat detail hari.';
+        }
+      });
   }
 
   function dmsOverallRenderTable(table) {
@@ -982,6 +1137,7 @@
     dmsOverallState.page = 1;
     dmsOverallState.status = 'with_alert';
     dmsOverallDestroyCharts();
+    dmsOverallResetDayCard();
     if (dmsOverallModal) dmsOverallModal.show();
     dmsOverallLoad();
   }
@@ -1462,6 +1618,17 @@
   });
   if (overallNext) overallNext.addEventListener('click', function () {
     dmsOverallState.page++; dmsOverallLoad();
+  });
+
+  var overallDayPrev = document.getElementById('dms-overall-day-prev');
+  var overallDayNext = document.getElementById('dms-overall-day-next');
+  if (overallDayPrev) overallDayPrev.addEventListener('click', function () {
+    if (dmsOverallDayState.page > 1) {
+      dmsOverallLoadDay(dmsOverallDayState.day, dmsOverallDayState.status, dmsOverallDayState.page - 1);
+    }
+  });
+  if (overallDayNext) overallDayNext.addEventListener('click', function () {
+    dmsOverallLoadDay(dmsOverallDayState.day, dmsOverallDayState.status, dmsOverallDayState.page + 1);
   });
 
   var overallTabWrap = document.getElementById('dms-overall-table-tabs');
