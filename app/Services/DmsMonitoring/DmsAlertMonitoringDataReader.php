@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services\DmsMonitoring;
 
 use App\Services\Dms\DmsDashboardDataSource;
-use App\Services\PraOperasi\PraOperasiOperatorRosterReader;
 use App\Services\SportEvaluation\SportEvaluationPvtRfidCheckinReader;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -59,7 +58,6 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
     public function __construct(
         private readonly SportEvaluationPvtRfidCheckinReader $connectionSource,
-        private readonly PraOperasiOperatorRosterReader $rosterReader,
     ) {}
 
     public function isUp(): bool
@@ -289,22 +287,51 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
-     * Jumlah SID unik yang check-in RFID dalam window, diiris roster
-     * jabatan FUNGSIONAL yang namanya mengandung "Operator"
-     * (kolom m_karyawan.id_jabatan_fungsional).
+     * Jumlah SID unik yang check-in RFID dalam window, diiris jabatan_fungsional
+     * yang namanya mengandung "Operator".
      *
-     * Tidak memfilter jenis_checkinout maupun status_lolos.
+     * Join ke snapshot karyawan aktif (crontable_bep_vw_m_karyawan_aktif, ~17 MB)
+     * — BUKAN seq-scan bcsid.m_karyawan (~6 GB) dan BUKAN dump ribuan SID ke PHP.
+     * RFID memakai index tanggal + kode_sid. Tidak memfilter jenis_checkinout
+     * maupun status_lolos.
      */
     public function countOperatorCheckinsInRange(string $start, string $end): int
     {
-        $roster = $this->rosterReader->fungsionalOperatorRoster();
-        if ($roster === []) {
-            return 0;
-        }
+        return $this->rememberScalarInt('rfid_fungsional_checkin_v1', $start, $end, function () use ($start, $end): int {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return 0;
+            }
 
-        $sids = array_map(static fn (array $row): string => (string) ($row['kode_sid'] ?? ''), $roster);
+            $sql = "
+                SELECT count(DISTINCT UPPER(TRIM(r.kode_sid))) AS total
+                FROM bcsid.mv_checkinout_rfid r
+                INNER JOIN bcsid.crontable_bep_vw_m_karyawan_aktif k
+                  ON k.kode_sid = r.kode_sid
+                WHERE r.tanggal_checkinout >= ? AND r.tanggal_checkinout < ?
+                  AND r.kode_sid IS NOT NULL AND TRIM(r.kode_sid) <> ''
+                  AND UPPER(TRIM(COALESCE(k.jabatan_fungsional, ''))) LIKE '%OPERATOR%'
+                  AND UPPER(TRIM(COALESCE(k.jabatan_fungsional, ''))) <> 'VISITOR'
+            ";
+            $bindings = [$start, $end];
+            if ($this->scopePerusahaan !== null) {
+                $sql .= ' AND TRIM(r.perusahaan::text) = ?';
+                $bindings[] = $this->scopePerusahaan;
+            }
 
-        return $this->countDistinctOperatorCheckins($start, $end, $sids);
+            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+            try {
+                $row = DB::connection($connection)->selectOne($sql, $bindings);
+            } catch (Throwable $e) {
+                report($e);
+
+                return 0;
+            } finally {
+                $this->clearStatementTimeout($connection);
+            }
+
+            return (int) ($row->total ?? 0);
+        });
     }
 
     /**

@@ -12,8 +12,9 @@ use Throwable;
 /**
  * Roster karyawan berjabatan "Operator".
  * - operatorRoster(): tipe STRUKTURAL via kolom id_jabatan (Pra Operasi / fit-to-work).
- * - fungsionalOperatorRoster(): tipe FUNGSIONAL via kolom id_jabatan_fungsional
- *   yang namanya mengandung Operator (KPI Total Orang Checkin di /pra-operasi/dashboard).
+ * - fungsionalOperatorRoster(): jabatan_fungsional mengandung Operator, dari
+ *   snapshot aktif crontable_bep_vw_m_karyawan_aktif (~17 MB) — bukan seq-scan
+ *   m_karyawan 6 GB (KPI Total Orang Checkin / drill-down).
  *
  * CATATAN PERFORMA (root cause 504 Gateway Timeout):
  * bcsid.m_karyawan berukuran ~6 GB untuk ±68 ribu baris dan HANYA punya index
@@ -36,7 +37,7 @@ final class PraOperasiOperatorRosterReader
 
     private const CACHE_KEY = 'pra_operasi:operator_roster:v3';
 
-    private const CACHE_KEY_FUNGSIONAL = 'pra_operasi:operator_roster_fungsional:v1';
+    private const CACHE_KEY_FUNGSIONAL = 'pra_operasi:operator_roster_fungsional:v2';
 
     public function __construct(
         private readonly SportEvaluationPvtRfidCheckinReader $connectionSource,
@@ -70,7 +71,7 @@ final class PraOperasiOperatorRosterReader
             return [];
         }
 
-        return Cache::remember(self::CACHE_KEY_FUNGSIONAL, self::CACHE_TTL_SECONDS, fn (): array => $this->fetchRoster('FUNGSIONAL'));
+        return Cache::remember(self::CACHE_KEY_FUNGSIONAL, self::CACHE_TTL_SECONDS, fn (): array => $this->fetchFungsionalFromActiveSnapshot());
     }
 
     /**
@@ -91,10 +92,58 @@ final class PraOperasiOperatorRosterReader
      */
     public function refreshFungsional(): array
     {
-        $roster = $this->fetchRoster('FUNGSIONAL');
+        $roster = $this->fetchFungsionalFromActiveSnapshot();
         Cache::put(self::CACHE_KEY_FUNGSIONAL, $roster, self::CACHE_TTL_SECONDS);
 
         return $roster;
+    }
+
+    /**
+     * Snapshot karyawan aktif (cron table 17 MB) — aman dipanggil dari HTTP.
+     *
+     * @return list<array{kode_sid: string, nama: string, jabatan: string, perusahaan: string}>
+     */
+    private function fetchFungsionalFromActiveSnapshot(): array
+    {
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return [];
+        }
+
+        try {
+            $rows = DB::connection($connection)->select(
+                "SELECT k.kode_sid, k.nama, k.jabatan_fungsional AS jabatan, COALESCE(k.nama_perusahaan, '') AS perusahaan
+                 FROM bcsid.crontable_bep_vw_m_karyawan_aktif k
+                 WHERE k.kode_sid IS NOT NULL
+                   AND TRIM(k.kode_sid) <> ''
+                   AND UPPER(TRIM(COALESCE(k.jabatan_fungsional, ''))) LIKE '%OPERATOR%'
+                   AND UPPER(TRIM(COALESCE(k.jabatan_fungsional, ''))) <> 'VISITOR'"
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        $roster = [];
+        foreach ($rows as $row) {
+            $sid = trim((string) ($row->kode_sid ?? ''));
+            if ($sid === '') {
+                continue;
+            }
+            $upper = mb_strtoupper($sid);
+            if (isset($roster[$upper])) {
+                continue;
+            }
+            $roster[$upper] = [
+                'kode_sid' => $sid,
+                'nama' => trim((string) ($row->nama ?? '')),
+                'jabatan' => trim((string) ($row->jabatan ?? '')),
+                'perusahaan' => trim((string) ($row->perusahaan ?? '')),
+            ];
+        }
+
+        return array_values($roster);
     }
 
     /**
@@ -108,12 +157,7 @@ final class PraOperasiOperatorRosterReader
         }
 
         $tipe = strtoupper(trim($jabatanTipe));
-        $jabatanColumn = match ($tipe) {
-            'STRUKTURAL' => 'id_jabatan',
-            'FUNGSIONAL' => 'id_jabatan_fungsional',
-            default => null,
-        };
-        if ($jabatanColumn === null) {
+        if ($tipe !== 'STRUKTURAL') {
             return [];
         }
 
@@ -124,8 +168,7 @@ final class PraOperasiOperatorRosterReader
                  JOIN bcsid.m_jabatan_tipe jt ON jt.id = j.id_jabatan_tipe
                  WHERE UPPER(j.nama) LIKE '%OPERATOR%'
                    AND UPPER(j.nama) <> 'VISITOR'
-                   AND UPPER(jt.nama) = ?",
-                [$tipe]
+                   AND UPPER(jt.nama) = 'STRUKTURAL'"
             );
         } catch (Throwable $e) {
             report($e);
@@ -154,9 +197,9 @@ final class PraOperasiOperatorRosterReader
         // Satu scan (bukan join), plus batasi ke karyawan yang belum dinonaktifkan
         // supaya roster tidak membengkak dengan riwayat karyawan lama.
         $sql = "
-            SELECT k.kode_sid, k.nama, k.{$jabatanColumn} AS id_jabatan, k.id_perusahaan
+            SELECT k.kode_sid, k.nama, k.id_jabatan, k.id_perusahaan
             FROM bcsid.m_karyawan k
-            WHERE k.{$jabatanColumn} = ANY(?)
+            WHERE k.id_jabatan = ANY(?)
               AND k.kode_sid IS NOT NULL
               AND TRIM(k.kode_sid) <> ''
               AND k.tanggal_penonaktifkan IS NULL
