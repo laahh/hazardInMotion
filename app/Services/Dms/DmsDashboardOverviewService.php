@@ -29,23 +29,54 @@ final class DmsDashboardOverviewService
     /**
      * @return array<string, mixed>
      */
-    public function dashboard(?string $startDate = null, ?string $endDate = null, ?string $site = null, ?string $perusahaan = null): array
-    {
+    public function dashboard(
+        ?string $startDate = null,
+        ?string $endDate = null,
+        ?string $site = null,
+        ?string $perusahaan = null,
+        bool $deferGrowth = false,
+    ): array {
         $this->reader->applyScope($site, $perusahaan);
         $tz = (string) config('app.timezone');
         $now = Carbon::now($tz);
         $windows = $this->buildWindows($now, $tz, $startDate, $endDate);
 
         if (! $this->reader->isUp()) {
-            return $this->emptyPayload($now, $windows);
+            return $this->emptyPayload($now, $windows, $deferGrowth);
         }
 
         try {
-            return $this->buildPayload($now, $tz, $windows);
+            return $this->buildPayload($now, $tz, $windows, $deferGrowth);
         } catch (Throwable $e) {
             report($e);
 
-            return $this->emptyPayload($now, $windows);
+            return $this->emptyPayload($now, $windows, $deferGrowth);
+        }
+    }
+
+    /**
+     * Widget growth chart — dipanggil lazy setelah halaman utama render.
+     *
+     * @return array{title:string, subtitle:string, total:string, delta:array{text:string, class:string}, labels:list<string>, series:list<int>}
+     */
+    public function growthWidget(?string $endDate, ?string $site, ?string $perusahaan): array
+    {
+        $this->reader->applyScope($site, $perusahaan);
+        $tz = (string) config('app.timezone');
+        $endDay = is_string($endDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) === 1
+            ? Carbon::parse($endDate, $tz)->startOfDay()->addDay()
+            : Carbon::now($tz)->startOfDay()->addDay();
+
+        if (! $this->reader->isUp()) {
+            return $this->emptyGrowthPayload();
+        }
+
+        try {
+            return $this->buildFourWeekGrowth($endDay->format('Y-m-d H:i:s'), $tz);
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->emptyGrowthPayload();
         }
     }
 
@@ -118,7 +149,7 @@ final class DmsDashboardOverviewService
      * @param  array<string, string>  $windows
      * @return array<string, mixed>
      */
-    private function buildPayload(Carbon $now, string $tz, array $windows): array
+    private function buildPayload(Carbon $now, string $tz, array $windows, bool $deferGrowth = false): array
     {
         $today = $this->reader->alertSummary($windows['todayStart'], $windows['todayEnd']);
         $yesterday = $this->reader->alertSummary($windows['yesterdayStart'], $windows['todayStart']);
@@ -239,7 +270,9 @@ final class DmsDashboardOverviewService
             ],
         ];
 
-        $growth = $this->buildFourWeekGrowth($windows['todayEnd'], $tz);
+        $growth = $deferGrowth
+            ? $this->emptyGrowthPayload()
+            : $this->buildFourWeekGrowth($windows['todayEnd'], $tz);
 
         return [
             'up' => true,
@@ -322,6 +355,23 @@ final class DmsDashboardOverviewService
             'delta' => $this->delta($latestWeek, $previousWeek, true),
             'labels' => $labels,
             'series' => $series,
+        ];
+    }
+
+    /**
+     * @return array{title:string, subtitle:string, total:string, delta:array{text:string, class:string}, labels:list<string>, series:list<int>}
+     */
+    private function emptyGrowthPayload(): array
+    {
+        $zeroDelta = ['text' => '+0', 'class' => 'bg-success-focus text-success-main', 'raw' => 0];
+
+        return [
+            'title' => 'Alert Last 4 Week',
+            'subtitle' => 'Weekly Report',
+            'total' => '0',
+            'delta' => $zeroDelta,
+            'labels' => ['W1', 'W2', 'W3', 'W4'],
+            'series' => [0, 0, 0, 0],
         ];
     }
 
@@ -607,7 +657,7 @@ final class DmsDashboardOverviewService
      * @param  array<string, string>  $windows
      * @return array<string, mixed>
      */
-    private function emptyPayload(Carbon $now, array $windows): array
+    private function emptyPayload(Carbon $now, array $windows, bool $deferGrowth = false): array
     {
         $zeroDelta = ['text' => '+0', 'class' => 'bg-success-focus text-success-main', 'raw' => 0];
         $emptySpark = array_fill(0, self::SPARKLINE_DAYS, 0);
@@ -642,7 +692,7 @@ final class DmsDashboardOverviewService
             'dateLabel' => $windows['dateLabel'] ?? $now->translatedFormat('d M Y'),
             'kpiDeltaLabel' => $windows['kpiDeltaLabel'] ?? 'vs kemarin',
             'kpis' => $kpis,
-            'growth' => ['title' => 'Alert Last 4 Week', 'subtitle' => 'Weekly Report', 'total' => '0', 'delta' => $zeroDelta, 'labels' => ['W1', 'W2', 'W3', 'W4'], 'series' => [0, 0, 0, 0]],
+            'growth' => $deferGrowth ? $this->emptyGrowthPayload() : ['title' => 'Alert Last 4 Week', 'subtitle' => 'Weekly Report', 'total' => '0', 'delta' => $zeroDelta, 'labels' => ['W1', 'W2', 'W3', 'W4'], 'series' => [0, 0, 0, 0]],
             'statistic' => ['title' => 'Statistik Alert', 'subtitle' => self::CHART_DAYS.' hari terakhir', 'total' => '0', 'confirmed' => '0', 'dismissed' => '0', 'labels' => $chartLabels, 'series' => $emptyChart],
             'categories' => [],
             'overview' => ['confirmed' => 0, 'dismissed' => 0, 'pending' => 0, 'rate' => 0.0],

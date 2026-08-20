@@ -27,6 +27,32 @@ final class DmsAlertMonitoringService
     ) {}
 
     /**
+     * @return array{start:string, end:string, site:string, perusahaan:string}
+     */
+    public function filtersFromRequest(Request $request): array
+    {
+        return $this->readFilters($request);
+    }
+
+    /**
+     * Funnel layer tanpa load array SID ke memori.
+     *
+     * @return list<array{label:string, count:int}>
+     */
+    public function funnelForPeriod(string $start, string $end): array
+    {
+        $summary = $this->reader->alertSummary($start, $end);
+
+        return [
+            ['label' => 'Checkin RFID', 'count' => $this->reader->countDistinctCheckinSids($start, $end)],
+            ['label' => 'Punya Alert DMS', 'count' => $this->reader->countDistinctAlertSids($start, $end)],
+            ['label' => 'Direview L1', 'count' => (int) ($summary['l1_reviewed'] ?? 0)],
+            ['label' => 'Direview L2', 'count' => (int) ($summary['l2_reviewed'] ?? 0)],
+            ['label' => 'Post Event', 'count' => $this->reader->countPostEventDistinctSids($start, $end)],
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function dashboard(Request $request): array

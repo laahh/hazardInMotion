@@ -1,6 +1,6 @@
-{{-- Modal overview unit beroperasi & alert (menggantikan drill-down KPI lama) --}}
+{{-- Modal overview unit beroperasi & alert — hampir full viewport --}}
 <div class="modal fade" id="dmsOverallModal" tabindex="-1" aria-labelledby="dmsOverallModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-fullscreen-lg-down modal-xxl modal-dialog-scrollable">
+  <div class="modal-dialog modal-dialog-scrollable dms-overall-modal-dialog">
     <div class="modal-content radius-8 border-0 shadow-lg">
       <div class="modal-header border-bottom py-16 px-24">
         <div class="min-w-0 pe-12">
@@ -29,26 +29,30 @@
           {{-- Summary cards --}}
           <div id="dms-overall-summary" class="row g-3 mb-24"></div>
 
-          {{-- Top units highlight --}}
-          <div class="card border radius-8 mb-24">
-            <div class="card-body p-20">
-              <h6 class="fw-bold text-md mb-12">Unit dengan Alert Terbanyak</h6>
-              <div id="dms-overall-top-units" class="row g-2 mb-16"></div>
-              <div id="dms-overall-top-units-chart"></div>
-            </div>
-          </div>
-
-          {{-- Control chart UCL / LCL --}}
-          <div class="card border radius-8 mb-24">
-            <div class="card-body p-20">
-              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-12">
-                <div>
-                  <h6 class="fw-bold text-md mb-4">Control Chart Alert Harian</h6>
-                  <p class="text-xs text-secondary-light mb-0">Mean ± 3σ (UCL / LCL) dari total alert per hari</p>
+          {{-- Top units + control chart (2 kolom di layar lebar) --}}
+          <div class="row g-3 mb-24">
+            <div class="col-xl-5">
+              <div class="card border radius-8 h-100">
+                <div class="card-body p-20">
+                  <h6 class="fw-bold text-md mb-12">Unit dengan Alert Terbanyak</h6>
+                  <div id="dms-overall-top-units" class="row g-2 mb-12"></div>
+                  <div id="dms-overall-top-units-chart" class="dms-overall-mini-chart"></div>
                 </div>
-                <div id="dms-overall-control-legend" class="d-flex flex-wrap gap-3 text-xs"></div>
               </div>
-              <div id="dms-overall-control-chart"></div>
+            </div>
+            <div class="col-xl-7">
+              <div class="card border radius-8 h-100">
+                <div class="card-body p-20">
+                  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-12">
+                    <div>
+                      <h6 class="fw-bold text-md mb-4">Control Chart Alert Harian</h6>
+                      <p class="text-xs text-secondary-light mb-0">Mean ± 3σ (UCL / LCL) dari total alert per hari</p>
+                    </div>
+                    <div id="dms-overall-control-legend" class="d-flex flex-wrap gap-3 text-xs"></div>
+                  </div>
+                  <div id="dms-overall-control-chart" class="dms-overall-main-chart"></div>
+                </div>
+              </div>
             </div>
           </div>
 

@@ -60,6 +60,7 @@
     $weeklyStatus = $weeklyStatus ?? ['confirmed' => [], 'pending' => [], 'dismissed' => [], 'labels' => [], 'totals' => ['confirmed' => 0, 'pending' => 0, 'dismissed' => 0]];
     $filters = $filters ?? ['start' => '', 'end' => '', 'site' => '', 'perusahaan' => ''];
     $filterOptions = $filterOptions ?? ['sites' => [], 'companies' => []];
+    $lazyWidgets = $lazyWidgets ?? false;
 @endphp
 
 @section('css')
@@ -120,6 +121,43 @@
   .dms-cr-tone-bad { background: #fdba74; color: #7c2d12; }
   .dms-cr-tone-critical { background: #ef4444; color: #fff; }
   .dms-cr-tone-empty { background: #F3F4F6; color: #6B7280; }
+
+  .dms-overall-modal-dialog {
+    max-width: min(98vw, 1920px);
+    width: 98vw;
+    margin: 0.5rem auto;
+    height: calc(100vh - 1rem);
+  }
+  .dms-overall-modal-dialog .modal-content {
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .dms-overall-modal-dialog .modal-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .dms-overall-main-chart {
+    width: 100%;
+    min-height: 380px;
+  }
+  .dms-overall-mini-chart {
+    width: 100%;
+    min-height: 280px;
+  }
+  @media (max-width: 1199.98px) {
+    .dms-overall-modal-dialog {
+      width: 100vw;
+      max-width: 100vw;
+      height: 100vh;
+      margin: 0;
+    }
+    .dms-overall-modal-dialog .modal-content {
+      min-height: 100vh;
+      border-radius: 0 !important;
+    }
+  }
 </style>
 @endsection
 
@@ -237,120 +275,42 @@
   </div>
 
   <div class="col-xxl-4">
-    <div class="card h-100 radius-8 border">
+    <div class="card h-100 radius-8 border" id="dms-growth-widget">
       <div class="card-body p-24">
         <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
           <div>
             <h6 class="mb-2 fw-bold text-lg">{{ $growth['title'] ?? 'Alert Last 4 Week' }}</h6>
             <span class="text-sm fw-medium text-secondary-light">{{ $growth['subtitle'] ?? 'Weekly Report' }}</span>
           </div>
-          <div class="text-end">
+          <div class="text-end" id="dms-growth-head">
+            @if(empty($lazyWidgets))
             <h6 class="mb-2 fw-bold text-lg">{{ $growth['total'] }}</h6>
             <span class="{{ $growth['delta']['class'] }} ps-12 pe-12 pt-2 pb-2 rounded-2 fw-medium text-sm">{{ $growth['delta']['text'] }}</span>
+            @else
+            <div class="spinner-border spinner-border-sm text-primary-600" role="status"></div>
+            @endif
           </div>
         </div>
-        <div id="revenue-chart" class="mt-28"></div>
+        <div id="revenue-chart" class="mt-28">
+          @if(!empty($lazyWidgets))
+          <div class="text-center py-40 text-secondary-light text-sm">Memuat grafik mingguan…</div>
+          @endif
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="col-xxl-8">
+  <div class="col-xxl-8" id="dms-quadrant-widget">
+    @if(empty($lazyWidgets))
+    @include('pra-operasi.partials._dms-quadrant-widget', ['quadrantOrder' => $quadrantOrder])
+    @else
     <div class="card h-100 radius-8 border-0">
-      <div class="card-body p-24">
-        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-          <div>
-            <h6 class="mb-2 fw-bold text-lg">{{ $statistic['title'] ?? 'Matriks Site' }}</h6>
-            <span class="text-sm fw-medium text-secondary-light">{{ $statistic['subtitle'] ?? 'Check-in vs Alert / Orang' }}</span>
-          </div>
-          <div>
-            <span class="form-select form-select-sm w-auto bg-base border text-secondary-light d-inline-block pe-none">{{ $dateLabel }}</span>
-          </div>
-        </div>
-
-        <div class="mt-20 d-flex justify-content-center flex-wrap gap-3">
-          <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
-            <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
-              <iconify-icon icon="mingcute:user-follow-fill" class="icon"></iconify-icon>
-            </span>
-            <div>
-              <span class="text-secondary-light text-sm fw-medium">Total Check-in</span>
-              <h6 class="text-md fw-semibold mb-0">{{ $statistic['confirmed'] }}</h6>
-            </div>
-          </div>
-          <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
-            <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
-              <iconify-icon icon="solar:danger-triangle-bold" class="icon"></iconify-icon>
-            </span>
-            <div>
-              <span class="text-secondary-light text-sm fw-medium">Total Alert</span>
-              <h6 class="text-md fw-semibold mb-0">{{ $statistic['total'] }}</h6>
-            </div>
-          </div>
-          <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
-            <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
-              <iconify-icon icon="solar:chart-2-bold" class="icon"></iconify-icon>
-            </span>
-            <div>
-              <span class="text-secondary-light text-sm fw-medium">Alert / Orang</span>
-              <h6 class="text-md fw-semibold mb-0">{{ $statistic['dismissed'] }}</h6>
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-12 text-xs text-secondary-light text-center">
-          Median check-in: <strong>{{ number_format((float) ($statistic['x_median'] ?? 0), 0) }}</strong>
-          &nbsp;·&nbsp;
-          Median alert/orang: <strong>{{ number_format((float) ($statistic['y_median'] ?? 0), 2) }}</strong>
-        </div>
-
-        <div class="dms-quadrant-wrap mt-16">
-          <div class="dms-quadrant-y-title">Alert Intensity – Rasio Alert / Orang</div>
-          <div class="dms-quadrant-axis-hint mb-4"><span>Tinggi</span></div>
-          <div class="dms-quadrant-grid">
-            @foreach($quadrantOrder as $qKey)
-              @php
-                $q = $statistic['quadrants'][$qKey] ?? [
-                  'label' => $qKey,
-                  'description' => '',
-                  'bg' => '#f9fafb',
-                  'border' => '#9CA3AF',
-                  'text' => '#374151',
-                  'icon' => 'solar:map-point-bold',
-                  'sites' => [],
-                ];
-              @endphp
-              <div class="dms-quadrant-cell" style="background: {{ $q['bg'] }};">
-                <div>
-                  <div class="dms-quadrant-cell-head">
-                    <span class="dms-quadrant-cell-icon" style="background: {{ $q['bg'] }}; color: {{ $q['text'] }}; border: 1.5px solid {{ $q['border'] }};">
-                      <iconify-icon icon="{{ $q['icon'] }}" class="icon"></iconify-icon>
-                    </span>
-                    <div>
-                      <div class="dms-quadrant-cell-title" style="color: {{ $q['text'] }};">{{ $q['label'] }}</div>
-                      <div class="dms-quadrant-cell-desc">{{ $q['description'] }}</div>
-                    </div>
-                  </div>
-                </div>
-                <div class="dms-quadrant-sites">
-                  @forelse($q['sites'] ?? [] as $siteRow)
-                    <span
-                      class="dms-quadrant-pill"
-                      style="color: {{ $q['text'] }};"
-                      title="Check-in: {{ number_format($siteRow['checkin_count'] ?? 0) }} | Alert: {{ number_format($siteRow['alert_count'] ?? 0) }} | Rasio: {{ number_format((float) ($siteRow['ratio'] ?? 0), 2) }} | WoW: {{ ($siteRow['wow'] ?? 0) >= 0 ? '+' : '' }}{{ number_format((float) ($siteRow['wow'] ?? 0), 2) }}"
-                    >{{ $siteRow['site'] ?? '-' }} {{ $siteRow['arrow'] ?? '' }}</span>
-                  @empty
-                    <span class="text-xs text-secondary-light">—</span>
-                  @endforelse
-                </div>
-              </div>
-            @endforeach
-            <div class="dms-quadrant-center" title="Overall: {{ $statistic['confirmed'] }} check-in, {{ $statistic['total'] }} alert, {{ $statistic['dismissed'] }} alert/orang">Overall</div>
-          </div>
-          <div class="dms-quadrant-axis-hint"><span>Rendah</span><span>Tinggi</span></div>
-          <div class="dms-quadrant-x-title">Exposure – Total Orang Check-in</div>
-        </div>
+      <div class="card-body p-24 text-center py-60">
+        <div class="spinner-border text-primary-600 mb-12" role="status"></div>
+        <p class="text-sm text-secondary-light mb-0">Memuat matriks site…</p>
       </div>
     </div>
+    @endif
   </div>
 
   <div class="col-xxl-4">
@@ -433,63 +393,17 @@
     </div>
   </div>
 
-  <div class="col-12">
+  <div class="col-12" id="dms-control-room-widget">
+    @if(empty($lazyWidgets))
+    @include('pra-operasi.partials._dms-control-room-widget')
+    @else
     <div class="card h-100 radius-8 border-0">
-      <div class="card-body p-24">
-        <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between mb-16">
-          <div>
-            <h6 class="mb-2 fw-bold text-lg">{{ $controlRoom['title'] ?? 'Performa Control Room' }}</h6>
-            <span class="text-sm fw-medium text-secondary-light">{{ $controlRoom['subtitle'] ?? 'Intervensi alert & lead time real time per perusahaan / site' }}</span>
-          </div>
-          <span class="form-select form-select-sm w-auto bg-base border text-secondary-light d-inline-block pe-none">{{ $dateLabel }}</span>
-        </div>
-
-        <div class="dms-cr-wrap">
-          @if(($controlRoomColumns ?? []) === [])
-            <p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data performa control room untuk periode ini.</p>
-          @else
-            <table class="dms-cr-table">
-              <thead>
-                {{-- Baris 1: nama perusahaan (colspan = jumlah site) --}}
-                <tr>
-                  <th rowspan="2" class="dms-cr-metric">Metrik</th>
-                  @foreach($controlRoom['companies'] ?? [] as $company)
-                    <th colspan="{{ count($company['columns'] ?? []) }}" class="dms-cr-company">{{ $company['name'] ?? '-' }}</th>
-                  @endforeach
-                </tr>
-                {{-- Baris 2: nama site --}}
-                <tr>
-                  @foreach($controlRoomColumns as $column)
-                    <th class="dms-cr-site">{{ $column['site'] ?? '-' }}</th>
-                  @endforeach
-                </tr>
-              </thead>
-              <tbody>
-                @foreach($controlRoomRows as $row)
-                  <tr>
-                    <td class="dms-cr-metric">{{ $row['label'] ?? '-' }}</td>
-                    @foreach($controlRoomColumns as $column)
-                      @php
-                        $cell = ($row['cells'] ?? [])[$column['key'] ?? ''] ?? [
-                          'pct_label'   => '0%',
-                          'numerator'   => 0,
-                          'denominator' => 0,
-                          'tone'        => 'empty',
-                        ];
-                      @endphp
-                      <td class="dms-cr-tone-{{ $cell['tone'] ?? 'empty' }}">
-                        <div class="dms-cr-pct">{{ $cell['pct_label'] ?? '0%' }}</div>
-                        <div class="dms-cr-frac">({{ number_format((int) ($cell['numerator'] ?? 0)) }} / {{ number_format((int) ($cell['denominator'] ?? 0)) }})</div>
-                      </td>
-                    @endforeach
-                  </tr>
-                @endforeach
-              </tbody>
-            </table>
-          @endif
-        </div>
+      <div class="card-body p-24 text-center py-60">
+        <div class="spinner-border text-primary-600 mb-12" role="status"></div>
+        <p class="text-sm text-secondary-light mb-0">Memuat performa control room…</p>
       </div>
     </div>
+    @endif
   </div>
 
   <div class="col-xxl-6">
@@ -612,40 +526,34 @@
     createSparkline(kpi.chart, kpi.color, kpi.sparkline);
   });
 
-  var revenueEl = document.querySelector('#revenue-chart');
-  if (revenueEl && typeof ApexCharts !== 'undefined') {
+  function dmsRenderGrowthChart(growthData) {
+    var revenueEl = document.querySelector('#revenue-chart');
+    if (!revenueEl || typeof ApexCharts === 'undefined') return;
+    revenueEl.innerHTML = '';
     new ApexCharts(revenueEl, {
-      series: [{ name: 'Alert', data: growth.series || [] }],
+      series: [{ name: 'Alert', data: growthData.series || [] }],
       chart: { type: 'area', width: '100%', height: 162, toolbar: { show: false } },
       dataLabels: { enabled: false },
       stroke: { curve: 'smooth', width: 2, colors: ['#487fff'], lineCap: 'round' },
       grid: {
-        show: true,
-        borderColor: 'transparent',
-        strokeDashArray: 0,
-        xaxis: { lines: { show: false } },
-        yaxis: { lines: { show: false } },
+        show: true, borderColor: 'transparent', strokeDashArray: 0,
+        xaxis: { lines: { show: false } }, yaxis: { lines: { show: false } },
         padding: { top: -30, right: 0, bottom: -10, left: 0 }
       },
       fill: {
-        type: 'gradient',
-        colors: ['#487fff'],
-        gradient: {
-          shade: 'light',
-          type: 'vertical',
-          shadeIntensity: 0.5,
-          gradientToColors: ['#487fff00'],
-          inverseColors: false,
-          opacityFrom: 0.6,
-          opacityTo: 0.3,
-          stops: [0, 100]
-        }
+        type: 'gradient', colors: ['#487fff'],
+        gradient: { shade: 'light', type: 'vertical', shadeIntensity: 0.5, gradientToColors: ['#487fff00'], inverseColors: false, opacityFrom: 0.6, opacityTo: 0.3, stops: [0, 100] }
       },
       markers: { colors: ['#487fff'], strokeWidth: 3, size: 0, hover: { size: 10 } },
-      xaxis: { categories: growth.labels || [], labels: { show: true, style: { fontSize: '10px', colors: '#6B7280' } } },
+      xaxis: { categories: growthData.labels || [], labels: { show: true, style: { fontSize: '10px', colors: '#6B7280' } } },
       yaxis: { labels: { show: false } },
       tooltip: { y: { formatter: function (v) { return v + ' alert'; } } }
     }).render();
+  }
+
+  var dmsLazyWidgets = @json(!empty($lazyWidgets));
+  if (!dmsLazyWidgets) {
+    dmsRenderGrowthChart(growth);
   }
 
   var donutEl = document.querySelector('#donutChart');
@@ -780,7 +688,7 @@
         { name: 'UCL', type: 'line', data: chartData.ucl_series || [] },
         { name: 'LCL', type: 'line', data: chartData.lcl_series || [] },
       ],
-      chart: { height: 320, type: 'line', toolbar: { show: false }, zoom: { enabled: false } },
+      chart: { height: 380, type: 'line', toolbar: { show: false }, zoom: { enabled: false } },
       colors: ['#487fff', '#45b369', '#ef4a00', '#8252e9'],
       stroke: { width: [2, 2, 2, 2], curve: 'smooth', dashArray: [0, 6, 4, 4] },
       fill: {
@@ -806,7 +714,7 @@
     el.innerHTML = '';
     dmsOverallTopUnitsChart = new ApexCharts(el, {
       series: chartData.series,
-      chart: { type: 'line', height: 260, toolbar: { show: false }, zoom: { enabled: false } },
+      chart: { type: 'line', height: 280, toolbar: { show: false }, zoom: { enabled: false } },
       stroke: { curve: 'smooth', width: 2 },
       dataLabels: { enabled: false },
       xaxis: { categories: chartData.labels || [], labels: { rotate: -45, style: { fontSize: '10px' } } },
@@ -940,6 +848,50 @@
     dmsOverallModalEl.addEventListener('hidden.bs.modal', function () {
       dmsOverallDestroyCharts();
     });
+  }
+
+  if (dmsLazyWidgets) {
+    var dmsWidgetFilters = @json($filters);
+    var dmsWidgetQuery = new URLSearchParams({
+      start: dmsWidgetFilters.start || '',
+      end: dmsWidgetFilters.end || '',
+      site: dmsWidgetFilters.site || '',
+      perusahaan: dmsWidgetFilters.perusahaan || ''
+    }).toString();
+
+    function dmsLoadHtmlWidget(url, targetId) {
+      var el = document.getElementById(targetId);
+      if (!el) return;
+      fetch(url + '?' + dmsWidgetQuery, { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/html' } })
+        .then(function (res) { return res.text(); })
+        .then(function (html) { el.innerHTML = html; })
+        .catch(function () {
+          el.innerHTML = '<div class="card border radius-8 p-24 text-center text-sm text-secondary-light">Gagal memuat widget.</div>';
+        });
+    }
+
+    dmsLoadHtmlWidget(@json(route('pra-operasi.dms-monitoring.widget.quadrant')), 'dms-quadrant-widget');
+    dmsLoadHtmlWidget(@json(route('pra-operasi.dms-monitoring.widget.control-room')), 'dms-control-room-widget');
+
+    fetch(@json(route('pra-operasi.dms-monitoring.widget.growth')) + '?' + dmsWidgetQuery, {
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        if (!payload.ok || !payload.growth) return;
+        var g = payload.growth;
+        var head = document.getElementById('dms-growth-head');
+        if (head) {
+          head.innerHTML = '<h6 class="mb-2 fw-bold text-lg">' + (g.total || '0') + '</h6>' +
+            '<span class="' + ((g.delta && g.delta.class) || 'bg-success-focus text-success-main') + ' ps-12 pe-12 pt-2 pb-2 rounded-2 fw-medium text-sm">' +
+            ((g.delta && g.delta.text) || '+0') + '</span>';
+        }
+        dmsRenderGrowthChart(g);
+      })
+      .catch(function () {
+        var el = document.getElementById('revenue-chart');
+        if (el) el.innerHTML = '<div class="text-center py-40 text-secondary-light text-sm">Gagal memuat grafik.</div>';
+      });
   }
 })();
 </script>

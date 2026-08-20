@@ -396,6 +396,89 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         });
     }
 
+    public function countDistinctCheckinSids(string $start, string $end): int
+    {
+        return $this->rememberScalarInt('rfid_sids_count', $start, $end, function () use ($start, $end): int {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return 0;
+            }
+
+            $sql = "
+                SELECT count(DISTINCT UPPER(TRIM(kode_sid))) AS total
+                FROM bcsid.mv_checkinout_rfid
+                WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
+                  AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
+                  AND UPPER(TRIM(jenis_checkinout::text)) IN ('IN','CHECKIN','CHECK-IN','CHECK_IN','CHECK IN','MASUK')
+                  AND REPLACE(REPLACE(UPPER(TRIM(status_lolos::text)), ' ', ''), '-', '') IN ('PASSED','PASS','LOLOS','YA','YES','1','TRUE','T','Y')
+            ";
+
+            try {
+                $row = DB::connection($connection)->selectOne($sql, [$start, $end]);
+            } catch (Throwable $e) {
+                report($e);
+
+                return 0;
+            }
+
+            return (int) ($row->total ?? 0);
+        });
+    }
+
+    public function countDistinctAlertSids(string $start, string $end): int
+    {
+        return $this->rememberScalarInt('alert_sids_count', $start, $end, function () use ($start, $end): int {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return 0;
+            }
+
+            $sql = "
+                SELECT count(DISTINCT UPPER(TRIM(kode_sid))) AS total
+                FROM bcsid.mv_dms_alert
+                WHERE {$this->alertDateWhere()}
+                  AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
+            ";
+
+            try {
+                $row = DB::connection($connection)->selectOne($sql, $this->alertDateBindings($start, $end));
+            } catch (Throwable $e) {
+                report($e);
+
+                return 0;
+            }
+
+            return (int) ($row->total ?? 0);
+        });
+    }
+
+    public function countPostEventDistinctSids(string $start, string $end): int
+    {
+        return $this->rememberScalarInt('post_event_sids_count', $start, $end, function () use ($start, $end): int {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return 0;
+            }
+
+            $sql = "
+                SELECT count(DISTINCT UPPER(TRIM(driver_sid))) AS total
+                FROM bcsid.dms_violation_report_log
+                WHERE created_at >= ? AND created_at < ?
+                  AND driver_sid IS NOT NULL AND TRIM(driver_sid) <> ''
+            ";
+
+            try {
+                $row = DB::connection($connection)->selectOne($sql, [$start, $end]);
+            } catch (Throwable $e) {
+                report($e);
+
+                return 0;
+            }
+
+            return (int) ($row->total ?? 0);
+        });
+    }
+
     /**
      * Post Event — agregat TUNGGAL (bukan chunk/loop) ke bcsid.dms_violation_report_log.
      *
@@ -2533,5 +2616,16 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         $cacheKey = 'dms_monitoring:'.$key.':'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix());
 
         return Cache::remember($cacheKey, 1800, $callback);
+    }
+
+    private function rememberScalarInt(string $key, string $start, string $end, \Closure $callback): int
+    {
+        if (! $this->isUp()) {
+            return 0;
+        }
+
+        $cacheKey = 'dms_monitoring:'.$key.':'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix());
+
+        return (int) Cache::remember($cacheKey, 1800, $callback);
     }
 }

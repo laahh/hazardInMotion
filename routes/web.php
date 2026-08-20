@@ -771,6 +771,9 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         // Monitoring alert DMS L1/L2 (bukan Fatigue Test) — kuadran, rasio per unit/orang,
         // funnel layer vs RFID, Post Event, sampling QA false negative (Slovin), performa control room.
         Route::get('/dashboard', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'index'])->name('dms-monitoring');
+        Route::get('/dashboard/widgets/quadrant', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'widgetQuadrant'])->name('dms-monitoring.widget.quadrant');
+        Route::get('/dashboard/widgets/control-room', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'widgetControlRoom'])->name('dms-monitoring.widget.control-room');
+        Route::get('/dashboard/widgets/growth', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'widgetGrowth'])->name('dms-monitoring.widget.growth');
         Route::get('/dashboard/kpi-overall', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'overallModal'])
             ->name('dms-monitoring.kpi-overall');
         Route::get('/dashboard/kpi/{metric}/detail', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'kpiDetail'])

@@ -7,6 +7,7 @@ namespace App\Http\Controllers\PraOperasi;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DmsMonitoring\DmsMonitoringOverallModalRequest;
 use App\Services\Dms\DmsDashboardOverviewService;
+use App\Services\DmsMonitoring\DmsAlertMonitoringPageService;
 use App\Services\DmsMonitoring\DmsAlertMonitoringService;
 use App\Services\DmsMonitoring\DmsMonitoringControlRoomPerformanceService;
 use App\Services\DmsMonitoring\DmsMonitoringKpiDetailService;
@@ -22,6 +23,7 @@ use Illuminate\Http\Request;
 final class DmsAlertMonitoringController extends Controller
 {
     public function __construct(
+        private readonly DmsAlertMonitoringPageService $page,
         private readonly DmsAlertMonitoringService $service,
         private readonly DmsDashboardOverviewService $overview,
         private readonly DmsMonitoringKpiDetailService $kpiDetail,
@@ -31,27 +33,56 @@ final class DmsAlertMonitoringController extends Controller
 
     public function index(Request $request): View
     {
-        $monitoring = $this->service->dashboard($request);
-        $filters = $monitoring['filters'] ?? ['start' => null, 'end' => null, 'site' => null, 'perusahaan' => null];
-        $crm = $this->overview->dashboard(
-            is_string($filters['start'] ?? null) ? $filters['start'] : null,
-            is_string($filters['end'] ?? null) ? $filters['end'] : null,
-            is_string($filters['site'] ?? null) && $filters['site'] !== '' ? $filters['site'] : null,
-            is_string($filters['perusahaan'] ?? null) && $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null,
+        $filters = $this->page->filtersFromRequest($request);
+
+        return view('pra-operasi.dms-alert-monitoring', $this->page->cachedPayload($filters));
+    }
+
+    public function widgetQuadrant(Request $request): View
+    {
+        $filters = $this->page->filtersFromRequest($request);
+        $quadrantFilters = [
+            'start' => $filters['start'],
+            'end' => $filters['end'],
+            'site' => $filters['site'],
+            'perusahaan' => $filters['perusahaan'],
+        ];
+
+        return view('pra-operasi.partials._dms-quadrant-widget', [
+            'statistic' => $this->kpiDetail->siteQuadrantMatrix($quadrantFilters),
+            'dateLabel' => $this->dateRangeLabel($filters['start'], $filters['end']),
+            'quadrantOrder' => ['q2', 'q1', 'q4', 'q3'],
+        ]);
+    }
+
+    public function widgetControlRoom(Request $request): View
+    {
+        $filters = $this->page->filtersFromRequest($request);
+        $controlRoom = $this->controlRoom->matrix([
+            'start' => $filters['start'],
+            'end' => $filters['end'],
+            'site' => $filters['site'],
+            'perusahaan' => $filters['perusahaan'],
+        ]);
+
+        return view('pra-operasi.partials._dms-control-room-widget', [
+            'controlRoom' => $controlRoom,
+            'controlRoomColumns' => $controlRoom['columns'] ?? [],
+            'controlRoomRows' => $controlRoom['rows'] ?? [],
+            'dateLabel' => $this->dateRangeLabel($filters['start'], $filters['end']),
+        ]);
+    }
+
+    public function widgetGrowth(Request $request): JsonResponse
+    {
+        $filters = $this->page->filtersFromRequest($request);
+        $growth = $this->overview->growthWidget(
+            $filters['end'],
+            $filters['site'] !== '' ? $filters['site'] : null,
+            $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null,
         );
 
-        $quadrantFilters = [
-            'start' => (string) ($filters['start'] ?? ''),
-            'end' => (string) ($filters['end'] ?? ''),
-            'site' => (string) ($filters['site'] ?? ''),
-            'perusahaan' => (string) ($filters['perusahaan'] ?? ''),
-        ];
-        if ($quadrantFilters['start'] !== '' && $quadrantFilters['end'] !== '') {
-            $crm['statistic'] = $this->kpiDetail->siteQuadrantMatrix($quadrantFilters);
-            $crm['controlRoom'] = $this->controlRoom->matrix($quadrantFilters);
-        }
-
-        return view('pra-operasi.dms-alert-monitoring', $this->mergeCrmPayload($crm, $monitoring));
+        return response()->json(['ok' => true, 'growth' => $growth]);
     }
 
     public function overallModal(DmsMonitoringOverallModalRequest $request): JsonResponse
@@ -112,80 +143,16 @@ final class DmsAlertMonitoringController extends Controller
         return response()->json(['message' => 'Tersimpan.']);
     }
 
-    /**
-     * Layout CRM tetap; overlay angka operasional ke slot widget.
-     *
-     * @param  array<string, mixed>  $crm
-     * @param  array<string, mixed>  $monitoring
-     * @return array<string, mixed>
-     */
-    private function mergeCrmPayload(array $crm, array $monitoring): array
+    private function dateRangeLabel(string $start, string $end): string
     {
-        $kpis = $crm['kpis'] ?? [];
-        foreach ($monitoring['kpis'] ?? [] as $i => $kpi) {
-            if (! is_array($kpi)) {
-                continue;
-            }
-            if (! isset($kpis[$i]) || ! is_array($kpis[$i])) {
-                $kpis[$i] = $kpi;
-                continue;
-            }
-            $kpis[$i]['label'] = $kpi['label'] ?? $kpis[$i]['label'];
-            $kpis[$i]['value'] = $kpi['value'] ?? $kpis[$i]['value'];
-            $kpis[$i]['icon'] = $kpi['icon'] ?? $kpis[$i]['icon'];
-            $kpis[$i]['bg'] = $kpi['bg'] ?? $kpis[$i]['bg'];
-            $kpis[$i]['gradient'] = $kpi['gradient'] ?? $kpis[$i]['gradient'];
+        try {
+            $tz = (string) config('app.timezone');
+            $startLabel = \Illuminate\Support\Carbon::parse($start, $tz)->translatedFormat('d M Y');
+            $endLabel = \Illuminate\Support\Carbon::parse($end, $tz)->translatedFormat('d M Y');
+
+            return $start === $end ? $startLabel : "{$startLabel} - {$endLabel}";
+        } catch (\Throwable) {
+            return "{$start} - {$end}";
         }
-
-        $campaigns = $this->mapFunnelCampaigns($monitoring['funnel'] ?? []);
-        if ($campaigns === []) {
-            $campaigns = $crm['categories'] ?? [];
-        }
-
-        return array_merge($crm, [
-            'up' => (bool) ($crm['up'] ?? false) || (bool) ($monitoring['up'] ?? false),
-            'filters' => $monitoring['filters'] ?? ['start' => '', 'end' => '', 'site' => '', 'perusahaan' => ''],
-            'filterOptions' => $monitoring['filterOptions'] ?? ['sites' => [], 'companies' => []],
-            'kpis' => array_values($kpis),
-            'campaigns' => $campaigns,
-            'kpiDeltaLabel' => 'this week',
-        ]);
-    }
-
-    /**
-     * @param  list<array{label?:string, count?:int}>  $funnel
-     * @return list<array{name:string, total:int, pct:int, icon:string, barClass:string, textClass:string, conversion_label:string}>
-     */
-    private function mapFunnelCampaigns(array $funnel): array
-    {
-        $styles = [
-            ['icon' => 'majesticons:mail', 'textClass' => 'text-orange', 'barClass' => 'bg-orange'],
-            ['icon' => 'eva:globe-2-fill', 'textClass' => 'text-success-main', 'barClass' => 'bg-success-main'],
-            ['icon' => 'fa6-brands:square-facebook', 'textClass' => 'text-info-main', 'barClass' => 'bg-info-main'],
-            ['icon' => 'fluent:location-off-20-filled', 'textClass' => 'text-indigo', 'barClass' => 'bg-indigo'],
-            ['icon' => 'solar:shield-check-bold', 'textClass' => 'text-primary-600', 'barClass' => 'bg-primary-600'],
-        ];
-
-        $out = [];
-        $previous = null;
-        foreach ($funnel as $i => $row) {
-            if (! is_array($row)) {
-                continue;
-            }
-            $style = $styles[$i] ?? $styles[0];
-            $count = (int) ($row['count'] ?? 0);
-            $pct = $previous === null || $previous <= 0
-                ? 100
-                : (int) round(($count / $previous) * 100);
-            $out[] = $style + [
-                'name' => (string) ($row['label'] ?? '-'),
-                'total' => $count,
-                'pct' => max(0, min(100, $pct)),
-                'conversion_label' => $previous === null ? 'baseline' : 'vs tahap sebelumnya',
-            ];
-            $previous = max(0, $count);
-        }
-
-        return $out;
     }
 }
