@@ -100,6 +100,8 @@ final class DmsMonitoringOverallModalService
                         ['key' => 'site', 'label' => 'Site'],
                         ['key' => 'perusahaan', 'label' => 'Perusahaan'],
                         ['key' => 'status', 'label' => 'Status Alert'],
+                        ['key' => 'alert_count', 'label' => 'Total Alert'],
+                        ['key' => 'detail', 'label' => 'Detail'],
                     ],
                     'rows' => $table['rows'] ?? [],
                 ],

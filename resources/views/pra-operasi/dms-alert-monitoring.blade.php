@@ -738,12 +738,56 @@
 
     rows.forEach(function (row) {
       var tr = document.createElement('tr');
+      var alerts = Number(row.alert_count || 0);
+      var hasAlert = !!row.has_alert && alerts > 0;
+      var detailId = 'dms-overall-alerts-' + [row.unit || '-', row.site || '-', row.perusahaan || '-'].join('-').replace(/[^a-zA-Z0-9_-]/g, '_');
+      var badge = hasAlert
+        ? '<span class="badge bg-warning-focus text-warning-main border border-warning-main px-12 py-6">Ada alert</span>'
+        : '<span class="badge bg-success-focus text-success-main border border-success-main px-12 py-6">Tidak ada alert</span>';
+      var detailButton = hasAlert
+        ? '<button type="button" class="btn btn-sm btn-outline-primary dms-overall-toggle" data-target="' + detailId + '">Lihat alert</button>'
+        : '<span class="text-xs text-secondary-light">-</span>';
       tr.innerHTML =
         '<td class="fw-medium">' + (row.unit || '-') + '</td>' +
         '<td>' + (row.site || '-') + '</td>' +
         '<td>' + (row.perusahaan || '-') + '</td>' +
-        '<td><span class="badge bg-success-focus text-success-main border border-success-main px-12 py-6">Tidak ada alert</span></td>';
+        '<td>' + badge + '</td>' +
+        '<td class="text-end fw-semibold">' + alerts.toLocaleString('id-ID') + '</td>' +
+        '<td>' + detailButton + '</td>';
       body.appendChild(tr);
+
+      if (hasAlert) {
+        var detailTr = document.createElement('tr');
+        detailTr.id = detailId;
+        detailTr.className = 'd-none';
+        detailTr.innerHTML =
+          '<td colspan="6" class="bg-neutral-50">' +
+            '<div class="p-12">' +
+              '<div class="text-xs text-secondary-light mb-8">Jenis alert pada unit ini</div>' +
+              '<div class="d-flex flex-wrap gap-2">' +
+                ((row.alerts || []).length
+                  ? row.alerts.map(function (item) {
+                      return '<span class="badge bg-primary-50 text-primary-600 border border-primary-100 px-12 py-6">' +
+                        (item.name || '-') + ' <span class="fw-semibold">(' + Number(item.total || 0).toLocaleString('id-ID') + ')</span>' +
+                      '</span>';
+                    }).join('')
+                  : '<span class="text-sm text-secondary-light">Detail alert tidak tersedia.</span>') +
+              '</div>' +
+            '</div>' +
+          '</td>';
+        body.appendChild(detailTr);
+      }
+    });
+
+    body.querySelectorAll('.dms-overall-toggle').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var targetId = button.getAttribute('data-target');
+        var detailRow = targetId ? document.getElementById(targetId) : null;
+        if (!detailRow) return;
+        var isHidden = detailRow.classList.contains('d-none');
+        detailRow.classList.toggle('d-none', !isHidden);
+        button.textContent = isHidden ? 'Sembunyikan alert' : 'Lihat alert';
+      });
     });
   }
 

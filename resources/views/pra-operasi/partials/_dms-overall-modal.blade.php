@@ -56,11 +56,11 @@
             </div>
           </div>
 
-          {{-- Unit tanpa alert --}}
+          {{-- Daftar unit beroperasi --}}
           <div class="card border radius-8">
             <div class="card-body p-20">
               <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-16">
-                <h6 class="fw-bold text-md mb-0">Daftar Unit Beroperasi Tanpa Alert</h6>
+                <h6 class="fw-bold text-md mb-0">Daftar Unit Beroperasi</h6>
                 <span id="dms-overall-table-count" class="text-sm text-secondary-light"></span>
               </div>
               <div class="table-responsive border radius-8">
@@ -71,13 +71,15 @@
                       <th scope="col">Site</th>
                       <th scope="col">Perusahaan</th>
                       <th scope="col" style="min-width: 160px;">Status Alert</th>
+                      <th scope="col" class="text-end">Total Alert</th>
+                      <th scope="col" style="min-width: 140px;">Detail</th>
                     </tr>
                   </thead>
                   <tbody id="dms-overall-table-body"></tbody>
                 </table>
               </div>
               <div id="dms-overall-table-empty" class="d-none text-center py-24 text-secondary-light text-sm">
-                Tidak ada unit beroperasi tanpa alert pada periode ini.
+                Tidak ada unit beroperasi pada periode ini.
               </div>
               <div id="dms-overall-pagination" class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-16 d-none">
                 <span id="dms-overall-page-info" class="text-sm text-secondary-light"></span>

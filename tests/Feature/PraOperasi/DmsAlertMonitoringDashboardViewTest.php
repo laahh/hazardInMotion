@@ -50,7 +50,7 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
         $this->assertStringContainsString('dmsOverallModal', $html);
         $this->assertStringContainsString('Overview Unit & Alert', $html);
         $this->assertStringContainsString('Control Chart Alert Harian', $html);
-        $this->assertStringContainsString('Daftar Unit Beroperasi Tanpa Alert', $html);
+        $this->assertStringContainsString('Daftar Unit Beroperasi', $html);
         $this->assertStringContainsString('Unit dengan Alert Terbanyak', $html);
         $this->assertStringContainsString('Checkin RFID', $html);
         $this->assertStringContainsString('Site', $html);

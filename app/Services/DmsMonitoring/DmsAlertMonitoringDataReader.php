@@ -741,11 +741,18 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
-     * Tabel unit beroperasi tanpa alert (modal overall).
+     * Tabel unit beroperasi (dengan/tanpa alert) untuk modal overall.
      *
      * @return array{
      *     total:int,
-     *     rows:list<array{unit:string, site:string, perusahaan:string, alert_count:int}>
+     *     rows:list<array{
+     *         unit:string,
+     *         site:string,
+     *         perusahaan:string,
+     *         alert_count:int,
+     *         has_alert:bool,
+     *         alerts:list<array{name:string,total:int}>
+     *     }>
      * }
      */
     public function overallOperatingUnitsTable(
@@ -809,7 +816,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 FROM operating o
                 LEFT JOIN unit_alerts ua ON TRIM(o.unit) = TRIM(ua.unit) AND TRIM(o.site) = TRIM(ua.site)
             )
-            SELECT count(*) AS total FROM joined WHERE alert_count = 0
+            SELECT count(*) AS total FROM joined
         ";
 
         $dataSql = "
@@ -826,8 +833,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             )
             SELECT j.unit, j.site, j.perusahaan, j.alert_count
             FROM joined j
-            WHERE j.alert_count = 0
-            ORDER BY j.unit ASC
+            ORDER BY j.alert_count DESC, j.unit ASC
             LIMIT ? OFFSET ?
         ";
 
@@ -843,15 +849,101 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             return $empty;
         }
 
+        $mappedRows = array_map(static fn ($r): array => [
+            'unit' => (string) $r->unit,
+            'site' => (string) $r->site,
+            'perusahaan' => (string) $r->perusahaan,
+            'alert_count' => (int) $r->alert_count,
+            'has_alert' => (int) $r->alert_count > 0,
+            'alerts' => [],
+        ], $rows);
+
+        $alertsByUnit = $this->overallOperatingUnitAlertDetails($start, $end, $mappedRows);
+        foreach ($mappedRows as &$row) {
+            $key = $row['unit'].'|'.$row['site'].'|'.$row['perusahaan'];
+            $row['alerts'] = $alertsByUnit[$key] ?? [];
+        }
+        unset($row);
+
         return [
             'total' => (int) ($countRow->total ?? 0),
-            'rows' => array_map(static fn ($r): array => [
-                'unit' => (string) $r->unit,
-                'site' => (string) $r->site,
-                'perusahaan' => (string) $r->perusahaan,
-                'alert_count' => (int) $r->alert_count,
-            ], $rows),
+            'rows' => $mappedRows,
         ];
+    }
+
+    /**
+     * @param  list<array{unit:string, site:string, perusahaan:string, alert_count:int, has_alert:bool, alerts:list<array{name:string,total:int}>}>  $rows
+     * @return array<string, list<array{name:string,total:int}>>
+     */
+    private function overallOperatingUnitAlertDetails(string $start, string $end, array $rows): array
+    {
+        $targets = [];
+        foreach ($rows as $row) {
+            if (($row['alert_count'] ?? 0) <= 0) {
+                continue;
+            }
+            $targets[] = [
+                'unit' => (string) $row['unit'],
+                'site' => (string) $row['site'],
+                'perusahaan' => (string) $row['perusahaan'],
+            ];
+        }
+
+        if ($targets === []) {
+            return [];
+        }
+
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return [];
+        }
+
+        $predicates = [];
+        $bindings = $this->alertDateBindings($start, $end);
+        foreach ($targets as $target) {
+            $predicates[] = '(TRIM(unit::text) = ? AND COALESCE(NULLIF(TRIM(site::text), \'\'), \'-\') = ? AND COALESCE(NULLIF(TRIM(perusahaan::text), \'\'), \'-\') = ?)';
+            $bindings[] = $target['unit'];
+            $bindings[] = $target['site'];
+            $bindings[] = $target['perusahaan'];
+        }
+
+        $sql = "
+            SELECT
+                TRIM(unit::text) AS unit,
+                COALESCE(NULLIF(TRIM(site::text), ''), '-') AS site,
+                COALESCE(NULLIF(TRIM(perusahaan::text), ''), '-') AS perusahaan,
+                COALESCE(NULLIF(TRIM(nama_pelanggaran::text), ''), '-') AS alert_name,
+                count(*) AS total
+            FROM bcsid.mv_dms_alert
+            WHERE {$this->alertDateWhere()}
+              AND unit IS NOT NULL AND TRIM(unit::text) <> ''
+              AND (".implode(' OR ', $predicates).")
+            GROUP BY 1, 2, 3, 4
+            ORDER BY 1, 2, 3, total DESC, alert_name ASC
+        ";
+
+        try {
+            $detailRows = DB::connection($connection)->select($sql, $bindings);
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        $mapped = [];
+        foreach ($detailRows as $detail) {
+            $key = (string) $detail->unit.'|'.(string) $detail->site.'|'.(string) $detail->perusahaan;
+            $mapped[$key] ??= [];
+            if (count($mapped[$key]) >= 8) {
+                continue;
+            }
+            $mapped[$key][] = [
+                'name' => (string) $detail->alert_name,
+                'total' => (int) ($detail->total ?? 0),
+            ];
+        }
+
+        return $mapped;
     }
 
     /**
