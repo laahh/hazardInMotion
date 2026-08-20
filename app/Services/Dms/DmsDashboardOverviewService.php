@@ -154,20 +154,30 @@ final class DmsDashboardOverviewService
         $today = $this->reader->alertSummary($windows['todayStart'], $windows['todayEnd']);
         $yesterday = $this->reader->alertSummary($windows['yesterdayStart'], $windows['todayStart']);
         $week = $this->reader->alertSummary($windows['weekStart'], $windows['todayEnd']);
-        $prevWeek = $this->reader->alertSummary($windows['prevWeekStart'], $windows['prevWeekEnd']);
 
         $operatorsToday = $this->reader->countOperatorCheckinsInRange($windows['todayStart'], $windows['todayEnd']);
-        $operatorsYesterday = $this->reader->countOperatorCheckinsInRange($windows['yesterdayStart'], $windows['todayStart']);
-        $unitsToday = $this->reader->unitsOperatingInRange($windows['todayStart'], $windows['todayEnd']);
-        $unitsYesterday = $this->reader->unitsOperatingInRange($windows['yesterdayStart'], $windows['todayStart']);
-        $unitsOnline = $this->reader->unitsOperatingNow(30);
+        $operatorsYesterday = $deferGrowth
+            ? 0
+            : $this->reader->countOperatorCheckinsInRange($windows['yesterdayStart'], $windows['todayStart']);
+        $unitsToday = $deferGrowth
+            ? 0
+            : $this->reader->unitsOperatingInRange($windows['todayStart'], $windows['todayEnd']);
+        $unitsYesterday = $deferGrowth
+            ? 0
+            : $this->reader->unitsOperatingInRange($windows['yesterdayStart'], $windows['todayStart']);
+        $unitsOnline = $deferGrowth ? 0 : $this->reader->unitsOperatingNow(30);
 
-        $dailyRaw = $this->reader->dailyAlertSeries($windows['chartStart'], $windows['todayEnd']);
+        $dailyRaw = $this->reader->dailyAlertSeries(
+            $deferGrowth ? $windows['todayStart'] : $windows['chartStart'],
+            $windows['todayEnd'],
+        );
         $daily = $this->fillDailySeries($windows['chartStart'], $windows['todayEnd'], $dailyRaw, $tz);
         $weekDaily = array_slice($daily, -self::WEEK_DAYS);
         $sparkline = array_slice($daily, -self::SPARKLINE_DAYS);
 
-        $dailyUnitsRaw = $this->reader->dailyOperatingUnitSeries($windows['chartStart'], $windows['todayEnd']);
+        $dailyUnitsRaw = $deferGrowth
+            ? []
+            : $this->reader->dailyOperatingUnitSeries($windows['chartStart'], $windows['todayEnd']);
         $dailyUnitsIndexed = [];
         foreach ($dailyUnitsRaw as $unitRow) {
             $dailyUnitsIndexed[(string) $unitRow['hari']] = (int) $unitRow['units'];
@@ -181,14 +191,20 @@ final class DmsDashboardOverviewService
             $sparkline,
         );
 
-        $categories = $this->mapCategories($this->reader->categoryQuadrant($windows['weekStart'], $windows['todayEnd']));
-        $sites = $this->mapSites($this->reader->alertsBySite($windows['weekStart'], $windows['todayEnd'], 6));
-        $topOperators = $this->mapOperators($this->reader->alertsByOperator($windows['weekStart'], $windows['todayEnd'], 6));
+        $categories = $deferGrowth
+            ? []
+            : $this->mapCategories($this->reader->categoryQuadrant($windows['weekStart'], $windows['todayEnd']));
+        $sites = $deferGrowth
+            ? []
+            : $this->mapSites($this->reader->alertsBySite($windows['weekStart'], $windows['todayEnd'], 6));
+        $topOperators = $deferGrowth
+            ? []
+            : $this->mapOperators($this->reader->alertsByOperator($windows['weekStart'], $windows['todayEnd'], 6));
         $recentAll = $this->mapRecent($this->reader->recentAlerts($windows['weekStart'], $windows['todayEnd'], 8, false), $tz);
-        $recentConfirmed = $this->mapRecent($this->reader->recentAlerts($windows['weekStart'], $windows['todayEnd'], 8, true), $tz);
+        $recentConfirmed = $deferGrowth
+            ? []
+            : $this->mapRecent($this->reader->recentAlerts($windows['weekStart'], $windows['todayEnd'], 8, true), $tz);
 
-        $confirmRate = $this->confirmationRate($today);
-        $confirmRateYesterday = $this->confirmationRate($yesterday);
         $weekConfirmRate = $this->confirmationRate($week);
 
         $kpis = [
@@ -279,6 +295,8 @@ final class DmsDashboardOverviewService
             'dateLabel' => $windows['dateLabel'] ?? $now->translatedFormat('d M Y'),
             'kpiDeltaLabel' => $windows['kpiDeltaLabel'] ?? 'vs kemarin',
             'kpis' => $kpis,
+            'summary' => $today,
+            'operatorsCheckedIn' => $operatorsToday,
             'growth' => $growth,
             'statistic' => [
                 'title' => 'Statistik Alert',
@@ -692,6 +710,8 @@ final class DmsDashboardOverviewService
             'dateLabel' => $windows['dateLabel'] ?? $now->translatedFormat('d M Y'),
             'kpiDeltaLabel' => $windows['kpiDeltaLabel'] ?? 'vs kemarin',
             'kpis' => $kpis,
+            'summary' => ['total' => 0, 'l1_reviewed' => 0, 'l1_confirmed' => 0, 'l1_dismissed' => 0, 'l1_belum' => 0, 'l2_reviewed' => 0, 'l2_confirmed' => 0, 'post_event_eligible' => 0],
+            'operatorsCheckedIn' => 0,
             'growth' => $deferGrowth ? $this->emptyGrowthPayload() : ['title' => 'Alert Last 4 Week', 'subtitle' => 'Weekly Report', 'total' => '0', 'delta' => $zeroDelta, 'labels' => ['W1', 'W2', 'W3', 'W4'], 'series' => [0, 0, 0, 0]],
             'statistic' => ['title' => 'Statistik Alert', 'subtitle' => self::CHART_DAYS.' hari terakhir', 'total' => '0', 'confirmed' => '0', 'dismissed' => '0', 'labels' => $chartLabels, 'series' => $emptyChart],
             'categories' => [],

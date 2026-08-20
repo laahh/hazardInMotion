@@ -50,7 +50,10 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     private const CATEGORY_LIMIT = 500;
 
     /** Batas waktu query RFID (ms) supaya halaman tidak 504. */
-    private const RFID_STATEMENT_TIMEOUT_MS = 10000;
+    private const RFID_STATEMENT_TIMEOUT_MS = 8000;
+
+    /** Batas waktu query FDW unit/post-event (ms). FDW sering tidak hormati timeout — first paint harus menghindari query ini. */
+    private const FDW_STATEMENT_TIMEOUT_MS = 4000;
 
     private ?string $scopeSite = null;
 
@@ -101,12 +104,15 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 WHERE {$this->alertDateWhere()}
             ";
 
+            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
             try {
                 $row = DB::connection($connection)->selectOne($sql, $this->alertDateBindings($start, $end));
             } catch (Throwable $e) {
                 report($e);
 
                 return $empty;
+            } finally {
+                $this->clearStatementTimeout($connection);
             }
 
             return [
@@ -297,27 +303,38 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      */
     public function countOperatorCheckinsInRange(string $start, string $end): int
     {
-        return $this->rememberScalarInt('rfid_fungsional_checkin_v1', $start, $end, function () use ($start, $end): int {
+        return $this->rememberScalarInt('rfid_fungsional_checkin_v2', $start, $end, function () use ($start, $end): int {
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return 0;
             }
 
             $sql = "
-                SELECT count(DISTINCT UPPER(TRIM(r.kode_sid))) AS total
-                FROM bcsid.mv_checkinout_rfid r
-                INNER JOIN bcsid.crontable_bep_vw_m_karyawan_aktif k
-                  ON k.kode_sid = r.kode_sid
-                WHERE r.tanggal_checkinout >= ? AND r.tanggal_checkinout < ?
-                  AND r.kode_sid IS NOT NULL AND TRIM(r.kode_sid) <> ''
-                  AND UPPER(TRIM(COALESCE(k.jabatan_fungsional, ''))) LIKE '%OPERATOR%'
-                  AND UPPER(TRIM(COALESCE(k.jabatan_fungsional, ''))) <> 'VISITOR'
+                WITH ops AS MATERIALIZED (
+                    SELECT kode_sid
+                    FROM bcsid.crontable_bep_vw_m_karyawan_aktif
+                    WHERE kode_sid IS NOT NULL
+                      AND TRIM(kode_sid) <> ''
+                      AND UPPER(TRIM(COALESCE(jabatan_fungsional, ''))) LIKE '%OPERATOR%'
+                      AND UPPER(TRIM(COALESCE(jabatan_fungsional, ''))) <> 'VISITOR'
+                ),
+                rfid AS MATERIALIZED (
+                    SELECT DISTINCT kode_sid
+                    FROM bcsid.mv_checkinout_rfid
+                    WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
+                      AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
             ";
             $bindings = [$start, $end];
             if ($this->scopePerusahaan !== null) {
-                $sql .= ' AND TRIM(r.perusahaan::text) = ?';
+                $sql .= ' AND TRIM(perusahaan::text) = ?';
                 $bindings[] = $this->scopePerusahaan;
             }
+            $sql .= '
+                )
+                SELECT count(*) AS total
+                FROM rfid r
+                INNER JOIN ops o ON o.kode_sid = r.kode_sid
+            ';
 
             $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
             try {
@@ -483,12 +500,15 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                   AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
             ";
 
+            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
             try {
                 $row = DB::connection($connection)->selectOne($sql, $this->alertDateBindings($start, $end));
             } catch (Throwable $e) {
                 report($e);
 
                 return 0;
+            } finally {
+                $this->clearStatementTimeout($connection);
             }
 
             return (int) ($row->total ?? 0);
@@ -510,12 +530,15 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                   AND driver_sid IS NOT NULL AND TRIM(driver_sid) <> ''
             ";
 
+            $this->applyStatementTimeout($connection, self::FDW_STATEMENT_TIMEOUT_MS);
             try {
                 $row = DB::connection($connection)->selectOne($sql, [$start, $end]);
             } catch (Throwable $e) {
                 report($e);
 
                 return 0;
+            } finally {
+                $this->clearStatementTimeout($connection);
             }
 
             return (int) ($row->total ?? 0);
@@ -1348,7 +1371,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      */
     public function dailyAlertSeries(string $start, string $end): array
     {
-        return $this->remember('dashboard.daily_series', $start, $end, function () use ($start, $end): array {
+        return $this->remember('dashboard.daily_series.v2', $start, $end, function () use ($start, $end): array {
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return [];
@@ -1360,22 +1383,22 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                     count(*) AS total,
                     count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = true) AS confirmed,
                     count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = false) AS dismissed,
-                    count(*) FILTER (WHERE sudah_direview_l1 = false OR sudah_direview_l1 IS NULL) AS pending,
-                    count(DISTINCT UPPER(TRIM(kode_sid))) FILTER (
-                        WHERE kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
-                    ) AS operators
+                    count(*) FILTER (WHERE sudah_direview_l1 = false OR sudah_direview_l1 IS NULL) AS pending
                 FROM bcsid.mv_dms_alert
                 WHERE {$this->alertDateWhere()}
                 GROUP BY 1
                 ORDER BY 1
             ";
 
+            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
             try {
                 $rows = DB::connection($connection)->select($sql, $this->alertDateBindings($start, $end));
             } catch (Throwable $e) {
                 report($e);
 
                 return [];
+            } finally {
+                $this->clearStatementTimeout($connection);
             }
 
             return array_map(static function ($r): array {
@@ -1390,7 +1413,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                     'confirmed' => (int) $r->confirmed,
                     'dismissed' => (int) $r->dismissed,
                     'pending' => (int) $r->pending,
-                    'operators' => (int) $r->operators,
+                    'operators' => (int) $r->total,
                 ];
             }, $rows);
         });
@@ -2317,6 +2340,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 LIMIT 200
             ";
 
+            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
             try {
                 $siteRows = DB::connection($connection)->select($siteSql, [$start, $end]);
                 $companyRows = DB::connection($connection)->select($companySql, [$start, $end]);
@@ -2324,6 +2348,8 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 report($e);
 
                 return $empty;
+            } finally {
+                $this->clearStatementTimeout($connection);
             }
 
             $pick = static function (array $rows): array {
@@ -2496,25 +2522,37 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             return 0;
         }
 
-        $scopeWhere = $this->vehicleScopeWhere('dv.site', 'dv.company_owner');
-        $sql = "
-            SELECT count(DISTINCT TRIM(vsa.vehicle_no)) AS total
-            FROM bcsid.dms_vehicle_status_alerts vsa
-            INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
-            WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
-              AND vsa.vehicle_no IS NOT NULL AND TRIM(vsa.vehicle_no) <> ''
-              {$scopeWhere}
-        ";
+        $hasScope = $this->scopeSite !== null || $this->scopePerusahaan !== null;
+        if ($hasScope) {
+            $scopeWhere = $this->vehicleScopeWhere('dv.site', 'dv.company_owner');
+            $sql = "
+                SELECT count(DISTINCT TRIM(vsa.vehicle_no)) AS total
+                FROM bcsid.dms_vehicle_status_alerts vsa
+                INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
+                WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
+                  AND vsa.vehicle_no IS NOT NULL AND TRIM(vsa.vehicle_no) <> ''
+                  {$scopeWhere}
+            ";
+            $bindings = array_merge([$start, $end], $this->vehicleScopeBindings());
+        } else {
+            $sql = "
+                SELECT count(DISTINCT TRIM(vehicle_no)) AS total
+                FROM bcsid.dms_vehicle_status_alerts
+                WHERE last_online_at >= ? AND last_online_at < ?
+                  AND vehicle_no IS NOT NULL AND TRIM(vehicle_no) <> ''
+            ";
+            $bindings = [$start, $end];
+        }
 
+        $this->applyStatementTimeout($connection, self::FDW_STATEMENT_TIMEOUT_MS);
         try {
-            $row = DB::connection($connection)->selectOne(
-                $sql,
-                array_merge([$start, $end], $this->vehicleScopeBindings()),
-            );
+            $row = DB::connection($connection)->selectOne($sql, $bindings);
         } catch (Throwable $e) {
             report($e);
 
             return 0;
+        } finally {
+            $this->clearStatementTimeout($connection);
         }
 
         return (int) ($row->total ?? 0);

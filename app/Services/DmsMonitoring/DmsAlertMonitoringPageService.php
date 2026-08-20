@@ -38,7 +38,7 @@ final class DmsAlertMonitoringPageService
      */
     public function cachedPayload(array $filters): array
     {
-        $cacheKey = 'dms_dashboard_page:v8:'.md5(json_encode($filters));
+        $cacheKey = 'dms_dashboard_page:v9:'.md5(json_encode($filters));
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && ($cached['up'] ?? false) === true) {
             return $cached;
@@ -74,12 +74,25 @@ final class DmsAlertMonitoringPageService
         $end = Carbon::parse($filters['end'], $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
 
         $this->reader->applyScope($site, $perusahaan);
-        $funnel = $this->monitoring->funnelForPeriod($start, $end);
+
+        $summary = is_array($crm['summary'] ?? null) ? $crm['summary'] : [];
+        $funnel = [];
+        if (($crm['up'] ?? false) === true) {
+            $funnel = [
+                ['label' => 'Checkin RFID', 'count' => (int) ($crm['operatorsCheckedIn'] ?? 0)],
+                ['label' => 'Punya Alert DMS', 'count' => $this->reader->countDistinctAlertSids($start, $end)],
+                ['label' => 'Direview L1', 'count' => (int) ($summary['l1_reviewed'] ?? 0)],
+                ['label' => 'Direview L2', 'count' => (int) ($summary['l2_reviewed'] ?? 0)],
+                ['label' => 'Post Event', 'count' => (int) ($summary['post_event_eligible'] ?? 0)],
+            ];
+        }
 
         return array_merge($crm, [
             'up' => (bool) ($crm['up'] ?? false),
             'filters' => $filters,
-            'filterOptions' => $this->reader->filterOptions($start, $end),
+            'filterOptions' => ($crm['up'] ?? false) === true
+                ? $this->reader->filterOptions($start, $end)
+                : ['sites' => [], 'companies' => []],
             'campaigns' => $this->mapFunnelCampaigns($funnel),
             'kpiDeltaLabel' => 'this week',
             'statistic' => $this->emptyStatisticPlaceholder(),
