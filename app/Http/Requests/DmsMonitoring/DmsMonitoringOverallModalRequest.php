@@ -24,6 +24,7 @@ final class DmsMonitoringOverallModalRequest extends FormRequest
             'site' => ['nullable', 'string', 'max:80'],
             'perusahaan' => ['nullable', 'string', 'max:80'],
             'page' => ['nullable', 'integer', 'min:1'],
+            'status' => ['nullable', 'in:with_alert,without_alert'],
         ];
     }
 
@@ -43,5 +44,14 @@ final class DmsMonitoringOverallModalRequest extends FormRequest
     public function page(): int
     {
         return max(1, (int) $this->input('page', 1));
+    }
+
+    public function status(): string
+    {
+        $status = (string) $this->input('status', 'with_alert');
+
+        return in_array($status, ['with_alert', 'without_alert'], true)
+            ? $status
+            : 'with_alert';
     }
 }

@@ -91,6 +91,7 @@ final class DmsAlertMonitoringController extends Controller
         $payload = $this->overallModal->payload(
             $request->filters(),
             $request->page(),
+            $request->status(),
         );
 
         $status = ($payload['ok'] ?? false) ? 200 : 422;

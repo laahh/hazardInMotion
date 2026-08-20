@@ -22,7 +22,7 @@ final class DmsMonitoringOverallModalService
      * @param  array{start:string, end:string, site:string, perusahaan:string}  $filters
      * @return array<string, mixed>
      */
-    public function payload(array $filters, int $page = 1): array
+    public function payload(array $filters, int $page = 1, string $status = 'with_alert'): array
     {
         $this->reader->applyScope(
             $filters['site'] !== '' ? $filters['site'] : null,
@@ -39,7 +39,7 @@ final class DmsMonitoringOverallModalService
             $end = Carbon::parse($filters['end'], $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
 
             $summary = $this->reader->overallOperatingUnitsSummary($start, $end);
-            $table = $this->reader->overallOperatingUnitsTable($start, $end, $page, self::PER_PAGE);
+            $table = $this->reader->overallOperatingUnitsTable($start, $end, $page, self::PER_PAGE, $status);
             $controlChart = $this->buildControlChart($start, $end, $tz);
 
             $topUnitNames = array_map(
@@ -105,6 +105,11 @@ final class DmsMonitoringOverallModalService
                     ],
                     'rows' => $table['rows'] ?? [],
                 ],
+                'table_tabs' => [
+                    ['key' => 'with_alert', 'label' => 'Unit Dengan Alert', 'count' => (int) ($summary['units_with_alert'] ?? 0)],
+                    ['key' => 'without_alert', 'label' => 'Unit Tanpa Alert', 'count' => (int) ($summary['units_without_alert'] ?? 0)],
+                ],
+                'table_active' => $status,
                 'pagination' => [
                     'page' => $page,
                     'per_page' => self::PER_PAGE,

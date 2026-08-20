@@ -63,6 +63,16 @@
                 <h6 class="fw-bold text-md mb-0">Daftar Unit Beroperasi</h6>
                 <span id="dms-overall-table-count" class="text-sm text-secondary-light"></span>
               </div>
+              <div class="d-flex flex-wrap gap-2 mb-16" id="dms-overall-table-tabs">
+                <button type="button" class="btn btn-sm btn-primary" data-status="with_alert">
+                  Unit Dengan Alert
+                  <span class="ms-4" id="dms-overall-tab-count-with-alert">0</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-status="without_alert">
+                  Unit Tanpa Alert
+                  <span class="ms-4" id="dms-overall-tab-count-without-alert">0</span>
+                </button>
+              </div>
               <div class="table-responsive border radius-8">
                 <table class="table table-hover mb-0 align-middle">
                   <thead class="bg-neutral-50">

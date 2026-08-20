@@ -759,6 +759,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         string $end,
         int $page,
         int $perPage,
+        string $status = 'with_alert',
     ): array {
         $empty = ['total' => 0, 'rows' => []];
         if (! $this->isUp()) {
@@ -802,6 +803,9 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         }
 
         $baseBindings = array_merge($operatingBindings, $this->alertDateBindings($start, $end));
+        $statusWhere = $status === 'without_alert'
+            ? ' WHERE alert_count = 0'
+            : ' WHERE alert_count > 0';
 
         $countSql = "
             WITH operating AS ({$operatingSql}),
@@ -815,7 +819,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 FROM operating o
                 LEFT JOIN unit_alerts ua ON TRIM(o.unit) = TRIM(ua.unit) AND TRIM(o.site) = TRIM(ua.site)
             )
-            SELECT count(*) AS total FROM joined
+            SELECT count(*) AS total FROM joined{$statusWhere}
         ";
 
         $dataSql = "
@@ -831,7 +835,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 LEFT JOIN unit_alerts ua ON TRIM(o.unit) = TRIM(ua.unit) AND TRIM(o.site) = TRIM(ua.site)
             )
             SELECT j.unit, j.site, j.perusahaan, j.alert_count
-            FROM joined j
+            FROM joined j{$statusWhere}
             ORDER BY j.alert_count DESC, j.unit ASC
             LIMIT ? OFFSET ?
         ";

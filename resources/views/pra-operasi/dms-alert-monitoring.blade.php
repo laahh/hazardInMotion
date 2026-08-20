@@ -606,7 +606,7 @@
   var dmsOverallUnitAlertsUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall.unit-alerts'));
   var dmsOverallModalEl = document.getElementById('dmsOverallModal');
   var dmsOverallModal = dmsOverallModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(dmsOverallModalEl) : null;
-  var dmsOverallState = { page: 1 };
+  var dmsOverallState = { page: 1, status: 'with_alert' };
   var dmsOverallControlChart = null;
   var dmsOverallTopUnitsChart = null;
 
@@ -835,6 +835,21 @@
     });
   }
 
+  function dmsOverallRenderTabs(tabs, activeKey) {
+    var wrap = document.getElementById('dms-overall-table-tabs');
+    if (!wrap) return;
+
+    (tabs || []).forEach(function (tab) {
+      var button = wrap.querySelector('[data-status="' + (tab.key || '') + '"]');
+      if (!button) return;
+      var isActive = (tab.key || '') === activeKey;
+      button.classList.toggle('btn-primary', isActive);
+      button.classList.toggle('btn-outline-secondary', !isActive);
+      var countEl = button.querySelector('span');
+      if (countEl) countEl.textContent = Number(tab.count || 0).toLocaleString('id-ID');
+    });
+  }
+
   function dmsOverallRenderPagination(pagination) {
     var wrap = document.getElementById('dms-overall-pagination');
     var info = document.getElementById('dms-overall-page-info');
@@ -861,6 +876,7 @@
       site: dmsOverallFilters.site || '',
       perusahaan: dmsOverallFilters.perusahaan || '',
       page: String(dmsOverallState.page),
+      status: dmsOverallState.status || 'with_alert',
     });
 
     fetch(dmsOverallUrl + '?' + params.toString(), {
@@ -887,6 +903,7 @@
         dmsOverallRenderTopUnitsChart(payload.top_units_chart || {});
 
         dmsOverallRenderTable(payload.table || {});
+        dmsOverallRenderTabs(payload.table_tabs || [], payload.table_active || 'with_alert');
         dmsOverallRenderPagination(payload.pagination || null);
 
         document.getElementById('dms-overall-content').classList.remove('d-none');
@@ -900,6 +917,7 @@
 
   function dmsOverallOpen() {
     dmsOverallState.page = 1;
+    dmsOverallState.status = 'with_alert';
     dmsOverallDestroyCharts();
     if (dmsOverallModal) dmsOverallModal.show();
     dmsOverallLoad();
@@ -920,6 +938,19 @@
   if (overallNext) overallNext.addEventListener('click', function () {
     dmsOverallState.page++; dmsOverallLoad();
   });
+
+  var overallTabWrap = document.getElementById('dms-overall-table-tabs');
+  if (overallTabWrap) {
+    overallTabWrap.querySelectorAll('[data-status]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var nextStatus = button.getAttribute('data-status') || 'with_alert';
+        if (nextStatus === dmsOverallState.status) return;
+        dmsOverallState.status = nextStatus;
+        dmsOverallState.page = 1;
+        dmsOverallLoad();
+      });
+    });
+  }
 
   if (dmsOverallModalEl) {
     dmsOverallModalEl.addEventListener('hidden.bs.modal', function () {
