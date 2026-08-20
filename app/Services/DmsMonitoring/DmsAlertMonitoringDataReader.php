@@ -44,6 +44,9 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     /** Cap kecepatan GPS outlier (km/h). */
     private const OPERATING_MAX_SPEED = 80.0;
 
+    /** Versi cache/logika unit beroperasi — bump saat sumber atau fallback berubah. */
+    private const OPERATING_LOGIC_VERSION = 'v4';
+
     /** Batas jumlah kategori pelanggaran yang ditampilkan di kuadran. */
     private const CATEGORY_LIMIT = 500;
 
@@ -445,40 +448,20 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      */
     public function unitsOperatingInRange(string $start, string $end): int
     {
-        $cacheKey = 'dms_monitoring:units_operating_range:'.md5($start.'|'.$end);
+        $cacheKey = 'dms_monitoring:units_operating_range:'.self::OPERATING_LOGIC_VERSION.':'.md5($start.'|'.$end);
 
         return Cache::remember($cacheKey, 300, function () use ($start, $end): int {
-            $connection = $this->connectionSource->connectionName();
-            if ($connection === null) {
-                return 0;
-            }
-
-            $unitKey = $this->vehicleRegisterKeyExpr('vs.vehicle_no');
-            $sql = "
-                SELECT count(DISTINCT {$unitKey}) AS total
-                FROM bcsid.dms_vehicle_statuses vs
-                WHERE vs.created_at >= ? AND vs.created_at < ?
-                  AND {$this->movingVehicleSpeedWhere('vs')}
-            ";
-
-            try {
-                $row = DB::connection($connection)->selectOne($sql, [$start, $end]);
-            } catch (Throwable $e) {
-                report($e);
-
-                return 0;
-            }
-
-            return (int) ($row->total ?? 0);
+            return $this->resolveOperatingUnitCount($start, $end);
         });
     }
 
     /**
-     * Unit beroperasi dalam N menit terakhir — speed_gps > 0 di dms_vehicle_statuses.
+     * Unit beroperasi dalam N menit terakhir.
+     * Utama: speed_gps > 0 di dms_vehicle_statuses; fallback: last_online_at di dms_vehicle_status_alerts.
      */
     public function unitsOperatingNow(int $withinMinutes = 30): int
     {
-        $cacheKey = 'dms_monitoring:units_operating:'.$withinMinutes;
+        $cacheKey = 'dms_monitoring:units_operating:'.self::OPERATING_LOGIC_VERSION.':'.$withinMinutes;
 
         return Cache::remember($cacheKey, 60, function () use ($withinMinutes): int {
             $connection = $this->connectionSource->connectionName();
@@ -486,23 +469,24 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 return 0;
             }
 
-            $unitKey = $this->vehicleRegisterKeyExpr('vs.vehicle_no');
-            $sql = "
-                SELECT count(DISTINCT {$unitKey}) AS total
-                FROM bcsid.dms_vehicle_statuses vs
-                WHERE vs.created_at >= now() - (? || ' minutes')::interval
-                  AND {$this->movingVehicleSpeedWhere('vs')}
-            ";
-
             try {
-                $row = DB::connection($connection)->selectOne($sql, [$withinMinutes]);
+                $row = DB::connection($connection)->selectOne(
+                    'SELECT now() - (? || \' minutes\')::interval AS start_at, now() AS end_at',
+                    [$withinMinutes],
+                );
+                $startAt = (string) ($row->start_at ?? '');
+                $endAt = (string) ($row->end_at ?? '');
             } catch (Throwable $e) {
                 report($e);
 
                 return 0;
             }
 
-            return (int) ($row->total ?? 0);
+            if ($startAt === '' || $endAt === '') {
+                return 0;
+            }
+
+            return $this->resolveOperatingUnitCount($startAt, $endAt);
         });
     }
 
@@ -521,7 +505,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      */
     public function controlRoomPerformanceRows(string $start, string $end): array
     {
-        return $this->remember('control_room_matrix', $start, $end, function () use ($start, $end): array {
+        return $this->remember('control_room_matrix.v3', $start, $end, function () use ($start, $end): array {
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return [];
@@ -977,7 +961,11 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      */
     public function distinctUnitsBySite(string $start, string $end, int $limit = 200): array
     {
-        return $this->remember('kpi.units_by_site.'.$limit, $start, $end, function () use ($start, $end, $limit): array {
+        return $this->remember('kpi.units_by_site.v3.'.$limit, $start, $end, function () use ($start, $end, $limit): array {
+            if (! $this->hasGpsMovingUnitsInRange($start, $end)) {
+                return $this->distinctOnlineUnitsBySiteFromAlerts($start, $end, $limit);
+            }
+
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return [];
@@ -1027,7 +1015,11 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     {
         $siteKey = md5($site);
 
-        return $this->remember('kpi.units_by_company.'.$siteKey.'.'.$limit, $start, $end, function () use ($start, $end, $site, $limit): array {
+        return $this->remember('kpi.units_by_company.v3.'.$siteKey.'.'.$limit, $start, $end, function () use ($start, $end, $site, $limit): array {
+            if (! $this->hasGpsMovingUnitsInRange($start, $end)) {
+                return $this->distinctOnlineUnitsByCompanyFromAlerts($start, $end, $site, $limit);
+            }
+
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return [];
@@ -1248,6 +1240,8 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             return $empty;
         }
 
+        $useGpsSnapshot = $this->hasGpsMovingUnitsInRange($start, $end);
+
         $unitKey = $this->vehicleRegisterKeyExpr('vs.vehicle_no');
         $extraWhere = '';
         $extraBindings = [];
@@ -1263,33 +1257,59 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         $baseBindings = array_merge([$start, $end], $extraBindings);
         $offset = max(0, ($page - 1) * $perPage);
 
-        $countSql = "
-            SELECT count(*) AS total FROM (
-                SELECT 1
+        if (! $useGpsSnapshot) {
+            $countSql = "
+                SELECT count(*) AS total FROM (
+                    SELECT 1
+                    FROM bcsid.dms_vehicle_status_alerts vsa
+                    INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
+                    WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
+                      {$extraWhere}
+                    GROUP BY TRIM(vsa.vehicle_no), TRIM(dv.site::text), TRIM(dv.company_owner::text)
+                ) AS grouped
+            ";
+            $dataSql = "
+                SELECT
+                    COALESCE(NULLIF(TRIM(dv.no_register::text), ''), '-') AS unit,
+                    COALESCE(NULLIF(TRIM(dv.site::text), ''), '-') AS site,
+                    COALESCE(NULLIF(TRIM(dv.company_owner::text), ''), '-') AS perusahaan,
+                    1 AS value
+                FROM bcsid.dms_vehicle_status_alerts vsa
+                INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
+                WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
+                  {$extraWhere}
+                GROUP BY 1, 2, 3
+                ORDER BY unit ASC
+                LIMIT ? OFFSET ?
+            ";
+        } else {
+            $countSql = "
+                SELECT count(*) AS total FROM (
+                    SELECT 1
+                    FROM bcsid.dms_vehicle_statuses vs
+                    INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = {$unitKey}
+                    WHERE vs.created_at >= ? AND vs.created_at < ?
+                      AND {$this->movingVehicleSpeedWhere('vs')}
+                      {$extraWhere}
+                    GROUP BY {$unitKey}, TRIM(dv.site::text), TRIM(dv.company_owner::text)
+                ) AS grouped
+            ";
+            $dataSql = "
+                SELECT
+                    COALESCE(NULLIF(TRIM(dv.no_register::text), ''), '-') AS unit,
+                    COALESCE(NULLIF(TRIM(dv.site::text), ''), '-') AS site,
+                    COALESCE(NULLIF(TRIM(dv.company_owner::text), ''), '-') AS perusahaan,
+                    1 AS value
                 FROM bcsid.dms_vehicle_statuses vs
                 INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = {$unitKey}
                 WHERE vs.created_at >= ? AND vs.created_at < ?
                   AND {$this->movingVehicleSpeedWhere('vs')}
                   {$extraWhere}
-                GROUP BY {$unitKey}, TRIM(dv.site::text), TRIM(dv.company_owner::text)
-            ) AS grouped
-        ";
-
-        $dataSql = "
-            SELECT
-                COALESCE(NULLIF(TRIM(dv.no_register::text), ''), '-') AS unit,
-                COALESCE(NULLIF(TRIM(dv.site::text), ''), '-') AS site,
-                COALESCE(NULLIF(TRIM(dv.company_owner::text), ''), '-') AS perusahaan,
-                1 AS value
-            FROM bcsid.dms_vehicle_statuses vs
-            INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = {$unitKey}
-            WHERE vs.created_at >= ? AND vs.created_at < ?
-              AND {$this->movingVehicleSpeedWhere('vs')}
-              {$extraWhere}
-            GROUP BY 1, 2, 3
-            ORDER BY unit ASC
-            LIMIT ? OFFSET ?
-        ";
+                GROUP BY 1, 2, 3
+                ORDER BY unit ASC
+                LIMIT ? OFFSET ?
+            ";
+        }
 
         try {
             $countRow = DB::connection($connection)->selectOne($countSql, $baseBindings);
@@ -1623,14 +1643,267 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
+     * Hitung unit beroperasi: GPS bergerak jika ada data; fallback ke last_online_at alerts.
+     */
+    private function resolveOperatingUnitCount(string $start, string $end): int
+    {
+        $gps = $this->countMovingUnitsFromStatuses($start, $end);
+        if ($gps > 0) {
+            return $gps;
+        }
+
+        return $this->countOnlineUnitsFromAlerts($start, $end);
+    }
+
+    /**
+     * Apakah window ini punya unit bergerak (speed_gps > 0) di dms_vehicle_statuses.
+     * Lebih akurat daripada cek keberadaan baris — FDW kadang mengabaikan filter tanggal.
+     */
+    private function hasGpsMovingUnitsInRange(string $start, string $end): bool
+    {
+        $cacheKey = 'dms_monitoring:vs_moving:'.self::OPERATING_LOGIC_VERSION.':'.md5($start.'|'.$end);
+
+        return Cache::remember($cacheKey, 300, function () use ($start, $end): bool {
+            return $this->countMovingUnitsFromStatuses($start, $end) > 0;
+        });
+    }
+
+    private function countMovingUnitsFromStatuses(string $start, string $end): int
+    {
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return 0;
+        }
+
+        $unitKey = $this->vehicleRegisterKeyExpr('vs.vehicle_no');
+        $sql = "
+            SELECT count(DISTINCT {$unitKey}) AS total
+            FROM bcsid.dms_vehicle_statuses vs
+            WHERE vs.created_at >= ? AND vs.created_at < ?
+              AND {$this->movingVehicleSpeedWhere('vs')}
+        ";
+
+        try {
+            $row = DB::connection($connection)->selectOne($sql, [$start, $end]);
+        } catch (Throwable $e) {
+            report($e);
+
+            return 0;
+        }
+
+        return (int) ($row->total ?? 0);
+    }
+
+    private function countOnlineUnitsFromAlerts(string $start, string $end): int
+    {
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return 0;
+        }
+
+        $scopeWhere = $this->vehicleScopeWhere('dv.site', 'dv.company_owner');
+        $sql = "
+            SELECT count(DISTINCT TRIM(vsa.vehicle_no)) AS total
+            FROM bcsid.dms_vehicle_status_alerts vsa
+            INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
+            WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
+              AND vsa.vehicle_no IS NOT NULL AND TRIM(vsa.vehicle_no) <> ''
+              {$scopeWhere}
+        ";
+
+        try {
+            $row = DB::connection($connection)->selectOne(
+                $sql,
+                array_merge([$start, $end], $this->vehicleScopeBindings()),
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return 0;
+        }
+
+        return (int) ($row->total ?? 0);
+    }
+
+    /**
+     * @return list<array{site:string, value:int}>
+     */
+    private function distinctOnlineUnitsBySiteFromAlerts(string $start, string $end, int $limit): array
+    {
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return [];
+        }
+
+        $scopeWhere = $this->vehicleScopeWhere('dv.site', 'dv.company_owner');
+        $sql = "
+            SELECT
+                COALESCE(NULLIF(TRIM(dv.site::text), ''), '-') AS site,
+                count(DISTINCT TRIM(vsa.vehicle_no)) AS value
+            FROM bcsid.dms_vehicle_status_alerts vsa
+            INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
+            WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
+              AND vsa.vehicle_no IS NOT NULL AND TRIM(vsa.vehicle_no) <> ''
+              {$scopeWhere}
+            GROUP BY 1
+            ORDER BY value DESC
+            LIMIT ?
+        ";
+
+        try {
+            $rows = DB::connection($connection)->select(
+                $sql,
+                array_merge([$start, $end], $this->vehicleScopeBindings(), [$limit]),
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        return array_map(static fn ($r): array => [
+            'site' => (string) $r->site,
+            'value' => (int) $r->value,
+        ], $rows);
+    }
+
+    /**
+     * @return list<array{perusahaan:string, value:int}>
+     */
+    private function distinctOnlineUnitsByCompanyFromAlerts(string $start, string $end, string $site, int $limit): array
+    {
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return [];
+        }
+
+        $scopeWhere = $this->vehicleScopeWhere('dv.site', 'dv.company_owner');
+        $sql = "
+            SELECT
+                COALESCE(NULLIF(TRIM(dv.company_owner::text), ''), '-') AS perusahaan,
+                count(DISTINCT TRIM(vsa.vehicle_no)) AS value
+            FROM bcsid.dms_vehicle_status_alerts vsa
+            INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
+            WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
+              AND TRIM(dv.site::text) = ?
+              AND vsa.vehicle_no IS NOT NULL AND TRIM(vsa.vehicle_no) <> ''
+              {$scopeWhere}
+            GROUP BY 1
+            ORDER BY value DESC
+            LIMIT ?
+        ";
+
+        try {
+            $rows = DB::connection($connection)->select(
+                $sql,
+                array_merge([$start, $end, $site], $this->vehicleScopeBindings(), [$limit]),
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        return array_map(static fn ($r): array => [
+            'perusahaan' => (string) $r->perusahaan,
+            'value' => (int) $r->value,
+        ], $rows);
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function onlineUnitCountMapBySiteCompanyFromAlerts(string $start, string $end): array
+    {
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return [];
+        }
+
+        $scopeWhere = $this->vehicleScopeWhere('dv.site', 'dv.company_owner');
+        $sql = "
+            SELECT
+                COALESCE(NULLIF(TRIM(dv.company_owner::text), ''), '-') AS perusahaan,
+                COALESCE(NULLIF(TRIM(dv.site::text), ''), '-') AS site,
+                count(DISTINCT TRIM(vsa.vehicle_no)) AS total_unit
+            FROM bcsid.dms_vehicle_status_alerts vsa
+            INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
+            WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
+              AND vsa.vehicle_no IS NOT NULL AND TRIM(vsa.vehicle_no) <> ''
+              {$scopeWhere}
+            GROUP BY 1, 2
+        ";
+
+        try {
+            $rows = DB::connection($connection)->select(
+                $sql,
+                array_merge([$start, $end], $this->vehicleScopeBindings()),
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(string) $row->perusahaan.'|'.(string) $row->site] = (int) $row->total_unit;
+        }
+
+        return $map;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function intervenedUnitCountMapBySiteCompanyFromAlerts(string $start, string $end): array
+    {
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return [];
+        }
+
+        $sql = "
+            SELECT
+                COALESCE(NULLIF(TRIM(perusahaan::text), ''), '-') AS perusahaan,
+                COALESCE(NULLIF(TRIM(site::text), ''), '-') AS site,
+                count(DISTINCT TRIM(unit::text)) AS unit_intervened
+            FROM bcsid.mv_dms_alert
+            WHERE {$this->alertDateWhere()}
+              AND sudah_direview_l1 = true
+              AND unit IS NOT NULL AND TRIM(unit::text) <> ''
+            GROUP BY 1, 2
+        ";
+
+        try {
+            $rows = DB::connection($connection)->select($sql, $this->alertDateBindings($start, $end));
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(string) $row->perusahaan.'|'.(string) $row->site] = (int) $row->unit_intervened;
+        }
+
+        return $map;
+    }
+
+    /**
      * @return array<string, int> "perusahaan|site" => count
      */
     private function operatingUnitCountMapBySiteCompany(string $start, string $end): array
     {
-        $cacheKey = 'dms_monitoring:operating_units_map:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix());
+        $cacheKey = 'dms_monitoring:operating_units_map:'.self::OPERATING_LOGIC_VERSION.':'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix());
 
         /** @var array<string, int> */
         return Cache::remember($cacheKey, 1800, function () use ($start, $end): array {
+            if (! $this->hasGpsMovingUnitsInRange($start, $end)) {
+                return $this->onlineUnitCountMapBySiteCompanyFromAlerts($start, $end);
+            }
+
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return [];
@@ -1679,10 +1952,14 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      */
     private function intervenedOperatingUnitCountMapBySiteCompany(string $start, string $end): array
     {
-        $cacheKey = 'dms_monitoring:intervened_operating_units_map:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix());
+        $cacheKey = 'dms_monitoring:intervened_operating_units_map:'.self::OPERATING_LOGIC_VERSION.':'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix());
 
         /** @var array<string, int> */
         return Cache::remember($cacheKey, 1800, function () use ($start, $end): array {
+            if (! $this->hasGpsMovingUnitsInRange($start, $end)) {
+                return $this->intervenedUnitCountMapBySiteCompanyFromAlerts($start, $end);
+            }
+
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return [];

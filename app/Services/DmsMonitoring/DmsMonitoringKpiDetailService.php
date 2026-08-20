@@ -262,8 +262,8 @@ class DmsMonitoringKpiDetailService
         $alertUnitsTotal = array_sum(array_column($this->reader->distinctAlertUnitsBySite($start, $end), 'value'));
 
         $summary = [
-            ['label' => 'Unit bergerak (30 mnt)', 'value' => number_format($unitsMoving), 'hint' => 'Global — dms_vehicle_statuses (speed_gps > 0)'],
-            ['label' => 'Unit bergerak (periode)', 'value' => number_format($unitsInPeriod), 'hint' => 'Global — dms_vehicle_statuses (speed_gps > 0)'],
+            ['label' => 'Unit bergerak (30 mnt)', 'value' => number_format($unitsMoving), 'hint' => 'dms_vehicle_statuses jika ada data; fallback dms_vehicle_status_alerts'],
+            ['label' => 'Unit bergerak (periode)', 'value' => number_format($unitsInPeriod), 'hint' => 'dms_vehicle_statuses jika ada data; fallback dms_vehicle_status_alerts'],
             ['label' => 'Unit dengan alert', 'value' => number_format($alertUnitsTotal), 'hint' => 'Per site — mv_dms_alert'],
         ];
 

@@ -189,7 +189,7 @@ final class DmsDashboardOverviewService
             ],
             [
                 'label' => 'Unit Beroperasi',
-                'value' => number_format($unitsOnline > 0 ? $unitsOnline : $unitsToday),
+                'value' => number_format($unitsToday > 0 ? $unitsToday : $unitsOnline),
                 'icon' => 'solar:wheel-bold',
                 'bg' => 'bg-purple',
                 'gradient' => 'bg-gradient-end-4',
