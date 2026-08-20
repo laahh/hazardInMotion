@@ -562,7 +562,7 @@
   </div>
 </div>
 
-@include('pra-operasi.partials._dms-kpi-detail-modal')
+@include('pra-operasi.partials._dms-overall-modal')
 @endsection
 
 @section('scripts')
@@ -693,229 +693,254 @@
     }).render();
   }
 
-  var dmsKpiFilters = @json($filters);
-  var dmsKpiDetailUrl = @json(route('pra-operasi.dms-monitoring.kpi-detail', ['metric' => '__METRIC__']));
-  var dmsKpiModalEl = document.getElementById('dmsKpiDetailModal');
-  var dmsKpiModal = dmsKpiModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(dmsKpiModalEl) : null;
-  var dmsKpiState = { metric: '', level: 'sites', parentSite: '', parentCompany: '', page: 1 };
+  var dmsOverallFilters = @json($filters);
+  var dmsOverallUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall'));
+  var dmsOverallModalEl = document.getElementById('dmsOverallModal');
+  var dmsOverallModal = dmsOverallModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(dmsOverallModalEl) : null;
+  var dmsOverallState = { page: 1 };
+  var dmsOverallControlChart = null;
+  var dmsOverallTopUnitsChart = null;
 
-  function dmsKpiDetailEndpoint(metric) {
-    return dmsKpiDetailUrl.replace('__METRIC__', encodeURIComponent(metric));
-  }
-
-  function dmsKpiSetLoading(show) {
-    var loading = document.getElementById('dms-kpi-detail-loading');
+  function dmsOverallSetLoading(show) {
+    var loading = document.getElementById('dms-overall-loading');
     if (loading) loading.classList.toggle('d-none', !show);
     if (loading) loading.classList.toggle('d-flex', show);
   }
 
-  function dmsKpiRenderBreadcrumb(crumbs) {
-    var ol = document.querySelector('#dms-kpi-detail-breadcrumb ol');
-    if (!ol) return;
-    ol.innerHTML = '';
-    (crumbs || []).forEach(function (crumb, idx) {
-      var li = document.createElement('li');
-      li.className = 'breadcrumb-item' + (idx === crumbs.length - 1 ? ' active' : '');
-      if (idx === crumbs.length - 1) {
-        li.textContent = crumb.label;
-        li.setAttribute('aria-current', 'page');
-      } else {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn btn-link btn-sm p-0 text-decoration-none';
-        btn.textContent = crumb.label;
-        btn.addEventListener('click', function () {
-          dmsKpiState.level = crumb.level || 'sites';
-          dmsKpiState.parentSite = crumb.parent_site || '';
-          dmsKpiState.parentCompany = crumb.parent_company || '';
-          dmsKpiState.page = 1;
-          dmsKpiLoadDetail();
-        });
-        li.appendChild(btn);
-      }
-      ol.appendChild(li);
-    });
+  function dmsOverallDestroyCharts() {
+    if (dmsOverallControlChart) { dmsOverallControlChart.destroy(); dmsOverallControlChart = null; }
+    if (dmsOverallTopUnitsChart) { dmsOverallTopUnitsChart.destroy(); dmsOverallTopUnitsChart = null; }
   }
 
-  function dmsKpiRenderSummary(summary, metric) {
-    var wrap = document.getElementById('dms-kpi-detail-summary');
-    var footnote = document.getElementById('dms-kpi-detail-footnote');
+  function dmsOverallRenderSummary(cards) {
+    var wrap = document.getElementById('dms-overall-summary');
     if (!wrap) return;
     wrap.innerHTML = '';
-    if (!summary || !summary.length) {
-      wrap.classList.add('d-none');
-      if (footnote) footnote.classList.add('d-none');
-      return;
-    }
-    wrap.classList.remove('d-none');
-    if (footnote) footnote.classList.toggle('d-none', metric !== 'units_operating');
-    summary.forEach(function (item) {
+    (cards || []).forEach(function (card) {
       var col = document.createElement('div');
-      col.className = 'col-md-4';
-      col.innerHTML = '<div class="border radius-8 p-16 h-100"><div class="text-sm text-secondary-light mb-4">' + item.label + '</div><div class="fw-bold text-lg">' + item.value + '</div><div class="text-xs text-secondary-light mt-4">' + (item.hint || '') + '</div></div>';
+      col.className = 'col-sm-6 col-xl-3';
+      col.innerHTML =
+        '<div class="border radius-8 p-16 h-100 d-flex align-items-start gap-12">' +
+          '<span class="w-40-px h-40-px radius-circle d-flex align-items-center justify-content-center flex-shrink-0" style="background:' + (card.color || '#487fff') + '20;color:' + (card.color || '#487fff') + '">' +
+            '<iconify-icon icon="' + (card.icon || 'solar:chart-2-bold') + '" class="icon text-lg"></iconify-icon>' +
+          '</span>' +
+          '<div class="min-w-0">' +
+            '<div class="text-sm text-secondary-light mb-4">' + (card.label || '-') + '</div>' +
+            '<div class="fw-bold text-xl">' + (card.value || '0') + '</div>' +
+            '<div class="text-xs text-secondary-light mt-4">' + (card.hint || '') + '</div>' +
+          '</div>' +
+        '</div>';
       wrap.appendChild(col);
     });
   }
 
-  function dmsKpiMetaText(meta) {
-    if (!meta) return '';
-    var parts = [];
-    if (meta.alert_count != null) parts.push('Alert: ' + meta.alert_count);
-    if (meta.checkin_count != null) parts.push('Check-in: ' + meta.checkin_count);
-    if (meta.unit_count != null) parts.push('Unit: ' + meta.unit_count);
-    return parts.join(' · ');
+  function dmsOverallRenderTopUnits(topUnits) {
+    var wrap = document.getElementById('dms-overall-top-units');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!topUnits || !topUnits.length) {
+      wrap.innerHTML = '<div class="col-12 text-sm text-secondary-light">Tidak ada unit dengan alert.</div>';
+      return;
+    }
+    topUnits.forEach(function (row, idx) {
+      var col = document.createElement('div');
+      col.className = 'col-md-6 col-xl-4';
+      col.innerHTML =
+        '<div class="border radius-8 p-12 h-100">' +
+          '<div class="d-flex align-items-center gap-8 mb-4">' +
+            '<span class="badge bg-primary-600 text-white radius-4 px-8 py-4">#' + (idx + 1) + '</span>' +
+            '<span class="fw-semibold text-sm text-truncate">' + (row.unit || '-') + '</span>' +
+          '</div>' +
+          '<div class="text-xs text-secondary-light">' + (row.site || '-') + ' · ' + (row.perusahaan || '-') + '</div>' +
+          '<div class="fw-bold text-lg mt-4">' + Number(row.alert_count || 0).toLocaleString('id-ID') + ' <span class="text-sm fw-normal text-secondary-light">alert</span></div>' +
+        '</div>';
+      wrap.appendChild(col);
+    });
   }
 
-  function dmsKpiRenderTable(payload) {
-    var head = document.getElementById('dms-kpi-detail-head');
-    var body = document.getElementById('dms-kpi-detail-body');
-    var empty = document.getElementById('dms-kpi-detail-empty');
-    if (!head || !body) return;
+  function dmsOverallRenderControlChart(chartData) {
+    var el = document.getElementById('dms-overall-control-chart');
+    var legend = document.getElementById('dms-overall-control-legend');
+    if (!el || typeof ApexCharts === 'undefined') return;
 
-    head.innerHTML = '';
-    body.innerHTML = '';
-    (payload.columns || []).forEach(function (col) {
-      var th = document.createElement('th');
-      th.scope = 'col';
-      th.textContent = col.label;
-      head.appendChild(th);
+    dmsOverallDestroyCharts();
+
+    if (legend) {
+      legend.innerHTML =
+        '<span><span class="d-inline-block rounded-circle me-4" style="width:8px;height:8px;background:#487fff"></span> Alert harian</span>' +
+        '<span><span class="d-inline-block rounded-circle me-4" style="width:8px;height:8px;background:#45b369"></span> Mean: ' + (chartData.mean || 0) + '</span>' +
+        '<span><span class="d-inline-block rounded-circle me-4" style="width:8px;height:8px;background:#ef4a00"></span> UCL: ' + (chartData.ucl || 0) + '</span>' +
+        '<span><span class="d-inline-block rounded-circle me-4" style="width:8px;height:8px;background:#8252e9"></span> LCL: ' + (chartData.lcl || 0) + '</span>';
+    }
+
+    dmsOverallControlChart = new ApexCharts(el, {
+      series: [
+        { name: 'Total Alert', type: 'area', data: chartData.series || [] },
+        { name: 'Mean', type: 'line', data: chartData.mean_series || [] },
+        { name: 'UCL', type: 'line', data: chartData.ucl_series || [] },
+        { name: 'LCL', type: 'line', data: chartData.lcl_series || [] },
+      ],
+      chart: { height: 320, type: 'line', toolbar: { show: false }, zoom: { enabled: false } },
+      colors: ['#487fff', '#45b369', '#ef4a00', '#8252e9'],
+      stroke: { width: [2, 2, 2, 2], curve: 'smooth', dashArray: [0, 6, 4, 4] },
+      fill: {
+        type: ['gradient', 'solid', 'solid', 'solid'],
+        gradient: { shadeIntensity: 0.4, opacityFrom: 0.45, opacityTo: 0.05, stops: [0, 100] },
+      },
+      dataLabels: { enabled: false },
+      xaxis: { categories: chartData.labels || [], labels: { rotate: -45, style: { fontSize: '10px' } } },
+      yaxis: { labels: { formatter: function (v) { return Math.round(v); } } },
+      legend: { show: false },
+      tooltip: { shared: true, intersect: false },
     });
+    dmsOverallControlChart.render();
+  }
 
-    var rows = payload.rows || [];
+  function dmsOverallRenderTopUnitsChart(chartData) {
+    var el = document.getElementById('dms-overall-top-units-chart');
+    if (!el || typeof ApexCharts === 'undefined') return;
+    if (!chartData || !chartData.series || !chartData.series.length) {
+      el.innerHTML = '<p class="text-sm text-secondary-light mb-0">Grafik tren unit teratas tidak tersedia.</p>';
+      return;
+    }
+    el.innerHTML = '';
+    dmsOverallTopUnitsChart = new ApexCharts(el, {
+      series: chartData.series,
+      chart: { type: 'line', height: 260, toolbar: { show: false }, zoom: { enabled: false } },
+      stroke: { curve: 'smooth', width: 2 },
+      dataLabels: { enabled: false },
+      xaxis: { categories: chartData.labels || [], labels: { rotate: -45, style: { fontSize: '10px' } } },
+      legend: { position: 'top', horizontalAlign: 'left', fontSize: '11px' },
+      tooltip: { shared: true },
+    });
+    dmsOverallTopUnitsChart.render();
+  }
+
+  function dmsOverallRenderTable(table, maxAlert) {
+    var body = document.getElementById('dms-overall-table-body');
+    var empty = document.getElementById('dms-overall-table-empty');
+    if (!body) return;
+    body.innerHTML = '';
+    var rows = (table && table.rows) ? table.rows : [];
     if (!rows.length) {
       if (empty) empty.classList.remove('d-none');
       return;
     }
     if (empty) empty.classList.add('d-none');
+    var barMax = maxAlert > 0 ? maxAlert : Math.max.apply(null, rows.map(function (r) { return r.alert_count || 0; }).concat([1]));
 
     rows.forEach(function (row) {
       var tr = document.createElement('tr');
-      if (payload.drillable && row.drill) {
-        tr.className = 'cursor-pointer';
-        tr.addEventListener('click', function () {
-          dmsKpiState.level = row.drill.level;
-          dmsKpiState.parentSite = row.drill.parent_site || '';
-          dmsKpiState.parentCompany = row.drill.parent_company || '';
-          dmsKpiState.page = 1;
-          dmsKpiLoadDetail();
-        });
-      }
-
-      if (payload.level === 'sites' || payload.level === 'companies') {
-        var tdLabel = document.createElement('td');
-        tdLabel.innerHTML = '<div class="fw-medium">' + (row.label || '-') + '</div><div class="text-xs text-secondary-light">' + dmsKpiMetaText(row.meta) + '</div>';
-        tr.appendChild(tdLabel);
-        var tdValue = document.createElement('td');
-        tdValue.className = 'text-end fw-semibold';
-        tdValue.textContent = row.value != null ? row.value : '-';
-        tr.appendChild(tdValue);
-      } else {
-        (payload.columns || []).forEach(function (col) {
-          var td = document.createElement('td');
-          td.textContent = row[col.key] != null ? row[col.key] : '-';
-          tr.appendChild(td);
-        });
-      }
-
+      var pct = Number(row.pct_of_total || 0);
+      var alerts = Number(row.alert_count || 0);
+      var barWidth = barMax > 0 ? Math.round((alerts / barMax) * 100) : 0;
+      var barColor = alerts <= 0 ? '#45b369' : (pct >= 10 ? '#ef4a00' : '#487fff');
+      tr.innerHTML =
+        '<td class="fw-medium">' + (row.unit || '-') + '</td>' +
+        '<td>' + (row.site || '-') + '</td>' +
+        '<td>' + (row.perusahaan || '-') + '</td>' +
+        '<td class="text-end fw-semibold">' + alerts.toLocaleString('id-ID') + '</td>' +
+        '<td class="text-end">' + pct.toFixed(2) + '%</td>' +
+        '<td><div class="dms-overall-bar bg-neutral-100 radius-4 overflow-hidden" style="height:8px;">' +
+          '<div style="width:' + barWidth + '%;height:100%;background:' + barColor + ';border-radius:4px;"></div>' +
+        '</td>';
       body.appendChild(tr);
     });
   }
 
-  function dmsKpiRenderPagination(pagination) {
-    var wrap = document.getElementById('dms-kpi-detail-pagination');
-    var info = document.getElementById('dms-kpi-detail-page-info');
-    var prev = document.getElementById('dms-kpi-detail-prev');
-    var next = document.getElementById('dms-kpi-detail-next');
-    if (!wrap) return;
-
-    if (!pagination) {
-      wrap.classList.add('d-none');
-      return;
-    }
+  function dmsOverallRenderPagination(pagination) {
+    var wrap = document.getElementById('dms-overall-pagination');
+    var info = document.getElementById('dms-overall-page-info');
+    var prev = document.getElementById('dms-overall-prev');
+    var next = document.getElementById('dms-overall-next');
+    var count = document.getElementById('dms-overall-table-count');
+    if (!wrap || !pagination) return;
 
     wrap.classList.remove('d-none');
-    if (info) info.textContent = 'Halaman ' + pagination.page + ' / ' + pagination.total_pages + ' (' + pagination.total_rows + ' baris)';
+    if (count) count.textContent = Number(pagination.total_rows || 0).toLocaleString('id-ID') + ' unit';
+    if (info) info.textContent = 'Halaman ' + pagination.page + ' / ' + pagination.total_pages;
     if (prev) prev.disabled = pagination.page <= 1;
     if (next) next.disabled = pagination.page >= pagination.total_pages;
   }
 
-  function dmsKpiLoadDetail() {
-    if (!dmsKpiState.metric) return;
-    dmsKpiSetLoading(true);
-    document.getElementById('dms-kpi-detail-error').classList.add('d-none');
+  function dmsOverallLoad() {
+    dmsOverallSetLoading(true);
+    document.getElementById('dms-overall-error').classList.add('d-none');
+    document.getElementById('dms-overall-content').classList.add('d-none');
 
     var params = new URLSearchParams({
-      start: dmsKpiFilters.start || '',
-      end: dmsKpiFilters.end || '',
-      site: dmsKpiFilters.site || '',
-      perusahaan: dmsKpiFilters.perusahaan || '',
-      level: dmsKpiState.level,
-      page: String(dmsKpiState.page)
+      start: dmsOverallFilters.start || '',
+      end: dmsOverallFilters.end || '',
+      site: dmsOverallFilters.site || '',
+      perusahaan: dmsOverallFilters.perusahaan || '',
+      page: String(dmsOverallState.page),
     });
-    if (dmsKpiState.parentSite) params.set('parent_site', dmsKpiState.parentSite);
-    if (dmsKpiState.parentCompany) params.set('parent_company', dmsKpiState.parentCompany);
 
-    fetch(dmsKpiDetailEndpoint(dmsKpiState.metric) + '?' + params.toString(), {
-      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    fetch(dmsOverallUrl + '?' + params.toString(), {
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
     })
       .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
       .then(function (result) {
-        dmsKpiSetLoading(false);
+        dmsOverallSetLoading(false);
         if (!result.data.ok) {
-          document.getElementById('dms-kpi-detail-error').classList.remove('d-none');
-          document.getElementById('dms-kpi-detail-error-message').textContent = result.data.message || 'Gagal memuat detail.';
+          document.getElementById('dms-overall-error').classList.remove('d-none');
+          document.getElementById('dms-overall-error-message').textContent = result.data.message || 'Gagal memuat overview.';
           return;
         }
         var payload = result.data;
-        document.getElementById('dmsKpiDetailModalLabel').textContent = payload.label || 'Detail KPI';
-        document.getElementById('dms-kpi-detail-subtitle').textContent = (dmsKpiFilters.start || '') + ' s/d ' + (dmsKpiFilters.end || '');
-        document.getElementById('dms-kpi-detail-total').textContent = payload.total || '0';
-        document.getElementById('dms-kpi-detail-hint').textContent = payload.level === 'rows'
-          ? 'Klik baris site/perusahaan di level atas untuk drill-down.'
-          : (payload.drillable ? 'Klik baris untuk lihat breakdown berikutnya.' : '');
-        dmsKpiRenderBreadcrumb(payload.breadcrumb || []);
-        dmsKpiRenderSummary(payload.summary || [], payload.metric || '');
-        dmsKpiRenderTable(payload);
-        dmsKpiRenderPagination(payload.pagination || null);
+        document.getElementById('dmsOverallModalLabel').textContent = payload.label || 'Overview Unit & Alert';
+        document.getElementById('dms-overall-subtitle').textContent =
+          (payload.period && payload.period.start ? payload.period.start : '') +
+          ' s/d ' +
+          (payload.period && payload.period.end ? payload.period.end : '');
+
+        dmsOverallRenderSummary(payload.summary || []);
+        dmsOverallRenderTopUnits(payload.top_units || []);
+        dmsOverallRenderControlChart(payload.control_chart || {});
+        dmsOverallRenderTopUnitsChart(payload.top_units_chart || {});
+
+        var maxAlert = 0;
+        (payload.top_units || []).forEach(function (u) { maxAlert = Math.max(maxAlert, u.alert_count || 0); });
+        dmsOverallRenderTable(payload.table || {}, maxAlert);
+        dmsOverallRenderPagination(payload.pagination || null);
+
+        document.getElementById('dms-overall-content').classList.remove('d-none');
       })
       .catch(function () {
-        dmsKpiSetLoading(false);
-        document.getElementById('dms-kpi-detail-error').classList.remove('d-none');
-        document.getElementById('dms-kpi-detail-error-message').textContent = 'Gagal memuat detail KPI.';
+        dmsOverallSetLoading(false);
+        document.getElementById('dms-overall-error').classList.remove('d-none');
+        document.getElementById('dms-overall-error-message').textContent = 'Gagal memuat overview unit & alert.';
       });
   }
 
-  function dmsKpiOpenDetail(metric, label) {
-    dmsKpiState.metric = metric;
-    dmsKpiState.level = 'sites';
-    dmsKpiState.parentSite = '';
-    dmsKpiState.parentCompany = '';
-    dmsKpiState.page = 1;
-    document.getElementById('dmsKpiDetailModalLabel').textContent = label || 'Detail KPI';
-    if (dmsKpiModal) dmsKpiModal.show();
-    dmsKpiLoadDetail();
+  function dmsOverallOpen() {
+    dmsOverallState.page = 1;
+    dmsOverallDestroyCharts();
+    if (dmsOverallModal) dmsOverallModal.show();
+    dmsOverallLoad();
   }
 
   document.querySelectorAll('.dms-kpi-card').forEach(function (card) {
-    card.addEventListener('click', function () {
-      dmsKpiOpenDetail(card.getAttribute('data-kpi-metric'), card.getAttribute('data-kpi-label'));
-    });
+    card.addEventListener('click', function () { dmsOverallOpen(); });
     card.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        dmsKpiOpenDetail(card.getAttribute('data-kpi-metric'), card.getAttribute('data-kpi-label'));
-      }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dmsOverallOpen(); }
     });
   });
 
-  var prevBtn = document.getElementById('dms-kpi-detail-prev');
-  var nextBtn = document.getElementById('dms-kpi-detail-next');
-  if (prevBtn) prevBtn.addEventListener('click', function () {
-    if (dmsKpiState.page > 1) { dmsKpiState.page--; dmsKpiLoadDetail(); }
+  var overallPrev = document.getElementById('dms-overall-prev');
+  var overallNext = document.getElementById('dms-overall-next');
+  if (overallPrev) overallPrev.addEventListener('click', function () {
+    if (dmsOverallState.page > 1) { dmsOverallState.page--; dmsOverallLoad(); }
   });
-  if (nextBtn) nextBtn.addEventListener('click', function () {
-    dmsKpiState.page++; dmsKpiLoadDetail();
+  if (overallNext) overallNext.addEventListener('click', function () {
+    dmsOverallState.page++; dmsOverallLoad();
   });
+
+  if (dmsOverallModalEl) {
+    dmsOverallModalEl.addEventListener('hidden.bs.modal', function () {
+      dmsOverallDestroyCharts();
+    });
+  }
 })();
 </script>
 @endsection

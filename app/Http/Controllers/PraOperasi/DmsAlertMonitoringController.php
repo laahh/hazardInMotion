@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\PraOperasi;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\DmsMonitoring\DmsMonitoringKpiDetailRequest;
+use App\Http\Requests\DmsMonitoring\DmsMonitoringOverallModalRequest;
 use App\Services\Dms\DmsDashboardOverviewService;
 use App\Services\DmsMonitoring\DmsAlertMonitoringService;
 use App\Services\DmsMonitoring\DmsMonitoringControlRoomPerformanceService;
 use App\Services\DmsMonitoring\DmsMonitoringKpiDetailService;
+use App\Services\DmsMonitoring\DmsMonitoringOverallModalService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -24,6 +25,7 @@ final class DmsAlertMonitoringController extends Controller
         private readonly DmsAlertMonitoringService $service,
         private readonly DmsDashboardOverviewService $overview,
         private readonly DmsMonitoringKpiDetailService $kpiDetail,
+        private readonly DmsMonitoringOverallModalService $overallModal,
         private readonly DmsMonitoringControlRoomPerformanceService $controlRoom,
     ) {}
 
@@ -52,20 +54,24 @@ final class DmsAlertMonitoringController extends Controller
         return view('pra-operasi.dms-alert-monitoring', $this->mergeCrmPayload($crm, $monitoring));
     }
 
-    public function kpiDetail(DmsMonitoringKpiDetailRequest $request): JsonResponse
+    public function overallModal(DmsMonitoringOverallModalRequest $request): JsonResponse
     {
-        $payload = $this->kpiDetail->detail(
-            $request->metricKey(),
+        $payload = $this->overallModal->payload(
             $request->filters(),
-            $request->level(),
-            $request->parentSite(),
-            $request->parentCompany(),
             $request->page(),
         );
 
         $status = ($payload['ok'] ?? false) ? 200 : 422;
 
         return response()->json($payload, $status);
+    }
+
+    /**
+     * @deprecated Drill-down lama — diganti overallModal
+     */
+    public function kpiDetail(DmsMonitoringOverallModalRequest $request): JsonResponse
+    {
+        return $this->overallModal($request);
     }
 
     /**

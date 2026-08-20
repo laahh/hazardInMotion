@@ -47,10 +47,11 @@ class DmsAlertMonitoringDashboardViewTest extends TestCase
         $this->assertStringContainsString('Rasio Alert / Orang', $html);
         $this->assertStringContainsString('Unit Beroperasi', $html);
         $this->assertStringContainsString('Rasio Alert / Unit', $html);
-        $this->assertStringContainsString('dmsKpiDetailModal', $html);
-        $this->assertStringContainsString('data-kpi-metric="operator_checkin"', $html);
-        $this->assertStringContainsString('data-kpi-metric="total_alert"', $html);
-        $this->assertStringContainsString('dms-kpi-detail-breadcrumb', $html);
+        $this->assertStringContainsString('dmsOverallModal', $html);
+        $this->assertStringContainsString('Overview Unit & Alert', $html);
+        $this->assertStringContainsString('Control Chart Alert Harian', $html);
+        $this->assertStringContainsString('Daftar Unit Beroperasi', $html);
+        $this->assertStringContainsString('Unit dengan Alert Terbanyak', $html);
         $this->assertStringContainsString('Checkin RFID', $html);
         $this->assertStringContainsString('Site', $html);
         $this->assertStringContainsString('Perusahaan', $html);
