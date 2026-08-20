@@ -1,6 +1,6 @@
-{{-- Modal overview unit beroperasi & alert — hampir full viewport --}}
+{{-- Modal overview unit beroperasi & alert — ukuran standar modal-xl --}}
 <div class="modal fade" id="dmsOverallModal" tabindex="-1" aria-labelledby="dmsOverallModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-scrollable dms-overall-modal-dialog">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable dms-overall-modal-dialog">
     <div class="modal-content radius-8 border-0 shadow-lg">
       <div class="modal-header border-bottom py-16 px-24">
         <div class="min-w-0 pe-12">

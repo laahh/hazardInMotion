@@ -124,13 +124,12 @@
   .dms-cr-tone-empty { background: #F3F4F6; color: #6B7280; }
 
   .dms-overall-modal-dialog {
-    max-width: min(98vw, 1920px);
-    width: 98vw;
-    margin: 0.5rem auto;
-    height: calc(100vh - 1rem);
+    max-width: 1140px;
+    width: calc(100% - 2rem);
+    margin: 1.75rem auto;
   }
   .dms-overall-modal-dialog .modal-content {
-    max-height: 100%;
+    max-height: calc(100vh - 3.5rem);
     display: flex;
     flex-direction: column;
   }
@@ -141,22 +140,19 @@
   }
   .dms-overall-main-chart {
     width: 100%;
-    min-height: 380px;
+    min-height: 260px;
   }
   .dms-overall-mini-chart {
     width: 100%;
-    min-height: 280px;
+    min-height: 200px;
   }
-  @media (max-width: 1199.98px) {
+  @media (max-width: 575.98px) {
     .dms-overall-modal-dialog {
-      width: 100vw;
-      max-width: 100vw;
-      height: 100vh;
-      margin: 0;
+      width: calc(100% - 1rem);
+      margin: 0.75rem auto;
     }
     .dms-overall-modal-dialog .modal-content {
-      min-height: 100vh;
-      border-radius: 0 !important;
+      max-height: calc(100vh - 1.5rem);
     }
   }
 </style>

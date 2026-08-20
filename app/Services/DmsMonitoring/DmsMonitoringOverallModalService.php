@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\DmsMonitoring;
 
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 /**
@@ -13,6 +14,8 @@ use Throwable;
 final class DmsMonitoringOverallModalService
 {
     private const PER_PAGE = 25;
+
+    private const CACHE_TTL = 300;
 
     public function __construct(
         private readonly DmsAlertMonitoringDataReader $reader,
@@ -33,91 +36,18 @@ final class DmsMonitoringOverallModalService
             return $this->errorPayload('Koneksi ke hse_automation tidak tersedia.');
         }
 
+        $cacheKey = 'dms_monitoring:overall_unit.payload:'.md5(json_encode([
+            $filters,
+            $page,
+            $status,
+            $this->reader->scopeCacheSuffixForKey(),
+        ]));
+
         try {
-            $tz = (string) config('app.timezone');
-            $start = Carbon::parse($filters['start'], $tz)->startOfDay()->format('Y-m-d H:i:s');
-            $end = Carbon::parse($filters['end'], $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
-
-            $summary = $this->reader->overallOperatingUnitsSummary($start, $end);
-            $table = $this->reader->overallOperatingUnitsTable($start, $end, $page, self::PER_PAGE, $status);
-            $controlChart = $this->buildControlChart($start, $end, $tz);
-
-            $topUnitNames = array_map(
-                static fn (array $row): string => (string) ($row['unit'] ?? ''),
-                array_slice($summary['top_units'] ?? [], 0, 5),
-            );
-            $topUnitsChart = $this->reader->dailyAlertsForTopUnits($start, $end, $topUnitNames);
-
-            $totalPages = max(1, (int) ceil(($table['total'] ?? 0) / self::PER_PAGE));
-
-            return [
-                'ok' => true,
-                'label' => 'Overview Unit & Alert',
-                'period' => [
-                    'start' => $filters['start'],
-                    'end' => $filters['end'],
-                ],
-                'summary' => [
-                    [
-                        'key' => 'units_operating',
-                        'label' => 'Unit Beroperasi',
-                        'value' => number_format((int) ($summary['units_operating'] ?? 0)),
-                        'hint' => 'Unit unik online/bergerak dalam periode',
-                        'icon' => 'solar:wheel-bold',
-                        'color' => '#8252e9',
-                    ],
-                    [
-                        'key' => 'units_without_alert',
-                        'label' => 'Beroperasi Tanpa Alert',
-                        'value' => number_format((int) ($summary['units_without_alert'] ?? 0)),
-                        'hint' => 'Unit aktif tanpa alert DMS',
-                        'icon' => 'solar:shield-check-bold',
-                        'color' => '#45b369',
-                    ],
-                    [
-                        'key' => 'units_with_alert',
-                        'label' => 'Unit Dengan Alert',
-                        'value' => number_format((int) ($summary['units_with_alert'] ?? 0)),
-                        'hint' => 'Unit aktif yang memiliki alert',
-                        'icon' => 'solar:danger-triangle-bold',
-                        'color' => '#f4941e',
-                    ],
-                    [
-                        'key' => 'ratio',
-                        'label' => 'Rasio Alert / Unit',
-                        'value' => number_format((float) ($summary['ratio_per_unit'] ?? 0), 2),
-                        'hint' => number_format((int) ($summary['total_alerts'] ?? 0)).' total alert',
-                        'icon' => 'solar:chart-2-bold',
-                        'color' => '#487fff',
-                    ],
-                ],
-                'top_units' => $summary['top_units'] ?? [],
-                'control_chart' => $controlChart,
-                'top_units_chart' => $topUnitsChart,
-                'table' => [
-                    'columns' => [
-                        ['key' => 'unit', 'label' => 'Unit'],
-                        ['key' => 'site', 'label' => 'Site'],
-                        ['key' => 'perusahaan', 'label' => 'Perusahaan'],
-                        ['key' => 'evidence', 'label' => 'Bukti Operasi'],
-                        ['key' => 'status', 'label' => 'Status Alert'],
-                        ['key' => 'alert_count', 'label' => 'Total Alert'],
-                        ['key' => 'detail', 'label' => 'Detail'],
-                    ],
-                    'rows' => $table['rows'] ?? [],
-                ],
-                'table_tabs' => [
-                    ['key' => 'with_alert', 'label' => 'Unit Dengan Alert', 'count' => (int) ($summary['units_with_alert'] ?? 0)],
-                    ['key' => 'without_alert', 'label' => 'Unit Tanpa Alert', 'count' => (int) ($summary['units_without_alert'] ?? 0)],
-                ],
-                'table_active' => $status,
-                'pagination' => [
-                    'page' => $page,
-                    'per_page' => self::PER_PAGE,
-                    'total_rows' => (int) ($table['total'] ?? 0),
-                    'total_pages' => $totalPages,
-                ],
-            ];
+            /** @var array<string, mixed> */
+            return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters, $page, $status): array {
+                return $this->buildPayload($filters, $page, $status);
+            });
         } catch (Throwable $e) {
             report($e);
 
@@ -157,6 +87,98 @@ final class DmsMonitoringOverallModalService
 
             return $this->errorPayload('Gagal memuat detail alert unit.');
         }
+    }
+
+    /**
+     * @param  array{start:string, end:string, site:string, perusahaan:string}  $filters
+     * @return array<string, mixed>
+     */
+    private function buildPayload(array $filters, int $page, string $status): array
+    {
+        $tz = (string) config('app.timezone');
+        $start = Carbon::parse($filters['start'], $tz)->startOfDay()->format('Y-m-d H:i:s');
+        $end = Carbon::parse($filters['end'], $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+
+        $summary = $this->reader->overallOperatingUnitsSummary($start, $end);
+        $table = $this->reader->overallOperatingUnitsTable($start, $end, $page, self::PER_PAGE, $status);
+        $controlChart = $this->buildControlChart($start, $end, $tz);
+
+        $topUnitNames = array_map(
+            static fn (array $row): string => (string) ($row['unit'] ?? ''),
+            array_slice($summary['top_units'] ?? [], 0, 5),
+        );
+        $topUnitsChart = $this->reader->dailyAlertsForTopUnits($start, $end, $topUnitNames);
+
+        $totalPages = max(1, (int) ceil(($table['total'] ?? 0) / self::PER_PAGE));
+
+        return [
+            'ok' => true,
+            'label' => 'Overview Unit & Alert',
+            'period' => [
+                'start' => $filters['start'],
+                'end' => $filters['end'],
+            ],
+            'summary' => [
+                [
+                    'key' => 'units_operating',
+                    'label' => 'Unit Beroperasi',
+                    'value' => number_format((int) ($summary['units_operating'] ?? 0)),
+                    'hint' => 'Unit unik online/bergerak dalam periode',
+                    'icon' => 'solar:wheel-bold',
+                    'color' => '#8252e9',
+                ],
+                [
+                    'key' => 'units_without_alert',
+                    'label' => 'Beroperasi Tanpa Alert',
+                    'value' => number_format((int) ($summary['units_without_alert'] ?? 0)),
+                    'hint' => 'Unit aktif tanpa alert DMS',
+                    'icon' => 'solar:shield-check-bold',
+                    'color' => '#45b369',
+                ],
+                [
+                    'key' => 'units_with_alert',
+                    'label' => 'Unit Dengan Alert',
+                    'value' => number_format((int) ($summary['units_with_alert'] ?? 0)),
+                    'hint' => 'Unit aktif yang memiliki alert',
+                    'icon' => 'solar:danger-triangle-bold',
+                    'color' => '#f4941e',
+                ],
+                [
+                    'key' => 'ratio',
+                    'label' => 'Rasio Alert / Unit',
+                    'value' => number_format((float) ($summary['ratio_per_unit'] ?? 0), 2),
+                    'hint' => number_format((int) ($summary['total_alerts'] ?? 0)).' total alert',
+                    'icon' => 'solar:chart-2-bold',
+                    'color' => '#487fff',
+                ],
+            ],
+            'top_units' => $summary['top_units'] ?? [],
+            'control_chart' => $controlChart,
+            'top_units_chart' => $topUnitsChart,
+            'table' => [
+                'columns' => [
+                    ['key' => 'unit', 'label' => 'Unit'],
+                    ['key' => 'site', 'label' => 'Site'],
+                    ['key' => 'perusahaan', 'label' => 'Perusahaan'],
+                    ['key' => 'evidence', 'label' => 'Bukti Operasi'],
+                    ['key' => 'status', 'label' => 'Status Alert'],
+                    ['key' => 'alert_count', 'label' => 'Total Alert'],
+                    ['key' => 'detail', 'label' => 'Detail'],
+                ],
+                'rows' => $table['rows'] ?? [],
+            ],
+            'table_tabs' => [
+                ['key' => 'with_alert', 'label' => 'Unit Dengan Alert', 'count' => (int) ($summary['units_with_alert'] ?? 0)],
+                ['key' => 'without_alert', 'label' => 'Unit Tanpa Alert', 'count' => (int) ($summary['units_without_alert'] ?? 0)],
+            ],
+            'table_active' => $status,
+            'pagination' => [
+                'page' => $page,
+                'per_page' => self::PER_PAGE,
+                'total_rows' => (int) ($table['total'] ?? 0),
+                'total_pages' => $totalPages,
+            ],
+        ];
     }
 
     /**

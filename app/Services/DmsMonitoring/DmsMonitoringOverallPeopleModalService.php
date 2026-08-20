@@ -15,6 +15,8 @@ final class DmsMonitoringOverallPeopleModalService
 {
     private const PER_PAGE = 25;
 
+    private const CACHE_TTL = 300;
+
     public function __construct(
         private readonly DmsAlertMonitoringDataReader $reader,
         private readonly PraOperasiOperatorRosterReader $rosterReader,
@@ -37,59 +39,18 @@ final class DmsMonitoringOverallPeopleModalService
             return $this->errorPayload('Koneksi ke sumber data operator tidak tersedia.');
         }
 
+        $cacheKey = 'dms_monitoring:overall_people.payload:'.md5(json_encode([
+            $filters,
+            $page,
+            $status,
+            $this->reader->scopeCacheSuffixForKey(),
+        ]));
+
         try {
-            $tz = (string) config('app.timezone');
-            $start = Carbon::parse($filters['start'], $tz)->startOfDay()->format('Y-m-d H:i:s');
-            $end = Carbon::parse($filters['end'], $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
-
-            $cohort = $this->filterCohort($this->operatorCheckinCohort($start, $end), $filters['site'], $filters['perusahaan']);
-            $alertMap = $this->reader->alertCountByOperatorSid(
-                $start,
-                $end,
-                $filters['site'] !== '' ? $filters['site'] : null,
-                $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null,
-            );
-            $summary = $this->buildSummary($cohort, $alertMap);
-            $rows = $this->tableRows($cohort, $alertMap, $status);
-            $paged = array_slice($rows, max(0, ($page - 1) * self::PER_PAGE), self::PER_PAGE);
-            $controlChart = $this->buildControlChart($start, $end, $tz);
-
-            $topPeople = array_slice(array_values(array_filter($rows, static fn (array $row): bool => (int) $row['alert_count'] > 0)), 0, 5);
-            $topSids = array_map(static fn (array $row): string => (string) $row['kode_sid'], $topPeople);
-
-            return [
-                'ok' => true,
-                'label' => 'Overview Orang & Alert',
-                'period' => ['start' => $filters['start'], 'end' => $filters['end']],
-                'summary' => [
-                    ['key' => 'people_checkin', 'label' => 'Orang Checkin RFID', 'value' => number_format($summary['checkin_total']), 'hint' => 'Operator unik yang lolos check-in', 'icon' => 'mingcute:user-follow-fill', 'color' => '#487fff'],
-                    ['key' => 'people_without_alert', 'label' => 'Orang Tanpa Alert', 'value' => number_format($summary['without_alert']), 'hint' => 'Sudah check-in namun tanpa alert DMS', 'icon' => 'solar:shield-check-bold', 'color' => '#45b369'],
-                    ['key' => 'people_with_alert', 'label' => 'Orang Dengan Alert', 'value' => number_format($summary['with_alert']), 'hint' => 'Operator check-in yang punya alert', 'icon' => 'solar:danger-triangle-bold', 'color' => '#f4941e'],
-                    ['key' => 'ratio', 'label' => 'Rasio Alert / Orang', 'value' => number_format($summary['ratio_per_person'], 2), 'hint' => number_format($summary['total_alerts']).' total alert', 'icon' => 'solar:chart-2-bold', 'color' => '#8252e9'],
-                ],
-                'top_units' => array_map(static fn (array $row): array => [
-                    'unit' => (string) $row['nama'],
-                    'site' => (string) $row['site'],
-                    'perusahaan' => (string) $row['perusahaan'],
-                    'alert_count' => (int) $row['alert_count'],
-                ], $topPeople),
-                'top_units_chart' => $this->reader->dailyAlertsForTopOperatorSids($start, $end, $topSids),
-                'control_chart' => $controlChart,
-                'table' => [
-                    'rows' => $paged,
-                ],
-                'table_tabs' => [
-                    ['key' => 'with_alert', 'label' => 'Orang Dengan Alert', 'count' => $summary['with_alert']],
-                    ['key' => 'without_alert', 'label' => 'Orang Tanpa Alert', 'count' => $summary['without_alert']],
-                ],
-                'table_active' => $status,
-                'pagination' => [
-                    'page' => $page,
-                    'per_page' => self::PER_PAGE,
-                    'total_rows' => count($rows),
-                    'total_pages' => max(1, (int) ceil(count($rows) / self::PER_PAGE)),
-                ],
-            ];
+            /** @var array<string, mixed> */
+            return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters, $page, $status): array {
+                return $this->buildPayload($filters, $page, $status);
+            });
         } catch (Throwable $e) {
             report($e);
 
@@ -126,11 +87,86 @@ final class DmsMonitoringOverallPeopleModalService
     }
 
     /**
+     * @param  array{start:string, end:string, site:string, perusahaan:string}  $filters
+     * @return array<string, mixed>
+     */
+    private function buildPayload(array $filters, int $page, string $status): array
+    {
+        try {
+            $tz = (string) config('app.timezone');
+            $start = Carbon::parse($filters['start'], $tz)->startOfDay()->format('Y-m-d H:i:s');
+            $end = Carbon::parse($filters['end'], $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+
+            $cohort = $this->filterCohort(
+                $this->operatorCheckinCohort($start, $end),
+                $filters['site'],
+                $filters['perusahaan'],
+            );
+
+            $siteFilter = $filters['site'] !== '' ? $filters['site'] : null;
+            $companyFilter = $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null;
+            $cohortSids = array_map(static fn (array $row): string => (string) ($row['kode_sid'] ?? ''), $cohort);
+
+            $alertMap = $this->reader->alertCountForOperatorSids(
+                $start,
+                $end,
+                $cohortSids,
+                $siteFilter,
+                $companyFilter,
+            );
+
+            $summary = $this->buildSummary($cohort, $alertMap);
+            $tableResult = $this->paginatedTableRows($cohort, $alertMap, $status, $page);
+            $controlChart = $this->buildControlChart($start, $end, $tz);
+            $topPeople = $this->topPeopleWithAlerts($cohort, $alertMap, 5);
+            $topSids = array_map(static fn (array $row): string => (string) $row['kode_sid'], $topPeople);
+
+            return [
+                'ok' => true,
+                'label' => 'Overview Orang & Alert',
+                'period' => ['start' => $filters['start'], 'end' => $filters['end']],
+                'summary' => [
+                    ['key' => 'people_checkin', 'label' => 'Orang Checkin RFID', 'value' => number_format($summary['checkin_total']), 'hint' => 'Operator unik yang lolos check-in', 'icon' => 'mingcute:user-follow-fill', 'color' => '#487fff'],
+                    ['key' => 'people_without_alert', 'label' => 'Orang Tanpa Alert', 'value' => number_format($summary['without_alert']), 'hint' => 'Sudah check-in namun tanpa alert DMS', 'icon' => 'solar:shield-check-bold', 'color' => '#45b369'],
+                    ['key' => 'people_with_alert', 'label' => 'Orang Dengan Alert', 'value' => number_format($summary['with_alert']), 'hint' => 'Operator check-in yang punya alert', 'icon' => 'solar:danger-triangle-bold', 'color' => '#f4941e'],
+                    ['key' => 'ratio', 'label' => 'Rasio Alert / Orang', 'value' => number_format($summary['ratio_per_person'], 2), 'hint' => number_format($summary['total_alerts']).' total alert', 'icon' => 'solar:chart-2-bold', 'color' => '#8252e9'],
+                ],
+                'top_units' => array_map(static fn (array $row): array => [
+                    'unit' => (string) $row['nama'],
+                    'site' => (string) $row['site'],
+                    'perusahaan' => (string) $row['perusahaan'],
+                    'alert_count' => (int) $row['alert_count'],
+                ], $topPeople),
+                'top_units_chart' => $this->reader->dailyAlertsForTopOperatorSids($start, $end, $topSids),
+                'control_chart' => $controlChart,
+                'table' => [
+                    'rows' => $tableResult['rows'],
+                ],
+                'table_tabs' => [
+                    ['key' => 'with_alert', 'label' => 'Orang Dengan Alert', 'count' => $summary['with_alert']],
+                    ['key' => 'without_alert', 'label' => 'Orang Tanpa Alert', 'count' => $summary['without_alert']],
+                ],
+                'table_active' => $status,
+                'pagination' => [
+                    'page' => $page,
+                    'per_page' => self::PER_PAGE,
+                    'total_rows' => $tableResult['total'],
+                    'total_pages' => max(1, (int) ceil($tableResult['total'] / self::PER_PAGE)),
+                ],
+            ];
+        } catch (Throwable $e) {
+            report($e);
+
+            throw $e;
+        }
+    }
+
+    /**
      * @return list<array{kode_sid:string,nama:string,jabatan:string,perusahaan:string,site:string,checked_in_at:string,gate:string}>
      */
     private function operatorCheckinCohort(string $start, string $end): array
     {
-        $cacheKey = 'dms_monitoring:overall_people.operator_cohort:'.md5($start.'|'.$end);
+        $cacheKey = 'dms_monitoring:kpi.operator_cohort:'.md5($start.'|'.$end);
 
         return Cache::remember($cacheKey, 900, function () use ($start, $end): array {
             $roster = $this->rosterReader->operatorRoster();
@@ -146,48 +182,114 @@ final class DmsMonitoringOverallPeopleModalService
             }
 
             $sids = array_map(static fn (array $o): string => (string) ($o['kode_sid'] ?? ''), $roster);
-            $byDay = $this->rfidReader->firstPassedCheckinsByDayForSids($fromDate, $toDate, $sids);
+            $siteMap = $this->siteResolver->siteMap();
 
-            $cohort = [];
-            foreach ($roster as $operator) {
-                $upper = mb_strtoupper((string) ($operator['kode_sid'] ?? ''));
-                if ($upper === '') {
-                    continue;
-                }
-
-                $best = null;
-                foreach ($byDay as $dayCheckins) {
-                    if (! isset($dayCheckins[$upper])) {
-                        continue;
-                    }
-                    $checkin = $dayCheckins[$upper];
-                    if ($best === null || $checkin['checked_in_at'] < $best['checked_in_at']) {
-                        $best = $checkin;
-                    }
-                }
-
-                if ($best === null) {
-                    continue;
-                }
-
-                $company = trim((string) ($operator['perusahaan'] ?? ''));
-                if ($company === '') {
-                    $company = trim((string) ($best['perusahaan'] ?? ''));
-                }
-
-                $cohort[] = [
-                    'kode_sid' => (string) $operator['kode_sid'],
-                    'nama' => trim((string) ($operator['nama'] ?? '')) !== '' ? (string) $operator['nama'] : (string) ($best['nama_karyawan'] ?? '-'),
-                    'jabatan' => (string) ($operator['jabatan'] ?? ''),
-                    'perusahaan' => $company !== '' ? $company : '-',
-                    'site' => $this->siteResolver->resolveOrDash($operator['kode_sid'], ''),
-                    'checked_in_at' => (string) $best['checked_in_at'],
-                    'gate' => (string) ($best['gate'] ?? '-'),
-                ];
+            if ($fromDate === $toDate) {
+                return $this->buildCohortFromSingleDayCheckins(
+                    $roster,
+                    $this->rfidReader->firstPassedCheckinsForSids($fromDate, $sids),
+                    $siteMap,
+                );
             }
 
-            return $cohort;
+            $byDay = $this->rfidReader->firstPassedCheckinsByDayForSids($fromDate, $toDate, $sids);
+
+            return $this->buildCohortFromByDayCheckins($roster, $byDay, $siteMap);
         });
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $roster
+     * @param  array<string, array<string, mixed>>  $checkins
+     * @param  array<string, string>  $siteMap
+     * @return list<array{kode_sid:string,nama:string,jabatan:string,perusahaan:string,site:string,checked_in_at:string,gate:string}>
+     */
+    private function buildCohortFromSingleDayCheckins(array $roster, array $checkins, array $siteMap): array
+    {
+        $cohort = [];
+        foreach ($roster as $operator) {
+            $upper = mb_strtoupper((string) ($operator['kode_sid'] ?? ''));
+            if ($upper === '' || ! isset($checkins[$upper])) {
+                continue;
+            }
+
+            $best = $checkins[$upper];
+            $company = trim((string) ($operator['perusahaan'] ?? ''));
+            if ($company === '') {
+                $company = trim((string) ($best['perusahaan'] ?? ''));
+            }
+
+            $cohort[] = [
+                'kode_sid' => (string) $operator['kode_sid'],
+                'nama' => trim((string) ($operator['nama'] ?? '')) !== '' ? (string) $operator['nama'] : (string) ($best['nama_karyawan'] ?? '-'),
+                'jabatan' => (string) ($operator['jabatan'] ?? ''),
+                'perusahaan' => $company !== '' ? $company : '-',
+                'site' => $this->resolveSiteFromMap($upper, $siteMap),
+                'checked_in_at' => (string) $best['checked_in_at'],
+                'gate' => (string) ($best['gate'] ?? '-'),
+            ];
+        }
+
+        return $cohort;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $roster
+     * @param  array<string, array<string, array<string, mixed>>>  $byDay
+     * @param  array<string, string>  $siteMap
+     * @return list<array{kode_sid:string,nama:string,jabatan:string,perusahaan:string,site:string,checked_in_at:string,gate:string}>
+     */
+    private function buildCohortFromByDayCheckins(array $roster, array $byDay, array $siteMap): array
+    {
+        $cohort = [];
+        foreach ($roster as $operator) {
+            $upper = mb_strtoupper((string) ($operator['kode_sid'] ?? ''));
+            if ($upper === '') {
+                continue;
+            }
+
+            $best = null;
+            foreach ($byDay as $dayCheckins) {
+                if (! isset($dayCheckins[$upper])) {
+                    continue;
+                }
+                $checkin = $dayCheckins[$upper];
+                if ($best === null || $checkin['checked_in_at'] < $best['checked_in_at']) {
+                    $best = $checkin;
+                }
+            }
+
+            if ($best === null) {
+                continue;
+            }
+
+            $company = trim((string) ($operator['perusahaan'] ?? ''));
+            if ($company === '') {
+                $company = trim((string) ($best['perusahaan'] ?? ''));
+            }
+
+            $cohort[] = [
+                'kode_sid' => (string) $operator['kode_sid'],
+                'nama' => trim((string) ($operator['nama'] ?? '')) !== '' ? (string) $operator['nama'] : (string) ($best['nama_karyawan'] ?? '-'),
+                'jabatan' => (string) ($operator['jabatan'] ?? ''),
+                'perusahaan' => $company !== '' ? $company : '-',
+                'site' => $this->resolveSiteFromMap($upper, $siteMap),
+                'checked_in_at' => (string) $best['checked_in_at'],
+                'gate' => (string) ($best['gate'] ?? '-'),
+            ];
+        }
+
+        return $cohort;
+    }
+
+    /**
+     * @param  array<string, string>  $siteMap
+     */
+    private function resolveSiteFromMap(string $upperSid, array $siteMap): string
+    {
+        $site = trim($siteMap[$upperSid] ?? '');
+
+        return $site !== '' ? $site : '-';
     }
 
     /**
@@ -241,9 +343,31 @@ final class DmsMonitoringOverallPeopleModalService
      * @param  array<string,int>  $alertMap
      * @return list<array<string,mixed>>
      */
-    private function tableRows(array $cohort, array $alertMap, string $status): array
+    private function topPeopleWithAlerts(array $cohort, array $alertMap, int $limit): array
     {
-        $rows = [];
+        $entries = [];
+        foreach ($cohort as $row) {
+            $sid = mb_strtoupper((string) ($row['kode_sid'] ?? ''));
+            $alertCount = (int) ($alertMap[$sid] ?? 0);
+            if ($alertCount <= 0) {
+                continue;
+            }
+            $entries[] = $row + ['alert_count' => $alertCount];
+        }
+
+        usort($entries, static fn (array $a, array $b): int => ($b['alert_count'] <=> $a['alert_count']) ?: strcmp((string) $a['nama'], (string) $b['nama']));
+
+        return array_slice($entries, 0, $limit);
+    }
+
+    /**
+     * @param  list<array{kode_sid:string,nama:string,jabatan:string,perusahaan:string,site:string,checked_in_at:string,gate:string}>  $cohort
+     * @param  array<string,int>  $alertMap
+     * @return array{total:int, rows:list<array<string,mixed>>}
+     */
+    private function paginatedTableRows(array $cohort, array $alertMap, string $status, int $page): array
+    {
+        $entries = [];
         foreach ($cohort as $row) {
             $sid = mb_strtoupper((string) ($row['kode_sid'] ?? ''));
             $alertCount = (int) ($alertMap[$sid] ?? 0);
@@ -254,7 +378,22 @@ final class DmsMonitoringOverallPeopleModalService
             if ($status === 'without_alert' && $hasAlert) {
                 continue;
             }
+            $entries[] = [
+                'row' => $row,
+                'alert_count' => $alertCount,
+                'has_alert' => $hasAlert,
+            ];
+        }
 
+        usort($entries, static fn (array $a, array $b): int => ($b['alert_count'] <=> $a['alert_count']) ?: strcmp((string) $a['row']['nama'], (string) $b['row']['nama']));
+
+        $total = count($entries);
+        $offset = max(0, ($page - 1) * self::PER_PAGE);
+        $slice = array_slice($entries, $offset, self::PER_PAGE);
+
+        $rows = [];
+        foreach ($slice as $entry) {
+            $row = $entry['row'];
             $rows[] = [
                 'kode_sid' => (string) ($row['kode_sid'] ?? '-'),
                 'nama' => (string) ($row['nama'] ?? '-'),
@@ -264,14 +403,12 @@ final class DmsMonitoringOverallPeopleModalService
                 'evidence_source' => 'RFID Check-in',
                 'evidence_at' => (string) ($row['checked_in_at'] ?? '-'),
                 'evidence_note' => 'Gate: '.((string) ($row['gate'] ?? '-')),
-                'alert_count' => $alertCount,
-                'has_alert' => $hasAlert,
+                'alert_count' => (int) $entry['alert_count'],
+                'has_alert' => (bool) $entry['has_alert'],
             ];
         }
 
-        usort($rows, static fn (array $a, array $b): int => ($b['alert_count'] <=> $a['alert_count']) ?: strcmp((string) $a['nama'], (string) $b['nama']));
-
-        return $rows;
+        return ['total' => $total, 'rows' => $rows];
     }
 
     /**

@@ -585,8 +585,8 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      */
     public function dailyOperatingUnitSeries(string $start, string $end): array
     {
-        return $this->remember('dashboard.daily_units.v5', $start, $end, function () use ($start, $end): array {
-            if (! $this->shouldSkipGpsStatusesQuery($start) && $this->countMovingUnitsFromStatuses($start, $end) > 0) {
+        return $this->remember('dashboard.daily_units.v6', $start, $end, function () use ($start, $end): array {
+            if (! $this->shouldSkipGpsStatusesQuery($start) && $this->hasGpsMovingUnitsInRange($start, $end)) {
                 return $this->dailyMovingUnitsFromStatuses($start, $end);
             }
 
@@ -766,6 +766,28 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             return $empty;
         }
 
+        $cacheKey = 'dms_monitoring:overall.units_table.v1:'.md5(
+            $start.'|'.$end.'|'.$page.'|'.$perPage.'|'.$status.'|'.$this->scopeCacheSuffix()
+        );
+
+        /** @var array{total:int, rows:list<array<string, mixed>>} */
+        return Cache::remember($cacheKey, 300, function () use ($start, $end, $page, $perPage, $status, $empty): array {
+            return $this->queryOverallOperatingUnitsTable($start, $end, $page, $perPage, $status, $empty);
+        });
+    }
+
+    /**
+     * @param  array{total:int, rows:list<array<string, mixed>>}  $empty
+     * @return array{total:int, rows:list<array<string, mixed>>}
+     */
+    private function queryOverallOperatingUnitsTable(
+        string $start,
+        string $end,
+        int $page,
+        int $perPage,
+        string $status,
+        array $empty,
+    ): array {
         $connection = $this->connectionSource->connectionName();
         if ($connection === null) {
             return $empty;
@@ -1749,6 +1771,92 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
+     * Total alert per operator — dibatasi daftar SID cohort (chunked IN).
+     * Lebih ringan daripada alertCountByOperatorSid saat hanya butuh subset operator.
+     *
+     * @param  list<string>  $sids
+     * @return array<string, int> UPPER(kode_sid) => count
+     */
+    public function alertCountForOperatorSids(
+        string $start,
+        string $end,
+        array $sids,
+        ?string $site = null,
+        ?string $perusahaan = null,
+    ): array {
+        if (! $this->isUp()) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($sids as $sid) {
+            $upper = strtoupper(trim((string) $sid));
+            if ($upper !== '') {
+                $normalized[$upper] = true;
+            }
+        }
+        if ($normalized === []) {
+            return [];
+        }
+
+        $sidList = array_keys($normalized);
+        sort($sidList);
+        $sidHash = md5(implode(',', $sidList));
+        $extra = ($site ?? '').'|'.($perusahaan ?? '');
+        $cacheKey = 'dms_monitoring:alert_by_sid_scoped:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix().'|'.$extra.'|'.$sidHash);
+
+        /** @var array<string, int> */
+        return Cache::remember($cacheKey, 1800, function () use ($start, $end, $sidList, $site, $perusahaan): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return [];
+            }
+
+            $extraWhere = '';
+            $extraBindings = [];
+            if ($site !== null && $site !== '') {
+                $extraWhere .= ' AND TRIM(site::text) = ?';
+                $extraBindings[] = $site;
+            }
+            if ($perusahaan !== null && $perusahaan !== '') {
+                $extraWhere .= ' AND TRIM(perusahaan::text) = ?';
+                $extraBindings[] = $perusahaan;
+            }
+
+            $map = [];
+            foreach (array_chunk($sidList, 500) as $chunk) {
+                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+                $sql = "
+                    SELECT UPPER(TRIM(kode_sid)) AS sid, count(*) AS total
+                    FROM bcsid.mv_dms_alert
+                    WHERE {$this->alertDateWhere()}
+                      AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
+                      AND UPPER(TRIM(kode_sid)) IN ({$placeholders})
+                      {$extraWhere}
+                    GROUP BY 1
+                ";
+
+                try {
+                    $rows = DB::connection($connection)->select(
+                        $sql,
+                        array_merge($this->alertDateBindings($start, $end), $chunk, $extraBindings),
+                    );
+                } catch (Throwable $e) {
+                    report($e);
+
+                    continue;
+                }
+
+                foreach ($rows as $row) {
+                    $map[(string) $row->sid] = (int) ($row->total ?? 0);
+                }
+            }
+
+            return $map;
+        });
+    }
+
+    /**
      * Daftar alert paginated untuk drill-down level rows.
      *
      * @return array{total:int, rows:list<array{id_alert:string, kode_sid:string, nama:string, nama_pelanggaran:string, unit:string, site:string, perusahaan:string, waktu_deteksi:string|null, status_label:string}>}
@@ -2277,9 +2385,8 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             return $this->countOnlineUnitsFromAlerts($start, $end);
         }
 
-        $gps = $this->countMovingUnitsFromStatuses($start, $end);
-        if ($gps > 0) {
-            return $gps;
+        if ($this->hasGpsMovingUnitsInRange($start, $end)) {
+            return $this->countMovingUnitsFromStatuses($start, $end);
         }
 
         return $this->countOnlineUnitsFromAlerts($start, $end);
@@ -2780,6 +2887,14 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     private function scopeCacheSuffix(): string
     {
         return ($this->scopeSite ?? '').'|'.($this->scopePerusahaan ?? '');
+    }
+
+    /**
+     * Suffix scope untuk cache key eksternal (modal/service).
+     */
+    public function scopeCacheSuffixForKey(): string
+    {
+        return $this->scopeCacheSuffix();
     }
 
     private function remember(string $key, string $start, string $end, \Closure $callback): array
