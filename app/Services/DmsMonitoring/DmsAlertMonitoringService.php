@@ -44,7 +44,7 @@ final class DmsAlertMonitoringService
         $summary = $this->reader->alertSummary($start, $end);
 
         return [
-            ['label' => 'Checkin RFID', 'count' => $this->reader->countDistinctCheckinSids($start, $end)],
+            ['label' => 'Checkin RFID', 'count' => $this->reader->countOperatorCheckinsInRange($start, $end)],
             ['label' => 'Punya Alert DMS', 'count' => $this->reader->countDistinctAlertSids($start, $end)],
             ['label' => 'Direview L1', 'count' => (int) ($summary['l1_reviewed'] ?? 0)],
             ['label' => 'Direview L2', 'count' => (int) ($summary['l2_reviewed'] ?? 0)],

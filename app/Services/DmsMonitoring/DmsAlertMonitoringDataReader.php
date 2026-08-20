@@ -50,6 +50,9 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     /** Batas jumlah kategori pelanggaran yang ditampilkan di kuadran. */
     private const CATEGORY_LIMIT = 500;
 
+    /** Batas waktu query RFID (ms) supaya halaman tidak 504. */
+    private const RFID_STATEMENT_TIMEOUT_MS = 10000;
+
     private ?string $scopeSite = null;
 
     private ?string $scopePerusahaan = null;
@@ -310,9 +313,8 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      * Tidak memfilter jenis_checkinout maupun status_lolos — semua baris RFID
      * dalam window dihitung.
      *
-     * Optimasi: lakukan SATU scan DISTINCT pada window RFID lalu intersect di PHP.
-     * Ini jauh lebih stabil daripada query per-chunk SID saat user memilih hari
-     * yang belum hangat di cache.
+     * COUNT DISTINCT per-chunk SID operator (bukan dump semua SID RFID ke PHP)
+     * plus statement_timeout, supaya load dashboard tidak 504.
      *
      * @param  list<string>  $operatorSids
      */
@@ -329,45 +331,49 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             return 0;
         }
 
-        $sidHash = md5(implode(',', array_keys($normalized)));
-        $cacheKey = 'dms_monitoring:rfid_operator_count_v2:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix().'|'.$sidHash);
+        $sidList = array_keys($normalized);
+        $sidHash = md5(implode(',', $sidList));
+        $cacheKey = 'dms_monitoring:rfid_operator_count_v3:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix().'|'.$sidHash);
 
-        return (int) Cache::remember($cacheKey, 1800, function () use ($start, $end, $normalized): int {
-            $connection = $this->connectionSource->connectionName();
-            if ($connection === null) {
-                return 0;
-            }
+        $cached = Cache::get($cacheKey);
+        if (is_int($cached)) {
+            return $cached;
+        }
 
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return 0;
+        }
+
+        $total = 0;
+        $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+        try {
             $sql = "
-                SELECT DISTINCT UPPER(TRIM(kode_sid)) AS sid
+                SELECT count(DISTINCT UPPER(TRIM(kode_sid))) AS total
                 FROM bcsid.mv_checkinout_rfid
                 WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
                   AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
+                  AND UPPER(TRIM(kode_sid)) = ANY(?::text[])
             ";
-            $bindings = [$start, $end];
+            $bindings = [$start, $end, $this->toPgTextArray($sidList)];
             if ($this->scopePerusahaan !== null) {
                 $sql .= ' AND TRIM(perusahaan::text) = ?';
                 $bindings[] = $this->scopePerusahaan;
             }
 
-            try {
-                $rows = DB::connection($connection)->select($sql, $bindings);
-            } catch (Throwable $e) {
-                report($e);
+            $row = DB::connection($connection)->selectOne($sql, $bindings);
+            $total = (int) ($row->total ?? 0);
+        } catch (Throwable $e) {
+            report($e);
 
-                return 0;
-            }
+            return 0;
+        } finally {
+            $this->clearStatementTimeout($connection);
+        }
 
-            $total = 0;
-            foreach ($rows as $row) {
-                $sid = strtoupper(trim((string) ($row->sid ?? '')));
-                if ($sid !== '' && isset($normalized[$sid])) {
-                    $total++;
-                }
-            }
+        Cache::put($cacheKey, $total, 1800);
 
-            return $total;
-        });
+        return $total;
     }
 
     /**
@@ -402,7 +408,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
     public function countDistinctCheckinSids(string $start, string $end): int
     {
-        return $this->rememberScalarInt('rfid_sids_count_v2', $start, $end, function () use ($start, $end): int {
+        return $this->rememberScalarInt('rfid_sids_count_v3', $start, $end, function () use ($start, $end): int {
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return 0;
@@ -415,12 +421,15 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                   AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
             ";
 
+            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
             try {
                 $row = DB::connection($connection)->selectOne($sql, [$start, $end]);
             } catch (Throwable $e) {
                 report($e);
 
                 return 0;
+            } finally {
+                $this->clearStatementTimeout($connection);
             }
 
             return (int) ($row->total ?? 0);
@@ -2932,5 +2941,33 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         $cacheKey = 'dms_monitoring:'.$key.':'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix());
 
         return (int) Cache::remember($cacheKey, 1800, $callback);
+    }
+
+    private function applyStatementTimeout(string $connection, int $milliseconds): void
+    {
+        DB::connection($connection)->statement('SET statement_timeout = '.(string) max(1, $milliseconds));
+    }
+
+    private function clearStatementTimeout(string $connection): void
+    {
+        try {
+            DB::connection($connection)->statement('SET statement_timeout = 0');
+        } catch (Throwable) {
+            // ignore
+        }
+    }
+
+    /**
+     * @param  list<string>  $values
+     */
+    private function toPgTextArray(array $values): string
+    {
+        $parts = [];
+        foreach ($values as $value) {
+            $escaped = str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
+            $parts[] = '"'.$escaped.'"';
+        }
+
+        return '{'.implode(',', $parts).'}';
     }
 }
