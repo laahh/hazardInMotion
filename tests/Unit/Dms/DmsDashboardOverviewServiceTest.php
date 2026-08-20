@@ -67,6 +67,7 @@ class DmsDashboardOverviewServiceTest extends TestCase
         $reader->shouldReceive('unitsOperatingInRange')->andReturn(5, 3);
         $reader->shouldReceive('unitsOperatingNow')->andReturn(4);
         $reader->shouldReceive('dailyAlertSeries')->andReturn([]);
+        $reader->shouldReceive('dailyOperatingUnitSeries')->andReturn([]);
         $reader->shouldReceive('categoryQuadrant')->andReturn([
             ['nama_pelanggaran' => 'Menutup Mata', 'total' => 8, 'confirmed' => 3, 'confirmation_rate' => 37.5],
         ]);

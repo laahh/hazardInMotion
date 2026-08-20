@@ -45,7 +45,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     private const OPERATING_MAX_SPEED = 80.0;
 
     /** Versi cache/logika unit beroperasi — bump saat sumber atau fallback berubah. */
-    private const OPERATING_LOGIC_VERSION = 'v4';
+    private const OPERATING_LOGIC_VERSION = 'v5';
 
     /** Batas jumlah kategori pelanggaran yang ditampilkan di kuadran. */
     private const CATEGORY_LIMIT = 500;
@@ -487,6 +487,22 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             }
 
             return $this->resolveOperatingUnitCount($startAt, $endAt);
+        });
+    }
+
+    /**
+     * Unit beroperasi per hari — satu query agregat (hindari N+1 untuk sparkline).
+     *
+     * @return list<array{hari:string, units:int}>
+     */
+    public function dailyOperatingUnitSeries(string $start, string $end): array
+    {
+        return $this->remember('dashboard.daily_units.v5', $start, $end, function () use ($start, $end): array {
+            if (! $this->shouldSkipGpsStatusesQuery($start) && $this->countMovingUnitsFromStatuses($start, $end) > 0) {
+                return $this->dailyMovingUnitsFromStatuses($start, $end);
+            }
+
+            return $this->dailyOnlineUnitsFromAlerts($start, $end);
         });
     }
 
@@ -1647,6 +1663,10 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      */
     private function resolveOperatingUnitCount(string $start, string $end): int
     {
+        if ($this->shouldSkipGpsStatusesQuery($start)) {
+            return $this->countOnlineUnitsFromAlerts($start, $end);
+        }
+
         $gps = $this->countMovingUnitsFromStatuses($start, $end);
         if ($gps > 0) {
             return $gps;
@@ -1656,11 +1676,27 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
+     * Lewati scan FDW dms_vehicle_statuses (~30M baris) bila window di luar cakupan GPS.
+     */
+    private function shouldSkipGpsStatusesQuery(string $rangeStart): bool
+    {
+        $through = config('dms_monitoring.gps_statuses_through');
+        if (! is_string($through) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $through) !== 1) {
+            return false;
+        }
+
+        return substr($rangeStart, 0, 10) >= $through;
+    }
+
+    /**
      * Apakah window ini punya unit bergerak (speed_gps > 0) di dms_vehicle_statuses.
-     * Lebih akurat daripada cek keberadaan baris — FDW kadang mengabaikan filter tanggal.
      */
     private function hasGpsMovingUnitsInRange(string $start, string $end): bool
     {
+        if ($this->shouldSkipGpsStatusesQuery($start)) {
+            return false;
+        }
+
         $cacheKey = 'dms_monitoring:vs_moving:'.self::OPERATING_LOGIC_VERSION.':'.md5($start.'|'.$end);
 
         return Cache::remember($cacheKey, 300, function () use ($start, $end): bool {
@@ -1670,6 +1706,10 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
     private function countMovingUnitsFromStatuses(string $start, string $end): int
     {
+        if ($this->shouldSkipGpsStatusesQuery($start)) {
+            return 0;
+        }
+
         $connection = $this->connectionSource->connectionName();
         if ($connection === null) {
             return 0;
@@ -1723,6 +1763,102 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         }
 
         return (int) ($row->total ?? 0);
+    }
+
+    /**
+     * @return list<array{hari:string, units:int}>
+     */
+    private function dailyOnlineUnitsFromAlerts(string $start, string $end): array
+    {
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return [];
+        }
+
+        $scopeWhere = $this->vehicleScopeWhere('dv.site', 'dv.company_owner');
+        $sql = "
+            SELECT
+                date(vsa.last_online_at) AS hari,
+                count(DISTINCT TRIM(vsa.vehicle_no)) AS units
+            FROM bcsid.dms_vehicle_status_alerts vsa
+            INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
+            WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
+              AND vsa.vehicle_no IS NOT NULL AND TRIM(vsa.vehicle_no) <> ''
+              {$scopeWhere}
+            GROUP BY 1
+            ORDER BY 1
+        ";
+
+        try {
+            $rows = DB::connection($connection)->select(
+                $sql,
+                array_merge([$start, $end], $this->vehicleScopeBindings()),
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        return $this->mapDailyUnitRows($rows);
+    }
+
+    /**
+     * @return list<array{hari:string, units:int}>
+     */
+    private function dailyMovingUnitsFromStatuses(string $start, string $end): array
+    {
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return [];
+        }
+
+        $unitKey = $this->vehicleRegisterKeyExpr('vs.vehicle_no');
+        $scopeWhere = $this->vehicleScopeWhere('dv.site', 'dv.company_owner');
+        $sql = "
+            SELECT
+                date(vs.created_at) AS hari,
+                count(DISTINCT {$unitKey}) AS units
+            FROM bcsid.dms_vehicle_statuses vs
+            INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = {$unitKey}
+            WHERE vs.created_at >= ? AND vs.created_at < ?
+              AND {$this->movingVehicleSpeedWhere('vs')}
+              {$scopeWhere}
+            GROUP BY 1
+            ORDER BY 1
+        ";
+
+        try {
+            $rows = DB::connection($connection)->select(
+                $sql,
+                array_merge([$start, $end], $this->vehicleScopeBindings()),
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        return $this->mapDailyUnitRows($rows);
+    }
+
+    /**
+     * @param  list<object>  $rows
+     * @return list<array{hari:string, units:int}>
+     */
+    private function mapDailyUnitRows(array $rows): array
+    {
+        return array_map(static function ($r): array {
+            $hari = $r->hari;
+            if ($hari instanceof \DateTimeInterface) {
+                $hari = $hari->format('Y-m-d');
+            }
+
+            return [
+                'hari' => (string) $hari,
+                'units' => (int) ($r->units ?? 0),
+            ];
+        }, $rows);
     }
 
     /**

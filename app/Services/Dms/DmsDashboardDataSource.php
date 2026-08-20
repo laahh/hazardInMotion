@@ -37,6 +37,13 @@ interface DmsDashboardDataSource
     public function unitsOperatingNow(int $withinMinutes = 30): int;
 
     /**
+     * Unit beroperasi per hari (satu query agregat) — untuk sparkline KPI.
+     *
+     * @return list<array{hari:string, units:int}>
+     */
+    public function dailyOperatingUnitSeries(string $start, string $end): array;
+
+    /**
      * @return list<array{hari:string, total:int, confirmed:int, dismissed:int, pending:int, operators:int}>
      */
     public function dailyAlertSeries(string $start, string $end): array;

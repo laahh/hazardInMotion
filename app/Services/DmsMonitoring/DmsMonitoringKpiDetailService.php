@@ -1015,6 +1015,23 @@ class DmsMonitoringKpiDetailService
      */
     public function siteQuadrantMatrix(array $filters): array
     {
+        $cacheKey = 'dms_monitoring:site_quadrant_matrix:'.md5(json_encode([
+            'start' => (string) ($filters['start'] ?? ''),
+            'end' => (string) ($filters['end'] ?? ''),
+            'site' => (string) ($filters['site'] ?? ''),
+            'perusahaan' => (string) ($filters['perusahaan'] ?? ''),
+        ]));
+
+        /** @var array<string, mixed> */
+        return Cache::remember($cacheKey, 1800, fn (): array => $this->buildSiteQuadrantMatrix($filters));
+    }
+
+    /**
+     * @param  array{start:string, end:string, site?:string, perusahaan?:string}  $filters
+     * @return array<string, mixed>
+     */
+    private function buildSiteQuadrantMatrix(array $filters): array
+    {
         $empty = $this->emptyQuadrantPayload();
         $tz = (string) config('app.timezone');
         $siteFilter = trim((string) ($filters['site'] ?? ''));

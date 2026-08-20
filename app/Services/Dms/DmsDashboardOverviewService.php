@@ -135,8 +135,20 @@ final class DmsDashboardOverviewService
         $daily = $this->fillDailySeries($windows['chartStart'], $windows['todayEnd'], $dailyRaw, $tz);
         $weekDaily = array_slice($daily, -self::WEEK_DAYS);
         $sparkline = array_slice($daily, -self::SPARKLINE_DAYS);
-        $operatorCheckinSparkline = $this->operatorCheckinSparkline($sparkline, $tz);
-        $unitOperatingSparkline = $this->unitOperatingSparkline($sparkline, $tz);
+
+        $dailyUnitsRaw = $this->reader->dailyOperatingUnitSeries($windows['chartStart'], $windows['todayEnd']);
+        $dailyUnitsIndexed = [];
+        foreach ($dailyUnitsRaw as $unitRow) {
+            $dailyUnitsIndexed[(string) $unitRow['hari']] = (int) $unitRow['units'];
+        }
+        $operatorCheckinSparkline = array_map(
+            static fn (array $day): int => (int) ($day['operators'] ?? 0),
+            $sparkline,
+        );
+        $unitOperatingSparkline = array_map(
+            static fn (array $day): int => (int) ($dailyUnitsIndexed[(string) ($day['hari'] ?? '')] ?? 0),
+            $sparkline,
+        );
 
         $categories = $this->mapCategories($this->reader->categoryQuadrant($windows['weekStart'], $windows['todayEnd']));
         $sites = $this->mapSites($this->reader->alertsBySite($windows['weekStart'], $windows['todayEnd'], 6));
@@ -539,58 +551,6 @@ final class DmsDashboardOverviewService
             $units = (int) ($unitCounts[$i] ?? 0);
             $total = (int) ($day['total'] ?? 0);
             $out[] = $units > 0 ? round($total / $units, 2) : 0.0;
-        }
-
-        return $out;
-    }
-
-    /**
-     * @param  list<array{hari:string}>  $days
-     * @return list<int>
-     */
-    private function unitOperatingSparkline(array $days, string $tz): array
-    {
-        $out = [];
-        foreach ($days as $day) {
-            $hari = (string) ($day['hari'] ?? '');
-            if ($hari === '') {
-                $out[] = 0;
-                continue;
-            }
-            try {
-                $start = Carbon::parse($hari, $tz)->startOfDay()->format('Y-m-d H:i:s');
-                $end = Carbon::parse($hari, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
-            } catch (Throwable) {
-                $out[] = 0;
-                continue;
-            }
-            $out[] = $this->reader->unitsOperatingInRange($start, $end);
-        }
-
-        return $out;
-    }
-
-    /**
-     * @param  list<array{hari:string}>  $days
-     * @return list<int>
-     */
-    private function operatorCheckinSparkline(array $days, string $tz): array
-    {
-        $out = [];
-        foreach ($days as $day) {
-            $hari = (string) ($day['hari'] ?? '');
-            if ($hari === '') {
-                $out[] = 0;
-                continue;
-            }
-            try {
-                $start = Carbon::parse($hari, $tz)->startOfDay()->format('Y-m-d H:i:s');
-                $end = Carbon::parse($hari, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
-            } catch (Throwable) {
-                $out[] = 0;
-                continue;
-            }
-            $out[] = $this->reader->countOperatorCheckinsInRange($start, $end);
         }
 
         return $out;

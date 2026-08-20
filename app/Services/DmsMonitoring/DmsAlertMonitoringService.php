@@ -44,19 +44,10 @@ final class DmsAlertMonitoringService
             $end = Carbon::parse($filters['end'], $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
 
             $summary = $this->reader->alertSummary($start, $end);
-            $byUnit = $this->reader->alertsByUnit($start, $end, 20);
-            $byOperator = $this->reader->alertsByOperator($start, $end, 20);
-            $quadrant = $this->reader->categoryQuadrant($start, $end);
             $unitsOperating = $this->reader->unitsOperatingNow(30);
             $postEvent = $this->reader->postEventSummary($start, $end);
-            $turnaround = $this->reader->turnaroundBySite($start, $end);
 
             $funnel = $this->buildLayerFunnel($start, $end, $summary, $postEvent);
-            $neverPostEvent = $this->buildNeverPostEvent($filters['end'], $tz);
-            $slovin = $this->buildSlovinCoverage($summary, $postEvent);
-            $qaSummary = $this->qaService->summaryForPeriod($filters['start'], $filters['end']);
-            $qaPending = $this->qaService->pendingSamples($filters['start'], $filters['end']);
-            $today = $this->buildTodaySnapshot($tz);
             $operatorsCheckedIn = $this->reader->countOperatorCheckinsInRange($start, $end);
             $unitsInPeriod = $this->reader->unitsOperatingInRange($start, $end);
             $filterOptions = $this->reader->filterOptions($start, $end);
@@ -66,20 +57,9 @@ final class DmsAlertMonitoringService
                 'filters' => $filters,
                 'filterOptions' => $filterOptions,
                 'dateLabel' => $this->dateRangeLabel($filters['start'], $filters['end']),
-                'today' => $today,
                 'kpis' => $this->buildKpis($summary, $unitsOperating, $operatorsCheckedIn, $unitsInPeriod),
                 'summary' => $summary,
-                'byUnit' => $byUnit,
-                'byOperator' => $byOperator,
-                'quadrant' => $quadrant,
-                'unitsOperating' => $unitsOperating,
-                'postEvent' => $postEvent,
-                'turnaround' => $turnaround,
                 'funnel' => $funnel,
-                'neverPostEvent' => $neverPostEvent,
-                'slovin' => $slovin,
-                'qaSummary' => $qaSummary,
-                'qaPending' => $qaPending,
             ];
         } catch (Throwable $e) {
             report($e);
