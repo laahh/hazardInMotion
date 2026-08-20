@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services\DmsMonitoring;
 
 use App\Services\Dms\DmsDashboardDataSource;
-use App\Services\PraOperasi\PraOperasiOperatorRosterReader;
 use App\Services\SportEvaluation\SportEvaluationPvtRfidCheckinReader;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -59,7 +58,6 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
     public function __construct(
         private readonly SportEvaluationPvtRfidCheckinReader $connectionSource,
-        private readonly PraOperasiOperatorRosterReader $rosterReader,
     ) {}
 
     public function isUp(): bool
@@ -289,21 +287,11 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
-     * Jumlah operator (jabatan struktural) yang muncul di RFID dalam window.
+     * Jumlah SID unik yang muncul di RFID dalam window — semua jabatan.
      */
     public function countOperatorCheckinsInRange(string $start, string $end): int
     {
-        $roster = $this->rosterReader->operatorRoster();
-        if ($roster === []) {
-            return 0;
-        }
-
-        $sids = [];
-        foreach ($roster as $operator) {
-            $sids[] = (string) ($operator['kode_sid'] ?? '');
-        }
-
-        return $this->countDistinctOperatorCheckins($start, $end, $sids);
+        return $this->countDistinctCheckinSids($start, $end);
     }
 
     /**
@@ -408,7 +396,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
     public function countDistinctCheckinSids(string $start, string $end): int
     {
-        return $this->rememberScalarInt('rfid_sids_count_v3', $start, $end, function () use ($start, $end): int {
+        return $this->rememberScalarInt('rfid_sids_count_v4', $start, $end, function () use ($start, $end): int {
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return 0;
@@ -420,10 +408,15 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
                   AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
             ";
+            $bindings = [$start, $end];
+            if ($this->scopePerusahaan !== null) {
+                $sql .= ' AND TRIM(perusahaan::text) = ?';
+                $bindings[] = $this->scopePerusahaan;
+            }
 
             $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
             try {
-                $row = DB::connection($connection)->selectOne($sql, [$start, $end]);
+                $row = DB::connection($connection)->selectOne($sql, $bindings);
             } catch (Throwable $e) {
                 report($e);
 
