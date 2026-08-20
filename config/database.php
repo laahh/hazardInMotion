@@ -121,6 +121,27 @@ return [
             ],
         ],
 
+        /*
+        | Amazon Redshift DWH (PostgreSQL wire protocol, SSL wajib).
+        | Kredensial hanya dari .env — jangan hardcode password di sini.
+        */
+        'redshift' => [
+            'driver' => 'pgsql',
+            'host' => env('REDSHIFT_HOST', 'prod-bc-dwh-redshift.cuqsugk2wrdd.ap-southeast-1.redshift.amazonaws.com'),
+            'port' => env('REDSHIFT_PORT', '5439'),
+            'database' => env('REDSHIFT_DATABASE', 'prod'),
+            'username' => env('REDSHIFT_USERNAME', 'data_analyst_prod'),
+            'password' => env('REDSHIFT_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => env('REDSHIFT_SEARCH_PATH', 'public'),
+            'sslmode' => env('REDSHIFT_SSLMODE', 'require'),
+            'options' => [
+                PDO::ATTR_TIMEOUT => (int) env('REDSHIFT_CONNECT_TIMEOUT', 8),
+            ],
+        ],
+
         'clickhouse' => [
             'driver' => 'clickhouse',
             'host' => env('CLICKHOUSE_HOST'),
