@@ -120,6 +120,40 @@ final class DmsMonitoringOverallModalService
     }
 
     /**
+     * @param  array{start:string, end:string, site:string, perusahaan:string}  $filters
+     * @return array<string, mixed>
+     */
+    public function unitAlertDetails(array $filters, string $unit, string $unitSite, string $unitPerusahaan): array
+    {
+        $this->reader->applyScope(
+            $filters['site'] !== '' ? $filters['site'] : null,
+            $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null,
+        );
+
+        if (! $this->reader->isUp()) {
+            return $this->errorPayload('Koneksi ke hse_automation tidak tersedia.');
+        }
+
+        try {
+            $tz = (string) config('app.timezone');
+            $start = Carbon::parse($filters['start'], $tz)->startOfDay()->format('Y-m-d H:i:s');
+            $end = Carbon::parse($filters['end'], $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+
+            return [
+                'ok' => true,
+                'unit' => $unit,
+                'site' => $unitSite,
+                'perusahaan' => $unitPerusahaan,
+                'alerts' => $this->reader->operatingUnitAlertDetails($start, $end, $unit, $unitSite, $unitPerusahaan),
+            ];
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->errorPayload('Gagal memuat detail alert unit.');
+        }
+    }
+
+    /**
      * @return array{
      *     labels:list<string>,
      *     series:list<int>,

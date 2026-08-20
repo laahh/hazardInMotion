@@ -603,6 +603,7 @@
 
   var dmsOverallFilters = @json($filters);
   var dmsOverallUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall'));
+  var dmsOverallUnitAlertsUrl = @json(route('pra-operasi.dms-monitoring.kpi-overall.unit-alerts'));
   var dmsOverallModalEl = document.getElementById('dmsOverallModal');
   var dmsOverallModal = dmsOverallModalEl && typeof bootstrap !== 'undefined' ? new bootstrap.Modal(dmsOverallModalEl) : null;
   var dmsOverallState = { page: 1 };
@@ -764,14 +765,8 @@
           '<td colspan="6" class="bg-neutral-50">' +
             '<div class="p-12">' +
               '<div class="text-xs text-secondary-light mb-8">Jenis alert pada unit ini</div>' +
-              '<div class="d-flex flex-wrap gap-2">' +
-                ((row.alerts || []).length
-                  ? row.alerts.map(function (item) {
-                      return '<span class="badge bg-primary-50 text-primary-600 border border-primary-100 px-12 py-6">' +
-                        (item.name || '-') + ' <span class="fw-semibold">(' + Number(item.total || 0).toLocaleString('id-ID') + ')</span>' +
-                      '</span>';
-                    }).join('')
-                  : '<span class="text-sm text-secondary-light">Detail alert tidak tersedia.</span>') +
+              '<div class="d-flex flex-wrap gap-2" data-role="alert-list">' +
+                '<span class="text-sm text-secondary-light">Klik "Lihat alert" untuk memuat detail.</span>' +
               '</div>' +
             '</div>' +
           '</td>';
@@ -785,8 +780,57 @@
         var detailRow = targetId ? document.getElementById(targetId) : null;
         if (!detailRow) return;
         var isHidden = detailRow.classList.contains('d-none');
-        detailRow.classList.toggle('d-none', !isHidden);
-        button.textContent = isHidden ? 'Sembunyikan alert' : 'Lihat alert';
+        if (isHidden) {
+          detailRow.classList.remove('d-none');
+          button.textContent = 'Memuat...';
+          button.disabled = true;
+
+          var params = new URLSearchParams({
+            start: dmsOverallFilters.start || '',
+            end: dmsOverallFilters.end || '',
+            site: dmsOverallFilters.site || '',
+            perusahaan: dmsOverallFilters.perusahaan || '',
+            unit: button.closest('tr').children[0].textContent.trim(),
+            unit_site: button.closest('tr').children[1].textContent.trim(),
+            unit_perusahaan: button.closest('tr').children[2].textContent.trim()
+          });
+          var listEl = detailRow.querySelector('[data-role="alert-list"]');
+
+          fetch(dmsOverallUnitAlertsUrl + '?' + params.toString(), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+          })
+            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+            .then(function (result) {
+              if (!listEl) return;
+              if (!result.ok || !result.data.ok) {
+                listEl.innerHTML = '<span class="text-sm text-danger-main">Gagal memuat detail alert.</span>';
+                button.textContent = 'Lihat alert';
+                return;
+              }
+
+              var items = result.data.alerts || [];
+              if (!items.length) {
+                listEl.innerHTML = '<span class="text-sm text-secondary-light">Tidak ada detail alert.</span>';
+              } else {
+                listEl.innerHTML = items.map(function (item) {
+                  return '<span class="badge bg-primary-50 text-primary-600 border border-primary-100 px-12 py-6">' +
+                    (item.name || '-') + ' <span class="fw-semibold">(' + Number(item.total || 0).toLocaleString('id-ID') + ')</span>' +
+                  '</span>';
+                }).join('');
+              }
+              button.textContent = 'Sembunyikan alert';
+            })
+            .catch(function () {
+              if (listEl) listEl.innerHTML = '<span class="text-sm text-danger-main">Gagal memuat detail alert.</span>';
+              button.textContent = 'Lihat alert';
+            })
+            .finally(function () {
+              button.disabled = false;
+            });
+        } else {
+          detailRow.classList.add('d-none');
+          button.textContent = 'Lihat alert';
+        }
       });
     });
   }

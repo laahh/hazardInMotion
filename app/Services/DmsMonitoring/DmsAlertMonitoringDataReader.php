@@ -750,8 +750,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      *         site:string,
      *         perusahaan:string,
      *         alert_count:int,
-     *         has_alert:bool,
-     *         alerts:list<array{name:string,total:int}>
+     *         has_alert:bool
      *     }>
      * }
      */
@@ -855,15 +854,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             'perusahaan' => (string) $r->perusahaan,
             'alert_count' => (int) $r->alert_count,
             'has_alert' => (int) $r->alert_count > 0,
-            'alerts' => [],
         ], $rows);
-
-        $alertsByUnit = $this->overallOperatingUnitAlertDetails($start, $end, $mappedRows);
-        foreach ($mappedRows as &$row) {
-            $key = $row['unit'].'|'.$row['site'].'|'.$row['perusahaan'];
-            $row['alerts'] = $alertsByUnit[$key] ?? [];
-        }
-        unset($row);
 
         return [
             'total' => (int) ($countRow->total ?? 0),
@@ -872,54 +863,32 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
-     * @param  list<array{unit:string, site:string, perusahaan:string, alert_count:int, has_alert:bool, alerts:list<array{name:string,total:int}>}>  $rows
-     * @return array<string, list<array{name:string,total:int}>>
+     * @return list<array{name:string,total:int}>
      */
-    private function overallOperatingUnitAlertDetails(string $start, string $end, array $rows): array
+    public function operatingUnitAlertDetails(string $start, string $end, string $unit, string $site, string $perusahaan): array
     {
-        $targets = [];
-        foreach ($rows as $row) {
-            if (($row['alert_count'] ?? 0) <= 0) {
-                continue;
-            }
-            $targets[] = [
-                'unit' => (string) $row['unit'],
-                'site' => (string) $row['site'],
-                'perusahaan' => (string) $row['perusahaan'],
-            ];
-        }
-
-        if ($targets === []) {
-            return [];
-        }
-
         $connection = $this->connectionSource->connectionName();
         if ($connection === null) {
             return [];
         }
 
-        $predicates = [];
         $bindings = $this->alertDateBindings($start, $end);
-        foreach ($targets as $target) {
-            $predicates[] = '(TRIM(unit::text) = ? AND COALESCE(NULLIF(TRIM(site::text), \'\'), \'-\') = ? AND COALESCE(NULLIF(TRIM(perusahaan::text), \'\'), \'-\') = ?)';
-            $bindings[] = $target['unit'];
-            $bindings[] = $target['site'];
-            $bindings[] = $target['perusahaan'];
-        }
+        $bindings[] = $unit;
+        $bindings[] = $site;
+        $bindings[] = $perusahaan;
 
         $sql = "
             SELECT
-                TRIM(unit::text) AS unit,
-                COALESCE(NULLIF(TRIM(site::text), ''), '-') AS site,
-                COALESCE(NULLIF(TRIM(perusahaan::text), ''), '-') AS perusahaan,
                 COALESCE(NULLIF(TRIM(nama_pelanggaran::text), ''), '-') AS alert_name,
                 count(*) AS total
             FROM bcsid.mv_dms_alert
             WHERE {$this->alertDateWhere()}
               AND unit IS NOT NULL AND TRIM(unit::text) <> ''
-              AND (".implode(' OR ', $predicates).")
-            GROUP BY 1, 2, 3, 4
-            ORDER BY 1, 2, 3, total DESC, alert_name ASC
+              AND TRIM(unit::text) = ?
+              AND COALESCE(NULLIF(TRIM(site::text), ''), '-') = ?
+              AND COALESCE(NULLIF(TRIM(perusahaan::text), ''), '-') = ?
+            GROUP BY 1
+            ORDER BY total DESC, alert_name ASC
         ";
 
         try {
@@ -932,12 +901,10 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
         $mapped = [];
         foreach ($detailRows as $detail) {
-            $key = (string) $detail->unit.'|'.(string) $detail->site.'|'.(string) $detail->perusahaan;
-            $mapped[$key] ??= [];
-            if (count($mapped[$key]) >= 8) {
+            if (count($mapped) >= 8) {
                 continue;
             }
-            $mapped[$key][] = [
+            $mapped[] = [
                 'name' => (string) $detail->alert_name,
                 'total' => (int) ($detail->total ?? 0),
             ];

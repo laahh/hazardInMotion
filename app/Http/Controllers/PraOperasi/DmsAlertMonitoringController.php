@@ -6,6 +6,7 @@ namespace App\Http\Controllers\PraOperasi;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DmsMonitoring\DmsMonitoringOverallModalRequest;
+use App\Http\Requests\DmsMonitoring\DmsMonitoringUnitAlertDetailRequest;
 use App\Services\Dms\DmsDashboardOverviewService;
 use App\Services\DmsMonitoring\DmsAlertMonitoringPageService;
 use App\Services\DmsMonitoring\DmsAlertMonitoringService;
@@ -90,6 +91,20 @@ final class DmsAlertMonitoringController extends Controller
         $payload = $this->overallModal->payload(
             $request->filters(),
             $request->page(),
+        );
+
+        $status = ($payload['ok'] ?? false) ? 200 : 422;
+
+        return response()->json($payload, $status);
+    }
+
+    public function overallModalUnitAlerts(DmsMonitoringUnitAlertDetailRequest $request): JsonResponse
+    {
+        $payload = $this->overallModal->unitAlertDetails(
+            $request->filters(),
+            $request->unit(),
+            $request->unitSite(),
+            $request->unitPerusahaan(),
         );
 
         $status = ($payload['ok'] ?? false) ? 200 : 422;
