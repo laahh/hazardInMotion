@@ -375,6 +375,185 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
+     * Orang-hari check-in vs alert di hari yang sama.
+     *
+     * @return array{
+     *     days:list<array{hari:string, operators:int, with_alert:int, without_alert:int}>,
+     *     checkin_total:int,
+     *     with_alert:int,
+     *     without_alert:int
+     * }
+     */
+    public function operatorCheckinAlertBreakdown(string $start, string $end): array
+    {
+        $empty = ['days' => [], 'checkin_total' => 0, 'with_alert' => 0, 'without_alert' => 0];
+
+        /** @var array{days:list<array{hari:string, operators:int, with_alert:int, without_alert:int}>, checkin_total:int, with_alert:int, without_alert:int} */
+        return $this->rememberScalar('rfid_fungsional_checkin_alert_daily_v1', $start, $end, function () use ($start, $end, $empty): array {
+            $connection = $this->connectionSource->connectionName();
+            if ($connection === null) {
+                return $empty;
+            }
+
+            $matched = $this->fungsionalOperatorCheckinMatchedSql($start, $end);
+            $sql = $matched['sql'].'
+                , alert_days AS (
+                    SELECT date(waktu_deteksi) AS hari, UPPER(TRIM(kode_sid)) AS sid
+                    FROM bcsid.mv_dms_alert
+                    WHERE '.$this->alertDateWhere().'
+                      AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> \'\'
+                    GROUP BY 1, 2
+                )
+                SELECT
+                    m.hari,
+                    count(*) AS operators,
+                    count(*) FILTER (WHERE a.sid IS NOT NULL) AS with_alert,
+                    count(*) FILTER (WHERE a.sid IS NULL) AS without_alert
+                FROM matched m
+                LEFT JOIN alert_days a
+                    ON a.hari = m.hari AND a.sid = UPPER(TRIM(m.kode_sid))
+                GROUP BY 1
+                ORDER BY 1
+            ';
+            $bindings = array_merge($matched['bindings'], $this->alertDateBindings($start, $end));
+
+            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+            try {
+                $rows = DB::connection($connection)->select($sql, $bindings);
+            } catch (Throwable $e) {
+                report($e);
+
+                return $empty;
+            } finally {
+                $this->clearStatementTimeout($connection);
+            }
+
+            $days = [];
+            $checkinTotal = 0;
+            $withAlert = 0;
+            $withoutAlert = 0;
+            foreach ($rows as $row) {
+                $hari = $row->hari;
+                if ($hari instanceof \DateTimeInterface) {
+                    $hari = $hari->format('Y-m-d');
+                }
+                $operators = (int) ($row->operators ?? 0);
+                $with = (int) ($row->with_alert ?? 0);
+                $without = (int) ($row->without_alert ?? 0);
+                $checkinTotal += $operators;
+                $withAlert += $with;
+                $withoutAlert += $without;
+                $days[] = [
+                    'hari' => (string) $hari,
+                    'operators' => $operators,
+                    'with_alert' => $with,
+                    'without_alert' => $without,
+                ];
+            }
+
+            return [
+                'days' => $days,
+                'checkin_total' => $checkinTotal,
+                'with_alert' => $withAlert,
+                'without_alert' => $withoutAlert,
+            ];
+        }, $empty);
+    }
+
+    /**
+     * Daftar orang check-in di satu hari kalender, dengan/tanpa alert di hari itu.
+     *
+     * @return array{total:int, rows:list<array<string, mixed>>}
+     */
+    public function operatorCheckinPeopleForDay(
+        string $dayStart,
+        string $dayEnd,
+        string $status,
+        int $page,
+        int $perPage,
+    ): array {
+        $empty = ['total' => 0, 'rows' => []];
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return $empty;
+        }
+
+        $identity = $this->fungsionalOperatorCheckinIdentitySql($dayStart, $dayEnd);
+        $statusWhere = match ($status) {
+            'without_alert' => ' WHERE COALESCE(a.alert_count, 0) = 0',
+            'with_alert' => ' WHERE COALESCE(a.alert_count, 0) > 0',
+            default => '',
+        };
+        $offset = max(0, ($page - 1) * $perPage);
+        $sqlBody = $identity['sql'].'
+            , alert_days AS (
+                SELECT UPPER(TRIM(kode_sid)) AS sid, count(*) AS alert_count
+                FROM bcsid.mv_dms_alert
+                WHERE '.$this->alertDateWhere().'
+                  AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> \'\'
+                GROUP BY 1
+            ),
+            tagged AS (
+                SELECT
+                    m.kode_sid,
+                    m.nama,
+                    m.jabatan,
+                    m.perusahaan,
+                    m.site,
+                    m.gate,
+                    m.tanggal_checkinout,
+                    COALESCE(a.alert_count, 0) AS alert_count
+                FROM matched m
+                LEFT JOIN alert_days a ON a.sid = UPPER(TRIM(m.kode_sid))
+            )
+        ';
+        $bindings = array_merge($identity['bindings'], $this->alertDateBindings($dayStart, $dayEnd));
+
+        $countSql = $sqlBody.' SELECT count(*) AS total FROM tagged'.$statusWhere;
+        $dataSql = $sqlBody.'
+            SELECT kode_sid, nama, jabatan, perusahaan, site, gate, tanggal_checkinout, alert_count
+            FROM tagged'.$statusWhere.'
+            ORDER BY nama ASC, kode_sid ASC
+            LIMIT ? OFFSET ?
+        ';
+
+        $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+        try {
+            $countRow = DB::connection($connection)->selectOne($countSql, $bindings);
+            $rows = DB::connection($connection)->select($dataSql, array_merge($bindings, [$perPage, $offset]));
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        } finally {
+            $this->clearStatementTimeout($connection);
+        }
+
+        return [
+            'total' => (int) ($countRow->total ?? 0),
+            'rows' => array_map(static function ($r): array {
+                $checkedInAt = $r->tanggal_checkinout;
+                if ($checkedInAt instanceof \DateTimeInterface) {
+                    $checkedInAt = $checkedInAt->format('Y-m-d H:i:s');
+                }
+
+                return [
+                    'kode_sid' => (string) ($r->kode_sid ?? '-'),
+                    'nama' => (string) ($r->nama ?? '-'),
+                    'jabatan' => (string) ($r->jabatan ?? '-'),
+                    'perusahaan' => (string) ($r->perusahaan ?? '-'),
+                    'site' => (string) ($r->site ?? '-'),
+                    'evidence_source' => 'RFID Check-in',
+                    'evidence_at' => $checkedInAt !== null ? (string) $checkedInAt : '-',
+                    'evidence_note' => 'Gate: '.((string) ($r->gate ?? '-')),
+                    'alert_count' => (int) ($r->alert_count ?? 0),
+                    'has_alert' => (int) ($r->alert_count ?? 0) > 0,
+                ];
+            }, $rows),
+        ];
+    }
+
+    /**
      * Jumlah SID unik yang ada di RFID, dibatasi daftar SID operator.
      *
      * Tidak memfilter jenis_checkinout maupun status_lolos — semua baris RFID
@@ -2453,6 +2632,66 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             ),
             matched AS (
                 SELECT DISTINCT r.hari, r.kode_sid
+                FROM rfid r
+                INNER JOIN ops o ON o.kode_sid = r.kode_sid
+                WHERE 1=1
+        ";
+        $bindings = [$start, $end];
+        if ($this->scopeSite !== null) {
+            $sql .= ' AND (UPPER(TRIM(COALESCE(r.gate, \'\'))) ~ ? OR UPPER(TRIM(COALESCE(o.site_dedicated, \'\'))) = ?)';
+            $bindings[] = $this->rfidSiteGatePattern((string) $this->scopeSite);
+            $bindings[] = mb_strtoupper((string) $this->scopeSite);
+        }
+        if ($this->scopePerusahaan !== null) {
+            $sql .= ' AND (TRIM(COALESCE(r.perusahaan, \'\')) = ? OR TRIM(COALESCE(o.nama_perusahaan, \'\')) = ?)';
+            $bindings[] = $this->scopePerusahaan;
+            $bindings[] = $this->scopePerusahaan;
+        }
+        $sql .= '
+            )
+        ';
+
+        return ['sql' => $sql, 'bindings' => $bindings];
+    }
+
+    /**
+     * CTE orang check-in + identitas snapshot, untuk detail per hari.
+     *
+     * @return array{sql:string, bindings:list<mixed>}
+     */
+    private function fungsionalOperatorCheckinIdentitySql(string $start, string $end): array
+    {
+        $sql = "
+            WITH ops AS MATERIALIZED (
+                SELECT kode_sid, nama, jabatan_fungsional, site_dedicated, nama_perusahaan
+                FROM bcsid.crontable_bep_vw_m_karyawan_aktif
+                WHERE kode_sid IS NOT NULL
+                  AND TRIM(kode_sid) <> ''
+                  AND UPPER(TRIM(COALESCE(jabatan_fungsional, ''))) LIKE '%OPERATOR%'
+                  AND UPPER(TRIM(COALESCE(jabatan_fungsional, ''))) <> 'VISITOR'
+            ),
+            rfid AS MATERIALIZED (
+                SELECT DISTINCT ON ((tanggal_checkinout)::date, kode_sid)
+                    (tanggal_checkinout)::date AS hari,
+                    kode_sid,
+                    TRIM(gate::text) AS gate,
+                    TRIM(perusahaan::text) AS perusahaan,
+                    tanggal_checkinout
+                FROM bcsid.mv_checkinout_rfid
+                WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
+                  AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
+                ORDER BY (tanggal_checkinout)::date, kode_sid, tanggal_checkinout
+            ),
+            matched AS (
+                SELECT
+                    r.hari,
+                    r.kode_sid,
+                    r.tanggal_checkinout,
+                    r.gate,
+                    COALESCE(NULLIF(TRIM(r.perusahaan), ''), NULLIF(TRIM(o.nama_perusahaan), ''), '-') AS perusahaan,
+                    COALESCE(NULLIF(TRIM(o.nama), ''), '-') AS nama,
+                    COALESCE(NULLIF(TRIM(o.jabatan_fungsional), ''), '-') AS jabatan,
+                    COALESCE(NULLIF(TRIM(o.site_dedicated), ''), '-') AS site
                 FROM rfid r
                 INNER JOIN ops o ON o.kode_sid = r.kode_sid
                 WHERE 1=1

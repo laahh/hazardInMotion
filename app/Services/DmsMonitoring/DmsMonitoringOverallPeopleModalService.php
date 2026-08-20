@@ -39,7 +39,7 @@ final class DmsMonitoringOverallPeopleModalService
             return $this->errorPayload('Koneksi ke sumber data operator tidak tersedia.');
         }
 
-        $cacheKey = 'dms_monitoring:overall_people.payload.v2:'.md5(json_encode([
+        $cacheKey = 'dms_monitoring:overall_people.payload.v3:'.md5(json_encode([
             $filters,
             $page,
             $status,
@@ -90,6 +90,67 @@ final class DmsMonitoringOverallPeopleModalService
      * @param  array{start:string, end:string, site:string, perusahaan:string}  $filters
      * @return array<string, mixed>
      */
+    public function dayPayload(array $filters, string $day, string $status = 'without_alert', int $page = 1): array
+    {
+        $this->reader->applyScope(
+            $filters['site'] !== '' ? $filters['site'] : null,
+            $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null,
+        );
+
+        if (! $this->reader->isUp()) {
+            return $this->errorPayload('Koneksi ke hse_automation tidak tersedia.');
+        }
+
+        if ($day < $filters['start'] || $day > $filters['end']) {
+            return $this->errorPayload('Tanggal detail di luar range filter.');
+        }
+
+        $cacheKey = 'dms_monitoring:overall_people.day.v1:'.md5(json_encode([
+            $filters,
+            $day,
+            $status,
+            $page,
+            $this->reader->scopeCacheSuffixForKey(),
+        ]));
+
+        try {
+            /** @var array<string, mixed> */
+            return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters, $day, $status, $page): array {
+                $tz = (string) config('app.timezone');
+                $dayStart = Carbon::parse($day, $tz)->startOfDay()->format('Y-m-d H:i:s');
+                $dayEnd = Carbon::parse($day, $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
+                $table = $this->reader->operatorCheckinPeopleForDay($dayStart, $dayEnd, $status, $page, self::PER_PAGE);
+                $statusLabel = match ($status) {
+                    'with_alert' => 'dengan alert',
+                    'all' => 'check-in',
+                    default => 'tanpa alert',
+                };
+
+                return [
+                    'ok' => true,
+                    'day' => $day,
+                    'status' => $status,
+                    'label' => 'Orang '.$statusLabel.' pada '.Carbon::parse($day, $tz)->translatedFormat('d M Y'),
+                    'table' => ['rows' => $table['rows']],
+                    'pagination' => [
+                        'page' => $page,
+                        'per_page' => self::PER_PAGE,
+                        'total_rows' => (int) ($table['total'] ?? 0),
+                        'total_pages' => max(1, (int) ceil(($table['total'] ?? 0) / self::PER_PAGE)),
+                    ],
+                ];
+            });
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->errorPayload('Gagal memuat detail orang harian.');
+        }
+    }
+
+    /**
+     * @param  array{start:string, end:string, site:string, perusahaan:string}  $filters
+     * @return array<string, mixed>
+     */
     private function buildPayload(array $filters, int $page, string $status): array
     {
         try {
@@ -97,35 +158,37 @@ final class DmsMonitoringOverallPeopleModalService
             $start = Carbon::parse($filters['start'], $tz)->startOfDay()->format('Y-m-d H:i:s');
             $end = Carbon::parse($filters['end'], $tz)->startOfDay()->addDay()->format('Y-m-d H:i:s');
 
-            $dailyBar = $this->buildDailyBarChart(
-                $start,
-                $end,
-                $tz,
-                $this->reader->dailyOperatorCheckinSeries($start, $end),
-                'operators',
-                'Orang checkin',
-            );
+            $breakdown = $this->reader->operatorCheckinAlertBreakdown($start, $end);
+            $alertTotal = (int) ($this->reader->alertSummary($start, $end)['total'] ?? 0);
+            $checkinTotal = (int) ($breakdown['checkin_total'] ?? 0);
+            $withAlert = (int) ($breakdown['with_alert'] ?? 0);
+            $withoutAlert = (int) ($breakdown['without_alert'] ?? 0);
+            $dailyBar = $this->buildDailyPeopleChart($start, $end, $tz, $breakdown['days'] ?? []);
 
-            $cohort = $this->filterCohort(
-                $this->operatorCheckinCohort($start, $end),
-                $filters['site'],
-                $filters['perusahaan'],
-            );
+            $cohort = [];
+            $alertMap = [];
+            try {
+                $cohort = $this->filterCohort(
+                    $this->operatorCheckinCohort($start, $end),
+                    $filters['site'],
+                    $filters['perusahaan'],
+                );
+                $siteFilter = $filters['site'] !== '' ? $filters['site'] : null;
+                $companyFilter = $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null;
+                $cohortSids = array_map(static fn (array $row): string => (string) ($row['kode_sid'] ?? ''), $cohort);
+                $alertMap = $this->reader->alertCountForOperatorSids(
+                    $start,
+                    $end,
+                    $cohortSids,
+                    $siteFilter,
+                    $companyFilter,
+                );
+            } catch (Throwable $e) {
+                report($e);
+            }
 
-            $siteFilter = $filters['site'] !== '' ? $filters['site'] : null;
-            $companyFilter = $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null;
-            $cohortSids = array_map(static fn (array $row): string => (string) ($row['kode_sid'] ?? ''), $cohort);
-
-            $alertMap = $this->reader->alertCountForOperatorSids(
-                $start,
-                $end,
-                $cohortSids,
-                $siteFilter,
-                $companyFilter,
-            );
-
-            $summary = $this->buildSummary($cohort, $alertMap);
             $tableResult = $this->paginatedTableRows($cohort, $alertMap, $status, $page);
+            $cohortSummary = $this->buildSummary($cohort, $alertMap);
             $controlChart = $this->buildControlChart($start, $end, $tz);
             $topPeople = $this->topPeopleWithAlerts($cohort, $alertMap, 5);
             $topSids = array_map(static fn (array $row): string => (string) $row['kode_sid'], $topPeople);
@@ -135,10 +198,38 @@ final class DmsMonitoringOverallPeopleModalService
                 'label' => 'Overview Orang & Alert',
                 'period' => ['start' => $filters['start'], 'end' => $filters['end']],
                 'summary' => [
-                    ['key' => 'people_checkin', 'label' => 'Orang Checkin RFID', 'value' => number_format($summary['checkin_total']), 'hint' => 'Operator unik di tabel; batang harian = orang-hari', 'icon' => 'mingcute:user-follow-fill', 'color' => '#487fff'],
-                    ['key' => 'people_without_alert', 'label' => 'Orang Tanpa Alert', 'value' => number_format($summary['without_alert']), 'hint' => 'Sudah check-in namun tanpa alert DMS', 'icon' => 'solar:shield-check-bold', 'color' => '#45b369'],
-                    ['key' => 'people_with_alert', 'label' => 'Orang Dengan Alert', 'value' => number_format($summary['with_alert']), 'hint' => 'Operator check-in yang punya alert', 'icon' => 'solar:danger-triangle-bold', 'color' => '#f4941e'],
-                    ['key' => 'ratio', 'label' => 'Rasio Alert / Orang', 'value' => number_format($summary['ratio_per_person'], 2), 'hint' => number_format($summary['total_alerts']).' total alert', 'icon' => 'solar:chart-2-bold', 'color' => '#8252e9'],
+                    [
+                        'key' => 'people_checkin',
+                        'label' => 'Orang Checkin RFID',
+                        'value' => number_format($checkinTotal),
+                        'hint' => 'Orang-hari di range filter (sama dengan kartu KPI)',
+                        'icon' => 'mingcute:user-follow-fill',
+                        'color' => '#487fff',
+                    ],
+                    [
+                        'key' => 'people_without_alert',
+                        'label' => 'Orang Tanpa Alert',
+                        'value' => number_format($withoutAlert),
+                        'hint' => 'Orang-hari check-in tanpa alert di hari yang sama',
+                        'icon' => 'solar:shield-check-bold',
+                        'color' => '#45b369',
+                    ],
+                    [
+                        'key' => 'people_with_alert',
+                        'label' => 'Orang Dengan Alert',
+                        'value' => number_format($withAlert),
+                        'hint' => 'Orang-hari check-in yang punya alert di hari yang sama',
+                        'icon' => 'solar:danger-triangle-bold',
+                        'color' => '#f4941e',
+                    ],
+                    [
+                        'key' => 'ratio',
+                        'label' => 'Rasio Alert / Orang',
+                        'value' => number_format($checkinTotal > 0 ? $alertTotal / $checkinTotal : 0, 2),
+                        'hint' => number_format($alertTotal).' alert ÷ '.$checkinTotal.' orang-hari',
+                        'icon' => 'solar:chart-2-bold',
+                        'color' => '#8252e9',
+                    ],
                 ],
                 'top_units' => array_map(static fn (array $row): array => [
                     'unit' => (string) $row['nama'],
@@ -153,8 +244,8 @@ final class DmsMonitoringOverallPeopleModalService
                     'rows' => $tableResult['rows'],
                 ],
                 'table_tabs' => [
-                    ['key' => 'with_alert', 'label' => 'Orang Dengan Alert', 'count' => $summary['with_alert']],
-                    ['key' => 'without_alert', 'label' => 'Orang Tanpa Alert', 'count' => $summary['without_alert']],
+                    ['key' => 'with_alert', 'label' => 'Orang Dengan Alert', 'count' => $cohortSummary['with_alert']],
+                    ['key' => 'without_alert', 'label' => 'Orang Tanpa Alert', 'count' => $cohortSummary['without_alert']],
                 ],
                 'table_active' => $status,
                 'pagination' => [
@@ -479,38 +570,52 @@ final class DmsMonitoringOverallPeopleModalService
     }
 
     /**
-     * @param  list<array<string, mixed>>  $rows
-     * @return array{labels:list<string>, series:list<int>, total:int, name:string}
+     * @param  list<array{hari:string, operators:int, with_alert:int, without_alert:int}>  $rows
+     * @return array{
+     *     labels:list<string>,
+     *     iso_dates:list<string>,
+     *     series:list<array{name:string, data:list<int>}>,
+     *     totals:array{checkin:int, with_alert:int, without_alert:int}
+     * }
      */
-    private function buildDailyBarChart(
-        string $start,
-        string $end,
-        string $tz,
-        array $rows,
-        string $valueKey,
-        string $name,
-    ): array {
+    private function buildDailyPeopleChart(string $start, string $end, string $tz, array $rows): array
+    {
         $indexed = [];
         foreach ($rows as $row) {
-            $indexed[(string) ($row['hari'] ?? '')] = (int) ($row[$valueKey] ?? 0);
+            $indexed[(string) ($row['hari'] ?? '')] = $row;
         }
 
         $labels = [];
-        $values = [];
+        $isoDates = [];
+        $checkin = [];
+        $withAlert = [];
+        $withoutAlert = [];
         $cursor = Carbon::parse($start, $tz)->startOfDay();
         $until = Carbon::parse($end, $tz)->startOfDay();
         while ($cursor->lt($until)) {
             $key = $cursor->toDateString();
+            $hit = $indexed[$key] ?? [];
             $labels[] = $cursor->isoFormat('D MMM');
-            $values[] = (int) ($indexed[$key] ?? 0);
+            $isoDates[] = $key;
+            $checkin[] = (int) ($hit['operators'] ?? 0);
+            $withAlert[] = (int) ($hit['with_alert'] ?? 0);
+            $withoutAlert[] = (int) ($hit['without_alert'] ?? 0);
             $cursor->addDay();
         }
 
         return [
             'labels' => $labels,
-            'series' => $values,
-            'total' => array_sum($values),
-            'name' => $name,
+            'iso_dates' => $isoDates,
+            'series' => [
+                ['name' => 'Orang checkin', 'data' => $checkin],
+                ['name' => 'Dengan alert', 'data' => $withAlert],
+                ['name' => 'Tanpa alert', 'data' => $withoutAlert],
+            ],
+            'totals' => [
+                'checkin' => array_sum($checkin),
+                'with_alert' => array_sum($withAlert),
+                'without_alert' => array_sum($withoutAlert),
+            ],
         ];
     }
 

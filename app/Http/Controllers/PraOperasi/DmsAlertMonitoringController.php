@@ -6,6 +6,7 @@ namespace App\Http\Controllers\PraOperasi;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DmsMonitoring\DmsMonitoringOverallModalRequest;
+use App\Http\Requests\DmsMonitoring\DmsMonitoringPeopleDayRequest;
 use App\Http\Requests\DmsMonitoring\DmsMonitoringPersonAlertDetailRequest;
 use App\Http\Requests\DmsMonitoring\DmsMonitoringUnitAlertDetailRequest;
 use App\Services\Dms\DmsDashboardOverviewService;
@@ -108,6 +109,20 @@ final class DmsAlertMonitoringController extends Controller
             $request->filters(),
             $request->page(),
             $request->status(),
+        );
+
+        $status = ($payload['ok'] ?? false) ? 200 : 422;
+
+        return response()->json($payload, $status);
+    }
+
+    public function overallPeopleModalDay(DmsMonitoringPeopleDayRequest $request): JsonResponse
+    {
+        $payload = $this->overallPeopleModal->dayPayload(
+            $request->filters(),
+            $request->day(),
+            $request->status(),
+            $request->page(),
         );
 
         $status = ($payload['ok'] ?? false) ? 200 : 422;

@@ -32,11 +32,54 @@
               <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-12">
                 <div>
                   <h6 class="fw-bold text-md mb-4">Orang Checkin per Hari</h6>
-                  <p class="text-xs text-secondary-light mb-0">SID unik tiap hari. Total kartu KPI = jumlah batang.</p>
+                  <p class="text-xs text-secondary-light mb-0">SID unik tiap hari. Klik batang <strong>Tanpa alert</strong> untuk melihat daftar orangnya.</p>
                 </div>
                 <span id="dms-overall-people-daily-bar-total" class="badge bg-primary-50 text-primary-600 px-12 py-6">Total 0</span>
               </div>
               <div id="dms-overall-people-daily-bar" class="dms-overall-main-chart"></div>
+            </div>
+          </div>
+
+          <div class="card border radius-8 mb-24" id="dms-overall-people-day-card">
+            <div class="card-body p-20">
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-12">
+                <div>
+                  <h6 class="fw-bold text-md mb-4" id="dms-overall-people-day-title">Detail Orang Harian</h6>
+                  <p class="text-xs text-secondary-light mb-0" id="dms-overall-people-day-hint">Klik batang hari di chart untuk memuat daftar orang.</p>
+                </div>
+                <span id="dms-overall-people-day-count" class="text-sm text-secondary-light"></span>
+              </div>
+              <div id="dms-overall-people-day-loading" class="d-none text-center py-16">
+                <div class="spinner-border spinner-border-sm text-primary-600" role="status" aria-hidden="true"></div>
+                <span class="text-sm text-secondary-light ms-8">Memuat detail hari…</span>
+              </div>
+              <div class="table-responsive border radius-8">
+                <table class="table table-hover mb-0 align-middle">
+                  <thead class="bg-neutral-50">
+                    <tr>
+                      <th scope="col">Nama</th>
+                      <th scope="col">SID</th>
+                      <th scope="col">Jabatan</th>
+                      <th scope="col">Perusahaan</th>
+                      <th scope="col">Site</th>
+                      <th scope="col">Bukti Kehadiran</th>
+                      <th scope="col">Status Alert</th>
+                      <th scope="col" class="text-end">Total Alert</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dms-overall-people-day-body"></tbody>
+                </table>
+              </div>
+              <div id="dms-overall-people-day-empty" class="text-center py-24 text-secondary-light text-sm">
+                Belum ada hari yang dipilih.
+              </div>
+              <div id="dms-overall-people-day-pagination" class="d-none align-items-center justify-content-between flex-wrap gap-2 mt-16">
+                <span id="dms-overall-people-day-page-info" class="text-sm text-secondary-light"></span>
+                <div class="d-flex gap-2">
+                  <button type="button" id="dms-overall-people-day-prev" class="btn btn-sm btn-outline-secondary" disabled>Sebelumnya</button>
+                  <button type="button" id="dms-overall-people-day-next" class="btn btn-sm btn-outline-secondary" disabled>Berikutnya</button>
+                </div>
+              </div>
             </div>
           </div>
 

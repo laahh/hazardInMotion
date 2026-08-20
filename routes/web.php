@@ -778,6 +778,8 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
             ->name('dms-monitoring.kpi-overall');
         Route::get('/dashboard/kpi-overall/people', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'overallPeopleModal'])
             ->name('dms-monitoring.kpi-overall.people');
+        Route::get('/dashboard/kpi-overall/people-day', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'overallPeopleModalDay'])
+            ->name('dms-monitoring.kpi-overall.people-day');
         Route::get('/dashboard/kpi-overall/unit-alerts', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'overallModalUnitAlerts'])
             ->name('dms-monitoring.kpi-overall.unit-alerts');
         Route::get('/dashboard/kpi-overall/people-alerts', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'overallPeopleModalAlerts'])
