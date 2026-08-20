@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Database\Connectors\DwhRedshiftConnector;
+use App\Database\Connectors\GssSafePostgresConnector;
 use App\Models\CctvData;
 use Illuminate\Database\Connection;
 use Illuminate\Database\PostgresConnection;
@@ -25,6 +26,7 @@ class AppServiceProvider extends ServiceProvider
             \App\Services\DmsMonitoring\DmsAlertMonitoringDataReader::class
         );
 
+        $this->app->bind('db.connector.pgsql', GssSafePostgresConnector::class);
         $this->app->bind('db.connector.redshift', DwhRedshiftConnector::class);
         Connection::resolverFor('redshift', function ($connection, $database, $prefix, $config) {
             return new PostgresConnection($connection, $database, $prefix, $config);
@@ -37,9 +39,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->ensureOpenSslCaBundle();
-
-        // libpq (PHP 8+) mencoba GSSAPI dulu; Redshift tidak support → timeout.
-        putenv('PGGSSENCMODE=disable');
 
         // 🔑 Force HTTPS for asset URLs in production
         if ($this->app->environment('production')) {

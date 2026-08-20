@@ -76,6 +76,7 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public, datamart',
             'sslmode' => 'prefer',
+            'gssencmode' => 'disable',
         ],
 
         'pgsql_ssh' => [
@@ -90,8 +91,10 @@ return [
             'prefix_indexes' => true,
             'search_path' => env('PG_SCHEMA_SEARCH_PATH', 'bcbeats,public,bcsid,datamart'),
             'sslmode' => 'prefer',
+            'gssencmode' => 'disable',
+            'connect_timeout' => (int) env('PG_CONNECT_TIMEOUT', 8),
             'options' => [
-                PDO::ATTR_TIMEOUT => (int) env('PG_CONNECT_TIMEOUT', 3),
+                PDO::ATTR_TIMEOUT => (int) env('PG_CONNECT_TIMEOUT', 8),
             ],
             // SSH Configuration (setup-ssh-tunnel.bat / start-bemcu-tunnel.bat)
             'ssh_host' => env('SSH_HOST', '13.212.87.127'),
@@ -116,8 +119,10 @@ return [
             'prefix_indexes' => true,
             'search_path' => env('PG_SCHEMA_SEARCH_PATH', 'bcbeats,public,bcsid,datamart'),
             'sslmode' => 'prefer',
+            'gssencmode' => 'disable',
+            'connect_timeout' => (int) env('PG_CONNECT_TIMEOUT', 8),
             'options' => [
-                PDO::ATTR_TIMEOUT => (int) env('PG_CONNECT_TIMEOUT', 3),
+                PDO::ATTR_TIMEOUT => (int) env('PG_CONNECT_TIMEOUT', 8),
             ],
         ],
 
@@ -256,6 +261,8 @@ return [
             'prefix_indexes' => true,
             'search_path' => env('BEMCU_DB_SCHEMA', env('PG_SCHEMA_SEARCH_PATH', 'bcbeats,public,bcsid,datamart')),
             'sslmode' => 'prefer',
+            'gssencmode' => 'disable',
+            'connect_timeout' => (int) env('PG_CONNECT_TIMEOUT', 8),
         ],
 
     ],

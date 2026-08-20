@@ -39,9 +39,17 @@ final class DmsAlertMonitoringPageService
     public function cachedPayload(array $filters): array
     {
         $cacheKey = 'dms_dashboard_page:v3:'.md5(json_encode($filters));
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && ($cached['up'] ?? false) === true) {
+            return $cached;
+        }
 
-        /** @var array<string, mixed> */
-        return Cache::remember($cacheKey, self::CACHE_TTL, fn (): array => $this->buildPayload($filters));
+        $payload = $this->buildPayload($filters);
+        if (($payload['up'] ?? false) === true) {
+            Cache::put($cacheKey, $payload, self::CACHE_TTL);
+        }
+
+        return $payload;
     }
 
     /**
