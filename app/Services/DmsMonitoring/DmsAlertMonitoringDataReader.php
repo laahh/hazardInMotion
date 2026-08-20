@@ -256,11 +256,11 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
-     * @return list<string> UPPER(kode_sid) yang checkin RFID lolos dalam window
+     * @return list<string> UPPER(kode_sid) yang ada di RFID pada window
      */
     public function distinctCheckinSids(string $start, string $end): array
     {
-        return $this->remember('rfid_sids', $start, $end, function () use ($start, $end): array {
+        return $this->remember('rfid_sids_v2', $start, $end, function () use ($start, $end): array {
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return [];
@@ -271,8 +271,6 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 FROM bcsid.mv_checkinout_rfid
                 WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
                   AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
-                  AND UPPER(TRIM(jenis_checkinout::text)) IN ('IN','CHECKIN','CHECK-IN','CHECK_IN','CHECK IN','MASUK')
-                  AND REPLACE(REPLACE(UPPER(TRIM(status_lolos::text)), ' ', ''), '-', '') IN ('PASSED','PASS','LOLOS','YA','YES','1','TRUE','T','Y')
             ";
 
             try {
@@ -288,7 +286,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
-     * Jumlah operator (jabatan struktural) yang check-in RFID lolos dalam window.
+     * Jumlah operator (jabatan struktural) yang muncul di RFID dalam window.
      */
     public function countOperatorCheckinsInRange(string $start, string $end): int
     {
@@ -306,8 +304,11 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     }
 
     /**
-     * Jumlah SID unik yang check-in RFID lolos, dibatasi daftar SID operator
+     * Jumlah SID unik yang ada di RFID, dibatasi daftar SID operator
      * (roster jabatan struktural "Operator").
+     *
+     * Tidak memfilter jenis_checkinout maupun status_lolos — semua baris RFID
+     * dalam window dihitung.
      *
      * Optimasi: lakukan SATU scan DISTINCT pada window RFID lalu intersect di PHP.
      * Ini jauh lebih stabil daripada query per-chunk SID saat user memilih hari
@@ -329,7 +330,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         }
 
         $sidHash = md5(implode(',', array_keys($normalized)));
-        $cacheKey = 'dms_monitoring:rfid_operator_count:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix().'|'.$sidHash);
+        $cacheKey = 'dms_monitoring:rfid_operator_count_v2:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix().'|'.$sidHash);
 
         return (int) Cache::remember($cacheKey, 1800, function () use ($start, $end, $normalized): int {
             $connection = $this->connectionSource->connectionName();
@@ -342,8 +343,6 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 FROM bcsid.mv_checkinout_rfid
                 WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
                   AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
-                  AND UPPER(TRIM(jenis_checkinout::text)) IN ('IN','CHECKIN','CHECK-IN','CHECK_IN','CHECK IN','MASUK')
-                  AND REPLACE(REPLACE(UPPER(TRIM(status_lolos::text)), ' ', ''), '-', '') IN ('PASSED','PASS','LOLOS','YA','YES','1','TRUE','T','Y')
             ";
             $bindings = [$start, $end];
             if ($this->scopePerusahaan !== null) {
@@ -403,7 +402,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
     public function countDistinctCheckinSids(string $start, string $end): int
     {
-        return $this->rememberScalarInt('rfid_sids_count', $start, $end, function () use ($start, $end): int {
+        return $this->rememberScalarInt('rfid_sids_count_v2', $start, $end, function () use ($start, $end): int {
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return 0;
@@ -414,8 +413,6 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 FROM bcsid.mv_checkinout_rfid
                 WHERE tanggal_checkinout >= ? AND tanggal_checkinout < ?
                   AND kode_sid IS NOT NULL AND TRIM(kode_sid) <> ''
-                  AND UPPER(TRIM(jenis_checkinout::text)) IN ('IN','CHECKIN','CHECK-IN','CHECK_IN','CHECK IN','MASUK')
-                  AND REPLACE(REPLACE(UPPER(TRIM(status_lolos::text)), ' ', ''), '-', '') IN ('PASSED','PASS','LOLOS','YA','YES','1','TRUE','T','Y')
             ";
 
             try {
