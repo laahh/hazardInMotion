@@ -779,25 +779,33 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         if ($useGps) {
             $unitKey = $this->vehicleRegisterKeyExpr('vs.vehicle_no');
             $operatingSql = "
-                SELECT DISTINCT {$unitKey} AS unit,
+                SELECT {$unitKey} AS unit,
                     COALESCE(NULLIF(TRIM(dv.site::text), ''), '-') AS site,
-                    COALESCE(NULLIF(TRIM(dv.company_owner::text), ''), '-') AS perusahaan
+                    COALESCE(NULLIF(TRIM(dv.company_owner::text), ''), '-') AS perusahaan,
+                    'GPS bergerak' AS evidence_source,
+                    max(vs.created_at) AS evidence_at,
+                    max(vs.speed_gps) AS evidence_value
                 FROM bcsid.dms_vehicle_statuses vs
                 INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = {$unitKey}
                 WHERE vs.created_at >= ? AND vs.created_at < ?
                   AND {$this->movingVehicleSpeedWhere('vs')} {$scopeWhereVehicle}
+                GROUP BY 1, 2, 3, 4
             ";
             $operatingBindings = array_merge([$start, $end], $this->vehicleScopeBindings());
         } else {
             $operatingSql = "
-                SELECT DISTINCT TRIM(dv.no_register) AS unit,
+                SELECT TRIM(dv.no_register) AS unit,
                     COALESCE(NULLIF(TRIM(dv.site::text), ''), '-') AS site,
-                    COALESCE(NULLIF(TRIM(dv.company_owner::text), ''), '-') AS perusahaan
+                    COALESCE(NULLIF(TRIM(dv.company_owner::text), ''), '-') AS perusahaan,
+                    'Online DMS' AS evidence_source,
+                    max(vsa.last_online_at) AS evidence_at,
+                    null::numeric AS evidence_value
                 FROM bcsid.dms_vehicle_status_alerts vsa
                 INNER JOIN bcsid.dms_vehicle dv ON TRIM(dv.no_register) = TRIM(vsa.vehicle_no)
                 WHERE vsa.last_online_at >= ? AND vsa.last_online_at < ?
                   AND vsa.vehicle_no IS NOT NULL AND TRIM(vsa.vehicle_no) <> ''
                   {$scopeWhereVehicle}
+                GROUP BY 1, 2, 3, 4, 6
             ";
             $operatingBindings = array_merge([$start, $end], $this->vehicleScopeBindings());
         }
@@ -815,7 +823,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 GROUP BY 1, 2
             ),
             joined AS (
-                SELECT o.unit, o.site, o.perusahaan, COALESCE(ua.alert_count, 0) AS alert_count
+                SELECT o.unit, o.site, o.perusahaan, o.evidence_source, o.evidence_at, o.evidence_value, COALESCE(ua.alert_count, 0) AS alert_count
                 FROM operating o
                 LEFT JOIN unit_alerts ua ON TRIM(o.unit) = TRIM(ua.unit) AND TRIM(o.site) = TRIM(ua.site)
             )
@@ -830,11 +838,11 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                 GROUP BY 1, 2
             ),
             joined AS (
-                SELECT o.unit, o.site, o.perusahaan, COALESCE(ua.alert_count, 0) AS alert_count
+                SELECT o.unit, o.site, o.perusahaan, o.evidence_source, o.evidence_at, o.evidence_value, COALESCE(ua.alert_count, 0) AS alert_count
                 FROM operating o
                 LEFT JOIN unit_alerts ua ON TRIM(o.unit) = TRIM(ua.unit) AND TRIM(o.site) = TRIM(ua.site)
             )
-            SELECT j.unit, j.site, j.perusahaan, j.alert_count
+            SELECT j.unit, j.site, j.perusahaan, j.evidence_source, j.evidence_at, j.evidence_value, j.alert_count
             FROM joined j{$statusWhere}
             ORDER BY j.alert_count DESC, j.unit ASC
             LIMIT ? OFFSET ?
@@ -856,6 +864,11 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             'unit' => (string) $r->unit,
             'site' => (string) $r->site,
             'perusahaan' => (string) $r->perusahaan,
+            'evidence_source' => (string) ($r->evidence_source ?? '-'),
+            'evidence_at' => ($r->evidence_at instanceof \DateTimeInterface)
+                ? $r->evidence_at->format('Y-m-d H:i:s')
+                : ($r->evidence_at !== null ? (string) $r->evidence_at : null),
+            'evidence_value' => $r->evidence_value !== null ? (float) $r->evidence_value : null,
             'alert_count' => (int) $r->alert_count,
             'has_alert' => (int) $r->alert_count > 0,
         ], $rows);

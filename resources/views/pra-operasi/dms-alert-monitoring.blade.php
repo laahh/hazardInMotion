@@ -742,6 +742,16 @@
       var alerts = Number(row.alert_count || 0);
       var hasAlert = !!row.has_alert && alerts > 0;
       var detailId = 'dms-overall-alerts-' + [row.unit || '-', row.site || '-', row.perusahaan || '-'].join('-').replace(/[^a-zA-Z0-9_-]/g, '_');
+      var evidenceSource = row.evidence_source || '-';
+      var evidenceAt = row.evidence_at || null;
+      var evidenceValue = row.evidence_value !== null && row.evidence_value !== undefined
+        ? Number(row.evidence_value)
+        : null;
+      var evidenceHtml = '<div class="fw-medium text-sm">' + evidenceSource + '</div>' +
+        '<div class="text-xs text-secondary-light">' + (evidenceAt || '-') + '</div>' +
+        (evidenceSource === 'GPS bergerak' && evidenceValue !== null
+          ? '<div class="text-xs text-primary-600 mt-4">Speed max: ' + evidenceValue.toFixed(1) + ' km/h</div>'
+          : '');
       var badge = hasAlert
         ? '<span class="badge bg-warning-focus text-warning-main border border-warning-main px-12 py-6">Ada alert</span>'
         : '<span class="badge bg-success-focus text-success-main border border-success-main px-12 py-6">Tidak ada alert</span>';
@@ -752,6 +762,7 @@
         '<td class="fw-medium">' + (row.unit || '-') + '</td>' +
         '<td>' + (row.site || '-') + '</td>' +
         '<td>' + (row.perusahaan || '-') + '</td>' +
+        '<td>' + evidenceHtml + '</td>' +
         '<td>' + badge + '</td>' +
         '<td class="text-end fw-semibold">' + alerts.toLocaleString('id-ID') + '</td>' +
         '<td>' + detailButton + '</td>';
@@ -762,7 +773,7 @@
         detailTr.id = detailId;
         detailTr.className = 'd-none';
         detailTr.innerHTML =
-          '<td colspan="6" class="bg-neutral-50">' +
+          '<td colspan="7" class="bg-neutral-50">' +
             '<div class="p-12">' +
               '<div class="text-xs text-secondary-light mb-8">Jenis alert pada unit ini</div>' +
               '<div class="d-flex flex-wrap gap-2" data-role="alert-list">' +

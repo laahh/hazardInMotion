@@ -99,6 +99,7 @@ final class DmsMonitoringOverallModalService
                         ['key' => 'unit', 'label' => 'Unit'],
                         ['key' => 'site', 'label' => 'Site'],
                         ['key' => 'perusahaan', 'label' => 'Perusahaan'],
+                        ['key' => 'evidence', 'label' => 'Bukti Operasi'],
                         ['key' => 'status', 'label' => 'Status Alert'],
                         ['key' => 'alert_count', 'label' => 'Total Alert'],
                         ['key' => 'detail', 'label' => 'Detail'],

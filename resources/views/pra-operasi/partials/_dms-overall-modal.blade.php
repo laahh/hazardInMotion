@@ -80,6 +80,7 @@
                       <th scope="col">Unit</th>
                       <th scope="col">Site</th>
                       <th scope="col">Perusahaan</th>
+                      <th scope="col" style="min-width: 220px;">Bukti Operasi</th>
                       <th scope="col" style="min-width: 160px;">Status Alert</th>
                       <th scope="col" class="text-end">Total Alert</th>
                       <th scope="col" style="min-width: 140px;">Detail</th>
