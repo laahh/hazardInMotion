@@ -114,7 +114,7 @@ final class SportEvaluationMitraAssignmentService
      */
     public function filterOptions(): array
     {
-        return Cache::remember('evaluasi_well:mitra_filter_options_v2', 300, function (): array {
+        return Cache::remember('evaluasi_well:mitra_filter_options_v3', 300, function (): array {
             $sites = $this->siteResolver->distinctDedicatedSites();
             $companyList = [];
 
@@ -145,34 +145,22 @@ final class SportEvaluationMitraAssignmentService
                         ->values()
                         ->all();
 
-                    foreach ($rawCompanies as $company) {
-                        $resolved = $this->companyAliasResolver->resolve($company) ?: $company;
-                        if ($resolved !== '') {
-                            $companyList[$resolved] = true;
-                        }
-                    }
+                    $this->mergeCompanyOptions($companyList, $rawCompanies);
                 } catch (Throwable $e) {
                     report($e);
                 }
             }
 
-            // Fallback: daftar Minecon jika BeWell down / kosong.
+            $mitraCompanies = config('evaluasi_well_mitra_companies', []);
+            if (is_array($mitraCompanies)) {
+                $this->mergeCompanyOptions($companyList, $mitraCompanies);
+            }
+
+            // Fallback: daftar Minecon jika BeWell down / kosong dan config mitra kosong.
             if ($companyList === []) {
                 $fallback = config('evaluasi_well_minecon_companies', []);
                 if (is_array($fallback)) {
-                    foreach ($fallback as $company) {
-                        if (! is_string($company)) {
-                            continue;
-                        }
-                        $trimmed = trim($company);
-                        if ($trimmed === '') {
-                            continue;
-                        }
-                        $resolved = $this->companyAliasResolver->resolve($trimmed) ?: $trimmed;
-                        if ($resolved !== '') {
-                            $companyList[$resolved] = true;
-                        }
-                    }
+                    $this->mergeCompanyOptions($companyList, $fallback);
                 }
             }
 
@@ -327,5 +315,28 @@ final class SportEvaluationMitraAssignmentService
         $resolved = $this->companyAliasResolver->resolve($company);
 
         return $resolved !== '' ? $resolved : trim($company);
+    }
+
+    /**
+     * @param  array<string, true>  $companyList
+     * @param  array<int|string, mixed>  $companies
+     */
+    private function mergeCompanyOptions(array &$companyList, array $companies): void
+    {
+        foreach ($companies as $company) {
+            if (! is_string($company)) {
+                continue;
+            }
+
+            $trimmed = trim($company);
+            if ($trimmed === '') {
+                continue;
+            }
+
+            $resolved = $this->companyAliasResolver->resolve($trimmed) ?: $trimmed;
+            if ($resolved !== '') {
+                $companyList[$resolved] = true;
+            }
+        }
     }
 }

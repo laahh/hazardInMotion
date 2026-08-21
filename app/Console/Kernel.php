@@ -137,6 +137,24 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/pra-operasi-sync-roster.log'));
 
+        $schedule->command('ohs-dashboard:digest')
+            ->timezone('Asia/Jakarta')
+            ->everyMinute()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/ohs-dashboard-digest.log'));
+
+        $schedule->command('ohs-dashboard:overdue-reminder')
+            ->timezone('Asia/Jakarta')
+            ->everyMinute()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/ohs-dashboard-overdue.log'));
+
+        $schedule->command('ohs-dashboard:hse-sync')
+            ->timezone('Asia/Jakarta')
+            ->everyMinute()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/ohs-dashboard-hse-sync.log'));
+
         // Pra Operasi Fase 3: tutup buku evaluasi harian kemarin, jam 01:00
         // (memberi jeda supaya seluruh checkin shift malam kemarin sudah pasti selesai).
         $schedule->command('pra-operasi:evaluate-day')

@@ -68,6 +68,14 @@ use App\Http\Controllers\UnitMtdController;
 
 require __DIR__ . '/sid_meeting.php';
 
+Route::prefix('ohs-dashboard')
+    ->name('ohs-dashboard.')
+    ->group(base_path('routes/OhsDashboard/web.php'));
+
+Route::prefix('ohs-dashboard/api')
+    ->name('ohs-dashboard.api.')
+    ->group(base_path('routes/OhsDashboard/api.php'));
+
 Auth::routes();
 
 // Form publik Auto Banned — tanpa login
@@ -929,5 +937,5 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     // Define a GET route with dynamic placeholders for route parameters
     // HARUS di akhir agar tidak menangkap route spesifik di atas
     Route::get('{routeName}/{name?}', [HomeController::class, 'pageView'])
-        ->where('routeName', '^(?!sid-meeting$|attendance$|hsecm$).+');
+        ->where('routeName', '^(?!sid-meeting$|attendance$|hsecm$|ohs-dashboard$).+');
 });
