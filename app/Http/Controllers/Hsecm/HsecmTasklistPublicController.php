@@ -8,6 +8,7 @@ use App\Actions\Hsecm\HsecmBuildTasklistSubmitMasterSodWaLinksAction;
 use App\Actions\Hsecm\HsecmNotifyTasklistSubmitToSodAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Hsecm\HsecmTasklistSubmitRequest;
+use App\Services\Hsecm\HsecmTasklistEvidenceUpload;
 use App\Services\Hsecm\HsecmTasklistService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -60,6 +61,11 @@ class HsecmTasklistPublicController extends Controller
             'programLabel' => 'Tasklist Monitoring & Intervensi',
             'programCode' => 'Daily',
             'isPublicAccess' => true,
+            'evidenceMaxKb' => HsecmTasklistEvidenceUpload::appMaxKilobytes(),
+            'phpUploadLimitBelowApp' => HsecmTasklistEvidenceUpload::phpLimitIsBelowAppMax(),
+            'phpUploadLimitMb' => HsecmTasklistEvidenceUpload::formatMegabytes(
+                HsecmTasklistEvidenceUpload::phpLimitBytes()
+            ),
         ]);
     }
 

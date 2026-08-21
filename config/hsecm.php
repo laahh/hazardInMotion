@@ -20,6 +20,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Tasklist public upload (evidence)
+    |--------------------------------------------------------------------------
+    | App max = 10 MB. PHP/nginx harus >= ini, jika tidak file 7 MB pun gagal
+    | sebelum validasi Laravel (upload_max_filesize default sering 2M).
+    | Nginx: client_max_body_size 16M;
+    */
+    'tasklist_evidence' => [
+        'max_kb' => (int) env('HSECM_TASKLIST_EVIDENCE_MAX_KB', 10240),
+        'mimes' => 'jpg,jpeg,png,pdf,webp,doc,docx,xls,xlsx',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Scheduler (Asia/Makassar) — lihat app/Console/Kernel.php
     |--------------------------------------------------------------------------
     | Midshift 01:00 → batch_slot 00:00 (night)

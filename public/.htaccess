@@ -19,3 +19,13 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# HSECM tasklist evidence max 10 MB (hanya berlaku jika Apache memakai mod_php).
+<IfModule mod_php.c>
+    php_value upload_max_filesize 12M
+    php_value post_max_size 16M
+</IfModule>
+<IfModule mod_php8.c>
+    php_value upload_max_filesize 12M
+    php_value post_max_size 16M
+</IfModule>

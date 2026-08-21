@@ -126,13 +126,21 @@
           <div class="rounded-xl border border-teal-100 bg-teal-50/60 px-4 py-4 space-y-3">
             <div>
               <label class="block text-xs font-bold uppercase tracking-wide text-teal-900 mb-1">Evidence (1 file untuk semua item terpilih)</label>
-              <input type="file" name="evidence_shared" required
+              <input type="file" name="evidence_shared" required id="hsecm-evidence-shared"
                      class="block w-full text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-teal-700 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white"
                      accept=".jpg,.jpeg,.png,.pdf,.webp,.doc,.docx,.xls,.xlsx" />
               <p class="text-[11px] text-teal-800/80 mt-1">
                 Satu file evidence akan dipakai untuk semua gap yang masih open/rejected yang Anda centang
-                ({{ $submittableCount }} item siap submit). Maks. 10 MB.
+                ({{ $submittableCount }} item siap submit). Maks. {{ (int) floor(($evidenceMaxKb ?? 10240) / 1024) }} MB.
               </p>
+              @if(! empty($phpUploadLimitBelowApp))
+                <p class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-2">
+                  Server saat ini membatasi upload di
+                  <strong>{{ $phpUploadLimitMb }} MB</strong>
+                  (PHP <code>upload_max_filesize</code> / <code>post_max_size</code>).
+                  File 7 MB akan gagal sampai limit PHP dan nginx <code>client_max_body_size</code> dinaikkan minimal 16M.
+                </p>
+              @endif
             </div>
           </div>
         @endif
@@ -384,6 +392,19 @@
     @else
       syncSelectAll();
     @endif
+
+    const evidenceInput = document.getElementById('hsecm-evidence-shared');
+    const evidenceMaxBytes = {{ (int) (($evidenceMaxKb ?? 10240) * 1024) }};
+    if (evidenceInput) {
+      evidenceInput.addEventListener('change', () => {
+        const file = evidenceInput.files && evidenceInput.files[0];
+        if (!file) return;
+        if (file.size > evidenceMaxBytes) {
+          alert('Ukuran evidence maksimal 10 MB.');
+          evidenceInput.value = '';
+        }
+      });
+    }
 
     // Default: collapse semua program (ringkas). User bisa "Lihat" per program.
     document.querySelectorAll('.hsecm-program-group').forEach((el) => setGroupOpen(el, false));
