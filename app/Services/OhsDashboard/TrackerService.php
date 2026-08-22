@@ -329,31 +329,21 @@ final class TrackerService
         $site = OhsDashboardPayload::string($payload, 'site');
         $search = mb_strtolower(OhsDashboardPayload::string($payload, 'search'));
 
-        $query = ProjectIssueTracker::query()->withCount('subTasks');
+        $query = ProjectIssueTracker::query()->withCount('subTasks')->with('subTasks');
         if (! $this->support->isAllType($type) && $type !== '') {
             $query->where('tracker_type', $type);
         }
-        if (! $this->support->isAllTeam($department) && $department !== '') {
-            $query->where('department', $department);
-        }
-        if (! $this->support->isAllSite($site) && $site !== '') {
-            $query->where('site', $site);
-        }
-        if ($search !== '') {
-            $like = '%'.$search.'%';
-            $query->where(function ($builder) use ($like): void {
-                $builder->where('project_issue_name', 'like', $like)
-                    ->orWhere('project_leader_name', 'like', $like)
-                    ->orWhere('department', 'like', $like)
-                    ->orWhere('site', 'like', $like)
-                    ->orWhere('tracker_id', 'like', $like);
-            });
-        }
 
-        $trackers = $query->orderBy('due_date')->limit(300)->get();
+        $trackers = $query->orderBy('due_date')->get();
         $filtered = [];
 
         foreach ($trackers as $tracker) {
+            if (! $this->matchesDepartmentSite($tracker, $department, $site)) {
+                continue;
+            }
+            if ($search !== '' && ! $this->matchesSearch($tracker, $search)) {
+                continue;
+            }
             $tracker->status = $this->support->deriveTrackerStatus(
                 (float) $tracker->current_percent_complete,
                 $tracker->due_date,
@@ -392,10 +382,12 @@ final class TrackerService
             return strcmp($a->project_issue_name, $b->project_issue_name);
         });
 
+        $filtered = array_slice($filtered, 0, 300);
+
         return [
             'counts' => $counts,
             'trackers' => array_map(
-                fn (ProjectIssueTracker $tracker): array => $this->enrichTracker($tracker, false),
+                fn (ProjectIssueTracker $tracker): array => $this->enrichTracker($tracker, true),
                 $filtered,
             ),
         ];

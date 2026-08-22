@@ -237,10 +237,129 @@ function employeePicker(root, hiddenName, onSelect) {
     });
 }
 
+function createSortableTable(mount, config) {
+    const state = { sortKey: config.defaultSort || null, sortDir: 'asc', filters: {}, page: 1 };
+    const pageSize = config.pageSize || 10;
+
+    const theadSortRow = config.columns.map((col) => {
+        if (col.sortable === false) return `<th>${escapeHtml(col.label)}</th>`;
+        return `<th><button type="button" class="ohs-th-sort" data-sort="${col.key}">${escapeHtml(col.label)} <span class="ohs-sort-arrow" data-arrow="${col.key}">↕</span></button></th>`;
+    }).join('');
+    const theadFilterRow = config.columns.map((col) => {
+        if (col.searchable === false) return '<th></th>';
+        return `<th><input type="search" class="ohs-th-filter" data-filter="${col.key}" placeholder="Cari…"></th>`;
+    }).join('');
+
+    mount.innerHTML = `
+        <div class="ohs-table-wrap">
+            <table class="ohs-table">
+                <thead><tr>${theadSortRow}</tr><tr class="ohs-table-filter-row">${theadFilterRow}</tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="ohs-pager" data-pager></div>`;
+
+    const tbody = mount.querySelector('tbody');
+    const pager = mount.querySelector('[data-pager]');
+
+    function filteredSortedRows() {
+        let rows = (config.rows || []).slice();
+        config.columns.forEach((col) => {
+            const q = (state.filters[col.key] || '').trim().toLowerCase();
+            if (!q) return;
+            rows = rows.filter((row) => String(col.searchValue ? col.searchValue(row) : (row[col.key] ?? '')).toLowerCase().includes(q));
+        });
+        if (state.sortKey) {
+            const col = config.columns.find((c) => c.key === state.sortKey);
+            if (col) {
+                const dir = state.sortDir === 'desc' ? -1 : 1;
+                rows.sort((a, b) => {
+                    const va = col.sortValue ? col.sortValue(a) : (a[col.key] ?? '');
+                    const vb = col.sortValue ? col.sortValue(b) : (b[col.key] ?? '');
+                    if (va < vb) return -1 * dir;
+                    if (va > vb) return 1 * dir;
+                    return 0;
+                });
+            }
+        }
+        return rows;
+    }
+
+    function renderBody() {
+        const filtered = filteredSortedRows();
+        const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+        state.page = Math.min(state.page, totalPages);
+        const pageRows = filtered.slice((state.page - 1) * pageSize, state.page * pageSize);
+        tbody.innerHTML = pageRows.length
+            ? pageRows.map((row) => `<tr class="${config.rowClass ? config.rowClass(row) : ''}">${config.columns.map((col) => `<td>${col.render ? col.render(row) : escapeHtml(row[col.key] ?? '')}</td>`).join('')}</tr>${config.detailRow ? config.detailRow(row) : ''}`).join('')
+            : emptyCell(config.columns.length, config.emptyText || 'Belum ada data');
+        pager.innerHTML = `
+            <span class="ohs-muted">${filtered.length} data</span>
+            <button type="button" class="btn-ghost" data-page="first" ${state.page <= 1 ? 'disabled' : ''}>«</button>
+            <button type="button" class="btn-ghost" data-page="prev" ${state.page <= 1 ? 'disabled' : ''}>‹</button>
+            <span>${state.page} / ${totalPages}</span>
+            <button type="button" class="btn-ghost" data-page="next" ${state.page >= totalPages ? 'disabled' : ''}>›</button>
+            <button type="button" class="btn-ghost" data-page="last" ${state.page >= totalPages ? 'disabled' : ''}>»</button>`;
+        pager.querySelectorAll('[data-page]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                if (btn.dataset.page === 'first') state.page = 1;
+                if (btn.dataset.page === 'prev') state.page = Math.max(1, state.page - 1);
+                if (btn.dataset.page === 'next') state.page = state.page + 1;
+                if (btn.dataset.page === 'last') state.page = totalPages;
+                renderBody();
+            });
+        });
+        mount.querySelectorAll('[data-arrow]').forEach((span) => {
+            const active = state.sortKey === span.dataset.arrow;
+            span.textContent = active ? (state.sortDir === 'asc' ? '▲' : '▼') : '↕';
+        });
+        if (config.onRender) config.onRender(pageRows, mount);
+    }
+
+    mount.querySelectorAll('[data-sort]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const key = btn.dataset.sort;
+            if (state.sortKey === key) state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+            else { state.sortKey = key; state.sortDir = 'asc'; }
+            renderBody();
+        });
+    });
+    mount.querySelectorAll('[data-filter]').forEach((input) => {
+        input.addEventListener('input', debounce(() => {
+            state.filters[input.dataset.filter] = input.value;
+            state.page = 1;
+            renderBody();
+        }, 200));
+    });
+
+    renderBody();
+
+    return {
+        setRows(rows) { config.rows = rows; state.page = 1; renderBody(); },
+        refresh: renderBody,
+    };
+}
+
 let INIT = null;
 async function loadInit() {
     if (!INIT) INIT = await api('/init');
     return INIT;
+}
+
+async function openLeaveHistory(empId, year) {
+    const hist = await api(`/leave/history?empId=${encodeURIComponent(empId)}&year=${encodeURIComponent(year)}`);
+    openModal('Riwayat Cuti ' + (hist.employee.EmpName || ''), `
+        <div class="ohs-kpis" style="grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));">
+            ${kpiCard('Total Working Days YTD', hist.ytdWorkingDays)}
+            ${kpiCard('Leave YTD', hist.leaveDaysYTD, 'red')}
+            ${kpiCard('Effective Working Days', hist.effectiveWorkingDays, 'blue')}
+            ${kpiCard('Effective Working %', hist.effectiveWorkingPercent + '%', 'blue')}
+            ${kpiCard('Total Requests', hist.totalRequests)}
+        </div>
+        <div class="ohs-table-wrap">
+            <table class="ohs-table"><thead><tr><th>Tipe</th><th>Start</th><th>End</th><th>Hari</th><th>Status</th></tr></thead>
+            <tbody>${hist.records.length ? hist.records.map((r) => `<tr><td>${escapeHtml(r.LeaveType)}</td><td>${escapeHtml(r.StartDate)}</td><td>${escapeHtml(r.EndDate)}</td><td>${r.LeaveDays}</td><td>${badge(r.Status)}</td></tr>`).join('') : emptyCell(5, 'Belum ada riwayat cuti')}</tbody></table>
+        </div>`);
 }
 
 function initOverview() {
@@ -250,6 +369,150 @@ function initOverview() {
     const site = document.getElementById('filter-site');
     const year = document.getElementById('filter-year');
     const req = {};
+    let trackerTable = null;
+    let leaderboardCache = [];
+    const eventGroupData = {};
+    const leaveGroupData = {};
+
+    page.querySelectorAll('[data-collapse-toggle]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const target = document.getElementById(btn.dataset.collapseTarget);
+            const collapsed = target.classList.toggle('collapsed');
+            btn.textContent = collapsed ? '+' : '−';
+        });
+    });
+
+    function sortItems(items, mode, dateKey, nameKey) {
+        const sorted = items.slice();
+        if (mode === 'dateDesc') sorted.sort((a, b) => String(b[dateKey] || '').localeCompare(String(a[dateKey] || '')));
+        else if (mode === 'nameAsc') sorted.sort((a, b) => String(a[nameKey] || '').localeCompare(String(b[nameKey] || '')));
+        else sorted.sort((a, b) => String(a[dateKey] || '').localeCompare(String(b[dateKey] || '')));
+        return sorted;
+    }
+
+    function renderEventGroup(key) {
+        const card = page.querySelector(`[data-event-group="${key}"]`);
+        if (!card) return;
+        const items = eventGroupData[key] || [];
+        card.querySelector('[data-count]').textContent = items.length;
+        const mode = card.querySelector('[data-sort-select]').value;
+        const sorted = sortItems(items, mode, 'EventDate', 'EventName');
+        card.querySelector('[data-item-list]').innerHTML = sorted.length ? sorted.map((it) => `
+            <div class="ohs-item">
+                <div class="ohs-item-title">${escapeHtml(it.EventName)}</div>
+                <div class="ohs-item-meta">${escapeHtml(it.EventDate || '-')} • ${escapeHtml(it.PICName || '-')} • ${escapeHtml(it.Where || '-')}</div>
+            </div>`).join('') : '<div class="ohs-empty">Tidak ada data pada periode ini</div>';
+    }
+
+    function renderLeaveGroup(key) {
+        const card = page.querySelector(`[data-leave-group="${key}"]`);
+        if (!card) return;
+        const items = leaveGroupData[key] || [];
+        card.querySelector('[data-count]').textContent = items.length;
+        const mode = card.querySelector('[data-sort-select]').value;
+        const sorted = sortItems(items, mode, 'StartDate', 'EmpName');
+        card.querySelector('[data-item-list]').innerHTML = sorted.length ? sorted.map((it) => `
+            <div class="ohs-item">
+                <div class="ohs-item-title">${escapeHtml(it.EmpName)}</div>
+                <div class="ohs-item-meta">${escapeHtml(it.LeaveType || '-')} • ${escapeHtml(it.StartDate || '-')} → ${escapeHtml(it.EndDate || '-')}</div>
+            </div>`).join('') : '<div class="ohs-empty">Tidak ada data pada periode ini</div>';
+    }
+
+    page.querySelectorAll('[data-event-group] [data-sort-select]').forEach((sel) => {
+        sel.addEventListener('change', () => renderEventGroup(sel.closest('[data-event-group]').dataset.eventGroup));
+    });
+    page.querySelectorAll('[data-leave-group] [data-sort-select]').forEach((sel) => {
+        sel.addEventListener('change', () => renderLeaveGroup(sel.closest('[data-leave-group]').dataset.leaveGroup));
+    });
+
+    function ensureTrackerTable() {
+        if (trackerTable) return trackerTable;
+        trackerTable = createSortableTable(document.getElementById('overview-tracker-mount'), {
+            pageSize: 10,
+            rows: [],
+            emptyText: 'Belum ada tracker',
+            rowClass: (t) => t.EffectiveStatus === 'Closed' ? 'closed' : t.EffectiveStatus === 'Overdue' ? 'overdue' : '',
+            columns: [
+                {
+                    key: 'type', label: 'Type', sortValue: (t) => t.TrackerType, searchValue: (t) => t.TrackerType + ' ' + t.TrackerId,
+                    render: (t) => `<span class="ohs-tracker-type">${escapeHtml(t.TrackerType)}</span><div class="ohs-person-sub">${escapeHtml(t.TrackerId)}</div>`,
+                },
+                { key: 'name', label: 'Project / Issue', sortValue: (t) => t.ProjectIssueName, render: (t) => `<b>${escapeHtml(t.ProjectIssueName)}</b>` },
+                {
+                    key: 'dept', label: 'Department / Site', sortValue: (t) => t.Department, searchValue: (t) => (t.Department || '') + ' ' + (t.Site || ''),
+                    render: (t) => `${escapeHtml(t.Department || '-')}<div class="ohs-person-sub">${escapeHtml(t.Site || '-')}</div>`,
+                },
+                { key: 'leader', label: 'Project Leader', sortValue: (t) => t.ProjectLeaderName, render: (t) => escapeHtml(t.ProjectLeaderName || t.ProjectLeaderEmpId || '-') },
+                {
+                    key: 'timeline', label: 'Timeline', sortValue: (t) => t.DueDate || '', searchValue: (t) => (t.StartDate || '') + ' ' + (t.DueDate || ''),
+                    render: (t) => `${escapeHtml(t.StartDate || '-')}<br>→ ${escapeHtml(t.DueDate || '-')}`,
+                },
+                {
+                    key: 'subtasks', label: 'Sub Tasks / PIC', sortable: false, searchValue: (t) => (t.SubTasks || []).map((s) => s.SubTaskName + ' ' + (s.PICName || '')).join(' '),
+                    render: (t) => {
+                        const tasks = t.SubTasks || [];
+                        if (!tasks.length) return '<span class="ohs-tracker-no-subtask-label">NO SUB TASK</span>';
+                        return `<b>${tasks.length} Sub Task</b><div class="ohs-subtask-summary">${tasks.slice(0, 4).map((s) => `<span class="ohs-subtask-chip">${escapeHtml(s.SubTaskName)} • ${escapeHtml(s.PICName || s.PICEmpId || '-')}</span>`).join('')}</div>`;
+                    },
+                },
+                { key: 'percent', label: '% Complete', sortValue: (t) => Number(t.CurrentPercentComplete || 0), render: (t) => progressBar(t.CurrentPercentComplete) },
+                {
+                    key: 'status', label: 'Status', sortValue: (t) => t.EffectiveStatus === 'Overdue' ? 0 : t.EffectiveStatus === 'On Going' ? 1 : 2,
+                    render: (t) => `<span class="ohs-tracker-status ${trackerStatusBadgeClass(t.EffectiveStatus)}">${escapeHtml(t.EffectiveStatus)}</span>`,
+                },
+                { key: 'report', label: 'Latest Weekly Report', sortValue: (t) => t.CurrentProgressReportWeekly || '', render: (t) => escapeHtml(t.CurrentProgressReportWeekly || '-') },
+                {
+                    key: 'action', label: 'Action', sortable: false, searchable: false,
+                    render: (t) => `<button type="button" class="btn-ghost" data-view-tracker="${escapeHtml(t.TrackerId)}">Buka</button>`,
+                },
+            ],
+            onRender: (pageRows, mount) => {
+                mount.querySelectorAll('[data-view-tracker]').forEach((btn) => btn.addEventListener('click', () => { location.href = '/ohs-dashboard/tracker'; }));
+            },
+        });
+        return trackerTable;
+    }
+
+    function renderLeaderboardList() {
+        const search = document.getElementById('leaderboard-search').value.trim().toLowerCase();
+        const mode = document.getElementById('leaderboard-sort').value;
+        let items = leaderboardCache.slice();
+        if (search) {
+            items = items.filter((it) => [it.EmpId, it.EmpName, it.Position, it.Team, it.SiteDedicated].some((v) => String(v || '').toLowerCase().includes(search)));
+        }
+        if (mode === 'effectiveDesc') items.sort((a, b) => (b.EffectiveWorkingPercent || 0) - (a.EffectiveWorkingPercent || 0));
+        else if (mode === 'effectiveAsc') items.sort((a, b) => (a.EffectiveWorkingPercent || 0) - (b.EffectiveWorkingPercent || 0));
+        else if (mode === 'nameAsc') items.sort((a, b) => String(a.EmpName || '').localeCompare(String(b.EmpName || '')));
+        else items.sort((a, b) => (b.LeaveYTD || 0) - (a.LeaveYTD || 0));
+
+        const list = document.getElementById('leaderboard-list');
+        list.innerHTML = items.length ? items.map((it, idx) => `
+            <div class="ohs-leaderboard-sidebar-item">
+                <div class="ohs-leaderboard-rank">${idx + 1}</div>
+                <div class="ohs-leaderboard-avatar">${escapeHtml(String(it.EmpName || '').trim().split(/\s+/).map((p) => p[0] || '').slice(0, 2).join('').toUpperCase() || '?')}</div>
+                <div style="min-width:0;">
+                    <button type="button" class="link-button" data-emp="${escapeHtml(it.EmpId)}" style="background:none;border:0;padding:0;font-weight:700;cursor:pointer;color:inherit;text-align:left;">${escapeHtml(it.EmpName)}</button>
+                    <div class="ohs-person-sub">${escapeHtml(it.Position || it.EmpId)}</div>
+                    <div class="ohs-person-sub">${escapeHtml(it.Team || '-')} • ${escapeHtml(it.SiteDedicated || '-')}</div>
+                </div>
+                <div class="ohs-leaderboard-days"><b>${it.LeaveYTD || 0}</b>leave days<small>${it.EffectiveWorkingDays || 0} effective days</small></div>
+            </div>`).join('') : '<div class="ohs-empty">Tidak ada employee sesuai pencarian.</div>';
+        list.querySelectorAll('[data-emp]').forEach((btn) => btn.addEventListener('click', () => runSafe(openLeaveHistory(btn.dataset.emp, year.value))));
+    }
+
+    function setLeaderboardOpen(open) {
+        document.getElementById('leaderboard-sidebar').classList.toggle('open', open);
+        document.getElementById('leaderboard-toggle').classList.toggle('open', open);
+        document.getElementById('leaderboard-toggle').textContent = open ? '›' : '‹';
+        document.getElementById('leaderboard-sidebar').setAttribute('aria-hidden', open ? 'false' : 'true');
+        document.getElementById('leaderboard-backdrop').classList.toggle('hide', !open);
+    }
+
+    document.getElementById('leaderboard-search').addEventListener('input', debounce(renderLeaderboardList, 200));
+    document.getElementById('leaderboard-sort').addEventListener('change', renderLeaderboardList);
+    document.getElementById('leaderboard-toggle').addEventListener('click', () => setLeaderboardOpen(true));
+    document.getElementById('leaderboard-close').addEventListener('click', () => setLeaderboardOpen(false));
+    document.getElementById('leaderboard-backdrop').addEventListener('click', () => setLeaderboardOpen(false));
 
     async function refresh() {
         const data = await api('/dashboard/overview', {
@@ -259,72 +522,42 @@ function initOverview() {
         });
         const k = data.kpis;
         document.getElementById('overview-kpis').innerHTML = [
-            kpiCard('Event This Week', k.eventThisWeek, 'blue'),
-            kpiCard('Upcoming Event', k.upcomingEvent, 'blue'),
-            kpiCard('Leave This Week', k.leaveThisWeek, 'purple'),
-            kpiCard('Upcoming Leave', k.upcomingLeave, 'purple'),
-            kpiCard('Project Active', k.projectActive),
-            kpiCard('Issue Active', k.issueActive, 'amber'),
-            kpiCard('Effective %', data.workforceEffectiveness.effectiveWorkingPercent, 'gold'),
+            kpiCard('Event This Week', k.eventThisWeek, 'green', 'Event pada minggu berjalan'),
+            kpiCard('Upcoming Event', k.upcomingEvent, 'blue', 'Mulai minggu depan'),
+            kpiCard('Leave This Week', k.leaveThisWeek, 'red', 'Leave yang beririsan minggu ini'),
+            kpiCard('Upcoming Leave', k.upcomingLeave, 'orange', 'Leave setelah minggu berjalan'),
+            kpiCard('Project Active', k.projectActive, 'green', 'Project On Going dan Overdue'),
+            kpiCard('Issue Active', k.issueActive, 'red', 'Issue On Going dan Overdue'),
         ].join('');
 
-        const renderGroup = (title, items, fields) => {
-            const body = (items || []).map((it) => `<tr class="is-clickable" data-kind="${escapeHtml(fields.kind)}" data-id="${escapeHtml(it[fields.id] || '')}">${fields.cols.map((f) => `<td>${escapeHtml(it[f] ?? '')}</td>`).join('')}</tr>`).join('') || emptyCell(4, 'Tidak ada data pada periode ini');
-            return `<details open><summary class="collapse-h">${title} (${(items || []).length})</summary><table class="ohs-table">${body}</table></details>`;
-        };
-        document.getElementById('overview-events').innerHTML =
-            '<h3>Event Status</h3>' +
-            renderGroup('This Week', data.eventStatus.thisWeek, { cols: ['EventName', 'EventDate', 'PICName', 'Where'], id: 'EventId', kind: 'event' }) +
-            renderGroup('Next Week', data.eventStatus.nextWeek, { cols: ['EventName', 'EventDate', 'PICName', 'Where'], id: 'EventId', kind: 'event' }) +
-            renderGroup('Next 2 Week', data.eventStatus.nextTwoWeek, { cols: ['EventName', 'EventDate', 'PICName', 'Where'], id: 'EventId', kind: 'event' }) +
-            renderGroup('More Than 2 Weeks Ahead', data.eventStatus.moreThanTwoWeeks, { cols: ['EventName', 'EventDate', 'PICName', 'Where'], id: 'EventId', kind: 'event' });
+        document.getElementById('dashboard-period').textContent =
+            `Tahun ${data.year} • Minggu acuan: ${data.windows.thisWeekStart} s/d ${data.windows.thisWeekEnd}`;
 
-        document.getElementById('overview-leave').innerHTML =
-            '<h3>Leave Status</h3>' +
-            renderGroup('Leave This Week', data.leaveStatus.thisWeek, { cols: ['EmpName', 'LeaveType', 'StartDate', 'EndDate'], id: 'RequestId', kind: 'leave' }) +
-            renderGroup('Upcoming Leave', data.leaveStatus.upcoming, { cols: ['EmpName', 'LeaveType', 'StartDate', 'EndDate'], id: 'RequestId', kind: 'leave' });
+        eventGroupData.thisWeek = data.eventStatus.thisWeek || [];
+        eventGroupData.nextWeek = data.eventStatus.nextWeek || [];
+        eventGroupData.nextTwoWeek = data.eventStatus.nextTwoWeek || [];
+        eventGroupData.moreThanTwoWeeks = data.eventStatus.moreThanTwoWeeks || [];
+        page.querySelector('[data-event-group="thisWeek"] [data-period]').textContent = `${data.windows.thisWeekStart} - ${data.windows.thisWeekEnd}`;
+        page.querySelector('[data-event-group="nextWeek"] [data-period]').textContent = `${data.windows.nextWeekStart} - ${data.windows.nextWeekEnd}`;
+        page.querySelector('[data-event-group="nextTwoWeek"] [data-period]').textContent = `${data.windows.nextTwoWeekStart} - ${data.windows.nextTwoWeekEnd}`;
+        ['thisWeek', 'nextWeek', 'nextTwoWeek', 'moreThanTwoWeeks'].forEach(renderEventGroup);
 
-        page.querySelectorAll('#overview-events tr[data-id], #overview-leave tr[data-id]').forEach((tr) => {
-            if (!tr.dataset.id) return;
-            tr.addEventListener('click', () => {
-                if (tr.dataset.kind === 'event') location.href = '/ohs-dashboard/events';
-                if (tr.dataset.kind === 'leave') location.href = '/ohs-dashboard/leave';
-            });
+        leaveGroupData.thisWeek = data.leaveStatus.thisWeek || [];
+        leaveGroupData.upcoming = data.leaveStatus.upcoming || [];
+        ['thisWeek', 'upcoming'].forEach(renderLeaveGroup);
+
+        leaderboardCache = data.leaderboard || [];
+        document.getElementById('leaderboard-note').textContent = `Leave days & effective working days ${data.year} • weekend dan holiday tidak dihitung`;
+        renderLeaderboardList();
+
+        const tc = { onGoing: 0, overdue: 0, closed: 0 };
+        (data.trackerHighlights || []).forEach((t) => {
+            if (t.EffectiveStatus === 'On Going') tc.onGoing++;
+            else if (t.EffectiveStatus === 'Overdue') tc.overdue++;
+            else if (t.EffectiveStatus === 'Closed') tc.closed++;
         });
-
-        const w = data.workforceEffectiveness;
-        document.getElementById('overview-effectiveness').innerHTML = `<h3>Workforce Effectiveness</h3>
-            <p class="ohs-muted">${w.employeeCount} karyawan · ${w.leavePersonDays} hari cuti YTD · ${w.effectivePersonDays} hari efektif</p>
-            <div class="effectiveness-bar"><span style="width:${Number(w.effectiveWorkingPercent) || 0}%"></span></div>
-            <p style="margin:10px 0 0;font-weight:800;font-size:22px">${w.effectiveWorkingPercent}%</p>`;
-        document.getElementById('overview-leaderboard').innerHTML = `<h3>Leaderboard Working Days</h3>
-            <table class="ohs-table"><thead><tr><th>Nama</th><th>Team</th><th>Leave YTD</th><th>Effective %</th></tr></thead>
-            <tbody>${data.leaderboard.length ? data.leaderboard.map((r) => `<tr class="is-clickable" data-emp="${escapeHtml(r.EmpId)}"><td>${personCell(r.EmpName, r.Position)}</td><td>${escapeHtml(r.Team)}</td><td>${r.LeaveYTD}</td><td>${progressBar(r.EffectiveWorkingPercent)}</td></tr>`).join('') : emptyCell(4, 'Roster masih kosong')}</tbody></table>`;
-        document.getElementById('overview-leaderboard').querySelectorAll('tr[data-emp]').forEach((tr) => {
-            tr.addEventListener('click', () => runSafe((async () => {
-                const hist = await api(`/leave/history?empId=${encodeURIComponent(tr.dataset.emp)}&year=${year.value}`);
-                openModal('Riwayat Cuti ' + (hist.employee.EmpName || ''), `<p>Leave YTD: ${hist.leaveDaysYTD} hari • Effective: ${hist.effectiveWorkingPercent}%</p>
-                    <table class="ohs-table"><tr><th>Tipe</th><th>Start</th><th>End</th><th>Status</th></tr>
-                    ${hist.records.map((r) => `<tr><td>${escapeHtml(r.LeaveType)}</td><td>${r.StartDate}</td><td>${r.EndDate}</td><td>${r.Status}</td></tr>`).join('')}</table>`);
-            })()));
-        });
-
-        const pageSize = 10;
-        let pageNo = 1;
-        const renderTrackers = () => {
-            const all = data.trackerHighlights || [];
-            const slice = all.slice((pageNo - 1) * pageSize, pageNo * pageSize);
-            document.getElementById('overview-trackers').innerHTML = `<h3>Tracker Highlights</h3>
-                <table class="ohs-table"><thead><tr><th>Type</th><th>Nama</th><th>Status</th><th>Due</th><th>%</th></tr></thead>
-                <tbody>${slice.length ? slice.map((t) => `<tr class="is-clickable" data-id="${escapeHtml(t.TrackerId)}"><td>${escapeHtml(t.TrackerType)}</td><td>${escapeHtml(t.ProjectIssueName)}</td><td>${badge(t.EffectiveStatus)}</td><td>${t.DueDate}</td><td>${progressBar(t.CurrentPercentComplete)}</td></tr>`).join('') : emptyCell(5, 'Belum ada tracker')}</tbody></table>
-                <div class="ohs-pager"><button type="button" class="btn-ghost" id="trk-prev">Prev</button><span>Hal ${pageNo}</span><button type="button" class="btn-ghost" id="trk-next">Next</button></div>`;
-            document.getElementById('overview-trackers').querySelectorAll('tr[data-id]').forEach((tr) => {
-                tr.addEventListener('click', () => { location.href = '/ohs-dashboard/tracker'; });
-            });
-            document.getElementById('trk-prev').onclick = () => { if (pageNo > 1) { pageNo--; renderTrackers(); } };
-            document.getElementById('trk-next').onclick = () => { if (pageNo * pageSize < all.length) { pageNo++; renderTrackers(); } };
-        };
-        renderTrackers();
+        document.getElementById('overview-tracker-counts').innerHTML = `${statChip('On Going', tc.onGoing)}${statChip('Overdue', tc.overdue)}${statChip('Closed', tc.closed)}`;
+        ensureTrackerTable().setRows(data.trackerHighlights || []);
     }
 
     loadInit().then((init) => {
@@ -347,6 +580,34 @@ function initLeave() {
     const calReq = {};
     const listReq = {};
 
+    function parseISODate(iso) {
+        const [y, m, d] = String(iso || '').split('-').map(Number);
+        return new Date(y || 1970, (m || 1) - 1, d || 1);
+    }
+
+    function formatDateShort(iso) {
+        return parseISODate(iso).toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+    }
+
+    function rangeTitle(data) {
+        if (state.viewMode === 'YEAR') return String(parseISODate(data.rangeStart).getFullYear());
+        if (state.viewMode === 'MONTH') return parseISODate(data.rangeStart).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        return formatDateShort(data.rangeStart) + ' - ' + formatDateShort(data.rangeEnd);
+    }
+
+    function assignLanes(items) {
+        const lanes = [];
+        return items
+            .slice()
+            .sort((a, b) => a.startIndex - b.startIndex || a.endIndex - b.endIndex)
+            .map((item) => {
+                let lane = lanes.findIndex((lastEnd) => lastEnd < item.startIndex);
+                if (lane < 0) { lane = lanes.length; lanes.push(item.endIndex); }
+                else { lanes[lane] = item.endIndex; }
+                return Object.assign({}, item, { lane });
+            });
+    }
+
     async function refreshCalendar() {
         const data = await api('/calendar/range', {
             method: 'POST',
@@ -360,25 +621,91 @@ function initLeave() {
             }),
         });
         state.anchorISO = data.rangeStart;
-        document.getElementById('calendar-meta').textContent =
-            `${data.rangeStart} s/d ${data.rangeEnd} · Event ${data.counts.events} · Project ${data.counts.projects} · Issue ${data.counts.issues} · Acting ${data.counts.actingTransfers}`;
-        const colCount = data.cols.length;
-        const today = INIT?.todayISO || '';
-        const head = `<div class="cal-row" style="grid-template-columns: 220px repeat(${colCount}, minmax(88px, 1fr))"><div class="cal-name">Karyawan</div>${data.cols.map((c) => `<div class="cal-name ${today && c.start <= today && c.end >= today ? 'is-today' : ''}">${escapeHtml(c.label)}</div>`).join('')}</div>`;
-        const rows = data.rows.length ? data.rows.map((row) => {
-            const bars = data.cols.map((col) => {
-                const hits = (row.items || []).filter((it) => it.start <= col.end && it.end >= col.start);
-                return `<div>${hits.map((it) => {
-                    const d = it.data || {};
+        const holidays = data.holidays || {};
+        const counts = data.counts || {};
+
+        document.getElementById('calendar-status').textContent =
+            `Integrated Calendar • ${counts.events || 0} event • ${counts.projects || 0} project • ${counts.issues || 0} issue assignment • ${counts.leaveEmployees || 0} employee memiliki leave • ${counts.actingTransfers || 0} temporary Event/Project/Issue handover ke Backup PIC. Leave YTD tidak menghitung Sabtu, Minggu, dan hari libur.`;
+        document.getElementById('cal-range-title').textContent = rangeTitle(data);
+
+        const cols = data.cols || [];
+        const colCount = cols.length;
+        const colMin = state.viewMode === 'MONTH' ? 150 : state.viewMode === 'YEAR' ? 105 : 90;
+        const template = `260px repeat(${colCount}, minmax(${colMin}px, 1fr))`;
+
+        const headCells = cols.map((col) => {
+            if (state.viewMode === 'WEEK') {
+                const d = parseISODate(col.key);
+                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                const holidayName = holidays[col.key];
+                return `<div class="ohs-cal-head-cell${isWeekend ? ' ohs-weekend' : ''}${holidayName ? ' ohs-holiday' : ''}"><b>${d.toLocaleDateString('en-US', { weekday: 'short' })}</b><div class="hint">${d.getDate()}${holidayName ? ' • ' + escapeHtml(holidayName) : ''}</div></div>`;
+            }
+            return `<div class="ohs-cal-head-cell"><b>${escapeHtml(col.label)}</b><div class="hint">${escapeHtml(formatDateShort(col.start))} - ${escapeHtml(formatDateShort(col.end))}</div></div>`;
+        }).join('');
+        const headEl = document.getElementById('calendar-head');
+        headEl.style.minWidth = (260 + colCount * colMin) + 'px';
+        headEl.innerHTML = `<div class="ohs-cal-head-row" style="grid-template-columns:${template}"><div class="ohs-sticky-left ohs-name-head">Employee / PIC</div>${headCells}</div>`;
+
+        const gridEl = document.getElementById('calendar-grid');
+        gridEl.style.minWidth = (260 + colCount * colMin) + 'px';
+
+        if (!data.rows.length) {
+            gridEl.innerHTML = '<div class="ohs-empty">Tidak ada Leave, Event, Project, atau Issue untuk filter dan periode ini.</div>';
+            return;
+        }
+
+        const groups = [];
+        const groupIndex = {};
+        data.rows.forEach((row) => {
+            const key = row.employee.Team || 'OTHER';
+            if (!(key in groupIndex)) {
+                groupIndex[key] = groups.length;
+                groups.push({ label: row.employee.Team || 'Other', rows: [] });
+            }
+            groups[groupIndex[key]].rows.push(row);
+        });
+
+        gridEl.innerHTML = groups.map((group) => {
+            const groupRow = `<div class="ohs-team-row" style="grid-template-columns:${template}">
+                <div class="ohs-team-cell ohs-sticky-left">${escapeHtml(group.label)} • ${group.rows.length} item</div>
+                <div class="ohs-team-cell" style="grid-column:2 / span ${colCount}"></div>
+            </div>`;
+            const bodyRows = group.rows.map((row) => {
+                const mapped = (row.items || []).map((item) => {
+                    let startIndex = -1;
+                    let endIndex = -1;
+                    cols.forEach((col, idx) => {
+                        if (item.start <= col.end && item.end >= col.start) {
+                            if (startIndex < 0) startIndex = idx;
+                            endIndex = idx;
+                        }
+                    });
+                    return startIndex >= 0 ? Object.assign({}, item, { startIndex, endIndex }) : null;
+                }).filter(Boolean);
+                const placed = assignLanes(mapped);
+                const laneCount = placed.reduce((max, it) => Math.max(max, it.lane + 1), 1);
+                const events = placed.map((item) => {
+                    const cat = String(item.category || 'LEAVE').toLowerCase().split('-')[0];
+                    const d = item.data || {};
                     const id = d.RequestId || d.EventId || d.TrackerId || d.SubTaskId || '';
-                    return `<div class="cal-chip ${it.category.replace(' ', '-')} ${it.acting ? 'acting' : ''}" data-cat="${escapeHtml(it.category)}" data-id="${escapeHtml(id)}" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</div>`;
-                }).join('')}</div>`;
+                    const tip = item.detail || (item.title + '\n' + item.start + ' - ' + item.end);
+                    return `<div class="ohs-calendar-event ${cat}${item.acting ? ' acting' : ''}" style="grid-column:${item.startIndex + 1} / ${item.endIndex + 2};grid-row:${item.lane + 1}" data-cat="${escapeHtml(item.category)}" data-id="${escapeHtml(id)}" title="${escapeHtml(tip)}">${escapeHtml(item.title)}</div>`;
+                }).join('');
+                return `<div class="ohs-calendar-row" style="grid-template-columns:${template}">
+                    <div class="ohs-calendar-row-label ohs-sticky-left">
+                        <div class="ohs-calendar-row-name">${escapeHtml(row.employee.EmpName || '-')}</div>
+                        <div class="ohs-calendar-row-meta">${escapeHtml((row.employee.Position || '') + ' · ' + (row.employee.SiteDedicated || ''))}</div>
+                        ${row.chip ? `<div class="ohs-calendar-row-chip">${escapeHtml(row.chip)}</div>` : ''}
+                    </div>
+                    <div class="ohs-lane-wrap" style="grid-column:2 / span ${colCount}">
+                        <div class="ohs-lane-grid" style="grid-template-columns:repeat(${colCount}, minmax(${colMin}px,1fr));grid-template-rows:repeat(${laneCount}, 27px)">${events}</div>
+                    </div>
+                </div>`;
             }).join('');
-            return `<div class="cal-row" style="grid-template-columns: 220px repeat(${colCount}, minmax(88px, 1fr))">
-                <div class="cal-name">${personCell(row.employee.EmpName, (row.employee.Position || '') + ' · ' + (row.employee.SiteDedicated || ''))}<div class="ohs-muted">${escapeHtml(row.chip)}</div></div>${bars}</div>`;
-        }).join('') : `<div class="ohs-empty">Tidak ada assignment pada rentang ini. Ubah filter atau buat leave request.</div>`;
-        document.getElementById('calendar-grid').innerHTML = head + rows;
-        document.getElementById('calendar-grid').querySelectorAll('.cal-chip[data-id]').forEach((chip) => {
+            return groupRow + bodyRows;
+        }).join('');
+
+        gridEl.querySelectorAll('.ohs-calendar-event[data-id]').forEach((chip) => {
             chip.addEventListener('click', () => runSafe(onCalendarChip(chip.dataset.cat, chip.dataset.id, chip.title)));
         });
     }
@@ -534,13 +861,64 @@ function initLeave() {
     document.getElementById('btn-create-leave').onclick = () => leaveForm(null);
 }
 
+const EVENT_STATUS_ORDER = [
+    ['This Week', 'This-Week'],
+    ['Next Week', 'Next-Week'],
+    ['Next 2 Week', 'Next-2-Week'],
+    ['More Than 2 Weeks Ahead', 'More-Than-2-Weeks-Ahead'],
+    ['Previous Event', 'Previous-Event'],
+];
+
 function initEvents() {
     const page = document.querySelector('[data-ohs-page="events"]');
     if (!page) return;
     const team = document.getElementById('ev-team');
     const site = document.getElementById('ev-site');
+    let table = null;
+    let events = [];
 
     const evReq = {};
+
+    function ensureTable() {
+        if (table) return table;
+        table = createSortableTable(document.getElementById('event-table-mount'), {
+            pageSize: 10,
+            rows: [],
+            emptyText: 'Belum ada event',
+            columns: [
+                {
+                    key: 'status', label: 'Status', sortValue: (ev) => EVENT_STATUS_ORDER.findIndex(([label]) => label === ev.ScheduleStatus),
+                    render: (ev) => badge(ev.ScheduleStatus),
+                },
+                {
+                    key: 'name', label: 'Event', sortValue: (ev) => ev.EventName, searchValue: (ev) => ev.EventName + ' ' + (ev.Description || ''),
+                    render: (ev) => `<div class="ohs-person"><strong>${escapeHtml(ev.EventName)}</strong><span>${escapeHtml((ev.Description || '').slice(0, 80))}</span></div>`,
+                },
+                { key: 'date', label: 'Date', sortValue: (ev) => ev.EventDate || '', render: (ev) => escapeHtml(ev.EventDate || '-') },
+                {
+                    key: 'pic', label: 'PIC / Team / Site', sortValue: (ev) => ev.PICName || '', searchValue: (ev) => [ev.PICName, ev.PICTeam, ev.PICSiteDedicated].join(' '),
+                    render: (ev) => personCell(ev.PICName, (ev.PICTeam || '') + ' · ' + (ev.PICSiteDedicated || '')),
+                },
+                { key: 'where', label: 'Where', sortValue: (ev) => ev.Where || '', render: (ev) => escapeHtml(ev.Where || '-') },
+                { key: 'readiness', label: 'Update Kesiapan', sortValue: (ev) => ev.ReadinessUpdate || '', render: (ev) => escapeHtml(ev.ReadinessUpdate || '-') },
+                { key: 'lastupdate', label: 'Last Update', sortValue: (ev) => ev.ReadinessUpdatedAt || '', render: (ev) => escapeHtml(ev.ReadinessUpdatedAt || '-') },
+                {
+                    key: 'action', label: 'Action', sortable: false, searchable: false,
+                    render: (ev) => `<div class="ohs-row-actions">
+                        <button class="btn-ghost" data-act="edit" data-id="${escapeHtml(ev.EventId)}">Edit</button>
+                        <button class="btn-ghost" data-act="ready" data-id="${escapeHtml(ev.EventId)}">Update Kesiapan</button>
+                        <button class="btn-ghost" data-act="qr" data-id="${escapeHtml(ev.EventId)}">QR Absensi</button>
+                        <button class="btn-ghost" data-act="min" data-id="${escapeHtml(ev.EventId)}">Notulensi</button>
+                        <button class="btn-danger" data-act="del" data-id="${escapeHtml(ev.EventId)}">Hapus</button>
+                    </div>`,
+                },
+            ],
+            onRender: (pageRows, mount) => {
+                mount.querySelectorAll('button[data-act]').forEach((btn) => btn.addEventListener('click', () => runSafe(onEventAction(btn.dataset.act, btn.dataset.id, events.find((e) => e.EventId === btn.dataset.id)))));
+            },
+        });
+        return table;
+    }
 
     async function refresh() {
         const data = await api('/events/maker-data', {
@@ -548,40 +926,21 @@ function initEvents() {
             signal: withAbort(evReq),
             body: JSON.stringify({ team: team.value, site: site.value }),
         });
-        const c = data.counts;
-        document.getElementById('event-badges').innerHTML = Object.entries(c).map(([k, v]) => statChip(k, v)).join('');
-        const table = document.getElementById('event-table');
-        table.querySelector('thead').innerHTML = '<tr><th>Status</th><th>Event</th><th>Date</th><th>PIC</th><th>Where</th><th>Kesiapan</th><th>Last Update</th><th></th></tr>';
-        table.querySelector('tbody').innerHTML = data.events.length ? data.events.map((ev) => `<tr>
-            <td>${badge(ev.ScheduleStatus)}</td>
-            <td><div class="ohs-person"><strong>${escapeHtml(ev.EventName)}</strong><span>${escapeHtml(ev.Description || '').slice(0, 80)}</span></div></td>
-            <td>${escapeHtml(ev.EventDate)}</td>
-            <td>${personCell(ev.PICName, (ev.PICTeam || '') + ' · ' + (ev.PICSiteDedicated || ''))}</td>
-            <td>${escapeHtml(ev.Where)}</td>
-            <td>${escapeHtml(ev.ReadinessUpdate || '-')}</td>
-            <td>${escapeHtml(ev.ReadinessUpdatedAt || '-')}</td>
-            <td>
-                <div class="ohs-row-actions">
-                    <button class="btn-ghost" data-act="edit" data-id="${escapeHtml(ev.EventId)}">Edit</button>
-                    <button class="btn-ghost" data-act="ready" data-id="${escapeHtml(ev.EventId)}">Kesiapan</button>
-                    <button class="btn-ghost" data-act="qr" data-id="${escapeHtml(ev.EventId)}">QR</button>
-                    <button class="btn-ghost" data-act="att" data-id="${escapeHtml(ev.EventId)}">Hadir</button>
-                    <button class="btn-ghost" data-act="min" data-id="${escapeHtml(ev.EventId)}">Notulensi</button>
-                    <button class="btn-danger" data-act="del" data-id="${escapeHtml(ev.EventId)}">Hapus</button>
-                </div>
-            </td>
-        </tr>`).join('') : emptyCell(8, 'Belum ada event');
-        table.querySelectorAll('button[data-act]').forEach((btn) => btn.addEventListener('click', () => runSafe(onEventAction(btn.dataset.act, btn.dataset.id, data.events.find((e) => e.EventId === btn.dataset.id)))));
+        events = data.events || [];
+        const c = data.counts || {};
+        document.getElementById('event-badges').innerHTML = EVENT_STATUS_ORDER.map(([label, cls]) => `<span class="badge ${cls}">${escapeHtml(label)}: ${c[label] || 0}</span>`).join('');
+        ensureTable().setRows(events);
     }
 
     function eventForm(ev) {
         openModal(ev ? 'Edit Event' : 'Create Event', `
             <form id="event-form" class="ohs-form">
-                <label>Nama<input name="EventName" required></label>
-                <label>Deskripsi<textarea name="Description" required></textarea></label>
+                <label>Nama Event<input name="EventName" required></label>
+                <label>Tanggal Event<input type="date" name="EventDate" required></label>
                 <label>Where<input name="Where" required></label>
-                <div class="emp-box"><label>PIC<input type="search"><input type="hidden" name="PICEmpId"><ul class="ohs-search-list"></ul></label></div>
-                <label>Tanggal<input type="date" name="EventDate" required></label>
+                <div class="emp-box full"><label>PIC<input type="search"><input type="hidden" name="PICEmpId"><ul class="ohs-search-list"></ul></label></div>
+                <label class="full">Deskripsi Event<textarea name="Description" required></textarea></label>
+                <p class="hint full">Update Kesiapan diisi setelah event tersimpan, lewat tombol "Update Kesiapan" pada baris event.</p>
                 <button class="btn-primary">Simpan</button>
             </form>`, (modal) => {
             const form = modal.querySelector('#event-form');
@@ -607,18 +966,104 @@ function initEvents() {
         });
     }
 
+    function openEventQr(id) {
+        const url = `${location.origin}/ohs-dashboard/checkin?eventId=${encodeURIComponent(id)}`;
+        openModal('QR Absensi', `
+            <div class="ohs-qr">
+                <img alt="QR" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(url)}">
+                <p><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></p>
+                <button type="button" class="btn-primary" id="copy-qr">Copy link</button>
+            </div>
+            <h3 style="margin-top:18px;">Daftar Hadir</h3>
+            <p class="ohs-muted" id="qr-att-summary">Memuat…</p>
+            <div class="ohs-table-wrap"><table class="ohs-table"><thead><tr><th>Nama</th><th>Check-in</th></tr></thead><tbody id="qr-att-body"></tbody></table></div>
+            <button type="button" class="btn-ghost" id="qr-att-refresh" style="margin-top:10px;">Refresh Daftar Hadir</button>`, (modal) => {
+            modal.querySelector('#copy-qr').onclick = () => navigator.clipboard.writeText(url);
+            const loadAttendance = () => runSafe((async () => {
+                const data = await api('/events/attendance?eventId=' + encodeURIComponent(id), { silent: true });
+                modal.querySelector('#qr-att-summary').textContent = `${data.attendanceCount || 0} peserta sudah check-in`;
+                modal.querySelector('#qr-att-body').innerHTML = (data.attendance || []).length
+                    ? data.attendance.map((a) => `<tr><td>${escapeHtml(a.EmpName)}</td><td>${escapeHtml(a.CheckInAt)}</td></tr>`).join('')
+                    : emptyCell(2, 'Belum ada absensi');
+            })());
+            modal.querySelector('#qr-att-refresh').onclick = loadAttendance;
+            loadAttendance();
+        });
+    }
+
+    function renderActionItems(modal, id, items) {
+        const list = modal.querySelector('#ai-list');
+        list.innerHTML = items.length ? items.map((i) => `<div class="ohs-ai-item"><div><strong>${escapeHtml(i.Task)}</strong><div class="ohs-muted">${escapeHtml(i.PICName || 'Tanpa PIC')} · ${escapeHtml(i.DueDate || '-')}</div></div>${badge(i.Status)} <button type="button" class="btn-ghost action-item-status-btn" data-ai="${escapeHtml(i.ActionItemId)}" data-st="${i.Status === 'Open' ? 'Done' : 'Open'}">Toggle</button></div>`).join('') : '<p class="ohs-muted">Belum ada action item</p>';
+        list.querySelectorAll('[data-ai]').forEach((b) => b.onclick = () => runSafe((async () => {
+            const updated = await api('/events/action-items/status', { method: 'POST', body: JSON.stringify({ EventId: id, ActionItemId: b.dataset.ai, Status: b.dataset.st }) });
+            renderActionItems(modal, id, updated.actionItems || []);
+        })()));
+    }
+
+    function openEventMinutes(id) {
+        runSafe((async () => {
+            const data = await api('/events/minutes?eventId=' + encodeURIComponent(id));
+            openModal('Notulensi', `
+                <p class="ohs-muted" id="min-updated">${data.updatedAt ? 'Terakhir diperbarui ' + escapeHtml(data.updatedAt) + ' oleh ' + escapeHtml(data.updatedByName || '-') : 'Belum pernah diperbarui.'}</p>
+                <form id="min-form" class="ohs-form">
+                    <label>Summary<textarea name="Summary">${escapeHtml(data.summary || '')}</textarea></label>
+                    <div class="emp-box"><label>Updated By<input type="search"><input type="hidden" name="UpdatedByEmpId"><ul class="ohs-search-list"></ul></label></div>
+                    <button class="btn-primary">Simpan notulensi</button>
+                </form>
+                <h3 style="margin-top:18px;">Action Items</h3>
+                <div id="ai-list"></div>
+                <form id="ai-form" class="ohs-form" style="margin-top:10px;">
+                    <input name="Task" placeholder="Task" required>
+                    <div class="emp-box"><label>PIC<input type="search"><input type="hidden" name="PICEmpId"><ul class="ohs-search-list"></ul></label></div>
+                    <input type="date" name="DueDate">
+                    <button class="btn-primary">Tambah</button>
+                </form>`, (modal) => {
+                employeePicker(modal.querySelectorAll('.emp-box')[0], 'UpdatedByEmpId');
+                employeePicker(modal.querySelectorAll('.emp-box')[1], 'PICEmpId');
+                renderActionItems(modal, id, data.actionItems || []);
+                modal.querySelector('#min-form').onsubmit = (e) => {
+                    e.preventDefault();
+                    runSafe((async () => {
+                        try {
+                            const updated = await api('/events/minutes', { method: 'POST', body: JSON.stringify({ EventId: id, ...formObject(e.target, null) }) });
+                            modal.querySelector('#min-updated').textContent = 'Terakhir diperbarui ' + updated.updatedAt + ' oleh ' + (updated.updatedByName || '-');
+                            toast('Notulensi tersimpan.', 'ok');
+                        } catch (err) { toast(err.message); }
+                    })());
+                };
+                modal.querySelector('#ai-form').onsubmit = (e) => {
+                    e.preventDefault();
+                    const form = e.target;
+                    runSafe((async () => {
+                        try {
+                            const updated = await api('/events/action-items/add', { method: 'POST', body: JSON.stringify({ EventId: id, ...formObject(form, null) }) });
+                            renderActionItems(modal, id, updated.actionItems || []);
+                            form.reset();
+                        } catch (err) { toast(err.message); }
+                    })());
+                };
+            });
+        })());
+    }
+
     async function onEventAction(act, id, ev) {
         if (act === 'edit') return eventForm(ev);
         if (act === 'del') {
             if (!confirm('Hapus event beserta absensi, notulensi, dan action item?')) return;
-            try {
-                await api('/events/delete', { method: 'POST', body: JSON.stringify({ EventId: id }) });
-                refresh();
-            } catch (err) { toast(err.message); }
+            await api('/events/delete', { method: 'POST', body: JSON.stringify({ EventId: id }) });
+            refresh();
             return;
         }
         if (act === 'ready') {
-            openModal('Update Kesiapan', `<form id="ready-form" class="ohs-form"><textarea name="ReadinessUpdate" required>${escapeHtml(ev?.ReadinessUpdate || '')}</textarea><button class="btn-primary">Simpan</button></form>`, (modal) => {
+            openModal('Update Kesiapan', `
+                <div class="ohs-summary-box" style="margin-bottom:12px;">
+                    <div class="ohs-summary-label">Kesiapan Saat Ini</div>
+                    <div class="ohs-summary-value" style="font-size:13px;white-space:pre-wrap;">${escapeHtml(ev?.ReadinessUpdate || 'Belum ada update kesiapan.')}</div>
+                </div>
+                <form id="ready-form" class="ohs-form">
+                    <label>Update Kesiapan Baru<textarea name="ReadinessUpdate" required></textarea></label>
+                    <button class="btn-primary">Simpan</button>
+                </form>`, (modal) => {
                 modal.querySelector('form').onsubmit = async (e) => {
                     e.preventDefault();
                     try {
@@ -627,51 +1072,10 @@ function initEvents() {
                     } catch (err) { toast(err.message); }
                 };
             });
+            return;
         }
-        if (act === 'qr') {
-            const url = `${location.origin}/ohs-dashboard/checkin?eventId=${encodeURIComponent(id)}`;
-            openModal('QR Absensi', `<div class="ohs-qr"><p><a href="${url}" target="_blank">${url}</a></p><p><button type="button" class="btn-primary" id="copy-qr">Copy link</button></p><img alt="QR" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(url)}"></div>`, (modal) => {
-                modal.querySelector('#copy-qr').onclick = () => navigator.clipboard.writeText(url);
-            });
-        }
-        if (act === 'att') {
-            const data = await api('/events/attendance?eventId=' + encodeURIComponent(id));
-            openModal('Daftar Hadir', `<p class="ohs-muted">${data.attendanceCount} peserta sudah check-in</p><table class="ohs-table"><thead><tr><th>Nama</th><th>Check-in</th></tr></thead><tbody>${data.attendance.length ? data.attendance.map((a) => `<tr><td>${escapeHtml(a.EmpName)}</td><td>${escapeHtml(a.CheckInAt)}</td></tr>`).join('') : emptyCell(2, 'Belum ada absensi')}</tbody></table>`);
-        }
-        if (act === 'min') {
-            const data = await api('/events/minutes?eventId=' + encodeURIComponent(id));
-            openModal('Notulensi', `
-                <form id="min-form" class="ohs-form">
-                    <label>Summary<textarea name="Summary">${escapeHtml(data.summary || '')}</textarea></label>
-                    <div class="emp-box"><label>Updated By<input type="search"><input type="hidden" name="UpdatedByEmpId"><ul class="ohs-search-list"></ul></label></div>
-                    <button class="btn-primary">Simpan notulensi</button>
-                </form>
-                <h4>Action Items</h4>
-                <div id="ai-list">${(data.actionItems || []).map((i) => `<div class="ohs-ai-item"><div><strong>${escapeHtml(i.Task)}</strong><div class="ohs-muted">${escapeHtml(i.PICName || 'Tanpa PIC')} · ${escapeHtml(i.DueDate || '-')}</div></div>${badge(i.Status)} <button class="btn-ghost" data-ai="${escapeHtml(i.ActionItemId)}" data-st="${i.Status === 'Open' ? 'Done' : 'Open'}">Toggle</button></div>`).join('') || '<p class="ohs-muted">Belum ada action item</p>'}</div>
-                <form id="ai-form" class="ohs-form">
-                    <input name="Task" placeholder="Task" required>
-                    <div class="emp-box"><label>PIC<input type="search"><input type="hidden" name="PICEmpId"><ul class="ohs-search-list"></ul></label></div>
-                    <input type="date" name="DueDate">
-                    <button class="btn-primary">Tambah</button>
-                </form>`, (modal) => {
-                employeePicker(modal.querySelectorAll('.emp-box')[0], 'UpdatedByEmpId');
-                employeePicker(modal.querySelectorAll('.emp-box')[1], 'PICEmpId');
-                modal.querySelector('#min-form').onsubmit = async (e) => {
-                    e.preventDefault();
-                    await api('/events/minutes', { method: 'POST', body: JSON.stringify({ EventId: id, ...formObject(e.target, null) }) });
-                    closeModal(); onEventAction('min', id, ev);
-                };
-                modal.querySelector('#ai-form').onsubmit = async (e) => {
-                    e.preventDefault();
-                    await api('/events/action-items/add', { method: 'POST', body: JSON.stringify({ EventId: id, ...formObject(e.target, null) }) });
-                    closeModal(); onEventAction('min', id, ev);
-                };
-                modal.querySelectorAll('[data-ai]').forEach((b) => b.onclick = async () => {
-                    await api('/events/action-items/status', { method: 'POST', body: JSON.stringify({ EventId: id, ActionItemId: b.dataset.ai, Status: b.dataset.st }) });
-                    closeModal(); onEventAction('min', id, ev);
-                });
-            });
-        }
+        if (act === 'qr') return openEventQr(id);
+        if (act === 'min') return openEventMinutes(id);
     }
 
     loadInit().then((init) => {
@@ -683,14 +1087,337 @@ function initEvents() {
     document.getElementById('btn-create-event').onclick = () => eventForm(null);
 }
 
+function trackerStatusBadgeClass(status) {
+    if (status === 'Closed') return 'closed';
+    if (status === 'Overdue') return 'overdue';
+    return 'on-going';
+}
+
+function trackerInlineSummaryBox(label, value) {
+    return `<div class="ohs-summary-box"><div class="ohs-summary-label">${escapeHtml(label)}</div><div class="ohs-summary-value" style="font-size:13px;">${escapeHtml(value || '-')}</div></div>`;
+}
+
+function trackerInlineUpdateForm(kind, tracker, task) {
+    const source = task || tracker;
+    const entityId = task ? task.SubTaskId : tracker.TrackerId;
+    const selName = task ? (task.PICName || tracker.ProjectLeaderName || '') : (tracker.ProjectLeaderName || '');
+    const selId = task ? (task.PICEmpId || tracker.ProjectLeaderEmpId || '') : (tracker.ProjectLeaderEmpId || '');
+    const buttonText = task ? 'Save Sub Task Update' : 'Save Overall Update';
+    return `
+        <div class="ohs-tracker-inline-form" data-inline-kind="${escapeHtml(kind)}" data-entity-id="${escapeHtml(entityId)}">
+            <div class="field"><label>% Complete</label><input class="inline-percent" type="number" min="0" max="100" step="1" value="${escapeHtml(source.CurrentPercentComplete || 0)}"></div>
+            <div class="field"><label>Progress Report Weekly</label><textarea class="inline-progress" placeholder="Milestone, evidence, kendala, dan next action."></textarea></div>
+            <div class="field"><label>Keterangan</label><textarea class="inline-remarks" placeholder="Keputusan, risiko, support, atau catatan penting."></textarea></div>
+            <div class="field emp-box"><label>Updated By</label><input type="search" value="${escapeHtml(selName)}"><input type="hidden" name="UpdatedByEmpId" value="${escapeHtml(selId)}"><ul class="ohs-search-list"></ul></div>
+            <div class="field"><button type="button" class="btn-primary tracker-inline-save">${escapeHtml(buttonText)}</button></div>
+        </div>
+        <div class="ohs-tracker-inline-message hide"></div>`;
+}
+
+function trackerInlineLogBox(kind, id) {
+    return `
+        <div class="ohs-tracker-inline-log-box" data-log-box>
+            <div class="ohs-tracker-inline-log-head">
+                <div><b>Immutable Update Log</b><div class="hint">Histori sebelumnya read-only dan tidak dapat diedit.</div></div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="badge log-count">Belum dimuat</span>
+                    <button type="button" class="btn-ghost tracker-log-toggle" data-log-kind="${escapeHtml(kind)}" data-log-id="${escapeHtml(id)}">Show Log</button>
+                </div>
+            </div>
+            <div class="ohs-tracker-inline-log-content hide">
+                <div class="ohs-table-wrap">
+                    <table class="ohs-table"><thead><tr><th>Timestamp</th><th>% Complete</th><th>Status</th><th>Weekly Report</th><th>Keterangan</th><th>Updated By</th></tr></thead>
+                    <tbody class="log-body"><tr><td colspan="6"><div class="ohs-empty">Klik Show Log untuk memuat histori.</div></td></tr></tbody></table>
+                </div>
+            </div>
+        </div>`;
+}
+
+function trackerInlineSubTaskHtml(task, tracker) {
+    const percent = Number(task.CurrentPercentComplete || 0);
+    return `
+        <div class="ohs-tracker-inline-task" data-task-id="${escapeHtml(task.SubTaskId)}">
+            <button type="button" class="ohs-tracker-inline-task-toggle" data-subtask-toggle="${escapeHtml(task.SubTaskId)}">
+                <div><div class="ohs-tracker-inline-task-name">${escapeHtml(task.SubTaskName)}</div><div class="ohs-person-sub">${escapeHtml(task.SubTaskId)}</div></div>
+                <div><b>${escapeHtml(task.PICName || task.PICEmpId || '-')}</b><div class="ohs-person-sub">${escapeHtml([task.Department, task.Site].filter(Boolean).join(' • '))}</div></div>
+                <div>${escapeHtml(task.StartDate || '-')}<br>→ ${escapeHtml(task.DueDate || '-')}</div>
+                <div><div class="ohs-progress-track" style="width:90px;"><div class="ohs-progress-fill" style="width:${Math.max(0, Math.min(100, percent))}%"></div></div><div class="ohs-progress-value">${escapeHtml(percent)}%</div></div>
+                <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;">
+                    <span class="ohs-tracker-status ${trackerStatusBadgeClass(task.EffectiveStatus)}">${escapeHtml(task.EffectiveStatus)}</span>
+                    <span class="subtask-toggle-symbol" data-symbol>＋</span>
+                </div>
+            </button>
+            <div class="ohs-tracker-inline-task-body hide" data-task-body>
+                <div class="ohs-tracker-inline-task-meta">
+                    ${trackerInlineSummaryBox('Description', task.DescriptionSubTask)}
+                    ${trackerInlineSummaryBox('Success Indicator', task.SuccessIndicator)}
+                    ${trackerInlineSummaryBox('Latest Weekly Report', task.CurrentProgressReportWeekly)}
+                    ${trackerInlineSummaryBox('Latest Keterangan', task.CurrentRemarks)}
+                </div>
+                ${trackerInlineUpdateForm('subtask', tracker, task)}
+                ${trackerInlineLogBox('subtask', task.SubTaskId)}
+            </div>
+        </div>`;
+}
+
+function trackerInlinePanelHtml(tracker) {
+    const tasks = tracker.SubTasks || [];
+    const percent = Number(tracker.CurrentPercentComplete || 0);
+    const trackingMode = tasks.length ? `${tasks.length} Sub Task` : 'Overall only — tanpa Sub Task';
+    const contextHtml = [
+        ['Description', tracker.DescriptionProject],
+        ['Background', tracker.BackgroundProject],
+        ['Impact', tracker.ImpactProject],
+        ['Success Indicator', tracker.SuccessIndicator],
+    ].map(([label, value]) => `<div class="ohs-tracker-inline-context-item"><b>${escapeHtml(label)}</b>${escapeHtml(value || '-')}</div>`).join('');
+
+    const updateArea = tasks.length
+        ? `<div class="ohs-tracker-inline-section">
+            <div class="ohs-tracker-inline-section-head">
+                <div><b>Sub Task Progress &amp; Update Log</b><div class="hint">Klik setiap Sub Task untuk membuka form update dan immutable log.</div></div>
+                <span class="badge">${tasks.length} Sub Task</span>
+            </div>
+            <div class="ohs-tracker-inline-section-body"><div class="ohs-tracker-inline-task-list">${tasks.map((t) => trackerInlineSubTaskHtml(t, tracker)).join('')}</div></div>
+          </div>`
+        : `<div class="ohs-tracker-inline-section">
+            <div class="ohs-tracker-inline-section-head">
+                <div><b>Overall Progress Update</b><div class="hint">Tracker ini tidak memiliki Sub Task. Progress dikelola langsung pada level parent.</div></div>
+                <span class="ohs-tracker-no-subtask-label">NO SUB TASK</span>
+            </div>
+            <div class="ohs-tracker-inline-section-body">${trackerInlineUpdateForm('parent', tracker, null)}${trackerInlineLogBox('parent', tracker.TrackerId)}</div>
+          </div>`;
+
+    return `
+        <div class="ohs-tracker-inline-panel">
+            <div class="ohs-tracker-inline-header">
+                <div><div class="ohs-tracker-inline-title">${escapeHtml(tracker.TrackerType + ' — ' + tracker.ProjectIssueName)}</div><div class="hint">${escapeHtml(tracker.TrackerId)} • ${escapeHtml(trackingMode)}</div></div>
+                <span class="ohs-tracker-status ${trackerStatusBadgeClass(tracker.EffectiveStatus)}">${escapeHtml(tracker.EffectiveStatus)}</span>
+            </div>
+            <div class="ohs-tracker-inline-overview">
+                ${trackerInlineSummaryBox('Project Leader', tracker.ProjectLeaderName || tracker.ProjectLeaderEmpId)}
+                ${trackerInlineSummaryBox('Department / Site', [tracker.Department, tracker.Site].filter(Boolean).join(' • '))}
+                ${trackerInlineSummaryBox('Timeline', (tracker.StartDate || '-') + ' → ' + (tracker.DueDate || '-'))}
+                ${trackerInlineSummaryBox('Overall Progress', percent + '%')}
+            </div>
+            <div class="ohs-tracker-inline-context">${contextHtml}</div>
+            ${updateArea}
+        </div>`;
+}
+
 function initTracker() {
     const page = document.querySelector('[data-ohs-page="tracker"]');
     if (!page) return;
     let cache = [];
-    let pageNo = 1;
-    const pageSize = 10;
-
+    let table = null;
+    let reopenTrackerId = '';
+    let reopenSubTaskId = '';
     const trReq = {};
+    const expandedIds = new Set();
+
+    function findTracker(id) {
+        return cache.find((t) => t.TrackerId === id);
+    }
+
+    function bindInlinePanel(panelRoot, tracker) {
+        panelRoot.querySelectorAll('.emp-box').forEach((box) => employeePicker(box, 'UpdatedByEmpId'));
+
+        panelRoot.querySelectorAll('[data-subtask-toggle]').forEach((btn) => {
+            const shouldOpen = reopenSubTaskId && btn.dataset.subtaskToggle === reopenSubTaskId;
+            btn.addEventListener('click', () => toggleInlineSubTask(btn));
+            if (shouldOpen) toggleInlineSubTask(btn, true);
+        });
+
+        panelRoot.querySelectorAll('.tracker-inline-save').forEach((btn) => {
+            btn.addEventListener('click', () => runSafe(saveInlineUpdate(btn, tracker)));
+        });
+
+        panelRoot.querySelectorAll('.tracker-log-toggle').forEach((btn) => {
+            btn.addEventListener('click', () => runSafe(toggleInlineLog(btn)));
+        });
+
+        reopenSubTaskId = '';
+    }
+
+    function toggleInlineSubTask(button, forceOpen) {
+        const body = button.closest('.ohs-tracker-inline-task').querySelector('[data-task-body]');
+        const symbol = button.querySelector('[data-symbol]');
+        const isHidden = body.classList.contains('hide');
+        const shouldOpen = forceOpen === true ? true : isHidden;
+        body.classList.toggle('hide', !shouldOpen);
+        if (symbol) symbol.textContent = shouldOpen ? '−' : '＋';
+    }
+
+    async function saveInlineUpdate(button, tracker) {
+        const form = button.closest('[data-inline-kind]');
+        const kind = form.dataset.inlineKind;
+        const entityId = form.dataset.entityId;
+        const percent = Number(form.querySelector('.inline-percent').value);
+        const weekly = form.querySelector('.inline-progress').value;
+        const remarks = form.querySelector('.inline-remarks').value;
+        const updatedBy = form.querySelector('input[name="UpdatedByEmpId"]').value;
+        const msgBox = form.nextElementSibling;
+
+        const setMsg = (text, tone) => {
+            msgBox.textContent = text;
+            msgBox.classList.remove('hide', 'success', 'error');
+            if (tone) msgBox.classList.add(tone);
+        };
+
+        if (!Number.isFinite(percent) || percent < 0 || percent > 100) return setMsg('% Complete harus berupa angka 0 sampai 100.', 'error');
+        if (!weekly.trim()) return setMsg('Progress Report Weekly wajib diisi.', 'error');
+        if (!remarks.trim()) return setMsg('Keterangan wajib diisi.', 'error');
+        if (!updatedBy) return setMsg('Updated By wajib dipilih.', 'error');
+
+        button.disabled = true;
+        setMsg('Menyimpan...');
+        try {
+            if (kind === 'parent') {
+                await api('/tracker/update', { method: 'POST', body: JSON.stringify({ TrackerId: entityId, PercentComplete: percent, ProgressReportWeekly: weekly, Remarks: remarks, UpdatedByEmpId: updatedBy }) });
+            } else {
+                await api('/tracker/update-subtask', { method: 'POST', body: JSON.stringify({ SubTaskId: entityId, PercentComplete: percent, ProgressReportWeekly: weekly, Remarks: remarks, UpdatedByEmpId: updatedBy }) });
+            }
+            reopenTrackerId = tracker.TrackerId;
+            reopenSubTaskId = kind === 'subtask' ? entityId : '';
+            expandedIds.add(tracker.TrackerId);
+            await refresh();
+        } catch (err) {
+            button.disabled = false;
+            setMsg('Gagal menyimpan update: ' + err.message, 'error');
+        }
+    }
+
+    async function toggleInlineLog(button) {
+        const box = button.closest('[data-log-box]');
+        const content = box.querySelector('.ohs-tracker-inline-log-content');
+        const isHidden = content.classList.contains('hide');
+        content.classList.toggle('hide', !isHidden);
+        button.textContent = isHidden ? 'Hide Log' : 'Show Log';
+        if (!isHidden || box.dataset.loaded === '1') return;
+
+        const body = box.querySelector('.log-body');
+        const count = box.querySelector('.log-count');
+        body.innerHTML = '<tr><td colspan="6"><div class="ohs-empty">Loading immutable log…</div></td></tr>';
+        count.textContent = 'Loading…';
+        try {
+            const kind = button.dataset.logKind;
+            const id = button.dataset.logId;
+            const data = kind === 'parent'
+                ? await api('/tracker/log?trackerId=' + encodeURIComponent(id), { silent: true })
+                : await api('/tracker/subtask-log?subTaskId=' + encodeURIComponent(id), { silent: true });
+            const logs = data.logs || [];
+            count.textContent = logs.length + ' update';
+            body.innerHTML = logs.length ? logs.map((l) => `<tr>
+                <td><b>${escapeHtml(l.Timestamp || '-')}</b><div class="ohs-person-sub">${escapeHtml(l.UpdateId || '')}</div></td>
+                <td><b>${escapeHtml(l.PercentComplete)}%</b></td>
+                <td><span class="ohs-tracker-status ${trackerStatusBadgeClass(l.Status)}">${escapeHtml(l.Status || '-')}</span></td>
+                <td>${escapeHtml(l.ProgressReportWeekly || '-')}</td>
+                <td>${escapeHtml(l.Remarks || '-')}</td>
+                <td>${escapeHtml(l.UpdatedByName || l.UpdatedByEmpId || '-')}<div class="ohs-person-sub">${escapeHtml([l.UpdatedByPosition, l.UpdatedByTeam, l.UpdatedBySiteDedicated].filter(Boolean).join(' • '))}</div></td>
+            </tr>`).join('') : '<tr><td colspan="6"><div class="ohs-empty">Belum ada update log.</div></td></tr>';
+            box.dataset.loaded = '1';
+        } catch (err) {
+            body.innerHTML = `<tr><td colspan="6"><div class="ohs-empty">Gagal mengambil log: ${escapeHtml(err.message)}</div></td></tr>`;
+            count.textContent = 'Error';
+        }
+    }
+
+    function ensureTable() {
+        if (table) return table;
+        table = createSortableTable(document.getElementById('tracker-table-mount'), {
+            pageSize: 10,
+            rows: [],
+            emptyText: 'Belum ada tracker',
+            rowClass: (t) => t.EffectiveStatus === 'Closed' ? 'closed' : t.EffectiveStatus === 'Overdue' ? 'overdue' : '',
+            columns: [
+                {
+                    key: 'type', label: 'Type / ID', sortValue: (t) => t.TrackerType, searchValue: (t) => t.TrackerType + ' ' + t.TrackerId,
+                    render: (t) => `<span class="ohs-tracker-type">${escapeHtml(t.TrackerType)}</span><div class="ohs-person-sub">${escapeHtml(t.TrackerId)}</div>`,
+                },
+                {
+                    key: 'name', label: 'Project / Issue', sortValue: (t) => t.ProjectIssueName, searchValue: (t) => t.ProjectIssueName + ' ' + (t.DescriptionProject || ''),
+                    render: (t) => `<b>${escapeHtml(t.ProjectIssueName)}</b><div class="ohs-person-sub">${escapeHtml(t.DescriptionProject || '-')}</div>`,
+                },
+                {
+                    key: 'dept', label: 'Department / Site', sortValue: (t) => t.Department, searchValue: (t) => (t.Department || '') + ' ' + (t.Site || ''),
+                    render: (t) => `${escapeHtml(t.Department || '-')}<div class="ohs-person-sub">${escapeHtml(t.Site || '-')}</div>`,
+                },
+                {
+                    key: 'leader', label: 'Project Leader', sortValue: (t) => t.ProjectLeaderName, searchValue: (t) => t.ProjectLeaderName || '',
+                    render: (t) => `${escapeHtml(t.ProjectLeaderName || t.ProjectLeaderEmpId || '-')}<div class="ohs-person-sub">${escapeHtml([t.ProjectLeaderPosition, t.ProjectLeaderTeam].filter(Boolean).join(' • '))}</div>`,
+                },
+                {
+                    key: 'timeline', label: 'Timeline', sortValue: (t) => t.DueDate || '', searchValue: (t) => (t.StartDate || '') + ' ' + (t.DueDate || ''),
+                    render: (t) => `${escapeHtml(t.StartDate || '-')}<br>→ ${escapeHtml(t.DueDate || '-')}`,
+                },
+                {
+                    key: 'subtasks', label: 'Sub Tasks / PIC', sortable: false,
+                    searchValue: (t) => (t.SubTasks || []).map((s) => s.SubTaskName + ' ' + (s.PICName || '')).join(' '),
+                    render: (t) => {
+                        const tasks = t.SubTasks || [];
+                        if (!tasks.length) return `<span class="ohs-tracker-no-subtask-label">NO SUB TASK</span><div class="ohs-person-sub" style="margin-top:5px;">Overall progress tracking</div>`;
+                        const chips = tasks.slice(0, 4).map((s) => `<span class="ohs-subtask-chip">${escapeHtml(s.SubTaskName)} • ${escapeHtml(s.PICName || s.PICEmpId || '-')} • ${escapeHtml(s.CurrentPercentComplete)}%</span>`).join('');
+                        return `<b>${tasks.length} Sub Task</b><div class="ohs-subtask-summary">${chips}</div>${tasks.length > 4 ? `<div class="ohs-person-sub">+${tasks.length - 4} lainnya</div>` : ''}`;
+                    },
+                },
+                {
+                    key: 'percent', label: '% Complete', sortValue: (t) => Number(t.CurrentPercentComplete || 0),
+                    render: (t) => progressBar(t.CurrentPercentComplete),
+                },
+                {
+                    key: 'status', label: 'Status', sortValue: (t) => t.EffectiveStatus === 'Overdue' ? 0 : t.EffectiveStatus === 'On Going' ? 1 : 2,
+                    render: (t) => `<span class="ohs-tracker-status ${trackerStatusBadgeClass(t.EffectiveStatus)}">${escapeHtml(t.EffectiveStatus)}</span>`,
+                },
+                {
+                    key: 'weekly', label: 'Latest Weekly Report', sortValue: (t) => t.CurrentProgressReportWeekly || '',
+                    render: (t) => `${escapeHtml(t.CurrentProgressReportWeekly || '-')}<div class="ohs-person-sub">${escapeHtml(t.CurrentRemarks || '')}</div>`,
+                },
+                {
+                    key: 'updated', label: 'Last Updated', sortValue: (t) => t.LastUpdated || '',
+                    render: (t) => escapeHtml(t.LastUpdated || '-'),
+                },
+                {
+                    key: 'action', label: 'Action', sortable: false, searchable: false,
+                    render: (t) => `<div class="ohs-tracker-row-actions">
+                        <button type="button" class="btn-ghost" data-act="edit" data-id="${escapeHtml(t.TrackerId)}">Edit</button>
+                        <button type="button" class="btn-ghost" data-act="expand" data-id="${escapeHtml(t.TrackerId)}">${expandedIds.has(t.TrackerId) ? 'Collapse' : 'Expand'}</button>
+                        <button type="button" class="btn-danger" data-act="del" data-id="${escapeHtml(t.TrackerId)}">Hapus</button>
+                    </div>`,
+                },
+            ],
+            detailRow: (t) => `<tr class="tracker-detail-row${expandedIds.has(t.TrackerId) ? '' : ' hide'}"><td colspan="11">${expandedIds.has(t.TrackerId) ? trackerInlinePanelHtml(t) : ''}</td></tr>`,
+            onRender: (pageRows, mount) => {
+                mount.querySelectorAll('[data-act="expand"]').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        const id = btn.dataset.id;
+                        if (expandedIds.has(id)) expandedIds.delete(id); else expandedIds.add(id);
+                        table.refresh();
+                    });
+                });
+                mount.querySelectorAll('[data-act="edit"]').forEach((btn) => {
+                    btn.addEventListener('click', () => runSafe((async () => {
+                        const t = await api('/tracker/show?trackerId=' + encodeURIComponent(btn.dataset.id));
+                        trackerForm(t);
+                    })()));
+                });
+                mount.querySelectorAll('[data-act="del"]').forEach((btn) => {
+                    btn.addEventListener('click', () => runSafe((async () => {
+                        if (!confirm('Hapus tracker beserta sub task dan log progress?')) return;
+                        await api('/tracker/delete', { method: 'POST', body: JSON.stringify({ TrackerId: btn.dataset.id }) });
+                        expandedIds.delete(btn.dataset.id);
+                        await refresh();
+                    })()));
+                });
+                const detailRows = mount.querySelectorAll('.tracker-detail-row');
+                pageRows.forEach((t, idx) => {
+                    if (!expandedIds.has(t.TrackerId)) return;
+                    const row = detailRows[idx];
+                    if (row) bindInlinePanel(row, t);
+                });
+                if (reopenTrackerId) reopenTrackerId = '';
+            },
+        });
+        return table;
+    }
 
     async function refresh() {
         const data = await api('/tracker/data', {
@@ -704,56 +1431,38 @@ function initTracker() {
                 search: document.getElementById('tr-search').value,
             }),
         });
-        cache = data.trackers;
-        pageNo = 1;
-        const c = data.counts;
-        document.getElementById('tracker-counts').innerHTML = `${statChip('Total', c.total)}${statChip('On Going', c.onGoing)}${statChip('Overdue', c.overdue)}${statChip('Closed', c.closed)}`;
-        render();
-    }
-
-    function render() {
-        const slice = cache.slice((pageNo - 1) * pageSize, pageNo * pageSize);
-        const table = document.getElementById('tracker-table');
-        table.querySelector('thead').innerHTML = '<tr><th>Type</th><th>Nama</th><th>Leader</th><th>Site</th><th>Due</th><th>%</th><th>Status</th><th></th></tr>';
-        table.querySelector('tbody').innerHTML = slice.length ? slice.map((t) => `<tr>
-            <td>${escapeHtml(t.TrackerType)}</td>
-            <td><div class="ohs-person"><strong>${escapeHtml(t.ProjectIssueName)}</strong><span>${escapeHtml(t.Department || '')}</span></div></td>
-            <td>${escapeHtml(t.ProjectLeaderName)}</td>
-            <td>${escapeHtml(t.Site)}</td>
-            <td>${escapeHtml(t.DueDate)}</td>
-            <td>${progressBar(t.CurrentPercentComplete)}</td>
-            <td>${badge(t.EffectiveStatus)}</td>
-            <td>
-                <div class="ohs-row-actions">
-                    <button class="btn-ghost" data-act="edit" data-id="${t.TrackerId}">Edit</button>
-                    <button class="btn-ghost" data-act="prog" data-id="${t.TrackerId}">Progress</button>
-                    <button class="btn-ghost" data-act="log" data-id="${t.TrackerId}">Log</button>
-                    <button class="btn-danger" data-act="del" data-id="${t.TrackerId}">Hapus</button>
-                </div>
-            </td>
-        </tr>`).join('') : emptyCell(8, 'Belum ada tracker');
-        table.querySelectorAll('button[data-act]').forEach((b) => b.onclick = () => runSafe(onTracker(b.dataset.act, cache.find((t) => t.TrackerId === b.dataset.id))));
-        document.getElementById('tracker-pager').innerHTML = `<button type="button" class="btn-ghost" id="pprev">Prev</button><span>Hal ${pageNo}</span><button type="button" class="btn-ghost" id="pnext">Next</button>`;
-        document.getElementById('pprev').onclick = () => { if (pageNo > 1) { pageNo--; render(); } };
-        document.getElementById('pnext').onclick = () => { if (pageNo * pageSize < cache.length) { pageNo++; render(); } };
+        cache = data.trackers || [];
+        const c = data.counts || {};
+        document.getElementById('tracker-counts').innerHTML = `${statChip('On Going', c.onGoing)}${statChip('Overdue', c.overdue)}${statChip('Closed', c.closed)}`;
+        ensureTable().setRows(cache);
     }
 
     function trackerForm(existing) {
         openModal(existing ? 'Edit Details' : 'Create Tracker', `
             <form id="tr-form" class="ohs-form">
-                <label>Type<select name="TrackerType"><option>Project</option><option>Issue</option></select></label>
-                <label>Nama<input name="ProjectIssueName" required></label>
-                <label>Department<input name="Department" required></label>
-                <div class="emp-box"><label>Leader<input type="search"><input type="hidden" name="ProjectLeaderEmpId"><ul class="ohs-search-list"></ul></label></div>
-                <label>Site<input name="Site" required></label>
-                <label>Description<textarea name="DescriptionProject" required></textarea></label>
-                <label>Background<textarea name="BackgroundProject" required></textarea></label>
-                <label>Impact<textarea name="ImpactProject" required></textarea></label>
-                <label>Start<input type="date" name="StartDate" required></label>
-                <label>Due<input type="date" name="DueDate" required></label>
-                <label>Success Indicator<textarea name="SuccessIndicator" required></textarea></label>
-                <div id="subtask-box"></div>
-                <button type="button" class="btn-ghost" id="add-st">+ Sub Task</button>
+                <fieldset><legend>1. Overall</legend>
+                    <div class="ohs-form-grid" style="width:100%;">
+                        <label>Type<select name="TrackerType"><option>Project</option><option>Issue</option></select></label>
+                        <label>Nama<input name="ProjectIssueName" required></label>
+                        <label>Department<input name="Department" required></label>
+                        <label>Site<input name="Site" required></label>
+                        <div class="emp-box full"><label>Project Leader<input type="search"><input type="hidden" name="ProjectLeaderEmpId"><ul class="ohs-search-list"></ul></label></div>
+                        <label>Start<input type="date" name="StartDate" required></label>
+                        <label>Due<input type="date" name="DueDate" required></label>
+                    </div>
+                </fieldset>
+                <fieldset><legend>2. Context &amp; Success</legend>
+                    <div class="ohs-form-grid" style="width:100%;">
+                        <label class="full">Description<textarea name="DescriptionProject" required></textarea></label>
+                        <label class="full">Background<textarea name="BackgroundProject" required></textarea></label>
+                        <label class="full">Impact<textarea name="ImpactProject" required></textarea></label>
+                        <label class="full">Success Indicator<textarea name="SuccessIndicator" required></textarea></label>
+                    </div>
+                </fieldset>
+                <fieldset><legend>3. Initial Progress / Sub Task</legend>
+                    <div id="subtask-box"></div>
+                    <button type="button" class="btn-ghost" id="add-st">+ Sub Task</button>
+                </fieldset>
                 <button class="btn-primary">Simpan</button>
             </form>`, (modal) => {
             const form = modal.querySelector('#tr-form');
@@ -811,76 +1520,12 @@ function initTracker() {
         });
     }
 
-    async function onTracker(act, t) {
-        if (!t) return;
-        try {
-            if (act !== 'del') {
-                t = await api('/tracker/show?trackerId=' + encodeURIComponent(t.TrackerId));
-            }
-            if (act === 'edit') return trackerForm(t);
-            if (act === 'del') {
-                if (!confirm('Hapus tracker beserta sub task dan log progress?')) return;
-                await api('/tracker/delete', { method: 'POST', body: JSON.stringify({ TrackerId: t.TrackerId }) });
-                refresh();
-                return;
-            }
-        if (act === 'log') {
-            const data = await api('/tracker/log?trackerId=' + encodeURIComponent(t.TrackerId));
-            const subLinks = (t.SubTasks || []).map((s) => `<button type="button" class="btn-ghost" data-st="${escapeHtml(s.SubTaskId)}">${escapeHtml(s.SubTaskName)}</button>`).join(' ');
-            openModal('Update Log', `
-                ${subLinks ? `<p>Sub task log: ${subLinks}</p>` : ''}
-                <table class="ohs-table">${(data.logs || []).map((l) => `<tr><td>${escapeHtml(l.Timestamp)}</td><td>${l.PercentComplete}</td><td>${escapeHtml(l.ProgressReportWeekly)}</td><td>${escapeHtml(l.UpdatedByName)}</td></tr>`).join('') || '<tr><td colspan="4">Belum ada log parent</td></tr>'}</table>`, (modal) => {
-                modal.querySelectorAll('[data-st]').forEach((b) => b.onclick = async () => {
-                    const sub = await api('/tracker/subtask-log?subTaskId=' + encodeURIComponent(b.dataset.st));
-                    openModal('Log Sub Task', `<table class="ohs-table">${(sub.logs || []).map((l) => `<tr><td>${escapeHtml(l.Timestamp)}</td><td>${l.PercentComplete}</td><td>${escapeHtml(l.ProgressReportWeekly)}</td><td>${escapeHtml(l.UpdatedByName)}</td></tr>`).join('') || '<tr><td colspan="4">Belum ada log</td></tr>'}</table>`);
-                });
-            });
-            return;
-        }
-        if (t.HasSubTasks) {
-            const options = (t.SubTasks || []).map((s) => `<option value="${escapeHtml(s.SubTaskId)}">${escapeHtml(s.SubTaskName)}</option>`).join('');
-            openModal('Update Progress Sub Task', `<form id="up" class="ohs-form">
-                <label>Sub Task<select name="SubTaskId">${options}</select></label>
-                <label>%<input name="PercentComplete" type="number" min="0" max="100" step="0.01" required></label>
-                <label>Weekly<textarea name="ProgressReportWeekly" required></textarea></label>
-                <label>Keterangan<textarea name="Remarks" required></textarea></label>
-                <div class="emp-box"><label>Updated By<input type="search"><input type="hidden" name="UpdatedByEmpId"><ul class="ohs-search-list"></ul></label></div>
-                <button class="btn-primary">Simpan</button></form>`, (modal) => {
-                employeePicker(modal.querySelector('.emp-box'), 'UpdatedByEmpId');
-                modal.querySelector('#up').onsubmit = async (e) => {
-                    e.preventDefault();
-                    try {
-                        await api('/tracker/update-subtask', { method: 'POST', body: JSON.stringify(formObject(e.target, null)) });
-                        closeModal(); refresh();
-                    } catch (err) { toast(err.message); }
-                };
-            });
-        } else {
-            openModal('Update Progress', `<form id="up" class="ohs-form">
-                <label>%<input name="PercentComplete" type="number" min="0" max="100" step="0.01" required></label>
-                <label>Weekly<textarea name="ProgressReportWeekly" required></textarea></label>
-                <label>Keterangan<textarea name="Remarks" required></textarea></label>
-                <div class="emp-box"><label>Updated By<input type="search"><input type="hidden" name="UpdatedByEmpId"><ul class="ohs-search-list"></ul></label></div>
-                <button class="btn-primary">Simpan</button></form>`, (modal) => {
-                employeePicker(modal.querySelector('.emp-box'), 'UpdatedByEmpId');
-                modal.querySelector('#up').onsubmit = async (e) => {
-                    e.preventDefault();
-                    try {
-                        await api('/tracker/update', { method: 'POST', body: JSON.stringify({ TrackerId: t.TrackerId, ...formObject(e.target, null) }) });
-                        closeModal(); refresh();
-                    } catch (err) { toast(err.message); }
-                };
-            });
-        }
-        } catch (err) { toast(err.message); }
-    }
-
     loadInit().then((init) => {
         fillSelect(document.getElementById('tr-dept'), init.teams, 'All Departments');
         fillSelect(document.getElementById('tr-site'), init.sites, 'All Sites');
         return refresh();
     }).catch((e) => toast(e.message));
-    document.getElementById('tr-refresh').onclick = () => { pageNo = 1; runSafe(refresh()); };
+    document.getElementById('tr-refresh').onclick = () => runSafe(refresh());
     document.getElementById('tr-type').onchange = document.getElementById('tr-status').onchange =
         document.getElementById('tr-dept').onchange = document.getElementById('tr-site').onchange =
         () => runSafe(refresh());
@@ -914,13 +1559,16 @@ function initAdmin() {
         form.IncludeTrackerSummary.checked = !!s.IncludeTrackerSummary;
         form.IncludeLeaderboard.checked = !!s.IncludeLeaderboard;
         document.getElementById('admin-status').innerHTML = [
-            kpiCard('Scheduler', s.Enabled ? 'ON' : 'OFF', s.Enabled ? '' : 'red'),
-            kpiCard('Hari & jam', `${s.ScheduleDays || '-'} ${String(s.SendHour).padStart(2, '0')}:${String(s.SendMinute).padStart(2, '0')}`, 'blue'),
-            kpiCard('Digest terakhir', s.LastRunAt || '-', 'gold', s.LastRunStatus || ''),
-            kpiCard('Overdue reminder', s.OverdueReminderLastRunAt || '-', 'amber', `${s.OverdueReminderLastCount ?? 0} item`),
-            kpiCard('HSE sync', s.HseSyncLastRunAt || '-', 'purple', `${s.HseSyncLastCount ?? 0} karyawan`),
-            kpiCard('Roster karyawan', init.employeeCount, ''),
+            kpiCard('Scheduler', s.Enabled ? 'ON' : 'OFF', s.Enabled ? 'green' : 'red'),
+            kpiCard('Hari & Jam Pengiriman', `${s.ScheduleDays || '-'} ${String(s.SendHour).padStart(2, '0')}:${String(s.SendMinute).padStart(2, '0')}`, 'blue'),
+            kpiCard('Last Run', s.LastRunAt || '-', 'green', s.LastRunStatus || ''),
+            kpiCard('Overdue Reminder Terakhir', s.OverdueReminderLastRunAt || '-', 'orange', `${s.OverdueReminderLastCount ?? 0} item`),
+            kpiCard('HSE Sync Terakhir', s.HseSyncLastRunAt || '-', 'blue', `${s.HseSyncLastCount ?? 0} karyawan`),
+            kpiCard('Roster Karyawan', init.employeeCount, 'green'),
         ].join('');
+        const triggerBadge = document.getElementById('admin-trigger-badge');
+        triggerBadge.textContent = 'Trigger: ' + (s.Enabled ? 'ON' : 'OFF');
+        triggerBadge.className = 'badge ' + (s.Enabled ? 'green' : 'gray');
         document.getElementById('admin-note').textContent = s.CronNote || '';
     }
 

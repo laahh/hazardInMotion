@@ -16,13 +16,9 @@
         </div>
     </div>
     <div id="event-badges" class="ohs-badges"></div>
+    <p class="hint" style="margin:-6px 0 12px;">Klik header kolom untuk sort, gunakan kotak pencarian per kolom untuk filter.</p>
     <article class="ohs-card">
-        <div class="ohs-table-wrap">
-            <table class="ohs-table" id="event-table">
-                <thead></thead>
-                <tbody></tbody>
-            </table>
-        </div>
+        <div id="event-table-mount"></div>
     </article>
 </section>
 @endsection

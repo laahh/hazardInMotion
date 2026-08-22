@@ -33,14 +33,9 @@
         </div>
     </div>
     <div id="tracker-counts" class="ohs-badges"></div>
+    <p class="hint" style="margin:-6px 0 12px;">Klik header kolom untuk sort, gunakan kotak pencarian per kolom untuk filter, dan tombol Expand untuk membuka detail sub task &amp; update log.</p>
     <article class="ohs-card">
-        <div class="ohs-table-wrap">
-            <table class="ohs-table" id="tracker-table">
-                <thead></thead>
-                <tbody></tbody>
-            </table>
-        </div>
-        <div id="tracker-pager" class="ohs-pager"></div>
+        <div id="tracker-table-mount"></div>
     </article>
 </section>
 @endsection

@@ -112,7 +112,7 @@ final class DashboardService
         $trackers = [];
         $projectActive = 0;
         $issueActive = 0;
-        $trackerQuery = ProjectIssueTracker::query()
+        $trackerQuery = ProjectIssueTracker::query()->with('subTasks')
             ->where('start_date', '<=', $yearEndIso)
             ->where('due_date', '>=', $yearStartIso);
         if (! $this->support->isAllTeam($team)) {
@@ -123,7 +123,7 @@ final class DashboardService
         }
 
         foreach ($trackerQuery->limit(80)->get() as $tracker) {
-            $row = $this->trackerService->enrichTracker($tracker, false);
+            $row = $this->trackerService->enrichTracker($tracker, true);
             $trackers[] = $row;
             if ($tracker->status !== 'Closed') {
                 if ($tracker->tracker_type === 'Project') {

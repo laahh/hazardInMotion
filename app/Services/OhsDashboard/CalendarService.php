@@ -152,6 +152,9 @@ final class CalendarService
             ? $employees
             : $employees->filter(fn (Employee $emp): bool => isset($itemsByEmp[$emp->emp_id]));
 
+        $ytdYear = (int) $this->support->today()->year;
+        $leaveYtdByEmp = $this->leaveService->leaveDaysByEmpForYear($roster->keys()->all(), $ytdYear);
+
         foreach ($roster as $employee) {
             $items = $itemsByEmp[$employee->emp_id] ?? [];
             if ($search !== '' && ! $this->employeeOrItemsMatch($employee, $items, $search)) {
@@ -169,9 +172,10 @@ final class CalendarService
                 }
             }
 
+            $leaveYtd = (int) ($leaveYtdByEmp[$employee->emp_id] ?? 0);
             $rows[] = [
                 'employee' => $employee->toApiArray(),
-                'chip' => 'Assignment: '.$assignmentCount.' · Acting: '.$actingCount,
+                'chip' => 'Leave YTD '.$ytdYear.': '.$leaveYtd.' hari · Assignment: '.$assignmentCount.' · Acting: '.$actingCount,
                 'items' => $items,
             ];
             if (count($rows) >= 120) {
@@ -188,6 +192,12 @@ final class CalendarService
         // Fix event/project/issue counts from items rather than the crude increment above
         $counts = $this->recount($rows);
 
+        $holidays = array_filter(
+            $this->support->holidayMap(),
+            fn (string $date): bool => $date >= $startIso && $date <= $endIso,
+            ARRAY_FILTER_USE_KEY,
+        );
+
         return [
             'viewMode' => $viewMode,
             'rangeStart' => $this->support->formatISO($rangeStart),
@@ -195,6 +205,7 @@ final class CalendarService
             'cols' => $cols,
             'rows' => $rows,
             'counts' => $counts,
+            'holidays' => $holidays,
         ];
     }
 

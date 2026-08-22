@@ -4,14 +4,20 @@
 <section class="ohs-page" data-ohs-page="admin">
     <div class="ohs-page-head">
         <div>
-            <h1>Admin Scheduler</h1>
-            <p class="lead">Atur digest email, overdue reminder, dan sinkronisasi roster HSE. Status last run tampil di kartu monitoring.</p>
+            <h1>Admin Email Scheduler</h1>
+            <p class="lead">Atur email otomatis untuk reminder event, previous event, leave, serta Project &amp; Issue aktif. Termasuk overdue reminder dan sinkronisasi roster HSE.</p>
         </div>
         <button type="button" class="btn-ghost" id="admin-refresh">Refresh Settings</button>
     </div>
     <div id="admin-status" class="ohs-kpis"></div>
     <article class="ohs-card">
-        <h3>Email &amp; automation</h3>
+        <div class="card-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div>
+                <h3>Scheduler Configuration</h3>
+                <p class="hint">Pengaturan hari dan jam pengiriman digest email portal.</p>
+            </div>
+            <span id="admin-trigger-badge" class="badge">Trigger: -</span>
+        </div>
         <form id="admin-form" class="ohs-form">
             <label class="chk full"><input type="checkbox" name="Enabled"> Enable Auto Email</label>
             <div class="ohs-form-grid">
@@ -43,15 +49,15 @@
                 <label>Overview Team <select name="OverviewTeam" id="admin-team"><option>All Teams</option></select></label>
                 <label>Overview Site <select name="OverviewSite" id="admin-site"><option>All Sites</option></select></label>
                 <label class="full">Subject prefix <input name="SubjectPrefix"></label>
-                <label class="chk"><input type="checkbox" name="IncludeLeaveSummary"> Include Leave Summary</label>
-                <label class="chk"><input type="checkbox" name="IncludeTrackerSummary"> Include Tracker Summary</label>
-                <label class="chk"><input type="checkbox" name="IncludeLeaderboard"> Include Leaderboard</label>
+                <label class="chk"><input type="checkbox" name="IncludeLeaveSummary"> Include Leave Status</label>
+                <label class="chk"><input type="checkbox" name="IncludeTrackerSummary"> Include Active Project &amp; Issue</label>
+                <label class="chk"><input type="checkbox" name="IncludeLeaderboard"> Include Leaderboard On Leave YTD</label>
             </div>
             <div class="ohs-actions">
-                <button type="submit" class="btn-primary">Save</button>
-                <button type="button" class="btn-ghost" id="admin-send">Send Now</button>
-                <button type="button" class="btn-ghost" id="admin-test">Test Email</button>
-                <button type="button" class="btn-ghost" id="admin-overdue">Overdue Reminder</button>
+                <button type="submit" class="btn-primary">Save Scheduler Settings</button>
+                <button type="button" class="btn-ghost" id="admin-send">Run &amp; Send Now</button>
+                <button type="button" class="btn-ghost" id="admin-test">Send Test Email</button>
+                <button type="button" class="btn-ghost" id="admin-overdue">Send Overdue Reminder Now</button>
                 <button type="button" class="btn-ghost" id="admin-hse">Sync HSE Now</button>
             </div>
             <p id="admin-note" class="ohs-muted"></p>

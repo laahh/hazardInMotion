@@ -9,12 +9,30 @@ use App\Models\OhsDashboard\EmailSchedulerSetting;
 use App\Models\OhsDashboard\Employee;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
+/**
+ * Sumber data: view bcsid.crontable_bep_vw_m_karyawan_aktif pada database
+ * `hse_automation` (Postgres RDS "postgresql-olap-bc-production") — view ini
+ * sudah berisi karyawan AKTIF saja, seluruh company (~24 ribu baris saat
+ * diverifikasi). Koneksi LANGSUNG ke RDS (`pgsql_direct`), tunnel SSH
+ * (`pgsql_ssh`) sengaja tidak dipakai — sama seperti keputusan eksplisit di
+ * App\Services\SportEvaluation\SportEvaluationPvtRfidCheckinReader untuk
+ * tabel bcsid lain: tunnel di server tidak selalu aktif, akses langsung lebih
+ * andal.
+ */
 final class HseSyncService
 {
+    private const CONNECTION_DIRECT = 'pgsql_direct';
+
+    private const EMPLOYEE_VIEW = 'bcsid.crontable_bep_vw_m_karyawan_aktif';
+
+    private const UP_CACHE_KEY = 'ohs-dashboard:hse-sync:connection-v1';
+
+    private const UP_CACHE_TTL = 20;
+
+    private const SOCKET_TIMEOUT_SECONDS = 3;
+
     public function __construct(private readonly OhsDashboardSupport $support) {}
 
     /**
@@ -32,58 +50,33 @@ final class HseSyncService
             }
         }
 
-        $apiKey = trim((string) config('ohs-dashboard.hse.api_key'));
-        if ($apiKey === '') {
-            throw new OhsDashboardException('HSE_API_KEY belum dikonfigurasi. Isi HSE_API_KEY di .env.');
+        $connection = $this->connectionName();
+        if ($connection === null) {
+            throw new OhsDashboardException('Database HSE (bcsid) tidak dapat dijangkau saat ini.');
         }
 
-        $base = rtrim((string) config('ohs-dashboard.hse.base'), '/');
-        $timeout = (int) config('ohs-dashboard.hse.timeout', 120);
-        $companyPageSize = (int) config('ohs-dashboard.hse.company_page_size', 1000);
-        $employeePageSize = (int) config('ohs-dashboard.hse.employee_page_size', 30000);
-        $concurrency = (int) config('ohs-dashboard.hse.concurrency', 8);
+        try {
+            $rows = DB::connection($connection)->select(
+                'SELECT nik, kode_sid, nama, jabatan_struktural, departement, site_dedicated, nama_perusahaan, url_foto
+                 FROM '.self::EMPLOYEE_VIEW.'
+                 WHERE status_karyawan = ?',
+                ['AKTIF'],
+            );
+        } catch (Throwable $e) {
+            report($e);
 
-        $companyUrl = $base.'/sid2/api/ftwApi/getCompany?page=1&size='.$companyPageSize;
-        $companyResponse = Http::timeout($timeout)
-            ->withHeaders(['x-api-key' => $apiKey])
-            ->get($companyUrl);
-
-        if (! $companyResponse->successful()) {
-            throw new OhsDashboardException('Gagal mengambil daftar company dari API HSE.');
-        }
-
-        $companyIds = [];
-        foreach ((array) ($companyResponse->json('results') ?? []) as $company) {
-            if (! is_array($company)) {
-                continue;
-            }
-            $id = $company['id'] ?? $company['companyId'] ?? null;
-            if ($id !== null && $id !== '') {
-                $companyIds[] = $id;
-            }
+            throw new OhsDashboardException('Gagal mengambil data karyawan dari database HSE: '.$e->getMessage());
         }
 
         $mapped = [];
-        $failedCompanyIds = [];
-        $chunks = array_chunk($companyIds, max(1, $concurrency));
-
-        foreach ($chunks as $chunk) {
-            foreach ($chunk as $companyId) {
-                $employees = $this->fetchEmployees($base, $apiKey, $companyId, $employeePageSize, $timeout);
-                if ($employees === null) {
-                    $failedCompanyIds[] = $companyId;
-                    continue;
-                }
-                foreach ($employees as $item) {
-                    $rowMap = $this->mapEmployee($item);
-                    if ($rowMap === null) {
-                        continue;
-                    }
-                    $empId = $rowMap['emp_id'];
-                    if (! isset($mapped[$empId])) {
-                        $mapped[$empId] = $rowMap;
-                    }
-                }
+        foreach ($rows as $item) {
+            $rowMap = $this->mapEmployee((array) $item);
+            if ($rowMap === null) {
+                continue;
+            }
+            $empId = $rowMap['emp_id'];
+            if (! isset($mapped[$empId])) {
+                $mapped[$empId] = $rowMap;
             }
         }
 
@@ -101,12 +94,11 @@ final class HseSyncService
         $row->hse_sync_last_count = $count;
         $row->save();
 
-        $message = 'Sinkronisasi HSE selesai. '.$count.' karyawan AKTIF.';
-        if ($failedCompanyIds !== []) {
-            $message .= ' Gagal company: '.implode(', ', array_map('strval', $failedCompanyIds)).'.';
-        }
-
-        return ['count' => $count, 'failedCompanyIds' => $failedCompanyIds, 'message' => $message];
+        return [
+            'count' => $count,
+            'failedCompanyIds' => [],
+            'message' => 'Sinkronisasi HSE selesai. '.$count.' karyawan AKTIF.',
+        ];
     }
 
     public function runScheduled(): array
@@ -114,36 +106,51 @@ final class HseSyncService
         return $this->syncNow(true);
     }
 
-    /**
-     * @return list<array<string, mixed>>|null
-     */
-    private function fetchEmployees(string $base, string $apiKey, mixed $companyId, int $size, int $timeout): ?array
+    private function connectionName(): ?string
     {
-        $url = $base.'/sid2/api/ftwApi/getEmployee?companyId='.$companyId.'&page=1&size='.$size;
-        $attempt = 0;
-
-        while ($attempt < 2) {
-            $attempt++;
-            try {
-                $response = Http::timeout($timeout)
-                    ->withHeaders(['x-api-key' => $apiKey])
-                    ->get($url);
-                if ($response->successful()) {
-                    $results = $response->json('results');
-
-                    return is_array($results) ? $results : [];
-                }
-            } catch (Throwable $e) {
-                report($e);
-                Log::warning('OHS HSE employee fetch failed', [
-                    'companyId' => $companyId,
-                    'attempt' => $attempt,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+        try {
+            $cached = Cache::remember(self::UP_CACHE_KEY, self::UP_CACHE_TTL, function (): string {
+                return $this->isHostReachable(self::CONNECTION_DIRECT) && $this->ping(self::CONNECTION_DIRECT)
+                    ? self::CONNECTION_DIRECT
+                    : '';
+            });
+        } catch (Throwable $e) {
+            report($e);
+            $cached = $this->isHostReachable(self::CONNECTION_DIRECT) && $this->ping(self::CONNECTION_DIRECT)
+                ? self::CONNECTION_DIRECT
+                : '';
         }
 
-        return null;
+        return $cached !== '' ? $cached : null;
+    }
+
+    private function isHostReachable(string $connection): bool
+    {
+        $host = config("database.connections.{$connection}.host");
+        $port = config("database.connections.{$connection}.port");
+        if (! is_string($host) || $host === '' || ! is_numeric($port) || (int) $port <= 0) {
+            return true;
+        }
+
+        $socket = @fsockopen($host, (int) $port, $errno, $errstr, self::SOCKET_TIMEOUT_SECONDS);
+        if ($socket === false) {
+            return false;
+        }
+
+        fclose($socket);
+
+        return true;
+    }
+
+    private function ping(string $connection): bool
+    {
+        try {
+            DB::connection($connection)->select('SELECT 1');
+
+            return true;
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**
@@ -152,26 +159,21 @@ final class HseSyncService
      */
     private function mapEmployee(array $item): ?array
     {
-        $status = strtoupper(trim((string) ($item['status'] ?? '')));
-        if ($status !== 'AKTIF') {
-            return null;
-        }
-
-        $empId = trim((string) ($item['npk'] ?? ''));
-        $empName = trim((string) ($item['name'] ?? ''));
+        $empId = trim((string) ($item['nik'] ?? ''));
+        $empName = trim((string) ($item['nama'] ?? ''));
         if ($empId === '' || $empName === '') {
             return null;
         }
 
         return [
             'emp_id' => $empId,
-            'sid' => $this->nullable($item['sidCode'] ?? null),
+            'sid' => $this->nullable($item['kode_sid'] ?? null),
             'emp_name' => $empName,
-            'position' => $this->nullable($item['structuralPosition'] ?? null),
-            'team' => $this->nullable($item['departmentName'] ?? null),
-            'site_dedicated' => $this->nullable($item['dedicatedSite'] ?? null),
-            'company' => $this->nullable($item['companyName'] ?? null),
-            'photo_url' => '',
+            'position' => $this->nullable($item['jabatan_struktural'] ?? null),
+            'team' => $this->nullable($item['departement'] ?? null),
+            'site_dedicated' => $this->nullable($item['site_dedicated'] ?? null),
+            'company' => $this->nullable($item['nama_perusahaan'] ?? null),
+            'photo_url' => $this->nullable($item['url_foto'] ?? null) ?? '',
         ];
     }
 

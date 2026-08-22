@@ -10,12 +10,47 @@ use App\Models\OhsDashboard\LeaveRequest;
 use App\Models\OhsDashboard\LeaveType;
 use App\Services\OhsDashboard\Support\OhsDashboardId;
 use App\Services\OhsDashboard\Support\OhsDashboardPayload;
+use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
 final class LeaveService
 {
     public function __construct(private readonly OhsDashboardSupport $support) {}
+
+    /**
+     * Total leave days (working days only; excludes Sat/Sun/holidays, clipped to today) per employee, year-to-date.
+     *
+     * @param  list<string>  $empIds
+     * @return array<string, int>
+     */
+    public function leaveDaysByEmpForYear(array $empIds, int $year): array
+    {
+        if ($empIds === []) {
+            return [];
+        }
+
+        $yearStart = Carbon::create($year, 1, 1, 0, 0, 0, $this->support->timezone())->startOfDay();
+        $yearEnd = Carbon::create($year, 12, 31, 0, 0, 0, $this->support->timezone())->startOfDay();
+        $cutoff = $this->support->ytdCutoff($year);
+
+        $days = [];
+        $leaves = LeaveRequest::query()
+            ->whereIn('emp_id', $empIds)
+            ->where('start_date', '<=', $this->support->formatISO($yearEnd))
+            ->where('end_date', '>=', $this->support->formatISO($yearStart))
+            ->get(['emp_id', 'start_date', 'end_date']);
+
+        foreach ($leaves as $leave) {
+            if ($leave->start_date === null || $leave->end_date === null) {
+                continue;
+            }
+            $days[$leave->emp_id] = ($days[$leave->emp_id] ?? 0)
+                + $this->support->countWorkingDaysClipped($leave->start_date, $leave->end_date, $yearStart, $cutoff);
+        }
+
+        return $days;
+    }
 
     /**
      * @param  array<string, mixed>  $payload
