@@ -23,6 +23,11 @@ final class EventController extends OhsDashboardApiController
         return $this->jsonOk($this->eventService->update($this->payload($request)));
     }
 
+    public function delete(Request $request): JsonResponse
+    {
+        return $this->jsonOk($this->eventService->delete($this->payload($request)));
+    }
+
     public function readiness(Request $request): JsonResponse
     {
         return $this->jsonOk($this->eventService->updateReadiness($this->payload($request)));

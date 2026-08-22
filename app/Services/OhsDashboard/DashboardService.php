@@ -39,36 +39,42 @@ final class DashboardService
         $yearStart = Carbon::create($year, 1, 1, 0, 0, 0, $this->support->timezone())->startOfDay();
         $yearEnd = Carbon::create($year, 12, 31, 0, 0, 0, $this->support->timezone())->startOfDay();
         $cutoff = $this->support->ytdCutoff($year);
+        $yearStartIso = $this->support->formatISO($yearStart);
+        $yearEndIso = $this->support->formatISO($yearEnd);
 
-        $employees = $this->filteredEmployees($team, $site);
-        $empIds = $employees->pluck('emp_id')->all();
+        $employeeCount = $this->employeeCount($team, $site);
 
         $leaveThisWeek = [];
         $upcomingLeave = [];
         $leaveDaysByEmp = [];
 
-        if ($empIds !== []) {
-            $leaves = LeaveRequest::query()
-                ->whereIn('emp_id', $empIds)
-                ->whereDate('start_date', '<=', $this->support->formatISO($yearEnd))
-                ->whereDate('end_date', '>=', $this->support->formatISO($yearStart))
-                ->get();
+        $leavesQuery = LeaveRequest::query()
+            ->where('start_date', '<=', $yearEndIso)
+            ->where('end_date', '>=', $yearStartIso);
+        if (! $this->support->isAllTeam($team)) {
+            $leavesQuery->where('team', $team);
+        }
+        if (! $this->support->isAllSite($site)) {
+            $leavesQuery->where('site_dedicated', $site);
+        }
 
-            foreach ($leaves as $leave) {
-                $row = $this->leaveService->enrich($leave);
-                $start = $this->support->parseISO($row['StartDate']);
-                $end = $this->support->parseISO($row['EndDate']);
-
-                if ($this->support->isDateRangeOverlap($start, $end, $windows['thisWeekStart'], $windows['thisWeekEnd'])) {
-                    $leaveThisWeek[] = $row;
-                }
-                if ($start->gt($windows['thisWeekEnd'])) {
-                    $upcomingLeave[] = $row;
-                }
-
-                $leaveDaysByEmp[$leave->emp_id] = ($leaveDaysByEmp[$leave->emp_id] ?? 0)
-                    + $this->support->countWorkingDaysClipped($start, $end, $yearStart, $cutoff);
+        foreach ($leavesQuery->limit(800)->get() as $leave) {
+            $start = $leave->start_date;
+            $end = $leave->end_date;
+            if ($start === null || $end === null) {
+                continue;
             }
+
+            if (count($leaveThisWeek) < 40
+                && $this->support->isDateRangeOverlap($start, $end, $windows['thisWeekStart'], $windows['thisWeekEnd'])) {
+                $leaveThisWeek[] = $this->leaveService->enrich($leave);
+            }
+            if (count($upcomingLeave) < 40 && $start->gt($windows['thisWeekEnd'])) {
+                $upcomingLeave[] = $this->leaveService->enrich($leave);
+            }
+
+            $leaveDaysByEmp[$leave->emp_id] = ($leaveDaysByEmp[$leave->emp_id] ?? 0)
+                + $this->support->countWorkingDaysClipped($start, $end, $yearStart, $cutoff);
         }
 
         $eventGroups = [
@@ -79,7 +85,9 @@ final class DashboardService
         ];
 
         $eventsQuery = Event::query()
-            ->whereYear('event_date', $year);
+            ->where('event_date', '>=', $yearStartIso)
+            ->where('event_date', '<=', $yearEndIso)
+            ->limit(200);
         if (! $this->support->isAllTeam($team)) {
             $eventsQuery->where('pic_team', $team);
         }
@@ -104,9 +112,9 @@ final class DashboardService
         $trackers = [];
         $projectActive = 0;
         $issueActive = 0;
-        $trackerQuery = ProjectIssueTracker::query()->with('subTasks')
-            ->whereDate('start_date', '<=', $this->support->formatISO($yearEnd))
-            ->whereDate('due_date', '>=', $this->support->formatISO($yearStart));
+        $trackerQuery = ProjectIssueTracker::query()
+            ->where('start_date', '<=', $yearEndIso)
+            ->where('due_date', '>=', $yearStartIso);
         if (! $this->support->isAllTeam($team)) {
             $trackerQuery->where('department', $team);
         }
@@ -114,9 +122,8 @@ final class DashboardService
             $trackerQuery->where('site', $site);
         }
 
-        foreach ($trackerQuery->get() as $tracker) {
-            $this->trackerService->refreshEffectiveStatus($tracker);
-            $row = $this->trackerService->enrichTracker($tracker);
+        foreach ($trackerQuery->limit(80)->get() as $tracker) {
+            $row = $this->trackerService->enrichTracker($tracker, false);
             $trackers[] = $row;
             if ($tracker->status !== 'Closed') {
                 if ($tracker->tracker_type === 'Project') {
@@ -138,18 +145,31 @@ final class DashboardService
         });
 
         $totalWorkingDays = $cutoff->lt($yearStart) ? 0 : $this->support->countWorkingDaysInclusive($yearStart, $cutoff);
+        $leavePersonDays = (int) array_sum($leaveDaysByEmp);
+        $limit = (int) config('ohs-dashboard.dashboard.leaderboard_limit', 200);
+        $upcomingLimit = (int) config('ohs-dashboard.dashboard.upcoming_leave_limit', 30);
+
+        arsort($leaveDaysByEmp);
+        $topLeaveEmpIds = array_slice(array_keys($leaveDaysByEmp), 0, $limit);
+        $employeesById = $topLeaveEmpIds === []
+            ? collect()
+            : Employee::query()
+                ->select(['emp_id', 'emp_name', 'team', 'site_dedicated', 'position'])
+                ->whereIn('emp_id', $topLeaveEmpIds)
+                ->get()
+                ->keyBy('emp_id');
+
         $leaderboard = [];
-        $leavePersonDays = 0;
-        foreach ($employees as $employee) {
-            $leaveYtd = (int) ($leaveDaysByEmp[$employee->emp_id] ?? 0);
+        foreach ($topLeaveEmpIds as $empId) {
+            $employee = $employeesById->get($empId);
+            $leaveYtd = (int) $leaveDaysByEmp[$empId];
             $effective = max(0, $totalWorkingDays - $leaveYtd);
-            $leavePersonDays += $leaveYtd;
             $leaderboard[] = [
-                'EmpId' => $employee->emp_id,
-                'EmpName' => $employee->emp_name,
-                'Team' => $employee->team ?? '',
-                'SiteDedicated' => $employee->site_dedicated ?? '',
-                'Position' => $employee->position ?? '',
+                'EmpId' => $empId,
+                'EmpName' => $employee?->emp_name ?? (string) $empId,
+                'Team' => $employee?->team ?? '',
+                'SiteDedicated' => $employee?->site_dedicated ?? '',
+                'Position' => $employee?->position ?? '',
                 'LeaveYTD' => $leaveYtd,
                 'TotalWorkingDaysYTD' => $totalWorkingDays,
                 'EffectiveWorkingDays' => $effective,
@@ -157,17 +177,8 @@ final class DashboardService
             ];
         }
 
-        usort($leaderboard, function (array $a, array $b): int {
-            $leave = $b['LeaveYTD'] <=> $a['LeaveYTD'];
-
-            return $leave !== 0 ? $leave : strcmp((string) $a['EmpName'], (string) $b['EmpName']);
-        });
-
-        $employeeCount = $employees->count();
         $totalPersonWorkingDays = $employeeCount * $totalWorkingDays;
         $effectivePersonDays = max(0, $totalPersonWorkingDays - $leavePersonDays);
-        $limit = (int) config('ohs-dashboard.dashboard.leaderboard_limit', 200);
-        $upcomingLimit = (int) config('ohs-dashboard.dashboard.upcoming_leave_limit', 30);
 
         return [
             'year' => $year,
@@ -195,7 +206,7 @@ final class DashboardService
                 'upcoming' => array_slice($upcomingLeave, 0, $upcomingLimit),
                 'upcomingCount' => count($upcomingLeave),
             ],
-            'leaderboard' => array_slice($leaderboard, 0, $limit),
+            'leaderboard' => $leaderboard,
             'workforceEffectiveness' => [
                 'employeeCount' => $employeeCount,
                 'totalWorkingDaysPerEmployee' => $totalWorkingDays,
@@ -208,12 +219,9 @@ final class DashboardService
         ];
     }
 
-    /**
-     * @return \Illuminate\Support\Collection<int, Employee>
-     */
-    private function filteredEmployees(string $team, string $site)
+    private function employeeCount(string $team, string $site): int
     {
-        $query = Employee::query()->select(['emp_id', 'emp_name', 'team', 'site_dedicated', 'position']);
+        $query = Employee::query();
         if (! $this->support->isAllTeam($team)) {
             $query->where('team', $team);
         }
@@ -221,6 +229,6 @@ final class DashboardService
             $query->where('site_dedicated', $site);
         }
 
-        return $query->orderBy('emp_name')->get();
+        return (int) $query->count();
     }
 }

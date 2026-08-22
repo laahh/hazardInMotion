@@ -42,7 +42,8 @@ document.getElementById('checkin-q')?.addEventListener('input', () => {
         const q = document.getElementById('checkin-q').value.trim();
         if (q.length < 2) { results.innerHTML = ''; return; }
         const rows = await api('/employees/search?q=' + encodeURIComponent(q));
-        results.innerHTML = rows.map((r) => `<li data-id="${r.EmpId}">${r.EmpName} • ${r.EmpId} • ${r.Team || ''}</li>`).join('');
+        const items = Array.isArray(rows) ? rows : [];
+        results.innerHTML = items.map((r) => `<li data-id="${r.EmpId}"><strong>${r.EmpName}</strong><div class="ohs-muted">${r.EmpId} · ${r.Team || ''}</div></li>`).join('') || '<li>Tidak ada hasil</li>';
     }, 250);
 });
 

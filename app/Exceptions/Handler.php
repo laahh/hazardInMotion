@@ -3,6 +3,8 @@
 namespace App\Exceptions;
 
 use App\Exceptions\OhsDashboard\OhsDashboardException;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -35,6 +37,14 @@ class Handler extends ExceptionHandler
             return response()->json(['error' => $e->getMessage()], $e->status());
         });
 
+        $this->renderable(function (AuthenticationException $e, Request $request) {
+            if (! $this->isOhsDashboardApi($request)) {
+                return null;
+            }
+
+            return response()->json(['error' => 'Silakan login.'], 401);
+        });
+
         $this->renderable(function (ValidationException $e, Request $request) {
             if (! $this->isOhsDashboardApi($request)) {
                 return null;
@@ -43,6 +53,18 @@ class Handler extends ExceptionHandler
             $message = collect($e->errors())->flatten()->first() ?: $e->getMessage();
 
             return response()->json(['error' => $message], 422);
+        });
+
+        $this->renderable(function (QueryException $e, Request $request) {
+            if (! $this->isOhsDashboardApi($request)) {
+                return null;
+            }
+
+            report($e);
+
+            return response()->json([
+                'error' => 'Database OHS Dashboard lambat atau belum siap. Sempitkan filter Team/Site, lalu coba lagi.',
+            ], 503);
         });
 
         $this->renderable(function (Throwable $e, Request $request) {

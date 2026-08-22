@@ -99,6 +99,25 @@ final class EventService
 
     /**
      * @param  array<string, mixed>  $payload
+     * @return array{eventId: string, deleted: bool}
+     */
+    public function delete(array $payload): array
+    {
+        $event = $this->requireEvent(OhsDashboardPayload::string($payload, 'EventId'));
+        $eventId = $event->event_id;
+
+        DB::transaction(function () use ($event): void {
+            EventAttendance::query()->where('event_id', $event->event_id)->delete();
+            EventActionItem::query()->where('event_id', $event->event_id)->delete();
+            EventMinute::query()->where('event_id', $event->event_id)->delete();
+            $event->delete();
+        });
+
+        return ['eventId' => $eventId, 'deleted' => true];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
     public function updateReadiness(array $payload): array
@@ -132,7 +151,10 @@ final class EventService
         $windows = $this->support->dashboardWeekWindows((int) $this->support->today()->year);
         $today = $this->support->today();
 
-        $query = Event::query()->orderBy('event_date');
+        $query = Event::query()
+            ->where('event_date', '>=', $this->support->formatISO($today->copy()->subDays(90)))
+            ->orderBy('event_date')
+            ->limit(300);
         if (! $this->support->isAllTeam($team)) {
             $query->where('pic_team', $team);
         }
@@ -414,7 +436,7 @@ final class EventService
      */
     public function enrich(Event $event): array
     {
-        $pic = $event->pic;
+        $pic = $event->relationLoaded('pic') ? $event->pic : null;
 
         return [
             'EventId' => $event->event_id,

@@ -38,6 +38,11 @@ final class TrackerController extends OhsDashboardApiController
         return $this->jsonOk($this->trackerService->updateParentProgress($this->payload($request)));
     }
 
+    public function delete(Request $request): JsonResponse
+    {
+        return $this->jsonOk($this->trackerService->delete($this->payload($request)));
+    }
+
     public function log(Request $request): JsonResponse
     {
         $trackerId = trim((string) $request->query('trackerId', ''));
@@ -56,5 +61,15 @@ final class TrackerController extends OhsDashboardApiController
         }
 
         return $this->jsonOk($this->trackerService->subTaskLog($subTaskId));
+    }
+
+    public function show(Request $request): JsonResponse
+    {
+        $trackerId = trim((string) $request->query('trackerId', ''));
+        if ($trackerId === '') {
+            throw new OhsDashboardException('trackerId wajib diisi.');
+        }
+
+        return $this->jsonOk($this->trackerService->show($trackerId));
     }
 }

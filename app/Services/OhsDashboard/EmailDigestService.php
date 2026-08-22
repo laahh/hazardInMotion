@@ -86,8 +86,8 @@ final class EmailDigestService
             if ($days === []) {
                 throw new OhsDashboardException('Minimal satu hari harus dipilih jika scheduler aktif.');
             }
-            if ($portalUrl === '' || ! str_starts_with(strtolower($portalUrl), 'https://')) {
-                throw new OhsDashboardException('PortalUrl wajib diisi dengan URL https:// jika scheduler aktif.');
+            if ($portalUrl === '' || ! preg_match('#^https?://#i', $portalUrl)) {
+                throw new OhsDashboardException('PortalUrl wajib diisi dengan URL http(s):// jika scheduler aktif.');
             }
         } elseif ($recipients !== '') {
             $this->support->parseEmailList($recipients);

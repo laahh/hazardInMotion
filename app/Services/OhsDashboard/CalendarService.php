@@ -7,7 +7,6 @@ namespace App\Services\OhsDashboard;
 use App\Models\OhsDashboard\Employee;
 use App\Models\OhsDashboard\Event;
 use App\Models\OhsDashboard\LeaveRequest;
-use App\Models\OhsDashboard\ProjectIssueSubTask;
 use App\Models\OhsDashboard\ProjectIssueTracker;
 use App\Services\OhsDashboard\Support\OhsDashboardPayload;
 use Carbon\Carbon;
@@ -40,29 +39,26 @@ final class CalendarService
 
         [$rangeStart, $rangeEnd] = $this->rangeBounds($viewMode, $anchor);
         $cols = $this->buildCalendarColumns($viewMode, $rangeStart, $rangeEnd);
+        $startIso = $this->support->formatISO($rangeStart);
+        $endIso = $this->support->formatISO($rangeEnd);
 
-        $hasRosterFilter = ! $this->support->isAllTeam($team) || ! $this->support->isAllSite($site);
-        $employeesQuery = Employee::query()->select(['emp_id', 'sid', 'emp_name', 'position', 'team', 'site_dedicated']);
+        $leavesQuery = LeaveRequest::query()
+            ->select([
+                'request_id', 'emp_id', 'emp_name', 'team', 'position', 'site_dedicated',
+                'leave_type', 'start_date', 'end_date', 'backup_emp_id', 'backup_emp_name',
+            ])
+            ->where('start_date', '<=', $endIso)
+            ->where('end_date', '>=', $startIso);
         if (! $this->support->isAllTeam($team)) {
-            $employeesQuery->where('team', $team);
+            $leavesQuery->where('team', $team);
         }
         if (! $this->support->isAllSite($site)) {
-            $employeesQuery->where('site_dedicated', $site);
+            $leavesQuery->where('site_dedicated', $site);
         }
-        $employees = $hasRosterFilter
-            ? $employeesQuery->get()->keyBy('emp_id')
-            : collect();
-
-        $leaves = LeaveRequest::query()
-            ->whereDate('start_date', '<=', $this->support->formatISO($rangeEnd))
-            ->whereDate('end_date', '>=', $this->support->formatISO($rangeStart))
-            ->get();
+        $leaves = $leavesQuery->limit(400)->get();
 
         $itemsByEmp = [];
         foreach ($leaves as $leave) {
-            if ($hasRosterFilter && ! $employees->has($leave->emp_id)) {
-                continue;
-            }
             $row = $this->leaveService->enrich($leave);
             $item = $this->makeItem(
                 $leave->emp_id,
@@ -75,11 +71,16 @@ final class CalendarService
             $itemsByEmp[$leave->emp_id][] = $item;
         }
 
-        $events = Event::query()
-            ->whereDate('event_date', '>=', $this->support->formatISO($rangeStart))
-            ->whereDate('event_date', '<=', $this->support->formatISO($rangeEnd))
-            ->get();
-        foreach ($events as $event) {
+        $eventsQuery = Event::query()
+            ->where('event_date', '>=', $startIso)
+            ->where('event_date', '<=', $endIso);
+        if (! $this->support->isAllTeam($team)) {
+            $eventsQuery->where('pic_team', $team);
+        }
+        if (! $this->support->isAllSite($site)) {
+            $eventsQuery->where('pic_site_dedicated', $site);
+        }
+        foreach ($eventsQuery->limit(200)->get() as $event) {
             $row = $this->eventService->enrich($event);
             $iso = (string) $row['EventDate'];
             $item = $this->makeItem($event->pic_emp_id, 'EVENT', $event->event_name, $iso, $iso, $row);
@@ -88,14 +89,18 @@ final class CalendarService
             }
         }
 
-        $trackers = ProjectIssueTracker::query()
-            ->with('subTasks')
-            ->whereDate('start_date', '<=', $this->support->formatISO($rangeEnd))
-            ->whereDate('due_date', '>=', $this->support->formatISO($rangeStart))
-            ->get();
+        $trackersQuery = ProjectIssueTracker::query()
+            ->where('start_date', '<=', $endIso)
+            ->where('due_date', '>=', $startIso);
+        if (! $this->support->isAllTeam($team)) {
+            $trackersQuery->where('department', $team);
+        }
+        if (! $this->support->isAllSite($site)) {
+            $trackersQuery->where('site', $site);
+        }
+        $trackers = $trackersQuery->limit(200)->get();
 
         foreach ($trackers as $tracker) {
-            $this->trackerService->refreshEffectiveStatus($tracker);
             $row = $this->trackerService->enrichTracker($tracker, false);
             $category = $tracker->tracker_type === 'Issue' ? 'ISSUE' : 'PROJECT';
             $title = $tracker->project_issue_name.' ('.(float) $tracker->current_percent_complete.'%)';
@@ -110,52 +115,38 @@ final class CalendarService
             foreach ($this->distributeAssignmentToBackup($item, $leaves) as $distributed) {
                 $itemsByEmp[$distributed['empId']][] = $distributed;
             }
-
-            foreach ($tracker->subTasks as $task) {
-                $sub = $this->trackerService->enrichSubTask($task);
-                $taskItem = $this->makeItem(
-                    $task->pic_emp_id,
-                    $category.' TASK',
-                    $task->sub_task_name.' ('.(float) $task->current_percent_complete.'%)',
-                    $task->start_date?->format('Y-m-d') ?? '',
-                    $task->due_date?->format('Y-m-d') ?? '',
-                    $sub,
-                );
-                foreach ($this->distributeAssignmentToBackup($taskItem, $leaves) as $distributed) {
-                    $itemsByEmp[$distributed['empId']][] = $distributed;
-                }
-            }
         }
 
         $hasFilter = $this->hasFilter($team, $site, $search);
-        $year = (int) $rangeStart->year;
-        $yearStart = $rangeStart->copy()->startOfYear();
-        $cutoff = $this->support->ytdCutoff($year);
         $rows = [];
 
-        if (! $hasRosterFilter) {
-            $itemEmpIds = array_keys($itemsByEmp);
-            $query = Employee::query()->select(['emp_id', 'sid', 'emp_name', 'position', 'team', 'site_dedicated']);
-            if ($search !== '') {
-                $like = '%'.$search.'%';
-                $query->where(function ($builder) use ($itemEmpIds, $like): void {
-                    if ($itemEmpIds !== []) {
-                        $builder->whereIn('emp_id', $itemEmpIds);
-                    }
-                    $builder->orWhere('emp_name', 'like', $like)
-                        ->orWhere('emp_id', 'like', $like)
-                        ->orWhere('sid', 'like', $like)
-                        ->orWhere('position', 'like', $like)
-                        ->orWhere('team', 'like', $like)
-                        ->orWhere('site_dedicated', 'like', $like);
-                });
-            } elseif ($itemEmpIds !== []) {
-                $query->whereIn('emp_id', $itemEmpIds);
-            } else {
-                $query->whereRaw('1 = 0');
-            }
-            $employees = $query->get()->keyBy('emp_id');
+        $itemEmpIds = array_keys($itemsByEmp);
+        $query = Employee::query()->select(['emp_id', 'sid', 'emp_name', 'position', 'team', 'site_dedicated']);
+        if (! $this->support->isAllTeam($team)) {
+            $query->where('team', $team);
         }
+        if (! $this->support->isAllSite($site)) {
+            $query->where('site_dedicated', $site);
+        }
+        if ($search !== '') {
+            $like = '%'.$search.'%';
+            $query->where(function ($builder) use ($itemEmpIds, $like): void {
+                if ($itemEmpIds !== []) {
+                    $builder->whereIn('emp_id', array_slice($itemEmpIds, 0, 300));
+                }
+                $builder->orWhere('emp_name', 'like', $like)
+                    ->orWhere('emp_id', 'like', $like)
+                    ->orWhere('sid', 'like', $like)
+                    ->orWhere('position', 'like', $like)
+                    ->orWhere('team', 'like', $like)
+                    ->orWhere('site_dedicated', 'like', $like);
+            });
+        } elseif ($itemEmpIds !== []) {
+            $query->whereIn('emp_id', array_slice($itemEmpIds, 0, 200));
+        } else {
+            $query->whereRaw('1 = 0');
+        }
+        $employees = $query->orderBy('emp_name')->limit(200)->get()->keyBy('emp_id');
 
         $roster = $hasFilter
             ? $employees
@@ -167,18 +158,10 @@ final class CalendarService
                 continue;
             }
 
-            $leaveYtd = 0;
             $assignmentCount = 0;
             $actingCount = 0;
             foreach ($items as $item) {
-                if ($item['category'] === 'LEAVE') {
-                    $leaveYtd += $this->support->countWorkingDaysClipped(
-                        $this->support->parseISO($item['start']),
-                        $this->support->parseISO($item['end']),
-                        $yearStart,
-                        $cutoff,
-                    );
-                } else {
+                if ($item['category'] !== 'LEAVE') {
                     $assignmentCount++;
                     if (! empty($item['acting'])) {
                         $actingCount++;
@@ -188,9 +171,12 @@ final class CalendarService
 
             $rows[] = [
                 'employee' => $employee->toApiArray(),
-                'chip' => 'Leave YTD '.$year.': '.$leaveYtd.' hari • Assignment: '.$assignmentCount.' • Acting: '.$actingCount,
+                'chip' => 'Assignment: '.$assignmentCount.' · Acting: '.$actingCount,
                 'items' => $items,
             ];
+            if (count($rows) >= 120) {
+                break;
+            }
         }
 
         usort($rows, function (array $a, array $b): int {
@@ -358,11 +344,16 @@ final class CalendarService
             'end' => $end,
             'status' => $data['Status'] ?? $data['EffectiveStatus'] ?? '',
             'detail' => $data['Description'] ?? $data['DescriptionProject'] ?? $data['DescriptionSubTask'] ?? $data['Note'] ?? '',
-            'searchText' => mb_strtolower($title.' '.$category.' '.implode(' ', $data)),
+            'searchText' => mb_strtolower($title.' '.$category),
             'acting' => false,
             'originalOwnerName' => '',
             'actingEmployeeName' => '',
-            'data' => $data,
+            'data' => [
+                'RequestId' => $data['RequestId'] ?? '',
+                'EventId' => $data['EventId'] ?? '',
+                'TrackerId' => $data['TrackerId'] ?? '',
+                'SubTaskId' => $data['SubTaskId'] ?? '',
+            ],
         ];
     }
 

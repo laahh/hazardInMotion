@@ -132,6 +132,172 @@ final class LeaveService
     }
 
     /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function list(array $payload): array
+    {
+        $team = OhsDashboardPayload::string($payload, 'team');
+        $site = OhsDashboardPayload::string($payload, 'site');
+        $search = mb_strtolower(OhsDashboardPayload::string($payload, 'search'));
+        $year = $this->support->clampInteger(
+            OhsDashboardPayload::raw($payload, 'year'),
+            2000,
+            2100,
+            (int) $this->support->today()->year,
+        );
+
+        $yearStart = $this->support->formatISO(
+            $this->support->today()->copy()->setYear($year)->startOfYear()
+        );
+        $yearEnd = $this->support->formatISO(
+            $this->support->today()->copy()->setYear($year)->endOfYear()->startOfDay()
+        );
+
+        $query = LeaveRequest::query()
+            ->where('start_date', '<=', $yearEnd)
+            ->where('end_date', '>=', $yearStart)
+            ->orderByDesc('start_date')
+            ->orderByDesc('end_date')
+            ->limit(400);
+
+        if (! $this->support->isAllTeam($team)) {
+            $query->where('team', $team);
+        }
+        if (! $this->support->isAllSite($site)) {
+            $query->where('site_dedicated', $site);
+        }
+
+        $today = $this->support->today();
+        $requests = [];
+        $counts = ['total' => 0, 'onLeave' => 0, 'upcoming' => 0, 'completed' => 0];
+
+        foreach ($query->get() as $row) {
+            $enriched = $this->enrichWithStatus($row, $today);
+            if ($search !== '' && ! $this->leaveMatchesSearch($enriched, $search)) {
+                continue;
+            }
+            $counts['total']++;
+            match ($enriched['Status']) {
+                'On Leave' => $counts['onLeave']++,
+                'Upcoming' => $counts['upcoming']++,
+                default => $counts['completed']++,
+            };
+            $requests[] = $enriched;
+        }
+
+        return [
+            'year' => $year,
+            'counts' => $counts,
+            'requests' => $requests,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function show(string $requestId): array
+    {
+        return $this->enrichWithStatus($this->requireLeave($requestId), $this->support->today());
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array{requestId: string}
+     */
+    public function update(array $payload): array
+    {
+        $leave = $this->requireLeave(OhsDashboardPayload::string($payload, 'RequestId'));
+        $empId = OhsDashboardPayload::string($payload, 'EmpId') ?: $leave->emp_id;
+        $backupEmpId = OhsDashboardPayload::string($payload, 'BackupEmpId') ?: $leave->backup_emp_id;
+        $leaveType = OhsDashboardPayload::string($payload, 'LeaveType') ?: $leave->leave_type;
+        $startRaw = OhsDashboardPayload::string($payload, 'StartDate') ?: ($leave->start_date?->format('Y-m-d') ?? '');
+        $endRaw = OhsDashboardPayload::string($payload, 'EndDate') ?: ($leave->end_date?->format('Y-m-d') ?? '');
+        $timeFrom = OhsDashboardPayload::nullableString($payload, 'TimeFrom');
+        $timeTo = OhsDashboardPayload::nullableString($payload, 'TimeTo');
+        $note = OhsDashboardPayload::nullableString($payload, 'Note');
+
+        $employee = $this->support->requireEmployee($empId, 'Karyawan');
+        if ($backupEmpId === '') {
+            throw new OhsDashboardException('Backup / Acting PIC wajib dipilih.');
+        }
+        if ($backupEmpId === $empId) {
+            throw new OhsDashboardException('Backup / Acting PIC tidak boleh sama dengan karyawan yang cuti.');
+        }
+        $backup = $this->support->requireEmployee($backupEmpId, 'Backup / Acting PIC');
+
+        if ($leaveType === '') {
+            throw new OhsDashboardException('Leave Type wajib dipilih.');
+        }
+        $typeExists = LeaveType::query()->where('leave_type', $leaveType)->exists();
+        if (! $typeExists) {
+            throw new OhsDashboardException('Leave Type tidak valid.');
+        }
+
+        $start = $this->support->parseISO($startRaw);
+        $end = $this->support->parseISO($endRaw);
+        if ($end->lt($start)) {
+            throw new OhsDashboardException('EndDate harus sama atau setelah StartDate.');
+        }
+
+        $overlaps = $this->findLeaveOverlaps($empId, $start, $end, $leave->request_id);
+        $backupOverlaps = $this->findLeaveOverlaps($backupEmpId, $start, $end, $leave->request_id);
+        if ($overlaps !== [] || $backupOverlaps !== []) {
+            throw new OhsDashboardException($this->overlapMessage($overlaps, $backupOverlaps));
+        }
+
+        $leave->fill([
+            'emp_id' => $employee->emp_id,
+            'emp_name' => $employee->emp_name,
+            'team' => $employee->team,
+            'position' => $employee->position,
+            'site_dedicated' => $employee->site_dedicated,
+            'leave_type' => $leaveType,
+            'start_date' => $this->support->formatISO($start),
+            'end_date' => $this->support->formatISO($end),
+            'start_time' => $timeFrom,
+            'end_time' => $timeTo,
+            'note' => $note,
+            'backup_emp_id' => $backup->emp_id,
+            'backup_emp_name' => $backup->emp_name,
+            'backup_team' => $backup->team,
+            'backup_position' => $backup->position,
+            'backup_site_dedicated' => $backup->site_dedicated,
+        ]);
+        $leave->save();
+
+        return ['requestId' => $leave->request_id];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array{requestId: string, deleted: bool}
+     */
+    public function delete(array $payload): array
+    {
+        $leave = $this->requireLeave(OhsDashboardPayload::string($payload, 'RequestId'));
+        $requestId = $leave->request_id;
+        $leave->delete();
+
+        return ['requestId' => $requestId, 'deleted' => true];
+    }
+
+    public function requireLeave(string $requestId): LeaveRequest
+    {
+        $requestId = trim($requestId);
+        if ($requestId === '') {
+            throw new OhsDashboardException('RequestId wajib diisi.');
+        }
+
+        $leave = LeaveRequest::query()->find($requestId);
+        if (! $leave instanceof LeaveRequest) {
+            throw new OhsDashboardException('Leave request tidak ditemukan.');
+        }
+
+        return $leave;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function history(string $empId, ?int $year): array
@@ -187,7 +353,7 @@ final class LeaveService
             'totalWorkingDays' => $totalLeaveDaysAllHistory,
             'totalLeaveDaysAllHistory' => $totalLeaveDaysAllHistory,
             'leaveDaysYTD' => $leaveDaysYtd,
-            'ytdWorkingDays' => $leaveDaysYtd,
+            'ytdWorkingDays' => $ytdWorkingDays,
             'effectiveWorkingDays' => $effective,
             'effectiveWorkingPercent' => $this->support->workingDayPercent($effective, $ytdWorkingDays),
             'currentYear' => $year,
@@ -208,9 +374,10 @@ final class LeaveService
         $endIso = $this->support->formatISO($end);
 
         return $query
-            ->whereDate('start_date', '<=', $endIso)
-            ->whereDate('end_date', '>=', $startIso)
+            ->where('start_date', '<=', $endIso)
+            ->where('end_date', '>=', $startIso)
             ->orderBy('start_date')
+            ->limit(50)
             ->get()
             ->all();
     }
@@ -220,7 +387,9 @@ final class LeaveService
      */
     public function enrich(LeaveRequest $row, ?Employee $employee = null): array
     {
-        $employee ??= $row->employee;
+        if ($employee === null && $row->relationLoaded('employee')) {
+            $employee = $row->employee;
+        }
 
         return [
             'RequestId' => $row->request_id,
@@ -282,5 +451,45 @@ final class LeaveService
         }
 
         return implode(' ', $parts);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function enrichWithStatus(LeaveRequest $row, CarbonInterface $today): array
+    {
+        $enriched = $this->enrich($row);
+        $start = $this->support->parseISO($enriched['StartDate']);
+        $end = $this->support->parseISO($enriched['EndDate']);
+        $status = 'Completed';
+        if ($start->gt($today)) {
+            $status = 'Upcoming';
+        } elseif ($start->lte($today) && $end->gte($today)) {
+            $status = 'On Leave';
+        }
+
+        $enriched['LeaveDays'] = $this->support->countWorkingDaysInclusive($start, $end);
+        $enriched['Status'] = $status;
+
+        return $enriched;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function leaveMatchesSearch(array $row, string $search): bool
+    {
+        $haystack = mb_strtolower(implode(' ', [
+            $row['RequestId'] ?? '',
+            $row['EmpId'] ?? '',
+            $row['EmpName'] ?? '',
+            $row['Team'] ?? '',
+            $row['LeaveType'] ?? '',
+            $row['BackupEmpName'] ?? '',
+            $row['Note'] ?? '',
+            $row['Status'] ?? '',
+        ]));
+
+        return str_contains($haystack, $search);
     }
 }

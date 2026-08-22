@@ -7,6 +7,7 @@ namespace App\Services\OhsDashboard;
 use App\Exceptions\OhsDashboard\OhsDashboardException;
 use App\Models\OhsDashboard\EmailSchedulerSetting;
 use App\Models\OhsDashboard\Employee;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -94,6 +95,7 @@ final class HseSyncService
         });
 
         $count = count($mapped);
+        Cache::forget(InitService::CACHE_KEY);
         $row->hse_sync_last_key = $this->support->formatISO($this->support->startOfWeekMonday($now));
         $row->hse_sync_last_run_at = $now;
         $row->hse_sync_last_count = $count;

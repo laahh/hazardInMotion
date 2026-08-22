@@ -3,7 +3,12 @@
 @section('content')
 <section class="ohs-page" data-ohs-page="overview">
     <div class="ohs-page-head">
-        <h1>Overview Dashboard</h1>
+        <div>
+            <h1>Overview Dashboard</h1>
+            <p class="lead">Ringkasan event, cuti, efektivitas kerja, dan status project/issue dalam satu pandangan.</p>
+        </div>
+    </div>
+    <div class="ohs-toolbar">
         <div class="ohs-filters" id="overview-filters">
             <label>Team
                 <select id="filter-team"><option>All Teams</option></select>

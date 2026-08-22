@@ -4,14 +4,16 @@ declare(strict_types=1);
 
 namespace App\Services\OhsDashboard;
 
+use App\Exceptions\OhsDashboard\OhsDashboardException;
 use App\Models\OhsDashboard\Employee;
-use App\Models\OhsDashboard\Event;
-use App\Models\OhsDashboard\LeaveRequest;
 use App\Models\OhsDashboard\LeaveType;
-use App\Models\OhsDashboard\ProjectIssueTracker;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Cache;
 
 final class InitService
 {
+    public const CACHE_KEY = 'ohs-dashboard.init';
+
     public function __construct(private readonly OhsDashboardSupport $support) {}
 
     /**
@@ -19,52 +21,48 @@ final class InitService
      */
     public function getInit(): array
     {
-        $currentYear = (int) $this->support->today()->year;
-        $years = [$currentYear - 1, $currentYear];
+        try {
+            $cached = Cache::remember(self::CACHE_KEY, 180, function (): array {
+                $currentYear = (int) $this->support->today()->year;
 
-        foreach (LeaveRequest::query()->select(['start_date', 'end_date'])->cursor() as $leave) {
-            $years[] = (int) $leave->start_date?->year;
-            $years[] = (int) $leave->end_date?->year;
+                return [
+                    'employeeCount' => Employee::query()->count(),
+                    'leaveTypes' => LeaveType::query()->orderBy('leave_type')->get()->map->toApiArray()->all(),
+                    'teams' => Employee::query()
+                        ->whereNotNull('team')
+                        ->where('team', '!=', '')
+                        ->distinct()
+                        ->orderBy('team')
+                        ->pluck('team')
+                        ->values()
+                        ->all(),
+                    'sites' => Employee::query()
+                        ->whereNotNull('site_dedicated')
+                        ->where('site_dedicated', '!=', '')
+                        ->distinct()
+                        ->orderBy('site_dedicated')
+                        ->pluck('site_dedicated')
+                        ->values()
+                        ->all(),
+                    'years' => [$currentYear - 1, $currentYear],
+                    'currentYear' => $currentYear,
+                ];
+            });
+        } catch (QueryException $e) {
+            throw new OhsDashboardException(
+                'Tabel OHS Dashboard belum siap atau database lambat merespons. Pastikan migrasi ohs_dashboard sudah dijalankan.',
+                503,
+            );
         }
-        foreach (Event::query()->select(['event_date'])->cursor() as $event) {
-            $years[] = (int) $event->event_date?->year;
+
+        $cached['todayISO'] = $this->support->todayISO();
+        $cached['currentYear'] = (int) $this->support->today()->year;
+        if (! in_array($cached['currentYear'], $cached['years'], true)) {
+            $cached['years'][] = $cached['currentYear'];
+            sort($cached['years']);
         }
-        foreach (ProjectIssueTracker::query()->select(['start_date', 'due_date'])->cursor() as $tracker) {
-            $years[] = (int) $tracker->start_date?->year;
-            $years[] = (int) $tracker->due_date?->year;
-        }
 
-        $years = array_values(array_unique(array_filter($years, fn ($year): bool => $year > 1990 && $year < 2100)));
-        sort($years);
-
-        $teams = Employee::query()
-            ->whereNotNull('team')
-            ->where('team', '!=', '')
-            ->distinct()
-            ->orderBy('team')
-            ->pluck('team')
-            ->values()
-            ->all();
-
-        $sites = Employee::query()
-            ->whereNotNull('site_dedicated')
-            ->where('site_dedicated', '!=', '')
-            ->distinct()
-            ->orderBy('site_dedicated')
-            ->pluck('site_dedicated')
-            ->values()
-            ->all();
-
-        return [
-            'employeeCount' => Employee::query()->count(),
-            'leaveTypes' => LeaveType::query()->orderBy('leave_type')->get()->map->toApiArray()->all(),
-            'teams' => $teams,
-            'sites' => $sites,
-            'years' => $years,
-            'currentYear' => $currentYear,
-            'holidays' => $this->support->holidayMap(),
-            'todayISO' => $this->support->todayISO(),
-        ];
+        return $cached;
     }
 
     /**

@@ -8,7 +8,7 @@
         <p id="checkin-event-name">Memuat event...</p>
     </header>
     <section class="ohs-checkin-card">
-        <p id="checkin-meta" class="ohs-muted"></p>
+        <p id="checkin-meta" class="ohs-muted">Cari nama Anda, lalu konfirmasi check-in.</p>
         <label>Cari nama / NPK
             <input id="checkin-q" type="search" placeholder="Ketik minimal 2 karakter" autocomplete="off">
         </label>

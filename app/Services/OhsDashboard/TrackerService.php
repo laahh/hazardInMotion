@@ -300,6 +300,25 @@ final class TrackerService
 
     /**
      * @param  array<string, mixed>  $payload
+     * @return array{trackerId: string, deleted: bool}
+     */
+    public function delete(array $payload): array
+    {
+        $tracker = $this->requireTracker(OhsDashboardPayload::string($payload, 'TrackerId'));
+        $trackerId = $tracker->tracker_id;
+
+        DB::transaction(function () use ($trackerId, $tracker): void {
+            ProjectIssueSubTaskUpdateLog::query()->where('tracker_id', $trackerId)->delete();
+            ProjectIssueUpdateLog::query()->where('tracker_id', $trackerId)->delete();
+            ProjectIssueSubTask::query()->where('tracker_id', $trackerId)->delete();
+            $tracker->delete();
+        });
+
+        return ['trackerId' => $trackerId, 'deleted' => true];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
     public function data(array $payload): array
@@ -310,20 +329,35 @@ final class TrackerService
         $site = OhsDashboardPayload::string($payload, 'site');
         $search = mb_strtolower(OhsDashboardPayload::string($payload, 'search'));
 
-        $trackers = ProjectIssueTracker::query()->with('subTasks')->get();
+        $query = ProjectIssueTracker::query()->withCount('subTasks');
+        if (! $this->support->isAllType($type) && $type !== '') {
+            $query->where('tracker_type', $type);
+        }
+        if (! $this->support->isAllTeam($department) && $department !== '') {
+            $query->where('department', $department);
+        }
+        if (! $this->support->isAllSite($site) && $site !== '') {
+            $query->where('site', $site);
+        }
+        if ($search !== '') {
+            $like = '%'.$search.'%';
+            $query->where(function ($builder) use ($like): void {
+                $builder->where('project_issue_name', 'like', $like)
+                    ->orWhere('project_leader_name', 'like', $like)
+                    ->orWhere('department', 'like', $like)
+                    ->orWhere('site', 'like', $like)
+                    ->orWhere('tracker_id', 'like', $like);
+            });
+        }
+
+        $trackers = $query->orderBy('due_date')->limit(300)->get();
         $filtered = [];
 
         foreach ($trackers as $tracker) {
-            $this->refreshEffectiveStatus($tracker);
-            if (! $this->support->isAllType($type) && $tracker->tracker_type !== $type) {
-                continue;
-            }
-            if (! $this->matchesDepartmentSite($tracker, $department, $site)) {
-                continue;
-            }
-            if ($search !== '' && ! $this->matchesSearch($tracker, $search)) {
-                continue;
-            }
+            $tracker->status = $this->support->deriveTrackerStatus(
+                (float) $tracker->current_percent_complete,
+                $tracker->due_date,
+            );
             $filtered[] = $tracker;
         }
 
@@ -360,7 +394,10 @@ final class TrackerService
 
         return [
             'counts' => $counts,
-            'trackers' => array_map(fn (ProjectIssueTracker $tracker): array => $this->enrichTracker($tracker), $filtered),
+            'trackers' => array_map(
+                fn (ProjectIssueTracker $tracker): array => $this->enrichTracker($tracker, false),
+                $filtered,
+            ),
         ];
     }
 
@@ -493,9 +530,23 @@ final class TrackerService
     /**
      * @return array<string, mixed>
      */
+    public function show(string $trackerId): array
+    {
+        $tracker = $this->requireTracker($trackerId);
+        $this->refreshEffectiveStatus($tracker);
+
+        return $this->enrichTracker($tracker, true);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     public function enrichTracker(ProjectIssueTracker $tracker, bool $withSubTasks = true): array
     {
-        $leader = $tracker->leader;
+        $leader = $tracker->relationLoaded('leader') ? $tracker->leader : null;
+        $hasSubTasks = $tracker->sub_tasks_count !== null
+            ? (int) $tracker->sub_tasks_count > 0
+            : ($tracker->relationLoaded('subTasks') && $tracker->subTasks->isNotEmpty());
         $row = [
             'TrackerId' => $tracker->tracker_id,
             'Timestamp' => $this->support->formatDateTime($tracker->timestamp),
@@ -520,7 +571,7 @@ final class TrackerService
             'Status' => $tracker->status,
             'EffectiveStatus' => $tracker->status,
             'LastUpdated' => $this->support->formatDateTime($tracker->last_updated),
-            'HasSubTasks' => $tracker->subTasks->isNotEmpty(),
+            'HasSubTasks' => $hasSubTasks,
         ];
 
         if ($withSubTasks) {
@@ -545,7 +596,7 @@ final class TrackerService
      */
     public function enrichSubTask(ProjectIssueSubTask $task): array
     {
-        $pic = $task->pic;
+        $pic = $task->relationLoaded('pic') ? $task->pic : null;
 
         return [
             'SubTaskId' => $task->sub_task_id,
