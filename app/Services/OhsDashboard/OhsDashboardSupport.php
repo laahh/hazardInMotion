@@ -509,36 +509,6 @@ final class OhsDashboardSupport
         return ['shouldRun' => true, 'key' => $todayISO, 'reason' => ''];
     }
 
-    /**
-     * @return array{shouldRun: bool, key: string, reason: string}
-     */
-    public function getHseSyncDecision(string $lastKey, ?CarbonInterface $now = null): array
-    {
-        $now ??= $this->now();
-        $weekday = (int) config('ohs-dashboard.scheduler.hse_sync_weekday', 1);
-        $monday = $this->startOfWeekMonday($now);
-        $key = $this->formatISO($monday);
-        $hour = (int) config('ohs-dashboard.scheduler.overdue_hour', 8);
-        $minute = (int) config('ohs-dashboard.scheduler.overdue_minute', 0);
-        $window = (int) config('ohs-dashboard.scheduler.window_minutes', 75);
-        $target = $now->copy()->startOfDay()->setTime($hour, $minute, 0);
-        $minutes = (int) floor(($now->getTimestamp() - $target->getTimestamp()) / 60);
-
-        if ((int) $now->dayOfWeek !== $weekday) {
-            return ['shouldRun' => false, 'key' => $key, 'reason' => 'HSE sync hanya Senin.'];
-        }
-
-        if ($minutes < 0 || $minutes >= $window) {
-            return ['shouldRun' => false, 'key' => $key, 'reason' => 'Di luar window 08:00 + 75 menit.'];
-        }
-
-        if ($lastKey === $key) {
-            return ['shouldRun' => false, 'key' => $key, 'reason' => 'Sudah dijalankan minggu ini.'];
-        }
-
-        return ['shouldRun' => true, 'key' => $key, 'reason' => ''];
-    }
-
     public function employeeMap(): array
     {
         return Employee::query()

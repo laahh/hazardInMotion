@@ -53,11 +53,8 @@ final class EmailDigestService
             'OverdueReminderLastKey' => $row->overdue_reminder_last_key,
             'OverdueReminderLastRunAt' => $this->support->formatDateTime($row->overdue_reminder_last_run_at),
             'OverdueReminderLastCount' => (int) $row->overdue_reminder_last_count,
-            'HseSyncLastKey' => $row->hse_sync_last_key,
-            'HseSyncLastRunAt' => $this->support->formatDateTime($row->hse_sync_last_run_at),
-            'HseSyncLastCount' => (int) $row->hse_sync_last_count,
             'TimeZone' => $this->support->timezone(),
-            'CronNote' => 'Laravel Scheduler: ohs-dashboard:digest, ohs-dashboard:overdue-reminder, ohs-dashboard:hse-sync setiap menit (window 75 menit, timezone Asia/Jakarta). OS cron: * * * * * php artisan schedule:run',
+            'CronNote' => 'Laravel Scheduler: ohs-dashboard:digest, ohs-dashboard:overdue-reminder setiap menit (window 75 menit, timezone Asia/Jakarta). Data karyawan real-time dari database HSE, tidak perlu sinkronisasi. OS cron: * * * * * php artisan schedule:run',
             'MailQuotaRemaining' => null,
         ];
     }

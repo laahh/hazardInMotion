@@ -57,7 +57,6 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/admin/email-send', [AdminController::class, 'emailSend'])->name('admin.email-send');
     Route::post('/admin/email-test', [AdminController::class, 'emailTest'])->name('admin.email-test');
     Route::post('/admin/overdue-reminder-send', [AdminController::class, 'overdueReminderSend'])->name('admin.overdue-reminder-send');
-    Route::post('/admin/hse-sync-now', [AdminController::class, 'hseSyncNow'])->name('admin.hse-sync-now');
     Route::post('/admin/install-cron', [AdminController::class, 'installCron'])->name('admin.install-cron');
     Route::post('/admin/remove-cron', [AdminController::class, 'removeCron'])->name('admin.remove-cron');
 });

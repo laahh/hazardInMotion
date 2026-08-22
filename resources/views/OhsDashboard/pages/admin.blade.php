@@ -5,7 +5,7 @@
     <div class="ohs-page-head">
         <div>
             <h1>Admin Email Scheduler</h1>
-            <p class="lead">Atur email otomatis untuk reminder event, previous event, leave, serta Project &amp; Issue aktif. Termasuk overdue reminder dan sinkronisasi roster HSE.</p>
+            <p class="lead">Atur email otomatis untuk reminder event, previous event, leave, serta Project &amp; Issue aktif. Termasuk overdue reminder. Data karyawan diambil real-time dari database HSE.</p>
         </div>
         <button type="button" class="btn-ghost" id="admin-refresh">Refresh Settings</button>
     </div>
@@ -58,7 +58,6 @@
                 <button type="button" class="btn-ghost" id="admin-send">Run &amp; Send Now</button>
                 <button type="button" class="btn-ghost" id="admin-test">Send Test Email</button>
                 <button type="button" class="btn-ghost" id="admin-overdue">Send Overdue Reminder Now</button>
-                <button type="button" class="btn-ghost" id="admin-hse">Sync HSE Now</button>
             </div>
             <p id="admin-note" class="ohs-muted"></p>
         </form>

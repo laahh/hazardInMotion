@@ -1563,8 +1563,7 @@ function initAdmin() {
             kpiCard('Hari & Jam Pengiriman', `${s.ScheduleDays || '-'} ${String(s.SendHour).padStart(2, '0')}:${String(s.SendMinute).padStart(2, '0')}`, 'blue'),
             kpiCard('Last Run', s.LastRunAt || '-', 'green', s.LastRunStatus || ''),
             kpiCard('Overdue Reminder Terakhir', s.OverdueReminderLastRunAt || '-', 'orange', `${s.OverdueReminderLastCount ?? 0} item`),
-            kpiCard('HSE Sync Terakhir', s.HseSyncLastRunAt || '-', 'blue', `${s.HseSyncLastCount ?? 0} karyawan`),
-            kpiCard('Roster Karyawan', init.employeeCount, 'green'),
+            kpiCard('Roster Karyawan', init.employeeCount, 'green', 'Real-time dari database HSE'),
         ].join('');
         const triggerBadge = document.getElementById('admin-trigger-badge');
         triggerBadge.textContent = 'Trigger: ' + (s.Enabled ? 'ON' : 'OFF');
@@ -1603,7 +1602,7 @@ function initAdmin() {
     const run = (path, label) => async () => {
         if (!confirm(label + '?')) return;
         try {
-            const r = await api(path, { method: 'POST', body: '{}', timeout: path.includes('hse-sync') ? 120000 : 45000 });
+            const r = await api(path, { method: 'POST', body: '{}', timeout: 45000 });
             toast(r.message || 'Selesai', 'ok');
             load();
         } catch (err) { toast(err.message); }
@@ -1612,7 +1611,6 @@ function initAdmin() {
     document.getElementById('admin-send').onclick = run('/admin/email-send', 'Kirim digest sekarang');
     document.getElementById('admin-test').onclick = run('/admin/email-test', 'Kirim test email');
     document.getElementById('admin-overdue').onclick = run('/admin/overdue-reminder-send', 'Kirim overdue reminder');
-    document.getElementById('admin-hse').onclick = run('/admin/hse-sync-now', 'Sync HSE akan menimpa seluruh ohs_employees');
     load().catch((e) => toast(e.message));
 }
 
