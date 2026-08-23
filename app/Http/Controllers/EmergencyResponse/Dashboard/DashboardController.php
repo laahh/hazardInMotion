@@ -45,7 +45,9 @@ class DashboardController extends Controller
             ->whereBetween('reported_at', [$dateFrom, $dateTo])
             ->when($siteId, fn ($q) => $q->where('site_id', $siteId));
 
-        $equipmentByCondition = (clone $equipmentQuery)->selectRaw('condition, count(*) as total')->groupBy('condition')->pluck('total', 'condition');
+        // `condition` adalah reserved word di MySQL 8 — tidak aman dipakai mentah lewat selectRaw()
+        // tanpa backtick, jadi kolomnya dilewatkan lewat select() biasa (auto di-backtick oleh grammar).
+        $equipmentByCondition = (clone $equipmentQuery)->select('condition')->selectRaw('count(*) as total')->groupBy('condition')->pluck('total', 'condition');
         $incidentsByStatus = (clone $incidentQuery)->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
         $incidentsByPriority = (clone $incidentQuery)->with('priorityLevel')->get()->groupBy(fn ($i) => $i->priorityLevel->name ?? 'Tidak ditentukan')->map->count();
 
