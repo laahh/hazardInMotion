@@ -8,6 +8,7 @@
             <h6 class="mb-0">Safety Device</h6>
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <a href="{{ route('emergency-response.safety-device.export') }}" class="btn btn-outline-secondary btn-sm"><i class="ri-file-excel-2-line"></i> Export</a>
+                <a href="{{ route('emergency-response.safety-device.import-template') }}" class="btn btn-outline-secondary btn-sm"><i class="ri-download-2-line"></i> Download Template</a>
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#importModal"><i class="ri-upload-2-line"></i> Import</button>
                 <a href="{{ route('emergency-response.safety-device.create') }}" class="btn btn-primary-600 btn-sm"><i class="ri-add-line"></i> Tambah</a>
             </div>
