@@ -82,19 +82,19 @@
                 </a>
             </li>
 
-            {{-- <li class="sidebar-menu-group-title">Administrasi</li>
+            <li class="sidebar-menu-group-title">Administrasi</li>
             <li>
                 <a href="{{ $rr('emergency-response.master-data.index') }}">
                     <i class="ri-database-2-line menu-icon"></i>
                     <span>Master Data</span>
                 </a>
             </li>
-            <li>
+            {{-- <li>
                 <a href="{{ $rr('role-permission.index') }}">
                     <i class="ri-shield-user-line menu-icon"></i>
                     <span>User &amp; Role</span>
                 </a>
-            </li>
+            </li> --}}
             <li>
                 <a href="{{ $rr('emergency-response.audit-log.index') }}">
                     <i class="ri-history-line menu-icon"></i>
@@ -106,7 +106,7 @@
                     <i class="ri-settings-3-line menu-icon"></i>
                     <span>Pengaturan</span>
                 </a>
-            </li> --}}
+            </li>
         </ul>
     </div>
 </aside>
