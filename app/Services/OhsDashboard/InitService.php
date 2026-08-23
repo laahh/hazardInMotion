@@ -80,10 +80,10 @@ final class InitService
 
         return Employee::query()
             ->where(function ($builder) use ($like): void {
-                $builder->where('emp_name', 'like', $like)
-                    ->orWhere('emp_id', 'like', $like)
-                    ->orWhere('company', 'like', $like)
-                    ->orWhere('team', 'like', $like);
+                $builder->where('emp_name', 'ilike', $like)
+                    ->orWhere('emp_id', 'ilike', $like)
+                    ->orWhere('company', 'ilike', $like)
+                    ->orWhere('team', 'ilike', $like);
             })
             ->orderBy('emp_name')
             ->limit($limit)

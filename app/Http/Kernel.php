@@ -67,5 +67,6 @@ class Kernel extends HttpKernel
         'fatigue.management' => \App\Http\Middleware\FatigueManagementAccess::class,
         'evaluasi-well.access' => \App\Http\Middleware\SportEvaluationAccess::class,
         'evaluasi-well.mitra-only' => \App\Http\Middleware\SportEvaluationMitraOnlyAccess::class,
+        'er.role' => \App\Http\Middleware\EnsureEmergencyResponseRole::class,
     ];
 }

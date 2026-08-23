@@ -134,12 +134,12 @@ final class CalendarService
                 if ($itemEmpIds !== []) {
                     $builder->whereIn('emp_id', array_slice($itemEmpIds, 0, 300));
                 }
-                $builder->orWhere('emp_name', 'like', $like)
-                    ->orWhere('emp_id', 'like', $like)
-                    ->orWhere('sid', 'like', $like)
-                    ->orWhere('position', 'like', $like)
-                    ->orWhere('team', 'like', $like)
-                    ->orWhere('site_dedicated', 'like', $like);
+                $builder->orWhere('emp_name', 'ilike', $like)
+                    ->orWhere('emp_id', 'ilike', $like)
+                    ->orWhere('sid', 'ilike', $like)
+                    ->orWhere('position', 'ilike', $like)
+                    ->orWhere('team', 'ilike', $like)
+                    ->orWhere('site_dedicated', 'ilike', $like);
             });
         } elseif ($itemEmpIds !== []) {
             $query->whereIn('emp_id', array_slice($itemEmpIds, 0, 200));

@@ -54,6 +54,11 @@
             .replace(/>/g, '&gt;');
     }
 
+    var ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>';
+    var ICON_CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 3"></path></svg>';
+    var ICON_ALERT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="12.5"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
+    var ICON_CHECK_SMALL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>';
+
     function formatDateLabel(iso) {
         if (!iso) return '';
         var parts = String(iso).split('-');
@@ -87,8 +92,8 @@
                     '<span class="sub">' + escapeHtml([emp.Position, emp.Team, emp.Company].filter(Boolean).join(' • ')) + '</span>' +
                 '</span>' +
                 (isSelected
-                    ? '<span class="check">&#10003;</span>'
-                    : alreadyIn ? '<span class="done">Sudah absen</span>' : '');
+                    ? '<span class="check">' + ICON_CHECK_SMALL + '</span>'
+                    : alreadyIn ? '<span class="done">' + ICON_CHECK_SMALL + ' Sudah absen</span>' : '');
             btn.addEventListener('click', function () {
                 selectEmployee(emp);
             });
@@ -165,13 +170,13 @@
                 var icon = document.getElementById('successIcon');
                 if (data.alreadyCheckedIn) {
                     icon.className = 'state-icon warn';
-                    icon.innerHTML = '&#8505;&#65039;';
+                    icon.innerHTML = ICON_CLOCK;
                     document.getElementById('successTitle').textContent = 'Anda Sudah Absen';
                     document.getElementById('successText').innerHTML =
                         '<span class="name-highlight">' + escapeHtml(data.empName) + '</span> sudah tercatat hadir sebelumnya pada event ini.';
                 } else {
                     icon.className = 'state-icon success';
-                    icon.innerHTML = '&#9989;';
+                    icon.innerHTML = ICON_CHECK;
                     document.getElementById('successTitle').textContent = 'Absensi Tercatat';
                     document.getElementById('successText').innerHTML =
                         'Terima kasih, <span class="name-highlight">' + escapeHtml(data.empName) + '</span>. Kehadiran Anda berhasil dicatat.';
@@ -180,7 +185,7 @@
             })
             .catch(function (err) {
                 setSubmitting(false);
-                formMsg.innerHTML = '<div class="msg error">' + escapeHtml(err.message) + '</div>';
+                formMsg.innerHTML = '<div class="msg error">' + ICON_ALERT + '<span>' + escapeHtml(err.message) + '</span></div>';
             });
     });
 

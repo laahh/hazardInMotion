@@ -12,11 +12,22 @@ use App\Models\OhsDashboard\EventMinute;
 use App\Services\OhsDashboard\Support\OhsDashboardId;
 use App\Services\OhsDashboard\Support\OhsDashboardPayload;
 use Carbon\CarbonInterface;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 final class EventService
 {
     public function __construct(private readonly OhsDashboardSupport $support) {}
+
+    /**
+     * MySQL 42S02 / Postgres 42P01: table or view not found. Lets a missing
+     * `ohs_event_attendances` table degrade gracefully on read (empty list)
+     * instead of a hard failure, without masking other kinds of DB errors.
+     */
+    private function isMissingTable(QueryException $e): bool
+    {
+        return in_array($e->getCode(), ['42S02', '42P01'], true);
+    }
 
     /**
      * @param  array<string, mixed>  $payload
@@ -208,10 +219,19 @@ final class EventService
     public function checkinInfo(string $eventId): array
     {
         $event = $this->requireEvent($eventId, 'Event tidak ditemukan atau QR sudah tidak berlaku.');
-        $attendances = EventAttendance::query()
-            ->where('event_id', $event->event_id)
-            ->orderBy('check_in_at')
-            ->get();
+
+        try {
+            $attendances = EventAttendance::query()
+                ->where('event_id', $event->event_id)
+                ->orderBy('check_in_at')
+                ->get();
+        } catch (QueryException $e) {
+            if (! $this->isMissingTable($e)) {
+                throw $e;
+            }
+            report($e);
+            $attendances = collect();
+        }
 
         return [
             'event' => [
@@ -235,31 +255,42 @@ final class EventService
         $event = $this->requireEvent(OhsDashboardPayload::string($payload, 'EventId'));
         $employee = $this->support->requireEmployee(OhsDashboardPayload::string($payload, 'EmpId'));
 
-        $existing = EventAttendance::query()
-            ->where('event_id', $event->event_id)
-            ->where('emp_id', $employee->emp_id)
-            ->first();
+        try {
+            $existing = EventAttendance::query()
+                ->where('event_id', $event->event_id)
+                ->where('emp_id', $employee->emp_id)
+                ->first();
 
-        if ($existing instanceof EventAttendance) {
-            return [
-                'alreadyCheckedIn' => true,
-                'empName' => $existing->emp_name,
-                'checkInAt' => $this->support->formatDateTime($existing->check_in_at),
-            ];
+            if ($existing instanceof EventAttendance) {
+                return [
+                    'alreadyCheckedIn' => true,
+                    'empName' => $existing->emp_name,
+                    'checkInAt' => $this->support->formatDateTime($existing->check_in_at),
+                ];
+            }
+
+            $now = $this->support->now();
+            EventAttendance::query()->create([
+                'attendance_id' => OhsDashboardId::attendance(),
+                'timestamp' => $now,
+                'event_id' => $event->event_id,
+                'emp_id' => $employee->emp_id,
+                'emp_name' => $employee->emp_name,
+                'team' => $employee->team,
+                'position' => $employee->position,
+                'site_dedicated' => $employee->site_dedicated,
+                'check_in_at' => $now,
+            ]);
+        } catch (QueryException $e) {
+            if (! $this->isMissingTable($e)) {
+                throw $e;
+            }
+            report($e);
+            throw new OhsDashboardException(
+                'Tabel absensi (ohs_event_attendances) belum tersedia di database. Hubungi admin untuk menjalankan migrasi OHS Dashboard.',
+                503,
+            );
         }
-
-        $now = $this->support->now();
-        EventAttendance::query()->create([
-            'attendance_id' => OhsDashboardId::attendance(),
-            'timestamp' => $now,
-            'event_id' => $event->event_id,
-            'emp_id' => $employee->emp_id,
-            'emp_name' => $employee->emp_name,
-            'team' => $employee->team,
-            'position' => $employee->position,
-            'site_dedicated' => $employee->site_dedicated,
-            'check_in_at' => $now,
-        ]);
 
         return [
             'alreadyCheckedIn' => false,
@@ -274,10 +305,18 @@ final class EventService
     public function attendanceSummary(string $eventId): array
     {
         $event = $this->requireEvent($eventId);
-        $rows = EventAttendance::query()
-            ->where('event_id', $event->event_id)
-            ->orderBy('check_in_at')
-            ->get();
+        try {
+            $rows = EventAttendance::query()
+                ->where('event_id', $event->event_id)
+                ->orderBy('check_in_at')
+                ->get();
+        } catch (QueryException $e) {
+            if (! $this->isMissingTable($e)) {
+                throw $e;
+            }
+            report($e);
+            $rows = collect();
+        }
 
         return [
             'event' => $this->enrich($event),

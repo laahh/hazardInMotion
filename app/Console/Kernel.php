@@ -156,6 +156,32 @@ class Kernel extends ConsoleKernel
             ->dailyAt('01:00')
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/pra-operasi-evaluate-day.log'));
+
+        // Emergency Response & Safety Management System (default timezone Asia/Jakarta per spec modul).
+        // Urutan: generate WO/inspeksi terjadwal dulu, baru cek alert supaya WO/inspeksi baru itu ikut kena reminder hari yang sama.
+        $schedule->command('emergency-response:generate-due-maintenance')
+            ->timezone('Asia/Jakarta')
+            ->dailyAt('06:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/emergency-response-generate-maintenance.log'));
+
+        $schedule->command('emergency-response:check-alerts')
+            ->timezone('Asia/Jakarta')
+            ->dailyAt('07:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/emergency-response-check-alerts.log'));
+
+        $schedule->command('emergency-response:check-escalations')
+            ->timezone('Asia/Jakarta')
+            ->everyThirtyMinutes()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/emergency-response-check-escalations.log'));
+
+        $schedule->command('emergency-response:retry-failed-notifications')
+            ->timezone('Asia/Jakarta')
+            ->hourly()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/emergency-response-retry-notifications.log'));
     }
 
     /**

@@ -76,6 +76,14 @@ Route::prefix('ohs-dashboard/api')
     ->name('ohs-dashboard.api.')
     ->group(base_path('routes/OhsDashboard/api.php'));
 
+Route::prefix('emergency-response')
+    ->name('emergency-response.')
+    ->group(base_path('routes/EmergencyResponse/web.php'));
+
+Route::prefix('emergency-response/api')
+    ->name('emergency-response.api.')
+    ->group(base_path('routes/EmergencyResponse/api.php'));
+
 Auth::routes();
 
 // Form publik Auto Banned — tanpa login
