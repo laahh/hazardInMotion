@@ -3,7 +3,7 @@
     <iconify-icon icon="radix-icons:cross-2"></iconify-icon>
   </button>
   <div>
-    <a href="{{ route('dms.index') }}" class="sidebar-logo">
+    <a href="{{ route('dms.index') }}" class="sidebar-logo" style="justify-content: center;">
       <img src="https://besentry-dev.beraucoal.co.id/build/images/logo-removebg.png" alt="site logo" class="light-logo">
       <img src="https://besentry-dev.beraucoal.co.id/build/images/logo-removebg.png" alt="site logo" class="dark-logo">
       <img src="https://besentry-dev.beraucoal.co.id/build/images/logo-removebg.png" alt="site logo" class="logo-icon">
@@ -50,7 +50,7 @@
       </li>
       <li>
         <a href="{{ route('pra-operasi.saat-operasi') }}" class="{{ request()->routeIs('pra-operasi.saat-operasi') ? 'active-page' : '' }}">
-          <iconify-icon icon="solar:steering-wheel-outline" class="menu-icon"></iconify-icon>
+          <iconify-icon icon="solar:steering-wheel-bold" class="menu-icon"></iconify-icon>
           <span>Saat Operasi</span>
         </a>
       </li>
