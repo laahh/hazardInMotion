@@ -189,6 +189,9 @@ class EquipmentController extends Controller
         $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
             'Kode', 'Nama', 'Kategori (kode)', 'Tipe/Model', 'Merek', 'No. Seri', 'Site (kode)', 'Kondisi', 'Status Operasional',
         ]);
+        $spreadsheet->getActiveSheet()->fromArray([
+            'CONTOH-001', 'Contoh: APAR 6kg Ruang Genset (hapus baris ini)', 'APAR', 'ABC Dry Powder', 'Chubb', 'SN-12345', 'SITE-A', 'baik', 'available',
+        ], null, 'A2');
 
         SpreadsheetExporter::download($spreadsheet, 'template-import-emergency-equipment.xlsx');
     }

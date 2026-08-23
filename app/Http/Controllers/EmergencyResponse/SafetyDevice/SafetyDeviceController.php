@@ -7,6 +7,7 @@ namespace App\Http\Controllers\EmergencyResponse\SafetyDevice;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\EmergencyResponse\Shared\Concerns\ManagesEquipmentDocuments;
 use App\Http\Requests\EmergencyResponse\SafetyDevice\SafetyDeviceRequest;
+use App\Jobs\EmergencyResponse\ImportSafetyDeviceJob;
 use App\Models\EmergencyResponse\MasterData\Area;
 use App\Models\EmergencyResponse\MasterData\Department;
 use App\Models\EmergencyResponse\MasterData\Location;
@@ -179,5 +180,30 @@ class SafetyDeviceController extends Controller
         }
 
         SpreadsheetExporter::download($spreadsheet, 'safety-device-'.now()->format('Ymd-His').'.xlsx');
+    }
+
+    public function importTemplate(): Response
+    {
+        $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
+            'Kode', 'Nama', 'Jenis (kode)', 'Merek', 'Model', 'No. Seri', 'Site (kode)', 'Kondisi', 'Status Operasional',
+        ]);
+        $spreadsheet->getActiveSheet()->fromArray([
+            'CONTOH-001', 'Contoh: Gas Detector Area Tambang (hapus baris ini)', 'GAS-DET', 'Drager', 'X-am 2500', 'SN-98765', 'SITE-A', 'baik', 'available',
+        ], null, 'A2');
+
+        SpreadsheetExporter::download($spreadsheet, 'template-import-safety-device.xlsx');
+    }
+
+    public function import(Request $request): RedirectResponse
+    {
+        $request->validate(['excel_file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240']]);
+
+        $file = $request->file('excel_file');
+        $uniqueName = uniqid('er_safety_device_', true).'.'.$file->getClientOriginalExtension();
+        $storedPath = $file->storeAs('emergency-response/imports', $uniqueName);
+
+        ImportSafetyDeviceJob::dispatch($storedPath, $request->user()->id);
+
+        return redirect()->route('emergency-response.safety-device.index')->with('success', 'File berhasil diunggah dan sedang diproses di background.');
     }
 }

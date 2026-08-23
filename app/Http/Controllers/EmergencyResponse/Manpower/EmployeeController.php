@@ -6,6 +6,7 @@ namespace App\Http\Controllers\EmergencyResponse\Manpower;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\EmergencyResponse\Manpower\EmployeeRequest;
+use App\Jobs\EmergencyResponse\ImportEmployeeJob;
 use App\Models\EmergencyResponse\Manpower\Certification;
 use App\Models\EmergencyResponse\Manpower\Employee;
 use App\Models\EmergencyResponse\Manpower\Training;
@@ -138,5 +139,32 @@ class EmployeeController extends Controller
         }
 
         SpreadsheetExporter::download($spreadsheet, 'employees-'.now()->format('Ymd-His').'.xlsx');
+    }
+
+    public function importTemplate(): Response
+    {
+        $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
+            'No. Pegawai', 'Nama Lengkap', 'Jabatan', 'Departemen (kode)', 'Unit Emergency (kode)',
+            'Site (kode)', 'Email', 'Telepon', 'Status Pekerjaan', 'Peran Emergency',
+        ]);
+        $spreadsheet->getActiveSheet()->fromArray([
+            'CONTOH-001', 'Contoh: Budi Santoso (hapus baris ini)', 'HSE Officer', 'HSE', 'FIRE-01',
+            'SITE-A', 'budi.santoso@example.com', '081234567890', 'permanent', 'Fire Warden',
+        ], null, 'A2');
+
+        SpreadsheetExporter::download($spreadsheet, 'template-import-employees.xlsx');
+    }
+
+    public function import(Request $request): RedirectResponse
+    {
+        $request->validate(['excel_file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240']]);
+
+        $file = $request->file('excel_file');
+        $uniqueName = uniqid('er_employee_', true).'.'.$file->getClientOriginalExtension();
+        $storedPath = $file->storeAs('emergency-response/imports', $uniqueName);
+
+        ImportEmployeeJob::dispatch($storedPath, $request->user()->id);
+
+        return redirect()->route('emergency-response.manpower.employees.index')->with('success', 'File berhasil diunggah dan sedang diproses di background.');
     }
 }

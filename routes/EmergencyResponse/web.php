@@ -100,6 +100,8 @@ Route::middleware('auth')->group(function (): void {
 
     Route::prefix('safety-device')->name('safety-device.')->group(function (): void {
         Route::get('/export', [SafetyDeviceController::class, 'export'])->name('export');
+        Route::get('/import-template', [SafetyDeviceController::class, 'importTemplate'])->name('import-template');
+        Route::post('/import', [SafetyDeviceController::class, 'import'])->name('import');
         Route::get('/{safety_device}/qr', [SafetyDeviceController::class, 'qrSvg'])->name('qr');
         Route::get('/{safety_device}/print', [SafetyDeviceController::class, 'print'])->name('print');
         Route::post('/{safety_device}/documents', [SafetyDeviceController::class, 'storeDocument'])->name('documents.store');
@@ -197,6 +199,8 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/', [ManpowerController::class, 'index'])->name('index');
 
         Route::get('/employees/export', [EmployeeController::class, 'export'])->name('employees.export');
+        Route::get('/employees/import-template', [EmployeeController::class, 'importTemplate'])->name('employees.import-template');
+        Route::post('/employees/import', [EmployeeController::class, 'import'])->name('employees.import');
         Route::post('/employees/{employee}/trainings', [EmployeeTrainingController::class, 'store'])->name('employees.trainings.store');
         Route::delete('/employees/{employee}/trainings/{training}', [EmployeeTrainingController::class, 'destroy'])->name('employees.trainings.destroy');
         Route::post('/employees/{employee}/certifications', [EmployeeCertificationController::class, 'store'])->name('employees.certifications.store');

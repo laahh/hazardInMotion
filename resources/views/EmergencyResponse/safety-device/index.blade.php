@@ -8,6 +8,7 @@
             <h6 class="mb-0">Safety Device</h6>
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <a href="{{ route('emergency-response.safety-device.export') }}" class="btn btn-outline-secondary btn-sm"><i class="ri-file-excel-2-line"></i> Export</a>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#importModal"><i class="ri-upload-2-line"></i> Import</button>
                 <a href="{{ route('emergency-response.safety-device.create') }}" class="btn btn-primary-600 btn-sm"><i class="ri-add-line"></i> Tambah</a>
             </div>
         </div>
@@ -94,6 +95,34 @@
                 </table>
             </div>
             <div class="mt-16">{{ $devices->links() }}</div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form action="{{ route('emergency-response.safety-device.import') }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+                    <div class="modal-header">
+                        <h6 class="modal-title">Import Safety Device</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-secondary-light text-sm">
+                            Unduh <a href="{{ route('emergency-response.safety-device.import-template') }}">template Excel</a> terlebih dahulu.
+                            Data akan diproses di background (bisa perlu waktu beberapa saat).
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label">File Excel/CSV</label>
+                            <input type="file" name="excel_file" class="form-control" accept=".xlsx,.xls,.csv" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-primary-600">Upload</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 @endsection
