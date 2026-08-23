@@ -82,7 +82,7 @@
                 </a>
             </li>
 
-            <li class="sidebar-menu-group-title">Administrasi</li>
+            {{-- <li class="sidebar-menu-group-title">Administrasi</li>
             <li>
                 <a href="{{ $rr('emergency-response.master-data.index') }}">
                     <i class="ri-database-2-line menu-icon"></i>
@@ -106,7 +106,7 @@
                     <i class="ri-settings-3-line menu-icon"></i>
                     <span>Pengaturan</span>
                 </a>
-            </li>
+            </li> --}}
         </ul>
     </div>
 </aside>
