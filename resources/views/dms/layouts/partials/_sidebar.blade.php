@@ -4,15 +4,15 @@
   </button>
   <div>
     <a href="{{ route('dms.index') }}" class="sidebar-logo">
-      <img src="{{ asset('evaluasi-well-assets/images/logo.png') }}" alt="site logo" class="light-logo">
-      <img src="{{ asset('evaluasi-well-assets/images/logo-light.png') }}" alt="site logo" class="dark-logo">
-      <img src="{{ asset('evaluasi-well-assets/images/logo-icon.png') }}" alt="site logo" class="logo-icon">
+      <img src="https://besentry-dev.beraucoal.co.id/build/images/logo-removebg.png" alt="site logo" class="light-logo">
+      <img src="https://besentry-dev.beraucoal.co.id/build/images/logo-removebg.png" alt="site logo" class="dark-logo">
+      <img src="https://besentry-dev.beraucoal.co.id/build/images/logo-removebg.png" alt="site logo" class="logo-icon">
     </a>
   </div>
   <div class="sidebar-menu-area">
     <ul class="sidebar-menu" id="sidebar-menu">
       <li class="sidebar-menu-group-title">Driver Monitoring System</li>
-      <li>
+      {{-- <li>
         <a href="{{ route('dms.dashboard') }}" class="{{ request()->routeIs('dms.dashboard') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:home-smile-angle-outline" class="menu-icon"></iconify-icon>
           <span>Dashboard DMS</span>
@@ -28,6 +28,12 @@
         <a href="{{ route('dms.detection') }}" class="{{ request()->routeIs('dms.detection') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:videocamera-record-outline" class="menu-icon"></iconify-icon>
           <span>Deteksi</span>
+        </a>
+      </li> --}}
+       <li>
+        <a href="{{ route('pra-operasi.dms-monitoring') }}" class="{{ request()->routeIs('pra-operasi.dms-monitoring*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:shield-warning-outline" class="menu-icon"></iconify-icon>
+          <span>Monitoring Alert DMS</span>
         </a>
       </li>
       <li>
@@ -54,12 +60,7 @@
           <span>Evaluasi Harian</span>
         </a>
       </li>
-      <li>
-        <a href="{{ route('pra-operasi.dms-monitoring') }}" class="{{ request()->routeIs('pra-operasi.dms-monitoring*') ? 'active-page' : '' }}">
-          <iconify-icon icon="solar:shield-warning-outline" class="menu-icon"></iconify-icon>
-          <span>Monitoring Alert DMS</span>
-        </a>
-      </li>
+     
       <li class="sidebar-menu-group-title">Navigasi</li>
       <li>
         <a href="{{ url('/') }}">
