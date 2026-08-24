@@ -7,27 +7,29 @@ namespace App\Support\EmergencyResponse;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 /**
- * Wraps simplesoftwareio/simple-qrcode for Emergency Response asset codes
- * (emergency equipment, safety device). Content is the asset code itself,
- * not a URL — the scanning page looks the code up server-side.
+ * Wraps simplesoftwareio/simple-qrcode for Emergency Response asset labels.
+ * Content is the scan URL so a phone camera opens the asset page directly.
+ *
+ * generate() returns Illuminate\Support\HtmlString; it must be cast to string
+ * because this class uses declare(strict_types=1).
  */
 class QrCodeService
 {
-    public function svg(string $assetCode): string
+    public function svg(string $content): string
     {
-        return QrCode::format('svg')
+        return (string) QrCode::format('svg')
             ->size(400)
             ->margin(3)
             ->errorCorrection('H')
-            ->generate($assetCode);
+            ->generate($content);
     }
 
-    public function png(string $assetCode): string
+    public function png(string $content): string
     {
-        return QrCode::format('png')
+        return (string) QrCode::format('png')
             ->size(400)
             ->margin(3)
             ->errorCorrection('H')
-            ->generate($assetCode);
+            ->generate($content);
     }
 }
