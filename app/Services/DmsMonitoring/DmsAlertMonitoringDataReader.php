@@ -84,48 +84,77 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     {
         $empty = ['total' => 0, 'l1_reviewed' => 0, 'l1_confirmed' => 0, 'l1_dismissed' => 0, 'l1_belum' => 0, 'l2_reviewed' => 0, 'l2_confirmed' => 0, 'post_event_eligible' => 0];
 
-        return $this->remember('summary.raw_v1', $start, $end, function () use ($start, $end, $empty): array {
-            $connection = $this->connectionSource->connectionName();
-            if ($connection === null) {
-                return $empty;
-            }
+        $cacheKey = 'dms_monitoring:summary.raw_v2:'.md5($start.'|'.$end.'|'.$this->scopeCacheSuffix());
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && array_key_exists('total', $cached)) {
+            return $cached;
+        }
 
-            $sql = "
-                SELECT
-                    count(*) AS total,
-                    count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL) AS l1_reviewed,
-                    count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL AND a.l1_context_status = true) AS l1_confirmed,
-                    count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL AND a.l1_context_status = false) AS l1_dismissed,
-                    count(*) FILTER (WHERE a.l1_updated_at IS NULL) AS l1_belum,
-                    count(*) FILTER (WHERE a.l2_updated_at IS NOT NULL) AS l2_reviewed,
-                    count(*) FILTER (WHERE a.l2_updated_at IS NOT NULL AND a.l2_context_status = true) AS l2_confirmed,
-                    count(*) FILTER (WHERE a.is_calculated_for_report_violation = true) AS post_event_eligible
-                {$this->rawAlertFromSql()}
-                WHERE {$this->rawAlertDateWhere()}
-            ";
+        if (! $this->isUp()) {
+            return $empty;
+        }
 
-            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+        $connection = $this->connectionSource->connectionName();
+        if ($connection === null) {
+            return $empty;
+        }
+
+        $bindings = $this->alertDateBindings($start, $end);
+        $from = $this->rawAlertFromSql();
+        $where = $this->rawAlertDateWhere();
+
+        $this->applyStatementTimeout($connection, 15000);
+        try {
+            $totalRow = DB::connection($connection)->selectOne(
+                "SELECT count(*) AS total {$from} WHERE {$where}",
+                $bindings,
+            );
+            $total = (int) ($totalRow->total ?? 0);
+
             try {
-                $row = DB::connection($connection)->selectOne($sql, $this->alertDateBindings($start, $end));
+                $row = DB::connection($connection)->selectOne(
+                    "
+                        SELECT
+                            count(*) AS total,
+                            count(a.l1_updated_at) AS l1_reviewed,
+                            count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL AND a.l1_context_status = true) AS l1_confirmed,
+                            count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL AND a.l1_context_status = false) AS l1_dismissed,
+                            count(*) FILTER (WHERE a.l1_updated_at IS NULL) AS l1_belum,
+                            count(a.l2_updated_at) AS l2_reviewed,
+                            count(*) FILTER (WHERE a.l2_updated_at IS NOT NULL AND a.l2_context_status = true) AS l2_confirmed,
+                            count(*) FILTER (WHERE a.is_calculated_for_report_violation = true) AS post_event_eligible
+                        {$from}
+                        WHERE {$where}
+                    ",
+                    $bindings,
+                );
+
+                $payload = [
+                    'total' => (int) ($row->total ?? $total),
+                    'l1_reviewed' => (int) ($row->l1_reviewed ?? 0),
+                    'l1_confirmed' => (int) ($row->l1_confirmed ?? 0),
+                    'l1_dismissed' => (int) ($row->l1_dismissed ?? 0),
+                    'l1_belum' => (int) ($row->l1_belum ?? 0),
+                    'l2_reviewed' => (int) ($row->l2_reviewed ?? 0),
+                    'l2_confirmed' => (int) ($row->l2_confirmed ?? 0),
+                    'post_event_eligible' => (int) ($row->post_event_eligible ?? 0),
+                ];
             } catch (Throwable $e) {
                 report($e);
 
-                return $empty;
-            } finally {
-                $this->clearStatementTimeout($connection);
+                $payload = array_merge($empty, ['total' => $total, 'l1_belum' => $total]);
             }
 
-            return [
-                'total' => (int) ($row->total ?? 0),
-                'l1_reviewed' => (int) ($row->l1_reviewed ?? 0),
-                'l1_confirmed' => (int) ($row->l1_confirmed ?? 0),
-                'l1_dismissed' => (int) ($row->l1_dismissed ?? 0),
-                'l1_belum' => (int) ($row->l1_belum ?? 0),
-                'l2_reviewed' => (int) ($row->l2_reviewed ?? 0),
-                'l2_confirmed' => (int) ($row->l2_confirmed ?? 0),
-                'post_event_eligible' => (int) ($row->post_event_eligible ?? 0),
-            ];
-        });
+            Cache::put($cacheKey, $payload, 1800);
+
+            return $payload;
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        } finally {
+            $this->clearStatementTimeout($connection);
+        }
     }
 
     /**
@@ -1700,7 +1729,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      */
     public function dailyAlertSeries(string $start, string $end): array
     {
-        return $this->remember('dashboard.daily_series.raw_v1', $start, $end, function () use ($start, $end): array {
+        return $this->remember('dashboard.daily_series.raw_v2', $start, $end, function () use ($start, $end): array {
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return [];
@@ -1709,17 +1738,14 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             $sql = "
                 SELECT
                     date(a.event_time) AS hari,
-                    count(*) AS total,
-                    count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL AND a.l1_context_status = true) AS confirmed,
-                    count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL AND a.l1_context_status = false) AS dismissed,
-                    count(*) FILTER (WHERE a.l1_updated_at IS NULL) AS pending
+                    count(*) AS total
                 {$this->rawAlertFromSql()}
                 WHERE {$this->rawAlertDateWhere()}
                 GROUP BY 1
                 ORDER BY 1
             ";
 
-            $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
+            $this->applyStatementTimeout($connection, 15000);
             try {
                 $rows = DB::connection($connection)->select($sql, $this->alertDateBindings($start, $end));
             } catch (Throwable $e) {
@@ -1736,13 +1762,15 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
                     $hari = $hari->format('Y-m-d');
                 }
 
+                $total = (int) $r->total;
+
                 return [
                     'hari' => (string) $hari,
-                    'total' => (int) $r->total,
-                    'confirmed' => (int) $r->confirmed,
-                    'dismissed' => (int) $r->dismissed,
-                    'pending' => (int) $r->pending,
-                    'operators' => (int) $r->total,
+                    'total' => $total,
+                    'confirmed' => 0,
+                    'dismissed' => 0,
+                    'pending' => $total,
+                    'operators' => $total,
                 ];
             }, $rows);
         });
@@ -2812,7 +2840,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     {
         return '
             FROM bcsid.dms_alert a
-            JOIN bcsid.dms_alert_mapping m ON a.alert_name_mapping_id = m.id
+            JOIN bcsid.dms_alert_mapping m ON a.alert_name_mapping_id::text = m.id::text
         ';
     }
 
