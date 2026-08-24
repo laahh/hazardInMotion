@@ -25,12 +25,12 @@ use Throwable;
  *     WAJIB tetap agregat tunggal — JANGAN PERNAH di-chunk atau di-loop per SID.
  *   - Unit beroperasi diambil dari bcsid.dms_vehicle_statuses (speed_gps > 0),
  *     di-join ke bcsid.dms_vehicle untuk site/perusahaan.
- *   - bcsid.dms_alert (raw, bukan mv_dms_alert) dan bcsid.dms_spv_schedule
- *     SENGAJA TIDAK dipakai — dms_alert diketahui COUNT(*) timeout tanpa
- *     filter dan tidak ada jalan aman untuk resolusi identitas reviewer;
- *     dms_spv_schedule butuh join yang belum tervalidasi. Panel yang
- *     harusnya butuh ini (mis. performa per-reviewer) diganti dengan agregat
- *     per site dari mv_dms_alert saja.
+ *   - bcsid.dms_alert + bcsid.dms_alert_mapping: sumber kartu KPI Total Alert
+ *     (alertSummary & dailyAlertSeries). Keduanya FOREIGN TABLE — WAJIB
+ *     window event_time, jangan pernah COUNT(*) tanpa filter tanggal.
+ *   - bcsid.dms_spv_schedule SENGAJA TIDAK dipakai (join identitas reviewer
+ *     belum tervalidasi). Panel per-reviewer diganti agregat per site dari
+ *     mv_dms_alert.
  */
 final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 {
@@ -84,7 +84,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
     {
         $empty = ['total' => 0, 'l1_reviewed' => 0, 'l1_confirmed' => 0, 'l1_dismissed' => 0, 'l1_belum' => 0, 'l2_reviewed' => 0, 'l2_confirmed' => 0, 'post_event_eligible' => 0];
 
-        return $this->remember('summary', $start, $end, function () use ($start, $end, $empty): array {
+        return $this->remember('summary.raw_v1', $start, $end, function () use ($start, $end, $empty): array {
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return $empty;
@@ -93,15 +93,15 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
             $sql = "
                 SELECT
                     count(*) AS total,
-                    count(*) FILTER (WHERE sudah_direview_l1 = true) AS l1_reviewed,
-                    count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = true) AS l1_confirmed,
-                    count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = false) AS l1_dismissed,
-                    count(*) FILTER (WHERE sudah_direview_l1 = false OR sudah_direview_l1 IS NULL) AS l1_belum,
-                    count(*) FILTER (WHERE sudah_direview_l2 = true) AS l2_reviewed,
-                    count(*) FILTER (WHERE sudah_direview_l2 = true AND l2_context_status = true) AS l2_confirmed,
-                    count(*) FILTER (WHERE dihitung_untuk_laporan_pelanggaran = true) AS post_event_eligible
-                FROM bcsid.mv_dms_alert
-                WHERE {$this->alertDateWhere()}
+                    count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL) AS l1_reviewed,
+                    count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL AND a.l1_context_status = true) AS l1_confirmed,
+                    count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL AND a.l1_context_status = false) AS l1_dismissed,
+                    count(*) FILTER (WHERE a.l1_updated_at IS NULL) AS l1_belum,
+                    count(*) FILTER (WHERE a.l2_updated_at IS NOT NULL) AS l2_reviewed,
+                    count(*) FILTER (WHERE a.l2_updated_at IS NOT NULL AND a.l2_context_status = true) AS l2_confirmed,
+                    count(*) FILTER (WHERE a.is_calculated_for_report_violation = true) AS post_event_eligible
+                {$this->rawAlertFromSql()}
+                WHERE {$this->rawAlertDateWhere()}
             ";
 
             $this->applyStatementTimeout($connection, self::RFID_STATEMENT_TIMEOUT_MS);
@@ -1746,7 +1746,7 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
      */
     public function dailyAlertSeries(string $start, string $end): array
     {
-        return $this->remember('dashboard.daily_series.v2', $start, $end, function () use ($start, $end): array {
+        return $this->remember('dashboard.daily_series.raw_v1', $start, $end, function () use ($start, $end): array {
             $connection = $this->connectionSource->connectionName();
             if ($connection === null) {
                 return [];
@@ -1754,13 +1754,13 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
 
             $sql = "
                 SELECT
-                    date(waktu_deteksi) AS hari,
+                    date(a.event_time) AS hari,
                     count(*) AS total,
-                    count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = true) AS confirmed,
-                    count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_context_status = false) AS dismissed,
-                    count(*) FILTER (WHERE sudah_direview_l1 = false OR sudah_direview_l1 IS NULL) AS pending
-                FROM bcsid.mv_dms_alert
-                WHERE {$this->alertDateWhere()}
+                    count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL AND a.l1_context_status = true) AS confirmed,
+                    count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL AND a.l1_context_status = false) AS dismissed,
+                    count(*) FILTER (WHERE a.l1_updated_at IS NULL) AS pending
+                {$this->rawAlertFromSql()}
+                WHERE {$this->rawAlertDateWhere()}
                 GROUP BY 1
                 ORDER BY 1
             ";
@@ -2888,6 +2888,33 @@ final class DmsAlertMonitoringDataReader implements DmsDashboardDataSource
         }
         if ($this->scopePerusahaan !== null) {
             $sql .= ' AND TRIM(perusahaan::text) = ?';
+        }
+
+        return $sql;
+    }
+
+    /**
+     * FROM/JOIN untuk kartu KPI alert dari tabel mentah.
+     * Mapping di-INNER JOIN (hanya alert yang punya nama mapping, sama seperti
+     * PraOperasiDmsAlertReader). Site/perusahaan di-resolve via subquery id
+     * supaya COUNT tidak menarik join FDW besar.
+     */
+    private function rawAlertFromSql(): string
+    {
+        return '
+            FROM bcsid.dms_alert a
+            JOIN bcsid.dms_alert_mapping m ON a.alert_name_mapping_id::text = m.id::text
+        ';
+    }
+
+    private function rawAlertDateWhere(): string
+    {
+        $sql = 'a.event_time >= ? AND a.event_time < ?';
+        if ($this->scopeSite !== null) {
+            $sql .= ' AND a.mine_operation_id IN (SELECT id FROM bcsid.dms_mine_operation WHERE TRIM(name::text) = ?)';
+        }
+        if ($this->scopePerusahaan !== null) {
+            $sql .= ' AND a.contractor_id IN (SELECT id FROM bcsid.dms_contractor WHERE TRIM(name::text) = ?)';
         }
 
         return $sql;

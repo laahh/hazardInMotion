@@ -8,9 +8,9 @@ use Illuminate\Support\Carbon;
 use Throwable;
 
 /**
- * Payload dashboard DMS (layout WowDash CRM) dari bcsid.mv_dms_alert.
- * Semua query windowed lewat DmsDashboardDataSource — tidak SELECT *
- * dan tidak loop per-SID.
+ * Payload dashboard DMS (layout WowDash CRM). Kartu KPI Total Alert dari
+ * bcsid.dms_alert ⋈ bcsid.dms_alert_mapping; widget lain tetap windowed lewat
+ * DmsDashboardDataSource. Tidak SELECT * dan tidak loop per-SID.
  */
 final class DmsDashboardOverviewService
 {

@@ -234,7 +234,7 @@
 @unless($up)
 <div class="alert alert-warning radius-8 mb-24 d-flex align-items-start gap-2">
   <iconify-icon icon="solar:danger-circle-bold" class="icon text-xl flex-shrink-0"></iconify-icon>
-  <div>Koneksi ke hse_automation (bcsid.mv_dms_alert) tidak tersedia saat ini. Kartu di bawah menampilkan angka kosong sampai koneksi tersambung.</div>
+  <div>Koneksi ke hse_automation (bcsid.dms_alert) tidak tersedia saat ini. Kartu di bawah menampilkan angka kosong sampai koneksi tersambung.</div>
 </div>
 @endunless
 
