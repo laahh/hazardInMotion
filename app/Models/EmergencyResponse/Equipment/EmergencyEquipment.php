@@ -41,7 +41,7 @@ class EmergencyEquipment extends Model
 
     protected $fillable = [
         'code', 'name', 'equipment_category_id', 'type_model', 'brand', 'serial_number',
-        'site_id', 'location_id', 'area_id', 'position_detail', 'latitude', 'longitude',
+        'site_id', 'location_id', 'location_name', 'area_id', 'area_name', 'position_detail', 'latitude', 'longitude',
         'department_id', 'emergency_unit_id', 'purchased_at', 'commissioned_at',
         'condition', 'operational_status', 'last_inspection_at', 'next_inspection_at',
         'last_calibration_at', 'expires_at', 'certificate_number', 'certificate_expires_at',
@@ -110,6 +110,20 @@ class EmergencyEquipment extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function locationLabel(): ?string
+    {
+        $name = trim((string) ($this->location_name ?? ''));
+
+        return $name !== '' ? $name : $this->location?->name;
+    }
+
+    public function areaLabel(): ?string
+    {
+        $name = trim((string) ($this->area_name ?? ''));
+
+        return $name !== '' ? $name : $this->area?->name;
     }
 
     public function conditionLabel(): string

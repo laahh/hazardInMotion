@@ -3,6 +3,10 @@
 @section('page-title', $pageTitle)
 
 @section('content')
+    @php
+        $formIntent = (string) old('form_intent', 'create');
+    @endphp
+
     <div class="card shadow-none border">
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
             <h6 class="mb-0">{{ $pageTitle }}</h6>
@@ -54,44 +58,6 @@
                                     </form>
                                 </td>
                             </tr>
-
-                            <div class="modal fade" id="editModal-{{ $item->id }}" tabindex="-1" aria-hidden="true">
-                                <div class="modal-dialog">
-                                    <div class="modal-content">
-                                        <form action="{{ route("{$routeName}.update", $item->id) }}" method="POST">
-                                            @csrf
-                                            @method('PUT')
-                                            <div class="modal-header">
-                                                <h6 class="modal-title">Edit {{ $pageTitle }}</h6>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                            </div>
-                                            <div class="modal-body">
-                                                <div class="mb-3">
-                                                    <label class="form-label">Kode</label>
-                                                    <input type="text" name="code" class="form-control" value="{{ old('code', $item->code) }}" required maxlength="50">
-                                                </div>
-                                                <div class="mb-3">
-                                                    <label class="form-label">Nama</label>
-                                                    <input type="text" name="name" class="form-control" value="{{ old('name', $item->name) }}" required maxlength="255">
-                                                </div>
-                                                <div class="mb-3">
-                                                    <label class="form-label">Deskripsi</label>
-                                                    <textarea name="description" class="form-control" rows="2">{{ old('description', $item->description) }}</textarea>
-                                                </div>
-                                                <div class="form-check form-switch">
-                                                    <input type="hidden" name="is_active" value="0">
-                                                    <input type="checkbox" name="is_active" value="1" class="form-check-input" id="active-{{ $item->id }}" @checked($item->is_active)>
-                                                    <label class="form-check-label" for="active-{{ $item->id }}">Aktif</label>
-                                                </div>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
-                                                <button type="submit" class="btn btn-primary-600">Simpan</button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
                         @empty
                             <tr>
                                 <td colspan="5" class="text-center text-secondary-light py-24">Belum ada data {{ strtolower($pageTitle) }}.</td>
@@ -107,23 +73,86 @@
         </div>
     </div>
 
+    @foreach ($items as $item)
+        @php
+            $isThisEdit = $formIntent === 'edit-'.$item->id;
+        @endphp
+        <div class="modal fade" id="editModal-{{ $item->id }}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <form action="{{ route("{$routeName}.update", $item->id) }}" method="POST">
+                        @csrf
+                        @method('PUT')
+                        <input type="hidden" name="form_intent" value="edit-{{ $item->id }}">
+                        <div class="modal-header">
+                            <h6 class="modal-title">Edit {{ $pageTitle }}</h6>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            @if ($errors->any() && $isThisEdit)
+                                <div class="alert alert-danger" role="alert">
+                                    <ul class="mb-0 ps-16">
+                                        @foreach ($errors->all() as $error)
+                                            <li>{{ $error }}</li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @endif
+                            <div class="mb-3">
+                                <label class="form-label">Kode</label>
+                                <input type="text" name="code" class="form-control @if ($isThisEdit && $errors->has('code')) is-invalid @endif" value="{{ $isThisEdit ? old('code', $item->code) : $item->code }}" required maxlength="50">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Nama</label>
+                                <input type="text" name="name" class="form-control @if ($isThisEdit && $errors->has('name')) is-invalid @endif" value="{{ $isThisEdit ? old('name', $item->name) : $item->name }}" required maxlength="255">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Deskripsi</label>
+                                <textarea name="description" class="form-control" rows="2">{{ $isThisEdit ? old('description', $item->description) : $item->description }}</textarea>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input type="hidden" name="is_active" value="0">
+                                <input type="checkbox" name="is_active" value="1" class="form-check-input" id="active-{{ $item->id }}" @checked($isThisEdit ? (string) old('is_active', $item->is_active ? '1' : '0') === '1' : $item->is_active)>
+                                <label class="form-check-label" for="active-{{ $item->id }}">Aktif</label>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                            <button type="submit" class="btn btn-primary-600">Simpan</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endforeach
+
     <div class="modal fade" id="createModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <form action="{{ route("{$routeName}.store") }}" method="POST">
                     @csrf
+                    <input type="hidden" name="form_intent" value="create">
                     <div class="modal-header">
                         <h6 class="modal-title">Tambah {{ $pageTitle }}</h6>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
+                        @if ($errors->any() && $formIntent === 'create')
+                            <div class="alert alert-danger" role="alert">
+                                <ul class="mb-0 ps-16">
+                                    @foreach ($errors->all() as $error)
+                                        <li>{{ $error }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
                         <div class="mb-3">
                             <label class="form-label">Kode</label>
-                            <input type="text" name="code" class="form-control" value="{{ old('code') }}" required maxlength="50">
+                            <input type="text" name="code" class="form-control @if ($formIntent === 'create' && $errors->has('code')) is-invalid @endif" value="{{ old('code') }}" required maxlength="50">
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Nama</label>
-                            <input type="text" name="name" class="form-control" value="{{ old('name') }}" required maxlength="255">
+                            <input type="text" name="name" class="form-control @if ($formIntent === 'create' && $errors->has('name')) is-invalid @endif" value="{{ old('name') }}" required maxlength="255">
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Deskripsi</label>
@@ -131,7 +160,7 @@
                         </div>
                         <div class="form-check form-switch">
                             <input type="hidden" name="is_active" value="0">
-                            <input type="checkbox" name="is_active" value="1" class="form-check-input" id="active-new" checked>
+                            <input type="checkbox" name="is_active" value="1" class="form-check-input" id="active-new" @checked((string) old('is_active', '1') === '1')>
                             <label class="form-check-label" for="active-new">Aktif</label>
                         </div>
                     </div>
@@ -143,13 +172,19 @@
             </div>
         </div>
     </div>
+@endsection
 
+@push('scripts')
     @if ($errors->any())
         <script>
             document.addEventListener('DOMContentLoaded', function () {
-                var modal = new bootstrap.Modal(document.getElementById('createModal'));
-                modal.show();
+                var intent = @json($formIntent);
+                var modalId = intent.indexOf('edit-') === 0 ? 'editModal-' + intent.slice(5) : 'createModal';
+                var el = document.getElementById(modalId) || document.getElementById('createModal');
+                if (el && window.bootstrap) {
+                    bootstrap.Modal.getOrCreateInstance(el).show();
+                }
             });
         </script>
     @endif
-@endsection
+@endpush

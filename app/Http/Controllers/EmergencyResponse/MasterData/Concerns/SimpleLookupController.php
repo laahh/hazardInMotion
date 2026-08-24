@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\EmergencyResponse\MasterData\Concerns;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 /**
@@ -47,11 +50,46 @@ abstract class SimpleLookupController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $data = $request->validate($this->rules());
-        $data['created_by'] = $request->user()->id;
+        $data = $request->validate($this->rules(), $this->validationMessages());
         $data['is_active'] = $request->boolean('is_active', true);
+        $userId = $request->user()->id;
 
-        $this->model::create($data);
+        try {
+            DB::transaction(function () use ($data, $userId): void {
+                // Unique index `code` masih berlaku untuk baris soft-deleted.
+                // Kalau kode pernah dipakai lalu dihapus, restore + update agar
+                // halaman kosong tidak "menolak" kode yang sama tanpa alasan jelas.
+                $existing = $this->model::withTrashed()->where('code', $data['code'])->first();
+
+                if ($existing !== null) {
+                    if (! $existing->trashed()) {
+                        throw ValidationException::withMessages([
+                            'code' => 'Kode sudah digunakan oleh data aktif.',
+                        ]);
+                    }
+
+                    $existing->restore();
+                    $existing->update([
+                        'name' => $data['name'],
+                        'description' => $data['description'] ?? null,
+                        'is_active' => $data['is_active'],
+                        'updated_by' => $userId,
+                    ]);
+
+                    return;
+                }
+
+                $data['created_by'] = $userId;
+                $this->model::create($data);
+            });
+        } catch (QueryException $e) {
+            report($e);
+
+            return redirect()
+                ->route("{$this->routeName}.index")
+                ->withInput()
+                ->withErrors(['code' => 'Gagal menyimpan. Kode mungkin sudah digunakan.']);
+        }
 
         return redirect()->route("{$this->routeName}.index")->with('success', "{$this->pageTitle} berhasil ditambahkan.");
     }
@@ -59,11 +97,20 @@ abstract class SimpleLookupController extends Controller
     public function update(Request $request, string $id): RedirectResponse
     {
         $item = $this->model::findOrFail($id);
-        $data = $request->validate($this->rules($id));
+        $data = $request->validate($this->rules($id), $this->validationMessages());
         $data['updated_by'] = $request->user()->id;
         $data['is_active'] = $request->boolean('is_active', true);
 
-        $item->update($data);
+        try {
+            $item->update($data);
+        } catch (QueryException $e) {
+            report($e);
+
+            return redirect()
+                ->route("{$this->routeName}.index")
+                ->withInput()
+                ->withErrors(['code' => 'Gagal memperbarui. Kode mungkin sudah digunakan.']);
+        }
 
         return redirect()->route("{$this->routeName}.index")->with('success', "{$this->pageTitle} berhasil diperbarui.");
     }
@@ -80,12 +127,29 @@ abstract class SimpleLookupController extends Controller
     protected function rules(?string $ignoreId = null): array
     {
         $table = (new $this->model)->getTable();
+        $unique = Rule::unique($table, 'code')->whereNull('deleted_at');
+
+        if ($ignoreId !== null && $ignoreId !== '') {
+            $unique->ignore($ignoreId);
+        }
 
         return [
-            'code' => ['required', 'string', 'max:50', Rule::unique($table, 'code')->ignore($ignoreId)],
+            'code' => ['required', 'string', 'max:50', $unique],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'is_active' => ['nullable', 'boolean'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function validationMessages(): array
+    {
+        return [
+            'code.required' => 'Kode wajib diisi.',
+            'code.unique' => 'Kode sudah digunakan oleh data aktif.',
+            'name.required' => 'Nama wajib diisi.',
         ];
     }
 }

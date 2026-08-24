@@ -9,11 +9,9 @@ use App\Http\Controllers\EmergencyResponse\Shared\Concerns\ManagesEquipmentDocum
 use App\Http\Requests\EmergencyResponse\Equipment\EquipmentRequest;
 use App\Jobs\EmergencyResponse\ImportEquipmentJob;
 use App\Models\EmergencyResponse\Equipment\EmergencyEquipment;
-use App\Models\EmergencyResponse\MasterData\Area;
 use App\Models\EmergencyResponse\MasterData\Department;
 use App\Models\EmergencyResponse\MasterData\EmergencyUnit;
 use App\Models\EmergencyResponse\MasterData\EquipmentCategory;
-use App\Models\EmergencyResponse\MasterData\Location;
 use App\Models\EmergencyResponse\MasterData\Site;
 use App\Models\EmergencyResponse\Shared\EquipmentDocument;
 use App\Support\EmergencyResponse\QrCodeService;
@@ -70,8 +68,6 @@ class EquipmentController extends Controller
             'equipment' => $equipment,
             'categories' => EquipmentCategory::query()->where('is_active', true)->orderBy('name')->get(),
             'sites' => Site::query()->where('is_active', true)->orderBy('name')->get(),
-            'locations' => Location::query()->with('site')->where('is_active', true)->orderBy('name')->get(),
-            'areas' => Area::query()->with('location')->where('is_active', true)->orderBy('name')->get(),
             'departments' => Department::query()->where('is_active', true)->orderBy('name')->get(),
             'emergencyUnits' => EmergencyUnit::query()->where('is_active', true)->orderBy('name')->get(),
             'conditions' => EmergencyEquipment::CONDITIONS,
@@ -174,7 +170,7 @@ class EquipmentController extends Controller
                 $item->brand,
                 $item->serial_number,
                 $item->site->name ?? '-',
-                $item->location->name ?? '-',
+                $item->locationLabel() ?? '-',
                 $item->conditionLabel(),
                 $item->operationalStatusLabel(),
                 optional($item->next_inspection_at)->format('Y-m-d'),

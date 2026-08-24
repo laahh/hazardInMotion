@@ -25,7 +25,7 @@
                                 <tr><th>Tipe/Model</th><td>{{ $equipment->type_model ?: '-' }}</td></tr>
                                 <tr><th>Merek</th><td>{{ $equipment->brand ?: '-' }}</td></tr>
                                 <tr><th>No. Seri</th><td>{{ $equipment->serial_number ?: '-' }}</td></tr>
-                                <tr><th>Lokasi</th><td>{{ $equipment->site->name ?? '-' }} / {{ $equipment->location->name ?? '-' }} / {{ $equipment->area->name ?? '-' }}</td></tr>
+                                <tr><th>Lokasi</th><td>{{ $equipment->site->name ?? '-' }} / {{ $equipment->locationLabel() ?? '-' }} / {{ $equipment->areaLabel() ?? '-' }}</td></tr>
                                 <tr><th>Detail Posisi</th><td>{{ $equipment->position_detail ?: '-' }}</td></tr>
                                 <tr><th>Departemen</th><td>{{ $equipment->department->name ?? '-' }}</td></tr>
                                 <tr><th>Unit Emergency</th><td>{{ $equipment->emergencyUnit->name ?? '-' }}</td></tr>

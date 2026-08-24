@@ -18,7 +18,7 @@
         <img src="{{ route('emergency-response.equipment.qr', $equipment) }}" alt="QR Code">
         <h3>{{ $equipment->code }}</h3>
         <p>{{ $equipment->name }}</p>
-        <p>{{ $equipment->site->name ?? '' }} @if($equipment->location) - {{ $equipment->location->name }} @endif</p>
+        <p>{{ $equipment->site->name ?? '' }} @if($equipment->locationLabel()) - {{ $equipment->locationLabel() }} @endif</p>
     </div>
     <div class="no-print">
         <button onclick="window.print()">Cetak</button>

@@ -62,21 +62,11 @@
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="form-label">Lokasi</label>
-                        <select name="location_id" class="form-control">
-                            <option value="">-- Pilih --</option>
-                            @foreach ($locations as $location)
-                                <option value="{{ $location->id }}" @selected(old('location_id', $equipment->location_id) === $location->id)>{{ $location->site->name }} - {{ $location->name }}</option>
-                            @endforeach
-                        </select>
+                        <input type="text" name="location_name" class="form-control" value="{{ old('location_name', $equipment->location_name ?: $equipment->location?->name) }}" maxlength="255" placeholder="mis. Gudang A">
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="form-label">Area</label>
-                        <select name="area_id" class="form-control">
-                            <option value="">-- Pilih --</option>
-                            @foreach ($areas as $area)
-                                <option value="{{ $area->id }}" @selected(old('area_id', $equipment->area_id) === $area->id)>{{ $area->location->name }} - {{ $area->name }}</option>
-                            @endforeach
-                        </select>
+                        <input type="text" name="area_name" class="form-control" value="{{ old('area_name', $equipment->area_name ?: $equipment->area?->name) }}" maxlength="255" placeholder="mis. Dekat pintu keluar">
                     </div>
                 </div>
                 <div class="row">

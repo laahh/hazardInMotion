@@ -75,7 +75,7 @@
                                 <td>{{ $item->code }}</td>
                                 <td><a href="{{ route('emergency-response.equipment.show', $item) }}">{{ $item->name }}</a></td>
                                 <td>{{ $item->category->name ?? '-' }}</td>
-                                <td>{{ $item->site->name ?? '-' }} @if($item->location) / {{ $item->location->name }} @endif</td>
+                                <td>{{ $item->site->name ?? '-' }} @if($item->locationLabel()) / {{ $item->locationLabel() }} @endif</td>
                                 <td><span class="badge bg-info-focus text-info-600 px-16 py-4 radius-4">{{ $item->conditionLabel() }}</span></td>
                                 <td><span class="badge bg-success-focus text-success-600 px-16 py-4 radius-4">{{ $item->operationalStatusLabel() }}</span></td>
                                 <td>{{ optional($item->next_inspection_at)->format('d M Y') ?? '-' }}</td>
