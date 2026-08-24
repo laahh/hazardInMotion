@@ -9,7 +9,11 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Sync karyawan HSE → BeWell employee_profiles (append-only by kode_sid).
+ * Sync karyawan HSE → BeWell employee_profiles.
+ *
+ * Karyawan baru ditambahkan (append-only, field existing tidak ditimpa),
+ * tapi status_karyawan existing bisa berubah jadi NONAKTIF kalau SID-nya
+ * sudah tidak ada di roster aktif HSE (resign/mutasi keluar, dsb).
  */
 final class SportEvaluationHseEmployeeSyncService
 {
@@ -27,6 +31,7 @@ final class SportEvaluationHseEmployeeSyncService
      *     failed: int,
      *     companies: int,
      *     sids_seen: int,
+     *     deactivated: int,
      *     errors: list<string>
      * }
      */
@@ -43,6 +48,7 @@ final class SportEvaluationHseEmployeeSyncService
             'failed' => 0,
             'companies' => 0,
             'sids_seen' => 0,
+            'deactivated' => 0,
             'errors' => [],
         ];
 
@@ -86,6 +92,18 @@ final class SportEvaluationHseEmployeeSyncService
 
         $allSids = array_values($pendingSids);
         $summary['sids_seen'] = count($allSids);
+
+        // Deteksi karyawan resign/mutasi keluar: hanya jalan kalau semua company
+        // berhasil diambil, supaya kegagalan API tidak salah menonaktifkan orang.
+        if ($summary['failed'] === 0 && $allSids !== []) {
+            $summary['deactivated'] = $this->employeeProfileService->deactivateMissingFromHse(
+                array_keys($pendingSids)
+            );
+
+            Log::info('evaluasi_well.hse_sync.deactivated', [
+                'deactivated' => $summary['deactivated'],
+            ]);
+        }
 
         $existingMap = $this->employeeProfileService->existingKodeSidMap($allSids);
 

@@ -154,7 +154,7 @@
         <p class="text-sm text-secondary-light mb-0">Tambah / edit profil. Password login = Kode SID.</p>
       </div>
       <div class="d-flex flex-wrap gap-2">
-        <form action="{{ route('evaluasi-well.users.sync-hse') }}" method="POST" class="d-inline" onsubmit="return confirm('Jalankan sync HSE? Karyawan baru akan ditambahkan; SID yang sudah ada tidak diubah.');">
+        <form action="{{ route('evaluasi-well.users.sync-hse') }}" method="POST" class="d-inline" onsubmit="return confirm('Jalankan sync HSE? Karyawan baru akan ditambahkan; SID yang sudah ada tidak diubah datanya, kecuali statusnya otomatis jadi NONAKTIF bila sudah tidak ada di roster aktif HSE.');">
           @csrf
           <button type="submit" class="btn btn-outline-success-600 radius-8 px-16 py-10" @disabled(!($connectionUp ?? false))>
             Sync dari HSE

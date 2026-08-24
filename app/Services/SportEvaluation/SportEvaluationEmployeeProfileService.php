@@ -690,6 +690,50 @@ final class SportEvaluationEmployeeProfileService
     }
 
     /**
+     * Tandai NONAKTIF karyawan yang saat ini berstatus AKTIF di BeWell tapi
+     * sudah tidak muncul di roster aktif HSE (resign/mutasi, dsb).
+     *
+     * @param  list<string>  $activeSidsFromHse  kode_sid (UPPER) yang masih aktif menurut HSE, dari seluruh company yang berhasil diambil
+     * @return int jumlah karyawan yang dinonaktifkan
+     */
+    public function deactivateMissingFromHse(array $activeSidsFromHse): int
+    {
+        if (! $this->connection->isUp()) {
+            throw new RuntimeException('Koneksi BeWell tidak tersedia.');
+        }
+
+        $activeSet = array_flip($activeSidsFromHse);
+
+        $rows = $this->db()->table('employee_profiles')
+            ->where('status_karyawan', 'AKTIF')
+            ->get(['id', 'kode_sid']);
+
+        $idsToDeactivate = [];
+        foreach ($rows as $row) {
+            $sid = mb_strtoupper(trim((string) ($row->kode_sid ?? '')));
+            if ($sid !== '' && ! isset($activeSet[$sid])) {
+                $idsToDeactivate[] = (int) $row->id;
+            }
+        }
+
+        if ($idsToDeactivate === []) {
+            return 0;
+        }
+
+        foreach (array_chunk($idsToDeactivate, 800) as $chunk) {
+            $this->db()->table('employee_profiles')
+                ->whereIn('id', $chunk)
+                ->update(['status_karyawan' => 'NONAKTIF']);
+        }
+
+        foreach ($idsToDeactivate as $id) {
+            $this->invalidateCaches($id);
+        }
+
+        return count($idsToDeactivate);
+    }
+
+    /**
      * @param  list<string>  $header
      * @param  list<string>  $possibleNames
      */
