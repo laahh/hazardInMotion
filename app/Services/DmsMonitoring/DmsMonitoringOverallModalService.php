@@ -36,7 +36,7 @@ final class DmsMonitoringOverallModalService
             return $this->errorPayload('Koneksi ke hse_automation tidak tersedia.');
         }
 
-        $cacheKey = 'dms_monitoring:overall_unit.payload.v3:'.md5(json_encode([
+        $cacheKey = 'dms_monitoring:overall_unit.payload.v4:'.md5(json_encode([
             $filters,
             $page,
             $status,
@@ -108,7 +108,7 @@ final class DmsMonitoringOverallModalService
             return $this->errorPayload('Tanggal detail di luar range filter.');
         }
 
-        $cacheKey = 'dms_monitoring:overall_unit.day.v1:'.md5(json_encode([
+        $cacheKey = 'dms_monitoring:overall_unit.day.v2:'.md5(json_encode([
             $filters,
             $day,
             $status,

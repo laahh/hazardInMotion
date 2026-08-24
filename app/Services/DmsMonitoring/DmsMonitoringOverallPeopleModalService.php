@@ -39,7 +39,7 @@ final class DmsMonitoringOverallPeopleModalService
             return $this->errorPayload('Koneksi ke sumber data operator tidak tersedia.');
         }
 
-        $cacheKey = 'dms_monitoring:overall_people.payload.v3:'.md5(json_encode([
+        $cacheKey = 'dms_monitoring:overall_people.payload.v4:'.md5(json_encode([
             $filters,
             $page,
             $status,
@@ -105,7 +105,7 @@ final class DmsMonitoringOverallPeopleModalService
             return $this->errorPayload('Tanggal detail di luar range filter.');
         }
 
-        $cacheKey = 'dms_monitoring:overall_people.day.v2:'.md5(json_encode([
+        $cacheKey = 'dms_monitoring:overall_people.day.v3:'.md5(json_encode([
             $filters,
             $day,
             $status,

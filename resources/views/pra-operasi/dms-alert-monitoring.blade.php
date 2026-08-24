@@ -712,7 +712,11 @@
       },
       dataLabels: { enabled: false },
       xaxis: { categories: chartData.labels || [], labels: { rotate: -45, style: { fontSize: '10px' } } },
-      yaxis: { labels: { formatter: function (v) { return Math.round(v); } } },
+      yaxis: {
+        min: 0,
+        max: function (max) { return (!isFinite(max) || max <= 0) ? 1 : max; },
+        labels: { formatter: function (v) { return isFinite(v) ? Math.round(v) : 0; } }
+      },
       legend: { show: false },
       tooltip: { shared: true, intersect: false },
     });
@@ -759,7 +763,11 @@
         formatter: function (v) { return Number(v || 0).toLocaleString('id-ID'); }
       },
       xaxis: { categories: chartData.labels || [], labels: { rotate: -45, style: { fontSize: '10px' } } },
-      yaxis: { labels: { formatter: function (v) { return Math.round(v); } } },
+      yaxis: {
+        min: 0,
+        max: function (max) { return (!isFinite(max) || max <= 0) ? 1 : max; },
+        labels: { formatter: function (v) { return isFinite(v) ? Math.round(v) : 0; } }
+      },
       tooltip: {
         y: { formatter: function (v) { return Number(v || 0).toLocaleString('id-ID'); } }
       }
@@ -807,7 +815,11 @@
       plotOptions: { bar: { borderRadius: 4, columnWidth: '60%' } },
       dataLabels: { enabled: false },
       xaxis: { categories: (chartData && chartData.labels) ? chartData.labels : [], labels: { rotate: -45, style: { fontSize: '10px' } } },
-      yaxis: { labels: { formatter: function (v) { return Math.round(v); } } },
+      yaxis: {
+        min: 0,
+        max: function (max) { return (!isFinite(max) || max <= 0) ? 1 : max; },
+        labels: { formatter: function (v) { return isFinite(v) ? Math.round(v) : 0; } }
+      },
       legend: { position: 'top', horizontalAlign: 'left', fontSize: '12px' },
       tooltip: { y: { formatter: function (v) { return Number(v || 0).toLocaleString('id-ID') + ' unit'; } } }
     });
@@ -1225,7 +1237,11 @@
       fill: { type: ['gradient', 'solid', 'solid', 'solid'], gradient: { shadeIntensity: 0.4, opacityFrom: 0.45, opacityTo: 0.05, stops: [0, 100] } },
       dataLabels: { enabled: false },
       xaxis: { categories: chartData.labels || [], labels: { rotate: -45, style: { fontSize: '10px' } } },
-      yaxis: { labels: { formatter: function (v) { return Math.round(v); } } },
+      yaxis: {
+        min: 0,
+        max: function (max) { return (!isFinite(max) || max <= 0) ? 1 : max; },
+        labels: { formatter: function (v) { return isFinite(v) ? Math.round(v) : 0; } }
+      },
       legend: { show: false },
       tooltip: { shared: true, intersect: false }
     });
@@ -1292,7 +1308,11 @@
       plotOptions: { bar: { borderRadius: 4, columnWidth: '60%', dataLabels: { position: 'top' } } },
       dataLabels: { enabled: false },
       xaxis: { categories: (chartData && chartData.labels) ? chartData.labels : [], labels: { rotate: -45, style: { fontSize: '10px' } } },
-      yaxis: { labels: { formatter: function (v) { return Math.round(v); } } },
+      yaxis: {
+        min: 0,
+        max: function (max) { return (!isFinite(max) || max <= 0) ? 1 : max; },
+        labels: { formatter: function (v) { return isFinite(v) ? Math.round(v) : 0; } }
+      },
       legend: { position: 'top', horizontalAlign: 'left', fontSize: '12px' },
       tooltip: { y: { formatter: function (v) { return Number(v || 0).toLocaleString('id-ID') + ' orang'; } } }
     });
