@@ -11,9 +11,12 @@ use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * Jumlah alert fatigue DMS (bcsid.dms_alert, kategori Menutup Mata/Menguap/Menunduk)
- * per driver_sid dalam window waktu tertentu — dipakai untuk cross-check "Pencapaian
- * Pengisian Aggregator Fatigue berdasarkan Pekerja dengan Alert DMS".
+ * Jumlah alert fatigue DMS (bcsid.dms_alert ⋈ bcsid.dms_alert_mapping,
+ * kategori Menutup Mata/Menguap/Menunduk) per driver_sid dalam window waktu
+ * tertentu — dipakai dashboard Pra Operasi, Saat Operasi, dan Evaluasi Harian.
+ *
+ * Alert harian / live SENGAJA dari tabel mentah (bukan mv_dms_alert) supaya
+ * angka sama dengan /pra-operasi dan tidak menunggu refresh materialized view.
  */
 final class PraOperasiDmsAlertReader
 {
@@ -201,8 +204,11 @@ final class PraOperasiDmsAlertReader
 
     /**
      * Breakdown status alert (nyata/palsu/belum) untuk SATU tanggal spesifik per
-     * SID — dipakai untuk Evaluasi Harian (Fase 3), beda dari
+     * SID — dipakai Saat Operasi (Fase 2) dan Evaluasi Harian (Fase 3). Beda dari
      * confirmedAlertStatsForSids() yang window 30 hari & hanya menghitung yang nyata.
+     *
+     * Mapping status mengikuti definisi mv_dms_alert:
+     * sudah_direview_l1 = (l1_updated_at IS NOT NULL).
      *
      * @param  list<string>  $sids
      * @return array<string, array{nyata:int, palsu:int, belum:int}>  keyed by UPPER(kode_sid)
@@ -221,7 +227,7 @@ final class PraOperasiDmsAlertReader
             return [];
         }
 
-        $cacheKey = 'pra_operasi:dms_daily_breakdown:v1:'.$date.':'.md5(implode(',', $upperSids));
+        $cacheKey = 'pra_operasi:dms_daily_breakdown:v2:'.$date.':'.md5(implode(',', $upperSids));
 
         return Cache::remember($cacheKey, 300, function () use ($upperSids, $date): array {
             $connection = $this->connectionSource->connectionName();
@@ -238,15 +244,17 @@ final class PraOperasiDmsAlertReader
             foreach (array_chunk($upperSids, self::SID_CHUNK) as $chunk) {
                 $sidPlaceholders = implode(',', array_fill(0, count($chunk), '?'));
                 $sql = '
-                    SELECT UPPER(TRIM(kode_sid)) AS sid,
-                        count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_model_status = true) AS nyata,
-                        count(*) FILTER (WHERE sudah_direview_l1 = true AND l1_model_status = false) AS palsu,
-                        count(*) FILTER (WHERE sudah_direview_l1 = false OR sudah_direview_l1 IS NULL) AS belum
-                    FROM bcsid.mv_dms_alert
-                    WHERE nama_pelanggaran IN ('.$namePlaceholders.')
-                      AND waktu_deteksi >= ? AND waktu_deteksi < ?
-                      AND UPPER(TRIM(kode_sid)) IN ('.$sidPlaceholders.')
-                    GROUP BY UPPER(TRIM(kode_sid))
+                    SELECT UPPER(TRIM(a.driver_sid)) AS sid,
+                        count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL AND a.l1_model_status = true) AS nyata,
+                        count(*) FILTER (WHERE a.l1_updated_at IS NOT NULL AND a.l1_model_status = false) AS palsu,
+                        count(*) FILTER (WHERE a.l1_updated_at IS NULL) AS belum
+                    FROM bcsid.dms_alert a
+                    JOIN bcsid.dms_alert_mapping m ON a.alert_name_mapping_id::text = m.id::text
+                    WHERE m.name IN ('.$namePlaceholders.')
+                      AND a.event_time >= ? AND a.event_time < ?
+                      AND a.driver_sid IS NOT NULL
+                      AND UPPER(TRIM(a.driver_sid)) IN ('.$sidPlaceholders.')
+                    GROUP BY UPPER(TRIM(a.driver_sid))
                 ';
 
                 $bindings = array_merge(self::FATIGUE_ALERT_NAMES, [$start, $end], $chunk);
@@ -297,7 +305,7 @@ final class PraOperasiDmsAlertReader
             return [];
         }
 
-        $cacheKey = 'pra_operasi:dms_recent_feed:v1:'.$date.':'.md5(implode(',', $upperSids)).':'.$limit;
+        $cacheKey = 'pra_operasi:dms_recent_feed:v2:'.$date.':'.md5(implode(',', $upperSids)).':'.$limit;
 
         return Cache::remember($cacheKey, 30, function () use ($upperSids, $date, $limit): array {
             $connection = $this->connectionSource->connectionName();
@@ -312,12 +320,19 @@ final class PraOperasiDmsAlertReader
             $sidPlaceholders = implode(',', array_fill(0, count($upperSids), '?'));
 
             $sql = '
-                SELECT kode_sid, nama_driver_dms, waktu_deteksi, nama_pelanggaran, l1_model_status, sudah_direview_l1
-                FROM bcsid.mv_dms_alert
-                WHERE nama_pelanggaran IN ('.$namePlaceholders.')
-                  AND waktu_deteksi >= ? AND waktu_deteksi < ?
-                  AND UPPER(TRIM(kode_sid)) IN ('.$sidPlaceholders.')
-                ORDER BY waktu_deteksi DESC
+                SELECT a.driver_sid AS kode_sid,
+                    a.driver_name AS nama_driver_dms,
+                    a.event_time AS waktu_deteksi,
+                    m.name AS nama_pelanggaran,
+                    a.l1_model_status,
+                    (a.l1_updated_at IS NOT NULL) AS sudah_direview_l1
+                FROM bcsid.dms_alert a
+                JOIN bcsid.dms_alert_mapping m ON a.alert_name_mapping_id::text = m.id::text
+                WHERE m.name IN ('.$namePlaceholders.')
+                  AND a.event_time >= ? AND a.event_time < ?
+                  AND a.driver_sid IS NOT NULL
+                  AND UPPER(TRIM(a.driver_sid)) IN ('.$sidPlaceholders.')
+                ORDER BY a.event_time DESC
                 LIMIT ?
             ';
 
