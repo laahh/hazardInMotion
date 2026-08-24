@@ -55,6 +55,7 @@ final class SportEvaluationInstallStatsService
         private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
         private readonly SportEvaluationDivisiGroupResolver $divisiGroupResolver,
         private readonly SportEvaluationCompanyAliasResolver $companyAliasResolver,
+        private readonly SportEvaluationEmployeeExclusionRules $exclusionRules,
     ) {}
 
     /**
@@ -79,7 +80,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:v9:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:v10:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             $stats = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($dimension, $filters): array {
                 return $this->buildStats($dimension, $filters);
@@ -118,7 +119,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:overview:v9:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:overview:v10:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters): array {
                 $overview = [];
@@ -175,7 +176,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            return Cache::remember('evaluasi_well:install_stats:filter_options:v4', self::CACHE_TTL, function (): array {
+            return Cache::remember('evaluasi_well:install_stats:filter_options:v5', self::CACHE_TTL, function (): array {
                 $rows = $this->rawEmployeeRows();
                 $sites = [];
                 $companies = [];
@@ -185,6 +186,16 @@ final class SportEvaluationInstallStatsService
 
                 foreach ($rows as $row) {
                     $site = $this->siteResolver->resolve($row['kode_sid'], $row['site']);
+
+                    if ($this->exclusionRules->isExcludedRow([
+                        'jabatan_fungsional' => $row['jabatan'],
+                        'site' => $row['site'],
+                        'resolved_site' => $site,
+                        'nama' => $row['nama'],
+                    ])) {
+                        continue;
+                    }
+
                     if ($site !== '') {
                         $sites[$site] = true;
                     }
@@ -201,7 +212,7 @@ final class SportEvaluationInstallStatsService
                     if ($row['departement'] !== '') {
                         $departements[$row['departement']] = true;
                     }
-                    if ($row['jabatan'] !== '' && mb_strtoupper($row['jabatan']) !== 'VISITOR') {
+                    if ($row['jabatan'] !== '') {
                         $jabatans[$row['jabatan']] = true;
                     }
                 }
@@ -490,6 +501,16 @@ final class SportEvaluationInstallStatsService
 
         foreach ($this->rawEmployeeRows() as $row) {
             $resolvedSite = $this->siteResolver->resolve($row['kode_sid'], $row['site']);
+
+            if ($this->exclusionRules->isExcludedRow([
+                'jabatan_fungsional' => $row['jabatan'],
+                'site' => $row['site'],
+                'resolved_site' => $resolvedSite,
+                'nama' => $row['nama'],
+            ])) {
+                continue;
+            }
+
             $divisiGroup = $this->divisiGroupResolver->resolve($row['divisi']);
             $company = $this->companyAliasResolver->resolve($row['company']);
 
@@ -545,8 +566,8 @@ final class SportEvaluationInstallStatsService
      */
     private function rawEmployeeRows(): array
     {
-        /** @var list<array{id:int,kode_sid:string,site:string,divisi:string,company:string,departement:string,jabatan:string,is_installed:bool}> */
-        return Cache::remember('evaluasi_well:install_stats:raw_employees:v2', self::CACHE_TTL, function (): array {
+        /** @var list<array{id:int,kode_sid:string,site:string,divisi:string,company:string,departement:string,jabatan:string,nama:string,is_installed:bool}> */
+        return Cache::remember('evaluasi_well:install_stats:raw_employees:v3', self::CACHE_TTL, function (): array {
             $db = DB::connection(BewellConnectionService::CONNECTION);
 
             $sql = '
@@ -558,6 +579,7 @@ final class SportEvaluationInstallStatsService
                     e.nama_perusahaan,
                     e.departement,
                     e.jabatan_fungsional,
+                    e.nama,
                     CASE WHEN (
                         EXISTS (
                             SELECT 1 FROM login_audit a
@@ -589,6 +611,7 @@ final class SportEvaluationInstallStatsService
                     'company' => trim((string) ($row->nama_perusahaan ?? '')),
                     'departement' => trim((string) ($row->departement ?? '')),
                     'jabatan' => trim((string) ($row->jabatan_fungsional ?? '')),
+                    'nama' => trim((string) ($row->nama ?? '')),
                     'is_installed' => (int) ($row->is_installed ?? 0) === 1,
                 ];
             }

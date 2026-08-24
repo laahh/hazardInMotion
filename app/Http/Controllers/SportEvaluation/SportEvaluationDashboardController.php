@@ -9,6 +9,7 @@ use App\Services\SportEvaluation\BewellConnectionService;
 use App\Services\SportEvaluation\SportEvaluationActiveStatsService;
 use App\Services\SportEvaluation\SportEvaluationCompanyAliasResolver;
 use App\Services\SportEvaluation\SportEvaluationDivisiGroupResolver;
+use App\Services\SportEvaluation\SportEvaluationEmployeeExclusionRules;
 use App\Services\SportEvaluation\SportEvaluationInstallStatsService;
 use App\Services\SportEvaluation\SportEvaluationKaryawanWellSiteResolver;
 use App\Services\SportEvaluation\SportEvaluationMitraAssignmentService;
@@ -45,6 +46,7 @@ class SportEvaluationDashboardController extends Controller
         private readonly SportEvaluationDivisiGroupResolver $divisiGroupResolver,
         private readonly SportEvaluationMitraAssignmentService $mitraAssignmentService,
         private readonly SportEvaluationCompanyAliasResolver $companyAliasResolver,
+        private readonly SportEvaluationEmployeeExclusionRules $exclusionRules,
     ) {}
 
     public function index(Request $request): View
@@ -1170,6 +1172,7 @@ class SportEvaluationDashboardController extends Controller
 
             $employeesQuery = $db->table('employee_profiles as e')
                 ->where('e.status_karyawan', 'AKTIF');
+            $this->exclusionRules->applyToQuery($employeesQuery);
             $this->mitraAssignmentService->applyScopeToEmployeeQuery($employeesQuery, $this->indexFilters);
             $employees = $employeesQuery->get(['e.kode_sid', 'e.site']);
 
@@ -1493,15 +1496,16 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Karyawan status AKTIF, exclude jabatan_fungsional VISITOR.
+     * Karyawan status AKTIF, exclude VISITOR/Presiden Direktur/Direktur tanpa
+     * site (atau site HO), site Jakarta & Poltek, dan nama dummy.
      */
     private function activeEmployeesBaseQuery(): Builder
     {
         $query = DB::connection(BewellConnectionService::CONNECTION)
             ->table('employee_profiles as e')
-            ->where('e.status_karyawan', 'AKTIF')
-            ->whereRaw('UPPER(TRIM(COALESCE(e.jabatan_fungsional, \'\'))) <> ?', ['VISITOR']);
+            ->where('e.status_karyawan', 'AKTIF');
 
+        $this->exclusionRules->applyToQuery($query);
         $this->mitraAssignmentService->applyScopeToEmployeeQuery($query, $this->indexFilters);
 
         return $query;

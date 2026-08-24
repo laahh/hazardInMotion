@@ -9,6 +9,7 @@ use App\Services\SportEvaluation\SportEvaluationAccessService;
 use App\Services\SportEvaluation\SportEvaluationActiveStatsService;
 use App\Services\SportEvaluation\SportEvaluationCompanyAliasResolver;
 use App\Services\SportEvaluation\SportEvaluationDivisiGroupResolver;
+use App\Services\SportEvaluation\SportEvaluationEmployeeExclusionRules;
 use App\Services\SportEvaluation\SportEvaluationInstallStatsService;
 use App\Services\SportEvaluation\SportEvaluationKaryawanWellSiteResolver;
 use App\Services\SportEvaluation\SportEvaluationMitraAssignmentService;
@@ -30,6 +31,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
         SportEvaluationDivisiGroupResolver $divisiGroupResolver,
         SportEvaluationMitraAssignmentService $mitraAssignmentService,
         SportEvaluationCompanyAliasResolver $companyAliasResolver,
+        SportEvaluationEmployeeExclusionRules $exclusionRules,
         private readonly SportEvaluationAccessService $accessService,
         private readonly SportEvaluationMitraAssignmentService $assignmentService,
     ) {
@@ -41,6 +43,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
             $divisiGroupResolver,
             $mitraAssignmentService,
             $companyAliasResolver,
+            $exclusionRules,
         );
     }
 
