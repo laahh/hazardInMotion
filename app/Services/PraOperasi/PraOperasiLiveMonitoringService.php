@@ -30,6 +30,7 @@ final class PraOperasiLiveMonitoringService
         private readonly PraOperasiPvtStatusReader $pvtReader,
         private readonly PraOperasiRosterShiftReader $rosterShiftReader,
         private readonly PraOperasiFitToContinueService $fitToContinue,
+        private readonly PraOperasiPicNotifier $picNotifier,
     ) {}
 
     public function isUp(): bool
@@ -252,10 +253,24 @@ final class PraOperasiLiveMonitoringService
     }
 
     /**
-     * Simpan catatan tindak lanjut baru untuk satu operator pada tanggal tertentu.
+     * Simpan catatan tindak lanjut baru untuk satu operator pada tanggal
+     * tertentu, lalu kirim notifikasi WA ke PIC perusahaan operator tsb
+     * (lihat PraOperasiPicNotifier) — kegagalan kirim WA tidak membatalkan
+     * catatan yang sudah tersimpan.
+     *
+     * @return array{ok: bool, wa: array{attempted:int, sent:int, failed:int, recipients: list<array<string, mixed>>}}
      */
-    public function catatTindakLanjut(string $kodeSid, string $date, ?string $statusSaatIni, ?string $catatan, ?int $userId): bool
-    {
+    public function catatTindakLanjut(
+        string $kodeSid,
+        string $date,
+        ?string $statusSaatIni,
+        ?string $catatan,
+        ?int $userId,
+        string $nama = '',
+        string $perusahaan = '',
+    ): array {
+        $emptyWa = ['attempted' => 0, 'sent' => 0, 'failed' => 0, 'recipients' => []];
+
         try {
             PraOperasiTindakLanjut::create([
                 'kode_sid' => $kodeSid,
@@ -264,12 +279,28 @@ final class PraOperasiLiveMonitoringService
                 'catatan' => $catatan,
                 'user_id' => $userId,
             ]);
-
-            return true;
         } catch (Throwable $e) {
             report($e);
 
-            return false;
+            return ['ok' => false, 'wa' => $emptyWa];
         }
+
+        $wa = $emptyWa;
+        if ($perusahaan !== '') {
+            try {
+                $wa = $this->picNotifier->notify(
+                    $perusahaan,
+                    $kodeSid,
+                    $nama !== '' ? $nama : $kodeSid,
+                    $statusSaatIni ?? '',
+                    $catatan,
+                    $date,
+                );
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
+
+        return ['ok' => true, 'wa' => $wa];
     }
 }

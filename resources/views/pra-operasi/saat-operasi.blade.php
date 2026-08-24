@@ -98,14 +98,25 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
       </div>
       <div class="modal-body">
-        <p class="text-sm text-secondary-light mb-12">Operator: <b id="soTlNama">-</b> (<span id="soTlSid">-</span>)</p>
+        <p class="text-sm text-secondary-light mb-4">Operator: <b id="soTlNama">-</b> (<span id="soTlSid">-</span>)</p>
+        <p class="text-sm text-secondary-light mb-12">Perusahaan: <b id="soTlPerusahaan">-</b></p>
         <label class="form-label text-sm fw-medium">Catatan tindakan</label>
         <textarea id="soTlCatatan" class="form-control" rows="3" placeholder="mis. Ditarik dari unit, diistirahatkan 30 menit"></textarea>
+        <p class="text-xs text-secondary-light mt-8 mb-0">Menyimpan catatan ini juga akan mengirim notifikasi WhatsApp ke PIC perusahaan operator.</p>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
         <button type="button" class="btn btn-primary-600 btn-sm" id="soTlSubmit">Simpan</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:1080">
+  <div id="soToast" class="toast align-items-center text-bg-dark border-0" role="status" aria-live="polite" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body" id="soToastBody"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Tutup"></button>
     </div>
   </div>
 </div>
@@ -211,7 +222,7 @@
           (op.catatan_tindak_lanjut && op.catatan_tindak_lanjut.ditandai_pada ? ' (' + escapeHtml(op.catatan_tindak_lanjut.ditandai_pada) + ')' : '') +
           '</span>';
       } else {
-        actionHtml = '<button type="button" class="btn btn-outline-danger btn-sm so-tl-btn" data-sid="' + escapeHtml(op.kode_sid) + '" data-nama="' + escapeHtml(op.nama) + '">Tandai</button>';
+        actionHtml = '<button type="button" class="btn btn-outline-danger btn-sm so-tl-btn" data-sid="' + escapeHtml(op.kode_sid) + '" data-nama="' + escapeHtml(op.nama) + '" data-perusahaan="' + escapeHtml(op.perusahaan) + '" data-status="' + escapeHtml(op.status) + '">Tandai</button>';
       }
     }
     var pvtLabel = pvtStatusLabel[op.pvt_status] || 'Belum Tes';
@@ -293,6 +304,14 @@
   var tlUrl = @json(route('pra-operasi.saat-operasi.tindak-lanjut'));
   var csrfToken = document.querySelector('meta[name="csrf-token"]');
   csrfToken = csrfToken ? csrfToken.getAttribute('content') : '';
+
+  var toastEl = document.getElementById('soToast');
+  var toast = (toastEl && typeof bootstrap !== 'undefined') ? new bootstrap.Toast(toastEl, { delay: 5000 }) : null;
+  function showToast(msg) {
+    if (!toast) { alert(msg); return; }
+    document.getElementById('soToastBody').textContent = msg;
+    toast.show();
+  }
 
   // Drawer detail operator — riwayat Fatigue Test, PVT, dan alert.
   var drawerEl = document.getElementById('soOperatorDrawer');
@@ -480,7 +499,10 @@
     if (tlBtn && tlModal) {
       document.getElementById('soTlSid').textContent = tlBtn.getAttribute('data-sid');
       document.getElementById('soTlNama').textContent = tlBtn.getAttribute('data-nama');
+      document.getElementById('soTlPerusahaan').textContent = tlBtn.getAttribute('data-perusahaan') || '-';
       document.getElementById('soTlCatatan').value = '';
+      tlModalEl.dataset.perusahaan = tlBtn.getAttribute('data-perusahaan') || '';
+      tlModalEl.dataset.status = tlBtn.getAttribute('data-status') || '';
       tlModal.show();
       return;
     }
@@ -503,15 +525,19 @@
   if (tlSubmitBtn) {
     tlSubmitBtn.addEventListener('click', function(){
       var sid = document.getElementById('soTlSid').textContent;
+      var nama = document.getElementById('soTlNama').textContent;
       var catatan = document.getElementById('soTlCatatan').value;
+      var perusahaan = tlModalEl.dataset.perusahaan || '';
+      var status = tlModalEl.dataset.status || '';
       tlSubmitBtn.disabled = true;
       fetch(tlUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-        body: JSON.stringify({ kode_sid: sid, date: date || new Date().toISOString().slice(0,10), catatan: catatan })
-      }).then(function(r){ return r.json(); }).then(function(){
+        body: JSON.stringify({ kode_sid: sid, date: date || new Date().toISOString().slice(0,10), catatan: catatan, nama: nama, perusahaan: perusahaan, status: status })
+      }).then(function(r){ return r.json(); }).then(function(resp){
         tlModal.hide();
         fetchData();
+        showToast((resp && resp.message) ? resp.message : 'Catatan tersimpan.');
       }).catch(function(){
         alert('Gagal menyimpan catatan. Coba lagi.');
       }).finally(function(){

@@ -37,7 +37,8 @@ final class PraOperasiLiveController extends Controller
     }
 
     /**
-     * Simpan catatan tindak lanjut supervisor untuk satu operator.
+     * Simpan catatan tindak lanjut supervisor untuk satu operator, lalu
+     * kirim notifikasi WA ke PIC perusahaan operator tsb (jika ditemukan).
      */
     public function tindakLanjut(Request $request): JsonResponse
     {
@@ -46,21 +47,33 @@ final class PraOperasiLiveController extends Controller
             'date' => ['required', 'date_format:Y-m-d'],
             'status' => ['nullable', 'string', 'max:20'],
             'catatan' => ['nullable', 'string', 'max:1000'],
+            'nama' => ['nullable', 'string', 'max:150'],
+            'perusahaan' => ['nullable', 'string', 'max:150'],
         ]);
 
-        $ok = $this->service->catatTindakLanjut(
+        $result = $this->service->catatTindakLanjut(
             $validated['kode_sid'],
             $validated['date'],
             $validated['status'] ?? null,
             $validated['catatan'] ?? null,
             $request->user()?->id,
+            $validated['nama'] ?? '',
+            $validated['perusahaan'] ?? '',
         );
 
-        if (! $ok) {
+        if (! $result['ok']) {
             return response()->json(['message' => 'Gagal menyimpan catatan.'], 500);
         }
 
-        return response()->json(['message' => 'Catatan tersimpan.']);
+        $wa = $result['wa'];
+        $message = 'Catatan tersimpan.';
+        if ($wa['attempted'] > 0) {
+            $message .= $wa['sent'] > 0
+                ? ' WA terkirim ke '.$wa['sent'].' PIC.'.($wa['failed'] > 0 ? ' '.$wa['failed'].' gagal.' : '')
+                : ' Gagal mengirim WA ke PIC.';
+        }
+
+        return response()->json(['message' => $message, 'wa' => $wa]);
     }
 
     private function resolveDate(Request $request): string
