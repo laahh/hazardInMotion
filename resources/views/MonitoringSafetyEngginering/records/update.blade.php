@@ -27,7 +27,7 @@
 
 <div id="mse-grid-alert" class="crm-grid-alert" role="status"></div>
 
-<form id="mse-grid-filter" method="GET" action="{{ route('monitoring-safety-engineering.data-update.index') }}" class="crm-filter-bar crm-filter-bar--single mb-4">
+<!-- <form id="mse-grid-filter" method="GET" action="{{ route('monitoring-safety-engineering.data-update.index') }}" class="crm-filter-bar crm-filter-bar--single mb-4">
    <div class="crm-filter-field">
       <label class="crm-filter-label" for="mse-filter-year">Tahun Periode</label>
       <select id="mse-filter-year" name="period_year" class="crm-filter-select">
@@ -43,7 +43,7 @@
          Terapkan Filter
       </button>
    </div>
-</form>
+</form> -->
 
 <div class="crm-grid-toolbar">
    <div class="crm-grid-toolbar-actions">
