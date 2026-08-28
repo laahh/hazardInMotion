@@ -3094,6 +3094,34 @@
    .crm-history-field { font-weight: 600; color: #2F2F3A; }
    .crm-history-old { color: #848488; text-decoration: line-through; word-break: break-word; }
    .crm-history-new { color: #7366FF; font-weight: 600; word-break: break-word; }
+   .crm-history-filters {
+      display: flex; flex-wrap: wrap; gap: 0.4rem;
+      padding: 0.65rem 1.25rem 0.75rem;
+      border-bottom: 1px solid #EEF0F3;
+      background: #FAFBFC;
+   }
+   .crm-history-filter {
+      border: 1px solid #E6E9EB; background: #fff; color: #4B5563;
+      border-radius: 9999px; padding: 0.2rem 0.7rem;
+      font-size: 0.75rem; font-weight: 600; cursor: pointer;
+   }
+   .crm-history-filter--active {
+      background: #ECE9FF; border-color: #C9C3FF; color: #5f52e0;
+   }
+   .crm-history-entry {
+      border: 1px solid #E6E9EB; border-radius: 0.65rem; margin-bottom: 0.7rem; overflow: hidden;
+   }
+   .crm-history-entry-meta {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem 0.85rem;
+      padding: 0.55rem 0.85rem; background: #FAFBFC; border-bottom: 1px solid #E6E9EB;
+      font-size: 0.75rem;
+   }
+   .crm-history-entry-body { padding: 0.65rem 0.85rem 0.75rem; }
+   .crm-history-diff {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 0.55rem;
+      margin-top: 0.3rem; font-size: 0.8125rem;
+   }
+   .crm-history-arrow { color: #9CA3AF; }
    .crm-history-empty {
       text-align: center; color: #848488; font-size: 0.8125rem; padding: 2rem 1rem;
    }

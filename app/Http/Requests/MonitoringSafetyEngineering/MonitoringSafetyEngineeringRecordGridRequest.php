@@ -13,6 +13,34 @@ class MonitoringSafetyEngineeringRecordGridRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $rows = $this->input('rows');
+        if (! is_array($rows)) {
+            return;
+        }
+
+        $numericKeys = [
+            'id', 'client_index', 'row_no', 'replikasi_total_populasi', 'replikasi_target_komitmen',
+            'replikasi_aktual', 'prediksi_penurunan_tangga_risiko', 'total_risiko_signifikan',
+            'jumlah_risiko_signifikan_tercover_rekayasa', 'period_year', 'sort_order',
+        ];
+
+        foreach ($rows as $index => $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            foreach ($numericKeys as $key) {
+                if (array_key_exists($key, $row) && $row[$key] === '') {
+                    $rows[$index][$key] = null;
+                }
+            }
+        }
+
+        $this->merge(['rows' => $rows]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -22,6 +50,7 @@ class MonitoringSafetyEngineeringRecordGridRequest extends FormRequest
             'period_year' => ['required', 'integer', 'min:2000', 'max:2100'],
             'rows' => ['required', 'array', 'min:1'],
             'rows.*.id' => ['nullable', 'integer', 'min:1'],
+            'rows.*.client_index' => ['nullable', 'integer', 'min:0'],
             'rows.*.row_no' => ['nullable', 'integer', 'min:0'],
             'rows.*.site' => ['nullable', 'string', 'max:50'],
             'rows.*.perusahaan' => ['nullable', 'string', 'max:100'],

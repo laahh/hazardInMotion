@@ -8,14 +8,12 @@ use App\Models\MonitoringSafetyEngineeringRecord;
 use App\Support\MonitoringSafetyEngineering\MonitoringSafetyEngineeringExcelValueMapper as Mapper;
 use App\Support\MonitoringSafetyEngineering\MonitoringSafetyEngineeringRecordGridDefinition;
 use BackedEnum;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 final class MonitoringSafetyEngineeringRecordGridService
 {
-    private ?bool $tracingReadyForBatch = null;
-
     public function __construct(
         private readonly MonitoringSafetyEngineeringPhaseStatusLogService $phaseStatusLogService,
         private readonly MonitoringSafetyEngineeringRecordChangeLogService $changeLogService,
@@ -41,45 +39,22 @@ final class MonitoringSafetyEngineeringRecordGridService
      */
     public function fetchRows(?int $periodYear = null): array
     {
-        $query = MonitoringSafetyEngineeringRecord::query()
-            ->select($this->recordSelectColumns())
-            ->orderBy('sort_order')
-            ->orderBy('row_no')
-            ->orderBy('id');
-
-        if ($periodYear !== null) {
-            $query->where('period_year', $periodYear);
-        }
-
-        $records = $query->get();
-
-        $this->tracingReadyForBatch = $this->phaseStatusLogService->isTracingReady();
+        $maps = $this->gridLabelMaps();
 
         try {
-            return $records
-                ->map(function (MonitoringSafetyEngineeringRecord $record): array {
-                    try {
-                        return $this->serializeRecord($record);
-                    } catch (\Throwable $e) {
-                        report($e);
+            return $this->fetchGridRows($this->recordSelectColumns(true), $periodYear, $maps);
+        } catch (QueryException $e) {
+            if (! $this->isUnknownColumnException($e)) {
+                throw $e;
+            }
 
-                        return [
-                            'id' => $record->getKey(),
-                            'pengendalian_rekayasa' => (string) ($record->getAttributes()['pengendalian_rekayasa'] ?? ''),
-                            'site' => (string) ($record->getAttributes()['site'] ?? ''),
-                            'perusahaan' => (string) ($record->getAttributes()['perusahaan'] ?? ''),
-                        ];
-                    }
-                })
-                ->all();
-        } finally {
-            $this->tracingReadyForBatch = null;
+            return $this->fetchGridRows($this->recordSelectColumns(false), $periodYear, $maps);
         }
     }
 
     /**
      * @param  list<array<string, mixed>>  $rows
-     * @return array{created: int, updated: int, logs_created: int, change_logs_created: int, errors: list<string>}
+     * @return array{created: int, updated: int, logs_created: int, change_logs_created: int, errors: list<string>, saved: list<array{client_index: int, id: int}>}
      */
     public function bulkSave(array $rows, int $defaultPeriodYear): array
     {
@@ -88,49 +63,84 @@ final class MonitoringSafetyEngineeringRecordGridService
         $logsCreated = 0;
         $changeLogsCreated = 0;
         $errors = [];
+        $saved = [];
         $userId = Auth::id();
 
-        DB::transaction(function () use ($rows, $defaultPeriodYear, $userId, &$created, &$updated, &$logsCreated, &$changeLogsCreated, &$errors): void {
+        $ids = [];
+        foreach ($rows as $row) {
+            $id = isset($row['id']) && $row['id'] !== '' && $row['id'] !== null
+                ? (int) $row['id']
+                : 0;
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+
+        DB::transaction(function () use (
+            $rows,
+            $defaultPeriodYear,
+            $userId,
+            $ids,
+            &$created,
+            &$updated,
+            &$logsCreated,
+            &$changeLogsCreated,
+            &$errors,
+            &$saved,
+        ): void {
+            $records = $ids === []
+                ? collect()
+                : MonitoringSafetyEngineeringRecord::query()->whereIn('id', array_values(array_unique($ids)))->get()->keyBy('id');
+
             foreach ($rows as $index => $row) {
                 $line = $index + 1;
-
-                try {
-                    $payload = $this->normalizeRowPayload($row, $defaultPeriodYear);
-                } catch (\InvalidArgumentException $e) {
-                    $errors[] = 'Baris ' . $line . ': ' . $e->getMessage();
-
-                    continue;
-                }
+                $clientIndex = isset($row['client_index']) && is_numeric($row['client_index'])
+                    ? (int) $row['client_index']
+                    : $index;
 
                 $id = isset($row['id']) && $row['id'] !== '' && $row['id'] !== null
                     ? (int) $row['id']
                     : null;
 
-                if ($id !== null && $id > 0) {
-                    $record = MonitoringSafetyEngineeringRecord::query()->find($id);
-                    if ($record === null) {
-                        $errors[] = 'Baris ' . $line . ': record ID ' . $id . ' tidak ditemukan.';
+                try {
+                    if ($id !== null && $id > 0) {
+                        $record = $records->get($id);
+                        if ($record === null) {
+                            $errors[] = 'Baris ' . $line . ': record ID ' . $id . ' tidak ditemukan.';
+
+                            continue;
+                        }
+
+                        $payload = $this->normalizePatchPayload($row, $record, $defaultPeriodYear);
+                        if ($payload === []) {
+                            $saved[] = ['client_index' => $clientIndex, 'id' => $id];
+
+                            continue;
+                        }
+
+                        $payload['updated_by'] = $userId;
+                        $tracing = $this->phaseStatusLogService->applyForUpdate($record, $payload, $userId);
+                        $payload = $tracing['payload'];
+                        $logsCreated += $tracing['logs_created'];
+                        $changeLogsCreated += $this->changeLogService->logUpdate($record, $payload, $userId);
+                        $record->update($payload);
+                        $updated++;
+                        $saved[] = ['client_index' => $clientIndex, 'id' => $id];
 
                         continue;
                     }
 
+                    $payload = $this->normalizeRowPayload($row, $defaultPeriodYear);
+                    $payload['created_by'] = $userId;
                     $payload['updated_by'] = $userId;
-                    $tracing = $this->phaseStatusLogService->applyForUpdate($record, $payload, $userId);
-                    $payload = $tracing['payload'];
-                    $logsCreated += $tracing['logs_created'];
-                    $changeLogsCreated += $this->changeLogService->logUpdate($record, $payload, $userId);
-                    $record->update($payload);
-                    $updated++;
-
-                    continue;
+                    $record = MonitoringSafetyEngineeringRecord::query()->create($payload);
+                    $logsCreated += $this->phaseStatusLogService->writeInitialLogs($record, $payload, $userId);
+                    $changeLogsCreated += $this->changeLogService->logCreate($record, $payload, $userId);
+                    $created++;
+                    $saved[] = ['client_index' => $clientIndex, 'id' => (int) $record->id];
+                } catch (\InvalidArgumentException $e) {
+                    $errors[] = 'Baris ' . $line . ': ' . $e->getMessage();
                 }
-
-                $payload['created_by'] = $userId;
-                $payload['updated_by'] = $userId;
-                $record = MonitoringSafetyEngineeringRecord::query()->create($payload);
-                $logsCreated += $this->phaseStatusLogService->writeInitialLogs($record, $payload, $userId);
-                $changeLogsCreated += $this->changeLogService->logCreate($record, $payload, $userId);
-                $created++;
             }
         });
 
@@ -140,72 +150,252 @@ final class MonitoringSafetyEngineeringRecordGridService
             'logs_created' => $logsCreated,
             'change_logs_created' => $changeLogsCreated,
             'errors' => $errors,
+            'saved' => $saved,
         ];
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function fetchChangeHistory(int $recordId): array
+    public function fetchChangeHistory(int $recordId, ?string $field = null): array
     {
-        return $this->changeLogService->fetchHistory($recordId);
+        return $this->changeLogService->fetchHistory($recordId, $field);
     }
 
     /**
+     * @param  list<string>  $columns
+     * @param  array<string, array<string, string>>  $maps
+     * @return list<array<string, mixed>>
+     */
+    private function fetchGridRows(array $columns, ?int $periodYear, array $maps): array
+    {
+        $query = DB::table('monitoring_safety_engineering_records')
+            ->select($columns)
+            ->whereNull('deleted_at')
+            ->orderBy('sort_order')
+            ->orderBy('row_no')
+            ->orderBy('id');
+
+        if ($periodYear !== null) {
+            $query->where('period_year', $periodYear);
+        }
+
+        $withTracing = in_array('kajian_teknis_status_compliance', $columns, true);
+
+        return $query
+            ->get()
+            ->map(fn (object $row): array => $this->serializeGridRow((array) $row, $maps, $withTracing))
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, array<string, string>>  $maps
      * @return array<string, mixed>
      */
-    private function serializeRecord(MonitoringSafetyEngineeringRecord $record): array
+    private function serializeGridRow(array $row, array $maps, bool $withTracing): array
     {
-        $data = $record->toArray();
-
         foreach (['sumber_rekayasa', 'pelaksana_rekayasa', 'kajian_teknis_status', 'pengadaan_status', 'uji_coba_status', 'standardisasi_status'] as $enumField) {
-            $value = $record->getAttribute($enumField);
-            if ($value instanceof BackedEnum) {
-                $data[$enumField] = $this->enumToLabel($enumField, $value->value);
-            } elseif (is_string($value) && $value !== '') {
-                $data[$enumField] = $this->enumToLabel($enumField, $value);
-            }
+            $row[$enumField] = $this->labelFromMap($maps[$enumField] ?? [], $row[$enumField] ?? null);
         }
 
         foreach ([
             'tanggal_ideation', 'kajian_teknis_due_date', 'pengadaan_due_date', 'uji_coba_due_date',
             'standardisasi_due_date', 'replikasi_due_date',
         ] as $dateField) {
-            $data[$dateField] = $this->formatSerializableDate($record->getAttribute($dateField));
+            $row[$dateField] = $this->formatSerializableDate($row[$dateField] ?? null);
         }
 
-        $data['terkait_hazard'] = $record->terkait_hazard ? 'Ya' : 'Tidak';
-        $data['terkait_insiden'] = $record->terkait_insiden ? 'Ya' : 'Tidak';
-        $data['potensi_peningkatan_efektivitas'] = $record->potensi_peningkatan_efektivitas ? 'Ya' : 'Tidak';
+        $row['terkait_hazard'] = $this->booleanLabel($row['terkait_hazard'] ?? null);
+        $row['terkait_insiden'] = $this->booleanLabel($row['terkait_insiden'] ?? null);
+        $row['potensi_peningkatan_efektivitas'] = $this->booleanLabel($row['potensi_peningkatan_efektivitas'] ?? null);
+        $row['intervensi_deviasi'] = $this->labelFromMap($maps['intervensi_deviasi'] ?? [], $row['intervensi_deviasi'] ?? null);
+        $row['efektivitas_rekayasa'] = $this->labelFromMap($maps['efektivitas_rekayasa'] ?? [], $row['efektivitas_rekayasa'] ?? null);
+        $row['deteksi_deviasi'] = $this->labelFromMap($maps['deteksi_deviasi'] ?? [], $row['deteksi_deviasi'] ?? null);
 
-        if ($record->intervensi_deviasi !== null && $record->intervensi_deviasi !== '') {
-            try {
-                $data['intervensi_deviasi'] = Mapper::resolveIntervensi((string) $record->intervensi_deviasi);
-            } catch (\InvalidArgumentException) {
-                $data['intervensi_deviasi'] = (string) $record->intervensi_deviasi;
-            }
-        }
-
-        if ($record->efektivitas_rekayasa !== null && $record->efektivitas_rekayasa !== '') {
-            try {
-                $data['efektivitas_rekayasa'] = Mapper::resolveEfektivitas((string) $record->efektivitas_rekayasa);
-            } catch (\InvalidArgumentException) {
-                $data['efektivitas_rekayasa'] = (string) $record->efektivitas_rekayasa;
-            }
-        }
-
-        if ($this->tracingReadyForBatch === true) {
+        if ($withTracing) {
             foreach ($this->phaseStatusLogService->phaseDefinitions() as $definition) {
                 $changedAtField = $definition['changed_at'];
                 $complianceField = $definition['compliance'];
 
-                $data[$changedAtField] = $this->formatSerializableDate($record->getAttribute($changedAtField), 'Y-m-d H:i:s');
-                $compliance = $record->getAttribute($complianceField);
-                $data[$complianceField] = $compliance instanceof BackedEnum ? $compliance->value : $compliance;
+                $row[$changedAtField] = $this->formatSerializableDate($row[$changedAtField] ?? null, 'Y-m-d H:i:s');
+                $compliance = $row[$complianceField] ?? null;
+                $row[$complianceField] = $compliance instanceof BackedEnum ? $compliance->value : $compliance;
             }
         }
 
-        return $data;
+        return $row;
+    }
+
+    /**
+     * @return array<string, array<string, string>>
+     */
+    private function gridLabelMaps(): array
+    {
+        $phaseStatus = array_map('strval', config('monitoring_safety_engineering.phase_status', []));
+
+        return [
+            'sumber_rekayasa' => array_map('strval', config('monitoring_safety_engineering.sumber_rekayasa', [])),
+            'pelaksana_rekayasa' => array_map('strval', config('monitoring_safety_engineering.pelaksana_rekayasa', [])),
+            'kajian_teknis_status' => $phaseStatus,
+            'pengadaan_status' => $phaseStatus,
+            'uji_coba_status' => $phaseStatus,
+            'standardisasi_status' => $phaseStatus,
+            'intervensi_deviasi' => array_map('strval', config('monitoring_safety_engineering.intervensi_deviasi', [])),
+            'efektivitas_rekayasa' => array_map('strval', config('monitoring_safety_engineering.efektivitas_rekayasa', [])),
+            'deteksi_deviasi' => array_map('strval', config('monitoring_safety_engineering.deteksi_deviasi', [])),
+        ];
+    }
+
+    /**
+     * @param  array<string, string>  $map
+     */
+    private function labelFromMap(array $map, mixed $value): mixed
+    {
+        if ($value === null || $value === '') {
+            return $value;
+        }
+
+        $raw = trim((string) $value);
+        if (isset($map[$raw])) {
+            return $map[$raw];
+        }
+
+        return $raw;
+    }
+
+    private function booleanLabel(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return 'Tidak';
+        }
+
+        if (is_string($value) && in_array(strtolower($value), ['ya', 'tidak'], true)) {
+            return strtolower($value) === 'ya' ? 'Ya' : 'Tidak';
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'Ya' : 'Tidak';
+    }
+
+    private function isUnknownColumnException(QueryException $e): bool
+    {
+        return $e->getCode() === '42S22' || str_contains($e->getMessage(), 'Unknown column');
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function normalizePatchPayload(array $row, MonitoringSafetyEngineeringRecord $record, int $defaultPeriodYear): array
+    {
+        $payload = [];
+
+        foreach ($this->patchableFields() as $field) {
+            if (! array_key_exists($field, $row)) {
+                continue;
+            }
+
+            $payload[$field] = $this->normalizePatchField($field, $row[$field], $defaultPeriodYear);
+        }
+
+        if (isset($payload['site']) && trim((string) $payload['site']) === '') {
+            throw new \InvalidArgumentException('Site wajib diisi.');
+        }
+
+        if (isset($payload['perusahaan']) && trim((string) $payload['perusahaan']) === '') {
+            throw new \InvalidArgumentException('Perusahaan wajib diisi.');
+        }
+
+        if (isset($payload['pengendalian_rekayasa']) && trim((string) $payload['pengendalian_rekayasa']) === '') {
+            throw new \InvalidArgumentException('Pengendalian Rekayasa wajib diisi.');
+        }
+
+        $potensi = array_key_exists('potensi_peningkatan_efektivitas', $payload)
+            ? (bool) $payload['potensi_peningkatan_efektivitas']
+            : (bool) $record->potensi_peningkatan_efektivitas;
+
+        $pengendalianEfektivitas = array_key_exists('pengendalian_peningkatan_efektivitas', $payload)
+            ? (string) ($payload['pengendalian_peningkatan_efektivitas'] ?? '')
+            : (string) ($record->pengendalian_peningkatan_efektivitas ?? '');
+
+        if ($potensi && trim($pengendalianEfektivitas) === '') {
+            throw new \InvalidArgumentException('Pengendalian peningkatan efektivitas wajib diisi jika potensi = Ya.');
+        }
+
+        if (
+            array_key_exists('deteksi_deviasi', $payload)
+            || array_key_exists('intervensi_deviasi', $payload)
+            || array_key_exists('prediksi_penurunan_tangga_risiko', $payload)
+        ) {
+            $deteksi = array_key_exists('deteksi_deviasi', $payload)
+                ? $payload['deteksi_deviasi']
+                : $record->deteksi_deviasi;
+            $intervensi = array_key_exists('intervensi_deviasi', $payload)
+                ? $payload['intervensi_deviasi']
+                : $record->intervensi_deviasi;
+            $stored = array_key_exists('prediksi_penurunan_tangga_risiko', $payload)
+                ? $payload['prediksi_penurunan_tangga_risiko']
+                : $record->prediksi_penurunan_tangga_risiko;
+
+            $payload['prediksi_penurunan_tangga_risiko'] = $this->resolvePrediksiPenurunanTangga(
+                is_numeric($stored) ? (int) $stored : null,
+                $deteksi !== null && $deteksi !== '' ? (string) $deteksi : null,
+                $intervensi !== null && $intervensi !== '' ? (string) $intervensi : null,
+            );
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function patchableFields(): array
+    {
+        return [
+            'row_no', 'site', 'perusahaan', 'aktivitas', 'sumber_rekayasa', 'pelaksana_rekayasa',
+            'pengendalian_rekayasa', 'tanggal_ideation', 'kajian_teknis_due_date', 'kajian_teknis_status',
+            'pengadaan_due_date', 'pengadaan_status', 'uji_coba_due_date', 'uji_coba_status',
+            'standardisasi_due_date', 'standardisasi_status', 'replikasi_due_date', 'replikasi_total_populasi',
+            'replikasi_satuan', 'replikasi_target_komitmen', 'replikasi_diusulkan_pjo', 'replikasi_ditinjau',
+            'replikasi_disetujui', 'replikasi_aktual', 'deteksi_deviasi', 'intervensi_deviasi',
+            'prediksi_penurunan_tangga_risiko', 'terkait_hazard', 'terkait_insiden', 'efektivitas_rekayasa',
+            'brief_analysis_challenge', 'next_to_do', 'potensi_peningkatan_efektivitas',
+            'pengendalian_peningkatan_efektivitas', 'total_risiko_signifikan', 'link_list_risiko_signifikan',
+            'jumlah_risiko_signifikan_tercover_rekayasa', 'link_risiko_signifikan_tercover_rekayasa',
+            'period_year', 'sort_order',
+        ];
+    }
+
+    private function normalizePatchField(string $field, mixed $value, int $defaultPeriodYear): mixed
+    {
+        return match ($field) {
+            'site', 'perusahaan', 'pengendalian_rekayasa', 'aktivitas', 'replikasi_satuan' => trim((string) ($value ?? '')),
+            'sumber_rekayasa' => Mapper::resolveSumberRekayasa(isset($value) ? (string) $value : null)->value,
+            'pelaksana_rekayasa' => Mapper::resolvePelaksana(isset($value) ? (string) $value : null)->value,
+            'tanggal_ideation', 'kajian_teknis_due_date', 'pengadaan_due_date', 'uji_coba_due_date',
+            'standardisasi_due_date', 'replikasi_due_date' => $this->parseDate($value),
+            'kajian_teknis_status' => Mapper::resolvePhaseStatus(isset($value) ? (string) $value : null, 'Status Kajian Teknis')->value,
+            'pengadaan_status' => Mapper::resolvePhaseStatus(isset($value) ? (string) $value : null, 'Status Pengadaan')->value,
+            'uji_coba_status' => Mapper::resolvePhaseStatus(isset($value) ? (string) $value : null, 'Status Uji Coba')->value,
+            'standardisasi_status' => Mapper::resolvePhaseStatus(isset($value) ? (string) $value : null, 'Status Standardisasi')->value,
+            'row_no' => $this->parseInteger($value, 0),
+            'replikasi_total_populasi', 'replikasi_target_komitmen', 'replikasi_aktual' => $this->parseInteger($value, 0),
+            'sort_order' => $this->parseInteger($value, 0),
+            'period_year' => $this->parseInteger($value, $defaultPeriodYear),
+            'replikasi_diusulkan_pjo', 'replikasi_ditinjau', 'replikasi_disetujui',
+            'brief_analysis_challenge', 'next_to_do', 'pengendalian_peningkatan_efektivitas',
+            'link_list_risiko_signifikan', 'link_risiko_signifikan_tercover_rekayasa' => $this->nullableString($value),
+            'deteksi_deviasi' => Mapper::resolveDeteksi(isset($value) ? (string) $value : null),
+            'intervensi_deviasi' => Mapper::resolveIntervensi(isset($value) ? (string) $value : null),
+            'prediksi_penurunan_tangga_risiko', 'total_risiko_signifikan',
+            'jumlah_risiko_signifikan_tercover_rekayasa' => $this->parseNullableInteger($value),
+            'terkait_hazard' => Mapper::resolveBoolean(isset($value) ? (string) $value : null, 'Terkait Hazard'),
+            'terkait_insiden' => Mapper::resolveBoolean(isset($value) ? (string) $value : null, 'Terkait Insiden'),
+            'potensi_peningkatan_efektivitas' => Mapper::resolveBoolean(isset($value) ? (string) $value : null, 'Potensi Peningkatan Efektivitas'),
+            'efektivitas_rekayasa' => Mapper::resolveEfektivitas(isset($value) ? (string) $value : null),
+            default => $value,
+        };
     }
 
     /**
@@ -378,7 +568,12 @@ final class MonitoringSafetyEngineeringRecordGridService
                 return $value->format($format);
             }
 
-            $timestamp = strtotime((string) $value);
+            $string = trim((string) $value);
+            if ($string === '' || str_starts_with($string, '0000-00-00')) {
+                return null;
+            }
+
+            $timestamp = strtotime($string);
 
             return $timestamp === false ? null : date($format, $timestamp);
         } catch (\Throwable) {
@@ -389,7 +584,7 @@ final class MonitoringSafetyEngineeringRecordGridService
     /**
      * @return list<string>
      */
-    private function recordSelectColumns(): array
+    private function recordSelectColumns(bool $withTracing): array
     {
         $columns = [
             'id', 'row_no', 'site', 'perusahaan', 'aktivitas', 'sumber_rekayasa', 'pelaksana_rekayasa',
@@ -408,7 +603,7 @@ final class MonitoringSafetyEngineeringRecordGridService
             'period_year', 'sort_order',
         ];
 
-        if ($this->phaseStatusLogService->isTracingReady()) {
+        if ($withTracing) {
             $columns = array_merge($columns, [
                 'kajian_teknis_status_changed_at', 'kajian_teknis_status_compliance',
                 'pengadaan_status_changed_at', 'pengadaan_status_compliance',
@@ -417,8 +612,6 @@ final class MonitoringSafetyEngineeringRecordGridService
             ]);
         }
 
-        $existing = Schema::getColumnListing('monitoring_safety_engineering_records');
-
-        return array_values(array_intersect($columns, $existing));
+        return $columns;
     }
 }

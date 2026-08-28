@@ -89,7 +89,7 @@
 <div class="crm-grid-legend mb-3">
    <span class="crm-grid-legend-item"><span class="crm-grid-legend-dot crm-grid-legend-dot--on-target"></span> On Target (update ≤ due date)</span>
    <span class="crm-grid-legend-item"><span class="crm-grid-legend-dot crm-grid-legend-dot--overdue"></span> Overdue (update &gt; due date)</span>
-   <span class="crm-grid-legend-item text-crm-muted">Klik kanan baris → Riwayat Perubahan · Semua edit tercatat per minggu (Review W)</span>
+   <span class="crm-grid-legend-item text-crm-muted">Klik kanan → Riwayat baris / kolom · Hanya sel yang berubah yang disimpan dan dicatat</span>
 </div>
 
 <div class="crm-grid-wrap">
@@ -104,6 +104,10 @@
             <p id="mse-history-subtitle" class="crm-history-subtitle">—</p>
          </div>
          <button type="button" id="mse-history-close" class="crm-history-close" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="mse-history-filters" class="crm-history-filters" hidden>
+         <button type="button" id="mse-history-filter-all" class="crm-history-filter crm-history-filter--active" data-field="">Semua kolom</button>
+         <button type="button" id="mse-history-filter-field" class="crm-history-filter" hidden></button>
       </div>
       <div id="mse-history-body" class="crm-history-body">
          <p class="crm-history-empty">Memuat riwayat...</p>
@@ -140,12 +144,54 @@
    const historyBody = document.getElementById('mse-history-body');
    const historySubtitle = document.getElementById('mse-history-subtitle');
    const historyBtn = document.getElementById('mse-btn-history');
+   const historyFilters = document.getElementById('mse-history-filters');
+   const historyFilterAll = document.getElementById('mse-history-filter-all');
+   const historyFilterField = document.getElementById('mse-history-filter-field');
+   const editableFields = new Set(gridConfig.editable_fields || gridConfig.columns.map(function (col) { return col.key; }));
+   const fieldLabels = {};
+   (gridConfig.columns || []).forEach(function (col) {
+      fieldLabels[col.key] = col.label;
+   });
 
    let hot = null;
    let selectedRecordId = null;
+   let selectedFieldKey = null;
+   let historyRecordId = null;
+   let historyField = null;
+   let lastHistoryColumnField = null;
+   const dirtyById = new Map();
 
-   function historyUrl(recordId) {
-      return historyUrlTemplate.replace('/0/history', '/' + recordId + '/history');
+   function historyUrl(recordId, field) {
+      let url = historyUrlTemplate.replace('/0/history', '/' + recordId + '/history');
+      if (field) {
+         url += '?field=' + encodeURIComponent(field);
+      }
+      return url;
+   }
+
+   function dirtyCount() {
+      let count = 0;
+      dirtyById.forEach(function (fields) {
+         count += fields.size;
+      });
+      return count;
+   }
+
+   function markDirty(visualRow, prop) {
+      if (!hot || !editableFields.has(prop)) return;
+      const physical = hot.toPhysicalRow(visualRow);
+      const rowData = hot.getSourceData()[physical];
+      if (!rowData || !rowData.id) return;
+      const id = parseInt(rowData.id, 10);
+      if (!id) return;
+      if (!dirtyById.has(id)) dirtyById.set(id, new Set());
+      dirtyById.get(id).add(prop);
+   }
+
+   function clearDirtyForIds(ids) {
+      ids.forEach(function (id) {
+         dirtyById.delete(id);
+      });
    }
 
    function escapeHtml(text) {
@@ -156,61 +202,89 @@
          .replace(/"/g, '&quot;');
    }
 
-   function updateSelectedRecord(rowIndex) {
+   function updateSelectedRecord(rowIndex, colIndex) {
       if (!hot || rowIndex === null || rowIndex === undefined || rowIndex < 0) {
          selectedRecordId = null;
+         selectedFieldKey = null;
          if (historyBtn) historyBtn.disabled = true;
          return;
       }
 
-      const rowData = hot.getSourceDataAtRow(rowIndex) || {};
+      const physical = hot.toPhysicalRow(rowIndex);
+      const rowData = hot.getSourceData()[physical] || {};
       selectedRecordId = rowData.id ? parseInt(rowData.id, 10) : null;
+      const prop = typeof colIndex === 'number' && colIndex >= 0 ? hot.colToProp(colIndex) : null;
+      selectedFieldKey = typeof prop === 'string' ? prop : null;
       if (historyBtn) historyBtn.disabled = !selectedRecordId;
    }
 
    function renderHistory(payload) {
       if (!historyBody) return;
 
-      if (!payload.batches || payload.batches.length === 0) {
-         historyBody.innerHTML = '<p class="crm-history-empty">' + escapeHtml(payload.message || 'Belum ada riwayat perubahan untuk record ini.') + '</p>';
+      const entries = payload.entries || [];
+      if (entries.length === 0) {
+         historyBody.innerHTML = '<p class="crm-history-empty">' + escapeHtml(payload.message || 'Belum ada riwayat perubahan untuk filter ini.') + '</p>';
          return;
       }
 
-      historyBody.innerHTML = payload.batches.map(function (batch) {
-         const actionClass = batch.action === 'created' ? 'crm-history-action--created' : 'crm-history-action--updated';
-         const actionLabel = batch.action === 'created' ? 'Dibuat' : 'Diupdate';
-         const changesHtml = (batch.changes || []).map(function (change) {
-            const oldVal = change.old_value === null || change.old_value === '' ? '—' : change.old_value;
-            const newVal = change.new_value === null || change.new_value === '' ? '—' : change.new_value;
+      historyBody.innerHTML = entries.map(function (entry) {
+         const oldVal = entry.old_value === null || entry.old_value === '' ? '—' : entry.old_value;
+         const newVal = entry.new_value === null || entry.new_value === '' ? '—' : entry.new_value;
+         const actionClass = entry.action === 'created' ? 'crm-history-action--created' : 'crm-history-action--updated';
+         const actionLabel = entry.action === 'created' ? 'Dibuat' : 'Diupdate';
 
-            return '<div class="crm-history-change">'
-               + '<div class="crm-history-field">' + escapeHtml(change.field_label) + '</div>'
-               + '<div class="crm-history-old">' + escapeHtml(oldVal) + '</div>'
-               + '<div class="crm-history-new">' + escapeHtml(newVal) + '</div>'
-               + '</div>';
-         }).join('');
-
-         return '<div class="crm-history-batch">'
-            + '<div class="crm-history-batch-head">'
-            + '<span class="crm-history-week">' + escapeHtml(batch.review_week) + '</span>'
+         return '<article class="crm-history-entry">'
+            + '<div class="crm-history-entry-meta">'
+            + '<span class="crm-history-week">' + escapeHtml(entry.review_week || '') + '</span>'
             + '<span class="crm-history-action ' + actionClass + '">' + actionLabel + '</span>'
-            + '<span class="crm-history-meta">' + escapeHtml(batch.changed_at) + '</span>'
-            + '<span class="crm-history-meta">oleh ' + escapeHtml(batch.changed_by_name) + '</span>'
-            + '<span class="crm-history-meta">' + (batch.changes || []).length + ' field</span>'
+            + '<span class="crm-history-meta">' + escapeHtml(entry.changed_at || '') + '</span>'
+            + '<span class="crm-history-meta">oleh ' + escapeHtml(entry.changed_by_name || 'Sistem') + '</span>'
             + '</div>'
-            + changesHtml
-            + '</div>';
+            + '<div class="crm-history-entry-body">'
+            + '<div class="crm-history-field">' + escapeHtml(entry.field_label || entry.field_name || '') + '</div>'
+            + '<div class="crm-history-diff">'
+            + '<span class="crm-history-old">' + escapeHtml(oldVal) + '</span>'
+            + '<span class="crm-history-arrow" aria-hidden="true">→</span>'
+            + '<span class="crm-history-new">' + escapeHtml(newVal) + '</span>'
+            + '</div>'
+            + '</div>'
+            + '</article>';
       }).join('');
    }
 
-   async function openHistoryModal(recordId) {
+   function syncHistoryFilters(activeField) {
+      if (!historyFilters) return;
+      historyFilters.hidden = false;
+      historyFilterAll?.classList.toggle('crm-history-filter--active', !activeField);
+
+      if (lastHistoryColumnField && historyFilterField) {
+         historyFilterField.hidden = false;
+         historyFilterField.dataset.field = lastHistoryColumnField;
+         historyFilterField.textContent = 'Kolom: ' + (fieldLabels[lastHistoryColumnField] || lastHistoryColumnField);
+         historyFilterField.classList.toggle('crm-history-filter--active', activeField === lastHistoryColumnField);
+      } else if (historyFilterField) {
+         historyFilterField.hidden = true;
+         historyFilterField.classList.remove('crm-history-filter--active');
+      }
+   }
+
+   async function openHistoryModal(recordId, field) {
       if (!recordId || !historyModal) return;
 
+      if (historyRecordId !== recordId) {
+         lastHistoryColumnField = null;
+      }
+      historyRecordId = recordId;
+      historyField = field || null;
+      if (historyField) {
+         lastHistoryColumnField = historyField;
+      }
       historyModal.classList.add('crm-history-modal--open');
       if (historyBody) historyBody.innerHTML = '<p class="crm-history-empty">Memuat riwayat...</p>';
+      syncHistoryFilters(historyField);
 
       try {
-         const response = await fetch(historyUrl(recordId), { headers: { Accept: 'application/json' } });
+         const response = await fetch(historyUrl(recordId, historyField), { headers: { Accept: 'application/json' } });
          const payload = await response.json();
 
          if (!response.ok) {
@@ -218,9 +292,15 @@
          }
 
          if (historySubtitle) {
+            const fieldNote = payload.field_label ? (' · ' + payload.field_label) : '';
             historySubtitle.textContent = (payload.pengendalian_rekayasa || 'Record #' + recordId)
                + ' · ' + (payload.site || '') + ' · ' + (payload.perusahaan || '')
+               + fieldNote
                + ' · ' + (payload.total_changes || 0) + ' perubahan';
+         }
+
+         if (payload.field_label && historyFilterField && historyField) {
+            historyFilterField.textContent = 'Kolom: ' + payload.field_label;
          }
 
          renderHistory(payload);
@@ -418,18 +498,41 @@
                remove_row: {},
                sep1: '---------',
                mse_history: {
-                  name: 'Riwayat Perubahan',
+                  name: 'Riwayat baris',
                   callback: function (_key, selection) {
                      const row = selection?.[0]?.start?.row;
                      if (row === undefined || !hot) return;
-                     const rowData = hot.getSourceDataAtRow(row) || {};
-                     if (rowData.id) openHistoryModal(parseInt(rowData.id, 10));
+                     const physical = hot.toPhysicalRow(row);
+                     const rowData = hot.getSourceData()[physical] || {};
+                     if (rowData.id) openHistoryModal(parseInt(rowData.id, 10), null);
                   },
                   disabled: function () {
                      const sel = hot?.getSelectedLast?.();
                      if (!sel) return true;
-                     const rowData = hot.getSourceDataAtRow(sel[0]) || {};
+                     const physical = hot.toPhysicalRow(sel[0]);
+                     const rowData = hot.getSourceData()[physical] || {};
                      return !rowData.id;
+                  },
+               },
+               mse_history_field: {
+                  name: 'Riwayat kolom ini',
+                  callback: function (_key, selection) {
+                     const start = selection?.[0]?.start;
+                     if (!start || !hot) return;
+                     const physical = hot.toPhysicalRow(start.row);
+                     const rowData = hot.getSourceData()[physical] || {};
+                     const prop = hot.colToProp(start.col);
+                     if (rowData.id && typeof prop === 'string') {
+                        openHistoryModal(parseInt(rowData.id, 10), prop);
+                     }
+                  },
+                  disabled: function () {
+                     const sel = hot?.getSelectedLast?.();
+                     if (!sel) return true;
+                     const physical = hot.toPhysicalRow(sel[0]);
+                     const rowData = hot.getSourceData()[physical] || {};
+                     const prop = hot.colToProp(sel[1]);
+                     return !rowData.id || typeof prop !== 'string' || !editableFields.has(prop);
                   },
                },
                sep2: '---------',
@@ -447,12 +550,21 @@
          height: computeGridHeight(),
          width: '100%',
          className: 'htMiddle htLeft',
-         afterChange: function () {
-            setStatus('Ada perubahan belum disimpan', '');
+         afterChange: function (changes, source) {
+            if (!changes || source === 'loadData') return;
+            changes.forEach(function (change) {
+               const row = change[0];
+               const prop = change[1];
+               const oldVal = change[2];
+               const newVal = change[3];
+               if (oldVal === newVal) return;
+               markDirty(row, prop);
+            });
+            const cells = dirtyCount();
+            setStatus(cells > 0 ? (cells + ' sel belum disimpan') : 'Ada perubahan belum disimpan', '');
          },
-         afterSelection: function (_row, _col, _row2, _col2) {
-            const sel = hot?.getSelectedLast?.();
-            updateSelectedRecord(sel ? sel[0] : null);
+         afterSelection: function (row, col) {
+            updateSelectedRecord(row, col);
          },
          afterRenderer: function (td, _row, _col, prop, value) {
             if (statusFields.has(prop)) return;
@@ -502,6 +614,7 @@
 
          const rows = payload.data || [];
          hot.loadData(rows);
+         dirtyById.clear();
          const yearLabel = periodYear === null || periodYear === undefined ? 'Semua Tahun' : ('Tahun ' + periodYear);
          setStatus(rows.length + ' baris · ' + yearLabel, 'success');
       } catch (error) {
@@ -533,25 +646,66 @@
       setStatus('Baris baru ditambahkan — simpan untuk persist', '');
    }
 
+   function isNewRowFilled(row) {
+      if (!row || row.id) return false;
+      const pengendalian = String(row.pengendalian_rekayasa ?? '').trim();
+      const site = String(row.site ?? '').trim();
+      const perusahaan = String(row.perusahaan ?? '').trim();
+      return pengendalian !== '' && site !== '' && perusahaan !== '';
+   }
+
+   function pickRowFields(row, fields) {
+      const payload = { client_index: fields.client_index };
+      if (row.id) payload.id = row.id;
+      fields.keys.forEach(function (key) {
+         if (Object.prototype.hasOwnProperty.call(row, key)) {
+            payload[key] = row[key];
+         }
+      });
+      return payload;
+   }
+
+   function collectSaveRows() {
+      const source = hot.getSourceData() || [];
+      const rows = [];
+
+      source.forEach(function (row, physicalIndex) {
+         if (!row) return;
+
+         if (!row.id) {
+            if (!isNewRowFilled(row)) return;
+            const keys = (gridConfig.editable_fields || []).slice();
+            keys.push('row_no', 'sort_order', 'period_year');
+            rows.push(pickRowFields(row, { client_index: physicalIndex, keys: keys }));
+            return;
+         }
+
+         const id = parseInt(row.id, 10);
+         const dirty = dirtyById.get(id);
+         if (!dirty || dirty.size === 0) return;
+
+         rows.push(pickRowFields(row, {
+            client_index: physicalIndex,
+            keys: Array.from(dirty),
+         }));
+      });
+
+      return rows;
+   }
+
    async function saveRecords() {
       if (!hot) return;
 
       hideAlert();
-      setStatus('Menyimpan...', '');
-
-      const rows = hot.getSourceData().filter(function (row) {
-         if (!row) return false;
-         const pengendalian = String(row.pengendalian_rekayasa ?? '').trim();
-         const site = String(row.site ?? '').trim();
-         const perusahaan = String(row.perusahaan ?? '').trim();
-         return pengendalian !== '' || site !== '' || perusahaan !== '' || row.id;
-      });
+      const rows = collectSaveRows();
 
       if (rows.length === 0) {
-         showAlert('Tidak ada baris valid untuk disimpan.', 'error');
-         setStatus('Tidak ada data', 'error');
+         showAlert('Tidak ada perubahan untuk disimpan.', 'info');
+         setStatus('Tidak ada perubahan', '');
          return;
       }
+
+      setStatus('Menyimpan ' + rows.length + ' baris...', '');
 
       const saveBtn = document.getElementById('mse-btn-save');
       if (saveBtn) saveBtn.disabled = true;
@@ -577,15 +731,27 @@
             throw new Error(payload.message + (errorLines ? '\n' + errorLines : ''));
          }
 
+         const source = hot.getSourceData();
+         const savedIds = [];
+         (payload.saved || []).forEach(function (item) {
+            const index = item.client_index;
+            if (typeof index !== 'number' || !source[index]) return;
+            source[index].id = item.id;
+            savedIds.push(parseInt(item.id, 10));
+         });
+         clearDirtyForIds(savedIds);
+         hot.render();
+
          let message = payload.message || 'Data berhasil disimpan.';
          if (payload.errors && payload.errors.length > 0) {
             message += ' Peringatan: ' + payload.errors.join(' | ');
             showAlert(message, 'info');
+            setStatus('Tersimpan sebagian', '');
          } else {
             showAlert(message, 'success');
+            const remaining = dirtyCount();
+            setStatus(remaining > 0 ? remaining + ' sel belum disimpan' : 'Tersimpan', 'success');
          }
-
-         await loadRecords();
       } catch (error) {
          showAlert(error.message || 'Gagal menyimpan data.', 'error');
          setStatus('Gagal menyimpan', 'error');
@@ -725,7 +891,14 @@
    document.getElementById('mse-btn-add-row')?.addEventListener('click', addRow);
    document.getElementById('mse-btn-save')?.addEventListener('click', saveRecords);
    historyBtn?.addEventListener('click', function () {
-      if (selectedRecordId) openHistoryModal(selectedRecordId);
+      if (selectedRecordId) openHistoryModal(selectedRecordId, null);
+   });
+   historyFilterAll?.addEventListener('click', function () {
+      if (historyRecordId) openHistoryModal(historyRecordId, null);
+   });
+   historyFilterField?.addEventListener('click', function () {
+      const field = historyFilterField.dataset.field;
+      if (historyRecordId && field) openHistoryModal(historyRecordId, field);
    });
    document.getElementById('mse-history-close')?.addEventListener('click', closeHistoryModal);
    historyModal?.addEventListener('click', function (event) {

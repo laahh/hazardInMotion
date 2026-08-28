@@ -48,7 +48,14 @@ final class MonitoringSafetyEngineeringPhaseStatusLogService
             $changedAtField = $definition['changed_at'];
             $complianceField = $definition['compliance'];
 
-            $newStatus = (string) ($payload[$statusField] ?? MonitoringSafetyEngineeringPhaseStatus::NotYet->value);
+            $newStatus = array_key_exists($statusField, $payload)
+                ? (string) ($payload[$statusField] ?? MonitoringSafetyEngineeringPhaseStatus::NotYet->value)
+                : null;
+
+            if ($newStatus === null) {
+                continue;
+            }
+
             $oldStatus = $this->resolveStatusValue($record->getAttribute($statusField));
 
             if ($oldStatus === $newStatus) {

@@ -37,16 +37,15 @@ class MonitoringSafetyEngineeringRecordUpdateController extends Controller
 
     public function records(Request $request): JsonResponse
     {
-        if (! Schema::hasTable('monitoring_safety_engineering_records')) {
-            return response()->json(['message' => 'Tabel database belum tersedia.'], 422);
-        }
-
         $periodYear = $request->filled('period_year') ? (int) $request->get('period_year') : null;
 
         try {
-            return response()->json([
-                'data' => $this->gridService->fetchRows($periodYear),
-            ], 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            return response()->json(
+                ['data' => $this->gridService->fetchRows($periodYear)],
+                200,
+                [],
+                JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE,
+            );
         } catch (\Throwable $e) {
             report($e);
 
@@ -58,15 +57,20 @@ class MonitoringSafetyEngineeringRecordUpdateController extends Controller
 
     public function save(MonitoringSafetyEngineeringRecordGridRequest $request): JsonResponse
     {
-        if (! Schema::hasTable('monitoring_safety_engineering_records')) {
-            return response()->json(['message' => 'Tabel database belum tersedia.'], 422);
-        }
-
         $validated = $request->validated();
-        $result = $this->gridService->bulkSave(
-            $validated['rows'],
-            (int) $validated['period_year'],
-        );
+
+        try {
+            $result = $this->gridService->bulkSave(
+                $validated['rows'],
+                (int) $validated['period_year'],
+            );
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'Gagal menyimpan data. ' . $e->getMessage(),
+            ], 500);
+        }
 
         $message = 'Berhasil menyimpan data: ' . $result['updated'] . ' diperbarui, ' . $result['created'] . ' ditambahkan.';
         if (($result['change_logs_created'] ?? 0) > 0) {
@@ -81,17 +85,24 @@ class MonitoringSafetyEngineeringRecordUpdateController extends Controller
             'updated' => $result['updated'],
             'logs_created' => $result['logs_created'] ?? 0,
             'change_logs_created' => $result['change_logs_created'] ?? 0,
+            'saved' => $result['saved'] ?? [],
             'errors' => $result['errors'],
         ], $result['errors'] !== [] && ($result['created'] + $result['updated']) === 0 ? 422 : 200);
     }
 
-    public function history(int $recordId): JsonResponse
+    public function history(Request $request, int $recordId): JsonResponse
     {
-        if (! Schema::hasTable('monitoring_safety_engineering_records')) {
-            return response()->json(['message' => 'Tabel database belum tersedia.'], 422);
-        }
+        $field = $request->filled('field') ? (string) $request->get('field') : null;
 
-        $history = $this->gridService->fetchChangeHistory($recordId);
+        try {
+            $history = $this->gridService->fetchChangeHistory($recordId, $field);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'Gagal memuat riwayat. ' . $e->getMessage(),
+            ], 500);
+        }
 
         if (! ($history['found'] ?? false)) {
             return response()->json(['message' => 'Record tidak ditemukan.'], 404);

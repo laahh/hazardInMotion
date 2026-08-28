@@ -9,34 +9,16 @@ use App\Models\MonitoringSafetyEngineeringRecordChangeLog;
 use App\Support\MonitoringSafetyEngineering\MonitoringSafetyEngineeringRecordGridDefinition;
 use BackedEnum;
 use Carbon\CarbonInterface;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Str;
 
 final class MonitoringSafetyEngineeringRecordChangeLogService
 {
-    private ?bool $readyCache = null;
-
-    public function isReady(): bool
-    {
-        if ($this->readyCache !== null) {
-            return $this->readyCache;
-        }
-
-        $this->readyCache = Schema::hasTable('monitoring_safety_engineering_record_change_logs');
-
-        return $this->readyCache;
-    }
-
     /**
      * @param  array<string, mixed>  $payload
      */
     public function logCreate(MonitoringSafetyEngineeringRecord $record, array $payload, ?int $userId): int
     {
-        if (! $this->isReady()) {
-            return 0;
-        }
-
         $changedAt = now();
         $batch = (string) Str::uuid();
         $rows = [];
@@ -62,13 +44,7 @@ final class MonitoringSafetyEngineeringRecordChangeLogService
             );
         }
 
-        if ($rows === []) {
-            return 0;
-        }
-
-        MonitoringSafetyEngineeringRecordChangeLog::query()->insert($rows);
-
-        return count($rows);
+        return $this->insertLogRows($rows);
     }
 
     /**
@@ -76,18 +52,17 @@ final class MonitoringSafetyEngineeringRecordChangeLogService
      */
     public function logUpdate(MonitoringSafetyEngineeringRecord $record, array $payload, ?int $userId): int
     {
-        if (! $this->isReady()) {
-            return 0;
-        }
-
         $changedAt = now();
         $batch = (string) Str::uuid();
         $rows = [];
+        $tracked = $this->trackedFields();
 
-        foreach ($this->trackedFields() as $field => $label) {
+        foreach ($payload as $field => $newRaw) {
+            if (! is_string($field) || ! isset($tracked[$field])) {
+                continue;
+            }
+
             $oldRaw = $record->getAttribute($field);
-            $newRaw = $payload[$field] ?? null;
-
             $oldComparable = $this->normalizeComparable($field, $oldRaw);
             $newComparable = $this->normalizeComparable($field, $newRaw);
 
@@ -100,7 +75,7 @@ final class MonitoringSafetyEngineeringRecordChangeLogService
                 batch: $batch,
                 action: 'updated',
                 field: $field,
-                label: $label,
+                label: $tracked[$field],
                 oldValue: $this->formatDisplay($field, $oldRaw),
                 newValue: $this->formatDisplay($field, $newRaw),
                 changedAt: $changedAt,
@@ -109,19 +84,13 @@ final class MonitoringSafetyEngineeringRecordChangeLogService
             );
         }
 
-        if ($rows === []) {
-            return 0;
-        }
-
-        MonitoringSafetyEngineeringRecordChangeLog::query()->insert($rows);
-
-        return count($rows);
+        return $this->insertLogRows($rows);
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function fetchHistory(int $recordId): array
+    public function fetchHistory(int $recordId, ?string $field = null): array
     {
         $record = MonitoringSafetyEngineeringRecord::query()
             ->select(['id', 'pengendalian_rekayasa', 'site', 'perusahaan'])
@@ -132,32 +101,53 @@ final class MonitoringSafetyEngineeringRecordChangeLogService
                 'found' => false,
                 'record_id' => $recordId,
                 'batches' => [],
+                'entries' => [],
             ];
         }
 
-        if (! $this->isReady()) {
+        $tracked = $this->trackedFields();
+        $fieldFilter = $field !== null && $field !== '' && isset($tracked[$field]) ? $field : null;
+
+        try {
+            $query = MonitoringSafetyEngineeringRecordChangeLog::query()
+                ->with(['changer:id,name'])
+                ->where('record_id', $recordId)
+                ->orderByDesc('changed_at')
+                ->orderByDesc('id');
+
+            if ($fieldFilter !== null) {
+                $query->where('field_name', $fieldFilter);
+            }
+
+            $logs = $query->get();
+        } catch (QueryException $e) {
+            if (! $this->isMissingTableException($e)) {
+                throw $e;
+            }
+
             return [
                 'found' => true,
                 'record_id' => $record->id,
                 'pengendalian_rekayasa' => $record->pengendalian_rekayasa,
                 'site' => $record->site,
                 'perusahaan' => $record->perusahaan,
+                'field' => $fieldFilter,
+                'field_label' => $fieldFilter !== null ? $tracked[$fieldFilter] : null,
                 'batches' => [],
+                'entries' => [],
+                'total_changes' => 0,
                 'message' => 'Tabel log belum tersedia. Jalankan migration terlebih dahulu.',
             ];
         }
 
-        $logs = MonitoringSafetyEngineeringRecordChangeLog::query()
-            ->with(['changer:id,name'])
-            ->where('record_id', $recordId)
-            ->orderByDesc('changed_at')
-            ->orderByDesc('id')
-            ->get();
-
         $batches = [];
+
+        $entries = [];
 
         foreach ($logs as $log) {
             $batchKey = $log->change_batch;
+            $changedAt = $log->changed_at?->format('Y-m-d H:i:s');
+            $changedByName = $log->changer?->name ?? 'Sistem';
 
             if (! isset($batches[$batchKey])) {
                 $batches[$batchKey] = [
@@ -165,9 +155,9 @@ final class MonitoringSafetyEngineeringRecordChangeLogService
                     'action' => $log->action,
                     'review_week' => $log->review_week,
                     'period_year' => $log->period_year,
-                    'changed_at' => $log->changed_at?->format('Y-m-d H:i:s'),
+                    'changed_at' => $changedAt,
                     'changed_by' => $log->changed_by,
-                    'changed_by_name' => $log->changer?->name ?? 'Sistem',
+                    'changed_by_name' => $changedByName,
                     'changes' => [],
                 ];
             }
@@ -178,6 +168,18 @@ final class MonitoringSafetyEngineeringRecordChangeLogService
                 'old_value' => $log->old_value,
                 'new_value' => $log->new_value,
             ];
+
+            $entries[] = [
+                'field_name' => $log->field_name,
+                'field_label' => $log->field_label,
+                'old_value' => $log->old_value,
+                'new_value' => $log->new_value,
+                'action' => $log->action,
+                'review_week' => $log->review_week,
+                'changed_at' => $changedAt,
+                'changed_by' => $log->changed_by,
+                'changed_by_name' => $changedByName,
+            ];
         }
 
         return [
@@ -186,7 +188,10 @@ final class MonitoringSafetyEngineeringRecordChangeLogService
             'pengendalian_rekayasa' => $record->pengendalian_rekayasa,
             'site' => $record->site,
             'perusahaan' => $record->perusahaan,
+            'field' => $fieldFilter,
+            'field_label' => $fieldFilter !== null ? $tracked[$fieldFilter] : null,
             'batches' => array_values($batches),
+            'entries' => $entries,
             'total_changes' => $logs->count(),
         ];
     }
@@ -211,6 +216,37 @@ final class MonitoringSafetyEngineeringRecordChangeLogService
         $labels['sort_order'] = 'Urutan';
 
         return $labels;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function insertLogRows(array $rows): int
+    {
+        if ($rows === []) {
+            return 0;
+        }
+
+        try {
+            MonitoringSafetyEngineeringRecordChangeLog::query()->insert($rows);
+        } catch (QueryException $e) {
+            if ($this->isMissingTableException($e)) {
+                return 0;
+            }
+
+            throw $e;
+        }
+
+        return count($rows);
+    }
+
+    private function isMissingTableException(QueryException $e): bool
+    {
+        $message = $e->getMessage();
+
+        return $e->getCode() === '42S02'
+            || str_contains($message, "doesn't exist")
+            || str_contains($message, 'Base table or view not found');
     }
 
     /**
