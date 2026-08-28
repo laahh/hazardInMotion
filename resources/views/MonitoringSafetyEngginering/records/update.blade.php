@@ -136,6 +136,27 @@
       'uji_coba_status',
       'standardisasi_status',
    ]);
+   const valueFilterKeys = new Set(['site', 'perusahaan', 'sumber_rekayasa', 'pelaksana_rekayasa']);
+   let lastHeaderProp = null;
+
+   function currentHeaderProp() {
+      const instance = hot;
+      if (!instance) return lastHeaderProp;
+      const filtersPlugin = instance.getPlugin('filters');
+      const selected = filtersPlugin && typeof filtersPlugin.getSelectedColumn === 'function'
+         ? filtersPlugin.getSelectedColumn()
+         : null;
+      if (selected && typeof selected.visualIndex === 'number' && selected.visualIndex >= 0) {
+         const prop = instance.colToProp(selected.visualIndex);
+         if (typeof prop === 'string') return prop;
+      }
+      return lastHeaderProp;
+   }
+
+   function isValueFilterColumn() {
+      const prop = currentHeaderProp();
+      return typeof prop === 'string' && valueFilterKeys.has(prop);
+   }
 
    const alertEl = document.getElementById('mse-grid-alert');
    const statusEl = document.getElementById('mse-grid-status');
@@ -543,13 +564,37 @@
                cut: {},
             },
          },
-         dropdownMenu: ['filter_by_condition', 'filter_operators', 'filter_action_bar'],
+         dropdownMenu: {
+            items: {
+               filter_by_value: {
+                  hidden: function () {
+                     return !isValueFilterColumn();
+                  },
+               },
+               filter_by_condition: {
+                  hidden: function () {
+                     return isValueFilterColumn();
+                  },
+               },
+               filter_operators: {
+                  hidden: function () {
+                     return isValueFilterColumn();
+                  },
+               },
+               filter_action_bar: {},
+            },
+         },
          filters: true,
          columnSorting: true,
          licenseKey: 'non-commercial-and-evaluation',
          height: computeGridHeight(),
          width: '100%',
          className: 'htMiddle htLeft',
+         afterOnCellMouseDown: function (_event, coords) {
+            if (!hot || !coords || coords.col < 0 || coords.row >= 0) return;
+            const prop = hot.colToProp(coords.col);
+            if (typeof prop === 'string') lastHeaderProp = prop;
+         },
          afterChange: function (changes, source) {
             if (!changes || source === 'loadData') return;
             changes.forEach(function (change) {

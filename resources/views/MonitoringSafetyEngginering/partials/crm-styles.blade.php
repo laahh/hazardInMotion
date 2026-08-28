@@ -2986,13 +2986,21 @@
    .htFiltersMenuCondition,
    .htFiltersMenuValue {
       z-index: 2050 !important;
-      max-height: 280px !important;
       font-size: 12px !important;
       font-family: Calibri, 'Segoe UI', Arial, sans-serif;
    }
-   .htDropdownMenu .wtHolder,
+   .htDropdownMenu {
+      max-height: min(420px, 75vh) !important;
+   }
+   .htFiltersMenuCondition {
+      max-height: 280px !important;
+   }
+   .htFiltersMenuValue,
    .htFiltersMenuValue .wtHolder {
-      max-height: 240px !important;
+      max-height: 320px !important;
+   }
+   .htDropdownMenu .wtHolder {
+      max-height: 380px !important;
    }
 
    .crm-grid-legend {
