@@ -124,7 +124,8 @@ final class MonitoringSafetyEngineeringRecordGridDefinition
     {
         return [
             [
-                ['label' => 'Identitas', 'colspan' => 5],
+                ['label' => 'Identitas', 'colspan' => 4],
+                ['label' => 'Pengendalian Rekayasa', 'colspan' => 1],
                 ['label' => 'Ideation', 'colspan' => 1],
                 ['label' => 'Kajian Teknis', 'colspan' => 2],
                 ['label' => 'Pengadaan', 'colspan' => 2],

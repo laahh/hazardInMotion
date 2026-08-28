@@ -68,13 +68,16 @@
             <span class="material-symbols-outlined text-base">view_column</span>
             Kolom
          </button>
-         <div id="mse-col-picker-panel" class="crm-col-picker-panel">
+         <div id="mse-col-picker-panel" class="crm-col-picker-panel" role="dialog" aria-label="Tampilkan Kolom">
             <div class="crm-col-picker-head">
                <span>Tampilkan Kolom</span>
                <div class="crm-col-picker-head-actions">
                   <button type="button" id="mse-col-show-all" class="crm-col-picker-link">Semua</button>
                   <button type="button" id="mse-col-hide-all" class="crm-col-picker-link">Sembunyikan Semua</button>
                </div>
+            </div>
+            <div class="crm-col-picker-search-wrap">
+               <input type="search" id="mse-col-picker-search" class="crm-col-picker-search" placeholder="Cari kolom..." autocomplete="off">
             </div>
             <div id="mse-col-picker-body" class="crm-col-picker-body"></div>
          </div>
@@ -321,16 +324,20 @@
             cfg.source = gridConfig.dropdowns[col.key] || [];
             cfg.strict = false;
             cfg.allowInvalid = true;
+            cfg.wordWrap = false;
          } else if (col.type === 'date') {
             cfg.type = 'date';
             cfg.dateFormat = 'YYYY-MM-DD';
             cfg.correctFormat = true;
             cfg.allowEmpty = true;
+            cfg.wordWrap = false;
          } else if (col.type === 'numeric') {
             cfg.type = 'numeric';
             cfg.allowEmpty = true;
+            cfg.wordWrap = false;
          } else {
             cfg.type = 'text';
+            cfg.wordWrap = false;
          }
 
          if (statusFields.has(col.key)) {
@@ -386,10 +393,19 @@
          columns: buildColumns(),
          nestedHeaders: buildNestedHeaders(),
          fixedColumnsLeft: gridConfig.fixed_columns_left || 0,
+         fixedColumnsStart: gridConfig.fixed_columns_left || 0,
          rowHeaders: true,
+         colHeaders: true,
          stretchH: 'none',
+         wordWrap: false,
+         autoRowSize: false,
+         autoColumnSize: false,
+         rowHeights: 22,
          autoWrapRow: true,
          autoWrapCol: true,
+         enterMoves: { row: 1, col: 0 },
+         tabMoves: { row: 0, col: 1 },
+         fillHandle: true,
          manualColumnResize: true,
          manualRowResize: true,
          hiddenColumns: {
@@ -425,19 +441,28 @@
                cut: {},
             },
          },
-         dropdownMenu: true,
+         dropdownMenu: ['filter_by_condition', 'filter_operators', 'filter_action_bar'],
          filters: true,
          columnSorting: true,
          licenseKey: 'non-commercial-and-evaluation',
          height: computeGridHeight(),
          width: '100%',
-         className: 'htMiddle',
+         className: 'htMiddle htLeft',
          afterChange: function () {
             setStatus('Ada perubahan belum disimpan', '');
          },
          afterSelection: function (_row, _col, _row2, _col2) {
             const sel = hot?.getSelectedLast?.();
             updateSelectedRecord(sel ? sel[0] : null);
+         },
+         afterRenderer: function (td, _row, _col, prop, value) {
+            if (statusFields.has(prop)) return;
+            const text = value === null || value === undefined ? '' : String(value);
+            if (text.length > 24) {
+               td.title = text;
+            } else {
+               td.removeAttribute('title');
+            }
          },
          afterHideColumns: function (_current, hidden) {
             saveHiddenColumns(hidden);
@@ -587,11 +612,18 @@
 
       const plugin = hot.getPlugin('hiddenColumns');
       const hidden = new Set(plugin.getHiddenColumns());
+      const query = String(document.getElementById('mse-col-picker-search')?.value || '')
+         .trim()
+         .toLowerCase();
       let currentGroup = null;
       let html = '';
+      let visibleCount = 0;
 
       gridConfig.columns.forEach(function (col, index) {
          const group = columnGroupForIndex(index);
+         const haystack = (group + ' ' + col.label).toLowerCase();
+         if (query && haystack.indexOf(query) === -1) return;
+
          if (group !== currentGroup) {
             currentGroup = group;
             html += '<p class="crm-col-picker-group">' + escapeHtml(group) + '</p>';
@@ -601,9 +633,30 @@
             + '<input type="checkbox" data-col-index="' + index + '" ' + checked + '>'
             + '<span>' + escapeHtml(col.label) + '</span>'
             + '</label>';
+         visibleCount += 1;
       });
 
-      body.innerHTML = html;
+      body.innerHTML = visibleCount === 0
+         ? '<p class="crm-col-picker-empty">Kolom tidak ditemukan.</p>'
+         : html;
+   }
+
+   function positionColumnPanel() {
+      const panel = document.getElementById('mse-col-picker-panel');
+      const trigger = document.getElementById('mse-btn-columns');
+      if (!panel || !trigger) return;
+
+      const rect = trigger.getBoundingClientRect();
+      const width = panel.offsetWidth || 288;
+      const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+      let top = rect.bottom + 6;
+      const maxHeight = Math.min(448, window.innerHeight - 24);
+      if (top + Math.min(panel.scrollHeight || 320, maxHeight) > window.innerHeight - 8) {
+         top = Math.max(8, rect.top - Math.min(panel.offsetHeight || 320, maxHeight) - 6);
+      }
+
+      panel.style.top = top + 'px';
+      panel.style.left = left + 'px';
    }
 
    function toggleColumnPanel(forceState) {
@@ -611,11 +664,26 @@
       if (!panel) return;
       const shouldOpen = forceState !== undefined ? forceState : !panel.classList.contains('crm-col-picker-panel--open');
       panel.classList.toggle('crm-col-picker-panel--open', shouldOpen);
+      if (shouldOpen) {
+         positionColumnPanel();
+         document.getElementById('mse-col-picker-search')?.focus();
+      }
    }
 
    document.getElementById('mse-btn-columns')?.addEventListener('click', function (event) {
       event.stopPropagation();
       toggleColumnPanel();
+   });
+
+   document.getElementById('mse-col-picker-search')?.addEventListener('input', function () {
+      renderColumnPicker();
+   });
+
+   window.addEventListener('resize', function () {
+      const panel = document.getElementById('mse-col-picker-panel');
+      if (panel?.classList.contains('crm-col-picker-panel--open')) {
+         positionColumnPanel();
+      }
    });
 
    document.getElementById('mse-col-picker-body')?.addEventListener('change', function (event) {

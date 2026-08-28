@@ -190,7 +190,6 @@ final class SportEvaluationInstallStatsService
                     if ($this->exclusionRules->isExcludedRow([
                         'jabatan_fungsional' => $row['jabatan'],
                         'site' => $row['site'],
-                        'resolved_site' => $site,
                         'nama' => $row['nama'],
                     ])) {
                         continue;
@@ -505,7 +504,6 @@ final class SportEvaluationInstallStatsService
             if ($this->exclusionRules->isExcludedRow([
                 'jabatan_fungsional' => $row['jabatan'],
                 'site' => $row['site'],
-                'resolved_site' => $resolvedSite,
                 'nama' => $row['nama'],
             ])) {
                 continue;
