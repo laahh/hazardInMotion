@@ -392,7 +392,6 @@
          data: [],
          columns: buildColumns(),
          nestedHeaders: buildNestedHeaders(),
-         fixedColumnsLeft: gridConfig.fixed_columns_left || 0,
          fixedColumnsStart: gridConfig.fixed_columns_left || 0,
          rowHeaders: true,
          colHeaders: true,
