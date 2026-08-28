@@ -1,0 +1,485 @@
+[
+  {
+    "no": 1,
+    "site": "BMO 1",
+    "perusahaan": "KDC",
+    "nama": "ASRIL WIRANATA MUHNAS",
+    "sid": "IIVK3"
+  },
+  {
+    "no": 2,
+    "site": "BMO 1",
+    "perusahaan": "KDC",
+    "nama": "HELFID SAMAD",
+    "sid": "YCB55"
+  },
+  {
+    "no": 3,
+    "site": "BMO 1",
+    "perusahaan": "KDC",
+    "nama": "TOTOK ARIYO",
+    "sid": "RYXZQ"
+  },
+  {
+    "no": 4,
+    "site": "BMO 1",
+    "perusahaan": "BUMA",
+    "nama": "SUDIRMAN SINAGA",
+    "sid": "WW5RH"
+  },
+  {
+    "no": 5,
+    "site": "BMO 1",
+    "perusahaan": "BUMA",
+    "nama": "AGUNG INDRIATMOKO",
+    "sid": "T9XBN"
+  },
+  {
+    "no": 6,
+    "site": "BMO 1",
+    "perusahaan": "MTL",
+    "nama": "ALDI FAHRESA",
+    "sid": "QKJNA"
+  },
+  {
+    "no": 7,
+    "site": "BMO 1",
+    "perusahaan": "MTL",
+    "nama": "YAYAN ADIYANA",
+    "sid": "RFYTJ"
+  },
+  {
+    "no": 8,
+    "site": "BMO 1",
+    "perusahaan": "MTL",
+    "nama": "HAMDAN",
+    "sid": "MGLSX"
+  },
+  {
+    "no": 9,
+    "site": "BMO 1",
+    "perusahaan": "MTN",
+    "nama": "ERWIN SUSTANTO",
+    "sid": "9MRM1"
+  },
+  {
+    "no": 10,
+    "site": "BMO 1",
+    "perusahaan": "MTN",
+    "nama": "INDRA GUNAWAN",
+    "sid": "D5HW6"
+  },
+  {
+    "no": 11,
+    "site": "BMO 1",
+    "perusahaan": "MTN",
+    "nama": "BAMBANG MUHAMMAD SHAFAR",
+    "sid": "INLAW"
+  },
+  {
+    "no": 12,
+    "site": "BMO 2",
+    "perusahaan": "PAMA",
+    "nama": "YANUAR SAPUTRA",
+    "sid": "21T53"
+  },
+  {
+    "no": 13,
+    "site": "BMO 2",
+    "perusahaan": "PAMA",
+    "nama": "ANDY PURNOMO",
+    "sid": "QH8RU"
+  },
+  {
+    "no": 14,
+    "site": "BMO 2",
+    "perusahaan": "PAMA",
+    "nama": "REZA FANSURI",
+    "sid": "HFJVY"
+  },
+  {
+    "no": 15,
+    "site": "BMO 3",
+    "perusahaan": "BAR",
+    "nama": "MUHAMAD RIDWAN",
+    "sid": "PRW7Y"
+  },
+  {
+    "no": 16,
+    "site": "BMO 3",
+    "perusahaan": "BAR",
+    "nama": "AKHMAD SIGIT ARISANDY",
+    "sid": "3ON7Q"
+  },
+  {
+    "no": 17,
+    "site": "BMO 3",
+    "perusahaan": "BAR",
+    "nama": "RIVALDI PATRA",
+    "sid": "0T6TD"
+  },
+  {
+    "no": 18,
+    "site": "LMO",
+    "perusahaan": "BUMA",
+    "nama": "FREDERIKA YENI WATTIMENA",
+    "sid": "N0042"
+  },
+  {
+    "no": 19,
+    "site": "LMO",
+    "perusahaan": "BUMA",
+    "nama": "ADI SUCIPTO",
+    "sid": "ZCDJZ"
+  },
+  {
+    "no": 20,
+    "site": "LMO",
+    "perusahaan": "BUMA",
+    "nama": "JOKO SUSANTO",
+    "sid": "Q78IV"
+  },
+  {
+    "no": 21,
+    "site": "LMO",
+    "perusahaan": "FAD",
+    "nama": "RAMA DAUPHIAN GAUTAMA",
+    "sid": "2E3ZU"
+  },
+  {
+    "no": 22,
+    "site": "GMO",
+    "perusahaan": "PAMA",
+    "nama": "DANANG BUDI ARIANTO",
+    "sid": "RXT2V"
+  },
+  {
+    "no": 23,
+    "site": "GMO",
+    "perusahaan": "PAMA",
+    "nama": "MUHAMMAD INSAN KAMIL",
+    "sid": "61LA6"
+  },
+  {
+    "no": 24,
+    "site": "GMO",
+    "perusahaan": "PAMA",
+    "nama": "SIGIT",
+    "sid": "W1YL5"
+  },
+  {
+    "no": 25,
+    "site": "GMO",
+    "perusahaan": "KDC",
+    "nama": "RAMLI SAPUTRA",
+    "sid": "FT70O"
+  },
+  {
+    "no": 26,
+    "site": "GMO",
+    "perusahaan": "KDC",
+    "nama": "HERMAN TOLANDE",
+    "sid": "L5JBX"
+  },
+  {
+    "no": 27,
+    "site": "GMO",
+    "perusahaan": "KDC",
+    "nama": "DWI KURNIAWAN AHMAD",
+    "sid": "K9ORE"
+  },
+  {
+    "no": 28,
+    "site": "GMO",
+    "perusahaan": "BAR",
+    "nama": "RIVALDI PATRA",
+    "sid": "0T6TD"
+  },
+  {
+    "no": 29,
+    "site": "GMO",
+    "perusahaan": "BAR",
+    "nama": "SYAHDINAH USWATUN DARMATAZIA",
+    "sid": "RHHIF"
+  },
+  {
+    "no": 30,
+    "site": "GMO",
+    "perusahaan": "BAR",
+    "nama": "ZULFIKAR ANSORY",
+    "sid": "F7EKP"
+  },
+  {
+    "no": 31,
+    "site": "SMO",
+    "perusahaan": "MTN",
+    "nama": "MUHAMMAD SULTHAN MUBAROK",
+    "sid": "JWRFO"
+  },
+  {
+    "no": 32,
+    "site": "SMO",
+    "perusahaan": "MTN",
+    "nama": "BAMBANG TRIANTO",
+    "sid": "6YX1L"
+  },
+  {
+    "no": 33,
+    "site": "SMO",
+    "perusahaan": "MTN",
+    "nama": "DODI HIMAWAN WICAKSONO",
+    "sid": "H9WFI"
+  },
+  {
+    "no": 34,
+    "site": "SMO",
+    "perusahaan": "KASAM& DBM",
+    "nama": "TASWANDI",
+    "sid": "B0RW5"
+  },
+  {
+    "no": 35,
+    "site": "SMO",
+    "perusahaan": "KASAM& DBM",
+    "nama": "IAN MARYANDI SUWARNO",
+    "sid": "DTWY9"
+  },
+  {
+    "no": 36,
+    "site": "SMO",
+    "perusahaan": "KASAM& DBM",
+    "nama": "RUSWANTO",
+    "sid": "2NVE6"
+  },
+  {
+    "no": 37,
+    "site": "SMO",
+    "perusahaan": "G&E",
+    "nama": "KANDA SINAGA",
+    "sid": null
+  },
+  {
+    "no": 38,
+    "site": "MARINE",
+    "perusahaan": "DCA",
+    "nama": "EKO PRIO UTOMO",
+    "sid": "5VBIB"
+  },
+  {
+    "no": 39,
+    "site": "MARINE",
+    "perusahaan": "DCA",
+    "nama": "RUBEN RANTE PASANG",
+    "sid": "JW6DI"
+  },
+  {
+    "no": 40,
+    "site": "MARINE",
+    "perusahaan": "ABL",
+    "nama": "AHMAD YANI",
+    "sid": "EKS30"
+  },
+  {
+    "no": 41,
+    "site": "MARINE",
+    "perusahaan": "ABL",
+    "nama": "SANDY SANTOSA",
+    "sid": "N14P3"
+  },
+  {
+    "no": 42,
+    "site": "MARINE",
+    "perusahaan": "ABL",
+    "nama": "DICKY SYAHPUTRA",
+    "sid": "ELXOH"
+  },
+  {
+    "no": 43,
+    "site": "LMO",
+    "perusahaan": "CPP/ FPM",
+    "nama": "IRAWANSYAH",
+    "sid": "1Q89A"
+  },
+  {
+    "no": 44,
+    "site": "LMO",
+    "perusahaan": "CPP/ FPM",
+    "nama": "WARSIDI",
+    "sid": "7U5L5"
+  },
+  {
+    "no": 45,
+    "site": "LMO",
+    "perusahaan": "CPP/ FPM",
+    "nama": "SUPARYANA",
+    "sid": "O5B27"
+  },
+  {
+    "no": 46,
+    "site": "GMO",
+    "perusahaan": "CPP/FPM",
+    "nama": "DANANG KURNIAWAN",
+    "sid": "XHWDW"
+  },
+  {
+    "no": 47,
+    "site": "GMO",
+    "perusahaan": "CPP/FPM",
+    "nama": "DHANY SARTIKA",
+    "sid": "NYAJX"
+  },
+  {
+    "no": 48,
+    "site": "GMO",
+    "perusahaan": "CPP/FPM",
+    "nama": "DIAN PERMANA PUTRA",
+    "sid": "9KZU2"
+  },
+  {
+    "no": 49,
+    "site": "BMO 1",
+    "perusahaan": "CPP/FPM",
+    "nama": "HARAPAN SEHAT TONNI NAIBAHO",
+    "sid": "OQ8TH"
+  },
+  {
+    "no": 50,
+    "site": "BMO 1",
+    "perusahaan": "CPP/FPM",
+    "nama": "ABI GUNAWAN",
+    "sid": "0IS7R"
+  },
+  {
+    "no": 51,
+    "site": "BMO 1",
+    "perusahaan": "CPP/FPM",
+    "nama": "JUFRIANSYAH",
+    "sid": "EU6CW"
+  },
+  {
+    "no": 52,
+    "site": "BMO 1",
+    "perusahaan": "Logistik",
+    "nama": "JERRYMIA RICKYANDO",
+    "sid": "CM9HJ"
+  },
+  {
+    "no": 53,
+    "site": "BMO 1",
+    "perusahaan": "Logistik",
+    "nama": "ADITYA RISMANA",
+    "sid": "WCGBR"
+  },
+  {
+    "no": 54,
+    "site": "BMO 1",
+    "perusahaan": "Logistik",
+    "nama": "LAMBOK EFENDI RISPEN PANJ",
+    "sid": "R8QD7"
+  },
+  {
+    "no": 55,
+    "site": "BMO 1",
+    "perusahaan": "PQSC",
+    "nama": "AHMAD SUPRIADI",
+    "sid": "7ANJI"
+  },
+  {
+    "no": 56,
+    "site": "BMO 1",
+    "perusahaan": "PQSC",
+    "nama": "ASTRI MUHAMMAD REZA",
+    "sid": "P6V1O"
+  },
+  {
+    "no": 57,
+    "site": "BMO 1",
+    "perusahaan": "PQSC",
+    "nama": "GILBERT GOMOS PILIHAN TAMPUBOLON",
+    "sid": "IZBRQ"
+  },
+  {
+    "no": 58,
+    "site": "BMO 1",
+    "perusahaan": "Survey",
+    "nama": "ARDILLA FIRMANA",
+    "sid": "HW7WY"
+  },
+  {
+    "no": 59,
+    "site": "BMO 1",
+    "perusahaan": "Survey",
+    "nama": "SURIANSYAH",
+    "sid": "76BQT"
+  },
+  {
+    "no": 60,
+    "site": "BMO 1",
+    "perusahaan": "Survey",
+    "nama": "DANANG WIDITOMO",
+    "sid": "NDUH8"
+  },
+  {
+    "no": 61,
+    "site": "BMO 2",
+    "perusahaan": "Env",
+    "nama": "MEIRTA AFIFFA",
+    "sid": "9FSZI"
+  },
+  {
+    "no": 62,
+    "site": "BMO 2",
+    "perusahaan": "Env",
+    "nama": "YUDHI KRISTIAN",
+    "sid": "INM7H"
+  },
+  {
+    "no": 63,
+    "site": "BMO 2",
+    "perusahaan": "Env",
+    "nama": "RAHMA FITRIAN",
+    "sid": "8UUZP"
+  },
+  {
+    "no": 64,
+    "site": "SMO",
+    "perusahaan": "CPP/FPM",
+    "nama": "BUDI WARSITO",
+    "sid": "9LP4W"
+  },
+  {
+    "no": 65,
+    "site": "SMO",
+    "perusahaan": "CPP/FPM",
+    "nama": "IRAWANSYAH",
+    "sid": "WGC77"
+  },
+  {
+    "no": 66,
+    "site": "SMO",
+    "perusahaan": "CPP/FPM",
+    "nama": "ANDHIKA WIRA BUWANA",
+    "sid": "N38PB"
+  },
+  {
+    "no": 67,
+    "site": "All Site",
+    "perusahaan": "FID/CHID",
+    "nama": "ARIF RAHMAN PUTRANTO",
+    "sid": "SEUQJ"
+  },
+  {
+    "no": 68,
+    "site": "All Site",
+    "perusahaan": "FID/CHID",
+    "nama": "ABDUL HALIM",
+    "sid": "ZN21G"
+  },
+  {
+    "no": 69,
+    "site": "All Site",
+    "perusahaan": "FID/CHID",
+    "nama": "DEDY CITRA SUSILA",
+    "sid": "1NNCX"
+  }
+]

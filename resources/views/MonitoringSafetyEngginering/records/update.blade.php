@@ -15,6 +15,19 @@
    <p class="crm-page-subtitle">
       Edit data langsung seperti spreadsheet. Semua {{ count($gridConfig['columns'] ?? []) }} kolom tabel
       <strong>monitoring_safety_engineering_records</strong> ditampilkan dengan grouped header — kolom bisa disembunyikan lewat tombol "Kolom".
+      @if(! empty($picScope['scoped']))
+         <br>
+         Tampilan dibatasi PIC
+         <strong>{{ $picScope['nama'] ?? auth()->user()->name }}</strong>
+         @if(! empty($picScope['sid'])) ({{ $picScope['sid'] }}) @endif
+         —
+         @if(! empty($picScope['all_sites']))
+            semua site
+         @else
+            {{ implode(', ', $picScope['sites'] ?? []) }}
+         @endif
+         / {{ implode(', ', $picScope['companies'] ?? []) }}.
+      @endif
    </p>
 </div>
 
@@ -124,6 +137,7 @@
    const periodYear = @json($periodYear);
    const currentYear = @json($currentYear);
    const gridConfig = @json($gridConfig);
+   const picScope = @json($picScope ?? ['scoped' => false]);
    const recordsUrl = @json(route('monitoring-safety-engineering.data-update.records'));
    const saveUrl = @json(route('monitoring-safety-engineering.data-update.save'));
    const historyUrlTemplate = @json(route('monitoring-safety-engineering.data-update.history', ['recordId' => 0]));
@@ -679,6 +693,14 @@
       row.terkait_hazard = 'Tidak';
       row.terkait_insiden = 'Tidak';
       row.potensi_peningkatan_efektivitas = 'Tidak';
+      if (picScope && picScope.scoped) {
+         if (picScope.lock_site && picScope.sites && picScope.sites.length === 1) {
+            row.site = picScope.sites[0];
+         }
+         if (picScope.lock_perusahaan && picScope.companies && picScope.companies.length === 1) {
+            row.perusahaan = picScope.companies[0];
+         }
+      }
       return row;
    }
 

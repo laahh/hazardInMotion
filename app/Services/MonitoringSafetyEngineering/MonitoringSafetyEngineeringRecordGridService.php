@@ -18,6 +18,7 @@ final class MonitoringSafetyEngineeringRecordGridService
         private readonly MonitoringSafetyEngineeringPhaseStatusLogService $phaseStatusLogService,
         private readonly MonitoringSafetyEngineeringRecordChangeLogService $changeLogService,
         private readonly MonitoringSafetyEngineeringRiskReductionCalculator $riskReductionCalculator,
+        private readonly MonitoringSafetyEngineeringPicScopeService $picScope,
     ) {}
 
     /**
@@ -25,12 +26,35 @@ final class MonitoringSafetyEngineeringRecordGridService
      */
     public function gridConfig(): array
     {
+        $scope = $this->picScope->forCurrentUser();
+        $columns = MonitoringSafetyEngineeringRecordGridDefinition::columns();
+        $dropdowns = MonitoringSafetyEngineeringRecordGridDefinition::dropdownSources();
+
+        if ($scope['scoped']) {
+            if (! $scope['all_sites'] && $scope['sites'] !== []) {
+                $dropdowns['site'] = $scope['sites'];
+            }
+            if ($scope['companies'] !== []) {
+                $dropdowns['perusahaan'] = $scope['companies'];
+            }
+
+            foreach ($columns as $index => $column) {
+                if ($column['key'] === 'site' && $scope['lock_site']) {
+                    $columns[$index]['read_only'] = true;
+                }
+                if ($column['key'] === 'perusahaan' && $scope['lock_perusahaan']) {
+                    $columns[$index]['read_only'] = true;
+                }
+            }
+        }
+
         return [
-            'columns' => MonitoringSafetyEngineeringRecordGridDefinition::columns(),
+            'columns' => $columns,
             'nested_headers' => MonitoringSafetyEngineeringRecordGridDefinition::nestedHeaderGroups(),
-            'dropdowns' => MonitoringSafetyEngineeringRecordGridDefinition::dropdownSources(),
+            'dropdowns' => $dropdowns,
             'editable_fields' => MonitoringSafetyEngineeringRecordGridDefinition::editableFields(),
             'fixed_columns_left' => MonitoringSafetyEngineeringRecordGridDefinition::fixedColumnsLeft(),
+            'pic_scope' => $scope,
         ];
     }
 
@@ -65,6 +89,7 @@ final class MonitoringSafetyEngineeringRecordGridService
         $errors = [];
         $saved = [];
         $userId = Auth::id();
+        $scope = $this->picScope->forCurrentUser();
 
         $ids = [];
         foreach ($rows as $row) {
@@ -81,6 +106,7 @@ final class MonitoringSafetyEngineeringRecordGridService
             $defaultPeriodYear,
             $userId,
             $ids,
+            $scope,
             &$created,
             &$updated,
             &$logsCreated,
@@ -111,6 +137,29 @@ final class MonitoringSafetyEngineeringRecordGridService
                             continue;
                         }
 
+                        if (! $this->picScope->allowsRecord($record, $scope)) {
+                            $errors[] = 'Baris ' . $line . ': record di luar site/perusahaan Anda.';
+
+                            continue;
+                        }
+
+                        if ($scope['lock_site']) {
+                            unset($row['site']);
+                        }
+                        if ($scope['lock_perusahaan']) {
+                            unset($row['perusahaan']);
+                        }
+
+                        if (isset($row['site']) || isset($row['perusahaan'])) {
+                            $nextSite = isset($row['site']) ? (string) $row['site'] : (string) $record->site;
+                            $nextPerusahaan = isset($row['perusahaan']) ? (string) $row['perusahaan'] : (string) $record->perusahaan;
+                            if (! $this->picScope->allowsPair($nextSite, $nextPerusahaan, $scope)) {
+                                $errors[] = 'Baris ' . $line . ': site/perusahaan tidak sesuai PIC Anda.';
+
+                                continue;
+                            }
+                        }
+
                         $payload = $this->normalizePatchPayload($row, $record, $defaultPeriodYear);
                         if ($payload === []) {
                             $saved[] = ['client_index' => $clientIndex, 'id' => $id];
@@ -126,6 +175,17 @@ final class MonitoringSafetyEngineeringRecordGridService
                         $record->update($payload);
                         $updated++;
                         $saved[] = ['client_index' => $clientIndex, 'id' => $id];
+
+                        continue;
+                    }
+
+                    $row = $this->picScope->applyToNewRow($row, $scope);
+                    if (! $this->picScope->allowsPair(
+                        trim((string) ($row['site'] ?? '')),
+                        trim((string) ($row['perusahaan'] ?? '')),
+                        $scope,
+                    )) {
+                        $errors[] = 'Baris ' . $line . ': site/perusahaan tidak sesuai PIC Anda.';
 
                         continue;
                     }
@@ -159,6 +219,22 @@ final class MonitoringSafetyEngineeringRecordGridService
      */
     public function fetchChangeHistory(int $recordId, ?string $field = null): array
     {
+        $scope = $this->picScope->forCurrentUser();
+        if ($scope['scoped']) {
+            $record = MonitoringSafetyEngineeringRecord::query()
+                ->select(['id', 'site', 'perusahaan'])
+                ->find($recordId);
+
+            if ($record === null || ! $this->picScope->allowsRecord($record, $scope)) {
+                return [
+                    'found' => false,
+                    'record_id' => $recordId,
+                    'batches' => [],
+                    'entries' => [],
+                ];
+            }
+        }
+
         return $this->changeLogService->fetchHistory($recordId, $field);
     }
 
@@ -179,6 +255,8 @@ final class MonitoringSafetyEngineeringRecordGridService
         if ($periodYear !== null) {
             $query->where('period_year', $periodYear);
         }
+
+        $this->picScope->applyToQuery($query, $this->picScope->forCurrentUser());
 
         $withTracing = in_array('kajian_teknis_status_compliance', $columns, true);
 

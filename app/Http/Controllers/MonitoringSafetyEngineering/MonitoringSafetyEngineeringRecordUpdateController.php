@@ -25,13 +25,16 @@ class MonitoringSafetyEngineeringRecordUpdateController extends Controller
     {
         $currentYear = (int) now()->format('Y');
         $periodYear = $request->filled('period_year') ? (int) $request->get('period_year') : null;
+        $gridConfig = $this->gridService->gridConfig();
+        $picScope = $gridConfig['pic_scope'] ?? ['scoped' => false];
 
         return view('MonitoringSafetyEngginering.records.update', $this->monitoringSafetyEngineeringViewData('data-update', [
             'tablesReady' => Schema::hasTable('monitoring_safety_engineering_records'),
             'periodYear' => $periodYear,
             'currentYear' => $currentYear,
             'planYears' => range($currentYear - 1, $currentYear + 2),
-            'gridConfig' => $this->gridService->gridConfig(),
+            'gridConfig' => $gridConfig,
+            'picScope' => $picScope,
         ]));
     }
 
