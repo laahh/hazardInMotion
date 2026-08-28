@@ -43,9 +43,17 @@ class MonitoringSafetyEngineeringRecordUpdateController extends Controller
 
         $periodYear = $request->filled('period_year') ? (int) $request->get('period_year') : null;
 
-        return response()->json([
-            'data' => $this->gridService->fetchRows($periodYear),
-        ]);
+        try {
+            return response()->json([
+                'data' => $this->gridService->fetchRows($periodYear),
+            ], 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'Gagal memuat data. ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function save(MonitoringSafetyEngineeringRecordGridRequest $request): JsonResponse

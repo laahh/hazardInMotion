@@ -10,6 +10,7 @@ use App\Support\MonitoringSafetyEngineering\MonitoringSafetyEngineeringRecordGri
 use BackedEnum;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 final class MonitoringSafetyEngineeringRecordGridService
 {
@@ -56,7 +57,20 @@ final class MonitoringSafetyEngineeringRecordGridService
 
         try {
             return $records
-                ->map(fn (MonitoringSafetyEngineeringRecord $record) => $this->serializeRecord($record))
+                ->map(function (MonitoringSafetyEngineeringRecord $record): array {
+                    try {
+                        return $this->serializeRecord($record);
+                    } catch (\Throwable $e) {
+                        report($e);
+
+                        return [
+                            'id' => $record->getKey(),
+                            'pengendalian_rekayasa' => (string) ($record->getAttributes()['pengendalian_rekayasa'] ?? ''),
+                            'site' => (string) ($record->getAttributes()['site'] ?? ''),
+                            'perusahaan' => (string) ($record->getAttributes()['perusahaan'] ?? ''),
+                        ];
+                    }
+                })
                 ->all();
         } finally {
             $this->tracingReadyForBatch = null;
@@ -157,7 +171,7 @@ final class MonitoringSafetyEngineeringRecordGridService
             'tanggal_ideation', 'kajian_teknis_due_date', 'pengadaan_due_date', 'uji_coba_due_date',
             'standardisasi_due_date', 'replikasi_due_date',
         ] as $dateField) {
-            $data[$dateField] = $record->{$dateField}?->format('Y-m-d');
+            $data[$dateField] = $this->formatSerializableDate($record->getAttribute($dateField));
         }
 
         $data['terkait_hazard'] = $record->terkait_hazard ? 'Ya' : 'Tidak';
@@ -185,7 +199,7 @@ final class MonitoringSafetyEngineeringRecordGridService
                 $changedAtField = $definition['changed_at'];
                 $complianceField = $definition['compliance'];
 
-                $data[$changedAtField] = $record->{$changedAtField}?->format('Y-m-d H:i:s');
+                $data[$changedAtField] = $this->formatSerializableDate($record->getAttribute($changedAtField), 'Y-m-d H:i:s');
                 $compliance = $record->getAttribute($complianceField);
                 $data[$complianceField] = $compliance instanceof BackedEnum ? $compliance->value : $compliance;
             }
@@ -353,6 +367,25 @@ final class MonitoringSafetyEngineeringRecordGridService
         return $string === '' ? null : $string;
     }
 
+    private function formatSerializableDate(mixed $value, string $format = 'Y-m-d'): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        try {
+            if ($value instanceof \DateTimeInterface) {
+                return $value->format($format);
+            }
+
+            $timestamp = strtotime((string) $value);
+
+            return $timestamp === false ? null : date($format, $timestamp);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     /**
      * @return list<string>
      */
@@ -372,6 +405,7 @@ final class MonitoringSafetyEngineeringRecordGridService
             'next_to_do', 'potensi_peningkatan_efektivitas', 'pengendalian_peningkatan_efektivitas',
             'total_risiko_signifikan', 'link_list_risiko_signifikan',
             'jumlah_risiko_signifikan_tercover_rekayasa', 'link_risiko_signifikan_tercover_rekayasa',
+            'period_year', 'sort_order',
         ];
 
         if ($this->phaseStatusLogService->isTracingReady()) {
@@ -383,6 +417,8 @@ final class MonitoringSafetyEngineeringRecordGridService
             ]);
         }
 
-        return $columns;
+        $existing = Schema::getColumnListing('monitoring_safety_engineering_records');
+
+        return array_values(array_intersect($columns, $existing));
     }
 }
