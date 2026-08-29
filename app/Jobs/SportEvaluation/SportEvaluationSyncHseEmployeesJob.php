@@ -14,8 +14,9 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Sync massal karyawan HSE → BeWell. Karyawan baru ditambahkan; karyawan
- * existing yang sudah tidak ada di roster aktif HSE otomatis dinonaktifkan.
+ * Sync massal karyawan HSE → BeWell (upsert in-place).
+ * SID baru di-insert; SID existing di-update tanpa mengubah id.
+ * Karyawan yang sudah tidak ada di roster aktif HSE otomatis dinonaktifkan.
  */
 final class SportEvaluationSyncHseEmployeesJob implements ShouldQueue
 {

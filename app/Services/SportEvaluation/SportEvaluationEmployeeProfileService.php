@@ -17,8 +17,10 @@ use Throwable;
 /**
  * Create / Read / Update employee_profiles di bewell_db.
  *
- * Tidak menghapus baris. password_hash di-set bcrypt(kode_sid) saat create/update
- * (sesuai login BeWell: password = SID). Hash tidak pernah ditampilkan di UI.
+ * Tidak menghapus baris. id tidak pernah diubah setelah insert.
+ * password_hash di-set bcrypt(kode_sid) saat create, dan saat update dari
+ * form/import (login BeWell = SID). Sync HSE tidak mereset password.
+ * Hash tidak pernah ditampilkan di UI.
  */
 final class SportEvaluationEmployeeProfileService
 {
@@ -646,10 +648,10 @@ final class SportEvaluationEmployeeProfileService
     }
 
     /**
-     * SID yang sudah ada di BeWell (untuk sync append-only).
+     * SID yang sudah ada di BeWell (untuk sync upsert in-place).
      *
      * @param  list<string>  $kodeSids
-     * @return array<string, true> map UPPER(kode_sid) => true
+     * @return array<string, array{id: int, kode_sid: string}> map UPPER(kode_sid) => baris existing
      */
     public function existingKodeSidMap(array $kodeSids): array
     {
@@ -674,19 +676,63 @@ final class SportEvaluationEmployeeProfileService
         foreach (array_chunk(array_keys($normalized), 800) as $chunk) {
             $placeholders = implode(',', array_fill(0, count($chunk), '?'));
             $rows = $this->db()->select(
-                'SELECT kode_sid FROM employee_profiles WHERE UPPER(TRIM(kode_sid)) IN ('.$placeholders.')',
+                'SELECT id, kode_sid FROM employee_profiles WHERE UPPER(TRIM(kode_sid)) IN ('.$placeholders.')',
                 $chunk
             );
 
             foreach ($rows as $row) {
                 $key = mb_strtoupper(trim((string) ($row->kode_sid ?? '')));
-                if ($key !== '') {
-                    $map[$key] = true;
+                $id = (int) ($row->id ?? 0);
+                if ($key === '' || $id <= 0) {
+                    continue;
+                }
+                // Kalau ada duplikat SID (beda casing), pakai id terkecil agar deterministik.
+                if (! isset($map[$key]) || $id < $map[$key]['id']) {
+                    $map[$key] = [
+                        'id' => $id,
+                        'kode_sid' => (string) $row->kode_sid,
+                    ];
                 }
             }
         }
 
         return $map;
+    }
+
+    /**
+     * Cari profil existing by SID (case-insensitive). Tidak membuat baris baru.
+     *
+     * @return array{id: int, kode_sid: string}|null
+     */
+    public function findExistingByKodeSid(string $kodeSid): ?array
+    {
+        $sid = mb_strtoupper(trim($kodeSid));
+        if ($sid === '') {
+            return null;
+        }
+
+        if (! $this->connection->isUp()) {
+            throw new RuntimeException('Koneksi BeWell tidak tersedia.');
+        }
+
+        $row = $this->db()->table('employee_profiles')
+            ->whereRaw('UPPER(TRIM(kode_sid)) = ?', [$sid])
+            ->orderBy('id')
+            ->first(['id', 'kode_sid']);
+
+        if ($row === null) {
+            return null;
+        }
+
+        $id = (int) ($row->id ?? 0);
+        if ($id <= 0) {
+            return null;
+        }
+
+        return [
+            'id' => $id,
+            'kode_sid' => (string) ($row->kode_sid ?? ''),
+        ];
     }
 
     /**
@@ -785,7 +831,7 @@ final class SportEvaluationEmployeeProfileService
     /**
      * @param  array<string, mixed>  $input
      */
-    public function update(int $id, array $input): void
+    public function update(int $id, array $input, bool $resetPassword = true): void
     {
         if (! $this->connection->isUp()) {
             throw new RuntimeException('Koneksi BeWell tidak tersedia.');
@@ -797,9 +843,12 @@ final class SportEvaluationEmployeeProfileService
         }
 
         $payload = $this->normalizeWritable($input);
+        unset($payload['id']);
         $this->assertUniqueSidNik($payload['kode_sid'] ?? null, $payload['nik'] ?? null, $id);
-        // Sync password = SID agar akun bisa login di app BeWell.
-        $payload['password_hash'] = $this->hashPasswordFromSid((string) $payload['kode_sid']);
+        if ($resetPassword) {
+            // Sync password = SID agar akun bisa login di app BeWell.
+            $payload['password_hash'] = $this->hashPasswordFromSid((string) $payload['kode_sid']);
+        }
 
         $this->db()->table('employee_profiles')
             ->where('id', $id)

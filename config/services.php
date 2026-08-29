@@ -70,7 +70,7 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Evaluasi Well — HSE Employee API (sync append-only)
+    | Evaluasi Well — HSE Employee API (sync upsert in-place, id tidak berubah)
     |--------------------------------------------------------------------------
     */
     'evaluasi_well_hse' => [

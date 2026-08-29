@@ -222,7 +222,7 @@ final class SportEvaluationEmployeeProfileController extends Controller
             ->route('evaluasi-well.users.index')
             ->with(
                 'success',
-                'Sync HSE diantrikan. Karyawan baru akan ditambahkan; SID yang sudah ada tidak diubah datanya, kecuali statusnya otomatis jadi NONAKTIF bila sudah tidak ada di roster aktif HSE. Pantau log queue untuk hasil.'
+                'Sync HSE diantrikan. Karyawan baru ditambahkan; data existing (perusahaan, status, jabatan, dll.) di-update tanpa mengubah ID. SID yang hilang dari roster HSE otomatis NONAKTIF. Password existing tidak direset. Pantau log queue untuk hasil.'
             );
     }
 }

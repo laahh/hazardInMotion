@@ -10,19 +10,17 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Autocomplete driver/SID dari view safety (bukan bep_vw_wp_karyawan).
+ * Autocomplete driver/SID dari data safety karyawan aktif.
  *
- * Sumber: bcsid.bep_vw_safety_karyawan_aktif di database hse_automation
- * (koneksi pgsql_direct). View ini live, status AKTIF, ~22k baris, dan
- * punya site_dedicated / departemen yang lebih lengkap dari wp_karyawan.
- * Cron crontable_bep_vw_m_karyawan_aktif tidak dipakai — snapshot itu
- * memotong sebagian karyawan aktif.
- *
- * Query hanya 6 kolom, prefix ILIKE (tanpa leading %), LIMIT, cache 45 detik.
+ * View live bcsid.bep_vw_safety_karyawan_aktif join ke m_karyawan (~6GB)
+ * tanpa index — autocomplete kena statement_timeout jadi hasilnya kosong.
+ * Snapshot bcsid.crontable_bep_vw_m_karyawan_aktif (~17MB, ~24.7k AKTIF)
+ * punya kolom yang sama (kode_sid, nama, nik, perusahaan, site_dedicated,
+ * departement) dan aman untuk request web.
  */
 class PembatasanLVDriverOptionService
 {
-    private const SOURCE = 'bcsid.bep_vw_safety_karyawan_aktif';
+    private const SOURCE = 'bcsid.crontable_bep_vw_m_karyawan_aktif';
 
     private const MIN_QUERY_LENGTH = 2;
 
@@ -41,13 +39,16 @@ class PembatasanLVDriverOptionService
             return collect();
         }
 
-        $cacheKey = 'pembatasan_lv:driver_options:v2:'.md5(mb_strtolower($q).'|'.$limit);
+        $cacheKey = 'pembatasan_lv:driver_options:v3:'.md5(mb_strtolower($q).'|'.$limit);
 
         try {
-            /** @var list<array{id: string, nama: string, kode_sid: string, nik: string, nama_perusahaan: string, site: string, dept: string}> $rows */
-            $rows = Cache::remember($cacheKey, self::SEARCH_CACHE_TTL_SECONDS, function () use ($q, $limit): array {
-                return $this->queryPrefix($q, $limit);
-            });
+            $cached = Cache::get($cacheKey);
+            if (is_array($cached)) {
+                return collect($cached)->values();
+            }
+
+            $rows = $this->querySearch($q, $limit);
+            Cache::put($cacheKey, $rows, self::SEARCH_CACHE_TTL_SECONDS);
 
             return collect($rows)->values();
         } catch (Throwable $e) {
@@ -80,15 +81,14 @@ class PembatasanLVDriverOptionService
     }
 
     /**
+     * Contains-match (%q%) di tabel 17MB aman; prefix-only membuat SID/nama
+     * di tengah kata tidak ketemu.
+     *
      * @return list<array{id: string, nama: string, kode_sid: string, nik: string, nama_perusahaan: string, site: string, dept: string}>
      */
-    private function queryPrefix(string $q, int $limit): array
+    private function querySearch(string $q, int $limit): array
     {
-        if (! $this->olap->isReachable()) {
-            return [];
-        }
-
-        $prefix = addcslashes($q, '%_\\').'%';
+        $like = '%'.addcslashes($q, '%_\\').'%';
         $fetch = min($limit * 4, 120);
 
         $sql = <<<SQL
@@ -112,7 +112,7 @@ LIMIT ?
 SQL;
 
         return $this->mapUnique(
-            $this->olap->select($sql, [$prefix, $prefix, $prefix, $fetch], 2500),
+            $this->olap->select($sql, [$like, $like, $like, $fetch], 4000),
             $limit
         );
     }
@@ -122,10 +122,6 @@ SQL;
      */
     private function queryExactSid(string $sid): ?array
     {
-        if (! $this->olap->isReachable()) {
-            return null;
-        }
-
         $sql = <<<SQL
 SELECT
     TRIM(kode_sid) AS kode_sid,
@@ -139,7 +135,7 @@ WHERE kode_sid = ?
 LIMIT 1
 SQL;
 
-        $mapped = $this->mapUnique($this->olap->select($sql, [$sid], 2000), 1);
+        $mapped = $this->mapUnique($this->olap->select($sql, [$sid], 3000), 1);
         if ($mapped !== []) {
             return $mapped[0];
         }
@@ -157,7 +153,7 @@ WHERE LOWER(kode_sid) = LOWER(?)
 LIMIT 1
 SQL;
 
-        $mapped = $this->mapUnique($this->olap->select($sqlCi, [$sid], 2000), 1);
+        $mapped = $this->mapUnique($this->olap->select($sqlCi, [$sid], 3000), 1);
 
         return $mapped[0] ?? null;
     }

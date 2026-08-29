@@ -4,16 +4,18 @@ declare(strict_types=1);
 
 namespace App\Services\SportEvaluation;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
 
 /**
- * Sync karyawan HSE → BeWell employee_profiles.
+ * Sync karyawan HSE → BeWell employee_profiles (upsert in-place).
  *
- * Karyawan baru ditambahkan (append-only, field existing tidak ditimpa),
- * tapi status_karyawan existing bisa berubah jadi NONAKTIF kalau SID-nya
- * sudah tidak ada di roster aktif HSE (resign/mutasi keluar, dsb).
+ * SID baru di-insert; SID existing di-update field-nya (perusahaan, status,
+ * jabatan, dll.) tanpa mengubah id — agar food_analyses.user_id tetap nyambung.
+ * Password existing tidak direset. Karyawan yang hilang dari roster HSE
+ * di-set NONAKTIF.
  */
 final class SportEvaluationHseEmployeeSyncService
 {
@@ -26,7 +28,7 @@ final class SportEvaluationHseEmployeeSyncService
     /**
      * @return array{
      *     inserted: int,
-     *     skipped_existing: int,
+     *     updated: int,
      *     skipped_invalid: int,
      *     failed: int,
      *     companies: int,
@@ -43,7 +45,7 @@ final class SportEvaluationHseEmployeeSyncService
 
         $summary = [
             'inserted' => 0,
-            'skipped_existing' => 0,
+            'updated' => 0,
             'skipped_invalid' => 0,
             'failed' => 0,
             'companies' => 0,
@@ -107,24 +109,16 @@ final class SportEvaluationHseEmployeeSyncService
 
         $existingMap = $this->employeeProfileService->existingKodeSidMap($allSids);
 
-        $newSids = [];
-        foreach ($pendingSids as $upper => $sid) {
-            if (isset($existingMap[$upper])) {
-                $summary['skipped_existing']++;
-            } else {
-                $newSids[] = $sid;
-            }
-        }
-
-        Log::info('evaluasi_well.hse_sync.sids_filtered', [
+        Log::info('evaluasi_well.hse_sync.sids_ready', [
             'seen' => $summary['sids_seen'],
-            'existing' => $summary['skipped_existing'],
-            'new' => count($newSids),
+            'existing' => count($existingMap),
+            'new' => max(0, $summary['sids_seen'] - count($existingMap)),
         ]);
 
         $delayMs = max(0, (int) config('services.evaluasi_well_hse.detail_delay_ms', 50));
+        $sids = array_values($pendingSids);
 
-        foreach ($newSids as $index => $sid) {
+        foreach ($sids as $index => $sid) {
             try {
                 $detail = $this->apiClient->getEmployeeDetailBySid($token, $sid);
 
@@ -145,13 +139,7 @@ final class SportEvaluationHseEmployeeSyncService
                     $summary['skipped_invalid']++;
                     $this->pushError($summary, 'SID '.$sid.': data tidak lengkap (nama/SID).');
                 } else {
-                    // Guard race: SID mungkin terisi antara filter dan insert.
-                    if ($this->employeeProfileService->findIdByKodeSid($payload['kode_sid']) !== null) {
-                        $summary['skipped_existing']++;
-                    } else {
-                        $this->employeeProfileService->create($payload);
-                        $summary['inserted']++;
-                    }
+                    $this->upsertEmployee($payload, $existingMap, $summary);
                 }
             } catch (Throwable $e) {
                 report($e);
@@ -159,15 +147,16 @@ final class SportEvaluationHseEmployeeSyncService
                 $this->pushError($summary, 'SID '.$sid.': '.$e->getMessage());
             }
 
-            if ($delayMs > 0 && $index < count($newSids) - 1) {
+            if ($delayMs > 0 && $index < count($sids) - 1) {
                 usleep($delayMs * 1000);
             }
 
             if (($index + 1) % 100 === 0) {
                 Log::info('evaluasi_well.hse_sync.progress', [
-                    'processed_new' => $index + 1,
-                    'total_new' => count($newSids),
+                    'processed' => $index + 1,
+                    'total' => count($sids),
                     'inserted' => $summary['inserted'],
+                    'updated' => $summary['updated'],
                     'failed' => $summary['failed'],
                 ]);
             }
@@ -175,12 +164,59 @@ final class SportEvaluationHseEmployeeSyncService
 
         Log::info('evaluasi_well.hse_sync.finished', [
             'inserted' => $summary['inserted'],
-            'skipped_existing' => $summary['skipped_existing'],
+            'updated' => $summary['updated'],
             'skipped_invalid' => $summary['skipped_invalid'],
             'failed' => $summary['failed'],
+            'deactivated' => $summary['deactivated'],
         ]);
 
         return $summary;
+    }
+
+    /**
+     * Insert SID baru atau update baris existing. id BeWell tidak pernah diubah.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, array{id: int, kode_sid: string}>  $existingMap
+     * @param  array{inserted: int, updated: int, errors: list<string>}  $summary
+     */
+    private function upsertEmployee(array $payload, array &$existingMap, array &$summary): void
+    {
+        $upper = mb_strtoupper(trim((string) $payload['kode_sid']));
+        $existing = $existingMap[$upper] ?? $this->employeeProfileService->findExistingByKodeSid(
+            (string) $payload['kode_sid']
+        );
+
+        if ($existing !== null) {
+            // Pertahankan kode_sid tersimpan agar login/password BeWell tidak bergeser
+            // hanya karena perbedaan huruf besar-kecil dari HSE.
+            $payload['kode_sid'] = $existing['kode_sid'];
+            $this->employeeProfileService->update($existing['id'], $payload, false);
+            $summary['updated']++;
+            $existingMap[$upper] = $existing;
+
+            return;
+        }
+
+        try {
+            $id = $this->employeeProfileService->create($payload);
+            $summary['inserted']++;
+            $existingMap[$upper] = [
+                'id' => $id,
+                'kode_sid' => (string) $payload['kode_sid'],
+            ];
+        } catch (QueryException $e) {
+            // Race: SID terisi antara lookup dan insert — update baris yang sudah ada.
+            $raced = $this->employeeProfileService->findExistingByKodeSid((string) $payload['kode_sid']);
+            if ($raced === null) {
+                throw $e;
+            }
+
+            $payload['kode_sid'] = $raced['kode_sid'];
+            $this->employeeProfileService->update($raced['id'], $payload, false);
+            $summary['updated']++;
+            $existingMap[$upper] = $raced;
+        }
     }
 
     /**
