@@ -27,6 +27,9 @@ final class PeerPressurePelaksanaanBaselineService
         private readonly PeerPressureBerecordNitipService $berecordNitip,
     ) {}
 
+    /** @var array<string, array<string, mixed>> */
+    private array $computeMemo = [];
+
     /**
      * @return array{
      *   baseline_total: int,
@@ -44,6 +47,11 @@ final class PeerPressurePelaksanaanBaselineService
      */
     public function compute(?int $year = null, ?int $month = null): array
     {
+        $memoKey = ($year ?? 0).'-'.($month ?? 0);
+        if (isset($this->computeMemo[$memoKey])) {
+            return $this->computeMemo[$memoKey];
+        }
+
         $bounds = $this->kejadianTanggalTemuanBounds($year, $month);
 
         $beCoMapFull = $this->berecordNitip->mapNormalizedBeRecordToCompany($year, $month);
@@ -114,7 +122,7 @@ final class PeerPressurePelaksanaanBaselineService
         $pctSelesai = $baselineTotal > 0 ? round(100 * $selesai / $baselineTotal, 1) : 0.0;
         $pctBelum = $baselineTotal > 0 ? round(100 * $belum / $baselineTotal, 1) : 0.0;
 
-        return [
+        return $this->computeMemo[$memoKey] = [
             'baseline_total' => $baselineTotal,
             'selesai' => $selesai,
             'belum' => $belum,
@@ -531,7 +539,7 @@ final class PeerPressurePelaksanaanBaselineService
     }
 
     /**
-     * Site per kunci BeRecord dari nitip: kode_sid di bep_vw_berecord → site di bep_vw_wp_karyawan (baris terbaru per sid).
+     * Site per kunci BeRecord dari OLAP: kode_sid di bcsid.bep_vw_berecord → site di bep_vw_wp_karyawan (baris terbaru per sid).
      *
      * @return array<string, string> normalized BeRecord key => site (hanya jika site WP terisi)
      */

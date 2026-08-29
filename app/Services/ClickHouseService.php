@@ -18,6 +18,9 @@ class ClickHouseService
     /** @var string */
     private $connectionName;
 
+    /** @var array<string, bool> */
+    private static array $connectedCache = [];
+
     public function __construct(string $connectionName = 'clickhouse')
     {
         $this->connectionName = $connectionName;
@@ -30,6 +33,8 @@ class ClickHouseService
         if (empty($host) || empty($port)) {
             Log::info('ClickHouse configuration is incomplete for connection [' . $connectionName . ']. Host or port is missing.');
             $this->isConnected = false;
+            self::$connectedCache[$connectionName] = false;
+
             return;
         }
 
@@ -43,7 +48,13 @@ class ClickHouseService
         $this->password = $conn['password'] ?? '';
         $this->database = $conn['database'] ?? 'default';
         $this->timeout = $conn['options']['timeout'] ?? 30;
-        
+
+        if (array_key_exists($connectionName, self::$connectedCache)) {
+            $this->isConnected = self::$connectedCache[$connectionName];
+
+            return;
+        }
+
         Log::info('ClickHouse configuration loaded', [
             'baseUrl' => $this->baseUrl,
             'database' => $this->database,
@@ -79,6 +90,8 @@ class ClickHouseService
                 $this->isConnected = false;
             }
         }
+
+        self::$connectedCache[$connectionName] = $this->isConnected;
     }
 
     /**

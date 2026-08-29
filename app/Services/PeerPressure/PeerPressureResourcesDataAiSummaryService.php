@@ -2,6 +2,7 @@
 
 namespace App\Services\PeerPressure;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -13,18 +14,28 @@ class PeerPressureResourcesDataAiSummaryService
      */
     public function generate(array $kpi): array
     {
-        $raw = $this->loadAllJsonFiles();
-        $digest = $this->buildDigest($raw, $kpi);
+        $cacheKey = 'peer_pressure.resources_ai_summary.'.md5((string) json_encode([
+            'total_cases' => $kpi['total_cases'] ?? 0,
+            'completion_rate' => $kpi['completion_rate'] ?? 0,
+            'comply' => $kpi['peer_pressure_compliance_comply'] ?? 0,
+            'total' => $kpi['peer_pressure_compliance_total'] ?? 0,
+            'trend' => $kpi['total_cases_trend_pct'] ?? null,
+        ]));
 
-        $key = config('services.openai.key');
-        if (is_string($key) && $key !== '') {
-            $text = $this->tryOpenAiSummary($digest, $kpi);
-            if (is_string($text) && trim($text) !== '') {
-                return ['text' => trim($text), 'source' => 'openai'];
+        return Cache::remember($cacheKey, 1800, function () use ($kpi): array {
+            $raw = $this->loadAllJsonFiles();
+            $digest = $this->buildDigest($raw, $kpi);
+
+            $key = config('services.openai.key');
+            if (is_string($key) && $key !== '') {
+                $text = $this->tryOpenAiSummary($digest, $kpi);
+                if (is_string($text) && trim($text) !== '') {
+                    return ['text' => trim($text), 'source' => 'openai'];
+                }
             }
-        }
 
-        return ['text' => $this->buildHeuristicSummary($digest, $kpi), 'source' => 'heuristic'];
+            return ['text' => $this->buildHeuristicSummary($digest, $kpi), 'source' => 'heuristic'];
+        });
     }
 
     /**
@@ -254,7 +265,8 @@ class PeerPressureResourcesDataAiSummaryService
         ];
 
         try {
-            $res = Http::timeout(50)
+            $res = Http::timeout(8)
+                ->connectTimeout(3)
                 ->withToken((string) config('services.openai.key'))
                 ->acceptJson()
                 ->post('https://api.openai.com/v1/chat/completions', $payload);

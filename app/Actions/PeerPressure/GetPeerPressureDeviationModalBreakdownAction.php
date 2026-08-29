@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Ringkasan tiga kartu pada modal "Total Deviasi Pelanggaran":
- * BeRecord (uniq id · bep_vw_berecord, filter golden_rules: terisi & bukan “Tidak Melanggar Golden Rules”),
+ * BeRecord (uniq id · bcsid.bep_vw_berecord, filter golden_rules: terisi & bukan “Tidak Melanggar Golden Rules”),
  * Validasi TBC (tasklist terisi), Speak Up Fatigue (kategori deviasi pada kejadian).
  */
 final class GetPeerPressureDeviationModalBreakdownAction

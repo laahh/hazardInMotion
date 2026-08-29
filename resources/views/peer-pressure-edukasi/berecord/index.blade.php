@@ -1,6 +1,6 @@
 @extends('peer-pressure-edukasi.layouts.peer-app')
 
-@section('title', 'BeRecord (Nitip · ClickHouse)')
+@section('title', 'BeRecord (OLAP · Postgres)')
 
 @section('content')
 <div class="bg-white rounded-2xl anchored-card overflow-hidden">
@@ -27,8 +27,8 @@
 
    @if (! $connected)
    <div class="px-6 py-8 border-b border-outline-variant/15 bg-amber-50/80 text-sm text-amber-950">
-      <p class="font-bold flex items-center gap-2"><span class="material-symbols-outlined text-xl">cloud_off</span> ClickHouse nitip tidak terhubung</p>
-      <p class="mt-2 text-xs text-amber-900/90">Periksa konfigurasi <span class="font-mono">database.connections.clickhouse_nitip</span> dan jaringan ke server ClickHouse.</p>
+      <p class="font-bold flex items-center gap-2"><span class="material-symbols-outlined text-xl">cloud_off</span> Postgres OLAP tidak terhubung</p>
+      <p class="mt-2 text-xs text-amber-900/90">Periksa <span class="font-mono">pgsql_direct</span> (PG_HOST) atau tunnel <span class="font-mono">pgsql_ssh</span> (PG_SSH_HOST:PG_SSH_LOCAL_PORT) dan view <span class="font-mono">bcsid.bep_vw_berecord</span>.</p>
    </div>
    @elseif ($chError)
    <div class="px-6 py-8 border-b border-outline-variant/15 bg-red-50 text-sm text-red-900">

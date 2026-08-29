@@ -6,17 +6,30 @@ namespace App\Services\PeerPressure;
 
 use App\Services\ClickHouseService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Membaca view ClickHouse nitip.bep_vw_berecord (koneksi clickhouse_nitip).
+ * Membaca view Postgres OLAP bcsid.bep_vw_berecord
+ * (pgsql_direct = PG_HOST, fallback pgsql_ssh = tunnel lokal PG_SSH_*).
  */
 final class PeerPressureBerecordNitipService
 {
     private const MIN_YEAR = 2025;
 
     private const MAX_YEAR = 2026;
+
+    public const CONNECTION_DIRECT = 'pgsql_direct';
+
+    public const CONNECTION_TUNNEL = 'pgsql_ssh';
+
+    public const TABLE = 'bcsid.bep_vw_berecord';
+
+    private const UP_CACHE_KEY = 'peer_pressure:berecord_pg_connection_v1';
+
+    private const UP_CACHE_TTL_SECONDS = 20;
 
     /** Baris dengan nilai ini dianggap tidak masuk baseline pelaksanaan (tidak ada pelanggaran GR). */
     private const GOLDEN_RULES_NO_VIOLATION = 'Tidak Melanggar Golden Rules';
@@ -50,7 +63,7 @@ final class PeerPressureBerecordNitipService
     /**
      * Daftar kolom untuk header Blade (label singkat opsional).
      *
-     * @return array<string, string> key = nama kolom CH, value = label UI
+     * @return array<string, string> key = nama kolom, value = label UI
      */
     public static function columnLabels(): array
     {
@@ -80,10 +93,15 @@ final class PeerPressureBerecordNitipService
         ];
     }
 
+    public function isConnected(): bool
+    {
+        return $this->connectionName() !== null;
+    }
+
     /**
      * WHERE untuk kartu/tab deviasi BeRecord: periode (jika ada) + filter {@see baselineBeRecordWhereAndAppendParam} pada `golden_rules`.
      *
-     * @return array{0: string, 1: list<string>}
+     * @return array{0: string, 1: list<mixed>}
      */
     private function deviationModalBeRecordWhere(?int $year = null, ?int $month = null): array
     {
@@ -98,26 +116,17 @@ final class PeerPressureBerecordNitipService
      */
     public function countDistinctIdsGoldenRulesBaseline(?int $year = null, ?int $month = null): int
     {
-        $ch = new ClickHouseService('clickhouse_nitip');
-        if (! $ch->isConnected()) {
+        if (! $this->isConnected()) {
             return 0;
         }
 
         [$where, $params] = $this->deviationModalBeRecordWhere($year, $month);
 
         try {
-            $sql = 'SELECT uniqExact(`id`) AS c FROM bep_vw_berecord '.$where;
-            $rows = $ch->query($sql, $params);
-            if (! is_array($rows) || $rows === []) {
-                return 0;
-            }
-            $first = $rows[0];
-            if (! is_array($first)) {
-                return 0;
-            }
-            $c = $first['c'] ?? $first['C'] ?? null;
+            $sql = 'SELECT COUNT(DISTINCT id) AS c FROM '.self::TABLE.' '.$where;
+            $rows = $this->select($sql, $params);
 
-            return is_numeric($c) ? (int) $c : 0;
+            return $this->intFromFirstRow($rows, 'c');
         } catch (Throwable $e) {
             Log::warning('PeerPressureBerecordNitipService: countDistinctIdsGoldenRulesBaseline gagal', [
                 'message' => $e->getMessage(),
@@ -128,31 +137,22 @@ final class PeerPressureBerecordNitipService
     }
 
     /**
-     * Jumlah nilai unik kolom `id` pada view ClickHouse `bep_vw_berecord`.
-     * Jika tahun & bulan diisi, dibatasi ke baris yang `start_date_be_record` jatuh di bulan tersebut (tanggal yang bisa di-parse).
+     * Jumlah nilai unik kolom `id` pada view `bcsid.bep_vw_berecord`.
+     * Jika tahun & bulan diisi, dibatasi ke baris yang `start_date_be_record` jatuh di bulan tersebut.
      */
     public function countDistinctIds(?int $year = null, ?int $month = null): int
     {
-        $ch = new ClickHouseService('clickhouse_nitip');
-        if (! $ch->isConnected()) {
+        if (! $this->isConnected()) {
             return 0;
         }
 
         [$whereSql, $params] = $this->periodWhereAndParams($year, $month);
 
         try {
-            $sql = 'SELECT uniqExact(`id`) AS c FROM bep_vw_berecord ' . $whereSql;
-            $rows = $ch->query($sql, $params);
-            if (! is_array($rows) || $rows === []) {
-                return 0;
-            }
-            $first = $rows[0];
-            if (! is_array($first)) {
-                return 0;
-            }
-            $c = $first['c'] ?? $first['C'] ?? null;
+            $sql = 'SELECT COUNT(DISTINCT id) AS c FROM '.self::TABLE.' '.$whereSql;
+            $rows = $this->select($sql, $params);
 
-            return is_numeric($c) ? (int) $c : 0;
+            return $this->intFromFirstRow($rows, 'c');
         } catch (Throwable $e) {
             Log::warning('PeerPressureBerecordNitipService: countDistinctIds gagal', [
                 'message' => $e->getMessage(),
@@ -163,14 +163,13 @@ final class PeerPressureBerecordNitipService
     }
 
     /**
-     * Paginasi baris `bep_vw_berecord` untuk modal deviasi: periode + filter `golden_rules` sama {@see countDistinctIdsGoldenRulesBaseline}.
+     * Paginasi baris `bcsid.bep_vw_berecord` untuk modal deviasi: periode + filter `golden_rules` sama {@see countDistinctIdsGoldenRulesBaseline}.
      *
      * @return array{rows: list<array<string, string|null>>, total: int, connected: bool, error?: string}
      */
     public function paginateDeviationModal(?int $year = null, ?int $month = null, int $page = 1, int $perPage = 10): array
     {
-        $ch = new ClickHouseService('clickhouse_nitip');
-        if (! $ch->isConnected()) {
+        if (! $this->isConnected()) {
             return ['rows' => [], 'total' => 0, 'connected' => false];
         }
 
@@ -181,29 +180,18 @@ final class PeerPressureBerecordNitipService
         $selectList = $this->buildSelectListSql();
 
         try {
-            $countSql = 'SELECT count() AS c FROM bep_vw_berecord '.$whereSql;
-            $countRows = $ch->query($countSql, $params);
-            $total = 0;
-            if (is_array($countRows) && isset($countRows[0]) && is_array($countRows[0])) {
-                $c = $countRows[0]['c'] ?? $countRows[0]['C'] ?? null;
-                $total = is_numeric($c) ? (int) $c : 0;
-            }
+            $countSql = 'SELECT COUNT(*) AS c FROM '.self::TABLE.' '.$whereSql;
+            $total = $this->intFromFirstRow($this->select($countSql, $params), 'c');
 
-            $dataSql = 'SELECT '.$selectList.' FROM bep_vw_berecord '.$whereSql
-                .' ORDER BY toDateOrNull(toString(`start_date_be_record`)) DESC, `id` DESC'
+            $dataSql = 'SELECT '.$selectList.' FROM '.self::TABLE.' '.$whereSql
+                .' ORDER BY start_date_be_record DESC NULLS LAST, id DESC'
                 .' LIMIT '.(int) $perPage.' OFFSET '.(int) $offset;
 
-            $dataRows = $ch->query($dataSql, $params);
-            $rows = [];
-            if (is_array($dataRows)) {
-                foreach ($dataRows as $row) {
-                    if (is_array($row)) {
-                        $rows[] = $this->normalizeRow($row);
-                    }
-                }
-            }
-
-            return ['rows' => $rows, 'total' => $total, 'connected' => true];
+            return [
+                'rows' => $this->normalizeSelectRows($this->select($dataSql, $params)),
+                'total' => $total,
+                'connected' => true,
+            ];
         } catch (Throwable $e) {
             Log::warning('PeerPressureBerecordNitipService: paginateDeviationModal gagal', [
                 'message' => $e->getMessage(),
@@ -214,7 +202,7 @@ final class PeerPressureBerecordNitipService
     }
 
     /**
-     * @return array{0: string, 1: list<string>}
+     * @return array{0: string, 1: list<mixed>}
      */
     private function periodWhereAndParams(?int $year, ?int $month): array
     {
@@ -228,7 +216,7 @@ final class PeerPressureBerecordNitipService
         $end = $start->copy()->endOfMonth();
 
         return [
-            'WHERE toDateOrNull(toString(`start_date_be_record`)) >= toDate(?) AND toDateOrNull(toString(`start_date_be_record`)) <= toDate(?)',
+            'WHERE start_date_be_record >= ?::date AND start_date_be_record <= ?::date',
             [$start->toDateString(), $end->toDateString()],
         ];
     }
@@ -236,14 +224,14 @@ final class PeerPressureBerecordNitipService
     /**
      * Baseline BeRecord memakai kolom `golden_rules`: terisi (bukan null/kosong) dan bukan {@see GOLDEN_RULES_NO_VIOLATION}.
      *
-     * @param  list<string>  $params  parameter query (akan ditambah satu nilai untuk perbandingan teks)
-     * @return array{0: string, 1: list<string>}
+     * @param  list<mixed>  $params  parameter query (akan ditambah satu nilai untuk perbandingan teks)
+     * @return array{0: string, 1: list<mixed>}
      */
     private function baselineBeRecordWhereAndAppendParam(string $where, array $params): array
     {
-        $where .= ' AND isNotNull(`golden_rules`)'
-            .' AND length(trim(toString(`golden_rules`))) > 0'
-            .' AND lowerUTF8(trim(toString(`golden_rules`))) != lowerUTF8(?)';
+        $where .= ' AND golden_rules IS NOT NULL'
+            .' AND length(trim(golden_rules)) > 0'
+            .' AND lower(trim(golden_rules)) <> lower(?)';
         $params[] = self::GOLDEN_RULES_NO_VIOLATION;
 
         return [$where, $params];
@@ -256,34 +244,22 @@ final class PeerPressureBerecordNitipService
      */
     public function distinctNormalizedBeRecordValues(?int $year = null, ?int $month = null): array
     {
-        $ch = new ClickHouseService('clickhouse_nitip');
-        if (! $ch->isConnected()) {
+        if (! $this->isConnected()) {
             return [];
         }
 
-        [$wherePeriod, $params] = $this->periodWhereAndParams($year, $month);
-        $where = 'WHERE length(trim(toString(`BeRecord`))) > 0';
-        if ($wherePeriod !== '') {
-            $where .= ' AND '.substr($wherePeriod, strlen('WHERE '));
-        }
-        [$where, $params] = $this->baselineBeRecordWhereAndAppendParam($where, $params);
+        [$where, $params] = $this->beRecordNonEmptyWhere($year, $month);
 
         try {
-            $sql = 'SELECT DISTINCT lowerUTF8(trim(toString(`BeRecord`))) AS b FROM bep_vw_berecord '.$where.' ORDER BY b';
-            $rows = $ch->query($sql, $params);
-            if (! is_array($rows)) {
-                return [];
-            }
+            $sql = 'SELECT DISTINCT lower(trim("BeRecord"::text)) AS b FROM '.self::TABLE.' '.$where.' ORDER BY b';
+            $rows = $this->select($sql, $params);
             $out = [];
             foreach ($rows as $row) {
-                if (! is_array($row)) {
+                $b = $this->cell($row, 'b');
+                if ($b === null || trim($b) === '') {
                     continue;
                 }
-                $b = $row['b'] ?? $row['B'] ?? null;
-                if ($b === null || trim((string) $b) === '') {
-                    continue;
-                }
-                $out[] = strtolower(trim((string) $b));
+                $out[] = strtolower(trim($b));
             }
 
             return array_values(array_unique($out));
@@ -298,31 +274,17 @@ final class PeerPressureBerecordNitipService
 
     public function countDistinctNormalizedBeRecord(?int $year = null, ?int $month = null): int
     {
-        $ch = new ClickHouseService('clickhouse_nitip');
-        if (! $ch->isConnected()) {
+        if (! $this->isConnected()) {
             return 0;
         }
 
-        [$wherePeriod, $params] = $this->periodWhereAndParams($year, $month);
-        $where = 'WHERE length(trim(toString(`BeRecord`))) > 0';
-        if ($wherePeriod !== '') {
-            $where .= ' AND '.substr($wherePeriod, strlen('WHERE '));
-        }
-        [$where, $params] = $this->baselineBeRecordWhereAndAppendParam($where, $params);
+        [$where, $params] = $this->beRecordNonEmptyWhere($year, $month);
 
         try {
-            $sql = 'SELECT uniqExact(lowerUTF8(trim(toString(`BeRecord`)))) AS c FROM bep_vw_berecord '.$where;
-            $rows = $ch->query($sql, $params);
-            if (! is_array($rows) || $rows === []) {
-                return 0;
-            }
-            $first = $rows[0];
-            if (! is_array($first)) {
-                return 0;
-            }
-            $c = $first['c'] ?? $first['C'] ?? null;
+            $sql = 'SELECT COUNT(DISTINCT lower(trim("BeRecord"::text))) AS c FROM '.self::TABLE.' '.$where;
+            $rows = $this->select($sql, $params);
 
-            return is_numeric($c) ? (int) $c : 0;
+            return $this->intFromFirstRow($rows, 'c');
         } catch (Throwable $e) {
             Log::warning('PeerPressureBerecordNitipService: countDistinctNormalizedBeRecord gagal', [
                 'message' => $e->getMessage(),
@@ -333,44 +295,30 @@ final class PeerPressureBerecordNitipService
     }
 
     /**
-     * Pemetaan BeRecord ter-normalisasi → label perusahaan (kolom `perusahaan` di CH; satu nilai per grup).
+     * Pemetaan BeRecord ter-normalisasi → label perusahaan (satu nilai per grup).
      * Hanya baris baseline: {@see baselineBeRecordWhereAndAppendParam} (`golden_rules` terisi dan bukan “Tidak Melanggar Golden Rules”).
      *
      * @return array<string, string>
      */
     public function mapNormalizedBeRecordToCompany(?int $year = null, ?int $month = null): array
     {
-        $ch = new ClickHouseService('clickhouse_nitip');
-        if (! $ch->isConnected()) {
+        if (! $this->isConnected()) {
             return [];
         }
 
-        [$wherePeriod, $params] = $this->periodWhereAndParams($year, $month);
-        $where = 'WHERE length(trim(toString(`BeRecord`))) > 0';
-        if ($wherePeriod !== '') {
-            $where .= ' AND '.substr($wherePeriod, strlen('WHERE '));
-        }
-        [$where, $params] = $this->baselineBeRecordWhereAndAppendParam($where, $params);
+        [$where, $params] = $this->beRecordNonEmptyWhere($year, $month);
 
         try {
-            $sql = 'SELECT lowerUTF8(trim(toString(`BeRecord`))) AS b, any(trim(toString(ifNull(`perusahaan`, \'\')))) AS co'
-                .' FROM bep_vw_berecord '.$where.' GROUP BY b ORDER BY b';
-            $rows = $ch->query($sql, $params);
-            if (! is_array($rows)) {
-                return [];
-            }
+            $sql = 'SELECT lower(trim("BeRecord"::text)) AS b, MAX(trim(COALESCE(perusahaan, \'\'))) AS co'
+                .' FROM '.self::TABLE.' '.$where.' GROUP BY lower(trim("BeRecord"::text)) ORDER BY b';
+            $rows = $this->select($sql, $params);
             $out = [];
             foreach ($rows as $row) {
-                if (! is_array($row)) {
+                $b = $this->cell($row, 'b');
+                if ($b === null || trim($b) === '') {
                     continue;
                 }
-                $b = $row['b'] ?? $row['B'] ?? null;
-                if ($b === null || trim((string) $b) === '') {
-                    continue;
-                }
-                $key = strtolower(trim((string) $b));
-                $co = $row['co'] ?? $row['CO'] ?? '';
-                $out[$key] = trim((string) $co);
+                $out[strtolower(trim($b))] = trim((string) $this->cell($row, 'co'));
             }
 
             return $out;
@@ -384,43 +332,29 @@ final class PeerPressureBerecordNitipService
     }
 
     /**
-     * Pemetaan BeRecord ter-normalisasi → kode_sid (kolom `kode_sid` di CH; satu nilai per grup, sama seperti {@see mapNormalizedBeRecordToCompany}).
+     * Pemetaan BeRecord ter-normalisasi → kode_sid (satu nilai per grup, sama seperti {@see mapNormalizedBeRecordToCompany}).
      *
      * @return array<string, string>
      */
     public function mapNormalizedBeRecordToKodeSid(?int $year = null, ?int $month = null): array
     {
-        $ch = new ClickHouseService('clickhouse_nitip');
-        if (! $ch->isConnected()) {
+        if (! $this->isConnected()) {
             return [];
         }
 
-        [$wherePeriod, $params] = $this->periodWhereAndParams($year, $month);
-        $where = 'WHERE length(trim(toString(`BeRecord`))) > 0';
-        if ($wherePeriod !== '') {
-            $where .= ' AND '.substr($wherePeriod, strlen('WHERE '));
-        }
-        [$where, $params] = $this->baselineBeRecordWhereAndAppendParam($where, $params);
+        [$where, $params] = $this->beRecordNonEmptyWhere($year, $month);
 
         try {
-            $sql = 'SELECT lowerUTF8(trim(toString(`BeRecord`))) AS b, any(trim(toString(ifNull(`kode_sid`, \'\')))) AS ks'
-                .' FROM bep_vw_berecord '.$where.' GROUP BY b ORDER BY b';
-            $rows = $ch->query($sql, $params);
-            if (! is_array($rows)) {
-                return [];
-            }
+            $sql = 'SELECT lower(trim("BeRecord"::text)) AS b, MAX(trim(COALESCE(kode_sid, \'\'))) AS ks'
+                .' FROM '.self::TABLE.' '.$where.' GROUP BY lower(trim("BeRecord"::text)) ORDER BY b';
+            $rows = $this->select($sql, $params);
             $out = [];
             foreach ($rows as $row) {
-                if (! is_array($row)) {
+                $b = $this->cell($row, 'b');
+                if ($b === null || trim($b) === '') {
                     continue;
                 }
-                $b = $row['b'] ?? $row['B'] ?? null;
-                if ($b === null || trim((string) $b) === '') {
-                    continue;
-                }
-                $key = strtolower(trim((string) $b));
-                $ks = $row['ks'] ?? $row['KS'] ?? '';
-                $out[$key] = trim((string) $ks);
+                $out[strtolower(trim($b))] = trim((string) $this->cell($row, 'ks'));
             }
 
             return $out;
@@ -498,14 +432,13 @@ final class PeerPressureBerecordNitipService
     }
 
     /**
-     * Paginasi baris dari bep_vw_berecord (pencarian substring pada beberapa kolom teks).
+     * Paginasi baris dari bcsid.bep_vw_berecord (pencarian substring pada beberapa kolom teks).
      *
-     * @return array{rows: list<array<string, string|null>>, total: int, connected: bool}
+     * @return array{rows: list<array<string, string|null>>, total: int, connected: bool, error?: string}
      */
     public function paginateView(int $page, int $perPage, string $q): array
     {
-        $ch = new ClickHouseService('clickhouse_nitip');
-        if (! $ch->isConnected()) {
+        if (! $this->isConnected()) {
             return ['rows' => [], 'total' => 0, 'connected' => false];
         }
 
@@ -518,33 +451,23 @@ final class PeerPressureBerecordNitipService
         $params = [];
         $qTrim = trim($q);
         if ($qTrim !== '') {
-            $whereSql = 'WHERE ' . $this->buildSearchPredicate();
-            $params[] = $qTrim;
+            $whereSql = 'WHERE '.$this->buildSearchPredicate();
+            $params[] = '%'.$qTrim.'%';
         }
 
         try {
-            $countSql = 'SELECT count() AS c FROM bep_vw_berecord ' . $whereSql;
-            $countRows = $ch->query($countSql, $params);
-            $total = 0;
-            if (is_array($countRows) && isset($countRows[0]) && is_array($countRows[0])) {
-                $c = $countRows[0]['c'] ?? $countRows[0]['C'] ?? null;
-                $total = is_numeric($c) ? (int) $c : 0;
-            }
+            $countSql = 'SELECT COUNT(*) AS c FROM '.self::TABLE.' '.$whereSql;
+            $total = $this->intFromFirstRow($this->select($countSql, $params), 'c');
 
-            $dataSql = 'SELECT ' . $selectList . ' FROM bep_vw_berecord ' . $whereSql
-                . ' ORDER BY `_airbyte_extracted_at` DESC LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset;
+            $dataSql = 'SELECT '.$selectList.' FROM '.self::TABLE.' '.$whereSql
+                .' ORDER BY start_date_be_record DESC NULLS LAST, id DESC'
+                .' LIMIT '.(int) $perPage.' OFFSET '.(int) $offset;
 
-            $dataRows = $ch->query($dataSql, $params);
-            $rows = [];
-            if (is_array($dataRows)) {
-                foreach ($dataRows as $row) {
-                    if (is_array($row)) {
-                        $rows[] = $this->normalizeRow($row);
-                    }
-                }
-            }
-
-            return ['rows' => $rows, 'total' => $total, 'connected' => true];
+            return [
+                'rows' => $this->normalizeSelectRows($this->select($dataSql, $params)),
+                'total' => $total,
+                'connected' => true,
+            ];
         } catch (Throwable $e) {
             Log::warning('PeerPressureBerecordNitipService: paginateView gagal', [
                 'message' => $e->getMessage(),
@@ -558,8 +481,12 @@ final class PeerPressureBerecordNitipService
     {
         $parts = [];
         foreach (self::VIEW_COLUMNS as $col) {
-            $escaped = '`' . str_replace('`', '', $col) . '`';
-            $parts[] = 'toString(' . $escaped . ') AS ' . $escaped;
+            if ($col === 'BeRecord') {
+                $parts[] = '"BeRecord"::text AS "BeRecord"';
+                continue;
+            }
+            $safe = str_replace('"', '', $col);
+            $parts[] = $safe.'::text AS '.$safe;
         }
 
         return implode(', ', $parts);
@@ -575,10 +502,12 @@ final class PeerPressureBerecordNitipService
         ];
         $args = [];
         foreach ($cols as $c) {
-            $args[] = "toString(ifNull(`{$c}`, ''))";
+            $args[] = 'COALESCE('.$c.', \'\')';
         }
+        $args[] = 'COALESCE("BeRecord"::text, \'\')';
+        $args[] = 'COALESCE(id::text, \'\')';
 
-        return 'lowerUTF8(toString(concat_ws(\' \', ' . implode(', ', $args) . '))) LIKE concat(\'%\', lowerUTF8(?), \'%\')';
+        return 'CONCAT_WS(\' \', '.implode(', ', $args).') ILIKE ?';
     }
 
     /**
@@ -593,9 +522,8 @@ final class PeerPressureBerecordNitipService
             return null;
         }
 
-        $ch = new ClickHouseService('clickhouse_nitip');
-        if (! $ch->isConnected()) {
-            Log::info('PeerPressureBerecordNitipService: ClickHouse nitip tidak terhubung');
+        if (! $this->isConnected()) {
+            Log::info('PeerPressureBerecordNitipService: Postgres OLAP tidak terhubung');
 
             return null;
         }
@@ -603,9 +531,10 @@ final class PeerPressureBerecordNitipService
         try {
             $sql = <<<'SQL'
 SELECT
-  toString(id) AS id,
+  id::text AS id,
   nama AS nama,
-  toString(`BeRecord`) AS be_record,
+  "BeRecord"::text AS be_record,
+  "BeRecord"::text AS "BeRecord",
   kode_sid AS kode_sid,
   diskripsi AS diskripsi,
   perusahaan AS perusahaan,
@@ -620,25 +549,20 @@ SELECT
   alamat_province AS alamat_province,
   status_berecord AS status_berecord,
   kategori_berecord AS kategori_berecord,
-  toString(end_date_be_record) AS end_date_be_record,
-  toString(id_status_karyawan) AS id_status_karyawan,
+  end_date_be_record::text AS end_date_be_record,
+  id_status_karyawan::text AS id_status_karyawan,
   kategori_kecelakaan AS kategori_kecelakaan,
-  toString(start_date_be_record) AS start_date_be_record,
+  start_date_be_record::text AS start_date_be_record,
   status_proses_berecord AS status_proses_berecord
-FROM bep_vw_berecord
-WHERE lowerUTF8(trim(kode_sid)) = lowerUTF8(?)
-ORDER BY start_date_be_record DESC
+FROM bcsid.bep_vw_berecord
+WHERE lower(trim(kode_sid)) = lower(?)
+ORDER BY start_date_be_record DESC NULLS LAST, id DESC
 LIMIT 1
 SQL;
 
-            $rows = $ch->query($sql, [$sid]);
-            if (! is_array($rows) || $rows === []) {
-                return null;
-            }
+            $rows = $this->normalizeSelectRows($this->select($sql, [$sid]));
 
-            $first = $rows[0];
-
-            return is_array($first) ? $this->normalizeRow($first) : null;
+            return $rows[0] ?? null;
         } catch (Throwable $e) {
             Log::warning('PeerPressureBerecordNitipService: query gagal', [
                 'sid' => $sid,
@@ -647,6 +571,138 @@ SQL;
 
             return null;
         }
+    }
+
+    /**
+     * @return array{0: string, 1: list<mixed>}
+     */
+    private function beRecordNonEmptyWhere(?int $year, ?int $month): array
+    {
+        [$wherePeriod, $params] = $this->periodWhereAndParams($year, $month);
+        $where = 'WHERE length(trim(COALESCE("BeRecord"::text, \'\'))) > 0';
+        if ($wherePeriod !== '') {
+            $where .= ' AND '.substr($wherePeriod, strlen('WHERE '));
+        }
+
+        return $this->baselineBeRecordWhereAndAppendParam($where, $params);
+    }
+
+    /**
+     * @param  list<mixed>  $bindings
+     * @return list<object>
+     */
+    private function select(string $sql, array $bindings = []): array
+    {
+        $name = $this->connectionName();
+        if ($name === null) {
+            return [];
+        }
+
+        /** @var list<object> $rows */
+        $rows = DB::connection($name)->select($sql, $bindings);
+
+        return $rows;
+    }
+
+    private function connectionName(): ?string
+    {
+        try {
+            $cached = Cache::remember(self::UP_CACHE_KEY, self::UP_CACHE_TTL_SECONDS, function (): string {
+                foreach ([self::CONNECTION_DIRECT, self::CONNECTION_TUNNEL] as $name) {
+                    if ($this->ping($name)) {
+                        return $name;
+                    }
+                }
+
+                return '';
+            });
+        } catch (Throwable $e) {
+            Log::warning('PeerPressureBerecordNitipService cache koneksi: '.$e->getMessage());
+            $cached = $this->ping(self::CONNECTION_DIRECT)
+                ? self::CONNECTION_DIRECT
+                : ($this->ping(self::CONNECTION_TUNNEL) ? self::CONNECTION_TUNNEL : '');
+        }
+
+        return is_string($cached) && $cached !== '' ? $cached : null;
+    }
+
+    private function ping(string $connection): bool
+    {
+        if (! $this->isHostReachable($connection)) {
+            return false;
+        }
+
+        try {
+            DB::connection($connection)->select('SELECT 1');
+
+            return true;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function isHostReachable(string $connection): bool
+    {
+        $host = config("database.connections.{$connection}.host");
+        $port = config("database.connections.{$connection}.port");
+
+        if (! is_string($host) || $host === '' || ! is_numeric($port) || (int) $port <= 0) {
+            return true;
+        }
+
+        $socket = @fsockopen($host, (int) $port, $errno, $errstr, 2);
+        if (! is_resource($socket)) {
+            return false;
+        }
+
+        fclose($socket);
+
+        return true;
+    }
+
+    /**
+     * @param  list<object>  $rows
+     */
+    private function intFromFirstRow(array $rows, string $key): int
+    {
+        if ($rows === []) {
+            return 0;
+        }
+        $c = $this->cell($rows[0], $key);
+
+        return is_numeric($c) ? (int) $c : 0;
+    }
+
+    private function cell(object|array $row, string $key): ?string
+    {
+        if (is_object($row)) {
+            $v = $row->{$key} ?? null;
+        } else {
+            $v = $row[$key] ?? $row[strtolower($key)] ?? null;
+        }
+
+        if ($v === null) {
+            return null;
+        }
+
+        return (string) $v;
+    }
+
+    /**
+     * @param  list<object>  $rows
+     * @return list<array<string, string|null>>
+     */
+    private function normalizeSelectRows(array $rows): array
+    {
+        $out = [];
+        foreach ($rows as $row) {
+            $arr = is_object($row) ? get_object_vars($row) : $row;
+            if (is_array($arr)) {
+                $out[] = $this->normalizeRow($arr);
+            }
+        }
+
+        return $out;
     }
 
     /**

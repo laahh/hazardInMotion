@@ -138,7 +138,7 @@ final class GetPeerPressureDashboardKpiStatsAction
 
         $completionDelta = $this->completionRateDeltaMonthVsPreviousMonth($start);
 
-        $compliance = $this->complianceFromPelaksanaanBaseline($year, $month);
+        $compliance = $this->complianceFromComputedPelaksanaan($pelBase);
         $statusKosong = $this->countPelaksanaanStatusKosong($base);
         $kkRows = $this->pelaksanaanKelompokKerjaBreakdown($base);
         $slaChart = $this->buildSlaTemuanKePelaksanaan($base);
@@ -281,7 +281,7 @@ final class GetPeerPressureDashboardKpiStatsAction
         $completionDelta = $this->completionRateDeltaLast30VsPrev30();
 
         $baseGlobal = PeerPressureKejadianEdukasi::query();
-        $compliance = $this->complianceFromPelaksanaanBaseline(null, null);
+        $compliance = $this->complianceFromComputedPelaksanaan($pelBase);
         $statusKosong = $this->countPelaksanaanStatusKosong($baseGlobal);
         $kkRows = $this->pelaksanaanKelompokKerjaBreakdown($baseGlobal);
         $slaChart = $this->buildSlaTemuanKePelaksanaan($baseGlobal);
@@ -619,10 +619,16 @@ SQL;
      *   peer_pressure_compliance_comply: int
      * }
      */
-    private function complianceFromPelaksanaanBaseline(?int $year, ?int $month): array
+    /**
+     * @param  array{pct_selesai: float, baseline_total: int, selesai: int}  $p
+     * @return array{
+     *   peer_pressure_compliance_pct: float,
+     *   peer_pressure_compliance_total: int,
+     *   peer_pressure_compliance_comply: int
+     * }
+     */
+    private function complianceFromComputedPelaksanaan(array $p): array
     {
-        $p = $this->pelaksanaanBaseline->compute($year, $month);
-
         return [
             'peer_pressure_compliance_pct' => $p['pct_selesai'],
             'peer_pressure_compliance_total' => $p['baseline_total'],

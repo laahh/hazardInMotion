@@ -310,14 +310,9 @@ final class GetPeerPressureDashboardInsightCardsAction
      */
     private function buildProfilingPelanggar(Builder $base, int $totalKejadian): array
     {
-        $ids = (clone $base)->pluck('id');
-        if ($ids->isEmpty()) {
-            return [];
-        }
-
         $rows = DB::table('peer_pressure_peserta_edukasi as p')
             ->where('p.peran', 'pelanggar')
-            ->whereIn('p.kejadian_edukasi_id', $ids)
+            ->whereIn('p.kejadian_edukasi_id', (clone $base)->select('id'))
             ->selectRaw('p.sid, MAX(p.nama) as nama, COUNT(*) as kasus')
             ->groupBy('p.sid')
             ->orderByDesc('kasus')

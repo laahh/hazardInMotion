@@ -456,31 +456,25 @@ final class GetPeerPressureDashboardEvaluationSummaryAction
      */
     private function rowPeerCorrelation(): array
     {
+        $rawPairs = DB::select(<<<'SQL'
+SELECT
+  TRIM(pel.sid) AS pelanggar_sid,
+  TRIM(peer.sid) AS peer_sid,
+  COUNT(*) AS frekuensi
+FROM peer_pressure_peserta_edukasi pel
+INNER JOIN peer_pressure_peserta_edukasi peer
+  ON peer.kejadian_edukasi_id = pel.kejadian_edukasi_id
+ AND peer.peran = 'peer'
+WHERE pel.peran = 'pelanggar'
+  AND TRIM(COALESCE(pel.sid, '')) <> TRIM(COALESCE(peer.sid, ''))
+GROUP BY TRIM(pel.sid), TRIM(peer.sid)
+SQL);
+
         $pairCounts = [];
-        PeerPressureKejadianEdukasi::query()
-            ->select(['id'])
-            ->with([
-                'peserta' => static function ($q): void {
-                    $q->whereIn('peran', ['pelanggar', 'peer'])->orderBy('urutan');
-                },
-            ])
-            ->chunkById(200, function ($rows) use (&$pairCounts): void {
-                foreach ($rows as $k) {
-                    $pel = $k->peserta->firstWhere('peran', 'pelanggar');
-                    if ($pel === null) {
-                        continue;
-                    }
-                    foreach ($k->peserta->where('peran', 'peer') as $peer) {
-                        $sidPel = (string) ($pel->sid ?? '');
-                        $sidPeer = (string) ($peer->sid ?? '');
-                        if ($sidPel !== '' && $sidPel === $sidPeer) {
-                            continue;
-                        }
-                        $key = $sidPel . '|' . $sidPeer;
-                        $pairCounts[$key] = ($pairCounts[$key] ?? 0) + 1;
-                    }
-                }
-            });
+        foreach ($rawPairs as $row) {
+            $key = (string) ($row->pelanggar_sid ?? '').'|'.(string) ($row->peer_sid ?? '');
+            $pairCounts[$key] = (int) ($row->frekuensi ?? 0);
+        }
 
         $repeatedPairs = array_filter($pairCounts, static fn (int $c): bool => $c >= 2);
         $pasanganBerulang = count($repeatedPairs);

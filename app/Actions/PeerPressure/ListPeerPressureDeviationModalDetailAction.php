@@ -11,7 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
- * Detail terpaginasi untuk tab modal deviasi: BeRecord (ClickHouse bep_vw_berecord), Validasi TBC (tasklist terisi), Speak Up Fatigue.
+ * Detail terpaginasi untuk tab modal deviasi: BeRecord (Postgres bcsid.bep_vw_berecord), Validasi TBC (tasklist terisi), Speak Up Fatigue.
  */
 final class ListPeerPressureDeviationModalDetailAction
 {

@@ -77,6 +77,17 @@ class PeerPressureEdukasiController extends Controller
         PeerPressureResourcesDataAiSummaryService $resourcesDataAiSummary,
         SitePerformanceBriefAnalysisService $sitePerformanceBriefAnalysis
     ): View {
+        $dashboardView = match (true) {
+            $request->routeIs('peer-pressure-edukasi.dashboard') => 'peer-pressure-edukasi.dashboard',
+            $request->routeIs('peer-pressure-edukasi.dashboard-performance') => 'peer-pressure-edukasi.DashPerformance',
+            $request->routeIs('peer-pressure-edukasi.tematic') => 'peer-pressure-edukasi.tematic',
+            default => 'peer-pressure-edukasi.dashboard-peer',
+        };
+        $needsSiteJsonMetrics = in_array($dashboardView, [
+            'peer-pressure-edukasi.dashboard',
+            'peer-pressure-edukasi.DashPerformance',
+        ], true);
+
         $q = trim((string) $request->get('q', ''));
         $chartPeriodMonth = $request->filled('year') && $request->filled('month');
 
@@ -104,6 +115,83 @@ class PeerPressureEdukasiController extends Controller
         }
         $peerFotoUrls = $karyawanNitip->fotoUrlsByKodeSids($peerSids);
 
+        $siteJson = $needsSiteJsonMetrics
+            ? $this->dashboardSiteJsonMetrics($request)
+            : $this->emptyDashboardSiteJsonMetrics();
+
+        $deviationModalBreakdownData = $deviationModalBreakdown(
+            $chartPeriodMonth ? $chartYear : null,
+            $chartPeriodMonth ? $chartMonth : null
+        );
+
+        return view($dashboardView, [
+            'navActive' => 'overview',
+            'kejadian' => $kejadian,
+            'peerFotoUrls' => $peerFotoUrls,
+            'q' => $q,
+            'kpi' => $kpiData,
+            'peerResourcesAiSummary' => $needsSiteJsonMetrics
+                ? $resourcesDataAiSummary->generate($kpiData)
+                : ['text' => '', 'source' => 'heuristic'],
+            'sitePerformanceBrief' => $needsSiteJsonMetrics
+                ? $sitePerformanceBriefAnalysis->analyze()
+                : [
+                    'ok' => false,
+                    'message' => '',
+                    'last_year' => null,
+                    'last_week' => null,
+                    'gaps_last_week' => [],
+                    'attention_sites' => [],
+                    'repetitive' => [],
+                    'overall_by_site_mitra' => [],
+                    'narrative' => '',
+                ],
+            'weeklyTrend' => $weeklyTrendData,
+            'chartYear' => $chartYear,
+            'chartMonth' => $chartMonth,
+            'chartPeriodMonth' => $chartPeriodMonth,
+            'evaluationSummary' => $evaluationSummary(
+                $chartPeriodMonth ? $chartYear : null,
+                $chartPeriodMonth ? $chartMonth : null
+            ),
+            'insightCards' => $insightCards(
+                $chartPeriodMonth ? $chartYear : null,
+                $chartPeriodMonth ? $chartMonth : null
+            ),
+            'deviationModalBreakdown' => $deviationModalBreakdownData,
+            ...$siteJson,
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptyDashboardSiteJsonMetrics(): array
+    {
+        return [
+            'peerHazardReportingBySite' => null,
+            'hazardSite' => '__all',
+            'peerHrEvalFromJson' => null,
+            'peerTbcHighBySite' => null,
+            'peerTbcEvalFromJson' => null,
+            'peerTbcBlindspotBySite' => null,
+            'peerTbcBlindEvalFromJson' => null,
+            'peerGoldenRulesBySite' => null,
+            'peerGoldenRulesEvalFromJson' => null,
+            'peerAreaNonKritisBySite' => null,
+            'peerAreaNonKritisEvalFromJson' => null,
+            'peerAreaKritisBySite' => null,
+            'peerAreaKritisEvalFromJson' => null,
+        ];
+    }
+
+    /**
+     * Metrik JSON per site hanya dipakai dashboard / DashPerformance, bukan dashboard-peer.
+     *
+     * @return array<string, mixed>
+     */
+    private function dashboardSiteJsonMetrics(Request $request): array
+    {
         $peerHazardReportingBySite = $this->loadPeerHazardReportingBySite();
         $peerTbcHighBySite = $this->loadPeerTbcHighBySite();
         $peerTbcBlindspotBySite = $this->loadPeerTbcBlindspotBySite();
@@ -158,77 +246,34 @@ class PeerPressureEdukasiController extends Controller
         }
         $hazardSiteReq = (string) $request->query('hazard_site', '__all');
         $hazardSite = in_array($hazardSiteReq, $hazardSiteAllowed, true) ? $hazardSiteReq : '__all';
-        $peerHrEvalFromJson = is_array($peerHazardReportingBySite)
-            ? $this->peerMetricEvalFromJson($peerHazardReportingBySite, $hazardSite, '#d97706', 0)
-            : null;
 
-        $peerTbcEvalFromJson = is_array($peerTbcHighBySite)
-            ? $this->peerMetricEvalFromJson($peerTbcHighBySite, $hazardSite, '#3952bc', 0)
-            : null;
-
-        $peerTbcBlindEvalFromJson = is_array($peerTbcBlindspotBySite)
-            ? $this->peerMetricEvalFromJson($peerTbcBlindspotBySite, $hazardSite, '#16a34a', 0)
-            : null;
-
-        $peerGoldenRulesEvalFromJson = is_array($peerGoldenRulesBySite)
-            ? $this->peerMetricEvalFromJson($peerGoldenRulesBySite, $hazardSite, '#c8102e', 0)
-            : null;
-
-        $peerAreaNonKritisEvalFromJson = is_array($peerAreaNonKritisBySite)
-            ? $this->peerMetricEvalFromJson($peerAreaNonKritisBySite, $hazardSite, '#ea580c', 0)
-            : null;
-
-        $peerAreaKritisEvalFromJson = is_array($peerAreaKritisBySite)
-            ? $this->peerMetricEvalFromJson($peerAreaKritisBySite, $hazardSite, '#dc2626', 0)
-            : null;
-
-        $dashboardView = match (true) {
-            $request->routeIs('peer-pressure-edukasi.dashboard') => 'peer-pressure-edukasi.dashboard',
-            $request->routeIs('peer-pressure-edukasi.dashboard-performance') => 'peer-pressure-edukasi.DashPerformance',
-            $request->routeIs('peer-pressure-edukasi.tematic') => 'peer-pressure-edukasi.tematic',
-            default => 'peer-pressure-edukasi.dashboard-peer',
-        };
-
-        $deviationModalBreakdownData = $deviationModalBreakdown(
-            $chartPeriodMonth ? $chartYear : null,
-            $chartPeriodMonth ? $chartMonth : null
-        );
-
-        return view($dashboardView, [
-            'navActive' => 'overview',
-            'kejadian' => $kejadian,
-            'peerFotoUrls' => $peerFotoUrls,
-            'q' => $q,
-            'kpi' => $kpiData,
-            'peerResourcesAiSummary' => $resourcesDataAiSummary->generate($kpiData),
-            'sitePerformanceBrief' => $sitePerformanceBriefAnalysis->analyze(),
-            'weeklyTrend' => $weeklyTrendData,
-            'chartYear' => $chartYear,
-            'chartMonth' => $chartMonth,
-            'chartPeriodMonth' => $chartPeriodMonth,
-            'evaluationSummary' =>             $evaluationSummary(
-                $chartPeriodMonth ? $chartYear : null,
-                $chartPeriodMonth ? $chartMonth : null
-            ),
-            'insightCards' => $insightCards(
-                $chartPeriodMonth ? $chartYear : null,
-                $chartPeriodMonth ? $chartMonth : null
-            ),
-            'deviationModalBreakdown' => $deviationModalBreakdownData,
+        return [
             'peerHazardReportingBySite' => $peerHazardReportingBySite,
             'hazardSite' => $hazardSite,
-            'peerHrEvalFromJson' => $peerHrEvalFromJson,
+            'peerHrEvalFromJson' => is_array($peerHazardReportingBySite)
+                ? $this->peerMetricEvalFromJson($peerHazardReportingBySite, $hazardSite, '#d97706', 0)
+                : null,
             'peerTbcHighBySite' => $peerTbcHighBySite,
-            'peerTbcEvalFromJson' => $peerTbcEvalFromJson,
+            'peerTbcEvalFromJson' => is_array($peerTbcHighBySite)
+                ? $this->peerMetricEvalFromJson($peerTbcHighBySite, $hazardSite, '#3952bc', 0)
+                : null,
             'peerTbcBlindspotBySite' => $peerTbcBlindspotBySite,
-            'peerTbcBlindEvalFromJson' => $peerTbcBlindEvalFromJson,
+            'peerTbcBlindEvalFromJson' => is_array($peerTbcBlindspotBySite)
+                ? $this->peerMetricEvalFromJson($peerTbcBlindspotBySite, $hazardSite, '#16a34a', 0)
+                : null,
             'peerGoldenRulesBySite' => $peerGoldenRulesBySite,
-            'peerGoldenRulesEvalFromJson' => $peerGoldenRulesEvalFromJson,
+            'peerGoldenRulesEvalFromJson' => is_array($peerGoldenRulesBySite)
+                ? $this->peerMetricEvalFromJson($peerGoldenRulesBySite, $hazardSite, '#c8102e', 0)
+                : null,
             'peerAreaNonKritisBySite' => $peerAreaNonKritisBySite,
-            'peerAreaNonKritisEvalFromJson' => $peerAreaNonKritisEvalFromJson,
+            'peerAreaNonKritisEvalFromJson' => is_array($peerAreaNonKritisBySite)
+                ? $this->peerMetricEvalFromJson($peerAreaNonKritisBySite, $hazardSite, '#ea580c', 0)
+                : null,
             'peerAreaKritisBySite' => $peerAreaKritisBySite,
-            'peerAreaKritisEvalFromJson' => $peerAreaKritisEvalFromJson,
-        ]);
+            'peerAreaKritisEvalFromJson' => is_array($peerAreaKritisBySite)
+                ? $this->peerMetricEvalFromJson($peerAreaKritisBySite, $hazardSite, '#dc2626', 0)
+                : null,
+        ];
     }
 
     /**
