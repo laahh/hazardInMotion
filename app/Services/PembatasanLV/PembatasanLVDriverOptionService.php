@@ -10,16 +10,19 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Autocomplete driver/SID. Sumber logis: view bcsid.bep_vw_wp_karyawan.
+ * Autocomplete driver/SID dari view safety (bukan bep_vw_wp_karyawan).
  *
- * View itu JOIN ke bcsid.m_karyawan (~6GB, tanpa index kode_sid/nama) plus
- * sid_penugasan (meledak jadi ~1.6 juta baris). Tidak dipakai di hot path web.
- * Snapshot cron bcsid.crontable_bep_vw_wp_karyawan (~66MB, kolom view yang sama)
- * di-query dengan prefix match + LIMIT, lalu di-cache singkat per kata kunci.
+ * Sumber: bcsid.bep_vw_safety_karyawan_aktif di database hse_automation
+ * (koneksi pgsql_direct). View ini live, status AKTIF, ~22k baris, dan
+ * punya site_dedicated / departemen yang lebih lengkap dari wp_karyawan.
+ * Cron crontable_bep_vw_m_karyawan_aktif tidak dipakai — snapshot itu
+ * memotong sebagian karyawan aktif.
+ *
+ * Query hanya 6 kolom, prefix ILIKE (tanpa leading %), LIMIT, cache 45 detik.
  */
 class PembatasanLVDriverOptionService
 {
-    private const SOURCE = 'bcsid.crontable_bep_vw_wp_karyawan';
+    private const SOURCE = 'bcsid.bep_vw_safety_karyawan_aktif';
 
     private const MIN_QUERY_LENGTH = 2;
 
@@ -38,7 +41,7 @@ class PembatasanLVDriverOptionService
             return collect();
         }
 
-        $cacheKey = 'pembatasan_lv:driver_options:v1:'.md5(mb_strtolower($q).'|'.$limit);
+        $cacheKey = 'pembatasan_lv:driver_options:v2:'.md5(mb_strtolower($q).'|'.$limit);
 
         try {
             /** @var list<array{id: string, nama: string, kode_sid: string, nik: string, nama_perusahaan: string, site: string, dept: string}> $rows */
@@ -77,9 +80,6 @@ class PembatasanLVDriverOptionService
     }
 
     /**
-     * Prefix ILIKE (tanpa leading %) + LIMIT supaya seq scan 66MB bisa berhenti
-     * setelah cukup kandidat, bukan DISTINCT ON seluruh tabel.
-     *
      * @return list<array{id: string, nama: string, kode_sid: string, nik: string, nama_perusahaan: string, site: string, dept: string}>
      */
     private function queryPrefix(string $q, int $limit): array
@@ -97,7 +97,7 @@ SELECT
     TRIM(nama) AS nama,
     TRIM(COALESCE(nik, '')) AS nik,
     TRIM(COALESCE(nama_perusahaan, '')) AS nama_perusahaan,
-    TRIM(COALESCE(site, '')) AS site,
+    TRIM(COALESCE(site_dedicated, '')) AS site,
     TRIM(COALESCE(departement, '')) AS departement
 FROM {$this->source()}
 WHERE kode_sid IS NOT NULL
@@ -132,7 +132,7 @@ SELECT
     TRIM(nama) AS nama,
     TRIM(COALESCE(nik, '')) AS nik,
     TRIM(COALESCE(nama_perusahaan, '')) AS nama_perusahaan,
-    TRIM(COALESCE(site, '')) AS site,
+    TRIM(COALESCE(site_dedicated, '')) AS site,
     TRIM(COALESCE(departement, '')) AS departement
 FROM {$this->source()}
 WHERE kode_sid = ?
@@ -150,7 +150,7 @@ SELECT
     TRIM(nama) AS nama,
     TRIM(COALESCE(nik, '')) AS nik,
     TRIM(COALESCE(nama_perusahaan, '')) AS nama_perusahaan,
-    TRIM(COALESCE(site, '')) AS site,
+    TRIM(COALESCE(site_dedicated, '')) AS site,
     TRIM(COALESCE(departement, '')) AS departement
 FROM {$this->source()}
 WHERE LOWER(kode_sid) = LOWER(?)
@@ -184,8 +184,6 @@ SQL;
             }
             $seen[$key] = true;
 
-            $departement = trim((string) ($row->departement ?? ''));
-
             $out[] = [
                 'id' => $kodeSid,
                 'nama' => $nama,
@@ -193,7 +191,7 @@ SQL;
                 'nik' => trim((string) ($row->nik ?? '')),
                 'nama_perusahaan' => trim((string) ($row->nama_perusahaan ?? '')),
                 'site' => trim((string) ($row->site ?? '')),
-                'dept' => $departement,
+                'dept' => trim((string) ($row->departement ?? '')),
             ];
 
             if (count($out) >= $limit) {

@@ -89,7 +89,7 @@
                <input type="text" name="sid" id="orang-sid" autocomplete="off" required value="{{ $oldOrang ? old('sid') : '' }}" placeholder="Cari kode SID…" class="plv-orang-combobox-input w-full rounded-xl border border-outline-variant/30 bg-[#f8fafc] px-3 py-2.5 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"/>
                <ul class="plv-orang-combobox-list absolute z-[210] mt-1 hidden max-h-52 w-full overflow-y-auto rounded-xl border border-outline-variant/30 bg-white py-1 shadow-lg"></ul>
             </div>
-            <p class="mt-1 text-[11px] text-on-surface-variant">Data dari bep_vw_wp_karyawan (cari SID, nama, atau NIK — min. 2 karakter)</p>
+            <p class="mt-1 text-[11px] text-on-surface-variant">Data dari bep_vw_safety_karyawan_aktif (cari SID, nama, atau NIK — min. 2 karakter)</p>
          </div>
 
          {{-- Nama (auto) --}}
