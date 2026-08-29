@@ -90,7 +90,7 @@
                <input type="hidden" name="driver_ref" value="{{ $oldLv ? old('driver_ref') : '' }}"/>
                <ul class="plv-combobox-list absolute z-[210] mt-1 hidden max-h-52 w-full overflow-y-auto rounded-xl border border-outline-variant/30 bg-white py-1 shadow-lg"></ul>
             </div>
-            <p class="mt-1 text-[11px] text-on-surface-variant">Data dari Nitip · bep_vw_wp_karyawan (cari nama, SID, atau NIK)</p>
+            <p class="mt-1 text-[11px] text-on-surface-variant">Data dari bep_vw_wp_karyawan (cari nama, SID, atau NIK — min. 2 karakter)</p>
          </div>
 
          {{-- No Unit --}}

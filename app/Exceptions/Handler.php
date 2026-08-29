@@ -87,4 +87,52 @@ class Handler extends ExceptionHandler
     {
         return $request->is('ohs-dashboard/api') || $request->is('ohs-dashboard/api/*');
     }
+
+    /**
+     * Simpan halaman tujuan asli. Jangan timpa dengan /login atau request AJAX,
+     * supaya setelah login user kembali ke konteks yang ingin dibuka.
+     */
+    protected function unauthenticated($request, AuthenticationException $exception)
+    {
+        if ($this->shouldReturnJson($request, $exception) || $this->isOhsDashboardApi($request)) {
+            return response()->json(['message' => $exception->getMessage()], 401);
+        }
+
+        $this->rememberIntendedUrl($request);
+
+        return redirect()->to($exception->redirectTo($request) ?? route('login'));
+    }
+
+    private function rememberIntendedUrl(Request $request): void
+    {
+        if (! $request->isMethod('GET') || $request->expectsJson() || $request->ajax()) {
+            return;
+        }
+
+        $path = '/'.ltrim($request->path(), '/');
+        if ($path === '/login' || str_starts_with($path, '/login/') || $path === '/logout') {
+            return;
+        }
+
+        if (str_contains($path, '/api/') || $request->is('build/*') || $request->is('livewire/*')) {
+            return;
+        }
+
+        $existing = $request->session()->get('url.intended');
+        if (is_string($existing) && $existing !== '' && ! $this->isLoginUrl($existing)) {
+            return;
+        }
+
+        $request->session()->put('url.intended', $request->fullUrl());
+    }
+
+    private function isLoginUrl(string $url): bool
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+        if (! is_string($path) || $path === '') {
+            return false;
+        }
+
+        return $path === '/login' || str_ends_with($path, '/login') || str_contains($path, '/login/');
+    }
 }

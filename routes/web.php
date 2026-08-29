@@ -86,6 +86,11 @@ Route::prefix('emergency-response/api')
 
 Auth::routes();
 
+// URL salah setelah login: /login/maps (dst.) → arahkan ke path yang benar (/maps).
+Route::get('/login/{path}', static function (string $path) {
+    return redirect('/'.ltrim($path, '/'));
+})->where('path', '.*');
+
 // Form publik Auto Banned — tanpa login
 require __DIR__.'/AutoBanned/auto_banned_public.php';
 
@@ -945,5 +950,5 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     // Define a GET route with dynamic placeholders for route parameters
     // HARUS di akhir agar tidak menangkap route spesifik di atas
     Route::get('{routeName}/{name?}', [HomeController::class, 'pageView'])
-        ->where('routeName', '^(?!sid-meeting$|attendance$|hsecm$|ohs-dashboard$).+');
+        ->where('routeName', '^(?!sid-meeting$|attendance$|hsecm$|ohs-dashboard$|login$).+');
 });
