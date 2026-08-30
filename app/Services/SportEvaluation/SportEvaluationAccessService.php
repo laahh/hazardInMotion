@@ -117,6 +117,7 @@ final class SportEvaluationAccessService
             'evaluasi-well.employees.show',
             'evaluasi-well.not-installed.data',
             'evaluasi-well.not-installed.export',
+            'evaluasi-well.install-stats.export',
             'logout',
             'password.confirm',
             'password.update',

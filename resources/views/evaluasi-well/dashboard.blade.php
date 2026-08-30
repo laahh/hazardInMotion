@@ -978,6 +978,11 @@
             ? route('evaluasi-well.mitra.not-installed.data')
             : ($ajaxRoutes['notInstalledData'] ?? route('evaluasi-well.not-installed.data'))
     );
+    var exportUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.install-stats.export')
+            : ($ajaxRoutes['installStatsExport'] ?? route('evaluasi-well.install-stats.export'))
+    );
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
     var mitraMode = @json((bool) ($mitraMode ?? false));
     var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '']);
@@ -1035,6 +1040,8 @@
     var globalInstallEl = document.getElementById('install-global-install');
     var globalApplyBtn = document.getElementById('install-global-apply-btn');
     var globalResetBtn = document.getElementById('install-global-reset-btn');
+    var exportBtnEl = document.getElementById('install-stats-export-btn');
+    var peopleExportBtnEl = document.getElementById('install-people-export-btn');
 
     var dimensionUnit = {
         site: 'site',
@@ -1462,6 +1469,36 @@
         };
     }
 
+    function updateInstallStatsExportHref() {
+        var filters = readGlobalFilters();
+        var params = {
+            dimension: currentDimension || 'site'
+        };
+        if (filters.site) params.site = filters.site;
+        if (filters.division_group) params.division_group = filters.division_group;
+        if (filters.jabatan) params.jabatan = filters.jabatan;
+        if (filters.company) {
+            params.company = filters.company;
+            params.perusahaan = filters.company;
+        }
+        if (filters.departement) params.departement = filters.departement;
+        if (filters.install) params.install = filters.install;
+        if (peopleTable && typeof peopleTable.search === 'function') {
+            var search = peopleTable.search();
+            if (search) {
+                params.search = search;
+            }
+        }
+
+        var href = appendQuery(exportUrl, params);
+        if (exportBtnEl) {
+            exportBtnEl.setAttribute('href', href);
+        }
+        if (peopleExportBtnEl) {
+            peopleExportBtnEl.setAttribute('href', href);
+        }
+    }
+
     function filtersCacheKey(filters) {
         return [
             filters.site || '',
@@ -1642,6 +1679,10 @@
             if (peopleTotalBadge) {
                 peopleTotalBadge.textContent = formatNumber(peopleTable.page.info().recordsDisplay || 0);
             }
+            updateInstallStatsExportHref();
+        });
+        peopleTable.on('search.dt', function () {
+            updateInstallStatsExportHref();
         });
 
         return peopleTable;
@@ -1829,11 +1870,13 @@
         renderTable(payload);
         ensurePeopleTable();
         reloadPeopleTable();
+        updateInstallStatsExportHref();
     }
 
     function loadDimension(dimension) {
         currentDimension = dimension;
         highlightOverview(dimension);
+        updateInstallStatsExportHref();
 
         var filters = readGlobalFilters();
         var key = dimension + '::' + filtersCacheKey(filters);
@@ -2645,6 +2688,7 @@
     'notInstalledData' => route('evaluasi-well.not-installed.data'),
     'notInstalledExport' => route('evaluasi-well.not-installed.export'),
     'installStats' => route('evaluasi-well.install-stats'),
+    'installStatsExport' => route('evaluasi-well.install-stats.export'),
     'activeStats' => route('evaluasi-well.active-stats'),
     'index' => route('evaluasi-well.index'),
   ];

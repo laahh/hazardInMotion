@@ -212,6 +212,149 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
+     * Export Excel modal Detail Total User Install: ringkasan dimensi + daftar karyawan.
+     */
+    public function installStatsExport(Request $request): JsonResponse
+    {
+        $this->ensureMitraAssignmentScope($request);
+
+        if (! $this->connection->isUp()) {
+            return response()->json(['message' => 'Koneksi BeWell tidak tersedia.'], 503);
+        }
+
+        try {
+            $dimension = is_string($request->input('dimension'))
+                ? $request->input('dimension')
+                : 'site';
+
+            $filters = $this->installStatsService->normalizeFilters([
+                'site' => $request->input('site'),
+                'division_group' => $request->input('division_group', $request->input('division')),
+                'jabatan' => $request->input('jabatan', $request->input('jabatan_fungsional')),
+                'company' => $request->input('company'),
+                'departement' => $request->input('departement'),
+                'install' => $request->input('install'),
+            ]);
+
+            $stats = $this->installStatsService->getStats($dimension, $filters);
+            $dimensionLabel = (string) ($stats['dimension_label'] ?? 'Site');
+            $summary = is_array($stats['summary'] ?? null) ? $stats['summary'] : [];
+            $rows = is_array($stats['rows'] ?? null) ? $stats['rows'] : [];
+
+            $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
+                $dimensionLabel,
+                'Total',
+                'Sudah Install',
+                'Belum Install',
+                'Adoption (%)',
+            ]);
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Ringkasan');
+
+            $rowNum = 2;
+            foreach ($rows as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+                $sheet->fromArray([
+                    (string) ($row['name'] ?? '-'),
+                    (int) ($row['total'] ?? 0),
+                    (int) ($row['installed'] ?? 0),
+                    (int) ($row['not_installed'] ?? 0),
+                    (float) ($row['pct'] ?? 0),
+                ], null, 'A'.$rowNum);
+                $rowNum++;
+            }
+
+            $sheet->fromArray([
+                'Total',
+                (int) ($summary['total'] ?? 0),
+                (int) ($summary['installed'] ?? 0),
+                (int) ($summary['not_installed'] ?? 0),
+                (float) ($summary['adoption_pct'] ?? 0),
+            ], null, 'A'.$rowNum);
+
+            $employeeFilters = $this->readNotInstalledFilters($request);
+            if ($employeeFilters['jabatan_fungsional'] === '' && $filters['jabatan'] !== '') {
+                $employeeFilters['jabatan_fungsional'] = $filters['jabatan'];
+            }
+            if ($employeeFilters['division_group'] === '' && $filters['division_group'] !== '') {
+                $employeeFilters['division_group'] = $filters['division_group'];
+            }
+            if ($employeeFilters['company'] === '' && $filters['company'] !== '') {
+                $employeeFilters['company'] = $filters['company'];
+            }
+            if ($employeeFilters['site'] === '' && $filters['site'] !== '') {
+                $employeeFilters['site'] = $filters['site'];
+            }
+            if ($employeeFilters['departement'] === '' && $filters['departement'] !== '') {
+                $employeeFilters['departement'] = $filters['departement'];
+            }
+            if ($employeeFilters['install'] === '' && $filters['install'] !== '') {
+                $employeeFilters['install'] = $filters['install'];
+            }
+
+            $search = trim((string) $request->query('search', ''));
+            $week = $this->currentWeekRange();
+            $employees = $this->appendEmployeeStatusSelects(
+                $this->applyNotInstalledFilters(
+                    $this->activeEmployeesBaseQuery(),
+                    $employeeFilters,
+                    $search,
+                    $week['start'],
+                    $week['end'],
+                ),
+                $week['start'],
+                $week['end'],
+            )
+                ->orderBy('e.nama')
+                ->get();
+
+            $employeeSheet = SpreadsheetExporter::addSheetWithHeaders($spreadsheet, 'Karyawan', [
+                'No',
+                'Nama',
+                'Kode SID',
+                'Site',
+                'Perusahaan',
+                'Departemen',
+                'Divisi',
+                'Jabatan Fungsional',
+                'Install',
+            ]);
+
+            $empRow = 2;
+            foreach ($employees as $index => $employee) {
+                $employeeSheet->fromArray([
+                    $index + 1,
+                    (string) ($employee->nama ?: '-'),
+                    (string) ($employee->kode_sid ?: '-'),
+                    $this->siteResolver->resolveOrDash(
+                        isset($employee->kode_sid) ? (string) $employee->kode_sid : null,
+                        isset($employee->site) ? (string) $employee->site : null,
+                    ),
+                    (string) (trim((string) ($employee->nama_perusahaan ?? '')) !== '' ? $employee->nama_perusahaan : '-'),
+                    (string) (trim((string) ($employee->departement ?? '')) !== '' ? $employee->departement : '-'),
+                    (string) (trim((string) ($employee->divisi ?? '')) !== '' ? $employee->divisi : '-'),
+                    (string) (trim((string) ($employee->jabatan_fungsional ?? '')) !== '' ? $employee->jabatan_fungsional : '-'),
+                    (int) ($employee->is_installed ?? 0) === 1 ? 'Sudah' : 'Belum',
+                ], null, 'A'.$empRow);
+                $empRow++;
+            }
+
+            $spreadsheet->setActiveSheetIndex(0);
+
+            SpreadsheetExporter::download(
+                $spreadsheet,
+                'evaluasi_well_detail_install_'.date('Y-m-d_His').'.xlsx'
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => 'Gagal mengekspor data install.'], 500);
+        }
+    }
+
+    /**
      * Detail statistik user aktif per dimensi (site / perusahaan / jabatan) + leaderboard.
      */
     public function activeStats(Request $request): JsonResponse

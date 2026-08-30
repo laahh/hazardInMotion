@@ -9,7 +9,13 @@
             Sudah Install mengikuti KPI kartu (tanpa filter). Filter global mengubah seluruh ringkasan; Divisi digabung per grup sejenis.
           </p>
         </div>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+          <a id="install-stats-export-btn" href="{{ ($ajaxRoutes['installStatsExport'] ?? route('evaluasi-well.install-stats.export')) }}" class="btn btn-sm btn-success-600 d-inline-flex align-items-center gap-1">
+            <iconify-icon icon="solar:file-download-bold" class="icon"></iconify-icon>
+            Download Excel
+          </a>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+        </div>
       </div>
 
       <div class="modal-body p-24 position-relative">
@@ -228,7 +234,13 @@
                   Mengikuti filter global di atas
                 </span>
               </div>
-              <span id="install-people-total-badge" class="bg-primary-50 text-primary-600 text-sm fw-medium px-12 py-2 rounded-pill">0</span>
+              <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                <span id="install-people-total-badge" class="bg-primary-50 text-primary-600 text-sm fw-medium px-12 py-2 rounded-pill">0</span>
+                <a id="install-people-export-btn" href="{{ ($ajaxRoutes['installStatsExport'] ?? route('evaluasi-well.install-stats.export')) }}" class="btn btn-sm btn-success-600 d-inline-flex align-items-center gap-1">
+                  <iconify-icon icon="solar:file-download-bold" class="icon"></iconify-icon>
+                  Download Excel
+                </a>
+              </div>
             </div>
 
             <div class="p-16">

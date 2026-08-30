@@ -143,6 +143,22 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
         return parent::installStats($request);
     }
 
+    public function installStatsExport(Request $request): JsonResponse
+    {
+        $scope = $this->requireScopeOrEmpty($request);
+        if ($scope === null) {
+            return response()->json(['message' => 'Scope mitra belum dipilih.'], 422);
+        }
+
+        $this->applyForcedIndexFilters($scope);
+        $request->merge([
+            'site' => $scope['site'],
+            'company' => $scope['perusahaan'],
+        ]);
+
+        return parent::installStatsExport($request);
+    }
+
     public function activeStats(Request $request): JsonResponse
     {
         $scope = $this->requireScopeOrEmpty($request);
@@ -223,6 +239,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
      *     notInstalledData:string,
      *     notInstalledExport:string,
      *     installStats:string,
+     *     installStatsExport:string,
      *     activeStats:string,
      *     index:string
      * }
@@ -234,6 +251,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
             'notInstalledData' => route('evaluasi-well.mitra.not-installed.data'),
             'notInstalledExport' => route('evaluasi-well.mitra.not-installed.export'),
             'installStats' => route('evaluasi-well.mitra.install-stats'),
+            'installStatsExport' => route('evaluasi-well.mitra.install-stats.export'),
             'activeStats' => route('evaluasi-well.mitra.active-stats'),
             'index' => route('evaluasi-well.mitra.index'),
         ];
