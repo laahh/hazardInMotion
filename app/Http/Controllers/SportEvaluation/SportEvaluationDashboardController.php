@@ -6,6 +6,7 @@ namespace App\Http\Controllers\SportEvaluation;
 
 use App\Http\Controllers\Controller;
 use App\Services\SportEvaluation\BewellConnectionService;
+use App\Services\SportEvaluation\SportEvaluationAccessService;
 use App\Services\SportEvaluation\SportEvaluationActiveStatsService;
 use App\Services\SportEvaluation\SportEvaluationCompanyAliasResolver;
 use App\Services\SportEvaluation\SportEvaluationDivisiGroupResolver;
@@ -47,6 +48,7 @@ class SportEvaluationDashboardController extends Controller
         private readonly SportEvaluationMitraAssignmentService $mitraAssignmentService,
         private readonly SportEvaluationCompanyAliasResolver $companyAliasResolver,
         private readonly SportEvaluationEmployeeExclusionRules $exclusionRules,
+        protected readonly SportEvaluationAccessService $accessService,
     ) {}
 
     public function index(Request $request): View
@@ -276,6 +278,7 @@ class SportEvaluationDashboardController extends Controller
      */
     public function notInstalledData(Request $request): JsonResponse
     {
+        $this->ensureMitraAssignmentScope($request);
         $draw = (int) $request->input('draw', 1);
 
         if (! $this->connection->isUp()) {
@@ -375,8 +378,7 @@ class SportEvaluationDashboardController extends Controller
                 'recordsTotal' => 0,
                 'recordsFiltered' => 0,
                 'data' => [],
-                'error' => 'Gagal memuat data karyawan.',
-            ], 500);
+            ]);
         }
     }
 
@@ -385,6 +387,7 @@ class SportEvaluationDashboardController extends Controller
      */
     public function notInstalledExport(Request $request): JsonResponse
     {
+        $this->ensureMitraAssignmentScope($request);
         if (! $this->connection->isUp()) {
             return response()->json(['message' => 'Koneksi BeWell tidak tersedia.'], 503);
         }
@@ -1173,7 +1176,7 @@ class SportEvaluationDashboardController extends Controller
             $employeesQuery = $db->table('employee_profiles as e')
                 ->where('e.status_karyawan', 'AKTIF');
             $this->exclusionRules->applyToQuery($employeesQuery);
-            $this->mitraAssignmentService->applyScopeToEmployeeQuery($employeesQuery, $this->indexFilters);
+            $this->applyScopedUserIds($employeesQuery, 'e.id');
             $employees = $employeesQuery->get(['e.kode_sid', 'e.site']);
 
             $siteTotalEmployees = $employees->count();
@@ -1506,7 +1509,7 @@ class SportEvaluationDashboardController extends Controller
             ->where('e.status_karyawan', 'AKTIF');
 
         $this->exclusionRules->applyToQuery($query);
-        $this->mitraAssignmentService->applyScopeToEmployeeQuery($query, $this->indexFilters);
+        $this->applyScopedUserIds($query, 'e.id');
 
         return $query;
     }
@@ -1601,10 +1604,14 @@ class SportEvaluationDashboardController extends Controller
         string $weekStart = '',
         string $weekEnd = '',
     ): Builder {
-        if ($filters['site'] !== '') {
+        $scopedSite = trim((string) ($this->indexFilters['site'] ?? ''));
+        $scopedCompany = trim((string) ($this->indexFilters['perusahaan'] ?? ''));
+
+        // Jangan double-apply site/perusahaan: indexFilters sudah membatasi via ID.
+        if ($filters['site'] !== '' && $scopedSite === '') {
             $this->siteResolver->applySiteFilter($query, $filters['site']);
         }
-        if ($filters['company'] !== '') {
+        if ($filters['company'] !== '' && $scopedCompany === '') {
             $names = $this->companyAliasResolver->matchingRawNames($filters['company']);
             if ($names === []) {
                 $names = [$filters['company']];
@@ -1730,6 +1737,35 @@ class SportEvaluationDashboardController extends Controller
         }
 
         return $query;
+    }
+
+    /**
+     * User Mitra Kerja: kunci query ke assignment meskipun AJAX mengenai
+     * endpoint dashboard global (bukan /mitra/...). Manager tidak di-kunci.
+     */
+    protected function ensureMitraAssignmentScope(Request $request): void
+    {
+        if ($this->hasIndexScope()) {
+            return;
+        }
+
+        $user = $request->user();
+        if ($user === null || $this->accessService->isMitraManager($user)) {
+            return;
+        }
+
+        $scope = $this->mitraAssignmentService->scopeFromAssignment(
+            $this->mitraAssignmentService->findActiveForUser((int) $user->id)
+        );
+        if ($scope === null) {
+            return;
+        }
+
+        $this->applyForcedIndexFilters($scope);
+        $request->merge([
+            'site' => $scope['site'],
+            'company' => $scope['perusahaan'],
+        ]);
     }
 
     /**

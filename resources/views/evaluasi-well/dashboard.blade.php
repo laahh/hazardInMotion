@@ -669,10 +669,22 @@
         return;
     }
 
+    if (DataTable.ext) {
+        DataTable.ext.errMode = 'none';
+    }
+
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
-    var dataUrl = @json($ajaxRoutes['notInstalledData'] ?? route('evaluasi-well.not-installed.data'));
-    var exportUrl = @json($ajaxRoutes['notInstalledExport'] ?? route('evaluasi-well.not-installed.export'));
     var mitraMode = @json((bool) ($mitraMode ?? false));
+    var dataUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.not-installed.data')
+            : ($ajaxRoutes['notInstalledData'] ?? route('evaluasi-well.not-installed.data'))
+    );
+    var exportUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.not-installed.export')
+            : ($ajaxRoutes['notInstalledExport'] ?? route('evaluasi-well.not-installed.export'))
+    );
     var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '']);
 
     var siteEl = document.querySelector('#not-installed-site');
@@ -785,6 +797,10 @@
         ],
         ajax: {
             url: dataUrl,
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
             data: function (d) {
                 var filters = currentFilters();
                 d.site = filters.site;
@@ -797,6 +813,11 @@
                 d.jabatan_fungsional = filters.jabatan_fungsional;
                 d.install = filters.install;
                 d.user_aktif = filters.user_aktif;
+            },
+            error: function (xhr, error) {
+                if (typeof console !== 'undefined' && console.error) {
+                    console.error('Status Install Karyawan: gagal memuat data', error, xhr && xhr.status);
+                }
             }
         },
         columns: [
@@ -947,8 +968,16 @@
         return;
     }
 
-    var dataUrl = @json($ajaxRoutes['installStats'] ?? route('evaluasi-well.install-stats'));
-    var peopleDataUrl = @json($ajaxRoutes['notInstalledData'] ?? route('evaluasi-well.not-installed.data'));
+    var dataUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.install-stats')
+            : ($ajaxRoutes['installStats'] ?? route('evaluasi-well.install-stats'))
+    );
+    var peopleDataUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.not-installed.data')
+            : ($ajaxRoutes['notInstalledData'] ?? route('evaluasi-well.not-installed.data'))
+    );
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
     var mitraMode = @json((bool) ($mitraMode ?? false));
     var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '']);
@@ -1948,7 +1977,11 @@
         return;
     }
 
-    var dataUrl = @json($ajaxRoutes['activeStats'] ?? route('evaluasi-well.active-stats'));
+    var dataUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.active-stats')
+            : ($ajaxRoutes['activeStats'] ?? route('evaluasi-well.active-stats'))
+    );
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
     var mitraMode = @json((bool) ($mitraMode ?? false));
     var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '']);

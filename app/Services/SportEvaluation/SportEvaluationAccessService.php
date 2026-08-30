@@ -115,6 +115,8 @@ final class SportEvaluationAccessService
 
         return in_array($routeName, [
             'evaluasi-well.employees.show',
+            'evaluasi-well.not-installed.data',
+            'evaluasi-well.not-installed.export',
             'logout',
             'password.confirm',
             'password.update',

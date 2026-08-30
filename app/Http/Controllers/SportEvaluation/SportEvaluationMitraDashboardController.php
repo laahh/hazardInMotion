@@ -32,7 +32,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
         SportEvaluationMitraAssignmentService $mitraAssignmentService,
         SportEvaluationCompanyAliasResolver $companyAliasResolver,
         SportEvaluationEmployeeExclusionRules $exclusionRules,
-        private readonly SportEvaluationAccessService $accessService,
+        SportEvaluationAccessService $accessService,
         private readonly SportEvaluationMitraAssignmentService $assignmentService,
     ) {
         parent::__construct(
@@ -44,6 +44,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
             $mitraAssignmentService,
             $companyAliasResolver,
             $exclusionRules,
+            $accessService,
         );
     }
 
@@ -172,9 +173,15 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
 
     public function notInstalledData(Request $request): JsonResponse
     {
+        $draw = (int) $request->input('draw', 1);
         $scope = $this->requireScopeOrEmpty($request);
         if ($scope === null) {
-            return response()->json(['data' => [], 'recordsTotal' => 0, 'recordsFiltered' => 0]);
+            return response()->json([
+                'draw' => $draw,
+                'data' => [],
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+            ]);
         }
 
         $this->applyForcedIndexFilters($scope);

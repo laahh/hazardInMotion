@@ -197,24 +197,12 @@ final class SportEvaluationMitraAssignmentService
         $site = trim((string) ($scope['site'] ?? ''));
         $company = trim((string) ($scope['perusahaan'] ?? $scope['company'] ?? ''));
 
-        if ($site !== '') {
-            $this->siteResolver->applySiteFilter($query, $site);
+        if ($company !== '') {
+            $this->applyCompanyFilter($query, $company);
         }
 
-        if ($company !== '') {
-            $names = $this->companyAliasResolver->matchingRawNames($company);
-            if ($names === []) {
-                $names = [$company];
-            }
-            $normalized = array_map(
-                static fn (string $name): string => mb_strtoupper(trim($name)),
-                $names
-            );
-            $placeholders = implode(',', array_fill(0, count($normalized), '?'));
-            $query->whereRaw(
-                'UPPER(TRIM(COALESCE(e.nama_perusahaan, \'\'))) IN ('.$placeholders.')',
-                $normalized
-            );
+        if ($site !== '') {
+            $this->siteResolver->applySiteFilter($query, $site);
         }
 
         return $query;
@@ -249,11 +237,40 @@ final class SportEvaluationMitraAssignmentService
         }
 
         try {
+            $site = trim((string) ($scope['site'] ?? ''));
+            $company = trim((string) ($scope['perusahaan'] ?? $scope['company'] ?? ''));
+
             $query = DB::connection(BewellConnectionService::CONNECTION)
                 ->table('employee_profiles as e')
-                ->select('e.id');
+                ->select(['e.id', 'e.kode_sid', 'e.site']);
 
-            $this->applyScopeToEmployeeQuery($query, $scope);
+            // Perusahaan dulu (set kecil) lalu resolve site di PHP — hindari
+            // WHERE kode_sid IN/NOT IN ribuan SID yang bikin query timeout
+            // (DataTables Ajax error tn/7) lewat tunnel bewell_db.
+            if ($company !== '') {
+                $this->applyCompanyFilter($query, $company);
+
+                $ids = [];
+                foreach ($query->get() as $row) {
+                    if ($site !== '') {
+                        $resolved = $this->siteResolver->resolve(
+                            isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                            isset($row->site) ? (string) $row->site : null,
+                        );
+                        if ($resolved !== $site) {
+                            continue;
+                        }
+                    }
+
+                    $ids[] = (int) $row->id;
+                }
+
+                $this->scopedIdsCache[$cacheKey] = $ids;
+
+                return $ids;
+            }
+
+            $this->siteResolver->applySiteFilter($query, $site);
 
             $ids = $query
                 ->pluck('e.id')
@@ -308,6 +325,26 @@ final class SportEvaluationMitraAssignmentService
             'site' => $site,
             'perusahaan' => $perusahaan,
         ];
+    }
+
+    /**
+     * Filter employee_profiles (alias e) berdasarkan nama perusahaan + alias.
+     */
+    private function applyCompanyFilter(Builder $query, string $company): void
+    {
+        $names = $this->companyAliasResolver->matchingRawNames($company);
+        if ($names === []) {
+            $names = [$company];
+        }
+        $normalized = array_map(
+            static fn (string $name): string => mb_strtoupper(trim($name)),
+            $names
+        );
+        $placeholders = implode(',', array_fill(0, count($normalized), '?'));
+        $query->whereRaw(
+            'UPPER(TRIM(COALESCE(e.nama_perusahaan, \'\'))) IN ('.$placeholders.')',
+            $normalized
+        );
     }
 
     private function canonicalCompany(string $company): string
