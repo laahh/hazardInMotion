@@ -1,0 +1,281 @@
+/* HUD terang di atas peta satelit — tidak mengubah tile peta. */
+
+.page-app {
+  --hud-bg: rgba(255, 255, 255, .94);
+  --hud-bg-soft: rgba(248, 250, 249, .96);
+  --hud-line: rgba(15, 23, 20, .12);
+  --hud-ink: #152018;
+  --hud-muted: #5c6660;
+  --hud-green: #3d8c2a;
+  --hud-green-soft: rgba(61, 140, 42, .12);
+}
+
+.page-app .topbar {
+  background: var(--hud-bg);
+  border-bottom: 1px solid var(--hud-line);
+  box-shadow: 0 8px 28px rgba(15, 23, 20, .08);
+}
+
+.page-app .brand,
+.page-app .brand span {
+  color: var(--hud-ink);
+}
+
+.page-app .brand i {
+  color: #7a847e;
+}
+
+.page-app .desktop-nav {
+  color: var(--hud-muted);
+}
+
+.page-app .desktop-nav a:hover,
+.page-app .desktop-nav a.active {
+  color: var(--hud-green);
+}
+
+.page-app .desktop-nav a.active:after {
+  background: var(--hud-green);
+}
+
+.page-app .mobile-menu summary {
+  color: var(--hud-ink);
+}
+
+.page-app .mobile-menu nav {
+  background: #fff;
+  border-color: var(--hud-line);
+  box-shadow: 0 16px 40px rgba(15, 23, 20, .12);
+}
+
+.page-app .mobile-menu nav a {
+  color: var(--hud-ink);
+}
+
+.page-app .list-card {
+  color: var(--hud-ink);
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-line);
+  box-shadow: 0 18px 48px rgba(15, 23, 20, .14);
+}
+
+.page-app .list-card h1 {
+  color: var(--hud-ink);
+}
+
+.page-app .list-card .lead {
+  color: var(--hud-muted);
+}
+
+.page-app .list-card .eyebrow {
+  color: var(--hud-green);
+}
+
+.page-app .ghost-chip {
+  color: var(--hud-muted);
+  border-color: var(--hud-line);
+  background: #f4f6f5;
+}
+
+.page-app .alert-chip {
+  color: #b42318;
+  background: #fff4f2;
+  border-color: rgba(180, 35, 24, .28);
+}
+
+.page-app .day-summary article {
+  background: var(--hud-bg-soft);
+  border-color: var(--hud-line);
+}
+
+.page-app .day-summary small {
+  color: var(--hud-muted);
+}
+
+.page-app .day-summary strong {
+  color: var(--hud-green);
+}
+
+.page-app .scope-tabs {
+  border-color: var(--hud-line);
+  background: #f4f6f5;
+}
+
+.page-app .scope-tabs button {
+  color: var(--hud-muted);
+  border-right-color: var(--hud-line);
+}
+
+.page-app .scope-tabs button.is-on,
+.page-app .scope-tabs button:hover {
+  background: var(--hud-green);
+  color: #fff;
+}
+
+.page-app .list-meta {
+  color: var(--hud-muted);
+}
+
+.page-app .list-meta strong {
+  color: var(--hud-green);
+}
+
+.page-app .refresh-btn {
+  background: #fff;
+  border-color: var(--hud-line);
+  color: var(--hud-green);
+}
+
+.page-app .refresh-btn:hover {
+  background: var(--hud-green-soft);
+}
+
+.page-app .hotspot-list::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 20, .18);
+}
+
+.page-app .hotspot-item {
+  background: #fff;
+  border-color: var(--hud-line);
+  color: var(--hud-ink);
+}
+
+.page-app .hotspot-item:hover,
+.page-app .hotspot-item.is-on {
+  border-color: rgba(61, 140, 42, .45);
+  background: #f3faf0;
+}
+
+.page-app .hotspot-item .meta {
+  color: var(--hud-muted);
+}
+
+.page-app .badge.tinggi {
+  color: #b42318;
+  background: #fff4f2;
+  border-color: rgba(180, 35, 24, .28);
+}
+
+.page-app .badge.sedang {
+  color: #b54708;
+  background: #fff8eb;
+  border-color: rgba(181, 71, 8, .28);
+}
+
+.page-app .badge.rendah {
+  color: var(--hud-green);
+  background: var(--hud-green-soft);
+  border-color: rgba(61, 140, 42, .32);
+}
+
+.page-app .layer-switch,
+.page-app .zoom-switch {
+  background: var(--hud-bg);
+  border-color: var(--hud-line);
+  box-shadow: 0 10px 28px rgba(15, 23, 20, .1);
+}
+
+.page-app .layer-switch button,
+.page-app .zoom-switch button {
+  color: var(--hud-muted);
+  border-right-color: var(--hud-line);
+}
+
+.page-app .layer-switch button.is-on,
+.page-app .layer-switch button:hover,
+.page-app .zoom-switch button:hover {
+  background: var(--hud-green);
+  color: #fff;
+}
+
+.page-app .detail-card-wrap {
+  color: var(--hud-ink);
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-line);
+  box-shadow: 0 18px 48px rgba(15, 23, 20, .14);
+}
+
+.page-app .detail-empty small,
+.page-app .detail-card small,
+.page-app .detail-card .detail-section {
+  color: var(--hud-green);
+}
+
+.page-app .detail-empty p,
+.page-app .detail-card h2 {
+  color: var(--hud-ink);
+}
+
+.page-app .detail-card .lead-mini {
+  color: var(--hud-muted);
+}
+
+.page-app .detail-grid div {
+  background: var(--hud-bg-soft);
+  border-color: var(--hud-line);
+}
+
+.page-app .detail-grid span {
+  color: var(--hud-muted);
+}
+
+.page-app .detail-actions .ghost {
+  border-color: var(--hud-line);
+  background: #fff;
+  color: var(--hud-ink);
+}
+
+.page-app .metric-panel,
+.page-app .map-legend-bar {
+  background: var(--hud-bg);
+  border-color: var(--hud-line);
+  box-shadow: 0 12px 36px rgba(15, 23, 20, .12);
+}
+
+.page-app .metric-panel article,
+.page-app .map-legend-bar article {
+  border-right-color: var(--hud-line);
+}
+
+.page-app .metric-panel small,
+.page-app .map-legend-bar small {
+  color: var(--hud-muted);
+}
+
+.page-app .metric-panel p,
+.page-app .map-legend-bar p,
+.page-app .metric-panel strong,
+.page-app .map-legend-bar strong {
+  color: var(--hud-ink);
+}
+
+.page-app .leaflet-popup-content-wrapper,
+.page-app .leaflet-popup-tip {
+  background: #fff;
+  color: var(--hud-ink);
+  border: 1px solid var(--hud-line);
+}
+
+.page-app .leaflet-bar a {
+  background: #fff;
+  color: var(--hud-ink);
+  border-bottom-color: var(--hud-line);
+}
+
+.page-app .date-chip {
+  background: #fff;
+  border-color: var(--hud-line);
+  color: var(--hud-ink);
+}
+
+.page-app .date-chip.is-on,
+.page-app .date-chip:hover {
+  background: var(--hud-green);
+  border-color: var(--hud-green);
+  color: #fff;
+}
+
+.page-app .date-chip.is-on i,
+.page-app .date-chip:hover i {
+  color: rgba(255, 255, 255, .82);
+}

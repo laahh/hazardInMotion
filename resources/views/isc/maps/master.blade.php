@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="{{ asset('isc-assets/karhutla-styles.css') }}">
   <link rel="stylesheet" href="{{ asset('isc-assets/karhutla-maps.css') }}">
+  <link rel="stylesheet" href="{{ asset('isc-assets/isc-hud-light.css') }}">
   @yield('css')
 </head>
 <body class="page-app">
