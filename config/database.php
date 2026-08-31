@@ -237,7 +237,7 @@ return [
                 PDO::ATTR_TIMEOUT => (int) env('BESIGMA_DB_CONNECT_TIMEOUT', 3),
             ]) : [],
             // SSH Tunnel Configuration (setup-ssh-tunnel-besigma.bat — dibuka manual)
-            'ssh_host' => env('BESIGMA_SSH_HOST', '13.250.29.29'),
+            'ssh_host' => env('BESIGMA_SSH_HOST', '52.74.245.15'),
             'ssh_port' => env('BESIGMA_SSH_PORT', 22),
             'ssh_user' => env('BESIGMA_SSH_USER', 'ubuntu'),
             'ssh_pkey' => env('BESIGMA_SSH_PKEY', public_path('bsigma-jumpserver.pem')),
