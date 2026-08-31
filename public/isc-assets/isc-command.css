@@ -17,10 +17,28 @@
 html, body {
   margin: 0;
   min-height: 100%;
+  height: 100%;
   background: var(--isc-bg);
   color: var(--isc-text);
   font-family: var(--isc-font);
 }
+
+body.page-isc-full {
+  overflow: hidden;
+  height: 100%;
+  background: #0b0908;
+}
+
+.isc-map-full {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 1;
+}
+
+.leaflet-container { font-family: var(--isc-font); background: #1a1411; }
 
 body.page-isc {
   background:
