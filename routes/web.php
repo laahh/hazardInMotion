@@ -52,6 +52,7 @@ use App\Http\Controllers\PeerPressureSbsKelompokController;
 use App\Http\Controllers\PeerPressureSpeakUpFatigueController;
 use App\Http\Controllers\PeerPressureValidasiTbcController;
 use App\Http\Controllers\PeerPressureBerecordTableController;
+use App\Http\Controllers\OakCcvDashboardController;
 use App\Http\Controllers\UnitMtdController;
 
 /*
@@ -273,6 +274,8 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     Route::get('/peer-pressure-edukasi/dashboard-performance', [PeerPressureEdukasiController::class, 'dashboard'])->name('peer-pressure-edukasi.dashboard-performance');
     Route::get('/peer-pressure-edukasi/tematic', [PeerPressureEdukasiController::class, 'dashboard'])->name('peer-pressure-edukasi.tematic');
     Route::get('/peer-pressure-edukasi/dashboard-peer', [PeerPressureEdukasiController::class, 'dashboard'])->name('peer-pressure-edukasi.dashboard-peer');
+
+    Route::get('/oak-ccv/dashboard', [OakCcvDashboardController::class, 'dashboard'])->name('oak-ccv.dashboard');
     Route::get('/peer-pressure-edukasi/dashboard-risk-score', function () {
         return view('peer-pressure-edukasi.RiskScoreSite');
     })->name('peer-pressure-edukasi.dashboard-risk-score');
@@ -944,6 +947,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     require __DIR__ . '/DopSafety/dop-safety.php';
     require __DIR__ . '/MonitoringSafetyEngineering/monitoring-safety-engineering.php';
     require __DIR__ . '/EvaluasiWell/evaluasi-well.php';
+    require __DIR__ . '/Besigma/besigma.php';
     require __DIR__ . '/DwhRedshift/dwh-redshift.php';
 
 

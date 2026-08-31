@@ -384,6 +384,14 @@
               <li><a href="{{ route('evaluasi-well.activities.index') }}"><i class="material-icons-outlined">arrow_right</i>Detail Aktivitas</a></li>
             </ul>
           </li>
+          <li class="menu-label">Besigma</li>
+          <li>
+            <a href="{{ route('besigma.connection-test') }}">
+              <div class="parent-icon"><i class="material-icons-outlined">vpn_lock</i>
+              </div>
+              <div class="menu-title">Tes Koneksi Jumphost</div>
+            </a>
+          </li>
           @endif
            
        

@@ -234,8 +234,9 @@ return [
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                PDO::ATTR_TIMEOUT => (int) env('BESIGMA_DB_CONNECT_TIMEOUT', 3),
             ]) : [],
-            // SSH Tunnel Configuration
+            // SSH Tunnel Configuration (setup-ssh-tunnel-besigma.bat — dibuka manual)
             'ssh_host' => env('BESIGMA_SSH_HOST', '13.250.29.29'),
             'ssh_port' => env('BESIGMA_SSH_PORT', 22),
             'ssh_user' => env('BESIGMA_SSH_USER', 'ubuntu'),
