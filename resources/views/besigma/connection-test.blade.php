@@ -14,7 +14,7 @@
     <i class="material-icons-outlined">{{ $connected ? 'check_circle' : 'error_outline' }}</i>
     <div>
         @if ($connected)
-            <strong>Koneksi berhasil.</strong> Jumphost Besigma hidup; Laravel masuk ke database lewat <code>127.0.0.1:{{ $tunnel['local_port'] ?? 3307 }}</code>.
+            <strong>Koneksi berhasil.</strong> Laravel masuk ke Besigma lewat <code>{{ ($tunnel['local_host'] ?? '127.0.0.1').':'.($tunnel['local_port'] ?? 3307) }}</code>.
         @else
             <strong>Koneksi gagal.</strong> {{ $probe['error'] ?? 'Tidak dapat terhubung ke besigma_db.' }}
             @if (!empty($probe['hint']))
@@ -44,7 +44,7 @@
                             </td>
                         </tr>
                         <tr>
-                            <th>TCP tunnel (localhost)</th>
+                            <th>TCP ke host Laravel</th>
                             <td>{{ ($probe['tcp_reachable'] ?? false) ? 'Terbuka' : 'Tidak merespons' }}</td>
                         </tr>
                         <tr>
@@ -110,8 +110,10 @@
                         </tr>
                     </tbody>
                 </table>
-                <p class="text-muted small mb-2">Jalankan script ini dulu, biarkan window terbuka:</p>
-                <pre class="bg-light p-3 rounded small mb-0">setup-ssh-tunnel-besigma.bat</pre>
+                <p class="text-muted small mb-2">App server tidak tembus MySQL langsung. Di Linux, buka tunnel lalu arahkan Laravel ke localhost:</p>
+                <pre class="bg-light p-3 rounded small mb-0">bash setup-ssh-tunnel-besigma.sh
+BESIGMA_DB_HOST=127.0.0.1
+BESIGMA_DB_PORT=3307</pre>
             </div>
         </div>
     </div>

@@ -111,17 +111,21 @@ final class BesigmaConnectionService
             'tunnel' => $tunnel,
         ];
 
+        $usesLoopback = in_array($tunnel['local_host'], ['127.0.0.1', 'localhost', '::1'], true);
+
         if (! $keyExists) {
-            $base['hint'] = 'File private key jumphost tidak ditemukan. Pastikan public/bsigma-jumpserver.pem ada.';
+            $base['hint'] = 'File private key jumphost tidak ditemukan. Pastikan public/bsigma-jumpserver.pem ada, atau set BESIGMA_SSH_PKEY ke path Linux di server.';
         }
 
         if (! $tcpReachable) {
             $base['error'] = sprintf(
-                'Port lokal %s:%d tidak merespons. Tunnel SSH belum aktif.',
+                'Host %s:%d tidak merespons.',
                 $tunnel['local_host'],
                 $tunnel['local_port']
             );
-            $base['hint'] = 'Jalankan setup-ssh-tunnel-besigma.bat dan biarkan window-nya terbuka, lalu tes ulang.';
+            $base['hint'] = $usesLoopback
+                ? 'Tunnel SSH belum aktif. Di server Linux jalankan setup-ssh-tunnel-besigma.sh (bukan .bat), biarkan prosesnya hidup, lalu tes ulang.'
+                : 'App server tidak bisa tembus MySQL langsung. Set BESIGMA_DB_HOST=127.0.0.1 dan BESIGMA_DB_PORT=3307, lalu buka tunnel jumphost ke 10.11.58.139:3306.';
 
             return $base;
         }
@@ -201,6 +205,11 @@ final class BesigmaConnectionService
     public function tunnelMeta(): array
     {
         $cfg = config('database.connections.'.self::CONNECTION, []);
+        $pkey = (string) ($cfg['ssh_pkey'] ?? '');
+        $fallbackPkey = public_path('bsigma-jumpserver.pem');
+        if ($pkey === '' || ! is_file($pkey)) {
+            $pkey = $fallbackPkey;
+        }
 
         return [
             'local_host' => (string) ($cfg['host'] ?? '127.0.0.1'),
@@ -208,7 +217,7 @@ final class BesigmaConnectionService
             'ssh_host' => (string) ($cfg['ssh_host'] ?? ''),
             'ssh_port' => (int) ($cfg['ssh_port'] ?? 22),
             'ssh_user' => (string) ($cfg['ssh_user'] ?? ''),
-            'ssh_pkey' => (string) ($cfg['ssh_pkey'] ?? ''),
+            'ssh_pkey' => $pkey,
             'remote_host' => (string) ($cfg['remote_host'] ?? ''),
             'remote_port' => (int) ($cfg['remote_port'] ?? 3306),
         ];
