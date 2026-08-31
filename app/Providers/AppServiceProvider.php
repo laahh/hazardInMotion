@@ -20,6 +20,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Register ChatbotRuleService as singleton
+        $this->app->singleton(\App\Services\Besigma\BesigmaTunnelService::class);
         $this->app->singleton(\App\Services\ChatbotRuleService::class);
         $this->app->bind(
             \App\Services\Dms\DmsDashboardDataSource::class,
@@ -39,6 +40,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->ensureOpenSslCaBundle();
+        $this->bindBesigmaThroughJumphostTunnel();
 
         // 🔑 Force HTTPS for asset URLs in production
         if ($this->app->environment('production')) {
@@ -80,6 +82,19 @@ class AppServiceProvider extends ServiceProvider
             
             $view->with('controlRooms', $controlRooms);
         });
+    }
+
+    /**
+     * Besigma MySQL tidak tembus dari app server; pakai SSH tunnel 127.0.0.1:3307.
+     */
+    private function bindBesigmaThroughJumphostTunnel(): void
+    {
+        $tunnel = $this->app->make(\App\Services\Besigma\BesigmaTunnelService::class);
+        $tunnel->applyRuntimeConfig();
+
+        if (! $this->app->runningUnitTests()) {
+            $tunnel->ensureListening();
+        }
     }
 
     /**

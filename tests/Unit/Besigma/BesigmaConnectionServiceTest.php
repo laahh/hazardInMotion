@@ -26,6 +26,23 @@ final class BesigmaConnectionServiceTest extends TestCase
         $this->assertArrayNotHasKey('ssh_pkey_contents', $meta);
     }
 
+    public function test_runtime_config_rewrites_direct_mysql_host_to_loopback_tunnel(): void
+    {
+        config([
+            'database.connections.besigma_db.host' => '10.11.58.139',
+            'database.connections.besigma_db.port' => 3306,
+            'database.connections.besigma_db.remote_host' => '10.11.58.139',
+            'database.connections.besigma_db.local_port' => 3307,
+            'database.connections.besigma_db.ssh_host' => '13.250.29.29',
+        ]);
+
+        app(\App\Services\Besigma\BesigmaTunnelService::class)->applyRuntimeConfig();
+
+        $this->assertSame('127.0.0.1', config('database.connections.besigma_db.host'));
+        $this->assertSame(3307, (int) config('database.connections.besigma_db.port'));
+        $this->assertSame('52.74.245.15', config('database.connections.besigma_db.ssh_host'));
+    }
+
     public function test_probe_returns_diagnostic_keys(): void
     {
         $probe = app(BesigmaConnectionService::class)->probe();

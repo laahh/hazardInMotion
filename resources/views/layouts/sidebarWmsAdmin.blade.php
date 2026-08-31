@@ -392,6 +392,14 @@
               <div class="menu-title">Tes Koneksi Jumphost</div>
             </a>
           </li>
+          <li class="menu-label">ISC</li>
+          <li>
+            <a href="{{ route('isc.maps.index') }}">
+              <div class="parent-icon"><i class="material-icons-outlined">map</i>
+              </div>
+              <div class="menu-title">Peta Boundary</div>
+            </a>
+          </li>
           @endif
            
        

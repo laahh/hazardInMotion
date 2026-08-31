@@ -948,6 +948,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     require __DIR__ . '/MonitoringSafetyEngineering/monitoring-safety-engineering.php';
     require __DIR__ . '/EvaluasiWell/evaluasi-well.php';
     require __DIR__ . '/Besigma/besigma.php';
+    require __DIR__ . '/Isc/isc.php';
     require __DIR__ . '/DwhRedshift/dwh-redshift.php';
 
 

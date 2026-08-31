@@ -89,11 +89,16 @@ final class BesigmaConnectionService
     public function probe(): array
     {
         $this->forgetCachedStatus();
+
+        $tunnelService = app(BesigmaTunnelService::class);
+        $tunnelService->applyRuntimeConfig();
+        $tunnelService->ensureListening();
+
         DB::purge(self::CONNECTION);
 
         $tunnel = $this->tunnelMeta();
         $keyExists = is_file($tunnel['ssh_pkey']);
-        $tcpReachable = $this->isTcpReachable($tunnel['local_host'], $tunnel['local_port']);
+        $tcpReachable = $tunnelService->isTcpReachable($tunnel['local_host'], $tunnel['local_port']);
 
         $base = [
             'connected' => false,
@@ -124,8 +129,8 @@ final class BesigmaConnectionService
                 $tunnel['local_port']
             );
             $base['hint'] = $usesLoopback
-                ? 'Tunnel SSH belum aktif. Di server Linux jalankan setup-ssh-tunnel-besigma.sh (bukan .bat), biarkan prosesnya hidup, lalu tes ulang.'
-                : 'App server tidak bisa tembus MySQL langsung. Set BESIGMA_DB_HOST=127.0.0.1 dan BESIGMA_DB_PORT=3307, lalu buka tunnel jumphost ke 10.11.58.139:3306.';
+                ? 'Tunnel SSH belum aktif di 127.0.0.1:3307. Di server, pastikan proses ssh -L ke jumphost 52.74.245.15 masih jalan (setup-ssh-tunnel-besigma.sh).'
+                : 'App server tidak bisa tembus MySQL langsung. Laravel harus memakai 127.0.0.1:3307 lewat jumphost.';
 
             return $base;
         }
@@ -225,17 +230,6 @@ final class BesigmaConnectionService
 
     public function isTcpReachable(string $host, int $port): bool
     {
-        if ($host === '' || $port < 1) {
-            return false;
-        }
-
-        $connection = @fsockopen($host, $port, $errno, $errstr, 2);
-        if (is_resource($connection)) {
-            fclose($connection);
-
-            return true;
-        }
-
-        return false;
+        return app(BesigmaTunnelService::class)->isTcpReachable($host, $port);
     }
 }
