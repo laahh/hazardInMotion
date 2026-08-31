@@ -3,7 +3,7 @@
 @section('title', 'Peta Boundary')
 
 @section('content')
-<section class="map-hero">
+<section class="gm-shell">
   <div
     id="map"
     role="application"
@@ -12,110 +12,143 @@
     data-overlay-url="{{ $overlayUrl }}"
     data-connected="{{ $connected ? '1' : '0' }}"
   ></div>
-  <div class="map-vignette" aria-hidden="true"></div>
-  <div id="map-loading" class="map-loading">Memuat peta boundary…</div>
+  <div id="map-loading" class="gm-loading">Memuat peta…</div>
 
-  <header class="topbar">
-    <a class="brand" href="{{ route('isc.maps.index') }}" aria-label="Berau Coal OHS">
-      <span>BERAU COAL</span><i>·</i><strong>OHS </strong>
+  <aside class="gm-rail" aria-label="Menu peta">
+    <button type="button" class="gm-rail-btn is-on" id="gm-rail-toggle" aria-label="Buka panel" aria-expanded="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      <span>Menu</span>
+    </button>
+    <a class="gm-rail-btn" href="{{ url('/') }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20H4z"/><path d="M9 20v-6h6v6"/></svg>
+      <span>Beranda</span>
     </a>
-    <nav class="desktop-nav" aria-label="Navigasi utama">
-      <a href="{{ url('/') }}">Beranda</a>
-      <a class="active" href="{{ route('isc.maps.index') }}" aria-current="page">Hotspot</a>
-    </nav>
-    <details class="mobile-menu">
-      <summary aria-label="Buka menu">
-        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-      </summary>
-      <nav>
-        <a href="{{ url('/') }}">Beranda</a>
-        <a class="active" href="{{ route('isc.maps.index') }}">Hotspot</a>
-      </nav>
-    </details>
-  </header>
-
-  <aside class="glass-panel list-card" aria-label="Boundary ISC">
-    <div class="chip-row">
-      <span class="alert-chip">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2 21.5 20H2.5L12 3.2Z"/><path d="M12 10v4.2"/><path d="M12 17.2v.6"/></svg>
-        SIAGA ISC
-      </span>
-      <span class="ghost-chip">KAB. BERAU</span>
-    </div>
-    <p class="eyebrow">Command center · boundary</p>
-    <h1>Peta &amp; zona.</h1>
-    <p class="lead" id="data-source">Overlay IUPK BounderyBC + polygon Besigma.</p>
-
-    <div class="day-summary" aria-label="Ringkasan layer">
-      <article>
-        <small>IUPK</small>
-        <strong id="sum-iupk">0</strong>
-      </article>
-      <article>
-        <small>Besigma</small>
-        <strong id="sum-besigma">0</strong>
-      </article>
-      <article>
-        <small>Violations</small>
-        <strong id="sum-violations">0</strong>
-      </article>
-      <article>
-        <small>Entries</small>
-        <strong id="sum-entries">0</strong>
-      </article>
-    </div>
-
-    <div class="scope-tabs" role="group" aria-label="Filter layer">
-      <button type="button" class="is-on" data-scope="semua">Semua</button>
-      <button type="button" data-scope="iupk">IUPK</button>
-      <button type="button" data-scope="besigma">Besigma</button>
-    </div>
-
-    <div class="list-meta">
-      <strong id="list-count">0</strong>
-      <span id="list-label">zona tampil</span>
-      <button type="button" id="btn-refresh" class="refresh-btn">Muat Besigma</button>
-    </div>
-    <div class="hotspot-list" id="zone-list"></div>
+    <button type="button" class="gm-rail-btn" id="gm-saved-btn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v16l-5-3-5 3z"/></svg>
+      <span>Disimpan</span>
+    </button>
+    <button type="button" class="gm-rail-btn" id="gm-recents-btn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>
+      <span>Terbaru</span>
+    </button>
+    <button type="button" class="gm-rail-thumb" data-jump="BMO" title="Binungan">BMO</button>
+    <button type="button" class="gm-rail-thumb" data-jump="LMO" title="Lati">LMO</button>
+    <button type="button" class="gm-rail-thumb" data-jump="GMO" title="Gurimbang">GMO</button>
+    <button type="button" class="gm-rail-thumb" data-jump="SMO" title="Sambarata">SMO</button>
   </aside>
 
-  <div class="hud-right">
-    <div class="map-toolbar" aria-label="Kontrol peta">
-      <div class="layer-switch" role="group" aria-label="Layer peta">
-        <button type="button" data-basemap="sat" class="is-on">Satelit</button>
-        <button type="button" data-basemap="dark">Gelap</button>
-        <button type="button" data-layer="ops" class="is-on">Konsesi</button>
-      </div>
-      <div class="layer-switch" role="group" aria-label="Layer data">
-        <button type="button" data-layer="besigma" class="is-on">Besigma</button>
-      </div>
-      <div class="zoom-switch" role="group" aria-label="Zoom peta">
-        <button type="button" id="zoom-in" aria-label="Perbesar">+</button>
-        <button type="button" id="zoom-out" aria-label="Perkecil">−</button>
-        <button type="button" id="zoom-fit" aria-label="Pusatkan wilayah operasi">⌖</button>
-      </div>
-    </div>
+  <div class="gm-left">
+    <form class="gm-search" id="gm-search-form" role="search" autocomplete="off">
+      <button type="submit" class="gm-icon-btn" aria-label="Cari">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+      </button>
+      <input
+        id="gm-search-input"
+        type="search"
+        placeholder="Cari zona, site, atau boundary"
+        aria-label="Cari peta"
+      >
+      <button type="button" class="gm-icon-btn" id="gm-search-clear" hidden aria-label="Hapus pencarian">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <button type="button" class="gm-dir-btn" id="zoom-fit" aria-label="Pusatkan wilayah operasi">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </form>
 
-    <aside class="glass-panel detail-card-wrap" id="map-detail" aria-label="Status peta">
-      <div class="detail-empty" id="detail-empty">
-        <span class="pulse"></span>
-        <div>
-          <small>STATUS LAYER</small>
-          <p id="live-status">{{ $connected ? 'Besigma terhubung.' : 'Besigma belum terhubung — IUPK tetap tampil.' }}</p>
+    <aside class="gm-panel" id="gm-panel" aria-label="Hasil peta">
+      <div class="gm-results" id="gm-results">
+        <div class="gm-results-head">
+          <p id="gm-status">{{ $connected ? 'Besigma terhubung' : 'IUPK tampil · Besigma belum terhubung' }}</p>
+          <strong id="gm-count">0</strong>
         </div>
+        <div class="gm-results-list" id="zone-list"></div>
       </div>
-      <article class="detail-card" id="detail-card" hidden></article>
+
+      <article class="gm-place" id="gm-place" hidden>
+        <button type="button" class="gm-place-back" id="gm-place-back" aria-label="Kembali ke daftar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7"/></svg>
+        </button>
+        <div class="gm-place-hero" id="gm-place-hero">IUPK</div>
+        <div class="gm-place-body">
+          <h1 id="gm-place-title">Zona</h1>
+          <p class="gm-place-sub" id="gm-place-sub">Konsesi</p>
+          <div class="gm-place-tabs" role="tablist">
+            <button type="button" class="is-on" data-tab="overview">Ringkasan</button>
+            <button type="button" data-tab="about">Data</button>
+          </div>
+          <div class="gm-actions" aria-label="Aksi lokasi">
+            <button type="button" class="gm-action" id="gm-act-zoom">
+              <span class="gm-action-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
+              </span>
+              Zoom
+            </button>
+            <button type="button" class="gm-action" id="gm-act-save">
+              <span class="gm-action-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v16l-5-3-5 3z"/></svg>
+              </span>
+              Simpan
+            </button>
+            <button type="button" class="gm-action" id="gm-act-nearby">
+              <span class="gm-action-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 4v2M12 18v2M4 12h2M18 12h2"/></svg>
+              </span>
+              Sekitar
+            </button>
+            <button type="button" class="gm-action" id="gm-act-share">
+              <span class="gm-action-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 11.1 15.8 6.4M8.2 12.9l7.6 5.7"/></svg>
+              </span>
+              Bagikan
+            </button>
+          </div>
+          <ul class="gm-facts" id="gm-place-facts"></ul>
+          <pre class="gm-place-data" id="gm-place-data" hidden></pre>
+        </div>
+      </article>
     </aside>
   </div>
 
-  <div class="metric-panel map-legend-bar">
-    <article><i class="dot rendah"></i><div><small>Konsesi</small><p>IUPK BounderyBC</p></div></article>
-    <article><i class="dot internal"></i><div><small>Besigma</small><p>Polygon database</p></div></article>
-    <article><i class="dot tinggi"></i><div><small>Violation</small><p>Pelanggaran zona</p></div></article>
-    <article><i class="dot sedang"></i><div><small>Entry</small><p>Masuk boundary</p></div></article>
-    <article><i class="dot patroli"></i><div><small>BMO</small><p>Binungan</p></div></article>
-    <article><i class="dot kasus"></i><div><small>SMO / GMO</small><p>Sambarata / Gurimbang</p></div></article>
-    <article><i class="dot route"></i><div><small>LMO</small><p>Lati</p></div></article>
+  <nav class="gm-pills" aria-label="Filter peta">
+    <button type="button" class="gm-pill is-on" data-scope="semua">Semua</button>
+    <button type="button" class="gm-pill" data-scope="iupk">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v12H4zM8 7V5h8v2"/></svg>
+      Konsesi
+    </button>
+    <button type="button" class="gm-pill" data-scope="besigma">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+      Besigma
+    </button>
+    <button type="button" class="gm-pill" data-jump="BMO">Binungan</button>
+    <button type="button" class="gm-pill" data-jump="LMO">Lati</button>
+    <button type="button" class="gm-pill" data-jump="GMO">Gurimbang</button>
+    <button type="button" class="gm-pill" data-jump="SMO">Sambarata</button>
+    <button type="button" class="gm-pill" data-jump="PUNAN">Punan</button>
+    <button type="button" class="gm-pill" id="btn-refresh">Muat Besigma</button>
+  </nav>
+
+  <div class="gm-layers">
+    <button type="button" class="gm-layers-btn" id="gm-layers-btn" aria-expanded="false" aria-controls="gm-layers-pop">
+      <span class="gm-layers-thumb" id="gm-layers-thumb" data-kind="sat"></span>
+      <span>Layers</span>
+    </button>
+    <div class="gm-layers-pop" id="gm-layers-pop" hidden>
+      <p>Jenis peta</p>
+      <div class="gm-layer-cards">
+        <button type="button" class="is-on" data-basemap="sat"><i data-kind="sat"></i>Satelit</button>
+        <button type="button" data-basemap="map"><i data-kind="map"></i>Peta</button>
+        <button type="button" data-basemap="dark"><i data-kind="dark"></i>Gelap</button>
+      </div>
+      <p>Overlay</p>
+      <label><input type="checkbox" data-layer="ops" checked> Konsesi IUPK</label>
+      <label><input type="checkbox" data-layer="besigma" checked> Besigma</label>
+    </div>
+  </div>
+
+  <div class="gm-zoom" role="group" aria-label="Zoom peta">
+    <button type="button" id="zoom-in" aria-label="Perbesar">+</button>
+    <button type="button" id="zoom-out" aria-label="Perkecil">−</button>
   </div>
 </section>
 @endsection
