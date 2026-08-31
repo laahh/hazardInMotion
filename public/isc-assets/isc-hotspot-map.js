@@ -24,12 +24,16 @@
   var layersBtn = document.getElementById("gm-layers-btn");
   var layersPop = document.getElementById("gm-layers-pop");
   var layersThumb = document.getElementById("gm-layers-thumb");
+  var saveLabel = document.getElementById("gm-save-label");
+  var toastEl = document.getElementById("gm-toast");
+  var toastTimer = 0;
 
   var scope = "semua";
   var query = "";
   var listMode = "all";
   var showOps = true;
   var showBesigma = true;
+  var showLabels = true;
   var selected = null;
   var recents = [];
   var saved = loadSaved();
@@ -60,17 +64,29 @@
 
   map.createPane("iupk");
   map.getPane("iupk").style.zIndex = 450;
+  map.createPane("labels");
+  map.getPane("labels").style.zIndex = 650;
+  map.getPane("labels").style.pointerEvents = "none";
+
   var iupkRenderer = L.canvas({ pane: "iupk", padding: 0.8 });
+  var labelsLayer = L.layerGroup();
+
+  function iupkStyle() {
+    return { color: "#d4ff7a", weight: 3, fillColor: "#7cb342", fillOpacity: 0.2 };
+  }
+
+  function iupkHover() {
+    return { color: "#fff59d", weight: 4.5, fillColor: "#9ccc65", fillOpacity: 0.32 };
+  }
+
+  function iupkSelected() {
+    return { color: "#1a73e8", weight: 5, fillColor: "#1a73e8", fillOpacity: 0.28 };
+  }
 
   var opsLayer = L.geoJSON(window.IUPK_BOUNDARY || { type: "FeatureCollection", features: [] }, {
     pane: "iupk",
     renderer: iupkRenderer,
-    style: {
-      color: "#d4ff7a",
-      weight: 4,
-      fillColor: "#6bb443",
-      fillOpacity: 0.22
-    },
+    style: iupkStyle,
     onEachFeature: function (feature, layer) {
       var p = feature.properties || {};
       var luas = formatHa(p.Luas);
@@ -78,6 +94,14 @@
       layer.bindTooltip((title || "Konsesi IUPK") + (luas ? " · " + luas : ""), { sticky: true, className: "iupk-tip" });
       layer.on("click", function () {
         openPlace(itemFromIupk(feature, layer));
+      });
+      layer.on("mouseover", function () {
+        if (!selected || selected.layer !== layer) {
+          layer.setStyle(iupkHover());
+        }
+      });
+      layer.on("mouseout", function () {
+        paintSelection();
       });
       iupkLayers.push({ feature: feature, layer: layer });
     }
@@ -91,7 +115,7 @@
       fillOpacity: 0.16
     },
     pointToLayer: function (feature, latlng) {
-      return L.circleMarker(latlng, { radius: 7, color: "#1a73e8", fillOpacity: 0.85 });
+      return L.circleMarker(latlng, { radius: 7, color: "#1a73e8", fillOpacity: 0.85, weight: 2 });
     },
     onEachFeature: function (feature, layer) {
       var p = feature.properties || {};
@@ -132,7 +156,7 @@
 
   function fitOps() {
     if (opsLayer.getLayers().length) {
-      map.fitBounds(opsLayer.getBounds(), { padding: [48, 48] });
+      map.fitBounds(opsLayer.getBounds(), { padding: [56, 56] });
     }
   }
 
@@ -142,6 +166,18 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  function toast(message) {
+    if (!toastEl) {
+      return;
+    }
+    toastEl.textContent = message;
+    toastEl.hidden = false;
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(function () {
+      toastEl.hidden = true;
+    }, 1800);
   }
 
   function itemKey(item) {
@@ -222,7 +258,58 @@
       map.removeLayer(besigmaLayer);
     }
 
+    if (showLabels) {
+      if (!map.hasLayer(labelsLayer)) {
+        labelsLayer.addTo(map);
+      }
+    } else if (map.hasLayer(labelsLayer)) {
+      map.removeLayer(labelsLayer);
+    }
+
+    paintSelection();
     renderList();
+  }
+
+  function paintSelection() {
+    opsLayer.eachLayer(function (layer) {
+      layer.setStyle(selected && selected.layer === layer ? iupkSelected() : iupkStyle());
+    });
+    besigmaLayer.eachLayer(function (layer) {
+      var on = selected && selected.layer === layer;
+      if (layer.setStyle) {
+        layer.setStyle({
+          color: on ? "#174ea6" : "#1a73e8",
+          weight: on ? 4 : 2,
+          fillColor: on ? "#174ea6" : "#1a73e8",
+          fillOpacity: on ? 0.32 : 0.16
+        });
+      }
+    });
+  }
+
+  function addLabels() {
+    labelsLayer.clearLayers();
+    iupkLayers.forEach(function (entry) {
+      if (!entry.layer.getBounds) {
+        return;
+      }
+      var center = entry.layer.getBounds().getCenter();
+      var name = (entry.feature.properties || {}).Layer || (entry.feature.properties || {}).Site || "IUPK";
+      L.marker(center, {
+        pane: "labels",
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: "gm-label-wrap",
+          html: '<span class="gm-label">' + esc(name) + "</span>",
+          iconSize: [0, 0],
+          iconAnchor: [0, 0]
+        })
+      }).addTo(labelsLayer);
+    });
+    if (showLabels) {
+      labelsLayer.addTo(map);
+    }
   }
 
   function pinSvg() {
@@ -261,9 +348,21 @@
       return;
     }
     if (item.layer.getBounds) {
-      map.fitBounds(item.layer.getBounds(), { padding: [56, 56], maxZoom: 13 });
+      map.fitBounds(item.layer.getBounds(), { padding: [72, 72], maxZoom: 13 });
     } else if (item.layer.getLatLng) {
       map.setView(item.layer.getLatLng(), 14);
+    }
+  }
+
+  function syncSaveButton() {
+    var act = document.getElementById("gm-act-save");
+    if (!act || !selected) {
+      return;
+    }
+    var on = saved.indexOf(itemKey(selected)) !== -1;
+    act.classList.toggle("is-saved", on);
+    if (saveLabel) {
+      saveLabel.textContent = on ? "Tersimpan" : "Simpan";
     }
   }
 
@@ -291,28 +390,39 @@
     }
     if (placeHero) {
       placeHero.textContent = item.badge || (item.kind === "iupk" ? "IUPK" : "DB");
+      placeHero.setAttribute("data-site", item.badge || "IUPK");
     }
     if (placeFacts) {
       var p = item.props || {};
       placeFacts.innerHTML =
-        fact("Site / nama", item.title) +
-        fact("Layer / status", item.badge) +
-        fact("Luas", formatHa(p.Luas) || "—") +
-        fact("Sumber", item.kind === "iupk" ? "BounderyBC.js" : "Besigma") +
-        fact("Pelanggaran", String((overlay.violations || []).length)) +
-        fact("Entry", String((overlay.entries || []).length));
+        fact("pin", item.title, "Site / nama") +
+        fact("tag", item.badge, "Layer / status") +
+        fact("area", formatHa(p.Luas) || "—", "Luas") +
+        fact("db", item.kind === "iupk" ? "BounderyBC.js" : "Besigma", "Sumber") +
+        fact("alert", String((overlay.violations || []).length), "Pelanggaran") +
+        fact("in", String((overlay.entries || []).length), "Entry");
     }
     if (placeData) {
       placeData.textContent = JSON.stringify(item.props || {}, null, 2);
     }
     setTab("overview");
+    syncSaveButton();
+    paintSelection();
     renderList();
     flyToItem(item);
   }
 
-  function fact(label, value) {
+  function fact(kind, value, label) {
+    var icons = {
+      pin: "<path d='M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z'/>",
+      tag: "<path d='M4 8h16M4 12h10M4 16h13'/>",
+      area: "<path d='M4 7h16v12H4z'/>",
+      db: "<ellipse cx='12' cy='6' rx='7' ry='3'/><path d='M5 6v8c0 1.7 3.1 3 7 3s7-1.3 7-3V6'/>",
+      alert: "<path d='M12 4 21 19H3L12 4z'/><path d='M12 10v4M12 16v.5'/>",
+      in: "<path d='M12 4v12'/><path d='m7 11 5 5 5-5'/>"
+    };
     return (
-      "<li><svg viewBox='0 0 24 24'><circle cx='12' cy='12' r='8'/></svg>" +
+      "<li><svg viewBox='0 0 24 24'>" + (icons[kind] || icons.tag) + "</svg>" +
       "<div>" + esc(value) + "<small>" + esc(label) + "</small></div></li>"
     );
   }
@@ -325,6 +435,7 @@
     if (placeEl) {
       placeEl.hidden = true;
     }
+    paintSelection();
     renderList();
   }
 
@@ -435,6 +546,7 @@
       .catch(function () {});
   }
 
+  addLabels();
   fitOps();
   renderList();
   loadBesigma();
@@ -450,6 +562,12 @@
     var first = visibleItems()[0];
     if (first) {
       openPlace(first);
+    }
+  });
+
+  searchInput.addEventListener("focus", function () {
+    if (!selected) {
+      openPanel();
     }
   });
 
@@ -511,6 +629,14 @@
     });
   });
 
+  var labelsToggle = document.getElementById("gm-toggle-labels");
+  if (labelsToggle) {
+    labelsToggle.addEventListener("change", function () {
+      showLabels = labelsToggle.checked;
+      applyScope();
+    });
+  }
+
   document.querySelectorAll("[data-tab]").forEach(function (btn) {
     btn.addEventListener("click", function () {
       setTab(btn.getAttribute("data-tab") || "overview");
@@ -552,10 +678,13 @@
     var key = itemKey(selected);
     if (saved.indexOf(key) === -1) {
       saved.unshift(key);
+      toast("Disimpan ke daftar.");
     } else {
       saved = saved.filter(function (item) { return item !== key; });
+      toast("Dihapus dari daftar.");
     }
     persistSaved();
+    syncSaveButton();
   });
 
   document.getElementById("gm-act-share").addEventListener("click", function () {
@@ -565,6 +694,7 @@
     var text = selected.title + " — " + selected.meta;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text);
+      toast("Nama zona disalin.");
     }
   });
 
@@ -584,6 +714,7 @@
   var zoomIn = document.getElementById("zoom-in");
   var zoomOut = document.getElementById("zoom-out");
   var zoomFit = document.getElementById("zoom-fit");
+  var zoomHome = document.getElementById("zoom-home");
   if (zoomIn) {
     zoomIn.addEventListener("click", function () { map.zoomIn(); });
   }
@@ -593,6 +724,9 @@
   if (zoomFit) {
     zoomFit.addEventListener("click", fitOps);
   }
+  if (zoomHome) {
+    zoomHome.addEventListener("click", fitOps);
+  }
 
   var refreshBtn = document.getElementById("btn-refresh");
   if (refreshBtn) {
@@ -601,6 +735,7 @@
         loadingEl.hidden = false;
       }
       loadBesigma();
+      toast("Memuat data Besigma…");
     });
   }
 
