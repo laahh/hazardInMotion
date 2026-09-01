@@ -216,6 +216,18 @@ button, input { font-family: inherit; }
   margin-top: 0;
   max-height: min(42vh, 420px);
 }
+.gm-shell.is-postevent .gm-panel {
+  display: none !important;
+}
+.gm-shell.is-postevent .gm-hud {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none !important;
+  overflow: auto;
+}
+.gm-shell.is-postevent #gm-view-postevent {
+  align-content: start;
+}
 .gm-hud-card {
   position: relative;
   overflow: visible;

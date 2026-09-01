@@ -286,7 +286,7 @@
           <label class="gm-hud-hint" for="hud-postevent-date">Tanggal jejak
             <input type="date" id="hud-postevent-date" class="gm-hud-date">
           </label>
-          <p class="gm-hud-foot">Kartu orang/unit yang bergerak hari itu. Klik untuk melihat jalur.</p>
+          <p class="gm-hud-foot">Cari nama, SID, atau nopol, lalu klik kartu untuk melihat jalur GPS.</p>
         </article>
         <div id="gm-postevent-cards" class="gm-hud-place-stack"></div>
       </div>

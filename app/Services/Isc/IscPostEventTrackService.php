@@ -7,7 +7,6 @@ namespace App\Services\Isc;
 use App\Services\Besigma\BesigmaConnectionService;
 use App\Services\Besigma\BesigmaTunnelService;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
@@ -29,7 +28,6 @@ final class IscPostEventTrackService
         private readonly BesigmaConnectionService $connection,
         private readonly BesigmaTunnelService $tunnel,
         private readonly IscPersonnelGpsReader $gps,
-        private readonly IscBesigmaViolationReader $violations,
         private readonly IscPobDemoDataset $demo,
         private readonly IscSiteNormalizer $sites,
     ) {}
@@ -45,18 +43,15 @@ final class IscPostEventTrackService
 
         $from = IscPersonnelGpsReader::dayStart($date);
         $to = IscPersonnelGpsReader::dayEndExclusive($date);
-        $needle = mb_strtolower(trim($query));
-        $people = $this->peopleWithGps($from, $to, $needle);
+        $search = trim($query);
+        $people = $this->peopleRoster($from, $to, $search);
         $byId = [];
         foreach ($people as $row) {
             $byId[(string) $row['user_id']] = $row;
         }
-        foreach ($this->peopleViolationsOnDay($from, $to) as $row) {
+        foreach ($this->peopleViolationsOnDay($from, $to, $search) as $row) {
             $userId = (string) ($row['user_id'] ?? '');
             if ($userId === '') {
-                continue;
-            }
-            if (! $this->matchesNeedle($needle, $row['name'] ?? '', $row['sid'] ?? '', $row['company'] ?? '')) {
                 continue;
             }
             if (isset($byId[$userId])) {
@@ -69,15 +64,12 @@ final class IscPostEventTrackService
         }
 
         $units = [];
-        foreach ($this->unitsWithGps($from, $to, $needle) as $row) {
+        foreach ($this->unitsRoster($from, $to, $search) as $row) {
             $units[(string) $row['unit_id']] = $row;
         }
-        foreach ($this->unitViolationsOnDay($from, $to) as $row) {
+        foreach ($this->unitViolationsOnDay($from, $to, $search) as $row) {
             $unitId = (string) ($row['unit_id'] ?? '');
             if ($unitId === '') {
-                continue;
-            }
-            if (! $this->matchesNeedle($needle, $row['name'] ?? '', $row['sid'] ?? '', $row['company'] ?? '')) {
                 continue;
             }
             if (isset($units[$unitId])) {
@@ -182,80 +174,121 @@ final class IscPostEventTrackService
     }
 
     /**
+     * Roster orang: cari user dulu, jangan scan seluruh user_gps_logs harian (itu yang 504).
+     *
      * @return list<array<string, mixed>>
      */
-    private function peopleWithGps(string $from, string $to, string $needle): array
+    private function peopleRoster(string $from, string $to, string $search): array
+    {
+        $candidates = $search !== ''
+            ? $this->findUsers($search)
+            : $this->peopleFromLatests($from, $to);
+        if ($candidates === []) {
+            return [];
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function unitsRoster(string $from, string $to, string $search): array
+    {
+        if ($search === '') {
+            return [];
+        }
+        $candidates = $this->findUnits($search);
+        if ($candidates === []) {
+            return [];
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function findUsers(string $search): array
     {
         try {
-            if (! Schema::connection(self::CONNECTION)->hasTable('user_gps_logs')) {
-                return [];
-            }
-            $bindings = [$from, $to];
-            $searchSql = '';
-            if ($needle !== '') {
-                $like = '%'.$needle.'%';
-                $searchSql = ' AND (LOWER(u.fullname) LIKE ? OR LOWER(u.sid_code) LIKE ? OR LOWER(IFNULL(u.npk, \'\')) LIKE ? OR LOWER(IFNULL(u.nik, \'\')) LIKE ?)';
-                array_push($bindings, $like, $like, $like, $like);
-            }
+            $like = '%'.$this->likeNeedle($search).'%';
             $rows = DB::connection(self::CONNECTION)->select("
                 SELECT
-                    g.user_id,
-                    COUNT(*) AS point_count,
-                    MIN(g.updated_at) AS first_at,
-                    MAX(g.updated_at) AS last_at,
+                    u.id AS user_id,
                     u.sid_code,
                     u.fullname,
                     u.npk,
-                    u.nik,
                     u.dedicated_site,
                     u.site_assignment,
                     u.functional_position,
                     c.name AS company_name
-                FROM user_gps_logs g
+                FROM users u
+                LEFT JOIN companies c ON c.id = u.company_id
+                WHERE u.is_deleted = 0
+                  AND (
+                    u.fullname LIKE ?
+                    OR u.sid_code LIKE ?
+                    OR u.npk LIKE ?
+                    OR u.nik LIKE ?
+                  )
+                ORDER BY u.fullname ASC
+                LIMIT 40
+            ", [$like, $like, $like, $like]);
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        return array_map(function (object $row): array {
+            $card = $this->personCardFromUserRow($row);
+            $card['has_trail'] = true;
+
+            return $card;
+        }, $rows);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function peopleFromLatests(string $from, string $to): array
+    {
+        try {
+            $rows = DB::connection(self::CONNECTION)->select("
+                SELECT
+                    g.user_id,
+                    g.updated_at AS last_at,
+                    u.sid_code,
+                    u.fullname,
+                    u.npk,
+                    u.dedicated_site,
+                    u.site_assignment,
+                    u.functional_position,
+                    c.name AS company_name
+                FROM user_gps_latests g
                 INNER JOIN users u ON u.id = g.user_id AND u.is_deleted = 0
                 LEFT JOIN companies c ON c.id = u.company_id
                 WHERE g.updated_at >= ?
                   AND g.updated_at < ?
                   AND g.latitude IS NOT NULL
                   AND g.longitude IS NOT NULL
-                  AND g.latitude != ''
-                  AND g.longitude != ''
-                  {$searchSql}
-                GROUP BY g.user_id, u.sid_code, u.fullname, u.npk, u.nik, u.dedicated_site, u.site_assignment, u.functional_position, c.name
-                ORDER BY last_at DESC
+                ORDER BY g.updated_at DESC
                 LIMIT ".self::ROSTER_LIMIT."
-            ", $bindings);
+            ", [$from, $to]);
         } catch (Throwable $e) {
             report($e);
-            $this->connection->rememberFailure($e);
 
             return [];
         }
 
         $out = [];
         foreach ($rows as $row) {
-            $userId = (string) ($row->user_id ?? '');
-            $sid = trim((string) ($row->sid_code ?? ''));
-            $name = trim((string) ($row->fullname ?? ''));
-            $out[] = [
-                'entity' => 'person',
-                'id' => $userId,
-                'user_id' => $userId,
-                'key' => $this->gps->personKey($sid, $userId),
-                'sid' => $sid,
-                'name' => $name !== '' ? $name : ($sid !== '' ? $sid : 'User '.substr($userId, 0, 8)),
-                'company' => $this->nullableString($row->company_name ?? null),
-                'job_title' => $this->nullableString($row->functional_position ?? null),
-                'site' => $this->nullableString($row->dedicated_site ?? $row->site_assignment ?? null),
-                'site_code' => $this->sites->codeFrom(null, $row->dedicated_site ?? null, $row->site_assignment ?? null),
-                'point_count' => (int) ($row->point_count ?? 0),
-                'first_at' => isset($row->first_at) ? (string) $row->first_at : null,
-                'last_at' => isset($row->last_at) ? (string) $row->last_at : null,
-                'entered' => false,
-                'hazard_name' => null,
-                'hazard_kind' => null,
-                'has_trail' => true,
-            ];
+            $card = $this->personCardFromUserRow($row);
+            $card['last_at'] = isset($row->last_at) ? (string) $row->last_at : null;
+            $card['first_at'] = $card['last_at'];
+            $card['has_trail'] = true;
+            $out[] = $card;
         }
 
         return $out;
@@ -264,39 +297,19 @@ final class IscPostEventTrackService
     /**
      * @return list<array<string, mixed>>
      */
-    private function unitsWithGps(string $from, string $to, string $needle): array
+    private function findUnits(string $search): array
     {
         try {
-            if (! Schema::connection(self::CONNECTION)->hasTable('unit_gps_logs')) {
-                return [];
-            }
-            $bindings = [$from, $to];
-            $searchSql = '';
-            if ($needle !== '') {
-                $like = '%'.$needle.'%';
-                $searchSql = ' AND (LOWER(IFNULL(u.vehicle_number, \'\')) LIKE ? OR LOWER(IFNULL(u.vehicle_name, \'\')) LIKE ? OR LOWER(IFNULL(u.vendor_name, \'\')) LIKE ?)';
-                array_push($bindings, $like, $like, $like);
-            }
+            $like = '%'.$this->likeNeedle($search).'%';
             $rows = DB::connection(self::CONNECTION)->select("
-                SELECT
-                    g.unit_id,
-                    COUNT(*) AS point_count,
-                    MIN(g.updated_at) AS first_at,
-                    MAX(g.updated_at) AS last_at,
-                    u.vehicle_number,
-                    u.vehicle_name,
-                    u.vendor_name
-                FROM unit_gps_logs g
-                INNER JOIN units u ON u.id = g.unit_id
-                WHERE g.updated_at >= ?
-                  AND g.updated_at < ?
-                  AND g.latitude IS NOT NULL
-                  AND g.longitude IS NOT NULL
-                  {$searchSql}
-                GROUP BY g.unit_id, u.vehicle_number, u.vehicle_name, u.vendor_name
-                ORDER BY last_at DESC
-                LIMIT ".self::ROSTER_LIMIT."
-            ", $bindings);
+                SELECT id AS unit_id, vehicle_number, vehicle_name, vendor_name
+                FROM units
+                WHERE vehicle_number LIKE ?
+                   OR vehicle_name LIKE ?
+                   OR vendor_name LIKE ?
+                ORDER BY vehicle_number ASC
+                LIMIT 20
+            ", [$like, $like, $like]);
         } catch (Throwable $e) {
             report($e);
 
@@ -318,17 +331,47 @@ final class IscPostEventTrackService
                 'job_title' => $this->nullableString($row->vehicle_name ?? null),
                 'site' => null,
                 'site_code' => null,
-                'point_count' => (int) ($row->point_count ?? 0),
-                'first_at' => isset($row->first_at) ? (string) $row->first_at : null,
-                'last_at' => isset($row->last_at) ? (string) $row->last_at : null,
+                'point_count' => 0,
+                'first_at' => null,
+                'last_at' => null,
                 'entered' => false,
                 'hazard_name' => null,
                 'hazard_kind' => IscHazardBoundaryClassifier::KIND_UNIT_DANGER,
-                'has_trail' => true,
+                'has_trail' => false,
             ];
         }
 
         return $out;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function personCardFromUserRow(object $row): array
+    {
+        $userId = (string) ($row->user_id ?? '');
+        $sid = trim((string) ($row->sid_code ?? ''));
+        $name = trim((string) ($row->fullname ?? ''));
+
+        return [
+            'entity' => 'person',
+            'id' => $userId,
+            'user_id' => $userId,
+            'key' => $this->gps->personKey($sid, $userId),
+            'sid' => $sid,
+            'name' => $name !== '' ? $name : ($sid !== '' ? $sid : 'User '.substr($userId, 0, 8)),
+            'company' => $this->nullableString($row->company_name ?? null),
+            'job_title' => $this->nullableString($row->functional_position ?? null),
+            'site' => $this->nullableString($row->dedicated_site ?? $row->site_assignment ?? null),
+            'site_code' => $this->sites->codeFrom(null, $row->dedicated_site ?? null, $row->site_assignment ?? null),
+            'point_count' => 0,
+            'first_at' => null,
+            'last_at' => null,
+            'entered' => false,
+            'hazard_name' => null,
+            'hazard_kind' => null,
+            'has_trail' => false,
+        ];
     }
 
     /**
@@ -337,9 +380,6 @@ final class IscPostEventTrackService
     private function personTrailPoints(string $userId, string $from, string $to): array
     {
         try {
-            if (! Schema::connection(self::CONNECTION)->hasTable('user_gps_logs')) {
-                return [];
-            }
             $rows = DB::connection(self::CONNECTION)->select("
                 SELECT latitude, longitude, updated_at
                 FROM user_gps_logs
@@ -366,9 +406,6 @@ final class IscPostEventTrackService
     private function unitTrailPoints(string $unitId, string $from, string $to): array
     {
         try {
-            if (! Schema::connection(self::CONNECTION)->hasTable('unit_gps_logs')) {
-                return [];
-            }
             $rows = DB::connection(self::CONNECTION)->select("
                 SELECT latitude, longitude, updated_at
                 FROM unit_gps_logs
@@ -415,35 +452,133 @@ final class IscPostEventTrackService
     /**
      * @return list<array<string, mixed>>
      */
-    private function peopleViolationsOnDay(string $from, string $to): array
+    private function peopleViolationsOnDay(string $from, string $to, string $search = ''): array
     {
-        $out = [];
-        foreach ($this->violations->people() as $row) {
-            $at = (string) ($row['entered_at'] ?? '');
-            if ($at !== '' && ($at < $from || $at >= $to)) {
-                continue;
-            }
-            $out[] = $row;
+        if ($search === '') {
+            return [];
+        }
+        try {
+            $like = '%'.$this->likeNeedle($search).'%';
+            $bindings = [$from, $to, $like, $like, $like];
+            $searchSql = ' AND (u.fullname LIKE ? OR u.sid_code LIKE ? OR u.npk LIKE ?)';
+            $rows = DB::connection(self::CONNECTION)->select("
+                SELECT
+                    v.user_id,
+                    v.created_at,
+                    v.is_competency,
+                    u.sid_code,
+                    u.fullname,
+                    u.functional_position,
+                    u.dedicated_site,
+                    c.name AS company_name,
+                    b.name AS boundary_name,
+                    s.code AS site_code_raw,
+                    s.name AS site_name
+                FROM boundary_violations v
+                INNER JOIN users u ON u.id = v.user_id AND u.is_deleted = 0
+                LEFT JOIN companies c ON c.id = u.company_id
+                LEFT JOIN boundaries b ON b.id = v.boundary_id
+                LEFT JOIN sites s ON s.id = v.site_id
+                WHERE v.is_deleted = 0
+                  AND v.deleted_at IS NULL
+                  AND v.created_at >= ?
+                  AND v.created_at < ?
+                  {$searchSql}
+                ORDER BY v.created_at DESC
+                LIMIT ".self::ROSTER_LIMIT."
+            ", $bindings);
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
         }
 
-        return $out;
+        $byUser = [];
+        foreach ($rows as $row) {
+            $userId = (string) ($row->user_id ?? '');
+            if ($userId === '' || isset($byUser[$userId])) {
+                continue;
+            }
+            $kind = ((int) ($row->is_competency ?? 0)) === 1
+                ? IscHazardBoundaryClassifier::KIND_EMPLOYEE_COMPETENCE
+                : IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER;
+            $sid = trim((string) ($row->sid_code ?? ''));
+            $byUser[$userId] = [
+                'user_id' => $userId,
+                'sid' => $sid,
+                'name' => trim((string) ($row->fullname ?? '')) ?: $sid,
+                'company' => $this->nullableString($row->company_name ?? null),
+                'job_title' => $this->nullableString($row->functional_position ?? null),
+                'site' => $this->nullableString($row->dedicated_site ?? $row->site_name ?? null),
+                'site_code' => $this->sites->codeFrom($row->site_code_raw ?? null, $row->site_name ?? null, $row->dedicated_site ?? null),
+                'hazard_name' => $this->nullableString($row->boundary_name ?? null),
+                'hazard_kind' => $kind,
+                'entered_at' => isset($row->created_at) ? (string) $row->created_at : null,
+            ];
+        }
+
+        return array_values($byUser);
     }
 
     /**
      * @return list<array<string, mixed>>
      */
-    private function unitViolationsOnDay(string $from, string $to): array
+    private function unitViolationsOnDay(string $from, string $to, string $search = ''): array
     {
-        $out = [];
-        foreach ($this->violations->units() as $row) {
-            $at = (string) ($row['entered_at'] ?? '');
-            if ($at !== '' && ($at < $from || $at >= $to)) {
-                continue;
-            }
-            $out[] = $row;
+        if ($search === '') {
+            return [];
+        }
+        try {
+            $like = '%'.$this->likeNeedle($search).'%';
+            $bindings = [$from, $to, $like, $like, $like];
+            $searchSql = ' AND (u.vehicle_number LIKE ? OR u.vehicle_name LIKE ? OR u.vendor_name LIKE ?)';
+            $rows = DB::connection(self::CONNECTION)->select("
+                SELECT
+                    v.unit_id,
+                    v.created_at,
+                    u.vehicle_number,
+                    u.vehicle_name,
+                    u.vendor_name,
+                    b.name AS boundary_name,
+                    s.code AS site_code_raw,
+                    s.name AS site_name
+                FROM boundary_violation_units v
+                INNER JOIN units u ON u.id = v.unit_id
+                LEFT JOIN boundaries b ON b.id = v.boundary_id
+                LEFT JOIN sites s ON s.id = v.site_id
+                WHERE v.is_deleted = 0
+                  AND v.deleted_at IS NULL
+                  AND v.created_at >= ?
+                  AND v.created_at < ?
+                  {$searchSql}
+                ORDER BY v.created_at DESC
+                LIMIT ".self::ROSTER_LIMIT."
+            ", $bindings);
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
         }
 
-        return $out;
+        $byUnit = [];
+        foreach ($rows as $row) {
+            $unitId = (string) ($row->unit_id ?? '');
+            if ($unitId === '' || isset($byUnit[$unitId])) {
+                continue;
+            }
+            $plate = trim((string) ($row->vehicle_number ?? ''));
+            $byUnit[$unitId] = [
+                'unit_id' => $unitId,
+                'sid' => $plate,
+                'name' => $plate !== '' ? $plate : trim((string) ($row->vehicle_name ?? 'Unit')),
+                'company' => $this->nullableString($row->vendor_name ?? null),
+                'site_code' => $this->sites->codeFrom($row->site_code_raw ?? null, $row->site_name ?? null),
+                'hazard_name' => $this->nullableString($row->boundary_name ?? null),
+                'entered_at' => isset($row->created_at) ? (string) $row->created_at : null,
+            ];
+        }
+
+        return array_values($byUnit);
     }
 
     /**
@@ -608,6 +743,11 @@ final class IscPostEventTrackService
             'raw_point_count' => count($points),
             'points' => $points,
         ];
+    }
+
+    private function likeNeedle(string $search): string
+    {
+        return addcslashes($search, '%_\\');
     }
 
     private function matchesNeedle(string $needle, string $name, string $sid, string $company): bool

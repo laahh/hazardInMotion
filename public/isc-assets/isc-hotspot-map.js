@@ -58,6 +58,7 @@
   var postEventDate = "";
   var postEventQuery = "";
   var postEventTimer = 0;
+  var postEventAbort = null;
   var trailLayer = L.layerGroup();
 
   var sgiAttribution = mapEl.getAttribute("data-wmts-attribution") || "Drone Imagery © SGI";
@@ -621,6 +622,9 @@
   }
 
   function openPlace(item) {
+    if (railView === "postevent") {
+      return;
+    }
     selected = item;
     recents = [itemKey(item)].concat(recents.filter(function (key) { return key !== itemKey(item); })).slice(0, 12);
     if (railView === "recents") {
@@ -769,6 +773,9 @@
   }
 
   function openPanel() {
+    if (railView === "postevent") {
+      return;
+    }
     if (panel) {
       panel.classList.remove("is-closed");
     }
@@ -802,6 +809,10 @@
       view.classList.toggle("is-on", on);
       view.hidden = !on;
     });
+    var shell = document.querySelector(".gm-shell");
+    if (shell) {
+      shell.classList.toggle("is-postevent", railView === "postevent");
+    }
     closePanel();
     closePlace();
     if (railView === "saved") {
@@ -817,6 +828,8 @@
       listMode = "all";
       if (searchInput) {
         searchInput.placeholder = "Cari nama, SID, atau unit";
+        postEventQuery = searchInput.value || "";
+        query = postEventQuery;
       }
       loadPostEventRoster();
     } else {
@@ -889,13 +902,31 @@
     if (dateInput && dateInput.value) {
       postEventDate = dateInput.value;
     }
-    fetch(withQuery(postEventUrl, { date: postEventDate, q: postEventQuery }), { headers: { Accept: "application/json" } })
-      .then(function (res) { return res.json(); })
+    if (postEventAbort) {
+      postEventAbort.abort();
+    }
+    postEventAbort = new AbortController();
+    paintPostEventRoster({ loading: true, count: "…", entries: [] });
+    fetch(withQuery(postEventUrl, { date: postEventDate, q: postEventQuery }), {
+      headers: { Accept: "application/json" },
+      signal: postEventAbort.signal
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          var error = new Error("HTTP " + res.status);
+          error.status = res.status;
+          throw error;
+        }
+        return res.json();
+      })
       .then(function (payload) {
         paintPostEventRoster(payload || {});
       })
-      .catch(function () {
-        paintPostEventRoster({ entries: [], count: 0 });
+      .catch(function (err) {
+        if (err && err.name === "AbortError") {
+          return;
+        }
+        paintPostEventRoster({ error: true, status: err && err.status, entries: [], count: 0 });
       });
   }
 
@@ -907,10 +938,28 @@
       return;
     }
     target.innerHTML = "";
+    if (payload.loading) {
+      var loading = document.createElement("article");
+      loading.className = "gm-hud-card is-empty";
+      loading.innerHTML = "<p class=\"gm-hud-kicker\">Memuat jejak</p><p class=\"gm-hud-hint\" style=\"margin:0\">Mencari orang atau unit untuk tanggal ini…</p>";
+      target.appendChild(loading);
+      return;
+    }
+    if (payload.error) {
+      var failed = document.createElement("article");
+      failed.className = "gm-hud-card is-empty";
+      failed.innerHTML = "<p class=\"gm-hud-kicker\">Gagal memuat</p><p class=\"gm-hud-hint\" style=\"margin:0\">Server timeout atau sibuk. Ketik nama, SID, atau nopol lalu cari lagi.</p>";
+      target.appendChild(failed);
+      replayViewAnim();
+      return;
+    }
     if (!entries.length) {
       var empty = document.createElement("article");
       empty.className = "gm-hud-card is-empty";
-      empty.innerHTML = "<p class=\"gm-hud-kicker\">Tidak ada jejak</p><p class=\"gm-hud-hint\" style=\"margin:0\">Tidak ada orang atau unit bergerak di tanggal ini.</p>";
+      var hint = postEventQuery
+        ? "Tidak ada orang atau unit yang cocok dengan pencarian ini."
+        : "Ketik nama, SID, atau nopol di kotak cari. Tanpa pencarian, hanya orang yang GPS-nya masih aktif di tanggal ini yang tampil.";
+      empty.innerHTML = "<p class=\"gm-hud-kicker\">Tidak ada jejak</p><p class=\"gm-hud-hint\" style=\"margin:0\">" + hint + "</p>";
       target.appendChild(empty);
       replayViewAnim();
       return;
@@ -947,17 +996,23 @@
       toast("Jejak tidak tersedia.");
       return;
     }
+    toast("Memuat jalur GPS…");
     fetch(withQuery(postEventTrailUrl, {
       entity: row.entity === "unit" ? "unit" : "person",
       id: row.id,
       date: postEventDate
     }), { headers: { Accept: "application/json" } })
-      .then(function (res) { return res.json(); })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("HTTP " + res.status);
+        }
+        return res.json();
+      })
       .then(function (payload) {
         drawTrail(row, (payload && payload.points) || []);
       })
       .catch(function () {
-        toast("Gagal memuat jejak.");
+        toast("Gagal memuat jejak. Coba lagi atau pilih tanggal lain.");
       });
   }
 
