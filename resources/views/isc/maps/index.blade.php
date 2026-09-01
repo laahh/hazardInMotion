@@ -108,7 +108,7 @@
         <p class="gm-hud-foot">Per site hari ini <button type="button" class="gm-hud-link" data-roster="checkin">Lihat daftar</button></p>
       </article>
 
-      <article class="gm-hud-card is-safety">
+      <article class="gm-hud-card is-safety" id="gm-safety-card" role="button" tabindex="0" aria-label="Buka daftar personel terlacak">
         <div class="gm-hud-card-top">
           <span class="gm-hud-ico safety" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.5 3 7.6 7 9 4-1.4 7-4.5 7-9V6z"/><path d="m9.2 12 2 2 4-4"/></svg>

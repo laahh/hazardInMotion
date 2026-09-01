@@ -705,6 +705,7 @@
     }
     if (placeEl) {
       placeEl.hidden = false;
+      placeEl.classList.toggle("is-person", item.kind === "person");
     }
     if (searchInput) {
       searchInput.value = item.title;
@@ -722,8 +723,17 @@
       placeSub.textContent = kindLabel + item.meta;
     }
     if (placeHero) {
-      placeHero.textContent = item.badge || (item.kind === "iupk" ? "IUPK" : "DB");
-      placeHero.setAttribute("data-site", item.badge || "IUPK");
+      placeHero.classList.toggle("is-safe", item.kind === "person" && (item.props || {}).safety !== "unsafe");
+      placeHero.classList.toggle("is-unsafe", item.kind === "person" && (item.props || {}).safety === "unsafe");
+      if (item.kind === "person") {
+        var safety = (item.props || {}).safety === "unsafe" ? "UNSAFE" : "SAFE";
+        placeHero.textContent = (item.props || {}).site_code || item.badge || safety;
+      } else {
+        placeHero.textContent = item.badge || (item.kind === "iupk" ? "IUPK" : "DB");
+      }
+      placeHero.setAttribute("data-site", item.kind === "person"
+        ? ((item.props || {}).site_code || item.badge || "IUPK")
+        : (item.badge || "IUPK"));
     }
     if (placeFacts) {
       placeFacts.innerHTML = factsFromProps(item);
@@ -829,6 +839,10 @@
     }
     if (placeEl) {
       placeEl.hidden = true;
+      placeEl.classList.remove("is-person");
+    }
+    if (placeHero) {
+      placeHero.classList.remove("is-safe", "is-unsafe");
     }
     paintSelection();
     renderList();
@@ -836,9 +850,14 @@
 
   function syncShell() {
     var shell = document.querySelector(".gm-shell");
-    if (shell) {
-      shell.classList.toggle("is-panel-closed", !!(panel && panel.classList.contains("is-closed")));
+    if (!shell) {
+      return;
     }
+    var panelClosed = !!(panel && panel.classList.contains("is-closed"));
+    var rosterOn = !panelClosed && listMode === "roster";
+    shell.classList.toggle("is-panel-closed", panelClosed);
+    shell.classList.toggle("is-roster", rosterOn);
+    shell.classList.toggle("is-roster-checkin", rosterOn && rosterFilter.type === "checkin");
   }
 
   function openPanel() {
@@ -2115,6 +2134,22 @@
       }
     });
   });
+  var safetyCard = document.getElementById("gm-safety-card");
+  if (safetyCard) {
+    safetyCard.addEventListener("click", function (event) {
+      if (event.target.closest("[data-roster], [data-hud-site], a, button")) {
+        return;
+      }
+      openRoster({ type: "in", safety: "", kind: "" });
+    });
+    safetyCard.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      openRoster({ type: "in", safety: "", kind: "" });
+    });
+  }
   setTimeout(hideLoading, 1200);
 
   document.getElementById("gm-search-form").addEventListener("submit", function (event) {
