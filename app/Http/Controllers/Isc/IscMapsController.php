@@ -33,6 +33,8 @@ final class IscMapsController extends Controller
             'boundariesUrl' => route('isc.maps.boundaries'),
             'overlayUrl' => route('isc.maps.overlay'),
             'pobUrl' => route('isc.maps.pob', ['source' => $status['connected'] ? 'live' : 'demo']),
+            'postEventUrl' => route('isc.maps.post-event', ['source' => $status['connected'] ? 'live' : 'demo']),
+            'postEventTrailUrl' => route('isc.maps.post-event.trail', ['source' => $status['connected'] ? 'live' : 'demo']),
             'interventionsUrl' => route('isc.interventions.index'),
             'wmsUrl' => '',
             'wmsLayer' => IscBasemapProxyService::WMS_LAYER,

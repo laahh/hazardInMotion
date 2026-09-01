@@ -7,6 +7,8 @@
   var boundariesUrl = mapEl.getAttribute("data-boundaries-url") || "";
   var overlayUrl = mapEl.getAttribute("data-overlay-url") || "";
   var pobUrl = mapEl.getAttribute("data-pob-url") || "";
+  var postEventUrl = mapEl.getAttribute("data-post-event-url") || "";
+  var postEventTrailUrl = mapEl.getAttribute("data-post-event-trail-url") || "";
   var interventionsUrl = mapEl.getAttribute("data-interventions-url") || "";
 
   var listEl = document.getElementById("zone-list");
@@ -53,6 +55,10 @@
   var pobSummary = {};
   var hudSite = "";
   var rosterFilter = { type: "", site: "", safety: "", kind: "" };
+  var postEventDate = "";
+  var postEventQuery = "";
+  var postEventTimer = 0;
+  var trailLayer = L.layerGroup();
 
   var sgiAttribution = mapEl.getAttribute("data-wmts-attribution") || "Drone Imagery © SGI";
   var wmtsProxyUrl = mapEl.getAttribute("data-wmts-proxy-url") || "";
@@ -124,6 +130,8 @@
   map.getPane("hazard").style.zIndex = 470;
   map.createPane("people");
   map.getPane("people").style.zIndex = 620;
+  map.createPane("trail");
+  map.getPane("trail").style.zIndex = 630;
   map.createPane("labels");
   map.getPane("labels").style.zIndex = 650;
   map.getPane("labels").style.pointerEvents = "none";
@@ -131,6 +139,7 @@
   var iupkRenderer = L.canvas({ pane: "iupk", padding: 0.8 });
   var labelsLayer = L.layerGroup();
   var peopleLayer = L.layerGroup();
+  trailLayer.addTo(map);
   var hazardLayer = L.geoJSON(null, {
     pane: "hazard",
     style: function (feature) {
@@ -804,10 +813,22 @@
     } else if (railView === "menu") {
       listMode = "all";
       paintMenuView();
+    } else if (railView === "postevent") {
+      listMode = "all";
+      if (searchInput) {
+        searchInput.placeholder = "Cari nama, SID, atau unit";
+      }
+      loadPostEventRoster();
     } else {
       listMode = "all";
     }
-    replayViewAnim();
+    if (railView !== "postevent") {
+      clearTrail();
+      if (searchInput) {
+        searchInput.placeholder = "Cari zona, site, atau boundary";
+      }
+      replayViewAnim();
+    }
   }
 
   function paintMenuView() {
@@ -822,6 +843,160 @@
   function paintRecentsView() {
     setText("hud-recent-count", recents.length);
     renderPlaceCards("gm-recent-cards", recents, "Belum ada riwayat", "Zona yang Anda buka akan muncul di sini.");
+  }
+
+  function todayIsoDate() {
+    var now = new Date();
+    var m = String(now.getMonth() + 1).padStart(2, "0");
+    var d = String(now.getDate()).padStart(2, "0");
+    return now.getFullYear() + "-" + m + "-" + d;
+  }
+
+  function withQuery(url, params) {
+    var next = url || "";
+    Object.keys(params).forEach(function (key) {
+      if (params[key] == null || params[key] === "") {
+        return;
+      }
+      next += (next.indexOf("?") >= 0 ? "&" : "?") + encodeURIComponent(key) + "=" + encodeURIComponent(params[key]);
+    });
+    return next;
+  }
+
+  function clockLabel(value) {
+    if (!value) {
+      return "";
+    }
+    var match = String(value).match(/(\d{2}:\d{2})/);
+    return match ? match[1] : String(value);
+  }
+
+  function clearTrail() {
+    trailLayer.clearLayers();
+  }
+
+  function loadPostEventRoster() {
+    if (!postEventUrl) {
+      return;
+    }
+    var dateInput = document.getElementById("hud-postevent-date");
+    if (!postEventDate) {
+      postEventDate = todayIsoDate();
+    }
+    if (dateInput && !dateInput.value) {
+      dateInput.value = postEventDate;
+    }
+    if (dateInput && dateInput.value) {
+      postEventDate = dateInput.value;
+    }
+    fetch(withQuery(postEventUrl, { date: postEventDate, q: postEventQuery }), { headers: { Accept: "application/json" } })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        paintPostEventRoster(payload || {});
+      })
+      .catch(function () {
+        paintPostEventRoster({ entries: [], count: 0 });
+      });
+  }
+
+  function paintPostEventRoster(payload) {
+    var entries = payload.entries || [];
+    setText("hud-postevent-count", payload.count != null ? payload.count : entries.length);
+    var target = document.getElementById("gm-postevent-cards");
+    if (!target) {
+      return;
+    }
+    target.innerHTML = "";
+    if (!entries.length) {
+      var empty = document.createElement("article");
+      empty.className = "gm-hud-card is-empty";
+      empty.innerHTML = "<p class=\"gm-hud-kicker\">Tidak ada jejak</p><p class=\"gm-hud-hint\" style=\"margin:0\">Tidak ada orang atau unit bergerak di tanggal ini.</p>";
+      target.appendChild(empty);
+      replayViewAnim();
+      return;
+    }
+    entries.forEach(function (row, i) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "gm-hud-card gm-hud-place";
+      btn.style.animationDelay = (0.08 + i * 0.05) + "s";
+      var kind = row.entity === "unit" ? "unit" : "person";
+      var tagClass = row.entered ? "tag is-in" : (kind === "unit" ? "tag is-unit" : "tag");
+      var tagText = row.entered ? "Masuk" : (kind === "unit" ? "Unit" : "GPS");
+      var timeRange = [clockLabel(row.first_at), clockLabel(row.last_at)].filter(Boolean).join(" – ");
+      var meta = [row.company, row.site || row.site_code, timeRange, row.point_count ? row.point_count + " titik" : "tanpa GPS"]
+        .filter(Boolean)
+        .join(" · ");
+      btn.innerHTML =
+        "<span class=\"gm-pin " + (kind === "unit" ? "besigma" : "people") + "\">" + pinSvg() + "</span>" +
+        "<span class=\"copy\"><b>" + esc(row.name || row.sid || "Tanpa nama") + "</b><span class=\"meta\">" + esc(meta) + "</span></span>" +
+        "<span class=\"" + tagClass + "\">" + tagText + "</span>";
+      btn.addEventListener("click", function () {
+        target.querySelectorAll(".gm-hud-place").forEach(function (el) {
+          el.classList.toggle("is-on", el === btn);
+        });
+        loadPostEventTrail(row);
+      });
+      target.appendChild(btn);
+    });
+    replayViewAnim();
+  }
+
+  function loadPostEventTrail(row) {
+    if (!postEventTrailUrl || !row || !row.id) {
+      toast("Jejak tidak tersedia.");
+      return;
+    }
+    fetch(withQuery(postEventTrailUrl, {
+      entity: row.entity === "unit" ? "unit" : "person",
+      id: row.id,
+      date: postEventDate
+    }), { headers: { Accept: "application/json" } })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        drawTrail(row, (payload && payload.points) || []);
+      })
+      .catch(function () {
+        toast("Gagal memuat jejak.");
+      });
+  }
+
+  function drawTrail(row, points) {
+    clearTrail();
+    if (!points.length) {
+      toast("Belum ada titik GPS untuk " + (row.name || "entitas ini") + ".");
+      return;
+    }
+    var latlngs = points.map(function (p) {
+      return [Number(p.lat), Number(p.lng)];
+    }).filter(function (p) {
+      return p[0] && p[1];
+    });
+    if (latlngs.length < 2) {
+      if (latlngs.length === 1) {
+        L.circleMarker(latlngs[0], { pane: "trail", radius: 7, color: "#0284c7", fillColor: "#0284c7", fillOpacity: 1, weight: 2 }).addTo(trailLayer);
+        map.setView(latlngs[0], 15);
+      }
+      toast("Titik GPS terlalu sedikit untuk menggambar jalur.");
+      return;
+    }
+    var line = L.polyline(latlngs, {
+      pane: "trail",
+      color: "#0284c7",
+      weight: 4,
+      opacity: 0.92,
+      lineJoin: "round",
+      lineCap: "round"
+    }).addTo(trailLayer);
+    L.marker(latlngs[0], {
+      pane: "trail",
+      icon: L.divIcon({ className: "", html: "<span class=\"gm-trail-dot start\"></span>", iconSize: [12, 12], iconAnchor: [6, 6] })
+    }).bindTooltip("Mulai " + clockLabel(points[0].at), { direction: "top" }).addTo(trailLayer);
+    L.marker(latlngs[latlngs.length - 1], {
+      pane: "trail",
+      icon: L.divIcon({ className: "", html: "<span class=\"gm-trail-dot end\"></span>", iconSize: [12, 12], iconAnchor: [6, 6] })
+    }).bindTooltip("Terakhir " + clockLabel(points[points.length - 1].at), { direction: "top" }).addTo(trailLayer);
+    map.fitBounds(line.getBounds(), { padding: [48, 48], maxZoom: 16 });
   }
 
   function renderPlaceCards(id, keys, emptyTitle, emptyHint) {
@@ -1297,6 +1472,11 @@
   document.getElementById("gm-search-form").addEventListener("submit", function (event) {
     event.preventDefault();
     query = searchInput.value || "";
+    if (railView === "postevent") {
+      postEventQuery = query;
+      loadPostEventRoster();
+      return;
+    }
     listMode = "all";
     openPanel();
     closePlace();
@@ -1308,6 +1488,9 @@
   });
 
   searchInput.addEventListener("focus", function () {
+    if (railView === "postevent") {
+      return;
+    }
     if (!selected) {
       openPanel();
     }
@@ -1317,6 +1500,12 @@
     query = searchInput.value || "";
     if (searchClear) {
       searchClear.hidden = query === "";
+    }
+    if (railView === "postevent") {
+      postEventQuery = query;
+      window.clearTimeout(postEventTimer);
+      postEventTimer = window.setTimeout(loadPostEventRoster, 280);
+      return;
     }
     listMode = "all";
     openPanel();
@@ -1331,6 +1520,11 @@
       searchInput.value = "";
       query = "";
       searchClear.hidden = true;
+      if (railView === "postevent") {
+        postEventQuery = "";
+        loadPostEventRoster();
+        return;
+      }
       closePlace();
       renderList();
     });
@@ -1414,6 +1608,21 @@
   document.getElementById("gm-recents-btn").addEventListener("click", function () {
     setRailView("recents");
   });
+  var postEventBtn = document.getElementById("gm-postevent-btn");
+  if (postEventBtn) {
+    postEventBtn.addEventListener("click", function () {
+      setRailView("postevent");
+    });
+  }
+  var postEventDateInput = document.getElementById("hud-postevent-date");
+  if (postEventDateInput) {
+    postEventDateInput.value = todayIsoDate();
+    postEventDateInput.addEventListener("change", function () {
+      postEventDate = postEventDateInput.value || todayIsoDate();
+      clearTrail();
+      loadPostEventRoster();
+    });
+  }
 
   var menuOpenList = document.getElementById("gm-menu-open-list");
   if (menuOpenList) {

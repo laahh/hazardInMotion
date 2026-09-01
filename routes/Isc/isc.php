@@ -7,6 +7,7 @@ use App\Http\Controllers\Isc\IscInterventionsController;
 use App\Http\Controllers\Isc\IscMapsController;
 use App\Http\Controllers\Isc\IscPobController;
 use App\Http\Controllers\Isc\IscPostEventController;
+use App\Http\Controllers\Isc\IscPostEventTrackController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('isc')
@@ -22,6 +23,8 @@ Route::prefix('isc')
             ->name('maps.wmts');
         Route::get('/maps/pob', [IscPobController::class, 'index'])->name('maps.pob');
         Route::get('/maps/pob/{key}', [IscPobController::class, 'show'])->where('key', '.*')->name('maps.pob.show');
+        Route::get('/maps/post-event', [IscPostEventTrackController::class, 'index'])->name('maps.post-event');
+        Route::get('/maps/post-event/trail', [IscPostEventTrackController::class, 'trail'])->name('maps.post-event.trail');
 
         Route::middleware('isc.role:isc-pic,isc-verifier,admin')->group(function (): void {
             Route::get('/interventions', [IscInterventionsController::class, 'index'])->name('interventions.index');

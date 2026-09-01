@@ -22,6 +22,8 @@ final class IscPersonnelGpsReaderTest extends TestCase
 
         $this->assertSame('2026-09-01 00:00:00', IscPersonnelGpsReader::todayStart('Asia/Makassar'));
         $this->assertSame('2026-09-02 00:00:00', IscPersonnelGpsReader::tomorrowStart('Asia/Makassar'));
+        $this->assertSame('2026-08-20 00:00:00', IscPersonnelGpsReader::dayStart('2026-08-20', 'Asia/Makassar'));
+        $this->assertSame('2026-08-21 00:00:00', IscPersonnelGpsReader::dayEndExclusive('2026-08-20', 'Asia/Makassar'));
     }
 
     public function test_only_gps_updated_today_is_accepted(): void

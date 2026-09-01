@@ -11,6 +11,8 @@
     data-boundaries-url="{{ $boundariesUrl }}"
     data-overlay-url="{{ $overlayUrl }}"
     data-pob-url="{{ $pobUrl }}"
+    data-post-event-url="{{ $postEventUrl }}"
+    data-post-event-trail-url="{{ $postEventTrailUrl }}"
     data-interventions-url="{{ $interventionsUrl }}"
     data-connected="{{ $connected ? '1' : '0' }}"
     data-wms-url="{{ $wmsUrl }}"
@@ -36,6 +38,10 @@
     <button type="button" class="gm-rail-btn" id="gm-recents-btn" data-rail="recents">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>
       <span>Terbaru</span>
+    </button>
+    <button type="button" class="gm-rail-btn" id="gm-postevent-btn" data-rail="postevent">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V7"/><path d="M4 19h16"/><path d="M8 15l3-4 3 3 4-6"/></svg>
+      <span>Post-event</span>
     </button>
     <span class="gm-rail-gap"></span>
     <button type="button" class="gm-rail-thumb bmo" data-jump="BMO" title="Binungan">BMO</button>
@@ -261,6 +267,28 @@
           <p class="gm-hud-foot">Zona yang terakhir dibuka di peta</p>
         </article>
         <div id="gm-recent-cards" class="gm-hud-place-stack"></div>
+      </div>
+
+      <div class="gm-hud-view" data-view="postevent" id="gm-view-postevent" hidden>
+        <article class="gm-hud-card is-postevent">
+          <div class="gm-hud-card-top">
+            <span class="gm-hud-ico postevent" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 19V7"/><path d="M4 19h16"/><path d="M8 15l3-4 3 3 4-6"/></svg>
+            </span>
+            <div class="gm-hud-head">
+              <p class="gm-hud-kicker">Post-event</p>
+              <p class="gm-hud-value"><b id="hud-postevent-count">–</b> <small>orang &amp; unit</small></p>
+            </div>
+            <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
+              <path d="M2 22 C12 22 16 10 26 14 C36 18 40 8 50 12 C60 16 68 24 86 12" />
+            </svg>
+          </div>
+          <label class="gm-hud-hint" for="hud-postevent-date">Tanggal jejak
+            <input type="date" id="hud-postevent-date" class="gm-hud-date">
+          </label>
+          <p class="gm-hud-foot">Kartu orang/unit yang bergerak hari itu. Klik untuk melihat jalur.</p>
+        </article>
+        <div id="gm-postevent-cards" class="gm-hud-place-stack"></div>
       </div>
     </div>
 

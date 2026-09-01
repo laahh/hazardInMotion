@@ -177,6 +177,16 @@ final class IscPersonnelGpsReader
         return '';
     }
 
+    public static function dayStart(string $date, ?string $timezone = null): string
+    {
+        return Carbon::parse($date, self::timezone($timezone))->startOfDay()->format('Y-m-d H:i:s');
+    }
+
+    public static function dayEndExclusive(string $date, ?string $timezone = null): string
+    {
+        return Carbon::parse($date, self::timezone($timezone))->startOfDay()->addDay()->format('Y-m-d H:i:s');
+    }
+
     public static function todayStart(?string $timezone = null): string
     {
         return Carbon::now(self::timezone($timezone))->startOfDay()->format('Y-m-d H:i:s');
