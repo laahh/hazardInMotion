@@ -34,10 +34,29 @@ final class IscMapsController extends Controller
             'overlayUrl' => route('isc.maps.overlay'),
             'pobUrl' => route('isc.maps.pob', ['source' => $status['connected'] ? 'live' : 'demo']),
             'interventionsUrl' => route('isc.interventions.index'),
-            'wmsUrl' => route('isc.maps.wms'),
+            'wmsUrl' => '',
             'wmsLayer' => IscBasemapProxyService::WMS_LAYER,
-            'wmtsProxyUrl' => url('/isc/maps/wmts').'/{z}/{x}/{y}',
+            'wmtsProxyUrl' => $this->wmtsProxyUrl(),
         ]);
+    }
+
+    /**
+     * Pakai /wms-proxy yang sudah ada di production, bukan /isc/maps/wms
+     * (route baru sering 404 karena route:cache lama).
+     */
+    private function wmtsProxyUrl(): string
+    {
+        $base = route('wms-proxy', [
+            'url' => 'http://'.IscBasemapProxyService::GEOSERVER_HOST.':'.IscBasemapProxyService::GEOSERVER_PORT.'/geoserver/gwc/service/wmts',
+            'layer' => 'geonode:basemap_allsite',
+            'tilematrixset' => 'EPSG:900913',
+            'Service' => 'WMTS',
+            'Request' => 'GetTile',
+            'Version' => '1.0.0',
+            'Format' => 'image/png',
+        ], false);
+
+        return $base.'&TileMatrix=EPSG:900913:{z}&TileCol={x}&TileRow={y}';
     }
 
     public function wms(Request $request): Response

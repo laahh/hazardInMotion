@@ -24,14 +24,18 @@ class WmsProxyController extends Controller
         }
         
         // Pastikan URL adalah dari domain yang diizinkan
-        $allowedDomains = [
-            'sgi.beraucoal.co.id'
-        ];
-        
         $parsedUrl = parse_url($wmsUrl);
-        $host = $parsedUrl['host'] ?? '';
-        
-        if (!in_array($host, $allowedDomains)) {
+        $host = strtolower((string) ($parsedUrl['host'] ?? ''));
+        $scheme = strtolower((string) ($parsedUrl['scheme'] ?? ''));
+        $path = (string) ($parsedUrl['path'] ?? '');
+        $port = (int) ($parsedUrl['port'] ?? ($scheme === 'https' ? 443 : 80));
+
+        $allowed = $host === 'sgi.beraucoal.co.id' && $scheme === 'https';
+        if ($host === '10.10.10.61' && $scheme === 'http' && $port === 8080 && str_starts_with($path, '/geoserver/')) {
+            $allowed = true;
+        }
+
+        if (! $allowed) {
             return response()->json(['error' => 'Domain not allowed'], 403);
         }
         

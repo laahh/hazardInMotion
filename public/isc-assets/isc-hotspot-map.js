@@ -54,27 +54,26 @@
   var rosterFilter = { type: "", site: "", safety: "", kind: "" };
 
   var sgiAttribution = mapEl.getAttribute("data-wmts-attribution") || "Drone Imagery © SGI";
+  var wmtsProxyUrl = mapEl.getAttribute("data-wmts-proxy-url") || "";
   var wmsUrl = mapEl.getAttribute("data-wms-url") || "";
   var wmsLayerName = mapEl.getAttribute("data-wms-layer") || "basemap:basemap_allsite";
-  var wmtsProxyUrl = mapEl.getAttribute("data-wmts-proxy-url") || "";
   var sgiOpts = {
     attribution: sgiAttribution,
     maxZoom: 22,
+    maxNativeZoom: 22,
     minZoom: 5,
-    opacity: 1
+    opacity: 1,
+    tms: false
   };
-  var sgi = wmsUrl
-    ? L.tileLayer.wms(wmsUrl, Object.assign({}, sgiOpts, {
+  var sgi = wmtsProxyUrl
+    ? L.tileLayer(wmtsProxyUrl, sgiOpts)
+    : L.tileLayer.wms(wmsUrl, Object.assign({}, sgiOpts, {
       layers: wmsLayerName,
       format: "image/png",
       transparent: true,
       version: "1.1.1",
       uppercase: true,
       tiled: true
-    }))
-    : L.tileLayer(wmtsProxyUrl, Object.assign({}, sgiOpts, {
-      maxNativeZoom: 22,
-      tms: false
     }));
   var sgiTileErrors = 0;
   sgi.on("tileerror", function () {

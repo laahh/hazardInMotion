@@ -277,5 +277,5 @@
 @section('scripts')
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="{{ $iupkAsset }}"></script>
-<script src="{{ asset('isc-assets/isc-hotspot-map.js') }}"></script>
+<script src="{{ asset('isc-assets/isc-hotspot-map.js') }}?v={{ filemtime(public_path('isc-assets/isc-hotspot-map.js')) }}"></script>
 @endsection
