@@ -66,7 +66,6 @@
     </form>
 
     <div class="gm-hud" id="gm-hud" aria-label="Ringkasan Person on Board">
-      <p class="gm-hud-demo" id="gm-hud-source">Data dummy preview</p>
 
       <article class="gm-hud-card is-checkin">
         <div class="gm-hud-card-top">

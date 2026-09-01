@@ -979,14 +979,6 @@
     setText("hud-gap-br", recon.gap_besigma_minus_rfid_count);
     setText("hud-gap-rb", recon.gap_rfid_minus_besigma_count);
     setText("hud-both", recon.both_count);
-    var sourceEl = document.getElementById("gm-hud-source");
-    if (sourceEl) {
-      if (payload.source === "live") {
-        sourceEl.textContent = payload.besigma_error ? ("Besigma live — " + payload.besigma_error) : "Data live Besigma";
-      } else {
-        sourceEl.textContent = payload.besigma_error || "Data dummy preview";
-      }
-    }
   }
 
   function paintHudCounts() {

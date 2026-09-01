@@ -214,16 +214,6 @@ button, input { font-family: inherit; }
   margin-top: 0;
   max-height: min(42vh, 420px);
 }
-.gm-hud-demo {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 500;
-  color: #8a5a00;
-  background: #fef7e0;
-  border-radius: 999px;
-  padding: 4px 10px;
-  width: fit-content;
-}
 .gm-hud-card {
   position: relative;
   overflow: visible;
