@@ -120,6 +120,89 @@ final class IscBoundaryGeometryMapperTest extends TestCase
         $this->assertSame($ring[0], $ring[array_key_last($ring)]);
     }
 
+    public function test_besigma_paths_wrapper_and_lon_keys(): void
+    {
+        $row = (object) [
+            'id' => 'path-1',
+            'polylines' => json_encode([
+                'paths' => [[
+                    ['Lat' => 2.0, 'Lon' => 117.1],
+                    ['Lat' => 2.0, 'Lon' => 117.2],
+                    ['Lat' => 2.1, 'lng' => 117.2],
+                    ['lat' => 2.1, 'lon' => 117.1],
+                ]],
+            ]),
+        ];
+
+        $feature = (new IscBoundaryGeometryMapper())->featureFromRow($row, [
+            'id' => 'char(36)',
+            'polylines' => 'longtext',
+        ]);
+
+        $this->assertSame('Polygon', $feature['geometry']['type']);
+        $this->assertGreaterThanOrEqual(5, count($feature['geometry']['coordinates'][0]));
+    }
+
+    public function test_nested_rings_and_invalid_vertex_are_skipped(): void
+    {
+        $row = (object) [
+            'id' => 'nested-1',
+            'polylines' => json_encode([
+                [
+                    ['lat' => 2.0, 'lng' => 117.1],
+                    ['bad' => true],
+                    ['lat' => 2.0, 'lng' => 117.2],
+                    ['lat' => 2.1, 'lng' => 117.2],
+                ],
+            ]),
+        ];
+
+        $feature = (new IscBoundaryGeometryMapper())->featureFromRow($row, [
+            'id' => 'char(36)',
+            'polylines' => 'longtext',
+        ]);
+
+        $this->assertSame('Polygon', $feature['geometry']['type']);
+    }
+
+    public function test_double_encoded_json_becomes_polygon(): void
+    {
+        $inner = json_encode([
+            ['lat' => 2.02, 'lng' => 117.11],
+            ['lat' => 2.02, 'lng' => 117.22],
+            ['lat' => 2.12, 'lng' => 117.22],
+        ]);
+        $row = (object) [
+            'id' => 'dbl-1',
+            'polylines' => json_encode($inner),
+        ];
+
+        $feature = (new IscBoundaryGeometryMapper())->featureFromRow($row, [
+            'id' => 'char(36)',
+            'polylines' => 'longtext',
+        ]);
+
+        $this->assertSame('Polygon', $feature['geometry']['type']);
+    }
+
+    public function test_center_point_used_when_polylines_unusable(): void
+    {
+        $row = (object) [
+            'id' => 'center-1',
+            'polylines' => '[]',
+            'polyline_center_point' => json_encode(['lat' => 2.05, 'lng' => 117.4]),
+        ];
+
+        $feature = (new IscBoundaryGeometryMapper())->featureFromRow($row, [
+            'id' => 'char(36)',
+            'polylines' => 'longtext',
+            'polyline_center_point' => 'text',
+        ]);
+
+        $this->assertSame('Point', $feature['geometry']['type']);
+        $this->assertEqualsWithDelta(117.4, $feature['geometry']['coordinates'][0], 0.0001);
+    }
+
     public function test_shadow_polylines_used_when_polylines_empty(): void
     {
         $row = (object) [

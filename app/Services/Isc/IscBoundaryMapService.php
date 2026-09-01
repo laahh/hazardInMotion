@@ -17,7 +17,7 @@ final class IscBoundaryMapService
 {
     public const CONNECTION = 'besigma_db';
 
-    public const CACHE_KEY = 'isc.besigma.boundaries.geojson.v1';
+    public const CACHE_KEY = 'isc.besigma.boundaries.geojson.v2';
 
     public const CACHE_TTL_SECONDS = 45;
 
@@ -52,6 +52,8 @@ final class IscBoundaryMapService
         'type' => 'varchar',
         'polylines' => 'longtext',
         'shadow_polylines' => 'longtext',
+        'polyline_center_point' => 'text',
+        'shadow_polyline_center_point' => 'longtext',
         'polyline_color_hex' => 'varchar',
         'site_id' => 'char(36)',
         'pit_id' => 'char(36)',
@@ -260,6 +262,8 @@ final class IscBoundaryMapService
                 b.type,
                 b.polylines,
                 b.shadow_polylines,
+                b.polyline_center_point,
+                b.shadow_polyline_center_point,
                 b.polyline_color_hex,
                 b.site_id,
                 b.pit_id,
