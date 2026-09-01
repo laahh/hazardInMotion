@@ -363,6 +363,9 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
 
     // WMS Proxy Route - untuk mengatasi CORS
     Route::get('wms-proxy', [WmsProxyController::class, 'proxy'])->name('wms-proxy');
+    Route::get('basemap-tile/{z}/{x}/{y}', [\App\Http\Controllers\Isc\IscMapsController::class, 'wmts'])
+        ->whereNumber(['z', 'x', 'y'])
+        ->name('isc.basemap.tile');
 
     // CCTV Proxy Route - untuk streaming CCTV
     Route::get('cctv-proxy/snapshot', [CctvProxyController::class, 'snapshot'])->name('cctv-proxy-snapshot');
