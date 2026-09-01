@@ -13,7 +13,9 @@
     data-pob-url="{{ $pobUrl }}"
     data-interventions-url="{{ $interventionsUrl }}"
     data-connected="{{ $connected ? '1' : '0' }}"
-    data-wmts-url="http://10.10.10.61:8080/geoserver/gwc/service/wmts?layer=geonode:basemap_allsite&amp;tilematrixset=EPSG:900913&amp;Service=WMTS&amp;Request=GetTile&amp;Version=1.0.0&amp;Format=image/png&amp;TileMatrix=EPSG:900913:{z}&amp;TileCol={x}&amp;TileRow={y}"
+    data-wms-url="{{ $wmsUrl }}"
+    data-wms-layer="{{ $wmsLayer }}"
+    data-wmts-proxy-url="{{ $wmtsProxyUrl }}"
     data-wmts-attribution="Drone Imagery &copy; SGI"
   ></div>
   <div id="map-loading" class="gm-loading">Memuat peta…</div>

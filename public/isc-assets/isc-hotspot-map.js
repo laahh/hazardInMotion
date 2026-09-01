@@ -53,15 +53,35 @@
   var hudSite = "";
   var rosterFilter = { type: "", site: "", safety: "", kind: "" };
 
-  var sgiUrl = mapEl.getAttribute("data-wmts-url") ||
-    "http://10.10.10.61:8080/geoserver/gwc/service/wmts?layer=geonode:basemap_allsite&tilematrixset=EPSG:900913&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/png&TileMatrix=EPSG:900913:{z}&TileCol={x}&TileRow={y}";
-  var sgi = L.tileLayer(sgiUrl, {
-    attribution: mapEl.getAttribute("data-wmts-attribution") || "Drone Imagery © SGI",
+  var sgiAttribution = mapEl.getAttribute("data-wmts-attribution") || "Drone Imagery © SGI";
+  var wmsUrl = mapEl.getAttribute("data-wms-url") || "";
+  var wmsLayerName = mapEl.getAttribute("data-wms-layer") || "basemap:basemap_allsite";
+  var wmtsProxyUrl = mapEl.getAttribute("data-wmts-proxy-url") || "";
+  var sgiOpts = {
+    attribution: sgiAttribution,
     maxZoom: 22,
-    maxNativeZoom: 22,
     minZoom: 5,
-    opacity: 1,
-    tms: false
+    opacity: 1
+  };
+  var sgi = wmsUrl
+    ? L.tileLayer.wms(wmsUrl, Object.assign({}, sgiOpts, {
+      layers: wmsLayerName,
+      format: "image/png",
+      transparent: true,
+      version: "1.1.1",
+      uppercase: true,
+      tiled: true
+    }))
+    : L.tileLayer(wmtsProxyUrl, Object.assign({}, sgiOpts, {
+      maxNativeZoom: 22,
+      tms: false
+    }));
+  var sgiTileErrors = 0;
+  sgi.on("tileerror", function () {
+    sgiTileErrors += 1;
+    if (sgiTileErrors === 4) {
+      toast("Basemap drone SGI gagal dimuat. Coba jaringan internal atau ganti ke Peta/Gelap.");
+    }
   });
   var osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 22,

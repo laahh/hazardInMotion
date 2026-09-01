@@ -16,6 +16,10 @@ Route::prefix('isc')
         Route::get('/maps', [IscMapsController::class, 'index'])->name('maps.index');
         Route::get('/maps/boundaries', [IscMapsController::class, 'boundaries'])->name('maps.boundaries');
         Route::get('/maps/overlay', [IscMapsController::class, 'overlay'])->name('maps.overlay');
+        Route::get('/maps/wms', [IscMapsController::class, 'wms'])->name('maps.wms');
+        Route::get('/maps/wmts/{z}/{x}/{y}', [IscMapsController::class, 'wmts'])
+            ->whereNumber(['z', 'x', 'y'])
+            ->name('maps.wmts');
         Route::get('/maps/pob', [IscPobController::class, 'index'])->name('maps.pob');
         Route::get('/maps/pob/{key}', [IscPobController::class, 'show'])->where('key', '.*')->name('maps.pob.show');
 
