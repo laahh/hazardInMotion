@@ -9,7 +9,7 @@
   --gm-shadow: 0 1px 2px rgba(60, 64, 67, .3), 0 1px 3px 1px rgba(60, 64, 67, .15);
   --gm-shadow-lg: 0 4px 16px rgba(60, 64, 67, .2), 0 1px 3px rgba(60, 64, 67, .12);
   --gm-radius: 8px;
-  --gm-font: Roboto, "Segoe UI", system-ui, sans-serif;
+  --gm-font: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -152,7 +152,7 @@ button, input { font-family: inherit; }
   width: var(--gm-panel);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   min-height: 0;
   pointer-events: none;
 }
@@ -198,7 +198,7 @@ button, input { font-family: inherit; }
 .gm-hud {
   display: grid;
   gap: 12px;
-  margin-top: auto;
+  margin-top: 0;
   min-height: 0;
   overflow: auto;
   padding-right: 4px;
