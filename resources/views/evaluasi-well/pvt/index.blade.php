@@ -424,8 +424,11 @@
             });
         });
     }
-    bindBreakdown('[data-pvt-site]', 'site');
-    bindBreakdown('[data-pvt-company]', 'company');
+    var lockMitraFilters = @json((bool) ($lockMitraFilters ?? false));
+    if (!lockMitraFilters) {
+        bindBreakdown('[data-pvt-site]', 'site');
+        bindBreakdown('[data-pvt-company]', 'company');
+    }
 
     updateExportHref();
 })();
@@ -452,6 +455,9 @@
     <p class="text-sm text-secondary-light mb-0 mt-4">
       Operator yang check-IN lolos pada {{ $dateLabel ?? 'hari ini' }} · PVT = tes terakhir di hari yang sama (sebelum atau sesudah gate)
     </p>
+    @if (! empty($mitraScopeLabel))
+      <div class="text-secondary-light text-sm mt-4">Scope Mitra: {{ $mitraScopeLabel }}</div>
+    @endif
   </div>
   <ul class="d-flex align-items-center gap-2">
     <li class="fw-medium">
@@ -487,8 +493,8 @@
       </div>
       <div class="col-xl-3 col-md-4 col-sm-6">
         <label for="pvt-site" class="form-label text-sm fw-medium mb-6">Site</label>
-        <select id="pvt-site" class="form-select form-select-sm js-pvt-searchable" data-placeholder="Semua Site">
-          <option value="">Semua Site</option>
+        <select id="pvt-site" class="form-select form-select-sm js-pvt-searchable" data-placeholder="Semua Site" @disabled(! empty($lockMitraFilters))>
+          <option value="">{{ ! empty($lockMitraFilters) ? 'Sesuai assignment' : 'Semua Site' }}</option>
           @foreach (($opts['sites'] ?? []) as $site)
             <option value="{{ $site }}" @selected(($f['site'] ?? '') === $site)>{{ $site }}</option>
           @endforeach
@@ -496,8 +502,8 @@
       </div>
       <div class="col-xl-3 col-md-4 col-sm-6">
         <label for="pvt-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
-        <select id="pvt-company" class="form-select form-select-sm js-pvt-searchable" data-placeholder="Semua Perusahaan">
-          <option value="">Semua Perusahaan</option>
+        <select id="pvt-company" class="form-select form-select-sm js-pvt-searchable" data-placeholder="Semua Perusahaan" @disabled(! empty($lockMitraFilters))>
+          <option value="">{{ ! empty($lockMitraFilters) ? 'Sesuai assignment' : 'Semua Perusahaan' }}</option>
           @foreach (($opts['companies'] ?? []) as $company)
             <option value="{{ $company }}" @selected(($f['company'] ?? '') === $company)>{{ $company }}</option>
           @endforeach

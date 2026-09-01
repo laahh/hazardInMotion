@@ -129,7 +129,7 @@ final class SportEvaluationActiveStatsService
      * }
      */
     /**
-     * @param  array{site?:string,perusahaan?:string,company?:string}  $filters
+     * @param  array{site?:string,perusahaan?:string,company?:string,companies?:mixed,pairs?:mixed}  $filters
      */
     public function getStats(string $dimension, ?string $weekStart = null, array $filters = []): array
     {
@@ -146,7 +146,7 @@ final class SportEvaluationActiveStatsService
         try {
             $scopeKey = $this->mitraAssignmentService->cacheKeySuffix($scope);
             $stats = Cache::remember(
-                'evaluasi_well:active_stats:v4:'.$dimension.':'.$week['start'].':'.$scopeKey,
+                'evaluasi_well:active_stats:v5:'.$dimension.':'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($dimension, $week, $scope): array {
                     return $this->buildStats($dimension, $week, $scope);
@@ -238,7 +238,7 @@ final class SportEvaluationActiveStatsService
 
                     foreach (array_keys(self::DIMENSION_COLUMNS) as $dimension) {
                         $stats = Cache::remember(
-                            'evaluasi_well:active_stats:v4:'.$dimension.':'.$week['start'].':'.$scopeKey,
+                            'evaluasi_well:active_stats:v5:'.$dimension.':'.$week['start'].':'.$scopeKey,
                             self::CACHE_TTL,
                             function () use ($dimension, $week, $scope): array {
                                 return $this->buildStats($dimension, $week, $scope);
@@ -1044,35 +1044,46 @@ final class SportEvaluationActiveStatsService
                 'workout_evals' => [],
             ],
             'leaderboard' => [],
-            'filters' => ['site' => '', 'company' => ''],
+            'filters' => ['site' => '', 'company' => '', 'pairs' => [], 'companies' => []],
         ];
     }
 
     /**
-     * @param  array{site?:string,perusahaan?:string,company?:string}  $filters
-     * @return array{site:string,company:string}
+     * @param  array<string, mixed>  $filters
+     * @return array{
+     *     site: string,
+     *     company: string,
+     *     perusahaan: string,
+     *     pairs: list<array{site: string, perusahaan: string}>,
+     *     companies: list<array{perusahaan: string, sites: list<string>}>
+     * }
      */
     private function normalizeScopeFilters(array $filters): array
     {
-        $site = trim((string) ($filters['site'] ?? ''));
-        $company = trim((string) ($filters['company'] ?? $filters['perusahaan'] ?? ''));
+        $normalized = $this->mitraAssignmentService->normalizeScope([
+            'site' => $filters['site'] ?? '',
+            'perusahaan' => $filters['perusahaan'] ?? $filters['company'] ?? '',
+            'company' => $filters['company'] ?? '',
+            'companies' => $this->mitraAssignmentService->decodeScopeCollection($filters['companies'] ?? null),
+            'pairs' => $this->mitraAssignmentService->decodeScopeCollection($filters['pairs'] ?? null),
+        ]);
 
         return [
-            'site' => mb_substr($site, 0, 180),
-            'company' => mb_substr($company, 0, 180),
+            'site' => $normalized['site'],
+            'company' => $normalized['perusahaan'],
+            'perusahaan' => $normalized['perusahaan'],
+            'pairs' => $normalized['pairs'],
+            'companies' => $normalized['companies'],
         ];
     }
 
     /**
-     * @param  array{site:string,company:string}  $scope
+     * @param  array<string, mixed>  $scope
      * @return array{0:string,1:list<int>}
      */
     private function userIdInClause(string $column, array $scope): array
     {
-        $ids = $this->mitraAssignmentService->scopedEmployeeIds([
-            'site' => $scope['site'] ?? '',
-            'perusahaan' => $scope['company'] ?? '',
-        ]);
+        $ids = $this->mitraAssignmentService->scopedEmployeeIds($scope);
 
         if ($ids === null) {
             return ['', []];

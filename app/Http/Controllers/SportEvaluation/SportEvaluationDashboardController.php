@@ -32,11 +32,18 @@ class SportEvaluationDashboardController extends Controller
     /**
      * Filter index opsional (dipakai dashboard Mitra Kerja).
      *
-     * @var array{site:string,perusahaan:string}
+     * @var array{
+     *     site: string,
+     *     perusahaan: string,
+     *     pairs: list<array{site: string, perusahaan: string}>,
+     *     companies: list<array{perusahaan: string, sites: list<string>}>
+     * }
      */
     protected array $indexFilters = [
         'site' => '',
         'perusahaan' => '',
+        'pairs' => [],
+        'companies' => [],
     ];
 
     public function __construct(
@@ -59,15 +66,12 @@ class SportEvaluationDashboardController extends Controller
     /**
      * Data SSR dashboard utama (global atau scoped mitra).
      *
-     * @param  array{site?:string,perusahaan?:string,company?:string}  $filters
+     * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
      */
     public function buildIndexData(array $filters = []): array
     {
-        $this->indexFilters = [
-            'site' => trim((string) ($filters['site'] ?? '')),
-            'perusahaan' => trim((string) ($filters['perusahaan'] ?? $filters['company'] ?? '')),
-        ];
+        $this->indexFilters = $this->mitraAssignmentService->normalizeScope($filters);
 
         // Fail-fast: satu cek koneksi. Saat tunnel down, jangan N× SELECT 1 / query berat.
         if (! $this->connection->isUp()) {
@@ -164,14 +168,7 @@ class SportEvaluationDashboardController extends Controller
             ? $request->input('dimension')
             : 'site';
 
-        $filters = $this->installStatsService->normalizeFilters([
-            'site' => $request->input('site'),
-            'division_group' => $request->input('division_group', $request->input('division')),
-            'jabatan' => $request->input('jabatan', $request->input('jabatan_fungsional')),
-            'company' => $request->input('company'),
-            'departement' => $request->input('departement'),
-            'install' => $request->input('install'),
-        ]);
+        $filters = $this->installStatsFiltersFromRequest($request);
 
         try {
             return response()->json($this->installStatsService->getStats($dimension, $filters));
@@ -227,14 +224,7 @@ class SportEvaluationDashboardController extends Controller
                 ? $request->input('dimension')
                 : 'site';
 
-            $filters = $this->installStatsService->normalizeFilters([
-                'site' => $request->input('site'),
-                'division_group' => $request->input('division_group', $request->input('division')),
-                'jabatan' => $request->input('jabatan', $request->input('jabatan_fungsional')),
-                'company' => $request->input('company'),
-                'departement' => $request->input('departement'),
-                'install' => $request->input('install'),
-            ]);
+            $filters = $this->installStatsFiltersFromRequest($request);
 
             $stats = $this->installStatsService->getStats($dimension, $filters);
             $dimensionLabel = (string) ($stats['dimension_label'] ?? 'Site');
@@ -1747,14 +1737,13 @@ class SportEvaluationDashboardController extends Controller
         string $weekStart = '',
         string $weekEnd = '',
     ): Builder {
-        $scopedSite = trim((string) ($this->indexFilters['site'] ?? ''));
-        $scopedCompany = trim((string) ($this->indexFilters['perusahaan'] ?? ''));
+        $hasForcedScope = $this->mitraAssignmentService->hasScope($this->indexFilters);
 
         // Jangan double-apply site/perusahaan: indexFilters sudah membatasi via ID.
-        if ($filters['site'] !== '' && $scopedSite === '') {
+        if ($filters['site'] !== '' && ! $hasForcedScope) {
             $this->siteResolver->applySiteFilter($query, $filters['site']);
         }
-        if ($filters['company'] !== '' && $scopedCompany === '') {
+        if ($filters['company'] !== '' && ! $hasForcedScope) {
             $names = $this->companyAliasResolver->matchingRawNames($filters['company']);
             if ($names === []) {
                 $names = [$filters['company']];
@@ -1905,21 +1894,33 @@ class SportEvaluationDashboardController extends Controller
         }
 
         $this->applyForcedIndexFilters($scope);
-        $request->merge([
-            'site' => $scope['site'],
-            'company' => $scope['perusahaan'],
-        ]);
+        $request->merge($this->mitraAssignmentService->toFilterPayload($scope));
     }
 
     /**
-     * @param  array{site?:string,perusahaan?:string,company?:string}  $filters
+     * @param  array<string, mixed>  $filters
      */
     protected function applyForcedIndexFilters(array $filters): void
     {
-        $this->indexFilters = [
-            'site' => trim((string) ($filters['site'] ?? '')),
-            'perusahaan' => trim((string) ($filters['perusahaan'] ?? $filters['company'] ?? '')),
-        ];
+        $this->indexFilters = $this->mitraAssignmentService->normalizeScope($filters);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function installStatsFiltersFromRequest(Request $request): array
+    {
+        return $this->installStatsService->normalizeFilters([
+            'site' => $request->input('site'),
+            'division_group' => $request->input('division_group', $request->input('division')),
+            'jabatan' => $request->input('jabatan', $request->input('jabatan_fungsional')),
+            'company' => $request->input('company'),
+            'departement' => $request->input('departement'),
+            'install' => $request->input('install'),
+            'perusahaan' => $request->input('perusahaan', $request->input('company')),
+            'companies' => $request->input('companies'),
+            'pairs' => $request->input('pairs'),
+        ]);
     }
 
     private function hasIndexScope(): bool

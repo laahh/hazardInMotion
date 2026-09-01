@@ -664,6 +664,43 @@
 </script>
 <script>
 (function () {
+    var mitraMode = @json((bool) ($mitraMode ?? false));
+    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '', 'companies' => [], 'pairs' => []]);
+    window.evaluasiWellAppendMitraScope = function (target, mode, scope) {
+        target = target || {};
+        if (!mode || !scope) {
+            return target;
+        }
+        if (Array.isArray(scope.companies) && scope.companies.length) {
+            target.companies = JSON.stringify(scope.companies);
+            if (Array.isArray(scope.pairs) && scope.pairs.length) {
+                target.pairs = JSON.stringify(scope.pairs);
+            }
+            return target;
+        }
+        if (scope.site) {
+            target.site = scope.site;
+        }
+        if (scope.perusahaan) {
+            target.perusahaan = scope.perusahaan;
+            target.company = scope.perusahaan;
+        }
+        return target;
+    };
+    window.evaluasiWellMitraHasMultiScope = function (scope) {
+        if (!scope) {
+            return false;
+        }
+        if (Array.isArray(scope.pairs) && scope.pairs.length > 1) {
+            return true;
+        }
+        var companies = Array.isArray(scope.companies) ? scope.companies : [];
+        if (companies.length > 1) {
+            return true;
+        }
+        return companies.length === 1 && Array.isArray(companies[0].sites) && companies[0].sites.length > 1;
+    };
+
     var tableEl = document.querySelector('#notInstalledTable');
     if (!tableEl || typeof DataTable === 'undefined') {
         return;
@@ -674,7 +711,6 @@
     }
 
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
-    var mitraMode = @json((bool) ($mitraMode ?? false));
     var dataUrl = @json(
         ($mitraMode ?? false)
             ? route('evaluasi-well.mitra.not-installed.data')
@@ -685,7 +721,6 @@
             ? route('evaluasi-well.mitra.not-installed.export')
             : ($ajaxRoutes['notInstalledExport'] ?? route('evaluasi-well.not-installed.export'))
     );
-    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '']);
 
     var siteEl = document.querySelector('#not-installed-site');
     var companyEl = document.querySelector('#not-installed-company');
@@ -700,18 +735,19 @@
     var totalBadge = document.querySelector('#not-installed-total-badge');
 
     if (mitraMode) {
+        var hasMultiScope = window.evaluasiWellMitraHasMultiScope(mitraScope);
         if (siteEl) {
-            if (mitraScope.site && !Array.from(siteEl.options).some(function (opt) { return opt.value === mitraScope.site; })) {
+            if (!hasMultiScope && mitraScope.site && !Array.from(siteEl.options).some(function (opt) { return opt.value === mitraScope.site; })) {
                 siteEl.appendChild(new Option(mitraScope.site, mitraScope.site, true, true));
             }
-            siteEl.value = mitraScope.site || '';
+            siteEl.value = hasMultiScope ? '' : (mitraScope.site || '');
             siteEl.disabled = true;
         }
         if (companyEl) {
-            if (mitraScope.perusahaan && !Array.from(companyEl.options).some(function (opt) { return opt.value === mitraScope.perusahaan; })) {
+            if (!hasMultiScope && mitraScope.perusahaan && !Array.from(companyEl.options).some(function (opt) { return opt.value === mitraScope.perusahaan; })) {
                 companyEl.appendChild(new Option(mitraScope.perusahaan, mitraScope.perusahaan, true, true));
             }
-            companyEl.value = mitraScope.perusahaan || '';
+            companyEl.value = hasMultiScope ? '' : (mitraScope.perusahaan || '');
             companyEl.disabled = true;
         }
     }
@@ -726,15 +762,16 @@
     }
 
     function currentFilters() {
-        return {
-            site: mitraMode ? (mitraScope.site || '') : (siteEl ? siteEl.value : ''),
-            company: mitraMode ? (mitraScope.perusahaan || '') : (companyEl ? companyEl.value : ''),
+        var filters = {
+            site: mitraMode ? '' : (siteEl ? siteEl.value : ''),
+            company: mitraMode ? '' : (companyEl ? companyEl.value : ''),
             division: divisionEl ? divisionEl.value.trim() : '',
             departement: departementEl ? departementEl.value.trim() : '',
             jabatan_fungsional: jabatanFungsionalEl ? jabatanFungsionalEl.value : '',
             install: installEl ? installEl.value : 'belum',
             user_aktif: userAktifEl ? userAktifEl.value : ''
         };
+        return window.evaluasiWellAppendMitraScope(filters, mitraMode, mitraScope);
     }
 
     function updateExportHref() {
@@ -748,7 +785,7 @@
                 params.set(key, filters[key]);
             }
         });
-        if (mitraMode && mitraScope.perusahaan) {
+        if (mitraMode && mitraScope.perusahaan && !filters.companies) {
             params.set('perusahaan', mitraScope.perusahaan);
         }
 
@@ -925,8 +962,8 @@
 
     if (resetBtn) {
         resetBtn.addEventListener('click', function () {
-            if (siteEl) siteEl.value = mitraMode ? (mitraScope.site || '') : '';
-            if (companyEl) companyEl.value = mitraMode ? (mitraScope.perusahaan || '') : '';
+            if (siteEl) siteEl.value = mitraMode ? (window.evaluasiWellMitraHasMultiScope(mitraScope) ? '' : (mitraScope.site || '')) : '';
+            if (companyEl) companyEl.value = mitraMode ? (window.evaluasiWellMitraHasMultiScope(mitraScope) ? '' : (mitraScope.perusahaan || '')) : '';
             if (divisionEl) divisionEl.value = '';
             if (departementEl) departementEl.value = '';
             if (jabatanFungsionalEl) jabatanFungsionalEl.value = '';
@@ -985,7 +1022,7 @@
     );
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
     var mitraMode = @json((bool) ($mitraMode ?? false));
-    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '']);
+    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '', 'companies' => [], 'pairs' => []]);
     var cache = {};
     var currentDimension = 'site';
     var barChart = null;
@@ -1459,14 +1496,18 @@
     }
 
     function readGlobalFilters() {
-        return {
-            site: mitraMode ? (mitraScope.site || '') : (globalSiteEl ? globalSiteEl.value : ''),
+        var filters = {
+            site: mitraMode ? '' : (globalSiteEl ? globalSiteEl.value : ''),
             division_group: globalDivisionEl ? globalDivisionEl.value : '',
             jabatan: globalJabatanEl ? globalJabatanEl.value : '',
-            company: mitraMode ? (mitraScope.perusahaan || '') : (globalCompanyEl ? globalCompanyEl.value : ''),
+            company: mitraMode ? '' : (globalCompanyEl ? globalCompanyEl.value : ''),
             departement: globalDepartementEl ? globalDepartementEl.value.trim() : '',
             install: globalInstallEl ? globalInstallEl.value : ''
         };
+        if (typeof window.evaluasiWellAppendMitraScope === 'function') {
+            return window.evaluasiWellAppendMitraScope(filters, mitraMode, mitraScope);
+        }
+        return filters;
     }
 
     function updateInstallStatsExportHref() {
@@ -1481,6 +1522,8 @@
             params.company = filters.company;
             params.perusahaan = filters.company;
         }
+        if (filters.companies) params.companies = filters.companies;
+        if (filters.pairs) params.pairs = filters.pairs;
         if (filters.departement) params.departement = filters.departement;
         if (filters.install) params.install = filters.install;
         if (peopleTable && typeof peopleTable.search === 'function') {
@@ -1505,6 +1548,8 @@
             filters.division_group || '',
             filters.jabatan || '',
             filters.company || '',
+            filters.companies || '',
+            filters.pairs || '',
             filters.departement || '',
             filters.install || ''
         ].join('|');
@@ -1555,18 +1600,19 @@
         }
 
         if (mitraMode) {
+            var hasMultiScope = typeof window.evaluasiWellMitraHasMultiScope === 'function' && window.evaluasiWellMitraHasMultiScope(mitraScope);
             if (globalSiteEl) {
-                if (mitraScope.site && !Array.from(globalSiteEl.options).some(function (opt) { return opt.value === mitraScope.site; })) {
+                if (!hasMultiScope && mitraScope.site && !Array.from(globalSiteEl.options).some(function (opt) { return opt.value === mitraScope.site; })) {
                     globalSiteEl.appendChild(new Option(mitraScope.site, mitraScope.site, true, true));
                 }
-                globalSiteEl.value = mitraScope.site || '';
+                globalSiteEl.value = hasMultiScope ? '' : (mitraScope.site || '');
                 globalSiteEl.disabled = true;
             }
             if (globalCompanyEl) {
-                if (mitraScope.perusahaan && !Array.from(globalCompanyEl.options).some(function (opt) { return opt.value === mitraScope.perusahaan; })) {
+                if (!hasMultiScope && mitraScope.perusahaan && !Array.from(globalCompanyEl.options).some(function (opt) { return opt.value === mitraScope.perusahaan; })) {
                     globalCompanyEl.appendChild(new Option(mitraScope.perusahaan, mitraScope.perusahaan, true, true));
                 }
-                globalCompanyEl.value = mitraScope.perusahaan || '';
+                globalCompanyEl.value = hasMultiScope ? '' : (mitraScope.perusahaan || '');
                 globalCompanyEl.disabled = true;
             }
         }
@@ -1589,7 +1635,7 @@
         else if (filters.install === 'belum') parts.push('belum install');
         peopleSubtitleEl.textContent = parts.length
             ? parts.join(' · ')
-            : 'Mengikuti filter global di atas (semua data)';
+            : (mitraMode ? 'Sesuai assignment mitra' : 'Mengikuti filter global di atas (semua data)');
     }
 
     function highlightSummaryRow(name) {
@@ -1629,6 +1675,12 @@
                     d.company = filters.company;
                     if (mitraMode && filters.company) {
                         d.perusahaan = filters.company;
+                    }
+                    if (filters.companies) {
+                        d.companies = filters.companies;
+                    }
+                    if (filters.pairs) {
+                        d.pairs = filters.pairs;
                     }
                     d.division_group = filters.division_group;
                     d.division = '';
@@ -1897,6 +1949,8 @@
             params.company = filters.company;
             params.perusahaan = filters.company;
         }
+        if (filters.companies) params.companies = filters.companies;
+        if (filters.pairs) params.pairs = filters.pairs;
         if (filters.departement) params.departement = filters.departement;
         if (filters.install) params.install = filters.install;
 
@@ -1936,10 +1990,10 @@
     }
 
     function resetGlobalFilters() {
-        if (globalSiteEl) globalSiteEl.value = mitraMode ? (mitraScope.site || '') : '';
+        if (globalSiteEl) globalSiteEl.value = mitraMode ? ((typeof window.evaluasiWellMitraHasMultiScope === 'function' && window.evaluasiWellMitraHasMultiScope(mitraScope)) ? '' : (mitraScope.site || '')) : '';
         if (globalDivisionEl) globalDivisionEl.value = '';
         if (globalJabatanEl) globalJabatanEl.value = '';
-        if (globalCompanyEl) globalCompanyEl.value = mitraMode ? (mitraScope.perusahaan || '') : '';
+        if (globalCompanyEl) globalCompanyEl.value = mitraMode ? ((typeof window.evaluasiWellMitraHasMultiScope === 'function' && window.evaluasiWellMitraHasMultiScope(mitraScope)) ? '' : (mitraScope.perusahaan || '')) : '';
         if (globalDepartementEl) globalDepartementEl.value = '';
         if (globalInstallEl) globalInstallEl.value = '';
     }
@@ -2027,7 +2081,7 @@
     );
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
     var mitraMode = @json((bool) ($mitraMode ?? false));
-    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '']);
+    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '', 'companies' => [], 'pairs' => []]);
     var cache = {};
     var currentDimension = 'site';
     var currentWeekStart = '';
@@ -2551,10 +2605,14 @@
             params.week_start = weekStart;
         }
         if (mitraMode) {
-            if (mitraScope.site) params.site = mitraScope.site;
-            if (mitraScope.perusahaan) {
-                params.perusahaan = mitraScope.perusahaan;
-                params.company = mitraScope.perusahaan;
+            if (typeof window.evaluasiWellAppendMitraScope === 'function') {
+                window.evaluasiWellAppendMitraScope(params, true, mitraScope);
+            } else {
+                if (mitraScope.site) params.site = mitraScope.site;
+                if (mitraScope.perusahaan) {
+                    params.perusahaan = mitraScope.perusahaan;
+                    params.company = mitraScope.perusahaan;
+                }
             }
         }
 
@@ -2681,7 +2739,7 @@
   $mitraNeedsPicker = (bool) ($mitraNeedsPicker ?? false);
   $mitraIsManager = (bool) ($mitraIsManager ?? false);
   $mitraScopeLabel = $mitraScopeLabel ?? null;
-  $mitraScope = $mitraScope ?? ['site' => '', 'perusahaan' => ''];
+  $mitraScope = $mitraScope ?? ['site' => '', 'perusahaan' => '', 'pairs' => [], 'companies' => []];
   $siteOptions = $siteOptions ?? [];
   $companyOptions = $companyOptions ?? [];
   $ajaxRoutes = $ajaxRoutes ?? [

@@ -495,6 +495,56 @@ final class SportEvaluationMitraAssignmentService
     }
 
     /**
+     * Payload filter dashboard/stats dari scope (termasuk companies + pairs).
+     *
+     * @param  array<string, mixed>  $scope
+     * @return array{
+     *     site: string,
+     *     perusahaan: string,
+     *     company: string,
+     *     pairs: list<array{site: string, perusahaan: string}>,
+     *     companies: list<array{perusahaan: string, sites: list<string>}>
+     * }
+     */
+    public function toFilterPayload(array $scope): array
+    {
+        $normalized = $this->normalizeScope($scope);
+
+        return [
+            'site' => $normalized['site'],
+            'perusahaan' => $normalized['perusahaan'],
+            'company' => $normalized['perusahaan'],
+            'pairs' => $normalized['pairs'],
+            'companies' => $normalized['companies'],
+        ];
+    }
+
+    /**
+     * Decode companies/pairs dari request (array atau JSON string).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function decodeScopeCollection(mixed $value): array
+    {
+        if (is_string($value) && $value !== '') {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : [];
+        }
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $rows = [];
+        foreach ($value as $row) {
+            if (is_array($row)) {
+                $rows[] = $row;
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
      * @return array{
      *     site: string,
      *     perusahaan: string,

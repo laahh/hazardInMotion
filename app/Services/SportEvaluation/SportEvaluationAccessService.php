@@ -93,9 +93,7 @@ final class SportEvaluationAccessService
 
         $scope = $this->scopeFor($user);
 
-        return isset($scope['site'], $scope['perusahaan'])
-            && trim((string) $scope['site']) !== ''
-            && trim((string) $scope['perusahaan']) !== '';
+        return $this->mitraAssignmentService->hasScope($scope);
     }
 
     /**
@@ -127,7 +125,12 @@ final class SportEvaluationAccessService
     /**
      * Scope wajib dari assignment aktif user (kosong untuk manager tanpa assignment).
      *
-     * @return array{site?:string,perusahaan?:string}
+     * @return array{
+     *     site?: string,
+     *     perusahaan?: string,
+     *     pairs?: list<array{site: string, perusahaan: string}>,
+     *     companies?: list<array{perusahaan: string, sites: list<string>}>
+     * }
      */
     public function scopeFor(?User $user): array
     {
@@ -148,7 +151,12 @@ final class SportEvaluationAccessService
      * - Manager: boleh pilih via request site + perusahaan.
      * - Selain itu tanpa assignment: null (tampilkan empty state).
      *
-     * @return array{site:string,perusahaan:string}|null
+     * @return array{
+     *     site: string,
+     *     perusahaan: string,
+     *     pairs: list<array{site: string, perusahaan: string}>,
+     *     companies: list<array{perusahaan: string, sites: list<string>}>
+     * }|null
      */
     public function resolveMitraScope(?User $user, ?Request $request = null): ?array
     {
@@ -157,27 +165,17 @@ final class SportEvaluationAccessService
         }
 
         $assignmentScope = $this->scopeFor($user);
-        if ($assignmentScope !== []
-            && isset($assignmentScope['site'], $assignmentScope['perusahaan'])
-            && $assignmentScope['site'] !== ''
-            && $assignmentScope['perusahaan'] !== ''
-        ) {
+        if ($this->mitraAssignmentService->hasScope($assignmentScope)) {
             // Non-manager selalu terkunci ke assignment.
-            // Manager dengan assignment juga terkunci (satu mapping per user).
+            // Manager dengan assignment juga terkunci, kecuali override via query.
             if (! $this->isMitraManager($user) || ! $this->requestWantsOverride($request)) {
-                return [
-                    'site' => (string) $assignmentScope['site'],
-                    'perusahaan' => (string) $assignmentScope['perusahaan'],
-                ];
+                return $this->mitraAssignmentService->normalizeScope($assignmentScope);
             }
         }
 
         if (! $this->isMitraManager($user)) {
-            return $assignmentScope !== []
-                ? [
-                    'site' => (string) ($assignmentScope['site'] ?? ''),
-                    'perusahaan' => (string) ($assignmentScope['perusahaan'] ?? ''),
-                ]
+            return $this->mitraAssignmentService->hasScope($assignmentScope)
+                ? $this->mitraAssignmentService->normalizeScope($assignmentScope)
                 : null;
         }
 
@@ -188,10 +186,10 @@ final class SportEvaluationAccessService
             return null;
         }
 
-        return [
+        return $this->mitraAssignmentService->normalizeScope([
             'site' => $site,
             'perusahaan' => $perusahaan,
-        ];
+        ]);
     }
 
     private function requestWantsOverride(?Request $request): bool

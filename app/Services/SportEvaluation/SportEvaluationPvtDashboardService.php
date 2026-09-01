@@ -34,6 +34,8 @@ final class SportEvaluationPvtDashboardService
         private readonly SportEvaluationPvtRfidCheckinReader $rfidReader,
         private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
         private readonly SportEvaluationCompanyAliasResolver $companyAliasResolver,
+        private readonly SportEvaluationAccessService $accessService,
+        private readonly SportEvaluationMitraAssignmentService $mitraAssignmentService,
     ) {}
 
     /**
@@ -42,7 +44,7 @@ final class SportEvaluationPvtDashboardService
     public function dashboard(Request $request): array
     {
         $filters = $this->readFilters($request);
-        $empty = $this->emptyPayload($filters);
+        $empty = array_merge($this->emptyPayload($filters), $this->viewScopeMeta($filters));
 
         $bewellUp = $this->bewell->isUp();
         $rfidUp = $this->rfidReader->isUp();
@@ -62,6 +64,8 @@ final class SportEvaluationPvtDashboardService
                 $chart = $this->emptyCheckinChart();
             }
 
+            $filterMeta = $this->viewScopeMeta($filters);
+
             return [
                 'bewellUp' => true,
                 'rfidUp' => $rfidUp,
@@ -71,7 +75,9 @@ final class SportEvaluationPvtDashboardService
                 'siteRows' => $this->aggregateBy($cohort, 'site'),
                 'companyRows' => $this->aggregateBy($cohort, 'company'),
                 'checkinChart' => $chart,
-                'filterOptions' => $this->buildFilterOptions(),
+                'filterOptions' => $filterMeta['filterOptions'],
+                'lockMitraFilters' => $filterMeta['lockMitraFilters'],
+                'mitraScopeLabel' => $filterMeta['mitraScopeLabel'],
             ];
         } catch (Throwable $e) {
             report($e);
@@ -235,7 +241,15 @@ final class SportEvaluationPvtDashboardService
     }
 
     /**
-     * @return array{date:string,site:string,company:string,pvt_status:string}
+    /**
+     * @return array{
+     *     date: string,
+     *     site: string,
+     *     company: string,
+     *     pvt_status: string,
+     *     pairs: list<array{site: string, perusahaan: string}>,
+     *     companies: list<array{perusahaan: string, sites: list<string>}>
+     * }
      */
     public function readFilters(Request $request): array
     {
@@ -253,11 +267,30 @@ final class SportEvaluationPvtDashboardService
             $status = '';
         }
 
+        $user = $request->user();
+        if ($this->accessService->isMitraOnlyUser($user)) {
+            $assignmentScope = $this->accessService->scopeFor($user);
+            if ($this->mitraAssignmentService->hasScope($assignmentScope)) {
+                $normalized = $this->mitraAssignmentService->normalizeScope($assignmentScope);
+
+                return [
+                    'date' => $date,
+                    'site' => '',
+                    'company' => '',
+                    'pvt_status' => $status,
+                    'pairs' => $normalized['pairs'],
+                    'companies' => $normalized['companies'],
+                ];
+            }
+        }
+
         return [
             'date' => $date,
             'site' => $read($request->input('site', $request->query('site', ''))),
             'company' => $read($request->input('company', $request->query('company', $request->query('perusahaan', '')))),
             'pvt_status' => $status,
+            'pairs' => [],
+            'companies' => [],
         ];
     }
 
@@ -267,11 +300,13 @@ final class SportEvaluationPvtDashboardService
      */
     private function cohortRows(array $filters): array
     {
-        $cacheKey = 'evaluasi_well:pvt_cohort:v3:'.sha1((string) json_encode([
+        $cacheKey = 'evaluasi_well:pvt_cohort:v4:'.sha1((string) json_encode([
             $filters['date'],
             $filters['site'],
             $filters['company'],
             $filters['pvt_status'],
+            $filters['pairs'] ?? [],
+            $filters['companies'] ?? [],
         ], JSON_THROW_ON_ERROR));
 
         /** @var list<array<string, mixed>> */
@@ -369,7 +404,12 @@ final class SportEvaluationPvtDashboardService
      */
     private function loadOperators(array $filters): array
     {
-        $memoKey = $filters['site'].'|'.$filters['company'];
+        $memoKey = sha1((string) json_encode([
+            $filters['site'] ?? '',
+            $filters['company'] ?? '',
+            $filters['pairs'] ?? [],
+            $filters['companies'] ?? [],
+        ]));
         if (isset($this->operatorsMemo[$memoKey])) {
             return $this->operatorsMemo[$memoKey];
         }
@@ -389,23 +429,27 @@ final class SportEvaluationPvtDashboardService
             ->whereRaw("UPPER(TRIM(COALESCE(e.jabatan_fungsional, ''))) LIKE ?", ['%OPERATOR%'])
             ->whereRaw("UPPER(TRIM(COALESCE(e.jabatan_fungsional, ''))) <> ?", ['VISITOR']);
 
-        if ($filters['site'] !== '') {
-            $this->siteResolver->applySiteFilter($query, $filters['site']);
-        }
-        if ($filters['company'] !== '') {
-            $names = $this->companyAliasResolver->matchingRawNames($filters['company']);
-            if ($names === []) {
-                $names = [$filters['company']];
+        if ($this->mitraAssignmentService->hasScope($filters)) {
+            $this->mitraAssignmentService->applyScopeToEmployeeQuery($query, $filters);
+        } else {
+            if ($filters['site'] !== '') {
+                $this->siteResolver->applySiteFilter($query, $filters['site']);
             }
-            $normalized = array_map(
-                static fn (string $name): string => mb_strtoupper(trim($name)),
-                $names
-            );
-            $placeholders = implode(',', array_fill(0, count($normalized), '?'));
-            $query->whereRaw(
-                'UPPER(TRIM(COALESCE(e.nama_perusahaan, \'\'))) IN ('.$placeholders.')',
-                $normalized
-            );
+            if ($filters['company'] !== '') {
+                $names = $this->companyAliasResolver->matchingRawNames($filters['company']);
+                if ($names === []) {
+                    $names = [$filters['company']];
+                }
+                $normalized = array_map(
+                    static fn (string $name): string => mb_strtoupper(trim($name)),
+                    $names
+                );
+                $placeholders = implode(',', array_fill(0, count($normalized), '?'));
+                $query->whereRaw(
+                    'UPPER(TRIM(COALESCE(e.nama_perusahaan, \'\'))) IN ('.$placeholders.')',
+                    $normalized
+                );
+            }
         }
 
         $rows = $query->get();
@@ -790,6 +834,58 @@ final class SportEvaluationPvtDashboardService
     }
 
     /**
+     * @param  array<string, mixed>  $filters
+     * @return array{
+     *     filterOptions: array{sites: list<string>, companies: list<string>},
+     *     lockMitraFilters: bool,
+     *     mitraScopeLabel: string|null
+     * }
+     */
+    private function viewScopeMeta(array $filters): array
+    {
+        $locked = $this->mitraAssignmentService->hasScope($filters);
+        if (! $locked) {
+            return [
+                'filterOptions' => $this->buildFilterOptions(),
+                'lockMitraFilters' => false,
+                'mitraScopeLabel' => null,
+            ];
+        }
+
+        $sites = [];
+        $companies = [];
+        foreach ($filters['companies'] ?? [] as $company) {
+            if (! is_array($company)) {
+                continue;
+            }
+            $name = trim((string) ($company['perusahaan'] ?? ''));
+            if ($name !== '') {
+                $companies[] = $name;
+            }
+            foreach ($company['sites'] ?? [] as $site) {
+                $trimmed = trim((string) $site);
+                if ($trimmed !== '') {
+                    $sites[$trimmed] = $trimmed;
+                }
+            }
+        }
+        $siteList = array_values($sites);
+        sort($siteList, SORT_STRING);
+        sort($companies, SORT_STRING);
+
+        $label = $this->mitraAssignmentService->scopeLabel($filters);
+
+        return [
+            'filterOptions' => [
+                'sites' => $siteList,
+                'companies' => $companies,
+            ],
+            'lockMitraFilters' => true,
+            'mitraScopeLabel' => $label !== '' ? $label : null,
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $row
      * @return array<string, mixed>
      */
@@ -880,6 +976,8 @@ final class SportEvaluationPvtDashboardService
                 'sites' => [],
                 'companies' => [],
             ],
+            'lockMitraFilters' => false,
+            'mitraScopeLabel' => null,
         ];
     }
 
@@ -897,10 +995,12 @@ final class SportEvaluationPvtDashboardService
      */
     private function checkinChart(array $filters): array
     {
-        $cacheKey = 'evaluasi_well:pvt_checkin_chart:v1:'.sha1((string) json_encode([
+        $cacheKey = 'evaluasi_well:pvt_checkin_chart:v2:'.sha1((string) json_encode([
             $filters['date'],
             $filters['site'],
             $filters['company'],
+            $filters['pairs'] ?? [],
+            $filters['companies'] ?? [],
         ], JSON_THROW_ON_ERROR));
 
         /** @var array{categories: list<string>, dates: list<string>, checkin: list<int>, lulus: list<int>, tidak_lulus: list<int>, belum: list<int>, pct_sudah: list<float>} */
@@ -934,12 +1034,9 @@ final class SportEvaluationPvtDashboardService
             return $empty;
         }
 
-        $operators = $this->loadOperators([
-            'date' => $filters['date'],
-            'site' => $filters['site'],
-            'company' => $filters['company'],
+        $operators = $this->loadOperators(array_merge($filters, [
             'pvt_status' => '',
-        ]);
+        ]));
         if ($operators === []) {
             return $empty;
         }

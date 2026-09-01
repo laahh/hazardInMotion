@@ -56,6 +56,7 @@ final class SportEvaluationInstallStatsService
         private readonly SportEvaluationDivisiGroupResolver $divisiGroupResolver,
         private readonly SportEvaluationCompanyAliasResolver $companyAliasResolver,
         private readonly SportEvaluationEmployeeExclusionRules $exclusionRules,
+        private readonly SportEvaluationMitraAssignmentService $mitraAssignmentService,
     ) {}
 
     /**
@@ -80,7 +81,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:v10:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:v11:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             $stats = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($dimension, $filters): array {
                 return $this->buildStats($dimension, $filters);
@@ -119,7 +120,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:overview:v10:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:overview:v11:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters): array {
                 $overview = [];
@@ -278,13 +279,24 @@ final class SportEvaluationInstallStatsService
             $jabatan = '';
         }
 
-        return [
+        $scope = $this->mitraAssignmentService->normalizeScope([
             'site' => $read($filters['site'] ?? ''),
+            'perusahaan' => $read($filters['perusahaan'] ?? $filters['company'] ?? ''),
+            'company' => $read($filters['company'] ?? ''),
+            'companies' => $this->mitraAssignmentService->decodeScopeCollection($filters['companies'] ?? null),
+            'pairs' => $this->mitraAssignmentService->decodeScopeCollection($filters['pairs'] ?? null),
+        ]);
+
+        return [
+            'site' => $scope['site'],
             'division_group' => $read($filters['division_group'] ?? $filters['division'] ?? ''),
             'jabatan' => $jabatan,
-            'company' => $read($filters['company'] ?? ''),
+            'company' => $scope['perusahaan'],
+            'perusahaan' => $scope['perusahaan'],
             'departement' => $read($filters['departement'] ?? ''),
             'install' => $install,
+            'pairs' => $scope['pairs'],
+            'companies' => $scope['companies'],
         ];
     }
 
@@ -340,7 +352,7 @@ final class SportEvaluationInstallStatsService
             if (
                 $dimension === 'company'
                 && ! $this->isMineconCompany($company)
-                && ($filters['company'] === '' || ! $this->companyAliasResolver->matchesFilter($company, $filters['company']))
+                && ! $this->isCompanyAllowedByScope($company, $filters)
             ) {
                 continue;
             }
@@ -465,10 +477,9 @@ final class SportEvaluationInstallStatsService
      */
     private function hasActiveFilters(array $filters): bool
     {
-        return $filters['site'] !== ''
+        return $this->mitraAssignmentService->hasScope($filters)
             || $filters['division_group'] !== ''
             || $filters['jabatan'] !== ''
-            || $filters['company'] !== ''
             || $filters['departement'] !== ''
             || $filters['install'] !== '';
     }
@@ -512,13 +523,10 @@ final class SportEvaluationInstallStatsService
             $divisiGroup = $this->divisiGroupResolver->resolve($row['divisi']);
             $company = $this->companyAliasResolver->resolve($row['company']);
 
-            if ($filters['site'] !== '' && $resolvedSite !== $filters['site']) {
+            if (! $this->mitraAssignmentService->rowMatchesScope($filters, $resolvedSite, $row['company'])) {
                 continue;
             }
             if ($filters['division_group'] !== '' && $divisiGroup !== $filters['division_group']) {
-                continue;
-            }
-            if ($filters['company'] !== '' && ! $this->companyAliasResolver->matchesFilter($row['company'], $filters['company'])) {
                 continue;
             }
             if ($filters['departement'] !== '' && ! str_contains(mb_strtolower($row['departement']), mb_strtolower($filters['departement']))) {
@@ -648,7 +656,7 @@ final class SportEvaluationInstallStatsService
         ];
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:daily_trend:v1:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:daily_trend:v2:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters, $empty): array {
                 $end = Carbon::now()->endOfDay();
@@ -677,14 +685,18 @@ final class SportEvaluationInstallStatsService
                     $userIds = [];
                     foreach ($this->rawEmployeeRows() as $row) {
                         $resolvedSite = $this->siteResolver->resolve($row['kode_sid'], $row['site']);
+                        if ($this->exclusionRules->isExcludedRow([
+                            'jabatan_fungsional' => $row['jabatan'],
+                            'site' => $row['site'],
+                            'nama' => $row['nama'],
+                        ])) {
+                            continue;
+                        }
                         $divisiGroup = $this->divisiGroupResolver->resolve($row['divisi']);
-                        if ($filters['site'] !== '' && $resolvedSite !== $filters['site']) {
+                        if (! $this->mitraAssignmentService->rowMatchesScope($filters, $resolvedSite, $row['company'])) {
                             continue;
                         }
                         if ($filters['division_group'] !== '' && $divisiGroup !== $filters['division_group']) {
-                            continue;
-                        }
-                        if ($filters['company'] !== '' && ! $this->companyAliasResolver->matchesFilter($row['company'], $filters['company'])) {
                             continue;
                         }
                         if ($filters['departement'] !== '' && ! str_contains(mb_strtolower($row['departement']), mb_strtolower($filters['departement']))) {
@@ -872,6 +884,28 @@ final class SportEvaluationInstallStatsService
         $dimension = strtolower(trim($dimension));
 
         return array_key_exists($dimension, self::DIMENSION_LABELS) ? $dimension : 'site';
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function isCompanyAllowedByScope(string $companyName, array $filters): bool
+    {
+        if (! $this->mitraAssignmentService->hasScope($filters)) {
+            $filterCompany = trim((string) ($filters['company'] ?? $filters['perusahaan'] ?? ''));
+
+            return $filterCompany !== ''
+                && $this->companyAliasResolver->matchesFilter($companyName, $filterCompany);
+        }
+
+        foreach ($this->mitraAssignmentService->normalizeScope($filters)['companies'] as $company) {
+            $name = trim((string) ($company['perusahaan'] ?? ''));
+            if ($name !== '' && $this->companyAliasResolver->matchesFilter($companyName, $name)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

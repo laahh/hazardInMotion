@@ -60,7 +60,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
                 'mitraMode' => true,
                 'mitraNeedsPicker' => true,
                 'mitraIsManager' => $isManager,
-                'mitraScope' => ['site' => '', 'perusahaan' => ''],
+                'mitraScope' => ['site' => '', 'perusahaan' => '', 'pairs' => [], 'companies' => []],
                 'mitraScopeLabel' => null,
                 'siteOptions' => $options['sites'],
                 'companyOptions' => $options['companies'],
@@ -120,7 +120,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
             'mitraNeedsPicker' => false,
             'mitraIsManager' => $isManager,
             'mitraScope' => $scope,
-            'mitraScopeLabel' => $scope['perusahaan'].' · '.$scope['site'],
+            'mitraScopeLabel' => $this->assignmentService->scopeLabel($scope),
             'siteOptions' => $options['sites'],
             'companyOptions' => $options['companies'],
             'ajaxRoutes' => $this->ajaxRoutes($scope),
@@ -135,10 +135,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
             return response()->json(['available' => false, 'message' => 'Scope mitra belum dipilih.']);
         }
 
-        $request->merge([
-            'site' => $scope['site'],
-            'company' => $scope['perusahaan'],
-        ]);
+        $request->merge($this->assignmentService->toFilterPayload($scope));
 
         return parent::installStats($request);
     }
@@ -151,10 +148,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
         }
 
         $this->applyForcedIndexFilters($scope);
-        $request->merge([
-            'site' => $scope['site'],
-            'company' => $scope['perusahaan'],
-        ]);
+        $request->merge($this->assignmentService->toFilterPayload($scope));
 
         return parent::installStatsExport($request);
     }
@@ -201,10 +195,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
         }
 
         $this->applyForcedIndexFilters($scope);
-        $request->merge([
-            'site' => $scope['site'],
-            'company' => $scope['perusahaan'],
-        ]);
+        $request->merge($this->assignmentService->toFilterPayload($scope));
 
         return parent::notInstalledData($request);
     }
@@ -217,16 +208,18 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
         }
 
         $this->applyForcedIndexFilters($scope);
-        $request->merge([
-            'site' => $scope['site'],
-            'company' => $scope['perusahaan'],
-        ]);
+        $request->merge($this->assignmentService->toFilterPayload($scope));
 
         return parent::notInstalledExport($request);
     }
 
     /**
-     * @return array{site:string,perusahaan:string}|null
+     * @return array{
+     *     site: string,
+     *     perusahaan: string,
+     *     pairs: list<array{site: string, perusahaan: string}>,
+     *     companies: list<array{perusahaan: string, sites: list<string>}>
+     * }|null
      */
     private function requireScopeOrEmpty(Request $request): ?array
     {
