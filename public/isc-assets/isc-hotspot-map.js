@@ -57,15 +57,20 @@
   var wmtsProxyUrl = mapEl.getAttribute("data-wmts-proxy-url") || "";
   var wmsUrl = mapEl.getAttribute("data-wms-url") || "";
   var wmsLayerName = mapEl.getAttribute("data-wms-layer") || "basemap:basemap_allsite";
-  var osmUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-  var osmOpts = {
+  var satUrl = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+  var satOpts = {
+    attribution: "Tiles © Esri",
+    maxZoom: 22,
+    maxNativeZoom: 18,
+    minZoom: 5
+  };
+  var satUnderlay = L.tileLayer(satUrl, satOpts);
+  var osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "© OpenStreetMap",
     maxZoom: 22,
     maxNativeZoom: 19,
     minZoom: 5
-  };
-  var osmUnderlay = L.tileLayer(osmUrl, osmOpts);
-  var osm = L.tileLayer(osmUrl, osmOpts);
+  });
   var dark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
     attribution: "© OpenStreetMap © CARTO",
     maxZoom: 22,
@@ -92,14 +97,14 @@
       uppercase: true,
       tiled: true
     })) : null);
-  var basemaps = { sgi: osmUnderlay, map: osm, dark: dark };
+  var basemaps = { sgi: satUnderlay, map: osm, dark: dark };
 
   var map = L.map("map", {
     center: [2.08, 117.42],
     zoom: 10,
     minZoom: 5,
     maxZoom: 22,
-    layers: [osmUnderlay],
+    layers: [satUnderlay],
     zoomControl: false,
     attributionControl: true
   });
