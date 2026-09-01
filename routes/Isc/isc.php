@@ -24,6 +24,7 @@ Route::prefix('isc')
             ->whereNumber(['z', 'x', 'y'])
             ->name('maps.wmts');
         Route::get('/maps/pob', [IscPobController::class, 'index'])->name('maps.pob');
+        Route::get('/maps/pob/export', [IscPobController::class, 'export'])->name('maps.pob.export');
         Route::get('/maps/pob/{key}', [IscPobController::class, 'show'])->where('key', '.*')->name('maps.pob.show');
         Route::get('/maps/post-event', [IscPostEventTrackController::class, 'index'])->name('maps.post-event');
         Route::get('/maps/post-event/trail', [IscPostEventTrackController::class, 'trail'])->name('maps.post-event.trail');

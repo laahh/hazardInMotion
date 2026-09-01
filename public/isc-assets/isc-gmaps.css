@@ -224,18 +224,20 @@ button, input { font-family: inherit; }
 .gm-shell.is-roster .gm-hud-view.is-on {
   gap: 0;
 }
-.gm-shell.is-roster:not(.is-roster-checkin) .gm-hud-card:not(.is-safety),
-.gm-shell.is-roster-checkin .gm-hud-card:not(.is-checkin) {
+.gm-shell.is-roster:not(.is-roster-checkin):not(.is-roster-rfid) .gm-hud-card:not(.is-safety),
+.gm-shell.is-roster-checkin .gm-hud-card:not(.is-checkin),
+.gm-shell.is-roster-rfid .gm-hud-card:not(.is-rfid) {
   display: none;
 }
-.gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-split,
+.gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-split:not(.is-presence),
 .gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-violations,
 .gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-hint,
 .gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-foot,
 .gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-spark,
 .gm-shell.is-roster-checkin .gm-hud-card.is-checkin .gm-hud-sites,
 .gm-shell.is-roster-checkin .gm-hud-card.is-checkin .gm-hud-foot,
-.gm-shell.is-roster-checkin .gm-hud-card.is-checkin .gm-hud-spark {
+.gm-shell.is-roster-checkin .gm-hud-card.is-checkin .gm-hud-spark,
+.gm-shell.is-roster-rfid .gm-hud-card.is-rfid .gm-hud-spark {
   display: none;
 }
 .gm-shell.is-roster .gm-hud-card {
@@ -790,6 +792,23 @@ div.gm-hud-metric:hover { transform: none; }
   border-radius: 999px;
   background: #f1f3f4;
 }
+.gm-results-tools {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.gm-export-btn {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: #137333;
+  color: #fff;
+  font: 600 12px var(--gm-font);
+  cursor: pointer;
+}
+.gm-export-btn:hover { filter: brightness(1.05); }
 
 .gm-results-list {
   flex: 1 1 auto;
@@ -1360,6 +1379,23 @@ div.gm-hud-metric:hover { transform: none; }
   font-weight: 600;
   text-decoration: none;
 }
+.gm-person-pop {
+  min-width: 168px;
+  max-width: 260px;
+  display: grid;
+  gap: 3px;
+  font: 500 13px/1.35 var(--gm-font);
+}
+.gm-person-pop b { font-size: 14px; color: #0f172a; }
+.gm-person-pop .meta { color: #64748b; font-size: 12px; font-weight: 400; }
+.gm-person-pop .st {
+  font-size: 12px;
+  font-weight: 700;
+  color: #137333;
+}
+.gm-person-pop .st.is-out { color: #1d4ed8; }
+.gm-person-pop .st.is-unsafe { color: #c5221f; }
+.leaflet-popup-pane { z-index: 850; }
 .gm-task {
   display: grid;
   gap: 8px;

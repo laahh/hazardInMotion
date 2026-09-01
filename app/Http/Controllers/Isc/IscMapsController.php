@@ -33,6 +33,7 @@ final class IscMapsController extends Controller
             'boundariesUrl' => route('isc.maps.boundaries'),
             'overlayUrl' => route('isc.maps.overlay'),
             'pobUrl' => route('isc.maps.pob', ['source' => $status['connected'] ? 'live' : 'demo']),
+            'pobExportUrl' => route('isc.maps.pob.export', ['source' => $status['connected'] ? 'live' : 'demo']),
             'postEventUrl' => route('isc.maps.post-event', ['source' => $status['connected'] ? 'live' : 'demo']),
             'postEventTrailUrl' => route('isc.maps.post-event.trail', ['source' => $status['connected'] ? 'live' : 'demo']),
             'cctvUrl' => route('isc.maps.cctv'),

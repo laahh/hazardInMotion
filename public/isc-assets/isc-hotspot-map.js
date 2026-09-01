@@ -7,6 +7,7 @@
   var boundariesUrl = mapEl.getAttribute("data-boundaries-url") || "";
   var overlayUrl = mapEl.getAttribute("data-overlay-url") || "";
   var pobUrl = mapEl.getAttribute("data-pob-url") || "";
+  var pobExportUrl = mapEl.getAttribute("data-pob-export-url") || "";
   var postEventUrl = mapEl.getAttribute("data-post-event-url") || "";
   var postEventTrailUrl = mapEl.getAttribute("data-post-event-trail-url") || "";
   var cctvUrl = mapEl.getAttribute("data-cctv-url") || "";
@@ -55,6 +56,7 @@
   var pobSource = "demo";
   var peopleByKey = {};
   var pobCheckins = [];
+  var pobReconcile = {};
   var pobSummary = {};
   var hudSite = "";
   var rosterFilter = { type: "", site: "", safety: "", kind: "" };
@@ -162,6 +164,9 @@
   map.createPane("labels");
   map.getPane("labels").style.zIndex = 650;
   map.getPane("labels").style.pointerEvents = "none";
+  if (map.getPane("popupPane")) {
+    map.getPane("popupPane").style.zIndex = 850;
+  }
 
   var iupkRenderer = L.canvas({ pane: "iupk", padding: 0.8 });
   var cctvRenderer = L.canvas({ pane: "cctv", padding: 0.4 });
@@ -357,6 +362,32 @@
 
   function matchesHudSite(record) {
     return !hudSite || siteCodeOf(record) === hudSite;
+  }
+
+  function presenceLabel(person) {
+    var presence = (person && person.presence) || "";
+    if (presence === "in") {
+      return "Dalam konsesi";
+    }
+    if (presence === "out") {
+      return "Di luar konsesi";
+    }
+    return "Lokasi tidak diketahui";
+  }
+
+  function personPopupHtml(person) {
+    var p = person || {};
+    var safety = p.safety === "unsafe" ? (p.hazard_kind_label || "Unsafe") : (p.safety === "safe" ? "Safe" : "—");
+    var gps = (p.lat && p.lng) ? (Number(p.lat).toFixed(5) + ", " + Number(p.lng).toFixed(5)) : "Tidak ada GPS";
+    var stClass = "st" + (p.safety === "unsafe" ? " is-unsafe" : (p.presence === "out" ? " is-out" : ""));
+    return "" +
+      "<div class=\"gm-person-pop\">" +
+      "<b>" + esc(p.name || p.sid || "Personel") + "</b>" +
+      "<span class=\"meta\">" + esc([p.sid, p.company, p.job_title].filter(Boolean).join(" · ")) + "</span>" +
+      "<span class=\"" + stClass + "\">" + esc(presenceLabel(p) + " · " + safety) + "</span>" +
+      "<span class=\"meta\">" + esc(p.iupk_site || p.site_code || "") + "</span>" +
+      "<span class=\"meta\">GPS " + esc(gps) + "</span>" +
+      "</div>";
   }
 
   function itemFromCheckin(row) {
@@ -639,6 +670,10 @@
     if (countEl) {
       countEl.textContent = String(items.length) + (listMode === "roster" ? " orang" : " tempat");
     }
+    var exportBtn = document.getElementById("gm-roster-export");
+    if (exportBtn) {
+      exportBtn.hidden = listMode !== "roster";
+    }
     setText("hud-zone-count", allItems().length);
     listEl.innerHTML = "";
     if (!items.length) {
@@ -699,6 +734,11 @@
     if (railView === "recents") {
       paintRecentsView();
     }
+    if (item.kind === "person" && listMode !== "roster") {
+      var presence = (item.props && item.props.presence) || "in";
+      listMode = "roster";
+      rosterFilter = { type: presence === "out" ? "out" : "in", safety: "", kind: "" };
+    }
     openPanel();
     if (resultsEl) {
       resultsEl.hidden = true;
@@ -745,7 +785,13 @@
     syncSaveButton();
     paintSelection();
     renderList();
+    if (item.kind === "person" && (!item.layer || !item.layer.getLatLng)) {
+      toast("Tidak ada koordinat GPS untuk orang ini.");
+    }
     flyToItem(item);
+    if (item.layer && item.layer.openPopup) {
+      item.layer.openPopup();
+    }
   }
 
   function factsFromProps(item) {
@@ -759,12 +805,16 @@
       return rows.join("");
     }
     if (item.kind === "person") {
+      var gpsText = (p.lat && p.lng) ? (Number(p.lat).toFixed(5) + ", " + Number(p.lng).toFixed(5)) : "Tidak ada GPS";
       rows.push(fact("pin", p.name || "—", "Nama"));
+      rows.push(fact("tag", p.sid || "—", "SID"));
       rows.push(fact("tag", p.company || "—", "Perusahaan"));
       rows.push(fact("tag", p.job_title || "—", "Jabatan"));
-      rows.push(fact("area", p.iupk_site || p.presence || "—", "Zona IUPK"));
+      rows.push(fact("area", presenceLabel(p), "In / Out konsesi"));
+      rows.push(fact("area", p.iupk_site || p.site_code || "—", "Zona IUPK"));
+      rows.push(fact("tag", gpsText, "Koordinat GPS"));
       rows.push(fact("db", p.hazard_kind_label || p.hazard_name || (p.safety === "unsafe" ? "Unsafe" : (p.safety || "—")), "Jenis pelanggaran"));
-      rows.push(fact("tag", p.safety || p.presence || "—", "Safe / Unsafe"));
+      rows.push(fact("tag", p.safety || "—", "Safe / Unsafe"));
       rows.push(fact("tag", p.entered_at || p.gps_updated_at || "—", "Masuk / GPS"));
       rows.push(fact("tag", formatDuration(p.duration_seconds), "Durasi"));
       rows.push(fact("tag", p.intervention_status || "belum ada", "Status intervensi"));
@@ -855,9 +905,11 @@
     }
     var panelClosed = !!(panel && panel.classList.contains("is-closed"));
     var rosterOn = !panelClosed && listMode === "roster";
+    var rfidTypes = { both: 1, gap_br: 1, gap_rb: 1, current: 1 };
     shell.classList.toggle("is-panel-closed", panelClosed);
     shell.classList.toggle("is-roster", rosterOn);
     shell.classList.toggle("is-roster-checkin", rosterOn && rosterFilter.type === "checkin");
+    shell.classList.toggle("is-roster-rfid", rosterOn && !!rfidTypes[rosterFilter.type]);
   }
 
   function openPanel() {
@@ -1438,8 +1490,9 @@
   function paintHud(payload) {
     pobSummary = (payload && payload.summary) || {};
     pobCheckins = (payload && payload.checkins) || [];
+    pobReconcile = (payload && payload.reconcile) || {};
     pobSource = (payload && payload.source) || "demo";
-    var recon = (payload && payload.reconcile) || {};
+    var recon = pobReconcile;
     var rows = pobSummary.checkin_by_site || [];
     rows.forEach(function (row) {
       setText("hud-site-" + row.code, row.count);
@@ -1451,14 +1504,17 @@
     setText("hud-gap-br", recon.gap_besigma_minus_rfid_count);
     setText("hud-gap-rb", recon.gap_rfid_minus_besigma_count);
     setText("hud-both", recon.both_count);
+    setText("hud-both-metric", recon.both_count);
   }
 
   function paintHudCounts() {
     var summary = filteredSummary();
     setText("hud-checkin-total", summary.checkin_total);
     setText("hud-pob-in", summary.in);
+    setText("hud-pob-in-metric", summary.in);
     setText("hud-traced", summary.traced);
     setText("hud-pob-out", summary.out);
+    setText("hud-pob-out-metric", summary.out);
     setText("hud-pob-unknown", summary.unknown);
     setText("hud-safe", summary.safe);
     setText("hud-unsafe", summary.unsafe);
@@ -1474,9 +1530,42 @@
     });
   }
 
+  function itemFromReconcile(row, badge, statusLabel) {
+    var p = row || {};
+    var sid = String(p.sid || "").toUpperCase();
+    return {
+      kind: "person",
+      title: p.name || p.sid || "Personel",
+      meta: [p.sid, p.company, statusLabel].filter(Boolean).join(" · "),
+      badge: badge,
+      props: Object.assign({ presence: badge === "RFID" ? "in" : "", safety: null }, p),
+      layer: peopleByKey[p.key] || peopleByKey["sid:" + sid] || null
+    };
+  }
+
+  function rosterFromReconcile(list, badge, statusLabel) {
+    return (list || []).filter(function (row) {
+      return matchesHudSite(row) || !siteCodeOf(row);
+    }).map(function (row) {
+      return itemFromReconcile(row, badge, statusLabel);
+    });
+  }
+
   function rosterItems() {
     if (rosterFilter.type === "checkin") {
       return pobCheckins.filter(matchesHudSite).map(itemFromCheckin);
+    }
+    if (rosterFilter.type === "both") {
+      return rosterFromReconcile(pobReconcile.both, "OK", "RFID + Besigma");
+    }
+    if (rosterFilter.type === "gap_br") {
+      return rosterFromReconcile(pobReconcile.gap_besigma_minus_rfid, "BELUM", "Besigma, belum RFID");
+    }
+    if (rosterFilter.type === "gap_rb") {
+      return rosterFromReconcile(pobReconcile.gap_rfid_minus_besigma, "RFID", "RFID tanpa Besigma");
+    }
+    if (rosterFilter.type === "current") {
+      return rosterFromReconcile(pobReconcile.current_list, "GPS", "GPS aktif hari ini");
     }
     return filteredPeople().filter(function (person) {
       if (rosterFilter.safety === "safe") {
@@ -1487,6 +1576,12 @@
       }
       if (rosterFilter.kind) {
         return person.hazard_kind === rosterFilter.kind && (person.safety === "unsafe" || person.from_violation);
+      }
+      if (rosterFilter.type === "out") {
+        return countsAsPob(person) && person.presence === "out";
+      }
+      if (rosterFilter.type === "unknown") {
+        return countsAsPob(person) && person.presence !== "in" && person.presence !== "out";
       }
       if (rosterFilter.type === "in") {
         return countsAsPob(person) && person.presence === "in";
@@ -1499,7 +1594,25 @@
 
   function rosterTitle() {
     if (rosterFilter.type === "checkin") {
-      return hudSite ? ("Check-in " + hudSite) : "Check-in RFID";
+      return hudSite ? ("Check-in RFID " + hudSite) : "Check-in RFID";
+    }
+    if (rosterFilter.type === "both") {
+      return "Sudah RFID dan Besigma";
+    }
+    if (rosterFilter.type === "gap_br") {
+      return "Besigma, belum check-in RFID";
+    }
+    if (rosterFilter.type === "gap_rb") {
+      return "Sudah RFID, tidak di Besigma";
+    }
+    if (rosterFilter.type === "current") {
+      return "GPS aktif hari ini";
+    }
+    if (rosterFilter.type === "out") {
+      return "Di luar konsesi IUPK";
+    }
+    if (rosterFilter.type === "unknown") {
+      return "GPS tidak diketahui";
     }
     if (rosterFilter.kind === "employee_danger") {
       return "Pelanggaran Batas Bahaya Karyawan";
@@ -1516,7 +1629,7 @@
     if (rosterFilter.safety === "unsafe") {
       return "Personel Unsafe";
     }
-    return "Personel In";
+    return "Dalam konsesi IUPK";
   }
 
   function openRoster(filter) {
@@ -1535,6 +1648,23 @@
     if (kicker) {
       kicker.textContent = rosterTitle();
     }
+    var exportBtn = document.getElementById("gm-roster-export");
+    if (exportBtn) {
+      exportBtn.hidden = false;
+    }
+    document.querySelectorAll("[data-roster]").forEach(function (el) {
+      var type = el.getAttribute("data-roster") || "";
+      var kind = el.getAttribute("data-kind") || "";
+      var on = false;
+      if (type === "kind") {
+        on = rosterFilter.kind === kind;
+      } else if (type === "safe" || type === "unsafe") {
+        on = rosterFilter.safety === type;
+      } else {
+        on = rosterFilter.type === type && !rosterFilter.safety && !rosterFilter.kind;
+      }
+      el.classList.toggle("is-on", on);
+    });
     applyScope();
   }
 
@@ -1589,6 +1719,11 @@
         existing._iscPerson = person;
         existing.setLatLng(latlng);
         existing.setIcon(personIcon(person.marker || person.safety || "stale"));
+        if (existing.getPopup && existing.getPopup()) {
+          existing.setPopupContent(personPopupHtml(person));
+        } else {
+          existing.bindPopup(personPopupHtml(person), { closeButton: true, maxWidth: 280, className: "gm-person-popup" });
+        }
         keep[person.key] = existing;
         return;
       }
@@ -1598,8 +1733,10 @@
         title: person.name || person.sid || "Personel"
       });
       marker._iscPerson = person;
+      marker.bindPopup(personPopupHtml(person), { closeButton: true, maxWidth: 280, className: "gm-person-popup" });
       marker.on("click", function () {
         openPlace(itemFromPerson(marker._iscPerson, marker));
+        marker.openPopup();
       });
       marker.addTo(peopleLayer);
       keep[person.key] = marker;
@@ -2121,6 +2258,18 @@
         openRoster({ type: "in", safety: "", kind: "" });
         return;
       }
+      if (type === "out") {
+        openRoster({ type: "out", safety: "", kind: "" });
+        return;
+      }
+      if (type === "unknown") {
+        openRoster({ type: "unknown", safety: "", kind: "" });
+        return;
+      }
+      if (type === "both" || type === "gap_br" || type === "gap_rb" || type === "current") {
+        openRoster({ type: type, safety: "", kind: "" });
+        return;
+      }
       if (type === "safe") {
         openRoster({ type: "in", safety: "safe", kind: "" });
         return;
@@ -2148,6 +2297,22 @@
       }
       event.preventDefault();
       openRoster({ type: "in", safety: "", kind: "" });
+    });
+  }
+  var rfidCard = document.getElementById("gm-rfid-card");
+  if (rfidCard) {
+    rfidCard.addEventListener("click", function (event) {
+      if (event.target.closest("[data-roster], a, button")) {
+        return;
+      }
+      openRoster({ type: "both", safety: "", kind: "" });
+    });
+    rfidCard.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      openRoster({ type: "both", safety: "", kind: "" });
     });
   }
   setTimeout(hideLoading, 1200);
@@ -2328,6 +2493,33 @@
     }
     closePlace();
   });
+  var rosterExport = document.getElementById("gm-roster-export");
+  if (rosterExport) {
+    rosterExport.addEventListener("click", function () {
+      if (!pobExportUrl || listMode !== "roster") {
+        return;
+      }
+      var url = new URL(pobExportUrl, window.location.origin);
+      var type = rosterFilter.kind ? "kind" : (rosterFilter.safety || rosterFilter.type || "in");
+      url.searchParams.set("type", type);
+      if (rosterFilter.safety) {
+        url.searchParams.set("safety", rosterFilter.safety);
+      } else {
+        url.searchParams.delete("safety");
+      }
+      if (rosterFilter.kind) {
+        url.searchParams.set("kind", rosterFilter.kind);
+      } else {
+        url.searchParams.delete("kind");
+      }
+      if (hudSite) {
+        url.searchParams.set("site", hudSite);
+      } else {
+        url.searchParams.delete("site");
+      }
+      window.location.href = url.toString();
+    });
+  }
 
   document.getElementById("gm-saved-btn").addEventListener("click", function () {
     setRailView("saved");

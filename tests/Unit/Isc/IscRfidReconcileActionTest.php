@@ -35,5 +35,7 @@ final class IscRfidReconcileActionTest extends TestCase
         $this->assertContains('B', array_column($result['gap_besigma_minus_rfid'], 'sid'));
         $this->assertContains('C', array_column($result['gap_rfid_minus_besigma'], 'sid'));
         $this->assertContains('A', array_column($result['both'], 'sid'));
+        $this->assertContains('A', array_column($result['current_list'], 'sid'));
+        $this->assertSame('Ali', $result['both'][0]['name']);
     }
 }

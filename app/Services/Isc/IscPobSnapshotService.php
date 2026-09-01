@@ -501,14 +501,17 @@ final class IscPobSnapshotService
         $out = [];
         foreach ($rows as $row) {
             $code = $this->sites->codeFrom($row['gate'] ?? null, $row['site'] ?? null, $row['site_code'] ?? null);
+            $sid = trim((string) ($row['sid'] ?? ''));
+            $name = trim((string) ($row['name'] ?? ''));
             $out[] = [
-                'sid' => (string) ($row['sid'] ?? ''),
-                'name' => (string) ($row['name'] ?? $row['sid'] ?? 'Personel'),
+                'sid' => $sid,
+                'name' => $name !== '' ? $name : ($sid !== '' ? $sid : 'Personel'),
                 'company' => $row['company'] ?? null,
                 'gate' => $row['gate'] ?? null,
                 'site_code' => $code,
                 'site_label' => $code !== null ? $this->sites->label($code) : null,
                 'checked_in_at' => $row['checked_in_at'] ?? null,
+                'key' => $sid !== '' ? 'sid:'.mb_strtoupper($sid) : null,
             ];
         }
 

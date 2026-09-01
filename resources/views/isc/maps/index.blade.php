@@ -11,6 +11,7 @@
     data-boundaries-url="{{ $boundariesUrl }}"
     data-overlay-url="{{ $overlayUrl }}"
     data-pob-url="{{ $pobUrl }}"
+    data-pob-export-url="{{ $pobExportUrl }}"
     data-post-event-url="{{ $postEventUrl }}"
     data-post-event-trail-url="{{ $postEventTrailUrl }}"
     data-cctv-url="{{ $cctvUrl }}"
@@ -122,6 +123,18 @@
           </svg>
         </div>
         <p class="gm-hud-hint">GPS Besigma hari ini <span class="gm-hud-pill"><b id="hud-traced">–</b> orang</span></p>
+        <div class="gm-hud-split is-presence">
+          <button type="button" class="gm-hud-metric is-tag" data-roster="in">
+            <span>Dalam konsesi</span>
+            <strong id="hud-pob-in-metric">–</strong>
+            <small>GPS di dalam boundary IUPK</small>
+          </button>
+          <button type="button" class="gm-hud-metric is-ever" data-roster="out">
+            <span>Di luar konsesi</span>
+            <strong id="hud-pob-out-metric">–</strong>
+            <small>GPS di luar boundary IUPK</small>
+          </button>
+        </div>
         <div class="gm-hud-split">
           <button type="button" class="gm-hud-metric is-safe" data-roster="safe">
             <span>Safe</span>
@@ -152,10 +165,10 @@
             <small>Unit di zona bahaya</small>
           </button>
         </div>
-        <p class="gm-hud-foot">Di luar <b id="hud-pob-out">–</b> · Tidak diketahui <b id="hud-pob-unknown">–</b> <button type="button" class="gm-hud-link" data-roster="in">Lihat di boundary</button></p>
+        <p class="gm-hud-foot">Tidak diketahui <b id="hud-pob-unknown">–</b> <button type="button" class="gm-hud-link" data-roster="unknown">Lihat daftar</button> · <button type="button" class="gm-hud-link" data-roster="in">Lihat di boundary</button></p>
       </article>
 
-      <article class="gm-hud-card is-rfid">
+      <article class="gm-hud-card is-rfid" id="gm-rfid-card" role="button" tabindex="0" aria-label="Buka daftar Besigma dan RFID">
         <div class="gm-hud-card-top">
           <span class="gm-hud-ico rfid" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 7-7"/><path d="M8 12a4 4 0 0 1 4-4"/><circle cx="12" cy="12" r="1.4"/><path d="M19 12a7 7 0 0 1-7 7"/><path d="M16 12a4 4 0 0 1-4 4"/></svg>
@@ -169,34 +182,35 @@
           </svg>
         </div>
         <div class="gm-hud-split is-3">
-          <div class="gm-hud-metric is-ever">
-            <span>Pernah tercatat</span>
-            <strong id="hud-ever">–</strong>
-            <small>SID di Besigma</small>
-          </div>
-          <div class="gm-hud-metric is-live">
+          <button type="button" class="gm-hud-metric is-ever" data-roster="current">
             <span>GPS aktif</span>
             <strong id="hud-current">–</strong>
             <small>Besigma hari ini</small>
-          </div>
-          <div class="gm-hud-metric is-tag">
+          </button>
+          <button type="button" class="gm-hud-metric is-tag" data-roster="checkin">
             <span>Check-in RFID</span>
             <strong id="hud-rfid">–</strong>
-            <small>Onsite hari ini</small>
-          </div>
+            <small>Sudah tap onsite</small>
+          </button>
+          <button type="button" class="gm-hud-metric is-live" data-roster="both">
+            <span>Keduanya cocok</span>
+            <strong id="hud-both-metric">–</strong>
+            <small>RFID + Besigma</small>
+          </button>
         </div>
         <div class="gm-hud-split">
-          <div class="gm-hud-metric is-gap">
-            <span>Besigma tanpa RFID</span>
+          <button type="button" class="gm-hud-metric is-gap" data-roster="gap_br">
+            <span>Belum RFID</span>
             <strong id="hud-gap-br">–</strong>
-            <small>Ada di Besigma, tidak check-in</small>
-          </div>
-          <div class="gm-hud-metric is-miss">
-            <span>RFID tanpa Besigma</span>
+            <small>Ada di Besigma, belum check-in</small>
+          </button>
+          <button type="button" class="gm-hud-metric is-miss" data-roster="gap_rb">
+            <span>RFID tanpa GPS</span>
             <strong id="hud-gap-rb">–</strong>
-            <small>Check-in, tidak di Besigma</small>
-          </div>
+            <small>Sudah tap, tidak di Besigma</small>
+          </button>
         </div>
+        <p class="gm-hud-foot">Klik angka untuk daftar · Excel di panel daftar</p>
       </article>
       </div>
 
@@ -394,7 +408,10 @@
             <p class="gm-kicker">Boundary Besigma</p>
             <p id="gm-status">{{ $connected ? 'Besigma terhubung' : 'IUPK tampil · Besigma belum terhubung' }}</p>
           </div>
-          <strong id="gm-count">0</strong>
+          <div class="gm-results-tools">
+            <button type="button" class="gm-export-btn" id="gm-roster-export" hidden>Unduh Excel</button>
+            <strong id="gm-count">0</strong>
+          </div>
         </div>
         <div class="gm-results-list" id="zone-list"></div>
       </div>

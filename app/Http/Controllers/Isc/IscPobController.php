@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Isc;
 
 use App\Http\Controllers\Controller;
+use App\Services\Isc\IscPobRosterExcelService;
 use App\Services\Isc\IscPobSnapshotService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class IscPobController extends Controller
 {
     public function __construct(
         private readonly IscPobSnapshotService $snapshot,
+        private readonly IscPobRosterExcelService $excel,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -46,5 +49,22 @@ final class IscPobController extends Controller
         }
 
         return response()->json(['success' => true, 'person' => $person]);
+    }
+
+    public function export(Request $request): StreamedResponse
+    {
+        $demo = $request->query('source', 'demo') !== 'live';
+        $type = (string) $request->query('type', 'in');
+        $safety = $request->query('safety');
+        $kind = $request->query('kind');
+        $site = $request->query('site');
+
+        return $this->excel->download(
+            $demo,
+            $type,
+            is_string($safety) ? $safety : null,
+            is_string($kind) ? $kind : null,
+            is_string($site) ? $site : null,
+        );
     }
 }

@@ -96,5 +96,13 @@ final class IscPobSnapshotServiceTest extends TestCase
         $this->assertNotEmpty($data['people']);
         $this->assertArrayHasKey('site_code', $data['people'][0]);
         $this->assertArrayHasKey('hazard_features', $data);
+        $this->assertArrayHasKey('both', $data['reconcile']);
+        $this->assertArrayHasKey('gap_besigma_minus_rfid', $data['reconcile']);
+        $this->assertArrayHasKey('gap_rfid_minus_besigma', $data['reconcile']);
+        $this->assertArrayHasKey('current_list', $data['reconcile']);
+        $this->assertNotEmpty($data['reconcile']['both']);
+        $this->assertContains('BC001', array_column($data['reconcile']['both'], 'sid'));
+        $this->assertContains('RFID09', array_column($data['reconcile']['gap_rfid_minus_besigma'], 'sid'));
+        $this->assertContains('BC007', array_column($data['reconcile']['gap_besigma_minus_rfid'], 'sid'));
     }
 }
