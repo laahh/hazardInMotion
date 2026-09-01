@@ -2,7 +2,7 @@
 REM SSH Tunnel Helper Script for Windows
 REM This script creates an SSH tunnel to Besigma MySQL database
 
-SET SSH_HOST=13.250.29.29
+SET SSH_HOST=52.74.245.15
 SET SSH_PORT=22
 SET SSH_USER=ubuntu
 SET SSH_KEY=C:\laragon\www\Admin\public\bsigma-jumpserver.pem
