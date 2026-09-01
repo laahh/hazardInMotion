@@ -229,11 +229,14 @@ button, input { font-family: inherit; }
 .gm-shell.is-roster-rfid .gm-hud-card:not(.is-rfid) {
   display: none;
 }
-.gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-split:not(.is-presence),
-.gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-violations,
-.gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-hint,
-.gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-foot,
 .gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-spark,
+.gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-foot,
+.gm-shell.is-roster .gm-hud-card.is-safety .gm-hud-hint:not(.is-violations),
+.gm-shell.is-roster:not(.is-roster-kind):not(.is-roster-safety) .gm-hud-card.is-safety .gm-hud-split:not(.is-presence),
+.gm-shell.is-roster:not(.is-roster-kind) .gm-hud-card.is-safety .gm-hud-violations,
+.gm-shell.is-roster:not(.is-roster-kind) .gm-hud-card.is-safety .gm-hud-hint.is-violations,
+.gm-shell.is-roster-kind .gm-hud-card.is-safety .gm-hud-split,
+.gm-shell.is-roster-safety .gm-hud-card.is-safety .gm-hud-split.is-presence,
 .gm-shell.is-roster-checkin .gm-hud-card.is-checkin .gm-hud-sites,
 .gm-shell.is-roster-checkin .gm-hud-card.is-checkin .gm-hud-foot,
 .gm-shell.is-roster-checkin .gm-hud-card.is-checkin .gm-hud-spark,
@@ -611,6 +614,9 @@ div.gm-hud-metric:hover { transform: none; }
 .gm-hud-violation.is-competence { background: rgba(249, 115, 22, .1); color: #c2410c; }
 .gm-hud-violation.is-unit { background: rgba(139, 92, 246, .1); color: #6d28d9; }
 .gm-hud-violation:hover { transform: translateY(-1px); }
+.gm-hud-violation.is-on {
+  box-shadow: inset 0 0 0 2px currentColor;
+}
 .gm-hud-violation:not(.is-hot) { opacity: .72; }
 .gm-hud-stats {
   display: flex;

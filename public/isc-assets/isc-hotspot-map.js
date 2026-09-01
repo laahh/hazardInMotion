@@ -910,6 +910,8 @@
     shell.classList.toggle("is-roster", rosterOn);
     shell.classList.toggle("is-roster-checkin", rosterOn && rosterFilter.type === "checkin");
     shell.classList.toggle("is-roster-rfid", rosterOn && !!rfidTypes[rosterFilter.type]);
+    shell.classList.toggle("is-roster-kind", rosterOn && !!rosterFilter.kind);
+    shell.classList.toggle("is-roster-safety", rosterOn && !rosterFilter.kind && (rosterFilter.safety === "safe" || rosterFilter.safety === "unsafe"));
   }
 
   function openPanel() {
@@ -1568,14 +1570,14 @@
       return rosterFromReconcile(pobReconcile.current_list, "GPS", "GPS aktif hari ini");
     }
     return filteredPeople().filter(function (person) {
+      if (rosterFilter.kind) {
+        return person.hazard_kind === rosterFilter.kind && (person.safety === "unsafe" || person.from_violation);
+      }
       if (rosterFilter.safety === "safe") {
         return countsAsPob(person) && person.presence === "in" && person.safety === "safe";
       }
       if (rosterFilter.safety === "unsafe") {
         return countsAsPob(person) && person.presence === "in" && person.safety === "unsafe";
-      }
-      if (rosterFilter.kind) {
-        return person.hazard_kind === rosterFilter.kind && (person.safety === "unsafe" || person.from_violation);
       }
       if (rosterFilter.type === "out") {
         return countsAsPob(person) && person.presence === "out";
@@ -2248,7 +2250,9 @@
     });
   });
   document.querySelectorAll("[data-roster]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
+    btn.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
       var type = btn.getAttribute("data-roster") || "";
       if (type === "checkin") {
         openRoster({ type: "checkin", safety: "", kind: "" });
@@ -2279,7 +2283,7 @@
         return;
       }
       if (type === "kind") {
-        openRoster({ type: "in", safety: "unsafe", kind: btn.getAttribute("data-kind") || "" });
+        openRoster({ type: "kind", safety: "", kind: btn.getAttribute("data-kind") || "" });
       }
     });
   });

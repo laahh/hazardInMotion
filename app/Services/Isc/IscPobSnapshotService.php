@@ -258,25 +258,51 @@ final class IscPobSnapshotService
     private function applyViolations(array $classified, array $peopleViolations, array $unitViolations): array
     {
         $byUser = [];
+        $bySid = [];
         foreach ($peopleViolations as $row) {
-            $byUser[(string) ($row['user_id'] ?? '')] = $row;
+            $userId = trim((string) ($row['user_id'] ?? ''));
+            if ($userId !== '') {
+                $byUser[$userId] = $row;
+            }
+            $sid = mb_strtoupper(trim((string) ($row['sid'] ?? '')));
+            if ($sid !== '') {
+                $bySid[$sid] = $row;
+            }
         }
 
         $seenUsers = [];
+        $seenSids = [];
         foreach ($classified as $i => $person) {
-            $userId = (string) ($person['user_id'] ?? '');
+            $userId = trim((string) ($person['user_id'] ?? ''));
+            $sid = mb_strtoupper(trim((string) ($person['sid'] ?? '')));
             $classified[$i]['entity'] = 'person';
             $classified[$i]['roster_only'] = false;
             $classified[$i]['from_violation'] = false;
-            if ($userId === '' || ! isset($byUser[$userId])) {
+            $violation = null;
+            if ($userId !== '' && isset($byUser[$userId])) {
+                $violation = $byUser[$userId];
+            } elseif ($sid !== '' && isset($bySid[$sid])) {
+                $violation = $bySid[$sid];
+            }
+            if ($violation === null) {
                 continue;
             }
-            $seenUsers[$userId] = true;
-            $classified[$i] = $this->overlayViolationOnPerson($person, $byUser[$userId]);
+            $vUser = trim((string) ($violation['user_id'] ?? $userId));
+            if ($vUser !== '') {
+                $seenUsers[$vUser] = true;
+            }
+            foreach ([$sid, mb_strtoupper(trim((string) ($violation['sid'] ?? '')))] as $markSid) {
+                if ($markSid !== '') {
+                    $seenSids[$markSid] = true;
+                }
+            }
+            $classified[$i] = $this->overlayViolationOnPerson($person, $violation);
         }
 
-        foreach ($byUser as $userId => $row) {
-            if (isset($seenUsers[$userId])) {
+        foreach ($peopleViolations as $row) {
+            $userId = trim((string) ($row['user_id'] ?? ''));
+            $sid = mb_strtoupper(trim((string) ($row['sid'] ?? '')));
+            if (($userId !== '' && isset($seenUsers[$userId])) || ($sid !== '' && isset($seenSids[$sid]))) {
                 continue;
             }
             $classified[] = $this->personFromViolation($row);

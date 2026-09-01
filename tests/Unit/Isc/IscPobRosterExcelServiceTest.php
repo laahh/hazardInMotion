@@ -43,4 +43,40 @@ final class IscPobRosterExcelServiceTest extends TestCase
         $this->assertArrayHasKey('sid', $in[0]);
         $this->assertArrayHasKey('status', $in[0]);
     }
+
+    public function test_kind_rows_include_roster_only_violations(): void
+    {
+        $excel = app(IscPobRosterExcelService::class);
+        $pack = [
+            'people' => [
+                [
+                    'entity' => 'person',
+                    'roster_only' => false,
+                    'presence' => 'in',
+                    'safety' => 'safe',
+                    'sid' => 'A',
+                    'name' => 'Ali',
+                    'hazard_kind' => null,
+                ],
+                [
+                    'entity' => 'person',
+                    'roster_only' => true,
+                    'from_violation' => true,
+                    'presence' => 'in',
+                    'safety' => 'unsafe',
+                    'sid' => 'B',
+                    'name' => 'Budi',
+                    'hazard_kind' => 'employee_danger',
+                    'hazard_kind_label' => 'Pelanggaran Batas Bahaya Karyawan',
+                    'site_code' => 'LMO',
+                ],
+            ],
+            'checkins' => [],
+            'reconcile' => [],
+        ];
+
+        $rows = $excel->rows($pack, 'kind', 'employee_danger');
+        $this->assertSame(['B'], array_column($rows, 'sid'));
+        $this->assertSame(['A'], array_column($excel->rows($pack, 'in'), 'sid'));
+    }
 }

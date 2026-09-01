@@ -84,6 +84,37 @@ final class IscPobSnapshotServiceTest extends TestCase
         $this->assertSame(1, $summary['unsafe_by_kind'][IscHazardBoundaryClassifier::KIND_UNIT_DANGER]);
     }
 
+    public function test_violations_match_gps_person_by_sid_when_user_id_differs(): void
+    {
+        $service = app(IscPobSnapshotService::class);
+        $apply = new ReflectionMethod($service, 'applyViolations');
+        $apply->setAccessible(true);
+
+        $merged = $apply->invoke($service, [[
+            'key' => 'sid:Z9',
+            'user_id' => 'gps-1',
+            'sid' => 'Z9',
+            'name' => 'Zaid',
+            'presence' => IscPobClassifyAction::PRESENCE_IN,
+            'safety' => IscPobClassifyAction::SAFETY_SAFE,
+            'lat' => 2.08,
+            'lng' => 117.18,
+        ]], [[
+            'user_id' => 'besigma-9',
+            'sid' => 'Z9',
+            'name' => 'Zaid',
+            'hazard_kind' => IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER,
+            'boundary_id' => 'b-z',
+            'hazard_name' => 'Zona bahaya',
+        ]], []);
+
+        $this->assertCount(1, $merged);
+        $this->assertTrue($merged[0]['from_violation']);
+        $this->assertFalse($merged[0]['roster_only']);
+        $this->assertSame(IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER, $merged[0]['hazard_kind']);
+        $this->assertSame(2.08, $merged[0]['lat']);
+    }
+
     public function test_hud_contract_keys_exist_on_demo_snapshot(): void
     {
         $data = app(IscPobSnapshotService::class)->snapshot(true, true);

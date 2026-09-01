@@ -147,7 +147,7 @@
             <small>Masuk boundary berbahaya</small>
           </button>
         </div>
-        <p class="gm-hud-hint">Pelanggaran aktif <span class="gm-hud-pill is-alert"><b id="hud-violation-total">–</b></span></p>
+        <p class="gm-hud-hint is-violations">Pelanggaran aktif <span class="gm-hud-pill is-alert"><b id="hud-violation-total">–</b></span></p>
         <div class="gm-hud-violations" role="group" aria-label="Pelanggaran Besigma">
           <button type="button" class="gm-hud-violation is-danger" data-roster="kind" data-kind="employee_danger">
             <span>Bahaya karyawan</span>

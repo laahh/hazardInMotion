@@ -109,7 +109,8 @@ final class IscPobRosterExcelService
     {
         $out = [];
         foreach ($people as $person) {
-            if (($person['entity'] ?? 'person') === 'unit' || ($person['roster_only'] ?? false)) {
+            $entity = (string) ($person['entity'] ?? 'person');
+            if ($type !== 'kind' && ($entity === 'unit' || ($person['roster_only'] ?? false))) {
                 continue;
             }
             if ($site !== null && strtoupper((string) ($person['site_code'] ?? '')) !== $site) {
