@@ -1049,6 +1049,14 @@ div.gm-hud-metric:hover { transform: none; }
   font-size: 14px;
   line-height: 1.45;
 }
+.gm-facts li.gm-fact-alert {
+  margin: 0 -4px;
+  padding: 12px 8px;
+  border-radius: 10px;
+  background: #fef2f2;
+  border-top: 0;
+  color: #991b1b;
+}
 
 .gm-facts small {
   display: block;
@@ -1401,6 +1409,12 @@ div.gm-hud-metric:hover { transform: none; }
 }
 .gm-person-pop .st.is-out { color: #1d4ed8; }
 .gm-person-pop .st.is-unsafe { color: #c5221f; }
+.gm-person-pop .act {
+  font-size: 12px;
+  font-weight: 700;
+  color: #b91c1c;
+  line-height: 1.35;
+}
 .leaflet-popup-pane { z-index: 850; }
 .gm-task {
   display: grid;

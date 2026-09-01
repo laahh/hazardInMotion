@@ -8,6 +8,7 @@ use App\Actions\Isc\IscPobClassifyAction;
 use App\Actions\Isc\IscRfidReconcileAction;
 use App\Models\Isc\IscBoundaryEvent;
 use App\Models\Isc\IscDetectionRule;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
 
@@ -90,6 +91,7 @@ final class IscPobSnapshotService
             $classified[$i]['entered_at'] = $event['entered_at'] ?? null;
             $classified[$i]['duration_seconds'] = $event['duration_seconds'] ?? null;
         }
+        $classified = $this->decoratePeople($classified, $hazards);
 
         $ever = $this->demo->everIdentifiers();
         $current = array_values(array_filter(
@@ -139,6 +141,7 @@ final class IscPobSnapshotService
         $unitViolations = $this->violations->units();
         $classified = $this->applyViolations($classified, $peopleViolations, $unitViolations);
         $classified = $this->attachOpenEvents($classified);
+        $classified = $this->decoratePeople($classified, $hazardPack['features']);
 
         $rfidPack = $this->rfid->onsiteTodayAll();
         $checkins = $this->normalizeCheckins($rfidPack['people']);
@@ -333,6 +336,15 @@ final class IscPobSnapshotService
         $person['hazard_boundary_id'] = $violation['boundary_id'] ?? $person['hazard_boundary_id'] ?? null;
         $person['hazard_name'] = $violation['hazard_name'] ?? $person['hazard_name'] ?? null;
         $person['entered_at'] = $violation['entered_at'] ?? $person['entered_at'] ?? null;
+        $person['besigma_status'] = $violation['status'] ?? $person['besigma_status'] ?? null;
+        $person['besigma_violation_id'] = $violation['id'] ?? $person['besigma_violation_id'] ?? null;
+        $person['hazard_code'] = $violation['hazard_code'] ?? $person['hazard_code'] ?? null;
+        $person['hazard_type'] = $violation['hazard_type'] ?? $person['hazard_type'] ?? null;
+        $person['pit_name'] = $violation['pit_name'] ?? $person['pit_name'] ?? null;
+        $person['site_label'] = $violation['site_label'] ?? $person['site_label'] ?? null;
+        if (($person['site'] ?? null) === null && isset($violation['site'])) {
+            $person['site'] = $violation['site'];
+        }
         if (! $wasIn) {
             $person['presence'] = IscPobClassifyAction::PRESENCE_IN;
             $person['marker'] = $kind;
@@ -383,6 +395,12 @@ final class IscPobSnapshotService
             'hazard_boundary_id' => $row['boundary_id'] ?? null,
             'hazard_name' => $row['hazard_name'] ?? null,
             'entered_at' => $row['entered_at'] ?? null,
+            'besigma_status' => $row['status'] ?? null,
+            'besigma_violation_id' => $row['id'] ?? null,
+            'hazard_code' => $row['hazard_code'] ?? null,
+            'hazard_type' => $row['hazard_type'] ?? null,
+            'pit_name' => $row['pit_name'] ?? null,
+            'site_label' => $row['site_label'] ?? null,
         ];
     }
 
@@ -418,7 +436,100 @@ final class IscPobSnapshotService
             'hazard_boundary_id' => $row['boundary_id'] ?? null,
             'hazard_name' => $row['hazard_name'] ?? null,
             'entered_at' => $row['entered_at'] ?? null,
+            'besigma_status' => $row['status'] ?? null,
+            'besigma_violation_id' => $row['id'] ?? null,
+            'hazard_code' => $row['hazard_code'] ?? null,
+            'hazard_type' => $row['hazard_type'] ?? null,
+            'pit_name' => $row['pit_name'] ?? null,
+            'site_label' => $row['site_label'] ?? null,
         ];
+    }
+
+    /**
+     * Lengkapi narasi apa/di mana/kapan dari pelanggaran + polygon bahaya.
+     *
+     * @param  list<array<string, mixed>>  $people
+     * @param  list<array<string, mixed>>  $features
+     * @return list<array<string, mixed>>
+     */
+    private function decoratePeople(array $people, array $features): array
+    {
+        $byId = [];
+        foreach ($features as $feature) {
+            if (! is_array($feature)) {
+                continue;
+            }
+            $props = is_array($feature['properties'] ?? null) ? $feature['properties'] : [];
+            $id = trim((string) ($props['id'] ?? ''));
+            if ($id !== '') {
+                $byId[$id] = $props;
+            }
+        }
+
+        foreach ($people as $i => $person) {
+            $bid = trim((string) ($person['hazard_boundary_id'] ?? ''));
+            if ($bid !== '' && isset($byId[$bid])) {
+                $props = $byId[$bid];
+                if (($person['hazard_activity'] ?? null) === null) {
+                    $people[$i]['hazard_activity'] = $props['aktivitas'] ?? $props['activity'] ?? null;
+                }
+                if (($people[$i]['pit_name'] ?? null) === null) {
+                    $people[$i]['pit_name'] = $props['pit_name'] ?? null;
+                }
+                if (($people[$i]['hazard_type'] ?? null) === null) {
+                    $people[$i]['hazard_type'] = $props['type'] ?? null;
+                }
+                if (($people[$i]['site_label'] ?? null) === null) {
+                    $people[$i]['site_label'] = $props['site_label'] ?? null;
+                }
+            }
+            if (($people[$i]['duration_seconds'] ?? null) === null) {
+                $people[$i]['duration_seconds'] = $this->secondsSince($people[$i]['entered_at'] ?? null);
+            }
+            $people[$i]['violation_action'] = $this->violationAction($people[$i]);
+        }
+
+        return $people;
+    }
+
+    /**
+     * @param  array<string, mixed>  $person
+     */
+    private function violationAction(array $person): ?string
+    {
+        $unsafe = ($person['safety'] ?? null) === IscPobClassifyAction::SAFETY_UNSAFE || ($person['from_violation'] ?? false);
+        if (! $unsafe) {
+            return null;
+        }
+        $kind = (string) ($person['hazard_kind_label'] ?? 'zona berbahaya');
+        $zone = (string) ($person['hazard_name'] ?? '');
+        $who = ($person['entity'] ?? 'person') === 'unit' ? 'Unit berada di' : 'Masuk';
+        $parts = [$who.' '.$kind];
+        if ($zone !== '') {
+            $parts[] = 'zona '.$zone;
+        }
+        $activity = trim((string) ($person['hazard_activity'] ?? ''));
+        if ($activity !== '') {
+            $parts[] = 'aktivitas '.$activity;
+        }
+        $job = trim((string) ($person['job_title'] ?? ''));
+        if ($job !== '' && ($person['entity'] ?? 'person') !== 'unit') {
+            $parts[] = 'sebagai '.$job;
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    private function secondsSince(mixed $at): ?int
+    {
+        if ($at === null || $at === '') {
+            return null;
+        }
+        try {
+            return max(0, Carbon::parse((string) $at)->diffInSeconds(now()));
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**

@@ -135,5 +135,11 @@ final class IscPobSnapshotServiceTest extends TestCase
         $this->assertContains('BC001', array_column($data['reconcile']['both'], 'sid'));
         $this->assertContains('RFID09', array_column($data['reconcile']['gap_rfid_minus_besigma'], 'sid'));
         $this->assertContains('BC007', array_column($data['reconcile']['gap_besigma_minus_rfid'], 'sid'));
+        $budi = collect($data['people'])->firstWhere('sid', 'BC002');
+        $this->assertNotNull($budi);
+        $this->assertSame(IscPobClassifyAction::SAFETY_UNSAFE, $budi['safety']);
+        $this->assertNotEmpty($budi['hazard_name']);
+        $this->assertNotEmpty($budi['violation_action']);
+        $this->assertNotEmpty($budi['entered_at']);
     }
 }

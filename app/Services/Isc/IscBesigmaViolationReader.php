@@ -91,13 +91,17 @@ final class IscBesigmaViolationReader
                     u.department_name,
                     c.name AS company_name,
                     b.name AS boundary_name,
+                    b.code AS boundary_code,
+                    b.type AS boundary_type,
                     s.code AS site_code_raw,
-                    s.name AS site_name
+                    s.name AS site_name,
+                    p.name AS pit_name
                 FROM boundary_violations v
                 INNER JOIN users u ON u.id = v.user_id AND u.is_deleted = 0
                 LEFT JOIN companies c ON c.id = u.company_id
                 LEFT JOIN boundaries b ON b.id = v.boundary_id
                 LEFT JOIN sites s ON s.id = v.site_id
+                LEFT JOIN pits p ON p.id = b.pit_id
                 WHERE v.is_deleted = 0
                   AND v.deleted_at IS NULL
                   AND v.status IN ({$placeholders})
@@ -138,6 +142,10 @@ final class IscBesigmaViolationReader
                 'site_code' => $siteCode,
                 'boundary_id' => (string) ($row->boundary_id ?? ''),
                 'hazard_name' => $this->nullableString($row->boundary_name ?? null),
+                'hazard_code' => $this->nullableString($row->boundary_code ?? null),
+                'hazard_type' => $this->nullableString($row->boundary_type ?? null),
+                'pit_name' => $this->nullableString($row->pit_name ?? null),
+                'site_label' => $siteCode !== null ? $this->sites->label($siteCode) : $this->nullableString($row->site_name ?? null),
                 'hazard_kind' => $kind,
                 'hazard_kind_label' => $this->hazard->label($kind),
                 'is_competency' => (int) ($row->is_competency ?? 0),
@@ -175,12 +183,16 @@ final class IscBesigmaViolationReader
                     u.vehicle_name,
                     u.vendor_name,
                     b.name AS boundary_name,
+                    b.code AS boundary_code,
+                    b.type AS boundary_type,
                     s.code AS site_code_raw,
-                    s.name AS site_name
+                    s.name AS site_name,
+                    p.name AS pit_name
                 FROM boundary_violation_units v
                 INNER JOIN units u ON u.id = v.unit_id
                 LEFT JOIN boundaries b ON b.id = v.boundary_id
                 LEFT JOIN sites s ON s.id = v.site_id
+                LEFT JOIN pits p ON p.id = b.pit_id
                 WHERE v.is_deleted = 0
                   AND v.deleted_at IS NULL
                   AND v.status IN ({$placeholders})
@@ -212,6 +224,10 @@ final class IscBesigmaViolationReader
                 'site_code' => $siteCode,
                 'boundary_id' => (string) ($row->boundary_id ?? ''),
                 'hazard_name' => $this->nullableString($row->boundary_name ?? null),
+                'hazard_code' => $this->nullableString($row->boundary_code ?? null),
+                'hazard_type' => $this->nullableString($row->boundary_type ?? null),
+                'pit_name' => $this->nullableString($row->pit_name ?? null),
+                'site_label' => $siteCode !== null ? $this->sites->label($siteCode) : $this->nullableString($row->site_name ?? null),
                 'hazard_kind' => $kind,
                 'hazard_kind_label' => $this->hazard->label($kind),
                 'status' => (string) ($row->status ?? ''),

@@ -131,6 +131,8 @@ final class IscPobClassifyAction
             $person['hazard_kind_label'] = $this->hazard->label($kind);
             $person['hazard_boundary_id'] = isset($chosen['id']) ? (string) $chosen['id'] : null;
             $person['hazard_name'] = $chosen['name'] ?? $chosen['nama'] ?? $chosen['title'] ?? $chosen['aktivitas'] ?? $chosen['activity'] ?? null;
+            $person['hazard_activity'] = $chosen['aktivitas'] ?? $chosen['activity'] ?? null;
+            $person['pit_name'] = $chosen['pit_name'] ?? $person['pit_name'] ?? null;
         }
 
         return $person;

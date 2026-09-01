@@ -43,7 +43,7 @@ final class IscPobRosterExcelService
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle(mb_substr($title, 0, 31));
-        $headers = ['No', 'Nama', 'SID', 'Perusahaan', 'Site', 'Status', 'Keselamatan', 'GPS', 'Check-in'];
+        $headers = ['No', 'Nama', 'SID', 'Perusahaan', 'Site', 'Status', 'Keselamatan', 'Pelanggaran', 'Zona', 'GPS', 'Waktu'];
         foreach ($headers as $index => $header) {
             $cell = $sheet->getCell([$index + 1, 1]);
             $cell->setValue($header);
@@ -64,11 +64,13 @@ final class IscPobRosterExcelService
                 $row['site'] ?? '—',
                 $row['status'] ?? '—',
                 $row['safety'] ?? '—',
+                $row['action'] ?? '—',
+                $row['zone'] ?? '—',
                 $row['gps'] ?? '—',
                 $row['checked_in_at'] ?? '—',
             ], null, 'A'.($i + 2));
         }
-        foreach (range(1, 9) as $col) {
+        foreach (range(1, 11) as $col) {
             $sheet->getColumnDimensionByColumn($col)->setAutoSize(true);
         }
 
@@ -140,6 +142,8 @@ final class IscPobRosterExcelService
                 'site' => $person['site_code'] ?? $person['iupk_site'] ?? null,
                 'status' => $presence !== '' ? $presence : '—',
                 'safety' => $person['hazard_kind_label'] ?? ($safety !== '' ? $safety : null),
+                'action' => $person['violation_action'] ?? null,
+                'zone' => $person['hazard_name'] ?? $person['iupk_site'] ?? null,
                 'gps' => ($lat != 0.0 && $lng != 0.0) ? $lat.', '.$lng : 'tidak ada',
                 'checked_in_at' => $person['entered_at'] ?? $person['gps_updated_at'] ?? null,
             ];
@@ -166,6 +170,8 @@ final class IscPobRosterExcelService
                 'site' => $row['site_code'] ?? $row['gate'] ?? null,
                 'status' => 'rfid',
                 'safety' => 'sudah check-in',
+                'action' => null,
+                'zone' => $row['site_label'] ?? $row['gate'] ?? null,
                 'gps' => '—',
                 'checked_in_at' => $row['checked_in_at'] ?? null,
             ];
@@ -199,6 +205,8 @@ final class IscPobRosterExcelService
                 'site' => $row['site_code'] ?? null,
                 'status' => $status,
                 'safety' => $status,
+                'action' => $status,
+                'zone' => $row['site_code'] ?? null,
                 'gps' => '—',
                 'checked_in_at' => $row['checked_in_at'] ?? null,
             ];

@@ -64,6 +64,7 @@
   var postEventQuery = "";
   var postEventTimer = 0;
   var postEventAbort = null;
+  var personTrailAbort = null;
   var postEventKind = "";
   var postEventEntries = [];
   var cctvCameras = [];
@@ -375,17 +376,50 @@
     return "Lokasi tidak diketahui";
   }
 
+  function formatWhen(value) {
+    if (!value) {
+      return "";
+    }
+    var d = new Date(value);
+    if (isNaN(d.getTime())) {
+      return String(value);
+    }
+    return d.toLocaleString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function dateFromTimestamp(value) {
+    if (!value) {
+      return todayIsoDate();
+    }
+    var match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) {
+      return match[1];
+    }
+    var d = new Date(value);
+    if (isNaN(d.getTime())) {
+      return todayIsoDate();
+    }
+    var m = String(d.getMonth() + 1).padStart(2, "0");
+    var day = String(d.getDate()).padStart(2, "0");
+    return d.getFullYear() + "-" + m + "-" + day;
+  }
+
   function personPopupHtml(person) {
     var p = person || {};
     var safety = p.safety === "unsafe" ? (p.hazard_kind_label || "Unsafe") : (p.safety === "safe" ? "Safe" : "—");
     var gps = (p.lat && p.lng) ? (Number(p.lat).toFixed(5) + ", " + Number(p.lng).toFixed(5)) : "Tidak ada GPS";
     var stClass = "st" + (p.safety === "unsafe" ? " is-unsafe" : (p.presence === "out" ? " is-out" : ""));
+    var where = [p.hazard_name, p.pit_name, p.iupk_site || p.site_label || p.site_code].filter(Boolean).join(" · ");
+    var when = formatWhen(p.entered_at) || formatWhen(p.gps_updated_at);
+    var action = p.violation_action || (p.safety === "unsafe" ? (p.hazard_kind_label || "Masuk zona berbahaya") : "");
     return "" +
       "<div class=\"gm-person-pop\">" +
       "<b>" + esc(p.name || p.sid || "Personel") + "</b>" +
       "<span class=\"meta\">" + esc([p.sid, p.company, p.job_title].filter(Boolean).join(" · ")) + "</span>" +
       "<span class=\"" + stClass + "\">" + esc(presenceLabel(p) + " · " + safety) + "</span>" +
-      "<span class=\"meta\">" + esc(p.iupk_site || p.site_code || "") + "</span>" +
+      (action ? "<span class=\"act\">" + esc(action) + "</span>" : "") +
+      (where ? "<span class=\"meta\">Di " + esc(where) + "</span>" : "") +
+      (when ? "<span class=\"meta\">" + esc(when) + (p.besigma_status ? " · " + esc(p.besigma_status) : "") + "</span>" : "") +
       "<span class=\"meta\">GPS " + esc(gps) + "</span>" +
       "</div>";
   }
@@ -419,7 +453,7 @@
     return {
       kind: "person",
       title: p.name || p.sid || "Personel",
-      meta: [p.company, p.job_title, p.iupk_site || p.presence].filter(Boolean).join(" · "),
+      meta: [p.company, p.job_title, p.hazard_name || p.iupk_site || p.presence].filter(Boolean).join(" · "),
       badge: p.safety === "unsafe" ? (p.hazard_kind_label || "UNSAFE") : (p.presence === "in" ? "IN" : (p.stale ? "STALE" : "OUT")),
       props: p,
       layer: layer || peopleByKey[p.key] || null
@@ -792,6 +826,11 @@
     if (item.layer && item.layer.openPopup) {
       item.layer.openPopup();
     }
+    if (item.kind === "person") {
+      loadPersonTrail(item.props || {});
+    } else if (railView !== "postevent") {
+      clearTrail();
+    }
   }
 
   function factsFromProps(item) {
@@ -806,18 +845,41 @@
     }
     if (item.kind === "person") {
       var gpsText = (p.lat && p.lng) ? (Number(p.lat).toFixed(5) + ", " + Number(p.lng).toFixed(5)) : "Tidak ada GPS";
+      var where = [p.hazard_name, p.pit_name, p.iupk_site || p.site_label || p.site_code].filter(Boolean).join(" · ") || "—";
+      var when = formatWhen(p.entered_at) || formatWhen(p.gps_updated_at) || "—";
+      var unsafe = p.safety === "unsafe" || p.from_violation;
+      if (unsafe) {
+        rows.push(fact("alert", p.violation_action || p.hazard_kind_label || "Masuk zona berbahaya", "Apa yang dilanggar"));
+        rows.push(fact("pin", where, "Di mana"));
+        rows.push(fact("tag", when, "Kapan"));
+        if (p.hazard_activity) {
+          rows.push(fact("in", p.hazard_activity, "Aktivitas di zona"));
+        }
+        if (p.besigma_status) {
+          rows.push(fact("db", p.besigma_status, "Status Besigma"));
+        }
+        if (p.duration_seconds) {
+          rows.push(fact("tag", formatDuration(p.duration_seconds), "Durasi di zona"));
+        }
+      }
       rows.push(fact("pin", p.name || "—", "Nama"));
       rows.push(fact("tag", p.sid || "—", "SID"));
       rows.push(fact("tag", p.company || "—", "Perusahaan"));
       rows.push(fact("tag", p.job_title || "—", "Jabatan"));
+      if (p.division) {
+        rows.push(fact("tag", p.division, "Divisi / departemen"));
+      }
       rows.push(fact("area", presenceLabel(p), "In / Out konsesi"));
-      rows.push(fact("area", p.iupk_site || p.site_code || "—", "Zona IUPK"));
-      rows.push(fact("tag", gpsText, "Koordinat GPS"));
-      rows.push(fact("db", p.hazard_kind_label || p.hazard_name || (p.safety === "unsafe" ? "Unsafe" : (p.safety || "—")), "Jenis pelanggaran"));
-      rows.push(fact("tag", p.safety || "—", "Safe / Unsafe"));
-      rows.push(fact("tag", p.entered_at || p.gps_updated_at || "—", "Masuk / GPS"));
-      rows.push(fact("tag", formatDuration(p.duration_seconds), "Durasi"));
+      rows.push(fact("area", p.iupk_site || p.site_label || p.site_code || "—", "Zona IUPK / site"));
+      rows.push(fact("tag", gpsText, "Koordinat GPS terakhir"));
+      if (p.gps_updated_at) {
+        rows.push(fact("tag", formatWhen(p.gps_updated_at), "GPS diperbarui"));
+      }
+      if (!unsafe) {
+        rows.push(fact("db", p.hazard_kind_label || p.safety || "—", "Status keselamatan"));
+      }
       rows.push(fact("tag", p.intervention_status || "belum ada", "Status intervensi"));
+      rows.push(fact("in", "Jalur GPS hari ini dimuat di peta", "Historical"));
       return rows.join("");
     }
     if (item.kind === "hazard") {
@@ -877,7 +939,7 @@
       in: "<path d='M12 4v12'/><path d='m7 11 5 5 5-5'/>"
     };
     return (
-      "<li><svg viewBox='0 0 24 24'>" + (icons[kind] || icons.tag) + "</svg>" +
+      "<li class=\"gm-fact gm-fact-" + kind + "\"><svg viewBox='0 0 24 24'>" + (icons[kind] || icons.tag) + "</svg>" +
       "<div>" + esc(value) + "<small>" + esc(label) + "</small></div></li>"
     );
   }
@@ -896,6 +958,9 @@
     }
     paintSelection();
     renderList();
+    if (railView !== "postevent") {
+      clearTrail();
+    }
   }
 
   function syncShell() {
@@ -1229,10 +1294,59 @@
       });
   }
 
-  function drawTrail(row, points) {
+  function loadPersonTrail(person) {
+    if (railView === "postevent" || !postEventTrailUrl || !person) {
+      return;
+    }
+    var id = person.entity === "unit" ? (person.unit_id || person.id || "") : (person.user_id || "");
+    if (!id) {
+      return;
+    }
+    if (personTrailAbort) {
+      personTrailAbort.abort();
+    }
+    personTrailAbort = new AbortController();
+    var date = dateFromTimestamp(person.entered_at || person.gps_updated_at);
+    fetch(withQuery(postEventTrailUrl, {
+      entity: person.entity === "unit" ? "unit" : "person",
+      id: id,
+      date: date
+    }), { headers: { Accept: "application/json" }, signal: personTrailAbort.signal })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("HTTP " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (payload) {
+        if (!selected || selected.kind !== "person") {
+          return;
+        }
+        drawTrail(person, (payload && payload.points) || [], {
+          silent: true,
+          violationLabel: person.violation_action || person.hazard_kind_label || ""
+        });
+        var count = (payload && payload.point_count) || ((payload && payload.points) || []).length;
+        if (placeFacts && count) {
+          var note = document.createElement("li");
+          note.innerHTML = "<svg viewBox='0 0 24 24'><path d='M4 12h16M12 4v16'/></svg><div>" + esc(count + " titik GPS") + "<small>Historical hari ini " + esc(date) + "</small></div>";
+          placeFacts.appendChild(note);
+        }
+      })
+      .catch(function (err) {
+        if (err && err.name === "AbortError") {
+          return;
+        }
+      });
+  }
+
+  function drawTrail(row, points, options) {
+    options = options || {};
     clearTrail();
     if (!points.length) {
-      toast("Belum ada titik GPS untuk " + (row.name || "entitas ini") + ".");
+      if (!options.silent) {
+        toast("Belum ada titik GPS untuk " + ((row && row.name) || "entitas ini") + ".");
+      }
       return;
     }
     var latlngs = points.map(function (p) {
@@ -1243,14 +1357,18 @@
     if (latlngs.length < 2) {
       if (latlngs.length === 1) {
         L.circleMarker(latlngs[0], { pane: "trail", radius: 7, color: "#0284c7", fillColor: "#0284c7", fillOpacity: 1, weight: 2 }).addTo(trailLayer);
-        map.setView(latlngs[0], 15);
+        if (!options.silent) {
+          map.setView(latlngs[0], 15);
+        }
       }
-      toast("Titik GPS terlalu sedikit untuk menggambar jalur.");
+      if (!options.silent) {
+        toast("Titik GPS terlalu sedikit untuk menggambar jalur.");
+      }
       return;
     }
     var line = L.polyline(latlngs, {
       pane: "trail",
-      color: row && row.entity === "unit" ? "#7c3aed" : "#0284c7",
+      color: row && row.entity === "unit" ? "#7c3aed" : "#c5221f",
       weight: 4,
       opacity: 0.92,
       lineJoin: "round",
@@ -1260,10 +1378,24 @@
       pane: "trail",
       icon: L.divIcon({ className: "", html: "<span class=\"gm-trail-dot start\"></span>", iconSize: [12, 12], iconAnchor: [6, 6] })
     }).bindTooltip("Mulai " + clockLabel(points[0].at), { direction: "top" }).addTo(trailLayer);
+    var step = Math.max(1, Math.floor(latlngs.length / 5));
+    for (var i = step; i < latlngs.length - 1; i += step) {
+      L.circleMarker(latlngs[i], {
+        pane: "trail",
+        radius: 4,
+        color: "#fff",
+        fillColor: "#c5221f",
+        fillOpacity: 1,
+        weight: 1.5
+      }).bindTooltip(clockLabel(points[i].at), { direction: "top" }).addTo(trailLayer);
+    }
+    var endTip = options.violationLabel
+      ? (options.violationLabel + " · " + clockLabel(points[points.length - 1].at))
+      : ("Terakhir " + clockLabel(points[points.length - 1].at));
     L.marker(latlngs[latlngs.length - 1], {
       pane: "trail",
       icon: L.divIcon({ className: "", html: "<span class=\"gm-trail-dot end\"></span>", iconSize: [12, 12], iconAnchor: [6, 6] })
-    }).bindTooltip("Terakhir " + clockLabel(points[points.length - 1].at), { direction: "top" }).addTo(trailLayer);
+    }).bindTooltip(endTip, { direction: "top", permanent: !!options.violationLabel }).addTo(trailLayer);
     map.fitBounds(line.getBounds(), { padding: [48, 48], maxZoom: 16 });
   }
 
