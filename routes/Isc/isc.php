@@ -6,6 +6,7 @@ use App\Http\Controllers\Isc\IscCctvMapController;
 use App\Http\Controllers\Isc\IscHomeController;
 use App\Http\Controllers\Isc\IscInterventionsController;
 use App\Http\Controllers\Isc\IscMapsController;
+use App\Http\Controllers\Isc\IscMapsInterventionController;
 use App\Http\Controllers\Isc\IscPobController;
 use App\Http\Controllers\Isc\IscPostEventController;
 use App\Http\Controllers\Isc\IscPostEventTrackController;
@@ -27,11 +28,13 @@ Route::prefix('isc')
         Route::get('/maps/post-event', [IscPostEventTrackController::class, 'index'])->name('maps.post-event');
         Route::get('/maps/post-event/trail', [IscPostEventTrackController::class, 'trail'])->name('maps.post-event.trail');
         Route::get('/maps/cctv', [IscCctvMapController::class, 'index'])->name('maps.cctv');
+        Route::get('/maps/interventions', [IscMapsInterventionController::class, 'index'])->name('maps.interventions');
 
         Route::middleware('isc.role:isc-pic,isc-verifier,admin')->group(function (): void {
             Route::get('/interventions', [IscInterventionsController::class, 'index'])->name('interventions.index');
             Route::get('/interventions/{event}', [IscInterventionsController::class, 'show'])->name('interventions.show');
             Route::post('/interventions', [IscInterventionsController::class, 'store'])->name('interventions.store');
+            Route::post('/maps/interventions', [IscMapsInterventionController::class, 'store'])->name('maps.interventions.store');
             Route::post('/interventions/{intervention}/evidence', [IscInterventionsController::class, 'storeEvidence'])->name('interventions.evidence');
             Route::post('/interventions/{intervention}/verify', [IscInterventionsController::class, 'verify'])->name('interventions.verify');
             Route::get('/post-event', [IscPostEventController::class, 'index'])->name('post-event.index');

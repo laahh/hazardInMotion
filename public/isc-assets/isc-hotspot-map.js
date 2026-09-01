@@ -10,6 +10,7 @@
   var postEventUrl = mapEl.getAttribute("data-post-event-url") || "";
   var postEventTrailUrl = mapEl.getAttribute("data-post-event-trail-url") || "";
   var cctvUrl = mapEl.getAttribute("data-cctv-url") || "";
+  var mapsInterventionsUrl = mapEl.getAttribute("data-maps-interventions-url") || "";
   var interventionsUrl = mapEl.getAttribute("data-interventions-url") || "";
 
   var listEl = document.getElementById("zone-list");
@@ -70,6 +71,18 @@
   var cctvStatus = "";
   var cctvQuery = "";
   var cctvTimer = 0;
+  var ivTasks = [];
+  var ivSummary = null;
+  var ivTypes = [];
+  var ivTypeLabels = {};
+  var ivCanCreate = false;
+  var ivEntity = "";
+  var ivStatus = "";
+  var ivKind = "";
+  var ivSite = "";
+  var ivQuery = "";
+  var ivTimer = 0;
+  var ivFocusId = 0;
   var trailLayer = L.layerGroup();
 
   var sgiAttribution = mapEl.getAttribute("data-wmts-attribution") || "Drone Imagery © SGI";
@@ -671,7 +684,7 @@
   }
 
   function openPlace(item) {
-    if (railView === "postevent") {
+    if (railView === "postevent" || railView === "interventions") {
       return;
     }
     if (item && item.kind === "cctv") {
@@ -829,7 +842,7 @@
   }
 
   function openPanel() {
-    if (railView === "postevent" || railView === "cctv") {
+    if (railView === "postevent" || railView === "cctv" || railView === "interventions") {
       return;
     }
     if (panel) {
@@ -869,6 +882,7 @@
     if (shell) {
       shell.classList.toggle("is-postevent", railView === "postevent");
       shell.classList.toggle("is-cctv", railView === "cctv");
+      shell.classList.toggle("is-interventions", railView === "interventions");
     }
     closePanel();
     closePlace();
@@ -902,6 +916,14 @@
         query = cctvQuery;
       }
       loadCctv(true);
+    } else if (railView === "interventions") {
+      listMode = "all";
+      if (searchInput) {
+        searchInput.placeholder = "Cari nama, nopol, atau pelanggaran";
+        ivQuery = searchInput.value || "";
+        query = ivQuery;
+      }
+      loadInterventions(true);
     } else {
       listMode = "all";
       showCctv = false;
@@ -913,7 +935,7 @@
         map.removeLayer(cctvLayer);
       }
     }
-    if (railView !== "postevent" && railView !== "cctv") {
+    if (railView !== "postevent" && railView !== "cctv" && railView !== "interventions") {
       clearTrail();
       if (searchInput) {
         searchInput.placeholder = "Cari zona, site, atau boundary";
@@ -1800,6 +1822,239 @@
       });
   }
 
+  function csrfToken() {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute("content") || "" : "";
+  }
+
+  function ivTypeOptions() {
+    var types = ivTypes.length ? ivTypes : ["himbauan", "evakuasi", "penghentian_aktivitas", "dampingan", "lainnya"];
+    var labels = Object.keys(ivTypeLabels).length ? ivTypeLabels : {
+      himbauan: "Himbauan",
+      evakuasi: "Evakuasi",
+      penghentian_aktivitas: "Penghentian aktivitas",
+      dampingan: "Dampingan",
+      lainnya: "Lainnya"
+    };
+    return types.map(function (type) {
+      return "<option value=\"" + esc(type) + "\">" + esc(labels[type] || type) + "</option>";
+    }).join("");
+  }
+
+  function visibleInterventionTasks() {
+    var needle = (ivQuery || "").trim().toLowerCase();
+    return ivTasks.filter(function (row) {
+      if (ivEntity && (row.entity || "person") !== ivEntity) {
+        return false;
+      }
+      if (ivStatus && (row.status || "") !== ivStatus) {
+        return false;
+      }
+      if (ivKind && (row.hazard_kind || "") !== ivKind) {
+        return false;
+      }
+      if (ivSite && (row.site_code || "") !== ivSite) {
+        return false;
+      }
+      if (!needle) {
+        return true;
+      }
+      var hay = [row.name, row.sid, row.company, row.hazard_name, row.hazard_kind_label, row.site]
+        .join(" ")
+        .toLowerCase();
+      return hay.indexOf(needle) !== -1;
+    });
+  }
+
+  function paintInterventionHud() {
+    var summary = ivSummary || {};
+    var kinds = summary.kinds || {};
+    var people = 0;
+    var units = 0;
+    ivTasks.forEach(function (row) {
+      if ((row.entity || "person") === "unit") {
+        units++;
+      } else {
+        people++;
+      }
+    });
+    setText("hud-iv-total", summary.total != null ? summary.total : ivTasks.length);
+    setText("hud-iv-open", summary.open != null ? summary.open : 0);
+    setText("hud-iv-progress", summary.in_progress != null ? summary.in_progress : 0);
+    setText("hud-iv-all", summary.total != null ? summary.total : ivTasks.length);
+    setText("hud-iv-people", people);
+    setText("hud-iv-units", units);
+    setText("hud-iv-kind-employee_danger", kinds.employee_danger || 0);
+    setText("hud-iv-kind-employee_competence", kinds.employee_competence || 0);
+    setText("hud-iv-kind-unit_danger", kinds.unit_danger || 0);
+    (summary.sites || []).forEach(function (row) {
+      setText("hud-iv-" + row.code, row.total || 0);
+    });
+    document.querySelectorAll("[data-iv-entity]").forEach(function (el) {
+      el.classList.toggle("is-on", (el.getAttribute("data-iv-entity") || "") === ivEntity);
+    });
+    document.querySelectorAll("[data-iv-status]").forEach(function (el) {
+      el.classList.toggle("is-on", (el.getAttribute("data-iv-status") || "") === ivStatus && ivStatus !== "");
+    });
+    document.querySelectorAll("[data-iv-kind]").forEach(function (el) {
+      el.classList.toggle("is-on", (el.getAttribute("data-iv-kind") || "") === ivKind && ivKind !== "");
+    });
+    document.querySelectorAll("[data-iv-site]").forEach(function (el) {
+      el.classList.toggle("is-on", (el.getAttribute("data-iv-site") || "") === ivSite);
+    });
+  }
+
+  function focusInterventionTask(row) {
+    if (row && row.has_point && row.lat != null && row.lng != null) {
+      map.setView([Number(row.lat), Number(row.lng)], Math.max(map.getZoom(), 15));
+    } else if (row && !row.has_point) {
+      toast("Task ini tidak punya koordinat GPS.");
+    }
+  }
+
+  function openInterventionForm(card, row) {
+    document.querySelectorAll(".gm-task").forEach(function (el) {
+      el.classList.toggle("is-open", el === card);
+      el.classList.toggle("is-on", el === card);
+    });
+    ivFocusId = row && row.id ? Number(row.id) : 0;
+    focusInterventionTask(row);
+  }
+
+  function submitIntervention(row, form) {
+    var type = (form.querySelector("[name=\"type\"]") || {}).value || "";
+    var notes = (form.querySelector("[name=\"notes\"]") || {}).value || "";
+    var msg = form.querySelector(".gm-task-msg");
+    if (!mapsInterventionsUrl) {
+      return;
+    }
+    fetch(mapsInterventionsUrl, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-CSRF-TOKEN": csrfToken(),
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: JSON.stringify({ event_id: row.id, type: type, notes: notes })
+    })
+      .then(function (res) {
+        return res.json().then(function (payload) {
+          return { ok: res.ok, payload: payload };
+        });
+      })
+      .then(function (pack) {
+        if (!pack.ok) {
+          var err = pack.payload && pack.payload.message
+            ? pack.payload.message
+            : "Gagal menyimpan intervensi.";
+          if (msg) {
+            msg.textContent = err;
+          } else {
+            toast(err);
+          }
+          return;
+        }
+        toast("Metode intervensi tersimpan.");
+        loadInterventions(true);
+      })
+      .catch(function () {
+        toast("Gagal menyimpan intervensi.");
+      });
+  }
+
+  function renderInterventionCards() {
+    var target = document.getElementById("gm-iv-cards");
+    if (!target) {
+      return;
+    }
+    var rows = visibleInterventionTasks();
+    target.innerHTML = "";
+    if (!rows.length) {
+      var empty = document.createElement("article");
+      empty.className = "gm-hud-card is-empty";
+      empty.innerHTML = "<p class=\"gm-hud-kicker\">Tidak ada task</p><p class=\"gm-hud-hint\" style=\"margin:0\">Tidak ada pelanggaran aktif untuk filter ini.</p>";
+      target.appendChild(empty);
+      replayViewAnim();
+      return;
+    }
+    rows.slice(0, 80).forEach(function (row, i) {
+      var card = document.createElement("article");
+      card.className = "gm-hud-card gm-task" + (Number(row.id) === ivFocusId ? " is-on is-open" : "");
+      card.style.animationDelay = (0.06 + i * 0.03) + "s";
+      var tagClass = row.status === "in_progress" ? "tag" : "tag is-in";
+      var tagText = row.status === "in_progress" ? "On progress" : "Open";
+      if ((row.entity || "person") === "unit") {
+        tagClass += " is-unit";
+      }
+      var meta = [row.sid, row.hazard_kind_label || row.hazard_name, row.site || row.site_code, formatDuration(row.duration_seconds)]
+        .filter(Boolean)
+        .join(" · ");
+      var formHtml = ivCanCreate
+        ? "<form class=\"gm-task-form\" data-event-id=\"" + esc(row.id) + "\">" +
+          "<label>Metode<select name=\"type\">" + ivTypeOptions() + "</select></label>" +
+          "<label>Catatan<textarea name=\"notes\" maxlength=\"2000\" placeholder=\"Opsional. Bukti diunggah di halaman detail.\"></textarea></label>" +
+          "<div class=\"gm-task-actions\"><button type=\"submit\">Simpan metode</button>" +
+          (row.show_url ? "<a href=\"" + esc(row.show_url) + "\">Detail &amp; bukti</a>" : "") +
+          "</div><p class=\"gm-task-msg\"></p></form>"
+        : "<div class=\"gm-task-form\"><p class=\"gm-hud-hint\" style=\"margin:0\">Hanya PIC yang dapat mengajukan metode." +
+          (row.show_url ? " <a href=\"" + esc(row.show_url) + "\">Buka detail</a>" : "") +
+          "</p></div>";
+      card.innerHTML =
+        "<button type=\"button\" class=\"gm-task-head\">" +
+        "<span class=\"gm-pin " + ((row.entity || "person") === "unit" ? "unit" : "people") + "\">" + pinSvg() + "</span>" +
+        "<span class=\"copy\"><b>" + esc(row.name || row.sid || "Task") + "</b><span class=\"meta\">" + esc(meta) + "</span></span>" +
+        "<span class=\"" + tagClass + "\">" + tagText + "</span>" +
+        "</button>" + formHtml;
+      card.querySelector(".gm-task-head").addEventListener("click", function () {
+        openInterventionForm(card, row);
+      });
+      var form = card.querySelector("form");
+      if (form) {
+        form.addEventListener("submit", function (event) {
+          event.preventDefault();
+          submitIntervention(row, form);
+        });
+      }
+      target.appendChild(card);
+    });
+    replayViewAnim();
+  }
+
+  function loadInterventions(paint) {
+    if (!mapsInterventionsUrl) {
+      return;
+    }
+    if (paint) {
+      setText("hud-iv-total", "…");
+      var stack = document.getElementById("gm-iv-cards");
+      if (stack && !ivTasks.length) {
+        stack.innerHTML = "<article class=\"gm-hud-card is-empty\"><p class=\"gm-hud-kicker\">Memuat task</p><p class=\"gm-hud-hint\" style=\"margin:0\">Mengambil pelanggaran aktif dari database lokal…</p></article>";
+      }
+    }
+    fetch(mapsInterventionsUrl, { headers: { Accept: "application/json" } })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        ivTasks = (payload && payload.tasks) || [];
+        ivSummary = (payload && payload.summary) || null;
+        ivTypes = (payload && payload.types) || [];
+        ivTypeLabels = (payload && payload.type_labels) || {};
+        ivCanCreate = !!(payload && payload.can_create);
+        if (paint || railView === "interventions") {
+          paintInterventionHud();
+          renderInterventionCards();
+        }
+      })
+      .catch(function () {
+        if (paint || railView === "interventions") {
+          ivTasks = [];
+          ivSummary = { total: 0, open: 0, in_progress: 0, kinds: {}, sites: [] };
+          paintInterventionHud();
+          renderInterventionCards();
+        }
+      });
+  }
+
   function pobFetchUrl(fresh) {
     if (!fresh) {
       return pobUrl;
@@ -1876,6 +2131,11 @@
       renderCctv();
       return;
     }
+    if (railView === "interventions") {
+      ivQuery = query;
+      renderInterventionCards();
+      return;
+    }
     listMode = "all";
     openPanel();
     closePlace();
@@ -1887,7 +2147,7 @@
   });
 
   searchInput.addEventListener("focus", function () {
-    if (railView === "postevent" || railView === "cctv") {
+    if (railView === "postevent" || railView === "cctv" || railView === "interventions") {
       return;
     }
     if (!selected) {
@@ -1915,6 +2175,12 @@
       }, 200);
       return;
     }
+    if (railView === "interventions") {
+      ivQuery = query;
+      window.clearTimeout(ivTimer);
+      ivTimer = window.setTimeout(renderInterventionCards, 200);
+      return;
+    }
     listMode = "all";
     openPanel();
     if (placeEl && !placeEl.hidden && query === "") {
@@ -1937,6 +2203,11 @@
         cctvQuery = "";
         renderCctvCards();
         renderCctv();
+        return;
+      }
+      if (railView === "interventions") {
+        ivQuery = "";
+        renderInterventionCards();
         return;
       }
       closePlace();
@@ -2080,6 +2351,45 @@
       renderCctv();
     });
   });
+  var ivBtn = document.getElementById("gm-interventions-btn");
+  if (ivBtn) {
+    ivBtn.addEventListener("click", function () {
+      setRailView("interventions");
+    });
+  }
+  document.querySelectorAll("[data-iv-entity]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      ivEntity = btn.getAttribute("data-iv-entity") || "";
+      paintInterventionHud();
+      renderInterventionCards();
+    });
+  });
+  document.querySelectorAll("[data-iv-status]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var next = btn.getAttribute("data-iv-status") || "";
+      ivStatus = ivStatus === next ? "" : next;
+      paintInterventionHud();
+      renderInterventionCards();
+    });
+  });
+  document.querySelectorAll("[data-iv-kind]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var next = btn.getAttribute("data-iv-kind") || "";
+      ivKind = ivKind === next ? "" : next;
+      paintInterventionHud();
+      renderInterventionCards();
+    });
+  });
+  document.querySelectorAll("[data-iv-site]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      ivSite = btn.getAttribute("data-iv-site") || "";
+      paintInterventionHud();
+      renderInterventionCards();
+      if (ivSite) {
+        jumpToSite(ivSite);
+      }
+    });
+  });
 
   var menuOpenList = document.getElementById("gm-menu-open-list");
   if (menuOpenList) {
@@ -2127,12 +2437,12 @@
   var interveneBtn = document.getElementById("gm-act-intervene");
   if (interveneBtn) {
     interveneBtn.addEventListener("click", function () {
-      if (!interventionsUrl) {
-        return;
-      }
       var eventId = selected && selected.props && selected.props.open_event_id;
-      var url = interventionsUrl + (eventId ? ("?event=" + encodeURIComponent(eventId)) : "");
-      window.location.href = url;
+      ivFocusId = eventId ? Number(eventId) : 0;
+      setRailView("interventions");
+      if (!eventId) {
+        toast("Belum ada task lokal. Tunggu sinkronisasi pelanggaran aktif.");
+      }
     });
   }
 

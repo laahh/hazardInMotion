@@ -11,7 +11,7 @@ final class IscDetectHazardEntriesCommand extends Command
 {
     protected $signature = 'isc:detect-hazard-entries {--demo : Gunakan snapshot dummy}';
 
-    protected $description = 'Deteksi personel In+Unsafe vs event terbuka ISC dan kirim notifikasi';
+    protected $description = 'Salin pelanggaran aktif Besigma ke task lokal ISC (read-only Besigma)';
 
     public function handle(IscDetectHazardEntryAction $action): int
     {
@@ -21,7 +21,12 @@ final class IscDetectHazardEntriesCommand extends Command
 
             return self::SUCCESS;
         }
-        $this->info(sprintf('ISC detect: %d event baru, %d event ditutup.', $result['created'], $result['closed']));
+        $this->info(sprintf(
+            'ISC detect: %d event baru, %d diperbarui, %d ditutup.',
+            $result['created'],
+            $result['updated'] ?? 0,
+            $result['closed'],
+        ));
 
         return self::SUCCESS;
     }

@@ -13,9 +13,10 @@ final class IscBoundaryEvent extends Model
     protected $table = 'isc_boundary_events';
 
     protected $fillable = [
-        'person_key', 'sid', 'name', 'company', 'job_title', 'lat', 'lng',
+        'person_key', 'entity', 'sid', 'name', 'company', 'job_title', 'lat', 'lng',
         'iupk_site', 'hazard_boundary_id', 'hazard_name', 'entered_at',
         'exited_at', 'duration_seconds', 'status', 'rule_code',
+        'besigma_violation_id', 'user_id', 'unit_id', 'hazard_kind', 'besigma_status',
     ];
 
     /**

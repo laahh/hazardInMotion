@@ -217,18 +217,21 @@ button, input { font-family: inherit; }
   max-height: min(42vh, 420px);
 }
 .gm-shell.is-postevent .gm-panel,
-.gm-shell.is-cctv .gm-panel {
+.gm-shell.is-cctv .gm-panel,
+.gm-shell.is-interventions .gm-panel {
   display: none !important;
 }
 .gm-shell.is-postevent .gm-hud,
-.gm-shell.is-cctv .gm-hud {
+.gm-shell.is-cctv .gm-hud,
+.gm-shell.is-interventions .gm-hud {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none !important;
   overflow: auto;
 }
 .gm-shell.is-postevent #gm-view-postevent,
-.gm-shell.is-cctv #gm-view-cctv {
+.gm-shell.is-cctv #gm-view-cctv,
+.gm-shell.is-interventions #gm-view-interventions {
   align-content: start;
 }
 .gm-hud-card {
@@ -289,6 +292,11 @@ button, input { font-family: inherit; }
     radial-gradient(120% 90% at 100% -10%, rgba(19, 115, 51, .16), transparent 52%),
     #fff;
 }
+.gm-hud-card.is-interventions {
+  background:
+    radial-gradient(120% 90% at 100% -10%, rgba(194, 65, 12, .16), transparent 52%),
+    #fff;
+}
 .gm-hud-card.is-empty {
   background: #fff;
 }
@@ -327,6 +335,7 @@ button, input { font-family: inherit; }
 .gm-hud-ico.recent { background: #475569; }
 .gm-hud-ico.postevent { background: #0284c7; }
 .gm-hud-ico.cctv { background: #137333; }
+.gm-hud-ico.interventions { background: #c2410c; }
 .gm-hud-spark {
   width: 72px;
   height: 28px;
@@ -349,6 +358,7 @@ button, input { font-family: inherit; }
 .is-recent .gm-hud-spark { stroke: #475569; }
 .is-postevent .gm-hud-spark { stroke: #0284c7; }
 .is-cctv .gm-hud-spark { stroke: #137333; }
+.is-interventions .gm-hud-spark { stroke: #c2410c; }
 .gm-hud-kicker {
   margin: 0;
   font-size: 13px;
@@ -787,6 +797,8 @@ div.gm-hud-metric:hover { transform: none; }
 .gm-pin.iupk { background: #e6f4ea; color: #188038; }
 .gm-pin.besigma { background: #e8f0fe; color: #1a73e8; }
 .gm-pin.cctv { background: #ecfdf3; color: #137333; }
+.gm-pin.people { background: #e6f4ea; color: #137333; }
+.gm-pin.unit { background: #ede9fe; color: #6d28d9; }
 
 .gm-pin svg {
   width: 18px;
@@ -1297,6 +1309,98 @@ div.gm-hud-metric:hover { transform: none; }
   color: var(--gm-blue);
   font-weight: 600;
   text-decoration: none;
+}
+.gm-task {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+.gm-task.is-on {
+  border-color: #c2410c;
+  box-shadow: 0 0 0 2px rgba(194, 65, 12, .16);
+}
+.gm-task-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.gm-task-head .copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.gm-task-head .copy b {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.gm-task-head .copy .meta {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+.gm-task-form {
+  display: none;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid #e2e8f0;
+}
+.gm-task.is-open .gm-task-form {
+  display: grid;
+}
+.gm-task-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+.gm-task-form select,
+.gm-task-form textarea {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: 500 13px var(--gm-font);
+  color: #0f172a;
+  background: #fff;
+}
+.gm-task-form textarea { min-height: 64px; resize: vertical; }
+.gm-task-form .gm-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.gm-task-form button[type="submit"] {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: #c2410c;
+  color: #fff;
+  font: 600 12px var(--gm-font);
+  cursor: pointer;
+}
+.gm-task-form a {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gm-blue);
+  text-decoration: none;
+}
+.gm-task-form .gm-task-msg {
+  margin: 0;
+  font-size: 12px;
+  color: #b91c1c;
 }
 
 @keyframes gm-rise {

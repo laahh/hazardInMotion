@@ -14,6 +14,7 @@
     data-post-event-url="{{ $postEventUrl }}"
     data-post-event-trail-url="{{ $postEventTrailUrl }}"
     data-cctv-url="{{ $cctvUrl }}"
+    data-maps-interventions-url="{{ $mapsInterventionsUrl }}"
     data-interventions-url="{{ $interventionsUrl }}"
     data-connected="{{ $connected ? '1' : '0' }}"
     data-wms-url="{{ $wmsUrl }}"
@@ -47,6 +48,10 @@
     <button type="button" class="gm-rail-btn" id="gm-cctv-btn" data-rail="cctv">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h10v10H4z"/><path d="m14 11 6-3v8l-6-3z"/></svg>
       <span>CCTV</span>
+    </button>
+    <button type="button" class="gm-rail-btn" id="gm-interventions-btn" data-rail="interventions">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M4 8h16M7 21h10"/></svg>
+      <span>Intervensi</span>
     </button>
     <span class="gm-rail-gap"></span>
     <button type="button" class="gm-rail-thumb bmo" data-jump="BMO" title="Binungan">BMO</button>
@@ -334,6 +339,51 @@
           <p class="gm-hud-foot">Klik kartu atau titik untuk melihat lokasi. Live hanya dibuka saat diminta.</p>
         </article>
         <div id="gm-cctv-cards" class="gm-hud-place-stack"></div>
+      </div>
+
+      <div class="gm-hud-view" data-view="interventions" id="gm-view-interventions" hidden>
+        <article class="gm-hud-card is-interventions">
+          <div class="gm-hud-card-top">
+            <span class="gm-hud-ico interventions" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3v18M4 8h16M7 21h10"/></svg>
+            </span>
+            <div class="gm-hud-head">
+              <p class="gm-hud-kicker">Intervensi</p>
+              <p class="gm-hud-value"><b id="hud-iv-total">–</b> <small>task terbuka</small></p>
+            </div>
+            <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
+              <path d="M2 18 C12 22 18 8 28 12 C38 16 44 24 54 14 C64 6 74 16 86 10" />
+            </svg>
+          </div>
+          <div class="gm-hud-split">
+            <button type="button" class="gm-hud-metric is-unsafe" data-iv-status="open">
+              <small>Open</small><b id="hud-iv-open">0</b>
+            </button>
+            <button type="button" class="gm-hud-metric is-tag" data-iv-status="in_progress">
+              <small>On progress</small><b id="hud-iv-progress">0</b>
+            </button>
+          </div>
+          <div class="gm-hud-sites" id="hud-iv-filters" role="group" aria-label="Filter task">
+            <button type="button" class="gm-hud-site is-on" data-iv-entity="">Semua <b id="hud-iv-all">0</b></button>
+            <button type="button" class="gm-hud-site" data-iv-entity="person">Orang <b id="hud-iv-people">0</b></button>
+            <button type="button" class="gm-hud-site" data-iv-entity="unit">Unit <b id="hud-iv-units">0</b></button>
+          </div>
+          <div class="gm-hud-sites" id="hud-iv-kinds" role="group" aria-label="Jenis pelanggaran">
+            <button type="button" class="gm-hud-site" data-iv-kind="employee_danger">Bahaya <b id="hud-iv-kind-employee_danger">0</b></button>
+            <button type="button" class="gm-hud-site" data-iv-kind="employee_competence">Kompetensi <b id="hud-iv-kind-employee_competence">0</b></button>
+            <button type="button" class="gm-hud-site" data-iv-kind="unit_danger">Unit <b id="hud-iv-kind-unit_danger">0</b></button>
+          </div>
+          <div class="gm-hud-sites" id="hud-iv-sites" role="group" aria-label="Filter site">
+            <button type="button" class="gm-hud-site is-on" data-iv-site="">Semua site</button>
+            <button type="button" class="gm-hud-site" data-iv-site="BMO">BMO <b id="hud-iv-BMO">0</b></button>
+            <button type="button" class="gm-hud-site" data-iv-site="LMO">LMO <b id="hud-iv-LMO">0</b></button>
+            <button type="button" class="gm-hud-site" data-iv-site="GMO">GMO <b id="hud-iv-GMO">0</b></button>
+            <button type="button" class="gm-hud-site" data-iv-site="SMO">SMO <b id="hud-iv-SMO">0</b></button>
+            <button type="button" class="gm-hud-site" data-iv-site="PUNAN">PUN <b id="hud-iv-PUNAN">0</b></button>
+          </div>
+          <p class="gm-hud-foot">Pilih metode di kartu. Bukti dan verifikasi di halaman detail.</p>
+        </article>
+        <div id="gm-iv-cards" class="gm-hud-place-stack"></div>
       </div>
     </div>
 
