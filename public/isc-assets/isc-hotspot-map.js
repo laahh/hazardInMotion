@@ -41,7 +41,7 @@
   var showBesigma = true;
   var showPeople = true;
   var showHazard = true;
-  var showCctv = true;
+  var showCctv = false;
   var showLabels = true;
   var selected = null;
   var recents = [];
@@ -65,6 +65,11 @@
   var postEventEntries = [];
   var cctvCameras = [];
   var cctvById = {};
+  var cctvSummary = null;
+  var cctvSite = "";
+  var cctvStatus = "";
+  var cctvQuery = "";
+  var cctvTimer = 0;
   var trailLayer = L.layerGroup();
 
   var sgiAttribution = mapEl.getAttribute("data-wmts-attribution") || "Drone Imagery © SGI";
@@ -420,7 +425,7 @@
     pobPeople.forEach(function (person) {
       items.push(itemFromPerson(person, peopleByKey[person.key]));
     });
-    if (showCctv) {
+    if (showCctv && railView === "cctv") {
       cctvCameras.forEach(function (camera) {
         if (!matchesHudSite(camera)) {
           return;
@@ -500,7 +505,7 @@
       map.removeLayer(hazardLayer);
     }
 
-    if (showCctv && (scope === "semua" || scope === "cctv")) {
+    if (showCctv && railView === "cctv" && (scope === "semua" || scope === "cctv")) {
       if (!map.hasLayer(cctvLayer)) {
         cctvLayer.addTo(map);
       }
@@ -673,6 +678,9 @@
       focusCctv(item.props || {});
       return;
     }
+    if (railView === "cctv") {
+      return;
+    }
     selected = item;
     recents = [itemKey(item)].concat(recents.filter(function (key) { return key !== itemKey(item); })).slice(0, 12);
     if (railView === "recents") {
@@ -821,7 +829,7 @@
   }
 
   function openPanel() {
-    if (railView === "postevent") {
+    if (railView === "postevent" || railView === "cctv") {
       return;
     }
     if (panel) {
@@ -860,6 +868,7 @@
     var shell = document.querySelector(".gm-shell");
     if (shell) {
       shell.classList.toggle("is-postevent", railView === "postevent");
+      shell.classList.toggle("is-cctv", railView === "cctv");
     }
     closePanel();
     closePlace();
@@ -880,13 +889,34 @@
         query = postEventQuery;
       }
       loadPostEventRoster();
+    } else if (railView === "cctv") {
+      listMode = "all";
+      showCctv = true;
+      var cctvToggle = document.querySelector("[data-layer=\"cctv\"]");
+      if (cctvToggle) {
+        cctvToggle.checked = true;
+      }
+      if (searchInput) {
+        searchInput.placeholder = "Cari nama atau nomor CCTV";
+        cctvQuery = searchInput.value || "";
+        query = cctvQuery;
+      }
+      loadCctv(true);
     } else {
       listMode = "all";
+      showCctv = false;
+      var cctvOff = document.querySelector("[data-layer=\"cctv\"]");
+      if (cctvOff) {
+        cctvOff.checked = false;
+      }
+      if (map.hasLayer(cctvLayer)) {
+        map.removeLayer(cctvLayer);
+      }
     }
-    if (railView !== "postevent") {
+    if (railView !== "postevent" && railView !== "cctv") {
       clearTrail();
       if (searchInput) {
-        searchInput.placeholder = "Cari zona, site, CCTV, atau boundary";
+        searchInput.placeholder = "Cari zona, site, atau boundary";
       }
       replayViewAnim();
     }
@@ -1490,7 +1520,10 @@
     });
     paintHudCounts();
     renderPeople(pobPeople);
-    renderCctv(cctvCameras);
+    if (railView === "cctv") {
+      renderCctv();
+      renderCctvCards();
+    }
     if (listMode === "roster") {
       openRoster(rosterFilter);
     } else {
@@ -1569,8 +1602,41 @@
     );
   }
 
+  function matchesCctvFilter(camera) {
+    if (cctvSite && String(camera.site_code || "") !== cctvSite) {
+      return false;
+    }
+    if (cctvStatus === "on" && !camera.ok) {
+      return false;
+    }
+    if (cctvStatus === "off" && camera.ok) {
+      return false;
+    }
+    var needle = (cctvQuery || "").trim().toLowerCase();
+    if (!needle) {
+      return true;
+    }
+    var hay = [camera.name, camera.no_cctv, camera.location, camera.company, camera.site].join(" ").toLowerCase();
+    return hay.indexOf(needle) !== -1;
+  }
+
+  function visibleCctvCameras() {
+    return (cctvCameras || []).filter(matchesCctvFilter);
+  }
+
   function focusCctv(camera) {
-    var marker = camera && cctvById[camera.id];
+    if (!camera || !camera.has_point) {
+      toast("CCTV ini belum punya koordinat di peta.");
+      return;
+    }
+    if (railView !== "cctv") {
+      setRailView("cctv");
+    }
+    var marker = cctvById[camera.id];
+    if (!marker) {
+      renderCctv();
+      marker = cctvById[camera.id];
+    }
     if (!marker) {
       toast("CCTV tidak punya titik di peta.");
       return;
@@ -1579,14 +1645,84 @@
     marker.openPopup();
   }
 
-  function renderCctv(cameras) {
-    cctvCameras = cameras || [];
+  function paintCctvHud() {
+    var summary = cctvSummary || {};
+    setText("hud-cctv-total", summary.total != null ? summary.total : cctvCameras.length);
+    setText("hud-cctv-on", summary.on != null ? summary.on : 0);
+    setText("hud-cctv-off", summary.off != null ? summary.off : 0);
+    setText("hud-cctv-all", summary.total != null ? summary.total : cctvCameras.length);
+    (summary.sites || []).forEach(function (row) {
+      setText("hud-cctv-" + row.code, row.total || 0);
+    });
+    document.querySelectorAll("[data-cctv-site]").forEach(function (el) {
+      el.classList.toggle("is-on", (el.getAttribute("data-cctv-site") || "") === cctvSite);
+    });
+    document.querySelectorAll("[data-cctv-status]").forEach(function (el) {
+      el.classList.toggle("is-on", (el.getAttribute("data-cctv-status") || "") === cctvStatus && cctvStatus !== "");
+    });
+  }
+
+  function renderCctvCards() {
+    var target = document.getElementById("gm-cctv-cards");
+    if (!target) {
+      return;
+    }
+    var rows = visibleCctvCameras();
+    target.innerHTML = "";
+    if (!rows.length) {
+      var empty = document.createElement("article");
+      empty.className = "gm-hud-card is-empty";
+      empty.innerHTML = "<p class=\"gm-hud-kicker\">Tidak ada CCTV</p><p class=\"gm-hud-hint\" style=\"margin:0\">Tidak ada kamera untuk filter ini.</p>";
+      target.appendChild(empty);
+      replayViewAnim();
+      return;
+    }
+    var limit = 120;
+    rows.slice(0, limit).forEach(function (row, i) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "gm-hud-card gm-hud-place";
+      btn.style.animationDelay = (0.06 + i * 0.03) + "s";
+      var tagClass = row.ok ? "tag" : "tag is-in";
+      var tagText = row.ok ? "On" : "Off";
+      var meta = [row.no_cctv, row.site || row.site_code, row.company, row.has_point ? "di peta" : "tanpa koordinat"]
+        .filter(Boolean)
+        .join(" · ");
+      btn.innerHTML =
+        "<span class=\"gm-pin cctv\">" + pinSvg() + "</span>" +
+        "<span class=\"copy\"><b>" + esc(row.name || row.no_cctv || "CCTV") + "</b><span class=\"meta\">" + esc(meta) + "</span></span>" +
+        "<span class=\"" + tagClass + "\">" + tagText + "</span>";
+      btn.addEventListener("click", function () {
+        target.querySelectorAll(".gm-hud-place").forEach(function (el) {
+          el.classList.toggle("is-on", el === btn);
+        });
+        focusCctv(row);
+      });
+      target.appendChild(btn);
+    });
+    if (rows.length > limit) {
+      var more = document.createElement("article");
+      more.className = "gm-hud-card is-empty";
+      more.innerHTML = "<p class=\"gm-hud-hint\" style=\"margin:0\">Menampilkan " + limit + " dari " + rows.length + " kamera. Perhalus pencarian atau filter site.</p>";
+      target.appendChild(more);
+    }
+    replayViewAnim();
+  }
+
+  function renderCctv() {
     var keep = {};
-    cctvCameras.forEach(function (camera) {
-      if (camera.lat == null || camera.lng == null) {
-        return;
+    if (railView !== "cctv" || !showCctv) {
+      Object.keys(cctvById).forEach(function (id) {
+        cctvLayer.removeLayer(cctvById[id]);
+      });
+      cctvById = {};
+      if (map.hasLayer(cctvLayer)) {
+        map.removeLayer(cctvLayer);
       }
-      if (!matchesHudSite(camera)) {
+      return;
+    }
+    visibleCctvCameras().forEach(function (camera) {
+      if (!camera.has_point || camera.lat == null || camera.lng == null) {
         return;
       }
       var latlng = [Number(camera.lat), Number(camera.lng)];
@@ -1631,18 +1767,36 @@
     }
   }
 
-  function loadCctv() {
+  function loadCctv(paint) {
     if (!cctvUrl) {
       return;
+    }
+    if (paint) {
+      setText("hud-cctv-total", "…");
+      var stack = document.getElementById("gm-cctv-cards");
+      if (stack && !cctvCameras.length) {
+        stack.innerHTML = "<article class=\"gm-hud-card is-empty\"><p class=\"gm-hud-kicker\">Memuat CCTV</p><p class=\"gm-hud-hint\" style=\"margin:0\">Mengambil kamera dan statistik site…</p></article>";
+      }
     }
     fetch(cctvUrl, { headers: { Accept: "application/json" } })
       .then(function (res) { return res.json(); })
       .then(function (payload) {
-        renderCctv((payload && payload.cameras) || []);
-        applyScope();
+        cctvCameras = (payload && payload.cameras) || [];
+        cctvSummary = (payload && payload.summary) || null;
+        if (paint || railView === "cctv") {
+          paintCctvHud();
+          renderCctvCards();
+          renderCctv();
+          applyScope();
+        }
       })
       .catch(function () {
-        renderCctv([]);
+        if (paint || railView === "cctv") {
+          cctvCameras = [];
+          cctvSummary = { total: 0, on: 0, off: 0, sites: [] };
+          paintCctvHud();
+          renderCctvCards();
+        }
       });
   }
 
@@ -1673,7 +1827,6 @@
   renderList();
   loadBesigma();
   loadPob(true);
-  loadCctv();
   window.setInterval(function () {
     loadPob(false);
   }, 10000);
@@ -1717,6 +1870,12 @@
       loadPostEventRoster();
       return;
     }
+    if (railView === "cctv") {
+      cctvQuery = query;
+      renderCctvCards();
+      renderCctv();
+      return;
+    }
     listMode = "all";
     openPanel();
     closePlace();
@@ -1728,7 +1887,7 @@
   });
 
   searchInput.addEventListener("focus", function () {
-    if (railView === "postevent") {
+    if (railView === "postevent" || railView === "cctv") {
       return;
     }
     if (!selected) {
@@ -1747,6 +1906,15 @@
       postEventTimer = window.setTimeout(loadPostEventRoster, 280);
       return;
     }
+    if (railView === "cctv") {
+      cctvQuery = query;
+      window.clearTimeout(cctvTimer);
+      cctvTimer = window.setTimeout(function () {
+        renderCctvCards();
+        renderCctv();
+      }, 200);
+      return;
+    }
     listMode = "all";
     openPanel();
     if (placeEl && !placeEl.hidden && query === "") {
@@ -1763,6 +1931,12 @@
       if (railView === "postevent") {
         postEventQuery = "";
         loadPostEventRoster();
+        return;
+      }
+      if (railView === "cctv") {
+        cctvQuery = "";
+        renderCctvCards();
+        renderCctv();
         return;
       }
       closePlace();
@@ -1812,6 +1986,11 @@
       }
       if (layer === "cctv") {
         showCctv = input.checked;
+        if (showCctv && railView !== "cctv") {
+          setRailView("cctv");
+          return;
+        }
+        renderCctv();
       }
       applyScope();
     });
@@ -1873,6 +2052,32 @@
         el.classList.toggle("is-on", el === btn);
       });
       renderPostEventCards();
+    });
+  });
+  var cctvBtn = document.getElementById("gm-cctv-btn");
+  if (cctvBtn) {
+    cctvBtn.addEventListener("click", function () {
+      setRailView("cctv");
+    });
+  }
+  document.querySelectorAll("[data-cctv-site]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      cctvSite = btn.getAttribute("data-cctv-site") || "";
+      paintCctvHud();
+      renderCctvCards();
+      renderCctv();
+      if (cctvSite) {
+        jumpToSite(cctvSite);
+      }
+    });
+  });
+  document.querySelectorAll("[data-cctv-status]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var next = btn.getAttribute("data-cctv-status") || "";
+      cctvStatus = cctvStatus === next ? "" : next;
+      paintCctvHud();
+      renderCctvCards();
+      renderCctv();
     });
   });
 

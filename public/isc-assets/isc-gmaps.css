@@ -216,16 +216,19 @@ button, input { font-family: inherit; }
   margin-top: 0;
   max-height: min(42vh, 420px);
 }
-.gm-shell.is-postevent .gm-panel {
+.gm-shell.is-postevent .gm-panel,
+.gm-shell.is-cctv .gm-panel {
   display: none !important;
 }
-.gm-shell.is-postevent .gm-hud {
+.gm-shell.is-postevent .gm-hud,
+.gm-shell.is-cctv .gm-hud {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none !important;
   overflow: auto;
 }
-.gm-shell.is-postevent #gm-view-postevent {
+.gm-shell.is-postevent #gm-view-postevent,
+.gm-shell.is-cctv #gm-view-cctv {
   align-content: start;
 }
 .gm-hud-card {
@@ -281,6 +284,11 @@ button, input { font-family: inherit; }
     radial-gradient(120% 90% at 100% -10%, rgba(14, 165, 233, .16), transparent 52%),
     #fff;
 }
+.gm-hud-card.is-cctv {
+  background:
+    radial-gradient(120% 90% at 100% -10%, rgba(19, 115, 51, .16), transparent 52%),
+    #fff;
+}
 .gm-hud-card.is-empty {
   background: #fff;
 }
@@ -318,6 +326,7 @@ button, input { font-family: inherit; }
 .gm-hud-ico.saved { background: #7c3aed; }
 .gm-hud-ico.recent { background: #475569; }
 .gm-hud-ico.postevent { background: #0284c7; }
+.gm-hud-ico.cctv { background: #137333; }
 .gm-hud-spark {
   width: 72px;
   height: 28px;
@@ -339,6 +348,7 @@ button, input { font-family: inherit; }
 .is-saved .gm-hud-spark { stroke: #7c3aed; }
 .is-recent .gm-hud-spark { stroke: #475569; }
 .is-postevent .gm-hud-spark { stroke: #0284c7; }
+.is-cctv .gm-hud-spark { stroke: #137333; }
 .gm-hud-kicker {
   margin: 0;
   font-size: 13px;
@@ -512,10 +522,14 @@ button, input { font-family: inherit; }
   text-transform: none;
   letter-spacing: 0;
 }
-.gm-hud-metric strong { font-size: 22px; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+.gm-hud-metric strong,
+.gm-hud-metric b { font-size: 22px; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
 .gm-hud-metric small { color: #64748b; font-size: 11px; line-height: 1.3; }
 .gm-hud-metric.is-safe { background: rgba(22, 163, 74, .1); color: #15803d; }
 .gm-hud-metric.is-unsafe { background: rgba(239, 68, 68, .1); color: #b91c1c; }
+button.gm-hud-metric.is-on {
+  box-shadow: inset 0 0 0 2px currentColor;
+}
 .gm-hud-metric.is-ever { background: #f1f5f9; color: #334155; }
 .gm-hud-metric.is-live { background: rgba(249, 115, 22, .12); color: #c2410c; }
 .gm-hud-metric.is-tag { background: rgba(37, 99, 235, .1); color: #1d4ed8; }

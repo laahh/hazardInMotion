@@ -37,6 +37,7 @@ final class IscCctvMapServiceTest extends TestCase
         $this->assertSame(117.48, $point['lng']);
         $this->assertSame('BMO', $point['site_code']);
         $this->assertTrue($point['ok']);
+        $this->assertTrue($point['has_point']);
         $this->assertTrue($point['has_link']);
         $this->assertSame('https://example.test/live', $point['link']);
         $this->assertArrayNotHasKey('password', $point);
@@ -47,11 +48,15 @@ final class IscCctvMapServiceTest extends TestCase
     {
         $service = app(IscCctvMapService::class);
 
-        $this->assertNull($service->mapRow((object) [
+        $empty = $service->mapRow((object) [
             'id' => 1,
+            'nama_cctv' => 'Tanpa titik',
             'latitude' => 0,
             'longitude' => 0,
-        ]));
+        ]);
+        $this->assertNotNull($empty);
+        $this->assertFalse($empty['has_point']);
+        $this->assertNull($empty['lat']);
 
         $point = $service->mapRow((object) [
             'id' => 2,
@@ -74,6 +79,14 @@ final class IscCctvMapServiceTest extends TestCase
 
         $this->assertSame('demo', $data['source']);
         $this->assertGreaterThanOrEqual(5, $data['count']);
+        $this->assertSame(5, $data['summary']['total']);
+        $this->assertSame(3, $data['summary']['on']);
+        $this->assertSame(2, $data['summary']['off']);
+        $siteCodes = array_column($data['summary']['sites'], 'code');
+        $this->assertContains('BMO', $siteCodes);
+        $bmo = collect($data['summary']['sites'])->firstWhere('code', 'BMO');
+        $this->assertSame(1, $bmo['total']);
+        $this->assertSame(1, $bmo['on']);
         $this->assertArrayHasKey('lat', $data['cameras'][0]);
         $this->assertArrayHasKey('lng', $data['cameras'][0]);
         $codes = array_column($data['cameras'], 'site_code');

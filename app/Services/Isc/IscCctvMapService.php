@@ -13,7 +13,7 @@ use Throwable;
  */
 final class IscCctvMapService
 {
-    public const CACHE_KEY = 'isc.maps.cctv.v1';
+    public const CACHE_KEY = 'isc.maps.cctv.v2';
 
     public const CACHE_SECONDS = 180;
 
@@ -45,16 +45,16 @@ final class IscCctvMapService
      */
     public function mapRow(object $row): ?array
     {
+        $id = (string) ($row->id ?? '');
+        if ($id === '') {
+            return null;
+        }
         $lat = $this->toFloat($row->latitude ?? null);
         $lng = $this->toFloat($row->longitude ?? null);
-        if ($lat === null || $lng === null || $lat == 0.0 || $lng == 0.0) {
-            return null;
-        }
-        if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
-            return null;
-        }
-
-        $id = (string) ($row->id ?? '');
+        $hasPoint = $lat !== null && $lng !== null
+            && $lat != 0.0 && $lng != 0.0
+            && $lat >= -90 && $lat <= 90
+            && $lng >= -180 && $lng <= 180;
         $no = trim((string) ($row->no_cctv ?? ''));
         $name = trim((string) ($row->nama_cctv ?? ''));
         $kondisi = $this->nullableString($row->kondisi ?? $row->status ?? null);
@@ -64,8 +64,9 @@ final class IscCctvMapService
             'id' => $id,
             'no_cctv' => $no !== '' ? $no : null,
             'name' => $name !== '' ? $name : ($no !== '' ? $no : 'CCTV '.$id),
-            'lat' => $lat,
-            'lng' => $lng,
+            'lat' => $hasPoint ? $lat : null,
+            'lng' => $hasPoint ? $lng : null,
+            'has_point' => $hasPoint,
             'site' => $this->nullableString($row->site ?? null),
             'site_code' => $this->sites->codeFrom($row->site ?? null, $row->lokasi_pemasangan ?? null),
             'company' => $this->nullableString($row->perusahaan ?? null),
@@ -97,8 +98,6 @@ final class IscCctvMapService
                 'longitude',
                 'link_akses',
             ])
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
             ->get();
 
         $cameras = [];
@@ -110,11 +109,10 @@ final class IscCctvMapService
             $cameras[] = $point;
         }
 
-        return [
+        return $this->withSummary([
             'source' => 'live',
-            'count' => count($cameras),
             'cameras' => $cameras,
-        ];
+        ]);
     }
 
     /**
@@ -130,12 +128,11 @@ final class IscCctvMapService
             $this->demoCamera('d5', 'CCTV-PUN-01', 'Haul road Punan', 'PUNAN', 'PT Berau Coal', 1.88, 117.35, false),
         ];
 
-        return [
+        return $this->withSummary([
             'source' => 'demo',
-            'count' => count($cameras),
             'fallback' => $fallback,
             'cameras' => $cameras,
-        ];
+        ]);
     }
 
     /**
@@ -163,9 +160,67 @@ final class IscCctvMapService
             'location' => $name,
             'kondisi' => $ok ? 'Baik' : 'Rusak',
             'ok' => $ok,
+            'has_point' => true,
             'has_link' => false,
             'link' => null,
         ];
+    }
+
+    /**
+     * @param  array{source:string,cameras:list<array<string, mixed>>,fallback?:bool}  $payload
+     * @return array{source:string,count:int,summary:array<string, mixed>,cameras:list<array<string, mixed>>,fallback?:bool}
+     */
+    private function withSummary(array $payload): array
+    {
+        $siteCodes = array_keys(IscSiteNormalizer::SITES);
+        $sites = [];
+        foreach ($siteCodes as $code) {
+            $sites[$code] = ['code' => $code, 'total' => 0, 'on' => 0, 'off' => 0];
+        }
+        $on = 0;
+        $off = 0;
+        $mapped = 0;
+        $other = ['code' => 'Lainnya', 'total' => 0, 'on' => 0, 'off' => 0];
+        foreach ($payload['cameras'] as $camera) {
+            $isOn = (bool) ($camera['ok'] ?? false);
+            if ($isOn) {
+                $on++;
+            } else {
+                $off++;
+            }
+            if (! empty($camera['has_point'])) {
+                $mapped++;
+            }
+            $code = (string) ($camera['site_code'] ?? '');
+            $bucket = $sites[$code] ?? null;
+            if ($bucket === null) {
+                $other['total']++;
+                if ($isOn) {
+                    $other['on']++;
+                } else {
+                    $other['off']++;
+                }
+                continue;
+            }
+            $sites[$code]['total']++;
+            if ($isOn) {
+                $sites[$code]['on']++;
+            } else {
+                $sites[$code]['off']++;
+            }
+        }
+
+        $payload['count'] = count($payload['cameras']);
+        $payload['summary'] = [
+            'total' => $payload['count'],
+            'on' => $on,
+            'off' => $off,
+            'mapped' => $mapped,
+            'sites' => array_values($sites),
+            'other' => $other,
+        ];
+
+        return $payload;
     }
 
     private function isOk(mixed $kondisi, mixed $status, mixed $connected): bool

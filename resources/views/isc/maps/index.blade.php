@@ -44,6 +44,10 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V7"/><path d="M4 19h16"/><path d="M8 15l3-4 3 3 4-6"/></svg>
       <span>Post-event</span>
     </button>
+    <button type="button" class="gm-rail-btn" id="gm-cctv-btn" data-rail="cctv">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h10v10H4z"/><path d="m14 11 6-3v8l-6-3z"/></svg>
+      <span>CCTV</span>
+    </button>
     <span class="gm-rail-gap"></span>
     <button type="button" class="gm-rail-thumb bmo" data-jump="BMO" title="Binungan">BMO</button>
     <button type="button" class="gm-rail-thumb lmo" data-jump="LMO" title="Lati">LMO</button>
@@ -296,6 +300,41 @@
         </article>
         <div id="gm-postevent-cards" class="gm-hud-place-stack"></div>
       </div>
+
+      <div class="gm-hud-view" data-view="cctv" id="gm-view-cctv" hidden>
+        <article class="gm-hud-card is-cctv">
+          <div class="gm-hud-card-top">
+            <span class="gm-hud-ico cctv" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 8h10v10H4z"/><path d="m14 11 6-3v8l-6-3z"/></svg>
+            </span>
+            <div class="gm-hud-head">
+              <p class="gm-hud-kicker">CCTV</p>
+              <p class="gm-hud-value"><b id="hud-cctv-total">–</b> <small>kamera</small></p>
+            </div>
+            <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
+              <path d="M2 20 C14 20 18 10 28 12 C38 14 42 22 52 16 C62 10 70 8 86 14" />
+            </svg>
+          </div>
+          <div class="gm-hud-split">
+            <button type="button" class="gm-hud-metric is-safe" data-cctv-status="on">
+              <small>On</small><b id="hud-cctv-on">0</b>
+            </button>
+            <button type="button" class="gm-hud-metric is-unsafe" data-cctv-status="off">
+              <small>Off</small><b id="hud-cctv-off">0</b>
+            </button>
+          </div>
+          <div class="gm-hud-sites" id="hud-cctv-sites" role="group" aria-label="Filter site CCTV">
+            <button type="button" class="gm-hud-site is-on" data-cctv-site="">Semua <b id="hud-cctv-all">0</b></button>
+            <button type="button" class="gm-hud-site" data-cctv-site="BMO">BMO <b id="hud-cctv-BMO">0</b></button>
+            <button type="button" class="gm-hud-site" data-cctv-site="LMO">LMO <b id="hud-cctv-LMO">0</b></button>
+            <button type="button" class="gm-hud-site" data-cctv-site="GMO">GMO <b id="hud-cctv-GMO">0</b></button>
+            <button type="button" class="gm-hud-site" data-cctv-site="SMO">SMO <b id="hud-cctv-SMO">0</b></button>
+            <button type="button" class="gm-hud-site" data-cctv-site="PUNAN">PUN <b id="hud-cctv-PUNAN">0</b></button>
+          </div>
+          <p class="gm-hud-foot">Klik kartu atau titik untuk melihat lokasi. Live hanya dibuka saat diminta.</p>
+        </article>
+        <div id="gm-cctv-cards" class="gm-hud-place-stack"></div>
+      </div>
     </div>
 
     <aside class="gm-panel is-closed" id="gm-panel" aria-label="Hasil peta">
@@ -403,7 +442,7 @@
       <label><input type="checkbox" data-layer="besigma" checked> Besigma</label>
       <label><input type="checkbox" data-layer="people" checked> Personel GPS</label>
       <label><input type="checkbox" data-layer="hazard" checked> Zona berbahaya</label>
-      <label><input type="checkbox" data-layer="cctv" checked> CCTV</label>
+      <label><input type="checkbox" data-layer="cctv"> CCTV</label>
       <label><input type="checkbox" id="gm-toggle-labels" checked> Label site</label>
     </div>
   </div>
