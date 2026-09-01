@@ -18,6 +18,10 @@ final class IscPostEventTrackService
 
     public const ROSTER_LIMIT = 200;
 
+    public const PEOPLE_LIMIT = 120;
+
+    public const UNIT_LIMIT = 80;
+
     public const TRAIL_RAW_LIMIT = 4000;
 
     public const TRAIL_MAX_POINTS = 400;
@@ -82,6 +86,10 @@ final class IscPostEventTrackService
 
         $entries = array_values(array_merge($byId, $units));
         usort($entries, static function (array $a, array $b): int {
+            $kind = ((string) ($b['entity'] ?? '') === 'unit' ? 1 : 0) <=> ((string) ($a['entity'] ?? '') === 'unit' ? 1 : 0);
+            if ($kind !== 0) {
+                return $kind;
+            }
             $entered = ((int) ($b['entered'] ?? false)) <=> ((int) ($a['entered'] ?? false));
             if ($entered !== 0) {
                 return $entered;
@@ -89,13 +97,18 @@ final class IscPostEventTrackService
 
             return strcmp((string) ($b['last_at'] ?? ''), (string) ($a['last_at'] ?? ''));
         });
+        $entries = array_slice($entries, 0, self::ROSTER_LIMIT);
+        $peopleCount = count(array_filter($entries, static fn (array $row): bool => ($row['entity'] ?? '') !== 'unit'));
+        $unitCount = count($entries) - $peopleCount;
 
         return [
             'source' => 'live',
             'date' => $date,
             'query' => $query,
             'count' => count($entries),
-            'entries' => array_slice($entries, 0, self::ROSTER_LIMIT),
+            'people_count' => $peopleCount,
+            'unit_count' => $unitCount,
+            'entries' => $entries,
         ];
     }
 
@@ -195,10 +208,9 @@ final class IscPostEventTrackService
      */
     private function unitsRoster(string $from, string $to, string $search): array
     {
-        if ($search === '') {
-            return [];
-        }
-        $candidates = $this->findUnits($search);
+        $candidates = $search !== ''
+            ? $this->findUnits($search)
+            : $this->unitsFromLatests($from, $to);
         if ($candidates === []) {
             return [];
         }
@@ -274,7 +286,7 @@ final class IscPostEventTrackService
                   AND g.latitude IS NOT NULL
                   AND g.longitude IS NOT NULL
                 ORDER BY g.updated_at DESC
-                LIMIT ".self::ROSTER_LIMIT."
+                LIMIT ".self::PEOPLE_LIMIT."
             ", [$from, $to]);
         } catch (Throwable $e) {
             report($e);
@@ -299,6 +311,36 @@ final class IscPostEventTrackService
      */
     private function findUnits(string $search): array
     {
+        $byId = [];
+        foreach ($this->findUnitsFromMaster($search) as $row) {
+            $unitId = (string) ($row['unit_id'] ?? '');
+            if ($unitId === '') {
+                continue;
+            }
+            $byId[$unitId] = $row;
+        }
+        foreach ($this->findUnitsFromLatests($search) as $row) {
+            $unitId = (string) ($row['unit_id'] ?? '');
+            if ($unitId === '') {
+                continue;
+            }
+            if (isset($byId[$unitId])) {
+                $byId[$unitId]['has_trail'] = true;
+                $byId[$unitId]['last_at'] = $row['last_at'] ?? $byId[$unitId]['last_at'];
+                $byId[$unitId]['first_at'] = $row['first_at'] ?? $byId[$unitId]['first_at'];
+                continue;
+            }
+            $byId[$unitId] = $row;
+        }
+
+        return array_values($byId);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function findUnitsFromMaster(string $search): array
+    {
         try {
             $like = '%'.$this->likeNeedle($search).'%';
             $rows = DB::connection(self::CONNECTION)->select("
@@ -308,7 +350,7 @@ final class IscPostEventTrackService
                    OR vehicle_name LIKE ?
                    OR vendor_name LIKE ?
                 ORDER BY vehicle_number ASC
-                LIMIT 20
+                LIMIT 40
             ", [$like, $like, $like]);
         } catch (Throwable $e) {
             report($e);
@@ -316,32 +358,149 @@ final class IscPostEventTrackService
             return [];
         }
 
+        return array_map(fn (object $row): array => $this->unitCardFromRow($row, false), $rows);
+    }
+
+    /**
+     * Unit yang GPS terakhirnya masih di tanggal jejak. Satu baris per unit.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function unitsFromLatests(string $from, string $to): array
+    {
+        $rows = $this->selectUnitLatests(
+            "
+                SELECT
+                    {$this->unitLatestIdSql()} AS unit_id,
+                    g.updated_at AS last_at,
+                    g.vehicle_number,
+                    g.vehicle_name,
+                    g.vendor_name,
+                    g.vehicle_type
+                FROM unit_gps_latests g
+                WHERE g.updated_at >= ?
+                  AND g.updated_at < ?
+                  AND g.latitude IS NOT NULL
+                  AND g.longitude IS NOT NULL
+                ORDER BY g.updated_at DESC
+                LIMIT ".self::UNIT_LIMIT."
+            ",
+            [$from, $to],
+        );
+
+        return $this->unitCardsFromGpsRows($rows);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function findUnitsFromLatests(string $search): array
+    {
+        $like = '%'.$this->likeNeedle($search).'%';
+        $rows = $this->selectUnitLatests(
+            "
+                SELECT
+                    {$this->unitLatestIdSql()} AS unit_id,
+                    g.updated_at AS last_at,
+                    g.vehicle_number,
+                    g.vehicle_name,
+                    g.vendor_name,
+                    g.vehicle_type
+                FROM unit_gps_latests g
+                WHERE g.latitude IS NOT NULL
+                  AND g.longitude IS NOT NULL
+                  AND (
+                    g.vehicle_number LIKE ?
+                    OR g.vehicle_name LIKE ?
+                    OR g.vendor_name LIKE ?
+                    OR CAST(g.unit_id AS CHAR) LIKE ?
+                  )
+                ORDER BY g.updated_at DESC
+                LIMIT 40
+            ",
+            [$like, $like, $like, $like],
+        );
+
+        return $this->unitCardsFromGpsRows($rows);
+    }
+
+    /**
+     * @param  list<mixed>  $bindings
+     * @return list<object>
+     */
+    private function selectUnitLatests(string $sql, array $bindings): array
+    {
+        try {
+            return DB::connection(self::CONNECTION)->select($sql, $bindings);
+        } catch (Throwable $e) {
+            $fallbackSql = str_replace($this->unitLatestIdSql(), 'g.unit_id', $sql);
+            $fallbackSql = str_replace(', g.vehicle_type', '', $fallbackSql);
+            try {
+                return DB::connection(self::CONNECTION)->select($fallbackSql, $bindings);
+            } catch (Throwable $inner) {
+                report($inner);
+
+                return [];
+            }
+        }
+    }
+
+    private function unitLatestIdSql(): string
+    {
+        return "COALESCE(NULLIF(CAST(g.unit_id AS CHAR), ''), CAST(g.integration_id AS CHAR))";
+    }
+
+    /**
+     * @param  list<object>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function unitCardsFromGpsRows(array $rows): array
+    {
         $out = [];
+        $seen = [];
         foreach ($rows as $row) {
-            $unitId = (string) ($row->unit_id ?? '');
-            $plate = trim((string) ($row->vehicle_number ?? ''));
-            $out[] = [
-                'entity' => 'unit',
-                'id' => $unitId,
-                'unit_id' => $unitId,
-                'key' => 'unit:'.$unitId,
-                'sid' => $plate,
-                'name' => $plate !== '' ? $plate : trim((string) ($row->vehicle_name ?? 'Unit')),
-                'company' => $this->nullableString($row->vendor_name ?? null),
-                'job_title' => $this->nullableString($row->vehicle_name ?? null),
-                'site' => null,
-                'site_code' => null,
-                'point_count' => 0,
-                'first_at' => null,
-                'last_at' => null,
-                'entered' => false,
-                'hazard_name' => null,
-                'hazard_kind' => IscHazardBoundaryClassifier::KIND_UNIT_DANGER,
-                'has_trail' => false,
-            ];
+            $card = $this->unitCardFromRow($row, true);
+            $unitId = (string) ($card['unit_id'] ?? '');
+            if ($unitId === '' || isset($seen[$unitId])) {
+                continue;
+            }
+            $seen[$unitId] = true;
+            $card['last_at'] = isset($row->last_at) ? (string) $row->last_at : null;
+            $card['first_at'] = $card['last_at'];
+            $out[] = $card;
         }
 
         return $out;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function unitCardFromRow(object $row, bool $hasTrail): array
+    {
+        $unitId = (string) ($row->unit_id ?? '');
+        $plate = trim((string) ($row->vehicle_number ?? ''));
+        $name = $plate !== '' ? $plate : trim((string) ($row->vehicle_name ?? 'Unit'));
+
+        return [
+            'entity' => 'unit',
+            'id' => $unitId,
+            'unit_id' => $unitId,
+            'key' => 'unit:'.$unitId,
+            'sid' => $plate,
+            'name' => $name !== '' ? $name : ('Unit '.substr($unitId, 0, 8)),
+            'company' => $this->nullableString($row->vendor_name ?? null),
+            'job_title' => $this->nullableString($row->vehicle_type ?? $row->vehicle_name ?? null),
+            'site' => null,
+            'site_code' => null,
+            'point_count' => 0,
+            'first_at' => null,
+            'last_at' => null,
+            'entered' => false,
+            'hazard_name' => null,
+            'hazard_kind' => IscHazardBoundaryClassifier::KIND_UNIT_DANGER,
+            'has_trail' => $hasTrail,
+        ];
     }
 
     /**
@@ -409,18 +568,32 @@ final class IscPostEventTrackService
             $rows = DB::connection(self::CONNECTION)->select("
                 SELECT latitude, longitude, updated_at
                 FROM unit_gps_logs
-                WHERE unit_id = ?
+                WHERE (unit_id = ? OR integration_id = ?)
                   AND updated_at >= ?
                   AND updated_at < ?
                   AND latitude IS NOT NULL
                   AND longitude IS NOT NULL
                 ORDER BY updated_at ASC
                 LIMIT ".self::TRAIL_RAW_LIMIT."
-            ", [$unitId, $from, $to]);
+            ", [$unitId, $unitId, $from, $to]);
         } catch (Throwable $e) {
-            report($e);
+            try {
+                $rows = DB::connection(self::CONNECTION)->select("
+                    SELECT latitude, longitude, updated_at
+                    FROM unit_gps_logs
+                    WHERE unit_id = ?
+                      AND updated_at >= ?
+                      AND updated_at < ?
+                      AND latitude IS NOT NULL
+                      AND longitude IS NOT NULL
+                    ORDER BY updated_at ASC
+                    LIMIT ".self::TRAIL_RAW_LIMIT."
+                ", [$unitId, $from, $to]);
+            } catch (Throwable $inner) {
+                report($inner);
 
-            return [];
+                return [];
+            }
         }
 
         return $this->rowsToPoints($rows);
@@ -636,7 +809,7 @@ final class IscPostEventTrackService
             'entered' => true,
             'hazard_name' => $row['hazard_name'] ?? null,
             'hazard_kind' => $row['hazard_kind'] ?? IscHazardBoundaryClassifier::KIND_UNIT_DANGER,
-            'has_trail' => false,
+            'has_trail' => true,
         ];
     }
 
@@ -673,34 +846,45 @@ final class IscPostEventTrackService
                 'has_trail' => true,
             ];
         }
-        $unitName = 'DT-01';
-        if ($this->matchesNeedle($needle, $unitName, 'DT-01', 'PT BUMA')) {
+        $demoUnits = [
+            ['id' => 'demo-unit-1', 'sid' => 'DT-01', 'name' => 'DT-01', 'company' => 'PT BUMA', 'job_title' => 'Dump truck', 'site' => 'BMO', 'entered' => true, 'hazard_name' => 'Zona Bahaya Unit Pit BMO'],
+            ['id' => 'demo-unit-2', 'sid' => 'HD-12', 'name' => 'HD-12', 'company' => 'PT BUMA', 'job_title' => 'Haul dump', 'site' => 'LMO', 'entered' => false, 'hazard_name' => null],
+            ['id' => 'demo-unit-3', 'sid' => 'LV-07', 'name' => 'LV-07', 'company' => 'PT Pamapersada', 'job_title' => 'Light vehicle', 'site' => 'GMO', 'entered' => true, 'hazard_name' => 'Zona Bahaya Unit Pit GMO'],
+        ];
+        foreach ($demoUnits as $unit) {
+            if (! $this->matchesNeedle($needle, $unit['name'], $unit['sid'], $unit['company'])) {
+                continue;
+            }
             $entries[] = [
                 'entity' => 'unit',
-                'id' => 'demo-unit-1',
-                'unit_id' => 'demo-unit-1',
-                'key' => 'unit:demo-unit-1',
-                'sid' => 'DT-01',
-                'name' => $unitName,
-                'company' => 'PT BUMA',
-                'job_title' => 'Dump truck',
-                'site' => 'BMO',
-                'site_code' => 'BMO',
+                'id' => $unit['id'],
+                'unit_id' => $unit['id'],
+                'key' => 'unit:'.$unit['id'],
+                'sid' => $unit['sid'],
+                'name' => $unit['name'],
+                'company' => $unit['company'],
+                'job_title' => $unit['job_title'],
+                'site' => $unit['site'],
+                'site_code' => $unit['site'],
                 'point_count' => 12,
                 'first_at' => $date.' 07:00:00',
                 'last_at' => $date.' 15:20:00',
-                'entered' => true,
-                'hazard_name' => 'Zona Bahaya Unit Pit BMO',
+                'entered' => $unit['entered'],
+                'hazard_name' => $unit['hazard_name'],
                 'hazard_kind' => IscHazardBoundaryClassifier::KIND_UNIT_DANGER,
                 'has_trail' => true,
             ];
         }
+
+        $peopleCount = count(array_filter($entries, static fn (array $row): bool => ($row['entity'] ?? '') !== 'unit'));
 
         return [
             'source' => 'demo',
             'date' => $date,
             'query' => $query,
             'count' => count($entries),
+            'people_count' => $peopleCount,
+            'unit_count' => count($entries) - $peopleCount,
             'fallback' => $fallback,
             'entries' => $entries,
         ];

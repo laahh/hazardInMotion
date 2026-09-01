@@ -277,7 +277,7 @@
             </span>
             <div class="gm-hud-head">
               <p class="gm-hud-kicker">Post-event</p>
-              <p class="gm-hud-value"><b id="hud-postevent-count">–</b> <small>orang &amp; unit</small></p>
+              <p class="gm-hud-value"><b id="hud-postevent-headline">–</b> <small>orang &amp; unit</small></p>
             </div>
             <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
               <path d="M2 22 C12 22 16 10 26 14 C36 18 40 8 50 12 C60 16 68 24 86 12" />
@@ -286,6 +286,11 @@
           <label class="gm-hud-hint" for="hud-postevent-date">Tanggal jejak
             <input type="date" id="hud-postevent-date" class="gm-hud-date">
           </label>
+          <div class="gm-hud-sites" id="hud-postevent-kinds" role="group" aria-label="Filter jejak">
+            <button type="button" class="gm-hud-site is-on" data-postevent-kind="">Semua <b id="hud-postevent-count">0</b></button>
+            <button type="button" class="gm-hud-site" data-postevent-kind="person">Orang <b id="hud-postevent-people">0</b></button>
+            <button type="button" class="gm-hud-site" data-postevent-kind="unit">Unit <b id="hud-postevent-units">0</b></button>
+          </div>
           <p class="gm-hud-foot">Cari nama, SID, atau nopol, lalu klik kartu untuk melihat jalur GPS.</p>
         </article>
         <div id="gm-postevent-cards" class="gm-hud-place-stack"></div>

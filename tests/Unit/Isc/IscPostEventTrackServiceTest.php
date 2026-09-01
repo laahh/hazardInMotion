@@ -48,7 +48,18 @@ final class IscPostEventTrackServiceTest extends TestCase
         $entities = array_column($data['entries'], 'entity');
         $this->assertContains('person', $entities);
         $this->assertContains('unit', $entities);
+        $this->assertGreaterThanOrEqual(3, $data['unit_count']);
         $this->assertArrayHasKey('has_trail', $data['entries'][0]);
+    }
+
+    public function test_demo_search_finds_unit_by_plate(): void
+    {
+        $data = app(IscPostEventTrackService::class)->roster('2026-09-01', 'HD-12', true);
+        $entities = array_column($data['entries'], 'entity');
+
+        $this->assertSame(1, $data['unit_count']);
+        $this->assertContains('unit', $entities);
+        $this->assertSame('HD-12', $data['entries'][0]['name']);
     }
 
     public function test_demo_search_filters_name(): void

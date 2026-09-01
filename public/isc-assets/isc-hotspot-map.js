@@ -59,6 +59,8 @@
   var postEventQuery = "";
   var postEventTimer = 0;
   var postEventAbort = null;
+  var postEventKind = "";
+  var postEventEntries = [];
   var trailLayer = L.layerGroup();
 
   var sgiAttribution = mapEl.getAttribute("data-wmts-attribution") || "Drone Imagery © SGI";
@@ -932,7 +934,13 @@
 
   function paintPostEventRoster(payload) {
     var entries = payload.entries || [];
-    setText("hud-postevent-count", payload.count != null ? payload.count : entries.length);
+    var peopleCount = payload.people_count != null ? payload.people_count : entries.filter(function (row) { return row.entity !== "unit"; }).length;
+    var unitCount = payload.unit_count != null ? payload.unit_count : entries.filter(function (row) { return row.entity === "unit"; }).length;
+    var total = payload.count != null ? payload.count : entries.length;
+    setText("hud-postevent-headline", payload.loading ? "…" : total);
+    setText("hud-postevent-count", payload.loading ? "…" : total);
+    setText("hud-postevent-people", payload.loading ? "…" : peopleCount);
+    setText("hud-postevent-units", payload.loading ? "…" : unitCount);
     var target = document.getElementById("gm-postevent-cards");
     if (!target) {
       return;
@@ -941,11 +949,12 @@
     if (payload.loading) {
       var loading = document.createElement("article");
       loading.className = "gm-hud-card is-empty";
-      loading.innerHTML = "<p class=\"gm-hud-kicker\">Memuat jejak</p><p class=\"gm-hud-hint\" style=\"margin:0\">Mencari orang atau unit untuk tanggal ini…</p>";
+      loading.innerHTML = "<p class=\"gm-hud-kicker\">Memuat jejak</p><p class=\"gm-hud-hint\" style=\"margin:0\">Mencari orang dan unit untuk tanggal ini…</p>";
       target.appendChild(loading);
       return;
     }
     if (payload.error) {
+      postEventEntries = [];
       var failed = document.createElement("article");
       failed.className = "gm-hud-card is-empty";
       failed.innerHTML = "<p class=\"gm-hud-kicker\">Gagal memuat</p><p class=\"gm-hud-hint\" style=\"margin:0\">Server timeout atau sibuk. Ketik nama, SID, atau nopol lalu cari lagi.</p>";
@@ -953,12 +962,44 @@
       replayViewAnim();
       return;
     }
+    postEventEntries = entries;
+    renderPostEventCards();
+  }
+
+  function visiblePostEventEntries() {
+    if (postEventKind === "unit") {
+      return postEventEntries.filter(function (row) { return row.entity === "unit"; });
+    }
+    if (postEventKind === "person") {
+      return postEventEntries.filter(function (row) { return row.entity !== "unit"; });
+    }
+    return postEventEntries;
+  }
+
+  function renderPostEventCards() {
+    var target = document.getElementById("gm-postevent-cards");
+    if (!target) {
+      return;
+    }
+    var entries = visiblePostEventEntries();
+    target.innerHTML = "";
     if (!entries.length) {
       var empty = document.createElement("article");
       empty.className = "gm-hud-card is-empty";
-      var hint = postEventQuery
-        ? "Tidak ada orang atau unit yang cocok dengan pencarian ini."
-        : "Ketik nama, SID, atau nopol di kotak cari. Tanpa pencarian, hanya orang yang GPS-nya masih aktif di tanggal ini yang tampil.";
+      var hint;
+      if (postEventKind === "unit") {
+        hint = postEventQuery
+          ? "Tidak ada unit yang cocok dengan nopol atau nama ini."
+          : "Tidak ada unit dengan GPS aktif di tanggal ini. Cari nopol di kotak cari.";
+      } else if (postEventKind === "person") {
+        hint = postEventQuery
+          ? "Tidak ada orang yang cocok dengan pencarian ini."
+          : "Tidak ada orang dengan GPS aktif di tanggal ini. Cari nama atau SID.";
+      } else {
+        hint = postEventQuery
+          ? "Tidak ada orang atau unit yang cocok dengan pencarian ini."
+          : "Ketik nama, SID, atau nopol di kotak cari. Tanpa pencarian, hanya yang GPS-nya masih aktif di tanggal ini yang tampil.";
+      }
       empty.innerHTML = "<p class=\"gm-hud-kicker\">Tidak ada jejak</p><p class=\"gm-hud-hint\" style=\"margin:0\">" + hint + "</p>";
       target.appendChild(empty);
       replayViewAnim();
@@ -973,7 +1014,8 @@
       var tagClass = row.entered ? "tag is-in" : (kind === "unit" ? "tag is-unit" : "tag");
       var tagText = row.entered ? "Masuk" : (kind === "unit" ? "Unit" : "GPS");
       var timeRange = [clockLabel(row.first_at), clockLabel(row.last_at)].filter(Boolean).join(" – ");
-      var meta = [row.company, row.site || row.site_code, timeRange, row.point_count ? row.point_count + " titik" : "tanpa GPS"]
+      var gpsLabel = row.has_trail || row.point_count ? (row.point_count ? row.point_count + " titik" : "jejak GPS") : "tanpa GPS";
+      var meta = [kind === "unit" ? (row.job_title || "Unit") : null, row.company, row.site || row.site_code, timeRange, gpsLabel]
         .filter(Boolean)
         .join(" · ");
       btn.innerHTML =
@@ -1037,7 +1079,7 @@
     }
     var line = L.polyline(latlngs, {
       pane: "trail",
-      color: "#0284c7",
+      color: row && row.entity === "unit" ? "#7c3aed" : "#0284c7",
       weight: 4,
       opacity: 0.92,
       lineJoin: "round",
@@ -1678,6 +1720,15 @@
       loadPostEventRoster();
     });
   }
+  document.querySelectorAll("[data-postevent-kind]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      postEventKind = btn.getAttribute("data-postevent-kind") || "";
+      document.querySelectorAll("[data-postevent-kind]").forEach(function (el) {
+        el.classList.toggle("is-on", el === btn);
+      });
+      renderPostEventCards();
+    });
+  });
 
   var menuOpenList = document.getElementById("gm-menu-open-list");
   if (menuOpenList) {
