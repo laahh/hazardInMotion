@@ -9,6 +9,7 @@
   var pobUrl = mapEl.getAttribute("data-pob-url") || "";
   var postEventUrl = mapEl.getAttribute("data-post-event-url") || "";
   var postEventTrailUrl = mapEl.getAttribute("data-post-event-trail-url") || "";
+  var cctvUrl = mapEl.getAttribute("data-cctv-url") || "";
   var interventionsUrl = mapEl.getAttribute("data-interventions-url") || "";
 
   var listEl = document.getElementById("zone-list");
@@ -40,6 +41,7 @@
   var showBesigma = true;
   var showPeople = true;
   var showHazard = true;
+  var showCctv = true;
   var showLabels = true;
   var selected = null;
   var recents = [];
@@ -61,6 +63,8 @@
   var postEventAbort = null;
   var postEventKind = "";
   var postEventEntries = [];
+  var cctvCameras = [];
+  var cctvById = {};
   var trailLayer = L.layerGroup();
 
   var sgiAttribution = mapEl.getAttribute("data-wmts-attribution") || "Drone Imagery © SGI";
@@ -131,6 +135,8 @@
   map.getPane("iupk").style.zIndex = 450;
   map.createPane("hazard");
   map.getPane("hazard").style.zIndex = 470;
+  map.createPane("cctv");
+  map.getPane("cctv").style.zIndex = 580;
   map.createPane("people");
   map.getPane("people").style.zIndex = 620;
   map.createPane("trail");
@@ -140,8 +146,10 @@
   map.getPane("labels").style.pointerEvents = "none";
 
   var iupkRenderer = L.canvas({ pane: "iupk", padding: 0.8 });
+  var cctvRenderer = L.canvas({ pane: "cctv", padding: 0.4 });
   var labelsLayer = L.layerGroup();
   var peopleLayer = L.layerGroup();
+  var cctvLayer = L.layerGroup();
   trailLayer.addTo(map);
   var hazardLayer = L.geoJSON(null, {
     pane: "hazard",
@@ -307,6 +315,9 @@
     if (item.kind === "person" && item.props && item.props.key) {
       return "person:" + item.props.key;
     }
+    if (item.kind === "cctv" && item.props && item.props.id) {
+      return "cctv:" + item.props.id;
+    }
     return item.kind + ":" + item.title;
   }
 
@@ -339,6 +350,18 @@
       badge: "IN",
       props: Object.assign({ presence: "in", safety: null }, p),
       layer: peopleByKey[p.key] || peopleByKey["sid:" + (p.sid || "")] || null
+    };
+  }
+
+  function itemFromCctv(camera, layer) {
+    var p = camera || {};
+    return {
+      kind: "cctv",
+      title: p.name || p.no_cctv || "CCTV",
+      meta: [p.no_cctv, p.site || p.site_code, p.company].filter(Boolean).join(" · "),
+      badge: p.ok ? "LIVE" : "CCTV",
+      props: p,
+      layer: layer || cctvById[p.id] || null
     };
   }
 
@@ -397,6 +420,14 @@
     pobPeople.forEach(function (person) {
       items.push(itemFromPerson(person, peopleByKey[person.key]));
     });
+    if (showCctv) {
+      cctvCameras.forEach(function (camera) {
+        if (!matchesHudSite(camera)) {
+          return;
+        }
+        items.push(itemFromCctv(camera, cctvById[camera.id]));
+      });
+    }
     return items;
   }
 
@@ -418,6 +449,9 @@
         return false;
       }
       if (scope === "people" && item.kind !== "person") {
+        return false;
+      }
+      if (item.kind === "cctv" && (!showCctv || (scope !== "semua" && scope !== "cctv"))) {
         return false;
       }
       if (listMode === "saved" && saved.indexOf(itemKey(item)) === -1) {
@@ -464,6 +498,14 @@
       }
     } else if (map.hasLayer(hazardLayer)) {
       map.removeLayer(hazardLayer);
+    }
+
+    if (showCctv && (scope === "semua" || scope === "cctv")) {
+      if (!map.hasLayer(cctvLayer)) {
+        cctvLayer.addTo(map);
+      }
+    } else if (map.hasLayer(cctvLayer)) {
+      map.removeLayer(cctvLayer);
     }
 
     if (showLabels) {
@@ -625,6 +667,10 @@
 
   function openPlace(item) {
     if (railView === "postevent") {
+      return;
+    }
+    if (item && item.kind === "cctv") {
+      focusCctv(item.props || {});
       return;
     }
     selected = item;
@@ -840,7 +886,7 @@
     if (railView !== "postevent") {
       clearTrail();
       if (searchInput) {
-        searchInput.placeholder = "Cari zona, site, atau boundary";
+        searchInput.placeholder = "Cari zona, site, CCTV, atau boundary";
       }
       replayViewAnim();
     }
@@ -1444,6 +1490,7 @@
     });
     paintHudCounts();
     renderPeople(pobPeople);
+    renderCctv(cctvCameras);
     if (listMode === "roster") {
       openRoster(rosterFilter);
     } else {
@@ -1504,6 +1551,101 @@
     }
   }
 
+  function cctvPopupHtml(camera) {
+    var p = camera || {};
+    var meta = [p.no_cctv, p.site || p.site_code, p.company].filter(Boolean).join(" · ");
+    var status = p.ok ? "Baik" : (p.kondisi || "Tidak diketahui");
+    var link = p.has_link && p.link
+      ? "<a href=\"" + esc(p.link) + "\" target=\"_blank\" rel=\"noopener noreferrer\">Buka live</a>"
+      : "<span class=\"meta\">Tidak ada tautan live</span>";
+    return (
+      "<div class=\"gm-cctv-pop\">" +
+        "<b>" + esc(p.name || p.no_cctv || "CCTV") + "</b>" +
+        (meta ? "<span class=\"meta\">" + esc(meta) + "</span>" : "") +
+        (p.location ? "<span class=\"meta\">" + esc(p.location) + "</span>" : "") +
+        "<span class=\"st" + (p.ok ? "" : " is-off") + "\">" + esc(status) + "</span>" +
+        link +
+      "</div>"
+    );
+  }
+
+  function focusCctv(camera) {
+    var marker = camera && cctvById[camera.id];
+    if (!marker) {
+      toast("CCTV tidak punya titik di peta.");
+      return;
+    }
+    map.setView(marker.getLatLng(), Math.max(map.getZoom(), 15));
+    marker.openPopup();
+  }
+
+  function renderCctv(cameras) {
+    cctvCameras = cameras || [];
+    var keep = {};
+    cctvCameras.forEach(function (camera) {
+      if (camera.lat == null || camera.lng == null) {
+        return;
+      }
+      if (!matchesHudSite(camera)) {
+        return;
+      }
+      var latlng = [Number(camera.lat), Number(camera.lng)];
+      var existing = cctvById[camera.id];
+      if (existing) {
+        existing._iscCctv = camera;
+        existing.setLatLng(latlng);
+        existing.setStyle({
+          color: "#fff",
+          weight: 1,
+          fillColor: camera.ok ? "#137333" : "#c5221f",
+          fillOpacity: 0.92,
+          radius: 5
+        });
+        existing.setPopupContent(cctvPopupHtml(camera));
+        keep[camera.id] = existing;
+        return;
+      }
+      var marker = L.circleMarker(latlng, {
+        renderer: cctvRenderer,
+        pane: "cctv",
+        radius: 5,
+        color: "#fff",
+        weight: 1,
+        fillColor: camera.ok ? "#137333" : "#c5221f",
+        fillOpacity: 0.92
+      });
+      marker._iscCctv = camera;
+      marker.bindTooltip(camera.name || camera.no_cctv || "CCTV", { direction: "top", offset: [0, -6], className: "iupk-tip" });
+      marker.bindPopup(cctvPopupHtml(camera), { closeButton: true, maxWidth: 260 });
+      marker.addTo(cctvLayer);
+      keep[camera.id] = marker;
+    });
+    Object.keys(cctvById).forEach(function (id) {
+      if (!keep[id]) {
+        cctvLayer.removeLayer(cctvById[id]);
+      }
+    });
+    cctvById = keep;
+    if (showCctv && !map.hasLayer(cctvLayer)) {
+      cctvLayer.addTo(map);
+    }
+  }
+
+  function loadCctv() {
+    if (!cctvUrl) {
+      return;
+    }
+    fetch(cctvUrl, { headers: { Accept: "application/json" } })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        renderCctv((payload && payload.cameras) || []);
+        applyScope();
+      })
+      .catch(function () {
+        renderCctv([]);
+      });
+  }
+
   function pobFetchUrl(fresh) {
     if (!fresh) {
       return pobUrl;
@@ -1531,6 +1673,7 @@
   renderList();
   loadBesigma();
   loadPob(true);
+  loadCctv();
   window.setInterval(function () {
     loadPob(false);
   }, 10000);
@@ -1666,6 +1809,9 @@
       }
       if (layer === "hazard") {
         showHazard = input.checked;
+      }
+      if (layer === "cctv") {
+        showCctv = input.checked;
       }
       applyScope();
     });

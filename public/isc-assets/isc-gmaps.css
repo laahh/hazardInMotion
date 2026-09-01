@@ -772,6 +772,7 @@ div.gm-hud-metric:hover { transform: none; }
 
 .gm-pin.iupk { background: #e6f4ea; color: #188038; }
 .gm-pin.besigma { background: #e8f0fe; color: #1a73e8; }
+.gm-pin.cctv { background: #ecfdf3; color: #137333; }
 
 .gm-pin svg {
   width: 18px;
@@ -1261,6 +1262,27 @@ div.gm-hud-metric:hover { transform: none; }
   border: 0;
   box-shadow: var(--gm-shadow);
   font: 500 12px var(--gm-font);
+}
+.gm-cctv-pop {
+  min-width: 168px;
+  max-width: 240px;
+  display: grid;
+  gap: 4px;
+  font: 500 13px/1.35 var(--gm-font);
+}
+.gm-cctv-pop b { font-size: 14px; color: #0f172a; }
+.gm-cctv-pop .meta { color: #64748b; font-size: 12px; font-weight: 400; }
+.gm-cctv-pop .st {
+  font-size: 11px;
+  font-weight: 700;
+  color: #137333;
+}
+.gm-cctv-pop .st.is-off { color: #c5221f; }
+.gm-cctv-pop a {
+  margin-top: 4px;
+  color: var(--gm-blue);
+  font-weight: 600;
+  text-decoration: none;
 }
 
 @keyframes gm-rise {

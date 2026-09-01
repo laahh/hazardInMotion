@@ -13,6 +13,7 @@
     data-pob-url="{{ $pobUrl }}"
     data-post-event-url="{{ $postEventUrl }}"
     data-post-event-trail-url="{{ $postEventTrailUrl }}"
+    data-cctv-url="{{ $cctvUrl }}"
     data-interventions-url="{{ $interventionsUrl }}"
     data-connected="{{ $connected ? '1' : '0' }}"
     data-wms-url="{{ $wmsUrl }}"
@@ -59,7 +60,7 @@
       <input
         id="gm-search-input"
         type="search"
-        placeholder="Cari zona, site, atau boundary"
+        placeholder="Cari zona, site, CCTV, atau boundary"
         aria-label="Cari peta"
       >
       <button type="button" class="gm-icon-btn" id="gm-search-clear" hidden aria-label="Hapus pencarian">
@@ -402,6 +403,7 @@
       <label><input type="checkbox" data-layer="besigma" checked> Besigma</label>
       <label><input type="checkbox" data-layer="people" checked> Personel GPS</label>
       <label><input type="checkbox" data-layer="hazard" checked> Zona berbahaya</label>
+      <label><input type="checkbox" data-layer="cctv" checked> CCTV</label>
       <label><input type="checkbox" id="gm-toggle-labels" checked> Label site</label>
     </div>
   </div>
