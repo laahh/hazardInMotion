@@ -303,6 +303,7 @@ final class IscBoundaryMapService
     {
         $type = strtoupper(trim((string) ($row->type ?? '')));
         $hasCompetency = (int) ($row->has_competency ?? 0) === 1;
+        $violationCount = $violationCounts[(string) ($row->id ?? '')] ?? 0;
         $kind = null;
         if ($type !== 'INVERSE') {
             if ($hasCompetency) {
@@ -321,6 +322,10 @@ final class IscBoundaryMapService
         $props['name'] = (string) ($row->name ?? '');
         $props['code'] = (string) ($row->code ?? '');
         $props['type'] = $type;
+        $props['violations_count'] = $violationCount;
+        if ($kind === null) {
+            $kind = $this->hazard->kind($props);
+        }
         $props['hazard_kind'] = $kind;
         $props['hazard_kind_label'] = $this->hazard->label($kind);
         $props['site_code'] = $siteCode;
@@ -328,7 +333,6 @@ final class IscBoundaryMapService
         $props['pit_name'] = $row->pit_name ?? null;
         $props['risk_color'] = $this->nullableString($row->polyline_color_hex ?? null) ?? '#c5221f';
         $props['status_name'] = $row->boundary_status ?? null;
-        $props['violations_count'] = $violationCounts[(string) ($row->id ?? '')] ?? 0;
         $props['is_active'] = 1;
 
         return $props;

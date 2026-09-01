@@ -51,4 +51,22 @@ final class IscHazardBoundaryClassifierTest extends TestCase
         ]));
         $this->assertFalse($classifier->isHazardous(['type' => 'INVERSE']));
     }
+
+    public function test_active_violation_count_marks_named_zone_as_hazard(): void
+    {
+        $classifier = new IscHazardBoundaryClassifier();
+
+        $this->assertSame(
+            IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER,
+            $classifier->kind([
+                'name' => 'IPD E Blok 45-54',
+                'type' => 'POLYGON',
+                'violations_count' => 1,
+            ])
+        );
+        $this->assertTrue($classifier->isHazardous([
+            'name' => 'IPD E Blok 45-54',
+            'violations_count' => 3,
+        ]));
+    }
 }

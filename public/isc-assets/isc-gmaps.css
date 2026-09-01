@@ -1365,12 +1365,11 @@ div.gm-hud-metric:hover { transform: none; }
   border-radius: 8px;
 }
 
-.leaflet-tooltip.iupk-tip {
-  background: #fff;
-  color: var(--gm-ink);
+.leaflet-tooltip.gm-violation-zone-tip {
+  background: #c5221f;
+  color: #fff;
   border: 0;
-  box-shadow: var(--gm-shadow);
-  font: 500 12px var(--gm-font);
+  font-weight: 700;
 }
 .gm-cctv-pop {
   min-width: 168px;

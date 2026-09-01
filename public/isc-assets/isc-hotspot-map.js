@@ -156,6 +156,8 @@
   map.getPane("iupk").style.zIndex = 450;
   map.createPane("hazard");
   map.getPane("hazard").style.zIndex = 470;
+  map.createPane("violation");
+  map.getPane("violation").style.zIndex = 485;
   map.createPane("cctv");
   map.getPane("cctv").style.zIndex = 580;
   map.createPane("people");
@@ -175,6 +177,22 @@
   var peopleLayer = L.layerGroup();
   var cctvLayer = L.layerGroup();
   trailLayer.addTo(map);
+  var violationFocusLayer = L.geoJSON(null, {
+    pane: "violation",
+    style: function (feature) {
+      var kind = ((feature && feature.properties) || {}).hazard_kind || "";
+      var color = kind === "employee_competence" ? "#e37400" : (kind === "unit_danger" ? "#7627bb" : "#c5221f");
+      return { color: color, weight: 4, fillColor: color, fillOpacity: 0.4 };
+    },
+    onEachFeature: function (feature, layer) {
+      var p = feature.properties || {};
+      layer.bindTooltip("Zona dilanggar: " + (p.name || p.code || "Besigma"), {
+        permanent: true,
+        direction: "center",
+        className: "iupk-tip gm-violation-zone-tip"
+      });
+    }
+  });
   var hazardLayer = L.geoJSON(null, {
     pane: "hazard",
     style: function (feature) {
@@ -489,6 +507,103 @@
     return found;
   }
 
+  function boundaryNameOf(props) {
+    return String((props && (props.name || props.title || props.code)) || "").trim().toLowerCase();
+  }
+
+  function featureMatchesPerson(feature, person) {
+    if (!feature || !person) {
+      return false;
+    }
+    var props = feature.properties || {};
+    var id = String(person.hazard_boundary_id || "");
+    var name = String(person.hazard_name || "").trim().toLowerCase();
+    if (id && String(props.id || "") === id) {
+      return true;
+    }
+    var title = boundaryNameOf(props);
+    return !!(name && title && (title === name || title.indexOf(name) !== -1 || name.indexOf(title) !== -1));
+  }
+
+  function findViolatedBoundaryFeature(person) {
+    var found = null;
+    function consider(layer) {
+      if (found || !layer || !layer.feature) {
+        return;
+      }
+      if (featureMatchesPerson(layer.feature, person) && layer.feature.geometry) {
+        found = layer.feature;
+      }
+    }
+    var byId = person && person.hazard_boundary_id ? layerForBesigmaId(person.hazard_boundary_id) : null;
+    if (byId && byId.feature && byId.feature.geometry) {
+      return byId.feature;
+    }
+    besigmaLayer.eachLayer(consider);
+    if (found) {
+      return found;
+    }
+    hazardLayer.eachLayer(consider);
+    if (found) {
+      return found;
+    }
+    ((besigmaGeo && besigmaGeo.features) || []).forEach(function (feature) {
+      if (!found && featureMatchesPerson(feature, person) && feature.geometry) {
+        found = feature;
+      }
+    });
+    return found;
+  }
+
+  function clearViolatedBoundary() {
+    violationFocusLayer.clearLayers();
+    if (map.hasLayer(violationFocusLayer)) {
+      map.removeLayer(violationFocusLayer);
+    }
+  }
+
+  function fitViolationContext(extraLayer) {
+    var bounds = null;
+    function extend(layer) {
+      if (!layer) {
+        return;
+      }
+      if (layer.getBounds) {
+        var b = layer.getBounds();
+        if (b && b.isValid && b.isValid()) {
+          bounds = bounds ? bounds.extend(b) : b;
+        }
+      } else if (layer.getLatLng) {
+        var ll = layer.getLatLng();
+        bounds = bounds ? bounds.extend(ll) : L.latLngBounds(ll, ll);
+      }
+    }
+    violationFocusLayer.eachLayer(extend);
+    extend(extraLayer);
+    if (selected && selected.layer) {
+      extend(selected.layer);
+    }
+    if (bounds && bounds.isValid && bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [64, 64], maxZoom: 16 });
+    }
+  }
+
+  function focusViolatedBoundary(person) {
+    clearViolatedBoundary();
+    if (!person || (!person.hazard_boundary_id && !person.hazard_name)) {
+      return false;
+    }
+    var feature = findViolatedBoundaryFeature(person);
+    if (!feature || !feature.geometry) {
+      toast("Polygon zona " + (person.hazard_name || "Besigma") + " belum ada di data peta.");
+      return false;
+    }
+    violationFocusLayer.addData(feature);
+    violationFocusLayer.addTo(map);
+    fitViolationContext(null);
+    return true;
+  }
+
   function allItems() {
     var items = [];
     iupkLayers.forEach(function (entry) {
@@ -581,6 +696,9 @@
       }
     } else if (map.hasLayer(hazardLayer)) {
       map.removeLayer(hazardLayer);
+    }
+    if (violationFocusLayer.getLayers().length && !map.hasLayer(violationFocusLayer)) {
+      violationFocusLayer.addTo(map);
     }
 
     if (showCctv && railView === "cctv" && (scope === "semua" || scope === "cctv")) {
@@ -827,9 +945,11 @@
       item.layer.openPopup();
     }
     if (item.kind === "person") {
+      focusViolatedBoundary(item.props || {});
       loadPersonTrail(item.props || {});
     } else if (railView !== "postevent") {
       clearTrail();
+      clearViolatedBoundary();
     }
   }
 
@@ -851,6 +971,7 @@
       if (unsafe) {
         rows.push(fact("alert", p.violation_action || p.hazard_kind_label || "Masuk zona berbahaya", "Apa yang dilanggar"));
         rows.push(fact("pin", where, "Di mana"));
+        rows.push(fact("area", p.hazard_name || "—", "Boundary Besigma yang dilanggar"));
         rows.push(fact("tag", when, "Kapan"));
         if (p.hazard_activity) {
           rows.push(fact("in", p.hazard_activity, "Aktivitas di zona"));
@@ -960,6 +1081,7 @@
     renderList();
     if (railView !== "postevent") {
       clearTrail();
+      clearViolatedBoundary();
     }
   }
 
@@ -1396,7 +1518,7 @@
       pane: "trail",
       icon: L.divIcon({ className: "", html: "<span class=\"gm-trail-dot end\"></span>", iconSize: [12, 12], iconAnchor: [6, 6] })
     }).bindTooltip(endTip, { direction: "top", permanent: !!options.violationLabel }).addTo(trailLayer);
-    map.fitBounds(line.getBounds(), { padding: [48, 48], maxZoom: 16 });
+    fitViolationContext(line);
   }
 
   function renderPlaceCards(id, keys, emptyTitle, emptyHint) {
@@ -1508,6 +1630,9 @@
         addLabels();
         applyScope();
         hideLoading();
+        if (selected && selected.kind === "person") {
+          focusViolatedBoundary(selected.props || {});
+        }
       })
       .catch(function () {
         hideLoading();

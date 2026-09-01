@@ -75,6 +75,9 @@ final class IscHazardBoundaryClassifier
         if ($this->isHazardColor((string) ($properties['risk_color'] ?? $properties['color'] ?? ''))) {
             return self::KIND_EMPLOYEE_DANGER;
         }
+        if ((int) ($properties['violations_count'] ?? 0) > 0) {
+            return self::KIND_EMPLOYEE_DANGER;
+        }
 
         return null;
     }
