@@ -33,7 +33,7 @@ final class IscPobSnapshotService
      */
     public function snapshot(bool $fresh = false, bool $demo = true): array
     {
-        $key = $demo ? 'isc.pob.snapshot.demo.v3' : 'isc.pob.snapshot.live.v3';
+        $key = $demo ? 'isc.pob.snapshot.demo.v4' : 'isc.pob.snapshot.live.v4';
         if ($fresh) {
             Cache::forget($key);
         }

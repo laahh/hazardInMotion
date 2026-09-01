@@ -6,6 +6,7 @@ namespace App\Services\Isc;
 
 use App\Services\Besigma\BesigmaConnectionService;
 use App\Services\Besigma\BesigmaTunnelService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -23,6 +24,8 @@ final class IscPersonnelGpsReader
     ) {}
 
     /**
+     * Posisi GPS terakhir per orang, hanya yang `updated_at` jatuh pada hari ini (timezone aplikasi).
+     *
      * @return list<array<string, mixed>>
      */
     public function latest(): array
@@ -42,6 +45,8 @@ final class IscPersonnelGpsReader
                 ->whereNotNull('g.longitude')
                 ->where('g.latitude', '!=', '')
                 ->where('g.longitude', '!=', '')
+                ->where('g.updated_at', '>=', self::todayStart())
+                ->where('g.updated_at', '<', self::tomorrowStart())
                 ->orderByDesc('g.updated_at')
                 ->limit(self::GPS_LIMIT)
                 ->select([
@@ -80,6 +85,9 @@ final class IscPersonnelGpsReader
             $lat = $this->toFloat($row->latitude ?? null);
             $lng = $this->toFloat($row->longitude ?? null);
             if ($lat === null || $lng === null || $lat == 0.0 || $lng == 0.0) {
+                continue;
+            }
+            if (! self::isUpdatedToday($row->updated_at ?? null)) {
                 continue;
             }
             $seen[$userId] = true;
@@ -197,6 +205,40 @@ final class IscPersonnelGpsReader
         }
 
         return '';
+    }
+
+    public static function todayStart(?string $timezone = null): string
+    {
+        return Carbon::now(self::timezone($timezone))->startOfDay()->format('Y-m-d H:i:s');
+    }
+
+    public static function tomorrowStart(?string $timezone = null): string
+    {
+        return Carbon::now(self::timezone($timezone))->startOfDay()->addDay()->format('Y-m-d H:i:s');
+    }
+
+    public static function isUpdatedToday(mixed $updatedAt, ?string $timezone = null): bool
+    {
+        if ($updatedAt === null || $updatedAt === '') {
+            return false;
+        }
+
+        try {
+            $tz = self::timezone($timezone);
+            $at = Carbon::parse((string) $updatedAt, $tz);
+            $start = Carbon::now($tz)->startOfDay();
+
+            return $at->gte($start) && $at->lt($start->copy()->addDay());
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private static function timezone(?string $timezone): string
+    {
+        $tz = trim((string) ($timezone ?? config('app.timezone')));
+
+        return $tz !== '' ? $tz : 'Asia/Makassar';
     }
 
     private function toFloat(mixed $value): ?float
