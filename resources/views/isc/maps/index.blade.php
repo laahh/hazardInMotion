@@ -13,6 +13,8 @@
     data-pob-url="{{ $pobUrl }}"
     data-interventions-url="{{ $interventionsUrl }}"
     data-connected="{{ $connected ? '1' : '0' }}"
+    data-wmts-url="http://10.10.10.61:8080/geoserver/gwc/service/wmts?layer=geonode:basemap_allsite&amp;tilematrixset=EPSG:900913&amp;Service=WMTS&amp;Request=GetTile&amp;Version=1.0.0&amp;Format=image/png&amp;TileMatrix=EPSG:900913:{z}&amp;TileCol={x}&amp;TileRow={y}"
+    data-wmts-attribution="Drone Imagery &copy; SGI"
   ></div>
   <div id="map-loading" class="gm-loading">Memuat peta…</div>
 
@@ -239,13 +241,13 @@
 
   <div class="gm-layers">
     <button type="button" class="gm-layers-btn" id="gm-layers-btn" aria-expanded="false" aria-controls="gm-layers-pop">
-      <span class="gm-layers-thumb" id="gm-layers-thumb" data-kind="sat"></span>
+      <span class="gm-layers-thumb" id="gm-layers-thumb" data-kind="sgi"></span>
       <span>Layers</span>
     </button>
     <div class="gm-layers-pop" id="gm-layers-pop" hidden>
       <p>Jenis peta</p>
       <div class="gm-layer-cards">
-        <button type="button" class="is-on" data-basemap="sat"><i data-kind="sat"></i>Satelit</button>
+        <button type="button" class="is-on" data-basemap="sgi"><i data-kind="sgi"></i>Drone SGI</button>
         <button type="button" data-basemap="map"><i data-kind="map"></i>Peta</button>
         <button type="button" data-basemap="dark"><i data-kind="dark"></i>Gelap</button>
       </div>

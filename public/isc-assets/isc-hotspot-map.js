@@ -53,21 +53,34 @@
   var hudSite = "";
   var rosterFilter = { type: "", site: "", safety: "", kind: "" };
 
-  var sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-    maxZoom: 18
+  var sgiUrl = mapEl.getAttribute("data-wmts-url") ||
+    "http://10.10.10.61:8080/geoserver/gwc/service/wmts?layer=geonode:basemap_allsite&tilematrixset=EPSG:900913&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/png&TileMatrix=EPSG:900913:{z}&TileCol={x}&TileRow={y}";
+  var sgi = L.tileLayer(sgiUrl, {
+    attribution: mapEl.getAttribute("data-wmts-attribution") || "Drone Imagery © SGI",
+    maxZoom: 22,
+    maxNativeZoom: 22,
+    minZoom: 5,
+    opacity: 1,
+    tms: false
   });
   var osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19
+    maxZoom: 22,
+    maxNativeZoom: 19,
+    minZoom: 5
   });
   var dark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 18
+    maxZoom: 22,
+    maxNativeZoom: 18,
+    minZoom: 5
   });
-  var basemaps = { sat: sat, map: osm, dark: dark };
+  var basemaps = { sgi: sgi, map: osm, dark: dark };
 
   var map = L.map("map", {
     center: [2.08, 117.42],
     zoom: 10,
-    layers: [sat],
+    minZoom: 5,
+    maxZoom: 22,
+    layers: [sgi],
     zoomControl: false,
     attributionControl: true
   });
@@ -1176,7 +1189,7 @@
 
   document.querySelectorAll("[data-basemap]").forEach(function (btn) {
     btn.addEventListener("click", function () {
-      setBasemap(btn.getAttribute("data-basemap") || "sat");
+      setBasemap(btn.getAttribute("data-basemap") || "sgi");
     });
   });
 

@@ -830,6 +830,12 @@ button, input { font-family: inherit; }
     linear-gradient(180deg, #5aa0d6 0 38%, #6bb443 38% 72%, #c9a227 72%);
 }
 
+.gm-layers-thumb[data-kind="sgi"],
+.gm-layer-cards i[data-kind="sgi"] {
+  background:
+    linear-gradient(180deg, #3d5c3a 0 28%, #6b8f3a 28% 52%, #c4a35a 52% 78%, #8a6a3b 78%);
+}
+
 .gm-layers-thumb[data-kind="map"],
 .gm-layer-cards i[data-kind="map"] {
   background: linear-gradient(180deg, #d4ead4 0 40%, #f6efd2 40% 70%, #cde4f5 70%);
