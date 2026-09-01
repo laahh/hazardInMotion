@@ -89,7 +89,7 @@ final class IscPobSnapshotServiceTest extends TestCase
         $data = app(IscPobSnapshotService::class)->snapshot(true, true);
 
         $this->assertSame('demo', $data['source']);
-        $this->assertArrayHasKey('unsafe_by_kind', $data['summary']);
+        $this->assertArrayHasKey('traced', $data['summary']);
         $this->assertArrayHasKey(IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER, $data['summary']['unsafe_by_kind']);
         $this->assertArrayHasKey(IscHazardBoundaryClassifier::KIND_EMPLOYEE_COMPETENCE, $data['summary']['unsafe_by_kind']);
         $this->assertArrayHasKey(IscHazardBoundaryClassifier::KIND_UNIT_DANGER, $data['summary']['unsafe_by_kind']);

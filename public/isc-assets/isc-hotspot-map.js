@@ -904,6 +904,7 @@
     var inCount = 0;
     var outCount = 0;
     var unknownCount = 0;
+    var tracedCount = 0;
     var safe = 0;
     var unsafe = 0;
     var kinds = { employee_danger: 0, employee_competence: 0, unit_danger: 0 };
@@ -920,6 +921,9 @@
       }
       if (!countsAsPob(person)) {
         return;
+      }
+      if (Number(person.lat) && Number(person.lng)) {
+        tracedCount += 1;
       }
       if (person.presence === "in") {
         inCount += 1;
@@ -939,6 +943,7 @@
       in: inCount,
       out: outCount,
       unknown: unknownCount,
+      traced: tracedCount,
       safe: safe,
       unsafe: unsafe,
       unsafe_by_kind: kinds,
@@ -976,6 +981,7 @@
     var summary = filteredSummary();
     setText("hud-checkin-total", summary.checkin_total);
     setText("hud-pob-in", summary.in);
+    setText("hud-traced", summary.traced);
     setText("hud-pob-out", summary.out);
     setText("hud-pob-unknown", summary.unknown);
     setText("hud-safe", summary.safe);
@@ -1082,8 +1088,7 @@
 
   function renderPeople(people) {
     pobPeople = people || [];
-    peopleByKey = {};
-    peopleLayer.clearLayers();
+    var keep = {};
     pobPeople.forEach(function (person) {
       if (person.lat == null || person.lng == null || Number(person.lat) === 0 || Number(person.lng) === 0) {
         return;
@@ -1091,17 +1096,33 @@
       if (!matchesHudSite(person)) {
         return;
       }
-      var marker = L.marker([person.lat, person.lng], {
+      var latlng = [Number(person.lat), Number(person.lng)];
+      var existing = peopleByKey[person.key];
+      if (existing) {
+        existing._iscPerson = person;
+        existing.setLatLng(latlng);
+        existing.setIcon(personIcon(person.marker || person.safety || "stale"));
+        keep[person.key] = existing;
+        return;
+      }
+      var marker = L.marker(latlng, {
         pane: "people",
         icon: personIcon(person.marker || person.safety || "stale"),
         title: person.name || person.sid || "Personel"
       });
+      marker._iscPerson = person;
       marker.on("click", function () {
-        openPlace(itemFromPerson(person, marker));
+        openPlace(itemFromPerson(marker._iscPerson, marker));
       });
       marker.addTo(peopleLayer);
-      peopleByKey[person.key] = marker;
+      keep[person.key] = marker;
     });
+    Object.keys(peopleByKey).forEach(function (key) {
+      if (!keep[key]) {
+        peopleLayer.removeLayer(peopleByKey[key]);
+      }
+    });
+    peopleByKey = keep;
     if (showPeople && !map.hasLayer(peopleLayer)) {
       peopleLayer.addTo(map);
     }
@@ -1117,11 +1138,18 @@
     }
   }
 
-  function loadPob() {
+  function pobFetchUrl(fresh) {
+    if (!fresh) {
+      return pobUrl;
+    }
+    return pobUrl + (pobUrl.indexOf("?") >= 0 ? "&" : "?") + "fresh=1";
+  }
+
+  function loadPob(fresh) {
     if (!pobUrl) {
       return;
     }
-    fetch(pobUrl, { headers: { Accept: "application/json" } })
+    fetch(pobFetchUrl(!!fresh), { headers: { Accept: "application/json" } })
       .then(function (res) { return res.json(); })
       .then(function (payload) {
         paintHud(payload || {});
@@ -1136,7 +1164,10 @@
   fitOps();
   renderList();
   loadBesigma();
-  loadPob();
+  loadPob(true);
+  window.setInterval(function () {
+    loadPob(false);
+  }, 10000);
 
   document.querySelectorAll("[data-hud-site]").forEach(function (btn) {
     btn.addEventListener("click", function () {
@@ -1148,6 +1179,10 @@
       var type = btn.getAttribute("data-roster") || "";
       if (type === "checkin") {
         openRoster({ type: "checkin", safety: "", kind: "" });
+        return;
+      }
+      if (type === "in") {
+        openRoster({ type: "in", safety: "", kind: "" });
         return;
       }
       if (type === "safe") {
@@ -1369,7 +1404,7 @@
         loadingEl.hidden = false;
       }
       loadBesigma();
-      loadPob();
+      loadPob(true);
       toast("Memuat Besigma dan POB…");
     });
   }

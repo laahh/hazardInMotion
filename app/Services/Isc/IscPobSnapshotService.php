@@ -33,12 +33,12 @@ final class IscPobSnapshotService
      */
     public function snapshot(bool $fresh = false, bool $demo = true): array
     {
-        $key = $demo ? 'isc.pob.snapshot.demo.v4' : 'isc.pob.snapshot.live.v4';
+        $key = $demo ? 'isc.pob.snapshot.demo.v5' : 'isc.pob.snapshot.live.v5';
         if ($fresh) {
             Cache::forget($key);
         }
 
-        return Cache::remember($key, 20, fn (): array => $demo ? $this->buildDemo() : $this->buildLive());
+        return Cache::remember($key, 10, fn (): array => $demo ? $this->buildDemo() : $this->buildLive());
     }
 
     /**
@@ -422,7 +422,7 @@ final class IscPobSnapshotService
      */
     private function summarize(array $people, array $checkins, ?array $kindCounts = null): array
     {
-        $in = $out = $unknown = $safe = $unsafe = 0;
+        $in = $out = $unknown = $safe = $unsafe = $traced = 0;
         $unsafeByKind = [
             IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER => 0,
             IscHazardBoundaryClassifier::KIND_EMPLOYEE_COMPETENCE => 0,
@@ -435,6 +435,10 @@ final class IscPobSnapshotService
             $isHudPerson = ($person['entity'] ?? 'person') === 'person' && ! ($person['roster_only'] ?? false);
             $presence = (string) ($person['presence'] ?? 'unknown');
             $code = (string) ($person['site_code'] ?? '');
+            $hasGps = (float) ($person['lat'] ?? 0) != 0.0 && (float) ($person['lng'] ?? 0) != 0.0;
+            if ($isHudPerson && $hasGps) {
+                $traced++;
+            }
             if ($isHudPerson && $presence === IscPobClassifyAction::PRESENCE_IN) {
                 $in++;
                 if ($code !== '' && isset($inBySite[$code])) {
@@ -478,6 +482,7 @@ final class IscPobSnapshotService
             'in' => $in,
             'out' => $out,
             'unknown' => $unknown,
+            'traced' => $traced,
             'safe' => $safe,
             'unsafe' => $unsafe,
             'unsafe_by_kind' => $unsafeByKind,

@@ -95,10 +95,11 @@
             <svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.5 3 7.6 7 9 4-1.4 7-4.5 7-9V6z"/></svg>
           </span>
           <div>
-            <p class="gm-hud-kicker">Personel In vs boundary bahaya</p>
-            <p class="gm-hud-lead">In area operasi <b id="hud-pob-in">–</b></p>
+            <p class="gm-hud-kicker">Personel terlacak Besigma</p>
+            <p class="gm-hud-lead">Dalam boundary <b id="hud-pob-in">–</b></p>
           </div>
         </div>
+        <p class="gm-hud-meta">GPS Besigma hari ini <b id="hud-traced">–</b> orang</p>
         <div class="gm-hud-split">
           <button type="button" class="gm-hud-metric is-safe" data-roster="safe">
             <span>Safe</span>
@@ -129,6 +130,7 @@
           </button>
         </div>
         <p class="gm-hud-meta">Out <b id="hud-pob-out">–</b> · Unknown <b id="hud-pob-unknown">–</b></p>
+        <button type="button" class="gm-hud-link" data-roster="in">Lihat orang di dalam boundary</button>
       </article>
 
       <article class="gm-hud-card is-rfid">

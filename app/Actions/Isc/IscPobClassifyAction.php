@@ -93,9 +93,6 @@ final class IscPobClassifyAction
         if ($lat == 0.0 || $lng == 0.0) {
             return $person;
         }
-        if ($stale) {
-            return $person;
-        }
 
         $iupkFeature = $this->pip->firstContainingFeature($lng, $lat, $iupk);
         if ($iupkFeature === null) {

@@ -99,7 +99,7 @@ final class IscPobClassifyActionTest extends TestCase
         $this->assertNull($person['safety']);
     }
 
-    public function test_stale_gps_is_unknown_not_in(): void
+    public function test_stale_gps_still_counts_as_in_when_inside(): void
     {
         $person = $this->action()->classifyOne(
             $this->person(117.18, 2.08, now()->subMinutes(20)->toDateTimeString()),
@@ -107,9 +107,9 @@ final class IscPobClassifyActionTest extends TestCase
             [$this->hazardFeature()],
         );
 
-        $this->assertSame(IscPobClassifyAction::PRESENCE_UNKNOWN, $person['presence']);
         $this->assertTrue($person['stale']);
-        $this->assertNull($person['safety']);
+        $this->assertSame(IscPobClassifyAction::PRESENCE_IN, $person['presence']);
+        $this->assertSame(IscPobClassifyAction::SAFETY_SAFE, $person['safety']);
     }
 
     private function action(): IscPobClassifyAction

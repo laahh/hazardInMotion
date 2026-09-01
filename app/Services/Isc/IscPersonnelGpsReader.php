@@ -8,6 +8,7 @@ use App\Services\Besigma\BesigmaConnectionService;
 use App\Services\Besigma\BesigmaTunnelService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 final class IscPersonnelGpsReader
@@ -36,38 +37,7 @@ final class IscPersonnelGpsReader
         }
 
         try {
-            $gpsLogs = DB::connection(self::CONNECTION)
-                ->table('user_gps_latests as g')
-                ->join('users as u', 'u.id', '=', 'g.user_id')
-                ->leftJoin('companies as c', 'c.id', '=', 'u.company_id')
-                ->where('u.is_deleted', 0)
-                ->whereNotNull('g.latitude')
-                ->whereNotNull('g.longitude')
-                ->where('g.latitude', '!=', '')
-                ->where('g.longitude', '!=', '')
-                ->where('g.updated_at', '>=', self::todayStart())
-                ->where('g.updated_at', '<', self::tomorrowStart())
-                ->orderByDesc('g.updated_at')
-                ->limit(self::GPS_LIMIT)
-                ->select([
-                    'g.user_id',
-                    'g.latitude',
-                    'g.longitude',
-                    'g.updated_at',
-                    'u.sid_code',
-                    'u.fullname',
-                    'u.npk',
-                    'u.nik',
-                    'u.company_id',
-                    'u.site_assignment',
-                    'u.dedicated_site',
-                    'u.functional_position',
-                    'u.structural_position',
-                    'u.division_name',
-                    'u.department_name',
-                    'c.name as company_name',
-                ])
-                ->get();
+            $gpsLogs = $this->todayLatestRows();
         } catch (Throwable $e) {
             report($e);
             $this->connection->rememberFailure($e);
@@ -239,6 +209,110 @@ final class IscPersonnelGpsReader
         $tz = trim((string) ($timezone ?? config('app.timezone')));
 
         return $tz !== '' ? $tz : 'Asia/Makassar';
+    }
+
+    /**
+     * Posisi terbaru hari ini: utamakan user_gps_logs, fallback user_gps_latests.
+     *
+     * @return \Illuminate\Support\Collection<int, object>
+     */
+    private function todayLatestRows(): \Illuminate\Support\Collection
+    {
+        $fromLogs = $this->rowsFromLogsToday();
+        if ($fromLogs !== null && $fromLogs->isNotEmpty()) {
+            return $fromLogs;
+        }
+
+        return $this->gpsQuery('user_gps_latests')->get();
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, object>|null
+     */
+    private function rowsFromLogsToday(): ?\Illuminate\Support\Collection
+    {
+        try {
+            if (! Schema::connection(self::CONNECTION)->hasTable('user_gps_logs')) {
+                return null;
+            }
+            $latest = DB::connection(self::CONNECTION)
+                ->table('user_gps_logs')
+                ->selectRaw('user_id, MAX(updated_at) as max_at')
+                ->where('updated_at', '>=', self::todayStart())
+                ->where('updated_at', '<', self::tomorrowStart())
+                ->whereNotNull('latitude')
+                ->whereNotNull('longitude')
+                ->groupBy('user_id');
+
+            return DB::connection(self::CONNECTION)
+                ->query()
+                ->fromSub($latest, 'latest')
+                ->join('user_gps_logs as g', function ($join): void {
+                    $join->on('g.user_id', '=', 'latest.user_id')
+                        ->on('g.updated_at', '=', 'latest.max_at');
+                })
+                ->join('users as u', 'u.id', '=', 'g.user_id')
+                ->leftJoin('companies as c', 'c.id', '=', 'u.company_id')
+                ->where('u.is_deleted', 0)
+                ->whereNotNull('g.latitude')
+                ->whereNotNull('g.longitude')
+                ->where('g.latitude', '!=', '')
+                ->where('g.longitude', '!=', '')
+                ->orderByDesc('g.updated_at')
+                ->limit(self::GPS_LIMIT)
+                ->select($this->gpsSelect())
+                ->get();
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    /**
+     * @return \Illuminate\Database\Query\Builder
+     */
+    private function gpsQuery(string $table)
+    {
+        return DB::connection(self::CONNECTION)
+            ->table($table.' as g')
+            ->join('users as u', 'u.id', '=', 'g.user_id')
+            ->leftJoin('companies as c', 'c.id', '=', 'u.company_id')
+            ->where('u.is_deleted', 0)
+            ->whereNotNull('g.latitude')
+            ->whereNotNull('g.longitude')
+            ->where('g.latitude', '!=', '')
+            ->where('g.longitude', '!=', '')
+            ->where('g.updated_at', '>=', self::todayStart())
+            ->where('g.updated_at', '<', self::tomorrowStart())
+            ->orderByDesc('g.updated_at')
+            ->limit(self::GPS_LIMIT)
+            ->select($this->gpsSelect());
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function gpsSelect(): array
+    {
+        return [
+            'g.user_id',
+            'g.latitude',
+            'g.longitude',
+            'g.updated_at',
+            'u.sid_code',
+            'u.fullname',
+            'u.npk',
+            'u.nik',
+            'u.company_id',
+            'u.site_assignment',
+            'u.dedicated_site',
+            'u.functional_position',
+            'u.structural_position',
+            'u.division_name',
+            'u.department_name',
+            'c.name as company_name',
+        ];
     }
 
     private function toFloat(mixed $value): ?float
