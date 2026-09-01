@@ -118,21 +118,22 @@
             <small>Masuk boundary berbahaya</small>
           </button>
         </div>
-        <div class="gm-hud-violations">
-          <button type="button" class="gm-hud-violation" data-roster="kind" data-kind="employee_danger">
-            <i class="dot danger"></i>
-            <span>Batas bahaya karyawan</span>
-            <b id="hud-kind-employee_danger">0</b>
+        <p class="gm-hud-hint">Pelanggaran aktif <span class="gm-hud-pill is-alert"><b id="hud-violation-total">–</b></span></p>
+        <div class="gm-hud-violations" role="group" aria-label="Pelanggaran Besigma">
+          <button type="button" class="gm-hud-violation is-danger" data-roster="kind" data-kind="employee_danger">
+            <span>Bahaya karyawan</span>
+            <strong id="hud-kind-employee_danger">–</strong>
+            <small>Masuk batas bahaya</small>
           </button>
-          <button type="button" class="gm-hud-violation" data-roster="kind" data-kind="employee_competence">
-            <i class="dot competence"></i>
-            <span>Batas kompetensi karyawan</span>
-            <b id="hud-kind-employee_competence">0</b>
+          <button type="button" class="gm-hud-violation is-competence" data-roster="kind" data-kind="employee_competence">
+            <span>Kompetensi</span>
+            <strong id="hud-kind-employee_competence">–</strong>
+            <small>Batas kompetensi</small>
           </button>
-          <button type="button" class="gm-hud-violation" data-roster="kind" data-kind="unit_danger">
-            <i class="dot unit"></i>
-            <span>Batas bahaya unit</span>
-            <b id="hud-kind-unit_danger">0</b>
+          <button type="button" class="gm-hud-violation is-unit" data-roster="kind" data-kind="unit_danger">
+            <span>Bahaya unit</span>
+            <strong id="hud-kind-unit_danger">–</strong>
+            <small>Unit di zona bahaya</small>
           </button>
         </div>
         <p class="gm-hud-foot">Out <b id="hud-pob-out">–</b> · Unknown <b id="hud-pob-unknown">–</b> <button type="button" class="gm-hud-link" data-roster="in">Lihat di boundary</button></p>

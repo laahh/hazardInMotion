@@ -951,6 +951,18 @@
     };
   }
 
+  function violationKindCounts() {
+    if (!hudSite && pobSummary && pobSummary.unsafe_by_kind) {
+      var fromApi = pobSummary.unsafe_by_kind;
+      return {
+        employee_danger: Number(fromApi.employee_danger || 0),
+        employee_competence: Number(fromApi.employee_competence || 0),
+        unit_danger: Number(fromApi.unit_danger || 0)
+      };
+    }
+    return filteredSummary().unsafe_by_kind;
+  }
+
   function paintHud(payload) {
     pobSummary = (payload && payload.summary) || {};
     pobCheckins = (payload && payload.checkins) || [];
@@ -986,9 +998,16 @@
     setText("hud-pob-unknown", summary.unknown);
     setText("hud-safe", summary.safe);
     setText("hud-unsafe", summary.unsafe);
-    setText("hud-kind-employee_danger", summary.unsafe_by_kind.employee_danger);
-    setText("hud-kind-employee_competence", summary.unsafe_by_kind.employee_competence);
-    setText("hud-kind-unit_danger", summary.unsafe_by_kind.unit_danger);
+    var kinds = violationKindCounts();
+    setText("hud-kind-employee_danger", kinds.employee_danger);
+    setText("hud-kind-employee_competence", kinds.employee_competence);
+    setText("hud-kind-unit_danger", kinds.unit_danger);
+    var violationTotal = kinds.employee_danger + kinds.employee_competence + kinds.unit_danger;
+    setText("hud-violation-total", violationTotal);
+    document.querySelectorAll(".gm-hud-violation[data-kind]").forEach(function (el) {
+      var kind = el.getAttribute("data-kind") || "";
+      el.classList.toggle("is-hot", Number(kinds[kind] || 0) > 0);
+    });
   }
 
   function rosterItems() {
