@@ -665,7 +665,7 @@
 <script>
 (function () {
     var mitraMode = @json((bool) ($mitraMode ?? false));
-    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '', 'companies' => [], 'pairs' => []]);
+    var mitraScope = @json($mitraScope) || {site: '', perusahaan: '', companies: [], pairs: []};
     window.evaluasiWellAppendMitraScope = function (target, mode, scope) {
         target = target || {};
         if (!mode || !scope) {
@@ -1022,7 +1022,7 @@
     );
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
     var mitraMode = @json((bool) ($mitraMode ?? false));
-    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '', 'companies' => [], 'pairs' => []]);
+    var mitraScope = @json($mitraScope) || {site: '', perusahaan: '', companies: [], pairs: []};
     var cache = {};
     var currentDimension = 'site';
     var barChart = null;
@@ -2081,7 +2081,7 @@
     );
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
     var mitraMode = @json((bool) ($mitraMode ?? false));
-    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '', 'companies' => [], 'pairs' => []]);
+    var mitraScope = @json($mitraScope) || {site: '', perusahaan: '', companies: [], pairs: []};
     var cache = {};
     var currentDimension = 'site';
     var currentWeekStart = '';
