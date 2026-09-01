@@ -20,7 +20,7 @@ echo "========================================"
 echo "SSH Tunnel Setup - Besigma Database"
 echo "Local: 127.0.0.1:${LOCAL_PORT} -> ${DB_HOST}:${DB_PORT}"
 echo "Jump:  ${SSH_USER}@${SSH_HOST}:${SSH_PORT}"
-echo "Keep this process running."
+echo "Keep this process running (lebih aman dengan autossh / systemd Restart=always)."
 echo "========================================"
 
 exec ssh -N -L "127.0.0.1:${LOCAL_PORT}:${DB_HOST}:${DB_PORT}" \
@@ -31,4 +31,5 @@ exec ssh -N -L "127.0.0.1:${LOCAL_PORT}:${DB_HOST}:${DB_PORT}" \
   -o ExitOnForwardFailure=yes \
   -o ServerAliveInterval=30 \
   -o ServerAliveCountMax=3 \
+  -o TCPKeepAlive=yes \
   "${SSH_USER}@${SSH_HOST}"

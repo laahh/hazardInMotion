@@ -81,4 +81,13 @@ final class BesigmaConnectionServiceTest extends TestCase
         $this->assertStringContainsString('id bigint PRI NOT NULL auto_increment', $text);
         $this->assertStringContainsString('polygon json NULL', $text);
     }
+
+    public function test_host_blocked_opens_circuit_so_is_up_does_not_retry(): void
+    {
+        $service = app(BesigmaConnectionService::class);
+        $service->rememberFailure(new \RuntimeException("SQLSTATE[HY000] [1129] Host '10.11.58.7' is blocked because of many connection errors"));
+
+        $this->assertFalse($service->isUp());
+        $this->assertTrue(\Illuminate\Support\Facades\Cache::has('besigma:circuit_v1'));
+    }
 }

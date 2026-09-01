@@ -138,6 +138,7 @@ final class IscBoundaryMapService
             ];
         } catch (Throwable $e) {
             report($e);
+            $this->connection->rememberFailure($e);
             $empty['error'] = $e->getMessage();
 
             return $empty;

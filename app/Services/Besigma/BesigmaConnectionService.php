@@ -18,7 +18,13 @@ final class BesigmaConnectionService
 
     private const CACHE_KEY = 'besigma:is_up_v1';
 
-    private const CACHE_TTL_SECONDS = 20;
+    private const CIRCUIT_KEY = 'besigma:circuit_v1';
+
+    private const UP_TTL_SECONDS = 30;
+
+    private const DOWN_TTL_SECONDS = 120;
+
+    private const BLOCKED_TTL_SECONDS = 900;
 
     private ?bool $requestCache = null;
 
@@ -28,32 +34,48 @@ final class BesigmaConnectionService
             return $this->requestCache;
         }
 
-        try {
-            $this->requestCache = (bool) Cache::remember(
-                self::CACHE_KEY,
-                self::CACHE_TTL_SECONDS,
-                function (): bool {
-                    try {
-                        DB::connection(self::CONNECTION)->select('SELECT 1');
-
-                        return true;
-                    } catch (Throwable $e) {
-                        return false;
-                    }
-                }
-            );
-        } catch (Throwable $e) {
-            report($e);
-            $this->requestCache = false;
+        if ($this->circuitIsOpen()) {
+            return $this->requestCache = false;
         }
 
-        return $this->requestCache;
+        $cached = Cache::get(self::CACHE_KEY);
+        if (is_bool($cached)) {
+            return $this->requestCache = $cached;
+        }
+
+        try {
+            DB::connection(self::CONNECTION)->select('SELECT 1');
+            $this->rememberSuccess();
+
+            return $this->requestCache = true;
+        } catch (Throwable $e) {
+            $this->rememberFailure($e);
+
+            return $this->requestCache = false;
+        }
     }
 
     public function forgetCachedStatus(): void
     {
         $this->requestCache = null;
         Cache::forget(self::CACHE_KEY);
+        Cache::forget(self::CIRCUIT_KEY);
+    }
+
+    public function rememberSuccess(): void
+    {
+        Cache::forget(self::CIRCUIT_KEY);
+        Cache::put(self::CACHE_KEY, true, self::UP_TTL_SECONDS);
+    }
+
+    public function rememberFailure(Throwable $e): void
+    {
+        $ttl = $this->isHostBlockedError($e) ? self::BLOCKED_TTL_SECONDS : self::DOWN_TTL_SECONDS;
+        Cache::put(self::CACHE_KEY, false, $ttl);
+        Cache::put(self::CIRCUIT_KEY, [
+            'until' => now()->addSeconds($ttl)->toIso8601String(),
+            'error' => $e->getMessage(),
+        ], $ttl);
     }
 
     /**
@@ -166,7 +188,7 @@ final class BesigmaConnectionService
             );
 
             $this->requestCache = true;
-            Cache::put(self::CACHE_KEY, true, self::CACHE_TTL_SECONDS);
+            $this->rememberSuccess();
 
             return [
                 'connected' => true,
@@ -186,15 +208,46 @@ final class BesigmaConnectionService
             ];
         } catch (Throwable $e) {
             report($e);
+            $this->rememberFailure($e);
 
             $base['error'] = $e->getMessage();
-            $base['hint'] = $tcpReachable
-                ? 'Tunnel terbuka, tetapi login MySQL gagal. Periksa BESIGMA_DB_USERNAME / BESIGMA_DB_PASSWORD / BESIGMA_DB_DATABASE di .env.'
-                : 'Jalankan setup-ssh-tunnel-besigma.bat terlebih dahulu.';
+            $base['hint'] = $this->hintForProbeFailure($e, $tcpReachable);
             $base['latency_ms'] = round((microtime(true) - $started) * 1000, 1);
 
             return $base;
         }
+    }
+
+    private function hintForProbeFailure(Throwable $e, bool $tcpReachable): string
+    {
+        $message = $e->getMessage();
+
+        if (str_contains($message, '1129') || str_contains($message, 'is blocked because of many connection errors')) {
+            return 'MariaDB memblokir host penghubung (error 1129). FLUSH HOSTS hanya membuka blokir sekali. Agar tidak berulang: (1) jaga tunnel SSH tetap hidup (autossh/systemd Restart=always), (2) naikkan max_connect_errors di MariaDB Besigma, (3) aplikasi sekarang berhenti mengetuk DB 15 menit setelah 1129. Setelah FLUSH HOSTS, buka tes ulang.';
+        }
+
+        if (! $tcpReachable) {
+            return 'Jalankan setup-ssh-tunnel-besigma.bat terlebih dahulu.';
+        }
+
+        if (str_contains($message, '1045') || str_contains($message, 'Access denied')) {
+            return 'Tunnel terbuka, tetapi login ditolak. Periksa BESIGMA_DB_USERNAME / BESIGMA_DB_PASSWORD / BESIGMA_DB_DATABASE di .env.';
+        }
+
+        return 'Tunnel terbuka, tetapi query MySQL gagal. Periksa user, database, dan log MariaDB Besigma.';
+    }
+
+    private function circuitIsOpen(): bool
+    {
+        return Cache::has(self::CIRCUIT_KEY);
+    }
+
+    private function isHostBlockedError(Throwable $e): bool
+    {
+        $message = $e->getMessage();
+
+        return str_contains($message, '1129')
+            || str_contains($message, 'is blocked because of many connection errors');
     }
 
     /**
