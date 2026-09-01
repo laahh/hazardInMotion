@@ -21,19 +21,19 @@
   <div id="map-loading" class="gm-loading">Memuat peta…</div>
 
   <aside class="gm-rail" aria-label="Menu peta">
-    <button type="button" class="gm-rail-btn" id="gm-rail-toggle" aria-label="Buka panel" aria-expanded="false">
+    <button type="button" class="gm-rail-btn" id="gm-menu-btn" data-rail="menu" aria-label="Menu peta">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
       <span>Menu</span>
     </button>
-    <a class="gm-rail-btn" href="{{ url('/') }}">
+    <button type="button" class="gm-rail-btn is-on" id="gm-home-btn" data-rail="home" aria-label="Beranda peta">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20H4z"/><path d="M9 20v-6h6v6"/></svg>
       <span>Beranda</span>
-    </a>
-    <button type="button" class="gm-rail-btn" id="gm-saved-btn">
+    </button>
+    <button type="button" class="gm-rail-btn" id="gm-saved-btn" data-rail="saved">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v16l-5-3-5 3z"/></svg>
       <span>Disimpan</span>
     </button>
-    <button type="button" class="gm-rail-btn" id="gm-recents-btn">
+    <button type="button" class="gm-rail-btn" id="gm-recents-btn" data-rail="recents">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>
       <span>Terbaru</span>
     </button>
@@ -65,7 +65,8 @@
       </button>
     </form>
 
-    <div class="gm-hud" id="gm-hud" aria-label="Ringkasan Person on Board">
+    <div class="gm-hud" id="gm-hud" aria-label="Kartu peta">
+      <div class="gm-hud-view is-on is-anim" data-view="home" id="gm-view-home">
 
       <article class="gm-hud-card is-checkin">
         <div class="gm-hud-card-top">
@@ -181,6 +182,86 @@
           </div>
         </div>
       </article>
+      </div>
+
+      <div class="gm-hud-view" data-view="menu" id="gm-view-menu" hidden>
+        <article class="gm-hud-card is-menu">
+          <div class="gm-hud-card-top">
+            <span class="gm-hud-ico menu" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+            </span>
+            <div class="gm-hud-head">
+              <p class="gm-hud-kicker">Boundary peta</p>
+              <p class="gm-hud-value"><b id="hud-zone-count">–</b> <small>zona tampil</small></p>
+            </div>
+            <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
+              <path d="M2 18 C12 18 16 10 26 12 C36 14 40 24 50 18 C60 12 66 8 76 14 C82 18 84 20 86 16" />
+            </svg>
+          </div>
+          <p class="gm-hud-hint">IUPK, Besigma, dan personel di peta</p>
+          <p class="gm-hud-foot">Katalog zona <button type="button" class="gm-hud-link" id="gm-menu-open-list">Lihat daftar</button></p>
+        </article>
+        <article class="gm-hud-card is-sites">
+          <div class="gm-hud-card-top">
+            <span class="gm-hud-ico sites" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
+            </span>
+            <div class="gm-hud-head">
+              <p class="gm-hud-kicker">Site operasi</p>
+              <p class="gm-hud-value"><b>5</b> <small>wilayah</small></p>
+            </div>
+            <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
+              <path d="M2 22 C14 22 16 8 28 12 C40 16 42 24 54 16 C66 8 70 14 86 12" />
+            </svg>
+          </div>
+          <div class="gm-hud-sites" role="group" aria-label="Loncat ke site">
+            <button type="button" class="gm-hud-site" data-jump="BMO">BMO</button>
+            <button type="button" class="gm-hud-site" data-jump="LMO">LMO</button>
+            <button type="button" class="gm-hud-site" data-jump="GMO">GMO</button>
+            <button type="button" class="gm-hud-site" data-jump="SMO">SMO</button>
+            <button type="button" class="gm-hud-site" data-jump="PUNAN">PUNAN</button>
+          </div>
+          <p class="gm-hud-foot">Klik site untuk memusatkan peta</p>
+        </article>
+      </div>
+
+      <div class="gm-hud-view" data-view="saved" id="gm-view-saved" hidden>
+        <article class="gm-hud-card is-saved">
+          <div class="gm-hud-card-top">
+            <span class="gm-hud-ico saved" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7 4h10v16l-5-3-5 3z"/></svg>
+            </span>
+            <div class="gm-hud-head">
+              <p class="gm-hud-kicker">Lokasi disimpan</p>
+              <p class="gm-hud-value"><b id="hud-saved-count">0</b> <small>tempat</small></p>
+            </div>
+            <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
+              <path d="M2 20 C12 20 18 8 28 12 C38 16 42 24 54 16 C66 8 74 14 86 10" />
+            </svg>
+          </div>
+          <p class="gm-hud-foot">Boundary atau zona yang Anda tandai</p>
+        </article>
+        <div id="gm-saved-cards" class="gm-hud-place-stack"></div>
+      </div>
+
+      <div class="gm-hud-view" data-view="recents" id="gm-view-recents" hidden>
+        <article class="gm-hud-card is-recent">
+          <div class="gm-hud-card-top">
+            <span class="gm-hud-ico recent" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>
+            </span>
+            <div class="gm-hud-head">
+              <p class="gm-hud-kicker">Dilihat baru-baru ini</p>
+              <p class="gm-hud-value"><b id="hud-recent-count">0</b> <small>tempat</small></p>
+            </div>
+            <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
+              <path d="M2 16 C10 16 14 24 24 18 C34 12 40 6 50 12 C60 18 68 22 86 14" />
+            </svg>
+          </div>
+          <p class="gm-hud-foot">Zona yang terakhir dibuka di peta</p>
+        </article>
+        <div id="gm-recent-cards" class="gm-hud-place-stack"></div>
+      </div>
     </div>
 
     <aside class="gm-panel is-closed" id="gm-panel" aria-label="Hasil peta">

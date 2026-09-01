@@ -33,6 +33,7 @@
   var scope = "semua";
   var query = "";
   var listMode = "all";
+  var railView = "home";
   var showOps = true;
   var showBesigma = true;
   var showPeople = true;
@@ -231,6 +232,9 @@
 
   function persistSaved() {
     localStorage.setItem("isc-maps-saved", JSON.stringify(saved.slice(0, 40)));
+    if (railView === "saved") {
+      paintSavedView();
+    }
   }
 
   function hideLoading() {
@@ -563,6 +567,7 @@
     if (countEl) {
       countEl.textContent = String(items.length) + (listMode === "roster" ? " orang" : " tempat");
     }
+    setText("hud-zone-count", allItems().length);
     listEl.innerHTML = "";
     if (!items.length) {
       listEl.innerHTML = '<p class="gm-item"><span class="copy"><b>Tidak ada hasil</b><span class="meta">Ubah kata kunci atau filter.</span></span></p>';
@@ -609,6 +614,9 @@
   function openPlace(item) {
     selected = item;
     recents = [itemKey(item)].concat(recents.filter(function (key) { return key !== itemKey(item); })).slice(0, 12);
+    if (railView === "recents") {
+      paintRecentsView();
+    }
     openPanel();
     if (resultsEl) {
       resultsEl.hidden = true;
@@ -755,26 +763,101 @@
     if (panel) {
       panel.classList.remove("is-closed");
     }
-    var toggle = document.getElementById("gm-rail-toggle");
-    if (toggle) {
-      toggle.classList.add("is-on");
-      toggle.setAttribute("aria-expanded", "true");
+    syncShell();
+  }
+
+  function closePanel() {
+    if (panel) {
+      panel.classList.add("is-closed");
     }
     syncShell();
   }
 
-  function togglePanel() {
-    if (!panel) {
+  function replayViewAnim() {
+    var view = document.querySelector(".gm-hud-view.is-on");
+    if (!view) {
       return;
     }
-    panel.classList.toggle("is-closed");
-    var closed = panel.classList.contains("is-closed");
-    var toggle = document.getElementById("gm-rail-toggle");
-    if (toggle) {
-      toggle.classList.toggle("is-on", !closed);
-      toggle.setAttribute("aria-expanded", closed ? "false" : "true");
+    view.classList.remove("is-anim");
+    void view.offsetWidth;
+    view.classList.add("is-anim");
+  }
+
+  function setRailView(name) {
+    railView = name || "home";
+    document.querySelectorAll("[data-rail]").forEach(function (el) {
+      el.classList.toggle("is-on", el.getAttribute("data-rail") === railView);
+    });
+    document.querySelectorAll(".gm-hud-view").forEach(function (view) {
+      var on = view.getAttribute("data-view") === railView;
+      view.classList.toggle("is-on", on);
+      view.hidden = !on;
+    });
+    closePanel();
+    closePlace();
+    if (railView === "saved") {
+      listMode = "saved";
+      paintSavedView();
+    } else if (railView === "recents") {
+      listMode = "recents";
+      paintRecentsView();
+    } else if (railView === "menu") {
+      listMode = "all";
+      paintMenuView();
+    } else {
+      listMode = "all";
     }
-    syncShell();
+    replayViewAnim();
+  }
+
+  function paintMenuView() {
+    setText("hud-zone-count", allItems().length);
+  }
+
+  function paintSavedView() {
+    setText("hud-saved-count", saved.length);
+    renderPlaceCards("gm-saved-cards", saved, "Belum ada lokasi disimpan", "Buka zona lalu ketuk Simpan.");
+  }
+
+  function paintRecentsView() {
+    setText("hud-recent-count", recents.length);
+    renderPlaceCards("gm-recent-cards", recents, "Belum ada riwayat", "Zona yang Anda buka akan muncul di sini.");
+  }
+
+  function renderPlaceCards(id, keys, emptyTitle, emptyHint) {
+    var target = document.getElementById(id);
+    if (!target) {
+      return;
+    }
+    target.innerHTML = "";
+    var lookup = {};
+    allItems().forEach(function (item) {
+      lookup[itemKey(item)] = item;
+    });
+    var items = (keys || []).map(function (key) {
+      return lookup[key];
+    }).filter(Boolean);
+    if (!items.length) {
+      var empty = document.createElement("article");
+      empty.className = "gm-hud-card is-empty";
+      empty.innerHTML = "<p class=\"gm-hud-kicker\">" + emptyTitle + "</p><p class=\"gm-hud-hint\" style=\"margin:0\">" + emptyHint + "</p>";
+      target.appendChild(empty);
+      return;
+    }
+    items.forEach(function (item, i) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "gm-hud-card gm-hud-place";
+      btn.style.animationDelay = (0.1 + i * 0.06) + "s";
+      btn.innerHTML =
+        "<span class=\"gm-pin " + item.kind + "\">" + pinSvg() + "</span>" +
+        "<span class=\"copy\"><b>" + esc(item.title) + "</b><span class=\"meta\">" + esc(item.meta || item.badge || "") + "</span></span>";
+      btn.addEventListener("click", function () {
+        openPlace(item);
+        flyToItem(item);
+      });
+      target.appendChild(btn);
+    });
   }
 
   function jumpToLayer(code) {
@@ -1311,7 +1394,12 @@
     });
   });
 
-  document.getElementById("gm-rail-toggle").addEventListener("click", togglePanel);
+  document.getElementById("gm-home-btn").addEventListener("click", function () {
+    setRailView("home");
+  });
+  document.getElementById("gm-menu-btn").addEventListener("click", function () {
+    setRailView("menu");
+  });
   document.getElementById("gm-place-back").addEventListener("click", function () {
     if (searchInput) {
       searchInput.value = query;
@@ -1320,18 +1408,22 @@
   });
 
   document.getElementById("gm-saved-btn").addEventListener("click", function () {
-    listMode = "saved";
-    openPanel();
-    closePlace();
-    renderList();
+    setRailView("saved");
   });
 
   document.getElementById("gm-recents-btn").addEventListener("click", function () {
-    listMode = "recents";
-    openPanel();
-    closePlace();
-    renderList();
+    setRailView("recents");
   });
+
+  var menuOpenList = document.getElementById("gm-menu-open-list");
+  if (menuOpenList) {
+    menuOpenList.addEventListener("click", function () {
+      listMode = "all";
+      openPanel();
+      closePlace();
+      renderList();
+    });
+  }
 
   document.getElementById("gm-act-zoom").addEventListener("click", function () {
     flyToItem(selected);

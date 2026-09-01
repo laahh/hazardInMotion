@@ -197,8 +197,7 @@ button, input { font-family: inherit; }
 }
 
 .gm-hud {
-  display: grid;
-  gap: var(--gm-stack-gap);
+  display: block;
   margin-top: 0;
   min-height: 0;
   overflow: auto;
@@ -206,6 +205,13 @@ button, input { font-family: inherit; }
   -ms-overflow-style: none;
 }
 .gm-hud::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.gm-hud-view {
+  display: none;
+}
+.gm-hud-view.is-on {
+  display: grid;
+  gap: var(--gm-stack-gap);
+}
 .gm-shell:not(.is-panel-closed) .gm-hud {
   margin-top: 0;
   max-height: min(42vh, 420px);
@@ -238,6 +244,29 @@ button, input { font-family: inherit; }
     radial-gradient(120% 90% at 100% -10%, rgba(249, 115, 22, .14), transparent 52%),
     #fff;
 }
+.gm-hud-card.is-menu {
+  background:
+    radial-gradient(120% 90% at 100% -10%, rgba(79, 70, 229, .14), transparent 52%),
+    #fff;
+}
+.gm-hud-card.is-sites {
+  background:
+    radial-gradient(120% 90% at 100% -10%, rgba(14, 165, 233, .14), transparent 52%),
+    #fff;
+}
+.gm-hud-card.is-saved {
+  background:
+    radial-gradient(120% 90% at 100% -10%, rgba(124, 58, 237, .14), transparent 52%),
+    #fff;
+}
+.gm-hud-card.is-recent {
+  background:
+    radial-gradient(120% 90% at 100% -10%, rgba(71, 85, 105, .14), transparent 52%),
+    #fff;
+}
+.gm-hud-card.is-empty {
+  background: #fff;
+}
 .gm-hud-card-top {
   display: flex;
   align-items: center;
@@ -267,6 +296,10 @@ button, input { font-family: inherit; }
 .gm-hud-ico.checkin { background: #2563eb; }
 .gm-hud-ico.safety { background: #16a34a; }
 .gm-hud-ico.rfid { background: #f97316; }
+.gm-hud-ico.menu { background: #4f46e5; }
+.gm-hud-ico.sites { background: #0ea5e9; }
+.gm-hud-ico.saved { background: #7c3aed; }
+.gm-hud-ico.recent { background: #475569; }
 .gm-hud-spark {
   width: 72px;
   height: 28px;
@@ -276,9 +309,17 @@ button, input { font-family: inherit; }
   stroke-linejoin: round;
   opacity: .9;
 }
+.gm-hud-spark path {
+  stroke-dasharray: 180;
+  stroke-dashoffset: 180;
+}
 .is-checkin .gm-hud-spark { stroke: #2563eb; }
 .is-safety .gm-hud-spark { stroke: #16a34a; }
 .is-rfid .gm-hud-spark { stroke: #f97316; }
+.is-menu .gm-hud-spark { stroke: #4f46e5; }
+.is-sites .gm-hud-spark { stroke: #0ea5e9; }
+.is-saved .gm-hud-spark { stroke: #7c3aed; }
+.is-recent .gm-hud-spark { stroke: #475569; }
 .gm-hud-kicker {
   margin: 0;
   font-size: 13px;
@@ -467,6 +508,41 @@ div.gm-hud-metric:hover { transform: none; }
 .gm-hud-stats b { color: #0f172a; font-weight: 700; margin-left: 4px; }
 .gm-hud-stats .is-safe b { color: #15803d; }
 .gm-hud-stats .is-unsafe b { color: #b91c1c; }
+.gm-hud-place-stack {
+  display: grid;
+  gap: var(--gm-stack-gap);
+}
+.gm-hud-place {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  appearance: none;
+}
+.gm-hud-place .gm-pin {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+.gm-hud-place .copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.gm-hud-place .copy b {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.gm-hud-place .copy .meta {
+  font-size: 12px;
+  color: #64748b;
+}
 .gm-banner {
   margin: 0;
   padding: 8px 12px;
@@ -1128,6 +1204,73 @@ div.gm-hud-metric:hover { transform: none; }
 @keyframes gm-rise {
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gm-view-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes gm-card-in {
+  from { opacity: 0; transform: translateY(16px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes gm-tile-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes gm-spark {
+  to { stroke-dashoffset: 0; }
+}
+
+.gm-hud-view.is-on.is-anim {
+  animation: gm-view-in .32s ease both;
+}
+.gm-hud-view.is-on.is-anim .gm-hud-card {
+  animation: gm-card-in .48s cubic-bezier(.22, 1, .36, 1) both;
+}
+.gm-hud-view.is-on.is-anim .gm-hud-card:nth-child(1) { animation-delay: .04s; }
+.gm-hud-view.is-on.is-anim .gm-hud-card:nth-child(2) { animation-delay: .12s; }
+.gm-hud-view.is-on.is-anim .gm-hud-card:nth-child(3) { animation-delay: .2s; }
+.gm-hud-view.is-on.is-anim .gm-hud-card:nth-child(4) { animation-delay: .28s; }
+.gm-hud-view.is-on.is-anim .gm-hud-spark path {
+  animation: gm-spark .9s ease forwards;
+  animation-delay: .28s;
+}
+.gm-hud-view.is-on.is-anim .gm-hud-metric,
+.gm-hud-view.is-on.is-anim .gm-hud-violation,
+.gm-hud-view.is-on.is-anim .gm-hud-site {
+  animation: gm-tile-in .4s ease both;
+}
+.gm-hud-view.is-on.is-anim .gm-hud-split .gm-hud-metric:nth-child(1),
+.gm-hud-view.is-on.is-anim .gm-hud-violation:nth-child(1) { animation-delay: .22s; }
+.gm-hud-view.is-on.is-anim .gm-hud-split .gm-hud-metric:nth-child(2),
+.gm-hud-view.is-on.is-anim .gm-hud-violation:nth-child(2) { animation-delay: .3s; }
+.gm-hud-view.is-on.is-anim .gm-hud-split .gm-hud-metric:nth-child(3),
+.gm-hud-view.is-on.is-anim .gm-hud-violation:nth-child(3) { animation-delay: .38s; }
+.gm-hud-view.is-on.is-anim .gm-hud-site:nth-child(1) { animation-delay: .2s; }
+.gm-hud-view.is-on.is-anim .gm-hud-site:nth-child(2) { animation-delay: .24s; }
+.gm-hud-view.is-on.is-anim .gm-hud-site:nth-child(3) { animation-delay: .28s; }
+.gm-hud-view.is-on.is-anim .gm-hud-site:nth-child(4) { animation-delay: .32s; }
+.gm-hud-view.is-on.is-anim .gm-hud-site:nth-child(5) { animation-delay: .36s; }
+.gm-hud-view.is-on.is-anim .gm-hud-site:nth-child(6) { animation-delay: .4s; }
+.gm-hud-place-stack .gm-hud-place {
+  animation: gm-card-in .42s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gm-hud-view.is-on.is-anim,
+  .gm-hud-view.is-on.is-anim .gm-hud-card,
+  .gm-hud-view.is-on.is-anim .gm-hud-spark path,
+  .gm-hud-view.is-on.is-anim .gm-hud-metric,
+  .gm-hud-view.is-on.is-anim .gm-hud-violation,
+  .gm-hud-view.is-on.is-anim .gm-hud-site,
+  .gm-hud-place-stack .gm-hud-place {
+    animation: none !important;
+  }
+  .gm-hud-spark path { stroke-dashoffset: 0; }
 }
 
 @media (max-width: 900px) {
