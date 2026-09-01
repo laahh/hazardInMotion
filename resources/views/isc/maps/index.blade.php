@@ -87,7 +87,7 @@
           <button type="button" class="gm-hud-site" data-hud-site="LMO">LMO <b id="hud-site-LMO">0</b></button>
           <button type="button" class="gm-hud-site" data-hud-site="GMO">GMO <b id="hud-site-GMO">0</b></button>
           <button type="button" class="gm-hud-site" data-hud-site="SMO">SMO <b id="hud-site-SMO">0</b></button>
-          <button type="button" class="gm-hud-site" data-hud-site="PUNAN">PUN <b id="hud-site-PUNAN">0</b></button>
+          <button type="button" class="gm-hud-site" data-hud-site="PUNAN">PUNAN <b id="hud-site-PUNAN">0</b></button>
         </div>
         <p class="gm-hud-foot">Per site hari ini <button type="button" class="gm-hud-link" data-roster="checkin">Lihat daftar</button></p>
       </article>
@@ -136,7 +136,7 @@
             <small>Unit di zona bahaya</small>
           </button>
         </div>
-        <p class="gm-hud-foot">Out <b id="hud-pob-out">–</b> · Unknown <b id="hud-pob-unknown">–</b> <button type="button" class="gm-hud-link" data-roster="in">Lihat di boundary</button></p>
+        <p class="gm-hud-foot">Di luar <b id="hud-pob-out">–</b> · Tidak diketahui <b id="hud-pob-unknown">–</b> <button type="button" class="gm-hud-link" data-roster="in">Lihat di boundary</button></p>
       </article>
 
       <article class="gm-hud-card is-rfid">
@@ -152,16 +152,37 @@
             <path d="M2 18 C12 18 16 8 26 11 C36 14 38 22 48 16 C58 10 62 6 72 12 C80 16 82 20 86 14" />
           </svg>
         </div>
-        <div class="gm-hud-stats gm-hud-stats-wrap">
-          <span>Pernah <b id="hud-ever">–</b></span>
-          <span>Aktif <b id="hud-current">–</b></span>
-          <span>RFID <b id="hud-rfid">–</b></span>
-          <span>B−R <b id="hud-gap-br">–</b></span>
-          <span>R−B <b id="hud-gap-rb">–</b></span>
+        <div class="gm-hud-split is-3">
+          <div class="gm-hud-metric is-ever">
+            <span>Pernah tercatat</span>
+            <strong id="hud-ever">–</strong>
+            <small>SID di Besigma</small>
+          </div>
+          <div class="gm-hud-metric is-live">
+            <span>GPS aktif</span>
+            <strong id="hud-current">–</strong>
+            <small>Besigma hari ini</small>
+          </div>
+          <div class="gm-hud-metric is-tag">
+            <span>Check-in RFID</span>
+            <strong id="hud-rfid">–</strong>
+            <small>Onsite hari ini</small>
+          </div>
+        </div>
+        <div class="gm-hud-split">
+          <div class="gm-hud-metric is-gap">
+            <span>Besigma tanpa RFID</span>
+            <strong id="hud-gap-br">–</strong>
+            <small>Ada di Besigma, tidak check-in</small>
+          </div>
+          <div class="gm-hud-metric is-miss">
+            <span>RFID tanpa Besigma</span>
+            <strong id="hud-gap-rb">–</strong>
+            <small>Check-in, tidak di Besigma</small>
+          </div>
         </div>
       </article>
     </div>
-    <p class="gm-banner" id="gm-hazard-banner">Klik angka atau jenis pelanggaran untuk membuka daftar di sidebar.</p>
 
     <aside class="gm-panel is-closed" id="gm-panel" aria-label="Hasil peta">
       <div class="gm-results" id="gm-results">
