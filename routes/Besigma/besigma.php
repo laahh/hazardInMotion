@@ -18,4 +18,8 @@ Route::prefix('besigma')
     ->group(function (): void {
         Route::get('/connection-test', [BesigmaConnectionTestController::class, 'index'])
             ->name('connection-test');
+        Route::get('/connection-test.json', [BesigmaConnectionTestController::class, 'index'])
+            ->name('connection-test.json');
+        Route::get('/connection-test.txt', [BesigmaConnectionTestController::class, 'index'])
+            ->name('connection-test.text');
     });

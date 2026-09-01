@@ -68,5 +68,6 @@ class Kernel extends HttpKernel
         'evaluasi-well.access' => \App\Http\Middleware\SportEvaluationAccess::class,
         'evaluasi-well.mitra-only' => \App\Http\Middleware\SportEvaluationMitraOnlyAccess::class,
         'er.role' => \App\Http\Middleware\EnsureEmergencyResponseRole::class,
+        'isc.role' => \App\Http\Middleware\EnsureIscRole::class,
     ];
 }

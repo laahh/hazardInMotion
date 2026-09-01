@@ -10,6 +10,8 @@
     aria-label="Peta boundary wilayah operasi Berau"
     data-boundaries-url="{{ $boundariesUrl }}"
     data-overlay-url="{{ $overlayUrl }}"
+    data-pob-url="{{ $pobUrl }}"
+    data-interventions-url="{{ $interventionsUrl }}"
     data-connected="{{ $connected ? '1' : '0' }}"
   ></div>
   <div id="map-loading" class="gm-loading">Memuat peta…</div>
@@ -59,11 +61,42 @@
       </button>
     </form>
 
+    <div class="gm-hud" id="gm-hud" aria-label="Ringkasan POB dummy">
+      <p class="gm-hud-demo" id="gm-hud-source">Data dummy preview</p>
+      <div class="gm-hud-card">
+        <p class="gm-hud-kicker">POB vs boundary operasi IUPK</p>
+        <div class="gm-hud-stats">
+          <span>In <b id="hud-pob-in">–</b></span>
+          <span>Out <b id="hud-pob-out">–</b></span>
+          <span>Unknown <b id="hud-pob-unknown">–</b></span>
+        </div>
+      </div>
+      <div class="gm-hud-card">
+        <p class="gm-hud-kicker">In: Safe / Unsafe</p>
+        <div class="gm-hud-stats">
+          <span class="is-safe">Safe <b id="hud-safe">–</b></span>
+          <span class="is-unsafe">Unsafe <b id="hud-unsafe">–</b></span>
+        </div>
+      </div>
+      <div class="gm-hud-card">
+        <p class="gm-hud-kicker">Besigma × RFID</p>
+        <div class="gm-hud-stats gm-hud-stats-wrap">
+          <span>Pernah <b id="hud-ever">–</b></span>
+          <span>Aktif <b id="hud-current">–</b></span>
+          <span>RFID <b id="hud-rfid">–</b></span>
+          <span>B−R <b id="hud-gap-br">–</b></span>
+          <span>R−B <b id="hud-gap-rb">–</b></span>
+          <span>Keduanya <b id="hud-both">–</b></span>
+        </div>
+      </div>
+    </div>
+    <p class="gm-banner" id="gm-hazard-banner">Menampilkan data dummy: marker orang, zona blasting, dan rekonsiliasi SID. Klik personel atau boundary untuk detail.</p>
+
     <aside class="gm-panel is-closed" id="gm-panel" aria-label="Hasil peta">
       <div class="gm-results" id="gm-results">
         <div class="gm-results-head">
           <div>
-            <p class="gm-kicker">Wilayah operasi</p>
+            <p class="gm-kicker">Boundary Besigma</p>
             <p id="gm-status">{{ $connected ? 'Besigma terhubung' : 'IUPK tampil · Besigma belum terhubung' }}</p>
           </div>
           <strong id="gm-count">0</strong>
@@ -102,6 +135,12 @@
               </span>
               Sekitar
             </button>
+            <button type="button" class="gm-action" id="gm-act-intervene">
+              <span class="gm-action-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M4 8h16M7 21h10"/></svg>
+              </span>
+              Buka intervensi
+            </button>
             <button type="button" class="gm-action" id="gm-act-share">
               <span class="gm-action-icon">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 11.1 15.8 6.4M8.2 12.9l7.6 5.7"/></svg>
@@ -121,6 +160,10 @@
     <button type="button" class="gm-pill" data-scope="iupk">
       <span class="gm-dot iupk"></span>
       Konsesi
+    </button>
+    <button type="button" class="gm-pill" data-scope="people">
+      <span class="gm-dot people"></span>
+      Personel
     </button>
     <button type="button" class="gm-pill" data-scope="besigma">
       <span class="gm-dot besigma"></span>
@@ -152,6 +195,8 @@
       <p>Overlay</p>
       <label><input type="checkbox" data-layer="ops" checked> Konsesi IUPK</label>
       <label><input type="checkbox" data-layer="besigma" checked> Besigma</label>
+      <label><input type="checkbox" data-layer="people" checked> Personel GPS</label>
+      <label><input type="checkbox" data-layer="hazard" checked> Zona berbahaya</label>
       <label><input type="checkbox" id="gm-toggle-labels" checked> Label site</label>
     </div>
   </div>

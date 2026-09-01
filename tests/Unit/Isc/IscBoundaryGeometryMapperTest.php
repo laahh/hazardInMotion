@@ -53,6 +53,43 @@ final class IscBoundaryGeometryMapperTest extends TestCase
         $this->assertEqualsWithDelta(1.95, $feature['geometry']['coordinates'][1], 0.0001);
     }
 
+    public function test_wkt_polygon_becomes_feature(): void
+    {
+        $row = (object) [
+            'id' => 4,
+            'name' => 'Pit B',
+            'wkt' => 'POLYGON((117.1 2.0, 117.2 2.0, 117.2 2.1, 117.1 2.0))',
+        ];
+
+        $feature = (new IscBoundaryGeometryMapper())->featureFromRow($row, [
+            'id' => 'int',
+            'name' => 'varchar',
+            'wkt' => 'text',
+        ]);
+
+        $this->assertSame('Polygon', $feature['geometry']['type']);
+        $this->assertCount(4, $feature['geometry']['coordinates'][0]);
+    }
+
+    public function test_latlng_array_becomes_polygon(): void
+    {
+        $row = (object) [
+            'id' => 5,
+            'coordinates' => json_encode([
+                ['lat' => 2.0, 'lng' => 117.1],
+                ['lat' => 2.0, 'lng' => 117.2],
+                ['lat' => 2.1, 'lng' => 117.2],
+            ]),
+        ];
+
+        $feature = (new IscBoundaryGeometryMapper())->featureFromRow($row, [
+            'id' => 'int',
+            'coordinates' => 'json',
+        ]);
+
+        $this->assertSame('Polygon', $feature['geometry']['type']);
+    }
+
     public function test_row_without_geometry_returns_null(): void
     {
         $row = (object) ['id' => 1, 'name' => 'No geom'];

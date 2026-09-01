@@ -20,8 +20,6 @@ final class BesigmaConnectionService
 
     private const CACHE_TTL_SECONDS = 20;
 
-    private const TABLE_SAMPLE_LIMIT = 30;
-
     private ?bool $requestCache = null;
 
     public function isUp(): bool
@@ -72,6 +70,22 @@ final class BesigmaConnectionService
      *     server_time: string|null,
      *     table_count: int|null,
      *     tables: list<string>,
+     *     schema: list<array{
+     *         name:string,
+     *         type:string,
+     *         engine:?string,
+     *         approx_rows:?int,
+     *         comment:string,
+     *         columns:list<array{
+     *             name:string,
+     *             type:string,
+     *             nullable:bool,
+     *             key:string,
+     *             default:mixed,
+     *             extra:string,
+     *             comment:string
+     *         }>
+     *     }>,
      *     error: string|null,
      *     hint: string|null,
      *     tunnel: array{
@@ -111,6 +125,7 @@ final class BesigmaConnectionService
             'server_time' => null,
             'table_count' => null,
             'tables' => [],
+            'schema' => [],
             'error' => null,
             'hint' => null,
             'tunnel' => $tunnel,
@@ -144,25 +159,11 @@ final class BesigmaConnectionService
 
             $latencyMs = round((microtime(true) - $started) * 1000, 1);
 
-            $tableCountRow = DB::connection(self::CONNECTION)->selectOne(
-                'SELECT COUNT(*) AS table_count FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()'
+            $schema = $this->describeAllTables();
+            $tables = array_map(
+                static fn (array $table): string => $table['name'],
+                $schema
             );
-
-            $tableRows = DB::connection(self::CONNECTION)->select(
-                'SELECT TABLE_NAME AS table_name
-                 FROM information_schema.TABLES
-                 WHERE TABLE_SCHEMA = DATABASE()
-                 ORDER BY TABLE_NAME
-                 LIMIT '.self::TABLE_SAMPLE_LIMIT
-            );
-
-            $tables = [];
-            foreach ($tableRows as $tableRow) {
-                $name = (string) ($tableRow->table_name ?? $tableRow->TABLE_NAME ?? '');
-                if ($name !== '') {
-                    $tables[] = $name;
-                }
-            }
 
             $this->requestCache = true;
             Cache::put(self::CACHE_KEY, true, self::CACHE_TTL_SECONDS);
@@ -176,8 +177,9 @@ final class BesigmaConnectionService
                 'username' => isset($row->db_user) ? (string) $row->db_user : null,
                 'version' => isset($row->db_version) ? (string) $row->db_version : null,
                 'server_time' => isset($row->db_time) ? (string) $row->db_time : null,
-                'table_count' => isset($tableCountRow->table_count) ? (int) $tableCountRow->table_count : count($tables),
+                'table_count' => count($tables),
                 'tables' => $tables,
+                'schema' => $schema,
                 'error' => null,
                 'hint' => null,
                 'tunnel' => $tunnel,
@@ -193,6 +195,156 @@ final class BesigmaConnectionService
 
             return $base;
         }
+    }
+
+    /**
+     * Katalog read-only semua tabel + kolom di DATABASE() saat ini.
+     *
+     * @return list<array{
+     *     name:string,
+     *     type:string,
+     *     engine:?string,
+     *     approx_rows:?int,
+     *     comment:string,
+     *     columns:list<array{
+     *         name:string,
+     *         type:string,
+     *         nullable:bool,
+     *         key:string,
+     *         default:mixed,
+     *         extra:string,
+     *         comment:string
+     *     }>
+     * }>
+     */
+    public function describeAllTables(): array
+    {
+        $tableRows = DB::connection(self::CONNECTION)->select(
+            'SELECT
+                TABLE_NAME AS table_name,
+                TABLE_TYPE AS table_type,
+                ENGINE AS engine,
+                TABLE_ROWS AS approx_rows,
+                TABLE_COMMENT AS table_comment
+             FROM information_schema.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+             ORDER BY TABLE_NAME'
+        );
+
+        $columnRows = DB::connection(self::CONNECTION)->select(
+            'SELECT
+                TABLE_NAME AS table_name,
+                COLUMN_NAME AS column_name,
+                COLUMN_TYPE AS column_type,
+                IS_NULLABLE AS is_nullable,
+                COLUMN_KEY AS column_key,
+                COLUMN_DEFAULT AS column_default,
+                EXTRA AS extra,
+                COLUMN_COMMENT AS column_comment
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+             ORDER BY TABLE_NAME, ORDINAL_POSITION'
+        );
+
+        $schema = [];
+        foreach ($tableRows as $tableRow) {
+            $name = (string) ($tableRow->table_name ?? $tableRow->TABLE_NAME ?? '');
+            if ($name === '') {
+                continue;
+            }
+            $schema[$name] = [
+                'name' => $name,
+                'type' => (string) ($this->rowAttr($tableRow, 'table_type') ?? 'BASE TABLE'),
+                'engine' => ($engine = $this->rowAttr($tableRow, 'engine')) !== null && $engine !== ''
+                    ? (string) $engine
+                    : null,
+                'approx_rows' => ($rows = $this->rowAttr($tableRow, 'approx_rows')) !== null
+                    ? (int) $rows
+                    : null,
+                'comment' => (string) ($this->rowAttr($tableRow, 'table_comment') ?? ''),
+                'columns' => [],
+            ];
+        }
+
+        foreach ($columnRows as $columnRow) {
+            $table = (string) ($columnRow->table_name ?? $columnRow->TABLE_NAME ?? '');
+            if ($table === '') {
+                continue;
+            }
+            if (! isset($schema[$table])) {
+                $schema[$table] = [
+                    'name' => $table,
+                    'type' => 'BASE TABLE',
+                    'engine' => null,
+                    'approx_rows' => null,
+                    'comment' => '',
+                    'columns' => [],
+                ];
+            }
+            $schema[$table]['columns'][] = [
+                'name' => (string) ($this->rowAttr($columnRow, 'column_name') ?? ''),
+                'type' => (string) ($this->rowAttr($columnRow, 'column_type') ?? ''),
+                'nullable' => strtoupper((string) ($this->rowAttr($columnRow, 'is_nullable') ?? '')) === 'YES',
+                'key' => (string) ($this->rowAttr($columnRow, 'column_key') ?? ''),
+                'default' => $this->rowAttr($columnRow, 'column_default'),
+                'extra' => (string) ($this->rowAttr($columnRow, 'extra') ?? ''),
+                'comment' => (string) ($this->rowAttr($columnRow, 'column_comment') ?? ''),
+            ];
+        }
+
+        return array_values($schema);
+    }
+
+    /**
+     * Ringkasan teks semua tabel+kolom, mudah disalin ke chat.
+     *
+     * @param  list<array<string, mixed>>  $schema
+     */
+    public function schemaAsText(array $schema): string
+    {
+        $lines = [];
+        foreach ($schema as $table) {
+            $name = (string) ($table['name'] ?? '');
+            if ($name === '') {
+                continue;
+            }
+            $meta = array_filter([
+                (string) ($table['type'] ?? ''),
+                (string) ($table['engine'] ?? ''),
+                isset($table['approx_rows']) ? '~'.(int) $table['approx_rows'].' rows' : null,
+                isset($table['columns']) && is_array($table['columns']) ? count($table['columns']).' cols' : null,
+            ]);
+            $lines[] = $name.( $meta !== [] ? ' ('.implode(', ', $meta).')' : '');
+            foreach ($table['columns'] ?? [] as $column) {
+                if (! is_array($column)) {
+                    continue;
+                }
+                $parts = array_filter([
+                    (string) ($column['name'] ?? ''),
+                    (string) ($column['type'] ?? ''),
+                    (string) ($column['key'] ?? ''),
+                    ! empty($column['nullable']) ? 'NULL' : 'NOT NULL',
+                    (string) ($column['extra'] ?? ''),
+                ], static fn (string $part): bool => $part !== '');
+                $lines[] = '  '.implode(' ', $parts);
+            }
+            $lines[] = '';
+        }
+
+        return rtrim(implode("\n", $lines))."\n";
+    }
+
+    private function rowAttr(object $row, string $name): mixed
+    {
+        if (isset($row->{$name})) {
+            return $row->{$name};
+        }
+        $upper = strtoupper($name);
+        if (isset($row->{$upper})) {
+            return $row->{$upper};
+        }
+
+        return null;
     }
 
     /**

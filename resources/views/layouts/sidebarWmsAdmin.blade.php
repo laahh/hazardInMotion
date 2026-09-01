@@ -394,10 +394,31 @@
           </li>
           <li class="menu-label">ISC</li>
           <li>
+            <a href="{{ route('isc.index') }}">
+              <div class="parent-icon"><i class="material-icons-outlined">home</i>
+              </div>
+              <div class="menu-title">Home ISC</div>
+            </a>
+          </li>
+          <li>
             <a href="{{ route('isc.maps.index') }}">
               <div class="parent-icon"><i class="material-icons-outlined">map</i>
               </div>
               <div class="menu-title">Peta Boundary</div>
+            </a>
+          </li>
+          <li>
+            <a href="{{ route('isc.interventions.index') }}">
+              <div class="parent-icon"><i class="material-icons-outlined">health_and_safety</i>
+              </div>
+              <div class="menu-title">Risk Intervention</div>
+            </a>
+          </li>
+          <li>
+            <a href="{{ route('isc.post-event.index') }}">
+              <div class="parent-icon"><i class="material-icons-outlined">summarize</i>
+              </div>
+              <div class="menu-title">Rekap Post-Event</div>
             </a>
           </li>
           @endif

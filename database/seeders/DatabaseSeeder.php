@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Database\Seeders\EmergencyResponse\EmergencyResponseRoleSeeder;
+use Database\Seeders\Isc\IscRoleSeeder;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -16,6 +17,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             SidMeetingDemoSeeder::class,
             EmergencyResponseRoleSeeder::class,
+            IscRoleSeeder::class,
         ]);
     }
 }

@@ -80,34 +80,67 @@ final class IscBoundaryMapService
     }
 
     /**
-     * @return array{type:string,features:list<array<string,mixed>>}
+     * @return array{
+     *     type:string,
+     *     features:list<array<string,mixed>>,
+     *     records:list<array<string,mixed>>,
+     *     columns:list<string>,
+     *     connected:bool,
+     *     error:?string
+     * }
      */
     public function boundariesGeoJson(): array
     {
+        $empty = [
+            'type' => 'FeatureCollection',
+            'features' => [],
+            'records' => [],
+            'columns' => [],
+            'connected' => $this->isUp(),
+            'error' => null,
+        ];
+
         if (! $this->isUp() || ! $this->tableExists('boundaries')) {
-            return ['type' => 'FeatureCollection', 'features' => []];
+            $empty['error'] = $this->isUp() ? 'Tabel boundaries tidak ada.' : 'besigma_db tidak terhubung';
+
+            return $empty;
         }
 
         try {
             $columnTypes = $this->columnTypes('boundaries');
-            $selects = $this->selectList($columnTypes);
-            $sql = 'SELECT '.$selects.' FROM `boundaries` LIMIT '.self::BOUNDARY_LIMIT;
-            $rows = DB::connection(self::CONNECTION)->select($sql);
+            $rows = $this->fetchBoundaryRows($columnTypes);
+            $entryCounts = $this->countsByBoundary('boundary_entries');
+            $violationCounts = $this->countsByBoundary('boundary_violations');
 
             $features = [];
+            $records = [];
             foreach ($rows as $row) {
                 $feature = $this->geometry->featureFromRow($row, $columnTypes);
+                $props = $feature['properties'] ?? $this->geometry->scalarProperties($row, $columnTypes);
+                $props = $this->enrichBoundaryProperties($props, $entryCounts, $violationCounts);
+                $props['has_geometry'] = isset($feature['geometry']);
+                $records[] = $props;
+
                 if ($feature === null) {
                     continue;
                 }
-                $features[] = $this->enrichBoundaryFeature($feature);
+                $feature['properties'] = $props;
+                $features[] = $feature;
             }
 
-            return ['type' => 'FeatureCollection', 'features' => $features];
+            return [
+                'type' => 'FeatureCollection',
+                'features' => $features,
+                'records' => $records,
+                'columns' => $this->displayColumns($records),
+                'connected' => true,
+                'error' => null,
+            ];
         } catch (Throwable $e) {
             report($e);
+            $empty['error'] = $e->getMessage();
 
-            return ['type' => 'FeatureCollection', 'features' => []];
+            return $empty;
         }
     }
 
@@ -209,17 +242,32 @@ final class IscBoundaryMapService
     private function enrichBoundaryFeature(array $feature): array
     {
         $props = is_array($feature['properties'] ?? null) ? $feature['properties'] : [];
+        $feature['properties'] = $this->enrichBoundaryProperties($props, [], []);
+
+        return $feature;
+    }
+
+    /**
+     * @param  array<string, mixed>  $props
+     * @param  array<string, int>  $entryCounts
+     * @param  array<string, int>  $violationCounts
+     * @return array<string, mixed>
+     */
+    private function enrichBoundaryProperties(array $props, array $entryCounts, array $violationCounts): array
+    {
         $statusId = $props['status_id'] ?? $props['boundary_status_id'] ?? null;
         $riskId = $props['risk_level_id'] ?? $props['risk_id'] ?? null;
+        $boundaryId = $props['id'] ?? null;
 
         $statuses = $this->lookup('boundary_status');
         $levels = $this->lookup('boundary_risk_levels');
+        $risks = $this->lookup('boundary_risks');
 
         if ($statusId !== null) {
             foreach ($statuses as $status) {
                 if ((string) ($status['id'] ?? '') === (string) $statusId) {
-                    $props['status_name'] = $status['name'] ?? $status['status'] ?? $status['label'] ?? null;
-                    $props['status_color'] = $status['color'] ?? $status['colour'] ?? null;
+                    $props['status_name'] = $status['name'] ?? $status['status'] ?? $status['label'] ?? $status['title'] ?? null;
+                    $props['status_color'] = $status['color'] ?? $status['colour'] ?? $status['hex'] ?? null;
                     break;
                 }
             }
@@ -228,16 +276,106 @@ final class IscBoundaryMapService
         if ($riskId !== null) {
             foreach ($levels as $level) {
                 if ((string) ($level['id'] ?? '') === (string) $riskId) {
-                    $props['risk_name'] = $level['name'] ?? $level['label'] ?? null;
-                    $props['risk_color'] = $level['color'] ?? $level['colour'] ?? null;
+                    $props['risk_name'] = $level['name'] ?? $level['label'] ?? $level['title'] ?? null;
+                    $props['risk_color'] = $level['color'] ?? $level['colour'] ?? $level['hex'] ?? null;
                     break;
+                }
+            }
+            if (! isset($props['risk_name'])) {
+                foreach ($risks as $risk) {
+                    if ((string) ($risk['id'] ?? '') === (string) $riskId) {
+                        $props['risk_name'] = $risk['name'] ?? $risk['label'] ?? $risk['title'] ?? null;
+                        $props['risk_color'] = $risk['color'] ?? $risk['colour'] ?? $risk['hex'] ?? null;
+                        break;
+                    }
                 }
             }
         }
 
-        $feature['properties'] = $props;
+        if ($boundaryId !== null) {
+            $key = (string) $boundaryId;
+            $props['entries_count'] = $entryCounts[$key] ?? 0;
+            $props['violations_count'] = $violationCounts[$key] ?? 0;
+        }
 
-        return $feature;
+        return $props;
+    }
+
+    /**
+     * @param  array<string, string>  $columnTypes
+     * @return list<object>
+     */
+    private function fetchBoundaryRows(array $columnTypes): array
+    {
+        try {
+            $sql = 'SELECT '.$this->selectList($columnTypes).' FROM `boundaries`'.$this->orderClause($columnTypes).' LIMIT '.self::BOUNDARY_LIMIT;
+
+            return DB::connection(self::CONNECTION)->select($sql);
+        } catch (Throwable $e) {
+            $sql = 'SELECT '.$this->selectList($columnTypes, includeGeojson: false).' FROM `boundaries`'.$this->orderClause($columnTypes).' LIMIT '.self::BOUNDARY_LIMIT;
+
+            return DB::connection(self::CONNECTION)->select($sql);
+        }
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function countsByBoundary(string $table): array
+    {
+        if (! $this->tableExists($table)) {
+            return [];
+        }
+
+        $columnTypes = $this->columnTypes($table);
+        $fk = null;
+        foreach (['boundary_id', 'boundaries_id', 'geofence_id'] as $column) {
+            if (isset($columnTypes[$column])) {
+                $fk = $column;
+                break;
+            }
+        }
+        if ($fk === null) {
+            return [];
+        }
+
+        try {
+            $rows = DB::connection(self::CONNECTION)->select(
+                'SELECT `'.$fk.'` AS bid, COUNT(*) AS c FROM `'.$table.'` GROUP BY `'.$fk.'`'
+            );
+            $out = [];
+            foreach ($rows as $row) {
+                $out[(string) ($row->bid ?? '')] = (int) ($row->c ?? 0);
+            }
+
+            return $out;
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $records
+     * @return list<string>
+     */
+    private function displayColumns(array $records): array
+    {
+        $preferred = [
+            'id', 'name', 'title', 'code', 'type', 'category',
+            'status_name', 'risk_name', 'site', 'location', 'area',
+            'violations_count', 'entries_count', 'is_active', 'updated_at',
+        ];
+        $keys = $records[0] ?? [];
+        $out = [];
+        foreach ($preferred as $column) {
+            if (array_key_exists($column, $keys)) {
+                $out[] = $column;
+            }
+        }
+
+        return $out !== [] ? $out : array_keys($keys);
     }
 
     /**

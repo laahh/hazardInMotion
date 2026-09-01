@@ -182,6 +182,12 @@ class Kernel extends ConsoleKernel
             ->hourly()
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/emergency-response-retry-notifications.log'));
+
+        $schedule->command('isc:detect-hazard-entries')
+            ->timezone('Asia/Makassar')
+            ->everyMinute()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/isc-detect-hazard-entries.log'));
     }
 
     /**

@@ -51,13 +51,34 @@ final class BesigmaConnectionServiceTest extends TestCase
         $this->assertArrayHasKey('tcp_reachable', $probe);
         $this->assertArrayHasKey('key_exists', $probe);
         $this->assertArrayHasKey('tunnel', $probe);
-        $this->assertArrayHasKey('tables', $probe);
+        $this->assertArrayHasKey('schema', $probe);
         $this->assertIsBool($probe['connected']);
         $this->assertIsArray($probe['tables']);
+        $this->assertIsArray($probe['schema']);
 
         if (! $probe['connected']) {
             $this->assertNotEmpty($probe['error']);
             $this->assertNotEmpty($probe['hint']);
         }
+    }
+
+    public function test_schema_as_text_lists_table_and_columns(): void
+    {
+        $text = app(BesigmaConnectionService::class)->schemaAsText([
+            [
+                'name' => 'boundaries',
+                'type' => 'BASE TABLE',
+                'engine' => 'InnoDB',
+                'approx_rows' => 12,
+                'columns' => [
+                    ['name' => 'id', 'type' => 'bigint', 'key' => 'PRI', 'nullable' => false, 'extra' => 'auto_increment'],
+                    ['name' => 'polygon', 'type' => 'json', 'key' => '', 'nullable' => true, 'extra' => ''],
+                ],
+            ],
+        ]);
+
+        $this->assertStringContainsString('boundaries (BASE TABLE, InnoDB, ~12 rows, 2 cols)', $text);
+        $this->assertStringContainsString('id bigint PRI NOT NULL auto_increment', $text);
+        $this->assertStringContainsString('polygon json NULL', $text);
     }
 }

@@ -6,6 +6,8 @@
 
   var boundariesUrl = mapEl.getAttribute("data-boundaries-url") || "";
   var overlayUrl = mapEl.getAttribute("data-overlay-url") || "";
+  var pobUrl = mapEl.getAttribute("data-pob-url") || "";
+  var interventionsUrl = mapEl.getAttribute("data-interventions-url") || "";
 
   var listEl = document.getElementById("zone-list");
   var countEl = document.getElementById("gm-count");
@@ -33,13 +35,18 @@
   var listMode = "all";
   var showOps = true;
   var showBesigma = true;
+  var showPeople = true;
+  var showHazard = true;
   var showLabels = true;
   var selected = null;
   var recents = [];
   var saved = loadSaved();
   var iupkLayers = [];
   var besigmaGeo = { type: "FeatureCollection", features: [] };
+  var besigmaRecords = [];
   var overlay = { violations: [], entries: [] };
+  var pobPeople = [];
+  var peopleByKey = {};
 
   var sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
     maxZoom: 18
@@ -64,12 +71,37 @@
 
   map.createPane("iupk");
   map.getPane("iupk").style.zIndex = 450;
+  map.createPane("hazard");
+  map.getPane("hazard").style.zIndex = 470;
+  map.createPane("people");
+  map.getPane("people").style.zIndex = 620;
   map.createPane("labels");
   map.getPane("labels").style.zIndex = 650;
   map.getPane("labels").style.pointerEvents = "none";
 
   var iupkRenderer = L.canvas({ pane: "iupk", padding: 0.8 });
   var labelsLayer = L.layerGroup();
+  var peopleLayer = L.layerGroup();
+  var hazardLayer = L.geoJSON(null, {
+    pane: "hazard",
+    style: function () {
+      return { color: "#c5221f", weight: 2, fillColor: "#c5221f", fillOpacity: 0.28 };
+    },
+    onEachFeature: function (feature, layer) {
+      var p = feature.properties || {};
+      layer.bindTooltip(p.name || "Zona berbahaya", { sticky: true, className: "iupk-tip" });
+      layer.on("click", function () {
+        openPlace({
+          kind: "hazard",
+          title: p.name || "Zona berbahaya",
+          meta: [p.aktivitas, p.risk_name].filter(Boolean).join(" · ") || "Dummy hazard",
+          badge: "UNSAFE",
+          props: p,
+          layer: layer
+        });
+      });
+    }
+  });
 
   function iupkStyle() {
     return { color: "#d4ff7a", weight: 3, fillColor: "#7cb342", fillOpacity: 0.2 };
@@ -107,22 +139,31 @@
     }
   });
 
+  function besigmaColor(props) {
+    return props.risk_color || props.status_color || "#1a73e8";
+  }
+
+  function besigmaStyle(feature) {
+    var color = besigmaColor((feature && feature.properties) || {});
+    return {
+      color: color,
+      weight: 2.5,
+      fillColor: color,
+      fillOpacity: 0.22
+    };
+  }
+
   var besigmaLayer = L.geoJSON({ type: "FeatureCollection", features: [] }, {
-    style: {
-      color: "#1a73e8",
-      weight: 2,
-      fillColor: "#1a73e8",
-      fillOpacity: 0.16
-    },
+    style: besigmaStyle,
     pointToLayer: function (feature, latlng) {
-      return L.circleMarker(latlng, { radius: 7, color: "#1a73e8", fillOpacity: 0.85, weight: 2 });
+      var color = besigmaColor((feature && feature.properties) || {});
+      return L.circleMarker(latlng, { radius: 8, color: color, fillColor: color, fillOpacity: 0.9, weight: 2 });
     },
     onEachFeature: function (feature, layer) {
-      var p = feature.properties || {};
-      var title = p.name || p.title || p.code || ("Boundary #" + (p.id || ""));
-      layer.bindTooltip(String(title), { sticky: true, className: "iupk-tip" });
+      var item = itemFromBesigma(feature.properties || {}, layer);
+      layer.bindTooltip(item.title, { sticky: true, className: "iupk-tip" });
       layer.on("click", function () {
-        openPlace(itemFromBesigma(feature, layer));
+        openPlace(item);
       });
     }
   });
@@ -154,6 +195,21 @@
     return Number(value).toLocaleString("id-ID", { maximumFractionDigits: 0 }) + " ha";
   }
 
+  function formatDuration(seconds) {
+    var n = Number(seconds);
+    if (!isFinite(n) || n < 0) {
+      return "—";
+    }
+    var m = Math.floor(n / 60);
+    var s = Math.floor(n % 60);
+    if (m >= 60) {
+      var h = Math.floor(m / 60);
+      m = m % 60;
+      return h + "j " + m + "m";
+    }
+    return m + "m " + s + "d";
+  }
+
   function fitOps() {
     if (opsLayer.getLayers().length) {
       map.fitBounds(opsLayer.getBounds(), { padding: [56, 56] });
@@ -181,6 +237,9 @@
   }
 
   function itemKey(item) {
+    if (item.kind === "person" && item.props && item.props.key) {
+      return "person:" + item.props.key;
+    }
     return item.kind + ":" + item.title;
   }
 
@@ -196,16 +255,45 @@
     };
   }
 
-  function itemFromBesigma(feature, layer) {
-    var p = feature.properties || {};
+  function itemFromPerson(person, layer) {
+    var p = person || {};
+    return {
+      kind: "person",
+      title: p.name || p.sid || "Personel",
+      meta: [p.company, p.job_title, p.iupk_site || p.presence].filter(Boolean).join(" · "),
+      badge: p.safety === "unsafe" ? "UNSAFE" : (p.presence === "in" ? "IN" : (p.stale ? "STALE" : "OUT")),
+      props: p,
+      layer: layer || peopleByKey[p.key] || null
+    };
+  }
+
+  function itemFromBesigma(props, layer) {
+    var p = props || {};
     return {
       kind: "besigma",
-      title: p.name || p.title || p.code || ("Boundary #" + (p.id || "")),
-      meta: p.status_name || p.risk_name || "Besigma",
-      badge: p.status_name || p.risk_name || "DB",
+      title: p.name || p.title || p.code || p.label || ("Boundary #" + (p.id || "")),
+      meta: [p.status_name, p.risk_name, p.type || p.category, p.site || p.location].filter(Boolean).join(" · ") || "Besigma",
+      badge: p.status_name || p.risk_name || p.type || "DB",
       props: p,
-      layer: layer
+      layer: layer || layerForBesigmaId(p.id)
     };
+  }
+
+  function layerForBesigmaId(id) {
+    if (id == null) {
+      return null;
+    }
+    var found = null;
+    besigmaLayer.eachLayer(function (layer) {
+      if (found) {
+        return;
+      }
+      var props = (layer.feature && layer.feature.properties) || {};
+      if (String(props.id) === String(id)) {
+        found = layer;
+      }
+    });
+    return found;
   }
 
   function allItems() {
@@ -213,8 +301,14 @@
     iupkLayers.forEach(function (entry) {
       items.push(itemFromIupk(entry.feature, entry.layer));
     });
-    (besigmaGeo.features || []).forEach(function (feature, index) {
-      items.push(itemFromBesigma(feature, besigmaLayer.getLayers()[index] || null));
+    var source = besigmaRecords.length ? besigmaRecords : (besigmaGeo.features || []).map(function (feature) {
+      return feature.properties || {};
+    });
+    source.forEach(function (props) {
+      items.push(itemFromBesigma(props, layerForBesigmaId(props.id)));
+    });
+    pobPeople.forEach(function (person) {
+      items.push(itemFromPerson(person, peopleByKey[person.key]));
     });
     return items;
   }
@@ -226,6 +320,9 @@
         return false;
       }
       if (scope === "besigma" && item.kind !== "besigma") {
+        return false;
+      }
+      if (scope === "people" && item.kind !== "person") {
         return false;
       }
       if (listMode === "saved" && saved.indexOf(itemKey(item)) === -1) {
@@ -256,6 +353,22 @@
       }
     } else if (map.hasLayer(besigmaLayer)) {
       map.removeLayer(besigmaLayer);
+    }
+
+    if (showPeople && (scope === "semua" || scope === "people")) {
+      if (!map.hasLayer(peopleLayer)) {
+        peopleLayer.addTo(map);
+      }
+    } else if (map.hasLayer(peopleLayer)) {
+      map.removeLayer(peopleLayer);
+    }
+
+    if (showHazard && (scope === "semua" || scope === "people" || scope === "iupk")) {
+      if (!map.hasLayer(hazardLayer)) {
+        hazardLayer.addTo(map);
+      }
+    } else if (map.hasLayer(hazardLayer)) {
+      map.removeLayer(hazardLayer);
     }
 
     if (showLabels) {
@@ -290,26 +403,73 @@
   function addLabels() {
     labelsLayer.clearLayers();
     iupkLayers.forEach(function (entry) {
-      if (!entry.layer.getBounds) {
-        return;
-      }
-      var center = entry.layer.getBounds().getCenter();
-      var name = (entry.feature.properties || {}).Layer || (entry.feature.properties || {}).Site || "IUPK";
-      L.marker(center, {
-        pane: "labels",
-        interactive: false,
-        keyboard: false,
-        icon: L.divIcon({
-          className: "gm-label-wrap",
-          html: '<span class="gm-label">' + esc(name) + "</span>",
-          iconSize: [0, 0],
-          iconAnchor: [0, 0]
-        })
-      }).addTo(labelsLayer);
+      addLabelForLayer(entry.layer, (entry.feature.properties || {}).Layer || (entry.feature.properties || {}).Site || "IUPK");
+    });
+    besigmaLayer.eachLayer(function (layer) {
+      var p = (layer.feature && layer.feature.properties) || {};
+      addLabelForLayer(layer, p.name || p.title || p.code || p.Layer || "Boundary");
     });
     if (showLabels) {
       labelsLayer.addTo(map);
     }
+  }
+
+  function addLabelForLayer(layer, name) {
+    var center = null;
+    if (layer.getBounds) {
+      center = layer.getBounds().getCenter();
+    } else if (layer.getLatLng) {
+      center = layer.getLatLng();
+    }
+    if (!center) {
+      return;
+    }
+    L.marker(center, {
+      pane: "labels",
+      interactive: false,
+      keyboard: false,
+      icon: L.divIcon({
+        className: "gm-label-wrap",
+        html: '<span class="gm-label">' + esc(name) + "</span>",
+        iconSize: [0, 0],
+        iconAnchor: [0, 0]
+      })
+    }).addTo(labelsLayer);
+  }
+
+  function chipsHtml(item) {
+    if (item.kind === "person") {
+      var person = item.props || {};
+      var chips = [];
+      if (person.presence) {
+        chips.push('<span class="gm-chip">' + esc(person.presence) + "</span>");
+      }
+      if (person.safety) {
+        chips.push('<span class="gm-chip ' + (person.safety === "unsafe" ? "alert" : "") + '">' + esc(person.safety) + "</span>");
+      }
+      return chips.length ? '<span class="gm-chips">' + chips.join("") + "</span>" : "";
+    }
+    if (item.kind !== "besigma") {
+      return "";
+    }
+    var p = item.props || {};
+    var chips = [];
+    if (p.status_name) {
+      chips.push('<span class="gm-chip">' + esc(p.status_name) + "</span>");
+    }
+    if (p.risk_name) {
+      chips.push('<span class="gm-chip risk">' + esc(p.risk_name) + "</span>");
+    }
+    if (p.violations_count) {
+      chips.push('<span class="gm-chip alert">' + esc(p.violations_count) + " pelanggaran</span>");
+    }
+    if (p.entries_count) {
+      chips.push('<span class="gm-chip">' + esc(p.entries_count) + " entry</span>");
+    }
+    if (!p.has_geometry) {
+      chips.push('<span class="gm-chip muted">tanpa geometri</span>');
+    }
+    return chips.length ? '<span class="gm-chips">' + chips.join("") + "</span>" : "";
   }
 
   function pinSvg() {
@@ -335,7 +495,8 @@
       btn.className = "gm-item" + (selected && itemKey(selected) === itemKey(item) ? " is-on" : "");
       btn.innerHTML =
         '<span class="gm-pin ' + item.kind + '">' + pinSvg() + "</span>" +
-        '<span class="copy"><b>' + esc(item.title) + '</b><span class="meta">' + esc(item.meta) + "</span></span>";
+        '<span class="copy"><b>' + esc(item.title) + '</b><span class="meta">' + esc(item.meta) + "</span>" +
+        chipsHtml(item) + "</span>";
       btn.addEventListener("click", function () {
         openPlace(item);
       });
@@ -386,21 +547,17 @@
       placeTitle.textContent = item.title;
     }
     if (placeSub) {
-      placeSub.textContent = (item.kind === "iupk" ? "Konsesi IUPK · " : "Boundary Besigma · ") + item.meta;
+      var kindLabel = item.kind === "iupk"
+        ? "Konsesi IUPK · "
+        : (item.kind === "person" ? "Personel · " : (item.kind === "hazard" ? "Zona berbahaya · " : "Boundary Besigma · "));
+      placeSub.textContent = kindLabel + item.meta;
     }
     if (placeHero) {
       placeHero.textContent = item.badge || (item.kind === "iupk" ? "IUPK" : "DB");
       placeHero.setAttribute("data-site", item.badge || "IUPK");
     }
     if (placeFacts) {
-      var p = item.props || {};
-      placeFacts.innerHTML =
-        fact("pin", item.title, "Site / nama") +
-        fact("tag", item.badge, "Layer / status") +
-        fact("area", formatHa(p.Luas) || "—", "Luas") +
-        fact("db", item.kind === "iupk" ? "BounderyBC.js" : "Besigma", "Sumber") +
-        fact("alert", String((overlay.violations || []).length), "Pelanggaran") +
-        fact("in", String((overlay.entries || []).length), "Entry");
+      placeFacts.innerHTML = factsFromProps(item);
     }
     if (placeData) {
       placeData.textContent = JSON.stringify(item.props || {}, null, 2);
@@ -410,6 +567,75 @@
     paintSelection();
     renderList();
     flyToItem(item);
+  }
+
+  function factsFromProps(item) {
+    var p = item.props || {};
+    var rows = [];
+    if (item.kind === "iupk") {
+      rows.push(fact("pin", item.title, "Site / nama"));
+      rows.push(fact("tag", item.badge, "Layer / status"));
+      rows.push(fact("area", formatHa(p.Luas) || "—", "Luas"));
+      rows.push(fact("db", "BounderyBC.js", "Sumber"));
+      return rows.join("");
+    }
+    if (item.kind === "person") {
+      rows.push(fact("pin", p.name || "—", "Nama"));
+      rows.push(fact("tag", p.company || "—", "Perusahaan"));
+      rows.push(fact("tag", p.job_title || "—", "Jabatan"));
+      rows.push(fact("area", p.iupk_site || p.presence || "—", "Zona IUPK"));
+      rows.push(fact("db", p.hazard_name || (p.safety === "unsafe" ? "Unsafe" : (p.safety || "—")), "Aktivitas / bahaya"));
+      rows.push(fact("tag", p.safety || p.presence || "—", "Safe / Unsafe"));
+      rows.push(fact("tag", p.entered_at || p.gps_updated_at || "—", "Masuk / GPS"));
+      rows.push(fact("tag", formatDuration(p.duration_seconds), "Durasi"));
+      rows.push(fact("tag", p.intervention_status || "belum ada", "Status intervensi"));
+      return rows.join("");
+    }
+    if (item.kind === "hazard") {
+      rows.push(fact("pin", p.name || item.title, "Nama zona"));
+      rows.push(fact("tag", p.aktivitas || "—", "Aktivitas"));
+      rows.push(fact("tag", p.risk_name || "tinggi", "Potensi bahaya"));
+      return rows.join("");
+    }
+    var labels = {
+      id: "ID",
+      name: "Nama",
+      title: "Judul",
+      code: "Kode",
+      type: "Tipe",
+      category: "Kategori",
+      description: "Deskripsi",
+      status_name: "Status",
+      risk_name: "Risk",
+      site: "Site",
+      location: "Lokasi",
+      area: "Area",
+      department: "Departemen",
+      is_active: "Aktif",
+      entries_count: "Entry",
+      violations_count: "Pelanggaran",
+      created_at: "Dibuat",
+      updated_at: "Diubah"
+    };
+    Object.keys(labels).forEach(function (key) {
+      if (p[key] == null || p[key] === "") {
+        return;
+      }
+      rows.push(fact("tag", p[key], labels[key]));
+    });
+    Object.keys(p).forEach(function (key) {
+      if (labels[key] || /id$|_id$|color|geometry|has_geometry/.test(key)) {
+        return;
+      }
+      if (p[key] == null || p[key] === "" || typeof p[key] === "object") {
+        return;
+      }
+      rows.push(fact("tag", p[key], key.replace(/_/g, " ")));
+    });
+    if (!rows.length) {
+      rows.push(fact("db", "Besigma", "Sumber"));
+    }
+    return rows.join("");
   }
 
   function fact(kind, value, label) {
@@ -519,12 +745,21 @@
     }
     fetch(boundariesUrl, { headers: { Accept: "application/json" } })
       .then(function (res) { return res.json(); })
-      .then(function (geojson) {
-        besigmaGeo = geojson && geojson.features ? geojson : { type: "FeatureCollection", features: [] };
+      .then(function (payload) {
+        besigmaGeo = payload && payload.features ? payload : { type: "FeatureCollection", features: [] };
+        besigmaRecords = payload && payload.records ? payload.records : [];
         besigmaLayer.clearLayers();
-        if (besigmaGeo.features.length) {
+        if (besigmaGeo.features && besigmaGeo.features.length) {
           besigmaLayer.addData(besigmaGeo);
         }
+        if (liveStatus) {
+          if (payload && payload.error) {
+            liveStatus.textContent = "Besigma: " + payload.error;
+          } else if (besigmaRecords.length) {
+            liveStatus.textContent = "Besigma " + besigmaRecords.length + " boundary";
+          }
+        }
+        addLabels();
         applyScope();
         hideLoading();
       })
@@ -546,10 +781,97 @@
       .catch(function () {});
   }
 
+  function setText(id, value) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.textContent = value == null ? "–" : String(value);
+    }
+  }
+
+  function personIcon(markerKind) {
+    var kind = markerKind === "safe" || markerKind === "unsafe" ? markerKind : "stale";
+    return L.divIcon({
+      className: "gm-person-wrap",
+      html: '<span class="gm-person-icon ' + kind + '"></span>',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
+    });
+  }
+
+  function paintHud(payload) {
+    var summary = (payload && payload.summary) || {};
+    var recon = (payload && payload.reconcile) || {};
+    setText("hud-pob-in", summary.in);
+    setText("hud-pob-out", summary.out);
+    setText("hud-pob-unknown", summary.unknown);
+    setText("hud-safe", summary.safe);
+    setText("hud-unsafe", summary.unsafe);
+    setText("hud-ever", recon.ever_count);
+    setText("hud-current", recon.current_count);
+    setText("hud-rfid", recon.rfid_count);
+    setText("hud-gap-br", recon.gap_besigma_minus_rfid_count);
+    setText("hud-gap-rb", recon.gap_rfid_minus_besigma_count);
+    setText("hud-both", recon.both_count);
+    var sourceEl = document.getElementById("gm-hud-source");
+    if (sourceEl) {
+      sourceEl.textContent = payload.source === "live" ? "Data live" : "Data dummy preview";
+    }
+  }
+
+  function renderPeople(people) {
+    pobPeople = people || [];
+    peopleByKey = {};
+    peopleLayer.clearLayers();
+    pobPeople.forEach(function (person) {
+      if (person.lat == null || person.lng == null) {
+        return;
+      }
+      var marker = L.marker([person.lat, person.lng], {
+        pane: "people",
+        icon: personIcon(person.marker || person.safety || "stale"),
+        title: person.name || person.sid || "Personel"
+      });
+      marker.on("click", function () {
+        openPlace(itemFromPerson(person, marker));
+      });
+      marker.addTo(peopleLayer);
+      peopleByKey[person.key] = marker;
+    });
+    if (showPeople && !map.hasLayer(peopleLayer)) {
+      peopleLayer.addTo(map);
+    }
+  }
+
+  function renderHazards(features) {
+    hazardLayer.clearLayers();
+    if (features && features.length) {
+      hazardLayer.addData({ type: "FeatureCollection", features: features });
+    }
+    if (showHazard && !map.hasLayer(hazardLayer)) {
+      hazardLayer.addTo(map);
+    }
+  }
+
+  function loadPob() {
+    if (!pobUrl) {
+      return;
+    }
+    fetch(pobUrl, { headers: { Accept: "application/json" } })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        paintHud(payload || {});
+        renderPeople((payload && payload.people) || []);
+        renderHazards((payload && payload.hazard_features) || []);
+        applyScope();
+      })
+      .catch(function () {});
+  }
+
   addLabels();
   fitOps();
   renderList();
   loadBesigma();
+  loadPob();
   setTimeout(hideLoading, 1200);
 
   document.getElementById("gm-search-form").addEventListener("submit", function (event) {
@@ -600,6 +922,9 @@
       btn.classList.add("is-on");
       scope = btn.getAttribute("data-scope") || "semua";
       listMode = "all";
+      if (scope === "besigma" || scope === "people") {
+        openPanel();
+      }
       applyScope();
     });
   });
@@ -624,6 +949,12 @@
       }
       if (layer === "besigma") {
         showBesigma = input.checked;
+      }
+      if (layer === "people") {
+        showPeople = input.checked;
+      }
+      if (layer === "hazard") {
+        showHazard = input.checked;
       }
       applyScope();
     });
@@ -698,6 +1029,18 @@
     }
   });
 
+  var interveneBtn = document.getElementById("gm-act-intervene");
+  if (interveneBtn) {
+    interveneBtn.addEventListener("click", function () {
+      if (!interventionsUrl) {
+        return;
+      }
+      var eventId = selected && selected.props && selected.props.open_event_id;
+      var url = interventionsUrl + (eventId ? ("?event=" + encodeURIComponent(eventId)) : "");
+      window.location.href = url;
+    });
+  }
+
   if (layersBtn && layersPop) {
     layersBtn.addEventListener("click", function () {
       layersPop.hidden = !layersPop.hidden;
@@ -735,7 +1078,8 @@
         loadingEl.hidden = false;
       }
       loadBesigma();
-      toast("Memuat data Besigma…");
+      loadPob();
+      toast("Memuat Besigma dan POB…");
     });
   }
 
