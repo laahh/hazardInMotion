@@ -191,7 +191,7 @@ button, input { font-family: inherit; }
   background: var(--gm-line);
 }
 
-.gm-hud { display: grid; gap: 8px; }
+.gm-hud { display: grid; gap: 10px; max-height: min(58vh, 640px); overflow: auto; padding-right: 2px; }
 .gm-hud-demo {
   margin: 0;
   font-size: 11px;
@@ -204,18 +204,140 @@ button, input { font-family: inherit; }
 }
 .gm-hud-card {
   background: #fff;
-  border-radius: var(--gm-radius);
+  border-radius: 16px;
   box-shadow: var(--gm-shadow);
-  padding: 10px 12px;
+  padding: 12px 12px 10px;
+  border: 1px solid rgba(255,255,255,.7);
 }
+.gm-hud-card.is-checkin { background: linear-gradient(180deg, #f8fbff, #fff); }
+.gm-hud-card.is-safety { background: linear-gradient(180deg, #f7fbf6, #fff); }
+.gm-hud-card.is-rfid { background: linear-gradient(180deg, #fbf8ff, #fff); }
+.gm-hud-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.gm-hud-ico {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+}
+.gm-hud-ico svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.gm-hud-ico.checkin { background: #e8f0fe; color: #1967d2; }
+.gm-hud-ico.safety { background: #e6f4ea; color: #137333; }
+.gm-hud-ico.rfid { background: #f3e8fd; color: #7627bb; }
 .gm-hud-kicker {
-  margin: 0 0 6px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: .04em;
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--gm-muted);
 }
+.gm-hud-lead {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--gm-ink);
+  font-weight: 500;
+}
+.gm-hud-lead b { font-size: 18px; font-weight: 800; letter-spacing: -.03em; }
+.gm-hud-sites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gm-hud-site {
+  border: 1px solid var(--gm-line);
+  background: #fff;
+  color: var(--gm-ink);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gm-hud-site b { margin-left: 4px; color: var(--gm-blue); }
+.gm-hud-site.is-on {
+  background: #e8f0fe;
+  border-color: #d2e3fc;
+  color: #174ea6;
+}
+.gm-hud-link,
+.gm-hud-metric,
+.gm-hud-violation {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.gm-hud-link {
+  margin-top: 8px;
+  color: var(--gm-blue);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 0;
+}
+.gm-hud-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.gm-hud-metric {
+  border-radius: 12px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 2px;
+}
+.gm-hud-metric span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.gm-hud-metric strong { font-size: 22px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+.gm-hud-metric small { color: var(--gm-muted); font-size: 11px; line-height: 1.25; }
+.gm-hud-metric.is-safe { background: #e6f4ea; color: #137333; }
+.gm-hud-metric.is-unsafe { background: #fce8e6; color: #c5221f; }
+.gm-hud-metric:hover { filter: brightness(.97); }
+.gm-hud-violations { display: grid; gap: 4px; }
+.gm-hud-violation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: #f8f9fa;
+  color: var(--gm-ink);
+  font-size: 12px;
+}
+.gm-hud-violation:hover { background: #eef1f4; }
+.gm-hud-violation span { flex: 1; }
+.gm-hud-violation b { font-size: 14px; }
+.gm-hud-violation .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 8px;
+}
+.gm-hud-violation .dot.danger { background: #c5221f; }
+.gm-hud-violation .dot.competence { background: #e37400; }
+.gm-hud-violation .dot.unit { background: #7627bb; }
+.gm-hud-meta {
+  margin: 8px 0 0;
+  color: var(--gm-muted);
+  font-size: 11px;
+}
+.gm-hud-meta b { color: var(--gm-ink); }
 .gm-hud-stats {
   display: flex;
   flex-wrap: wrap;
@@ -245,7 +367,10 @@ button, input { font-family: inherit; }
   display: block;
 }
 .gm-person-icon.safe { background: #137333; }
-.gm-person-icon.unsafe { background: #c5221f; }
+.gm-person-icon.unsafe,
+.gm-person-icon.employee_danger { background: #c5221f; }
+.gm-person-icon.employee_competence { background: #e37400; }
+.gm-person-icon.unit_danger { background: #7627bb; }
 .gm-person-icon.out,
 .gm-person-icon.stale { background: #80868b; }
 .gm-dot.people { background: #137333; }

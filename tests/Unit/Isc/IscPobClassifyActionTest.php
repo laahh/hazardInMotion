@@ -36,6 +36,55 @@ final class IscPobClassifyActionTest extends TestCase
         $this->assertSame(IscPobClassifyAction::PRESENCE_IN, $person['presence']);
         $this->assertSame(IscPobClassifyAction::SAFETY_UNSAFE, $person['safety']);
         $this->assertSame('Pit berbahaya', $person['hazard_name']);
+        $this->assertSame(IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER, $person['hazard_kind']);
+    }
+
+    public function test_competence_zone_sets_competence_kind(): void
+    {
+        $person = $this->action()->classifyOne(
+            $this->person(117.125, 2.025),
+            $this->iupk(),
+            [[
+                'type' => 'Feature',
+                'properties' => [
+                    'id' => 'c1',
+                    'name' => 'Zona kompetensi',
+                    'hazard_kind' => IscHazardBoundaryClassifier::KIND_EMPLOYEE_COMPETENCE,
+                ],
+                'geometry' => [
+                    'type' => 'Polygon',
+                    'coordinates' => [[[117.1, 2.0], [117.15, 2.0], [117.15, 2.05], [117.1, 2.05], [117.1, 2.0]]],
+                ],
+            ]],
+        );
+
+        $this->assertSame(IscPobClassifyAction::SAFETY_UNSAFE, $person['safety']);
+        $this->assertSame(IscHazardBoundaryClassifier::KIND_EMPLOYEE_COMPETENCE, $person['hazard_kind']);
+        $this->assertSame('Pelanggaran Batas Kompetensi Karyawan', $person['hazard_kind_label']);
+    }
+
+    public function test_explicit_danger_kind_not_overridden_by_competency_type(): void
+    {
+        $person = $this->action()->classifyOne(
+            $this->person(117.125, 2.025),
+            $this->iupk(),
+            [[
+                'type' => 'Feature',
+                'properties' => [
+                    'id' => 'd1',
+                    'name' => 'Zona bahaya',
+                    'type' => 'DANGER_COMPETENCY',
+                    'hazard_kind' => IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER,
+                ],
+                'geometry' => [
+                    'type' => 'Polygon',
+                    'coordinates' => [[[117.1, 2.0], [117.15, 2.0], [117.15, 2.05], [117.1, 2.05], [117.1, 2.0]]],
+                ],
+            ]],
+        );
+
+        $this->assertSame(IscPobClassifyAction::SAFETY_UNSAFE, $person['safety']);
+        $this->assertSame(IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER, $person['hazard_kind']);
     }
 
     public function test_outside_iupk_is_out(): void

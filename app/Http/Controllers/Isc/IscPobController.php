@@ -29,6 +29,8 @@ final class IscPobController extends Controller
             'besigma_error' => $data['besigma_error'],
             'rfid_available' => $data['rfid_available'],
             'summary' => $data['summary'],
+            'sites' => $data['sites'] ?? [],
+            'checkins' => $data['checkins'] ?? [],
             'reconcile' => $data['reconcile'],
             'people' => $data['people'],
             'hazard_features' => $data['hazard_features'] ?? [],

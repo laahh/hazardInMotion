@@ -121,6 +121,8 @@ final class IscBoundaryGeometryMapper
             'area_geojson',
             'boundary_geojson',
             'poly',
+            'polylines',
+            'shadow_polylines',
             'data',
         ];
     }

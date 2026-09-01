@@ -90,6 +90,57 @@ final class IscBoundaryGeometryMapperTest extends TestCase
         $this->assertSame('Polygon', $feature['geometry']['type']);
     }
 
+    public function test_besigma_polylines_json_becomes_polygon(): void
+    {
+        $row = (object) [
+            'id' => 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            'name' => 'Zona BMO',
+            'polylines' => json_encode([
+                ['lat' => 2.0, 'lng' => 117.1],
+                ['lat' => 2.0, 'lng' => 117.2],
+                ['lat' => 2.1, 'lng' => 117.2],
+                ['lat' => 2.1, 'lng' => 117.1],
+            ]),
+        ];
+
+        $feature = (new IscBoundaryGeometryMapper())->featureFromRow($row, [
+            'id' => 'char(36)',
+            'name' => 'varchar(255)',
+            'polylines' => 'longtext',
+        ]);
+
+        $this->assertIsArray($feature);
+        $this->assertSame('Polygon', $feature['geometry']['type']);
+        $this->assertSame('a1b2c3d4-e5f6-7890-abcd-ef1234567890', $feature['properties']['id']);
+        $this->assertArrayNotHasKey('polylines', $feature['properties']);
+        $ring = $feature['geometry']['coordinates'][0];
+        $this->assertGreaterThanOrEqual(5, count($ring));
+        $this->assertEqualsWithDelta(117.1, $ring[0][0], 0.0001);
+        $this->assertEqualsWithDelta(2.0, $ring[0][1], 0.0001);
+        $this->assertSame($ring[0], $ring[array_key_last($ring)]);
+    }
+
+    public function test_shadow_polylines_used_when_polylines_empty(): void
+    {
+        $row = (object) [
+            'id' => 'shadow-1',
+            'polylines' => null,
+            'shadow_polylines' => json_encode([
+                ['lat' => 1.9, 'lng' => 117.0],
+                ['lat' => 1.9, 'lng' => 117.05],
+                ['lat' => 1.95, 'lng' => 117.05],
+            ]),
+        ];
+
+        $feature = (new IscBoundaryGeometryMapper())->featureFromRow($row, [
+            'id' => 'char(36)',
+            'polylines' => 'longtext',
+            'shadow_polylines' => 'longtext',
+        ]);
+
+        $this->assertSame('Polygon', $feature['geometry']['type']);
+    }
+
     public function test_row_without_geometry_returns_null(): void
     {
         $row = (object) ['id' => 1, 'name' => 'No geom'];

@@ -46,7 +46,12 @@
   var besigmaRecords = [];
   var overlay = { violations: [], entries: [] };
   var pobPeople = [];
+  var pobSource = "demo";
   var peopleByKey = {};
+  var pobCheckins = [];
+  var pobSummary = {};
+  var hudSite = "";
+  var rosterFilter = { type: "", site: "", safety: "", kind: "" };
 
   var sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
     maxZoom: 18
@@ -84,18 +89,21 @@
   var peopleLayer = L.layerGroup();
   var hazardLayer = L.geoJSON(null, {
     pane: "hazard",
-    style: function () {
-      return { color: "#c5221f", weight: 2, fillColor: "#c5221f", fillOpacity: 0.28 };
+    style: function (feature) {
+      var kind = ((feature && feature.properties) || {}).hazard_kind || "";
+      var color = kind === "employee_competence" ? "#e37400" : (kind === "unit_danger" ? "#7627bb" : "#c5221f");
+      return { color: color, weight: 2, fillColor: color, fillOpacity: 0.28 };
     },
     onEachFeature: function (feature, layer) {
       var p = feature.properties || {};
-      layer.bindTooltip(p.name || "Zona berbahaya", { sticky: true, className: "iupk-tip" });
+      var title = p.hazard_kind_label || p.name || "Zona berbahaya";
+      layer.bindTooltip(title, { sticky: true, className: "iupk-tip" });
       layer.on("click", function () {
         openPlace({
           kind: "hazard",
           title: p.name || "Zona berbahaya",
-          meta: [p.aktivitas, p.risk_name].filter(Boolean).join(" · ") || "Dummy hazard",
-          badge: "UNSAFE",
+          meta: [p.aktivitas, p.hazard_kind_label || p.risk_name].filter(Boolean).join(" · ") || "Zona bahaya",
+          badge: p.hazard_kind_label || "UNSAFE",
           props: p,
           layer: layer
         });
@@ -255,13 +263,33 @@
     };
   }
 
+  function siteCodeOf(record) {
+    return String((record && (record.site_code || record.iupk_site_code)) || "");
+  }
+
+  function matchesHudSite(record) {
+    return !hudSite || siteCodeOf(record) === hudSite;
+  }
+
+  function itemFromCheckin(row) {
+    var p = row || {};
+    return {
+      kind: "person",
+      title: p.name || p.sid || "Check-in",
+      meta: [p.company, p.site_label || p.gate, "RFID"].filter(Boolean).join(" · "),
+      badge: "IN",
+      props: Object.assign({ presence: "in", safety: null }, p),
+      layer: peopleByKey[p.key] || peopleByKey["sid:" + (p.sid || "")] || null
+    };
+  }
+
   function itemFromPerson(person, layer) {
     var p = person || {};
     return {
       kind: "person",
       title: p.name || p.sid || "Personel",
       meta: [p.company, p.job_title, p.iupk_site || p.presence].filter(Boolean).join(" · "),
-      badge: p.safety === "unsafe" ? "UNSAFE" : (p.presence === "in" ? "IN" : (p.stale ? "STALE" : "OUT")),
+      badge: p.safety === "unsafe" ? (p.hazard_kind_label || "UNSAFE") : (p.presence === "in" ? "IN" : (p.stale ? "STALE" : "OUT")),
       props: p,
       layer: layer || peopleByKey[p.key] || null
     };
@@ -272,8 +300,8 @@
     return {
       kind: "besigma",
       title: p.name || p.title || p.code || p.label || ("Boundary #" + (p.id || "")),
-      meta: [p.status_name, p.risk_name, p.type || p.category, p.site || p.location].filter(Boolean).join(" · ") || "Besigma",
-      badge: p.status_name || p.risk_name || p.type || "DB",
+      meta: [p.hazard_kind_label, p.status_name, p.type, p.site_label || p.site_code || p.site_name, p.pit_name].filter(Boolean).join(" · ") || "Besigma",
+      badge: p.hazard_kind_label || p.status_name || p.type || "DB",
       props: p,
       layer: layer || layerForBesigmaId(p.id)
     };
@@ -315,6 +343,14 @@
 
   function visibleItems() {
     var q = query.trim().toLowerCase();
+    if (listMode === "roster") {
+      return rosterItems().filter(function (item) {
+        if (!q) {
+          return true;
+        }
+        return (item.title + " " + item.meta + " " + item.badge).toLowerCase().indexOf(q) !== -1;
+      });
+    }
     return allItems().filter(function (item) {
       if (scope === "iupk" && item.kind !== "iupk") {
         return false;
@@ -445,7 +481,7 @@
         chips.push('<span class="gm-chip">' + esc(person.presence) + "</span>");
       }
       if (person.safety) {
-        chips.push('<span class="gm-chip ' + (person.safety === "unsafe" ? "alert" : "") + '">' + esc(person.safety) + "</span>");
+        chips.push('<span class="gm-chip ' + (person.safety === "unsafe" ? "alert" : "") + '">' + esc(person.hazard_kind_label || person.safety) + "</span>");
       }
       return chips.length ? '<span class="gm-chips">' + chips.join("") + "</span>" : "";
     }
@@ -482,7 +518,7 @@
     }
     var items = visibleItems();
     if (countEl) {
-      countEl.textContent = String(items.length) + " tempat";
+      countEl.textContent = String(items.length) + (listMode === "roster" ? " orang" : " tempat");
     }
     listEl.innerHTML = "";
     if (!items.length) {
@@ -584,7 +620,7 @@
       rows.push(fact("tag", p.company || "—", "Perusahaan"));
       rows.push(fact("tag", p.job_title || "—", "Jabatan"));
       rows.push(fact("area", p.iupk_site || p.presence || "—", "Zona IUPK"));
-      rows.push(fact("db", p.hazard_name || (p.safety === "unsafe" ? "Unsafe" : (p.safety || "—")), "Aktivitas / bahaya"));
+      rows.push(fact("db", p.hazard_kind_label || p.hazard_name || (p.safety === "unsafe" ? "Unsafe" : (p.safety || "—")), "Jenis pelanggaran"));
       rows.push(fact("tag", p.safety || p.presence || "—", "Safe / Unsafe"));
       rows.push(fact("tag", p.entered_at || p.gps_updated_at || "—", "Masuk / GPS"));
       rows.push(fact("tag", formatDuration(p.duration_seconds), "Durasi"));
@@ -789,7 +825,12 @@
   }
 
   function personIcon(markerKind) {
-    var kind = markerKind === "safe" || markerKind === "unsafe" ? markerKind : "stale";
+    var kind = markerKind === "safe" || markerKind === "unsafe" || markerKind === "employee_danger" || markerKind === "employee_competence" || markerKind === "unit_danger"
+      ? markerKind
+      : "stale";
+    if (kind === "unsafe") {
+      kind = "employee_danger";
+    }
     return L.divIcon({
       className: "gm-person-wrap",
       html: '<span class="gm-person-icon ' + kind + '"></span>',
@@ -798,14 +839,71 @@
     });
   }
 
+  function filteredPeople() {
+    return pobPeople.filter(matchesHudSite);
+  }
+
+  function countsAsPob(person) {
+    return person && person.entity !== "unit" && !person.roster_only;
+  }
+
+  function filteredSummary() {
+    var people = filteredPeople();
+    var inCount = 0;
+    var outCount = 0;
+    var unknownCount = 0;
+    var safe = 0;
+    var unsafe = 0;
+    var kinds = { employee_danger: 0, employee_competence: 0, unit_danger: 0 };
+    people.forEach(function (person) {
+      var kind = person.hazard_kind || "";
+      if (kinds[kind] != null) {
+        if (pobSource === "live") {
+          if (person.from_violation) {
+            kinds[kind] += 1;
+          }
+        } else if (person.presence === "in" && person.safety === "unsafe") {
+          kinds[kind] += 1;
+        }
+      }
+      if (!countsAsPob(person)) {
+        return;
+      }
+      if (person.presence === "in") {
+        inCount += 1;
+        if (person.safety === "unsafe") {
+          unsafe += 1;
+        } else {
+          safe += 1;
+        }
+      } else if (person.presence === "out") {
+        outCount += 1;
+      } else {
+        unknownCount += 1;
+      }
+    });
+    var checkins = pobCheckins.filter(matchesHudSite);
+    return {
+      in: inCount,
+      out: outCount,
+      unknown: unknownCount,
+      safe: safe,
+      unsafe: unsafe,
+      unsafe_by_kind: kinds,
+      checkin_total: checkins.length
+    };
+  }
+
   function paintHud(payload) {
-    var summary = (payload && payload.summary) || {};
+    pobSummary = (payload && payload.summary) || {};
+    pobCheckins = (payload && payload.checkins) || [];
+    pobSource = (payload && payload.source) || "demo";
     var recon = (payload && payload.reconcile) || {};
-    setText("hud-pob-in", summary.in);
-    setText("hud-pob-out", summary.out);
-    setText("hud-pob-unknown", summary.unknown);
-    setText("hud-safe", summary.safe);
-    setText("hud-unsafe", summary.unsafe);
+    var rows = pobSummary.checkin_by_site || [];
+    rows.forEach(function (row) {
+      setText("hud-site-" + row.code, row.count);
+    });
+    paintHudCounts();
     setText("hud-ever", recon.ever_count);
     setText("hud-current", recon.current_count);
     setText("hud-rfid", recon.rfid_count);
@@ -814,8 +912,120 @@
     setText("hud-both", recon.both_count);
     var sourceEl = document.getElementById("gm-hud-source");
     if (sourceEl) {
-      sourceEl.textContent = payload.source === "live" ? "Data live" : "Data dummy preview";
+      if (payload.source === "live") {
+        sourceEl.textContent = payload.besigma_error ? ("Besigma live — " + payload.besigma_error) : "Data live Besigma";
+      } else {
+        sourceEl.textContent = payload.besigma_error || "Data dummy preview";
+      }
     }
+  }
+
+  function paintHudCounts() {
+    var summary = filteredSummary();
+    setText("hud-checkin-total", summary.checkin_total);
+    setText("hud-pob-in", summary.in);
+    setText("hud-pob-out", summary.out);
+    setText("hud-pob-unknown", summary.unknown);
+    setText("hud-safe", summary.safe);
+    setText("hud-unsafe", summary.unsafe);
+    setText("hud-kind-employee_danger", summary.unsafe_by_kind.employee_danger);
+    setText("hud-kind-employee_competence", summary.unsafe_by_kind.employee_competence);
+    setText("hud-kind-unit_danger", summary.unsafe_by_kind.unit_danger);
+  }
+
+  function rosterItems() {
+    if (rosterFilter.type === "checkin") {
+      return pobCheckins.filter(matchesHudSite).map(itemFromCheckin);
+    }
+    return filteredPeople().filter(function (person) {
+      if (rosterFilter.safety === "safe") {
+        return countsAsPob(person) && person.presence === "in" && person.safety === "safe";
+      }
+      if (rosterFilter.safety === "unsafe") {
+        return countsAsPob(person) && person.presence === "in" && person.safety === "unsafe";
+      }
+      if (rosterFilter.kind) {
+        return person.hazard_kind === rosterFilter.kind && (person.safety === "unsafe" || person.from_violation);
+      }
+      if (rosterFilter.type === "in") {
+        return countsAsPob(person) && person.presence === "in";
+      }
+      return countsAsPob(person) && person.presence === "in";
+    }).map(function (person) {
+      return itemFromPerson(person, peopleByKey[person.key]);
+    });
+  }
+
+  function rosterTitle() {
+    if (rosterFilter.type === "checkin") {
+      return hudSite ? ("Check-in " + hudSite) : "Check-in RFID";
+    }
+    if (rosterFilter.kind === "employee_danger") {
+      return "Pelanggaran Batas Bahaya Karyawan";
+    }
+    if (rosterFilter.kind === "employee_competence") {
+      return "Pelanggaran Batas Kompetensi Karyawan";
+    }
+    if (rosterFilter.kind === "unit_danger") {
+      return "Pelanggaran Batas Bahaya Unit";
+    }
+    if (rosterFilter.safety === "safe") {
+      return "Personel Safe";
+    }
+    if (rosterFilter.safety === "unsafe") {
+      return "Personel Unsafe";
+    }
+    return "Personel In";
+  }
+
+  function openRoster(filter) {
+    rosterFilter = filter || { type: "in", site: hudSite, safety: "", kind: "" };
+    listMode = "roster";
+    scope = "people";
+    document.querySelectorAll("[data-scope]").forEach(function (el) {
+      el.classList.toggle("is-on", el.getAttribute("data-scope") === "people");
+    });
+    openPanel();
+    closePlace();
+    if (liveStatus) {
+      liveStatus.textContent = rosterTitle() + (hudSite ? " · " + hudSite : "");
+    }
+    var kicker = document.querySelector(".gm-results-head .gm-kicker");
+    if (kicker) {
+      kicker.textContent = rosterTitle();
+    }
+    applyScope();
+  }
+
+  function jumpToSite(code) {
+    if (!code) {
+      fitOps();
+      return;
+    }
+    var match = iupkLayers.find(function (entry) {
+      var props = entry.feature.properties || {};
+      var layer = String(props.Layer || "");
+      var site = String(props.Site || "");
+      return layer.indexOf(code) === 0 || site.toUpperCase().indexOf(code) !== -1 || (code === "BMO" && site.indexOf("Binungan") !== -1);
+    });
+    if (match && match.layer.getBounds) {
+      map.fitBounds(match.layer.getBounds(), { padding: [56, 56], maxZoom: 12 });
+    }
+  }
+
+  function setHudSite(code) {
+    hudSite = code || "";
+    document.querySelectorAll("[data-hud-site]").forEach(function (el) {
+      el.classList.toggle("is-on", (el.getAttribute("data-hud-site") || "") === hudSite);
+    });
+    paintHudCounts();
+    renderPeople(pobPeople);
+    if (listMode === "roster") {
+      openRoster(rosterFilter);
+    } else {
+      applyScope();
+    }
+    jumpToSite(hudSite);
   }
 
   function renderPeople(people) {
@@ -823,7 +1033,10 @@
     peopleByKey = {};
     peopleLayer.clearLayers();
     pobPeople.forEach(function (person) {
-      if (person.lat == null || person.lng == null) {
+      if (person.lat == null || person.lng == null || Number(person.lat) === 0 || Number(person.lng) === 0) {
+        return;
+      }
+      if (!matchesHudSite(person)) {
         return;
       }
       var marker = L.marker([person.lat, person.lng], {
@@ -872,6 +1085,32 @@
   renderList();
   loadBesigma();
   loadPob();
+
+  document.querySelectorAll("[data-hud-site]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      setHudSite(btn.getAttribute("data-hud-site") || "");
+    });
+  });
+  document.querySelectorAll("[data-roster]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var type = btn.getAttribute("data-roster") || "";
+      if (type === "checkin") {
+        openRoster({ type: "checkin", safety: "", kind: "" });
+        return;
+      }
+      if (type === "safe") {
+        openRoster({ type: "in", safety: "safe", kind: "" });
+        return;
+      }
+      if (type === "unsafe") {
+        openRoster({ type: "in", safety: "unsafe", kind: "" });
+        return;
+      }
+      if (type === "kind") {
+        openRoster({ type: "in", safety: "unsafe", kind: btn.getAttribute("data-kind") || "" });
+      }
+    });
+  });
   setTimeout(hideLoading, 1200);
 
   document.getElementById("gm-search-form").addEventListener("submit", function (event) {

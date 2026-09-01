@@ -6,6 +6,7 @@ namespace App\Actions\Isc;
 
 use App\Services\Isc\IscHazardBoundaryClassifier;
 use App\Services\Isc\IscPointInPolygon;
+use App\Services\Isc\IscSiteNormalizer;
 use Illuminate\Support\Carbon;
 
 final class IscPobClassifyAction
@@ -20,9 +21,19 @@ final class IscPobClassifyAction
 
     public const SAFETY_UNSAFE = 'unsafe';
 
+    /**
+     * @var list<string>
+     */
+    private const KIND_PRIORITY = [
+        IscHazardBoundaryClassifier::KIND_EMPLOYEE_COMPETENCE,
+        IscHazardBoundaryClassifier::KIND_UNIT_DANGER,
+        IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER,
+    ];
+
     public function __construct(
         private readonly IscPointInPolygon $pip,
         private readonly IscHazardBoundaryClassifier $hazard,
+        private readonly IscSiteNormalizer $sites = new IscSiteNormalizer(),
     ) {}
 
     /**
@@ -72,8 +83,11 @@ final class IscPobClassifyAction
         $person['safety'] = null;
         $person['stale'] = $stale;
         $person['iupk_site'] = null;
+        $person['site_code'] = $this->sites->codeFrom($person['site'] ?? null);
         $person['hazard_boundary_id'] = null;
         $person['hazard_name'] = null;
+        $person['hazard_kind'] = null;
+        $person['hazard_kind_label'] = null;
         $person['marker'] = 'stale';
 
         if ($lat == 0.0 || $lng == 0.0) {
@@ -94,23 +108,55 @@ final class IscPobClassifyAction
         $iupkProps = is_array($iupkFeature['properties'] ?? null) ? $iupkFeature['properties'] : [];
         $person['presence'] = self::PRESENCE_IN;
         $person['iupk_site'] = $iupkProps['Site'] ?? $iupkProps['Layer'] ?? $iupkProps['site'] ?? null;
+        $person['site_code'] = $this->sites->codeFrom(
+            $person['iupk_site'],
+            $iupkProps['Layer'] ?? null,
+            $person['site'] ?? null
+        );
         $person['safety'] = self::SAFETY_SAFE;
         $person['marker'] = 'safe';
 
+        $hits = [];
         foreach ($hazardous as $feature) {
             $geometry = $feature['geometry'] ?? null;
             if (! is_array($geometry) || ! $this->pip->contains($lng, $lat, $geometry)) {
                 continue;
             }
             $props = is_array($feature['properties'] ?? null) ? $feature['properties'] : [];
+            $hits[] = $props;
+        }
+        $chosen = $this->pickHazard($hits);
+        if ($chosen !== null) {
+            $kind = $this->hazard->kind($chosen);
             $person['safety'] = self::SAFETY_UNSAFE;
-            $person['marker'] = 'unsafe';
-            $person['hazard_boundary_id'] = isset($props['id']) ? (string) $props['id'] : null;
-            $person['hazard_name'] = $props['name'] ?? $props['nama'] ?? $props['title'] ?? $props['aktivitas'] ?? $props['activity'] ?? null;
-            break;
+            $person['marker'] = $kind ?? 'unsafe';
+            $person['hazard_kind'] = $kind;
+            $person['hazard_kind_label'] = $this->hazard->label($kind);
+            $person['hazard_boundary_id'] = isset($chosen['id']) ? (string) $chosen['id'] : null;
+            $person['hazard_name'] = $chosen['name'] ?? $chosen['nama'] ?? $chosen['title'] ?? $chosen['aktivitas'] ?? $chosen['activity'] ?? null;
         }
 
         return $person;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $hits
+     * @return array<string, mixed>|null
+     */
+    private function pickHazard(array $hits): ?array
+    {
+        if ($hits === []) {
+            return null;
+        }
+        foreach (self::KIND_PRIORITY as $kind) {
+            foreach ($hits as $props) {
+                if ($this->hazard->kind($props) === $kind) {
+                    return $props;
+                }
+            }
+        }
+
+        return $hits[0];
     }
 
     private function isStale(mixed $updatedAt, int $staleGpsSeconds): bool

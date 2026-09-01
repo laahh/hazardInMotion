@@ -35,26 +35,72 @@ final class IscPobDemoDataset
      */
     public function hazardFeatures(): array
     {
-        return [[
-            'type' => 'Feature',
-            'properties' => [
-                'id' => 'demo-pit-blast',
-                'name' => 'Zona Peledakan Pit BMO',
-                'aktivitas' => 'Blasting',
-                'risk_name' => 'tinggi',
-                'risk_color' => '#c5221f',
+        return [
+            [
+                'type' => 'Feature',
+                'properties' => [
+                    'id' => 'demo-pit-blast',
+                    'name' => 'Zona Peledakan Pit BMO',
+                    'aktivitas' => 'Blasting',
+                    'hazard_kind' => IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER,
+                    'hazard_kind_label' => IscHazardBoundaryClassifier::KIND_LABELS[IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER],
+                    'risk_name' => 'tinggi',
+                    'risk_color' => '#c5221f',
+                ],
+                'geometry' => [
+                    'type' => 'Polygon',
+                    'coordinates' => [[
+                        [117.370, 1.978],
+                        [117.405, 1.978],
+                        [117.405, 2.002],
+                        [117.370, 2.002],
+                        [117.370, 1.978],
+                    ]],
+                ],
             ],
-            'geometry' => [
-                'type' => 'Polygon',
-                'coordinates' => [[
-                    [117.370, 1.978],
-                    [117.405, 1.978],
-                    [117.405, 2.002],
-                    [117.370, 2.002],
-                    [117.370, 1.978],
-                ]],
+            [
+                'type' => 'Feature',
+                'properties' => [
+                    'id' => 'demo-kompetensi-bmo',
+                    'name' => 'Zona Kompetensi Hauling BMO',
+                    'kategori' => 'kompetensi',
+                    'hazard_kind' => IscHazardBoundaryClassifier::KIND_EMPLOYEE_COMPETENCE,
+                    'hazard_kind_label' => IscHazardBoundaryClassifier::KIND_LABELS[IscHazardBoundaryClassifier::KIND_EMPLOYEE_COMPETENCE],
+                    'risk_color' => '#e37400',
+                ],
+                'geometry' => [
+                    'type' => 'Polygon',
+                    'coordinates' => [[
+                        [117.288, 1.942],
+                        [117.312, 1.942],
+                        [117.312, 1.958],
+                        [117.288, 1.958],
+                        [117.288, 1.942],
+                    ]],
+                ],
             ],
-        ]];
+            [
+                'type' => 'Feature',
+                'properties' => [
+                    'id' => 'demo-unit-bmo',
+                    'name' => 'Zona Bahaya Unit Pit BMO',
+                    'kategori' => 'bahaya unit',
+                    'hazard_kind' => IscHazardBoundaryClassifier::KIND_UNIT_DANGER,
+                    'hazard_kind_label' => IscHazardBoundaryClassifier::KIND_LABELS[IscHazardBoundaryClassifier::KIND_UNIT_DANGER],
+                    'risk_color' => '#7627bb',
+                ],
+                'geometry' => [
+                    'type' => 'Polygon',
+                    'coordinates' => [[
+                        [117.238, 1.922],
+                        [117.262, 1.922],
+                        [117.262, 1.938],
+                        [117.238, 1.938],
+                        [117.238, 1.922],
+                    ]],
+                ],
+            ],
+        ];
     }
 
     /**

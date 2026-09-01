@@ -197,6 +197,69 @@ final class SportEvaluationPvtRfidCheckinReader
     }
 
     /**
+     * Check-IN lolos pertama per SID pada tanggal, tanpa filter daftar SID.
+     *
+     * @return array<string, array{
+     *     kode_sid: string,
+     *     checked_in_at: string,
+     *     nama_karyawan: string,
+     *     perusahaan: string,
+     *     gate: string,
+     *     jenis_checkinout: string,
+     *     status_lolos: string
+     * }>
+     */
+    public function firstPassedCheckinsForDate(string $date): array
+    {
+        if (! $this->isUp()) {
+            return [];
+        }
+
+        $day = Carbon::parse($date, config('app.timezone'))->startOfDay();
+        $start = $day->format('Y-m-d H:i:s');
+        $end = $day->copy()->addDay()->format('Y-m-d H:i:s');
+
+        $merged = [];
+        foreach ($this->queryChunk($start, $end, [], true) as $row) {
+            $upper = mb_strtoupper($row['kode_sid']);
+            if (! isset($merged[$upper])) {
+                $merged[$upper] = $row;
+            }
+        }
+
+        return $merged;
+    }
+
+    /**
+     * Check-OUT lolos terakhir per SID pada tanggal, tanpa filter daftar SID.
+     *
+     * @return array<string, array{
+     *     kode_sid: string, checked_in_at: string, nama_karyawan: string,
+     *     perusahaan: string, gate: string, jenis_checkinout: string, status_lolos: string
+     * }>
+     */
+    public function lastPassedCheckoutsForDate(string $date): array
+    {
+        if (! $this->isUp()) {
+            return [];
+        }
+
+        $day = Carbon::parse($date, config('app.timezone'))->startOfDay();
+        $start = $day->format('Y-m-d H:i:s');
+        $end = $day->copy()->addDay()->format('Y-m-d H:i:s');
+
+        $merged = [];
+        foreach ($this->queryChunk($start, $end, [], true, self::CHECKOUT_TYPES, 'DESC') as $row) {
+            $upper = mb_strtoupper($row['kode_sid']);
+            if (! isset($merged[$upper])) {
+                $merged[$upper] = $row;
+            }
+        }
+
+        return $merged;
+    }
+
+    /**
      * Check-IN lolos pertama per SID per hari dalam rentang tanggal (inklusif).
      *
      * @param  list<string>  $sids
@@ -321,7 +384,8 @@ final class SportEvaluationPvtRfidCheckinReader
         $types ??= self::CHECKIN_TYPES;
         $direction = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
 
-        $sidPlaceholders = implode(',', array_fill(0, count($upperSids), '?'));
+        $sidPlaceholders = $upperSids === [] ? '' : implode(',', array_fill(0, count($upperSids), '?'));
+        $sidClause = $upperSids === [] ? '' : 'AND UPPER(TRIM(kode_sid)) IN ('.$sidPlaceholders.')';
         $typePlaceholders = implode(',', array_fill(0, count($types), '?'));
         $statusPlaceholders = implode(',', array_fill(0, count(self::PASSED_STATUSES), '?'));
         $compactTypes = array_map(
@@ -358,7 +422,7 @@ final class SportEvaluationPvtRfidCheckinReader
               AND tanggal_checkinout < ?
               AND kode_sid IS NOT NULL
               AND TRIM(kode_sid) <> \'\'
-              AND UPPER(TRIM(kode_sid)) IN ('.$sidPlaceholders.')
+              '.$sidClause.'
               AND (
                     UPPER(TRIM(jenis_checkinout::text)) IN ('.$typePlaceholders.')
                  OR REPLACE(REPLACE(UPPER(TRIM(jenis_checkinout::text)), \' \', \'\'), \'-\', \'\') IN ('.$compactPlaceholders.')

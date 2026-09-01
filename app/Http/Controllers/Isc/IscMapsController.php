@@ -28,7 +28,7 @@ final class IscMapsController extends Controller
             'iupkAsset' => asset('isc-assets/BounderyBC.js'),
             'boundariesUrl' => route('isc.maps.boundaries'),
             'overlayUrl' => route('isc.maps.overlay'),
-            'pobUrl' => route('isc.maps.pob', ['source' => 'demo']),
+            'pobUrl' => route('isc.maps.pob', ['source' => $status['connected'] ? 'live' : 'demo']),
             'interventionsUrl' => route('isc.interventions.index'),
         ]);
     }

@@ -61,25 +61,82 @@
       </button>
     </form>
 
-    <div class="gm-hud" id="gm-hud" aria-label="Ringkasan POB dummy">
+    <div class="gm-hud" id="gm-hud" aria-label="Ringkasan Person on Board">
       <p class="gm-hud-demo" id="gm-hud-source">Data dummy preview</p>
-      <div class="gm-hud-card">
-        <p class="gm-hud-kicker">POB vs boundary operasi IUPK</p>
-        <div class="gm-hud-stats">
-          <span>In <b id="hud-pob-in">–</b></span>
-          <span>Out <b id="hud-pob-out">–</b></span>
-          <span>Unknown <b id="hud-pob-unknown">–</b></span>
+
+      <article class="gm-hud-card is-checkin">
+        <div class="gm-hud-card-top">
+          <span class="gm-hud-ico checkin" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4z"/><path d="M4 20c1.5-3.2 4.2-5 8-5s6.5 1.8 8 5"/></svg>
+          </span>
+          <div>
+            <p class="gm-hud-kicker">Check-in RFID per site</p>
+            <p class="gm-hud-lead"><b id="hud-checkin-total">–</b> orang onsite</p>
+          </div>
         </div>
-      </div>
-      <div class="gm-hud-card">
-        <p class="gm-hud-kicker">In: Safe / Unsafe</p>
-        <div class="gm-hud-stats">
-          <span class="is-safe">Safe <b id="hud-safe">–</b></span>
-          <span class="is-unsafe">Unsafe <b id="hud-unsafe">–</b></span>
+        <div class="gm-hud-sites" id="hud-site-filters" role="group" aria-label="Filter site">
+          <button type="button" class="gm-hud-site is-on" data-hud-site="">Semua</button>
+          <button type="button" class="gm-hud-site" data-hud-site="BMO">BMO <b id="hud-site-BMO">0</b></button>
+          <button type="button" class="gm-hud-site" data-hud-site="LMO">LMO <b id="hud-site-LMO">0</b></button>
+          <button type="button" class="gm-hud-site" data-hud-site="GMO">GMO <b id="hud-site-GMO">0</b></button>
+          <button type="button" class="gm-hud-site" data-hud-site="SMO">SMO <b id="hud-site-SMO">0</b></button>
+          <button type="button" class="gm-hud-site" data-hud-site="PUNAN">PUN <b id="hud-site-PUNAN">0</b></button>
         </div>
-      </div>
-      <div class="gm-hud-card">
-        <p class="gm-hud-kicker">Besigma × RFID</p>
+        <button type="button" class="gm-hud-link" data-roster="checkin">Lihat daftar check-in</button>
+      </article>
+
+      <article class="gm-hud-card is-safety">
+        <div class="gm-hud-card-top">
+          <span class="gm-hud-ico safety" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.5 3 7.6 7 9 4-1.4 7-4.5 7-9V6z"/></svg>
+          </span>
+          <div>
+            <p class="gm-hud-kicker">Personel In vs boundary bahaya</p>
+            <p class="gm-hud-lead">In area operasi <b id="hud-pob-in">–</b></p>
+          </div>
+        </div>
+        <div class="gm-hud-split">
+          <button type="button" class="gm-hud-metric is-safe" data-roster="safe">
+            <span>Safe</span>
+            <strong id="hud-safe">–</strong>
+            <small>Di IUPK, di luar zona bahaya</small>
+          </button>
+          <button type="button" class="gm-hud-metric is-unsafe" data-roster="unsafe">
+            <span>Unsafe</span>
+            <strong id="hud-unsafe">–</strong>
+            <small>Masuk boundary berbahaya</small>
+          </button>
+        </div>
+        <div class="gm-hud-violations">
+          <button type="button" class="gm-hud-violation" data-roster="kind" data-kind="employee_danger">
+            <i class="dot danger"></i>
+            <span>Pelanggaran Batas Bahaya Karyawan</span>
+            <b id="hud-kind-employee_danger">0</b>
+          </button>
+          <button type="button" class="gm-hud-violation" data-roster="kind" data-kind="employee_competence">
+            <i class="dot competence"></i>
+            <span>Pelanggaran Batas Kompetensi Karyawan</span>
+            <b id="hud-kind-employee_competence">0</b>
+          </button>
+          <button type="button" class="gm-hud-violation" data-roster="kind" data-kind="unit_danger">
+            <i class="dot unit"></i>
+            <span>Pelanggaran Batas Bahaya Unit</span>
+            <b id="hud-kind-unit_danger">0</b>
+          </button>
+        </div>
+        <p class="gm-hud-meta">Out <b id="hud-pob-out">–</b> · Unknown <b id="hud-pob-unknown">–</b></p>
+      </article>
+
+      <article class="gm-hud-card is-rfid">
+        <div class="gm-hud-card-top">
+          <span class="gm-hud-ico rfid" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 7-7"/><path d="M8 12a4 4 0 0 1 4-4"/><circle cx="12" cy="12" r="1.4"/><path d="M19 12a7 7 0 0 1-7 7"/><path d="M16 12a4 4 0 0 1-4 4"/></svg>
+          </span>
+          <div>
+            <p class="gm-hud-kicker">Besigma × RFID</p>
+            <p class="gm-hud-lead">Rekonsiliasi SID</p>
+          </div>
+        </div>
         <div class="gm-hud-stats gm-hud-stats-wrap">
           <span>Pernah <b id="hud-ever">–</b></span>
           <span>Aktif <b id="hud-current">–</b></span>
@@ -88,9 +145,9 @@
           <span>R−B <b id="hud-gap-rb">–</b></span>
           <span>Keduanya <b id="hud-both">–</b></span>
         </div>
-      </div>
+      </article>
     </div>
-    <p class="gm-banner" id="gm-hazard-banner">Menampilkan data dummy: marker orang, zona blasting, dan rekonsiliasi SID. Klik personel atau boundary untuk detail.</p>
+    <p class="gm-banner" id="gm-hazard-banner">Klik angka atau jenis pelanggaran untuk membuka daftar di sidebar.</p>
 
     <aside class="gm-panel is-closed" id="gm-panel" aria-label="Hasil peta">
       <div class="gm-results" id="gm-results">

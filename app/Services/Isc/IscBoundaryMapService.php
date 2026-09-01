@@ -12,15 +12,16 @@ use Throwable;
 
 /**
  * Pembaca read-only tabel boundary Besigma untuk peta ISC.
- * Kolom geometry dideteksi dari information_schema (bukan hardcode satu skema).
  */
 final class IscBoundaryMapService
 {
     public const CONNECTION = 'besigma_db';
 
-    public const BOUNDARY_LIMIT = 400;
+    public const CACHE_KEY = 'isc.besigma.boundaries.geojson.v1';
 
-    public const LIST_LIMIT = 80;
+    public const CACHE_TTL_SECONDS = 45;
+
+    public const OVERLAY_LIMIT = 40;
 
     /**
      * @var list<string>
@@ -37,17 +38,37 @@ final class IscBoundaryMapService
         'boundary_status',
         'boundary_violations',
         'boundary_violation_units',
+        'sites',
+        'pits',
     ];
 
     /**
-     * @var array<string, list<array<string, mixed>>>|null
+     * @var array<string, string>
      */
-    private ?array $lookupCache = null;
+    private const BOUNDARY_COLUMN_TYPES = [
+        'id' => 'char(36)',
+        'name' => 'varchar',
+        'code' => 'varchar',
+        'type' => 'varchar',
+        'polylines' => 'longtext',
+        'shadow_polylines' => 'longtext',
+        'polyline_color_hex' => 'varchar',
+        'site_id' => 'char(36)',
+        'pit_id' => 'char(36)',
+        'site_code_raw' => 'varchar',
+        'site_name' => 'varchar',
+        'pit_code' => 'varchar',
+        'pit_name' => 'varchar',
+        'has_competency' => 'tinyint',
+        'boundary_status' => 'varchar',
+    ];
 
     public function __construct(
         private readonly BesigmaConnectionService $connection,
         private readonly BesigmaTunnelService $tunnel,
         private readonly IscBoundaryGeometryMapper $geometry,
+        private readonly IscHazardBoundaryClassifier $hazard,
+        private readonly IscSiteNormalizer $sites,
     ) {}
 
     public function isUp(): bool
@@ -89,7 +110,26 @@ final class IscBoundaryMapService
      *     error:?string
      * }
      */
-    public function boundariesGeoJson(): array
+    public function boundariesGeoJson(bool $fresh = false): array
+    {
+        if ($fresh) {
+            Cache::forget(self::CACHE_KEY);
+        }
+
+        return Cache::remember(self::CACHE_KEY, self::CACHE_TTL_SECONDS, fn (): array => $this->buildBoundariesGeoJson());
+    }
+
+    /**
+     * @return array{
+     *     type:string,
+     *     features:list<array<string,mixed>>,
+     *     records:list<array<string,mixed>>,
+     *     columns:list<string>,
+     *     connected:bool,
+     *     error:?string
+     * }
+     */
+    private function buildBoundariesGeoJson(): array
     {
         $empty = [
             'type' => 'FeatureCollection',
@@ -100,24 +140,22 @@ final class IscBoundaryMapService
             'error' => null,
         ];
 
-        if (! $this->isUp() || ! $this->tableExists('boundaries')) {
-            $empty['error'] = $this->isUp() ? 'Tabel boundaries tidak ada.' : 'besigma_db tidak terhubung';
+        if (! $empty['connected']) {
+            $empty['error'] = 'besigma_db tidak terhubung';
 
             return $empty;
         }
 
         try {
-            $columnTypes = $this->columnTypes('boundaries');
-            $rows = $this->fetchBoundaryRows($columnTypes);
-            $entryCounts = $this->countsByBoundary('boundary_entries');
-            $violationCounts = $this->countsByBoundary('boundary_violations');
+            $rows = DB::connection(self::CONNECTION)->select($this->boundariesSql());
+            $violationCounts = $this->activeViolationCounts();
 
             $features = [];
             $records = [];
             foreach ($rows as $row) {
-                $feature = $this->geometry->featureFromRow($row, $columnTypes);
-                $props = $feature['properties'] ?? $this->geometry->scalarProperties($row, $columnTypes);
-                $props = $this->enrichBoundaryProperties($props, $entryCounts, $violationCounts);
+                $feature = $this->geometry->featureFromRow($row, self::BOUNDARY_COLUMN_TYPES);
+                $props = $feature['properties'] ?? $this->geometry->scalarProperties($row, self::BOUNDARY_COLUMN_TYPES);
+                $props = $this->enrichBoundaryProperties($props, $row, $violationCounts);
                 $props['has_geometry'] = isset($feature['geometry']);
                 $records[] = $props;
 
@@ -132,7 +170,10 @@ final class IscBoundaryMapService
                 'type' => 'FeatureCollection',
                 'features' => $features,
                 'records' => $records,
-                'columns' => $this->displayColumns($records),
+                'columns' => [
+                    'id', 'name', 'code', 'type', 'hazard_kind', 'site_code',
+                    'violations_count', 'is_active',
+                ],
                 'connected' => true,
                 'error' => null,
             ];
@@ -146,204 +187,167 @@ final class IscBoundaryMapService
     }
 
     /**
+     * Overlay ringan tanpa kolom geometri.
+     *
      * @return array{
-     *     statuses:list<array<string,mixed>>,
-     *     risk_levels:list<array<string,mixed>>,
-     *     entries:list<array<string,mixed>>,
+     *     violation_counts:array<string,int>,
      *     violations:list<array<string,mixed>>,
-     *     annotations:list<array<string,mixed>>,
-     *     competencies:list<array<string,mixed>>
+     *     violation_units:list<array<string,mixed>>
      * }
      */
     public function overlayData(): array
     {
         return [
-            'statuses' => $this->rows('boundary_status'),
-            'risk_levels' => $this->rows('boundary_risk_levels'),
-            'entries' => $this->rows('boundary_entries'),
-            'violations' => $this->rows('boundary_violations'),
-            'annotations' => $this->rows('boundary_annotations'),
-            'competencies' => $this->rows('boundary_competencies'),
+            'violation_counts' => $this->kindCounts(),
+            'violations' => $this->recentScalarRows('boundary_violations'),
+            'violation_units' => $this->recentScalarRows('boundary_violation_units'),
         ];
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function lookup(string $table): array
-    {
-        $this->lookupCache ??= [];
-        if (! isset($this->lookupCache[$table])) {
-            $this->lookupCache[$table] = $this->rows($table);
-        }
-
-        return $this->lookupCache[$table];
-    }
-
-    /**
-     * @return array{exists:bool,row_count:?int,error:?string}
-     */
-    private function describeTable(string $table): array
-    {
-        if (! $this->isAllowedTable($table)) {
-            return ['exists' => false, 'row_count' => null, 'error' => 'not allowed'];
-        }
-
-        try {
-            if (! $this->tableExists($table)) {
-                return ['exists' => false, 'row_count' => null, 'error' => null];
-            }
-            $count = DB::connection(self::CONNECTION)->selectOne(
-                'SELECT COUNT(*) AS c FROM `'.$table.'`'
-            );
-
-            return [
-                'exists' => true,
-                'row_count' => isset($count->c) ? (int) $count->c : 0,
-                'error' => null,
-            ];
-        } catch (Throwable $e) {
-            return ['exists' => false, 'row_count' => null, 'error' => $e->getMessage()];
-        }
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function rows(string $table): array
-    {
-        if (! $this->isUp() || ! $this->tableExists($table)) {
-            return [];
-        }
-
-        try {
-            $columnTypes = $this->columnTypes($table);
-            $selects = $this->selectList($columnTypes, includeGeojson: false);
-            $order = $this->orderClause($columnTypes);
-            $sql = 'SELECT '.$selects.' FROM `'.$table.'`'.$order.' LIMIT '.self::LIST_LIMIT;
-            $rows = DB::connection(self::CONNECTION)->select($sql);
-
-            $out = [];
-            foreach ($rows as $row) {
-                $out[] = $this->geometry->scalarProperties($row, $columnTypes);
-            }
-
-            return $out;
-        } catch (Throwable $e) {
-            report($e);
-
-            return [];
-        }
-    }
-
-    /**
-     * @param  array<string, mixed>  $feature
-     * @return array<string, mixed>
-     */
-    private function enrichBoundaryFeature(array $feature): array
-    {
-        $props = is_array($feature['properties'] ?? null) ? $feature['properties'] : [];
-        $feature['properties'] = $this->enrichBoundaryProperties($props, [], []);
-
-        return $feature;
-    }
-
-    /**
-     * @param  array<string, mixed>  $props
-     * @param  array<string, int>  $entryCounts
-     * @param  array<string, int>  $violationCounts
-     * @return array<string, mixed>
-     */
-    private function enrichBoundaryProperties(array $props, array $entryCounts, array $violationCounts): array
-    {
-        $statusId = $props['status_id'] ?? $props['boundary_status_id'] ?? null;
-        $riskId = $props['risk_level_id'] ?? $props['risk_id'] ?? null;
-        $boundaryId = $props['id'] ?? null;
-
-        $statuses = $this->lookup('boundary_status');
-        $levels = $this->lookup('boundary_risk_levels');
-        $risks = $this->lookup('boundary_risks');
-
-        if ($statusId !== null) {
-            foreach ($statuses as $status) {
-                if ((string) ($status['id'] ?? '') === (string) $statusId) {
-                    $props['status_name'] = $status['name'] ?? $status['status'] ?? $status['label'] ?? $status['title'] ?? null;
-                    $props['status_color'] = $status['color'] ?? $status['colour'] ?? $status['hex'] ?? null;
-                    break;
-                }
-            }
-        }
-
-        if ($riskId !== null) {
-            foreach ($levels as $level) {
-                if ((string) ($level['id'] ?? '') === (string) $riskId) {
-                    $props['risk_name'] = $level['name'] ?? $level['label'] ?? $level['title'] ?? null;
-                    $props['risk_color'] = $level['color'] ?? $level['colour'] ?? $level['hex'] ?? null;
-                    break;
-                }
-            }
-            if (! isset($props['risk_name'])) {
-                foreach ($risks as $risk) {
-                    if ((string) ($risk['id'] ?? '') === (string) $riskId) {
-                        $props['risk_name'] = $risk['name'] ?? $risk['label'] ?? $risk['title'] ?? null;
-                        $props['risk_color'] = $risk['color'] ?? $risk['colour'] ?? $risk['hex'] ?? null;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if ($boundaryId !== null) {
-            $key = (string) $boundaryId;
-            $props['entries_count'] = $entryCounts[$key] ?? 0;
-            $props['violations_count'] = $violationCounts[$key] ?? 0;
-        }
-
-        return $props;
-    }
-
-    /**
-     * @param  array<string, string>  $columnTypes
-     * @return list<object>
-     */
-    private function fetchBoundaryRows(array $columnTypes): array
-    {
-        try {
-            $sql = 'SELECT '.$this->selectList($columnTypes).' FROM `boundaries`'.$this->orderClause($columnTypes).' LIMIT '.self::BOUNDARY_LIMIT;
-
-            return DB::connection(self::CONNECTION)->select($sql);
-        } catch (Throwable $e) {
-            $sql = 'SELECT '.$this->selectList($columnTypes, includeGeojson: false).' FROM `boundaries`'.$this->orderClause($columnTypes).' LIMIT '.self::BOUNDARY_LIMIT;
-
-            return DB::connection(self::CONNECTION)->select($sql);
-        }
     }
 
     /**
      * @return array<string, int>
      */
-    private function countsByBoundary(string $table): array
+    public function kindCounts(): array
     {
-        if (! $this->tableExists($table)) {
-            return [];
+        $counts = [
+            IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER => 0,
+            IscHazardBoundaryClassifier::KIND_EMPLOYEE_COMPETENCE => 0,
+            IscHazardBoundaryClassifier::KIND_UNIT_DANGER => 0,
+        ];
+        if (! $this->isUp()) {
+            return $counts;
         }
 
-        $columnTypes = $this->columnTypes($table);
-        $fk = null;
-        foreach (['boundary_id', 'boundaries_id', 'geofence_id'] as $column) {
-            if (isset($columnTypes[$column])) {
-                $fk = $column;
-                break;
+        try {
+            $people = DB::connection(self::CONNECTION)->select("
+                SELECT is_competency, COUNT(DISTINCT user_id) AS c
+                FROM boundary_violations
+                WHERE is_deleted = 0
+                  AND deleted_at IS NULL
+                  AND status IN ('WARNING', 'STANDBY', 'DANGER')
+                GROUP BY is_competency
+            ");
+            foreach ($people as $row) {
+                $kind = ((int) ($row->is_competency ?? 0)) === 1
+                    ? IscHazardBoundaryClassifier::KIND_EMPLOYEE_COMPETENCE
+                    : IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER;
+                $counts[$kind] = (int) ($row->c ?? 0);
+            }
+
+            $units = DB::connection(self::CONNECTION)->selectOne("
+                SELECT COUNT(DISTINCT unit_id) AS c
+                FROM boundary_violation_units
+                WHERE is_deleted = 0
+                  AND deleted_at IS NULL
+                  AND status IN ('WARNING', 'STANDBY', 'DANGER')
+            ");
+            $counts[IscHazardBoundaryClassifier::KIND_UNIT_DANGER] = (int) ($units->c ?? 0);
+        } catch (Throwable $e) {
+            report($e);
+            $this->connection->rememberFailure($e);
+        }
+
+        return $counts;
+    }
+
+    private function boundariesSql(): string
+    {
+        return "
+            SELECT
+                b.id,
+                b.name,
+                b.code,
+                b.type,
+                b.polylines,
+                b.shadow_polylines,
+                b.polyline_color_hex,
+                b.site_id,
+                b.pit_id,
+                s.code AS site_code_raw,
+                s.name AS site_name,
+                p.code AS pit_code,
+                p.name AS pit_name,
+                CASE WHEN EXISTS (
+                    SELECT 1
+                    FROM boundary_competencies bc
+                    WHERE bc.boundary_id = b.id
+                      AND bc.is_deleted = 0
+                      AND bc.deleted_at IS NULL
+                ) THEN 1 ELSE 0 END AS has_competency,
+                (
+                    SELECT bs.status
+                    FROM boundary_status bs
+                    WHERE bs.boundary_id = b.id
+                      AND bs.is_deleted = 0
+                    ORDER BY bs.created_at DESC
+                    LIMIT 1
+                ) AS boundary_status
+            FROM boundaries b
+            LEFT JOIN sites s ON s.id = b.site_id
+            LEFT JOIN pits p ON p.id = b.pit_id
+            WHERE b.is_deleted = 0
+              AND b.is_active = 1
+        ";
+    }
+
+    /**
+     * @param  array<string, mixed>  $props
+     * @param  array<string, int>  $violationCounts
+     * @return array<string, mixed>
+     */
+    private function enrichBoundaryProperties(array $props, object $row, array $violationCounts): array
+    {
+        $type = strtoupper(trim((string) ($row->type ?? '')));
+        $hasCompetency = (int) ($row->has_competency ?? 0) === 1;
+        $kind = null;
+        if ($type !== 'INVERSE') {
+            if ($hasCompetency) {
+                $kind = IscHazardBoundaryClassifier::KIND_EMPLOYEE_COMPETENCE;
+            } elseif ($type === 'DANGER_COMPETENCY') {
+                $kind = IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER;
             }
         }
-        if ($fk === null) {
+
+        $siteCode = $this->sites->codeFrom(
+            $row->site_code_raw ?? null,
+            $row->site_name ?? null,
+        );
+
+        $props['id'] = (string) ($row->id ?? '');
+        $props['name'] = (string) ($row->name ?? '');
+        $props['code'] = (string) ($row->code ?? '');
+        $props['type'] = $type;
+        $props['hazard_kind'] = $kind;
+        $props['hazard_kind_label'] = $this->hazard->label($kind);
+        $props['site_code'] = $siteCode;
+        $props['site_label'] = $siteCode !== null ? $this->sites->label($siteCode) : ($row->site_name ?? null);
+        $props['pit_name'] = $row->pit_name ?? null;
+        $props['risk_color'] = $this->nullableString($row->polyline_color_hex ?? null) ?? '#c5221f';
+        $props['status_name'] = $row->boundary_status ?? null;
+        $props['violations_count'] = $violationCounts[(string) ($row->id ?? '')] ?? 0;
+        $props['is_active'] = 1;
+
+        return $props;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function activeViolationCounts(): array
+    {
+        if (! $this->isUp()) {
             return [];
         }
 
         try {
-            $rows = DB::connection(self::CONNECTION)->select(
-                'SELECT `'.$fk.'` AS bid, COUNT(*) AS c FROM `'.$table.'` GROUP BY `'.$fk.'`'
-            );
+            $rows = DB::connection(self::CONNECTION)->select("
+                SELECT boundary_id AS bid, COUNT(*) AS c
+                FROM boundary_violations
+                WHERE is_deleted = 0
+                  AND deleted_at IS NULL
+                  AND status IN ('WARNING', 'STANDBY', 'DANGER')
+                GROUP BY boundary_id
+            ");
             $out = [];
             foreach ($rows as $row) {
                 $out[(string) ($row->bid ?? '')] = (int) ($row->c ?? 0);
@@ -358,114 +362,85 @@ final class IscBoundaryMapService
     }
 
     /**
-     * @param  list<array<string, mixed>>  $records
-     * @return list<string>
+     * @return list<array<string, mixed>>
      */
-    private function displayColumns(array $records): array
+    private function recentScalarRows(string $table): array
     {
-        $preferred = [
-            'id', 'name', 'title', 'code', 'type', 'category',
-            'status_name', 'risk_name', 'site', 'location', 'area',
-            'violations_count', 'entries_count', 'is_active', 'updated_at',
-        ];
-        $keys = $records[0] ?? [];
-        $out = [];
-        foreach ($preferred as $column) {
-            if (array_key_exists($column, $keys)) {
-                $out[] = $column;
-            }
-        }
-
-        return $out !== [] ? $out : array_keys($keys);
-    }
-
-    /**
-     * @param  array<string, string>  $columnTypes
-     */
-    private function selectList(array $columnTypes, bool $includeGeojson = true): string
-    {
-        $parts = [];
-        $geojsonAdded = false;
-
-        foreach ($columnTypes as $name => $type) {
-            if ($includeGeojson && $this->geometry->isSpatialType($type) && ! $geojsonAdded) {
-                $parts[] = 'ST_AsGeoJSON(`'.$name.'`) AS `_geojson`';
-                $geojsonAdded = true;
-                continue;
-            }
-            if ($this->geometry->isSpatialType($type)) {
-                continue;
-            }
-            $parts[] = '`'.$name.'`';
-        }
-
-        if ($parts === []) {
-            $parts[] = '*';
-        }
-
-        return implode(', ', $parts);
-    }
-
-    /**
-     * @param  array<string, string>  $columnTypes
-     */
-    private function orderClause(array $columnTypes): string
-    {
-        foreach (['created_at', 'updated_at', 'occurred_at', 'entered_at', 'violated_at', 'id'] as $column) {
-            if (isset($columnTypes[$column])) {
-                return ' ORDER BY `'.$column.'` DESC';
-            }
-        }
-
-        return '';
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function columnTypes(string $table): array
-    {
-        if (! $this->isAllowedTable($table)) {
+        if (! $this->isAllowedTable($table) || ! $this->isUp()) {
             return [];
         }
 
-        return Cache::remember('isc:besigma_cols:'.$table, 300, function () use ($table): array {
-            $rows = DB::connection(self::CONNECTION)->select('SHOW COLUMNS FROM `'.$table.'`');
-            $types = [];
-            foreach ($rows as $row) {
-                $field = (string) ($row->Field ?? '');
-                if ($field === '') {
-                    continue;
-                }
-                $types[$field] = strtolower((string) ($row->Type ?? ''));
-            }
+        $columns = $table === 'boundary_violation_units'
+            ? 'id, unit_id, user_id, boundary_id, site_id, status, is_competency, created_at'
+            : 'id, user_id, boundary_id, site_id, status, is_competency, created_at';
 
-            return $types;
-        });
+        try {
+            $rows = DB::connection(self::CONNECTION)->select(
+                'SELECT '.$columns.'
+                 FROM `'.$table.'`
+                 WHERE is_deleted = 0
+                 ORDER BY created_at DESC
+                 LIMIT '.self::OVERLAY_LIMIT
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[] = [
+                'id' => (string) ($row->id ?? ''),
+                'user_id' => isset($row->user_id) ? (string) $row->user_id : null,
+                'unit_id' => isset($row->unit_id) ? (string) $row->unit_id : null,
+                'boundary_id' => isset($row->boundary_id) ? (string) $row->boundary_id : null,
+                'site_id' => isset($row->site_id) ? (string) $row->site_id : null,
+                'status' => $row->status ?? null,
+                'is_competency' => isset($row->is_competency) ? (int) $row->is_competency : null,
+                'created_at' => isset($row->created_at) ? (string) $row->created_at : null,
+            ];
+        }
+
+        return $out;
     }
 
-    private function tableExists(string $table): bool
+    /**
+     * @return array{exists:bool,row_count:?int,error:?string}
+     */
+    private function describeTable(string $table): array
     {
         if (! $this->isAllowedTable($table)) {
-            return false;
+            return ['exists' => false, 'row_count' => null, 'error' => 'not allowed'];
         }
 
         try {
-            return (bool) Cache::remember('isc:besigma_exists:'.$table, 300, function () use ($table): bool {
-                $rows = DB::connection(self::CONNECTION)->select(
-                    'SHOW TABLES LIKE ?',
-                    [$table]
-                );
+            $count = DB::connection(self::CONNECTION)->selectOne(
+                'SELECT COUNT(*) AS c FROM `'.$table.'`'
+            );
 
-                return $rows !== [];
-            });
+            return [
+                'exists' => true,
+                'row_count' => isset($count->c) ? (int) $count->c : 0,
+                'error' => null,
+            ];
         } catch (Throwable $e) {
-            return false;
+            return ['exists' => false, 'row_count' => null, 'error' => $e->getMessage()];
         }
     }
 
     private function isAllowedTable(string $table): bool
     {
         return in_array($table, self::TABLES, true);
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        $trimmed = trim((string) $value);
+
+        return $trimmed === '' ? null : $trimmed;
     }
 }
