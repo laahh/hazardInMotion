@@ -249,7 +249,7 @@
     <div class="gm-layers-pop" id="gm-layers-pop" hidden>
       <p>Jenis peta</p>
       <div class="gm-layer-cards">
-        <button type="button" class="is-on" data-basemap="sgi"><i data-kind="sgi"></i>Drone SGI</button>
+        <button type="button" class="is-on" data-basemap="sgi"><i data-kind="sgi"></i>Drone + OSM</button>
         <button type="button" data-basemap="map"><i data-kind="map"></i>Peta</button>
         <button type="button" data-basemap="dark"><i data-kind="dark"></i>Gelap</button>
       </div>

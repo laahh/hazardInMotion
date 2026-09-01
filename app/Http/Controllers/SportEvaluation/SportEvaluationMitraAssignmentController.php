@@ -14,7 +14,7 @@ use Illuminate\View\View;
 use Throwable;
 
 /**
- * CRUD mapping user → site + perusahaan untuk dashboard Mitra Kerja.
+ * CRUD mapping user → multi perusahaan + multi site untuk dashboard Mitra Kerja.
  */
 final class SportEvaluationMitraAssignmentController extends Controller
 {

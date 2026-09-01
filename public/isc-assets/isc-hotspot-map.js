@@ -57,54 +57,60 @@
   var wmtsProxyUrl = mapEl.getAttribute("data-wmts-proxy-url") || "";
   var wmsUrl = mapEl.getAttribute("data-wms-url") || "";
   var wmsLayerName = mapEl.getAttribute("data-wms-layer") || "basemap:basemap_allsite";
+  var osmUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+  var osmOpts = {
+    attribution: "© OpenStreetMap",
+    maxZoom: 22,
+    maxNativeZoom: 19,
+    minZoom: 5
+  };
+  var osmUnderlay = L.tileLayer(osmUrl, osmOpts);
+  var osm = L.tileLayer(osmUrl, osmOpts);
+  var dark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    attribution: "© OpenStreetMap © CARTO",
+    maxZoom: 22,
+    maxNativeZoom: 18,
+    minZoom: 5
+  });
   var sgiOpts = {
     attribution: sgiAttribution,
     maxZoom: 22,
     maxNativeZoom: 22,
     minZoom: 5,
     opacity: 1,
-    tms: false
+    tms: false,
+    pane: "sgi",
+    className: "sgi-overlay"
   };
-  var sgi = wmtsProxyUrl
+  var sgiOverlay = wmtsProxyUrl
     ? L.tileLayer(wmtsProxyUrl, sgiOpts)
-    : L.tileLayer.wms(wmsUrl, Object.assign({}, sgiOpts, {
+    : (wmsUrl ? L.tileLayer.wms(wmsUrl, Object.assign({}, sgiOpts, {
       layers: wmsLayerName,
       format: "image/png",
       transparent: true,
       version: "1.1.1",
       uppercase: true,
       tiled: true
-    }));
-  var sgiTileErrors = 0;
-  sgi.on("tileerror", function () {
-    sgiTileErrors += 1;
-    if (sgiTileErrors === 4) {
-      toast("Basemap drone SGI gagal dimuat. Coba jaringan internal atau ganti ke Peta/Gelap.");
-    }
-  });
-  var osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 22,
-    maxNativeZoom: 19,
-    minZoom: 5
-  });
-  var dark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 22,
-    maxNativeZoom: 18,
-    minZoom: 5
-  });
-  var basemaps = { sgi: sgi, map: osm, dark: dark };
+    })) : null);
+  var basemaps = { sgi: osmUnderlay, map: osm, dark: dark };
 
   var map = L.map("map", {
     center: [2.08, 117.42],
     zoom: 10,
     minZoom: 5,
     maxZoom: 22,
-    layers: [sgi],
+    layers: [osmUnderlay],
     zoomControl: false,
     attributionControl: true
   });
 
   L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
+
+  map.createPane("sgi");
+  map.getPane("sgi").style.zIndex = 350;
+  if (sgiOverlay) {
+    sgiOverlay.addTo(map);
+  }
 
   map.createPane("iupk");
   map.getPane("iupk").style.zIndex = 450;
@@ -786,6 +792,15 @@
         map.removeLayer(basemaps[key]);
       }
     });
+    if (sgiOverlay) {
+      if (kind === "sgi") {
+        if (!map.hasLayer(sgiOverlay)) {
+          sgiOverlay.addTo(map);
+        }
+      } else if (map.hasLayer(sgiOverlay)) {
+        map.removeLayer(sgiOverlay);
+      }
+    }
     document.querySelectorAll("[data-basemap]").forEach(function (el) {
       el.classList.toggle("is-on", el.getAttribute("data-basemap") === kind);
     });

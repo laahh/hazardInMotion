@@ -19,7 +19,7 @@ class WmsProxyController extends Controller
         $params = $request->except(['url']);
         
         // Validasi URL untuk keamanan
-        if (! is_string($wmsUrl) || parse_url($wmsUrl, PHP_URL_HOST) === null) {
+        if (!$wmsUrl || !filter_var($wmsUrl, FILTER_VALIDATE_URL)) {
             return response()->json(['error' => 'Invalid URL'], 400);
         }
         

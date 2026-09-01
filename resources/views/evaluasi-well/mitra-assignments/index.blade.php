@@ -39,21 +39,35 @@
         <thead>
           <tr>
             <th>User</th>
-            <th>Site</th>
-            <th>Perusahaan</th>
+            <th>Perusahaan &amp; Site</th>
             <th>Status</th>
             <th class="text-end">Aksi</th>
           </tr>
         </thead>
         <tbody>
           @forelse ($assignments as $row)
+            @php
+              $companies = $row->groupedCompanySites();
+            @endphp
             <tr>
               <td>
                 <div class="fw-medium">{{ $row->user?->name ?? '-' }}</div>
                 <div class="text-secondary-light text-sm">{{ $row->user?->email ?? '' }}</div>
               </td>
-              <td>{{ $row->site }}</td>
-              <td>{{ $row->perusahaan }}</td>
+              <td>
+                @if ($companies === [])
+                  <span class="text-secondary-light">-</span>
+                @else
+                  <div class="d-flex flex-column gap-6">
+                    @foreach ($companies as $company)
+                      <div>
+                        <div class="fw-medium">{{ $company['perusahaan'] }}</div>
+                        <div class="text-secondary-light text-sm">{{ implode(', ', $company['sites']) }}</div>
+                      </div>
+                    @endforeach
+                  </div>
+                @endif
+              </td>
               <td>
                 @if ($row->is_active)
                   <span class="bg-success-focus text-success-main px-12 py-4 radius-4 fw-medium text-sm">Aktif</span>
@@ -72,7 +86,7 @@
             </tr>
           @empty
             <tr>
-              <td colspan="5" class="text-center text-secondary-light py-24">Belum ada assignment mitra.</td>
+              <td colspan="4" class="text-center text-secondary-light py-24">Belum ada assignment mitra.</td>
             </tr>
           @endforelse
         </tbody>

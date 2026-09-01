@@ -3,22 +3,7 @@
 @section('title', 'Tambah Assignment Mitra')
 
 @section('css')
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
-<style>
-  .select2-container .select2-selection--single {
-    height: 42px;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-    padding: 6px 8px;
-  }
-  .select2-container--default .select2-selection--single .select2-selection__rendered {
-    line-height: 28px;
-    color: #111827;
-  }
-  .select2-container--default .select2-selection--single .select2-selection__arrow {
-    height: 40px;
-  }
-</style>
+@include('evaluasi-well.mitra-assignments._form-assets')
 @endsection
 
 @section('content')
@@ -47,21 +32,5 @@
 @endsection
 
 @section('scripts')
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-<script>
-(function ($) {
-  $('.js-mitra-searchable').each(function () {
-    var $el = $(this);
-    $el.select2({
-      width: '100%',
-      placeholder: $el.data('placeholder') || 'Cari…',
-      allowClear: true,
-      language: {
-        noResults: function () { return 'Tidak ditemukan'; },
-        searching: function () { return 'Mencari…'; }
-      }
-    });
-  });
-})(jQuery);
-</script>
+@include('evaluasi-well.mitra-assignments._form-scripts')
 @endsection

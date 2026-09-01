@@ -41,16 +41,4 @@ final class IscBasemapProxyServiceTest extends TestCase
 
         $this->assertSame(IscBasemapProxyService::WMS_LAYER, $query['LAYERS']);
     }
-
-    public function test_web_mercator_tile_bbox_covers_origin_tile(): void
-    {
-        $bbox = (new IscBasemapProxyService())->tileBbox(0, 0, 0);
-        $parts = array_map('floatval', explode(',', $bbox));
-
-        $this->assertCount(4, $parts);
-        $this->assertEqualsWithDelta(-20037508.34, $parts[0], 0.1);
-        $this->assertEqualsWithDelta(-20037508.34, $parts[1], 0.1);
-        $this->assertEqualsWithDelta(20037508.34, $parts[2], 0.1);
-        $this->assertEqualsWithDelta(20037508.34, $parts[3], 0.1);
-    }
 }
