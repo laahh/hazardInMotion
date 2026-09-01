@@ -71,12 +71,15 @@
       <article class="gm-hud-card is-checkin">
         <div class="gm-hud-card-top">
           <span class="gm-hud-ico checkin" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4z"/><path d="M4 20c1.5-3.2 4.2-5 8-5s6.5 1.8 8 5"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4z"/><path d="M4 20c1.5-3.2 4.2-5 8-5s6.5 1.8 8 5"/><circle cx="18" cy="7" r="3.2"/><path d="m16.7 7 .9.9 1.7-1.8"/></svg>
           </span>
-          <div>
-            <p class="gm-hud-kicker">Check-in RFID per site</p>
-            <p class="gm-hud-lead"><b id="hud-checkin-total">–</b> orang onsite</p>
+          <div class="gm-hud-head">
+            <p class="gm-hud-kicker">Check-in RFID</p>
+            <p class="gm-hud-value"><b id="hud-checkin-total">–</b> <small>orang onsite</small></p>
           </div>
+          <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
+            <path d="M2 24 C12 24 14 8 24 12 C34 16 36 6 46 10 C56 14 58 20 68 14 C78 8 80 18 86 16" />
+          </svg>
         </div>
         <div class="gm-hud-sites" id="hud-site-filters" role="group" aria-label="Filter site">
           <button type="button" class="gm-hud-site is-on" data-hud-site="">Semua</button>
@@ -86,20 +89,23 @@
           <button type="button" class="gm-hud-site" data-hud-site="SMO">SMO <b id="hud-site-SMO">0</b></button>
           <button type="button" class="gm-hud-site" data-hud-site="PUNAN">PUN <b id="hud-site-PUNAN">0</b></button>
         </div>
-        <button type="button" class="gm-hud-link" data-roster="checkin">Lihat daftar check-in</button>
+        <p class="gm-hud-foot">Per site hari ini <button type="button" class="gm-hud-link" data-roster="checkin">Lihat daftar</button></p>
       </article>
 
       <article class="gm-hud-card is-safety">
         <div class="gm-hud-card-top">
           <span class="gm-hud-ico safety" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.5 3 7.6 7 9 4-1.4 7-4.5 7-9V6z"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.5 3 7.6 7 9 4-1.4 7-4.5 7-9V6z"/><path d="m9.2 12 2 2 4-4"/></svg>
           </span>
-          <div>
+          <div class="gm-hud-head">
             <p class="gm-hud-kicker">Personel terlacak Besigma</p>
-            <p class="gm-hud-lead">Dalam boundary <b id="hud-pob-in">–</b></p>
+            <p class="gm-hud-value"><b id="hud-pob-in">–</b> <small>dalam boundary</small></p>
           </div>
+          <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
+            <path d="M2 20 C10 20 14 10 22 12 C30 14 34 24 44 18 C54 12 58 8 68 12 C78 16 82 22 86 18" />
+          </svg>
         </div>
-        <p class="gm-hud-meta">GPS Besigma hari ini <b id="hud-traced">–</b> orang</p>
+        <p class="gm-hud-hint">GPS Besigma hari ini <span class="gm-hud-pill"><b id="hud-traced">–</b> orang</span></p>
         <div class="gm-hud-split">
           <button type="button" class="gm-hud-metric is-safe" data-roster="safe">
             <span>Safe</span>
@@ -115,22 +121,21 @@
         <div class="gm-hud-violations">
           <button type="button" class="gm-hud-violation" data-roster="kind" data-kind="employee_danger">
             <i class="dot danger"></i>
-            <span>Pelanggaran Batas Bahaya Karyawan</span>
+            <span>Batas bahaya karyawan</span>
             <b id="hud-kind-employee_danger">0</b>
           </button>
           <button type="button" class="gm-hud-violation" data-roster="kind" data-kind="employee_competence">
             <i class="dot competence"></i>
-            <span>Pelanggaran Batas Kompetensi Karyawan</span>
+            <span>Batas kompetensi karyawan</span>
             <b id="hud-kind-employee_competence">0</b>
           </button>
           <button type="button" class="gm-hud-violation" data-roster="kind" data-kind="unit_danger">
             <i class="dot unit"></i>
-            <span>Pelanggaran Batas Bahaya Unit</span>
+            <span>Batas bahaya unit</span>
             <b id="hud-kind-unit_danger">0</b>
           </button>
         </div>
-        <p class="gm-hud-meta">Out <b id="hud-pob-out">–</b> · Unknown <b id="hud-pob-unknown">–</b></p>
-        <button type="button" class="gm-hud-link" data-roster="in">Lihat orang di dalam boundary</button>
+        <p class="gm-hud-foot">Out <b id="hud-pob-out">–</b> · Unknown <b id="hud-pob-unknown">–</b> <button type="button" class="gm-hud-link" data-roster="in">Lihat di boundary</button></p>
       </article>
 
       <article class="gm-hud-card is-rfid">
@@ -138,10 +143,13 @@
           <span class="gm-hud-ico rfid" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 7-7"/><path d="M8 12a4 4 0 0 1 4-4"/><circle cx="12" cy="12" r="1.4"/><path d="M19 12a7 7 0 0 1-7 7"/><path d="M16 12a4 4 0 0 1-4 4"/></svg>
           </span>
-          <div>
+          <div class="gm-hud-head">
             <p class="gm-hud-kicker">Besigma × RFID</p>
-            <p class="gm-hud-lead">Rekonsiliasi SID</p>
+            <p class="gm-hud-value"><b id="hud-both">–</b> <small>keduanya cocok</small></p>
           </div>
+          <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
+            <path d="M2 18 C12 18 16 8 26 11 C36 14 38 22 48 16 C58 10 62 6 72 12 C80 16 82 20 86 14" />
+          </svg>
         </div>
         <div class="gm-hud-stats gm-hud-stats-wrap">
           <span>Pernah <b id="hud-ever">–</b></span>
@@ -149,7 +157,6 @@
           <span>RFID <b id="hud-rfid">–</b></span>
           <span>B−R <b id="hud-gap-br">–</b></span>
           <span>R−B <b id="hud-gap-rb">–</b></span>
-          <span>Keduanya <b id="hud-both">–</b></span>
         </div>
       </article>
     </div>

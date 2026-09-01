@@ -193,7 +193,7 @@ button, input { font-family: inherit; }
 
 .gm-hud {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   max-height: min(58vh, 640px);
   overflow: auto;
   padding-right: 2px;
@@ -212,28 +212,49 @@ button, input { font-family: inherit; }
   width: fit-content;
 }
 .gm-hud-card {
+  position: relative;
+  overflow: hidden;
   background: #fff;
   border-radius: 16px;
-  box-shadow: var(--gm-shadow);
-  padding: 12px 12px 10px;
-  border: 1px solid rgba(255,255,255,.7);
+  padding: 16px 16px 14px;
+  border: 1px solid rgba(226, 232, 240, .9);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .07);
+  transition: box-shadow .2s ease, transform .2s ease;
 }
-.gm-hud-card.is-checkin { background: linear-gradient(180deg, #f8fbff, #fff); }
-.gm-hud-card.is-safety { background: linear-gradient(180deg, #f7fbf6, #fff); }
-.gm-hud-card.is-rfid { background: linear-gradient(180deg, #fbf8ff, #fff); }
+.gm-hud-card:hover {
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .1);
+}
+.gm-hud-card.is-checkin {
+  background:
+    radial-gradient(120% 90% at 100% -10%, rgba(37, 99, 235, .14), transparent 52%),
+    #fff;
+}
+.gm-hud-card.is-safety {
+  background:
+    radial-gradient(120% 90% at 100% -10%, rgba(22, 163, 74, .14), transparent 52%),
+    #fff;
+}
+.gm-hud-card.is-rfid {
+  background:
+    radial-gradient(120% 90% at 100% -10%, rgba(249, 115, 22, .14), transparent 52%),
+    #fff;
+}
 .gm-hud-card-top {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
+.gm-hud-head { flex: 1; min-width: 0; }
 .gm-hud-ico {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   display: grid;
   place-items: center;
-  flex: 0 0 36px;
+  flex: 0 0 40px;
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, .12);
 }
 .gm-hud-ico svg {
   width: 18px;
@@ -244,49 +265,104 @@ button, input { font-family: inherit; }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.gm-hud-ico.checkin { background: #e8f0fe; color: #1967d2; }
-.gm-hud-ico.safety { background: #e6f4ea; color: #137333; }
-.gm-hud-ico.rfid { background: #f3e8fd; color: #7627bb; }
+.gm-hud-ico.checkin { background: #2563eb; }
+.gm-hud-ico.safety { background: #16a34a; }
+.gm-hud-ico.rfid { background: #f97316; }
+.gm-hud-spark {
+  width: 72px;
+  height: 28px;
+  flex: 0 0 72px;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .9;
+}
+.is-checkin .gm-hud-spark { stroke: #2563eb; }
+.is-safety .gm-hud-spark { stroke: #16a34a; }
+.is-rfid .gm-hud-spark { stroke: #f97316; }
 .gm-hud-kicker {
   margin: 0;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--gm-muted);
-}
-.gm-hud-lead {
-  margin: 2px 0 0;
   font-size: 13px;
-  color: var(--gm-ink);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #64748b;
+}
+.gm-hud-value {
+  margin: 2px 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: #0f172a;
   font-weight: 500;
 }
-.gm-hud-lead b { font-size: 18px; font-weight: 800; letter-spacing: -.03em; }
+.gm-hud-value b {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -.04em;
+  line-height: 1.1;
+}
+.gm-hud-value small {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+.gm-hud-hint,
+.gm-hud-foot,
+.gm-hud-meta {
+  margin: 0 0 10px;
+  color: #64748b;
+  font-size: 12px;
+}
+.gm-hud-foot {
+  margin: 10px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gm-hud-foot b,
+.gm-hud-meta b { color: #0f172a; font-weight: 600; }
+.gm-hud-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 11px;
+  font-weight: 600;
+}
+.gm-hud-pill b { color: inherit; font-weight: 700; }
 .gm-hud-sites {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 .gm-hud-site {
-  border: 1px solid var(--gm-line);
-  background: #fff;
-  color: var(--gm-ink);
+  border: 1px solid #e2e8f0;
+  background: rgba(255,255,255,.8);
+  color: #334155;
   border-radius: 999px;
-  padding: 5px 9px;
+  padding: 5px 10px;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
 }
-.gm-hud-site b { margin-left: 4px; color: var(--gm-blue); }
+.gm-hud-site b { margin-left: 4px; color: #2563eb; }
+.gm-hud-site:hover { border-color: #cbd5e1; background: #fff; }
 .gm-hud-site.is-on {
-  background: #e8f0fe;
-  border-color: #d2e3fc;
-  color: #174ea6;
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
 }
+.gm-hud-site.is-on b { color: #fff; }
 .gm-hud-link,
 .gm-hud-metric,
 .gm-hud-violation {
-  width: 100%;
   border: 0;
   background: transparent;
   text-align: left;
@@ -294,12 +370,14 @@ button, input { font-family: inherit; }
   font-family: inherit;
 }
 .gm-hud-link {
-  margin-top: 8px;
-  color: var(--gm-blue);
+  margin: 0;
+  width: auto;
+  color: #2563eb;
   font-size: 12px;
   font-weight: 600;
-  padding: 2px 0;
+  padding: 0;
 }
+.gm-hud-link:hover { color: #1d4ed8; }
 .gm-hud-split {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -307,56 +385,62 @@ button, input { font-family: inherit; }
   margin-bottom: 8px;
 }
 .gm-hud-metric {
-  border-radius: 12px;
-  padding: 8px 10px;
+  width: 100%;
+  border-radius: 14px;
+  padding: 10px 12px;
   display: grid;
   gap: 2px;
 }
-.gm-hud-metric span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-.gm-hud-metric strong { font-size: 22px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
-.gm-hud-metric small { color: var(--gm-muted); font-size: 11px; line-height: 1.25; }
-.gm-hud-metric.is-safe { background: #e6f4ea; color: #137333; }
-.gm-hud-metric.is-unsafe { background: #fce8e6; color: #c5221f; }
-.gm-hud-metric:hover { filter: brightness(.97); }
-.gm-hud-violations { display: grid; gap: 4px; }
+.gm-hud-metric span {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.gm-hud-metric strong { font-size: 22px; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+.gm-hud-metric small { color: #64748b; font-size: 11px; line-height: 1.3; }
+.gm-hud-metric.is-safe { background: rgba(22, 163, 74, .1); color: #15803d; }
+.gm-hud-metric.is-unsafe { background: rgba(239, 68, 68, .1); color: #b91c1c; }
+.gm-hud-metric:hover { filter: none; transform: translateY(-1px); }
+.gm-hud-violations {
+  display: grid;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(248, 250, 252, .9);
+}
 .gm-hud-violation {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 7px 8px;
-  border-radius: 10px;
-  background: #f8f9fa;
-  color: var(--gm-ink);
+  border-radius: 8px;
+  color: #334155;
   font-size: 12px;
 }
-.gm-hud-violation:hover { background: #eef1f4; }
+.gm-hud-violation:hover { background: #fff; }
 .gm-hud-violation span { flex: 1; }
-.gm-hud-violation b { font-size: 14px; }
+.gm-hud-violation b { font-size: 13px; font-weight: 700; color: #0f172a; }
 .gm-hud-violation .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex: 0 0 8px;
 }
-.gm-hud-violation .dot.danger { background: #c5221f; }
-.gm-hud-violation .dot.competence { background: #e37400; }
-.gm-hud-violation .dot.unit { background: #7627bb; }
-.gm-hud-meta {
-  margin: 8px 0 0;
-  color: var(--gm-muted);
-  font-size: 11px;
-}
-.gm-hud-meta b { color: var(--gm-ink); }
+.gm-hud-violation .dot.danger { background: #ef4444; }
+.gm-hud-violation .dot.competence { background: #f97316; }
+.gm-hud-violation .dot.unit { background: #8b5cf6; }
 .gm-hud-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 14px;
-  font-size: 13px;
-  color: var(--gm-muted);
+  gap: 8px 14px;
+  font-size: 12px;
+  color: #64748b;
 }
-.gm-hud-stats b { color: var(--gm-ink); font-weight: 700; margin-left: 4px; }
-.gm-hud-stats .is-safe b { color: #137333; }
-.gm-hud-stats .is-unsafe b { color: #c5221f; }
+.gm-hud-stats b { color: #0f172a; font-weight: 700; margin-left: 4px; }
+.gm-hud-stats .is-safe b { color: #15803d; }
+.gm-hud-stats .is-unsafe b { color: #b91c1c; }
 .gm-banner {
   margin: 0;
   padding: 8px 12px;
