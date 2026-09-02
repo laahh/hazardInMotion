@@ -40,8 +40,8 @@
     <main class="isc-home-hero" id="overview">
       <section class="isc-home-copy">
         <p class="isc-home-badges">
-          <span>Personnel Geofencing</span>
-          <span>Real-Time Alert</span>
+          <span>ASSESSMENT EFEKTIVITAS</span>
+          <span>RISK INTERVENTION CENTER </span>
         </p>
         <h1>
           Deteksi Lebih Dini.<br>
