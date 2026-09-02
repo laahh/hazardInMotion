@@ -40,12 +40,12 @@
     <main class="isc-home-hero" id="overview">
       <section class="isc-home-copy">
         <p class="isc-home-badges">
-          <span>ASSESSMENT EFEKTIVITAS</span>
-          <span>RISK INTERVENTION CENTER </span>
+          <span>Personnel Geofencing</span>
+          <span>Real-Time Alert</span>
         </p>
         <h1>
-          Deteksi Lebih Dini.<br>
-          <em>Intervensi Lebih Cepat.</em>
+        ASSESSMENT EFEKTIVITAS.<br>
+          <em>ASSESSMENT EFEKTIVITAS</em>
         </h1>
         <p class="isc-home-lead">
           Geofencing menghubungkan posisi pekerja, batas area berisiko, dan control room
