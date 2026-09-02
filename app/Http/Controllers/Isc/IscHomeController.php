@@ -12,10 +12,12 @@ final class IscHomeController extends Controller
     public function index(): View
     {
         return view('isc.home', [
-            'heroImage' => asset('isc-assets/home.png'),
+            'heroImage' => asset('isc-assets/isc-home-hero.png'),
+            'controlRoomImage' => asset('isc-assets/isc-home-control-room.png'),
+            'overviewUrl' => route('isc.overview'),
             'mapsUrl' => route('isc.maps.index'),
             'interventionsUrl' => route('isc.interventions.index'),
-            'postEventUrl' => route('isc.post-event.index'),
+            'cctvUrl' => route('isc.maps.cctv'),
         ]);
     }
 }
