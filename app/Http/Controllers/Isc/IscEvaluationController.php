@@ -17,7 +17,7 @@ final class IscEvaluationController extends Controller
             'homeUrl' => route('isc.index'),
             'overviewUrl' => route('isc.overview'),
             'mapsUrl' => route('isc.maps.index'),
-            'watermark' => asset('isc-assets/isc-home-hero.png'),
+            'interventionsUrl' => route('isc.interventions.index'),
             'heroImage' => asset('isc-assets/isc-home-hero.png'),
             'pitImage' => asset('isc-assets/home.png'),
             'roomImage' => asset('isc-assets/isc-home-control-room.png'),
@@ -26,6 +26,8 @@ final class IscEvaluationController extends Controller
             'totals' => [
                 'records' => 1507,
                 'groupings' => 38,
+                'l4w' => 419,
+                'baseline' => 451,
             ],
             'heatmap' => $heatmap,
             'hazards' => $this->hazards(),
@@ -39,14 +41,14 @@ final class IscEvaluationController extends Controller
     private function trendChart(): array
     {
         $weeks = ['W28', 'W29', 'W30', 'W31', 'W32', 'W33', 'W34', 'W35'];
-        $values = [442, 469, 473, 404, 456, 428, 451, 438];
+        $values = [469, 473, 404, 456, 410, 418, 423, 425];
         $width = 540;
-        $height = 168;
-        $padL = 8;
-        $padR = 18;
+        $height = 158;
+        $padL = 10;
+        $padR = 16;
         $padT = 22;
-        $padB = 26;
-        $min = 390;
+        $padB = 24;
+        $min = 380;
         $max = 490;
         $count = count($values);
         $spanX = $width - $padL - $padR;
@@ -98,9 +100,9 @@ final class IscEvaluationController extends Controller
     {
         $sites = ['BMO 1', 'BMO 2', 'BMO 3', 'GMO', 'LMO', 'SMO', 'EKS'];
         $raw = [
-            ['Maintenance Unit', [95, 48, 12, 32, 208, 14, 3]],
-            ['Survey', [88, 40, 8, 55, 22, 18, 2]],
-            ['Peledakan', [70, 35, 5, 28, 18, 12, 1]],
+            ['Maintenance Unit', [62, 32, 8, 22, 208, 10, 3]],
+            ['Survey', [74, 36, 7, 48, 20, 16, 6]],
+            ['Peledakan', [68, 34, 5, 26, 18, 14, 6]],
             ['Loading Point', [62, 41, 6, 36, 15, 9, 2]],
             ['Haul Road', [54, 38, 4, 22, 11, 8, 1]],
             ['Refueling', [36, 24, 3, 18, 9, 6, 0]],
@@ -150,7 +152,7 @@ final class IscEvaluationController extends Controller
             [
                 'image' => 'hero',
                 'crop' => 'left',
-                'text' => 'Crew refueling tidak lapor ke pengawas sebelum isi BBM di area pit.',
+                'text' => 'Crew refueling tidak lapor dan izin ke pengawas.',
                 'tag' => 'BAR GMO',
             ],
             [
@@ -163,13 +165,13 @@ final class IscEvaluationController extends Controller
                 'image' => 'hero',
                 'crop' => 'right',
                 'text' => 'Mekanik memperbaiki unit di bahu haul road aktif.',
-                'tag' => 'BAR BMO 1',
+                'tag' => 'PAMA BMO 2',
             ],
             [
                 'image' => 'room',
                 'crop' => 'center',
                 'text' => 'Charging crew masih di zona blasting saat countdown.',
-                'tag' => 'FAD SMO',
+                'tag' => 'BAR BMO 3',
             ],
         ];
     }

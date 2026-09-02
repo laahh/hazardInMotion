@@ -8,140 +8,139 @@
   <link rel="icon" href="{{ URL::asset('build/images/logo-removebg.png') }}" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('isc-assets/isc-evaluation.css') }}?v={{ filemtime(public_path('isc-assets/isc-evaluation.css')) }}">
 </head>
 <body class="isc-ev-body">
-  <div class="isc-ev" style="--isc-ev-mark: url('{{ $watermark }}')">
-    <header class="isc-ev-head">
-      <div class="isc-ev-kicker">
-        <a class="isc-ev-pill isc-ev-pill--ink" href="{{ $overviewUrl }}">Evaluation Section</a>
-        <span class="isc-ev-pill isc-ev-pill--lime">Out of Cabin Review</span>
-      </div>
-      <a class="isc-ev-brand" href="{{ $homeUrl }}">PT BERAU COAL</a>
+  <div class="isc-ev">
+    <header class="isc-ev-nav">
+      <a class="isc-ev-logo" href="{{ $homeUrl }}">
+        <img src="{{ URL::asset('build/images/logo-removebg.png') }}" alt="">
+        beraucoal
+      </a>
+      <nav aria-label="Navigasi ISC">
+        <a href="{{ $overviewUrl }}">Overview</a>
+        <a href="{{ url()->current() }}" aria-current="page">Evaluation</a>
+        <a href="#heatmap">Critical activities</a>
+        <a href="#hazards">Hazard highlights</a>
+      </nav>
+      <a class="isc-ev-plan" href="{{ $interventionsUrl }}">Action plan</a>
     </header>
 
-    <div class="isc-ev-title">
-      <h1>Sebaran Aktivitas Kritis</h1>
-      <p>Aktivitas luar kabin by register paling banyak terdapat pada aktivitas Maintenance Unit, diikuti Survey dan Peledakan. Konsentrasi tertinggi di BMO 1, dengan sinyal paparan terkuat pada front / loading / dumping.</p>
-    </div>
+    <section class="isc-ev-hero">
+      <div>
+        <p class="isc-ev-kicker">Out of cabin review</p>
+        <h1>Sebaran aktivitas kritis</h1>
+        <p class="isc-ev-lead">Lokasi, grouping, dan exposure pathway dengan konsentrasi paparan tertinggi — untuk menajamkan intervensi.</p>
+      </div>
+      <dl class="isc-ev-kpis">
+        <div>
+          <dt>Total record</dt>
+          <dd>{{ number_format($totals['records'], 0, ',', '.') }}</dd>
+          <small>aktivitas–risiko</small>
+        </div>
+        <div>
+          <dt>Grouping kritis</dt>
+          <dd>{{ $totals['groupings'] }}</dd>
+          <small>aktivitas</small>
+        </div>
+        <div>
+          <dt>Rata-rata 4 minggu</dt>
+          <dd>{{ $totals['l4w'] }}</dd>
+          <small>vs W28–31: {{ $totals['baseline'] }}</small>
+        </div>
+      </dl>
+    </section>
 
-    <div class="isc-ev-grid">
-      <div class="isc-ev-main">
-        <section class="isc-ev-card isc-ev-trend" aria-label="Trend dan site share">
-          <div class="isc-ev-trend-chart">
-            <h2>TREND &amp; CONCENTRATION</h2>
-            <svg viewBox="0 0 {{ $trend['width'] }} {{ $trend['height'] }}" preserveAspectRatio="none" role="img" aria-label="Tren mingguan">
-              <polyline points="{{ $trend['polyline'] }}" />
-              @foreach ($trend['points'] as $point)
-                <circle cx="{{ $point['x'] }}" cy="{{ $point['y'] }}" r="5" />
-                <text x="{{ $point['x'] }}" y="{{ $point['y'] - 10 }}" text-anchor="middle">{{ $point['v'] }}</text>
-                <text class="isc-ev-x" x="{{ $point['x'] }}" y="{{ $trend['height'] - 6 }}" text-anchor="middle">{{ $point['label'] }}</text>
-              @endforeach
-            </svg>
-          </div>
-          <div class="isc-ev-share">
-            <h2>SITE SHARE</h2>
-            <ul>
-              @foreach ($siteShare as $share)
-                <li>
-                  <span>{{ $share['site'] }}</span>
-                  <div><i style="width: {{ $share['pct'] }}%"></i></div>
-                  <b>{{ number_format($share['pct'], 1, ',', '.') }}%</b>
-                </li>
-              @endforeach
-            </ul>
-          </div>
-        </section>
+    <section class="isc-ev-charts" id="trend">
+      <article class="isc-ev-panel">
+        <h2>Trend mingguan</h2>
+        <svg viewBox="0 0 {{ $trend['width'] }} {{ $trend['height'] }}" preserveAspectRatio="none" role="img" aria-label="Tren mingguan W28–W35">
+          <polyline points="{{ $trend['polyline'] }}" />
+          @foreach ($trend['points'] as $point)
+            <circle cx="{{ $point['x'] }}" cy="{{ $point['y'] }}" r="3" />
+            <text x="{{ $point['x'] }}" y="{{ $point['y'] - 8 }}" text-anchor="middle">{{ $point['v'] }}</text>
+            <text class="isc-ev-x" x="{{ $point['x'] }}" y="{{ $trend['height'] - 4 }}" text-anchor="middle">{{ $point['label'] }}</text>
+          @endforeach
+        </svg>
+      </article>
+      <article class="isc-ev-panel">
+        <h2>Porsi site</h2>
+        <ul class="isc-ev-bars">
+          @foreach ($siteShare as $share)
+            <li>
+              <span>{{ $share['site'] }}</span>
+              <div><i style="width: {{ $share['pct'] }}%"></i></div>
+              <b>{{ number_format($share['pct'], 1, ',', '.') }}%</b>
+            </li>
+          @endforeach
+        </ul>
+        <p class="isc-ev-note">Tiga site teratas menampung 82% record.</p>
+      </article>
+      <article class="isc-ev-panel">
+        <h2>Sinyal paparan</h2>
+        <p class="isc-ev-note is-top">Berdasarkan kata kunci di register.</p>
+        <ul class="isc-ev-bars is-signal">
+          @foreach ($signals as $signal)
+            <li>
+              <span>{{ $signal['label'] }}</span>
+              <div><i style="width: {{ $signal['pct'] }}%; background: {{ $signal['color'] }}"></i></div>
+              <b>{{ rtrim(rtrim(number_format($signal['pct'], 1, ',', '.'), '0'), ',') }}%</b>
+            </li>
+          @endforeach
+        </ul>
+      </article>
+    </section>
 
-        <section class="isc-ev-kpis" aria-label="Ringkasan">
-          <article>
-            <small>TOTAL RECORD</small>
-            <strong>{{ number_format($totals['records'], 0, ',', '.') }}</strong>
-            <span>aktivitas–risiko</span>
-          </article>
-          <article>
-            <small>TOTAL GROUPING AKTIVITAS KRITIS</small>
-            <strong>{{ $totals['groupings'] }}</strong>
-            <span>aktivitas</span>
-          </article>
-        </section>
-
-        <section class="isc-ev-heat" aria-label="Heatmap aktivitas">
-          <div class="isc-ev-heat-head">
-            <h2>TOP 10 GROUPING AKTIVITAS KRITIS — REGISTER PER SITE</h2>
-            <div class="isc-ev-scale" aria-hidden="true">
-              <span>SKALA</span>
-              <i></i><i></i><i></i><i></i><i></i>
-            </div>
-          </div>
-          <div class="isc-ev-table-wrap">
-            <table>
-              <thead>
+    <section class="isc-ev-bottom">
+      <article class="isc-ev-panel isc-ev-heat" id="heatmap">
+        <div class="isc-ev-heat-head">
+          <h2>10 grouping kritis per site</h2>
+          <div class="isc-ev-scale" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="isc-ev-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Grouping</th>
+                <th>Total</th>
+                @foreach ($heatmap['sites'] as $site)
+                  <th>{{ $site }}</th>
+                @endforeach
+              </tr>
+            </thead>
+            <tbody>
+              @foreach ($heatmap['rows'] as $row)
                 <tr>
-                  <th>Grouping Aktivitas Kritis</th>
-                  <th>Total</th>
-                  @foreach ($heatmap['sites'] as $site)
-                    <th>{{ $site }}</th>
+                  <th>{{ $row['name'] }}</th>
+                  <td>{{ $row['total'] }}</td>
+                  @foreach ($row['cells'] as $cell)
+                    <td style="background: {{ $cell['color'] }}; color: {{ $cell['ink'] }}">{{ $cell['value'] ?: '–' }}</td>
                   @endforeach
                 </tr>
-              </thead>
-              <tbody>
-                @foreach ($heatmap['rows'] as $row)
-                  <tr>
-                    <th>{{ $row['name'] }}</th>
-                    <td>{{ $row['total'] }}</td>
-                    @foreach ($row['cells'] as $cell)
-                      <td style="background: {{ $cell['color'] }}; color: {{ $cell['ink'] }}">{{ $cell['value'] ?: '–' }}</td>
-                    @endforeach
-                  </tr>
-                @endforeach
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+              @endforeach
+            </tbody>
+          </table>
+        </div>
+      </article>
 
-      <aside class="isc-ev-side">
-        <section class="isc-ev-card isc-ev-hazards">
-          <h2>Highlight Hazard Di Luar Kabin</h2>
-          <div class="isc-ev-hazard-grid">
-            @foreach ($hazards as $hazard)
-              @php
-                $src = $hazard['image'] === 'pit' ? $pitImage : ($hazard['image'] === 'room' ? $roomImage : $heroImage);
-              @endphp
-              <article>
-                <img src="{{ $src }}" alt="" class="is-{{ $hazard['crop'] }}">
-                <div>
-                  <p>{{ $hazard['text'] }}</p>
-                  <span>{{ $hazard['tag'] }}</span>
-                </div>
-              </article>
-            @endforeach
-          </div>
-        </section>
-
-        <section class="isc-ev-card isc-ev-signals">
-          <h2>OUT OF CABIN EXPOSURE SIGNALS</h2>
-          <p>Keyword-based approach</p>
-          <ul>
-            @foreach ($signals as $signal)
-              <li>
-                <span>{{ $signal['label'] }}</span>
-                <div><i style="width: {{ $signal['pct'] }}%; background: {{ $signal['color'] }}"></i></div>
-                <b>{{ rtrim(rtrim(number_format($signal['pct'], 1, ',', '.'), '0'), ',') }}%</b>
-              </li>
-            @endforeach
-          </ul>
-        </section>
-      </aside>
-    </div>
+      <article class="isc-ev-panel isc-ev-hazards" id="hazards">
+        <h2>Hazard di luar kabin</h2>
+        <ul>
+          @foreach ($hazards as $hazard)
+            <li>
+              <span>{{ $hazard['tag'] }}</span>
+              <p>{{ $hazard['text'] }}</p>
+            </li>
+          @endforeach
+        </ul>
+      </article>
+    </section>
 
     <footer class="isc-ev-foot">
-      <a href="{{ $mapsUrl }}">
-        <img src="{{ URL::asset('build/images/logo-removebg.png') }}" alt="">
-        <small>beraucoal</small>
-      </a>
+      <p>Fokus intervensi: aktivitas dan area dengan konsentrasi paparan tertinggi.</p>
+      <a href="{{ $interventionsUrl }}">Susun intervensi</a>
+      <a class="is-ghost" href="{{ $mapsUrl }}">Buka peta</a>
     </footer>
   </div>
 </body>
