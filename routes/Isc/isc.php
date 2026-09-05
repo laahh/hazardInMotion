@@ -12,6 +12,7 @@ use App\Http\Controllers\Isc\IscMapsInterventionController;
 use App\Http\Controllers\Isc\IscPobController;
 use App\Http\Controllers\Isc\IscPostEventController;
 use App\Http\Controllers\Isc\IscPostEventTrackController;
+use App\Http\Controllers\Isc\IscSlide2Controller;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('isc')
@@ -19,6 +20,7 @@ Route::prefix('isc')
     ->group(function (): void {
         Route::get('/', [IscHomeController::class, 'index'])->name('index');
         Route::get('/overview', [IscOverviewController::class, 'index'])->name('overview');
+        Route::get('/slide2', [IscSlide2Controller::class, 'index'])->name('slide2');
         Route::get('/evaluation', [IscEvaluationController::class, 'index'])->name('evaluation');
         Route::get('/maps', [IscMapsController::class, 'index'])->name('maps.index');
         Route::get('/maps/boundaries', [IscMapsController::class, 'boundaries'])->name('maps.boundaries');

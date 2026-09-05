@@ -27,6 +27,11 @@ class AppServiceProvider extends ServiceProvider
             \App\Services\DmsMonitoring\DmsAlertMonitoringDataReader::class
         );
 
+        $this->app->bind(
+            \App\Services\ControlRoom\Reference\LocationReaderContract::class,
+            \App\Services\ControlRoom\Reference\LocationReader::class
+        );
+
         $this->app->bind('db.connector.pgsql', GssSafePostgresConnector::class);
         $this->app->bind('db.connector.redshift', DwhRedshiftConnector::class);
         Connection::resolverFor('redshift', function ($connection, $database, $prefix, $config) {
@@ -82,6 +87,8 @@ class AppServiceProvider extends ServiceProvider
             
             $view->with('controlRooms', $controlRooms);
         });
+
+        \App\Models\ControlRoom\SchedulePlan::observe(\App\Observers\ControlRoom\SchedulePlanObserver::class);
     }
 
     /**

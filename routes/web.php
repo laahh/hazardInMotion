@@ -85,6 +85,10 @@ Route::prefix('emergency-response/api')
     ->name('emergency-response.api.')
     ->group(base_path('routes/EmergencyResponse/api.php'));
 
+Route::prefix('control-room')
+    ->name('control-room.')
+    ->group(base_path('routes/ControlRoom/control-room.php'));
+
 Auth::routes();
 
 // URL salah setelah login: /login/maps (dst.) → arahkan ke path yang benar (/maps).
@@ -113,6 +117,9 @@ Route::get('/dopmikk/dopm/dashboard/screenshot', function (\Illuminate\Http\Requ
 
 // HSECM: halaman view publik; aksi tulis (kirim/ACC) tetap auth di file route
 require __DIR__ . '/Hsecm/hsecm.php';
+
+// ISC MOI immersive site: publik, tanpa login
+require __DIR__ . '/Isc/isc-public.php';
 
 // Define a group of routes with 'auth' middleware applied
 Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {

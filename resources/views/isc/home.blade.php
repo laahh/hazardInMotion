@@ -44,12 +44,11 @@
           <span>Real-Time Alert</span>
         </p>
         <h1>
-        ASSESSMENT EFEKTIVITAS.<br>
-          <em>ASSESSMENT EFEKTIVITAS</em>
+        Assessment Efektivitas.<br>
+          <em>Risk Intervention Center         </em>
         </h1>
         <p class="isc-home-lead">
-          Geofencing menghubungkan posisi pekerja, batas area berisiko, dan control room
-          dalam satu alur deteksi hingga intervensi — sebelum paparan terjadi.
+        Mengenal fungsi Control Room sebagai pusat pemantauan dan intervensi, serta memahami sistem, perangkat, dan informasi yang digunakan untuk mendukung pengendalian risiko operasional.
         </p>
         <div class="isc-home-cta">
           <a class="isc-btn-lime" href="{{ $mapsUrl }}">
