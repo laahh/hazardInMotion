@@ -11,8 +11,10 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * plan-OCR.md T3.1 — satu submit untuk satu minggu penuh (grid personil x
- * 7 hari x 2 shift).
+ * plan-OCR.md T3.1 — bisa satu baris (dari modal kalender) atau banyak baris
+ * sekaligus dalam satu submit. `year`/`week_number` TIDAK diminta di sini —
+ * dihitung otomatis oleh ScheduleBulkAssignService dari tanggal tiap baris,
+ * supaya tidak ada risiko keduanya tidak sinkron dengan tanggal asli.
  */
 final class ScheduleBulkRequest extends FormRequest
 {
@@ -21,12 +23,31 @@ final class ScheduleBulkRequest extends FormRequest
         return true;
     }
 
+    /**
+     * Input personil dari <datalist> berbentuk "Nama (SID)" (pola yang sama
+     * dengan check-in.blade.php) — ekstrak SID-nya sebelum divalidasi.
+     */
+    protected function prepareForValidation(): void
+    {
+        $assignments = (array) $this->input('assignments', []);
+
+        foreach ($assignments as $index => $assignment) {
+            $raw = trim((string) ($assignment['personnel_source_key'] ?? ''));
+
+            if (preg_match('/\(([^)]+)\)\s*$/', $raw, $matches) === 1) {
+                $raw = trim($matches[1]);
+            }
+
+            $assignments[$index]['personnel_source_key'] = $raw;
+        }
+
+        $this->merge(['assignments' => $assignments]);
+    }
+
     public function rules(): array
     {
         return [
             'site_code' => ['required', Rule::in(array_column(ControlRoomSiteCode::cases(), 'value'))],
-            'year' => ['required', 'integer', 'min:2020', 'max:2100'],
-            'week_number' => ['required', 'integer', 'min:1', 'max:53'],
             'assignments' => ['required', 'array', 'min:1'],
             'assignments.*.date' => ['required', 'date'],
             'assignments.*.shift_code' => ['required', Rule::in(array_column(ControlRoomShiftCode::cases(), 'value'))],

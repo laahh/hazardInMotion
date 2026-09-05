@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace App\Services\ControlRoom;
 
-use App\Enums\ControlRoomShiftCode;
 use App\Models\ControlRoom\SchedulePlan;
 use App\Services\ControlRoom\Reference\PersonnelReader;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 /**
- * plan-OCR.md T3.1 — logika submit satu minggu penuh sekaligus (grid personil
- * x 7 hari x 2 shift). Dipisah dari controller supaya testable tanpa HTTP.
+ * plan-OCR.md T3.1 — submit satu baris (dari modal kalender) atau banyak
+ * baris sekaligus. Dipisah dari controller supaya testable tanpa HTTP.
+ *
+ * year/week_number TIDAK diminta dari pemanggil — dihitung di sini dari
+ * tanggal tiap baris (CarbonImmutable::isoWeekYear()/isoWeek()), supaya
+ * selalu konsisten dengan tanggal aslinya walau UI kalender kini navigasi
+ * per bulan, bukan per minggu.
  */
 final class ScheduleBulkAssignService
 {
@@ -21,7 +25,7 @@ final class ScheduleBulkAssignService
     ) {}
 
     /**
-     * @param  array{site_code: string, year: int, week_number: int, assignments: list<array{date: string, shift_code: string, personnel_source_key: string}>}  $payload
+     * @param  array{site_code: string, assignments: list<array{date: string, shift_code: string, personnel_source_key: string}>}  $payload
      */
     public function assign(array $payload, int $createdByUserId): ScheduleBulkAssignResult
     {
@@ -62,6 +66,7 @@ final class ScheduleBulkAssignService
                 }
 
                 $personnel = $this->personnelReader->find($row['personnel_source_key']);
+                $date = CarbonImmutable::parse($row['date']);
 
                 $plan = SchedulePlan::updateOrCreate(
                     [
@@ -71,8 +76,8 @@ final class ScheduleBulkAssignService
                         'personnel_source_key' => $row['personnel_source_key'],
                     ],
                     [
-                        'year' => $payload['year'],
-                        'week_number' => $payload['week_number'],
+                        'year' => $date->isoWeekYear(),
+                        'week_number' => $date->isoWeek(),
                         'personnel_name_snapshot' => $personnel?->emp_name ?? $row['personnel_source_key'],
                         'status' => SchedulePlan::STATUS_DRAFT,
                         'created_by' => $createdByUserId,
@@ -90,9 +95,9 @@ final class ScheduleBulkAssignService
 
     /**
      * Peringatan (tidak memblokir submit): personil kena S1 dan S2 di hari
-     * yang sama, dan slot shift yang masih kosong untuk minggu ini.
+     * yang sama.
      *
-     * @param  array{site_code: string, year: int, week_number: int, assignments: list<array{date: string, shift_code: string, personnel_source_key: string}>}  $payload
+     * @param  array{site_code: string, assignments: list<array{date: string, shift_code: string, personnel_source_key: string}>}  $payload
      * @return list<string>
      */
     private function buildWarnings(array $payload): array
@@ -108,26 +113,6 @@ final class ScheduleBulkAssignService
             foreach ($personnelShifts as $personnelKey => $shifts) {
                 if (count(array_unique($shifts)) > 1) {
                     $warnings[] = "Personil {$personnelKey} dijadwalkan S1 dan S2 di tanggal {$date}.";
-                }
-            }
-        }
-
-        $weekStart = CarbonImmutable::now()->setISODate($payload['year'], $payload['week_number'], 1);
-        $expectedDates = collect(range(0, 6))->map(fn (int $i): string => $weekStart->addDays($i)->toDateString());
-        $expectedShifts = array_column(ControlRoomShiftCode::cases(), 'value');
-
-        $existingSlots = SchedulePlan::query()
-            ->where('site_code', $payload['site_code'])
-            ->where('year', $payload['year'])
-            ->where('week_number', $payload['week_number'])
-            ->get(['date', 'shift_code'])
-            ->map(fn (SchedulePlan $plan): string => $plan->date->toDateString().'|'.$plan->shift_code->value)
-            ->unique();
-
-        foreach ($expectedDates as $date) {
-            foreach ($expectedShifts as $shift) {
-                if (! $existingSlots->contains("{$date}|{$shift}")) {
-                    $warnings[] = "Slot {$date} {$shift} belum ada personil.";
                 }
             }
         }

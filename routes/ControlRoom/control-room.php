@@ -24,6 +24,7 @@ Route::middleware('auth')->group(function (): void {
 
     Route::prefix('schedule')->name('schedule.')->group(function (): void {
         Route::get('/changes', [ScheduleController::class, 'changes'])->name('changes');
+        Route::get('/events', [ScheduleController::class, 'events'])->name('events');
         Route::post('/bulk', [ScheduleController::class, 'storeBulk'])->name('bulk');
         Route::post('/copy', [ScheduleController::class, 'copy'])->name('copy');
         Route::post('/{week}/lock', [ScheduleController::class, 'lock'])->name('lock');

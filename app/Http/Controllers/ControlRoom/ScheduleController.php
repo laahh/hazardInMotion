@@ -14,12 +14,15 @@ use App\Models\ControlRoom\SchedulePlan;
 use App\Services\ControlRoom\Reference\PersonnelReader;
 use App\Services\ControlRoom\ScheduleBulkAssignService;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 final class ScheduleController extends Controller
 {
+    private const SHIFT_COLORS = ['S1' => '#0d6efd', 'S2' => '#fd7e14'];
+
     public function __construct(
         private readonly PersonnelReader $personnelReader,
     ) {}
@@ -27,44 +30,61 @@ final class ScheduleController extends Controller
     public function index(Request $request): View
     {
         $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
-        $year = (int) $request->integer('year', (int) now()->isoFormat('GGGG'));
-        $week = (int) $request->integer('week', (int) now()->isoWeek());
-
-        $plans = SchedulePlan::query()
-            ->where('site_code', $site->value)
-            ->where('year', $year)
-            ->where('week_number', $week)
-            ->orderBy('date')
-            ->orderBy('shift_code')
-            ->get()
-            ->groupBy(fn (SchedulePlan $plan): string => $plan->date->toDateString().'|'.$plan->shift_code->value);
-
-        $personnel = $this->personnelReader->all($site);
 
         return view('control-room.schedule.index', [
             'site' => $site,
-            'year' => $year,
-            'week' => $week,
             'sites' => ControlRoomSiteCode::cases(),
-            'plans' => $plans,
-            'personnel' => $personnel,
+            'personnel' => $this->personnelReader->all($site),
         ]);
+    }
+
+    /**
+     * Feed JSON untuk FullCalendar (dipanggil otomatis oleh library setiap
+     * rentang tanggal yang ditampilkan berubah — prev/next/today).
+     */
+    public function events(Request $request): JsonResponse
+    {
+        $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
+        $start = CarbonImmutable::parse($request->string('start')->toString());
+        $end = CarbonImmutable::parse($request->string('end')->toString());
+
+        $events = SchedulePlan::query()
+            ->where('site_code', $site->value)
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->orderBy('shift_code')
+            ->get()
+            ->map(fn (SchedulePlan $plan): array => [
+                'id' => $plan->id,
+                'title' => "{$plan->shift_code->value} • {$plan->personnel_name_snapshot}",
+                'start' => $plan->date->toDateString(),
+                'allDay' => true,
+                'color' => self::SHIFT_COLORS[$plan->shift_code->value] ?? '#6c757d',
+                'extendedProps' => [
+                    'locked' => $plan->isLocked(),
+                    'personnel' => $plan->personnel_name_snapshot,
+                    'shift' => $plan->shift_code->value,
+                    'deleteUrl' => route('control-room.schedule.destroy', $plan),
+                ],
+            ]);
+
+        return response()->json($events);
     }
 
     public function storeBulk(ScheduleBulkRequest $request, ScheduleBulkAssignService $service): RedirectResponse
     {
         $result = $service->assign($request->validated(), (int) $request->user()->id);
 
+        $redirectParams = ['site' => $request->string('site_code')];
+
         if ($result->hasErrors()) {
-            return back()->withErrors(['assignments' => $result->errors])->withInput();
+            return redirect()
+                ->route('control-room.schedule.index', $redirectParams)
+                ->withErrors(['assignments' => $result->errors])
+                ->withInput();
         }
 
         return redirect()
-            ->route('control-room.schedule.index', [
-                'site' => $request->string('site_code'),
-                'year' => $request->integer('year'),
-                'week' => $request->integer('week_number'),
-            ])
+            ->route('control-room.schedule.index', $redirectParams)
             ->with('success', "Jadwal tersimpan: {$result->created} baru, {$result->updated} diperbarui.")
             ->with('warnings', $result->warnings);
     }
@@ -103,11 +123,7 @@ final class ScheduleController extends Controller
         }
 
         return redirect()
-            ->route('control-room.schedule.index', [
-                'site' => $data['site_code'],
-                'year' => $data['to_year'],
-                'week' => $data['to_week_number'],
-            ])
+            ->route('control-room.schedule.index', ['site' => $data['site_code']])
             ->with('success', "Minggu {$data['from_week_number']} berhasil disalin ke minggu {$data['to_week_number']} ({$sourcePlans->count()} baris) — silakan diedit.");
     }
 
@@ -123,15 +139,21 @@ final class ScheduleController extends Controller
         return back()->with('success', 'Jadwal diperbarui.');
     }
 
-    public function destroy(SchedulePlan $schedule): RedirectResponse
+    public function destroy(Request $request, SchedulePlan $schedule): RedirectResponse|JsonResponse
     {
         if ($schedule->isLocked() || $schedule->date->isPast()) {
-            return back()->withErrors(['schedule' => 'Hanya jadwal berstatus draft di minggu yang belum berjalan yang bisa dihapus.']);
+            $message = 'Hanya jadwal berstatus draft di minggu yang belum berjalan yang bisa dihapus.';
+
+            return $request->wantsJson()
+                ? response()->json(['message' => $message], 422)
+                : back()->withErrors(['schedule' => $message]);
         }
 
         $schedule->delete();
 
-        return back()->with('success', 'Jadwal dihapus.');
+        return $request->wantsJson()
+            ? response()->json(['message' => 'Jadwal dihapus.'])
+            : back()->with('success', 'Jadwal dihapus.');
     }
 
     public function lock(Request $request, int $week): RedirectResponse
