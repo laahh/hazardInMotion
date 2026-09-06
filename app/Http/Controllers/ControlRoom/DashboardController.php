@@ -41,6 +41,7 @@ final class DashboardController extends Controller
         $weekEnd = $weekStart->addDays(6)->endOfDay();
         $prevWeekStart = $weekStart->subWeek();
         $nextWeekStart = $weekStart->addWeek();
+        $schedule = $scheduleWeek->build($site, $weekStart);
 
         return view('control-room.dashboard.index', [
             'site' => $site,
@@ -53,8 +54,8 @@ final class DashboardController extends Controller
             'nextYear' => (int) $nextWeekStart->isoWeekYear(),
             'nextWeek' => (int) $nextWeekStart->isoWeek(),
             'sites' => ControlRoomSiteCode::cases(),
-            'mock' => $mock->build($weekStart),
-            'schedule' => $scheduleWeek->build($site, $weekStart),
+            'mock' => $mock->build($weekStart, $schedule['days']),
+            'schedule' => $schedule,
         ]);
     }
 }

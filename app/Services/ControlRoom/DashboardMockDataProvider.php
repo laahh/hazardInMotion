@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\ControlRoom;
 
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 
 /**
@@ -13,17 +14,201 @@ use Carbon\CarbonInterface;
 final class DashboardMockDataProvider
 {
     /**
+     * @param  list<array<string, mixed>>  $scheduleDays
      * @return array<string, mixed>
      */
-    public function build(CarbonInterface $weekStart): array
+    public function build(CarbonInterface $weekStart, array $scheduleDays = []): array
     {
+        $achievementRows = $this->achievementRowsFromSchedule($scheduleDays);
+        if ($achievementRows === []) {
+            $achievementRows = $this->personnelAchievementFallback($weekStart);
+        }
+
         return [
             'kpi' => $this->kpiCards(),
-            'achievement' => $this->personnelAchievement(),
+            'achievement' => $achievementRows,
+            'achievementGroups' => $this->groupAchievement($achievementRows),
+            'personnelCoverage' => $this->personnelCoverageFrom($achievementRows),
             'coverageRanking' => $this->coverageRanking(),
             'pareto' => $this->paretoHours(),
             'highlight' => $this->highlightFindings(),
             'quality' => $this->qualityPanel(),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $scheduleDays
+     * @return list<array<string, mixed>>
+     */
+    private function achievementRowsFromSchedule(array $scheduleDays): array
+    {
+        $rows = [];
+        foreach ($scheduleDays as $day) {
+            $date = (string) ($day['date'] ?? '');
+            if ($date === '') {
+                continue;
+            }
+
+            foreach (['s1', 's2'] as $shiftKey) {
+                foreach ($day[$shiftKey] ?? [] as $person) {
+                    $name = (string) ($person['name'] ?? '—');
+                    $rows[] = $this->achievementRow(
+                        $date,
+                        $name,
+                        $shiftKey === 's1' ? 'S1' : 'S2',
+                        $this->attendancePctFromStatus((string) ($person['status'] ?? '')),
+                        $person['checkinout'] ?? [],
+                    );
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function personnelAchievementFallback(CarbonInterface $weekStart): array
+    {
+        $start = CarbonImmutable::parse($weekStart);
+        $people = [
+            ['Budi Santoso', 'S1', 100.0],
+            ['Siti Rahayu', 'S1', 80.0],
+            ['Ahmad Fauzi', 'S2', 60.0],
+            ['Dewi Lestari', 'S2', 100.0],
+            ['Rudi Hartono', 'S1', 85.0],
+        ];
+
+        $rows = [];
+        for ($i = 0; $i < 4; $i++) {
+            $date = $start->addDays($i)->toDateString();
+            foreach ($people as [$name, $shift, $attendance]) {
+                $rows[] = $this->achievementRow($date, $name, $shift, $attendance, $this->sampleTaps($shift, $date));
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $taps
+     * @return array<string, mixed>
+     */
+    private function achievementRow(string $date, string $name, string $shift, ?float $attendancePct, array $taps): array
+    {
+        return [
+            'date' => $date,
+            'date_label' => CarbonImmutable::parse($date)->format('n/j/Y'),
+            'name' => $name,
+            'shift' => $shift,
+            'attendance_pct' => $attendancePct,
+            'sap' => $this->mockMetric($name.$date, 'sap'),
+            'tbc' => $this->mockMetric($name.$date, 'tbc'),
+            'checkinout' => $taps,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array{date: string, date_label: string, rows: list<array<string, mixed>>}>
+     */
+    private function groupAchievement(array $rows): array
+    {
+        $groups = [];
+        foreach ($rows as $row) {
+            $key = (string) $row['date'];
+            if (! isset($groups[$key])) {
+                $groups[$key] = [
+                    'date' => $key,
+                    'date_label' => (string) $row['date_label'],
+                    'rows' => [],
+                ];
+            }
+            $groups[$key]['rows'][] = $row;
+        }
+
+        return array_values($groups);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array{name: string, lokasi: int, kritis: int, lead: bool}>
+     */
+    private function personnelCoverageFrom(array $rows): array
+    {
+        $byName = [];
+        foreach ($rows as $row) {
+            $name = (string) $row['name'];
+            if ($name === '' || $name === '—') {
+                continue;
+            }
+            $byName[$name] = $name;
+        }
+
+        if ($byName === []) {
+            $byName = ['Budi Santoso' => 'Budi Santoso', 'Siti Rahayu' => 'Siti Rahayu', 'Ahmad Fauzi' => 'Ahmad Fauzi'];
+        }
+
+        ksort($byName, SORT_NATURAL | SORT_FLAG_CASE);
+
+        $coverage = [];
+        foreach ($byName as $name) {
+            $seed = abs(crc32($name));
+            $coverage[] = [
+                'name' => $name,
+                'lokasi' => 4 + ($seed % 22),
+                'kritis' => $seed % 12,
+                'lead' => false,
+            ];
+        }
+
+        usort($coverage, fn (array $a, array $b): int => $b['lokasi'] <=> $a['lokasi']);
+        if ($coverage !== []) {
+            $coverage[0]['lead'] = true;
+        }
+
+        return $coverage;
+    }
+
+    private function attendancePctFromStatus(string $status): ?float
+    {
+        return match ($status) {
+            'sesuai', 'menggantikan', 'tidak_dijadwalkan' => 100.0,
+            'tidak_hadir' => 0.0,
+            default => null,
+        };
+    }
+
+    private function mockMetric(string $seed, string $kind): ?float
+    {
+        $n = abs(crc32($seed.$kind));
+        if ($kind === 'tbc' && ($n % 9) === 0) {
+            return null;
+        }
+
+        $choices = [100.0, 100.0, 97.0, 80.0, 67.0, 50.0, 33.0];
+
+        return $choices[$n % count($choices)];
+    }
+
+    /**
+     * @return list<array{time: string, date_label: string, type: string, type_label: string, gate: string, passed: bool}>
+     */
+    private function sampleTaps(string $shift, string $date): array
+    {
+        if ($shift === 'S2') {
+            return [
+                ['time' => '18:01', 'date_label' => CarbonImmutable::parse($date)->format('d M'), 'type' => 'in', 'type_label' => 'Check-in', 'gate' => 'POS 2', 'passed' => true],
+                ['time' => '07:30', 'date_label' => CarbonImmutable::parse($date)->addDay()->format('d M'), 'type' => 'out', 'type_label' => 'Check-out', 'gate' => 'POS 2', 'passed' => true],
+            ];
+        }
+
+        return [
+            ['time' => '07:30', 'date_label' => CarbonImmutable::parse($date)->format('d M'), 'type' => 'in', 'type_label' => 'Check-in', 'gate' => 'POS 1', 'passed' => true],
+            ['time' => '12:20', 'date_label' => CarbonImmutable::parse($date)->format('d M'), 'type' => 'out', 'type_label' => 'Check-out', 'gate' => 'POS 1', 'passed' => true],
+            ['time' => '12:58', 'date_label' => CarbonImmutable::parse($date)->format('d M'), 'type' => 'in', 'type_label' => 'Check-in', 'gate' => 'POS 1', 'passed' => true],
+            ['time' => '17:32', 'date_label' => CarbonImmutable::parse($date)->format('d M'), 'type' => 'out', 'type_label' => 'Check-out', 'gate' => 'POS 1', 'passed' => true],
         ];
     }
 
@@ -40,34 +225,6 @@ final class DashboardMockDataProvider
             ['label' => 'Ratio SAP dgn bonus', 'value' => '108%', 'progress' => 100.0, 'delta' => 6.0, 'deltaLabel' => 'bonus coaching', 'icon' => 'ri-award-line', 'color' => 'success', 'formula' => '%SAP dasar + bonus coaching di atas 100%'],
             ['label' => 'Ratio TBC', 'value' => '34.2%', 'progress' => 34.2, 'delta' => 5.1, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-shield-check-line', 'color' => 'danger', 'formula' => 'temuan tervalidasi TBC / total hazard+inspeksi'],
         ];
-    }
-
-    /**
-     * @return list<array{date: string, name: string, attendance: string, attendance_pct: float, sap: float, tbc: ?float}>
-     */
-    private function personnelAchievement(): array
-    {
-        $data = [
-            ['Budi Santoso', 100.0, 100.0, 45.0],
-            ['Siti Rahayu', 80.0, 66.7, 20.0],
-            ['Ahmad Fauzi', 60.0, 33.3, null],
-            ['Dewi Lestari', 100.0, 100.0, 60.0],
-            ['Rudi Hartono', 85.0, 83.3, 30.0],
-        ];
-
-        $rows = [];
-        foreach ($data as [$name, $attendancePct, $sap, $tbc]) {
-            $rows[] = [
-                'date' => now()->subDay()->format('d M Y'),
-                'name' => $name,
-                'attendance' => $attendancePct >= 80 ? 'Hadir' : 'Parsial',
-                'attendance_pct' => $attendancePct,
-                'sap' => $sap,
-                'tbc' => $tbc,
-            ];
-        }
-
-        return $rows;
     }
 
     /**

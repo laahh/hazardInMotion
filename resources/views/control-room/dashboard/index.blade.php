@@ -27,16 +27,26 @@
         'anomali' => 'Anomali',
         'belum_absen' => 'Belum absen',
     ];
-    $maxCoverage = max(1, ...array_column($mock['coverageRanking'], 'score'));
     $maxGoldenRule = max(1, ...array_column($mock['highlight']['goldenRules'], 'count'));
     $blindspotPct = $mock['highlight']['blindspotTotal'] > 0
         ? round(($mock['highlight']['blindspotCount'] / $mock['highlight']['blindspotTotal']) * 100, 1)
         : 0;
     $weekRangeLabel = $weekStart->locale('id')->translatedFormat('d M').' – '.$weekEnd->locale('id')->translatedFormat('d M Y');
-    $toneFor = static fn (float $value): string => match (true) {
-        $value >= 100 => 'success',
-        $value >= 60 => 'warning',
-        default => 'danger',
+    $heatClass = static function (?float $value): string {
+        if ($value === null) {
+            return 'is-heat-empty';
+        }
+        if ($value >= 100) {
+            return 'is-heat-100';
+        }
+        if ($value >= 60) {
+            return 'is-heat-mid';
+        }
+
+        return 'is-heat-low';
+    };
+    $heatLabel = static function (?float $value): string {
+        return $value === null ? '—' : number_format($value, 0).'%';
     };
     $scheduleDays = $schedule['days'];
     $defaultDay = collect($scheduleDays)->firstWhere('is_today')
@@ -52,7 +62,7 @@
     <div class="ocr-dash">
         <div class="ocr-notice" role="status">
             <i class="ri-information-line"></i>
-            <span><strong>Sebagian mockup.</strong> KPI, ranking, Pareto, dan kualitas masih fiktif. Panel Penjadwalan memakai data Jadwal Rencana + Absen (default: minggu lalu).</span>
+            <span><strong>Sebagian mockup.</strong> KPI, % SAP, % TBC, coverage, Pareto, dan kualitas masih fiktif. Nama/tanggal/check-in RFID di tabel pencapaian memakai jadwal + tap RFID nyata (default: minggu lalu).</span>
         </div>
 
         <form method="GET" class="ocr-card">
@@ -225,45 +235,62 @@
             </div>
         </div>
 
-        <div class="ocr-widget-row">
+        <div class="ocr-widget-tables">
             <div class="ocr-card">
                 <div class="ocr-card-header">
                     <div>
                         <h6>Pencapaian Personil</h6>
-                        <p class="ocr-card-kicker">Kehadiran · SAP · TBC</p>
+                        <p class="ocr-card-kicker">% pencapaian berdasarkan kehadiran sesuai jadwal, SAP berdasarkan target (1 Hazard, 1 Inspeksi, 1 Observasi/OAK), dan % TBC dari Hazard &amp; Inspeksi (catatan: &gt; 100% jika pelaporan + coaching). Kolom RFID untuk lihat checkout lalu kembali di jam jaga.</p>
                     </div>
                 </div>
-                <div class="ocr-card-body">
-                    <div class="ocr-achieve-list">
-                        @foreach ($mock['achievement'] as $row)
-                            <div class="ocr-achieve-item">
-                                <div>
-                                    <p class="ocr-achieve-name">{{ $row['name'] }}</p>
-                                    <p class="ocr-achieve-meta">{{ $row['date'] }} · {{ $row['attendance'] }}</p>
-                                </div>
-                                <strong>{{ number_format($row['attendance_pct'], 0) }}%</strong>
-                                <div class="ocr-metric-row">
-                                    <span>Kehadiran</span>
-                                    <div class="ocr-track is-{{ $toneFor($row['attendance_pct']) }}"><span style="width: {{ min(100, $row['attendance_pct']) }}%"></span></div>
-                                    <span>{{ number_format($row['attendance_pct'], 0) }}%</span>
-                                </div>
-                                <div class="ocr-metric-row">
-                                    <span>SAP</span>
-                                    <div class="ocr-track is-{{ $toneFor($row['sap']) }}"><span style="width: {{ min(100, $row['sap']) }}%"></span></div>
-                                    <span>{{ number_format($row['sap'], 0) }}%</span>
-                                </div>
-                                <div class="ocr-metric-row">
-                                    <span>TBC</span>
-                                    @if ($row['tbc'] !== null)
-                                        <div class="ocr-track is-{{ $toneFor($row['tbc']) }}"><span style="width: {{ min(100, $row['tbc']) }}%"></span></div>
-                                        <span>{{ number_format($row['tbc'], 0) }}%</span>
-                                    @else
-                                        <div class="ocr-track"><span style="width: 0"></span></div>
-                                        <span>—</span>
-                                    @endif
-                                </div>
-                            </div>
-                        @endforeach
+                <div class="ocr-card-body ocr-card-body--flush">
+                    <div class="table-responsive">
+                        <table class="ocr-heat">
+                            <thead>
+                                <tr>
+                                    <th>Tanggal</th>
+                                    <th>Actual — Nama</th>
+                                    <th class="text-center">Shift</th>
+                                    <th class="text-center">Kehadiran</th>
+                                    <th class="text-center">% SAP</th>
+                                    <th class="text-center">% TBC</th>
+                                    <th>Check-in / Out</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($mock['achievementGroups'] as $group)
+                                    @foreach ($group['rows'] as $index => $row)
+                                        <tr>
+                                            @if ($index === 0)
+                                                <td class="ocr-heat-date" rowspan="{{ count($group['rows']) }}">{{ $group['date_label'] }}</td>
+                                            @endif
+                                            <td class="ocr-heat-name">{{ $row['name'] }}</td>
+                                            <td class="text-center">{{ $row['shift'] }}</td>
+                                            <td class="ocr-heat-cell {{ $heatClass($row['attendance_pct']) }}">{{ $heatLabel($row['attendance_pct']) }}</td>
+                                            <td class="ocr-heat-cell {{ $heatClass($row['sap']) }}">{{ $heatLabel($row['sap']) }}</td>
+                                            <td class="ocr-heat-cell {{ $heatClass($row['tbc']) }}">{{ $heatLabel($row['tbc']) }}</td>
+                                            <td>
+                                                @if (($row['checkinout'] ?? []) === [])
+                                                    <span class="ocr-tap-empty">—</span>
+                                                @else
+                                                    <div class="ocr-tap-chips">
+                                                        @foreach ($row['checkinout'] as $tap)
+                                                            <span class="is-{{ $tap['type'] === 'in' ? 'in' : 'out' }}" title="{{ $tap['type_label'] }} · {{ $tap['gate'] ?? '' }}">
+                                                                {{ $tap['time'] }}{{ isset($tap['date_label']) ? ' · '.$tap['date_label'] : '' }}
+                                                            </span>
+                                                        @endforeach
+                                                    </div>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                @empty
+                                    <tr>
+                                        <td colspan="7" class="text-secondary-light">Belum ada data pencapaian untuk minggu ini.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -271,27 +298,36 @@
             <div class="ocr-card">
                 <div class="ocr-card-header">
                     <div>
-                        <h6>Top 5 Site</h6>
-                        <p class="ocr-card-kicker">Coverage score · non-kritis ×1 · kritis ×2</p>
+                        <h6>Coverage Personil</h6>
+                        <p class="ocr-card-kicker">Coverage Detail Lokasi · Coverage Area Kritis</p>
                     </div>
                 </div>
-                <div class="ocr-card-body">
-                    <div class="ocr-rank-list">
-                        @foreach ($mock['coverageRanking'] as $row)
-                            <div class="ocr-rank-item {{ $row['rank'] <= 3 ? 'is-top' : '' }}">
-                                <span class="ocr-rank-badge">{{ $row['rank'] }}</span>
-                                <div>
-                                    <p class="ocr-rank-name">{{ $row['name'] }}</p>
-                                    <p class="ocr-rank-meta">{{ $row['non_critical'] }} non-kritis · {{ $row['critical'] }} kritis</p>
-                                </div>
-                                <span class="ocr-rank-score">{{ $row['score'] }}</span>
-                                <div class="ocr-track is-primary"><span style="width: {{ ($row['score'] / $maxCoverage) * 100 }}%"></span></div>
-                            </div>
-                        @endforeach
+                <div class="ocr-card-body ocr-card-body--flush">
+                    <div class="table-responsive">
+                        <table class="ocr-heat ocr-heat--coverage">
+                            <thead>
+                                <tr>
+                                    <th>Actual — Nama</th>
+                                    <th class="text-center">Coverage Detail Lokasi</th>
+                                    <th class="text-center">Coverage Area Kritis</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($mock['personnelCoverage'] as $row)
+                                    <tr class="{{ $row['lead'] ? 'is-lead' : '' }}">
+                                        <td class="ocr-heat-name">{{ $row['name'] }}</td>
+                                        <td class="ocr-heat-cell is-cov">{{ $row['lokasi'] }}</td>
+                                        <td class="ocr-heat-cell is-cov">{{ $row['kritis'] }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
+        </div>
 
+        <div class="ocr-widget-charts">
             <div class="ocr-card">
                 <div class="ocr-card-header">
                     <div>
@@ -570,7 +606,7 @@
 
             function paretoOptions(series) {
                 return {
-                    chart: { type: 'line', height: 260, toolbar: { show: false }, fontFamily: 'inherit', animations: { enabled: false } },
+                    chart: { type: 'line', height: 280, toolbar: { show: false }, fontFamily: 'inherit', animations: { enabled: false } },
                     stroke: { width: [0, 3], curve: 'straight' },
                     series: [
                         { name: 'Jumlah Laporan', type: 'column', data: series.map(function (row) { return row.count; }) },
