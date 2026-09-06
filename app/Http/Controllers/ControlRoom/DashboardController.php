@@ -7,6 +7,7 @@ namespace App\Http\Controllers\ControlRoom;
 use App\Enums\ControlRoomSiteCode;
 use App\Http\Controllers\Controller;
 use App\Services\ControlRoom\DashboardMockDataProvider;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -25,15 +26,27 @@ final class DashboardController extends Controller
     public function index(Request $request, DashboardMockDataProvider $mock): View
     {
         $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
-        $year = (int) $request->integer('year', (int) now()->isoFormat('GGGG'));
+        $year = (int) $request->integer('year', (int) now()->isoWeekYear());
         $week = (int) $request->integer('week', (int) now()->isoWeek());
+        $week = max(1, min(53, $week));
+
+        $weekStart = CarbonImmutable::now()->setISODate($year, $week, 1)->startOfDay();
+        $weekEnd = $weekStart->addDays(6)->endOfDay();
+        $prevWeekStart = $weekStart->subWeek();
+        $nextWeekStart = $weekStart->addWeek();
 
         return view('control-room.dashboard.index', [
             'site' => $site,
-            'year' => $year,
-            'week' => $week,
+            'year' => (int) $weekStart->isoWeekYear(),
+            'week' => (int) $weekStart->isoWeek(),
+            'weekStart' => $weekStart,
+            'weekEnd' => $weekEnd,
+            'prevYear' => (int) $prevWeekStart->isoWeekYear(),
+            'prevWeek' => (int) $prevWeekStart->isoWeek(),
+            'nextYear' => (int) $nextWeekStart->isoWeekYear(),
+            'nextWeek' => (int) $nextWeekStart->isoWeek(),
             'sites' => ControlRoomSiteCode::cases(),
-            'mock' => $mock->build(),
+            'mock' => $mock->build($weekStart),
         ]);
     }
 }

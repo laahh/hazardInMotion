@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services\ControlRoom;
 
+use Carbon\CarbonInterface;
+use Carbon\CarbonImmutable;
+
 /**
  * MOCKUP SEMENTARA — plan-OCR.md T6.2-T6.8. Panel KPI sungguhan menunggu
  * Fase 4 (snapshot SAP) & Fase 5 (agregasi mingguan), yang menunggu keputusan
@@ -20,11 +23,11 @@ final class DashboardMockDataProvider
     /**
      * @return array<string, mixed>
      */
-    public function build(): array
+    public function build(CarbonInterface $weekStart): array
     {
         return [
             'kpi' => $this->kpiCards(),
-            'schedule' => $this->schedulePlanning(),
+            'schedule' => $this->schedulePlanning($weekStart),
             'achievement' => $this->personnelAchievement(),
             'coverageRanking' => $this->coverageRanking(),
             'pareto' => $this->paretoHours(),
@@ -34,47 +37,65 @@ final class DashboardMockDataProvider
     }
 
     /**
-     * @return list<array{label: string, value: string, delta: float, deltaLabel: string, icon: string, color: string, formula: string}>
+     * @return list<array{label: string, value: string, progress: float, delta: float, deltaLabel: string, icon: string, color: string, formula: string}>
      */
     private function kpiCards(): array
     {
         return [
-            ['label' => '% Total Kehadiran', 'value' => '87.5%', 'delta' => 2.3, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-user-follow-line', 'color' => 'success', 'formula' => 'hadir_sesuai_jadwal + hadir_menggantikan / total jadwal'],
-            ['label' => '% Avg SAP', 'value' => '92.1%', 'delta' => -1.4, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-file-list-3-line', 'color' => 'primary', 'formula' => 'rata-rata SapAchievement seluruh personil'],
-            ['label' => 'Coverage Detail Lokasi', 'value' => '68 / 95', 'delta' => 4.1, 'deltaLabel' => 'lokasi baru tercover', 'icon' => 'ri-map-pin-line', 'color' => 'info', 'formula' => 'lokasi tersentuh SAP / total lokasi terdaftar'],
-            ['label' => 'Coverage Area Kritis', 'value' => '24 / 30', 'delta' => 0.0, 'deltaLabel' => 'tidak berubah', 'icon' => 'ri-alarm-warning-line', 'color' => 'warning', 'formula' => 'area kritis tersentuh SAP / total area kritis'],
-            ['label' => 'Ratio SAP (dgn bonus)', 'value' => '108%', 'delta' => 6.0, 'deltaLabel' => 'bonus coaching', 'icon' => 'ri-award-line', 'color' => 'success', 'formula' => '%SAP dasar + bonus coaching di atas 100%'],
-            ['label' => 'Ratio TBC', 'value' => '34.2%', 'delta' => 5.1, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-shield-check-line', 'color' => 'danger', 'formula' => 'temuan tervalidasi TBC / total hazard+inspeksi'],
+            ['label' => '% Total Kehadiran', 'value' => '87.5%', 'progress' => 87.5, 'delta' => 2.3, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-user-follow-line', 'color' => 'success', 'formula' => 'hadir_sesuai_jadwal + hadir_menggantikan / total jadwal'],
+            ['label' => '% Avg SAP', 'value' => '92.1%', 'progress' => 92.1, 'delta' => -1.4, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-file-list-3-line', 'color' => 'primary', 'formula' => 'rata-rata SapAchievement seluruh personil'],
+            ['label' => 'Coverage Detail Lokasi', 'value' => '68 / 95', 'progress' => 71.6, 'delta' => 4.1, 'deltaLabel' => 'lokasi baru tercover', 'icon' => 'ri-map-pin-line', 'color' => 'info', 'formula' => 'lokasi tersentuh SAP / total lokasi terdaftar'],
+            ['label' => 'Coverage Area Kritis', 'value' => '24 / 30', 'progress' => 80.0, 'delta' => 0.0, 'deltaLabel' => 'tidak berubah', 'icon' => 'ri-alarm-warning-line', 'color' => 'warning', 'formula' => 'area kritis tersentuh SAP / total area kritis'],
+            ['label' => 'Ratio SAP (dgn bonus)', 'value' => '108%', 'progress' => 100.0, 'delta' => 6.0, 'deltaLabel' => 'bonus coaching', 'icon' => 'ri-award-line', 'color' => 'success', 'formula' => '%SAP dasar + bonus coaching di atas 100%'],
+            ['label' => 'Ratio TBC', 'value' => '34.2%', 'progress' => 34.2, 'delta' => 5.1, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-shield-check-line', 'color' => 'danger', 'formula' => 'temuan tervalidasi TBC / total hazard+inspeksi'],
         ];
     }
 
     /**
-     * Matriks personil x 7 hari x 2 shift — outline rencana, fill aktual.
+     * Kalender minggu — 7 hari × S1/S2. Outline = rencana, fill = aktual.
      *
-     * @return array{dates: list<string>, rows: list<array{name: string, cells: array<string, array{planned: bool, status: string}>}>}
+     * @return array{days: list<array{date: string, label: string, day_number: string, month_short: string, is_today: bool, is_weekend: bool, s1: list<array{name: string, short_name: string, initial: string, planned: bool, status: string}>, s2: list<array{name: string, short_name: string, initial: string, planned: bool, status: string}>}>}
      */
-    private function schedulePlanning(): array
+    private function schedulePlanning(CarbonInterface $weekStart): array
     {
-        $dates = collect(range(0, 6))->map(fn (int $i): string => now()->startOfWeek()->addDays($i)->format('D d/m'))->all();
         $statuses = ['sesuai', 'menggantikan', 'tidak_hadir', 'tidak_dijadwalkan', 'anomali'];
         $names = ['BUDI SANTOSO', 'SITI RAHAYU', 'AHMAD FAUZI', 'DEWI LESTARI', 'RUDI HARTONO'];
+        $today = now()->toDateString();
+        $origin = CarbonImmutable::parse($weekStart)->startOfDay();
 
-        $rows = [];
-        foreach ($names as $index => $name) {
-            $cells = [];
-            foreach ($dates as $dayIndex => $date) {
-                foreach (['S1', 'S2'] as $shift) {
-                    $seed = ($index + $dayIndex + (int) ($shift === 'S2')) % 5;
-                    $cells["{$date}|{$shift}"] = [
+        $days = [];
+        for ($i = 0; $i < 7; $i++) {
+            $date = $origin->addDays($i);
+            $day = [
+                'date' => $date->toDateString(),
+                'label' => $date->locale('id')->translatedFormat('D'),
+                'day_number' => $date->format('d'),
+                'month_short' => $date->locale('id')->translatedFormat('M'),
+                'is_today' => $date->toDateString() === $today,
+                'is_weekend' => $date->isWeekend(),
+                's1' => [],
+                's2' => [],
+            ];
+
+            foreach ($names as $index => $name) {
+                foreach (['s1' => 'S1', 's2' => 'S2'] as $key => $shift) {
+                    $seed = ($index + $i + (int) ($shift === 'S2')) % 5;
+                    $parts = explode(' ', $name);
+
+                    $day[$key][] = [
+                        'name' => $name,
+                        'short_name' => $parts[0],
+                        'initial' => mb_substr($name, 0, 1),
                         'planned' => $seed !== 3,
                         'status' => $statuses[$seed],
                     ];
                 }
             }
-            $rows[] = ['name' => $name, 'cells' => $cells];
+
+            $days[] = $day;
         }
 
-        return ['dates' => $dates, 'rows' => $rows];
+        return ['days' => $days];
     }
 
     /**

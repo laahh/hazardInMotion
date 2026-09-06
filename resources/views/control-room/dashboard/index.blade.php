@@ -2,307 +2,360 @@
 
 @section('page-title', 'Dashboard')
 
+@php
+    $chipClass = [
+        'sesuai' => 'ocr-chip--sesuai',
+        'menggantikan' => 'ocr-chip--ganti',
+        'tidak_hadir' => 'ocr-chip--absen',
+        'tidak_dijadwalkan' => 'ocr-chip--unplanned',
+        'anomali' => 'ocr-chip--anomali',
+    ];
+    $statusLabel = [
+        'sesuai' => 'Sesuai',
+        'menggantikan' => 'Menggantikan',
+        'tidak_hadir' => 'Tidak Hadir',
+        'tidak_dijadwalkan' => 'Tidak Dijadwalkan',
+        'anomali' => 'Anomali',
+    ];
+    $maxCoverage = max(1, ...array_column($mock['coverageRanking'], 'score'));
+    $maxGoldenRule = max(1, ...array_column($mock['highlight']['goldenRules'], 'count'));
+    $blindspotPct = $mock['highlight']['blindspotTotal'] > 0
+        ? round(($mock['highlight']['blindspotCount'] / $mock['highlight']['blindspotTotal']) * 100, 1)
+        : 0;
+    $weekRangeLabel = $weekStart->locale('id')->translatedFormat('d M').' – '.$weekEnd->locale('id')->translatedFormat('d M Y');
+    $toneFor = static fn (float $value): string => match (true) {
+        $value >= 100 => 'success',
+        $value >= 60 => 'warning',
+        default => 'danger',
+    };
+@endphp
+
+@push('styles')
+    <link rel="stylesheet" href="{{ asset('wowdash-admin/assets/css/control-room-dashboard.css') }}">
+@endpush
+
 @section('content')
-    <div class="alert alert-warning d-flex align-items-start gap-2 mb-24">
-        <i class="ri-information-line text-xl"></i>
-        <div>
-            <strong>Ini mockup visual, bukan data asli.</strong> Semua angka di halaman ini contoh/fiktif —
-            dibuat supaya ada gambaran layout sebelum pipeline data sungguhan (Fase 4 normalisasi SAP &amp;
-            Fase 5 agregasi) selesai. T0.1 sendiri sudah selesai diverifikasi (lihat <code>plan-OCR.md</code>
-            bagian 0.6) — yang masih menunggu adalah keputusan desain agregasi (#27) dan beberapa sumber
-            lain (Sheet ID TBC #23, definisi kolom blindspot #24). Lihat <code>plan-OCR.md</code> Lampiran D.
+    <div class="ocr-dash">
+        <div class="ocr-notice" role="status">
+            <i class="ri-information-line"></i>
+            <span><strong>Mockup visual.</strong> Angka di halaman ini fiktif — pipeline SAP &amp; agregasi belum aktif.</span>
         </div>
-    </div>
 
-    <form method="GET" class="card shadow-none border mb-24">
-        <div class="card-body">
-            <div class="row g-2 align-items-end">
-                <div class="col-md-3">
-                    <label class="form-label text-sm mb-1">Site</label>
-                    <select name="site" class="form-control">
-                        @foreach ($sites as $siteOption)
-                            <option value="{{ $siteOption->value }}" @selected($site === $siteOption)>{{ $siteOption->label() }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label text-sm mb-1">Tahun</label>
-                    <input type="number" name="year" value="{{ $year }}" class="form-control">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label text-sm mb-1">Minggu</label>
-                    <input type="number" name="week" value="{{ $week }}" min="1" max="53" class="form-control">
-                </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary-600 w-100">Terapkan Filter</button>
-                </div>
-                <div class="col-md-3 text-md-end">
-                    <span class="text-secondary-light text-xs">Last Data Update: <em>mockup — belum ada sync asli</em></span>
-                </div>
-            </div>
-        </div>
-    </form>
+        <form method="GET" class="ocr-card">
+            <div class="ocr-toolbar">
+                <div class="ocr-toolbar-left">
+                    <div>
+                        <label for="ocr-site">Site</label>
+                        <select name="site" id="ocr-site" class="form-control" onchange="this.form.submit()">
+                            @foreach ($sites as $siteOption)
+                                <option value="{{ $siteOption->value }}" @selected($site === $siteOption)>{{ $siteOption->label() }}</option>
+                            @endforeach
+                        </select>
+                    </div>
 
-    {{-- T6.2 — Panel KPI Header --}}
-    <div class="row gy-4 mb-24">
-        @foreach ($mock['kpi'] as $card)
-            <div class="col-xxl-2 col-md-4 col-sm-6">
-                <div class="card shadow-none border h-100" title="{{ $card['formula'] }}">
-                    <div class="card-body p-20">
-                        <div class="d-flex align-items-center justify-content-between gap-2 mb-8">
-                            <div class="w-40-px h-40-px bg-{{ $card['color'] }}-100 text-{{ $card['color'] }}-600 rounded-circle d-flex justify-content-center align-items-center">
-                                <i class="{{ $card['icon'] }}"></i>
+                    <input type="hidden" name="year" value="{{ $year }}">
+                    <input type="hidden" name="week" value="{{ $week }}">
+
+                    <div>
+                        <label>Minggu</label>
+                        <div class="ocr-week-stepper">
+                            <a href="{{ route('control-room.dashboard', ['site' => $site->value, 'year' => $prevYear, 'week' => $prevWeek]) }}" aria-label="Minggu sebelumnya">
+                                <i class="ri-arrow-left-s-line"></i>
+                            </a>
+                            <div class="ocr-week-label">
+                                <strong>{{ $weekRangeLabel }}</strong>
+                                <span>Minggu {{ $week }} · {{ $year }}</span>
                             </div>
-                            @if ($card['delta'] > 0)
-                                <span class="text-success-600 text-xs fw-semibold"><i class="ri-arrow-up-line"></i> {{ $card['delta'] }}</span>
-                            @elseif ($card['delta'] < 0)
-                                <span class="text-danger-600 text-xs fw-semibold"><i class="ri-arrow-down-line"></i> {{ abs($card['delta']) }}</span>
-                            @else
-                                <span class="text-secondary-light text-xs">—</span>
-                            @endif
+                            <a href="{{ route('control-room.dashboard', ['site' => $site->value, 'year' => $nextYear, 'week' => $nextWeek]) }}" aria-label="Minggu berikutnya">
+                                <i class="ri-arrow-right-s-line"></i>
+                            </a>
                         </div>
-                        <h6 class="mb-4">{{ $card['value'] }}</h6>
-                        <p class="text-secondary-light text-xs mb-0">{{ $card['label'] }}</p>
-                        <p class="text-secondary-light text-xs mb-0 fst-italic">{{ $card['deltaLabel'] }}</p>
                     </div>
+                </div>
+                <div class="ocr-toolbar-right">
+                    <span class="ocr-sync">Last update: mockup — belum ada sync asli</span>
                 </div>
             </div>
-        @endforeach
-    </div>
+        </form>
 
-    <div class="row gy-4 mb-24">
-        {{-- T6.3 — Panel Penjadwalan (Rencana vs Aktual) --}}
-        <div class="col-xxl-7">
-            <div class="card shadow-none border h-100">
-                <div class="card-header d-flex align-items-center justify-content-between">
-                    <h6 class="mb-0">Penjadwalan — Rencana vs Aktual</h6>
-                    <div class="d-flex gap-8 text-xs">
-                        <span><span class="badge bg-success-focus text-success-600 px-8 py-2 radius-4">&nbsp;</span> Sesuai</span>
-                        <span><span class="badge bg-warning-focus text-warning-600 px-8 py-2 radius-4">&nbsp;</span> Menggantikan</span>
-                        <span><span class="badge bg-danger-focus text-danger-600 px-8 py-2 radius-4">&nbsp;</span> Tidak Hadir</span>
-                        <span><span class="badge bg-neutral-200 text-neutral-600 px-8 py-2 radius-4">&nbsp;</span> Tdk Dijadwalkan</span>
+        {{-- T6.2 — Panel KPI Header --}}
+        <div class="ocr-kpi-grid">
+            @foreach ($mock['kpi'] as $card)
+                <div class="ocr-card ocr-kpi" title="{{ $card['formula'] }}" data-bs-toggle="tooltip" data-bs-title="{{ $card['formula'] }}">
+                    <div class="ocr-kpi-top">
+                        <div class="ocr-kpi-icon is-{{ $card['color'] }}">
+                            <i class="{{ $card['icon'] }}"></i>
+                        </div>
+                        @if ($card['delta'] > 0)
+                            <span class="ocr-delta is-up"><i class="ri-arrow-up-line"></i> {{ $card['delta'] }}</span>
+                        @elseif ($card['delta'] < 0)
+                            <span class="ocr-delta is-down"><i class="ri-arrow-down-line"></i> {{ abs($card['delta']) }}</span>
+                        @else
+                            <span class="ocr-delta is-flat">—</span>
+                        @endif
                     </div>
+                    <p class="ocr-kpi-value">{{ $card['value'] }}</p>
+                    <p class="ocr-kpi-label">{{ $card['label'] }}</p>
+                    <p class="ocr-kpi-sub">{{ $card['deltaLabel'] }}</p>
+                    <div class="ocr-track is-{{ $card['color'] }}"><span style="width: {{ min(100, $card['progress']) }}%"></span></div>
                 </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-sm mb-0 text-center">
-                            <thead>
-                                <tr>
-                                    <th class="text-start">Personil</th>
-                                    @foreach ($mock['schedule']['dates'] as $date)
-                                        <th colspan="2" class="text-xs">{{ $date }}</th>
-                                    @endforeach
-                                </tr>
-                                <tr>
-                                    <th></th>
-                                    @foreach ($mock['schedule']['dates'] as $date)
-                                        <th class="text-xs fw-normal">S1</th>
-                                        <th class="text-xs fw-normal">S2</th>
-                                    @endforeach
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($mock['schedule']['rows'] as $row)
-                                    <tr>
-                                        <td class="text-start text-xs">{{ $row['name'] }}</td>
-                                        @foreach ($mock['schedule']['dates'] as $date)
-                                            @foreach (['S1', 'S2'] as $shift)
-                                                @php
-                                                    $cell = $row['cells']["{$date}|{$shift}"];
-                                                    $cellColor = match ($cell['status']) {
-                                                        'sesuai' => 'success',
-                                                        'menggantikan' => 'warning',
-                                                        'tidak_hadir' => 'danger',
-                                                        'anomali' => 'info',
-                                                        default => 'neutral-200',
-                                                    };
-                                                @endphp
-                                                <td>
-                                                    <span
-                                                        class="d-inline-block rounded-circle bg-{{ $cellColor }}{{ $cellColor !== 'neutral-200' ? '-focus' : '' }}"
-                                                        style="width:12px;height:12px;{{ $cell['planned'] ? 'border:2px solid #444;' : '' }}"
-                                                        title="{{ $cell['status'] }}"
-                                                    ></span>
-                                                </td>
-                                            @endforeach
+            @endforeach
+        </div>
+
+        {{-- T6.3 — Kalender minggu Rencana vs Aktual --}}
+        <div class="ocr-card">
+            <div class="ocr-card-header">
+                <div>
+                    <h6>Penjadwalan — Rencana vs Aktual</h6>
+                    <p class="ocr-card-kicker">Klik hari untuk melihat roster shift. Outline = dijadwalkan, warna = status absen.</p>
+                </div>
+                <div class="ocr-legend">
+                    <span class="ocr-legend-item"><span class="ocr-legend-swatch is-sesuai"></span> Sesuai</span>
+                    <span class="ocr-legend-item"><span class="ocr-legend-swatch is-ganti"></span> Menggantikan</span>
+                    <span class="ocr-legend-item"><span class="ocr-legend-swatch is-absen"></span> Tidak Hadir</span>
+                    <span class="ocr-legend-item"><span class="ocr-legend-swatch is-unplanned"></span> Tdk Dijadwalkan</span>
+                    <span class="ocr-legend-item"><span class="ocr-legend-swatch is-anomali"></span> Anomali</span>
+                    <span class="ocr-legend-item"><span class="ocr-legend-swatch is-planned"></span> Ada di rencana</span>
+                </div>
+            </div>
+            <div class="ocr-cal-scroll">
+                <div class="ocr-cal">
+                    @foreach ($mock['schedule']['days'] as $day)
+                        <button
+                            type="button"
+                            class="ocr-day{{ $day['is_today'] ? ' is-today' : '' }}{{ $day['is_weekend'] ? ' is-weekend' : '' }}"
+                            data-day-date="{{ $day['date'] }}"
+                            aria-label="Roster {{ $day['label'] }} {{ $day['day_number'] }} {{ $day['month_short'] }}"
+                        >
+                            <div class="ocr-day-head">
+                                <span class="ocr-day-name">{{ $day['label'] }}</span>
+                                <span class="ocr-day-num">{{ $day['day_number'] }}</span>
+                            </div>
+                            @foreach (['s1' => 'Shift 1', 's2' => 'Shift 2'] as $shiftKey => $shiftName)
+                                <div class="ocr-shift">
+                                    <p class="ocr-shift-label">{{ $shiftName }}</p>
+                                    <div class="ocr-chips">
+                                        @foreach ($day[$shiftKey] as $person)
+                                            <span class="ocr-chip {{ $chipClass[$person['status']] }} {{ $person['planned'] ? 'is-planned' : '' }}" title="{{ $person['name'] }} · {{ $statusLabel[$person['status']] }}">
+                                                <span class="ocr-chip-avatar">{{ $person['initial'] }}</span>
+                                                <span class="ocr-chip-name">{{ $person['short_name'] }}</span>
+                                            </span>
                                         @endforeach
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </button>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+
+        <div class="row gy-4">
+            {{-- T6.4 — Pencapaian per Personil --}}
+            <div class="col-xxl-7">
+                <div class="ocr-card h-100">
+                    <div class="ocr-card-header">
+                        <div>
+                            <h6>Pencapaian per Personil</h6>
+                            <p class="ocr-card-kicker">SAP hijau ≥100%, kuning 60–99%, merah &lt;60%.</p>
+                        </div>
+                    </div>
+                    <div class="ocr-card-body">
+                        <div class="ocr-achieve-list">
+                            @foreach ($mock['achievement'] as $row)
+                                @php $sapTone = $toneFor($row['sap']); @endphp
+                                <div class="ocr-achieve-item">
+                                    <div>
+                                        <p class="ocr-achieve-name">{{ $row['name'] }}</p>
+                                        <p class="ocr-achieve-meta">{{ $row['date'] }} · {{ $row['attendance'] }}</p>
+                                    </div>
+                                    <strong>{{ number_format($row['sap'], 1) }}%</strong>
+                                    <div class="ocr-metric-row">
+                                        <span>SAP</span>
+                                        <div class="ocr-track is-{{ $sapTone }}"><span style="width: {{ min(100, $row['sap']) }}%"></span></div>
+                                        <span>{{ number_format($row['sap'], 0) }}%</span>
+                                    </div>
+                                    <div class="ocr-metric-row">
+                                        <span>TBC</span>
+                                        @if ($row['tbc'] !== null)
+                                            <div class="ocr-track is-{{ $toneFor($row['tbc']) }}"><span style="width: {{ min(100, $row['tbc']) }}%"></span></div>
+                                            <span>{{ number_format($row['tbc'], 0) }}%</span>
+                                        @else
+                                            <div class="ocr-track"><span style="width: 0"></span></div>
+                                            <span>—</span>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- T6.5 — Coverage Score & Ranking --}}
+            <div class="col-xxl-5">
+                <div class="ocr-card h-100">
+                    <div class="ocr-card-header">
+                        <div>
+                            <h6>Coverage Score &amp; Ranking</h6>
+                            <p class="ocr-card-kicker">Non-kritis ×1 · Kritis ×2</p>
+                        </div>
+                    </div>
+                    <div class="ocr-card-body">
+                        <div class="ocr-rank-list">
+                            @foreach ($mock['coverageRanking'] as $row)
+                                <div class="ocr-rank-item {{ $row['rank'] <= 3 ? 'is-top' : '' }}">
+                                    <span class="ocr-rank-badge">{{ $row['rank'] }}</span>
+                                    <div>
+                                        <p class="ocr-rank-name">{{ $row['name'] }}</p>
+                                        <p class="ocr-rank-meta">{{ $row['non_critical'] }} non-kritis · {{ $row['critical'] }} kritis</p>
+                                    </div>
+                                    <span class="ocr-rank-score">{{ $row['score'] }}</span>
+                                    <div class="ocr-track is-primary"><span style="width: {{ ($row['score'] / $maxCoverage) * 100 }}%"></span></div>
+                                </div>
+                            @endforeach
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        {{-- T6.5 — Coverage Score & Ranking --}}
-        <div class="col-xxl-5">
-            <div class="card shadow-none border h-100">
-                <div class="card-header"><h6 class="mb-0">Coverage Score &amp; Ranking</h6></div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-sm mb-0">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Nama</th>
-                                    <th class="text-center">Non-kritis (×1)</th>
-                                    <th class="text-center">Kritis (×2)</th>
-                                    <th class="text-center">Skor</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($mock['coverageRanking'] as $row)
+        {{-- T6.6 — Pareto --}}
+        <div class="row gy-4">
+            <div class="col-lg-6">
+                <div class="ocr-card">
+                    <div class="ocr-card-header">
+                        <div>
+                            <h6>Pareto Distribusi Jam — Shift 1</h6>
+                            <p class="ocr-card-kicker">Garis putus 80% kumulatif</p>
+                        </div>
+                    </div>
+                    <div class="ocr-card-body"><div id="chart-pareto-s1"></div></div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="ocr-card">
+                    <div class="ocr-card-header">
+                        <div>
+                            <h6>Pareto Distribusi Jam — Shift 2</h6>
+                            <p class="ocr-card-kicker">Garis putus 80% kumulatif</p>
+                        </div>
+                    </div>
+                    <div class="ocr-card-body"><div id="chart-pareto-s2"></div></div>
+                </div>
+            </div>
+        </div>
+
+        {{-- T6.7 — Highlight --}}
+        <div class="row gy-4">
+            <div class="col-lg-6">
+                <div class="ocr-card h-100">
+                    <div class="ocr-card-header">
+                        <div>
+                            <h6>Highlight Golden Rule</h6>
+                            <p class="ocr-card-kicker">Sebaran temuan per aturan</p>
+                        </div>
+                    </div>
+                    <div class="ocr-card-body">
+                        <div class="ocr-gr-list">
+                            @foreach ($mock['highlight']['goldenRules'] as $gr)
+                                <div class="ocr-gr-row">
+                                    <span>{{ $gr['name'] }}</span>
+                                    <strong>{{ $gr['count'] }}</strong>
+                                    <div class="ocr-track is-primary"><span style="width: {{ ($gr['count'] / $maxGoldenRule) * 100 }}%"></span></div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3">
+                <div class="ocr-card ocr-metric-tile">
+                    <i class="ri-map-2-line text-danger-600"></i>
+                    <p class="ocr-kpi-value">{{ $mock['highlight']['blindspotCount'] }} <span class="fs-6 fw-normal text-secondary-light">/ {{ $mock['highlight']['blindspotTotal'] }}</span></p>
+                    <p class="ocr-kpi-label mb-12">Lokasi Blindspot</p>
+                    <p class="ocr-kpi-sub">Belum tersentuh SAP minggu ini</p>
+                    <div class="ocr-track is-danger"><span style="width: {{ $blindspotPct }}%"></span></div>
+                </div>
+            </div>
+            <div class="col-lg-3">
+                <div class="ocr-card ocr-metric-tile">
+                    <i class="ri-shield-check-line text-warning-600"></i>
+                    <p class="ocr-kpi-value">{{ $mock['highlight']['tbcPercentage'] }}%</p>
+                    <p class="ocr-kpi-label mb-12">Ratio TBC</p>
+                    <p class="ocr-kpi-sub">To Be Concerned vs total temuan</p>
+                    <div class="ocr-track is-warning"><span style="width: {{ min(100, $mock['highlight']['tbcPercentage']) }}%"></span></div>
+                </div>
+            </div>
+        </div>
+
+        {{-- T6.8 — Kualitas --}}
+        <div class="row gy-4">
+            <div class="col-lg-7">
+                <div class="ocr-card h-100">
+                    <div class="ocr-card-header">
+                        <div>
+                            <h6>Kualitas Temuan per Personil</h6>
+                            <p class="ocr-card-kicker">Variasi 0–1 · semakin tinggi semakin beragam kategori</p>
+                        </div>
+                    </div>
+                    <div class="ocr-card-body ocr-card-body--flush">
+                        <div class="table-responsive">
+                            <table class="ocr-table">
+                                <thead>
                                     <tr>
-                                        <td>{{ $row['rank'] }}</td>
-                                        <td class="text-sm">{{ $row['name'] }}</td>
-                                        <td class="text-center">{{ $row['non_critical'] }}</td>
-                                        <td class="text-center">{{ $row['critical'] }}</td>
-                                        <td class="text-center fw-semibold">{{ $row['score'] }}</td>
+                                        <th>Nama</th>
+                                        <th class="text-center">Total</th>
+                                        <th class="text-center">Kategori</th>
+                                        <th>Variasi</th>
+                                        <th class="text-center">TBC</th>
+                                        <th class="text-center">GR</th>
+                                        <th class="text-center">Blindspot</th>
                                     </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    @foreach ($mock['quality'] as $row)
+                                        <tr>
+                                            <td>{{ $row['name'] }}</td>
+                                            <td class="text-center">{{ $row['total_findings'] }}</td>
+                                            <td class="text-center">{{ $row['distinct_categories'] }}</td>
+                                            <td>
+                                                <div class="ocr-variety">
+                                                    <div class="ocr-track is-primary"><span style="width: {{ $row['variety_score'] * 100 }}%"></span></div>
+                                                    <span>{{ number_format($row['variety_score'], 2) }}</span>
+                                                </div>
+                                            </td>
+                                            <td class="text-center">{{ $row['tbc'] }}</td>
+                                            <td class="text-center">{{ $row['gr'] }}</td>
+                                            <td class="text-center">{{ $row['blindspot'] }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-
-    {{-- T6.4 — Panel Pencapaian per Personil --}}
-    <div class="card shadow-none border mb-24">
-        <div class="card-header"><h6 class="mb-0">Pencapaian per Personil</h6></div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table mb-0">
-                    <thead>
-                        <tr>
-                            <th>Tanggal</th>
-                            <th>Nama</th>
-                            <th>Kehadiran</th>
-                            <th>%SAP</th>
-                            <th>%TBC</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($mock['achievement'] as $row)
-                            @php
-                                $sapColor = match (true) {
-                                    $row['sap'] >= 100 => 'success',
-                                    $row['sap'] >= 60 => 'warning',
-                                    default => 'danger',
-                                };
-                            @endphp
-                            <tr>
-                                <td>{{ $row['date'] }}</td>
-                                <td>{{ $row['name'] }}</td>
-                                <td>{{ $row['attendance'] }}</td>
-                                <td><span class="badge bg-{{ $sapColor }}-focus text-{{ $sapColor }}-600 px-8 py-2 radius-4">{{ $row['sap'] }}%</span></td>
-                                <td>{{ $row['tbc'] !== null ? $row['tbc'].'%' : '—' }}</td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    {{-- T6.6 — Panel Pareto Distribusi Jam --}}
-    <div class="row gy-4 mb-24">
-        <div class="col-lg-6">
-            <div class="card shadow-none border">
-                <div class="card-header"><h6 class="mb-0">Pareto Distribusi Jam — Shift 1</h6></div>
-                <div class="card-body"><div id="chart-pareto-s1"></div></div>
-            </div>
-        </div>
-        <div class="col-lg-6">
-            <div class="card shadow-none border">
-                <div class="card-header"><h6 class="mb-0">Pareto Distribusi Jam — Shift 2</h6></div>
-                <div class="card-body"><div id="chart-pareto-s2"></div></div>
-            </div>
-        </div>
-    </div>
-
-    {{-- T6.7 — Panel Highlight Temuan --}}
-    <div class="row gy-4 mb-24">
-        <div class="col-lg-6">
-            <div class="card shadow-none border h-100">
-                <div class="card-header"><h6 class="mb-0">Highlight Golden Rule</h6></div>
-                <div class="card-body p-0">
-                    <ul class="list-group list-group-flush">
-                        @foreach ($mock['highlight']['goldenRules'] as $gr)
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <span class="text-sm">{{ $gr['name'] }}</span>
-                                <span class="badge bg-primary-focus text-primary-600 px-8 py-2 radius-4">{{ $gr['count'] }}</span>
-                            </li>
-                        @endforeach
-                    </ul>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-3">
-            <div class="card shadow-none border h-100">
-                <div class="card-body text-center d-flex flex-column justify-content-center">
-                    <i class="ri-map-2-line text-3xl text-danger-600 mb-8"></i>
-                    <h6 class="mb-4">{{ $mock['highlight']['blindspotCount'] }} / {{ $mock['highlight']['blindspotTotal'] }}</h6>
-                    <p class="text-secondary-light text-sm mb-0">Lokasi Blindspot (belum tersentuh SAP)</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-3">
-            <div class="card shadow-none border h-100">
-                <div class="card-body text-center d-flex flex-column justify-content-center">
-                    <i class="ri-shield-check-line text-3xl text-warning-600 mb-8"></i>
-                    <h6 class="mb-4">{{ $mock['highlight']['tbcPercentage'] }}%</h6>
-                    <p class="text-secondary-light text-sm mb-0">Ratio TBC (To Be Concerned)</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    {{-- T6.8 — Panel Kualitas --}}
-    <div class="row gy-4">
-        <div class="col-lg-7">
-            <div class="card shadow-none border h-100">
-                <div class="card-header"><h6 class="mb-0">Kualitas Temuan per Personil</h6></div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-sm mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Nama</th>
-                                    <th class="text-center">Total</th>
-                                    <th class="text-center">Kategori Unik</th>
-                                    <th class="text-center">Variasi</th>
-                                    <th class="text-center">TBC</th>
-                                    <th class="text-center">GR</th>
-                                    <th class="text-center">Blindspot</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($mock['quality'] as $row)
-                                    <tr>
-                                        <td class="text-sm">{{ $row['name'] }}</td>
-                                        <td class="text-center">{{ $row['total_findings'] }}</td>
-                                        <td class="text-center">{{ $row['distinct_categories'] }}</td>
-                                        <td class="text-center">{{ $row['variety_score'] }}</td>
-                                        <td class="text-center">{{ $row['tbc'] }}</td>
-                                        <td class="text-center">{{ $row['gr'] }}</td>
-                                        <td class="text-center">{{ $row['blindspot'] }}</td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
+            <div class="col-lg-5">
+                <div class="ocr-card h-100">
+                    <div class="ocr-card-header">
+                        <div>
+                            <h6>Volume vs Variasi</h6>
+                            <p class="ocr-card-kicker">Kanan-atas = banyak temuan &amp; kategori beragam</p>
+                        </div>
                     </div>
+                    <div class="ocr-card-body"><div id="chart-quality-scatter"></div></div>
                 </div>
             </div>
         </div>
-        <div class="col-lg-5">
-            <div class="card shadow-none border h-100">
-                <div class="card-header"><h6 class="mb-0">Volume vs Variasi</h6></div>
-                <div class="card-body"><div id="chart-quality-scatter"></div></div>
-            </div>
+    </div>
+
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="ocrDayDrawer" aria-labelledby="ocrDayDrawerTitle">
+        <div class="offcanvas-header">
+            <h6 class="offcanvas-title" id="ocrDayDrawerTitle">Roster hari</h6>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Tutup"></button>
         </div>
+        <div class="offcanvas-body" id="ocrDayDrawerBody"></div>
     </div>
 @endsection
 
@@ -311,6 +364,14 @@
         (function () {
             var pareto = @json($mock['pareto']);
             var quality = @json($mock['quality']);
+            var scheduleDays = @json($mock['schedule']['days']);
+            var statusLabel = @json($statusLabel);
+            var chipClass = @json($chipClass);
+
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.forEach(function (el) {
+                new bootstrap.Tooltip(el);
+            });
 
             function renderPareto(elementId, series) {
                 var hours = series.map(function (row) { return row.hour + ':00'; });
@@ -318,20 +379,23 @@
                 var cumulative = series.map(function (row) { return row.cumulative; });
 
                 new ApexCharts(document.getElementById(elementId), {
-                    chart: { type: 'line', height: 280, toolbar: { show: false } },
+                    chart: { type: 'line', height: 280, toolbar: { show: false }, fontFamily: 'inherit' },
                     stroke: { width: [0, 3], curve: 'straight' },
                     series: [
                         { name: 'Jumlah Laporan', type: 'column', data: counts },
                         { name: 'Kumulatif %', type: 'line', data: cumulative },
                     ],
-                    xaxis: { categories: hours, title: { text: 'Jam' } },
+                    xaxis: { categories: hours, title: { text: 'Jam' }, axisBorder: { show: false } },
                     yaxis: [
                         { title: { text: 'Jumlah Laporan' } },
                         { opposite: true, min: 0, max: 100, title: { text: 'Kumulatif %' } },
                     ],
-                    colors: ['#0d6efd', '#fd7e14'],
+                    colors: ['#487FFF', '#FF9F29'],
+                    grid: { borderColor: 'rgba(209, 213, 219, 0.4)', strokeDashArray: 4 },
+                    legend: { position: 'top', horizontalAlign: 'right' },
+                    dataLabels: { enabled: false },
                     annotations: {
-                        yaxis: [{ y: 80, yAxisIndex: 1, borderColor: '#adb5bd', label: { text: '80%', style: { fontSize: '10px' } } }],
+                        yaxis: [{ y: 80, yAxisIndex: 1, borderColor: '#9CA3AF', strokeDashArray: 6, label: { text: '80%', style: { fontSize: '10px' } } }],
                     },
                 }).render();
             }
@@ -340,14 +404,15 @@
             renderPareto('chart-pareto-s2', pareto.s2);
 
             new ApexCharts(document.getElementById('chart-quality-scatter'), {
-                chart: { type: 'scatter', height: 280, toolbar: { show: false } },
+                chart: { type: 'scatter', height: 280, toolbar: { show: false }, fontFamily: 'inherit' },
                 series: [{
                     name: 'Personil',
                     data: quality.map(function (row) { return [row.total_findings, row.variety_score]; }),
                 }],
-                xaxis: { title: { text: 'Volume Temuan' } },
+                xaxis: { title: { text: 'Volume Temuan' }, tickAmount: 5 },
                 yaxis: { title: { text: 'Variasi Score' }, min: 0, max: 1 },
-                colors: ['#0d6efd'],
+                colors: ['#487FFF'],
+                grid: { borderColor: 'rgba(209, 213, 219, 0.4)', strokeDashArray: 4 },
                 tooltip: {
                     custom: function (opts) {
                         var row = quality[opts.dataPointIndex];
@@ -355,6 +420,54 @@
                     },
                 },
             }).render();
+
+            function escapeHtml(value) {
+                return String(value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+            }
+
+            function renderShift(title, people) {
+                var html = '<div class="ocr-roster-shift"><h6>' + escapeHtml(title) + '</h6>';
+                if (!people.length) {
+                    html += '<p class="text-secondary-light text-sm mb-0">Tidak ada personil.</p></div>';
+                    return html;
+                }
+
+                people.forEach(function (person) {
+                    var klass = chipClass[person.status] || 'ocr-chip--unplanned';
+                    var planned = person.planned ? 'is-planned' : '';
+                    html += '<div class="ocr-roster-row">'
+                        + '<div><strong>' + escapeHtml(person.name) + '</strong>'
+                        + '<div class="text-xs text-secondary-light">' + (person.planned ? 'Ada di rencana' : 'Tidak dijadwalkan') + '</div></div>'
+                        + '<span class="ocr-chip ' + klass + ' ' + planned + '">' + escapeHtml(statusLabel[person.status] || person.status) + '</span>'
+                        + '</div>';
+                });
+
+                return html + '</div>';
+            }
+
+            var drawerEl = document.getElementById('ocrDayDrawer');
+            var drawer = new bootstrap.Offcanvas(drawerEl);
+            var titleEl = document.getElementById('ocrDayDrawerTitle');
+            var bodyEl = document.getElementById('ocrDayDrawerBody');
+            var daysByDate = {};
+            scheduleDays.forEach(function (day) { daysByDate[day.date] = day; });
+
+            document.querySelectorAll('.ocr-day').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var day = daysByDate[btn.getAttribute('data-day-date')];
+                    if (!day) {
+                        return;
+                    }
+
+                    titleEl.textContent = day.label + ', ' + day.day_number + ' ' + day.month_short;
+                    bodyEl.innerHTML = renderShift('Shift 1', day.s1) + renderShift('Shift 2', day.s2);
+                    drawer.show();
+                });
+            });
         })();
     </script>
 @endpush
