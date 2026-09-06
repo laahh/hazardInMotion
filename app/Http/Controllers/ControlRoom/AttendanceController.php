@@ -14,6 +14,7 @@ use App\Models\ControlRoom\SchedulePlan;
 use App\Services\ControlRoom\AttendanceFormRecorder;
 use App\Services\ControlRoom\Reference\PersonnelReader;
 use App\Services\ControlRoom\Reference\ShiftResolver;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -31,6 +32,32 @@ final class AttendanceController extends Controller
     {
         return view('control-room.attendance.form', [
             'defaultTanggal' => now()->toDateString(),
+            'lookupUrl' => route('control-room.attendance.personnel'),
+        ]);
+    }
+
+    public function lookupPersonnel(Request $request): JsonResponse
+    {
+        $sid = strtoupper(trim((string) $request->query('sid', '')));
+        if (strlen($sid) < 2) {
+            return response()->json(['found' => false]);
+        }
+
+        $personnel = $this->personnelReader->find($sid);
+        if ($personnel === null) {
+            return response()->json(['found' => false]);
+        }
+
+        $name = trim((string) $personnel->emp_name);
+        if ($name !== '') {
+            $name = mb_convert_case(mb_strtolower($name, 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+        }
+
+        return response()->json([
+            'found' => true,
+            'sid' => (string) $personnel->sid,
+            'name' => $name,
+            'site' => (string) $personnel->site_dedicated,
         ]);
     }
 

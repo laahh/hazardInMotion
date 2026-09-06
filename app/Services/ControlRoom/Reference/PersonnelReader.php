@@ -36,7 +36,15 @@ final class PersonnelReader
 
     public function find(string $sourceKey): ?Employee
     {
-        return Employee::query()->where('sid', $sourceKey)->first();
+        $sid = strtoupper(trim($sourceKey));
+        if ($sid === '') {
+            return null;
+        }
+
+        return Employee::query()
+            ->select(['emp_id', 'sid', 'emp_name', 'site_dedicated'])
+            ->whereRaw('upper(sid) = ?', [$sid])
+            ->first();
     }
 
     /**

@@ -61,6 +61,24 @@
                 @error('sid')
                     <p class="ocr-gf-error" id="sid-error"><i class="ri-error-warning-fill" aria-hidden="true"></i> {{ $message }}</p>
                 @enderror
+                <p class="ocr-gf-status" id="sid-status" role="status" aria-live="polite"></p>
+            </section>
+
+            <section class="ocr-gf-card" id="ocr-gf-nama-card">
+                <label class="ocr-gf-question" for="nama">Nama</label>
+                <p class="ocr-gf-help" id="nama-help">Terisi otomatis setelah SID dikenali.</p>
+                <input
+                    id="nama"
+                    name="nama"
+                    type="text"
+                    value="{{ old('nama') }}"
+                    class="ocr-gf-input"
+                    placeholder="Menunggu SID..."
+                    readonly
+                    tabindex="-1"
+                    aria-readonly="true"
+                    aria-describedby="nama-help"
+                >
             </section>
 
             <section class="ocr-gf-card{{ $errors->has('tanggal') ? ' is-invalid' : '' }}">
@@ -130,6 +148,73 @@
             var submit = document.getElementById('ocr-absensi-submit');
             var clearBtn = document.getElementById('ocr-absensi-clear');
             var defaultDate = @json($defaultTanggal);
+            var lookupUrl = @json($lookupUrl);
+            var sidInput = document.getElementById('sid');
+            var namaInput = document.getElementById('nama');
+            var sidStatus = document.getElementById('sid-status');
+            var lookupTimer = null;
+            var lookupSeq = 0;
+
+            function setStatus(text, tone) {
+                sidStatus.textContent = text || '';
+                sidStatus.className = 'ocr-gf-status' + (tone ? ' ' + tone : '');
+            }
+
+            function clearNama() {
+                namaInput.value = '';
+            }
+
+            function lookupSid() {
+                var sid = (sidInput.value || '').trim().toUpperCase();
+                sidInput.value = sid;
+
+                if (sid.length < 2) {
+                    clearNama();
+                    setStatus(sid.length ? 'Lanjutkan mengetik SID...' : '', sid.length ? 'is-wait' : '');
+                    return;
+                }
+
+                var seq = ++lookupSeq;
+                setStatus('Mencari nama...', 'is-wait');
+
+                fetch(lookupUrl + '?sid=' + encodeURIComponent(sid), {
+                    headers: { Accept: 'application/json' },
+                    credentials: 'same-origin',
+                })
+                    .then(function (res) { return res.json(); })
+                    .then(function (data) {
+                        if (seq !== lookupSeq) {
+                            return;
+                        }
+                        if (data && data.found) {
+                            namaInput.value = data.name || '';
+                            setStatus('Nama ditemukan.', 'is-ok');
+                            return;
+                        }
+                        clearNama();
+                        setStatus('SID tidak ditemukan atau personil tidak aktif.', 'is-miss');
+                    })
+                    .catch(function () {
+                        if (seq !== lookupSeq) {
+                            return;
+                        }
+                        clearNama();
+                        setStatus('Gagal mencari nama. Coba lagi.', 'is-miss');
+                    });
+            }
+
+            sidInput.addEventListener('input', function () {
+                window.clearTimeout(lookupTimer);
+                lookupTimer = window.setTimeout(lookupSid, 400);
+            });
+            sidInput.addEventListener('blur', function () {
+                window.clearTimeout(lookupTimer);
+                lookupSid();
+            });
+
+            if ((sidInput.value || '').trim().length >= 2) {
+                lookupSid();
+            }
             var summary = document.getElementById('ocr-gf-error-summary');
 
             function resetPreview() {
@@ -163,6 +248,8 @@
             clearBtn.addEventListener('click', function () {
                 window.setTimeout(function () {
                     document.getElementById('tanggal').value = defaultDate;
+                    namaInput.value = '';
+                    setStatus('', '');
                     resetPreview();
                     submit.disabled = false;
                     submit.textContent = 'Kirim';

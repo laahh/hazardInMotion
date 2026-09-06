@@ -39,6 +39,7 @@ Route::middleware('auth')->group(function (): void {
         // kalau tidak, "check-in" akan tertangkap sebagai {attendance} id.
         Route::get('/form', [AttendanceController::class, 'showForm'])->name('form');
         Route::post('/form', [AttendanceController::class, 'storeForm'])->name('form.store');
+        Route::get('/personnel', [AttendanceController::class, 'lookupPersonnel'])->name('personnel');
         Route::get('/check-in', [AttendanceController::class, 'showCheckIn'])->name('check-in.form');
         Route::post('/check-in', [AttendanceController::class, 'checkIn'])->name('check-in');
         Route::get('/{attendance}', [AttendanceController::class, 'show'])->name('show');

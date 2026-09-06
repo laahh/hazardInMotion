@@ -198,6 +198,31 @@
     color-scheme: light;
 }
 
+.ocr-gf-input[readonly] {
+    color: #202124;
+    border-bottom-style: dotted;
+    cursor: default;
+}
+
+.ocr-gf-status {
+    margin: 10px 0 0;
+    font-size: 13px;
+    line-height: 1.4;
+    min-height: 1.2em;
+}
+
+.ocr-gf-status.is-wait {
+    color: #5f6368;
+}
+
+.ocr-gf-status.is-ok {
+    color: #137333;
+}
+
+.ocr-gf-status.is-miss {
+    color: #d93025;
+}
+
 .ocr-gf-error {
     display: flex;
     align-items: flex-start;
