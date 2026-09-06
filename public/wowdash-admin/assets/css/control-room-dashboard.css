@@ -297,8 +297,10 @@
 
 .ocr-cal-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
-    min-height: 440px;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    height: 520px;
+    min-height: 520px;
+    overflow: hidden;
     border-top: 1px solid var(--neutral-100);
     transition: grid-template-columns 0.2s ease;
 }
@@ -313,16 +315,26 @@
 
 .ocr-cal-main {
     min-width: 0;
+    min-height: 0;
+    height: 100%;
     padding: 8px 8px 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .ocr-cal-scroll {
-    overflow-x: auto;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
     -webkit-overflow-scrolling: touch;
 }
 
 .ocr-cal-board {
     min-width: 760px;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 .ocr-cal-head {
@@ -370,11 +382,13 @@
     position: relative;
     display: grid;
     grid-template-columns: 56px minmax(0, 1fr);
+    flex: 1;
     min-height: 360px;
 }
 
 .ocr-cal-gutter {
     position: relative;
+    height: 100%;
     font-size: 11px;
     font-weight: 600;
     color: var(--text-secondary-light);
@@ -411,12 +425,16 @@
 
 .ocr-cal-track {
     position: relative;
+    height: 100%;
+    min-height: 360px;
 }
 
 .ocr-cal-days {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
     position: relative;
+    height: 100%;
+    min-height: 360px;
     background:
         linear-gradient(to bottom, transparent 0, transparent calc(66.666% - 0.5px), var(--neutral-200) calc(66.666% - 0.5px), var(--neutral-200) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px)),
         repeating-linear-gradient(
@@ -432,6 +450,8 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
+    height: 100%;
     padding: 0 7px 8px;
     border: 0;
     background: transparent;
@@ -458,7 +478,7 @@
     display: grid;
     grid-template-rows: 2fr 1fr;
     gap: 10px;
-    min-height: 320px;
+    min-height: 0;
     padding-top: 6px;
 }
 
@@ -589,7 +609,9 @@
     padding: 16px;
     display: flex;
     flex-direction: column;
-    min-height: 100%;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
 }
 
 .ocr-roster-head {
@@ -597,7 +619,8 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
 }
 
 .ocr-roster-head h6 {
@@ -631,12 +654,38 @@
     gap: 12px;
 }
 
+.ocr-roster-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+}
+
+.ocr-roster-name {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #111827;
+}
+
 .ocr-roster-person {
     background: var(--white);
     border: 1px solid var(--neutral-200);
     border-radius: 12px;
     padding: 12px 14px;
     border-left-width: 4px;
+}
+
+.ocr-roster-person-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary-light);
 }
 
 .ocr-roster-person.is-sesuai {
@@ -670,41 +719,6 @@
     border-left-color: var(--ocr-unplanned);
 }
 
-.ocr-roster-person-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 10px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-secondary-light);
-}
-
-.ocr-roster-fields {
-    display: grid;
-    gap: 8px;
-    margin: 0;
-}
-
-.ocr-roster-fields div {
-    display: grid;
-    grid-template-columns: 72px 1fr;
-    gap: 8px;
-    font-size: 12px;
-}
-
-.ocr-roster-fields dt {
-    margin: 0;
-    color: var(--text-secondary-light);
-}
-
-.ocr-roster-fields dd {
-    margin: 0;
-    font-weight: 600;
-    color: var(--text-primary-light);
-}
-
 .ocr-roster-empty {
     font-size: 12px;
     color: var(--text-secondary-light);
@@ -715,7 +729,7 @@
 }
 
 .ocr-roster-taps {
-    margin-top: 12px;
+    margin-top: 4px;
     padding-top: 10px;
     border-top: 1px dashed rgba(17, 24, 39, 0.12);
 }
@@ -1178,6 +1192,14 @@
     .ocr-cal-layout,
     .ocr-cal-layout.is-roster-closed {
         grid-template-columns: 1fr;
+        height: auto;
+        min-height: 0;
+        overflow: visible;
+    }
+
+    .ocr-cal-main,
+    .ocr-roster {
+        height: 480px;
     }
 
     .ocr-roster {
@@ -1246,6 +1268,10 @@
 
 [data-theme="dark"] .ocr-track {
     background: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .ocr-roster-name {
+    color: #f9fafb;
 }
 
 [data-theme="dark"] .ocr-roster-taps {

@@ -230,7 +230,7 @@
                             <i class="ri-close-line"></i>
                         </button>
                     </div>
-                    <div id="ocr-roster-body"></div>
+                    <div class="ocr-roster-body" id="ocr-roster-body"></div>
                 </aside>
             </div>
         </div>
@@ -473,12 +473,7 @@
                     + '<span>' + escapeHtml(shiftLabel) + '</span>'
                     + '<span class="ocr-chip ' + klass + '">' + escapeHtml(statusLabel[status] || status) + '</span>'
                     + '</div>'
-                    + '<dl class="ocr-roster-fields">'
-                    + '<div><dt>Nama</dt><dd>' + escapeHtml(person.name || '—') + '</dd></div>'
-                    + '<div><dt>Jabatan</dt><dd>' + escapeHtml(person.jabatan || '—') + '</dd></div>'
-                    + '<div><dt>Lokasi</dt><dd>' + escapeHtml(person.lokasi || '—') + '</dd></div>'
-                    + '<div><dt>Catatan</dt><dd>' + escapeHtml(person.catatan || '—') + '</dd></div>'
-                    + '</dl>'
+                    + '<p class="ocr-roster-name">' + escapeHtml(person.name || '—') + '</p>'
                     + renderCheckinout(person.checkinout || [])
                     + '</div>';
             }
