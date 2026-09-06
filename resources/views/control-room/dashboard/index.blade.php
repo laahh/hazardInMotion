@@ -27,7 +27,7 @@
         'anomali' => 'Anomali',
         'belum_absen' => 'Belum absen',
     ];
-    $maxGoldenRule = max(1, ...array_column($mock['highlight']['goldenRules'], 'count'));
+    $maxGoldenRule = max(1, ...(array_column($mock['highlight']['goldenRules'], 'count') ?: [0]));
     $blindspotPct = $mock['highlight']['blindspotTotal'] > 0
         ? round(($mock['highlight']['blindspotCount'] / $mock['highlight']['blindspotTotal']) * 100, 1)
         : 0;
@@ -62,7 +62,7 @@
     <div class="ocr-dash">
         <div class="ocr-notice" role="status">
             <i class="ri-information-line"></i>
-            <span><strong>Sebagian mockup.</strong> KPI, coverage, Pareto, kualitas, dan % TBC masih fiktif. Kehadiran dan % SAP di Pencapaian Personil memakai jadwal + laporan OBDS (target 1 Hazard, 1 Inspeksi, 1 Observasi/OAK). Tombol Detail menampilkan laporan pada jendela jaga.</span>
+            <span><strong>Sebagian mockup.</strong> KPI header dan ranking coverage masih fiktif. Pencapaian Personil, Pareto, Highlight, dan Kualitas memakai jadwal + laporan OBDS. Blindspot/TBC dari snapshot HSECM bila tabelnya ada. Tombol Detail menampilkan laporan pada jendela jaga.</span>
         </div>
 
         <form method="GET" class="ocr-card">
@@ -352,13 +352,15 @@
                 </div>
                 <div class="ocr-card-body">
                     <div class="ocr-gr-list">
-                        @foreach ($mock['highlight']['goldenRules'] as $gr)
+                        @forelse ($mock['highlight']['goldenRules'] as $gr)
                             <div class="ocr-gr-row">
                                 <span>{{ $gr['name'] }}</span>
                                 <strong>{{ $gr['count'] }}</strong>
                                 <div class="ocr-track is-primary"><span style="width: {{ ($gr['count'] / $maxGoldenRule) * 100 }}%"></span></div>
                             </div>
-                        @endforeach
+                        @empty
+                            <p class="text-secondary-light mb-0">Tidak ada nama Golden Rule pada laporan minggu ini.</p>
+                        @endforelse
                     </div>
                     <div class="ocr-highlight-metrics">
                         <div class="ocr-metric-mini">
@@ -368,8 +370,8 @@
                         </div>
                         <div class="ocr-metric-mini">
                             <p class="ocr-kpi-label">Ratio TBC</p>
-                            <p class="ocr-kpi-value">{{ $mock['highlight']['tbcPercentage'] }}%</p>
-                            <div class="ocr-track is-warning"><span style="width: {{ min(100, $mock['highlight']['tbcPercentage']) }}%"></span></div>
+                            <p class="ocr-kpi-value">{{ $mock['highlight']['tbcPercentage'] === null ? '—' : number_format($mock['highlight']['tbcPercentage'], 1).'%' }}</p>
+                            <div class="ocr-track is-warning"><span style="width: {{ min(100, $mock['highlight']['tbcPercentage'] ?? 0) }}%"></span></div>
                         </div>
                     </div>
                 </div>
@@ -400,22 +402,26 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach ($mock['quality'] as $row)
+                                    @forelse ($mock['quality'] as $row)
                                         <tr>
                                             <td>{{ $row['name'] }}</td>
                                             <td class="text-center">{{ $row['total_findings'] }}</td>
                                             <td class="text-center">{{ $row['distinct_categories'] }}</td>
                                             <td>
                                                 <div class="ocr-variety">
-                                                    <div class="ocr-track is-primary"><span style="width: {{ $row['variety_score'] * 100 }}%"></span></div>
-                                                    <span>{{ number_format($row['variety_score'], 2) }}</span>
+                                                    <div class="ocr-track is-primary"><span style="width: {{ ($row['variety_score'] ?? 0) * 100 }}%"></span></div>
+                                                    <span>{{ number_format((float) $row['variety_score'], 2) }}</span>
                                                 </div>
                                             </td>
                                             <td class="text-center">{{ $row['tbc'] }}</td>
                                             <td class="text-center">{{ $row['gr'] }}</td>
                                             <td class="text-center">{{ $row['blindspot'] }}</td>
                                         </tr>
-                                    @endforeach
+                                    @empty
+                                        <tr>
+                                            <td colspan="7" class="text-secondary-light">Belum ada temuan SAP personil jadwal pada minggu ini.</td>
+                                        </tr>
+                                    @endforelse
                                 </tbody>
                             </table>
                         </div>
@@ -627,6 +633,7 @@
             setInterval(placeNowLine, 60000);
 
             function paretoOptions(series) {
+                series = series || [];
                 return {
                     chart: { type: 'line', height: 280, toolbar: { show: false }, fontFamily: 'inherit', animations: { enabled: false } },
                     stroke: { width: [0, 3], curve: 'straight' },
@@ -653,6 +660,7 @@
             paretoChart.render();
 
             function applyPareto(series) {
+                series = series || [];
                 paretoChart.updateOptions({
                     xaxis: { categories: series.map(function (row) { return row.hour + ':00'; }) },
                 }, false, false);
@@ -683,6 +691,9 @@
                 tooltip: {
                     custom: function (opts) {
                         var row = quality[opts.dataPointIndex];
+                        if (!row) {
+                            return '';
+                        }
                         return '<div class="p-8 text-xs"><strong>' + row.name + '</strong><br>Volume: ' + row.total_findings + '<br>Variasi: ' + row.variety_score + '</div>';
                     },
                 },

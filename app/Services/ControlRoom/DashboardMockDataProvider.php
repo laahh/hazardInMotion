@@ -9,9 +9,8 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 
 /**
- * MOCKUP SEMENTARA — plan-OCR.md T6.2-T6.8 kecuali Pencapaian Personil:
- * kehadiran dari status jadwal, % SAP dari laporan OBDS (target 1+1+1).
- * KPI, coverage, Pareto, dan kualitas masih fiktif. % TBC menunggu GSheet.
+ * MOCKUP SEMENTARA — KPI header, coverage ranking masih fiktif.
+ * Pencapaian Personil, Pareto, Highlight, dan Kualitas memakai data jadwal + OBDS/HSECM.
  */
 final class DashboardMockDataProvider
 {
@@ -22,10 +21,20 @@ final class DashboardMockDataProvider
     /**
      * @param  list<array<string, mixed>>  $scheduleDays
      * @param  array<string, array{hazard: int, inspeksi: int, observasi: int}>  $sapCountsBySidDate
+     * @param  array{
+     *     pareto?: array{s1: list<array{hour: int, count: int, cumulative: float}>, s2: list<array{hour: int, count: int, cumulative: float}>},
+     *     highlight?: array{goldenRules: list<array{name: string, count: int}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float},
+     *     quality?: list<array<string, mixed>>
+     * }  $insights
      * @return array<string, mixed>
      */
-    public function build(CarbonInterface $weekStart, array $scheduleDays = [], array $sapCountsBySidDate = [], bool $sapLoaded = false): array
-    {
+    public function build(
+        CarbonInterface $weekStart,
+        array $scheduleDays = [],
+        array $sapCountsBySidDate = [],
+        bool $sapLoaded = false,
+        array $insights = [],
+    ): array {
         $achievementRows = $this->achievementRowsFromSchedule($scheduleDays, $sapCountsBySidDate, $sapLoaded);
         if ($achievementRows === []) {
             $achievementRows = $this->personnelAchievementFallback($weekStart);
@@ -37,9 +46,14 @@ final class DashboardMockDataProvider
             'achievementGroups' => $this->groupAchievement($achievementRows),
             'personnelCoverage' => $this->personnelCoverageFrom($achievementRows),
             'coverageRanking' => $this->coverageRanking(),
-            'pareto' => $this->paretoHours(),
-            'highlight' => $this->highlightFindings(),
-            'quality' => $this->qualityPanel(),
+            'pareto' => $insights['pareto'] ?? ['s1' => [], 's2' => []],
+            'highlight' => $insights['highlight'] ?? [
+                'goldenRules' => [],
+                'blindspotCount' => 0,
+                'blindspotTotal' => 0,
+                'tbcPercentage' => null,
+            ],
+            'quality' => $insights['quality'] ?? [],
         ];
     }
 
@@ -292,75 +306,5 @@ final class DashboardMockDataProvider
             array_keys($rows),
             $rows
         ));
-    }
-
-    /**
-     * @return array{s1: list<array{hour: int, count: int, cumulative: float}>, s2: list<array{hour: int, count: int, cumulative: float}>}
-     */
-    private function paretoHours(): array
-    {
-        $s1Counts = [7 => 42, 8 => 65, 9 => 38, 10 => 51, 11 => 29, 12 => 15, 13 => 22, 14 => 30, 15 => 18, 16 => 12, 17 => 8];
-        $s2Counts = [19 => 35, 20 => 48, 21 => 40, 22 => 25, 23 => 15, 0 => 10, 1 => 6, 2 => 4, 3 => 3, 4 => 5, 5 => 9];
-
-        return [
-            's1' => $this->toParetoSeries($s1Counts),
-            's2' => $this->toParetoSeries($s2Counts),
-        ];
-    }
-
-    /**
-     * @param  array<int, int>  $counts
-     * @return list<array{hour: int, count: int, cumulative: float}>
-     */
-    private function toParetoSeries(array $counts): array
-    {
-        arsort($counts);
-        $total = array_sum($counts);
-        $running = 0;
-        $series = [];
-
-        foreach ($counts as $hour => $count) {
-            $running += $count;
-            $series[] = [
-                'hour' => $hour,
-                'count' => $count,
-                'cumulative' => $total > 0 ? round(($running / $total) * 100, 1) : 0.0,
-            ];
-        }
-
-        return $series;
-    }
-
-    /**
-     * @return array{goldenRules: list<array{name: string, count: int}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: float}
-     */
-    private function highlightFindings(): array
-    {
-        return [
-            'goldenRules' => [
-                ['name' => 'Tidak Melanggar Golden Rules', 'count' => 142],
-                ['name' => 'Isolasi Energi', 'count' => 38],
-                ['name' => 'Bekerja di Ketinggian', 'count' => 27],
-                ['name' => 'Alat Berat & Kendaraan', 'count' => 19],
-                ['name' => 'Ruang Terbatas', 'count' => 8],
-            ],
-            'blindspotCount' => 12,
-            'blindspotTotal' => 95,
-            'tbcPercentage' => 34.2,
-        ];
-    }
-
-    /**
-     * @return list<array{name: string, total_findings: int, distinct_categories: int, variety_score: float, tbc: int, gr: int, blindspot: int}>
-     */
-    private function qualityPanel(): array
-    {
-        return [
-            ['name' => 'Budi Santoso', 'total_findings' => 20, 'distinct_categories' => 14, 'variety_score' => 0.7, 'tbc' => 6, 'gr' => 3, 'blindspot' => 1],
-            ['name' => 'Siti Rahayu', 'total_findings' => 8, 'distinct_categories' => 2, 'variety_score' => 0.25, 'tbc' => 1, 'gr' => 0, 'blindspot' => 3],
-            ['name' => 'Ahmad Fauzi', 'total_findings' => 15, 'distinct_categories' => 9, 'variety_score' => 0.6, 'tbc' => 4, 'gr' => 2, 'blindspot' => 0],
-            ['name' => 'Dewi Lestari', 'total_findings' => 25, 'distinct_categories' => 22, 'variety_score' => 0.88, 'tbc' => 9, 'gr' => 5, 'blindspot' => 0],
-            ['name' => 'Rudi Hartono', 'total_findings' => 12, 'distinct_categories' => 5, 'variety_score' => 0.42, 'tbc' => 3, 'gr' => 1, 'blindspot' => 2],
-        ];
     }
 }
