@@ -65,6 +65,8 @@ final class DashboardMockDataProvider
         $nameCount = count($names);
 
         $days = [];
+        $hideMockRoster = $origin->toDateString() === '2026-08-31';
+
         for ($i = 0; $i < 7; $i++) {
             $date = $origin->addDays($i);
             $days[] = [
@@ -74,8 +76,8 @@ final class DashboardMockDataProvider
                 'month_short' => $date->locale('id')->translatedFormat('M'),
                 'is_today' => $date->toDateString() === $today,
                 'is_weekend' => $date->isWeekend(),
-                's1' => [$this->schedulePerson($names[$i % $nameCount], $statuses[$i % 5])],
-                's2' => [$this->schedulePerson($names[($i + 2) % $nameCount], $statuses[($i + 2) % 5])],
+                's1' => $hideMockRoster ? [] : [$this->schedulePerson($names[$i % $nameCount], $statuses[$i % 5])],
+                's2' => $hideMockRoster ? [] : [$this->schedulePerson($names[($i + 2) % $nameCount], $statuses[($i + 2) % 5])],
             ];
         }
 
