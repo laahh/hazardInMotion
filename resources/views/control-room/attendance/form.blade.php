@@ -3,9 +3,9 @@
 @section('page-title', 'Absensi')
 
 @section('content')
-    <main class="ocr-absensi">
+    <main class="ocr-gf">
         <form
-            class="ocr-absensi-card"
+            class="ocr-gf-form"
             method="POST"
             action="{{ route('control-room.attendance.form.store') }}"
             enctype="multipart/form-data"
@@ -13,88 +13,109 @@
         >
             @csrf
 
-            <header class="ocr-absensi-header">
-                <h1>Absensi</h1>
-                <p>Isi SID, tanggal, dan unggah bukti kehadiran.</p>
-            </header>
+            <section class="ocr-gf-card ocr-gf-card--title" aria-labelledby="ocr-gf-title">
+                <div class="ocr-gf-accent" aria-hidden="true"></div>
+                <h1 id="ocr-gf-title">Absensi</h1>
+                <p class="ocr-gf-desc">Formulir kehadiran Control Room (Pengawasan OCR). Isi SID, pilih tanggal, lalu unggah bukti.</p>
+                <p class="ocr-gf-meta">* Menunjukkan pertanyaan yang wajib diisi</p>
+            </section>
 
-            <div class="ocr-absensi-fields">
-                @if (session('success'))
-                    <div class="ocr-absensi-alert is-success" role="status">{{ session('success') }}</div>
-                @endif
+            @if (session('success'))
+                <div class="ocr-gf-card ocr-gf-banner is-success" role="status">
+                    <strong>Respons tersimpan.</strong>
+                    <p>{{ session('success') }}</p>
+                </div>
+            @endif
 
-                @if ($errors->any())
-                    <div class="ocr-absensi-alert is-error" role="alert">
-                        <ul>
-                            @foreach ($errors->all() as $error)
-                                <li>{{ $error }}</li>
-                            @endforeach
-                        </ul>
-                    </div>
-                @endif
+            @if ($errors->any())
+                <div class="ocr-gf-card ocr-gf-banner is-error" role="alert" tabindex="-1" id="ocr-gf-error-summary">
+                    <strong>Ada masalah pada formulir</strong>
+                    <ul>
+                        @foreach ($errors->keys() as $key)
+                            <li><a href="#{{ $key }}">{{ $errors->first($key) }}</a></li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
 
-                <div class="ocr-absensi-field">
-                    <label for="sid">SID</label>
+            <section class="ocr-gf-card{{ $errors->has('sid') ? ' is-invalid' : '' }}">
+                <label class="ocr-gf-question" for="sid">
+                    SID <span class="ocr-gf-req" aria-hidden="true">*</span>
+                </label>
+                <p class="ocr-gf-help" id="sid-help">Ketik kode SID personil yang hadir.</p>
+                <input
+                    id="sid"
+                    name="sid"
+                    type="text"
+                    inputmode="text"
+                    autocomplete="off"
+                    autocapitalize="characters"
+                    spellcheck="false"
+                    value="{{ old('sid') }}"
+                    class="ocr-gf-input{{ $errors->has('sid') ? ' is-invalid' : '' }}"
+                    placeholder="Jawaban Anda"
+                    required
+                    aria-required="true"
+                    aria-describedby="sid-help{{ $errors->has('sid') ? ' sid-error' : '' }}"
+                >
+                @error('sid')
+                    <p class="ocr-gf-error" id="sid-error"><i class="ri-error-warning-fill" aria-hidden="true"></i> {{ $message }}</p>
+                @enderror
+            </section>
+
+            <section class="ocr-gf-card{{ $errors->has('tanggal') ? ' is-invalid' : '' }}">
+                <label class="ocr-gf-question" for="tanggal">
+                    Tanggal <span class="ocr-gf-req" aria-hidden="true">*</span>
+                </label>
+                <p class="ocr-gf-help" id="tanggal-help">Tanggal kehadiran yang dicatat.</p>
+                <input
+                    id="tanggal"
+                    name="tanggal"
+                    type="date"
+                    value="{{ old('tanggal', $defaultTanggal) }}"
+                    max="{{ $defaultTanggal }}"
+                    class="ocr-gf-input ocr-gf-input--date{{ $errors->has('tanggal') ? ' is-invalid' : '' }}"
+                    required
+                    aria-required="true"
+                    aria-describedby="tanggal-help{{ $errors->has('tanggal') ? ' tanggal-error' : '' }}"
+                >
+                @error('tanggal')
+                    <p class="ocr-gf-error" id="tanggal-error"><i class="ri-error-warning-fill" aria-hidden="true"></i> {{ $message }}</p>
+                @enderror
+            </section>
+
+            <section class="ocr-gf-card{{ $errors->has('bukti') ? ' is-invalid' : '' }}">
+                <p class="ocr-gf-question" id="bukti-label">
+                    Bukti <span class="ocr-gf-req" aria-hidden="true">*</span>
+                </p>
+                <p class="ocr-gf-help" id="bukti-help">Unggah foto atau dokumen kehadiran. JPG, PNG, WEBP, atau PDF — maksimal 5 MB.</p>
+                <label class="ocr-gf-file" for="bukti">
                     <input
-                        id="sid"
-                        name="sid"
-                        type="text"
-                        inputmode="text"
-                        autocomplete="off"
-                        autocapitalize="characters"
-                        value="{{ old('sid') }}"
-                        class="@error('sid') is-invalid @enderror"
-                        placeholder="Contoh: CVGTS"
+                        id="bukti"
+                        name="bukti"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        capture="environment"
                         required
+                        aria-required="true"
+                        aria-labelledby="bukti-label"
+                        aria-describedby="bukti-help{{ $errors->has('bukti') ? ' bukti-error' : '' }}"
                     >
-                    @error('sid')
-                        <span class="ocr-absensi-error">{{ $message }}</span>
-                    @enderror
-                </div>
+                    <span class="ocr-gf-file-btn" aria-hidden="true"><i class="ri-add-line"></i> Tambahkan file</span>
+                    <span class="ocr-gf-file-name" id="ocr-absensi-file-label">Belum ada file dipilih</span>
+                </label>
+                <img id="ocr-absensi-preview" class="ocr-gf-preview" alt="Pratinjau bukti" hidden>
+                @error('bukti')
+                    <p class="ocr-gf-error" id="bukti-error"><i class="ri-error-warning-fill" aria-hidden="true"></i> {{ $message }}</p>
+                @enderror
+            </section>
 
-                <div class="ocr-absensi-field">
-                    <label for="tanggal">Tanggal</label>
-                    <input
-                        id="tanggal"
-                        name="tanggal"
-                        type="date"
-                        value="{{ old('tanggal', $defaultTanggal) }}"
-                        max="{{ $defaultTanggal }}"
-                        class="@error('tanggal') is-invalid @enderror"
-                        required
-                    >
-                    @error('tanggal')
-                        <span class="ocr-absensi-error">{{ $message }}</span>
-                    @enderror
-                </div>
-
-                <div class="ocr-absensi-field">
-                    <label for="bukti">Bukti</label>
-                    <label class="ocr-absensi-upload" for="bukti">
-                        <input
-                            id="bukti"
-                            name="bukti"
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp,application/pdf"
-                            capture="environment"
-                            required
-                        >
-                        <span class="ocr-absensi-upload-icon" aria-hidden="true"><i class="ri-camera-line"></i></span>
-                        <span class="ocr-absensi-upload-title" id="ocr-absensi-file-label">Ambil foto atau pilih file</span>
-                        <span class="ocr-absensi-upload-hint">JPG, PNG, WEBP, atau PDF · maks. 5 MB</span>
-                    </label>
-                    <img id="ocr-absensi-preview" class="ocr-absensi-preview" alt="Pratinjau bukti" hidden>
-                    @error('bukti')
-                        <span class="ocr-absensi-error">{{ $message }}</span>
-                    @enderror
-                </div>
+            <div class="ocr-gf-actions">
+                <button type="submit" class="ocr-gf-submit" id="ocr-absensi-submit">Kirim</button>
+                <button type="reset" class="ocr-gf-clear" id="ocr-absensi-clear">Hapus formulir</button>
             </div>
 
-            <div class="ocr-absensi-actions">
-                <button type="submit" class="ocr-absensi-submit" id="ocr-absensi-submit">
-                    Kirim Absensi
-                </button>
-            </div>
+            <p class="ocr-gf-footnote">Jangan kirim sandi melalui formulir ini.</p>
         </form>
     </main>
 @endsection
@@ -107,13 +128,20 @@
             var preview = document.getElementById('ocr-absensi-preview');
             var form = document.getElementById('ocr-absensi-form');
             var submit = document.getElementById('ocr-absensi-submit');
+            var clearBtn = document.getElementById('ocr-absensi-clear');
+            var defaultDate = @json($defaultTanggal);
+            var summary = document.getElementById('ocr-gf-error-summary');
+
+            function resetPreview() {
+                label.textContent = 'Belum ada file dipilih';
+                preview.hidden = true;
+                preview.removeAttribute('src');
+            }
 
             input.addEventListener('change', function () {
                 var file = input.files && input.files[0];
                 if (!file) {
-                    label.textContent = 'Ambil foto atau pilih file';
-                    preview.hidden = true;
-                    preview.removeAttribute('src');
+                    resetPreview();
                     return;
                 }
 
@@ -129,8 +157,21 @@
 
             form.addEventListener('submit', function () {
                 submit.disabled = true;
-                submit.textContent = 'Menyimpan...';
+                submit.textContent = 'Mengirim...';
             });
+
+            clearBtn.addEventListener('click', function () {
+                window.setTimeout(function () {
+                    document.getElementById('tanggal').value = defaultDate;
+                    resetPreview();
+                    submit.disabled = false;
+                    submit.textContent = 'Kirim';
+                }, 0);
+            });
+
+            if (summary) {
+                summary.focus();
+            }
         })();
     </script>
 @endpush

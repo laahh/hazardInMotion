@@ -1,136 +1,228 @@
-.ocr-absensi-page {
+/* Google Forms–like attendance page. Mobile-first, then md/lg. */
+
+.ocr-gf-page {
     margin: 0;
     min-height: 100vh;
-    background: #eef2f7;
-    color: #111827;
-    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #f0ebf8;
+    color: #202124;
+    font-family: Roboto, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    touch-action: manipulation;
 }
 
-.ocr-absensi {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px 16px;
+.ocr-gf-page *,
+.ocr-gf-page *::before,
+.ocr-gf-page *::after {
+    box-sizing: border-box;
 }
 
-.ocr-absensi-card {
+.ocr-gf {
+    box-sizing: border-box;
     width: 100%;
-    max-width: 420px;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 12px 8px calc(32px + env(safe-area-inset-bottom, 0px));
+}
+
+.ocr-gf-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+
+.ocr-gf-card {
+    position: relative;
     background: #fff;
-    border: 1px solid #dbe3ee;
-    border-radius: 16px;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    padding: 20px 16px 22px;
     overflow: hidden;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
 }
 
-.ocr-absensi-header {
-    padding: 22px 22px 16px;
-    background: #1d4ed8;
-    color: #fff;
+.ocr-gf-card:focus-within {
+    border-color: #d5c5f0;
+    box-shadow: 0 0 0 1px #d5c5f0;
 }
 
-.ocr-absensi-header h1 {
-    margin: 0;
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: #fff;
+.ocr-gf-card:focus-within::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    background: #673ab7;
 }
 
-.ocr-absensi-header p {
-    margin: 6px 0 0;
-    font-size: 13px;
-    line-height: 1.45;
-    color: #dbeafe;
+.ocr-gf-card.is-invalid {
+    border-color: #d93025;
 }
 
-.ocr-absensi-fields {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    padding: 20px 22px 8px;
+.ocr-gf-card.is-invalid:focus-within::before,
+.ocr-gf-card.is-invalid::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    background: #d93025;
 }
 
-.ocr-absensi-field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+.ocr-gf-card--title {
+    padding-top: 20px;
 }
 
-.ocr-absensi-field label {
-    font-size: 13px;
-    font-weight: 700;
-    color: #111827;
+.ocr-gf-accent {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 10px;
+    background: #673ab7;
 }
 
-.ocr-absensi-field input[type="text"],
-.ocr-absensi-field input[type="date"] {
-    min-height: 48px;
-    padding: 10px 12px;
-    border: 1px solid #cbd5e1;
-    border-radius: 10px;
-    color: #111827;
-    background: #fff;
+.ocr-gf-card--title h1 {
+    margin: 8px 0 0;
+    font-size: 28px;
+    font-weight: 400;
+    line-height: 1.25;
+    color: #202124;
+    letter-spacing: 0;
+}
+
+.ocr-gf-desc {
+    margin: 12px 0 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #202124;
+}
+
+.ocr-gf-meta {
+    margin: 16px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid #e0e0e0;
+    font-size: 14px;
+    color: #d93025;
+}
+
+.ocr-gf-banner strong {
+    display: block;
     font-size: 16px;
+    font-weight: 500;
 }
 
-.ocr-absensi-field input:focus {
-    outline: 2px solid #93c5fd;
-    border-color: #2563eb;
+.ocr-gf-banner p,
+.ocr-gf-banner ul {
+    margin: 8px 0 0;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1.5;
 }
 
-.ocr-absensi-field input.is-invalid {
-    border-color: #dc2626;
-}
-
-.ocr-absensi-error {
-    font-size: 12px;
-    color: #b91c1c;
-}
-
-.ocr-absensi-alert {
-    padding: 12px 14px;
-    border-radius: 10px;
-    font-size: 13px;
-    line-height: 1.45;
-}
-
-.ocr-absensi-alert ul {
-    margin: 0;
+.ocr-gf-banner ul {
     padding-left: 18px;
 }
 
-.ocr-absensi-alert.is-success {
-    background: #ecfdf3;
-    color: #14532d;
-    border: 1px solid #bbf7d0;
+.ocr-gf-banner a {
+    color: #673ab7;
 }
 
-.ocr-absensi-alert.is-error {
-    background: #fef2f2;
-    color: #7f1d1d;
-    border: 1px solid #fecaca;
+.ocr-gf-banner.is-success {
+    border-color: #81c995;
+    background: #e6f4ea;
 }
 
-.ocr-absensi-upload {
+.ocr-gf-banner.is-error {
+    border-color: #f28b82;
+    background: #fce8e6;
+}
+
+.ocr-gf-question {
+    display: block;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1.4;
+    color: #202124;
+}
+
+.ocr-gf-req {
+    color: #d93025;
+    font-weight: 500;
+}
+
+.ocr-gf-help {
+    margin: 6px 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #5f6368;
+}
+
+.ocr-gf-input {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin-top: 16px;
+    padding: 8px 0;
+    min-height: 48px;
+    border: 0;
+    border-bottom: 1px solid #80868b;
+    border-radius: 0;
+    background: transparent;
+    color: #202124;
+    font-family: inherit;
+    font-size: 16px;
+    line-height: 1.4;
+}
+
+.ocr-gf-input::placeholder {
+    color: #80868b;
+}
+
+.ocr-gf-input:focus {
+    outline: none;
+    border-bottom-width: 2px;
+    border-bottom-color: #673ab7;
+    padding-bottom: 7px;
+}
+
+.ocr-gf-input.is-invalid {
+    border-bottom-color: #d93025;
+}
+
+.ocr-gf-input--date {
+    max-width: 220px;
+    color-scheme: light;
+}
+
+.ocr-gf-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 12px 0 0;
+    font-size: 13px;
+    color: #d93025;
+}
+
+.ocr-gf-error i {
+    font-size: 18px;
+    line-height: 1.2;
+}
+
+.ocr-gf-file {
     position: relative;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    min-height: 132px;
-    padding: 16px;
-    border: 1.5px dashed #94a3b8;
-    border-radius: 12px;
-    background: #f8fafc;
-    text-align: center;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 16px;
     cursor: pointer;
-    color: #111827;
 }
 
-.ocr-absensi-upload input {
+.ocr-gf-file input {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -139,67 +231,151 @@
     cursor: pointer;
 }
 
-.ocr-absensi-upload-icon {
-    width: 44px;
-    height: 44px;
+.ocr-gf-file-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 999px;
-    background: #dbeafe;
-    color: #1d4ed8;
-    font-size: 22px;
-}
-
-.ocr-absensi-upload-title {
+    gap: 6px;
+    min-height: 44px;
+    padding: 8px 16px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    background: #fff;
+    color: #673ab7;
     font-size: 14px;
-    font-weight: 700;
-    color: #111827;
+    font-weight: 500;
+    pointer-events: none;
 }
 
-.ocr-absensi-upload-hint {
-    font-size: 12px;
-    color: #334155;
+.ocr-gf-file:hover .ocr-gf-file-btn,
+.ocr-gf-file:focus-within .ocr-gf-file-btn {
+    background: #f6f0ff;
+    border-color: #673ab7;
 }
 
-.ocr-absensi-preview {
+.ocr-gf-file-name {
+    font-size: 13px;
+    color: #5f6368;
+    word-break: break-word;
+}
+
+.ocr-gf-preview {
     display: block;
     width: 100%;
-    max-height: 180px;
+    max-width: 100%;
+    max-height: 220px;
+    margin-top: 12px;
     object-fit: cover;
-    border-radius: 10px;
-    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    border: 1px solid #dadce0;
 }
 
-.ocr-absensi-actions {
-    padding: 8px 22px 22px;
+.ocr-gf-preview[hidden] {
+    display: none !important;
 }
 
-.ocr-absensi-submit {
-    width: 100%;
+.ocr-gf-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    padding: 4px 4px 0;
+}
+
+.ocr-gf-submit {
     min-height: 48px;
+    min-width: 96px;
+    padding: 0 24px;
     border: 0;
-    border-radius: 12px;
-    background: #1d4ed8;
+    border-radius: 4px;
+    background: #673ab7;
     color: #fff;
-    font-size: 16px;
-    font-weight: 700;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
     cursor: pointer;
 }
 
-.ocr-absensi-submit:disabled {
+.ocr-gf-submit:hover {
+    background: #5e35b1;
+}
+
+.ocr-gf-submit:focus-visible {
+    outline: 2px solid #202124;
+    outline-offset: 2px;
+}
+
+.ocr-gf-submit:disabled {
     opacity: 0.7;
     cursor: wait;
 }
 
-@media (max-width: 420px) {
-    .ocr-absensi {
-        padding: 12px;
-        align-items: stretch;
+.ocr-gf-clear {
+    min-height: 44px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: #673ab7;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.ocr-gf-clear:hover {
+    background: #f6f0ff;
+    border-radius: 4px;
+}
+
+.ocr-gf-footnote {
+    margin: 8px 4px 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #5f6368;
+}
+
+@media (min-width: 600px) {
+    .ocr-gf {
+        max-width: 640px;
+        padding: 24px 16px 64px;
     }
 
-    .ocr-absensi-card {
-        max-width: none;
-        border-radius: 14px;
+    .ocr-gf-form {
+        gap: 12px;
+    }
+
+    .ocr-gf-card {
+        padding: 24px 24px 28px;
+        box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.15), 0 1px 3px 1px rgba(60, 64, 67, 0.08);
+        border-color: transparent;
+    }
+
+    .ocr-gf-card--title h1 {
+        font-size: 32px;
+    }
+
+    .ocr-gf-input--date {
+        max-width: 260px;
+    }
+}
+
+@media (min-width: 1024px) {
+    .ocr-gf {
+        padding-top: 48px;
+    }
+}
+
+@media (min-width: 1440px) {
+    .ocr-gf {
+        padding-top: 56px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ocr-gf-submit,
+    .ocr-gf-clear,
+    .ocr-gf-file-btn {
+        transition: none;
     }
 }
