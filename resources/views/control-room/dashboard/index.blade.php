@@ -442,7 +442,32 @@
                     + '<div><dt>Jabatan</dt><dd>' + escapeHtml(person.jabatan || '—') + '</dd></div>'
                     + '<div><dt>Lokasi</dt><dd>' + escapeHtml(person.lokasi || '—') + '</dd></div>'
                     + '<div><dt>Catatan</dt><dd>' + escapeHtml(person.catatan || '—') + '</dd></div>'
-                    + '</dl></div>';
+                    + '</dl>'
+                    + renderCheckinout(person.checkinout || [])
+                    + '</div>';
+            }
+
+            function renderCheckinout(events) {
+                var html = '<div class="ocr-roster-taps">';
+                html += '<p class="ocr-roster-taps-title">Check-in / Check-out RFID</p>';
+                if (!events.length) {
+                    return html + '<p class="ocr-roster-taps-empty">Tidak ada tap di jendela shift (termasuk ±2 jam).</p></div>';
+                }
+
+                html += '<ol class="ocr-roster-taps-list">';
+                events.forEach(function (tap) {
+                    var tone = tap.type === 'in' ? 'is-in' : 'is-out';
+                    var time = escapeHtml((tap.time || '—') + ' · ' + (tap.date_label || ''));
+                    var gate = escapeHtml(tap.gate || '—');
+                    var pass = tap.passed ? '' : ' <span class="ocr-roster-tap-fail">Tidak lolos</span>';
+                    html += '<li class="' + tone + '">'
+                        + '<span class="ocr-roster-tap-type">' + escapeHtml(tap.type_label || tap.type) + '</span>'
+                        + '<span class="ocr-roster-tap-time">' + time + '</span>'
+                        + '<span class="ocr-roster-tap-gate">' + gate + '</span>'
+                        + pass
+                        + '</li>';
+                });
+                return html + '</ol></div>';
             }
 
             function renderRoster(day) {
@@ -457,10 +482,10 @@
                     });
                 }
                 if (s2.length === 0) {
-                    html += renderPerson('Shift 2 | 18:00 - 24:00', null);
+                    html += renderPerson('Shift 2 | 18:00 - 06:00', null);
                 } else {
                     s2.forEach(function (person) {
-                        html += renderPerson('Shift 2 | 18:00 - 24:00', person);
+                        html += renderPerson('Shift 2 | 18:00 - 06:00', person);
                     });
                 }
                 return html + '</div>';

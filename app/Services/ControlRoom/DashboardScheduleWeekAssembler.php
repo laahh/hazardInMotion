@@ -17,6 +17,10 @@ use Illuminate\Support\Collection;
  */
 final class DashboardScheduleWeekAssembler
 {
+    public function __construct(
+        private readonly ControlRoomRfidCheckinoutReader $rfidReader,
+    ) {}
+
     /**
      * @return array{days: list<array<string, mixed>>}
      */
@@ -49,12 +53,29 @@ final class DashboardScheduleWeekAssembler
             ->whereBetween('date', [$weekStart->toDateString(), $weekEnd->toDateString()])
             ->get();
 
-        return $this->assemble($weekStart, $plans, $attendances, $today);
+        $slots = [];
+        foreach ($plans as $plan) {
+            $slots[] = [
+                'sid' => (string) $plan->personnel_source_key,
+                'date' => $plan->date,
+                'shift' => $plan->shift_code,
+            ];
+        }
+        foreach ($attendances as $attendance) {
+            $slots[] = [
+                'sid' => (string) $attendance->personnel_source_key,
+                'date' => $attendance->date,
+                'shift' => $attendance->shift_code,
+            ];
+        }
+
+        return $this->assemble($weekStart, $plans, $attendances, $today, $this->rfidReader->forDutySlots($slots));
     }
 
     /**
      * @param  Collection<int, SchedulePlan>  $plans
      * @param  Collection<int, Attendance>  $attendances
+     * @param  array<string, list<array<string, mixed>>>  $rfidBySlot
      * @return array{days: list<array<string, mixed>>}
      */
     public function assemble(
@@ -62,6 +83,7 @@ final class DashboardScheduleWeekAssembler
         Collection $plans,
         Collection $attendances,
         ?CarbonInterface $today = null,
+        array $rfidBySlot = [],
     ): array {
         $todayDate = CarbonImmutable::parse($today ?? now())->toDateString();
         $replacedNames = $this->replacedNameIndex($plans);
@@ -82,7 +104,7 @@ final class DashboardScheduleWeekAssembler
 
             $date = $plan->date->toDateString();
             $shift = $plan->shift_code->value;
-            $peopleByDayShift[$date][$shift][] = $this->personFromPlan($plan, $attendance, $todayDate, $replacedNames);
+            $peopleByDayShift[$date][$shift][] = $this->personFromPlan($plan, $attendance, $todayDate, $replacedNames, $rfidBySlot);
         }
 
         foreach ($attendances as $attendance) {
@@ -92,7 +114,7 @@ final class DashboardScheduleWeekAssembler
 
             $date = $attendance->date->toDateString();
             $shift = $attendance->shift_code->value;
-            $peopleByDayShift[$date][$shift][] = $this->personFromUnplannedAttendance($attendance, $replacedNames);
+            $peopleByDayShift[$date][$shift][] = $this->personFromUnplannedAttendance($attendance, $replacedNames, $rfidBySlot);
         }
 
         $days = [];
@@ -151,15 +173,18 @@ final class DashboardScheduleWeekAssembler
 
     /**
      * @param  array<string, string>  $replacedNames
-     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string}
+     * @param  array<string, list<array<string, mixed>>>  $rfidBySlot
+     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string, checkinout: list<array<string, mixed>>}
      */
     private function personFromPlan(
         SchedulePlan $plan,
         ?Attendance $attendance,
         string $todayDate,
         array $replacedNames,
+        array $rfidBySlot,
     ): array {
         $name = $this->formatName((string) $plan->personnel_name_snapshot);
+        $taps = $rfidBySlot[$this->slotKey($plan->date, $plan->shift_code, (string) $plan->personnel_source_key)] ?? [];
 
         if ($attendance === null) {
             $isPast = $plan->date->toDateString() < $todayDate;
@@ -170,6 +195,7 @@ final class DashboardScheduleWeekAssembler
                 planned: true,
                 status: $status,
                 catatan: $isPast ? 'Tidak ada absen' : 'Belum check-in',
+                checkinout: $taps,
             );
         }
 
@@ -178,14 +204,16 @@ final class DashboardScheduleWeekAssembler
             planned: true,
             status: $this->mapAttendanceStatus($attendance, planned: true),
             catatan: $this->catatanFromAttendance($attendance, $replacedNames),
+            checkinout: $taps,
         );
     }
 
     /**
      * @param  array<string, string>  $replacedNames
-     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string}
+     * @param  array<string, list<array<string, mixed>>>  $rfidBySlot
+     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string, checkinout: list<array<string, mixed>>}
      */
-    private function personFromUnplannedAttendance(Attendance $attendance, array $replacedNames): array
+    private function personFromUnplannedAttendance(Attendance $attendance, array $replacedNames, array $rfidBySlot): array
     {
         $status = $attendance->status === Attendance::STATUS_MENGGANTIKAN
             ? 'menggantikan'
@@ -196,13 +224,15 @@ final class DashboardScheduleWeekAssembler
             planned: false,
             status: $status,
             catatan: $this->catatanFromAttendance($attendance, $replacedNames) ?: 'Hadir tanpa slot jadwal.',
+            checkinout: $rfidBySlot[$this->slotKey($attendance->date, $attendance->shift_code, (string) $attendance->personnel_source_key)] ?? [],
         );
     }
 
     /**
-     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string}
+     * @param  list<array<string, mixed>>  $checkinout
+     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string, checkinout: list<array<string, mixed>>}
      */
-    private function personPayload(string $name, bool $planned, string $status, string $catatan): array
+    private function personPayload(string $name, bool $planned, string $status, string $catatan, array $checkinout = []): array
     {
         $parts = preg_split('/\s+/', $name) ?: [$name];
 
@@ -215,6 +245,7 @@ final class DashboardScheduleWeekAssembler
             'jabatan' => '—',
             'lokasi' => '—',
             'catatan' => $catatan,
+            'checkinout' => $checkinout,
         ];
     }
 
@@ -254,7 +285,7 @@ final class DashboardScheduleWeekAssembler
         $dateString = $date instanceof CarbonInterface ? $date->toDateString() : (string) $date;
         $shiftCode = $shift instanceof ControlRoomShiftCode ? $shift->value : (string) $shift;
 
-        return $dateString.'|'.$shiftCode.'|'.$sourceKey;
+        return $dateString.'|'.$shiftCode.'|'.strtoupper(trim($sourceKey));
     }
 
     private function formatName(string $name): string

@@ -8,7 +8,9 @@ use App\Enums\ControlRoomShiftCode;
 use App\Enums\ControlRoomSiteCode;
 use App\Models\ControlRoom\Attendance;
 use App\Models\ControlRoom\SchedulePlan;
+use App\Services\ControlRoom\ControlRoomRfidCheckinoutReader;
 use App\Services\ControlRoom\DashboardScheduleWeekAssembler;
+use App\Services\PembatasanLV\PembatasanLVOlapQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Tests\TestCase;
@@ -20,7 +22,7 @@ final class DashboardScheduleWeekAssemblerTest extends TestCase
         $weekStart = CarbonImmutable::parse('2026-08-31');
         $plan = $this->plan(1, '2026-08-31', ControlRoomShiftCode::S1, 'SID01', 'AGUNG NUGROHO');
 
-        $days = (new DashboardScheduleWeekAssembler())->assemble(
+        $days = $this->assembler()->assemble(
             $weekStart,
             new Collection([$plan]),
             new Collection(),
@@ -39,7 +41,7 @@ final class DashboardScheduleWeekAssemblerTest extends TestCase
         $plan = $this->plan(2, '2026-09-01', ControlRoomShiftCode::S2, 'SID02', 'MUHAMMAD ALI YUSNI');
         $attendance = $this->attendance(10, 2, '2026-09-01', ControlRoomShiftCode::S2, 'SID02', 'MUHAMMAD ALI YUSNI', Attendance::STATUS_SESUAI_JADWAL);
 
-        $days = (new DashboardScheduleWeekAssembler())->assemble(
+        $days = $this->assembler()->assemble(
             $weekStart,
             new Collection([$plan]),
             new Collection([$attendance]),
@@ -55,7 +57,7 @@ final class DashboardScheduleWeekAssemblerTest extends TestCase
         $weekStart = CarbonImmutable::parse('2026-08-31');
         $attendance = $this->attendance(11, null, '2026-09-02', ControlRoomShiftCode::S1, 'SID99', 'DEWI LESTARI', Attendance::STATUS_SESUAI_JADWAL);
 
-        $days = (new DashboardScheduleWeekAssembler())->assemble(
+        $days = $this->assembler()->assemble(
             $weekStart,
             new Collection(),
             new Collection([$attendance]),
@@ -72,7 +74,7 @@ final class DashboardScheduleWeekAssemblerTest extends TestCase
         $weekStart = CarbonImmutable::parse('2026-09-07');
         $plan = $this->plan(3, '2026-09-07', ControlRoomShiftCode::S1, 'SID03', 'BUDI SANTOSO');
 
-        $days = (new DashboardScheduleWeekAssembler())->assemble(
+        $days = $this->assembler()->assemble(
             $weekStart,
             new Collection([$plan]),
             new Collection(),
@@ -80,6 +82,49 @@ final class DashboardScheduleWeekAssemblerTest extends TestCase
         )['days'];
 
         $this->assertSame('belum_absen', $days[0]['s1'][0]['status']);
+    }
+
+    public function test_tap_rfid_menempel_ke_slot_jadwal_yang_benar(): void
+    {
+        $weekStart = CarbonImmutable::parse('2026-08-31');
+        $plan = $this->plan(4, '2026-08-31', ControlRoomShiftCode::S2, '9etfj', 'MUHAMMAD ALI YUSNI');
+        $taps = [
+            [
+                'at' => '2026-08-31 18:01:00',
+                'time' => '18:01',
+                'date_label' => '31 Agu',
+                'type' => 'in',
+                'type_label' => 'Check-in',
+                'gate' => 'GATE A',
+                'passed' => true,
+            ],
+            [
+                'at' => '2026-09-01 07:30:00',
+                'time' => '07:30',
+                'date_label' => '01 Sep',
+                'type' => 'out',
+                'type_label' => 'Check-out',
+                'gate' => 'GATE A',
+                'passed' => true,
+            ],
+        ];
+
+        $days = $this->assembler()->assemble(
+            $weekStart,
+            new Collection([$plan]),
+            new Collection(),
+            CarbonImmutable::parse('2026-09-07'),
+            ['2026-08-31|S2|9ETFJ' => $taps],
+        )['days'];
+
+        $this->assertSame($taps, $days[0]['s2'][0]['checkinout']);
+    }
+
+    private function assembler(): DashboardScheduleWeekAssembler
+    {
+        return new DashboardScheduleWeekAssembler(
+            new ControlRoomRfidCheckinoutReader(new PembatasanLVOlapQuery())
+        );
     }
 
     private function plan(int $id, string $date, ControlRoomShiftCode $shift, string $sid, string $name): SchedulePlan
