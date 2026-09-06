@@ -41,8 +41,8 @@ final class ScheduleUpdateRequest extends FormRequest
 
     public function rules(): array
     {
-        /** @var SchedulePlan $plan */
-        $plan = $this->route('schedule');
+        $planId = (int) $this->route('schedule');
+        $plan = $planId > 0 ? SchedulePlan::query()->find($planId) : null;
         $isLocked = $plan instanceof SchedulePlan && $plan->isLocked();
 
         return [

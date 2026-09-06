@@ -61,7 +61,7 @@
                     </form>
                 </div>
                 <div class="col-md-6">
-                    <form method="POST" action="{{ route('control-room.schedule.lock', ['week' => 0]) }}" class="row g-2 align-items-end" id="lock-form">
+                    <form method="POST" action="{{ route('control-room.schedule.lock') }}" class="row g-2 align-items-end">
                         @csrf
                         <input type="hidden" name="site_code" value="{{ $site->value }}">
                         <div class="col-4">
@@ -70,7 +70,7 @@
                         </div>
                         <div class="col-4">
                             <label class="form-label text-sm mb-1">Minggu</label>
-                            <input type="number" class="form-control form-control-sm" min="1" max="53" value="{{ now()->isoWeek() }}" required id="lock-week-input">
+                            <input type="number" name="week_number" class="form-control form-control-sm" min="1" max="53" value="{{ now()->isoWeek() }}" required>
                         </div>
                         <div class="col-4">
                             <button type="submit" class="btn btn-warning-600 btn-sm w-100" onclick="return confirm('Kunci minggu ini sebagai baseline?');">Kunci Minggu</button>
@@ -210,6 +210,40 @@
 
 @push('styles')
     <link href="{{ asset('build/plugins/fullcalendar/css/main.min.css') }}" rel="stylesheet">
+    <style>
+        /* WowDash memaksa .fc-event ke primary-50 + FullCalendar memakai textColor putih.
+           Override scoped: chip pastel, teks gelap supaya nama terbaca. */
+        #schedule-calendar .ocr-sched-event--S1,
+        #schedule-calendar .ocr-sched-event--S1 .fc-event-main,
+        #schedule-calendar .ocr-sched-event--S1 .fc-event-title,
+        #schedule-calendar .ocr-sched-event--S1 .ocr-sched-title {
+            background-color: #dbeafe !important;
+            border-color: #93c5fd !important;
+            color: #1e3a8a !important;
+        }
+        #schedule-calendar .ocr-sched-event--S2,
+        #schedule-calendar .ocr-sched-event--S2 .fc-event-main,
+        #schedule-calendar .ocr-sched-event--S2 .fc-event-title,
+        #schedule-calendar .ocr-sched-event--S2 .ocr-sched-title {
+            background-color: #ffedd5 !important;
+            border-color: #fdba74 !important;
+            color: #9a3412 !important;
+        }
+        #schedule-calendar .ocr-sched-event .ocr-sched-title {
+            font-weight: 600;
+        }
+        #schedule-calendar .ocr-sched-event .fc-event-main {
+            background-color: transparent !important;
+        }
+        #schedule-calendar tr.ocr-sched-event--S1,
+        #schedule-calendar tr.ocr-sched-event--S1 a {
+            color: #1e3a8a !important;
+        }
+        #schedule-calendar tr.ocr-sched-event--S2,
+        #schedule-calendar tr.ocr-sched-event--S2 a {
+            color: #9a3412 !important;
+        }
+    </style>
 @endpush
 
 @push('scripts')
@@ -252,11 +286,15 @@
                     if (res.ok) {
                         editModal.hide();
                         calendar.refetchEvents();
-                    } else {
-                        res.json().then(function (data) {
-                            alert(data.message || 'Gagal menghapus jadwal.');
-                        });
+                        return;
                     }
+
+                    calendar.refetchEvents();
+                    res.json().then(function (data) {
+                        alert(data.message || 'Gagal menghapus jadwal.');
+                    }).catch(function () {
+                        alert('Jadwal tidak ditemukan. Mungkin sudah dihapus.');
+                    });
                 });
             }
             editDeleteBtn.addEventListener('click', deleteCurrentSchedule);
@@ -289,15 +327,15 @@
                 eventContent: function (arg) {
                     var props = arg.event.extendedProps;
                     var initial = (props.personnel || '?').trim().charAt(0).toUpperCase();
-                    var color = arg.event.backgroundColor || '#333';
+                    var accent = props.accent || arg.event.textColor || '#111827';
                     var title = arg.event.title.replace(/</g, '&lt;');
 
                     return {
                         html:
-                            '<div class="d-flex align-items-center gap-1 px-4 py-2" style="overflow:hidden;">' +
+                            '<div class="d-flex align-items-center gap-1 px-4 py-2" style="overflow:hidden;color:inherit;">' +
                             '<span class="rounded-circle bg-white d-inline-flex align-items-center justify-content-center flex-shrink-0" ' +
-                            'style="width:16px;height:16px;font-size:9px;font-weight:700;color:' + color + ';">' + initial + '</span>' +
-                            '<span class="text-truncate" style="font-size:11px;">' + title + '</span>' +
+                            'style="width:16px;height:16px;font-size:9px;font-weight:700;color:' + accent + ';">' + initial + '</span>' +
+                            '<span class="text-truncate ocr-sched-title" style="font-size:11px;color:' + accent + ';font-weight:600;">' + title + '</span>' +
                             '</div>',
                     };
                 },
@@ -327,13 +365,6 @@
             });
 
             calendar.render();
-
-            var lockForm = document.getElementById('lock-form');
-            var lockFormBaseAction = lockForm.action;
-            lockForm.addEventListener('submit', function () {
-                var week = document.getElementById('lock-week-input').value;
-                lockForm.action = lockFormBaseAction.replace('/0/lock', '/' + week + '/lock');
-            });
         })();
     </script>
 @endpush

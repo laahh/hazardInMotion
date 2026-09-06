@@ -22,7 +22,10 @@ use Illuminate\View\View;
 
 final class ScheduleController extends Controller
 {
-    private const SHIFT_COLORS = ['S1' => '#0d6efd', 'S2' => '#fd7e14'];
+    private const SHIFT_COLORS = [
+        'S1' => ['bg' => '#DBEAFE', 'border' => '#93C5FD', 'text' => '#1E3A8A'],
+        'S2' => ['bg' => '#FFEDD5', 'border' => '#FDBA74', 'text' => '#9A3412'],
+    ];
 
     public function __construct(
         private readonly PersonnelReader $personnelReader,
@@ -55,22 +58,24 @@ final class ScheduleController extends Controller
             ->orderBy('shift_code')
             ->get()
             ->map(function (SchedulePlan $plan): array {
-                $color = self::SHIFT_COLORS[$plan->shift_code->value] ?? '#6c757d';
+                $colors = self::SHIFT_COLORS[$plan->shift_code->value] ?? ['bg' => '#E5E7EB', 'border' => '#9CA3AF', 'text' => '#111827'];
 
                 return [
                     'id' => $plan->id,
                     'title' => "{$plan->shift_code->value} • {$plan->personnel_name_snapshot}",
                     'start' => $plan->date->toDateString(),
                     'allDay' => true,
-                    'backgroundColor' => $color,
-                    'borderColor' => $color,
-                    'textColor' => '#ffffff',
+                    'backgroundColor' => $colors['bg'],
+                    'borderColor' => $colors['border'],
+                    'textColor' => $colors['text'],
+                    'classNames' => ['ocr-sched-event', 'ocr-sched-event--'.$plan->shift_code->value],
                     'extendedProps' => [
                         'scheduleId' => $plan->id,
                         'locked' => $plan->isLocked(),
                         'personnel' => $plan->personnel_name_snapshot,
                         'personnelSourceKey' => $plan->personnel_source_key,
                         'shift' => $plan->shift_code->value,
+                        'accent' => $colors['text'],
                         'updateUrl' => route('control-room.schedule.update', $plan),
                         'deleteUrl' => route('control-room.schedule.destroy', $plan),
                     ],
@@ -163,19 +168,25 @@ final class ScheduleController extends Controller
             ->with('success', "Minggu {$data['week_number']} tahun {$data['year']} dihapus ({$count} baris). Absen terkait tidak dihapus.");
     }
 
-    public function update(ScheduleUpdateRequest $request, SchedulePlan $schedule): RedirectResponse|JsonResponse
+    public function update(ScheduleUpdateRequest $request, int $schedule): RedirectResponse|JsonResponse
     {
+        $plan = SchedulePlan::query()->find($schedule);
+
+        if (! $plan instanceof SchedulePlan) {
+            return $this->missingScheduleResponse($request);
+        }
+
         $data = $request->validated();
         $reason = $data['reason'] ?? null;
         unset($data['reason']);
 
-        if (isset($data['personnel_source_key']) && $data['personnel_source_key'] !== $schedule->personnel_source_key) {
+        if (isset($data['personnel_source_key']) && $data['personnel_source_key'] !== $plan->personnel_source_key) {
             $personnel = $this->personnelReader->find($data['personnel_source_key']);
             $data['personnel_name_snapshot'] = $personnel?->emp_name ?? $data['personnel_source_key'];
         }
 
-        $schedule->changeReason = $reason;
-        $schedule->update($data);
+        $plan->changeReason = $reason;
+        $plan->update($data);
 
         if ($request->wantsJson()) {
             return response()->json(['message' => 'Jadwal diperbarui.']);
@@ -184,9 +195,15 @@ final class ScheduleController extends Controller
         return back()->with('success', 'Jadwal diperbarui.');
     }
 
-    public function destroy(Request $request, SchedulePlan $schedule): RedirectResponse|JsonResponse
+    public function destroy(Request $request, int $schedule): RedirectResponse|JsonResponse
     {
-        if ($schedule->isLocked()) {
+        $plan = SchedulePlan::query()->find($schedule);
+
+        if (! $plan instanceof SchedulePlan) {
+            return $this->missingScheduleResponse($request);
+        }
+
+        if ($plan->isLocked()) {
             $message = 'Jadwal terkunci tidak bisa dihapus per slot. Gunakan Hapus Minggu di alat bawah.';
 
             return $request->wantsJson()
@@ -194,28 +211,42 @@ final class ScheduleController extends Controller
                 : back()->withErrors(['schedule' => $message]);
         }
 
-        $schedule->delete();
+        $plan->delete();
 
         return $request->wantsJson()
             ? response()->json(['message' => 'Jadwal dihapus.'])
             : back()->with('success', 'Jadwal dihapus.');
     }
 
-    public function lock(Request $request, int $week): RedirectResponse
+    public function lock(Request $request): RedirectResponse
     {
         $data = $request->validate([
             'site_code' => ['required', 'string'],
-            'year' => ['required', 'integer'],
+            'year' => ['required', 'integer', 'min:2020', 'max:2100'],
+            'week_number' => ['required', 'integer', 'min:1', 'max:53'],
         ]);
 
-        SchedulePlan::query()
+        $updated = SchedulePlan::query()
             ->where('site_code', $data['site_code'])
             ->where('year', $data['year'])
-            ->where('week_number', $week)
+            ->where('week_number', $data['week_number'])
             ->where('status', SchedulePlan::STATUS_DRAFT)
             ->update(['status' => SchedulePlan::STATUS_LOCKED, 'locked_at' => now()]);
 
-        return back()->with('success', "Minggu {$week} dikunci sebagai baseline.");
+        return back()->with('success', "Minggu {$data['week_number']} dikunci sebagai baseline ({$updated} baris).");
+    }
+
+    private function missingScheduleResponse(Request $request): RedirectResponse|JsonResponse
+    {
+        $message = 'Jadwal tidak ditemukan. Mungkin sudah dihapus — kalender akan diperbarui.';
+
+        return $request->wantsJson()
+            ? response()->json(['message' => $message], 404)
+            : redirect()
+                ->route('control-room.schedule.index', array_filter([
+                    'site' => $request->input('site_code') ?: $request->input('site'),
+                ]))
+                ->withErrors(['schedule' => $message]);
     }
 
     public function changes(Request $request): View
