@@ -40,6 +40,17 @@
                 <dt class="col-md-3">Jam Check-in</dt>
                 <dd class="col-md-9">{{ $attendance->checked_in_at->format('d M Y H:i:s') }}</dd>
 
+                @if ($attendance->proofUrl())
+                    <dt class="col-md-3">Bukti</dt>
+                    <dd class="col-md-9">
+                        @if ($attendance->proofIsImage())
+                            <img src="{{ $attendance->proofUrl() }}" alt="Bukti absensi" style="max-width: 320px; border-radius: 8px;">
+                        @else
+                            <a href="{{ $attendance->proofUrl() }}" target="_blank" rel="noopener">Lihat file bukti</a>
+                        @endif
+                    </dd>
+                @endif
+
                 @if ($attendance->correction_reason)
                     <dt class="col-md-3">Koreksi Terakhir</dt>
                     <dd class="col-md-9">{{ $attendance->correction_reason }} (oleh {{ $attendance->correctedBy->name ?? '-' }})</dd>

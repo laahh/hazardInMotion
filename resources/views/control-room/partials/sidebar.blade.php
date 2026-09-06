@@ -28,9 +28,15 @@ $rr = function (string $name, array $params = []) {
                 </a>
             </li>
             <li>
+                <a href="{{ $rr('control-room.attendance.form') }}">
+                    <i class="ri-camera-line menu-icon"></i>
+                    <span>Form Absensi</span>
+                </a>
+            </li>
+            <li>
                 <a href="{{ $rr('control-room.attendance.index') }}">
                     <i class="ri-user-follow-line menu-icon"></i>
-                    <span>Absen</span>
+                    <span>Rekap Absen</span>
                 </a>
             </li>
             <li>

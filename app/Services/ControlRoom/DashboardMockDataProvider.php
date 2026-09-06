@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services\ControlRoom;
 
 use Carbon\CarbonInterface;
-use Carbon\CarbonImmutable;
 
 /**
  * MOCKUP SEMENTARA — plan-OCR.md T6.2-T6.8. Panel KPI sungguhan menunggu
@@ -13,15 +12,6 @@ use Carbon\CarbonImmutable;
  */
 final class DashboardMockDataProvider
 {
-    /** @var array<string, array{jabatan: string, lokasi: string}> */
-    private const PERSONNEL_META = [
-        'Budi Santoso' => ['jabatan' => 'Pengawas OCR', 'lokasi' => 'HO Control Room'],
-        'Siti Rahayu' => ['jabatan' => 'HSE Officer', 'lokasi' => 'Pit BMO1'],
-        'Ahmad Fauzi' => ['jabatan' => 'Field Inspector', 'lokasi' => 'Pit BMO1'],
-        'Dewi Lestari' => ['jabatan' => 'Pengawas OCR', 'lokasi' => 'Disposal BMO1'],
-        'Rudi Hartono' => ['jabatan' => 'HSE Officer', 'lokasi' => 'Haul Road LMO'],
-    ];
-
     /**
      * @return array<string, mixed>
      */
@@ -29,7 +19,6 @@ final class DashboardMockDataProvider
     {
         return [
             'kpi' => $this->kpiCards(),
-            'schedule' => $this->schedulePlanning($weekStart),
             'achievement' => $this->personnelAchievement(),
             'coverageRanking' => $this->coverageRanking(),
             'pareto' => $this->paretoHours(),
@@ -50,64 +39,6 @@ final class DashboardMockDataProvider
             ['label' => 'Coverage Area Kritis', 'value' => '24 / 30', 'progress' => 80.0, 'delta' => 0.0, 'deltaLabel' => 'tidak berubah', 'icon' => 'ri-alarm-warning-line', 'color' => 'warning', 'formula' => 'area kritis tersentuh SAP / total area kritis'],
             ['label' => 'Ratio SAP dgn bonus', 'value' => '108%', 'progress' => 100.0, 'delta' => 6.0, 'deltaLabel' => 'bonus coaching', 'icon' => 'ri-award-line', 'color' => 'success', 'formula' => '%SAP dasar + bonus coaching di atas 100%'],
             ['label' => 'Ratio TBC', 'value' => '34.2%', 'progress' => 34.2, 'delta' => 5.1, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-shield-check-line', 'color' => 'danger', 'formula' => 'temuan tervalidasi TBC / total hazard+inspeksi'],
-        ];
-    }
-
-    /**
-     * @return array{days: list<array<string, mixed>>}
-     */
-    private function schedulePlanning(CarbonInterface $weekStart): array
-    {
-        $statuses = ['sesuai', 'menggantikan', 'tidak_hadir', 'tidak_dijadwalkan', 'anomali'];
-        $names = array_keys(self::PERSONNEL_META);
-        $origin = CarbonImmutable::parse($weekStart)->startOfDay();
-        $today = now()->toDateString();
-        $nameCount = count($names);
-
-        $days = [];
-        for ($i = 0; $i < 7; $i++) {
-            $date = $origin->addDays($i);
-            $days[] = [
-                'date' => $date->toDateString(),
-                'label' => $date->locale('id')->translatedFormat('D'),
-                'weekday' => $date->locale('id')->translatedFormat('l'),
-                'day_number' => $date->format('d'),
-                'month_short' => $date->locale('id')->translatedFormat('M'),
-                'year' => $date->format('Y'),
-                'is_today' => $date->toDateString() === $today,
-                'is_weekend' => $date->isWeekend(),
-                's1' => [$this->schedulePerson($names[$i % $nameCount], $statuses[$i % 5])],
-                's2' => [$this->schedulePerson($names[($i + 2) % $nameCount], $statuses[($i + 2) % 5])],
-            ];
-        }
-
-        return ['days' => $days];
-    }
-
-    /**
-     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string}
-     */
-    private function schedulePerson(string $name, string $status): array
-    {
-        $parts = explode(' ', $name);
-        $meta = self::PERSONNEL_META[$name];
-        $notes = [
-            'sesuai' => '-',
-            'menggantikan' => 'Menggantikan rekan yang berhalangan.',
-            'tidak_hadir' => 'Tidak ada keterangan',
-            'tidak_dijadwalkan' => 'Hadir tanpa slot jadwal minggu ini.',
-            'anomali' => 'Check-in di luar jendela ±2 jam.',
-        ];
-
-        return [
-            'name' => $name,
-            'short_name' => $parts[0],
-            'initial' => mb_substr($name, 0, 1),
-            'planned' => $status !== 'tidak_dijadwalkan',
-            'status' => $status,
-            'jabatan' => $meta['jabatan'],
-            'lokasi' => $meta['lokasi'],
-            'catatan' => $notes[$status] ?? '—',
         ];
     }
 

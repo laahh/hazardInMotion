@@ -7,13 +7,16 @@ namespace App\Http\Controllers\ControlRoom;
 use App\Enums\ControlRoomSiteCode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ControlRoom\AttendanceCheckInRequest;
+use App\Http\Requests\ControlRoom\AttendanceFormRequest;
 use App\Http\Requests\ControlRoom\AttendanceUpdateRequest;
 use App\Models\ControlRoom\Attendance;
 use App\Models\ControlRoom\SchedulePlan;
+use App\Services\ControlRoom\AttendanceFormRecorder;
 use App\Services\ControlRoom\Reference\PersonnelReader;
 use App\Services\ControlRoom\Reference\ShiftResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\View\View;
 
 final class AttendanceController extends Controller
@@ -21,7 +24,32 @@ final class AttendanceController extends Controller
     public function __construct(
         private readonly ShiftResolver $shiftResolver,
         private readonly PersonnelReader $personnelReader,
+        private readonly AttendanceFormRecorder $attendanceFormRecorder,
     ) {}
+
+    public function showForm(): View
+    {
+        return view('control-room.attendance.form', [
+            'defaultTanggal' => now()->toDateString(),
+        ]);
+    }
+
+    public function storeForm(AttendanceFormRequest $request): RedirectResponse
+    {
+        $bukti = $request->file('bukti');
+        if (! $bukti instanceof UploadedFile) {
+            return back()->withErrors(['bukti' => 'Unggah bukti kehadiran (foto atau PDF).'])->withInput();
+        }
+
+        $attendance = $this->attendanceFormRecorder->record(
+            $request->safe()->only(['sid', 'tanggal']),
+            $bukti,
+        );
+
+        return redirect()
+            ->route('control-room.attendance.form')
+            ->with('success', "Absensi tercatat untuk {$attendance->personnel_name_snapshot} ({$attendance->personnel_source_key}).");
+    }
 
     public function showCheckIn(Request $request): View
     {

@@ -9,6 +9,7 @@
         'tidak_hadir' => 'ocr-chip--absen',
         'tidak_dijadwalkan' => 'ocr-chip--unplanned',
         'anomali' => 'ocr-chip--anomali',
+        'belum_absen' => 'ocr-chip--rencana',
     ];
     $shiftCardClass = [
         'sesuai' => 'is-sesuai',
@@ -16,6 +17,7 @@
         'tidak_hadir' => 'is-absen',
         'tidak_dijadwalkan' => 'is-unplanned',
         'anomali' => 'is-anomali',
+        'belum_absen' => 'is-rencana',
     ];
     $statusLabel = [
         'sesuai' => 'Sesuai',
@@ -23,6 +25,7 @@
         'tidak_hadir' => 'Tidak Hadir',
         'tidak_dijadwalkan' => 'Tidak Dijadwalkan',
         'anomali' => 'Anomali',
+        'belum_absen' => 'Belum absen',
     ];
     $maxCoverage = max(1, ...array_column($mock['coverageRanking'], 'score'));
     $maxGoldenRule = max(1, ...array_column($mock['highlight']['goldenRules'], 'count'));
@@ -35,8 +38,10 @@
         $value >= 60 => 'warning',
         default => 'danger',
     };
-    $scheduleDays = $mock['schedule']['days'];
-    $defaultDay = collect($scheduleDays)->firstWhere('is_today') ?? $scheduleDays[0];
+    $scheduleDays = $schedule['days'];
+    $defaultDay = collect($scheduleDays)->firstWhere('is_today')
+        ?? collect($scheduleDays)->first(fn (array $day): bool => $day['s1'] !== [] || $day['s2'] !== [])
+        ?? $scheduleDays[0];
 @endphp
 
 @push('styles')
@@ -47,7 +52,7 @@
     <div class="ocr-dash">
         <div class="ocr-notice" role="status">
             <i class="ri-information-line"></i>
-            <span><strong>Mockup visual.</strong> Angka di halaman ini fiktif — pipeline SAP &amp; agregasi belum aktif.</span>
+            <span><strong>Sebagian mockup.</strong> KPI, ranking, Pareto, dan kualitas masih fiktif. Panel Penjadwalan memakai data Jadwal Rencana + Absen (default: minggu lalu).</span>
         </div>
 
         <form method="GET" class="ocr-card">
@@ -82,7 +87,7 @@
                     </div>
                 </div>
                 <div class="ocr-toolbar-right">
-                    <span class="ocr-sync">Last update: mockup — belum ada sync asli</span>
+                    <span class="ocr-sync">Panel jadwal: data asli · widget lain: mockup</span>
                 </div>
             </div>
         </form>
@@ -114,7 +119,7 @@
             <div class="ocr-card-header">
                 <div>
                     <h6>Penjadwalan — Rencana vs Aktual</h6>
-                    <p class="ocr-card-kicker">Klik hari untuk membuka Detail Roster.</p>
+                    <p class="ocr-card-kicker">Data jadwal site terpilih. Klik hari untuk Detail Roster.</p>
                 </div>
                 <div class="ocr-legend">
                     <span class="ocr-legend-item"><span class="ocr-legend-swatch is-sesuai"></span> Sesuai</span>
@@ -122,6 +127,7 @@
                     <span class="ocr-legend-item"><span class="ocr-legend-swatch is-absen"></span> Tidak Hadir</span>
                     <span class="ocr-legend-item"><span class="ocr-legend-swatch is-unplanned"></span> Tidak Dijadwalkan</span>
                     <span class="ocr-legend-item"><span class="ocr-legend-swatch is-anomali"></span> Anomali</span>
+                    <span class="ocr-legend-item"><span class="ocr-legend-swatch is-rencana"></span> Belum absen</span>
                 </div>
             </div>
 
@@ -153,8 +159,8 @@
                                     <div class="ocr-cal-days" role="list">
                                     @foreach ($scheduleDays as $day)
                                         @php
-                                            $s1 = $day['s1'][0] ?? null;
-                                            $s2 = $day['s2'][0] ?? null;
+                                            $s1People = $day['s1'];
+                                            $s2People = $day['s2'];
                                         @endphp
                                         <div
                                             class="ocr-cal-day{{ $day['date'] === $defaultDay['date'] ? ' is-selected' : '' }}{{ $day['is_today'] ? ' is-today' : '' }}"
@@ -164,27 +170,35 @@
                                             aria-pressed="{{ $day['date'] === $defaultDay['date'] ? 'true' : 'false' }}"
                                         >
                                             <div class="ocr-cal-slots">
-                                                @if ($s1)
-                                                    <article class="ocr-shift-card {{ $shiftCardClass[$s1['status']] }}">
+                                                @if ($s1People !== [])
+                                                    <article class="ocr-shift-card {{ $shiftCardClass[$s1People[0]['status']] ?? 'is-rencana' }}">
                                                         <div class="ocr-shift-meta">
                                                             <span>Shift 1</span>
                                                             <span>06:00 - 18:00</span>
                                                         </div>
-                                                        <strong>{{ $s1['name'] }}</strong>
-                                                        <span class="ocr-shift-status">{{ $statusLabel[$s1['status']] }}</span>
+                                                        @foreach ($s1People as $person)
+                                                            <div class="ocr-shift-person">
+                                                                <strong>{{ $person['name'] }}</strong>
+                                                                <span class="ocr-shift-status">{{ $statusLabel[$person['status']] ?? $person['status'] }}</span>
+                                                            </div>
+                                                        @endforeach
                                                     </article>
                                                 @else
                                                     <div class="ocr-shift-card is-empty">Kosong</div>
                                                 @endif
 
-                                                @if ($s2)
-                                                    <article class="ocr-shift-card {{ $shiftCardClass[$s2['status']] }}">
+                                                @if ($s2People !== [])
+                                                    <article class="ocr-shift-card {{ $shiftCardClass[$s2People[0]['status']] ?? 'is-rencana' }}">
                                                         <div class="ocr-shift-meta">
                                                             <span>Shift 2</span>
                                                             <span>18:00 - 24:00</span>
                                                         </div>
-                                                        <strong>{{ $s2['name'] }}</strong>
-                                                        <span class="ocr-shift-status">{{ $statusLabel[$s2['status']] }}</span>
+                                                        @foreach ($s2People as $person)
+                                                            <div class="ocr-shift-person">
+                                                                <strong>{{ $person['name'] }}</strong>
+                                                                <span class="ocr-shift-status">{{ $statusLabel[$person['status']] ?? $person['status'] }}</span>
+                                                            </div>
+                                                        @endforeach
                                                     </article>
                                                 @else
                                                     <div class="ocr-shift-card is-empty">Kosong</div>
@@ -391,7 +405,7 @@
         (function () {
             var pareto = @json($mock['pareto']);
             var quality = @json($mock['quality']);
-            var scheduleDays = @json($mock['schedule']['days']);
+            var scheduleDays = @json($schedule['days']);
             var statusLabel = @json($statusLabel);
             var chipClass = @json($chipClass);
             var shiftCardClass = @json($shiftCardClass);
@@ -432,10 +446,24 @@
             }
 
             function renderRoster(day) {
-                return '<div class="ocr-roster-stack">'
-                    + renderPerson('Shift 1 | 06:00 - 18:00', (day.s1 || [])[0])
-                    + renderPerson('Shift 2 | 18:00 - 24:00', (day.s2 || [])[0])
-                    + '</div>';
+                var s1 = day.s1 || [];
+                var s2 = day.s2 || [];
+                var html = '<div class="ocr-roster-stack">';
+                if (s1.length === 0) {
+                    html += renderPerson('Shift 1 | 06:00 - 18:00', null);
+                } else {
+                    s1.forEach(function (person) {
+                        html += renderPerson('Shift 1 | 06:00 - 18:00', person);
+                    });
+                }
+                if (s2.length === 0) {
+                    html += renderPerson('Shift 2 | 18:00 - 24:00', null);
+                } else {
+                    s2.forEach(function (person) {
+                        html += renderPerson('Shift 2 | 18:00 - 24:00', person);
+                    });
+                }
+                return html + '</div>';
             }
 
             var daysByDate = {};

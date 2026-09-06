@@ -9,6 +9,7 @@ use App\Enums\ControlRoomSiteCode;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Absen — plan-OCR.md T3.3. `schedule_plan_id` nullable = hadir tanpa
@@ -35,6 +36,7 @@ final class Attendance extends Model
         'replacing_source_key',
         'absence_reason',
         'checked_in_at',
+        'proof_path',
         'corrected_by',
         'correction_reason',
     ];
@@ -54,5 +56,22 @@ final class Attendance extends Model
     public function correctedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'corrected_by');
+    }
+
+    public function proofUrl(): ?string
+    {
+        $path = $this->getAttribute('proof_path');
+        if (! is_string($path) || $path === '') {
+            return null;
+        }
+
+        return Storage::disk('public')->url($path);
+    }
+
+    public function proofIsImage(): bool
+    {
+        $path = (string) $this->getAttribute('proof_path');
+
+        return preg_match('/\.(jpe?g|png|webp)$/i', $path) === 1;
     }
 }

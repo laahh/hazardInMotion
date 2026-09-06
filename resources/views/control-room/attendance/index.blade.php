@@ -32,8 +32,8 @@
     <div class="card shadow-none border">
         <div class="card-header d-flex align-items-center justify-content-between">
             <h6 class="mb-0">Rekap Absen Minggu {{ $week }} / {{ $year }} — {{ $site->label() }}</h6>
-            <a href="{{ route('control-room.attendance.check-in.form', ['site' => $site->value]) }}" class="btn btn-primary-600 btn-sm">
-                <i class="ri-user-follow-line"></i> Check-in Sekarang
+            <a href="{{ route('control-room.attendance.form') }}" class="btn btn-primary-600 btn-sm">
+                <i class="ri-camera-line"></i> Form Absensi
             </a>
         </div>
         <div class="card-body p-0">

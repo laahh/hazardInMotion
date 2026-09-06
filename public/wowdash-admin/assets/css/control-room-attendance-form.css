@@ -1,0 +1,205 @@
+.ocr-absensi-page {
+    margin: 0;
+    min-height: 100vh;
+    background: #eef2f7;
+    color: #111827;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.ocr-absensi {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 16px;
+}
+
+.ocr-absensi-card {
+    width: 100%;
+    max-width: 420px;
+    background: #fff;
+    border: 1px solid #dbe3ee;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.ocr-absensi-header {
+    padding: 22px 22px 16px;
+    background: #1d4ed8;
+    color: #fff;
+}
+
+.ocr-absensi-header h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #fff;
+}
+
+.ocr-absensi-header p {
+    margin: 6px 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #dbeafe;
+}
+
+.ocr-absensi-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px 22px 8px;
+}
+
+.ocr-absensi-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ocr-absensi-field label {
+    font-size: 13px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.ocr-absensi-field input[type="text"],
+.ocr-absensi-field input[type="date"] {
+    min-height: 48px;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    color: #111827;
+    background: #fff;
+    font-size: 16px;
+}
+
+.ocr-absensi-field input:focus {
+    outline: 2px solid #93c5fd;
+    border-color: #2563eb;
+}
+
+.ocr-absensi-field input.is-invalid {
+    border-color: #dc2626;
+}
+
+.ocr-absensi-error {
+    font-size: 12px;
+    color: #b91c1c;
+}
+
+.ocr-absensi-alert {
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.ocr-absensi-alert ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.ocr-absensi-alert.is-success {
+    background: #ecfdf3;
+    color: #14532d;
+    border: 1px solid #bbf7d0;
+}
+
+.ocr-absensi-alert.is-error {
+    background: #fef2f2;
+    color: #7f1d1d;
+    border: 1px solid #fecaca;
+}
+
+.ocr-absensi-upload {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 132px;
+    padding: 16px;
+    border: 1.5px dashed #94a3b8;
+    border-radius: 12px;
+    background: #f8fafc;
+    text-align: center;
+    cursor: pointer;
+    color: #111827;
+}
+
+.ocr-absensi-upload input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.ocr-absensi-upload-icon {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 22px;
+}
+
+.ocr-absensi-upload-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.ocr-absensi-upload-hint {
+    font-size: 12px;
+    color: #334155;
+}
+
+.ocr-absensi-preview {
+    display: block;
+    width: 100%;
+    max-height: 180px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+}
+
+.ocr-absensi-actions {
+    padding: 8px 22px 22px;
+}
+
+.ocr-absensi-submit {
+    width: 100%;
+    min-height: 48px;
+    border: 0;
+    border-radius: 12px;
+    background: #1d4ed8;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ocr-absensi-submit:disabled {
+    opacity: 0.7;
+    cursor: wait;
+}
+
+@media (max-width: 420px) {
+    .ocr-absensi {
+        padding: 12px;
+        align-items: stretch;
+    }
+
+    .ocr-absensi-card {
+        max-width: none;
+        border-radius: 14px;
+    }
+}

@@ -7,6 +7,7 @@ namespace App\Http\Controllers\ControlRoom;
 use App\Enums\ControlRoomSiteCode;
 use App\Http\Controllers\Controller;
 use App\Services\ControlRoom\DashboardMockDataProvider;
+use App\Services\ControlRoom\DashboardScheduleWeekAssembler;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -18,16 +19,22 @@ use Illuminate\View\View;
  * (T0.1 sudah selesai — lihat plan-OCR.md 0.6 — tapi desain final Fase 5
  * masih menunggu keputusan reuse mv_sap_scorecard_mingguan, dan beberapa
  * sumber lain seperti Sheet ID TBC belum ada — lihat Lampiran D #23/#27).
- * Sampai itu selesai, dashboard menampilkan data MOCKUP (DashboardMockDataProvider)
- * supaya ada gambaran visual layout — bukan angka asli.
+ * Panel KPI, ranking, Pareto, dan kualitas masih MOCKUP (DashboardMockDataProvider).
+ * Panel Penjadwalan memakai Jadwal Rencana + Absen nyata; default filter = minggu lalu.
  */
 final class DashboardController extends Controller
 {
-    public function index(Request $request, DashboardMockDataProvider $mock): View
-    {
+    public function index(
+        Request $request,
+        DashboardMockDataProvider $mock,
+        DashboardScheduleWeekAssembler $scheduleWeek,
+    ): View {
         $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
-        $year = (int) $request->integer('year', (int) now()->isoWeekYear());
-        $week = (int) $request->integer('week', (int) now()->isoWeek());
+        $previousWeekStart = CarbonImmutable::now()
+            ->setISODate((int) now()->isoWeekYear(), (int) now()->isoWeek(), 1)
+            ->subWeek();
+        $year = (int) $request->integer('year', (int) $previousWeekStart->isoWeekYear());
+        $week = (int) $request->integer('week', (int) $previousWeekStart->isoWeek());
         $week = max(1, min(53, $week));
 
         $weekStart = CarbonImmutable::now()->setISODate($year, $week, 1)->startOfDay();
@@ -47,6 +54,7 @@ final class DashboardController extends Controller
             'nextWeek' => (int) $nextWeekStart->isoWeek(),
             'sites' => ControlRoomSiteCode::cases(),
             'mock' => $mock->build($weekStart),
+            'schedule' => $scheduleWeek->build($site, $weekStart),
         ]);
     }
 }

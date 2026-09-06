@@ -31,4 +31,31 @@ enum ControlRoomSiteCode: string
     {
         return (string) (config("control-room.sites.{$this->value}.source_key") ?? $this->value);
     }
+
+    /**
+     * Petakan nilai site_dedicated personil (mis. "BMO 1", "HO") ke enum modul.
+     */
+    public static function fromDedicated(?string $dedicated): self
+    {
+        $normalized = self::normalizeSiteToken($dedicated);
+        if ($normalized === '') {
+            return self::HeadOffice;
+        }
+
+        foreach (self::cases() as $site) {
+            if (
+                $normalized === self::normalizeSiteToken($site->value)
+                || $normalized === self::normalizeSiteToken($site->sourceKey())
+            ) {
+                return $site;
+            }
+        }
+
+        return self::HeadOffice;
+    }
+
+    private static function normalizeSiteToken(?string $value): string
+    {
+        return strtoupper((string) preg_replace('/[\s\-]+/', '', trim((string) $value)));
+    }
 }

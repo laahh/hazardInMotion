@@ -283,6 +283,7 @@
     box-sizing: border-box;
 }
 .ocr-legend-swatch.is-anomali { background: var(--ocr-anomali); }
+.ocr-legend-swatch.is-rencana { background: #3b82f6; }
 
 /* Kalender + roster */
 .ocr-cal-card {
@@ -501,6 +502,12 @@
     color: #1e3a8a;
 }
 
+.ocr-shift-card.is-rencana {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1e3a8a;
+}
+
 .ocr-shift-card.is-unplanned {
     color: #4b5563;
     border: 1.5px dashed #9ca3af;
@@ -550,11 +557,29 @@
     font-weight: 700;
 }
 
+.ocr-shift-person {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 0;
+}
+
+.ocr-shift-person + .ocr-shift-person {
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(17, 24, 39, 0.08);
+}
+
+.ocr-shift-person .ocr-shift-status {
+    margin-top: 0;
+}
+
 .ocr-shift-card.is-sesuai .ocr-shift-status { color: var(--ocr-sesuai); }
 .ocr-shift-card.is-ganti .ocr-shift-status { color: var(--ocr-ganti); }
 .ocr-shift-card.is-absen .ocr-shift-status { color: var(--ocr-absen); }
 .ocr-shift-card.is-anomali .ocr-shift-status { color: var(--ocr-anomali); }
 .ocr-shift-card.is-unplanned .ocr-shift-status { color: var(--ocr-unplanned); }
+.ocr-shift-card.is-rencana .ocr-shift-status { color: #1e3a8a; }
 
 /* Roster panel */
 .ocr-roster {
@@ -716,6 +741,7 @@
 .ocr-chip--unplanned { background: #fff; color: var(--ocr-unplanned); border-style: dashed; border-color: #9ca3af; }
 .ocr-chip--unplanned::before { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
 .ocr-chip--anomali { background: #fff; color: var(--ocr-anomali); border-color: var(--ocr-anomali-border); }
+.ocr-chip--rencana { background: #fff; color: #1e3a8a; border-color: #bfdbfe; }
 
 /* 4 widget row */
 .ocr-widget-row {
