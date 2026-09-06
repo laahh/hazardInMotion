@@ -77,6 +77,12 @@
         </div>
     </div>
 
+    <datalist id="personnel-options">
+        @foreach ($personnel as $person)
+            <option value="{{ $person->emp_name }} ({{ $person->sid }})"></option>
+        @endforeach
+    </datalist>
+
     <div class="modal fade" id="addScheduleModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -108,16 +114,63 @@
                                 autocomplete="off"
                                 required
                             >
-                            <datalist id="personnel-options">
-                                @foreach ($personnel as $person)
-                                    <option value="{{ $person->emp_name }} ({{ $person->sid }})"></option>
-                                @endforeach
-                            </datalist>
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
                         <button type="submit" class="btn btn-primary-600">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="editScheduleModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" id="edit-schedule-form">
+                    @csrf
+                    @method('PUT')
+
+                    <div class="modal-header">
+                        <h6 class="modal-title">Ubah Jadwal — <span id="edit-modal-date-label"></span></h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-16">
+                            <label class="form-label text-sm mb-1">Shift</label>
+                            <select name="shift_code" id="edit-shift-select" class="form-control" required>
+                                <option value="S1">Shift 1</option>
+                                <option value="S2">Shift 2</option>
+                            </select>
+                        </div>
+                        <div class="mb-16">
+                            <label class="form-label text-sm mb-1">Personil (ketik nama atau SID)</label>
+                            <input
+                                type="text"
+                                name="personnel_source_key"
+                                id="edit-personnel-input"
+                                list="personnel-options"
+                                class="form-control"
+                                autocomplete="off"
+                                required
+                            >
+                        </div>
+                        <p class="text-warning-600 text-xs mb-8" id="edit-locked-note" style="display:none">
+                            <i class="ri-lock-line"></i> Jadwal ini sudah dikunci sebagai baseline — perubahan akan
+                            tetap tercatat di riwayat (lihat "Riwayat perubahan").
+                        </p>
+                        <div id="edit-reason-wrapper" style="display:none">
+                            <label class="form-label text-sm mb-1">Alasan Perubahan (wajib)</label>
+                            <textarea name="reason" id="edit-reason-input" class="form-control"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-danger" id="edit-delete-btn">Hapus Jadwal</button>
+                        <div>
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                            <button type="submit" class="btn btn-primary-600">Simpan Perubahan</button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -137,6 +190,47 @@
             var eventsUrl = @json(route('control-room.schedule.events'));
             var csrfToken = @json(csrf_token());
 
+            var editModalEl = document.getElementById('editScheduleModal');
+            var editModal = new bootstrap.Modal(editModalEl);
+            var editForm = document.getElementById('edit-schedule-form');
+            var editShiftSelect = document.getElementById('edit-shift-select');
+            var editPersonnelInput = document.getElementById('edit-personnel-input');
+            var editReasonWrapper = document.getElementById('edit-reason-wrapper');
+            var editReasonInput = document.getElementById('edit-reason-input');
+            var editLockedNote = document.getElementById('edit-locked-note');
+            var editDeleteBtn = document.getElementById('edit-delete-btn');
+            var editModalDateLabel = document.getElementById('edit-modal-date-label');
+            var currentDeleteUrl = null;
+
+            function deleteCurrentSchedule() {
+                if (!currentDeleteUrl) {
+                    return;
+                }
+                if (!confirm('Hapus jadwal ini?')) {
+                    return;
+                }
+
+                fetch(currentDeleteUrl, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                    body: '_method=DELETE',
+                }).then(function (res) {
+                    if (res.ok) {
+                        editModal.hide();
+                        calendar.refetchEvents();
+                    } else {
+                        res.json().then(function (data) {
+                            alert(data.message || 'Gagal menghapus jadwal.');
+                        });
+                    }
+                });
+            }
+            editDeleteBtn.addEventListener('click', deleteCurrentSchedule);
+
             var calendarEl = document.getElementById('schedule-calendar');
             var calendar = new FullCalendar.Calendar(calendarEl, {
                 headerToolbar: {
@@ -149,6 +243,7 @@
                 firstDay: 1,
                 height: 'auto',
                 dayMaxEvents: true,
+                eventDisplay: 'block',
 
                 events: function (info, successCallback, failureCallback) {
                     var url = eventsUrl + '?site=' + encodeURIComponent(siteCode)
@@ -161,6 +256,22 @@
                         .catch(failureCallback);
                 },
 
+                eventContent: function (arg) {
+                    var props = arg.event.extendedProps;
+                    var initial = (props.personnel || '?').trim().charAt(0).toUpperCase();
+                    var color = arg.event.backgroundColor || '#333';
+                    var title = arg.event.title.replace(/</g, '&lt;');
+
+                    return {
+                        html:
+                            '<div class="d-flex align-items-center gap-1 px-4 py-2" style="overflow:hidden;">' +
+                            '<span class="rounded-circle bg-white d-inline-flex align-items-center justify-content-center flex-shrink-0" ' +
+                            'style="width:16px;height:16px;font-size:9px;font-weight:700;color:' + color + ';">' + initial + '</span>' +
+                            '<span class="text-truncate" style="font-size:11px;">' + title + '</span>' +
+                            '</div>',
+                    };
+                },
+
                 dateClick: function (info) {
                     document.getElementById('modal-date-input').value = info.dateStr;
                     document.getElementById('modal-date-label').textContent = info.dateStr;
@@ -168,32 +279,20 @@
                 },
 
                 eventClick: function (info) {
-                    if (info.event.extendedProps.locked) {
-                        alert('Jadwal ini sudah dikunci, tidak bisa dihapus dari sini.');
-                        return;
-                    }
+                    var props = info.event.extendedProps;
 
-                    if (!confirm('Hapus jadwal ' + info.event.extendedProps.personnel + ' (' + info.event.extendedProps.shift + ')?')) {
-                        return;
-                    }
+                    editForm.action = props.updateUrl;
+                    editModalDateLabel.textContent = info.event.startStr;
+                    editShiftSelect.value = props.shift;
+                    editPersonnelInput.value = props.personnel + ' (' + props.personnelSourceKey + ')';
+                    editReasonInput.value = '';
+                    editReasonWrapper.style.display = props.locked ? '' : 'none';
+                    editReasonInput.required = props.locked;
+                    editLockedNote.style.display = props.locked ? '' : 'none';
+                    editDeleteBtn.style.display = props.locked ? 'none' : '';
+                    currentDeleteUrl = props.deleteUrl;
 
-                    fetch(info.event.extendedProps.deleteUrl, {
-                        method: 'POST',
-                        headers: {
-                            Accept: 'application/json',
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-CSRF-TOKEN': csrfToken,
-                        },
-                        body: '_method=DELETE',
-                    }).then(function (res) {
-                        if (res.ok) {
-                            calendar.refetchEvents();
-                        } else {
-                            res.json().then(function (data) {
-                                alert(data.message || 'Gagal menghapus jadwal.');
-                            });
-                        }
-                    });
+                    editModal.show();
                 },
             });
 

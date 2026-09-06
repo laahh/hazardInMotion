@@ -53,19 +53,28 @@ final class ScheduleController extends Controller
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
             ->orderBy('shift_code')
             ->get()
-            ->map(fn (SchedulePlan $plan): array => [
-                'id' => $plan->id,
-                'title' => "{$plan->shift_code->value} • {$plan->personnel_name_snapshot}",
-                'start' => $plan->date->toDateString(),
-                'allDay' => true,
-                'color' => self::SHIFT_COLORS[$plan->shift_code->value] ?? '#6c757d',
-                'extendedProps' => [
-                    'locked' => $plan->isLocked(),
-                    'personnel' => $plan->personnel_name_snapshot,
-                    'shift' => $plan->shift_code->value,
-                    'deleteUrl' => route('control-room.schedule.destroy', $plan),
-                ],
-            ]);
+            ->map(function (SchedulePlan $plan): array {
+                $color = self::SHIFT_COLORS[$plan->shift_code->value] ?? '#6c757d';
+
+                return [
+                    'id' => $plan->id,
+                    'title' => "{$plan->shift_code->value} • {$plan->personnel_name_snapshot}",
+                    'start' => $plan->date->toDateString(),
+                    'allDay' => true,
+                    'backgroundColor' => $color,
+                    'borderColor' => $color,
+                    'textColor' => '#ffffff',
+                    'extendedProps' => [
+                        'scheduleId' => $plan->id,
+                        'locked' => $plan->isLocked(),
+                        'personnel' => $plan->personnel_name_snapshot,
+                        'personnelSourceKey' => $plan->personnel_source_key,
+                        'shift' => $plan->shift_code->value,
+                        'updateUrl' => route('control-room.schedule.update', $plan),
+                        'deleteUrl' => route('control-room.schedule.destroy', $plan),
+                    ],
+                ];
+            });
 
         return response()->json($events);
     }
@@ -127,14 +136,23 @@ final class ScheduleController extends Controller
             ->with('success', "Minggu {$data['from_week_number']} berhasil disalin ke minggu {$data['to_week_number']} ({$sourcePlans->count()} baris) — silakan diedit.");
     }
 
-    public function update(ScheduleUpdateRequest $request, SchedulePlan $schedule): RedirectResponse
+    public function update(ScheduleUpdateRequest $request, SchedulePlan $schedule): RedirectResponse|JsonResponse
     {
         $data = $request->validated();
         $reason = $data['reason'] ?? null;
         unset($data['reason']);
 
+        if (isset($data['personnel_source_key']) && $data['personnel_source_key'] !== $schedule->personnel_source_key) {
+            $personnel = $this->personnelReader->find($data['personnel_source_key']);
+            $data['personnel_name_snapshot'] = $personnel?->emp_name ?? $data['personnel_source_key'];
+        }
+
         $schedule->changeReason = $reason;
         $schedule->update($data);
+
+        if ($request->wantsJson()) {
+            return response()->json(['message' => 'Jadwal diperbarui.']);
+        }
 
         return back()->with('success', 'Jadwal diperbarui.');
     }
