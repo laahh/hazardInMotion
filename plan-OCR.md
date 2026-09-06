@@ -75,6 +75,145 @@ Ada pipeline eksternal (Python scraper `tableau_hsecm_rulebase_to_json.py`, di l
 
 ---
 
+## 0.6 — Hasil T0.1 (Terverifikasi Langsung via OBDS, 2026-09-06)
+
+> **T0.1 SELESAI.** Sandbox eksekusi Claude Code tidak punya akses jaringan ke Postgres HSE (lihat 0.5 poin 1-2), tapi tool **OBDS** (koneksi database terpisah yang tersedia di sesi ini) ternyata tersambung langsung ke database yang sama persis (`bcbeats`/`bcsid`/`public`). Semua query T0.1 di bawah dijalankan sungguhan, bukan simulasi.
+
+**1. Keempat materialized view MEMANG ADA — plan-OCR.md benar sejak awal.**
+```
+SELECT schemaname, matviewname, ispopulated FROM pg_matviews;
+→ bcbeats.mv_inspeksi_hazard  (ispopulated=true)
+→ bcbeats.mv_observasi        (ispopulated=true)
+→ bcbeats.mv_oak              (ispopulated=true)
+→ bcbeats.mv_coaching         (ispopulated=true)
+```
+Alasan kenapa 0.5 poin 2 sebelumnya menyimpulkan "nol referensi di codebase" tetap valid — grep kode memang nihil. Tapi itu cuma berarti **belum ada kode Laravel yang memakainya**, bukan berarti objeknya tidak ada. `get_object_details` versi "table" mengembalikan `columns: []` untuk keempatnya karena materialized view tidak muncul di `information_schema.columns` — makanya perlu `SELECT * ... LIMIT n` langsung untuk lihat kolom aslinya (lihat poin 3).
+
+**2. `car_register` sebagai fallback TIDAK JADI DIPAKAI** — keempat `mv_*` di atas adalah sumber yang benar. Semua referensi "fallback ke car_register" di dokumen ini sekarang murni historis/tidak dipakai.
+
+**3. Kolom lengkap tiap view (dari `SELECT * LIMIT 3`, bukan tebakan):**
+
+```
+mv_inspeksi_hazard (778.516 baris, 2026-01-01 s/d 2026-09-06):
+  id_laporan, tanggal_laporan, jenis_laporan ('HAZARD'|'INSPEKSI'),
+  status_laporan, deskripsi_temuan, ketidaksesuaian, subketidaksesuaian,
+  nama_goldenrule (nullable — kosong utk beberapa INSPEKSI), nama_kategori,
+  kekerapan, keparahan, nilai_resiko, waktu_kalkulasi_resiko,
+  uraian_temuan_tindak_lanjut, tindakan_perbaikan, tanggal_janji_penyelesaian,
+  tanggal_aktual_penyelesaian, waktu_verifikasi, catatan_verifikasi,
+  id_site, site, id_lokasi, lokasi, id_detil_lokasi, detil_lokasi,
+  keterangan_lokasi, latitude, longitude, tools_observasi,
+  id_pelapor, kode_sid_pelapor, nama_pelapor, perusahaan_pelapor,
+  jabatan_fungsional_pelapor, departemen_pelapor,
+  id_pic, kode_sid_pic, nama_pic, perusahaan_pic, jabatan_fungsional_pic, departemen_pic,
+  metode_input, tanggal_bedraft, platform, versi_aplikasi, url_foto
+
+  ⚠️ TIDAK ADA kolom val_tbc / val_gr sama sekali — mengonfirmasi keputusan
+     pakai Google Sheet (0.5 poin 5), bukan reimplementasi dari sini.
+  ⚠️ TIDAK ADA kolom "waktu submit" terpisah dari tanggal_laporan — yang ada
+     cuma tanggal_bedraft (draft, sebelum submit final) dan tanggal_laporan
+     (laporan final). Untuk formula H+1 (SubmissionWindow), submitted_at =
+     tanggal_laporan — TIDAK ADA field lain yang lebih tepat.
+
+mv_observasi (1.650.976 baris, 2026-01-01 s/d 2026-09-06):
+  id_observasi, tanggal_observasi, id_pelapor, kode_sid_pelapor, nama_pelapor,
+  peran_personil, id_personil_diobservasi, kode_sid_personil_diobservasi,
+  nama_personil_diobservasi, perusahaan_personil_diobservasi,
+  jabatan_struktural_personil_diobservasi, jabatan_fungsional_personil_diobservasi,
+  departemen_personil_diobservasi, site, lokasi, id_detil_lokasi, detil_lokasi,
+  keterangan_lokasi, latitude, longitude, pja_bc, pja_mitra_kerja, jenis_kegiatan,
+  tindakan_perbaikan, umpan_balik, catatan_observasi, tools_observasi,
+  metode_input, tanggal_bedraft, platform, versi_aplikasi, url_foto
+
+  ⚠️ DUA identitas personil berbeda: kode_sid_pelapor (yang melakukan
+     pengawasan/observasi — INI yang dihitung untuk %SAP personil OCR) vs
+     kode_sid_personil_diobservasi (yang diamati/diawasi — bukan pemilik SAP).
+     JANGAN tertukar — %SAP milik kode_sid_pelapor.
+  ⚠️ Tidak ada id_lokasi (beda dari mv_inspeksi_hazard yang punya id_lokasi
+     DAN id_detil_lokasi) — mv_observasi cuma punya lokasi (teks) + id_detil_lokasi.
+
+mv_oak (3.481.210 baris / 1.021.254 id_oak DISTINCT, 2026-01-01 s/d 2026-09-06):
+  id_oak, uuid_mobile, tanggal_submit, aktivitas, sub_aktivitas, material,
+  jenis_alat, jenis_alat_angkut, alat_angkat, shift, kesimpulan, tools_observasi,
+  id_sib_register, kode_sib, id_site, site, id_lokasi, lokasi, id_detil_lokasi,
+  detil_lokasi, keterangan_lokasi, latitude, longitude,
+  id_pelapor, kode_sid_pelapor, nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor,
+  peran_dalam_tim, id_karyawan_team, kode_sid_team, nama_team, jabatan_fungsional_team,
+  metode_input, tanggal_bedraft, platform, versi_aplikasi, nama_file_foto, url_foto
+
+  ⚠️ SATU id_oak MUNCUL DI BANYAK BARIS — satu baris per anggota tim
+     (peran_dalam_tim: 'OBSERVEE'/'PENGAWAS LANGSUNG'/'OBSERVER'/dst),
+     kode_sid_pelapor SAMA di semua baris turunan id_oak yang sama, hanya
+     kode_sid_team yang beda. WAJIB dedup by (id_oak, kode_sid_pelapor) saat
+     menghitung "berapa OAK yang disubmit personil X" — COUNT(*) polos akan
+     3-4x lipat gandakan angka.
+  ⚠️ Kolom "shift" BUKAN S1/S2 — isinya 'Awal Shift' (1.478.827) /
+     'Tengah Shift' (1.131.918) / 'Akhir Shift' (870.465): posisi SUBMIT di
+     dalam shift, bukan kode shift itu sendiri. ShiftResolver tetap wajib
+     dipakai untuk menentukan S1/S2 dari tanggal_submit — kolom ini TIDAK
+     bisa dipakai sebagai pengganti.
+
+mv_coaching (316.324 baris, 2026-01-01 s/d 2026-09-06):
+  id_coaching, tanggal_coaching, id_coach, kode_sid_coach, npk_coach, nama_coach,
+  jabatan_struktural_coach, jabatan_fungsional_coach, divisi_coach, departemen_coach,
+  perusahaan_coach, area_pja_coach, id_coachee, kode_sid_coachee, npk_coachee,
+  nama_coachee, jabatan_struktural_coachee, jabatan_fungsional_coachee,
+  divisi_coachee, departemen_coachee, perusahaan_coachee, id_site, site, id_lokasi,
+  lokasi, id_detil_lokasi, detil_lokasi, keterangan_lokasi, latitude, longitude,
+  pja_bc, pja_mitra_kerja, topik_coaching, kategori_coaching, tools_observasi,
+  skor_coaching, predikat_coaching, catatan_coach, metode_input, tanggal_bedraft,
+  platform, versi_aplikasi, url_foto
+```
+
+**4. Nilai `site` TERNYATA KONSISTEN di keempat view** (bertentangan dengan temuan #5 di Section 1 — mungkin itu berasal dari dataset/view lain yang lebih lama). `GROUP BY site` di keempat view menghasilkan tepat 10 nilai yang sama: `GMO, LMO, BMO 1, BMO 2, BMO 3, SMO, MARINE, HO, EKSPLORASI, JAKARTA`, plus satu baris nyasar `'Other'` (5 baris di `mv_inspeksi_hazard`, diabaikan sebagai anomali data, bukan site sungguhan). **Ini persis cocok dengan `config/control-room.php` yang sudah dibuat** — tidak perlu ubah mapping site.
+
+**5. Rentang data terkonfirmasi:** kelima objek (4 view + `mv_sap_scorecard_mingguan`) sama-sama mulai **2026-01-01** (scorecard mulai 2025-12-29 karena mengikuti batas minggu ISO) sampai hari ini (2026-09-06, live/terkini). Materialized view ini di-refresh mendekati real-time (baris terbaru = beberapa jam sebelum query dijalankan) — jauh lebih sering dari yang diasumsikan plan awal. Jadwal refresh persis tidak diketahui dari sini (tidak ada log refresh yang bisa diquery) — tetap perlu tanya admin HSE untuk kepastian cadence-nya (pertanyaan #15 masih terbuka).
+
+**6. Temuan bonus besar — `bcbeats.mv_sap_scorecard_mingguan` sudah ada:**
+```
+kode_sid, nama_karyawan, minggu_mulai, minggu_selesai,
+jml_rfid, jml_coaching, jml_oak, jml_inspeksi, jml_hazard, jml_observasi, jml_sap_total
+```
+HSE **sudah punya scorecard mingguan per personil** yang menghitung sendiri jumlah hazard/inspeksi/observasi/oak/coaching per `kode_sid` per minggu ISO (625.321 baris, dari 2025-12-29). Ini berpotensi memangkas banyak pekerjaan Fase 5 (T5.1/T5.2) — alih-alih membangun ulang agregasi mingguan dari nol via `control_room_sap_snapshot`, OCR module BISA sync langsung dari view ini untuk kebutuhan hitung dasar %SAP per personil per minggu. **Belum diputuskan** apakah OCR akan pakai ini atau tetap membangun snapshot sendiri (snapshot sendiri tetap dibutuhkan untuk hal yang scorecard ini tidak tangani: breakdown per shift/hari, GR, kategori temuan untuk Variasi Score, lokasi untuk Coverage Score) — lihat pertanyaan baru #27 di Lampiran D.
+
+**7. Area kritis — DEAD END dikonfirmasi di `bcbeats`, bukan cuma dugaan.**
+Struktur lengkap kedua kandidat sudah dicek langsung:
+```
+bcbeats.m_lokasi: id, nama, singkatan, id_tipe, id_parent, is_active,
+                  center_latitude, center_longitude, updated_date
+bcbeats.bep_vw_site_lokasi_detil_lokasi: id_site, site, status_site, id_lokasi,
+                  lokasi, lokasi_last_update, status_lokasi, id_detil_lokasi,
+                  "Detil Lokasi", detil_lokasi_last_update, status_detil_lokasi,
+                  wkt_geometry, data_geometry2, data_geometry, buffer, updated_date
+```
+**Tidak ada kolom flag kritis di keduanya.** Sempat dicek juga `bcbeats.m_pja`/`m_pja_category`/`m_pja_locations` (menduga "PJA" = klasifikasi risiko) — ternyata PJA adalah **layer/kategori penugasan pengawasan** ("PJA Layer 1", "Mining Inspector", "Safety Inspector", "Superior", "Eksplorasi Inspector"), bukan klasifikasi kekritisan lokasi. Jalan buntu.
+
+**Sesuai instruksi eksplisit di plan ini ("Kalau tidak ketemu di keduanya → HENTIKAN dan eskalasi ke user") — INI DIESKALASI.** Opsi yang tersedia untuk user:
+```
+a) Pakai ulang logika LokasiNonKritisService (ClickHouse: DailyOperationPlan
+   aktif ATAU IKK work permit approved di lokasi tsb) — TAPI ini sudah
+   ditolak eksplisit sebelumnya untuk modul OCR (lihat 0.5 poin 4). Perlu
+   dikonfirmasi ulang apakah penolakan itu masih berlaku sekarang setelah
+   terbukti bcbeats benar-benar tidak punya alternatif.
+b) Definisikan "kritis" dari kombinasi data SAP itu sendiri (mis. lokasi yang
+   punya riwayat nilai_resiko='High' di mv_inspeksi_hazard) — bukan flag
+   statis, tapi diturunkan dari histori temuan.
+c) Kelola daftar lokasi kritis secara manual di aplikasi OCR sendiri (tabel
+   baru yang di-maintain user/admin, di luar sinkronisasi dari sumber manapun).
+d) Bobot ×2 untuk area kritis dihapus dari Coverage Score — semua lokasi
+   dihitung bobot 1, sampai ada sumber yang jelas.
+```
+
+**8. `bcsid.bep_vw_safety_karyawan_aktif` — struktur lengkap terkonfirmasi, tidak ada kejutan:**
+```
+mk_id, kode_sid, nik, nama, nama_perusahaan, jabatan_struktural, jabatan_fungsional,
+kategory_karyawan, level_jabatan, status_karyawan, departement, divisi,
+site_dedicated, status_permit, update_date_permit, tanggal_hari_pertama
+```
+Cocok 1:1 dengan kolom yang sudah dipakai `App\Models\OhsDashboard\Employee::liveSourceSql()`. Tidak ada perubahan diperlukan di T1.2/PersonnelReader.
+
+---
+
 ## 1. Sumber Data
 
 > **Status: sebagian besar sudah terverifikasi** dari dokumentasi skema internal HSE Database (skill `hse-sap-insiden-analysis`). Kolom yang ditandai ✅ sudah dikonfirmasi ada. Yang ditandai ⚠️ masih perlu dicek langsung ke DB.
@@ -86,10 +225,10 @@ Ada pipeline eksternal (Python scraper `tableau_hsecm_rulebase_to_json.py`, di l
 | Area kritis | `bcbeats.m_lokasi` atau `bcbeats.bep_vw_site_lokasi_detil_lokasi` — kolom flag belum diketahui | — | ⚠️ **belum terverifikasi** — kedua query yang sudah ada tidak pernah select kolom ini; wajib `\d+` langsung sebelum T1.3 final, lihat 0.5 poin 4 |
 | TBC (validasi) | **[DIPUTUSKAN]** Google Sheet tasklist (manual, "anyone with link"), dibaca via CSV export | belum diketahui — perlu Sheet ID/gid & daftar kolom | ⚠️ perlu inventarisasi struktur sheet (task baru T1.5) — lihat 0.5 poin 5 |
 | Blindspot & Coverage Area Kritis | **[DIPUTUSKAN]** reuse `scr_hsecm_coverage_area_kritis_daily` (MySQL lokal, diisi scraper Tableau eksternal tiap 6 jam) | `Site`, `Lokasi`, `Detil_Lokasi`, `Tercover`, `Status_Coverage_dalam_1_Week` | ✅ sudah jalan via `HsecmDatabaseRepository` — **bukan** `app_mixer.scr_daily_coverage_area` (tabel itu nol referensi di codebase) |
-| SAP — Hazard & Inspeksi | `bcbeats.mv_inspeksi_hazard` | `jenis_laporan`, `kode_sid_pelapor`, `tanggal_laporan`, `site`, `deskripsi_temuan`, `ketidaksesuaian`, `subketidaksesuaian`, `nama_kategori`, `nama_goldenrule`, `kekerapan`, `keparahan`, `nilai_resiko` | ⚠️ **nol referensi di codebase** — wajib diverifikasi T0.1; fallback teruji = `bcbeats.car_register` (lihat 0.5 poin 2) |
-| SAP — Observasi | `bcbeats.mv_observasi` | `id_observasi`, `kode_sid_pelapor`, `tanggal_observasi`, `site`, `lokasi`, `detil_lokasi`, `jenis_kegiatan` | ⚠️ **nol referensi di codebase** — wajib diverifikasi T0.1 |
-| SAP — OAK | `bcbeats.mv_oak` | `kode_sid_pelapor`, `tanggal_submit`, `site` | ⚠️ **nol referensi di codebase** — wajib diverifikasi T0.1 |
-| Coaching | `bcbeats.mv_coaching` | `kode_sid_coach`, `kode_sid_coachee`, `tanggal_coaching`, `site` | ⚠️ **nol referensi di codebase** — wajib diverifikasi T0.1 |
+| SAP — Hazard & Inspeksi | `bcbeats.mv_inspeksi_hazard` | `jenis_laporan`, `kode_sid_pelapor`, `tanggal_laporan`, `site`, `deskripsi_temuan`, `ketidaksesuaian`, `subketidaksesuaian`, `nama_kategori`, `nama_goldenrule`, `kekerapan`, `keparahan`, `nilai_resiko` | ✅ **T0.1 SELESAI (0.5.6)** — 778.516 baris, terkonfirmasi via query langsung. Tidak ada val_tbc/val_gr, tidak ada kolom submit terpisah dari tanggal_laporan |
+| SAP — Observasi | `bcbeats.mv_observasi` | `id_observasi`, `kode_sid_pelapor`, `tanggal_observasi`, `site`, `lokasi`, `detil_lokasi`, `jenis_kegiatan` | ✅ **T0.1 SELESAI (0.5.6)** — 1.650.976 baris. Ada 2 identitas personil (`kode_sid_pelapor` vs `kode_sid_personil_diobservasi`) — pakai `kode_sid_pelapor` untuk %SAP |
+| SAP — OAK | `bcbeats.mv_oak` | `kode_sid_pelapor`, `tanggal_submit`, `site` | ✅ **T0.1 SELESAI (0.5.6)** — 3.481.210 baris / 1.021.254 `id_oak` distinct (wajib dedup). Kolom `shift` bukan S1/S2 (posisi submit dalam shift) |
+| Coaching | `bcbeats.mv_coaching` | `kode_sid_coach`, `kode_sid_coachee`, `tanggal_coaching`, `site` | ✅ **T0.1 SELESAI (0.5.6)** — 316.324 baris |
 
 **Enam temuan awal (dari dokumentasi skema eksternal — sebagian sudah dikoreksi lebih lanjut oleh review codebase di 0.5, terutama poin 3 di bawah untuk personil dan poin 6 untuk validitas `mv_*`):**
 
@@ -194,7 +333,15 @@ mv_coaching         →  BUKAN komponen target. Bonus %SAP di atas 100%.
 
 # FASE 0 — Discovery & Fondasi
 
-## T0.1 — Inventarisasi Enam Objek Sumber
+## T0.1 — Inventarisasi Enam Objek Sumber ✅ SELESAI (2026-09-06, via OBDS)
+
+> **Status: SELESAI.** Dijalankan langsung terhadap Postgres HSE lewat tool OBDS (koneksi terpisah dari `pgsql_ssh`/`pgsql_direct` yang tidak reachable dari sandbox eksekusi kode, tapi tersambung ke database yang sama persis). Hasil lengkap ada di **section 0.6** di atas. Ringkasan:
+> - `mv_inspeksi_hazard`/`mv_observasi`/`mv_oak`/`mv_coaching` ADA, semua materialized view valid, struktur kolom lengkap terkonfirmasi.
+> - `vw_lokasi_aktif` tidak pernah ada; area kritis dead-end dikonfirmasi di `m_lokasi` & `bep_vw_site_lokasi_detil_lokasi` — **dieskalasi ke user (0.5.7, pertanyaan #22)**.
+> - `bep_vw_safety_karyawan_aktif` cocok 1:1 dengan asumsi `OhsDashboard\Employee`.
+> - Bonus: `mv_sap_scorecard_mingguan` — scorecard mingguan siap pakai (pertanyaan #27).
+>
+> Task-task di bawah ini (langkah manual, deliverable `docs/schema-inventory.md`) dipertahankan sebagai referensi format asli, tapi **secara substansi sudah terpenuhi** oleh 0.6 — tidak perlu diulang kecuali ada perubahan skema di masa depan.
 
 **Tujuan:** tahu bentuk persis keenam objek sebelum menulis reader.
 
@@ -1062,13 +1209,15 @@ FASE 8  T8.1 ... T8.4                      [hardening]
 
 | Task | Diblokir oleh | Alasan |
 |---|---|---|
-| T4.x (normalisasi SAP 4 view), GR di T6.7 | T0.1 | struktur `mv_inspeksi_hazard`/`mv_observasi`/`mv_oak`/`mv_coaching` belum diketahui — nol referensi di codebase, lihat 0.5 poin 2 |
+| T4.x (normalisasi SAP 4 view) | ~~T0.1~~ **TIDAK LAGI DIBLOKIR** | T0.1 selesai 2026-09-06 via OBDS — struktur, volume, dan isi keempat `mv_*` terverifikasi langsung. Lihat 0.5.6 |
+| GR di T6.7 | ~~T0.1~~ **tidak lagi diblokir** | `mv_inspeksi_hazard.nama_goldenrule` terkonfirmasi ada (nullable untuk sebagian INSPEKSI) |
 | T1.2, T2.1 (%TBC bagian sumber), T6.7 (Blindspot) | ~~T0.1~~ **tidak lagi diblokir** | sudah diputuskan reuse `OhsDashboard\Employee`, Google Sheet, `scr_hsecm_coverage_area_kritis_daily` — lihat 0.5 |
-| T1.3 (query lokasi), T6.5 (bobot kritis) | **belum lolos, tapi bukan lagi menunggu T0.1** | sumber lokasi sudah pasti (`bcbeats.m_lokasi` langsung Postgres, reuse `PembatasanLVOlapQuery`) — yang masih dicari cuma nama kolom flag kritis, lihat pertanyaan #26 |
+| T1.3 (query lokasi) | ~~T0.1~~ **tidak lagi diblokir** | sumber lokasi sudah pasti (`bcbeats.m_lokasi` langsung Postgres, reuse `PembatasanLVOlapQuery`) |
+| T6.5 (bobot kritis), Coverage Score (T2.1) | **DIESKALASI ke user — dead end dikonfirmasi** | `m_lokasi` dan `bep_vw_site_lokasi_detil_lokasi` terbukti TIDAK punya flag kritis (dicek langsung, lihat 0.5.7). Butuh keputusan user dari 4 opsi di 0.5.7 sebelum Coverage Score bisa diimplementasikan |
 | T1.5, T2.1 (%TBC formula final) | inventarisasi struktur Google Sheet | perlu Sheet ID/gid, kolom, dan ada/tidaknya join key ke laporan individual |
 | T6.7 (definisi persis nilai blindspot) | cek isi kolom `Tercover`/`Status_Coverage_dalam_1_Week` | setara T0.1 tapi untuk `scr_hsecm_coverage_area_kritis_daily`, bukan tabel yang diasumsikan plan awal |
+| T5.1/T5.2 (desain final) | **keputusan user** — reuse `mv_sap_scorecard_mingguan` vs bangun snapshot sendiri | temuan bonus 0.5.6 poin 6, lihat pertanyaan #27 |
 | Fase 3–6 | T2.1 | formula harus final |
-| T4.2 | T0.1 no.2 | butuh kolom pembeda hazard vs inspeksi (kalau `mv_*` terbukti ada; kalau tidak, pakai `jenis_laporan`/diskriminator setara di `car_register`) |
 | T5.1 | T4.3 | agregasi baca snapshot |
 | Fase 6 | T5.2 | dashboard baca agregasi |
 
@@ -1084,32 +1233,33 @@ FASE 8  T8.1 ... T8.4                      [hardening]
 | 2 | Kolom pembeda HAZARD vs INSPEKSI? | **Ada:** `mv_inspeksi_hazard.jenis_laporan` = `'HAZARD'` \| `'INSPEKSI'` |
 | 3 | Format identifikasi personil sama di keempat view? | **Ya — `kode_sid`.** Nama tidak unik, jangan dipakai sebagai kunci |
 | 4 | Kolom tanggal? | Berbeda per view: `tanggal_coaching` / `tanggal_submit` / `tanggal_laporan` / `tanggal_observasi` |
-| 5 | Ada kolom site? | Ada di keempat view, tapi **nilainya tidak konsisten** (`"BMO 2"` vs `"BMO-2 B7"`) |
-| 6 | Definisi **Blindspot**? | **Titik Lokasi+Detil_Lokasi dengan `Not_Covered = 'Not Covered'`** di `scr_daily_coverage_area` |
-| 7 | Sumber **Golden Rules**? | `mv_inspeksi_hazard.nama_goldenrule` — kolom langsung, tidak perlu objek terpisah |
-| 8 | Kolom untuk Variasi Score? | Tersedia: `nama_kategori`, `ketidaksesuaian`, `subketidaksesuaian`. Dashboard existing pakai `subketidaksesuaian` |
-| 9 | Data coverage lokasi dari mana? | `app_mixer.scr_daily_coverage_area` — **MySQL, satu DB dengan aplikasi ini**, append-only harian |
-| 10 | Rentang data tersedia? | `mv_coaching`/`mv_oak`/`mv_inspeksi_hazard` dibatasi **mulai 2026-01-01** |
+| 5 | Ada kolom site? | Ada di keempat view. **[KOREKSI 0.5.6]** Dicek ulang langsung via query nyata 2026-09-06 — nilainya justru **konsisten**: persis 10 nilai (`GMO, LMO, BMO 1, BMO 2, BMO 3, SMO, MARINE, HO, EKSPLORASI, JAKARTA`) + 5 baris anomali `'Other'`. Klaim "BMO-2 B7"/"BMO-2 B8" dari dokumentasi lama tidak terbukti di data aktual — mungkin dari view/dataset lain |
+| 6 | Definisi **Blindspot**? | ~~`scr_daily_coverage_area`~~ **[DIKOREKSI 0.5]** — tabel itu tidak ada. Definisi final: `scr_hsecm_coverage_area_kritis_daily`, lihat 0.5 poin 5 |
+| 7 | Sumber **Golden Rules**? | `mv_inspeksi_hazard.nama_goldenrule` — ✅ **terkonfirmasi via T0.1** (0.5.6), nullable untuk sebagian baris INSPEKSI |
+| 8 | Kolom untuk Variasi Score? | Tersedia: `nama_kategori`, `ketidaksesuaian`, `subketidaksesuaian` — ✅ terkonfirmasi ada di `mv_inspeksi_hazard` (0.5.6) |
+| 9 | Data coverage lokasi dari mana? | ~~`app_mixer.scr_daily_coverage_area`~~ **[DIKOREKSI 0.5]** — `scr_hsecm_coverage_area_kritis_daily` |
+| 10 | Rentang data tersedia? | ✅ **terkonfirmasi via T0.1** (0.5.6) — kelima objek (4 view + `mv_sap_scorecard_mingguan`) mulai **2026-01-01** (scorecard 2025-12-29) sampai hari query dijalankan (2026-09-06, live) |
 
-## ✅ Resolved lewat review codebase 2026-09-06 (bukan lewat query DB, lewat cross-check kode)
+## ✅ Resolved via T0.1 — query langsung ke Postgres HSE via OBDS, 2026-09-06
 
-| # | Pertanyaan lama | Jawaban baru |
+| # | Pertanyaan lama | Jawaban |
 |---|---|---|
-| 11 | `val_tbc` / `val_gr` benar ada sebagai kolom di `mv_inspeksi_hazard`? | **Tidak relevan lagi** — TBC divalidasi manual di Google Sheet tasklist (dikonfirmasi user), bukan kolom di source view. Lihat 0.5 poin 5, T1.5, T2.1. |
-| 12 | `vw_lokasi_aktif` ada di schema mana, dan punya flag area kritis? | **`vw_lokasi_aktif` sendiri tidak dipakai — diganti `bcbeats.m_lokasi`/`bcbeats.bep_vw_site_lokasi_detil_lokasi` (Postgres langsung, bukan ClickHouse).** Flag kritisnya sendiri **masih belum ditemukan** — kode yang ada belum pernah select kolom itu. Lihat 0.5 poin 4, T1.3, dan item #24b baru di bawah. |
-| 13 | `bep_vw_safety_karyawan_aktif` isinya apa, dan `kode_sid`-nya sama dengan `bep_sid_karyawan`? | **Tidak perlu dicek ulang** — `App\Models\OhsDashboard\Employee` sudah query view ini di produksi, sudah tervalidasi (termasuk bug 750 karyawan hilang di view alternatif). Reuse langsung, lihat 0.5 poin 3, T1.2. |
+| 11 | `val_tbc` / `val_gr` benar ada sebagai kolom di `mv_inspeksi_hazard`? | **Dicek langsung — TIDAK ADA.** Kolom itu benar-benar tidak ada di `mv_inspeksi_hazard`. Mengonfirmasi keputusan pakai Google Sheet (0.5 poin 5, T1.5, T2.1) — bukan cuma dugaan lagi. |
+| 12 | `vw_lokasi_aktif` ada di schema mana, dan punya flag area kritis? | **`vw_lokasi_aktif` tidak pernah ada** (tidak ditemukan di listing schema manapun). Kandidat pengganti `m_lokasi`/`bep_vw_site_lokasi_detil_lokasi` sudah dicek langsung — **keduanya juga tidak punya flag kritis**. Lihat 0.5.7 — DIESKALASI ke user, 4 opsi tersedia. |
+| 13 | `bep_vw_safety_karyawan_aktif` isinya apa? | **Dicek langsung** — `mk_id, kode_sid, nik, nama, nama_perusahaan, jabatan_struktural, jabatan_fungsional, kategory_karyawan, level_jabatan, status_karyawan, departement, divisi, site_dedicated, status_permit, update_date_permit, tanggal_hari_pertama`. Cocok 1:1 dengan `OhsDashboard\Employee::liveSourceSql()`. Lihat 0.5.6 poin 8. |
+| 14 | Ada kolom waktu submit terpisah dari tanggal pengawasan di `mv_*`? | **Dicek langsung — TIDAK ADA** di `mv_inspeksi_hazard` (cuma `tanggal_bedraft` untuk draft dan `tanggal_laporan` untuk final; `submitted_at` di formula H+1 = `tanggal_laporan`). `mv_oak` pakai `tanggal_submit` sebagai satu-satunya waktu. Lihat 0.5.6 poin 3. |
+| 16 | Ada kolom shift di data SAP? | **Ada, tapi bukan S1/S2** — `mv_oak.shift` isinya `'Awal Shift'/'Tengah Shift'/'Akhir Shift'` (posisi submit dalam shift, bukan kode shift). `ShiftResolver` tetap wajib dipakai untuk menentukan S1/S2 dari timestamp. Lihat 0.5.6 poin 3. Ada juga tabel terpisah `bcbeats.m_shift` (belum diperiksa isinya — mungkin master data shift, bukan per-baris SAP). |
+| 25 | Apakah `mv_inspeksi_hazard` dkk benar-benar ada di Postgres, atau harus fallback ke `car_register`? | **ADA — dikonfirmasi via `pg_matviews`.** Keempatnya materialized view valid (`ispopulated=true`). `car_register` tidak jadi dipakai. Lihat 0.5.6 poin 1-2. |
+| 26 | Kolom flag area kritis ada di `bcbeats.m_lokasi` atau `bcbeats.bep_vw_site_lokasi_detil_lokasi`? | **Dicek langsung — TIDAK ADA di keduanya**, juga tidak ada di `m_pja`/`m_pja_category` (itu klasifikasi layer pengawasan, bukan kekritisan). Dead end dikonfirmasi. **DIESKALASI ke user** — lihat 0.5.7, 4 opsi tersedia. |
 
 ## ⚠️ Masih perlu dicek langsung ke database / sumber lain
 
 | # | Pertanyaan | Cara cek | Memblokir |
 |---|---|---|---|
-| 14 | Ada kolom **waktu submit** terpisah dari tanggal pengawasan di `mv_*`? | cek kolom bertipe timestamp di tiap view (kalau T0.1 membuktikan `mv_*` ada) | T2.1 (H+1) |
-| 15 | Materialized view di-refresh kapan? Data lama bisa berubah? | `SELECT * FROM pg_matviews` + tanya admin | T4.3 (strategi sync) |
-| 16 | Ada kolom **shift** di data SAP? | cek kolom di keempat view | T4.2 |
+| 15 | Materialized view di-refresh kapan persis? | Tidak ada log refresh yang bisa diquery dari `pg_matviews`; data ditemukan sudah live/near-realtime (baris terbaru = beberapa jam sebelum query). Cadence persis tetap perlu ditanyakan ke admin HSE | T4.3 (strategi sync) |
 | 23 | Google Sheet TBC: Sheet ID, gid, kolom persis, ada/tidak join key ke laporan individual? | tanya pemilik sheet + buka sheet langsung | T1.5, T2.1 |
-| 24 | Isi persis kolom `Tercover` / `Status_Coverage_dalam_1_Week` di `scr_hsecm_coverage_area_kritis_daily` — nilai mana yang berarti "blindspot"? | `SELECT DISTINCT Tercover, Status_Coverage_dalam_1_Week FROM scr_hsecm_coverage_area_kritis_daily` | T6.7 |
-| 26 | Kolom flag area kritis ada di `bcbeats.m_lokasi` atau `bcbeats.bep_vw_site_lokasi_detil_lokasi`? Namanya apa? | `\d+ bcbeats.m_lokasi` dan `\d+ bcbeats.bep_vw_site_lokasi_detil_lokasi` via `pgsql_direct`/`pgsql_ssh` | T1.3, T6.5 — **user sudah menolak fallback ke ClickHouse/`lokasi_non_kritis`, jadi ini wajib ketemu di Postgres atau dieskalasi** |
-| 25 | Apakah `mv_inspeksi_hazard` dkk benar-benar ada di Postgres `hse_automation`, atau harus fallback ke `bcbeats.car_register`? | `\d+ bcbeats.mv_inspeksi_hazard` via `pgsql_ssh`/`pgsql_direct` | **Semua task Fase 4, GR di T6.7 — paling kritis, ini T0.1** |
+| 24 | Isi persis kolom `Tercover` / `Status_Coverage_dalam_1_Week` di `scr_hsecm_coverage_area_kritis_daily` — nilai mana yang berarti "blindspot"? | `SELECT DISTINCT Tercover, Status_Coverage_dalam_1_Week FROM scr_hsecm_coverage_area_kritis_daily` (via OBDS kalau tabel ini juga ada di scope koneksinya — perlu dicek, OBDS yang dipakai untuk T0.1 tersambung ke Postgres HSE, bukan ke MySQL `app_mixer` tempat tabel ini berada) | T6.7 |
+| 27 | Reuse `bcbeats.mv_sap_scorecard_mingguan` (scorecard mingguan siap pakai: `jml_hazard/inspeksi/observasi/oak/coaching/rfid/sap_total` per `kode_sid` per minggu) untuk Fase 5, atau tetap bangun `control_room_sap_snapshot` + agregasi sendiri dari nol? | keputusan desain, bukan query | T5.1, T5.2 — lihat 0.5.6 poin 6 |
 
 ## 🔷 Keputusan bisnis — perlu jawaban user, bukan query
 
@@ -1120,4 +1270,4 @@ FASE 8  T8.1 ... T8.4                      [hardening]
 | 19 | Personil bertugas 2 shift sehari — targetnya 3 atau 6 komponen? |
 | 20 | **Coaching** menambah berapa persen ke %SAP? |
 | 21 | Tanpa role, siapa yang boleh assign jadwal — semua user yang login? |
-| 22 | Bobot area kritis ×2 — kalau `vw_lokasi_aktif` ternyata tidak punya flag kritis, dari mana penentuannya? |
+| 22 | Bobot area kritis ×2 — sumbernya dari mana? **Lihat 4 opsi di 0.5.7** (bcbeats terbukti tidak punya flag kritis apapun): (a) reuse ClickHouse/LokasiNonKritisService meski sudah ditolak sebelumnya, (b) derive dari histori `nilai_resiko='High'`, (c) daftar manual di aplikasi OCR, (d) hapus bobot ×2 sampai ada sumber jelas. |

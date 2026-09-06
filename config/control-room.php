@@ -9,8 +9,9 @@ declare(strict_types=1);
 |
 | Lihat plan-OCR.md untuk konteks lengkap. Nilai site/shift di sini adalah
 | PLACEHOLDER — belum dikonfirmasi user (Lampiran D #17-#19 di plan-OCR.md).
-| sap_sources.*.view masih menunggu verifikasi T0.1 (apakah mv_inspeksi_hazard
-| dkk benar ada di Postgres bcbeats) — lihat 0.5 poin 2 di plan-OCR.md.
+| sap_sources.*.view SUDAH TERVERIFIKASI via T0.1 2026-09-06 (lihat plan-OCR.md
+| 0.6) — mv_inspeksi_hazard/mv_observasi/mv_oak/mv_coaching benar ada sebagai
+| materialized view di Postgres bcbeats.
 |
 */
 
@@ -45,10 +46,9 @@ return [
 
     /*
     | sap_sources — pemetaan 4 objek sumber SAP ke komponen metrik.
-    | STATUS: 'view' di bawah BELUM TERVERIFIKASI (T0.1 tidak bisa dijalankan
-    | dari environment ini — lihat plan-OCR.md 0.5 poin 2). Kalau T0.1
-    | membuktikan mv_* tidak ada, ganti 'view' ke fallback bcbeats.car_register
-    | dan sesuaikan SapNormalizer terkait.
+    | STATUS: 'view' di bawah SUDAH TERVERIFIKASI via T0.1 2026-09-06
+    | (plan-OCR.md 0.6) — keempatnya materialized view valid (ispopulated=true),
+    | struktur kolom & volume terkonfirmasi lewat query langsung.
     */
     'sap_sources' => [
         'inspeksi_hazard' => [
@@ -79,9 +79,28 @@ return [
 
     'sap_target_components' => ['hazard', 'inspeksi', 'observasi'],
 
-    // TODO [Lampiran D #22]: bobot area kritis x2 dari mana kalau bcbeats.m_lokasi
-    // ternyata tidak punya flag kritis (lihat plan-OCR.md 0.5 poin 4, pertanyaan #26).
     'coverage_weight' => ['normal' => 1, 'critical' => 2],
+
+    /*
+    | Keyword penentu "area kritis" — bcbeats terbukti tidak punya kolom flag
+    | kritis (lihat plan-OCR.md 0.5 poin 7, pertanyaan #22/#26). User memberikan
+    | rumus Tableau existing: CONTAINS([Lokasi],"Kritis") OR CONTAINS([Lokasi],"Risk")
+    | OR CONTAINS([Detil Lokasi], <keyword area spesifik>) — divalidasi terhadap
+    | data nyata 2026-09-06 (1.482/8.684 baris di bep_vw_site_lokasi_detil_lokasi
+    | cocok). Dipakai di App\Services\ControlRoom\Reference\LocationReader::isCritical()
+    | sebagai string CONTAINS (case-insensitive), bukan query DB tambahan.
+    */
+    'critical_area_keywords' => [
+        'lokasi' => ['kritis', 'risk'],
+        'detil_lokasi' => [
+            'eksplorasi',
+            'survey',
+            'area pengeboran',
+            'area kritis',
+            'workshop dbm',
+            'workshop kemakmuran',
+        ],
+    ],
 
     /*
     | Google Sheet tasklist TBC (lihat plan-OCR.md T1.5).

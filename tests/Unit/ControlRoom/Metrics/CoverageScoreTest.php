@@ -8,7 +8,6 @@ use App\Services\ControlRoom\Metrics\CoverageScore;
 use App\Services\ControlRoom\Reference\LocationReader;
 use App\Services\ControlRoom\Reference\LocationReaderContract;
 use App\Services\PembatasanLV\PembatasanLVOlapQuery;
-use RuntimeException;
 use Tests\TestCase;
 
 final class CoverageScoreTest extends TestCase
@@ -70,13 +69,21 @@ final class CoverageScoreTest extends TestCase
         $this->assertSame(0, $metric->calculate([]));
     }
 
-    public function test_location_reader_yang_belum_terverifikasi_melempar_exception_bukan_fabrikasi_skor(): void
+    public function test_dengan_location_reader_asli_area_kritis_terdeteksi_dari_nama_lokasi(): void
     {
+        // LocationReader::isCritical() sekarang murni string-matching (pola
+        // Tableau, lihat config('control-room.critical_area_keywords')) —
+        // tidak butuh DB sama sekali untuk kasus ini.
         $realReader = new LocationReader(new PembatasanLVOlapQuery());
         $metric = new CoverageScore($realReader);
 
-        $this->expectException(RuntimeException::class);
+        $score = $metric->calculate([
+            ['lokasi' => '(B7) Area Kritis Blok 7', 'detail_lokasi' => 'Front Double Pad Loading'],
+            ['lokasi' => 'LATI', 'detail_lokasi' => 'Area Pengeboran'],
+            ['lokasi' => 'Workshop', 'detail_lokasi' => 'Workshop MTN 059'],
+        ]);
 
-        $metric->calculate([['lokasi' => 'A', 'detail_lokasi' => 'A1']]);
+        // 2 lokasi kritis (x2) + 1 lokasi non-kritis (x1) = 5.
+        $this->assertSame(5, $score);
     }
 }

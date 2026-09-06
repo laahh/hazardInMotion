@@ -9,13 +9,21 @@ use App\Services\PembatasanLV\PembatasanLVOlapQuery;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use RuntimeException;
 
 /**
  * Query langsung ke Postgres bcbeats.m_lokasi (hierarki site/lokasi/detil),
  * pola diambil dari App\Services\PembatasanLV\PembatasanLVSiteLokasiService.
  * TIDAK reuse LokasiNonKritisService/ClickHouse — ditolak eksplisit oleh user
  * untuk modul ini. Lihat plan-OCR.md 0.5 poin 4.
+ *
+ * isCritical() — bcbeats terbukti tidak punya kolom flag kritis (m_lokasi,
+ * bep_vw_site_lokasi_detil_lokasi, dan m_pja* semua dicek, nihil — lihat
+ * plan-OCR.md 0.5 poin 7). Sumber kekritisan yang dipakai: pola CONTAINS()
+ * pada nama lokasi/detil_lokasi itu sendiri (persis rumus Tableau existing
+ * yang diberikan user), divalidasi terhadap data nyata 2026-09-06 — 1.482
+ * dari 8.684 baris di bep_vw_site_lokasi_detil_lokasi cocok pola ini
+ * (mis. lokasi "(B7) Area Kritis Blok 7", "Aktivitas Area High Risk",
+ * detil_lokasi "Area Pengeboran" di bawah lokasi "LATI").
  */
 final class LocationReader implements LocationReaderContract
 {
@@ -49,27 +57,30 @@ final class LocationReader implements LocationReaderContract
     }
 
     /**
-     * BLOCKED — lihat plan-OCR.md 0.5 poin 4 dan Lampiran D pertanyaan #26.
-     *
-     * Kolom flag area kritis belum ditemukan di `bcbeats.m_lokasi` maupun
-     * `bcbeats.bep_vw_site_lokasi_detil_lokasi` — query yang sudah terbukti
-     * jalan (PembatasanLVSiteLokasiService, dipakai ulang di fetchAll() di
-     * bawah) tidak pernah men-select kolom itu.
-     *
-     * JANGAN isi method ini dengan tebakan nama kolom, dan JANGAN diam-diam
-     * fallback ke ClickHouse/LokasiNonKritisService — itu sudah ditolak
-     * eksplisit oleh user sebagai sumber untuk modul ini. Tunggu hasil
-     * `\d+ bcbeats.m_lokasi` / `\d+ bcbeats.bep_vw_site_lokasi_detil_lokasi`,
-     * lalu tambahkan kolom itu ke SELECT di fetchAll() sebelum
-     * mengimplementasikan method ini.
+     * Pola CONTAINS() dari Tableau existing (dikonfirmasi user 2026-09-06),
+     * dicek murni sebagai string match — tidak perlu query tambahan karena
+     * lokasi/detilLokasi sudah jadi parameter method ini. Keyword dikonfigurasi
+     * di config('control-room.critical_area_keywords') supaya bisa disesuaikan
+     * tanpa ubah kode kalau daftar areanya berubah.
      */
     public function isCritical(string $lokasi, string $detilLokasi): bool
     {
-        throw new RuntimeException(
-            'LocationReader::isCritical() belum bisa diimplementasikan — kolom flag area kritis '.
-            'di bcbeats.m_lokasi/bcbeats.bep_vw_site_lokasi_detil_lokasi belum ditemukan. '.
-            'Lihat plan-OCR.md Lampiran D pertanyaan #26.'
-        );
+        $normalizedLokasi = $this->normalize($lokasi);
+        $normalizedDetil = $this->normalize($detilLokasi);
+
+        foreach ((array) config('control-room.critical_area_keywords.lokasi', []) as $keyword) {
+            if ($keyword !== '' && str_contains($normalizedLokasi, mb_strtolower((string) $keyword))) {
+                return true;
+            }
+        }
+
+        foreach ((array) config('control-room.critical_area_keywords.detil_lokasi', []) as $keyword) {
+            if ($keyword !== '' && str_contains($normalizedDetil, mb_strtolower((string) $keyword))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -77,9 +88,9 @@ final class LocationReader implements LocationReaderContract
      */
     public function criticalAreas(ControlRoomSiteCode $site): Collection
     {
-        throw new RuntimeException(
-            'LocationReader::criticalAreas() belum bisa diimplementasikan — lihat plan-OCR.md Lampiran D pertanyaan #26.'
-        );
+        return $this->all($site)->filter(
+            fn (array $row): bool => $this->isCritical($row['lokasi'], $row['detail_lokasi'])
+        )->values();
     }
 
     /**
