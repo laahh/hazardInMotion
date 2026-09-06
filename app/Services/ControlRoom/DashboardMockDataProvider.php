@@ -4,22 +4,29 @@ declare(strict_types=1);
 
 namespace App\Services\ControlRoom;
 
+use App\Services\ControlRoom\Metrics\SapAchievement;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 
 /**
- * MOCKUP SEMENTARA — plan-OCR.md T6.2-T6.8. Panel KPI sungguhan menunggu
- * Fase 4 (snapshot SAP) & Fase 5 (agregasi mingguan). Semua angka FIKTIF.
+ * MOCKUP SEMENTARA — plan-OCR.md T6.2-T6.8 kecuali Pencapaian Personil:
+ * kehadiran dari status jadwal, % SAP dari laporan OBDS (target 1+1+1).
+ * KPI, coverage, Pareto, dan kualitas masih fiktif. % TBC menunggu GSheet.
  */
 final class DashboardMockDataProvider
 {
+    public function __construct(
+        private readonly SapAchievement $sapAchievement = new SapAchievement(),
+    ) {}
+
     /**
      * @param  list<array<string, mixed>>  $scheduleDays
+     * @param  array<string, array{hazard: int, inspeksi: int, observasi: int}>  $sapCountsBySidDate
      * @return array<string, mixed>
      */
-    public function build(CarbonInterface $weekStart, array $scheduleDays = []): array
+    public function build(CarbonInterface $weekStart, array $scheduleDays = [], array $sapCountsBySidDate = [], bool $sapLoaded = false): array
     {
-        $achievementRows = $this->achievementRowsFromSchedule($scheduleDays);
+        $achievementRows = $this->achievementRowsFromSchedule($scheduleDays, $sapCountsBySidDate, $sapLoaded);
         if ($achievementRows === []) {
             $achievementRows = $this->personnelAchievementFallback($weekStart);
         }
@@ -38,9 +45,10 @@ final class DashboardMockDataProvider
 
     /**
      * @param  list<array<string, mixed>>  $scheduleDays
+     * @param  array<string, array{hazard: int, inspeksi: int, observasi: int}>  $sapCountsBySidDate
      * @return list<array<string, mixed>>
      */
-    private function achievementRowsFromSchedule(array $scheduleDays): array
+    private function achievementRowsFromSchedule(array $scheduleDays, array $sapCountsBySidDate, bool $sapLoaded): array
     {
         $rows = [];
         foreach ($scheduleDays as $day) {
@@ -59,6 +67,8 @@ final class DashboardMockDataProvider
                         $this->attendancePctFromStatus((string) ($person['status'] ?? '')),
                         $person['checkinout'] ?? [],
                         (string) ($person['sid'] ?? ''),
+                        $sapCountsBySidDate,
+                        $sapLoaded,
                     );
                 }
             }
@@ -85,7 +95,7 @@ final class DashboardMockDataProvider
         for ($i = 0; $i < 4; $i++) {
             $date = $start->addDays($i)->toDateString();
             foreach ($people as [$name, $shift, $attendance]) {
-                $rows[] = $this->achievementRow($date, $name, $shift, $attendance, $this->sampleTaps($shift, $date), '');
+                $rows[] = $this->achievementRow($date, $name, $shift, $attendance, $this->sampleTaps($shift, $date), '', [], false);
             }
         }
 
@@ -94,21 +104,61 @@ final class DashboardMockDataProvider
 
     /**
      * @param  list<array<string, mixed>>  $taps
+     * @param  array<string, array{hazard: int, inspeksi: int, observasi: int}>  $sapCountsBySidDate
      * @return array<string, mixed>
      */
-    private function achievementRow(string $date, string $name, string $shift, ?float $attendancePct, array $taps, string $sid = ''): array
-    {
+    private function achievementRow(
+        string $date,
+        string $name,
+        string $shift,
+        ?float $attendancePct,
+        array $taps,
+        string $sid = '',
+        array $sapCountsBySidDate = [],
+        bool $sapLoaded = false,
+    ): array {
+        $sid = strtoupper(trim($sid));
+        $emptyCounts = ['hazard' => 0, 'inspeksi' => 0, 'observasi' => 0];
+        $counts = $sapCountsBySidDate[$sid.'|'.$date] ?? $emptyCounts;
+        $sap = ($sapLoaded && $sid !== '' && $attendancePct !== null)
+            ? $this->sapAchievement->percentage($counts)
+            : null;
+
         return [
             'date' => $date,
             'date_label' => CarbonImmutable::parse($date)->format('n/j/Y'),
             'name' => $name,
             'shift' => $shift,
-            'sid' => strtoupper(trim($sid)),
+            'sid' => $sid,
             'attendance_pct' => $attendancePct,
-            'sap' => $this->mockMetric($name.$date, 'sap'),
-            'tbc' => $this->mockMetric($name.$date, 'tbc'),
+            'sap' => $sap,
+            'sap_counts' => $counts,
+            'sap_hint' => $this->sapHint($counts, $sapLoaded, $sid, $attendancePct),
+            'tbc' => null,
             'checkinout' => $taps,
         ];
+    }
+
+    /**
+     * @param  array{hazard: int, inspeksi: int, observasi: int}  $counts
+     */
+    private function sapHint(array $counts, bool $sapLoaded, string $sid, ?float $attendancePct): string
+    {
+        if (! $sapLoaded) {
+            return 'Sumber SAP belum termuat.';
+        }
+        if ($sid === '') {
+            return 'SID kosong — % SAP tidak dihitung.';
+        }
+        if ($attendancePct === null) {
+            return 'Menunggu absen — % SAP dihitung setelah status kehadiran ada.';
+        }
+
+        $mark = static fn (int $n): string => $n >= 1 ? 'ada' : 'belum';
+
+        return 'Target 1 Hazard, 1 Inspeksi, 1 Observasi/OAK. Hazard: '.$mark($counts['hazard'])
+            .', Inspeksi: '.$mark($counts['inspeksi'])
+            .', Observasi/OAK: '.$mark($counts['observasi']).'.';
     }
 
     /**
@@ -180,18 +230,6 @@ final class DashboardMockDataProvider
             'tidak_hadir' => 0.0,
             default => null,
         };
-    }
-
-    private function mockMetric(string $seed, string $kind): ?float
-    {
-        $n = abs(crc32($seed.$kind));
-        if ($kind === 'tbc' && ($n % 9) === 0) {
-            return null;
-        }
-
-        $choices = [100.0, 100.0, 97.0, 80.0, 67.0, 50.0, 33.0];
-
-        return $choices[$n % count($choices)];
     }
 
     /**

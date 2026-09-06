@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Unit\ControlRoom;
 
-use App\Enums\ControlRoomShiftCode;
-use App\Services\ControlRoom\ControlRoomRfidCheckinoutReader;
 use App\Services\ControlRoom\ControlRoomSapDutyReader;
 use App\Services\PembatasanLV\PembatasanLVOlapQuery;
 use Carbon\CarbonImmutable;
@@ -114,23 +112,16 @@ final class ControlRoomSapDutyReaderTest extends TestCase
         $this->assertSame('11', $cards[0]['id']);
     }
 
-    public function test_jendela_shift_2_dipakai_untuk_duty(): void
+    public function test_jendela_laporan_hari_h_sampai_akhir_h_plus_satu(): void
     {
-        $window = $this->windows()->window(CarbonImmutable::parse('2026-08-31'), ControlRoomShiftCode::S2);
+        $window = $this->reader()->reportingWindow(CarbonImmutable::parse('2026-08-31'));
 
-        $this->assertSame('2026-08-31 16:00:00', $window['start']->format('Y-m-d H:i:s'));
-        $this->assertSame('2026-09-01 08:00:00', $window['end']->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-08-31 00:00:00', $window['start']->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-09-02 00:00:00', $window['end']->format('Y-m-d H:i:s'));
     }
 
     private function reader(): ControlRoomSapDutyReader
     {
-        $olap = new PembatasanLVOlapQuery();
-
-        return new ControlRoomSapDutyReader($olap, new ControlRoomRfidCheckinoutReader($olap));
-    }
-
-    private function windows(): ControlRoomRfidCheckinoutReader
-    {
-        return new ControlRoomRfidCheckinoutReader(new PembatasanLVOlapQuery());
+        return new ControlRoomSapDutyReader(new PembatasanLVOlapQuery());
     }
 }

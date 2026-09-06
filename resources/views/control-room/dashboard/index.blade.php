@@ -62,7 +62,7 @@
     <div class="ocr-dash">
         <div class="ocr-notice" role="status">
             <i class="ri-information-line"></i>
-            <span><strong>Sebagian mockup.</strong> KPI, % SAP, % TBC, coverage, Pareto, dan kualitas masih fiktif. Nama/tanggal/check-in RFID memakai jadwal nyata. Tombol Detail memuat laporan SAP (hazard, inspeksi, observasi, OAK) dari OBDS pada jendela jaga.</span>
+            <span><strong>Sebagian mockup.</strong> KPI, coverage, Pareto, kualitas, dan % TBC masih fiktif. Kehadiran dan % SAP di Pencapaian Personil memakai jadwal + laporan OBDS (target 1 Hazard, 1 Inspeksi, 1 Observasi/OAK). Tombol Detail menampilkan laporan pada jendela jaga.</span>
         </div>
 
         <form method="GET" class="ocr-card">
@@ -267,7 +267,7 @@
                                             <td class="ocr-heat-name">{{ $row['name'] }}</td>
                                             <td class="text-center">{{ $row['shift'] }}</td>
                                             <td class="ocr-heat-cell {{ $heatClass($row['attendance_pct']) }}">{{ $heatLabel($row['attendance_pct']) }}</td>
-                                            <td class="ocr-heat-cell {{ $heatClass($row['sap']) }}">{{ $heatLabel($row['sap']) }}</td>
+                                            <td class="ocr-heat-cell {{ $heatClass($row['sap']) }}" title="{{ $row['sap_hint'] ?? '' }}">{{ $heatLabel($row['sap']) }}</td>
                                             <td class="ocr-heat-cell {{ $heatClass($row['tbc']) }}">{{ $heatLabel($row['tbc']) }}</td>
                                             <td class="text-center">
                                                 @if (($row['sid'] ?? '') !== '')
@@ -795,18 +795,25 @@
                             setSapFilterCounts(data.counts || {});
                             sapFilters.hidden = false;
                             if (!data.reachable) {
-                                sapStatus.textContent = 'Sumber SAP (OBDS) tidak terjangkau.';
+                                sapStatus.textContent = (data.errors && data.errors.length) ? data.errors.join(' ') : 'Sumber SAP (OBDS) tidak terjangkau.';
+                                sapGrid.innerHTML = '';
+                                return;
+                            }
+                            if (data.errors && data.errors.length && !sapCards.length) {
+                                sapStatus.textContent = data.errors.join(' ');
                                 sapGrid.innerHTML = '';
                                 return;
                             }
                             if (!sapCards.length) {
-                                sapStatus.textContent = 'Tidak ada laporan SAP di jendela shift ini.';
+                                sapStatus.textContent = 'Tidak ada laporan SAP pada hari jaga dan H+1.';
                                 sapGrid.innerHTML = '';
                                 return;
                             }
-                            var extra = data.truncated ? ' Menampilkan maksimal 40 laporan per jenis.' : '';
-                            sapStatus.textContent = extra;
-                            sapStatus.hidden = !extra;
+                            var extra = [];
+                            if (data.truncated) extra.push('Menampilkan maksimal 40 laporan per jenis.');
+                            if (data.errors && data.errors.length) extra.push(data.errors.join(' '));
+                            sapStatus.textContent = extra.join(' ');
+                            sapStatus.hidden = extra.length === 0;
                             renderSapCards();
                         })
                         .catch(function () {

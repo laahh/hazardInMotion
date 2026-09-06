@@ -8,6 +8,7 @@ use App\Enums\ControlRoomShiftCode;
 use App\Services\PembatasanLV\PembatasanLVOlapQuery;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -19,10 +20,27 @@ final class ControlRoomSapDutyReader
 {
     public const PER_TYPE_LIMIT = 40;
 
+    private const CACHE_SECONDS = 90;
+
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
-        private readonly ControlRoomRfidCheckinoutReader $windows,
     ) {}
+
+    /**
+     * Hari H (tanggal jaga) sampai akhir H+1, supaya laporan yang disubmit
+     * keesokan hari tetap masuk.
+     *
+     * @return array{start: CarbonImmutable, end: CarbonImmutable}
+     */
+    public function reportingWindow(CarbonInterface $dutyDate): array
+    {
+        $start = CarbonImmutable::parse($dutyDate)->startOfDay();
+
+        return [
+            'start' => $start,
+            'end' => $start->addDays(2),
+        ];
+    }
 
     /**
      * @return array{
@@ -33,6 +51,7 @@ final class ControlRoomSapDutyReader
      *     window_end: string,
      *     reachable: bool,
      *     truncated: bool,
+     *     errors: list<string>,
      *     counts: array{all: int, hazard: int, inspeksi: int, observasi: int, oak: int},
      *     cards: list<array<string, mixed>>
      * }
@@ -40,24 +59,41 @@ final class ControlRoomSapDutyReader
     public function forDuty(string $sid, CarbonInterface $dutyDate, ControlRoomShiftCode $shift): array
     {
         $sid = strtoupper(trim($sid));
-        $window = $this->windows->window($dutyDate, $shift);
+        $window = $this->reportingWindow($dutyDate);
         $meta = [
             'sid' => $sid,
             'date' => CarbonImmutable::parse($dutyDate)->toDateString(),
             'shift' => $shift->value,
             'window_start' => $window['start']->format('Y-m-d H:i'),
-            'window_end' => $window['end']->format('Y-m-d H:i'),
+            'window_end' => $window['end']->subSecond()->format('Y-m-d H:i'),
         ];
 
-        if ($sid === '' || ! $this->olap->isReachable()) {
-            return $this->payload($meta, [], reachable: $sid !== '' && $this->olap->isReachable());
+        if ($sid === '') {
+            return $this->payload($meta, [], reachable: false, errors: ['SID kosong.']);
         }
 
-        $hazardRows = $this->fetchHazardInspeksi($sid, $window['start'], $window['end']);
-        $observasiRows = $this->fetchObservasi($sid, $window['start'], $window['end']);
-        $oakRows = $this->fetchOak($sid, $window['start'], $window['end']);
+        if (! $this->olap->isReachable()) {
+            return $this->payload($meta, [], reachable: false, errors: ['Sumber SAP (OBDS) tidak terjangkau.']);
+        }
 
-        return $this->payload($meta, $this->cardsFromRows($hazardRows, $observasiRows, $oakRows), reachable: true);
+        $cacheKey = 'control-room:sap-duty:v4:'.$sid.':'.$meta['date'];
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && isset($cached['cards'])) {
+            return $this->payload($meta, $cached['cards'], reachable: true);
+        }
+
+        $errors = [];
+        $cards = $this->cardsFromRows(
+            $this->fetchHazardInspeksi($sid, $window['start'], $window['end'], $errors),
+            $this->fetchObservasi($sid, $window['start'], $window['end'], $errors),
+            $this->fetchOak($sid, $window['start'], $window['end'], $errors),
+        );
+
+        if ($errors === []) {
+            Cache::put($cacheKey, ['cards' => $cards], self::CACHE_SECONDS);
+        }
+
+        return $this->payload($meta, $cards, reachable: $errors === [] || $cards !== [], errors: $errors);
     }
 
     /**
@@ -80,11 +116,114 @@ final class ControlRoomSapDutyReader
     }
 
     /**
+     * CTE MATERIALIZED memaksa index kode_sid_pelapor dulu (~ratusan baris),
+     * baru filter H s/d H+1. Tanpa ini planner sering BitmapAnd dengan index
+     * tanggal (ribuan–puluhan ribu baris / 2 hari) dan observasi bisa >10 detik.
+     *
+     * @param  list<string>  $errors
+     * @return list<object>
+     */
+    private function fetchHazardInspeksi(string $sid, CarbonImmutable $start, CarbonImmutable $end, array &$errors): array
+    {
+        $limit = self::PER_TYPE_LIMIT;
+        $sql = "
+            WITH sid_rows AS MATERIALIZED (
+                SELECT id_laporan, tanggal_laporan, jenis_laporan, status_laporan,
+                       deskripsi_temuan, ketidaksesuaian, subketidaksesuaian, tools_observasi,
+                       lokasi, detil_lokasi, latitude, longitude,
+                       nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor,
+                       nama_pic, jabatan_fungsional_pic, perusahaan_pic, url_foto
+                FROM bcbeats.mv_inspeksi_hazard
+                WHERE kode_sid_pelapor = ?
+            )
+            SELECT *
+            FROM sid_rows
+            WHERE tanggal_laporan >= CAST(? AS timestamp)
+              AND tanggal_laporan < CAST(? AS timestamp)
+            LIMIT {$limit}
+        ";
+
+        return $this->select($sql, [$sid, $start->toDateTimeString(), $end->toDateTimeString()], 'hazard/inspeksi', $errors);
+    }
+
+    /**
+     * @param  list<string>  $errors
+     * @return list<object>
+     */
+    private function fetchObservasi(string $sid, CarbonImmutable $start, CarbonImmutable $end, array &$errors): array
+    {
+        $limit = self::PER_TYPE_LIMIT;
+        $sql = "
+            WITH sid_rows AS MATERIALIZED (
+                SELECT id_observasi, tanggal_observasi, jenis_kegiatan, catatan_observasi, tools_observasi,
+                       lokasi, detil_lokasi, latitude, longitude, url_foto,
+                       nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor
+                FROM bcbeats.mv_observasi
+                WHERE kode_sid_pelapor = ?
+            )
+            SELECT *
+            FROM sid_rows
+            WHERE tanggal_observasi >= CAST(? AS timestamp)
+              AND tanggal_observasi < CAST(? AS timestamp)
+            LIMIT {$limit}
+        ";
+
+        return $this->select($sql, [$sid, $start->toDateTimeString(), $end->toDateTimeString()], 'observasi', $errors);
+    }
+
+    /**
+     * @param  list<string>  $errors
+     * @return list<object>
+     */
+    private function fetchOak(string $sid, CarbonImmutable $start, CarbonImmutable $end, array &$errors): array
+    {
+        $limit = self::PER_TYPE_LIMIT;
+        $sql = "
+            WITH sid_rows AS MATERIALIZED (
+                SELECT id_oak, tanggal_submit, aktivitas, sub_aktivitas, kesimpulan, tools_observasi,
+                       lokasi, detil_lokasi, latitude, longitude, url_foto,
+                       nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor
+                FROM bcbeats.mv_oak
+                WHERE kode_sid_pelapor = ?
+            )
+            SELECT DISTINCT ON (id_oak)
+                id_oak, tanggal_submit, aktivitas, sub_aktivitas, kesimpulan, tools_observasi,
+                lokasi, detil_lokasi, latitude, longitude, url_foto,
+                nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor
+            FROM sid_rows
+            WHERE tanggal_submit >= CAST(? AS timestamp)
+              AND tanggal_submit < CAST(? AS timestamp)
+            ORDER BY id_oak, tanggal_submit
+            LIMIT {$limit}
+        ";
+
+        return $this->select($sql, [$sid, $start->toDateTimeString(), $end->toDateTimeString()], 'OAK', $errors);
+    }
+
+    /**
+     * @param  list<mixed>  $bindings
+     * @param  list<string>  $errors
+     * @return list<object>
+     */
+    private function select(string $sql, array $bindings, string $source, array &$errors): array
+    {
+        try {
+            return $this->olap->select($sql, $bindings, 4000);
+        } catch (Throwable $e) {
+            Log::warning('ControlRoom SAP duty '.$source.' gagal: '.$e->getMessage());
+            $errors[] = 'Gagal memuat '.$source.'.';
+
+            return [];
+        }
+    }
+
+    /**
      * @param  array{sid: string, date: string, shift: string, window_start: string, window_end: string}  $meta
      * @param  list<array<string, mixed>>  $cards
+     * @param  list<string>  $errors
      * @return array<string, mixed>
      */
-    private function payload(array $meta, array $cards, bool $reachable): array
+    private function payload(array $meta, array $cards, bool $reachable, array $errors = []): array
     {
         $counts = ['all' => count($cards), 'hazard' => 0, 'inspeksi' => 0, 'observasi' => 0, 'oak' => 0];
         foreach ($cards as $card) {
@@ -100,87 +239,10 @@ final class ControlRoomSapDutyReader
             'truncated' => $counts['hazard'] + $counts['inspeksi'] >= self::PER_TYPE_LIMIT
                 || $counts['observasi'] >= self::PER_TYPE_LIMIT
                 || $counts['oak'] >= self::PER_TYPE_LIMIT,
+            'errors' => $errors,
             'counts' => $counts,
             'cards' => $cards,
         ];
-    }
-
-    /**
-     * @return list<object>
-     */
-    private function fetchHazardInspeksi(string $sid, CarbonImmutable $start, CarbonImmutable $end): array
-    {
-        $sql = '
-            SELECT id_laporan, tanggal_laporan, jenis_laporan, status_laporan,
-                   deskripsi_temuan, ketidaksesuaian, subketidaksesuaian, tools_observasi,
-                   lokasi, detil_lokasi, latitude, longitude,
-                   nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor,
-                   nama_pic, jabatan_fungsional_pic, perusahaan_pic, url_foto
-            FROM bcbeats.mv_inspeksi_hazard
-            WHERE kode_sid_pelapor = ?
-              AND tanggal_laporan >= ?
-              AND tanggal_laporan < ?
-            ORDER BY tanggal_laporan ASC
-            LIMIT '.self::PER_TYPE_LIMIT.'
-        ';
-
-        return $this->select($sql, [$sid, $start->toDateTimeString(), $end->toDateTimeString()]);
-    }
-
-    /**
-     * @return list<object>
-     */
-    private function fetchObservasi(string $sid, CarbonImmutable $start, CarbonImmutable $end): array
-    {
-        $sql = '
-            SELECT id_observasi, tanggal_observasi, jenis_kegiatan, catatan_observasi, tools_observasi,
-                   lokasi, detil_lokasi, latitude, longitude, url_foto,
-                   nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor
-            FROM bcbeats.mv_observasi
-            WHERE kode_sid_pelapor = ?
-              AND tanggal_observasi >= ?
-              AND tanggal_observasi < ?
-            ORDER BY tanggal_observasi ASC
-            LIMIT '.self::PER_TYPE_LIMIT.'
-        ';
-
-        return $this->select($sql, [$sid, $start->toDateTimeString(), $end->toDateTimeString()]);
-    }
-
-    /**
-     * @return list<object>
-     */
-    private function fetchOak(string $sid, CarbonImmutable $start, CarbonImmutable $end): array
-    {
-        $sql = '
-            SELECT DISTINCT ON (id_oak)
-                   id_oak, tanggal_submit, aktivitas, sub_aktivitas, kesimpulan, tools_observasi,
-                   lokasi, detil_lokasi, latitude, longitude, url_foto, nama_file_foto,
-                   nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor
-            FROM bcbeats.mv_oak
-            WHERE kode_sid_pelapor = ?
-              AND tanggal_submit >= ?
-              AND tanggal_submit < ?
-            ORDER BY id_oak, tanggal_submit ASC
-            LIMIT '.self::PER_TYPE_LIMIT.'
-        ';
-
-        return $this->select($sql, [$sid, $start->toDateTimeString(), $end->toDateTimeString()]);
-    }
-
-    /**
-     * @param  list<mixed>  $bindings
-     * @return list<object>
-     */
-    private function select(string $sql, array $bindings): array
-    {
-        try {
-            return $this->olap->select($sql, $bindings, 8000);
-        } catch (Throwable $e) {
-            Log::warning('ControlRoom SAP duty gagal: '.$e->getMessage());
-
-            return [];
-        }
     }
 
     /**

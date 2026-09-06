@@ -37,7 +37,7 @@ final class PembatasanLVOlapQuery
         }
 
         $connection = DB::connection($name);
-        $safeTimeout = max(500, min($timeoutMs, 8000));
+        $safeTimeout = max(500, min($timeoutMs, 20000));
 
         return $connection->transaction(function () use ($connection, $sql, $bindings, $safeTimeout): array {
             $connection->unprepared("SET LOCAL statement_timeout = '{$safeTimeout}ms'");

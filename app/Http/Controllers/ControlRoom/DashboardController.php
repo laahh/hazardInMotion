@@ -9,6 +9,7 @@ use App\Enums\ControlRoomSiteCode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ControlRoom\ControlRoomDashboardSapDetailRequest;
 use App\Services\ControlRoom\ControlRoomSapDutyReader;
+use App\Services\ControlRoom\ControlRoomSapWeekCountsReader;
 use App\Services\ControlRoom\DashboardMockDataProvider;
 use App\Services\ControlRoom\DashboardScheduleWeekAssembler;
 use Carbon\CarbonImmutable;
@@ -24,6 +25,7 @@ use Illuminate\View\View;
  * masih menunggu keputusan reuse mv_sap_scorecard_mingguan, dan beberapa
  * sumber lain seperti Sheet ID TBC belum ada — lihat Lampiran D #23/#27).
  * Panel KPI, ranking, Pareto, dan kualitas masih MOCKUP (DashboardMockDataProvider).
+ * Pencapaian Personil: kehadiran dari jadwal/absen, % SAP dari OBDS (target 1+1+1).
  * Panel Penjadwalan memakai Jadwal Rencana + Absen nyata; default filter = minggu lalu.
  */
 final class DashboardController extends Controller
@@ -32,6 +34,7 @@ final class DashboardController extends Controller
         Request $request,
         DashboardMockDataProvider $mock,
         DashboardScheduleWeekAssembler $scheduleWeek,
+        ControlRoomSapWeekCountsReader $sapWeekCounts,
     ): View {
         $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
         $previousWeekStart = CarbonImmutable::now()
@@ -46,6 +49,7 @@ final class DashboardController extends Controller
         $prevWeekStart = $weekStart->subWeek();
         $nextWeekStart = $weekStart->addWeek();
         $schedule = $scheduleWeek->build($site, $weekStart);
+        $sapWeek = $sapWeekCounts->forScheduleDays($schedule['days']);
 
         return view('control-room.dashboard.index', [
             'site' => $site,
@@ -58,7 +62,7 @@ final class DashboardController extends Controller
             'nextYear' => (int) $nextWeekStart->isoWeekYear(),
             'nextWeek' => (int) $nextWeekStart->isoWeek(),
             'sites' => ControlRoomSiteCode::cases(),
-            'mock' => $mock->build($weekStart, $schedule['days']),
+            'mock' => $mock->build($weekStart, $schedule['days'], $sapWeek['counts'], $sapWeek['loaded']),
             'schedule' => $schedule,
         ]);
     }
