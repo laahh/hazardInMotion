@@ -108,7 +108,7 @@
             <div class="ocr-card-header">
                 <div>
                     <h6>Penjadwalan — Rencana vs Aktual</h6>
-                    <p class="ocr-card-kicker">Klik tanggal atau nama untuk melihat roster. Outline = dijadwalkan, warna = status absen.</p>
+                    <p class="ocr-card-kicker">Satu orang per shift. Klik blok atau tanggal untuk roster. Outline gelap = dijadwalkan.</p>
                 </div>
                 <div class="ocr-legend">
                     <span class="ocr-legend-item"><span class="ocr-legend-swatch is-sesuai"></span> Sesuai</span>
@@ -445,6 +445,12 @@
                 return String(value);
             }
 
+            function addDays(iso, days) {
+                var d = new Date(iso + 'T12:00:00');
+                d.setDate(d.getDate() + days);
+                return dateKey(d);
+            }
+
             function openDayDrawer(dateValue) {
                 var key = dateKey(dateValue);
                 var day = daysByDate[key];
@@ -467,71 +473,79 @@
 
             var calendarEvents = [];
             scheduleDays.forEach(function (day) {
-                ['s1', 's2'].forEach(function (shiftKey) {
-                    var shiftCode = shiftKey === 's1' ? 'S1' : 'S2';
-                    (day[shiftKey] || []).forEach(function (person) {
-                        var colors = statusColors[person.status] || statusColors.tidak_dijadwalkan;
-                        calendarEvents.push({
-                            title: shiftCode + ' • ' + person.short_name,
-                            start: day.date,
-                            allDay: true,
-                            backgroundColor: colors.bg,
-                            borderColor: person.planned ? colors.border : colors.bg,
-                            textColor: '#ffffff',
-                            extendedProps: {
-                                date: day.date,
-                                shift: shiftCode,
-                                status: person.status,
-                                planned: person.planned,
-                                personnel: person.name,
-                                initial: person.initial,
-                            },
-                        });
+                [
+                    { key: 's1', code: 'S1', label: 'Shift 1', startHour: '06:00:00', endHour: '18:00:00', nextDayEnd: false },
+                    { key: 's2', code: 'S2', label: 'Shift 2', startHour: '18:00:00', endHour: '00:00:00', nextDayEnd: true },
+                ].forEach(function (shift) {
+                    var person = (day[shift.key] || [])[0];
+                    if (!person) {
+                        return;
+                    }
+
+                    var colors = statusColors[person.status] || statusColors.tidak_dijadwalkan;
+                    var endDate = shift.nextDayEnd ? addDays(day.date, 1) : day.date;
+                    calendarEvents.push({
+                        title: person.name,
+                        start: day.date + 'T' + shift.startHour,
+                        end: endDate + 'T' + shift.endHour,
+                        allDay: false,
+                        backgroundColor: colors.bg,
+                        borderColor: person.planned ? '#111827' : colors.bg,
+                        textColor: '#ffffff',
+                        extendedProps: {
+                            date: day.date,
+                            shift: shift.code,
+                            shiftLabel: shift.label,
+                            status: person.status,
+                            planned: person.planned,
+                            personnel: person.name,
+                            initial: person.initial,
+                        },
                     });
                 });
             });
 
             var calendarEl = document.getElementById('ocr-schedule-calendar');
             var calendar = new FullCalendar.Calendar(calendarEl, {
-                headerToolbar: false,
-                initialView: 'dayGridWeek',
+                headerToolbar: { left: '', center: 'title', right: '' },
+                initialView: 'timeGridWeek',
                 initialDate: weekStart,
                 locale: 'id',
                 firstDay: 1,
                 height: 'auto',
+                allDaySlot: false,
+                slotMinTime: '06:00:00',
+                slotMaxTime: '24:00:00',
+                slotDuration: '03:00:00',
+                slotLabelInterval: '03:00:00',
+                slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+                nowIndicator: true,
                 navLinks: false,
                 editable: false,
                 selectable: false,
-                dayMaxEvents: true,
                 eventDisplay: 'block',
                 dayHeaderFormat: { weekday: 'short', day: 'numeric', omitCommas: true },
                 events: calendarEvents,
-                eventOrder: 'title',
                 eventContent: function (arg) {
                     var props = arg.event.extendedProps;
-                    var initial = (props.initial || (props.personnel || '?').charAt(0)).toUpperCase();
-                    var color = arg.event.backgroundColor || '#333';
-                    var title = arg.event.title.replace(/</g, '&lt;');
                     var plannedClass = props.planned ? ' is-planned' : '';
+                    var status = statusLabel[props.status] || props.status;
 
                     return {
                         html:
-                            '<div class="ocr-fc-event' + plannedClass + '">' +
-                            '<span class="ocr-fc-avatar" style="color:' + color + ';">' + escapeHtml(initial) + '</span>' +
-                            '<span class="ocr-fc-title">' + title + '</span>' +
+                            '<div class="ocr-fc-block' + plannedClass + '">' +
+                            '<span class="ocr-fc-shift">' + escapeHtml(props.shiftLabel || props.shift) + '</span>' +
+                            '<strong>' + escapeHtml(props.personnel || arg.event.title) + '</strong>' +
+                            '<span class="ocr-fc-status">' + escapeHtml(status) + '</span>' +
                             '</div>',
                     };
                 },
                 dateClick: function (info) {
-                    openDayDrawer(info.dateStr);
+                    openDayDrawer(info.date);
                 },
                 eventClick: function (info) {
                     info.jsEvent.preventDefault();
                     openDayDrawer(info.event.extendedProps.date || info.event.start);
-                },
-                moreLinkClick: function (info) {
-                    openDayDrawer(info.date);
-                    return true;
                 },
             });
 

@@ -52,7 +52,7 @@ final class DashboardMockDataProvider
     }
 
     /**
-     * Kalender minggu — 7 hari × S1/S2. Outline = rencana, fill = aktual.
+     * Kalender minggu — 1 orang Shift 1 + 1 orang Shift 2 per hari.
      *
      * @return array{days: list<array{date: string, label: string, day_number: string, month_short: string, is_today: bool, is_weekend: bool, s1: list<array{name: string, short_name: string, initial: string, planned: bool, status: string}>, s2: list<array{name: string, short_name: string, initial: string, planned: bool, status: string}>}>}
      */
@@ -60,42 +60,42 @@ final class DashboardMockDataProvider
     {
         $statuses = ['sesuai', 'menggantikan', 'tidak_hadir', 'tidak_dijadwalkan', 'anomali'];
         $names = ['BUDI SANTOSO', 'SITI RAHAYU', 'AHMAD FAUZI', 'DEWI LESTARI', 'RUDI HARTONO'];
-        $today = now()->toDateString();
         $origin = CarbonImmutable::parse($weekStart)->startOfDay();
+        $today = now()->toDateString();
+        $nameCount = count($names);
 
         $days = [];
         for ($i = 0; $i < 7; $i++) {
             $date = $origin->addDays($i);
-            $day = [
+            $days[] = [
                 'date' => $date->toDateString(),
                 'label' => $date->locale('id')->translatedFormat('D'),
                 'day_number' => $date->format('d'),
                 'month_short' => $date->locale('id')->translatedFormat('M'),
                 'is_today' => $date->toDateString() === $today,
                 'is_weekend' => $date->isWeekend(),
-                's1' => [],
-                's2' => [],
+                's1' => [$this->schedulePerson($names[$i % $nameCount], $statuses[$i % 5])],
+                's2' => [$this->schedulePerson($names[($i + 2) % $nameCount], $statuses[($i + 2) % 5])],
             ];
-
-            foreach ($names as $index => $name) {
-                foreach (['s1' => 'S1', 's2' => 'S2'] as $key => $shift) {
-                    $seed = ($index + $i + (int) ($shift === 'S2')) % 5;
-                    $parts = explode(' ', $name);
-
-                    $day[$key][] = [
-                        'name' => $name,
-                        'short_name' => $parts[0],
-                        'initial' => mb_substr($name, 0, 1),
-                        'planned' => $seed !== 3,
-                        'status' => $statuses[$seed],
-                    ];
-                }
-            }
-
-            $days[] = $day;
         }
 
         return ['days' => $days];
+    }
+
+    /**
+     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string}
+     */
+    private function schedulePerson(string $name, string $status): array
+    {
+        $parts = explode(' ', $name);
+
+        return [
+            'name' => $name,
+            'short_name' => $parts[0],
+            'initial' => mb_substr($name, 0, 1),
+            'planned' => $status !== 'tidak_dijadwalkan',
+            'status' => $status,
+        ];
     }
 
     /**

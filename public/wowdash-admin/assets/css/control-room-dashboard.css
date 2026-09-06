@@ -268,9 +268,9 @@
     background: transparent;
 }
 
-/* FullCalendar — Rencana vs Aktual */
+/* FullCalendar — Rencana vs Aktual (timeGridWeek) */
 .ocr-fc {
-    padding: 8px 12px 16px;
+    padding: 4px 12px 16px;
     overflow-x: auto;
 }
 
@@ -279,8 +279,14 @@
     --fc-today-bg-color: var(--primary-50);
     --fc-page-bg-color: transparent;
     --fc-neutral-bg-color: var(--bg-color);
+    --fc-now-indicator-color: var(--danger-600);
     font-family: inherit;
-    min-width: 720px;
+    min-width: 860px;
+}
+
+.ocr-fc .fc-toolbar-title {
+    font-size: 16px;
+    font-weight: 600;
 }
 
 .ocr-fc .fc-scrollgrid {
@@ -293,68 +299,67 @@
 }
 
 .ocr-fc .fc-col-header-cell-cushion,
-.ocr-fc .fc-daygrid-day-number {
+.ocr-fc .fc-timegrid-slot-label-cushion {
     color: var(--text-secondary-light);
     font-size: 12px;
     font-weight: 600;
     text-decoration: none;
-    padding: 8px 10px;
 }
 
-.ocr-fc .fc-daygrid-day {
+.ocr-fc .fc-col-header-cell-cushion {
+    padding: 10px 8px;
+}
+
+.ocr-fc .fc-timegrid-slot {
+    height: 2.4rem;
+}
+
+.ocr-fc .fc-timegrid-col {
     cursor: pointer;
 }
 
-.ocr-fc .fc-daygrid-event {
-    margin: 1px 4px;
-    border-radius: 999px;
+.ocr-fc .fc-timegrid-event {
+    border-radius: 10px;
     border-width: 2px;
+    box-shadow: none;
 }
 
 .ocr-fc .fc-event-main {
     padding: 0;
 }
 
-.ocr-fc-event {
+.ocr-fc-block {
     display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 24px;
-    padding: 2px 8px 2px 4px;
-    overflow: hidden;
-}
-
-.ocr-fc-event.is-planned .ocr-fc-avatar {
-    box-shadow: 0 0 0 2px currentColor;
-}
-
-.ocr-fc-avatar {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #fff;
-    font-size: 9px;
-    font-weight: 700;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.ocr-fc-title {
-    font-size: 11px;
-    font-weight: 600;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
     color: #fff;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    height: 100%;
 }
 
-.ocr-fc .fc-daygrid-more-link {
+.ocr-fc-block.is-planned {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.ocr-fc-shift,
+.ocr-fc-status {
     font-size: 11px;
     font-weight: 600;
-    color: var(--primary-600);
-    padding: 2px 8px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.9;
+}
+
+.ocr-fc-block strong {
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.ocr-fc .fc-timegrid-event-harness-inset .fc-timegrid-event,
+.ocr-fc .fc-timegrid-event.fc-event-mirror,
+.ocr-fc .fc-timegrid-more-link {
+    box-shadow: none;
 }
 
 .ocr-chip {
