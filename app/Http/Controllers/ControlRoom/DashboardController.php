@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\ControlRoom;
 
+use App\Enums\ControlRoomShiftCode;
 use App\Enums\ControlRoomSiteCode;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ControlRoom\ControlRoomDashboardSapDetailRequest;
+use App\Services\ControlRoom\ControlRoomSapDutyReader;
 use App\Services\ControlRoom\DashboardMockDataProvider;
 use App\Services\ControlRoom\DashboardScheduleWeekAssembler;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -57,5 +61,16 @@ final class DashboardController extends Controller
             'mock' => $mock->build($weekStart, $schedule['days']),
             'schedule' => $schedule,
         ]);
+    }
+
+    public function sapDetail(ControlRoomDashboardSapDetailRequest $request, ControlRoomSapDutyReader $reader): JsonResponse
+    {
+        $shift = ControlRoomShiftCode::from($request->validated('shift'));
+
+        return response()->json($reader->forDuty(
+            $request->validated('sid'),
+            CarbonImmutable::parse($request->validated('date')),
+            $shift,
+        ));
     }
 }

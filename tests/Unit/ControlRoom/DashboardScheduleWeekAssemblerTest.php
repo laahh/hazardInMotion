@@ -30,6 +30,7 @@ final class DashboardScheduleWeekAssemblerTest extends TestCase
         )['days'];
 
         $this->assertSame('Agung Nugroho', $days[0]['s1'][0]['name']);
+        $this->assertSame('SID01', $days[0]['s1'][0]['sid']);
         $this->assertSame('tidak_hadir', $days[0]['s1'][0]['status']);
         $this->assertTrue($days[0]['s1'][0]['planned']);
         $this->assertSame([], $days[0]['s2']);

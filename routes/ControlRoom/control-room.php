@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/dashboard/sap-detail', [DashboardController::class, 'sapDetail'])->name('dashboard.sap-detail');
 
     Route::prefix('schedule')->name('schedule.')->group(function (): void {
         Route::get('/changes', [ScheduleController::class, 'changes'])->name('changes');

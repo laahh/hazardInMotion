@@ -196,6 +196,7 @@ final class DashboardScheduleWeekAssembler
                 status: $status,
                 catatan: $isPast ? 'Tidak ada absen' : 'Belum check-in',
                 checkinout: $taps,
+                sid: (string) $plan->personnel_source_key,
             );
         }
 
@@ -205,6 +206,7 @@ final class DashboardScheduleWeekAssembler
             status: $this->mapAttendanceStatus($attendance, planned: true),
             catatan: $this->catatanFromAttendance($attendance, $replacedNames),
             checkinout: $taps,
+            sid: (string) $plan->personnel_source_key,
         );
     }
 
@@ -225,14 +227,15 @@ final class DashboardScheduleWeekAssembler
             status: $status,
             catatan: $this->catatanFromAttendance($attendance, $replacedNames) ?: 'Hadir tanpa slot jadwal.',
             checkinout: $rfidBySlot[$this->slotKey($attendance->date, $attendance->shift_code, (string) $attendance->personnel_source_key)] ?? [],
+            sid: (string) $attendance->personnel_source_key,
         );
     }
 
     /**
      * @param  list<array<string, mixed>>  $checkinout
-     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string, checkinout: list<array<string, mixed>>}
+     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string, checkinout: list<array<string, mixed>>, sid: string}
      */
-    private function personPayload(string $name, bool $planned, string $status, string $catatan, array $checkinout = []): array
+    private function personPayload(string $name, bool $planned, string $status, string $catatan, array $checkinout = [], string $sid = ''): array
     {
         $parts = preg_split('/\s+/', $name) ?: [$name];
 
@@ -246,6 +249,7 @@ final class DashboardScheduleWeekAssembler
             'lokasi' => '—',
             'catatan' => $catatan,
             'checkinout' => $checkinout,
+            'sid' => strtoupper(trim($sid)),
         ];
     }
 

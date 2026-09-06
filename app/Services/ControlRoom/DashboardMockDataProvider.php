@@ -58,6 +58,7 @@ final class DashboardMockDataProvider
                         $shiftKey === 's1' ? 'S1' : 'S2',
                         $this->attendancePctFromStatus((string) ($person['status'] ?? '')),
                         $person['checkinout'] ?? [],
+                        (string) ($person['sid'] ?? ''),
                     );
                 }
             }
@@ -84,7 +85,7 @@ final class DashboardMockDataProvider
         for ($i = 0; $i < 4; $i++) {
             $date = $start->addDays($i)->toDateString();
             foreach ($people as [$name, $shift, $attendance]) {
-                $rows[] = $this->achievementRow($date, $name, $shift, $attendance, $this->sampleTaps($shift, $date));
+                $rows[] = $this->achievementRow($date, $name, $shift, $attendance, $this->sampleTaps($shift, $date), '');
             }
         }
 
@@ -95,13 +96,14 @@ final class DashboardMockDataProvider
      * @param  list<array<string, mixed>>  $taps
      * @return array<string, mixed>
      */
-    private function achievementRow(string $date, string $name, string $shift, ?float $attendancePct, array $taps): array
+    private function achievementRow(string $date, string $name, string $shift, ?float $attendancePct, array $taps, string $sid = ''): array
     {
         return [
             'date' => $date,
             'date_label' => CarbonImmutable::parse($date)->format('n/j/Y'),
             'name' => $name,
             'shift' => $shift,
+            'sid' => strtoupper(trim($sid)),
             'attendance_pct' => $attendancePct,
             'sap' => $this->mockMetric($name.$date, 'sap'),
             'tbc' => $this->mockMetric($name.$date, 'tbc'),

@@ -62,7 +62,7 @@
     <div class="ocr-dash">
         <div class="ocr-notice" role="status">
             <i class="ri-information-line"></i>
-            <span><strong>Sebagian mockup.</strong> KPI, % SAP, % TBC, coverage, Pareto, dan kualitas masih fiktif. Nama/tanggal/check-in RFID di tabel pencapaian memakai jadwal + tap RFID nyata (default: minggu lalu).</span>
+            <span><strong>Sebagian mockup.</strong> KPI, % SAP, % TBC, coverage, Pareto, dan kualitas masih fiktif. Nama/tanggal/check-in RFID memakai jadwal nyata. Tombol Detail memuat laporan SAP (hazard, inspeksi, observasi, OAK) dari OBDS pada jendela jaga.</span>
         </div>
 
         <form method="GET" class="ocr-card">
@@ -240,7 +240,7 @@
                 <div class="ocr-card-header">
                     <div>
                         <h6>Pencapaian Personil</h6>
-                        <p class="ocr-card-kicker">% pencapaian berdasarkan kehadiran sesuai jadwal, SAP berdasarkan target (1 Hazard, 1 Inspeksi, 1 Observasi/OAK), dan % TBC dari Hazard &amp; Inspeksi (catatan: &gt; 100% jika pelaporan + coaching). Kolom RFID untuk lihat checkout lalu kembali di jam jaga.</p>
+                        <p class="ocr-card-kicker">% pencapaian berdasarkan kehadiran sesuai jadwal, SAP berdasarkan target (1 Hazard, 1 Inspeksi, 1 Observasi/OAK), dan % TBC dari Hazard &amp; Inspeksi. Klik Detail untuk laporan SAP selama jaga.</p>
                     </div>
                 </div>
                 <div class="ocr-card-body ocr-card-body--flush">
@@ -254,7 +254,7 @@
                                     <th class="text-center">Kehadiran</th>
                                     <th class="text-center">% SAP</th>
                                     <th class="text-center">% TBC</th>
-                                    <th>Check-in / Out</th>
+                                    <th class="text-center">Detail</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -269,17 +269,18 @@
                                             <td class="ocr-heat-cell {{ $heatClass($row['attendance_pct']) }}">{{ $heatLabel($row['attendance_pct']) }}</td>
                                             <td class="ocr-heat-cell {{ $heatClass($row['sap']) }}">{{ $heatLabel($row['sap']) }}</td>
                                             <td class="ocr-heat-cell {{ $heatClass($row['tbc']) }}">{{ $heatLabel($row['tbc']) }}</td>
-                                            <td>
-                                                @if (($row['checkinout'] ?? []) === [])
-                                                    <span class="ocr-tap-empty">—</span>
+                                            <td class="text-center">
+                                                @if (($row['sid'] ?? '') !== '')
+                                                    <button
+                                                        type="button"
+                                                        class="ocr-detail-btn"
+                                                        data-sid="{{ $row['sid'] }}"
+                                                        data-date="{{ $row['date'] }}"
+                                                        data-shift="{{ $row['shift'] }}"
+                                                        data-name="{{ $row['name'] }}"
+                                                    >Detail</button>
                                                 @else
-                                                    <div class="ocr-tap-chips">
-                                                        @foreach ($row['checkinout'] as $tap)
-                                                            <span class="is-{{ $tap['type'] === 'in' ? 'in' : 'out' }}" title="{{ $tap['type_label'] }} · {{ $tap['gate'] ?? '' }}">
-                                                                {{ $tap['time'] }}{{ isset($tap['date_label']) ? ' · '.$tap['date_label'] : '' }}
-                                                            </span>
-                                                        @endforeach
-                                                    </div>
+                                                    <span class="ocr-tap-empty">—</span>
                                                 @endif
                                             </td>
                                         </tr>
@@ -434,6 +435,31 @@
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="ocr-sap-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h6 class="modal-title" id="ocr-sap-title">Detail SAP</h6>
+                        <p class="ocr-card-kicker mb-0" id="ocr-sap-meta"></p>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="ocr-sap-filters" id="ocr-sap-filters" hidden>
+                        <button type="button" class="is-active" data-sap-filter="all">Semua</button>
+                        <button type="button" data-sap-filter="hazard">Hazard</button>
+                        <button type="button" data-sap-filter="inspeksi">Inspeksi</button>
+                        <button type="button" data-sap-filter="observasi">Observasi</button>
+                        <button type="button" data-sap-filter="oak">OAK</button>
+                    </div>
+                    <p class="ocr-sap-status-msg" id="ocr-sap-status">Memuat laporan…</p>
+                    <div class="ocr-sap-grid" id="ocr-sap-grid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @push('scripts')
@@ -446,6 +472,7 @@
             var chipClass = @json($chipClass);
             var shiftCardClass = @json($shiftCardClass);
             var defaultDate = @json($defaultDay['date']);
+            var sapDetailUrl = @json(route('control-room.dashboard.sap-detail'));
 
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
             tooltipTriggerList.forEach(function (el) {
@@ -660,6 +687,133 @@
                     },
                 },
             }).render();
+
+            var sapCards = [];
+            var sapFilter = 'all';
+            var sapModalEl = document.getElementById('ocr-sap-modal');
+            var sapModal = sapModalEl ? new bootstrap.Modal(sapModalEl) : null;
+            var sapTitle = document.getElementById('ocr-sap-title');
+            var sapMeta = document.getElementById('ocr-sap-meta');
+            var sapStatus = document.getElementById('ocr-sap-status');
+            var sapGrid = document.getElementById('ocr-sap-grid');
+            var sapFilters = document.getElementById('ocr-sap-filters');
+
+            function setSapFilterCounts(counts) {
+                document.querySelectorAll('[data-sap-filter]').forEach(function (btn) {
+                    var key = btn.getAttribute('data-sap-filter');
+                    var label = key === 'all' ? 'Semua' : btn.getAttribute('data-sap-filter');
+                    label = {
+                        all: 'Semua',
+                        hazard: 'Hazard',
+                        inspeksi: 'Inspeksi',
+                        observasi: 'Observasi',
+                        oak: 'OAK'
+                    }[key] || key;
+                    var n = counts && counts[key] != null ? counts[key] : 0;
+                    btn.textContent = label + ' (' + n + ')';
+                });
+            }
+
+            function renderSapCards() {
+                var list = sapFilter === 'all' ? sapCards : sapCards.filter(function (card) {
+                    return card.type === sapFilter;
+                });
+                if (!list.length) {
+                    sapGrid.innerHTML = '';
+                    sapStatus.hidden = false;
+                    sapStatus.textContent = sapCards.length ? 'Tidak ada laporan untuk filter ini.' : sapStatus.textContent;
+                    return;
+                }
+                sapStatus.hidden = true;
+                sapGrid.innerHTML = list.map(function (card) {
+                    var photo = card.photo_url
+                        ? '<a class="ocr-sap-photo" href="' + escapeHtml(card.photo_url) + '" target="_blank" rel="noopener">'
+                            + '<img src="' + escapeHtml(card.photo_url) + '" alt="Foto laporan ' + escapeHtml(card.id) + '" loading="lazy" onerror="this.parentElement.hidden=true">'
+                            + '</a>'
+                        : '';
+                    var geotag = card.geotag ? ('GEOTAGGING Jam: ' + escapeHtml(card.geotag)) : 'Null';
+                    var statusClass = (card.status || '').toLowerCase() === 'closed' ? 'is-closed' : 'is-plain';
+                    return '<article class="ocr-sap-card" data-type="' + escapeHtml(card.type) + '">'
+                        + photo
+                        + '<p class="ocr-sap-id">' + escapeHtml(card.id) + '</p>'
+                        + '<p class="ocr-sap-geotag">' + geotag + '</p>'
+                        + '<p>Submit BEATS: ' + escapeHtml(card.submitted_label) + '</p>'
+                        + '<p class="ocr-sap-headline">' + escapeHtml(card.headline) + '</p>'
+                        + '<p>' + escapeHtml(card.subcategory) + '</p>'
+                        + '<p class="ocr-sap-desc">' + escapeHtml(card.description) + '</p>'
+                        + '<p>PIC: ' + escapeHtml(card.pic) + '</p>'
+                        + '<p class="ocr-sap-muted">' + escapeHtml(card.pic_meta) + '</p>'
+                        + '<p>Pelapor: ' + escapeHtml(card.reporter) + '</p>'
+                        + '<p class="ocr-sap-muted">' + escapeHtml(card.reporter_meta) + '</p>'
+                        + '<p>Lokasi: ' + escapeHtml(card.location) + '</p>'
+                        + '<p>Detail Lok: ' + escapeHtml(card.location_detail) + '</p>'
+                        + '<span class="ocr-sap-badge ' + statusClass + '">' + escapeHtml(card.status || '—') + '</span>'
+                        + '</article>';
+                }).join('');
+            }
+
+            document.querySelectorAll('[data-sap-filter]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    sapFilter = btn.getAttribute('data-sap-filter');
+                    document.querySelectorAll('[data-sap-filter]').forEach(function (el) { el.classList.remove('is-active'); });
+                    btn.classList.add('is-active');
+                    renderSapCards();
+                });
+            });
+
+            document.querySelectorAll('.ocr-detail-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var sid = btn.getAttribute('data-sid');
+                    var date = btn.getAttribute('data-date');
+                    var shift = btn.getAttribute('data-shift');
+                    var name = btn.getAttribute('data-name') || sid;
+                    sapCards = [];
+                    sapFilter = 'all';
+                    sapGrid.innerHTML = '';
+                    sapFilters.hidden = true;
+                    sapStatus.hidden = false;
+                    sapStatus.textContent = 'Memuat laporan…';
+                    sapTitle.textContent = 'Detail SAP — ' + name;
+                    sapMeta.textContent = shift + ' · ' + date + ' · SID ' + sid;
+                    setSapFilterCounts({ all: 0, hazard: 0, inspeksi: 0, observasi: 0, oak: 0 });
+                    document.querySelectorAll('[data-sap-filter]').forEach(function (el) { el.classList.toggle('is-active', el.getAttribute('data-sap-filter') === 'all'); });
+                    if (sapModal) {
+                        sapModal.show();
+                    }
+
+                    var url = sapDetailUrl + '?sid=' + encodeURIComponent(sid) + '&date=' + encodeURIComponent(date) + '&shift=' + encodeURIComponent(shift);
+                    fetch(url, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+                        .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+                        .then(function (result) {
+                            if (!result.ok) {
+                                sapStatus.textContent = 'Gagal memuat detail SAP.';
+                                return;
+                            }
+                            var data = result.body;
+                            sapCards = data.cards || [];
+                            sapMeta.textContent = shift + ' · jendela ' + (data.window_start || '') + ' – ' + (data.window_end || '') + ' · SID ' + sid;
+                            setSapFilterCounts(data.counts || {});
+                            sapFilters.hidden = false;
+                            if (!data.reachable) {
+                                sapStatus.textContent = 'Sumber SAP (OBDS) tidak terjangkau.';
+                                sapGrid.innerHTML = '';
+                                return;
+                            }
+                            if (!sapCards.length) {
+                                sapStatus.textContent = 'Tidak ada laporan SAP di jendela shift ini.';
+                                sapGrid.innerHTML = '';
+                                return;
+                            }
+                            var extra = data.truncated ? ' Menampilkan maksimal 40 laporan per jenis.' : '';
+                            sapStatus.textContent = extra;
+                            sapStatus.hidden = !extra;
+                            renderSapCards();
+                        })
+                        .catch(function () {
+                            sapStatus.textContent = 'Gagal memuat detail SAP.';
+                        });
+                });
+            });
         })();
     </script>
 @endpush

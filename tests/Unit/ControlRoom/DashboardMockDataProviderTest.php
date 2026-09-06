@@ -17,6 +17,7 @@ final class DashboardMockDataProviderTest extends TestCase
                 'date' => '2026-08-31',
                 's1' => [[
                     'name' => 'Agung Nugroho',
+                    'sid' => 'FJAVJ',
                     'status' => 'sesuai',
                     'checkinout' => [
                         ['time' => '07:30', 'date_label' => '31 Agu', 'type' => 'in', 'type_label' => 'Check-in', 'gate' => 'POS 1', 'passed' => true],
@@ -39,6 +40,7 @@ final class DashboardMockDataProviderTest extends TestCase
         $this->assertSame('8/31/2026', $group['date_label']);
         $this->assertCount(2, $group['rows']);
         $this->assertSame('Agung Nugroho', $group['rows'][0]['name']);
+        $this->assertSame('FJAVJ', $group['rows'][0]['sid']);
         $this->assertSame(100.0, $group['rows'][0]['attendance_pct']);
         $this->assertSame('07:30', $group['rows'][0]['checkinout'][0]['time']);
         $this->assertSame('S2', $group['rows'][1]['shift']);
