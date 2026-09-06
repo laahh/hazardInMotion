@@ -268,92 +268,93 @@
     background: transparent;
 }
 
-/* Week calendar */
-.ocr-cal-scroll {
+/* FullCalendar — Rencana vs Aktual */
+.ocr-fc {
+    padding: 8px 12px 16px;
     overflow-x: auto;
-    padding: 12px 16px 18px;
 }
 
-.ocr-cal {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(128px, 1fr));
-    gap: 10px;
-    min-width: 920px;
+.ocr-fc .fc {
+    --fc-border-color: var(--neutral-200);
+    --fc-today-bg-color: var(--primary-50);
+    --fc-page-bg-color: transparent;
+    --fc-neutral-bg-color: var(--bg-color);
+    font-family: inherit;
+    min-width: 720px;
 }
 
-.ocr-day {
-    appearance: none;
-    border: 1px solid var(--neutral-200);
+.ocr-fc .fc-scrollgrid {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.ocr-fc .fc-col-header-cell {
     background: var(--bg-color);
-    border-radius: 14px;
-    padding: 10px 8px 12px;
-    text-align: left;
-    width: 100%;
-    min-height: 280px;
-    cursor: pointer;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-.ocr-day:hover,
-.ocr-day:focus-visible {
-    border-color: var(--primary-300);
-    box-shadow: 0 8px 20px rgba(72, 127, 255, 0.08);
-    outline: none;
-}
-
-.ocr-day.is-today {
-    border-color: var(--primary-400);
-    background: var(--primary-50);
-}
-
-.ocr-day.is-weekend .ocr-day-name {
-    color: var(--neutral-400);
-}
-
-.ocr-day-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin-bottom: 10px;
-    padding: 0 4px;
-}
-
-.ocr-day-name {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+.ocr-fc .fc-col-header-cell-cushion,
+.ocr-fc .fc-daygrid-day-number {
     color: var(--text-secondary-light);
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 8px 10px;
 }
 
-.ocr-day-num {
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    color: var(--text-primary-light);
+.ocr-fc .fc-daygrid-day {
+    cursor: pointer;
 }
 
-.ocr-shift {
-    margin-bottom: 10px;
+.ocr-fc .fc-daygrid-event {
+    margin: 1px 4px;
+    border-radius: 999px;
+    border-width: 2px;
 }
 
-.ocr-shift:last-child {
-    margin-bottom: 0;
+.ocr-fc .fc-event-main {
+    padding: 0;
 }
 
-.ocr-shift-label {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--neutral-400);
-    margin: 0 4px 6px;
-}
-
-.ocr-chips {
+.ocr-fc-event {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    gap: 6px;
+    min-height: 24px;
+    padding: 2px 8px 2px 4px;
+    overflow: hidden;
+}
+
+.ocr-fc-event.is-planned .ocr-fc-avatar {
+    box-shadow: 0 0 0 2px currentColor;
+}
+
+.ocr-fc-avatar {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ocr-fc-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ocr-fc .fc-daygrid-more-link {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--primary-600);
+    padding: 2px 8px;
 }
 
 .ocr-chip {
@@ -624,13 +625,13 @@
 }
 
 [data-theme="dark"] .ocr-dash .ocr-card,
-[data-theme="dark"] .ocr-day,
 [data-theme="dark"] .ocr-week-stepper a {
     border-color: rgba(255, 255, 255, 0.08);
 }
 
-[data-theme="dark"] .ocr-day {
-    background: var(--dark-1);
+[data-theme="dark"] .ocr-fc .fc {
+    --fc-border-color: rgba(255, 255, 255, 0.08);
+    --fc-today-bg-color: rgba(72, 127, 255, 0.12);
 }
 
 [data-theme="dark"] .ocr-rank-item,

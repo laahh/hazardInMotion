@@ -31,6 +31,7 @@
 @endphp
 
 @push('styles')
+    <link rel="stylesheet" href="{{ asset('build/plugins/fullcalendar/css/main.min.css') }}">
     <link rel="stylesheet" href="{{ asset('wowdash-admin/assets/css/control-room-dashboard.css') }}">
 @endpush
 
@@ -107,7 +108,7 @@
             <div class="ocr-card-header">
                 <div>
                     <h6>Penjadwalan — Rencana vs Aktual</h6>
-                    <p class="ocr-card-kicker">Klik hari untuk melihat roster shift. Outline = dijadwalkan, warna = status absen.</p>
+                    <p class="ocr-card-kicker">Klik tanggal atau nama untuk melihat roster. Outline = dijadwalkan, warna = status absen.</p>
                 </div>
                 <div class="ocr-legend">
                     <span class="ocr-legend-item"><span class="ocr-legend-swatch is-sesuai"></span> Sesuai</span>
@@ -118,35 +119,8 @@
                     <span class="ocr-legend-item"><span class="ocr-legend-swatch is-planned"></span> Ada di rencana</span>
                 </div>
             </div>
-            <div class="ocr-cal-scroll">
-                <div class="ocr-cal">
-                    @foreach ($mock['schedule']['days'] as $day)
-                        <button
-                            type="button"
-                            class="ocr-day{{ $day['is_today'] ? ' is-today' : '' }}{{ $day['is_weekend'] ? ' is-weekend' : '' }}"
-                            data-day-date="{{ $day['date'] }}"
-                            aria-label="Roster {{ $day['label'] }} {{ $day['day_number'] }} {{ $day['month_short'] }}"
-                        >
-                            <div class="ocr-day-head">
-                                <span class="ocr-day-name">{{ $day['label'] }}</span>
-                                <span class="ocr-day-num">{{ $day['day_number'] }}</span>
-                            </div>
-                            @foreach (['s1' => 'Shift 1', 's2' => 'Shift 2'] as $shiftKey => $shiftName)
-                                <div class="ocr-shift">
-                                    <p class="ocr-shift-label">{{ $shiftName }}</p>
-                                    <div class="ocr-chips">
-                                        @foreach ($day[$shiftKey] as $person)
-                                            <span class="ocr-chip {{ $chipClass[$person['status']] }} {{ $person['planned'] ? 'is-planned' : '' }}" title="{{ $person['name'] }} · {{ $statusLabel[$person['status']] }}">
-                                                <span class="ocr-chip-avatar">{{ $person['initial'] }}</span>
-                                                <span class="ocr-chip-name">{{ $person['short_name'] }}</span>
-                                            </span>
-                                        @endforeach
-                                    </div>
-                                </div>
-                            @endforeach
-                        </button>
-                    @endforeach
-                </div>
+            <div class="ocr-fc">
+                <div id="ocr-schedule-calendar"></div>
             </div>
         </div>
 
@@ -360,6 +334,7 @@
 @endsection
 
 @push('scripts')
+    <script src="{{ asset('build/plugins/fullcalendar/js/main.min.js') }}"></script>
     <script>
         (function () {
             var pareto = @json($mock['pareto']);
@@ -367,6 +342,7 @@
             var scheduleDays = @json($mock['schedule']['days']);
             var statusLabel = @json($statusLabel);
             var chipClass = @json($chipClass);
+            var weekStart = @json($weekStart->toDateString());
 
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
             tooltipTriggerList.forEach(function (el) {
@@ -456,18 +432,110 @@
             var daysByDate = {};
             scheduleDays.forEach(function (day) { daysByDate[day.date] = day; });
 
-            document.querySelectorAll('.ocr-day').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    var day = daysByDate[btn.getAttribute('data-day-date')];
-                    if (!day) {
-                        return;
-                    }
+            function dateKey(value) {
+                if (typeof value === 'string') {
+                    return value.slice(0, 10);
+                }
+                if (value instanceof Date) {
+                    var year = value.getFullYear();
+                    var month = String(value.getMonth() + 1).padStart(2, '0');
+                    var day = String(value.getDate()).padStart(2, '0');
+                    return year + '-' + month + '-' + day;
+                }
+                return String(value);
+            }
 
-                    titleEl.textContent = day.label + ', ' + day.day_number + ' ' + day.month_short;
-                    bodyEl.innerHTML = renderShift('Shift 1', day.s1) + renderShift('Shift 2', day.s2);
-                    drawer.show();
+            function openDayDrawer(dateValue) {
+                var key = dateKey(dateValue);
+                var day = daysByDate[key];
+                if (!day) {
+                    return;
+                }
+
+                titleEl.textContent = day.label + ', ' + day.day_number + ' ' + day.month_short;
+                bodyEl.innerHTML = renderShift('Shift 1', day.s1) + renderShift('Shift 2', day.s2);
+                drawer.show();
+            }
+
+            var statusColors = {
+                sesuai: { bg: '#16A34A', border: '#15803D' },
+                menggantikan: { bg: '#FF9F29', border: '#C28800' },
+                tidak_hadir: { bg: '#DC2626', border: '#B91C1C' },
+                tidak_dijadwalkan: { bg: '#9CA3AF', border: '#6B7280' },
+                anomali: { bg: '#2563EB', border: '#1D4ED8' },
+            };
+
+            var calendarEvents = [];
+            scheduleDays.forEach(function (day) {
+                ['s1', 's2'].forEach(function (shiftKey) {
+                    var shiftCode = shiftKey === 's1' ? 'S1' : 'S2';
+                    (day[shiftKey] || []).forEach(function (person) {
+                        var colors = statusColors[person.status] || statusColors.tidak_dijadwalkan;
+                        calendarEvents.push({
+                            title: shiftCode + ' • ' + person.short_name,
+                            start: day.date,
+                            allDay: true,
+                            backgroundColor: colors.bg,
+                            borderColor: person.planned ? colors.border : colors.bg,
+                            textColor: '#ffffff',
+                            extendedProps: {
+                                date: day.date,
+                                shift: shiftCode,
+                                status: person.status,
+                                planned: person.planned,
+                                personnel: person.name,
+                                initial: person.initial,
+                            },
+                        });
+                    });
                 });
             });
+
+            var calendarEl = document.getElementById('ocr-schedule-calendar');
+            var calendar = new FullCalendar.Calendar(calendarEl, {
+                headerToolbar: false,
+                initialView: 'dayGridWeek',
+                initialDate: weekStart,
+                locale: 'id',
+                firstDay: 1,
+                height: 'auto',
+                navLinks: false,
+                editable: false,
+                selectable: false,
+                dayMaxEvents: true,
+                eventDisplay: 'block',
+                dayHeaderFormat: { weekday: 'short', day: 'numeric', omitCommas: true },
+                events: calendarEvents,
+                eventOrder: 'title',
+                eventContent: function (arg) {
+                    var props = arg.event.extendedProps;
+                    var initial = (props.initial || (props.personnel || '?').charAt(0)).toUpperCase();
+                    var color = arg.event.backgroundColor || '#333';
+                    var title = arg.event.title.replace(/</g, '&lt;');
+                    var plannedClass = props.planned ? ' is-planned' : '';
+
+                    return {
+                        html:
+                            '<div class="ocr-fc-event' + plannedClass + '">' +
+                            '<span class="ocr-fc-avatar" style="color:' + color + ';">' + escapeHtml(initial) + '</span>' +
+                            '<span class="ocr-fc-title">' + title + '</span>' +
+                            '</div>',
+                    };
+                },
+                dateClick: function (info) {
+                    openDayDrawer(info.dateStr);
+                },
+                eventClick: function (info) {
+                    info.jsEvent.preventDefault();
+                    openDayDrawer(info.event.extendedProps.date || info.event.start);
+                },
+                moreLinkClick: function (info) {
+                    openDayDrawer(info.date);
+                    return true;
+                },
+            });
+
+            calendar.render();
         })();
     </script>
 @endpush
