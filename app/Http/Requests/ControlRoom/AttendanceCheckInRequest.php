@@ -32,13 +32,21 @@ final class AttendanceCheckInRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
-        $raw = trim((string) $this->input('personnel_source_key'));
+        $this->merge([
+            'personnel_source_key' => $this->extractSid((string) $this->input('personnel_source_key')),
+            'replacing_source_key' => $this->extractSid((string) $this->input('replacing_source_key')),
+        ]);
+    }
 
-        if (preg_match('/\(([^)]+)\)\s*$/', $raw, $matches) === 1) {
-            $raw = trim($matches[1]);
+    private function extractSid(string $raw): string
+    {
+        $raw = trim($raw);
+
+        if ($raw !== '' && preg_match('/\(([^)]+)\)\s*$/', $raw, $matches) === 1) {
+            return trim($matches[1]);
         }
 
-        $this->merge(['personnel_source_key' => $raw]);
+        return $raw;
     }
 
     public function rules(): array

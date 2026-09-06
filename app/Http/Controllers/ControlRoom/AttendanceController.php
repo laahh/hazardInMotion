@@ -30,7 +30,7 @@ final class AttendanceController extends Controller
         return view('control-room.attendance.check-in', [
             'site' => $site,
             'sites' => ControlRoomSiteCode::cases(),
-            'personnel' => $this->personnelReader->all($site),
+            'personnel' => $this->personnelReader->all(),
             'defaultPersonnelSourceKey' => $request->user()->personnel_source_key,
         ]);
     }

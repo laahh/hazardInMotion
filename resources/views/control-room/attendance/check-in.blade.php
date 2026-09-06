@@ -40,7 +40,7 @@
                         >
                         <datalist id="personnel-options">
                             @foreach ($personnel as $person)
-                                <option value="{{ $person->emp_name }} ({{ $person->sid }})"></option>
+                                <option value="{{ $person->emp_name }} · {{ $person->site_dedicated }} ({{ $person->sid }})"></option>
                             @endforeach
                         </datalist>
                         @error('personnel_source_key')

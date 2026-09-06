@@ -9,17 +9,19 @@ use Carbon\CarbonImmutable;
 
 /**
  * MOCKUP SEMENTARA — plan-OCR.md T6.2-T6.8. Panel KPI sungguhan menunggu
- * Fase 4 (snapshot SAP) & Fase 5 (agregasi mingguan), yang menunggu keputusan
- * desain di plan-OCR.md 0.6 poin 6 (reuse mv_sap_scorecard_mingguan?) dan
- * beberapa open question lain (Sheet ID TBC, dst — lihat Lampiran D).
- *
- * Class ini HANYA untuk memberi gambaran visual layout dashboard sebelum
- * pipeline data asli selesai. Semua angka di sini FIKTIF, bukan hasil query.
- * HAPUS class ini (dan ganti pemanggilnya di DashboardController) begitu
- * T5.2 (job agregasi) sudah menghasilkan data sungguhan.
+ * Fase 4 (snapshot SAP) & Fase 5 (agregasi mingguan). Semua angka FIKTIF.
  */
 final class DashboardMockDataProvider
 {
+    /** @var array<string, array{jabatan: string, lokasi: string}> */
+    private const PERSONNEL_META = [
+        'Budi Santoso' => ['jabatan' => 'Pengawas OCR', 'lokasi' => 'HO Control Room'],
+        'Siti Rahayu' => ['jabatan' => 'HSE Officer', 'lokasi' => 'Pit BMO1'],
+        'Ahmad Fauzi' => ['jabatan' => 'Field Inspector', 'lokasi' => 'Pit BMO1'],
+        'Dewi Lestari' => ['jabatan' => 'Pengawas OCR', 'lokasi' => 'Disposal BMO1'],
+        'Rudi Hartono' => ['jabatan' => 'HSE Officer', 'lokasi' => 'Haul Road LMO'],
+    ];
+
     /**
      * @return array<string, mixed>
      */
@@ -46,38 +48,36 @@ final class DashboardMockDataProvider
             ['label' => '% Avg SAP', 'value' => '92.1%', 'progress' => 92.1, 'delta' => -1.4, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-file-list-3-line', 'color' => 'primary', 'formula' => 'rata-rata SapAchievement seluruh personil'],
             ['label' => 'Coverage Detail Lokasi', 'value' => '68 / 95', 'progress' => 71.6, 'delta' => 4.1, 'deltaLabel' => 'lokasi baru tercover', 'icon' => 'ri-map-pin-line', 'color' => 'info', 'formula' => 'lokasi tersentuh SAP / total lokasi terdaftar'],
             ['label' => 'Coverage Area Kritis', 'value' => '24 / 30', 'progress' => 80.0, 'delta' => 0.0, 'deltaLabel' => 'tidak berubah', 'icon' => 'ri-alarm-warning-line', 'color' => 'warning', 'formula' => 'area kritis tersentuh SAP / total area kritis'],
-            ['label' => 'Ratio SAP (dgn bonus)', 'value' => '108%', 'progress' => 100.0, 'delta' => 6.0, 'deltaLabel' => 'bonus coaching', 'icon' => 'ri-award-line', 'color' => 'success', 'formula' => '%SAP dasar + bonus coaching di atas 100%'],
+            ['label' => 'Ratio SAP dgn bonus', 'value' => '108%', 'progress' => 100.0, 'delta' => 6.0, 'deltaLabel' => 'bonus coaching', 'icon' => 'ri-award-line', 'color' => 'success', 'formula' => '%SAP dasar + bonus coaching di atas 100%'],
             ['label' => 'Ratio TBC', 'value' => '34.2%', 'progress' => 34.2, 'delta' => 5.1, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-shield-check-line', 'color' => 'danger', 'formula' => 'temuan tervalidasi TBC / total hazard+inspeksi'],
         ];
     }
 
     /**
-     * Kalender minggu — 1 orang Shift 1 + 1 orang Shift 2 per hari.
-     *
-     * @return array{days: list<array{date: string, label: string, day_number: string, month_short: string, is_today: bool, is_weekend: bool, s1: list<array{name: string, short_name: string, initial: string, planned: bool, status: string}>, s2: list<array{name: string, short_name: string, initial: string, planned: bool, status: string}>}>}
+     * @return array{days: list<array<string, mixed>>}
      */
     private function schedulePlanning(CarbonInterface $weekStart): array
     {
         $statuses = ['sesuai', 'menggantikan', 'tidak_hadir', 'tidak_dijadwalkan', 'anomali'];
-        $names = ['BUDI SANTOSO', 'SITI RAHAYU', 'AHMAD FAUZI', 'DEWI LESTARI', 'RUDI HARTONO'];
+        $names = array_keys(self::PERSONNEL_META);
         $origin = CarbonImmutable::parse($weekStart)->startOfDay();
         $today = now()->toDateString();
         $nameCount = count($names);
 
         $days = [];
-        $hideMockRoster = $origin->toDateString() === '2026-08-31';
-
         for ($i = 0; $i < 7; $i++) {
             $date = $origin->addDays($i);
             $days[] = [
                 'date' => $date->toDateString(),
                 'label' => $date->locale('id')->translatedFormat('D'),
+                'weekday' => $date->locale('id')->translatedFormat('l'),
                 'day_number' => $date->format('d'),
                 'month_short' => $date->locale('id')->translatedFormat('M'),
+                'year' => $date->format('Y'),
                 'is_today' => $date->toDateString() === $today,
                 'is_weekend' => $date->isWeekend(),
-                's1' => $hideMockRoster ? [] : [$this->schedulePerson($names[$i % $nameCount], $statuses[$i % 5])],
-                's2' => $hideMockRoster ? [] : [$this->schedulePerson($names[($i + 2) % $nameCount], $statuses[($i + 2) % 5])],
+                's1' => [$this->schedulePerson($names[$i % $nameCount], $statuses[$i % 5])],
+                's2' => [$this->schedulePerson($names[($i + 2) % $nameCount], $statuses[($i + 2) % 5])],
             ];
         }
 
@@ -85,11 +85,19 @@ final class DashboardMockDataProvider
     }
 
     /**
-     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string}
+     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string}
      */
     private function schedulePerson(string $name, string $status): array
     {
         $parts = explode(' ', $name);
+        $meta = self::PERSONNEL_META[$name];
+        $notes = [
+            'sesuai' => '-',
+            'menggantikan' => 'Menggantikan rekan yang berhalangan.',
+            'tidak_hadir' => 'Tidak ada keterangan',
+            'tidak_dijadwalkan' => 'Hadir tanpa slot jadwal minggu ini.',
+            'anomali' => 'Check-in di luar jendela ±2 jam.',
+        ];
 
         return [
             'name' => $name,
@@ -97,28 +105,32 @@ final class DashboardMockDataProvider
             'initial' => mb_substr($name, 0, 1),
             'planned' => $status !== 'tidak_dijadwalkan',
             'status' => $status,
+            'jabatan' => $meta['jabatan'],
+            'lokasi' => $meta['lokasi'],
+            'catatan' => $notes[$status] ?? '—',
         ];
     }
 
     /**
-     * @return list<array{date: string, name: string, attendance: string, sap: float, tbc: ?float}>
+     * @return list<array{date: string, name: string, attendance: string, attendance_pct: float, sap: float, tbc: ?float}>
      */
     private function personnelAchievement(): array
     {
         $data = [
-            ['BUDI SANTOSO', 100.0, 45.0],
-            ['SITI RAHAYU', 66.7, 20.0],
-            ['AHMAD FAUZI', 33.3, null],
-            ['DEWI LESTARI', 100.0, 60.0],
-            ['RUDI HARTONO', 83.3, 30.0],
+            ['Budi Santoso', 100.0, 100.0, 45.0],
+            ['Siti Rahayu', 80.0, 66.7, 20.0],
+            ['Ahmad Fauzi', 60.0, 33.3, null],
+            ['Dewi Lestari', 100.0, 100.0, 60.0],
+            ['Rudi Hartono', 85.0, 83.3, 30.0],
         ];
 
         $rows = [];
-        foreach ($data as [$name, $sap, $tbc]) {
+        foreach ($data as [$name, $attendancePct, $sap, $tbc]) {
             $rows[] = [
                 'date' => now()->subDay()->format('d M Y'),
                 'name' => $name,
-                'attendance' => 'Hadir',
+                'attendance' => $attendancePct >= 80 ? 'Hadir' : 'Parsial',
+                'attendance_pct' => $attendancePct,
                 'sap' => $sap,
                 'tbc' => $tbc,
             ];
@@ -133,11 +145,11 @@ final class DashboardMockDataProvider
     private function coverageRanking(): array
     {
         $rows = [
-            ['name' => 'BUDI SANTOSO', 'non_critical' => 5, 'critical' => 10],
-            ['name' => 'DEWI LESTARI', 'non_critical' => 13, 'critical' => 0],
-            ['name' => 'AHMAD FAUZI', 'non_critical' => 8, 'critical' => 4],
-            ['name' => 'SITI RAHAYU', 'non_critical' => 3, 'critical' => 2],
-            ['name' => 'RUDI HARTONO', 'non_critical' => 6, 'critical' => 1],
+            ['name' => 'BMO 1', 'non_critical' => 18, 'critical' => 10],
+            ['name' => 'GMO', 'non_critical' => 14, 'critical' => 8],
+            ['name' => 'BMO 2', 'non_critical' => 12, 'critical' => 6],
+            ['name' => 'LMO', 'non_critical' => 11, 'critical' => 4],
+            ['name' => 'PMO', 'non_critical' => 9, 'critical' => 3],
         ];
 
         foreach ($rows as &$row) {
@@ -216,11 +228,11 @@ final class DashboardMockDataProvider
     private function qualityPanel(): array
     {
         return [
-            ['name' => 'BUDI SANTOSO', 'total_findings' => 20, 'distinct_categories' => 14, 'variety_score' => 0.7, 'tbc' => 6, 'gr' => 3, 'blindspot' => 1],
-            ['name' => 'SITI RAHAYU', 'total_findings' => 8, 'distinct_categories' => 2, 'variety_score' => 0.25, 'tbc' => 1, 'gr' => 0, 'blindspot' => 3],
-            ['name' => 'AHMAD FAUZI', 'total_findings' => 15, 'distinct_categories' => 9, 'variety_score' => 0.6, 'tbc' => 4, 'gr' => 2, 'blindspot' => 0],
-            ['name' => 'DEWI LESTARI', 'total_findings' => 25, 'distinct_categories' => 22, 'variety_score' => 0.88, 'tbc' => 9, 'gr' => 5, 'blindspot' => 0],
-            ['name' => 'RUDI HARTONO', 'total_findings' => 12, 'distinct_categories' => 5, 'variety_score' => 0.42, 'tbc' => 3, 'gr' => 1, 'blindspot' => 2],
+            ['name' => 'Budi Santoso', 'total_findings' => 20, 'distinct_categories' => 14, 'variety_score' => 0.7, 'tbc' => 6, 'gr' => 3, 'blindspot' => 1],
+            ['name' => 'Siti Rahayu', 'total_findings' => 8, 'distinct_categories' => 2, 'variety_score' => 0.25, 'tbc' => 1, 'gr' => 0, 'blindspot' => 3],
+            ['name' => 'Ahmad Fauzi', 'total_findings' => 15, 'distinct_categories' => 9, 'variety_score' => 0.6, 'tbc' => 4, 'gr' => 2, 'blindspot' => 0],
+            ['name' => 'Dewi Lestari', 'total_findings' => 25, 'distinct_categories' => 22, 'variety_score' => 0.88, 'tbc' => 9, 'gr' => 5, 'blindspot' => 0],
+            ['name' => 'Rudi Hartono', 'total_findings' => 12, 'distinct_categories' => 5, 'variety_score' => 0.42, 'tbc' => 3, 'gr' => 1, 'blindspot' => 2],
         ];
     }
 }

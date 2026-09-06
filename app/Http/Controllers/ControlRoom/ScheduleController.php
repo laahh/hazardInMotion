@@ -34,7 +34,7 @@ final class ScheduleController extends Controller
         return view('control-room.schedule.index', [
             'site' => $site,
             'sites' => ControlRoomSiteCode::cases(),
-            'personnel' => $this->personnelReader->all($site),
+            'personnel' => $this->personnelReader->all(),
         ]);
     }
 

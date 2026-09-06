@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services\ControlRoom\Reference;
 
-use App\Enums\ControlRoomSiteCode;
 use App\Models\OhsDashboard\Employee;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -18,15 +17,18 @@ final class PersonnelReader
     private const CACHE_TTL_SECONDS = 3600;
 
     /**
+     * Semua karyawan aktif dari seluruh site (bukan hanya site filter halaman).
+     * Filter site di jadwal/absen hanya membatasi kalender & record, bukan picker personil.
+     *
      * @return Collection<int, Employee>
      */
-    public function all(ControlRoomSiteCode $site): Collection
+    public function all(): Collection
     {
         return Cache::remember(
-            "control-room:personnel:{$site->value}",
+            'control-room:personnel:all',
             self::CACHE_TTL_SECONDS,
             fn (): Collection => Employee::query()
-                ->where('site_dedicated', $site->sourceKey())
+                ->select(['emp_id', 'sid', 'emp_name', 'site_dedicated'])
                 ->orderBy('emp_name')
                 ->get()
         );

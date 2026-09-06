@@ -10,6 +10,13 @@
         'tidak_dijadwalkan' => 'ocr-chip--unplanned',
         'anomali' => 'ocr-chip--anomali',
     ];
+    $shiftCardClass = [
+        'sesuai' => 'is-sesuai',
+        'menggantikan' => 'is-ganti',
+        'tidak_hadir' => 'is-absen',
+        'tidak_dijadwalkan' => 'is-unplanned',
+        'anomali' => 'is-anomali',
+    ];
     $statusLabel = [
         'sesuai' => 'Sesuai',
         'menggantikan' => 'Menggantikan',
@@ -28,10 +35,11 @@
         $value >= 60 => 'warning',
         default => 'danger',
     };
+    $scheduleDays = $mock['schedule']['days'];
+    $defaultDay = collect($scheduleDays)->firstWhere('is_today') ?? $scheduleDays[0];
 @endphp
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('build/plugins/fullcalendar/css/main.min.css') }}">
     <link rel="stylesheet" href="{{ asset('wowdash-admin/assets/css/control-room-dashboard.css') }}">
 @endpush
 
@@ -79,7 +87,6 @@
             </div>
         </form>
 
-        {{-- T6.2 — Panel KPI Header --}}
         <div class="ocr-kpi-grid">
             @foreach ($mock['kpi'] as $card)
                 <div class="ocr-card ocr-kpi" title="{{ $card['formula'] }}" data-bs-toggle="tooltip" data-bs-title="{{ $card['formula'] }}">
@@ -103,167 +110,221 @@
             @endforeach
         </div>
 
-        {{-- T6.3 — Kalender minggu Rencana vs Aktual --}}
-        <div class="ocr-card">
+        <div class="ocr-card ocr-cal-card">
             <div class="ocr-card-header">
                 <div>
                     <h6>Penjadwalan — Rencana vs Aktual</h6>
-                    <p class="ocr-card-kicker">Satu orang per shift. Klik blok atau tanggal untuk roster. Outline gelap = dijadwalkan.</p>
+                    <p class="ocr-card-kicker">Klik hari untuk membuka Detail Roster.</p>
                 </div>
                 <div class="ocr-legend">
                     <span class="ocr-legend-item"><span class="ocr-legend-swatch is-sesuai"></span> Sesuai</span>
                     <span class="ocr-legend-item"><span class="ocr-legend-swatch is-ganti"></span> Menggantikan</span>
                     <span class="ocr-legend-item"><span class="ocr-legend-swatch is-absen"></span> Tidak Hadir</span>
-                    <span class="ocr-legend-item"><span class="ocr-legend-swatch is-unplanned"></span> Tdk Dijadwalkan</span>
+                    <span class="ocr-legend-item"><span class="ocr-legend-swatch is-unplanned"></span> Tidak Dijadwalkan</span>
                     <span class="ocr-legend-item"><span class="ocr-legend-swatch is-anomali"></span> Anomali</span>
-                    <span class="ocr-legend-item"><span class="ocr-legend-swatch is-planned"></span> Ada di rencana</span>
                 </div>
             </div>
-            <div class="ocr-fc">
-                <div id="ocr-schedule-calendar"></div>
-            </div>
-        </div>
 
-        <div class="row gy-4">
-            {{-- T6.4 — Pencapaian per Personil --}}
-            <div class="col-xxl-7">
-                <div class="ocr-card h-100">
-                    <div class="ocr-card-header">
-                        <div>
-                            <h6>Pencapaian per Personil</h6>
-                            <p class="ocr-card-kicker">SAP hijau ≥100%, kuning 60–99%, merah &lt;60%.</p>
-                        </div>
-                    </div>
-                    <div class="ocr-card-body">
-                        <div class="ocr-achieve-list">
-                            @foreach ($mock['achievement'] as $row)
-                                @php $sapTone = $toneFor($row['sap']); @endphp
-                                <div class="ocr-achieve-item">
-                                    <div>
-                                        <p class="ocr-achieve-name">{{ $row['name'] }}</p>
-                                        <p class="ocr-achieve-meta">{{ $row['date'] }} · {{ $row['attendance'] }}</p>
-                                    </div>
-                                    <strong>{{ number_format($row['sap'], 1) }}%</strong>
-                                    <div class="ocr-metric-row">
-                                        <span>SAP</span>
-                                        <div class="ocr-track is-{{ $sapTone }}"><span style="width: {{ min(100, $row['sap']) }}%"></span></div>
-                                        <span>{{ number_format($row['sap'], 0) }}%</span>
-                                    </div>
-                                    <div class="ocr-metric-row">
-                                        <span>TBC</span>
-                                        @if ($row['tbc'] !== null)
-                                            <div class="ocr-track is-{{ $toneFor($row['tbc']) }}"><span style="width: {{ min(100, $row['tbc']) }}%"></span></div>
-                                            <span>{{ number_format($row['tbc'], 0) }}%</span>
-                                        @else
-                                            <div class="ocr-track"><span style="width: 0"></span></div>
-                                            <span>—</span>
-                                        @endif
+            <div class="ocr-cal-layout" id="ocr-cal-layout">
+                <div class="ocr-cal-main">
+                    <div class="ocr-cal-scroll">
+                        <div class="ocr-cal-board">
+                            <div class="ocr-cal-head">
+                                <div></div>
+                                <div class="ocr-cal-day-heads">
+                                    @foreach ($scheduleDays as $day)
+                                        <div class="ocr-cal-day-head{{ $day['date'] === $defaultDay['date'] ? ' is-selected' : '' }}{{ $day['is_today'] ? ' is-today' : '' }}" data-head-date="{{ $day['date'] }}">
+                                            <span>{{ $day['weekday'] }}</span>
+                                            <strong>{{ $day['day_number'] }} {{ $day['month_short'] }}</strong>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                            <div class="ocr-cal-body" id="ocr-cal-body">
+                                <div class="ocr-cal-gutter" aria-hidden="true">
+                                    <span style="top: 0">06:00</span>
+                                    <span style="top: 33.333%">12:00</span>
+                                    <span style="top: 66.666%">18:00</span>
+                                    <span style="top: 100%">24:00</span>
+                                    <span class="ocr-now-label" id="ocr-now-label">15:00</span>
+                                </div>
+                                <div class="ocr-cal-track">
+                                    <div class="ocr-now-line" id="ocr-now-line"></div>
+                                    <div class="ocr-cal-days" role="list">
+                                    @foreach ($scheduleDays as $day)
+                                        @php
+                                            $s1 = $day['s1'][0] ?? null;
+                                            $s2 = $day['s2'][0] ?? null;
+                                        @endphp
+                                        <div
+                                            class="ocr-cal-day{{ $day['date'] === $defaultDay['date'] ? ' is-selected' : '' }}{{ $day['is_today'] ? ' is-today' : '' }}"
+                                            data-date="{{ $day['date'] }}"
+                                            role="button"
+                                            tabindex="0"
+                                            aria-pressed="{{ $day['date'] === $defaultDay['date'] ? 'true' : 'false' }}"
+                                        >
+                                            <div class="ocr-cal-slots">
+                                                @if ($s1)
+                                                    <article class="ocr-shift-card {{ $shiftCardClass[$s1['status']] }}">
+                                                        <div class="ocr-shift-meta">
+                                                            <span>Shift 1</span>
+                                                            <span>06:00 - 18:00</span>
+                                                        </div>
+                                                        <strong>{{ $s1['name'] }}</strong>
+                                                        <span class="ocr-shift-status">{{ $statusLabel[$s1['status']] }}</span>
+                                                    </article>
+                                                @else
+                                                    <div class="ocr-shift-card is-empty">Kosong</div>
+                                                @endif
+
+                                                @if ($s2)
+                                                    <article class="ocr-shift-card {{ $shiftCardClass[$s2['status']] }}">
+                                                        <div class="ocr-shift-meta">
+                                                            <span>Shift 2</span>
+                                                            <span>18:00 - 24:00</span>
+                                                        </div>
+                                                        <strong>{{ $s2['name'] }}</strong>
+                                                        <span class="ocr-shift-status">{{ $statusLabel[$s2['status']] }}</span>
+                                                    </article>
+                                                @else
+                                                    <div class="ocr-shift-card is-empty">Kosong</div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endforeach
                                     </div>
                                 </div>
-                            @endforeach
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {{-- T6.5 — Coverage Score & Ranking --}}
-            <div class="col-xxl-5">
-                <div class="ocr-card h-100">
-                    <div class="ocr-card-header">
-                        <div>
-                            <h6>Coverage Score &amp; Ranking</h6>
-                            <p class="ocr-card-kicker">Non-kritis ×1 · Kritis ×2</p>
-                        </div>
+                <aside class="ocr-roster" id="ocr-roster" aria-live="polite">
+                    <div class="ocr-roster-head">
+                        <h6 id="ocr-roster-title">Detail Roster — {{ $defaultDay['weekday'] }}, {{ $defaultDay['day_number'] }} {{ $defaultDay['month_short'] }} {{ $defaultDay['year'] }}</h6>
+                        <button type="button" class="ocr-roster-close" id="ocr-roster-close" aria-label="Tutup detail roster">
+                            <i class="ri-close-line"></i>
+                        </button>
                     </div>
-                    <div class="ocr-card-body">
-                        <div class="ocr-rank-list">
-                            @foreach ($mock['coverageRanking'] as $row)
-                                <div class="ocr-rank-item {{ $row['rank'] <= 3 ? 'is-top' : '' }}">
-                                    <span class="ocr-rank-badge">{{ $row['rank'] }}</span>
-                                    <div>
-                                        <p class="ocr-rank-name">{{ $row['name'] }}</p>
-                                        <p class="ocr-rank-meta">{{ $row['non_critical'] }} non-kritis · {{ $row['critical'] }} kritis</p>
-                                    </div>
-                                    <span class="ocr-rank-score">{{ $row['score'] }}</span>
-                                    <div class="ocr-track is-primary"><span style="width: {{ ($row['score'] / $maxCoverage) * 100 }}%"></span></div>
+                    <div id="ocr-roster-body"></div>
+                </aside>
+            </div>
+        </div>
+
+        <div class="ocr-widget-row">
+            <div class="ocr-card">
+                <div class="ocr-card-header">
+                    <div>
+                        <h6>Pencapaian Personil</h6>
+                        <p class="ocr-card-kicker">Kehadiran · SAP · TBC</p>
+                    </div>
+                </div>
+                <div class="ocr-card-body">
+                    <div class="ocr-achieve-list">
+                        @foreach ($mock['achievement'] as $row)
+                            <div class="ocr-achieve-item">
+                                <div>
+                                    <p class="ocr-achieve-name">{{ $row['name'] }}</p>
+                                    <p class="ocr-achieve-meta">{{ $row['date'] }} · {{ $row['attendance'] }}</p>
                                 </div>
-                            @endforeach
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {{-- T6.6 — Pareto --}}
-        <div class="row gy-4">
-            <div class="col-lg-6">
-                <div class="ocr-card">
-                    <div class="ocr-card-header">
-                        <div>
-                            <h6>Pareto Distribusi Jam — Shift 1</h6>
-                            <p class="ocr-card-kicker">Garis putus 80% kumulatif</p>
-                        </div>
-                    </div>
-                    <div class="ocr-card-body"><div id="chart-pareto-s1"></div></div>
-                </div>
-            </div>
-            <div class="col-lg-6">
-                <div class="ocr-card">
-                    <div class="ocr-card-header">
-                        <div>
-                            <h6>Pareto Distribusi Jam — Shift 2</h6>
-                            <p class="ocr-card-kicker">Garis putus 80% kumulatif</p>
-                        </div>
-                    </div>
-                    <div class="ocr-card-body"><div id="chart-pareto-s2"></div></div>
-                </div>
-            </div>
-        </div>
-
-        {{-- T6.7 — Highlight --}}
-        <div class="row gy-4">
-            <div class="col-lg-6">
-                <div class="ocr-card h-100">
-                    <div class="ocr-card-header">
-                        <div>
-                            <h6>Highlight Golden Rule</h6>
-                            <p class="ocr-card-kicker">Sebaran temuan per aturan</p>
-                        </div>
-                    </div>
-                    <div class="ocr-card-body">
-                        <div class="ocr-gr-list">
-                            @foreach ($mock['highlight']['goldenRules'] as $gr)
-                                <div class="ocr-gr-row">
-                                    <span>{{ $gr['name'] }}</span>
-                                    <strong>{{ $gr['count'] }}</strong>
-                                    <div class="ocr-track is-primary"><span style="width: {{ ($gr['count'] / $maxGoldenRule) * 100 }}%"></span></div>
+                                <strong>{{ number_format($row['attendance_pct'], 0) }}%</strong>
+                                <div class="ocr-metric-row">
+                                    <span>Kehadiran</span>
+                                    <div class="ocr-track is-{{ $toneFor($row['attendance_pct']) }}"><span style="width: {{ min(100, $row['attendance_pct']) }}%"></span></div>
+                                    <span>{{ number_format($row['attendance_pct'], 0) }}%</span>
                                 </div>
-                            @endforeach
+                                <div class="ocr-metric-row">
+                                    <span>SAP</span>
+                                    <div class="ocr-track is-{{ $toneFor($row['sap']) }}"><span style="width: {{ min(100, $row['sap']) }}%"></span></div>
+                                    <span>{{ number_format($row['sap'], 0) }}%</span>
+                                </div>
+                                <div class="ocr-metric-row">
+                                    <span>TBC</span>
+                                    @if ($row['tbc'] !== null)
+                                        <div class="ocr-track is-{{ $toneFor($row['tbc']) }}"><span style="width: {{ min(100, $row['tbc']) }}%"></span></div>
+                                        <span>{{ number_format($row['tbc'], 0) }}%</span>
+                                    @else
+                                        <div class="ocr-track"><span style="width: 0"></span></div>
+                                        <span>—</span>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+
+            <div class="ocr-card">
+                <div class="ocr-card-header">
+                    <div>
+                        <h6>Top 5 Site</h6>
+                        <p class="ocr-card-kicker">Coverage score · non-kritis ×1 · kritis ×2</p>
+                    </div>
+                </div>
+                <div class="ocr-card-body">
+                    <div class="ocr-rank-list">
+                        @foreach ($mock['coverageRanking'] as $row)
+                            <div class="ocr-rank-item {{ $row['rank'] <= 3 ? 'is-top' : '' }}">
+                                <span class="ocr-rank-badge">{{ $row['rank'] }}</span>
+                                <div>
+                                    <p class="ocr-rank-name">{{ $row['name'] }}</p>
+                                    <p class="ocr-rank-meta">{{ $row['non_critical'] }} non-kritis · {{ $row['critical'] }} kritis</p>
+                                </div>
+                                <span class="ocr-rank-score">{{ $row['score'] }}</span>
+                                <div class="ocr-track is-primary"><span style="width: {{ ($row['score'] / $maxCoverage) * 100 }}%"></span></div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+
+            <div class="ocr-card">
+                <div class="ocr-card-header">
+                    <div>
+                        <h6>Pareto Jam Laporan</h6>
+                        <p class="ocr-card-kicker">Garis putus 80% kumulatif</p>
+                    </div>
+                    <div class="ocr-seg" role="group" aria-label="Pilih shift Pareto">
+                        <button type="button" class="is-active" data-pareto="s1">S1</button>
+                        <button type="button" data-pareto="s2">S2</button>
+                    </div>
+                </div>
+                <div class="ocr-card-body"><div id="chart-pareto"></div></div>
+            </div>
+
+            <div class="ocr-card">
+                <div class="ocr-card-header">
+                    <div>
+                        <h6>Highlight Temuan</h6>
+                        <p class="ocr-card-kicker">Golden Rule · Blindspot · TBC</p>
+                    </div>
+                </div>
+                <div class="ocr-card-body">
+                    <div class="ocr-gr-list">
+                        @foreach ($mock['highlight']['goldenRules'] as $gr)
+                            <div class="ocr-gr-row">
+                                <span>{{ $gr['name'] }}</span>
+                                <strong>{{ $gr['count'] }}</strong>
+                                <div class="ocr-track is-primary"><span style="width: {{ ($gr['count'] / $maxGoldenRule) * 100 }}%"></span></div>
+                            </div>
+                        @endforeach
+                    </div>
+                    <div class="ocr-highlight-metrics">
+                        <div class="ocr-metric-mini">
+                            <p class="ocr-kpi-label">Blindspot</p>
+                            <p class="ocr-kpi-value">{{ $mock['highlight']['blindspotCount'] }} <span class="fs-6 fw-normal text-secondary-light">/ {{ $mock['highlight']['blindspotTotal'] }}</span></p>
+                            <div class="ocr-track is-danger"><span style="width: {{ $blindspotPct }}%"></span></div>
+                        </div>
+                        <div class="ocr-metric-mini">
+                            <p class="ocr-kpi-label">Ratio TBC</p>
+                            <p class="ocr-kpi-value">{{ $mock['highlight']['tbcPercentage'] }}%</p>
+                            <div class="ocr-track is-warning"><span style="width: {{ min(100, $mock['highlight']['tbcPercentage']) }}%"></span></div>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="col-lg-3">
-                <div class="ocr-card ocr-metric-tile">
-                    <i class="ri-map-2-line text-danger-600"></i>
-                    <p class="ocr-kpi-value">{{ $mock['highlight']['blindspotCount'] }} <span class="fs-6 fw-normal text-secondary-light">/ {{ $mock['highlight']['blindspotTotal'] }}</span></p>
-                    <p class="ocr-kpi-label mb-12">Lokasi Blindspot</p>
-                    <p class="ocr-kpi-sub">Belum tersentuh SAP minggu ini</p>
-                    <div class="ocr-track is-danger"><span style="width: {{ $blindspotPct }}%"></span></div>
-                </div>
-            </div>
-            <div class="col-lg-3">
-                <div class="ocr-card ocr-metric-tile">
-                    <i class="ri-shield-check-line text-warning-600"></i>
-                    <p class="ocr-kpi-value">{{ $mock['highlight']['tbcPercentage'] }}%</p>
-                    <p class="ocr-kpi-label mb-12">Ratio TBC</p>
-                    <p class="ocr-kpi-sub">To Be Concerned vs total temuan</p>
-                    <div class="ocr-track is-warning"><span style="width: {{ min(100, $mock['highlight']['tbcPercentage']) }}%"></span></div>
-                </div>
-            </div>
         </div>
 
-        {{-- T6.8 — Kualitas --}}
         <div class="row gy-4">
             <div class="col-lg-7">
                 <div class="ocr-card h-100">
@@ -323,18 +384,9 @@
             </div>
         </div>
     </div>
-
-    <div class="offcanvas offcanvas-end" tabindex="-1" id="ocrDayDrawer" aria-labelledby="ocrDayDrawerTitle">
-        <div class="offcanvas-header">
-            <h6 class="offcanvas-title" id="ocrDayDrawerTitle">Roster hari</h6>
-            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Tutup"></button>
-        </div>
-        <div class="offcanvas-body" id="ocrDayDrawerBody"></div>
-    </div>
 @endsection
 
 @push('scripts')
-    <script src="{{ asset('build/plugins/fullcalendar/js/main.min.js') }}"></script>
     <script>
         (function () {
             var pareto = @json($mock['pareto']);
@@ -342,29 +394,139 @@
             var scheduleDays = @json($mock['schedule']['days']);
             var statusLabel = @json($statusLabel);
             var chipClass = @json($chipClass);
-            var weekStart = @json($weekStart->toDateString());
+            var shiftCardClass = @json($shiftCardClass);
+            var defaultDate = @json($defaultDay['date']);
 
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
             tooltipTriggerList.forEach(function (el) {
                 new bootstrap.Tooltip(el);
             });
 
-            function renderPareto(elementId, series) {
-                var hours = series.map(function (row) { return row.hour + ':00'; });
-                var counts = series.map(function (row) { return row.count; });
-                var cumulative = series.map(function (row) { return row.cumulative; });
+            function escapeHtml(value) {
+                return String(value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+            }
 
-                new ApexCharts(document.getElementById(elementId), {
-                    chart: { type: 'line', height: 280, toolbar: { show: false }, fontFamily: 'inherit' },
+            function renderPerson(shiftLabel, person) {
+                if (!person) {
+                    return '<p class="ocr-roster-empty">Tidak ada personil.</p>';
+                }
+
+                var status = person.status || 'tidak_dijadwalkan';
+                var klass = chipClass[status] || 'ocr-chip--unplanned';
+                var tone = shiftCardClass[status] || 'is-unplanned';
+                return '<div class="ocr-roster-person ' + tone + '">'
+                    + '<div class="ocr-roster-person-head">'
+                    + '<span>' + escapeHtml(shiftLabel) + '</span>'
+                    + '<span class="ocr-chip ' + klass + '">' + escapeHtml(statusLabel[status] || status) + '</span>'
+                    + '</div>'
+                    + '<dl class="ocr-roster-fields">'
+                    + '<div><dt>Nama</dt><dd>' + escapeHtml(person.name || '—') + '</dd></div>'
+                    + '<div><dt>Jabatan</dt><dd>' + escapeHtml(person.jabatan || '—') + '</dd></div>'
+                    + '<div><dt>Lokasi</dt><dd>' + escapeHtml(person.lokasi || '—') + '</dd></div>'
+                    + '<div><dt>Catatan</dt><dd>' + escapeHtml(person.catatan || '—') + '</dd></div>'
+                    + '</dl></div>';
+            }
+
+            function renderRoster(day) {
+                return '<div class="ocr-roster-stack">'
+                    + renderPerson('Shift 1 | 06:00 - 18:00', (day.s1 || [])[0])
+                    + renderPerson('Shift 2 | 18:00 - 24:00', (day.s2 || [])[0])
+                    + '</div>';
+            }
+
+            var daysByDate = {};
+            scheduleDays.forEach(function (day) { daysByDate[day.date] = day; });
+
+            var titleEl = document.getElementById('ocr-roster-title');
+            var bodyEl = document.getElementById('ocr-roster-body');
+            var layoutEl = document.getElementById('ocr-cal-layout');
+            var dayButtons = document.querySelectorAll('.ocr-cal-day');
+            var dayHeads = document.querySelectorAll('[data-head-date]');
+
+            function selectDay(date) {
+                var day = daysByDate[date];
+                if (!day) {
+                    return;
+                }
+
+                titleEl.textContent = 'Detail Roster — ' + day.weekday + ', ' + day.day_number + ' ' + day.month_short + ' ' + day.year;
+                bodyEl.innerHTML = renderRoster(day);
+                layoutEl.classList.remove('is-roster-closed');
+
+                dayButtons.forEach(function (btn) {
+                    var active = btn.getAttribute('data-date') === date;
+                    btn.classList.toggle('is-selected', active);
+                    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+                });
+                dayHeads.forEach(function (head) {
+                    head.classList.toggle('is-selected', head.getAttribute('data-head-date') === date);
+                });
+            }
+
+            dayHeads.forEach(function (head) {
+                head.addEventListener('click', function () {
+                    selectDay(head.getAttribute('data-head-date'));
+                });
+            });
+
+            dayButtons.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    selectDay(btn.getAttribute('data-date'));
+                });
+                btn.addEventListener('keydown', function (event) {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        selectDay(btn.getAttribute('data-date'));
+                    }
+                });
+            });
+
+            document.getElementById('ocr-roster-close').addEventListener('click', function () {
+                layoutEl.classList.add('is-roster-closed');
+            });
+
+            selectDay(defaultDate);
+
+            function placeNowLine() {
+                var now = new Date();
+                var hours = now.getHours() + now.getMinutes() / 60;
+                if (hours < 6 || hours >= 24) {
+                    hours = 15;
+                }
+                var pct = ((hours - 6) / 18) * 100;
+                var hour = Math.floor(hours);
+                var minute = Math.round((hours - hour) * 60);
+                if (minute === 60) {
+                    hour += 1;
+                    minute = 0;
+                }
+                var label = String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+                var line = document.getElementById('ocr-now-line');
+                var pill = document.getElementById('ocr-now-label');
+                line.style.top = pct + '%';
+                pill.style.top = pct + '%';
+                pill.textContent = label;
+            }
+
+            placeNowLine();
+            setInterval(placeNowLine, 60000);
+
+            function paretoOptions(series) {
+                return {
+                    chart: { type: 'line', height: 260, toolbar: { show: false }, fontFamily: 'inherit', animations: { enabled: false } },
                     stroke: { width: [0, 3], curve: 'straight' },
                     series: [
-                        { name: 'Jumlah Laporan', type: 'column', data: counts },
-                        { name: 'Kumulatif %', type: 'line', data: cumulative },
+                        { name: 'Jumlah Laporan', type: 'column', data: series.map(function (row) { return row.count; }) },
+                        { name: 'Kumulatif %', type: 'line', data: series.map(function (row) { return row.cumulative; }) },
                     ],
-                    xaxis: { categories: hours, title: { text: 'Jam' }, axisBorder: { show: false } },
+                    xaxis: { categories: series.map(function (row) { return row.hour + ':00'; }), axisBorder: { show: false } },
                     yaxis: [
-                        { title: { text: 'Jumlah Laporan' } },
-                        { opposite: true, min: 0, max: 100, title: { text: 'Kumulatif %' } },
+                        { title: { text: 'Laporan' } },
+                        { opposite: true, min: 0, max: 100, title: { text: '%' } },
                     ],
                     colors: ['#487FFF', '#FF9F29'],
                     grid: { borderColor: 'rgba(209, 213, 219, 0.4)', strokeDashArray: 4 },
@@ -373,11 +535,29 @@
                     annotations: {
                         yaxis: [{ y: 80, yAxisIndex: 1, borderColor: '#9CA3AF', strokeDashArray: 6, label: { text: '80%', style: { fontSize: '10px' } } }],
                     },
-                }).render();
+                };
             }
 
-            renderPareto('chart-pareto-s1', pareto.s1);
-            renderPareto('chart-pareto-s2', pareto.s2);
+            var paretoChart = new ApexCharts(document.getElementById('chart-pareto'), paretoOptions(pareto.s1));
+            paretoChart.render();
+
+            function applyPareto(series) {
+                paretoChart.updateOptions({
+                    xaxis: { categories: series.map(function (row) { return row.hour + ':00'; }) },
+                }, false, false);
+                paretoChart.updateSeries([
+                    { name: 'Jumlah Laporan', type: 'column', data: series.map(function (row) { return row.count; }) },
+                    { name: 'Kumulatif %', type: 'line', data: series.map(function (row) { return row.cumulative; }) },
+                ]);
+            }
+
+            document.querySelectorAll('[data-pareto]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    document.querySelectorAll('[data-pareto]').forEach(function (el) { el.classList.remove('is-active'); });
+                    btn.classList.add('is-active');
+                    applyPareto(pareto[btn.getAttribute('data-pareto')]);
+                });
+            });
 
             new ApexCharts(document.getElementById('chart-quality-scatter'), {
                 chart: { type: 'scatter', height: 280, toolbar: { show: false }, fontFamily: 'inherit' },
@@ -396,164 +576,6 @@
                     },
                 },
             }).render();
-
-            function escapeHtml(value) {
-                return String(value)
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;');
-            }
-
-            function renderShift(title, people) {
-                var html = '<div class="ocr-roster-shift"><h6>' + escapeHtml(title) + '</h6>';
-                if (!people.length) {
-                    html += '<p class="text-secondary-light text-sm mb-0">Tidak ada personil.</p></div>';
-                    return html;
-                }
-
-                people.forEach(function (person) {
-                    var klass = chipClass[person.status] || 'ocr-chip--unplanned';
-                    var planned = person.planned ? 'is-planned' : '';
-                    html += '<div class="ocr-roster-row">'
-                        + '<div><strong>' + escapeHtml(person.name) + '</strong>'
-                        + '<div class="text-xs text-secondary-light">' + (person.planned ? 'Ada di rencana' : 'Tidak dijadwalkan') + '</div></div>'
-                        + '<span class="ocr-chip ' + klass + ' ' + planned + '">' + escapeHtml(statusLabel[person.status] || person.status) + '</span>'
-                        + '</div>';
-                });
-
-                return html + '</div>';
-            }
-
-            var drawerEl = document.getElementById('ocrDayDrawer');
-            var drawer = new bootstrap.Offcanvas(drawerEl);
-            var titleEl = document.getElementById('ocrDayDrawerTitle');
-            var bodyEl = document.getElementById('ocrDayDrawerBody');
-            var daysByDate = {};
-            scheduleDays.forEach(function (day) { daysByDate[day.date] = day; });
-
-            function dateKey(value) {
-                if (typeof value === 'string') {
-                    return value.slice(0, 10);
-                }
-                if (value instanceof Date) {
-                    var year = value.getFullYear();
-                    var month = String(value.getMonth() + 1).padStart(2, '0');
-                    var day = String(value.getDate()).padStart(2, '0');
-                    return year + '-' + month + '-' + day;
-                }
-                return String(value);
-            }
-
-            function addDays(iso, days) {
-                var d = new Date(iso + 'T12:00:00');
-                d.setDate(d.getDate() + days);
-                return dateKey(d);
-            }
-
-            function openDayDrawer(dateValue) {
-                var key = dateKey(dateValue);
-                var day = daysByDate[key];
-                if (!day) {
-                    return;
-                }
-
-                titleEl.textContent = day.label + ', ' + day.day_number + ' ' + day.month_short;
-                bodyEl.innerHTML = renderShift('Shift 1', day.s1) + renderShift('Shift 2', day.s2);
-                drawer.show();
-            }
-
-            var statusColors = {
-                sesuai: { bg: '#15803D', border: '#14532D' },
-                menggantikan: { bg: '#C2410C', border: '#7C2D12' },
-                tidak_hadir: { bg: '#B91C1C', border: '#7F1D1D' },
-                tidak_dijadwalkan: { bg: '#4B5563', border: '#1F2937' },
-                anomali: { bg: '#1D4ED8', border: '#1E3A8A' },
-            };
-
-            var calendarEvents = [];
-            scheduleDays.forEach(function (day) {
-                [
-                    { key: 's1', code: 'S1', label: 'Shift 1', startHour: '06:00:00', endHour: '18:00:00', nextDayEnd: false },
-                    { key: 's2', code: 'S2', label: 'Shift 2', startHour: '18:00:00', endHour: '00:00:00', nextDayEnd: true },
-                ].forEach(function (shift) {
-                    var person = (day[shift.key] || [])[0];
-                    if (!person) {
-                        return;
-                    }
-
-                    var colors = statusColors[person.status] || statusColors.tidak_dijadwalkan;
-                    var endDate = shift.nextDayEnd ? addDays(day.date, 1) : day.date;
-                    calendarEvents.push({
-                        title: person.name,
-                        start: day.date + 'T' + shift.startHour,
-                        end: endDate + 'T' + shift.endHour,
-                        allDay: false,
-                        backgroundColor: colors.bg,
-                        borderColor: person.planned ? '#111827' : colors.border,
-                        textColor: '#ffffff',
-                        classNames: [
-                            'ocr-fc-event--' + person.status,
-                            person.planned ? 'is-planned' : 'is-unplanned',
-                        ],
-                        extendedProps: {
-                            date: day.date,
-                            shift: shift.code,
-                            shiftLabel: shift.label,
-                            status: person.status,
-                            planned: person.planned,
-                            personnel: person.name,
-                            initial: person.initial,
-                        },
-                    });
-                });
-            });
-
-            var calendarEl = document.getElementById('ocr-schedule-calendar');
-            var calendar = new FullCalendar.Calendar(calendarEl, {
-                headerToolbar: { left: '', center: 'title', right: '' },
-                initialView: 'timeGridWeek',
-                initialDate: weekStart,
-                locale: 'id',
-                firstDay: 1,
-                height: 'auto',
-                allDaySlot: false,
-                slotMinTime: '06:00:00',
-                slotMaxTime: '24:00:00',
-                slotDuration: '03:00:00',
-                slotLabelInterval: '03:00:00',
-                slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
-                nowIndicator: true,
-                navLinks: false,
-                editable: false,
-                selectable: false,
-                eventDisplay: 'block',
-                dayHeaderFormat: { weekday: 'short', day: 'numeric', omitCommas: true },
-                events: calendarEvents,
-                eventContent: function (arg) {
-                    var props = arg.event.extendedProps;
-                    var plannedClass = props.planned ? ' is-planned' : '';
-                    var status = statusLabel[props.status] || props.status;
-
-                    return {
-                        html:
-                            '<div class="ocr-fc-block' + plannedClass + '">' +
-                            '<span class="ocr-fc-shift">' + escapeHtml(props.shiftLabel || props.shift) + '</span>' +
-                            '<strong>' + escapeHtml(props.personnel || arg.event.title) + '</strong>' +
-                            '<span class="ocr-fc-status">' + escapeHtml(status) + '</span>' +
-                            '</div>',
-                    };
-                },
-                dateClick: function (info) {
-                    openDayDrawer(info.date);
-                },
-                eventClick: function (info) {
-                    info.jsEvent.preventDefault();
-                    openDayDrawer(info.event.extendedProps.date || info.event.start);
-                },
-            });
-
-            calendar.render();
         })();
     </script>
 @endpush
