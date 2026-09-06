@@ -464,11 +464,11 @@
             }
 
             var statusColors = {
-                sesuai: { bg: '#16A34A', border: '#15803D' },
-                menggantikan: { bg: '#FF9F29', border: '#C28800' },
-                tidak_hadir: { bg: '#DC2626', border: '#B91C1C' },
-                tidak_dijadwalkan: { bg: '#9CA3AF', border: '#6B7280' },
-                anomali: { bg: '#2563EB', border: '#1D4ED8' },
+                sesuai: { bg: '#15803D', border: '#14532D' },
+                menggantikan: { bg: '#C2410C', border: '#7C2D12' },
+                tidak_hadir: { bg: '#B91C1C', border: '#7F1D1D' },
+                tidak_dijadwalkan: { bg: '#4B5563', border: '#1F2937' },
+                anomali: { bg: '#1D4ED8', border: '#1E3A8A' },
             };
 
             var calendarEvents = [];
@@ -490,8 +490,12 @@
                         end: endDate + 'T' + shift.endHour,
                         allDay: false,
                         backgroundColor: colors.bg,
-                        borderColor: person.planned ? '#111827' : colors.bg,
+                        borderColor: person.planned ? '#111827' : colors.border,
                         textColor: '#ffffff',
+                        classNames: [
+                            'ocr-fc-event--' + person.status,
+                            person.planned ? 'is-planned' : 'is-unplanned',
+                        ],
                         extendedProps: {
                             date: day.date,
                             shift: shift.code,

@@ -258,11 +258,11 @@
     display: inline-block;
 }
 
-.ocr-legend-swatch.is-sesuai { background: var(--success-600); }
-.ocr-legend-swatch.is-ganti { background: var(--warning-600); }
-.ocr-legend-swatch.is-absen { background: var(--danger-600); }
-.ocr-legend-swatch.is-unplanned { background: var(--neutral-300); }
-.ocr-legend-swatch.is-anomali { background: var(--info-600); }
+.ocr-legend-swatch.is-sesuai { background: #15803d; }
+.ocr-legend-swatch.is-ganti { background: #c2410c; }
+.ocr-legend-swatch.is-absen { background: #b91c1c; }
+.ocr-legend-swatch.is-unplanned { background: #4b5563; }
+.ocr-legend-swatch.is-anomali { background: #1d4ed8; }
 .ocr-legend-swatch.is-planned {
     box-shadow: 0 0 0 2px var(--neutral-700);
     background: transparent;
@@ -318,10 +318,54 @@
     cursor: pointer;
 }
 
-.ocr-fc .fc-timegrid-event {
+.ocr-fc .fc-timegrid-event,
+.ocr-fc .fc-event {
     border-radius: 10px;
-    border-width: 2px;
+    border-width: 2px !important;
     box-shadow: none;
+    padding: 0 !important;
+    color: #fff !important;
+}
+
+.ocr-fc .fc-event-main,
+.ocr-fc .ocr-fc-block,
+.ocr-fc .ocr-fc-block strong,
+.ocr-fc .ocr-fc-shift,
+.ocr-fc .ocr-fc-status {
+    color: #fff !important;
+}
+
+.ocr-fc .fc-event.ocr-fc-event--sesuai {
+    background-color: #15803d !important;
+    border-color: #14532d !important;
+}
+
+.ocr-fc .fc-event.ocr-fc-event--menggantikan {
+    background-color: #c2410c !important;
+    border-color: #7c2d12 !important;
+}
+
+.ocr-fc .fc-event.ocr-fc-event--tidak_hadir {
+    background-color: #b91c1c !important;
+    border-color: #7f1d1d !important;
+}
+
+.ocr-fc .fc-event.ocr-fc-event--tidak_dijadwalkan {
+    background-color: #4b5563 !important;
+    border-color: #1f2937 !important;
+}
+
+.ocr-fc .fc-event.ocr-fc-event--anomali {
+    background-color: #1d4ed8 !important;
+    border-color: #1e3a8a !important;
+}
+
+.ocr-fc .fc-event.is-planned {
+    border-color: #111827 !important;
+}
+
+.ocr-fc .fc-event.is-unplanned {
+    border-style: dashed !important;
 }
 
 .ocr-fc .fc-event-main {
@@ -333,12 +377,7 @@
     flex-direction: column;
     gap: 4px;
     padding: 8px 10px;
-    color: #fff;
     height: 100%;
-}
-
-.ocr-fc-block.is-planned {
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
 }
 
 .ocr-fc-shift,
@@ -347,7 +386,7 @@
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    opacity: 0.9;
+    opacity: 0.92;
 }
 
 .ocr-fc-block strong {
