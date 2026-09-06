@@ -27,6 +27,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/events', [ScheduleController::class, 'events'])->name('events');
         Route::post('/bulk', [ScheduleController::class, 'storeBulk'])->name('bulk');
         Route::post('/copy', [ScheduleController::class, 'copy'])->name('copy');
+        Route::post('/destroy-week', [ScheduleController::class, 'destroyWeek'])->name('destroy-week');
         Route::post('/{week}/lock', [ScheduleController::class, 'lock'])->name('lock');
         Route::put('/{schedule}', [ScheduleController::class, 'update'])->name('update');
         Route::delete('/{schedule}', [ScheduleController::class, 'destroy'])->name('destroy');

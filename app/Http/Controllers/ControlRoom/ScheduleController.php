@@ -8,6 +8,7 @@ use App\Enums\ControlRoomSiteCode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ControlRoom\ScheduleBulkRequest;
 use App\Http\Requests\ControlRoom\ScheduleCopyRequest;
+use App\Http\Requests\ControlRoom\ScheduleDestroyWeekRequest;
 use App\Http\Requests\ControlRoom\ScheduleUpdateRequest;
 use App\Models\ControlRoom\ScheduleChange;
 use App\Models\ControlRoom\SchedulePlan;
@@ -136,6 +137,32 @@ final class ScheduleController extends Controller
             ->with('success', "Minggu {$data['from_week_number']} berhasil disalin ke minggu {$data['to_week_number']} ({$sourcePlans->count()} baris) — silakan diedit.");
     }
 
+    public function destroyWeek(ScheduleDestroyWeekRequest $request): RedirectResponse
+    {
+        $data = $request->validated();
+
+        $query = SchedulePlan::query()
+            ->where('site_code', $data['site_code'])
+            ->where('year', $data['year'])
+            ->where('week_number', $data['week_number']);
+
+        $count = (int) $query->count();
+
+        if ($count === 0) {
+            return redirect()
+                ->route('control-room.schedule.index', ['site' => $data['site_code']])
+                ->withErrors(['week' => "Tidak ada jadwal di minggu {$data['week_number']} tahun {$data['year']} untuk site ini."]);
+        }
+
+        $query->each(function (SchedulePlan $plan): void {
+            $plan->delete();
+        });
+
+        return redirect()
+            ->route('control-room.schedule.index', ['site' => $data['site_code']])
+            ->with('success', "Minggu {$data['week_number']} tahun {$data['year']} dihapus ({$count} baris). Absen terkait tidak dihapus.");
+    }
+
     public function update(ScheduleUpdateRequest $request, SchedulePlan $schedule): RedirectResponse|JsonResponse
     {
         $data = $request->validated();
@@ -159,8 +186,8 @@ final class ScheduleController extends Controller
 
     public function destroy(Request $request, SchedulePlan $schedule): RedirectResponse|JsonResponse
     {
-        if ($schedule->isLocked() || $schedule->date->isPast()) {
-            $message = 'Hanya jadwal berstatus draft di minggu yang belum berjalan yang bisa dihapus.';
+        if ($schedule->isLocked()) {
+            $message = 'Jadwal terkunci tidak bisa dihapus per slot. Gunakan Hapus Minggu di alat bawah.';
 
             return $request->wantsJson()
                 ? response()->json(['message' => $message], 422)

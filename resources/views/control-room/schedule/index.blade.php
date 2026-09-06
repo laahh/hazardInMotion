@@ -2,6 +2,10 @@
 
 @section('page-title', 'Jadwal Rencana')
 
+@php
+    $previousWeek = now()->subWeek();
+@endphp
+
 @section('content')
     <div class="card shadow-none border mb-24">
         <div class="card-body">
@@ -30,7 +34,7 @@
     </div>
 
     <div class="card shadow-none border">
-        <div class="card-header"><h6 class="mb-0">Alat Minggu (Salin &amp; Kunci)</h6></div>
+        <div class="card-header"><h6 class="mb-0">Alat Minggu (Salin, Kunci, Hapus)</h6></div>
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-md-6">
@@ -70,6 +74,32 @@
                         </div>
                         <div class="col-4">
                             <button type="submit" class="btn btn-warning-600 btn-sm w-100" onclick="return confirm('Kunci minggu ini sebagai baseline?');">Kunci Minggu</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="col-12">
+                    <form method="POST" action="{{ route('control-room.schedule.destroy-week') }}" class="row g-2 align-items-end">
+                        @csrf
+                        <input type="hidden" name="site_code" value="{{ $site->value }}">
+                        <div class="col-md-3">
+                            <label class="form-label text-sm mb-1">Tahun</label>
+                            <input type="number" name="year" class="form-control form-control-sm" value="{{ $previousWeek->isoWeekYear() }}" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-sm mb-1">Minggu</label>
+                            <input type="number" name="week_number" class="form-control form-control-sm" min="1" max="53" value="{{ $previousWeek->isoWeek() }}" required>
+                        </div>
+                        <div class="col-md-3">
+                            <button
+                                type="submit"
+                                class="btn btn-outline-danger btn-sm w-100"
+                                onclick="return confirm('Hapus SEMUA jadwal site ini di minggu tersebut? Termasuk yang sudah dikunci dan minggu yang sudah lewat. Absen tidak ikut terhapus. Tidak bisa dibatalkan.');"
+                            >
+                                Hapus Minggu
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <p class="text-secondary-light text-xs mb-0">Default: minggu lalu. Berlaku untuk site yang sedang dipilih.</p>
                         </div>
                     </form>
                 </div>
