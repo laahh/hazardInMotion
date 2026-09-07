@@ -10,7 +10,7 @@ use Carbon\CarbonInterface;
 
 /**
  * MOCKUP SEMENTARA — KPI header, coverage ranking masih fiktif.
- * Pencapaian Personil, Pareto, Highlight, dan Kualitas memakai data jadwal + OBDS/HSECM.
+ * Pencapaian Personil, Pareto, Highlight, Kualitas, dan Coverage Personil memakai data jadwal + OBDS/HSECM.
  */
 final class DashboardMockDataProvider
 {
@@ -24,7 +24,8 @@ final class DashboardMockDataProvider
      * @param  array{
      *     pareto?: array{s1: list<array{hour: int, count: int, cumulative: float}>, s2: list<array{hour: int, count: int, cumulative: float}>},
      *     highlight?: array{goldenRules: list<array{name: string, count: int}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float},
-     *     quality?: list<array<string, mixed>>
+     *     quality?: list<array<string, mixed>>,
+     *     personnelCoverage?: list<array{name: string, lokasi: int, kritis: int, lead: bool}>
      * }  $insights
      * @return array<string, mixed>
      */
@@ -44,7 +45,7 @@ final class DashboardMockDataProvider
             'kpi' => $this->kpiCards(),
             'achievement' => $achievementRows,
             'achievementGroups' => $this->groupAchievement($achievementRows),
-            'personnelCoverage' => $this->personnelCoverageFrom($achievementRows),
+            'personnelCoverage' => $insights['personnelCoverage'] ?? $this->personnelCoverageFrom($achievementRows),
             'coverageRanking' => $this->coverageRanking(),
             'pareto' => $insights['pareto'] ?? ['s1' => [], 's2' => []],
             'highlight' => $insights['highlight'] ?? [
@@ -212,24 +213,18 @@ final class DashboardMockDataProvider
             $byName[$name] = $name;
         }
 
-        if ($byName === []) {
-            $byName = ['Budi Santoso' => 'Budi Santoso', 'Siti Rahayu' => 'Siti Rahayu', 'Ahmad Fauzi' => 'Ahmad Fauzi'];
-        }
-
         ksort($byName, SORT_NATURAL | SORT_FLAG_CASE);
 
         $coverage = [];
         foreach ($byName as $name) {
-            $seed = abs(crc32($name));
             $coverage[] = [
                 'name' => $name,
-                'lokasi' => 4 + ($seed % 22),
-                'kritis' => $seed % 12,
+                'lokasi' => 0,
+                'kritis' => 0,
                 'lead' => false,
             ];
         }
 
-        usort($coverage, fn (array $a, array $b): int => $b['lokasi'] <=> $a['lokasi']);
         if ($coverage !== []) {
             $coverage[0]['lead'] = true;
         }

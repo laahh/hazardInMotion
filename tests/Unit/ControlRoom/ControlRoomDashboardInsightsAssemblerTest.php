@@ -81,6 +81,43 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         $this->assertSame(2, $row['tbc']);
     }
 
+    public function test_coverage_personil_menghitung_lokasi_unik_dan_kritis_saat_jaga(): void
+    {
+        $days = [
+            [
+                'date' => '2026-08-31',
+                's1' => [['name' => 'Agung Nugroho', 'sid' => 'FJAVJ']],
+                's2' => [['name' => 'Muhammad Ali Yusni', 'sid' => 'ALI01']],
+            ],
+        ];
+
+        $insights = $this->assembler()->fromFindings(
+            [
+                $this->finding('FJAVJ', '2026-08-31 08:15:00', 'hazard', 'APD', '', '(B7) Area Kritis Blok 7', 'Front'),
+                $this->finding('FJAVJ', '2026-08-31 09:00:00', 'inspeksi', 'APD', '', '(B7) Area Kritis Blok 7', 'Front'),
+                $this->finding('FJAVJ', '2026-08-31 10:00:00', 'observasi', 'APD', '', 'PIT Q1', 'View Point'),
+                $this->finding('FJAVJ', '2026-08-31 11:00:00', 'oak', 'APD', '', 'LATI', 'Area Pengeboran'),
+                $this->finding('XXXXX', '2026-08-31 12:00:00', 'hazard', 'APD', '', 'Workshop kemakmuran', 'Dalam'),
+            ],
+            $days,
+            ['uncovered' => [], 'total' => 0],
+            [],
+            sapLoaded: true,
+        );
+
+        $byName = [];
+        foreach ($insights['personnelCoverage'] as $row) {
+            $byName[$row['name']] = $row;
+        }
+
+        $this->assertSame(3, $byName['Agung Nugroho']['lokasi']);
+        $this->assertSame(2, $byName['Agung Nugroho']['kritis']);
+        $this->assertTrue($byName['Agung Nugroho']['lead']);
+        $this->assertSame(0, $byName['Muhammad Ali Yusni']['lokasi']);
+        $this->assertSame(0, $byName['Muhammad Ali Yusni']['kritis']);
+        $this->assertArrayNotHasKey('XXXXX', $byName);
+    }
+
     /**
      * @return array<string, mixed>
      */

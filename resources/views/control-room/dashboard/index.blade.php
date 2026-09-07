@@ -55,7 +55,7 @@
 @endphp
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('wowdash-admin/assets/css/control-room-dashboard.css') }}">
+    <link rel="stylesheet" href="{{ asset('wowdash-admin/assets/css/control-room-dashboard.css') }}?v={{ filemtime(public_path('wowdash-admin/assets/css/control-room-dashboard.css')) }}">
 @endpush
 
 @section('content')
@@ -300,7 +300,7 @@
                 <div class="ocr-card-header">
                     <div>
                         <h6>Coverage Personil</h6>
-                        <p class="ocr-card-kicker">Coverage Detail Lokasi · Coverage Area Kritis</p>
+                        <p class="ocr-card-kicker">Lokasi unik yang dilaporkan saat jadwal jaga · kritis mengikuti CONTAINS Lokasi/Detil Lokasi</p>
                     </div>
                 </div>
                 <div class="ocr-card-body ocr-card-body--flush">
@@ -314,13 +314,17 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($mock['personnelCoverage'] as $row)
+                                @forelse ($mock['personnelCoverage'] as $row)
                                     <tr class="{{ $row['lead'] ? 'is-lead' : '' }}">
                                         <td class="ocr-heat-name">{{ $row['name'] }}</td>
                                         <td class="ocr-heat-cell is-cov">{{ $row['lokasi'] }}</td>
                                         <td class="ocr-heat-cell is-cov">{{ $row['kritis'] }}</td>
                                     </tr>
-                                @endforeach
+                                @empty
+                                    <tr>
+                                        <td colspan="3" class="text-secondary-light">Belum ada personil jadwal untuk dihitung coverage.</td>
+                                    </tr>
+                                @endforelse
                             </tbody>
                         </table>
                     </div>

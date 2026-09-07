@@ -41,7 +41,8 @@ final class ControlRoomDashboardInsightsAssembler
      * @return array{
      *     pareto: array{s1: list<array{hour: int, count: int, cumulative: float}>, s2: list<array{hour: int, count: int, cumulative: float}>},
      *     highlight: array{goldenRules: list<array{name: string, count: int}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float},
-     *     quality: list<array<string, mixed>>
+     *     quality: list<array<string, mixed>>,
+     *     personnelCoverage: list<array{name: string, lokasi: int, kritis: int, lead: bool}>
      * }
      */
     public function build(
@@ -66,7 +67,8 @@ final class ControlRoomDashboardInsightsAssembler
      * @return array{
      *     pareto: array{s1: list<array{hour: int, count: int, cumulative: float}>, s2: list<array{hour: int, count: int, cumulative: float}>},
      *     highlight: array{goldenRules: list<array{name: string, count: int}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float},
-     *     quality: list<array<string, mixed>>
+     *     quality: list<array<string, mixed>>,
+     *     personnelCoverage: list<array{name: string, lokasi: int, kritis: int, lead: bool}>
      * }
      */
     public function fromFindings(
@@ -82,6 +84,7 @@ final class ControlRoomDashboardInsightsAssembler
             'pareto' => $this->paretoFromFindings($usable),
             'highlight' => $this->highlightFromFindings($usable, $coverage, $tbcRows),
             'quality' => $this->qualityFromFindings($usable, $scheduleDays, $coverage, $tbcRows),
+            'personnelCoverage' => $this->personnelCoverageFromFindings($usable, $scheduleDays),
         ];
     }
 
@@ -354,6 +357,72 @@ final class ControlRoomDashboardInsightsAssembler
         }
 
         return ! str_starts_with(mb_strtolower($rule), 'tidak melanggar');
+    }
+
+    /**
+     * Coverage personil saat jadwal jaga: DISTINCT (lokasi + detil lokasi)
+     * dari laporan SAP. Kritis mengikuti rumus CONTAINS Tableau
+     * (LocationReader::isCritical).
+     *
+     * @param  list<array<string, mixed>>  $findings
+     * @param  list<array<string, mixed>>  $scheduleDays
+     * @return list<array{name: string, lokasi: int, kritis: int, lead: bool}>
+     */
+    public function personnelCoverageFromFindings(array $findings, array $scheduleDays): array
+    {
+        $namesBySid = $this->namesBySid($scheduleDays);
+        $pairsBySid = [];
+        foreach ($namesBySid as $sid => $_name) {
+            $pairsBySid[$sid] = [];
+        }
+
+        foreach ($findings as $finding) {
+            $sid = strtoupper(trim((string) ($finding['sid'] ?? '')));
+            if ($sid === '' || ! isset($namesBySid[$sid])) {
+                continue;
+            }
+
+            $lokasi = trim((string) ($finding['lokasi'] ?? ''));
+            $detil = trim((string) ($finding['detil_lokasi'] ?? ''));
+            $key = $this->locationKey($lokasi, $detil);
+            if ($key === '') {
+                continue;
+            }
+
+            $pairsBySid[$sid][$key] = ['lokasi' => $lokasi, 'detil' => $detil];
+        }
+
+        $rows = [];
+        foreach ($namesBySid as $sid => $name) {
+            $kritis = 0;
+            foreach ($pairsBySid[$sid] as $pair) {
+                if ($this->locations->isCritical($pair['lokasi'], $pair['detil'])) {
+                    $kritis++;
+                }
+            }
+
+            $rows[] = [
+                'name' => $name,
+                'lokasi' => count($pairsBySid[$sid]),
+                'kritis' => $kritis,
+                'lead' => false,
+            ];
+        }
+
+        usort($rows, function (array $a, array $b): int {
+            $byLokasi = $b['lokasi'] <=> $a['lokasi'];
+            if ($byLokasi !== 0) {
+                return $byLokasi;
+            }
+
+            return $b['kritis'] <=> $a['kritis'];
+        });
+
+        if ($rows !== []) {
+            $rows[0]['lead'] = true;
+        }
+
+        return $rows;
     }
 
     /**

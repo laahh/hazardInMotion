@@ -162,11 +162,18 @@
     color: var(--text-secondary-light);
 }
 
-/* KPI rapat */
-.ocr-kpi-grid {
+/* KPI: tiga kartu merentang penuh lebar container */
+.ocr-dash .ocr-kpi-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
+    width: 100%;
+}
+
+.ocr-dash .ocr-kpi-grid > .ocr-kpi {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
 }
 
 .ocr-kpi {
@@ -1310,7 +1317,7 @@
 }
 
 @media (max-width: 1399.98px) {
-    .ocr-kpi-grid {
+    .ocr-dash .ocr-kpi-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
@@ -1365,7 +1372,7 @@
         align-items: flex-start;
     }
 
-    .ocr-kpi-grid,
+    .ocr-dash .ocr-kpi-grid,
     .ocr-widget-row,
     .ocr-widget-tables,
     .ocr-widget-charts,
@@ -1383,8 +1390,8 @@
 }
 
 @media (max-width: 575.98px) {
-    .ocr-kpi-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+    .ocr-dash .ocr-kpi-grid {
+        grid-template-columns: 1fr;
     }
 }
 
