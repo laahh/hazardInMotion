@@ -568,7 +568,12 @@
 @php
   $f = $filters ?? ['from' => '', 'to' => '', 'site' => '', 'company' => '', 'division' => '', 'activity_type' => '', 'nama' => '', 'report_mode' => 'day'];
   $opts = $filterOptions ?? ['sites' => [], 'companies' => [], 'divisions' => [], 'activity_types' => []];
+  $kpi = $kpi ?? [
+    'total_sessions' => 0, 'active_users' => 0, 'kcal_out' => 0, 'kcal_in' => 0,
+    'avg_sessions_per_week' => 0, 'avg_sessions_per_user' => 0, 'period_days' => 30,
+  ];
   $reportMode = ($f['report_mode'] ?? 'day') === 'week' ? 'week' : 'day';
+  $topActivity = ($distribution['labels'][0] ?? '') !== '' ? (string) $distribution['labels'][0] : '-';
 @endphp
 
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
@@ -598,6 +603,73 @@
   <div>{{ $loadError }}</div>
 </div>
 @endif
+
+<div class="row gy-4 mb-24">
+  <div class="col-xxl-3 col-sm-6">
+    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-1">
+      <div class="card-body p-0">
+        <div class="d-flex align-items-center gap-2 mb-8">
+          <span class="mb-0 w-48-px h-48-px bg-primary-600 flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+            <iconify-icon icon="solar:running-round-bold" class="icon"></iconify-icon>
+          </span>
+          <div>
+            <span class="mb-2 fw-medium text-secondary-light text-sm">Sesi olahraga</span>
+            <h6 class="fw-semibold mb-0">{{ number_format($kpi['total_sessions'] ?? 0) }}</h6>
+          </div>
+        </div>
+        <p class="text-sm mb-0">{{ number_format($kpi['avg_sessions_per_week'] ?? 0, 1) }} sesi/minggu · {{ $periodLabel ?? (number_format($kpi['period_days'] ?? 0).' hari') }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-xxl-3 col-sm-6">
+    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-2">
+      <div class="card-body p-0">
+        <div class="d-flex align-items-center gap-2 mb-8">
+          <span class="mb-0 w-48-px h-48-px bg-success-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+            <iconify-icon icon="solar:users-group-rounded-bold" class="icon"></iconify-icon>
+          </span>
+          <div>
+            <span class="mb-2 fw-medium text-secondary-light text-sm">Karyawan aktif</span>
+            <h6 class="fw-semibold mb-0">{{ number_format($kpi['active_users'] ?? 0) }}</h6>
+          </div>
+        </div>
+        <p class="text-sm mb-0">Rata {{ number_format($kpi['avg_sessions_per_user'] ?? 0, 1) }} sesi/orang</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-xxl-3 col-sm-6">
+    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-3">
+      <div class="card-body p-0">
+        <div class="d-flex align-items-center gap-2 mb-8">
+          <span class="mb-0 w-48-px h-48-px bg-warning-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+            <iconify-icon icon="solar:fire-bold" class="icon"></iconify-icon>
+          </span>
+          <div>
+            <span class="mb-2 fw-medium text-secondary-light text-sm">Kkal keluar</span>
+            <h6 class="fw-semibold mb-0">{{ number_format($kpi['kcal_out'] ?? 0) }}</h6>
+          </div>
+        </div>
+        <p class="text-sm mb-0">Dari log olahraga · terpopuler: {{ $topActivity }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-xxl-3 col-sm-6">
+    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-4">
+      <div class="card-body p-0">
+        <div class="d-flex align-items-center gap-2 mb-8">
+          <span class="mb-0 w-48-px h-48-px bg-info-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+            <iconify-icon icon="solar:cup-hot-bold" class="icon"></iconify-icon>
+          </span>
+          <div>
+            <span class="mb-2 fw-medium text-secondary-light text-sm">Kkal masuk</span>
+            <h6 class="fw-semibold mb-0">{{ number_format($kpi['kcal_in'] ?? 0) }}</h6>
+          </div>
+        </div>
+        <p class="text-sm mb-0">Dari log makanan pada periode yang sama</p>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="row gy-4 mb-24">
   <div class="col-xxl-6">
