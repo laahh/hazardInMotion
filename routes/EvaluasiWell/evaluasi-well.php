@@ -77,6 +77,7 @@ Route::middleware('evaluasi-well.access')
         Route::get('/activities/data', [SportActivitiesController::class, 'data'])->name('activities.data');
         Route::get('/activities/raw-data', [SportActivitiesController::class, 'rawData'])->name('activities.raw-data');
         Route::get('/activities/period-data', [SportActivitiesController::class, 'periodData'])->name('activities.period-data');
+        Route::get('/activities/leaderboard-data', [SportActivitiesController::class, 'leaderboardData'])->name('activities.leaderboard-data');
         Route::get('/activities/export', [SportActivitiesController::class, 'export'])->name('activities.export');
 
         Route::get('/nutrition', [NutritionEvaluationController::class, 'index'])->name('nutrition.index');

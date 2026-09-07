@@ -17,7 +17,9 @@
   .dt-container:has(#waRawTable) .dt-layout-row,
   #waRawTable_wrapper .dt-layout-row,
   .dt-container:has(#waPeriodTable) .dt-layout-row,
-  #waPeriodTable_wrapper .dt-layout-row {
+  #waPeriodTable_wrapper .dt-layout-row,
+  .dt-container:has(#waLeaderboardTable) .dt-layout-row,
+  #waLeaderboardTable_wrapper .dt-layout-row {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -30,7 +32,9 @@
   .dt-container:has(#waRawTable) .dt-paging .dt-paging-button,
   #waRawTable_wrapper .dt-paging .dt-paging-button,
   .dt-container:has(#waPeriodTable) .dt-paging .dt-paging-button,
-  #waPeriodTable_wrapper .dt-paging .dt-paging-button {
+  #waPeriodTable_wrapper .dt-paging .dt-paging-button,
+  .dt-container:has(#waLeaderboardTable) .dt-paging .dt-paging-button,
+  #waLeaderboardTable_wrapper .dt-paging .dt-paging-button {
     width: auto !important;
     min-width: 2rem;
     height: 2rem;
@@ -154,9 +158,16 @@
             series: [{ name: 'Frekuensi', data: distLabels.length ? distCounts : [] }],
             colors: ['#487FFF'],
             chart: { type: 'bar', height: 340, toolbar: { show: false } },
-            plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '70%' } },
+            plotOptions: { bar: { horizontal: false, borderRadius: 4, columnWidth: '45%' } },
             dataLabels: { enabled: distLabels.length > 0 },
-            xaxis: { categories: distLabels.length ? distLabels : ['Tidak ada data'] },
+            xaxis: {
+                categories: distLabels.length ? distLabels : ['Tidak ada data'],
+                labels: { rotate: -35, style: { fontSize: '11px' } }
+            },
+            yaxis: {
+                title: { text: 'Frekuensi' },
+                labels: { formatter: function (v) { return Math.round(v); } }
+            },
             grid: { borderColor: '#D1D5DB', strokeDashArray: 4 },
             noData: { text: 'Tidak ada data' }
         }).render();
@@ -173,6 +184,7 @@
     var dataUrl = @json(route('evaluasi-well.activities.data'));
     var rawDataUrl = @json(route('evaluasi-well.activities.raw-data'));
     var periodDataUrl = @json(route('evaluasi-well.activities.period-data'));
+    var leaderboardDataUrl = @json(route('evaluasi-well.activities.leaderboard-data'));
     var exportUrl = @json(route('evaluasi-well.activities.export'));
     var indexUrl = @json(route('evaluasi-well.activities.index'));
 
@@ -193,6 +205,7 @@
     var usersTableEl = document.querySelector('#waUsersTable');
     var rawTableEl = document.querySelector('#waRawTable');
     var periodTableEl = document.querySelector('#waPeriodTable');
+    var leaderboardTableEl = document.querySelector('#waLeaderboardTable');
 
     function escapeHtml(value) {
         return String(value)
@@ -340,6 +353,54 @@
             updateExportHref();
         });
     }
+
+    var leaderboardTable = leaderboardTableEl ? new DataTable(leaderboardTableEl, {
+        processing: true,
+        serverSide: true,
+        searching: true,
+        ordering: true,
+        paging: true,
+        pageLength: 10,
+        lengthChange: false,
+        order: [[5, 'desc']],
+        autoWidth: false,
+        ajax: {
+            url: leaderboardDataUrl,
+            data: function (d) {
+                var filters = currentFilters();
+                Object.keys(filters).forEach(function (key) { d[key] = filters[key]; });
+            }
+        },
+        columns: [
+            { data: 'rank', className: 'fw-semibold', orderable: false, searchable: false },
+            { data: 'kode_sid' },
+            {
+                data: 'nama',
+                className: 'wa-col-nama',
+                render: function (data, type, row) {
+                    if (type !== 'display') {
+                        return data;
+                    }
+                    return '<a href="' + employeeShowBase + '/' + row.id + '" class="text-primary-light hover-text-primary fw-medium">'
+                        + escapeHtml(data)
+                        + '</a>'
+                        + '<span class="text-sm d-block fw-normal text-secondary-light">'
+                        + escapeHtml(row.site)
+                        + '</span>';
+                }
+            },
+            { data: 'divisi' },
+            { data: 'sesi', className: 'text-center fw-semibold' },
+            {
+                data: 'kcal_out',
+                className: 'text-end',
+                render: function (data) { return formatNumber(data, 0); }
+            }
+        ],
+        language: Object.assign({}, dtLanguage, {
+            zeroRecords: 'Belum ada log olahraga di periode ini.'
+        })
+    }) : null;
 
     var periodTable = periodTableEl ? new DataTable(periodTableEl, {
         processing: true,
@@ -624,7 +685,6 @@
     'total_km' => 0, 'kcal_out' => 0, 'kcal_in' => 0,
     'avg_sessions_per_week' => 0, 'avg_sessions_per_user' => 0, 'period_days' => 7,
   ];
-  $leaderboard = $leaderboard ?? [];
   $reportMode = ($f['report_mode'] ?? 'day') === 'week' ? 'week' : 'day';
 @endphp
 
@@ -877,7 +937,7 @@
     <div class="card radius-8 border-0 shadow-sm h-100">
       <div class="card-header border-bottom bg-base py-16 px-24">
         <h6 class="text-lg fw-semibold mb-0">Leaderboard aktivitas kalori</h6>
-        <p class="text-sm text-secondary-light mb-0">Top 15 karyawan by kkal olahraga (SQL LIMIT, tanpa parse teks)</p>
+        <p class="text-sm text-secondary-light mb-0">10 karyawan per halaman, diurutkan kkal olahraga</p>
       </div>
       <div class="card-body p-24">
         <div class="table-responsive">
@@ -892,25 +952,7 @@
                 <th>Kkal</th>
               </tr>
             </thead>
-            <tbody>
-              @forelse ($leaderboard as $row)
-                <tr>
-                  <td class="fw-semibold">{{ $row['rank'] }}</td>
-                  <td>{{ $row['kode_sid'] }}</td>
-                  <td class="wa-col-nama">
-                    <a href="{{ url('/evaluasi-well/employees/'.$row['id']) }}" class="text-primary-light hover-text-primary fw-medium">{{ $row['nama'] }}</a>
-                    <span class="text-sm d-block fw-normal text-secondary-light">{{ $row['site'] }}</span>
-                  </td>
-                  <td>{{ $row['divisi'] }}</td>
-                  <td class="text-center fw-semibold">{{ number_format($row['sesi']) }}</td>
-                  <td class="text-end">{{ number_format($row['kcal_out']) }}</td>
-                </tr>
-              @empty
-                <tr>
-                  <td colspan="6" class="text-center text-secondary-light py-20">Belum ada log olahraga di periode ini.</td>
-                </tr>
-              @endforelse
-            </tbody>
+            <tbody></tbody>
           </table>
         </div>
       </div>

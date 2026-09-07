@@ -22,6 +22,8 @@ final class SportEvaluationWorkoutActivityService
 
     private const CHUNK_SIZE = 500;
 
+    private const LEADERBOARD_PAGE_SIZE = 10;
+
     public function __construct(
         private readonly BewellConnectionService $connection,
         private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
@@ -64,7 +66,6 @@ final class SportEvaluationWorkoutActivityService
                 'trendDaily' => $payload['trendDaily'],
                 'trendWeekly' => $payload['trendWeekly'],
                 'distribution' => $payload['distribution'],
-                'leaderboard' => $payload['leaderboard'],
                 'periodLabel' => $this->periodLabel($filters),
             ];
         } catch (Throwable $e) {
@@ -96,6 +97,34 @@ final class SportEvaluationWorkoutActivityService
 
         try {
             return $this->userDatatable($request, $draw);
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        }
+    }
+
+    /**
+     * Leaderboard kkal — 10 baris per halaman, SQL GROUP BY + pagination.
+     *
+     * @return array<string, mixed>
+     */
+    public function leaderboardDatatable(Request $request): array
+    {
+        $draw = (int) $request->input('draw', 1);
+        $empty = [
+            'draw' => $draw,
+            'recordsTotal' => 0,
+            'recordsFiltered' => 0,
+            'data' => [],
+        ];
+
+        if (! $this->connection->isUp()) {
+            return $empty;
+        }
+
+        try {
+            return $this->calorieLeaderboardDatatable($request, $draw);
         } catch (Throwable $e) {
             report($e);
 
@@ -392,7 +421,6 @@ final class SportEvaluationWorkoutActivityService
                     'labels' => $distRows->pluck('jenis')->map(static fn (mixed $v): string => mb_substr((string) $v, 0, 40))->all(),
                     'counts' => $distRows->pluck('c')->map(static fn (mixed $v): int => (int) $v)->all(),
                 ],
-                'leaderboard' => $this->buildLeaderboard($filters),
             ];
         });
     }
@@ -463,33 +491,47 @@ final class SportEvaluationWorkoutActivityService
     }
 
     /**
-     * Top 15 karyawan by kkal olahraga — LIMIT di SQL, tanpa parse teks.
-     *
-     * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string,nama:string,report_mode:string}  $filters
-     * @return list<array<string, mixed>>
+     * @return array<string, mixed>
      */
-    private function buildLeaderboard(array $filters): array
+    private function calorieLeaderboardDatatable(Request $request, int $draw): array
     {
-        $rows = $this->workoutBaseQuery($filters)
-            ->select([
-                'e.id',
-                'e.nama',
-                'e.kode_sid',
-                'e.site',
-                'e.divisi',
-            ])
-            ->selectRaw('COUNT(w.id) as sesi')
-            ->selectRaw('COALESCE(SUM(w.calories_kcal), 0) as kcal_out')
-            ->groupBy('e.id', 'e.nama', 'e.kode_sid', 'e.site', 'e.divisi')
-            ->orderByDesc('kcal_out')
+        $filters = $this->readFilters($request);
+        $search = trim((string) $request->input('search.value', ''));
+        $start = max(0, (int) $request->input('start', 0));
+        $length = self::LEADERBOARD_PAGE_SIZE;
+
+        $orderColumnIndex = (int) data_get($request->input('order'), '0.column', 5);
+        $orderDir = strtolower((string) data_get($request->input('order'), '0.dir', 'desc')) === 'asc'
+            ? 'asc'
+            : 'desc';
+        $orderable = [
+            1 => 'e.kode_sid',
+            2 => 'e.nama',
+            3 => 'e.divisi',
+            4 => 'sesi',
+            5 => 'kcal_out',
+        ];
+        $orderColumn = $orderable[$orderColumnIndex] ?? 'kcal_out';
+
+        $db = DB::connection(BewellConnectionService::CONNECTION);
+        $recordsTotal = (int) $db->query()
+            ->fromSub($this->leaderboardGroupedQuery($filters, ''), 'wa_lb')
+            ->count();
+        $recordsFiltered = (int) $db->query()
+            ->fromSub($this->leaderboardGroupedQuery($filters, $search), 'wa_lb')
+            ->count();
+
+        $rows = $this->leaderboardGroupedQuery($filters, $search)
+            ->orderBy($orderColumn, $orderDir)
             ->orderBy('e.nama')
-            ->limit(15)
+            ->offset($start)
+            ->limit($length)
             ->get();
 
-        $leaderboard = [];
-        $rank = 1;
+        $data = [];
+        $rank = $start + 1;
         foreach ($rows as $row) {
-            $leaderboard[] = [
+            $data[] = [
                 'rank' => $rank,
                 'id' => (int) $row->id,
                 'nama' => $this->displayOrDash($row->nama ?? null),
@@ -505,7 +547,32 @@ final class SportEvaluationWorkoutActivityService
             $rank++;
         }
 
-        return $leaderboard;
+        return [
+            'draw' => $draw,
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'data' => $data,
+        ];
+    }
+
+    /**
+     * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string,nama:string,report_mode:string}  $filters
+     */
+    private function leaderboardGroupedQuery(array $filters, string $search): Builder
+    {
+        $query = $this->workoutBaseQuery($filters)
+            ->select([
+                'e.id',
+                'e.nama',
+                'e.kode_sid',
+                'e.site',
+                'e.divisi',
+            ])
+            ->selectRaw('COUNT(w.id) as sesi')
+            ->selectRaw('COALESCE(SUM(w.calories_kcal), 0) as kcal_out')
+            ->groupBy('e.id', 'e.nama', 'e.kode_sid', 'e.site', 'e.divisi');
+
+        return $this->applyUserSearch($query, $search);
     }
 
     /**
@@ -1125,7 +1192,6 @@ final class SportEvaluationWorkoutActivityService
             'trendDaily' => $emptyTrend,
             'trendWeekly' => $emptyTrend,
             'distribution' => ['labels' => [], 'counts' => []],
-            'leaderboard' => [],
             'periodLabel' => $this->periodLabel($filters),
         ];
     }
