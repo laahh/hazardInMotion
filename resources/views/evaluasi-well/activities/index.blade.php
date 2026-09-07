@@ -307,69 +307,88 @@
         }
     }) : null;
 
-    var rawTable = rawTableEl ? new DataTable(rawTableEl, {
-        processing: true,
-        serverSide: true,
-        searching: true,
-        ordering: true,
-        pageLength: 10,
-        lengthMenu: [10, 25, 50, 100],
-        order: [[0, 'desc']],
-        autoWidth: false,
-        ajax: {
-            url: rawDataUrl,
-            data: function (d) {
-                var filters = currentFilters();
-                Object.keys(filters).forEach(function (key) { d[key] = filters[key]; });
+    var rawTable = null;
+
+    function bindRawTableEvents() {
+        if (!rawTable) {
+            return;
+        }
+        rawTable.on('draw', function () {
+            if (rawBadge) {
+                rawBadge.textContent = Number(rawTable.page.info().recordsDisplay || 0).toLocaleString('id-ID');
             }
-        },
-        columns: [
-            { data: 'local_datetime' },
-            {
-                data: 'nama',
-                className: 'wa-col-nama',
-                render: function (data, type, row) {
-                    if (type !== 'display') {
-                        return data;
-                    }
-                    return '<span class="fw-medium">' + escapeHtml(data) + '</span>'
-                        + '<span class="text-sm d-block fw-normal text-secondary-light">'
-                        + escapeHtml(row.kode_sid)
-                        + '</span>';
+        });
+    }
+
+    function initRawTable() {
+        if (rawTable || !rawTableEl) {
+            return;
+        }
+        rawTable = new DataTable(rawTableEl, {
+            processing: true,
+            serverSide: true,
+            searching: true,
+            ordering: true,
+            pageLength: 10,
+            lengthMenu: [10, 25, 50, 100],
+            order: [[0, 'desc']],
+            autoWidth: false,
+            ajax: {
+                url: rawDataUrl,
+                data: function (d) {
+                    var filters = currentFilters();
+                    Object.keys(filters).forEach(function (key) { d[key] = filters[key]; });
                 }
             },
-            { data: 'activity_type', className: 'wa-col-type' },
-            {
-                data: 'duration_minutes',
-                className: 'text-end',
-                render: function (data) { return data === null || data === '' ? '-' : formatNumber(data, 1); }
-            },
-            {
-                data: 'distance_km',
-                className: 'text-end',
-                render: function (data) { return data === null || data === '' ? '-' : formatNumber(data, 2); }
-            },
-            {
-                data: 'calories_kcal',
-                className: 'text-end',
-                render: function (data) { return data === null || data === '' ? '-' : formatNumber(data, 0); }
-            },
-            {
-                data: 'avg_heart_rate',
-                render: function (data) { return data ? escapeHtml(data) : '-'; }
+            columns: [
+                { data: 'local_datetime' },
+                {
+                    data: 'nama',
+                    className: 'wa-col-nama',
+                    render: function (data, type, row) {
+                        if (type !== 'display') {
+                            return data;
+                        }
+                        return '<span class="fw-medium">' + escapeHtml(data) + '</span>'
+                            + '<span class="text-sm d-block fw-normal text-secondary-light">'
+                            + escapeHtml(row.kode_sid)
+                            + '</span>';
+                    }
+                },
+                { data: 'activity_type', className: 'wa-col-type' },
+                {
+                    data: 'duration_minutes',
+                    className: 'text-end',
+                    render: function (data) { return data === null || data === '' ? '-' : formatNumber(data, 1); }
+                },
+                {
+                    data: 'distance_km',
+                    className: 'text-end',
+                    render: function (data) { return data === null || data === '' ? '-' : formatNumber(data, 2); }
+                },
+                {
+                    data: 'calories_kcal',
+                    className: 'text-end',
+                    render: function (data) { return data === null || data === '' ? '-' : formatNumber(data, 0); }
+                },
+                {
+                    data: 'avg_heart_rate',
+                    render: function (data) { return data ? escapeHtml(data) : '-'; }
+                }
+            ],
+            language: {
+                processing: 'Memuat...',
+                search: 'Cari:',
+                lengthMenu: 'Tampilkan _MENU_ data',
+                info: 'Menampilkan _START_–_END_ dari _TOTAL_ data',
+                infoEmpty: 'Tidak ada data',
+                infoFiltered: '(difilter dari _MAX_ total data)',
+                zeroRecords: 'Tidak ada log olahraga di periode ini.',
+                paginate: { first: '«', last: '»', next: '›', previous: '‹' }
             }
-        ],
-        language: {
-            processing: 'Memuat...',
-            search: 'Cari:',
-            lengthMenu: 'Tampilkan _MENU_ data',
-            info: 'Menampilkan _START_–_END_ dari _TOTAL_ data',
-            infoEmpty: 'Tidak ada data',
-            infoFiltered: '(difilter dari _MAX_ total data)',
-            zeroRecords: 'Tidak ada log olahraga di periode ini.',
-            paginate: { first: '«', last: '»', next: '›', previous: '‹' }
-        }
-    }) : null;
+        });
+        bindRawTableEvents();
+    }
 
     if (usersTable) {
         usersTable.on('draw', function () {
@@ -379,18 +398,13 @@
             updateExportHref();
         });
     }
-    if (rawTable) {
-        rawTable.on('draw', function () {
-            if (rawBadge) {
-                rawBadge.textContent = Number(rawTable.page.info().recordsDisplay || 0).toLocaleString('id-ID');
-            }
-        });
-    }
-
     var rawTab = document.querySelector('#wa-raw-tab');
-    if (rawTab && rawTable) {
+    if (rawTab) {
         rawTab.addEventListener('shown.bs.tab', function () {
-            rawTable.columns.adjust();
+            initRawTable();
+            if (rawTable) {
+                rawTable.columns.adjust();
+            }
         });
     }
 

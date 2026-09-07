@@ -90,17 +90,82 @@ final class SportEvaluationWorkoutActivityService
      */
     public function rawDatatable(Request $request): array
     {
-        return $this->paginateDataset($request, 'rawWorkouts', [
-            0 => 'local_datetime',
-            1 => 'nama',
-            2 => 'activity_type',
-            3 => 'duration_minutes',
-            4 => 'distance_km',
-            5 => 'calories_kcal',
-            6 => 'avg_heart_rate',
-        ], 'created_at', [
-            'nama', 'kode_sid', 'activity_type', 'site', 'company',
-        ]);
+        $draw = (int) $request->input('draw', 1);
+        $empty = [
+            'draw' => $draw,
+            'recordsTotal' => 0,
+            'recordsFiltered' => 0,
+            'data' => [],
+        ];
+
+        if (! $this->connection->isUp()) {
+            return $empty;
+        }
+
+        try {
+            $filters = $this->readFilters($request);
+            $search = trim((string) $request->input('search.value', ''));
+            $start = max(0, (int) $request->input('start', 0));
+            $length = (int) $request->input('length', 10);
+            if ($length < 1) {
+                $length = 10;
+            }
+            if ($length > 100) {
+                $length = 100;
+            }
+
+            $orderColumnIndex = (int) data_get($request->input('order'), '0.column', 0);
+            $orderDir = strtolower((string) data_get($request->input('order'), '0.dir', 'desc')) === 'asc'
+                ? 'asc'
+                : 'desc';
+            $orderable = [
+                0 => 'w.created_at',
+                1 => 'e.nama',
+                2 => 'w.activity_type',
+                3 => 'w.workout_time',
+                4 => 'w.distance',
+                5 => 'w.calories_kcal',
+                6 => 'w.avg_heart_rate',
+            ];
+            $orderColumn = $orderable[$orderColumnIndex] ?? 'w.created_at';
+
+            $recordsTotal = (int) $this->workoutBaseQuery($filters)->count('w.id');
+            $recordsFiltered = (int) $this->applyWorkoutSearch(
+                $this->workoutBaseQuery($filters),
+                $search
+            )->count('w.id');
+
+            $rows = $this->applyWorkoutSearch(
+                $this->workoutBaseQuery($filters)->select($this->workoutSelectColumns()),
+                $search
+            )
+                ->orderBy($orderColumn, $orderDir)
+                ->orderBy('w.id', 'desc')
+                ->offset($start)
+                ->limit($length)
+                ->get();
+
+            $data = [];
+            foreach ($rows as $row) {
+                $arr = (array) $row;
+                $site = $this->siteResolver->resolveOrDash(
+                    isset($arr['kode_sid']) ? (string) $arr['kode_sid'] : null,
+                    isset($arr['site']) ? (string) $arr['site'] : null,
+                );
+                $data[] = $this->aggregator->parseWorkoutRow($arr, $site);
+            }
+
+            return [
+                'draw' => $draw,
+                'recordsTotal' => $recordsTotal,
+                'recordsFiltered' => $recordsFiltered,
+                'data' => $data,
+            ];
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        }
     }
 
     /**
@@ -130,7 +195,7 @@ final class SportEvaluationWorkoutActivityService
 
         return [
             'users' => $payload['users'],
-            'rawWorkouts' => $payload['rawWorkouts'],
+            'rawWorkouts' => $this->fetchParsedWorkouts($filters),
             'rawFoods' => $this->fetchRawFoods($filters),
             'trendDaily' => $payload['trendDaily'],
             'filters' => $filters,
@@ -180,7 +245,7 @@ final class SportEvaluationWorkoutActivityService
      */
     public function loadPayload(array $filters): array
     {
-        $cacheKey = 'evaluasi_well:workout_activity:v1:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+        $cacheKey = 'evaluasi_well:workout_activity:v2:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters): array {
             $parsed = $this->fetchParsedWorkouts($filters);
@@ -189,7 +254,7 @@ final class SportEvaluationWorkoutActivityService
             $to = Carbon::parse($filters['to']);
             $periodDays = $from->diffInDays($to) + 1;
 
-            return $this->aggregator->aggregate(
+            $aggregated = $this->aggregator->aggregate(
                 $parsed,
                 $foodByUser,
                 $foodByDate,
@@ -197,6 +262,9 @@ final class SportEvaluationWorkoutActivityService
                 $filters['from'],
                 $filters['to'],
             );
+            unset($aggregated['rawWorkouts']);
+
+            return $aggregated;
         });
     }
 
@@ -286,7 +354,6 @@ final class SportEvaluationWorkoutActivityService
                 'recordsTotal' => 0,
                 'recordsFiltered' => 0,
                 'data' => [],
-                'error' => 'Gagal memuat data tren aktivitas.',
             ];
         }
     }
@@ -298,37 +365,68 @@ final class SportEvaluationWorkoutActivityService
     private function fetchParsedWorkouts(array $filters): array
     {
         $parsed = [];
+        $lastId = 0;
 
-        $this->workoutBaseQuery($filters)
-            ->select([
-                'w.id as id',
-                'w.user_id',
-                'w.activity_type',
-                'w.calories_kcal',
-                'w.active_kilocalories',
-                'w.total_kilocalories',
-                'w.distance',
-                'w.workout_time',
-                'w.avg_heart_rate',
-                'w.created_at',
-                'e.nama',
-                'e.kode_sid',
-                'e.site',
-                'e.nama_perusahaan',
-                'e.divisi',
-            ])
-            ->chunkById(self::CHUNK_SIZE, function ($rows) use (&$parsed): void {
-                foreach ($rows as $row) {
-                    $arr = (array) $row;
-                    $site = $this->siteResolver->resolveOrDash(
-                        isset($arr['kode_sid']) ? (string) $arr['kode_sid'] : null,
-                        isset($arr['site']) ? (string) $arr['site'] : null,
-                    );
-                    $parsed[] = $this->aggregator->parseWorkoutRow($arr, $site);
-                }
-            }, 'w.id', 'id');
+        do {
+            $rows = $this->workoutBaseQuery($filters)
+                ->select($this->workoutSelectColumns())
+                ->where('w.id', '>', $lastId)
+                ->orderBy('w.id')
+                ->limit(self::CHUNK_SIZE)
+                ->get();
+
+            foreach ($rows as $row) {
+                $lastId = (int) $row->id;
+                $arr = (array) $row;
+                $site = $this->siteResolver->resolveOrDash(
+                    isset($arr['kode_sid']) ? (string) $arr['kode_sid'] : null,
+                    isset($arr['site']) ? (string) $arr['site'] : null,
+                );
+                $parsed[] = $this->aggregator->parseWorkoutRow($arr, $site);
+            }
+        } while ($rows->count() === self::CHUNK_SIZE);
 
         return $parsed;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function workoutSelectColumns(): array
+    {
+        return [
+            'w.id as id',
+            'w.user_id',
+            'w.activity_type',
+            'w.calories_kcal',
+            'w.active_kilocalories',
+            'w.total_kilocalories',
+            'w.distance',
+            'w.workout_time',
+            'w.avg_heart_rate',
+            'w.created_at',
+            'e.nama',
+            'e.kode_sid',
+            'e.site',
+            'e.nama_perusahaan',
+            'e.divisi',
+        ];
+    }
+
+    private function applyWorkoutSearch(Builder $query, string $search): Builder
+    {
+        if ($search === '') {
+            return $query;
+        }
+
+        $like = '%'.$search.'%';
+
+        return $query->where(function (Builder $inner) use ($like): void {
+            $inner->where('e.nama', 'like', $like)
+                ->orWhere('e.kode_sid', 'like', $like)
+                ->orWhere('e.nama_perusahaan', 'like', $like)
+                ->orWhere('w.activity_type', 'like', $like);
+        });
     }
 
     /**
@@ -366,42 +464,50 @@ final class SportEvaluationWorkoutActivityService
     private function fetchRawFoods(array $filters): array
     {
         $rows = [];
-        $this->foodBaseQuery($filters)
-            ->select([
-                'f.id as id',
-                'f.user_id',
-                'f.food_name',
-                'f.meal_type',
-                'f.total_calories',
-                'f.created_at',
-                'e.nama',
-                'e.kode_sid',
-                'e.site',
-                'e.nama_perusahaan',
-            ])
-            ->chunkById(self::CHUNK_SIZE, function ($chunk) use (&$rows): void {
-                foreach ($chunk as $row) {
-                    $arr = (array) $row;
-                    $createdAt = (string) ($arr['created_at'] ?? '');
-                    $rows[] = [
-                        'id' => (int) ($arr['id'] ?? 0),
-                        'user_id' => (int) ($arr['user_id'] ?? 0),
-                        'kode_sid' => $this->displayOrDash($arr['kode_sid'] ?? null),
-                        'nama' => $this->displayOrDash($arr['nama'] ?? null),
-                        'site' => $this->siteResolver->resolveOrDash(
-                            isset($arr['kode_sid']) ? (string) $arr['kode_sid'] : null,
-                            isset($arr['site']) ? (string) $arr['site'] : null,
-                        ),
-                        'company' => $this->displayOrDash($arr['nama_perusahaan'] ?? null),
-                        'food_name' => $this->displayOrDash($arr['food_name'] ?? null),
-                        'meal_type' => $this->displayOrDash($arr['meal_type'] ?? null),
-                        'total_calories' => $arr['total_calories'] !== null ? round((float) $arr['total_calories'], 1) : null,
-                        'created_at' => $createdAt !== ''
-                            ? Carbon::parse($createdAt)->format('Y-m-d H:i:s')
-                            : '',
-                    ];
-                }
-            }, 'f.id', 'id');
+        $lastId = 0;
+
+        do {
+            $chunk = $this->foodBaseQuery($filters)
+                ->select([
+                    'f.id as id',
+                    'f.user_id',
+                    'f.food_name',
+                    'f.meal_type',
+                    'f.total_calories',
+                    'f.created_at',
+                    'e.nama',
+                    'e.kode_sid',
+                    'e.site',
+                    'e.nama_perusahaan',
+                ])
+                ->where('f.id', '>', $lastId)
+                ->orderBy('f.id')
+                ->limit(self::CHUNK_SIZE)
+                ->get();
+
+            foreach ($chunk as $row) {
+                $lastId = (int) $row->id;
+                $arr = (array) $row;
+                $createdAt = (string) ($arr['created_at'] ?? '');
+                $rows[] = [
+                    'id' => (int) ($arr['id'] ?? 0),
+                    'user_id' => (int) ($arr['user_id'] ?? 0),
+                    'kode_sid' => $this->displayOrDash($arr['kode_sid'] ?? null),
+                    'nama' => $this->displayOrDash($arr['nama'] ?? null),
+                    'site' => $this->siteResolver->resolveOrDash(
+                        isset($arr['kode_sid']) ? (string) $arr['kode_sid'] : null,
+                        isset($arr['site']) ? (string) $arr['site'] : null,
+                    ),
+                    'company' => $this->displayOrDash($arr['nama_perusahaan'] ?? null),
+                    'food_name' => $this->displayOrDash($arr['food_name'] ?? null),
+                    'meal_type' => $this->displayOrDash($arr['meal_type'] ?? null),
+                    'total_calories' => $arr['total_calories'] !== null ? round((float) $arr['total_calories'], 1) : null,
+                    'created_at' => $createdAt !== ''
+                        ? Carbon::parse($createdAt)->format('Y-m-d H:i:s')
+                        : '',
+                ];
+            }
+        } while ($chunk->count() === self::CHUNK_SIZE);
 
         return $rows;
     }
