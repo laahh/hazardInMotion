@@ -36,18 +36,28 @@ final class SportEvaluationWorkoutActivityService
     public function dashboard(Request $request): array
     {
         $filters = $this->readFilters($request);
-        $empty = $this->emptyDashboard($filters);
 
         if (! $this->connection->isUp()) {
-            return $empty;
+            return $this->emptyDashboard($filters, false);
         }
 
         try {
-            $payload = $this->loadPayload($filters);
-            $filterOptions = $this->buildFilterOptions($filters);
+            $payload = $this->buildSqlDashboard($filters);
+            try {
+                $filterOptions = $this->buildFilterOptions($filters);
+            } catch (Throwable $e) {
+                report($e);
+                $filterOptions = [
+                    'sites' => [],
+                    'companies' => [],
+                    'divisions' => [],
+                    'activity_types' => [],
+                ];
+            }
 
             return [
                 'connectionUp' => true,
+                'loadError' => null,
                 'filters' => $filters,
                 'filterOptions' => $filterOptions,
                 'kpi' => $payload['kpi'],
@@ -60,6 +70,9 @@ final class SportEvaluationWorkoutActivityService
         } catch (Throwable $e) {
             report($e);
 
+            $empty = $this->emptyDashboard($filters, true);
+            $empty['loadError'] = 'Gagal memuat ringkasan aktivitas. Coba perkecil rentang tanggal, lalu Terapkan.';
+
             return $empty;
         }
     }
@@ -69,20 +82,25 @@ final class SportEvaluationWorkoutActivityService
      */
     public function datatable(Request $request): array
     {
-        return $this->paginateDataset($request, 'users', [
-            0 => 'nama',
-            1 => 'kode_sid',
-            2 => 'site',
-            3 => 'company',
-            4 => 'sesi',
-            5 => 'duration_minutes',
-            6 => 'distance_km',
-            7 => 'kcal_out',
-            8 => 'kcal_in',
-            9 => 'last_workout_at',
-        ], 'sesi', [
-            'nama', 'kode_sid', 'site', 'company', 'divisi',
-        ]);
+        $draw = (int) $request->input('draw', 1);
+        $empty = [
+            'draw' => $draw,
+            'recordsTotal' => 0,
+            'recordsFiltered' => 0,
+            'data' => [],
+        ];
+
+        if (! $this->connection->isUp()) {
+            return $empty;
+        }
+
+        try {
+            return $this->userDatatable($request, $draw);
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        }
     }
 
     /**
@@ -269,93 +287,341 @@ final class SportEvaluationWorkoutActivityService
     }
 
     /**
-     * @param  array<int, string>  $orderable
-     * @param  list<string>  $searchKeys
+     * KPI + chart dari agregasi SQL (tanpa menarik semua baris workout).
+     *
+     * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string}  $filters
      * @return array<string, mixed>
      */
-    private function paginateDataset(
-        Request $request,
-        string $datasetKey,
-        array $orderable,
-        string $defaultOrder,
-        array $searchKeys,
-    ): array {
-        $draw = (int) $request->input('draw', 1);
+    private function buildSqlDashboard(array $filters): array
+    {
+        $cacheKey = 'evaluasi_well:workout_activity:sql_dash:v1:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
-        if (! $this->connection->isUp()) {
+        return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters): array {
+            $from = Carbon::parse($filters['from']);
+            $to = Carbon::parse($filters['to']);
+            $periodDays = $from->diffInDays($to) + 1;
+            $weeks = max(1.0, $periodDays / 7);
+
+            $totals = $this->workoutBaseQuery($filters)
+                ->selectRaw('COUNT(w.id) as sesi, COUNT(DISTINCT w.user_id) as users, COALESCE(SUM(w.calories_kcal), 0) as kcal_out')
+                ->first();
+
+            $sesi = (int) ($totals->sesi ?? 0);
+            $users = (int) ($totals->users ?? 0);
+            $kcalOut = (float) ($totals->kcal_out ?? 0);
+            $kcalIn = (float) $this->foodBaseQuery($filters)->sum('f.total_calories');
+
+            $dailyWorkout = [];
+            foreach ($this->workoutBaseQuery($filters)
+                ->selectRaw('DATE(w.created_at) as d, COUNT(w.id) as sesi, COUNT(DISTINCT w.user_id) as users, COALESCE(SUM(w.calories_kcal), 0) as kcal_out')
+                ->groupByRaw('DATE(w.created_at)')
+                ->get() as $row) {
+                $date = (string) $row->d;
+                $dailyWorkout[$date] = [
+                    'sesi' => (int) $row->sesi,
+                    'users' => (int) $row->users,
+                    'kcal_out' => (float) $row->kcal_out,
+                ];
+            }
+
+            $dailyFood = [];
+            foreach ($this->foodBaseQuery($filters)
+                ->selectRaw('DATE(f.created_at) as d, SUM(f.total_calories) as kcal')
+                ->groupByRaw('DATE(f.created_at)')
+                ->get() as $row) {
+                $dailyFood[(string) $row->d] = (float) ($row->kcal ?? 0);
+            }
+
+            $jenisExpr = "CASE WHEN TRIM(COALESCE(w.activity_type, '')) = '' THEN 'Lainnya' ELSE w.activity_type END";
+            $distRows = $this->workoutBaseQuery($filters)
+                ->selectRaw($jenisExpr.' as jenis, COUNT(w.id) as c')
+                ->groupByRaw($jenisExpr)
+                ->orderByDesc('c')
+                ->limit(12)
+                ->get();
+
+            $companyRows = $this->workoutBaseQuery($filters)
+                ->selectRaw("CASE WHEN TRIM(COALESCE(e.nama_perusahaan, '')) = '' THEN '-' ELSE e.nama_perusahaan END as company, COUNT(w.id) as c")
+                ->groupByRaw("CASE WHEN TRIM(COALESCE(e.nama_perusahaan, '')) = '' THEN '-' ELSE e.nama_perusahaan END")
+                ->orderByDesc('c')
+                ->limit(10)
+                ->get();
+
+            $trend = $this->fillDailyAndWeeklyTrends($filters['from'], $filters['to'], $dailyWorkout, $dailyFood);
+
             return [
-                'draw' => $draw,
-                'recordsTotal' => 0,
-                'recordsFiltered' => 0,
-                'data' => [],
+                'kpi' => [
+                    'total_sessions' => $sesi,
+                    'active_users' => $users,
+                    'total_minutes' => 0,
+                    'total_km' => 0.0,
+                    'kcal_out' => (int) round($kcalOut),
+                    'kcal_in' => (int) round($kcalIn),
+                    'avg_sessions_per_week' => round($sesi / $weeks, 1),
+                    'avg_sessions_per_user' => $users > 0 ? round($sesi / $users, 1) : 0.0,
+                    'period_days' => $periodDays,
+                ],
+                'trendDaily' => $trend['daily'],
+                'trendWeekly' => $trend['weekly'],
+                'distribution' => [
+                    'labels' => $distRows->pluck('jenis')->map(static fn (mixed $v): string => mb_substr((string) $v, 0, 40))->all(),
+                    'counts' => $distRows->pluck('c')->map(static fn (mixed $v): int => (int) $v)->all(),
+                ],
+                'topCompanies' => [
+                    'labels' => $companyRows->pluck('company')->map(static fn (mixed $v): string => (string) $v)->all(),
+                    'counts' => $companyRows->pluck('c')->map(static fn (mixed $v): int => (int) $v)->all(),
+                ],
+            ];
+        });
+    }
+
+    /**
+     * @param  array<string, array{sesi:int, users:int, kcal_out:float}>  $dailyWorkout
+     * @param  array<string, float>  $dailyFood
+     * @return array{daily: array<string, mixed>, weekly: array<string, mixed>}
+     */
+    private function fillDailyAndWeeklyTrends(string $fromDate, string $toDate, array $dailyWorkout, array $dailyFood): array
+    {
+        $labels = [];
+        $sesi = [];
+        $users = [];
+        $kcalOut = [];
+        $kcalIn = [];
+        $menit = [];
+        $km = [];
+
+        $cursor = Carbon::parse($fromDate)->startOfDay();
+        $end = Carbon::parse($toDate)->startOfDay();
+        while ($cursor->lessThanOrEqualTo($end)) {
+            $key = $cursor->format('Y-m-d');
+            $bucket = $dailyWorkout[$key] ?? ['sesi' => 0, 'users' => 0, 'kcal_out' => 0.0];
+            $labels[] = $cursor->format('d M');
+            $sesi[] = (int) $bucket['sesi'];
+            $users[] = (int) $bucket['users'];
+            $kcalOut[] = round((float) $bucket['kcal_out'], 1);
+            $kcalIn[] = round((float) ($dailyFood[$key] ?? 0), 1);
+            $menit[] = 0.0;
+            $km[] = 0.0;
+            $cursor->addDay();
+        }
+
+        $daily = [
+            'labels' => $labels,
+            'sesi' => $sesi,
+            'users' => $users,
+            'kcal_out' => $kcalOut,
+            'kcal_in' => $kcalIn,
+            'menit' => $menit,
+            'km' => $km,
+        ];
+
+        $weekly = [
+            'labels' => [],
+            'sesi' => [],
+            'users' => [],
+            'kcal_out' => [],
+            'kcal_in' => [],
+            'menit' => [],
+            'km' => [],
+        ];
+        $chunkSize = 7;
+        $count = count($labels);
+        for ($offset = 0; $offset < $count; $offset += $chunkSize) {
+            $endIdx = min($offset + $chunkSize, $count) - 1;
+            $weekly['labels'][] = $labels[$offset].' – '.$labels[$endIdx];
+            $weekly['sesi'][] = (int) array_sum(array_slice($sesi, $offset, $chunkSize));
+            $weekly['users'][] = (int) max(array_slice($users, $offset, $chunkSize) ?: [0]);
+            $weekly['kcal_out'][] = round((float) array_sum(array_slice($kcalOut, $offset, $chunkSize)), 1);
+            $weekly['kcal_in'][] = round((float) array_sum(array_slice($kcalIn, $offset, $chunkSize)), 1);
+            $weekly['menit'][] = 0.0;
+            $weekly['km'][] = 0.0;
+        }
+
+        return ['daily' => $daily, 'weekly' => $weekly];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function userDatatable(Request $request, int $draw): array
+    {
+        $filters = $this->readFilters($request);
+        $search = trim((string) $request->input('search.value', ''));
+        $start = max(0, (int) $request->input('start', 0));
+        $length = (int) $request->input('length', 10);
+        if ($length < 1) {
+            $length = 10;
+        }
+        if ($length > 100) {
+            $length = 100;
+        }
+
+        $orderColumnIndex = (int) data_get($request->input('order'), '0.column', 4);
+        $orderDir = strtolower((string) data_get($request->input('order'), '0.dir', 'desc')) === 'asc'
+            ? 'asc'
+            : 'desc';
+        $orderable = [
+            0 => 'e.nama',
+            1 => 'e.site',
+            2 => 'e.nama_perusahaan',
+            3 => 'e.divisi',
+            4 => 'sesi',
+            5 => 'sesi',
+            6 => 'sesi',
+            7 => 'kcal_out',
+            8 => 'kcal_in',
+            9 => 'last_workout_at',
+        ];
+        $orderColumn = $orderable[$orderColumnIndex] ?? 'sesi';
+
+        $db = DB::connection(BewellConnectionService::CONNECTION);
+        $recordsTotal = (int) $db->query()
+            ->fromSub($this->usersGroupedQuery($filters, ''), 'wa_users')
+            ->count();
+        $recordsFiltered = (int) $db->query()
+            ->fromSub($this->usersGroupedQuery($filters, $search), 'wa_users')
+            ->count();
+
+        $rows = $this->usersGroupedQuery($filters, $search)
+            ->orderBy($orderColumn, $orderDir)
+            ->orderBy('e.nama')
+            ->offset($start)
+            ->limit($length)
+            ->get();
+
+        $periodDays = Carbon::parse($filters['from'])->diffInDays(Carbon::parse($filters['to'])) + 1;
+        $weeks = max(1.0, $periodDays / 7);
+        $parsedByUser = $this->parsedMetricsForUsers(
+            $filters,
+            $rows->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all()
+        );
+
+        $data = [];
+        foreach ($rows as $row) {
+            $userId = (int) $row->id;
+            $metrics = $parsedByUser[$userId] ?? ['duration_minutes' => 0.0, 'distance_km' => 0.0];
+            $lastAt = $row->last_workout_at
+                ? Carbon::parse((string) $row->last_workout_at)->format('d M Y H:i')
+                : '-';
+            $sesi = (int) ($row->sesi ?? 0);
+            $kcalOut = round((float) ($row->kcal_out ?? 0), 1);
+            $kcalIn = round((float) ($row->kcal_in ?? 0), 1);
+
+            $data[] = [
+                'id' => $userId,
+                'nama' => $this->displayOrDash($row->nama ?? null),
+                'kode_sid' => $this->displayOrDash($row->kode_sid ?? null),
+                'site' => $this->siteResolver->resolveOrDash(
+                    isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                    isset($row->site) ? (string) $row->site : null,
+                ),
+                'company' => $this->displayOrDash($row->nama_perusahaan ?? null),
+                'divisi' => $this->displayOrDash($row->divisi ?? null),
+                'sesi' => $sesi,
+                'duration_minutes' => $metrics['duration_minutes'],
+                'distance_km' => $metrics['distance_km'],
+                'kcal_out' => $kcalOut,
+                'kcal_in' => $kcalIn,
+                'kcal_net' => round($kcalIn - $kcalOut, 1),
+                'sessions_per_week' => round($sesi / $weeks, 2),
+                'last_workout_at' => $lastAt,
             ];
         }
 
-        try {
-            $filters = $this->readFilters($request);
-            $payload = $this->loadPayload($filters);
-            /** @var list<array<string, mixed>> $rows */
-            $rows = $payload[$datasetKey] ?? [];
-            $recordsTotal = count($rows);
+        return [
+            'draw' => $draw,
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'data' => $data,
+        ];
+    }
 
-            $search = mb_strtolower(trim((string) $request->input('search.value', '')));
-            if ($search !== '') {
-                $rows = array_values(array_filter($rows, static function (array $row) use ($search, $searchKeys): bool {
-                    foreach ($searchKeys as $key) {
-                        if (mb_strpos(mb_strtolower((string) ($row[$key] ?? '')), $search) !== false) {
-                            return true;
-                        }
-                    }
+    /**
+     * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string}  $filters
+     */
+    private function usersGroupedQuery(array $filters, string $search): Builder
+    {
+        $range = $this->datetimeRange($filters);
+        $foodSub = DB::connection(BewellConnectionService::CONNECTION)
+            ->table('food_analyses')
+            ->selectRaw('user_id, SUM(total_calories) as kcal_in')
+            ->whereBetween('created_at', [$range['from'], $range['to']])
+            ->groupBy('user_id');
 
-                    return false;
-                }));
-            }
+        $query = $this->workoutBaseQuery($filters)
+            ->leftJoinSub($foodSub, 'food', 'food.user_id', '=', 'e.id')
+            ->select([
+                'e.id',
+                'e.nama',
+                'e.kode_sid',
+                'e.site',
+                'e.nama_perusahaan',
+                'e.divisi',
+            ])
+            ->selectRaw('COUNT(w.id) as sesi')
+            ->selectRaw('COALESCE(SUM(w.calories_kcal), 0) as kcal_out')
+            ->selectRaw('COALESCE(MAX(food.kcal_in), 0) as kcal_in')
+            ->selectRaw('MAX(w.created_at) as last_workout_at')
+            ->groupBy('e.id', 'e.nama', 'e.kode_sid', 'e.site', 'e.nama_perusahaan', 'e.divisi');
 
-            $orderColumnIndex = (int) data_get($request->input('order'), '0.column', 0);
-            $orderDir = strtolower((string) data_get($request->input('order'), '0.dir', 'desc')) === 'asc'
-                ? 'asc'
-                : 'desc';
-            $orderKey = $orderable[$orderColumnIndex] ?? $defaultOrder;
+        return $this->applyUserSearch($query, $search);
+    }
 
-            usort($rows, static function (array $a, array $b) use ($orderKey, $orderDir, $defaultOrder): int {
-                $left = $a[$orderKey] ?? $a[$defaultOrder] ?? null;
-                $right = $b[$orderKey] ?? $b[$defaultOrder] ?? null;
-                if (is_numeric($left) && is_numeric($right)) {
-                    $cmp = (float) $left <=> (float) $right;
-                } else {
-                    $cmp = strcmp((string) $left, (string) $right);
-                }
-
-                return $orderDir === 'asc' ? $cmp : -$cmp;
-            });
-
-            $start = max(0, (int) $request->input('start', 0));
-            $length = (int) $request->input('length', 10);
-            if ($length < 1) {
-                $length = 10;
-            }
-            if ($length > 100) {
-                $length = 100;
-            }
-
-            $page = array_slice($rows, $start, $length);
-
-            return [
-                'draw' => $draw,
-                'recordsTotal' => $recordsTotal,
-                'recordsFiltered' => count($rows),
-                'data' => $page,
-            ];
-        } catch (Throwable $e) {
-            report($e);
-
-            return [
-                'draw' => $draw,
-                'recordsTotal' => 0,
-                'recordsFiltered' => 0,
-                'data' => [],
-            ];
+    private function applyUserSearch(Builder $query, string $search): Builder
+    {
+        if ($search === '') {
+            return $query;
         }
+
+        $like = '%'.$search.'%';
+
+        return $query->where(function (Builder $inner) use ($like): void {
+            $inner->where('e.nama', 'like', $like)
+                ->orWhere('e.kode_sid', 'like', $like)
+                ->orWhere('e.nama_perusahaan', 'like', $like)
+                ->orWhere('e.divisi', 'like', $like);
+        });
+    }
+
+    /**
+     * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string}  $filters
+     * @param  list<int>  $userIds
+     * @return array<int, array{duration_minutes:float, distance_km:float}>
+     */
+    private function parsedMetricsForUsers(array $filters, array $userIds): array
+    {
+        $metrics = [];
+        if ($userIds === []) {
+            return $metrics;
+        }
+
+        $rows = $this->workoutBaseQuery($filters)
+            ->whereIn('w.user_id', $userIds)
+            ->get([
+                'w.user_id',
+                'w.activity_type',
+                'w.distance',
+                'w.workout_time',
+                'w.calories_kcal',
+                'w.created_at',
+            ]);
+
+        foreach ($rows as $row) {
+            $parsed = $this->aggregator->parseWorkoutRow((array) $row, '-');
+            $userId = (int) $parsed['user_id'];
+            if (! isset($metrics[$userId])) {
+                $metrics[$userId] = ['duration_minutes' => 0.0, 'distance_km' => 0.0];
+            }
+            $metrics[$userId]['duration_minutes'] += (float) ($parsed['duration_minutes'] ?? 0);
+            $metrics[$userId]['distance_km'] += (float) ($parsed['distance_km'] ?? 0);
+        }
+
+        foreach ($metrics as $userId => $row) {
+            $metrics[$userId]['duration_minutes'] = round($row['duration_minutes'], 1);
+            $metrics[$userId]['distance_km'] = round($row['distance_km'], 2);
+        }
+
+        return $metrics;
     }
 
     /**
@@ -553,29 +819,21 @@ final class SportEvaluationWorkoutActivityService
     private function buildFilterOptions(array $filters): array
     {
         return Cache::remember(
-            'evaluasi_well:workout_activity:filters:v1:'.sha1($filters['from'].'|'.$filters['to']),
+            'evaluasi_well:workout_activity:filters:v2:'.sha1($filters['from'].'|'.$filters['to']),
             self::CACHE_TTL,
             function () use ($filters): array {
                 $base = $this->activeEmployeesBaseQuery();
+                $fallbackSites = (clone $base)
+                    ->whereNotNull('e.site')
+                    ->where('e.site', '<>', '')
+                    ->distinct()
+                    ->orderBy('e.site')
+                    ->pluck('e.site')
+                    ->map(static fn (mixed $v): string => (string) $v)
+                    ->all();
+                $sites = $this->siteResolver->mergeFilterSites($fallbackSites);
 
-                $sitePairs = (clone $base)->get(['e.kode_sid', 'e.site']);
-                $resolvedSites = [];
-                foreach ($sitePairs as $pair) {
-                    $site = $this->siteResolver->resolve(
-                        isset($pair->kode_sid) ? (string) $pair->kode_sid : null,
-                        isset($pair->site) ? (string) $pair->site : null,
-                    );
-                    if ($site !== '') {
-                        $resolvedSites[$site] = true;
-                    }
-                }
-                $sites = array_keys($resolvedSites);
-                sort($sites, SORT_STRING);
-
-                $range = $this->datetimeRange($filters);
-                $activityTypes = $this->activeEmployeesBaseQuery()
-                    ->join('workout_analyses as w', 'w.user_id', '=', 'e.id')
-                    ->whereBetween('w.created_at', [$range['from'], $range['to']])
+                $activityTypes = $this->workoutBaseQuery($filters)
                     ->whereNotNull('w.activity_type')
                     ->where('w.activity_type', '<>', '')
                     ->distinct()
@@ -655,12 +913,13 @@ final class SportEvaluationWorkoutActivityService
      * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string}  $filters
      * @return array<string, mixed>
      */
-    private function emptyDashboard(array $filters): array
+    private function emptyDashboard(array $filters, bool $connectionUp): array
     {
         $emptyTrend = $this->emptyTrend();
 
         return [
-            'connectionUp' => false,
+            'connectionUp' => $connectionUp,
+            'loadError' => null,
             'filters' => $filters,
             'filterOptions' => [
                 'sites' => [],

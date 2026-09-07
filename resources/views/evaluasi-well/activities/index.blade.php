@@ -474,12 +474,19 @@
 </div>
 @endunless
 
+@if (! empty($loadError))
+<div class="alert alert-danger bg-danger-100 text-danger-600 border-danger-100 px-24 py-13 mb-24 radius-8 d-flex align-items-start gap-2" role="alert">
+  <iconify-icon icon="solar:danger-triangle-bold" class="icon text-xl mt-1"></iconify-icon>
+  <div>{{ $loadError }}</div>
+</div>
+@endif
+
 <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8 d-flex align-items-start gap-2" role="status">
   <iconify-icon icon="solar:info-circle-bold" class="icon text-xl mt-1"></iconify-icon>
   <div class="text-sm">
     Sumber: log WELL <strong>workout_analyses</strong> (olahraga) dan <strong>food_analyses</strong> (kalori masuk).
-    Jarak hanya dihitung untuk lari/jalan. Kalori masuk-keluar mengikuti kelengkapan log, bukan defisit metabolik.
-    Durasi/jarak di-parse best-effort dari teks screenshot.
+    KPI header memakai agregasi SQL (sesi &amp; kalori) supaya halaman tidak timeout lewat tunnel.
+    Durasi/jarak di-parse dari teks di tabel per halaman dan Excel. Jarak hanya untuk lari/jalan.
   </div>
 </div>
 
@@ -528,7 +535,7 @@
             <h6 class="fw-semibold mb-0">{{ number_format($kpi['total_minutes'] ?? 0) }} <span class="text-sm fw-normal">menit</span></h6>
           </div>
         </div>
-        <p class="text-sm mb-0 text-secondary-light wa-kpi-note">Parse dari workout_time</p>
+        <p class="text-sm mb-0 text-secondary-light wa-kpi-note">Detail di tabel &amp; Excel</p>
       </div>
     </div>
   </div>
@@ -544,7 +551,7 @@
             <h6 class="fw-semibold mb-0">{{ number_format($kpi['total_km'] ?? 0, 1) }} <span class="text-sm fw-normal">km</span></h6>
           </div>
         </div>
-        <p class="text-sm mb-0 text-secondary-light wa-kpi-note">Jenis lain tidak dihitung</p>
+        <p class="text-sm mb-0 text-secondary-light wa-kpi-note">Detail di tabel &amp; Excel</p>
       </div>
     </div>
   </div>
