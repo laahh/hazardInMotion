@@ -51,12 +51,18 @@
 @endsection
 
 @section('page-scripts')
+@php
+  $waTrendDaily = $trendDaily ?? [];
+  $waTrendWeekly = $trendWeekly ?? [];
+  $waDistribution = $distribution ?? [];
+  $waTopCompanies = $topCompanies ?? [];
+@endphp
 <script>
 (function () {
-    var trendDaily = @json($trendDaily ?? ['labels' => [], 'sesi' => [], 'kcal_out' => [], 'kcal_in' => []]);
-    var trendWeekly = @json($trendWeekly ?? ['labels' => [], 'sesi' => [], 'kcal_out' => [], 'kcal_in' => []]);
-    var distribution = @json($distribution ?? ['labels' => [], 'counts' => []]);
-    var topCompanies = @json($topCompanies ?? ['labels' => [], 'counts' => []]);
+    var trendDaily = @json($waTrendDaily);
+    var trendWeekly = @json($waTrendWeekly);
+    var distribution = @json($waDistribution);
+    var topCompanies = @json($waTopCompanies);
     var trendChart = null;
     var granularity = 'daily';
 
@@ -631,7 +637,7 @@
           <label for="wa-site" class="form-label text-sm fw-medium mb-6">Site</label>
           <select id="wa-site" class="form-select form-select-sm">
             <option value="">Semua Site</option>
-            @foreach (($opts['sites'] ?? []) as $site)
+            @foreach ($opts['sites'] as $site)
               <option value="{{ $site }}" @selected(($f['site'] ?? '') === $site)>{{ $site }}</option>
             @endforeach
           </select>
@@ -640,7 +646,7 @@
           <label for="wa-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
           <select id="wa-company" class="form-select form-select-sm">
             <option value="">Semua Perusahaan</option>
-            @foreach (($opts['companies'] ?? []) as $company)
+            @foreach ($opts['companies'] as $company)
               <option value="{{ $company }}" @selected(($f['company'] ?? '') === $company)>{{ $company }}</option>
             @endforeach
           </select>
@@ -657,7 +663,7 @@
             autocomplete="off"
           >
           <datalist id="wa-division-options">
-            @foreach (($opts['divisions'] ?? []) as $division)
+            @foreach ($opts['divisions'] as $division)
               <option value="{{ $division }}"></option>
             @endforeach
           </datalist>
@@ -666,7 +672,7 @@
           <label for="wa-activity-type" class="form-label text-sm fw-medium mb-6">Jenis aktivitas</label>
           <select id="wa-activity-type" class="form-select form-select-sm">
             <option value="">Semua jenis</option>
-            @foreach (($opts['activity_types'] ?? []) as $type)
+            @foreach ($opts['activity_types'] as $type)
               <option value="{{ $type }}" @selected(($f['activity_type'] ?? '') === $type)>{{ $type }}</option>
             @endforeach
           </select>
