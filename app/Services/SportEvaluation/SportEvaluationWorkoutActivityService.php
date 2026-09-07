@@ -64,7 +64,7 @@ final class SportEvaluationWorkoutActivityService
                 'trendDaily' => $payload['trendDaily'],
                 'trendWeekly' => $payload['trendWeekly'],
                 'distribution' => $payload['distribution'],
-                'topCompanies' => $payload['topCompanies'],
+                'leaderboard' => $payload['leaderboard'],
                 'periodLabel' => $this->periodLabel($filters),
             ];
         } catch (Throwable $e) {
@@ -96,6 +96,34 @@ final class SportEvaluationWorkoutActivityService
 
         try {
             return $this->userDatatable($request, $draw);
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        }
+    }
+
+    /**
+     * Laporan siapa yang olahraga per hari atau per minggu (SQL GROUP BY + pagination).
+     *
+     * @return array<string, mixed>
+     */
+    public function periodDatatable(Request $request): array
+    {
+        $draw = (int) $request->input('draw', 1);
+        $empty = [
+            'draw' => $draw,
+            'recordsTotal' => 0,
+            'recordsFiltered' => 0,
+            'data' => [],
+        ];
+
+        if (! $this->connection->isUp()) {
+            return $empty;
+        }
+
+        try {
+            return $this->periodReportDatatable($request, $draw);
         } catch (Throwable $e) {
             report($e);
 
@@ -233,7 +261,7 @@ final class SportEvaluationWorkoutActivityService
         $to = $this->parseDate($request->input('to', $request->query('to')));
 
         if ($from === null) {
-            $from = Carbon::now()->subDays(29)->startOfDay();
+            $from = SportEvaluationWorkoutActivityPeriodFormatter::weekStartMonday(Carbon::now());
         }
         if ($to === null) {
             $to = Carbon::now()->startOfDay();
@@ -254,6 +282,10 @@ final class SportEvaluationWorkoutActivityService
             'company' => $read($request->input('company', $request->query('company', ''))),
             'division' => $read($request->input('division', $request->query('division', ''))),
             'activity_type' => $read($request->input('activity_type', $request->query('activity_type', ''))),
+            'nama' => $read($request->input('nama', $request->query('nama', ''))),
+            'report_mode' => SportEvaluationWorkoutActivityPeriodFormatter::normalizeMode(
+                $read($request->input('report_mode', $request->query('report_mode', '')))
+            ),
         ];
     }
 
@@ -294,7 +326,7 @@ final class SportEvaluationWorkoutActivityService
      */
     private function buildSqlDashboard(array $filters): array
     {
-        $cacheKey = 'evaluasi_well:workout_activity:sql_dash:v1:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+        $cacheKey = 'evaluasi_well:workout_activity:sql_dash:v3:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters): array {
             $from = Carbon::parse($filters['from']);
@@ -340,13 +372,6 @@ final class SportEvaluationWorkoutActivityService
                 ->limit(12)
                 ->get();
 
-            $companyRows = $this->workoutBaseQuery($filters)
-                ->selectRaw("CASE WHEN TRIM(COALESCE(e.nama_perusahaan, '')) = '' THEN '-' ELSE e.nama_perusahaan END as company, COUNT(w.id) as c")
-                ->groupByRaw("CASE WHEN TRIM(COALESCE(e.nama_perusahaan, '')) = '' THEN '-' ELSE e.nama_perusahaan END")
-                ->orderByDesc('c')
-                ->limit(10)
-                ->get();
-
             $trend = $this->fillDailyAndWeeklyTrends($filters['from'], $filters['to'], $dailyWorkout, $dailyFood);
 
             return [
@@ -367,10 +392,7 @@ final class SportEvaluationWorkoutActivityService
                     'labels' => $distRows->pluck('jenis')->map(static fn (mixed $v): string => mb_substr((string) $v, 0, 40))->all(),
                     'counts' => $distRows->pluck('c')->map(static fn (mixed $v): int => (int) $v)->all(),
                 ],
-                'topCompanies' => [
-                    'labels' => $companyRows->pluck('company')->map(static fn (mixed $v): string => (string) $v)->all(),
-                    'counts' => $companyRows->pluck('c')->map(static fn (mixed $v): int => (int) $v)->all(),
-                ],
+                'leaderboard' => $this->buildLeaderboard($filters),
             ];
         });
     }
@@ -438,6 +460,165 @@ final class SportEvaluationWorkoutActivityService
         }
 
         return ['daily' => $daily, 'weekly' => $weekly];
+    }
+
+    /**
+     * Top 15 karyawan by kkal olahraga — LIMIT di SQL, tanpa parse teks.
+     *
+     * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string,nama:string,report_mode:string}  $filters
+     * @return list<array<string, mixed>>
+     */
+    private function buildLeaderboard(array $filters): array
+    {
+        $rows = $this->workoutBaseQuery($filters)
+            ->select([
+                'e.id',
+                'e.nama',
+                'e.kode_sid',
+                'e.site',
+                'e.divisi',
+            ])
+            ->selectRaw('COUNT(w.id) as sesi')
+            ->selectRaw('COALESCE(SUM(w.calories_kcal), 0) as kcal_out')
+            ->groupBy('e.id', 'e.nama', 'e.kode_sid', 'e.site', 'e.divisi')
+            ->orderByDesc('kcal_out')
+            ->orderBy('e.nama')
+            ->limit(15)
+            ->get();
+
+        $leaderboard = [];
+        $rank = 1;
+        foreach ($rows as $row) {
+            $leaderboard[] = [
+                'rank' => $rank,
+                'id' => (int) $row->id,
+                'nama' => $this->displayOrDash($row->nama ?? null),
+                'kode_sid' => $this->displayOrDash($row->kode_sid ?? null),
+                'site' => $this->siteResolver->resolveOrDash(
+                    isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                    isset($row->site) ? (string) $row->site : null,
+                ),
+                'divisi' => $this->displayOrDash($row->divisi ?? null),
+                'sesi' => (int) ($row->sesi ?? 0),
+                'kcal_out' => (int) round((float) ($row->kcal_out ?? 0)),
+            ];
+            $rank++;
+        }
+
+        return $leaderboard;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function periodReportDatatable(Request $request, int $draw): array
+    {
+        $filters = $this->readFilters($request);
+        $search = trim((string) $request->input('search.value', ''));
+        $start = max(0, (int) $request->input('start', 0));
+        $length = (int) $request->input('length', 10);
+        if ($length < 1) {
+            $length = 10;
+        }
+        if ($length > 100) {
+            $length = 100;
+        }
+
+        $orderColumnIndex = (int) data_get($request->input('order'), '0.column', 5);
+        $orderDir = strtolower((string) data_get($request->input('order'), '0.dir', 'desc')) === 'asc'
+            ? 'asc'
+            : 'desc';
+        $orderable = [
+            0 => 'period_start',
+            1 => 'e.nama',
+            2 => 'e.site',
+            3 => 'e.divisi',
+            4 => 'sesi',
+            5 => 'kcal_out',
+            6 => 'jenis',
+        ];
+        $orderColumn = $orderable[$orderColumnIndex] ?? 'kcal_out';
+
+        $db = DB::connection(BewellConnectionService::CONNECTION);
+        $recordsTotal = (int) $db->query()
+            ->fromSub($this->periodGroupedQuery($filters, '', false), 'wa_period')
+            ->count();
+        $recordsFiltered = (int) $db->query()
+            ->fromSub($this->periodGroupedQuery($filters, $search, false), 'wa_period')
+            ->count();
+
+        $rows = $this->periodGroupedQuery($filters, $search, true)
+            ->orderBy($orderColumn, $orderDir)
+            ->orderBy('e.nama')
+            ->offset($start)
+            ->limit($length)
+            ->get();
+
+        $mode = $filters['report_mode'];
+        $data = [];
+        $rank = $start + 1;
+        foreach ($rows as $row) {
+            $periodStartRaw = $row->period_start ?? '';
+            if ($periodStartRaw instanceof \DateTimeInterface) {
+                $periodStart = $periodStartRaw->format('Y-m-d');
+            } else {
+                $periodStart = substr((string) $periodStartRaw, 0, 10);
+            }
+            $data[] = [
+                'rank' => $rank,
+                'id' => (int) $row->id,
+                'period' => $periodStart !== ''
+                    ? SportEvaluationWorkoutActivityPeriodFormatter::label($mode, $periodStart)
+                    : '-',
+                'nama' => $this->displayOrDash($row->nama ?? null),
+                'kode_sid' => $this->displayOrDash($row->kode_sid ?? null),
+                'site' => $this->siteResolver->resolveOrDash(
+                    isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                    isset($row->site) ? (string) $row->site : null,
+                ),
+                'divisi' => $this->displayOrDash($row->divisi ?? null),
+                'sesi' => (int) ($row->sesi ?? 0),
+                'kcal_out' => (int) round((float) ($row->kcal_out ?? 0)),
+                'jenis' => $this->displayOrDash($row->jenis ?? null),
+            ];
+            $rank++;
+        }
+
+        return [
+            'draw' => $draw,
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'data' => $data,
+        ];
+    }
+
+    /**
+     * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string,nama:string,report_mode:string}  $filters
+     */
+    private function periodGroupedQuery(array $filters, string $search, bool $withJenis): Builder
+    {
+        $periodSql = SportEvaluationWorkoutActivityPeriodFormatter::periodStartSql($filters['report_mode']);
+        $query = $this->workoutBaseQuery($filters)
+            ->select([
+                'e.id',
+                'e.nama',
+                'e.kode_sid',
+                'e.site',
+                'e.divisi',
+            ])
+            ->selectRaw($periodSql.' as period_start')
+            ->selectRaw('COUNT(w.id) as sesi')
+            ->selectRaw('COALESCE(SUM(w.calories_kcal), 0) as kcal_out')
+            ->groupByRaw($periodSql)
+            ->groupBy('e.id', 'e.nama', 'e.kode_sid', 'e.site', 'e.divisi');
+
+        if ($withJenis) {
+            $query->selectRaw(
+                "SUBSTRING(GROUP_CONCAT(DISTINCT CASE WHEN TRIM(COALESCE(w.activity_type, '')) = '' THEN 'Lainnya' ELSE w.activity_type END SEPARATOR ', '), 1, 120) as jenis"
+            );
+        }
+
+        return $this->applyUserSearch($query, $search);
     }
 
     /**
@@ -884,6 +1065,9 @@ final class SportEvaluationWorkoutActivityService
         if ($filters['division'] !== '') {
             $query->where('e.divisi', 'like', '%'.$filters['division'].'%');
         }
+        if (($filters['nama'] ?? '') !== '') {
+            $query->where('e.nama', 'like', '%'.$filters['nama'].'%');
+        }
 
         return $query;
     }
@@ -941,7 +1125,7 @@ final class SportEvaluationWorkoutActivityService
             'trendDaily' => $emptyTrend,
             'trendWeekly' => $emptyTrend,
             'distribution' => ['labels' => [], 'counts' => []],
-            'topCompanies' => ['labels' => [], 'counts' => []],
+            'leaderboard' => [],
             'periodLabel' => $this->periodLabel($filters),
         ];
     }

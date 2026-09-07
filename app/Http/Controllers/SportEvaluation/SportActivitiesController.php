@@ -39,6 +39,11 @@ final class SportActivitiesController extends Controller
         return response()->json($this->service->rawDatatable($request));
     }
 
+    public function periodData(Request $request): JsonResponse
+    {
+        return response()->json($this->service->periodDatatable($request));
+    }
+
     public function export(SportEvaluationWorkoutActivityRequest $request): JsonResponse
     {
         try {
