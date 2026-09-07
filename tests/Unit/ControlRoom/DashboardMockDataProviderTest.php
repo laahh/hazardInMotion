@@ -115,4 +115,75 @@ final class DashboardMockDataProviderTest extends TestCase
         $this->assertSame(100.0, $mock['achievementGroups'][0]['rows'][0]['sap']);
         $this->assertStringContainsString('Observasi/OAK: ada', $mock['achievementGroups'][0]['rows'][0]['sap_hint']);
     }
+
+    public function test_kpi_kehadiran_dan_avg_sap_dari_orang_jaga(): void
+    {
+        $days = [[
+            'date' => '2026-08-31',
+            's1' => [[
+                'name' => 'Agung Nugroho',
+                'sid' => 'FJAVJ',
+                'status' => 'sesuai',
+                'checkinout' => [],
+            ]],
+            's2' => [[
+                'name' => 'Herru Siswahyudi',
+                'sid' => 'HHHHH',
+                'status' => 'tidak_hadir',
+                'checkinout' => [],
+            ]],
+        ]];
+        $previous = [[
+            'date' => '2026-08-24',
+            's1' => [[
+                'name' => 'Agung Nugroho',
+                'sid' => 'FJAVJ',
+                'status' => 'sesuai',
+                'checkinout' => [],
+            ]],
+            's2' => [],
+        ]];
+
+        $mock = (new DashboardMockDataProvider())->build(
+            CarbonImmutable::parse('2026-08-31'),
+            $days,
+            [
+                'FJAVJ|2026-08-31' => ['hazard' => 1, 'inspeksi' => 1, 'observasi' => 1],
+                'HHHHH|2026-08-31' => ['hazard' => 1, 'inspeksi' => 0, 'observasi' => 0],
+            ],
+            sapLoaded: true,
+            insights: ['highlight' => ['goldenRules' => [], 'blindspotCount' => 0, 'blindspotTotal' => 0, 'tbcPercentage' => 50.0]],
+            previousScheduleDays: $previous,
+            previousSapCounts: [
+                'FJAVJ|2026-08-24' => ['hazard' => 1, 'inspeksi' => 1, 'observasi' => 1],
+            ],
+            previousSapLoaded: true,
+        );
+
+        $byLabel = [];
+        foreach ($mock['kpi'] as $card) {
+            $byLabel[$card['label']] = $card;
+        }
+
+        $this->assertSame('50%', $byLabel['% Total Kehadiran']['value']);
+        $this->assertSame(-50.0, $byLabel['% Total Kehadiran']['delta']);
+        $this->assertSame('66.7%', $byLabel['% Avg SAP']['value']);
+        $this->assertSame(-33.3, $byLabel['% Avg SAP']['delta']);
+        $this->assertSame('50%', $byLabel['Ratio TBC']['value']);
+        $this->assertNull($byLabel['Ratio TBC']['delta']);
+    }
+
+    public function test_kpi_tanpa_jadwal_tidak_memakai_angka_mock(): void
+    {
+        $mock = (new DashboardMockDataProvider())->build(CarbonImmutable::parse('2026-08-31'));
+
+        $byLabel = [];
+        foreach ($mock['kpi'] as $card) {
+            $byLabel[$card['label']] = $card;
+        }
+        $this->assertSame('—', $byLabel['% Total Kehadiran']['value']);
+        $this->assertSame('—', $byLabel['% Avg SAP']['value']);
+        $this->assertSame('—', $byLabel['Ratio TBC']['value']);
+        $this->assertNull($byLabel['% Avg SAP']['delta']);
+    }
 }

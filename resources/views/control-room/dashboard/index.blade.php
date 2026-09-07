@@ -107,7 +107,7 @@
                     </div>
                 </div>
                 <div class="ocr-toolbar-right">
-                    <span class="ocr-sync">Panel jadwal: data asli · widget lain: mockup</span>
+                    <span class="ocr-sync">Jadwal, pencapaian, dan KPI: data asli</span>
                 </div>
             </div>
         </form>
@@ -119,12 +119,14 @@
                         <div class="ocr-kpi-icon is-{{ $card['color'] }}">
                             <i class="{{ $card['icon'] }}"></i>
                         </div>
-                        @if ($card['delta'] > 0)
+                        @if (($card['delta'] ?? null) === null)
+                            <span class="ocr-delta is-flat">—</span>
+                        @elseif ($card['delta'] > 0)
                             <span class="ocr-delta is-up"><i class="ri-arrow-up-line"></i> {{ $card['delta'] }}</span>
                         @elseif ($card['delta'] < 0)
                             <span class="ocr-delta is-down"><i class="ri-arrow-down-line"></i> {{ abs($card['delta']) }}</span>
                         @else
-                            <span class="ocr-delta is-flat">—</span>
+                            <span class="ocr-delta is-flat">0</span>
                         @endif
                     </div>
                     <p class="ocr-kpi-value">{{ $card['value'] }}</p>

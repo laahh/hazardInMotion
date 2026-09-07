@@ -24,8 +24,12 @@ final class DashboardScheduleWeekAssembler
     /**
      * @return array{days: list<array<string, mixed>>}
      */
-    public function build(ControlRoomSiteCode $site, CarbonImmutable $weekStart, ?CarbonInterface $today = null): array
-    {
+    public function build(
+        ControlRoomSiteCode $site,
+        CarbonImmutable $weekStart,
+        ?CarbonInterface $today = null,
+        bool $withRfid = true,
+    ): array {
         $weekEnd = $weekStart->addDays(6);
 
         $plans = SchedulePlan::query()

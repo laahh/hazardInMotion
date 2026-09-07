@@ -9,8 +9,8 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 
 /**
- * MOCKUP SEMENTARA — KPI header, coverage ranking masih fiktif.
- * Pencapaian Personil, Pareto, Highlight, Kualitas, dan Coverage Personil memakai data jadwal + OBDS/HSECM.
+ * Pencapaian Personil dan KPI header dari jadwal + absen + SAP nyata.
+ * Coverage ranking site masih mockup.
  */
 final class DashboardMockDataProvider
 {
@@ -46,7 +46,9 @@ final class DashboardMockDataProvider
         $kpi = $this->kpiCards(
             $achievementRows,
             $sapLoaded,
-            isset($insights['highlight']['tbcPercentage']) ? $insights['highlight']['tbcPercentage'] : null,
+            isset($insights['highlight']['tbcPercentage'])
+                ? $insights['highlight']['tbcPercentage']
+                : null,
             $previousRows,
             $previousSapLoaded,
         );
@@ -276,15 +278,107 @@ final class DashboardMockDataProvider
     }
 
     /**
-     * @return list<array{label: string, value: string, progress: float, delta: float, deltaLabel: string, icon: string, color: string, formula: string}>
+     * @param  list<array<string, mixed>>  $rows
+     * @param  list<array<string, mixed>>  $previousRows
+     * @return list<array{label: string, value: string, progress: float, delta: ?float, deltaLabel: string, icon: string, color: string, formula: string}>
      */
-    private function kpiCards(): array
-    {
+    private function kpiCards(
+        array $rows,
+        bool $sapLoaded,
+        ?float $tbcPercentage,
+        array $previousRows,
+        bool $previousSapLoaded,
+    ): array {
+        $attendance = $this->averageField($rows, 'attendance_pct');
+        $sap = $sapLoaded ? $this->averageField($rows, 'sap') : null;
+        $previousAttendance = $this->averageField($previousRows, 'attendance_pct');
+        $previousSap = $previousSapLoaded ? $this->averageField($previousRows, 'sap') : null;
+
         return [
-            ['label' => '% Total Kehadiran', 'value' => '87.5%', 'progress' => 87.5, 'delta' => 2.3, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-user-follow-line', 'color' => 'success', 'formula' => 'hadir_sesuai_jadwal + hadir_menggantikan / total jadwal'],
-            ['label' => '% Avg SAP', 'value' => '92.1%', 'progress' => 92.1, 'delta' => -1.4, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-file-list-3-line', 'color' => 'primary', 'formula' => 'rata-rata SapAchievement seluruh personil'],
-            ['label' => 'Ratio TBC', 'value' => '34.2%', 'progress' => 34.2, 'delta' => 5.1, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-shield-check-line', 'color' => 'danger', 'formula' => 'temuan tervalidasi TBC / total hazard+inspeksi'],
+            $this->kpiCard(
+                label: '% Total Kehadiran',
+                value: $attendance,
+                delta: $this->delta($attendance, $previousAttendance),
+                icon: 'ri-user-follow-line',
+                color: 'success',
+                formula: 'Rata-rata kehadiran slot jaga: sesuai/menggantikan/tidak dijadwalkan = 100%, tidak hadir = 0%. Belum absen tidak dihitung.',
+            ),
+            $this->kpiCard(
+                label: '% Avg SAP',
+                value: $sap,
+                delta: $this->delta($sap, $previousSap),
+                icon: 'ri-file-list-3-line',
+                color: 'primary',
+                formula: 'Rata-rata % SAP orang jaga. Target per slot: 1 Hazard + 1 Inspeksi + 1 Observasi/OAK.',
+            ),
+            $this->kpiCard(
+                label: 'Ratio TBC',
+                value: $tbcPercentage,
+                delta: null,
+                icon: 'ri-shield-check-line',
+                color: 'danger',
+                formula: 'Jumlah temuan TBC HSECM / total hazard + inspeksi minggu ini. Kosong bila tabel TBC belum ada.',
+            ),
         ];
+    }
+
+    /**
+     * @return array{label: string, value: string, progress: float, delta: ?float, deltaLabel: string, icon: string, color: string, formula: string}
+     */
+    private function kpiCard(
+        string $label,
+        ?float $value,
+        ?float $delta,
+        string $icon,
+        string $color,
+        string $formula,
+    ): array {
+        return [
+            'label' => $label,
+            'value' => $value === null ? '—' : $this->formatKpi($value).'%',
+            'progress' => $value ?? 0.0,
+            'delta' => $delta,
+            'deltaLabel' => 'vs minggu lalu',
+            'icon' => $icon,
+            'color' => $color,
+            'formula' => $formula,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function averageField(array $rows, string $key): ?float
+    {
+        $values = [];
+        foreach ($rows as $row) {
+            if ($row[$key] !== null) {
+                $values[] = (float) $row[$key];
+            }
+        }
+        if ($values === []) {
+            return null;
+        }
+
+        return round(array_sum($values) / count($values), 1);
+    }
+
+    private function delta(?float $current, ?float $previous): ?float
+    {
+        if ($current === null || $previous === null) {
+            return null;
+        }
+
+        return round($current - $previous, 1);
+    }
+
+    private function formatKpi(float $value): string
+    {
+        if (abs($value - round($value)) < 0.05) {
+            return number_format($value, 0);
+        }
+
+        return number_format($value, 1);
     }
 
     /**
@@ -294,4 +388,23 @@ final class DashboardMockDataProvider
     {
         $rows = [
             ['name' => 'BMO 1', 'non_critical' => 18, 'critical' => 10],
-            ['name' => 'GMO', 'non_critical' => 
+            ['name' => 'GMO', 'non_critical' => 14, 'critical' => 8],
+            ['name' => 'BMO 2', 'non_critical' => 12, 'critical' => 6],
+            ['name' => 'LMO', 'non_critical' => 11, 'critical' => 4],
+            ['name' => 'PMO', 'non_critical' => 9, 'critical' => 3],
+        ];
+
+        foreach ($rows as &$row) {
+            $row['score'] = $row['non_critical'] * 1 + $row['critical'] * 2;
+        }
+        unset($row);
+
+        usort($rows, fn (array $a, array $b): int => $b['score'] <=> $a['score']);
+
+        return array_values(array_map(
+            fn (int $rank, array $row): array => ['rank' => $rank + 1, ...$row],
+            array_keys($rows),
+            $rows
+        ));
+    }
+}

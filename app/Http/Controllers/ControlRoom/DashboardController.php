@@ -25,8 +25,7 @@ use Illuminate\View\View;
  * (T0.1 sudah selesai — lihat plan-OCR.md 0.6 — tapi desain final Fase 5
  * masih menunggu keputusan reuse mv_sap_scorecard_mingguan, dan beberapa
  * sumber lain seperti Sheet ID TBC belum ada — lihat Lampiran D #23/#27).
- * Panel KPI dan ranking coverage masih MOCKUP.
- * Pencapaian Personil, Pareto, Highlight, dan Kualitas memakai jadwal + OBDS/HSECM.
+ * Pencapaian Personil, KPI header, Pareto, Highlight, dan Kualitas memakai jadwal + OBDS/HSECM.
  * Panel Penjadwalan memakai Jadwal Rencana + Absen nyata; default filter = minggu lalu.
  */
 final class DashboardController extends Controller
@@ -60,6 +59,8 @@ final class DashboardController extends Controller
             $sapWeek['findings'] ?? [],
             $sapWeek['loaded'],
         );
+        $previousSchedule = $scheduleWeek->build($site, $prevWeekStart, withRfid: false);
+        $previousSap = $sapWeekCounts->forScheduleDays($previousSchedule['days']);
 
         return view('control-room.dashboard.index', [
             'site' => $site,
@@ -72,7 +73,16 @@ final class DashboardController extends Controller
             'nextYear' => (int) $nextWeekStart->isoWeekYear(),
             'nextWeek' => (int) $nextWeekStart->isoWeek(),
             'sites' => ControlRoomSiteCode::cases(),
-            'mock' => $mock->build($weekStart, $schedule['days'], $sapWeek['counts'], $sapWeek['loaded'], $insights),
+            'mock' => $mock->build(
+                $weekStart,
+                $schedule['days'],
+                $sapWeek['counts'],
+                $sapWeek['loaded'],
+                $insights,
+                $previousSchedule['days'],
+                $previousSap['counts'],
+                $previousSap['loaded'],
+            ),
             'schedule' => $schedule,
         ]);
     }
