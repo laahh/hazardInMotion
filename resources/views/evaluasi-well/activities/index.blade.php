@@ -483,11 +483,7 @@
 
 <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8 d-flex align-items-start gap-2" role="status">
   <iconify-icon icon="solar:info-circle-bold" class="icon text-xl mt-1"></iconify-icon>
-  <div class="text-sm">
-    Sumber: log WELL <strong>workout_analyses</strong> (olahraga) dan <strong>food_analyses</strong> (kalori masuk).
-    KPI header memakai agregasi SQL (sesi &amp; kalori) supaya halaman tidak timeout lewat tunnel.
-    Durasi/jarak di-parse dari teks di tabel per halaman dan Excel. Jarak hanya untuk lari/jalan.
-  </div>
+ 
 </div>
 
 <div class="row gy-4 mb-24">
