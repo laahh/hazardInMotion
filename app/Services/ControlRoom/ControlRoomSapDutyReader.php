@@ -20,7 +20,7 @@ final class ControlRoomSapDutyReader
 {
     public const PER_TYPE_LIMIT = 40;
 
-    private const CACHE_SECONDS = 90;
+    private const CACHE_SECONDS = 300;
 
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
@@ -116,9 +116,8 @@ final class ControlRoomSapDutyReader
     }
 
     /**
-     * CTE MATERIALIZED memaksa index kode_sid_pelapor dulu (~ratusan baris),
-     * baru filter H s/d H+1. Tanpa ini planner sering BitmapAnd dengan index
-     * tanggal (ribuan–puluhan ribu baris / 2 hari) dan observasi bisa >10 detik.
+     * SID + rentang H/H+1 memakai index kode_sid_pelapor dan tanggal
+     * (BitmapAnd). Jangan MATERIALIZED seluruh riwayat SID.
      *
      * @param  list<string>  $errors
      * @return list<object>
@@ -127,18 +126,14 @@ final class ControlRoomSapDutyReader
     {
         $limit = self::PER_TYPE_LIMIT;
         $sql = "
-            WITH sid_rows AS MATERIALIZED (
-                SELECT id_laporan, tanggal_laporan, jenis_laporan, status_laporan,
-                       deskripsi_temuan, ketidaksesuaian, subketidaksesuaian, tools_observasi,
-                       lokasi, detil_lokasi, latitude, longitude,
-                       nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor,
-                       nama_pic, jabatan_fungsional_pic, perusahaan_pic, url_foto
-                FROM bcbeats.mv_inspeksi_hazard
-                WHERE kode_sid_pelapor = ?
-            )
-            SELECT *
-            FROM sid_rows
-            WHERE tanggal_laporan >= CAST(? AS timestamp)
+            SELECT id_laporan, tanggal_laporan, jenis_laporan, status_laporan,
+                   deskripsi_temuan, ketidaksesuaian, subketidaksesuaian, tools_observasi,
+                   lokasi, detil_lokasi, latitude, longitude,
+                   nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor,
+                   nama_pic, jabatan_fungsional_pic, perusahaan_pic, url_foto
+            FROM bcbeats.mv_inspeksi_hazard
+            WHERE kode_sid_pelapor = ?
+              AND tanggal_laporan >= CAST(? AS timestamp)
               AND tanggal_laporan < CAST(? AS timestamp)
             LIMIT {$limit}
         ";
@@ -154,16 +149,12 @@ final class ControlRoomSapDutyReader
     {
         $limit = self::PER_TYPE_LIMIT;
         $sql = "
-            WITH sid_rows AS MATERIALIZED (
-                SELECT id_observasi, tanggal_observasi, jenis_kegiatan, catatan_observasi, tools_observasi,
-                       lokasi, detil_lokasi, latitude, longitude, url_foto,
-                       nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor
-                FROM bcbeats.mv_observasi
-                WHERE kode_sid_pelapor = ?
-            )
-            SELECT *
-            FROM sid_rows
-            WHERE tanggal_observasi >= CAST(? AS timestamp)
+            SELECT id_observasi, tanggal_observasi, jenis_kegiatan, catatan_observasi, tools_observasi,
+                   lokasi, detil_lokasi, latitude, longitude, url_foto,
+                   nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor
+            FROM bcbeats.mv_observasi
+            WHERE kode_sid_pelapor = ?
+              AND tanggal_observasi >= CAST(? AS timestamp)
               AND tanggal_observasi < CAST(? AS timestamp)
             LIMIT {$limit}
         ";
@@ -179,19 +170,13 @@ final class ControlRoomSapDutyReader
     {
         $limit = self::PER_TYPE_LIMIT;
         $sql = "
-            WITH sid_rows AS MATERIALIZED (
-                SELECT id_oak, tanggal_submit, aktivitas, sub_aktivitas, kesimpulan, tools_observasi,
-                       lokasi, detil_lokasi, latitude, longitude, url_foto,
-                       nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor
-                FROM bcbeats.mv_oak
-                WHERE kode_sid_pelapor = ?
-            )
             SELECT DISTINCT ON (id_oak)
                 id_oak, tanggal_submit, aktivitas, sub_aktivitas, kesimpulan, tools_observasi,
                 lokasi, detil_lokasi, latitude, longitude, url_foto,
                 nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor
-            FROM sid_rows
-            WHERE tanggal_submit >= CAST(? AS timestamp)
+            FROM bcbeats.mv_oak
+            WHERE kode_sid_pelapor = ?
+              AND tanggal_submit >= CAST(? AS timestamp)
               AND tanggal_submit < CAST(? AS timestamp)
             ORDER BY id_oak, tanggal_submit
             LIMIT {$limit}

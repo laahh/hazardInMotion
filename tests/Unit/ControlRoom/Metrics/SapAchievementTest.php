@@ -45,4 +45,13 @@ final class SapAchievementTest extends TestCase
 
         $this->assertSame(33.33, $percentage);
     }
+
+    public function test_oak_mengisi_slot_observasi(): void
+    {
+        $metric = new SapAchievement();
+
+        $this->assertSame(33.33, $metric->percentage(['oak' => 1]));
+        $this->assertSame(100.0, $metric->percentage(['hazard' => 1, 'inspeksi' => 1, 'oak' => 1]));
+        $this->assertSame(100.0, $metric->percentage(['hazard' => 1, 'inspeksi' => 1, 'observasi' => 1, 'oak' => 4]));
+    }
 }

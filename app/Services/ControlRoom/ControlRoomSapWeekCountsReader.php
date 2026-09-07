@@ -19,7 +19,7 @@ use Throwable;
  */
 final class ControlRoomSapWeekCountsReader
 {
-    private const CACHE_SECONDS = 90;
+    private const CACHE_SECONDS = 300;
 
     private const QUERY_TIMEOUT_MS = 4000;
 
@@ -52,7 +52,7 @@ final class ControlRoomSapWeekCountsReader
         sort($sids);
         $dates = array_column($duties, 'date');
         sort($dates);
-        $cacheKey = 'control-room:sap-week-counts:v2:'.hash('sha1', implode(',', $sids).'|'.$dates[0].'|'.$dates[array_key_last($dates)]);
+        $cacheKey = 'control-room:sap-week-counts:v5:'.hash('sha1', implode(',', $sids).'|'.$dates[0].'|'.$dates[array_key_last($dates)]);
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['counts'], $cached['findings'])) {
             return ['loaded' => true, 'counts' => $cached['counts'], 'findings' => $cached['findings']];
@@ -68,7 +68,7 @@ final class ControlRoomSapWeekCountsReader
             ...$this->fetchOak($sids, $rangeStart, $rangeEnd, $failed),
         ];
 
-        if ($failed > 0) {
+        if ($failed === 3) {
             return ['loaded' => false, 'counts' => [], 'findings' => []];
         }
 
@@ -83,9 +83,10 @@ final class ControlRoomSapWeekCountsReader
         }
 
         $counts = $this->countForDuties($events, $duties);
-        Cache::put($cacheKey, ['counts' => $counts, 'findings' => $findings], self::CACHE_SECONDS);
+        $onDuty = $this->findingsOnDuty($findings, $duties);
+        Cache::put($cacheKey, ['counts' => $counts, 'findings' => $onDuty], self::CACHE_SECONDS);
 
-        return ['loaded' => true, 'counts' => $counts, 'findings' => $findings];
+        return ['loaded' => true, 'counts' => $counts, 'findings' => $onDuty];
     }
 
     /**
@@ -111,8 +112,8 @@ final class ControlRoomSapWeekCountsReader
                 if ($event['at']->lt($window['start']) || $event['at']->gte($window['end'])) {
                     continue;
                 }
-                $component = $event['component'];
-                if (isset($bucket[$component])) {
+                $component = $this->slotComponent((string) $event['component']);
+                if ($component !== null) {
                     $bucket[$component]++;
                 }
             }
@@ -122,9 +123,72 @@ final class ControlRoomSapWeekCountsReader
         return $counts;
     }
 
+    /**
+     * Hanya laporan yang jatuh di jendela jaga H s/d H+1 untuk SID yang dijadwalkan.
+     *
+     * @param  list<array<string, mixed>>  $findings
+     * @param  list<array{sid: string, date: string}>  $duties
+     * @return list<array<string, mixed>>
+     */
+    public function findingsOnDuty(array $findings, array $duties): array
+    {
+        $windowsBySid = [];
+        foreach ($duties as $duty) {
+            $window = $this->dutyWindow->reportingWindow(CarbonImmutable::parse($duty['date']));
+            $windowsBySid[$duty['sid']][] = $window;
+        }
+
+        $onDuty = [];
+        foreach ($findings as $finding) {
+            $sid = strtoupper(trim((string) ($finding['sid'] ?? '')));
+            if ($sid === '' || ! isset($windowsBySid[$sid])) {
+                continue;
+            }
+
+            $at = $this->parseAt($finding['at'] ?? null);
+            if ($at === null) {
+                continue;
+            }
+
+            foreach ($windowsBySid[$sid] as $window) {
+                if ($at->gte($window['start']) && $at->lt($window['end'])) {
+                    $onDuty[] = $finding;
+                    break;
+                }
+            }
+        }
+
+        return $onDuty;
+    }
+
     public function slotKey(string $sid, string $date): string
     {
         return strtoupper(trim($sid)).'|'.$date;
+    }
+
+    /**
+     * Observasi dan OAK mengisi slot % SAP yang sama.
+     */
+    public function slotComponent(string $component): ?string
+    {
+        return match (strtolower(trim($component))) {
+            'hazard' => 'hazard',
+            'inspeksi' => 'inspeksi',
+            'observasi', 'oak' => 'observasi',
+            default => null,
+        };
+    }
+
+    private function componentFromJenis(string $jenis): ?string
+    {
+        if (str_contains($jenis, 'INSPEKSI')) {
+            return 'inspeksi';
+        }
+        if (str_contains($jenis, 'HAZARD')) {
+            return 'hazard';
+        }
+
+        return null;
     }
 
     /**
@@ -162,16 +226,11 @@ final class ControlRoomSapWeekCountsReader
     {
         $placeholders = implode(',', array_fill(0, count($sids), '?'));
         $sql = "
-            WITH sid_rows AS MATERIALIZED (
-                SELECT kode_sid_pelapor, nama_pelapor, tanggal_laporan, jenis_laporan,
-                       nama_kategori, ketidaksesuaian, nama_goldenrule, lokasi, detil_lokasi
-                FROM bcbeats.mv_inspeksi_hazard
-                WHERE kode_sid_pelapor IN ({$placeholders})
-            )
             SELECT kode_sid_pelapor, nama_pelapor, tanggal_laporan, jenis_laporan,
-                   nama_kategori, ketidaksesuaian, nama_goldenrule, lokasi, detil_lokasi
-            FROM sid_rows
-            WHERE tanggal_laporan >= CAST(? AS timestamp)
+                   subketidaksesuaian, ketidaksesuaian, nama_goldenrule, lokasi, detil_lokasi
+            FROM bcbeats.mv_inspeksi_hazard
+            WHERE kode_sid_pelapor IN ({$placeholders})
+              AND tanggal_laporan >= CAST(? AS timestamp)
               AND tanggal_laporan < CAST(? AS timestamp)
         ";
 
@@ -184,12 +243,16 @@ final class ControlRoomSapWeekCountsReader
                 continue;
             }
             $jenis = strtoupper(trim((string) ($row->jenis_laporan ?? '')));
+            $component = $this->componentFromJenis($jenis);
+            if ($component === null) {
+                continue;
+            }
             $findings[] = $this->finding(
                 sid: $sid,
                 name: (string) ($row->nama_pelapor ?? ''),
                 at: $at,
-                component: $jenis === 'INSPEKSI' ? 'inspeksi' : 'hazard',
-                category: $this->firstText($row->nama_kategori ?? null, $row->ketidaksesuaian ?? null),
+                component: $component,
+                category: $this->firstText($row->subketidaksesuaian ?? null, $row->ketidaksesuaian ?? null),
                 goldenRule: (string) ($row->nama_goldenrule ?? ''),
                 lokasi: (string) ($row->lokasi ?? ''),
                 detilLokasi: (string) ($row->detil_lokasi ?? ''),
@@ -208,14 +271,10 @@ final class ControlRoomSapWeekCountsReader
     {
         $placeholders = implode(',', array_fill(0, count($sids), '?'));
         $sql = "
-            WITH sid_rows AS MATERIALIZED (
-                SELECT kode_sid_pelapor, nama_pelapor, tanggal_observasi, jenis_kegiatan, tools_observasi, lokasi, detil_lokasi
-                FROM bcbeats.mv_observasi
-                WHERE kode_sid_pelapor IN ({$placeholders})
-            )
             SELECT kode_sid_pelapor, nama_pelapor, tanggal_observasi, jenis_kegiatan, tools_observasi, lokasi, detil_lokasi
-            FROM sid_rows
-            WHERE tanggal_observasi >= CAST(? AS timestamp)
+            FROM bcbeats.mv_observasi
+            WHERE kode_sid_pelapor IN ({$placeholders})
+              AND tanggal_observasi >= CAST(? AS timestamp)
               AND tanggal_observasi < CAST(? AS timestamp)
         ";
 
@@ -251,15 +310,11 @@ final class ControlRoomSapWeekCountsReader
     {
         $placeholders = implode(',', array_fill(0, count($sids), '?'));
         $sql = "
-            WITH sid_rows AS MATERIALIZED (
-                SELECT id_oak, kode_sid_pelapor, nama_pelapor, tanggal_submit, aktivitas, sub_aktivitas, lokasi, detil_lokasi
-                FROM bcbeats.mv_oak
-                WHERE kode_sid_pelapor IN ({$placeholders})
-            )
             SELECT DISTINCT ON (id_oak)
                 kode_sid_pelapor, nama_pelapor, tanggal_submit, aktivitas, sub_aktivitas, lokasi, detil_lokasi
-            FROM sid_rows
-            WHERE tanggal_submit >= CAST(? AS timestamp)
+            FROM bcbeats.mv_oak
+            WHERE kode_sid_pelapor IN ({$placeholders})
+              AND tanggal_submit >= CAST(? AS timestamp)
               AND tanggal_submit < CAST(? AS timestamp)
             ORDER BY id_oak, tanggal_submit
         ";
@@ -277,7 +332,7 @@ final class ControlRoomSapWeekCountsReader
                 name: (string) ($row->nama_pelapor ?? ''),
                 at: $at,
                 component: 'oak',
-                category: $this->firstText($row->aktivitas ?? null, $row->sub_aktivitas ?? null),
+                category: $this->firstText($row->sub_aktivitas ?? null, $row->aktivitas ?? null),
                 goldenRule: '',
                 lokasi: (string) ($row->lokasi ?? ''),
                 detilLokasi: (string) ($row->detil_lokasi ?? ''),

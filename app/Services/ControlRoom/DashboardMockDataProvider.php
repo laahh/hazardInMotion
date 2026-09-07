@@ -27,6 +27,8 @@ final class DashboardMockDataProvider
      *     quality?: list<array<string, mixed>>,
      *     personnelCoverage?: list<array{name: string, lokasi: int, kritis: int, lead: bool}>
      * }  $insights
+     * @param  list<array<string, mixed>>  $previousScheduleDays
+     * @param  array<string, array{hazard: int, inspeksi: int, observasi: int}>  $previousSapCounts
      * @return array<string, mixed>
      */
     public function build(
@@ -35,14 +37,25 @@ final class DashboardMockDataProvider
         array $sapCountsBySidDate = [],
         bool $sapLoaded = false,
         array $insights = [],
+        array $previousScheduleDays = [],
+        array $previousSapCounts = [],
+        bool $previousSapLoaded = false,
     ): array {
         $achievementRows = $this->achievementRowsFromSchedule($scheduleDays, $sapCountsBySidDate, $sapLoaded);
+        $previousRows = $this->achievementRowsFromSchedule($previousScheduleDays, $previousSapCounts, $previousSapLoaded);
+        $kpi = $this->kpiCards(
+            $achievementRows,
+            $sapLoaded,
+            isset($insights['highlight']['tbcPercentage']) ? $insights['highlight']['tbcPercentage'] : null,
+            $previousRows,
+            $previousSapLoaded,
+        );
         if ($achievementRows === []) {
             $achievementRows = $this->personnelAchievementFallback($weekStart);
         }
 
         return [
-            'kpi' => $this->kpiCards(),
+            'kpi' => $kpi,
             'achievement' => $achievementRows,
             'achievementGroups' => $this->groupAchievement($achievementRows),
             'personnelCoverage' => $insights['personnelCoverage'] ?? $this->personnelCoverageFrom($achievementRows),
@@ -170,10 +183,11 @@ final class DashboardMockDataProvider
         }
 
         $mark = static fn (int $n): string => $n >= 1 ? 'ada' : 'belum';
+        $observasi = (int) ($counts['observasi'] ?? 0) + (int) ($counts['oak'] ?? 0);
 
-        return 'Target 1 Hazard, 1 Inspeksi, 1 Observasi/OAK. Hazard: '.$mark($counts['hazard'])
-            .', Inspeksi: '.$mark($counts['inspeksi'])
-            .', Observasi/OAK: '.$mark($counts['observasi']).'.';
+        return 'Target 1 Hazard, 1 Inspeksi, 1 Observasi/OAK. Hazard: '.$mark((int) ($counts['hazard'] ?? 0))
+            .', Inspeksi: '.$mark((int) ($counts['inspeksi'] ?? 0))
+            .', Observasi/OAK: '.$mark($observasi).'.';
     }
 
     /**
@@ -280,23 +294,4 @@ final class DashboardMockDataProvider
     {
         $rows = [
             ['name' => 'BMO 1', 'non_critical' => 18, 'critical' => 10],
-            ['name' => 'GMO', 'non_critical' => 14, 'critical' => 8],
-            ['name' => 'BMO 2', 'non_critical' => 12, 'critical' => 6],
-            ['name' => 'LMO', 'non_critical' => 11, 'critical' => 4],
-            ['name' => 'PMO', 'non_critical' => 9, 'critical' => 3],
-        ];
-
-        foreach ($rows as &$row) {
-            $row['score'] = $row['non_critical'] * 1 + $row['critical'] * 2;
-        }
-        unset($row);
-
-        usort($rows, fn (array $a, array $b): int => $b['score'] <=> $a['score']);
-
-        return array_values(array_map(
-            fn (int $rank, array $row): array => ['rank' => $rank + 1, ...$row],
-            array_keys($rows),
-            $rows
-        ));
-    }
-}
+            ['name' => 'GMO', 'non_critical' => 

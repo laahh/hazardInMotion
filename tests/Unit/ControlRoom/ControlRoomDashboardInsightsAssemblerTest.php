@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\ControlRoom;
 
 use App\Services\ControlRoom\ControlRoomDashboardInsightsAssembler;
+use App\Services\ControlRoom\ControlRoomSapDutyReader;
 use App\Services\ControlRoom\Metrics\FindingVariety;
 use App\Services\ControlRoom\Metrics\TbcValidity;
 use App\Services\ControlRoom\Reference\LocationReader;
@@ -79,6 +80,29 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         $this->assertSame(1, $row['gr']);
         $this->assertSame(2, $row['blindspot']);
         $this->assertSame(2, $row['tbc']);
+    }
+
+    public function test_kualitas_hanya_dari_orang_jaga_dan_jendela_tugas(): void
+    {
+        $insights = $this->assembler()->fromFindings(
+            [
+                $this->finding('FJAVJ', '2026-08-31 08:15:00', 'hazard', 'Tidak menggunakan APD', ''),
+                $this->finding('FJAVJ', '2026-08-31 09:00:00', 'inspeksi', 'Tidak ada pengawas', ''),
+                $this->finding('FJAVJ', '2026-09-02 08:00:00', 'hazard', 'Di luar jaga', ''),
+                $this->finding('XXXXX', '2026-08-31 08:00:00', 'hazard', 'Bukan jaga CR', ''),
+            ],
+            $this->schedule(),
+            ['uncovered' => [], 'total' => 0],
+            [],
+            sapLoaded: true,
+        );
+
+        $this->assertCount(1, $insights['quality']);
+        $row = $insights['quality'][0];
+        $this->assertSame('Agung Nugroho', $row['name']);
+        $this->assertSame(2, $row['total_findings']);
+        $this->assertSame(2, $row['distinct_categories']);
+        $this->assertSame(1.0, $row['variety_score']);
     }
 
     public function test_coverage_personil_menghitung_lokasi_unik_dan_kritis_saat_jaga(): void
@@ -163,6 +187,7 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
             new TbcValidity(),
             new LocationReader(new PembatasanLVOlapQuery()),
             new HsecmDatabaseRepository(),
+            new ControlRoomSapDutyReader(new PembatasanLVOlapQuery()),
         );
     }
 }

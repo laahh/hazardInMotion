@@ -48,6 +48,16 @@
     $heatLabel = static function (?float $value): string {
         return $value === null ? '—' : number_format($value, 0).'%';
     };
+    $sapLabel = static function (?float $value): string {
+        if ($value === null) {
+            return '—';
+        }
+        if (abs($value - round($value)) < 0.005) {
+            return number_format($value, 0).'%';
+        }
+
+        return number_format($value, 2).'%';
+    };
     $scheduleDays = $schedule['days'];
     $defaultDay = collect($scheduleDays)->firstWhere('is_today')
         ?? collect($scheduleDays)->first(fn (array $day): bool => $day['s1'] !== [] || $day['s2'] !== [])
@@ -267,7 +277,7 @@
                                             <td class="ocr-heat-name">{{ $row['name'] }}</td>
                                             <td class="text-center">{{ $row['shift'] }}</td>
                                             <td class="ocr-heat-cell {{ $heatClass($row['attendance_pct']) }}">{{ $heatLabel($row['attendance_pct']) }}</td>
-                                            <td class="ocr-heat-cell {{ $heatClass($row['sap']) }}" title="{{ $row['sap_hint'] ?? '' }}">{{ $heatLabel($row['sap']) }}</td>
+                                            <td class="ocr-heat-cell {{ $heatClass($row['sap']) }}" title="{{ $row['sap_hint'] ?? '' }}">{{ $sapLabel($row['sap']) }}</td>
                                             <td class="ocr-heat-cell {{ $heatClass($row['tbc']) }}">{{ $heatLabel($row['tbc']) }}</td>
                                             <td class="text-center">
                                                 @if (($row['sid'] ?? '') !== '')
@@ -388,7 +398,7 @@
                     <div class="ocr-card-header">
                         <div>
                             <h6>Kualitas Temuan per Personil</h6>
-                            <p class="ocr-card-kicker">Variasi 0–1 · semakin tinggi semakin beragam kategori</p>
+                            <p class="ocr-card-kicker">Kategori = sub ketidaksesuaian · Variasi = kategori unik / total temuan saat jaga</p>
                         </div>
                     </div>
                     <div class="ocr-card-body ocr-card-body--flush">
@@ -412,10 +422,14 @@
                                             <td class="text-center">{{ $row['total_findings'] }}</td>
                                             <td class="text-center">{{ $row['distinct_categories'] }}</td>
                                             <td>
-                                                <div class="ocr-variety">
-                                                    <div class="ocr-track is-primary"><span style="width: {{ ($row['variety_score'] ?? 0) * 100 }}%"></span></div>
-                                                    <span>{{ number_format((float) $row['variety_score'], 2) }}</span>
-                                                </div>
+                                                @if ($row['variety_score'] === null)
+                                                    <span class="text-secondary-light">—</span>
+                                                @else
+                                                    <div class="ocr-variety">
+                                                        <div class="ocr-track is-primary"><span style="width: {{ $row['variety_score'] * 100 }}%"></span></div>
+                                                        <span>{{ number_format((float) $row['variety_score'], 2) }}</span>
+                                                    </div>
+                                                @endif
                                             </td>
                                             <td class="text-center">{{ $row['tbc'] }}</td>
                                             <td class="text-center">{{ $row['gr'] }}</td>
@@ -437,7 +451,7 @@
                     <div class="ocr-card-header">
                         <div>
                             <h6>Volume vs Variasi</h6>
-                            <p class="ocr-card-kicker">Kanan-atas = banyak temuan &amp; kategori beragam</p>
+                            <p class="ocr-card-kicker">Kanan-atas = banyak temuan saat jaga &amp; sub ketidaksesuaian beragam</p>
                         </div>
                     </div>
                     <div class="ocr-card-body"><div id="chart-quality-scatter"></div></div>
@@ -682,11 +696,14 @@
                 });
             });
 
+            var qualityPoints = quality.filter(function (row) {
+                return row.variety_score !== null;
+            });
             new ApexCharts(document.getElementById('chart-quality-scatter'), {
                 chart: { type: 'scatter', height: 280, toolbar: { show: false }, fontFamily: 'inherit' },
                 series: [{
                     name: 'Personil',
-                    data: quality.map(function (row) { return [row.total_findings, row.variety_score]; }),
+                    data: qualityPoints.map(function (row) { return [row.total_findings, row.variety_score]; }),
                 }],
                 xaxis: { title: { text: 'Volume Temuan' }, tickAmount: 5 },
                 yaxis: { title: { text: 'Variasi Score' }, min: 0, max: 1 },
@@ -694,11 +711,11 @@
                 grid: { borderColor: 'rgba(209, 213, 219, 0.4)', strokeDashArray: 4 },
                 tooltip: {
                     custom: function (opts) {
-                        var row = quality[opts.dataPointIndex];
+                        var row = qualityPoints[opts.dataPointIndex];
                         if (!row) {
                             return '';
                         }
-                        return '<div class="p-8 text-xs"><strong>' + row.name + '</strong><br>Volume: ' + row.total_findings + '<br>Variasi: ' + row.variety_score + '</div>';
+                        return '<div class="p-8 text-xs"><strong>' + row.name + '</strong><br>Volume: ' + row.total_findings + '<br>Kategori: ' + row.distinct_categories + '<br>Variasi: ' + row.variety_score + '</div>';
                     },
                 },
             }).render();

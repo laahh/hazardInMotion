@@ -17,7 +17,7 @@ namespace App\Services\ControlRoom\Metrics;
 final class SapAchievement
 {
     /**
-     * @param  array<string, int>  $componentCounts  key: nama komponen (hazard/inspeksi/observasi), value: jumlah laporan
+     * @param  array<string, int>  $componentCounts  key: hazard/inspeksi/observasi/oak
      */
     public function percentage(array $componentCounts): float
     {
@@ -27,9 +27,15 @@ final class SapAchievement
             return 0.0;
         }
 
+        $slots = [
+            'hazard' => (int) ($componentCounts['hazard'] ?? 0),
+            'inspeksi' => (int) ($componentCounts['inspeksi'] ?? 0),
+            'observasi' => (int) ($componentCounts['observasi'] ?? 0) + (int) ($componentCounts['oak'] ?? 0),
+        ];
+
         $fulfilled = 0;
         foreach ($targetComponents as $component) {
-            if (($componentCounts[$component] ?? 0) >= 1) {
+            if (($slots[$component] ?? $componentCounts[$component] ?? 0) >= 1) {
                 $fulfilled++;
             }
         }

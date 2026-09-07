@@ -13,6 +13,9 @@ use App\Services\ControlRoom\Reference\ShiftResolver;
 use App\Services\Hsecm\HsecmDatabaseRepository;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
@@ -27,12 +30,15 @@ final class ControlRoomDashboardInsightsAssembler
 
     private const TBC_TABLE = 'scr_hsecm_blindspot_tbc_gr';
 
+    private const HSECM_CACHE_SECONDS = 300;
+
     public function __construct(
         private readonly ShiftResolver $shifts,
         private readonly FindingVariety $variety,
         private readonly TbcValidity $tbc,
         private readonly LocationReader $locations,
         private readonly HsecmDatabaseRepository $hsecm,
+        private readonly ControlRoomSapDutyReader $dutyWindow,
     ) {}
 
     /**
@@ -53,10 +59,20 @@ final class ControlRoomDashboardInsightsAssembler
         array $findings,
         bool $sapLoaded,
     ): array {
-        $coverage = $this->loadCoverage($site);
-        $tbcRows = $this->loadTbcRows($site, $weekStart, $weekEnd);
+        $cacheKey = sprintf(
+            'control-room:insights-hsecm:v1:%s:%s:%s',
+            $site->value,
+            $weekStart->toDateString(),
+            $weekEnd->toDateString(),
+        );
+        $hsecm = Cache::remember($cacheKey, self::HSECM_CACHE_SECONDS, function () use ($site, $weekStart, $weekEnd): array {
+            return [
+                'coverage' => $this->loadCoverage($site),
+                'tbc' => $this->loadTbcRows($site, $weekStart, $weekEnd),
+            ];
+        });
 
-        return $this->fromFindings($findings, $scheduleDays, $coverage, $tbcRows, $sapLoaded);
+        return $this->fromFindings($findings, $scheduleDays, $hsecm['coverage'], $hsecm['tbc'], $sapLoaded);
     }
 
     /**
@@ -78,7 +94,7 @@ final class ControlRoomDashboardInsightsAssembler
         array $tbcRows,
         bool $sapLoaded,
     ): array {
-        $usable = $sapLoaded ? $findings : [];
+        $usable = $sapLoaded ? $this->onDutyFindings($findings, $scheduleDays) : [];
 
         return [
             'pareto' => $this->paretoFromFindings($usable),
@@ -180,6 +196,10 @@ final class ControlRoomDashboardInsightsAssembler
     }
 
     /**
+     * Kualitas temuan personil jadwal: kategori = sub ketidaksesuaian
+     * (observasi/OAK memakai analog jenis kegiatan / sub aktivitas).
+     * Variasi = COUNT DISTINCT kategori / COUNT temuan saat jaga.
+     *
      * @param  list<array<string, mixed>>  $findings
      * @param  list<array<string, mixed>>  $scheduleDays
      * @param  array{uncovered: array<string, true>, total: int}  $coverage
@@ -194,20 +214,24 @@ final class ControlRoomDashboardInsightsAssembler
         $bySid = [];
         foreach ($findings as $finding) {
             $sid = strtoupper(trim((string) ($finding['sid'] ?? '')));
-            if ($sid === '') {
+            if ($sid === '' || ! isset($namesBySid[$sid])) {
                 continue;
             }
             $bySid[$sid][] = $finding;
         }
 
         $rows = [];
-        foreach ($bySid as $sid => $personFindings) {
+        foreach ($namesBySid as $sid => $name) {
+            $personFindings = $bySid[$sid] ?? [];
+            if ($personFindings === []) {
+                continue;
+            }
+
             $categories = [];
             $gr = 0;
             $blindspot = 0;
             foreach ($personFindings as $finding) {
-                $category = trim((string) ($finding['category'] ?? ''));
-                $categories[] = $category !== '' ? $category : 'Tanpa kategori';
+                $categories[] = $this->findingCategory($finding);
                 if ($this->isGoldenRuleViolation((string) ($finding['golden_rule'] ?? ''))) {
                     $gr++;
                 }
@@ -224,13 +248,12 @@ final class ControlRoomDashboardInsightsAssembler
                 }
             }
 
-            $name = $namesBySid[$sid] ?? (string) ($personFindings[0]['name'] ?? $sid);
             $rows[] = [
                 'name' => $name,
                 'sid' => $sid,
                 'total_findings' => count($personFindings),
                 'distinct_categories' => count(array_unique($categories)),
-                'variety_score' => $this->variety->score($categories) ?? 0.0,
+                'variety_score' => $this->variety->score($categories),
                 'tbc' => $tbcByName[$this->normalizeName($name)] ?? 0,
                 'gr' => $gr,
                 'blindspot' => $blindspot,
@@ -243,6 +266,70 @@ final class ControlRoomDashboardInsightsAssembler
     }
 
     /**
+     * @param  list<array<string, mixed>>  $findings
+     * @param  list<array<string, mixed>>  $scheduleDays
+     * @return list<array<string, mixed>>
+     */
+    private function onDutyFindings(array $findings, array $scheduleDays): array
+    {
+        $windowsBySid = [];
+        foreach ($scheduleDays as $day) {
+            $date = (string) ($day['date'] ?? '');
+            if ($date === '') {
+                continue;
+            }
+            $window = $this->dutyWindow->reportingWindow(CarbonImmutable::parse($date));
+            foreach (['s1', 's2'] as $shiftKey) {
+                foreach ($day[$shiftKey] ?? [] as $person) {
+                    $sid = strtoupper(trim((string) ($person['sid'] ?? '')));
+                    if ($sid !== '') {
+                        $windowsBySid[$sid][] = $window;
+                    }
+                }
+            }
+        }
+
+        $onDuty = [];
+        foreach ($findings as $finding) {
+            $sid = strtoupper(trim((string) ($finding['sid'] ?? '')));
+            if ($sid === '' || ! isset($windowsBySid[$sid])) {
+                continue;
+            }
+
+            try {
+                $at = CarbonImmutable::parse((string) ($finding['at'] ?? ''));
+            } catch (Throwable) {
+                continue;
+            }
+
+            foreach ($windowsBySid[$sid] as $window) {
+                if ($at->gte($window['start']) && $at->lt($window['end'])) {
+                    $onDuty[] = $finding;
+                    break;
+                }
+            }
+        }
+
+        return $onDuty;
+    }
+
+    /**
+     * @param  array<string, mixed>  $finding
+     */
+    private function findingCategory(array $finding): string
+    {
+        $category = trim((string) preg_replace('/\s+/', ' ', (string) ($finding['category'] ?? '')));
+        if ($category === '') {
+            return 'Tanpa kategori';
+        }
+
+        return mb_strtolower($category);
+    }
+
+    /**
+     * Snapshot coverage slot terbaru: COUNT DISTINCT di SQL, lalu hanya
+     * baris yang belum tercover. Menghindari hydrate seluruh site (HO).
+     *
      * @return array{uncovered: array<string, true>, total: int}
      */
     private function loadCoverage(ControlRoomSiteCode $site): array
@@ -253,38 +340,60 @@ final class ControlRoomDashboardInsightsAssembler
         }
 
         try {
-            $where = $site === ControlRoomSiteCode::HeadOffice
-                ? []
-                : ['Site' => $site->sourceKey()];
-            $rows = $this->hsecm->rowsForBatchSlot(
-                self::COVERAGE_TABLE,
-                null,
-                ['Site', 'Lokasi', 'Detil_Lokasi', 'Status_Coverage_dalam_1_Week', 'Tercover'],
-                $where,
-            );
+            $base = DB::table(self::COVERAGE_TABLE);
+            if ($this->hsecm->hasBatchSlotSupport(self::COVERAGE_TABLE)) {
+                $slot = $this->hsecm->latestBatchSlot(self::COVERAGE_TABLE);
+                if ($slot === null) {
+                    return $empty;
+                }
+                $base->where('batch_slot', $slot);
+            }
+            $this->applySiteFilter($base, $site, 'Site');
+            $base->where(function ($query): void {
+                $query->whereRaw("TRIM(COALESCE(`Lokasi`, '')) <> ''")
+                    ->orWhereRaw("TRIM(COALESCE(`Detil_Lokasi`, '')) <> ''");
+            });
+
+            $total = (int) (clone $base)
+                ->selectRaw("COUNT(DISTINCT LOWER(CONCAT(TRIM(COALESCE(`Lokasi`, '')), '|', TRIM(COALESCE(`Detil_Lokasi`, ''))))) as c")
+                ->value('c');
+
+            $rows = (clone $base)
+                ->select(['Lokasi', 'Detil_Lokasi', 'Status_Coverage_dalam_1_Week', 'Tercover'])
+                ->where(function ($query): void {
+                    $status = "LOWER(TRIM(COALESCE(`Status_Coverage_dalam_1_Week`, '')))";
+                    $query->whereRaw("{$status} LIKE ?", ['%tidak%'])
+                        ->orWhereRaw("{$status} LIKE ?", ['%belum%'])
+                        ->orWhereRaw("{$status} LIKE ?", ['%gap%'])
+                        ->orWhereRaw("TRIM(COALESCE(`Status_Coverage_dalam_1_Week`, '')) = ''")
+                        ->orWhereRaw('CAST(`Tercover` AS DECIMAL(12, 4)) < 1');
+                })
+                ->get();
         } catch (Throwable $e) {
             Log::warning('ControlRoom HSECM coverage gagal: '.$e->getMessage());
 
             return $empty;
         }
 
-        $all = [];
         $uncovered = [];
         foreach ($rows as $row) {
-            $key = $this->locationKey((string) ($row['Lokasi'] ?? ''), (string) ($row['Detil_Lokasi'] ?? ''));
-            if ($key === '') {
+            $arr = (array) $row;
+            if (! $this->isUncovered($arr)) {
                 continue;
             }
-            $all[$key] = true;
-            if ($this->isUncovered($row)) {
+            $key = $this->locationKey((string) ($arr['Lokasi'] ?? ''), (string) ($arr['Detil_Lokasi'] ?? ''));
+            if ($key !== '') {
                 $uncovered[$key] = true;
             }
         }
 
-        return ['uncovered' => $uncovered, 'total' => count($all)];
+        return ['uncovered' => $uncovered, 'total' => $total];
     }
 
     /**
+     * TBC dari latest batch_slot + Date_for_Join minggu ini — bukan dump
+     * semua scrape di rentang tanggal.
+     *
      * @return list<array<string, mixed>>
      */
     private function loadTbcRows(ControlRoomSiteCode $site, CarbonInterface $weekStart, CarbonInterface $weekEnd): array
@@ -293,37 +402,48 @@ final class ControlRoomDashboardInsightsAssembler
             return [];
         }
 
+        $from = $weekStart->toDateString();
+        $to = $weekEnd->toDateString();
+
         try {
-            $where = $site === ControlRoomSiteCode::HeadOffice
-                ? []
-                : ['site' => $site->sourceKey()];
-            $rows = $this->hsecm->rowsForBatchSlotDateRange(
-                self::TBC_TABLE,
-                $weekStart->toDateString(),
-                $weekEnd->toDateString(),
-                ['Date_for_Join', 'site', 'kategori_TBC', 'blindspot_TBC', 'pelapor_all_karyawan', 'validasi_GR'],
-                $where,
-            );
+            $query = DB::table(self::TBC_TABLE)
+                ->select(['Date_for_Join', 'site', 'kategori_TBC', 'blindspot_TBC', 'pelapor_all_karyawan', 'validasi_GR']);
+            if ($this->hsecm->hasBatchSlotSupport(self::TBC_TABLE)) {
+                $slot = $this->hsecm->latestBatchSlot(self::TBC_TABLE);
+                if ($slot === null) {
+                    return [];
+                }
+                $query->where('batch_slot', $slot);
+            }
+            $this->applySiteFilter($query, $site, 'site');
+            $query->where(function ($inner) use ($from, $to): void {
+                $inner->whereNull('Date_for_Join')
+                    ->orWhere(function ($dates) use ($from, $to): void {
+                        $dates->whereDate('Date_for_Join', '>=', $from)
+                            ->whereDate('Date_for_Join', '<=', $to);
+                    });
+            });
+
+            return $query->get()->map(static fn (object $row): array => (array) $row)->all();
         } catch (Throwable $e) {
             Log::warning('ControlRoom HSECM TBC gagal: '.$e->getMessage());
 
             return [];
         }
+    }
 
-        $from = $weekStart->toDateString();
-        $to = $weekEnd->toDateString();
+    private function applySiteFilter(Builder $query, ControlRoomSiteCode $site, string $column): void
+    {
+        if ($site === ControlRoomSiteCode::HeadOffice) {
+            return;
+        }
 
-        return array_values(array_filter(
-            $rows,
-            function (array $row) use ($from, $to): bool {
-                $date = $this->normalizeDate($row['Date_for_Join'] ?? null);
-                if ($date === null) {
-                    return true;
-                }
+        $table = (string) $query->from;
+        if ($table === '' || ! Schema::hasColumn($table, $column)) {
+            return;
+        }
 
-                return $date >= $from && $date <= $to;
-            }
-        ));
+        $query->where($column, $site->sourceKey());
     }
 
     /**
@@ -479,18 +599,5 @@ final class ControlRoomDashboardInsightsAssembler
     private function normalizeName(string $name): string
     {
         return mb_strtolower(trim(preg_replace('/\s+/', ' ', $name) ?? $name));
-    }
-
-    private function normalizeDate(mixed $value): ?string
-    {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
-        try {
-            return CarbonImmutable::parse($value)->toDateString();
-        } catch (Throwable) {
-            return null;
-        }
     }
 }

@@ -6,6 +6,7 @@ namespace Tests\Unit\ControlRoom;
 
 use App\Services\ControlRoom\ControlRoomSapDutyReader;
 use App\Services\ControlRoom\ControlRoomSapWeekCountsReader;
+use App\Services\ControlRoom\Metrics\SapAchievement;
 use App\Services\PembatasanLV\PembatasanLVOlapQuery;
 use Carbon\CarbonImmutable;
 use Tests\TestCase;
@@ -49,12 +50,32 @@ final class ControlRoomSapWeekCountsReaderTest extends TestCase
         $counts = $this->reader()->countForDuties(
             [
                 ['sid' => 'FJAVJ', 'at' => CarbonImmutable::parse('2026-08-31 08:00:00'), 'component' => 'observasi'],
-                ['sid' => 'FJAVJ', 'at' => CarbonImmutable::parse('2026-08-31 09:00:00'), 'component' => 'observasi'],
+                ['sid' => 'FJAVJ', 'at' => CarbonImmutable::parse('2026-08-31 09:00:00'), 'component' => 'oak'],
             ],
             [['sid' => 'FJAVJ', 'date' => '2026-08-31']],
         );
 
         $this->assertSame(2, $counts['FJAVJ|2026-08-31']['observasi']);
+        $this->assertSame(0, $counts['FJAVJ|2026-08-31']['hazard']);
+        $this->assertSame(0, $counts['FJAVJ|2026-08-31']['inspeksi']);
+    }
+
+    public function test_oak_saja_mengisi_slot_observasi_untuk_persen_sap(): void
+    {
+        $counts = $this->reader()->countForDuties(
+            [
+                ['sid' => 'FJAVJ', 'at' => CarbonImmutable::parse('2026-08-31 08:00:00'), 'component' => 'hazard'],
+                ['sid' => 'FJAVJ', 'at' => CarbonImmutable::parse('2026-08-31 09:00:00'), 'component' => 'inspeksi'],
+                ['sid' => 'FJAVJ', 'at' => CarbonImmutable::parse('2026-08-31 10:00:00'), 'component' => 'oak'],
+            ],
+            [['sid' => 'FJAVJ', 'date' => '2026-08-31']],
+        );
+
+        $this->assertSame(
+            ['hazard' => 1, 'inspeksi' => 1, 'observasi' => 1],
+            $counts['FJAVJ|2026-08-31'],
+        );
+        $this->assertSame(100.0, (new SapAchievement())->percentage($counts['FJAVJ|2026-08-31']));
     }
 
     public function test_sid_lain_tidak_terhitung(): void
@@ -67,6 +88,21 @@ final class ControlRoomSapWeekCountsReaderTest extends TestCase
         );
 
         $this->assertSame(0, $counts['FJAVJ|2026-08-31']['hazard']);
+    }
+
+    public function test_temuan_di_luar_jendela_jaga_tidak_masuk_kualitas(): void
+    {
+        $findings = $this->reader()->findingsOnDuty(
+            [
+                ['sid' => 'FJAVJ', 'at' => '2026-08-31 09:00:00', 'category' => 'Tidak menggunakan APD'],
+                ['sid' => 'FJAVJ', 'at' => '2026-09-02 00:00:00', 'category' => 'Di luar jaga'],
+                ['sid' => 'XXXXX', 'at' => '2026-08-31 09:00:00', 'category' => 'Bukan jaga'],
+            ],
+            [['sid' => 'FJAVJ', 'date' => '2026-08-31']],
+        );
+
+        $this->assertCount(1, $findings);
+        $this->assertSame('Tidak menggunakan APD', $findings[0]['category']);
     }
 
     private function reader(): ControlRoomSapWeekCountsReader

@@ -91,4 +91,28 @@ final class DashboardMockDataProviderTest extends TestCase
         $this->assertSame(33.33, $mock['achievementGroups'][0]['rows'][1]['sap']);
         $this->assertNull($mock['achievementGroups'][0]['rows'][0]['tbc']);
     }
+
+    public function test_sap_oak_saja_setara_satu_slot_observasi(): void
+    {
+        $days = [[
+            'date' => '2026-08-31',
+            's1' => [[
+                'name' => 'Agung Nugroho',
+                'sid' => 'FJAVJ',
+                'status' => 'sesuai',
+                'checkinout' => [],
+            ]],
+            's2' => [],
+        ]];
+
+        $mock = (new DashboardMockDataProvider())->build(
+            CarbonImmutable::parse('2026-08-31'),
+            $days,
+            ['FJAVJ|2026-08-31' => ['hazard' => 1, 'inspeksi' => 1, 'oak' => 1]],
+            sapLoaded: true,
+        );
+
+        $this->assertSame(100.0, $mock['achievementGroups'][0]['rows'][0]['sap']);
+        $this->assertStringContainsString('Observasi/OAK: ada', $mock['achievementGroups'][0]['rows'][0]['sap_hint']);
+    }
 }

@@ -69,7 +69,13 @@ final class DashboardScheduleWeekAssembler
             ];
         }
 
-        return $this->assemble($weekStart, $plans, $attendances, $today, $this->rfidReader->forDutySlots($slots));
+        return $this->assemble(
+            $weekStart,
+            $plans,
+            $attendances,
+            $today,
+            $withRfid ? $this->rfidReader->forDutySlots($slots) : [],
+        );
     }
 
     /**
