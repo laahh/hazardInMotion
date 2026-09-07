@@ -274,9 +274,6 @@ final class DashboardMockDataProvider
         return [
             ['label' => '% Total Kehadiran', 'value' => '87.5%', 'progress' => 87.5, 'delta' => 2.3, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-user-follow-line', 'color' => 'success', 'formula' => 'hadir_sesuai_jadwal + hadir_menggantikan / total jadwal'],
             ['label' => '% Avg SAP', 'value' => '92.1%', 'progress' => 92.1, 'delta' => -1.4, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-file-list-3-line', 'color' => 'primary', 'formula' => 'rata-rata SapAchievement seluruh personil'],
-            ['label' => 'Coverage Detail Lokasi', 'value' => '68 / 95', 'progress' => 71.6, 'delta' => 4.1, 'deltaLabel' => 'lokasi baru tercover', 'icon' => 'ri-map-pin-line', 'color' => 'info', 'formula' => 'lokasi tersentuh SAP / total lokasi terdaftar'],
-            ['label' => 'Coverage Area Kritis', 'value' => '24 / 30', 'progress' => 80.0, 'delta' => 0.0, 'deltaLabel' => 'tidak berubah', 'icon' => 'ri-alarm-warning-line', 'color' => 'warning', 'formula' => 'area kritis tersentuh SAP / total area kritis'],
-            ['label' => 'Ratio SAP dgn bonus', 'value' => '108%', 'progress' => 100.0, 'delta' => 6.0, 'deltaLabel' => 'bonus coaching', 'icon' => 'ri-award-line', 'color' => 'success', 'formula' => '%SAP dasar + bonus coaching di atas 100%'],
             ['label' => 'Ratio TBC', 'value' => '34.2%', 'progress' => 34.2, 'delta' => 5.1, 'deltaLabel' => 'vs minggu lalu', 'icon' => 'ri-shield-check-line', 'color' => 'danger', 'formula' => 'temuan tervalidasi TBC / total hazard+inspeksi'],
         ];
     }

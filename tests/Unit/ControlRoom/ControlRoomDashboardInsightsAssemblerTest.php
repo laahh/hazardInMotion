@@ -51,7 +51,7 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
 
         $byName = array_column($insights['highlight']['goldenRules'], 'count', 'name');
         $this->assertSame(1, $byName['Isolasi Energi']);
-        $this->assertSame(1, $byName['Tidak Melanggar Golden Rules']);
+        $this->assertArrayNotHasKey('Tidak Melanggar Golden Rules', $byName);
         $this->assertSame(1, $insights['highlight']['blindspotCount']);
         $this->assertSame(10, $insights['highlight']['blindspotTotal']);
         $this->assertSame(50.0, $insights['highlight']['tbcPercentage']);

@@ -152,7 +152,7 @@ final class ControlRoomDashboardInsightsAssembler
                 $hazardInspeksi++;
             }
             $rule = trim((string) ($finding['golden_rule'] ?? ''));
-            if ($rule === '') {
+            if (! $this->isGoldenRuleViolation($rule)) {
                 continue;
             }
             $golden[$rule] = ($golden[$rule] ?? 0) + 1;
