@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Requests\SportEvaluation;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Carbon;
 
 final class SportEvaluationWorkoutActivityRequest extends FormRequest
 {
@@ -20,7 +19,7 @@ final class SportEvaluationWorkoutActivityRequest extends FormRequest
         $to = trim((string) $this->input('to', ''));
 
         if ($from === '') {
-            $this->merge(['from' => now()->startOfWeek(Carbon::MONDAY)->format('Y-m-d')]);
+            $this->merge(['from' => now()->subDays(29)->format('Y-m-d')]);
         }
         if ($to === '') {
             $this->merge(['to' => now()->format('Y-m-d')]);

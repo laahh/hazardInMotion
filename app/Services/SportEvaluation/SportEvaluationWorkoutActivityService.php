@@ -66,6 +66,7 @@ final class SportEvaluationWorkoutActivityService
                 'trendDaily' => $payload['trendDaily'],
                 'trendWeekly' => $payload['trendWeekly'],
                 'distribution' => $payload['distribution'],
+                'topCompanies' => $payload['topCompanies'],
                 'periodLabel' => $this->periodLabel($filters),
             ];
         } catch (Throwable $e) {
@@ -266,13 +267,23 @@ final class SportEvaluationWorkoutActivityService
             ];
         }
 
-        $payload = $this->loadPayload($filters);
+        $parsed = $this->fetchParsedWorkouts($filters);
+        [$foodByUser, $foodByDate] = $this->fetchFoodCalories($filters);
+        $periodDays = $this->periodDayCount($filters);
+        $aggregated = $this->aggregator->aggregate(
+            $parsed,
+            $foodByUser,
+            $foodByDate,
+            $periodDays,
+            $filters['from'],
+            $filters['to'],
+        );
 
         return [
-            'users' => $payload['users'],
-            'rawWorkouts' => $this->fetchParsedWorkouts($filters),
+            'users' => $aggregated['users'] ?? [],
+            'rawWorkouts' => $aggregated['rawWorkouts'] ?? $parsed,
             'rawFoods' => $this->fetchRawFoods($filters),
-            'trendDaily' => $payload['trendDaily'],
+            'trendDaily' => $aggregated['trendDaily'] ?? $this->emptyTrend(),
             'filters' => $filters,
         ];
     }
@@ -290,7 +301,7 @@ final class SportEvaluationWorkoutActivityService
         $to = $this->parseDate($request->input('to', $request->query('to')));
 
         if ($from === null) {
-            $from = SportEvaluationWorkoutActivityPeriodFormatter::weekStartMonday(Carbon::now());
+            $from = Carbon::now()->subDays(29)->startOfDay();
         }
         if ($to === null) {
             $to = Carbon::now()->startOfDay();
@@ -299,7 +310,7 @@ final class SportEvaluationWorkoutActivityService
             [$from, $to] = [$to->copy(), $from->copy()];
         }
 
-        $days = $from->diffInDays($to) + 1;
+        $days = max(1, (int) round($from->diffInDays($to)) + 1);
         if ($days > self::MAX_PERIOD_DAYS) {
             $from = $to->copy()->subDays(self::MAX_PERIOD_DAYS - 1)->startOfDay();
         }
@@ -329,9 +340,7 @@ final class SportEvaluationWorkoutActivityService
         return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters): array {
             $parsed = $this->fetchParsedWorkouts($filters);
             [$foodByUser, $foodByDate] = $this->fetchFoodCalories($filters);
-            $from = Carbon::parse($filters['from']);
-            $to = Carbon::parse($filters['to']);
-            $periodDays = $from->diffInDays($to) + 1;
+            $periodDays = $this->periodDayCount($filters);
 
             $aggregated = $this->aggregator->aggregate(
                 $parsed,
@@ -355,12 +364,10 @@ final class SportEvaluationWorkoutActivityService
      */
     private function buildSqlDashboard(array $filters): array
     {
-        $cacheKey = 'evaluasi_well:workout_activity:sql_dash:v3:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+        $cacheKey = 'evaluasi_well:workout_activity:sql_dash:v4:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters): array {
-            $from = Carbon::parse($filters['from']);
-            $to = Carbon::parse($filters['to']);
-            $periodDays = $from->diffInDays($to) + 1;
+            $periodDays = $this->periodDayCount($filters);
             $weeks = max(1.0, $periodDays / 7);
 
             $totals = $this->workoutBaseQuery($filters)
@@ -401,6 +408,13 @@ final class SportEvaluationWorkoutActivityService
                 ->limit(12)
                 ->get();
 
+            $companyRows = $this->workoutBaseQuery($filters)
+                ->selectRaw("CASE WHEN TRIM(COALESCE(e.nama_perusahaan, '')) = '' THEN '-' ELSE e.nama_perusahaan END as company, COUNT(w.id) as c")
+                ->groupByRaw("CASE WHEN TRIM(COALESCE(e.nama_perusahaan, '')) = '' THEN '-' ELSE e.nama_perusahaan END")
+                ->orderByDesc('c')
+                ->limit(10)
+                ->get();
+
             $trend = $this->fillDailyAndWeeklyTrends($filters['from'], $filters['to'], $dailyWorkout, $dailyFood);
 
             return [
@@ -420,6 +434,10 @@ final class SportEvaluationWorkoutActivityService
                 'distribution' => [
                     'labels' => $distRows->pluck('jenis')->map(static fn (mixed $v): string => mb_substr((string) $v, 0, 40))->all(),
                     'counts' => $distRows->pluck('c')->map(static fn (mixed $v): int => (int) $v)->all(),
+                ],
+                'topCompanies' => [
+                    'labels' => $companyRows->pluck('company')->map(static fn (mixed $v): string => (string) $v)->all(),
+                    'counts' => $companyRows->pluck('c')->map(static fn (mixed $v): int => (int) $v)->all(),
                 ],
             ];
         });
@@ -737,7 +755,7 @@ final class SportEvaluationWorkoutActivityService
             ->limit($length)
             ->get();
 
-        $periodDays = Carbon::parse($filters['from'])->diffInDays(Carbon::parse($filters['to'])) + 1;
+        $periodDays = $this->periodDayCount($filters);
         $weeks = max(1.0, $periodDays / 7);
         $parsedByUser = $this->parsedMetricsForUsers(
             $filters,
@@ -1161,6 +1179,19 @@ final class SportEvaluationWorkoutActivityService
     }
 
     /**
+     * Carbon 3 mengembalikan float dari diffInDays — wajib di-cast sebelum parameter int.
+     *
+     * @param  array{from:string,to:string}  $filters
+     */
+    private function periodDayCount(array $filters): int
+    {
+        $from = Carbon::parse($filters['from'])->startOfDay();
+        $to = Carbon::parse($filters['to'])->startOfDay();
+
+        return max(1, (int) round($from->diffInDays($to)) + 1);
+    }
+
+    /**
      * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string}  $filters
      * @return array<string, mixed>
      */
@@ -1187,11 +1218,12 @@ final class SportEvaluationWorkoutActivityService
                 'kcal_in' => 0,
                 'avg_sessions_per_week' => 0.0,
                 'avg_sessions_per_user' => 0.0,
-                'period_days' => Carbon::parse($filters['from'])->diffInDays(Carbon::parse($filters['to'])) + 1,
+                'period_days' => $this->periodDayCount($filters),
             ],
             'trendDaily' => $emptyTrend,
             'trendWeekly' => $emptyTrend,
             'distribution' => ['labels' => [], 'counts' => []],
+            'topCompanies' => ['labels' => [], 'counts' => []],
             'periodLabel' => $this->periodLabel($filters),
         ];
     }

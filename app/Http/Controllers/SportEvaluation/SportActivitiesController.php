@@ -75,19 +75,19 @@ final class SportActivitiesController extends Controller
             $this->fillRows($spreadsheet->getActiveSheet(), $payload['users'], static function (int $index, array $row): array {
                 return [
                     $index + 1,
-                    $row['nama'],
-                    $row['kode_sid'],
-                    $row['site'],
-                    $row['company'],
-                    $row['divisi'],
-                    $row['sesi'],
-                    $row['sessions_per_week'],
-                    $row['duration_minutes'],
-                    $row['distance_km'],
-                    $row['kcal_out'],
-                    $row['kcal_in'],
-                    $row['kcal_net'],
-                    $row['last_workout_at'],
+                    $row['nama'] ?? '-',
+                    $row['kode_sid'] ?? '-',
+                    $row['site'] ?? '-',
+                    $row['company'] ?? '-',
+                    $row['divisi'] ?? '-',
+                    $row['sesi'] ?? 0,
+                    $row['sessions_per_week'] ?? 0,
+                    $row['duration_minutes'] ?? 0,
+                    $row['distance_km'] ?? 0,
+                    $row['kcal_out'] ?? 0,
+                    $row['kcal_in'] ?? 0,
+                    $row['kcal_net'] ?? 0,
+                    $row['last_workout_at'] ?? '-',
                 ];
             });
 
@@ -112,21 +112,21 @@ final class SportActivitiesController extends Controller
             $this->fillRows($workoutSheet, $payload['rawWorkouts'], static function (int $index, array $row): array {
                 return [
                     $index + 1,
-                    $row['id'],
-                    $row['user_id'],
-                    $row['kode_sid'],
-                    $row['nama'],
-                    $row['site'],
-                    $row['company'],
-                    $row['activity_type'],
-                    $row['calories_kcal_raw'],
-                    $row['calories_kcal'],
-                    $row['workout_time_raw'],
-                    $row['duration_minutes'],
-                    $row['distance_raw'],
-                    $row['distance_km'],
-                    $row['avg_heart_rate'],
-                    $row['local_datetime'],
+                    $row['id'] ?? 0,
+                    $row['user_id'] ?? 0,
+                    $row['kode_sid'] ?? '-',
+                    $row['nama'] ?? '-',
+                    $row['site'] ?? '-',
+                    $row['company'] ?? '-',
+                    $row['activity_type'] ?? '-',
+                    $row['calories_kcal_raw'] ?? '',
+                    $row['calories_kcal'] ?? '',
+                    $row['workout_time_raw'] ?? '',
+                    $row['duration_minutes'] ?? '',
+                    $row['distance_raw'] ?? '',
+                    $row['distance_km'] ?? '',
+                    $row['avg_heart_rate'] ?? '',
+                    $row['local_datetime'] ?? '',
                 ];
             });
 
@@ -159,9 +159,9 @@ final class SportActivitiesController extends Controller
                 ];
             });
 
-            $trend = $payload['trendDaily'];
+            $trend = $payload['trendDaily'] ?? ['labels' => []];
             $trendRows = [];
-            foreach ($trend['labels'] as $i => $label) {
+            foreach (($trend['labels'] ?? []) as $i => $label) {
                 $trendRows[] = [
                     'tanggal' => $label,
                     'sesi' => $trend['sesi'][$i] ?? 0,
@@ -216,7 +216,14 @@ final class SportActivitiesController extends Controller
     {
         $rowNum = 2;
         foreach ($rows as $index => $row) {
-            $sheet->fromArray($mapper($index, $row), null, 'A'.$rowNum);
+            $values = array_map(static function (mixed $value): mixed {
+                if (is_bool($value) || is_int($value) || is_float($value) || is_string($value) || $value === null) {
+                    return $value;
+                }
+
+                return (string) $value;
+            }, $mapper($index, $row));
+            $sheet->fromArray($values, null, 'A'.$rowNum);
             $rowNum++;
         }
     }
