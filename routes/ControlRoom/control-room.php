@@ -24,6 +24,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard/sap-detail', [DashboardController::class, 'sapDetail'])->name('dashboard.sap-detail');
 
     Route::prefix('schedule')->name('schedule.')->group(function (): void {
+        Route::get('/excel-template', [ScheduleController::class, 'downloadExcelTemplate'])->name('excel-template');
+        Route::post('/excel-import', [ScheduleController::class, 'importExcel'])->name('excel-import');
         Route::get('/changes', [ScheduleController::class, 'changes'])->name('changes');
         Route::get('/events', [ScheduleController::class, 'events'])->name('events');
         Route::post('/bulk', [ScheduleController::class, 'storeBulk'])->name('bulk');

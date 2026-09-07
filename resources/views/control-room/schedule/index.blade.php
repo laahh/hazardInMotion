@@ -28,6 +28,54 @@
     </div>
 
     <div class="card shadow-none border mb-24">
+        <div class="card-header">
+            <h6 class="mb-0">Upload Excel per Minggu</h6>
+            <p class="text-secondary-light text-xs mb-0">Unduh template minggu ini (sheet Jadwal + daftar SID Personil), isi kolom kuning <strong>sid</strong>, lalu unggah. Satu baris = satu slot kalender.</p>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-lg-5">
+                    <form method="GET" action="{{ route('control-room.schedule.excel-template') }}" class="row g-2 align-items-end">
+                        <input type="hidden" name="site" value="{{ $site->value }}">
+                        <div class="col-4">
+                            <label class="form-label text-sm mb-1">Tahun</label>
+                            <input type="number" name="year" class="form-control form-control-sm" value="{{ now()->isoWeekYear() }}" min="2020" max="2100" required>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label text-sm mb-1">Minggu ISO</label>
+                            <input type="number" name="week_number" class="form-control form-control-sm" min="1" max="53" value="{{ now()->isoWeek() }}" required>
+                        </div>
+                        <div class="col-4">
+                            <button type="submit" class="btn btn-outline-secondary btn-sm w-100">Unduh Template</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="col-lg-7">
+                    <form method="POST" action="{{ route('control-room.schedule.excel-import') }}" enctype="multipart/form-data" class="row g-2 align-items-end">
+                        @csrf
+                        <input type="hidden" name="site_code" value="{{ $site->value }}">
+                        <div class="col-3">
+                            <label class="form-label text-sm mb-1">Tahun</label>
+                            <input type="number" name="year" class="form-control form-control-sm" value="{{ old('year', now()->isoWeekYear()) }}" min="2020" max="2100" required>
+                        </div>
+                        <div class="col-3">
+                            <label class="form-label text-sm mb-1">Minggu ISO</label>
+                            <input type="number" name="week_number" class="form-control form-control-sm" min="1" max="53" value="{{ old('week_number', now()->isoWeek()) }}" required>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label text-sm mb-1">File .xlsx</label>
+                            <input type="file" name="file" class="form-control form-control-sm" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" required>
+                        </div>
+                        <div class="col-2">
+                            <button type="submit" class="btn btn-primary-600 btn-sm w-100">Unggah</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-none border mb-24">
         <div class="card-body">
             <div id="schedule-calendar"></div>
         </div>

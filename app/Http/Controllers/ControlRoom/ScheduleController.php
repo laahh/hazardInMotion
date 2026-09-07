@@ -6,12 +6,15 @@ namespace App\Http\Controllers\ControlRoom;
 
 use App\Enums\ControlRoomSiteCode;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ControlRoom\ControlRoomScheduleExcelImportRequest;
 use App\Http\Requests\ControlRoom\ScheduleBulkRequest;
 use App\Http\Requests\ControlRoom\ScheduleCopyRequest;
 use App\Http\Requests\ControlRoom\ScheduleDestroyWeekRequest;
 use App\Http\Requests\ControlRoom\ScheduleUpdateRequest;
 use App\Models\ControlRoom\ScheduleChange;
 use App\Models\ControlRoom\SchedulePlan;
+use App\Services\ControlRoom\ControlRoomScheduleExcelParser;
+use App\Services\ControlRoom\ControlRoomScheduleExcelTemplateService;
 use App\Services\ControlRoom\Reference\PersonnelReader;
 use App\Services\ControlRoom\ScheduleBulkAssignService;
 use Carbon\CarbonImmutable;
@@ -19,6 +22,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class ScheduleController extends Controller
 {
@@ -40,6 +45,66 @@ final class ScheduleController extends Controller
             'sites' => ControlRoomSiteCode::cases(),
             'personnel' => $this->personnelReader->all(),
         ]);
+    }
+
+    public function downloadExcelTemplate(Request $request, ControlRoomScheduleExcelTemplateService $templates): StreamedResponse
+    {
+        $data = $request->validate([
+            'site' => ['required', Rule::in(array_column(ControlRoomSiteCode::cases(), 'value'))],
+            'year' => ['required', 'integer', 'min:2020', 'max:2100'],
+            'week_number' => ['required', 'integer', 'min:1', 'max:53'],
+        ]);
+
+        $site = ControlRoomSiteCode::from($data['site']);
+
+        return $templates->download(
+            $site,
+            (int) $data['year'],
+            (int) $data['week_number'],
+            $this->personnelReader->all(),
+        );
+    }
+
+    public function importExcel(
+        ControlRoomScheduleExcelImportRequest $request,
+        ControlRoomScheduleExcelParser $parser,
+        ScheduleBulkAssignService $service,
+    ): RedirectResponse {
+        $data = $request->validated();
+        $site = ControlRoomSiteCode::from($data['site_code']);
+        $file = $request->file('file');
+        $path = $file?->getRealPath();
+        if (! is_string($path) || $path === '') {
+            return redirect()
+                ->route('control-room.schedule.index', ['site' => $site->value])
+                ->withErrors(['file' => 'File Excel tidak terbaca.']);
+        }
+
+        $parsed = $parser->parse($path, $site, (int) $data['year'], (int) $data['week_number']);
+        if ($parsed->hasErrors()) {
+            return redirect()
+                ->route('control-room.schedule.index', ['site' => $site->value])
+                ->withErrors(['file' => $parsed->errors])
+                ->withInput();
+        }
+
+        $result = $service->assign(
+            ['site_code' => $site->value, 'assignments' => $parsed->assignments],
+            (int) $request->user()->id,
+        );
+
+        $redirectParams = ['site' => $site->value];
+        if ($result->hasErrors()) {
+            return redirect()
+                ->route('control-room.schedule.index', $redirectParams)
+                ->withErrors(['assignments' => $result->errors])
+                ->withInput();
+        }
+
+        return redirect()
+            ->route('control-room.schedule.index', $redirectParams)
+            ->with('success', "Excel minggu {$data['week_number']}/{$data['year']} masuk kalender: {$result->created} baru, {$result->updated} diperbarui.")
+            ->with('warnings', $result->warnings);
     }
 
     /**
