@@ -381,7 +381,7 @@
             <ul>
               <li><a href="{{ route('evaluasi-well.index') }}"><i class="material-icons-outlined">arrow_right</i>Dashboard</a></li>
               <li><a href="{{ route('evaluasi-well.mitra.index') }}"><i class="material-icons-outlined">arrow_right</i>Mitra Kerja</a></li>
-              <li><a href="{{ route('evaluasi-well.activities.index') }}"><i class="material-icons-outlined">arrow_right</i>Detail Aktivitas</a></li>
+              <li><a href="{{ route('evaluasi-well.activities.index') }}"><i class="material-icons-outlined">arrow_right</i>Tren Aktivitas</a></li>
             </ul>
           </li>
           <li class="menu-label">Besigma</li>

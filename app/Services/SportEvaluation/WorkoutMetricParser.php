@@ -8,12 +8,31 @@ namespace App\Services\SportEvaluation;
  * Parser metrik manual (workout_analyses) yang tersimpan sebagai VARCHAR bebas,
  * mis. distance "5,2 km" / "800 m", workout_time "45 min" / "1:05:00".
  *
- * WARNING: format string tidak konsisten. Parser ini best-effort untuk konteks
- * per karyawan; agregasi utama dashboard TETAP memakai strava_activities
- * (numerik) + daily_health_scores agar akurat.
+ * WARNING: format string tidak konsisten. Hasil bersifat best-effort.
  */
 final class WorkoutMetricParser
 {
+    /**
+     * Token jenis aktivitas yang dihitung sebagai lari/jalan untuk metrik jarak.
+     *
+     * @var list<string>
+     */
+    private const RUN_WALK_TOKENS = [
+        'lari',
+        'berlari',
+        'running',
+        'run',
+        'jog',
+        'jogging',
+        'jalan',
+        'berjalan',
+        'walk',
+        'walking',
+        'hike',
+        'hiking',
+        'trail',
+    ];
+
     /**
      * Ubah string jarak menjadi meter. Mengembalikan null bila tak terbaca.
      */
@@ -103,5 +122,88 @@ final class WorkoutMetricParser
         }
 
         return null;
+    }
+
+    /**
+     * Ubah string kkal menjadi angka. Mengembalikan null bila tak terbaca.
+     */
+    public function caloriesFromString(?string $raw): ?float
+    {
+        if ($raw === null) {
+            return null;
+        }
+
+        $text = strtolower(trim($raw));
+        if ($text === '') {
+            return null;
+        }
+
+        if (! preg_match('/([0-9]+(?:[.,][0-9]+)?)/', $text, $m)) {
+            return null;
+        }
+
+        $value = (float) str_replace(',', '.', $m[1]);
+
+        return $value > 0 ? $value : null;
+    }
+
+    /**
+     * Prioritas: kolom numerik calories_kcal, lalu active_kilocalories, lalu total_kilocalories.
+     */
+    public function resolveCalories(mixed $numeric, ?string $activeKilocalories, ?string $totalKilocalories): ?float
+    {
+        if (is_numeric($numeric)) {
+            $value = (float) $numeric;
+            if ($value > 0) {
+                return $value;
+            }
+        }
+
+        $fromActive = $this->caloriesFromString($activeKilocalories);
+        if ($fromActive !== null) {
+            return $fromActive;
+        }
+
+        return $this->caloriesFromString($totalKilocalories);
+    }
+
+    /**
+     * True bila activity_type terdeteksi sebagai lari/jalan/hiking (case-insensitive).
+     */
+    public function isRunOrWalk(?string $activityType): bool
+    {
+        $text = mb_strtolower(trim((string) $activityType));
+        if ($text === '') {
+            return false;
+        }
+
+        if (str_contains($text, 'jalan kaki') || str_contains($text, 'lari pagi')) {
+            return true;
+        }
+
+        foreach (self::RUN_WALK_TOKENS as $token) {
+            if (preg_match('/\b'.preg_quote($token, '/').'\b/u', $text) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Jarak km hanya untuk lari/jalan. Null jika bukan jenis itu atau tak terbaca.
+     */
+    public function runWalkDistanceKm(?string $activityType, ?string $distanceRaw): ?float
+    {
+        if (! $this->isRunOrWalk($activityType)) {
+            return null;
+        }
+
+        $meters = $this->distanceToMeters($distanceRaw);
+        if ($meters === null || $meters <= 0) {
+            return null;
+        }
+
+        return round($meters / 1000, 2);
     }
 }
