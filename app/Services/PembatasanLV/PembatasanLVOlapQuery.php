@@ -27,9 +27,10 @@ final class PembatasanLVOlapQuery
 
     /**
      * @param  list<mixed>  $bindings
+     * @param  array<string, string>  $localSettings  jit, work_mem, max_parallel_workers_per_gather
      * @return list<object>
      */
-    public function select(string $sql, array $bindings = [], int $timeoutMs = 4000): array
+    public function select(string $sql, array $bindings = [], int $timeoutMs = 4000, array $localSettings = []): array
     {
         $name = $this->connectionName();
         if ($name === null) {
@@ -38,9 +39,13 @@ final class PembatasanLVOlapQuery
 
         $connection = DB::connection($name);
         $safeTimeout = max(500, min($timeoutMs, 20000));
+        $localSets = $this->compileLocalSettings($localSettings);
 
-        return $connection->transaction(function () use ($connection, $sql, $bindings, $safeTimeout): array {
+        return $connection->transaction(function () use ($connection, $sql, $bindings, $safeTimeout, $localSets): array {
             $connection->unprepared("SET LOCAL statement_timeout = '{$safeTimeout}ms'");
+            foreach ($localSets as $localSet) {
+                $connection->unprepared($localSet);
+            }
 
             /** @var list<object> $rows */
             $rows = $connection->select($sql, $bindings);
@@ -74,6 +79,31 @@ final class PembatasanLVOlapQuery
         }
 
         return is_string($cached) && $cached !== '' ? $cached : null;
+    }
+
+    /**
+     * @param  array<string, string>  $settings
+     * @return list<string>
+     */
+    private function compileLocalSettings(array $settings): array
+    {
+        $statements = [];
+        $jit = $settings['jit'] ?? null;
+        if ($jit === 'off' || $jit === 'on') {
+            $statements[] = 'SET LOCAL jit = '.$jit;
+        }
+
+        $workMem = $settings['work_mem'] ?? null;
+        if (is_string($workMem) && preg_match('/^\d+MB$/', $workMem) === 1) {
+            $statements[] = "SET LOCAL work_mem = '{$workMem}'";
+        }
+
+        $parallel = $settings['max_parallel_workers_per_gather'] ?? null;
+        if (is_string($parallel) && preg_match('/^[0-4]$/', $parallel) === 1) {
+            $statements[] = 'SET LOCAL max_parallel_workers_per_gather = '.$parallel;
+        }
+
+        return $statements;
     }
 
     private function ping(string $connection): bool

@@ -77,6 +77,90 @@ final class ControlRoomLocationCoverageServiceTest extends TestCase
         $this->assertTrue($payload['rows'][0]['is_critical']);
     }
 
+    public function test_prefix_site_di_master_tetap_cocok_dengan_sap(): void
+    {
+        $service = $this->service();
+        $payload = $service->evaluate(
+            [
+                ['site' => 'BMO 1', 'lokasi' => '(B PMO) Area Kritis', 'detail_lokasi' => 'Disposal OPD Q1 KDC'],
+                ['site' => 'BMO 1', 'lokasi' => 'Area Revegetasi', 'detail_lokasi' => 'Revegetasi BC BMO 1'],
+            ],
+            $service->coveredAt([
+                ['lokasi' => 'Area Kritis', 'detil_lokasi' => 'Disposal OPD Q1 KDC', 'at' => '2026-09-08 09:00:00'],
+                ['lokasi' => 'Area Revegetasi', 'detail_lokasi' => 'Revegetasi BC BMO 1', 'at' => '2026-09-08 10:00:00'],
+            ]),
+        );
+
+        $this->assertTrue($payload['rows'][0]['covered']);
+        $this->assertTrue($payload['rows'][1]['covered']);
+        $this->assertSame(2, $payload['kpi']['covered']);
+        $this->assertSame(0, $payload['kpi']['uncovered']);
+    }
+
+    public function test_spasi_ganda_dan_beda_kapital_tetap_tercover(): void
+    {
+        $service = $this->service();
+        $payload = $service->evaluate(
+            [
+                ['site' => 'BMO 1', 'lokasi' => 'Area  Transportasi', 'detail_lokasi' => 'Jalan Hauling (sarana transportasi)'],
+            ],
+            $service->coveredAt([
+                ['lokasi' => 'area transportasi', 'detil_lokasi' => 'Jalan  Hauling (sarana transportasi)', 'at' => '2026-09-09 07:00:00'],
+            ]),
+        );
+
+        $this->assertTrue($payload['rows'][0]['covered']);
+    }
+
+    public function test_kolom_detail_lokasi_alias_tetap_tercover(): void
+    {
+        $service = $this->service();
+        $payload = $service->evaluate(
+            [
+                ['site' => 'BMO 1', 'lokasi' => 'Area Revegetasi', 'detail_lokasi' => 'Revegetasi BC BMO 1'],
+            ],
+            $service->coveredAt([
+                ['lokasi' => 'Area Revegetasi', 'detail_lokasi' => 'Revegetasi BC BMO 1', 'at' => '2026-09-08 11:00:00'],
+            ]),
+        );
+
+        $this->assertTrue($payload['rows'][0]['covered']);
+    }
+
+    public function test_sap_berprefix_cocok_dengan_master_tanpa_prefix(): void
+    {
+        $service = $this->service();
+        $payload = $service->evaluate(
+            [
+                ['site' => 'BMO 1', 'lokasi' => 'Area Kritis', 'detail_lokasi' => 'Disposal OPD Q1 KDC'],
+            ],
+            $service->coveredAt([
+                ['lokasi' => '(B PMO) Area Kritis', 'detil_lokasi' => 'Disposal OPD Q1 KDC', 'at' => '2026-09-08 09:00:00'],
+            ]),
+        );
+
+        $this->assertTrue($payload['rows'][0]['covered']);
+    }
+
+    public function test_detil_sama_lokasi_beda_tidak_saling_cover(): void
+    {
+        $service = $this->service();
+        $payload = $service->evaluate(
+            [
+                ['site' => 'BMO 1', 'lokasi' => '(B PMO) Area Kritis', 'detail_lokasi' => 'Disposal OPD Q1 KDC'],
+                ['site' => 'BMO 1', 'lokasi' => '(B PMO) Pit Q1', 'detail_lokasi' => 'Disposal OPD Q1 KDC'],
+            ],
+            $service->coveredAt([
+                ['lokasi' => 'Area Kritis', 'detil_lokasi' => 'Disposal OPD Q1 KDC', 'at' => '2026-09-08 09:00:00'],
+            ]),
+        );
+
+        $this->assertTrue($payload['rows'][0]['covered']);
+        $this->assertFalse($payload['rows'][1]['covered']);
+        $this->assertSame(1, $payload['kpi']['covered']);
+        $this->assertSame(1, $payload['kpi']['uncovered']);
+    }
+
     private function service(): ControlRoomLocationCoverageService
     {
         return $this->app->make(ControlRoomLocationCoverageService::class);

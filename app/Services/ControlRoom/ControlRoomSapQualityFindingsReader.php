@@ -20,7 +20,11 @@ final class ControlRoomSapQualityFindingsReader
 
     private const CACHE_SECONDS = 180;
 
+    private const LOCATION_HITS_CACHE_SECONDS = 300;
+
     private const QUERY_TIMEOUT_MS = 4000;
+
+    private const LOCATION_HITS_TIMEOUT_MS = 8000;
 
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
@@ -73,6 +77,97 @@ final class ControlRoomSapQualityFindingsReader
         }
 
         Cache::put($cacheKey, ['findings' => $findings], self::CACHE_SECONDS);
+
+        return ['loaded' => true, 'findings' => $findings];
+    }
+
+    /**
+     * Pasangan lokasi+detil yang muncul di SAP pada jendela minggu (semua pelapor).
+     *
+     * @return array{loaded: bool, findings: list<array{lokasi: string, detil_lokasi: string, at: string}>}
+     */
+    public function locationHits(CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        if (! $this->olap->isReachable()) {
+            return ['loaded' => false, 'findings' => []];
+        }
+
+        $from = $start->startOfDay();
+        $until = CarbonImmutable::parse($end);
+        $cacheKey = 'control-room:sap-location-hits:v2:'.$from->toDateTimeString().'|'.$until->toDateTimeString();
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && isset($cached['findings'])) {
+            return ['loaded' => true, 'findings' => $cached['findings']];
+        }
+
+        // Satu round-trip: index tanggal per MV, GROUP BY dulu (bukan UNION 48rb baris + BTRIM).
+        $sql = <<<'SQL'
+            SELECT lokasi, detil_lokasi, MAX(at) AS at
+            FROM (
+                SELECT lokasi, detil_lokasi, MAX(tanggal_laporan) AS at
+                FROM bcbeats.mv_inspeksi_hazard
+                WHERE tanggal_laporan >= CAST(? AS timestamp)
+                  AND tanggal_laporan < CAST(? AS timestamp)
+                GROUP BY lokasi, detil_lokasi
+
+                UNION ALL
+
+                SELECT lokasi, detil_lokasi, MAX(tanggal_observasi) AS at
+                FROM bcbeats.mv_observasi
+                WHERE tanggal_observasi >= CAST(? AS timestamp)
+                  AND tanggal_observasi < CAST(? AS timestamp)
+                GROUP BY lokasi, detil_lokasi
+
+                UNION ALL
+
+                SELECT lokasi, detil_lokasi, MAX(tanggal_submit) AS at
+                FROM bcbeats.mv_oak
+                WHERE tanggal_submit >= CAST(? AS timestamp)
+                  AND tanggal_submit < CAST(? AS timestamp)
+                GROUP BY lokasi, detil_lokasi
+            ) sap
+            GROUP BY lokasi, detil_lokasi
+            SQL;
+
+        $range = [$from->toDateTimeString(), $until->toDateTimeString()];
+        $bindings = [...$range, ...$range, ...$range];
+
+        try {
+            $rows = $this->olap->select($sql, $bindings, self::LOCATION_HITS_TIMEOUT_MS, [
+                'jit' => 'off',
+                'work_mem' => '64MB',
+                'max_parallel_workers_per_gather' => '2',
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('ControlRoom SAP location hits gagal: '.$e->getMessage());
+
+            return ['loaded' => false, 'findings' => []];
+        }
+
+        $findings = [];
+        foreach ($rows as $row) {
+            $at = trim((string) ($row->at ?? ''));
+            if ($at === '') {
+                continue;
+            }
+            try {
+                $at = CarbonImmutable::parse($at)->toDateTimeString();
+            } catch (Throwable) {
+                continue;
+            }
+            $lokasi = trim((string) ($row->lokasi ?? ''));
+            $detil = trim((string) ($row->detil_lokasi ?? ''));
+            if ($lokasi === '' && $detil === '') {
+                continue;
+            }
+            $findings[] = [
+                'lokasi' => $lokasi,
+                'detil_lokasi' => $detil,
+                'at' => $at,
+            ];
+        }
+
+        Cache::put($cacheKey, ['findings' => $findings], self::LOCATION_HITS_CACHE_SECONDS);
 
         return ['loaded' => true, 'findings' => $findings];
     }

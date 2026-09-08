@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services\ControlRoom;
 
 use App\Enums\ControlRoomSiteCode;
-use App\Models\ControlRoom\SchedulePlan;
 use App\Services\ControlRoom\Reference\LocationReader;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -13,7 +12,7 @@ use Illuminate\Support\Facades\Cache;
 
 /**
  * Coverage lokasi master vs SAP minggu terpilih (hazard/inspeksi/observasi/OAK).
- * Roster = SID jadwal 8 site papan; SAP = findings ter-chunk.
+ * Ter-cover = ada laporan SAP di lokasi+detil yang sama (bukan hanya SID jaga).
  */
 final class ControlRoomLocationCoverageService
 {
@@ -22,6 +21,7 @@ final class ControlRoomLocationCoverageService
     public function __construct(
         private readonly LocationReader $locations,
         private readonly ControlRoomSapQualityFindingsReader $qualityFindings,
+        private readonly ControlRoomSapDutyReader $dutyWindow,
     ) {}
 
     /**
@@ -39,7 +39,7 @@ final class ControlRoomLocationCoverageService
     ): array {
         $today = CarbonImmutable::parse($now ?? now())->startOfDay();
         $cacheKey = sprintf(
-            'control-room:location-coverage:v1:%s:%s:%s',
+            'control-room:location-coverage:v2:%s:%s:%s',
             $weekStart->toDateString(),
             $site->value,
             $today->toDateString(),
@@ -70,8 +70,7 @@ final class ControlRoomLocationCoverageService
         foreach ($master as $item) {
             $lokasi = (string) ($item['lokasi'] ?? '');
             $detil = (string) ($item['detail_lokasi'] ?? '');
-            $key = $this->locationKey($lokasi, $detil);
-            $lastAt = $key !== '' ? ($coveredAt[$key] ?? null) : null;
+            $lastAt = $this->latestCoveredAt($lokasi, $detil, $coveredAt);
             $isCovered = is_string($lastAt) && $lastAt !== '';
             $isCritical = $this->locations->isCritical($lokasi, $detil);
             if ($isCovered) {
@@ -131,13 +130,30 @@ final class ControlRoomLocationCoverageService
 
     public function locationKey(string $lokasi, string $detil): string
     {
-        $lokasi = mb_strtolower(trim($lokasi));
-        $detil = mb_strtolower(trim($detil));
+        $lokasi = $this->normalizeLabel($lokasi);
+        $detil = $this->normalizeLabel($detil);
         if ($lokasi === '' && $detil === '') {
             return '';
         }
 
         return $lokasi.'|'.$detil;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function locationKeys(string $lokasi, string $detil): array
+    {
+        $lokasi = $this->normalizeLabel($lokasi);
+        $detil = $this->normalizeLabel($detil);
+        $keys = [];
+        $this->pushKey($keys, $lokasi, $detil);
+        $stripped = $this->stripSitePrefix($lokasi);
+        if ($stripped !== $lokasi) {
+            $this->pushKey($keys, $stripped, $detil);
+        }
+
+        return $keys;
     }
 
     /**
@@ -149,12 +165,12 @@ final class ControlRoomLocationCoverageService
         CarbonImmutable $today,
     ): array {
         $master = $this->locations->forCoverage($site)->all();
-        $roster = $this->boardRoster($weekStart, $today);
-        if ($roster['sids'] === []) {
-            return $this->evaluate($master, [], true);
-        }
-
-        $sap = $this->qualityFindings->forSids($roster['sids'], $weekStart, $roster['last_duty']);
+        $weekEnd = $weekStart->addDays(6);
+        $lastDay = $weekEnd->lessThan($today) ? $weekEnd : $today;
+        $sap = $this->qualityFindings->locationHits(
+            $weekStart->startOfDay(),
+            $this->dutyWindow->reportingWindow($lastDay)['end'],
+        );
 
         return $this->evaluate($master, $this->coveredAt($sap['findings']), $sap['loaded']);
     }
@@ -167,19 +183,15 @@ final class ControlRoomLocationCoverageService
     {
         $covered = [];
         foreach ($findings as $finding) {
-            $key = $this->locationKey(
-                (string) ($finding['lokasi'] ?? ''),
-                (string) ($finding['detil_lokasi'] ?? ''),
-            );
-            if ($key === '') {
-                continue;
-            }
             $at = trim((string) ($finding['at'] ?? ''));
             if ($at === '') {
                 continue;
             }
-            if (! isset($covered[$key]) || $at > $covered[$key]) {
-                $covered[$key] = $at;
+            $detil = (string) ($finding['detil_lokasi'] ?? $finding['detail_lokasi'] ?? '');
+            foreach ($this->locationKeys((string) ($finding['lokasi'] ?? ''), $detil) as $key) {
+                if (! isset($covered[$key]) || $at > $covered[$key]) {
+                    $covered[$key] = $at;
+                }
             }
         }
 
@@ -187,38 +199,45 @@ final class ControlRoomLocationCoverageService
     }
 
     /**
-     * @return array{sids: list<string>, last_duty: CarbonImmutable}
+     * @param  array<string, string>  $coveredAt
      */
-    private function boardRoster(CarbonImmutable $weekStart, CarbonImmutable $today): array
+    private function latestCoveredAt(string $lokasi, string $detil, array $coveredAt): ?string
     {
-        $visibleUntil = $weekStart->addDays(6)->lessThan($today) ? $weekStart->addDays(6) : $today;
-        $plans = SchedulePlan::query()
-            ->select(['personnel_source_key', 'date'])
-            ->whereIn('site_code', ControlRoomSiteDutyBoardService::BOARD_SITE_CODES)
-            ->whereBetween('date', [$weekStart->toDateString(), $visibleUntil->toDateString()])
-            ->get();
-
-        $sids = [];
-        $dates = [];
-        foreach ($plans as $plan) {
-            $sid = strtoupper(trim((string) $plan->personnel_source_key));
-            if ($sid === '') {
+        $latest = null;
+        foreach ($this->locationKeys($lokasi, $detil) as $key) {
+            $at = $coveredAt[$key] ?? null;
+            if (! is_string($at) || $at === '') {
                 continue;
             }
-            $sids[$sid] = $sid;
-            $date = $plan->date instanceof CarbonInterface
-                ? $plan->date->toDateString()
-                : (string) $plan->date;
-            if ($date !== '') {
-                $dates[] = $date;
+            if ($latest === null || $at > $latest) {
+                $latest = $at;
             }
         }
 
-        return [
-            'sids' => array_values($sids),
-            'last_duty' => $dates === []
-                ? $visibleUntil
-                : CarbonImmutable::parse((string) max($dates)),
-        ];
+        return $latest;
+    }
+
+    /**
+     * @param  list<string>  $keys
+     */
+    private function pushKey(array &$keys, string $lokasi, string $detil): void
+    {
+        if ($lokasi === '' && $detil === '') {
+            return;
+        }
+        $keys[] = $lokasi.'|'.$detil;
+    }
+
+    private function normalizeLabel(string $value): string
+    {
+        $value = mb_strtolower(trim($value));
+        $value = (string) preg_replace('/\s+/u', ' ', $value);
+
+        return $value;
+    }
+
+    private function stripSitePrefix(string $lokasi): string
+    {
+        return trim((string) preg_replace('/^\([^)]+\)\s*/u', '', $lokasi));
     }
 }
