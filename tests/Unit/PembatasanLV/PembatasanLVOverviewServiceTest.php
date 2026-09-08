@@ -8,7 +8,6 @@ use App\Models\User;
 use App\Services\PembatasanLV\PembatasanLVControlRoomContextService;
 use App\Services\PembatasanLV\PembatasanLVOverviewService;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Cache;
 use Mockery;
 use Tests\TestCase;
 
@@ -71,15 +70,20 @@ final class PembatasanLVOverviewServiceTest extends TestCase
         $this->assertStringContainsString('1 = 0', $sql);
     }
 
+    public function test_site_options_are_operational_sites(): void
+    {
+        $service = $this->serviceWithRooms(['Office BC SMO']);
+
+        $this->assertSame(
+            ['BMO 1', 'BMO 2', 'LMO', 'SMO', 'GMO', 'BMO 3'],
+            $service->siteOptions()->all()
+        );
+    }
+
     public function test_orang_site_filter_matches_site_column(): void
     {
-        $user = $this->userWithId(1);
-        Cache::put('pembatasan_lv:orang_site_cr_v1:1', [
-            'sites' => ['SMO'],
-            'rooms_by_site' => ['SMO' => ['Office BC SMO']],
-        ], 60);
-
         $service = $this->serviceWithRooms(['Office BC SMO']);
+        $user = new User(['id' => 1]);
 
         $query = $service->orangMasukAktifQuery($user, ['site' => 'SMO']);
         $sql = strtolower($query->toSql());
@@ -90,18 +94,10 @@ final class PembatasanLVOverviewServiceTest extends TestCase
         $this->assertContains('Office BC SMO', $bindings);
     }
 
-    public function test_site_filter_narrows_lv_to_site_control_rooms(): void
+    public function test_site_filter_narrows_lv_to_matching_control_rooms(): void
     {
-        $user = $this->userWithId(1);
-        Cache::put('pembatasan_lv:orang_site_cr_v1:1', [
-            'sites' => ['SMO', 'BMO'],
-            'rooms_by_site' => [
-                'SMO' => ['Office BC SMO'],
-                'BMO' => ['CONTROL ROOM DERAWAN'],
-            ],
-        ], 60);
-
         $service = $this->serviceWithRooms(['Office BC SMO', 'CONTROL ROOM DERAWAN']);
+        $user = new User(['id' => 1]);
 
         $query = $service->lvMasukAktifQuery($user, ['site' => 'SMO']);
         $bindings = $this->bindingStrings($query->getBindings());
@@ -110,12 +106,16 @@ final class PembatasanLVOverviewServiceTest extends TestCase
         $this->assertNotContains('CONTROL ROOM DERAWAN', $bindings);
     }
 
-    private function userWithId(int $id): User
+    public function test_bmo1_site_does_not_match_bmo2_room(): void
     {
-        $user = new User();
-        $user->id = $id;
+        $service = $this->serviceWithRooms(['CONTROL ROOM BMO 2', 'Office BMO 1']);
+        $user = new User(['id' => 1]);
 
-        return $user;
+        $query = $service->lvMasukAktifQuery($user, ['site' => 'BMO 1']);
+        $bindings = $this->bindingStrings($query->getBindings());
+
+        $this->assertContains('Office BMO 1', $bindings);
+        $this->assertNotContains('CONTROL ROOM BMO 2', $bindings);
     }
 
     /**

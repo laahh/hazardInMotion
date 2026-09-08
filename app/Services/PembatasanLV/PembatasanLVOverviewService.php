@@ -10,15 +10,32 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
 
 class PembatasanLVOverviewService
 {
-    private const SITE_CR_CACHE_TTL_SECONDS = 60;
-
     private const LIVE_LIST_LIMIT = 100;
 
     private const HISTORY_LIST_LIMIT = 100;
+
+    /** @var list<string> */
+    public const FILTER_SITES = [
+        'BMO 1',
+        'BMO 2',
+        'LMO',
+        'SMO',
+        'GMO',
+        'BMO 3',
+    ];
+
+    /** @var array<string, list<string>> */
+    private const SITE_ALIASES = [
+        'BMO 1' => ['BMO 1', 'BMO1', 'BMO-1'],
+        'BMO 2' => ['BMO 2', 'BMO2', 'BMO-2'],
+        'BMO 3' => ['BMO 3', 'BMO3', 'BMO-3'],
+        'LMO' => ['LMO'],
+        'SMO' => ['SMO'],
+        'GMO' => ['GMO'],
+    ];
 
     /** @var list<string> */
     public const LV_LIVE_COLUMNS = [
@@ -56,9 +73,9 @@ class PembatasanLVOverviewService
 
         $site = trim((string) ($filters['site'] ?? ''));
         if ($site !== '') {
-            $siteRooms = $this->controlRoomsForSite($user, $site);
+            $siteRooms = $this->roomsMatchingSite($rooms, $site);
             if ($siteRooms->isNotEmpty()) {
-                $rooms = $this->intersectRooms($rooms, $siteRooms);
+                $rooms = $siteRooms;
             }
         }
 
@@ -75,9 +92,9 @@ class PembatasanLVOverviewService
     /**
      * @return Collection<int, string>
      */
-    public function siteOptions(?User $user): Collection
+    public function siteOptions(?User $user = null): Collection
     {
-        return collect($this->siteControlRoomCatalog($user)['sites']);
+        return collect(self::FILTER_SITES);
     }
 
     /**
@@ -91,11 +108,9 @@ class PembatasanLVOverviewService
             return $userRooms->values();
         }
 
-        $siteRooms = $this->controlRoomsForSite($user, $site);
+        $matched = $this->roomsMatchingSite($userRooms, $site);
 
-        return $siteRooms->isNotEmpty()
-            ? $this->intersectRooms($userRooms, $siteRooms)
-            : $userRooms->values();
+        return $matched->isNotEmpty() ? $matched : $userRooms->values();
     }
 
     /**
@@ -322,21 +337,51 @@ class PembatasanLVOverviewService
      */
     private function applyRoomScope(Builder $query, ?User $user, array $filters, bool $isOrang): Builder
     {
-        $rooms = $this->supervisedRooms($user, $filters);
+        $rooms = $this->controlRoomContext->controlRoomsForUser($user);
+        $filterRoom = trim((string) ($filters['control_room'] ?? ''));
+        if ($filterRoom !== '') {
+            $rooms = $rooms
+                ->filter(fn (string $room) => strcasecmp($room, $filterRoom) === 0)
+                ->values();
+        }
+
+        $site = trim((string) ($filters['site'] ?? ''));
+
+        if ($isOrang) {
+            if ($rooms->isEmpty()) {
+                return $query->whereRaw('1 = 0');
+            }
+
+            $query->whereIn('control_room', $rooms->all());
+
+            if ($site !== '') {
+                $aliases = $this->siteAliases($site);
+                $matchedRooms = $this->roomsMatchingSite($rooms, $site);
+                $query->where(function (Builder $builder) use ($aliases, $matchedRooms): void {
+                    $builder->whereIn('site', $aliases);
+                    if ($matchedRooms->isNotEmpty()) {
+                        $builder->orWhereIn('control_room', $matchedRooms->all());
+                    }
+                });
+            }
+
+            return $query;
+        }
+
+        if ($site !== '') {
+            $matchedRooms = $this->roomsMatchingSite($rooms, $site);
+            if ($matchedRooms->isNotEmpty()) {
+                $rooms = $matchedRooms;
+            } else {
+                return $query->whereRaw('1 = 0');
+            }
+        }
+
         if ($rooms->isEmpty()) {
             return $query->whereRaw('1 = 0');
         }
 
-        $query->whereIn('control_room', $rooms->all());
-
-        if ($isOrang) {
-            $site = trim((string) ($filters['site'] ?? ''));
-            if ($site !== '') {
-                $query->where('site', $site);
-            }
-        }
-
-        return $query;
+        return $query->whereIn('control_room', $rooms->all());
     }
 
     /**
@@ -356,92 +401,47 @@ class PembatasanLVOverviewService
     /**
      * @return Collection<int, string>
      */
-    private function controlRoomsForSite(?User $user, string $site): Collection
+    private function roomsMatchingSite(Collection $rooms, string $site): Collection
     {
-        $catalog = $this->siteControlRoomCatalog($user);
-
-        foreach ($catalog['rooms_by_site'] as $catalogSite => $rooms) {
-            if (strcasecmp((string) $catalogSite, $site) === 0) {
-                return collect($rooms)->values();
-            }
-        }
-
-        return collect();
-    }
-
-    /**
-     * @param  Collection<int, string>  $left
-     * @param  Collection<int, string>  $right
-     * @return Collection<int, string>
-     */
-    private function intersectRooms(Collection $left, Collection $right): Collection
-    {
-        $rightKeys = $right->map(fn (string $room) => mb_strtolower($room))->all();
-
-        return $left
-            ->filter(fn (string $room) => in_array(mb_strtolower($room), $rightKeys, true))
+        return $rooms
+            ->filter(fn (string $room) => $this->textMatchesSite($room, $site))
             ->values();
     }
 
     /**
-     * Site ↔ CR dari inputasi orang (tabel kecil, ter-index control_room).
-     * Tidak memakai cctv_data_bmo2 yang full-scan.
-     *
-     * @return array{sites: list<string>, rooms_by_site: array<string, list<string>>}
+     * @return list<string>
      */
-    private function siteControlRoomCatalog(?User $user): array
+    private function siteAliases(string $site): array
     {
-        $empty = ['sites' => [], 'rooms_by_site' => []];
-        if ($user === null) {
-            return $empty;
+        return self::SITE_ALIASES[$site] ?? [$site];
+    }
+
+    private function textMatchesSite(string $haystack, string $site): bool
+    {
+        $haystack = strtoupper(trim($haystack));
+        if ($haystack === '') {
+            return false;
         }
 
-        $userRooms = $this->controlRoomContext->controlRoomsForUser($user);
-        if ($userRooms->isEmpty()) {
-            return $empty;
+        foreach ($this->siteAliases($site) as $alias) {
+            $alias = strtoupper(trim($alias));
+            if ($alias === '') {
+                continue;
+            }
+
+            $pattern = '/(?<![A-Z0-9])'.preg_quote($alias, '/').'(?![A-Z0-9])/';
+            if (preg_match($pattern, $haystack) === 1) {
+                return true;
+            }
+
+            $compactHay = (string) preg_replace('/[\s\-]+/', '', $haystack);
+            $compactAlias = (string) preg_replace('/[\s\-]+/', '', $alias);
+            $compactPattern = '/(?<![A-Z0-9])'.preg_quote($compactAlias, '/').'(?![A-Z0-9])/';
+            if ($compactAlias !== '' && preg_match($compactPattern, $compactHay) === 1) {
+                return true;
+            }
         }
 
-        $cacheKey = 'pembatasan_lv:orang_site_cr_v1:'.$user->id;
-
-        /** @var array{sites: list<string>, rooms_by_site: array<string, list<string>>} $catalog */
-        $catalog = Cache::remember($cacheKey, self::SITE_CR_CACHE_TTL_SECONDS, function () use ($userRooms): array {
-            $rows = PembatasanOrangInputasi::query()
-                ->select(['site', 'control_room'])
-                ->whereIn('control_room', $userRooms->all())
-                ->whereNotNull('site')
-                ->where('site', '!=', '')
-                ->groupBy('site', 'control_room')
-                ->get();
-
-            $sites = [];
-            $roomsBySite = [];
-
-            foreach ($rows as $row) {
-                $site = trim((string) $row->site);
-                $room = trim((string) $row->control_room);
-                if ($site === '' || $room === '') {
-                    continue;
-                }
-                $sites[$site] = true;
-                $roomsBySite[$site][$room] = true;
-            }
-
-            $sitesList = array_keys($sites);
-            natcasesort($sitesList);
-
-            $roomsBySiteList = [];
-            foreach ($roomsBySite as $siteName => $rooms) {
-                $roomList = array_keys($rooms);
-                natcasesort($roomList);
-                $roomsBySiteList[$siteName] = array_values($roomList);
-            }
-
-            return [
-                'sites' => array_values($sitesList),
-                'rooms_by_site' => $roomsBySiteList,
-            ];
-        });
-
-        return $catalog;
+        return false;
     }
 }
