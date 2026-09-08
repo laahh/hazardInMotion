@@ -41,8 +41,22 @@ final class DashboardMockDataProvider
         array $previousSapCounts = [],
         bool $previousSapLoaded = false,
     ): array {
-        $achievementRows = $this->achievementRowsFromSchedule($scheduleDays, $sapCountsBySidDate, $sapLoaded);
-        $previousRows = $this->achievementRowsFromSchedule($previousScheduleDays, $previousSapCounts, $previousSapLoaded);
+        $today = CarbonImmutable::parse(now())->startOfDay();
+        $weekFrom = CarbonImmutable::parse($weekStart)->startOfDay();
+        $achievementRows = $this->achievementRowsFromSchedule(
+            $scheduleDays,
+            $sapCountsBySidDate,
+            $sapLoaded,
+            $weekFrom,
+            $today,
+        );
+        $previousRows = $this->achievementRowsFromSchedule(
+            $previousScheduleDays,
+            $previousSapCounts,
+            $previousSapLoaded,
+            $weekFrom->subWeek(),
+            $today,
+        );
         $kpi = $this->kpiCards(
             $achievementRows,
             $sapLoaded,
@@ -52,9 +66,6 @@ final class DashboardMockDataProvider
             $previousRows,
             $previousSapLoaded,
         );
-        if ($achievementRows === []) {
-            $achievementRows = $this->personnelAchievementFallback($weekStart);
-        }
 
         return [
             'kpi' => $kpi,
@@ -74,16 +85,31 @@ final class DashboardMockDataProvider
     }
 
     /**
+     * Hanya hari dalam minggu terpilih yang sudah berjalan. Minggu depan / tanpa jadwal = kosong.
+     *
      * @param  list<array<string, mixed>>  $scheduleDays
      * @param  array<string, array{hazard: int, inspeksi: int, observasi: int}>  $sapCountsBySidDate
      * @return list<array<string, mixed>>
      */
-    private function achievementRowsFromSchedule(array $scheduleDays, array $sapCountsBySidDate, bool $sapLoaded): array
-    {
+    private function achievementRowsFromSchedule(
+        array $scheduleDays,
+        array $sapCountsBySidDate,
+        bool $sapLoaded,
+        CarbonImmutable $weekFrom,
+        CarbonImmutable $today,
+    ): array {
+        $weekTo = $weekFrom->addDays(6);
+        $visibleUntil = $today->lessThan($weekTo) ? $today : $weekTo;
         $rows = [];
+
         foreach ($scheduleDays as $day) {
             $date = (string) ($day['date'] ?? '');
             if ($date === '') {
+                continue;
+            }
+
+            $dayDate = CarbonImmutable::parse($date)->startOfDay();
+            if ($dayDate->lt($weekFrom) || $dayDate->gt($visibleUntil)) {
                 continue;
             }
 
@@ -101,31 +127,6 @@ final class DashboardMockDataProvider
                         $sapLoaded,
                     );
                 }
-            }
-        }
-
-        return $rows;
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function personnelAchievementFallback(CarbonInterface $weekStart): array
-    {
-        $start = CarbonImmutable::parse($weekStart);
-        $people = [
-            ['Budi Santoso', 'S1', 100.0],
-            ['Siti Rahayu', 'S1', 80.0],
-            ['Ahmad Fauzi', 'S2', 60.0],
-            ['Dewi Lestari', 'S2', 100.0],
-            ['Rudi Hartono', 'S1', 85.0],
-        ];
-
-        $rows = [];
-        for ($i = 0; $i < 4; $i++) {
-            $date = $start->addDays($i)->toDateString();
-            foreach ($people as [$name, $shift, $attendance]) {
-                $rows[] = $this->achievementRow($date, $name, $shift, $attendance, $this->sampleTaps($shift, $date), '', [], false);
             }
         }
 
@@ -255,26 +256,6 @@ final class DashboardMockDataProvider
             'tidak_hadir' => 0.0,
             default => null,
         };
-    }
-
-    /**
-     * @return list<array{time: string, date_label: string, type: string, type_label: string, gate: string, passed: bool}>
-     */
-    private function sampleTaps(string $shift, string $date): array
-    {
-        if ($shift === 'S2') {
-            return [
-                ['time' => '18:01', 'date_label' => CarbonImmutable::parse($date)->format('d M'), 'type' => 'in', 'type_label' => 'Check-in', 'gate' => 'POS 2', 'passed' => true],
-                ['time' => '07:30', 'date_label' => CarbonImmutable::parse($date)->addDay()->format('d M'), 'type' => 'out', 'type_label' => 'Check-out', 'gate' => 'POS 2', 'passed' => true],
-            ];
-        }
-
-        return [
-            ['time' => '07:30', 'date_label' => CarbonImmutable::parse($date)->format('d M'), 'type' => 'in', 'type_label' => 'Check-in', 'gate' => 'POS 1', 'passed' => true],
-            ['time' => '12:20', 'date_label' => CarbonImmutable::parse($date)->format('d M'), 'type' => 'out', 'type_label' => 'Check-out', 'gate' => 'POS 1', 'passed' => true],
-            ['time' => '12:58', 'date_label' => CarbonImmutable::parse($date)->format('d M'), 'type' => 'in', 'type_label' => 'Check-in', 'gate' => 'POS 1', 'passed' => true],
-            ['time' => '17:32', 'date_label' => CarbonImmutable::parse($date)->format('d M'), 'type' => 'out', 'type_label' => 'Check-out', 'gate' => 'POS 1', 'passed' => true],
-        ];
     }
 
     /**

@@ -185,5 +185,61 @@ final class DashboardMockDataProviderTest extends TestCase
         $this->assertSame('—', $byLabel['% Avg SAP']['value']);
         $this->assertSame('—', $byLabel['Ratio TBC']['value']);
         $this->assertNull($byLabel['% Avg SAP']['delta']);
+        $this->assertSame([], $mock['achievement']);
+        $this->assertSame([], $mock['achievementGroups']);
+    }
+
+    public function test_tabel_pencapaian_hanya_hari_sudah_berjalan_pada_minggu_terpilih(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-09-08 10:00:00'));
+
+        $days = [
+            [
+                'date' => '2026-09-07',
+                's1' => [[
+                    'name' => 'Agung Nugroho',
+                    'sid' => 'FJAVJ',
+                    'status' => 'sesuai',
+                    'checkinout' => [],
+                ]],
+                's2' => [],
+            ],
+            [
+                'date' => '2026-09-09',
+                's1' => [[
+                    'name' => 'Herru Siswahyudi',
+                    'sid' => 'HHHHH',
+                    'status' => 'sesuai',
+                    'checkinout' => [],
+                ]],
+                's2' => [],
+            ],
+        ];
+
+        $mock = (new DashboardMockDataProvider())->build(CarbonImmutable::parse('2026-09-07'), $days);
+
+        $this->assertCount(1, $mock['achievementGroups']);
+        $this->assertSame('2026-09-07', $mock['achievementGroups'][0]['date']);
+        $this->assertSame('Agung Nugroho', $mock['achievementGroups'][0]['rows'][0]['name']);
+    }
+
+    public function test_minggu_depan_tanpa_jadwal_berjalan_dikosongkan(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-09-08 10:00:00'));
+
+        $days = [[
+            'date' => '2026-09-14',
+            's1' => [[
+                'name' => 'Budi Santoso',
+                'sid' => 'DUMMY',
+                'status' => 'sesuai',
+                'checkinout' => [],
+            ]],
+            's2' => [],
+        ]];
+
+        $mock = (new DashboardMockDataProvider())->build(CarbonImmutable::parse('2026-09-14'), $days);
+
+        $this->assertSame([], $mock['achievementGroups']);
     }
 }
