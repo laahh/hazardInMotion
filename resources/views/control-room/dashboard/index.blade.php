@@ -73,11 +73,15 @@
             return '—';
         }
         try {
-            return \Carbon\CarbonImmutable::parse($at)->locale('id')->translatedFormat('d M Y H:i');
+            return \Carbon\CarbonImmutable::parse($at)->locale('id')->translatedFormat('d M Y');
         } catch (\Throwable) {
             return $at;
         }
     };
+    $coverageRing = max(0, min(100, (float) $coverageKpi['percent']));
+    $personnelCoverage = $mock['personnelCoverage'];
+    $personnelLokasiMax = max(1, ...(array_column($personnelCoverage, 'lokasi') ?: [0]));
+    $personnelKritisMax = max(1, ...(array_column($personnelCoverage, 'kritis') ?: [0]));
 @endphp
 
 @push('styles')
@@ -168,29 +172,49 @@
         @endif
 
         <section class="ocr-cov" aria-labelledby="ocr-cov-title">
-            <div class="ocr-card-header ocr-cov-head">
+            <div class="ocr-cov-head">
                 <div>
                     <h6 id="ocr-cov-title">Coverage Lokasi</h6>
-                    <p class="ocr-card-kicker">{{ $weekRangeLabel }} · {{ $coverageScope }} · tercover jika ada SAP (hazard / inspeksi / observasi / OAK) di lokasi + detil lokasi</p>
+                    <p class="ocr-card-kicker">{{ $weekRangeLabel }} · {{ $coverageScope }}</p>
                 </div>
             </div>
             <div class="ocr-kpi-grid ocr-cov-kpi">
-                <div class="ocr-card ocr-kpi">
-                    <p class="ocr-kpi-label">Total lokasi</p>
+                <div class="ocr-card ocr-cov-stat">
+                    <div class="ocr-cov-stat-top">
+                        <span class="ocr-kpi-icon is-primary" aria-hidden="true"><i class="ri-map-pin-line"></i></span>
+                    </div>
                     <p class="ocr-kpi-value">{{ $coverageKpi['total'] }}</p>
+                    <p class="ocr-kpi-label">Total Lokasi</p>
+                    <p class="ocr-kpi-sub">Lokasi yang dipantau</p>
                 </div>
-                <div class="ocr-card ocr-kpi">
-                    <p class="ocr-kpi-label">Covered</p>
+                <div class="ocr-card ocr-cov-stat">
+                    <div class="ocr-cov-stat-top">
+                        <span class="ocr-kpi-icon is-success" aria-hidden="true"><i class="ri-checkbox-circle-line"></i></span>
+                    </div>
                     <p class="ocr-kpi-value">{{ $coverageKpi['covered'] }}</p>
+                    <p class="ocr-kpi-label">Covered</p>
+                    <p class="ocr-kpi-sub">Lokasi sudah ter-cover</p>
                 </div>
-                <div class="ocr-card ocr-kpi">
-                    <p class="ocr-kpi-label">Belum ter-cover</p>
+                <div class="ocr-card ocr-cov-stat">
+                    <div class="ocr-cov-stat-top">
+                        <span class="ocr-kpi-icon is-danger" aria-hidden="true"><i class="ri-error-warning-line"></i></span>
+                    </div>
                     <p class="ocr-kpi-value">{{ $coverageKpi['uncovered'] }}</p>
+                    <p class="ocr-kpi-label">Belum Ter-cover</p>
+                    <p class="ocr-kpi-sub">Lokasi belum ter-cover</p>
                 </div>
-                <div class="ocr-card ocr-kpi">
-                    <p class="ocr-kpi-label">Coverage %</p>
+                <div class="ocr-card ocr-cov-stat">
+                    <div class="ocr-cov-stat-top">
+                        <span class="ocr-cov-ring" aria-hidden="true">
+                            <svg viewBox="0 0 36 36">
+                                <path class="ocr-cov-ring-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                <path class="ocr-cov-ring-fg" stroke-dasharray="{{ $coverageRing }}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                            </svg>
+                        </span>
+                    </div>
                     <p class="ocr-kpi-value">{{ number_format($coverageKpi['percent'], 1) }}%</p>
-                    <div class="ocr-track is-success"><span style="width: {{ min(100, $coverageKpi['percent']) }}%"></span></div>
+                    <p class="ocr-kpi-label">Coverage %</p>
+                    <p class="ocr-kpi-sub">dari total {{ $coverageKpi['total'] }} lokasi</p>
                 </div>
             </div>
 
@@ -198,19 +222,20 @@
                 <div class="ocr-card ocr-cov-table-card">
                     <div class="ocr-card-header">
                         <div>
-                            <h6>Detail lokasi</h6>
-                            <p class="ocr-card-kicker">Filter di halaman, tanpa query ulang</p>
+                            <h6 id="ocr-cov-table-title">Detail Lokasi Belum Ter-cover</h6>
+                            <p class="ocr-card-kicker">{{ $weekRangeLabel }} · filter di halaman</p>
                         </div>
                     </div>
                     <div class="ocr-cov-toolbar">
-                        <div class="ocr-seg" role="group" aria-label="Filter status coverage">
-                            <button type="button" class="is-active" data-cov-tab="all">Semua ({{ $coverageKpi['total'] }})</button>
+                        <div class="ocr-seg ocr-cov-tabs" role="group" aria-label="Filter status coverage">
+                            <button type="button" data-cov-tab="all">Semua Lokasi ({{ $coverageKpi['total'] }})</button>
                             <button type="button" data-cov-tab="covered">Covered ({{ $coverageKpi['covered'] }})</button>
-                            <button type="button" data-cov-tab="uncovered">Belum ter-cover ({{ $coverageKpi['uncovered'] }})</button>
+                            <button type="button" class="is-active" data-cov-tab="uncovered">Belum Ter-cover ({{ $coverageKpi['uncovered'] }})</button>
                         </div>
                         <label class="ocr-cov-search">
+                            <i class="ri-search-line" aria-hidden="true"></i>
                             <span class="visually-hidden">Cari lokasi</span>
-                            <input type="search" id="ocr-cov-q" placeholder="Cari site, lokasi, detil…" autocomplete="off">
+                            <input type="search" id="ocr-cov-q" placeholder="Cari lokasi…" autocomplete="off">
                         </label>
                     </div>
                     <div class="ocr-card-body ocr-card-body--flush">
@@ -221,9 +246,10 @@
                                         <th>No</th>
                                         <th>Area / Site</th>
                                         <th>Lokasi</th>
-                                        <th>Detail lokasi</th>
+                                        <th>Detail Lokasi</th>
                                         <th>Status</th>
-                                        <th>Terakhir ter-cover</th>
+                                        <th>Terakhir Ter-cover</th>
+                                        <th>Missed / Gap</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -233,7 +259,12 @@
                                             data-search="{{ mb_strtolower($row['site'].' '.$row['lokasi'].' '.$row['detail_lokasi']) }}"
                                         >
                                             <td>{{ $index + 1 }}</td>
-                                            <td>{{ $row['site'] }}</td>
+                                            <td>
+                                                <span class="ocr-cov-site">
+                                                    <span class="ocr-cov-dot {{ $row['covered'] ? 'is-ok' : 'is-gap' }}"></span>
+                                                    {{ $row['site'] }}
+                                                </span>
+                                            </td>
                                             <td>
                                                 {{ $row['lokasi'] }}
                                                 @if ($row['is_critical'])
@@ -243,20 +274,21 @@
                                             <td>{{ $row['detail_lokasi'] !== '' ? $row['detail_lokasi'] : '—' }}</td>
                                             <td>
                                                 @if ($row['covered'])
-                                                    <span class="ocr-cov-status is-ok">Ter-cover</span>
+                                                    <span class="ocr-cov-pill is-ok">Ter-cover</span>
                                                 @else
-                                                    <span class="ocr-cov-status is-gap">Belum ter-cover</span>
+                                                    <span class="ocr-cov-pill is-gap">Belum ter-cover</span>
                                                 @endif
                                             </td>
                                             <td>{{ $coverageLastAt($row['last_at']) }}</td>
+                                            <td class="{{ $row['covered'] ? '' : 'ocr-cov-gap' }}">{{ $row['covered'] ? '—' : 'Minggu ini' }}</td>
                                         </tr>
                                     @empty
                                         <tr class="ocr-cov-empty-row">
-                                            <td colspan="6" class="text-secondary-light">Belum ada master lokasi untuk filter ini.</td>
+                                            <td colspan="7" class="text-secondary-light">Belum ada master lokasi untuk filter ini.</td>
                                         </tr>
                                     @endforelse
                                     <tr class="ocr-cov-empty-filter" hidden>
-                                        <td colspan="6" class="text-secondary-light">Tidak ada lokasi yang cocok dengan filter.</td>
+                                        <td colspan="7" class="text-secondary-light">Tidak ada lokasi yang cocok dengan filter.</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -264,27 +296,39 @@
                     </div>
                 </div>
 
-                <div class="ocr-card ocr-cov-attention">
+                <aside class="ocr-card ocr-cov-attention">
                     <div class="ocr-card-header">
-                        <div>
-                            <h6>Perlu perhatian</h6>
-                            <p class="ocr-card-kicker">Area kritis / high risk yang belum tercover minggu ini</p>
+                        <div class="ocr-cov-attn-title">
+                            <span class="ocr-cov-attn-icon" aria-hidden="true"><i class="ri-alert-fill"></i></span>
+                            <div>
+                                <h6>Perlu Perhatian</h6>
+                                <p class="ocr-card-kicker">Area kritis / high risk yang belum ter-cover minggu ini</p>
+                            </div>
                         </div>
                     </div>
                     <div class="ocr-card-body">
                         @forelse ($coverageAttention as $item)
                             <div class="ocr-cov-attn-row">
                                 <div>
-                                    <strong>{{ $item['lokasi'] }}</strong>
-                                    <span>{{ $item['detail_lokasi'] !== '' ? $item['detail_lokasi'] : '—' }}</span>
-                                    <em>{{ $item['site'] }}</em>
+                                    <strong>{{ $item['detail_lokasi'] !== '' ? $item['detail_lokasi'] : $item['lokasi'] }}</strong>
+                                    <span>{{ $item['lokasi'] }} · {{ $item['site'] }}</span>
+                                </div>
+                                <div class="ocr-cov-attn-meta">
+                                    <b>Minggu ini</b>
+                                    <small>tidak ter-cover</small>
                                 </div>
                             </div>
                         @empty
                             <p class="text-secondary-light mb-0">Tidak ada area kritis yang belum tercover pada minggu ini.</p>
                         @endforelse
                     </div>
-                </div>
+                    @if ($coverageKpi['uncovered'] > 0)
+                        <button type="button" class="ocr-cov-attn-more" data-cov-more>
+                            Lihat semua lokasi belum ter-cover
+                            <i class="ri-arrow-right-s-line" aria-hidden="true"></i>
+                        </button>
+                    @endif
+                </aside>
             </div>
         </section>
 
@@ -502,11 +546,21 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @forelse ($mock['personnelCoverage'] as $row)
+                                @forelse ($personnelCoverage as $row)
                                     <tr class="{{ $row['lead'] ? 'is-lead' : '' }}">
                                         <td class="ocr-heat-name">{{ $row['name'] }}</td>
-                                        <td class="ocr-heat-cell is-cov">{{ $row['lokasi'] }}</td>
-                                        <td class="ocr-heat-cell is-cov">{{ $row['kritis'] }}</td>
+                                        <td class="ocr-heat-cell is-cov">
+                                            <div class="ocr-cov-pbar">
+                                                <strong>{{ $row['lokasi'] }}</strong>
+                                                <div class="ocr-track is-info"><span style="width: {{ min(100, $row['lokasi'] / $personnelLokasiMax * 100) }}%"></span></div>
+                                            </div>
+                                        </td>
+                                        <td class="ocr-heat-cell is-cov">
+                                            <div class="ocr-cov-pbar">
+                                                <strong>{{ $row['kritis'] }}</strong>
+                                                <div class="ocr-track is-success"><span style="width: {{ min(100, $row['kritis'] / $personnelKritisMax * 100) }}%"></span></div>
+                                            </div>
+                                        </td>
                                     </tr>
                                 @empty
                                     <tr>
@@ -688,7 +742,24 @@
                 }
                 var q = document.getElementById('ocr-cov-q');
                 var emptyFilter = table.querySelector('.ocr-cov-empty-filter');
-                var tab = 'all';
+                var title = document.getElementById('ocr-cov-table-title');
+                var titles = {
+                    all: 'Detail Semua Lokasi',
+                    covered: 'Detail Lokasi Covered',
+                    uncovered: 'Detail Lokasi Belum Ter-cover'
+                };
+                var tab = 'uncovered';
+
+                function setTab(next) {
+                    tab = next || 'uncovered';
+                    document.querySelectorAll('[data-cov-tab]').forEach(function (el) {
+                        el.classList.toggle('is-active', el.getAttribute('data-cov-tab') === tab);
+                    });
+                    if (title) {
+                        title.textContent = titles[tab] || titles.uncovered;
+                    }
+                    applyCoverageFilter();
+                }
 
                 function applyCoverageFilter() {
                     var query = (q && q.value ? q.value : '').trim().toLowerCase();
@@ -712,16 +783,20 @@
 
                 document.querySelectorAll('[data-cov-tab]').forEach(function (btn) {
                     btn.addEventListener('click', function () {
-                        tab = btn.getAttribute('data-cov-tab') || 'all';
-                        document.querySelectorAll('[data-cov-tab]').forEach(function (el) {
-                            el.classList.toggle('is-active', el === btn);
-                        });
-                        applyCoverageFilter();
+                        setTab(btn.getAttribute('data-cov-tab'));
                     });
                 });
+                var more = document.querySelector('[data-cov-more]');
+                if (more) {
+                    more.addEventListener('click', function () {
+                        setTab('uncovered');
+                        table.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
+                }
                 if (q) {
                     q.addEventListener('input', applyCoverageFilter);
                 }
+                applyCoverageFilter();
             })();
 
             function escapeHtml(value) {
