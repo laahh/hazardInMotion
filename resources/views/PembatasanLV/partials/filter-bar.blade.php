@@ -12,12 +12,12 @@
    $tanggalLabel = \Carbon\Carbon::parse($filters['tanggal'])->format('d M Y');
    $controlRoomLabel = $filters['control_room'] !== '' ? $filters['control_room'] : 'Semua Control Room';
    $pickerBtnClass = 'plv-filter-pill inline-flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left sm:w-auto sm:min-w-[12.5rem]';
-   $dropdownClass = 'plv-filter-dropdown hidden absolute right-0 top-full z-40 mt-2 max-h-64 w-72 overflow-y-auto rounded-xl border border-outline-variant/20 bg-white py-2 shadow-lg';
-   $optionClass = 'flex w-full items-center px-4 py-2.5 text-left text-sm font-medium text-on-surface transition-colors duration-200 hover:bg-primary/[0.04]';
+   $dropdownClass = 'plv-filter-dropdown hidden absolute right-0 top-full z-[80] mt-2 max-h-64 w-72 overflow-y-auto rounded-xl border border-slate-200 bg-white py-2';
+   $optionClass = 'flex w-full items-center px-4 py-2.5 text-left text-sm font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50';
 @endphp
 <div class="flex flex-wrap items-center justify-start lg:justify-end gap-3">
-<form method="GET" action="{{ route('pembatasan-lv.index') }}" id="plv-filter-form" class="flex flex-wrap items-center gap-3">
-   <div class="relative" data-plv-filter-wrap>
+<form method="GET" action="{{ route('pembatasan-lv.index') }}" id="plv-filter-form" class="relative z-50 flex flex-wrap items-center gap-3">
+   <div class="relative z-10" data-plv-filter-wrap>
       <button type="button" data-plv-filter-toggle class="{{ $pickerBtnClass }}" aria-haspopup="listbox" aria-expanded="false">
          <span class="material-symbols-outlined text-primary text-xl shrink-0">location_on</span>
          <span class="flex min-w-0 flex-1 flex-col items-start leading-tight gap-0.5">
@@ -47,7 +47,7 @@
       <input type="date" name="tanggal" id="plv-filter-tanggal" value="{{ $filters['tanggal'] }}" class="pointer-events-none absolute opacity-0" tabindex="-1" aria-hidden="true"/>
    </div>
 
-   <div class="relative" data-plv-filter-wrap>
+   <div class="relative z-10" data-plv-filter-wrap>
       <button type="button" data-plv-filter-toggle class="{{ $pickerBtnClass }}" aria-haspopup="listbox" aria-expanded="false">
          <span class="material-symbols-outlined text-primary text-xl shrink-0">meeting_room</span>
          <span class="flex min-w-0 flex-1 flex-col items-start leading-tight gap-0.5">
@@ -94,6 +94,8 @@
       form.querySelectorAll('[data-plv-filter-menu]').forEach(function (menu) {
          if (menu === except) return;
          menu.classList.add('hidden');
+         var wrap = menu.closest('[data-plv-filter-wrap]');
+         if (wrap) wrap.classList.remove('z-50');
          var toggle = menu.parentElement && menu.parentElement.querySelector('[data-plv-filter-toggle]');
          if (toggle) toggle.setAttribute('aria-expanded', 'false');
       });
@@ -102,11 +104,13 @@
    form.querySelectorAll('[data-plv-filter-toggle]').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
          e.stopPropagation();
-         var menu = btn.parentElement.querySelector('[data-plv-filter-menu]');
+         var wrap = btn.closest('[data-plv-filter-wrap]');
+         var menu = wrap && wrap.querySelector('[data-plv-filter-menu]');
          var isOpen = menu && !menu.classList.contains('hidden');
          closeAllMenus();
          if (menu && !isOpen) {
             menu.classList.remove('hidden');
+            if (wrap) wrap.classList.add('z-50');
             btn.setAttribute('aria-expanded', 'true');
          }
       });
@@ -119,6 +123,12 @@
          var label = opt.getAttribute('data-label') || '';
          var input = form.querySelector('[name="' + name + '"]');
          if (input) input.value = value;
+         if (name === 'site') {
+            var crInput = form.querySelector('[name="control_room"]');
+            if (crInput) crInput.value = '';
+            var crLabel = document.getElementById('plv-control-room-label');
+            if (crLabel) crLabel.textContent = 'Semua Control Room';
+         }
          var labelEl = document.getElementById('plv-site-label');
          if (name === 'control_room') labelEl = document.getElementById('plv-control-room-label');
          if (name === 'site') labelEl = document.getElementById('plv-site-label');

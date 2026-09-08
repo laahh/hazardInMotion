@@ -1,17 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\PembatasanLV;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\PembatasanLV\Concerns\ProvidesPembatasanLVInputasiFormContext;
 use App\Http\Controllers\PembatasanLV\Concerns\ProvidesPembatasanLVLayout;
-use App\Models\CctvData;
 use App\Models\PembatasanLvInputasi;
 use App\Models\PembatasanOrangInputasi;
-use App\Services\PembatasanLV\PembatasanLVEvaluasiService;
 use App\Services\PembatasanLV\PembatasanLVControlRoomContextService;
 use App\Services\PembatasanLV\PembatasanLVOverviewService;
 use App\Services\PembatasanLV\PembatasanLVShiftService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -26,7 +27,6 @@ class PembatasanLVController extends Controller
         private readonly PembatasanLVOverviewService $overviewService,
         private readonly PembatasanLVShiftService $shiftService,
         private readonly PembatasanLVControlRoomContextService $controlRoomContext,
-        private readonly PembatasanLVEvaluasiService $evaluasiService,
     ) {}
 
     public function index(Request $request): View
@@ -38,91 +38,25 @@ class PembatasanLVController extends Controller
             'control_room' => trim((string) $request->query('control_room', '')),
         ];
 
-        $sites = CctvData::query()
-            ->whereNotNull('site')
-            ->where('site', '!=', '')
-            ->distinct()
-            ->orderBy('site')
-            ->pluck('site');
-
-        $supervisedRooms = $this->overviewService->supervisedRooms($user, $filters);
-
-        $controlRoomsQuery = CctvData::query()
-            ->whereNotNull('control_room')
-            ->where('control_room', '!=', '')
-            ->distinct()
-            ->orderBy('control_room');
-
-        if ($filters['site'] !== '') {
-            $controlRoomsQuery->where('site', $filters['site']);
-        }
-
-        if ($supervisedRooms->isNotEmpty()) {
-            $controlRoomsQuery->whereIn('control_room', $supervisedRooms->all());
-        }
-
-        $controlRooms = $controlRoomsQuery->pluck('control_room');
-
-        $lvMasukAktif = (clone $this->overviewService->lvMasukAktifQuery($user, $filters))->count();
-        $lvKeluar = (clone $this->overviewService->lvKeluarQuery($user, $filters))->count();
-        $lvMasukAktifList = $this->overviewService
-            ->lvMasukAktifQuery($user, $filters)
-            ->limit(100)
-            ->get();
-
-        $lvKeluarList = $this->overviewService
-            ->lvKeluarQuery($user, $filters)
-            ->limit(100)
-            ->get();
-
-        $lvAllList = $this->overviewService
-            ->lvAllListQuery($user, $filters)
-            ->limit(200)
-            ->get();
-
-        $orangMasukAktif = (clone $this->overviewService->orangMasukAktifQuery($user, $filters))->count();
-        $orangKeluar = (clone $this->overviewService->orangKeluarQuery($user, $filters))->count();
-        $sapIndex = $this->evaluasiService->buildSapReporterIndex($filters);
-        $orangMasukAktifList = $this->overviewService
-            ->orangMasukAktifQuery($user, $filters)
-            ->limit(100)
-            ->get()
-            ->each(function (PembatasanOrangInputasi $row) use ($sapIndex): void {
-                $row->has_sap = $this->evaluasiService->personHasSap(
-                    (string) $row->sid,
-                    (string) $row->nama,
-                    $sapIndex,
-                );
-            });
-        $orangKeluarList = $this->overviewService
-            ->orangKeluarQuery($user, $filters)
-            ->limit(100)
-            ->get();
-        $orangAllList = $this->overviewService
-            ->orangAllListQuery($user, $filters)
-            ->limit(200)
-            ->get();
+        $dashboard = $this->overviewService->dashboardPayload($user, $filters);
 
         return view('PembatasanLV.index', [
             'navActive' => 'overview',
             'navItems' => $this->pembatasanLvNavItems(),
             'filters' => $filters,
-            'sites' => $sites,
-            'controlRooms' => $controlRooms,
-            'supervisedRooms' => $supervisedRooms,
-            'lvMasukAktif' => $lvMasukAktif,
-            'lvKeluar' => $lvKeluar,
-            'lvMasukAktifList' => $lvMasukAktifList,
-            'lvKeluarList' => $lvKeluarList,
-            'lvAllList' => $lvAllList,
-            'orangMasukAktif' => $orangMasukAktif,
-            'orangKeluar' => $orangKeluar,
-            'orangMasukAktifList' => $orangMasukAktifList,
-            'orangKeluarList' => $orangKeluarList,
-            'orangAllList' => $orangAllList,
-            'sapAvailable' => $sapIndex['available'] ?? false,
+            'sites' => $dashboard['sites'],
+            'controlRooms' => $dashboard['controlRooms'],
+            'supervisedRooms' => $dashboard['supervisedRooms'],
+            'lvMasukAktif' => $dashboard['lvMasukAktif'],
+            'lvKeluar' => $dashboard['lvKeluar'],
+            'lvMasukAktifList' => $dashboard['lvMasukAktifList'],
+            'lvAllList' => $dashboard['lvAllList'],
+            'orangMasukAktif' => $dashboard['orangMasukAktif'],
+            'orangKeluar' => $dashboard['orangKeluar'],
+            'orangMasukAktifList' => $dashboard['orangMasukAktifList'],
+            'orangAllList' => $dashboard['orangAllList'],
             'formContext' => $this->pembatasanLvInputasiFormContext($this->shiftService, $this->controlRoomContext, $user),
-            'aktivitasOptions' => $this->pembatasanLvAktivitasOptions(),
+            'aktivitasOptions' => collect(),
         ]);
     }
 
@@ -172,7 +106,7 @@ class PembatasanLVController extends Controller
         return back()->with('success', 'Checkout '.$inputasi->nama.' (SID: '.$inputasi->sid.') berhasil pada '.$now->format('d M Y H:i').'.');
     }
 
-    public function lvMasukAktifData(Request $request): \Illuminate\Http\JsonResponse
+    public function lvMasukAktifData(Request $request): JsonResponse
     {
         $user = Auth::user();
         $filters = [
@@ -185,6 +119,7 @@ class PembatasanLVController extends Controller
 
         $rows = $this->overviewService
             ->lvMasukAktifQuery($user, $filters)
+            ->select(PembatasanLVOverviewService::LV_LIVE_COLUMNS)
             ->limit(100)
             ->get()
             ->map(fn (PembatasanLvInputasi $row) => [
@@ -209,7 +144,7 @@ class PembatasanLVController extends Controller
         ]);
     }
 
-    public function orangMasukAktifData(Request $request): \Illuminate\Http\JsonResponse
+    public function orangMasukAktifData(Request $request): JsonResponse
     {
         $user = Auth::user();
         $filters = [
@@ -219,10 +154,10 @@ class PembatasanLVController extends Controller
         ];
 
         $now = now()->timezone(config('app.timezone'));
-        $sapIndex = $this->evaluasiService->buildSapReporterIndex($filters);
 
         $rows = $this->overviewService
             ->orangMasukAktifQuery($user, $filters)
+            ->select(PembatasanLVOverviewService::ORANG_LIVE_COLUMNS)
             ->limit(100)
             ->get()
             ->map(fn (PembatasanOrangInputasi $row) => [
@@ -233,11 +168,6 @@ class PembatasanLVController extends Controller
                 'checkin_at' => $row->checkin_at?->timezone(config('app.timezone'))->toIso8601String(),
                 'lokasi' => $row->lokasi,
                 'detail_lokasi' => $row->detail_lokasi,
-                'has_sap' => $this->evaluasiService->personHasSap(
-                    (string) $row->sid,
-                    (string) $row->nama,
-                    $sapIndex,
-                ),
                 'durasi_detik' => $row->checkin_at
                     ? (int) $row->checkin_at->timezone(config('app.timezone'))->diffInSeconds($now)
                     : 0,
@@ -249,7 +179,6 @@ class PembatasanLVController extends Controller
             'meta' => [
                 'total' => $rows->count(),
                 'server_now' => $now->toIso8601String(),
-                'sap_available' => $sapIndex['available'] ?? false,
             ],
         ]);
     }
