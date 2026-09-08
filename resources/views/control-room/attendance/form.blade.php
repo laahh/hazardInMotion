@@ -7,38 +7,38 @@
 @endphp
 
 @section('content')
-    <div class="wrap">
-        <div class="hero">
-            <div class="hero-top"></div>
-            <div class="hero-body">
-                <span class="badge">
+    <div class="ocr-wrap">
+        <div class="ocr-hero">
+            <div class="ocr-hero-top"></div>
+            <div class="ocr-hero-body">
+                <span class="ocr-badge">
                     <span class="material-symbols-outlined" style="font-size:15px">badge</span>
                     Control Room
                 </span>
                 <h1>Absensi Jaga Control Room</h1>
-                <p class="lead">Isi SID Anda. Tanggal terisi otomatis dari jadwal jaga. Lampirkan bukti (unggah file atau foto langsung).</p>
-                <span class="period-pill">
+                <p class="ocr-lead">Isi SID Anda. Tanggal terisi otomatis dari jadwal jaga. Lampirkan bukti (unggah file atau foto langsung).</p>
+                <span class="ocr-pill">
                     <span class="material-symbols-outlined" style="font-size:16px">calendar_today</span>
                     {{ $dutyDateLabel }}
                 </span>
             </div>
         </div>
 
-        <div class="steps" aria-hidden="true">
-            <div class="step-dot is-active" id="step-dot-1"></div>
-            <div class="step-dot" id="step-dot-2"></div>
-            <div class="step-dot" id="step-dot-3"></div>
+        <div class="ocr-steps" aria-hidden="true">
+            <div class="ocr-step is-active" id="step-dot-1"></div>
+            <div class="ocr-step" id="step-dot-2"></div>
+            <div class="ocr-step" id="step-dot-3"></div>
         </div>
 
         @if (session('success'))
-            <div class="alert alert-ok" role="status">
+            <div class="ocr-alert ocr-alert-ok" role="status">
                 <strong>Absensi tercatat</strong>
                 <p>{{ session('success') }}</p>
             </div>
         @endif
 
         @if ($errors->any())
-            <div class="alert alert-error" role="alert" tabindex="-1" id="ocr-gf-error-summary">
+            <div class="ocr-alert ocr-alert-error" role="alert" tabindex="-1" id="ocr-gf-error-summary">
                 <strong>Periksa kembali:</strong>
                 <ul>
                     @foreach ($errors->all() as $error)
@@ -59,13 +59,13 @@
             <input type="hidden" name="tanggal" id="tanggal" value="{{ old('tanggal', $defaultTanggal) }}">
             <input type="hidden" id="nama" name="nama" value="{{ old('nama') }}">
 
-            <section class="card" id="section-sid">
-                <h2 class="card-title"><span class="num">1</span> Cari SID Anda</h2>
-                <div class="field" style="margin-bottom:0">
-                    <label for="sid">Nomor SID <span class="req">*</span></label>
-                    <div class="row">
+            <section class="ocr-card" id="section-sid">
+                <h2 class="ocr-card-title"><span class="ocr-num">1</span> Cari SID Anda</h2>
+                <div class="ocr-field" style="margin-bottom:0">
+                    <label for="sid">Nomor SID <span class="ocr-req">*</span></label>
+                    <div class="ocr-row">
                         <input
-                            class="input input-mono{{ $errors->has('sid') ? ' is-invalid' : '' }}"
+                            class="ocr-input ocr-input-mono"
                             type="text"
                             id="sid"
                             name="sid"
@@ -77,19 +77,19 @@
                             autocapitalize="characters"
                             spellcheck="false"
                         >
-                        <button type="button" class="btn btn-secondary" id="btn-lookup" style="white-space:nowrap">
+                        <button type="button" class="ocr-btn ocr-btn-secondary" id="btn-lookup" style="white-space:nowrap">
                             <span class="material-symbols-outlined">search</span>
                             Cari
                         </button>
                     </div>
-                    <p class="hint">Ketik SID persis seperti di kartu identitas, lalu tekan <strong>Cari</strong>.</p>
-                    <p id="sid-status" class="hint" style="margin-top:.5rem" role="status" aria-live="polite"></p>
+                    <p class="ocr-hint">Ketik SID persis seperti di kartu identitas, lalu tekan <strong>Cari</strong>.</p>
+                    <p id="sid-status" class="ocr-hint" style="margin-top:.5rem" role="status" aria-live="polite"></p>
                     @error('sid')
-                        <p class="hint" style="color:var(--danger)">{{ $message }}</p>
+                        <p class="ocr-hint" style="color:#dc2626">{{ $message }}</p>
                     @enderror
                 </div>
-                <div id="sid-preview" class="preview">
-                    <div class="preview-grid">
+                <div id="sid-preview" class="ocr-preview">
+                    <div class="ocr-preview-grid">
                         <div><span>Nama</span><strong id="pv-nama">—</strong></div>
                         <div><span>Tanggal jaga</span><strong id="tanggal-display">{{ $dutyDateLabel }}</strong></div>
                         <div><span>Shift</span><strong id="shift-display">{{ $currentShift->label() }}</strong></div>
@@ -98,22 +98,22 @@
                 </div>
             </section>
 
-            <div class="alert alert-error" id="ocr-not-scheduled" role="alert" hidden>
+            <div class="ocr-alert ocr-alert-error" id="ocr-not-scheduled" role="alert" hidden>
                 <strong>Tidak dapat absen</strong>
                 <p id="ocr-not-scheduled-text">Anda tidak dijadwalkan hari ini jadi tidak bisa absen. Jika ada perubahan, hubungi admin.</p>
             </div>
 
-            <section class="card" id="section-jadwal">
-                <h2 class="card-title"><span class="num">2</span> Jadwal jaga</h2>
-                <div class="alert alert-info" style="margin:0">
+            <section class="ocr-card" id="section-jadwal">
+                <h2 class="ocr-card-title"><span class="ocr-num">2</span> Jadwal jaga</h2>
+                <div class="ocr-alert ocr-alert-info" style="margin:0">
                     <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-4px">event_available</span>
                     Tanggal diisi otomatis dari roster Control Room. Hanya personil di daftar bawah yang dapat absen.
                 </div>
             </section>
 
-            <section class="card" id="section-bukti">
-                <h2 class="card-title"><span class="num">3</span> Upload Bukti (Evidence)</h2>
-                <div class="alert alert-info" style="margin-top:0">
+            <section class="ocr-card" id="section-bukti">
+                <h2 class="ocr-card-title"><span class="ocr-num">3</span> Upload Bukti (Evidence)</h2>
+                <div class="ocr-alert ocr-alert-info" style="margin-top:0">
                     <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-4px">info</span>
                     Bisa unggah file atau ambil foto langsung. JPG, PNG, WEBP, atau PDF. Maksimal <strong>5 MB</strong>.
                 </div>
@@ -123,7 +123,7 @@
                     id="bukti"
                     name="bukti"
                     accept="image/jpeg,image/png,image/webp,application/pdf"
-                    class="sr-only"
+                    class="ocr-sr"
                     required
                 >
                 <input
@@ -131,73 +131,73 @@
                     type="file"
                     accept="image/*"
                     capture="environment"
-                    class="sr-only"
+                    class="ocr-sr"
                     tabindex="-1"
                 >
 
-                <div class="dropzone is-disabled" id="dropzone" role="button" tabindex="0">
-                    <div class="dropzone-icon material-symbols-outlined">cloud_upload</div>
-                    <p class="dropzone-title">Ketuk untuk pilih file</p>
-                    <p class="dropzone-sub">atau seret &amp; lepas file ke sini</p>
-                    <p class="file-name" id="ocr-absensi-file-label"></p>
+                <div class="ocr-dropzone is-disabled" id="dropzone" role="button" tabindex="0">
+                    <span class="material-symbols-outlined ocr-dropzone-icon">cloud_upload</span>
+                    <p class="ocr-dropzone-title">Ketuk untuk pilih file</p>
+                    <p class="ocr-dropzone-sub">atau seret &amp; lepas file ke sini</p>
+                    <p class="ocr-file-name" id="ocr-absensi-file-label"></p>
                 </div>
-                <img id="ocr-absensi-preview" class="preview-image" alt="Pratinjau bukti" hidden>
+                <img id="ocr-absensi-preview" class="ocr-thumb" alt="Pratinjau bukti" hidden>
 
-                <div class="btn-row">
-                    <button type="button" class="btn btn-secondary" id="ocr-bukti-camera" disabled>
+                <div class="ocr-btn-row">
+                    <button type="button" class="ocr-btn ocr-btn-secondary" id="ocr-bukti-camera" disabled>
                         <span class="material-symbols-outlined">photo_camera</span>
                         Ambil foto
                     </button>
                 </div>
 
-                <div class="camera-panel" id="ocr-camera-panel" hidden>
+                <div class="ocr-camera" id="ocr-camera-panel" hidden>
                     <video id="ocr-camera-video" autoplay playsinline muted></video>
-                    <div class="camera-bar">
-                        <button type="button" class="btn btn-primary" id="ocr-camera-shot">Ambil</button>
-                        <button type="button" class="btn btn-secondary" id="ocr-camera-cancel">Batal</button>
+                    <div class="ocr-camera-bar">
+                        <button type="button" class="ocr-btn ocr-btn-primary" id="ocr-camera-shot">Ambil</button>
+                        <button type="button" class="ocr-btn ocr-btn-secondary" id="ocr-camera-cancel">Batal</button>
                     </div>
-                    <p class="camera-status" id="ocr-camera-status" role="status"></p>
+                    <p class="ocr-camera-status" id="ocr-camera-status" role="status"></p>
                 </div>
                 <canvas id="ocr-camera-canvas" hidden></canvas>
                 @error('bukti')
-                    <p class="hint" style="color:var(--danger)">{{ $message }}</p>
+                    <p class="ocr-hint" style="color:#dc2626">{{ $message }}</p>
                 @enderror
 
-                <button type="submit" class="btn btn-primary btn-block" id="ocr-absensi-submit" disabled style="margin-top:1rem">
+                <button type="submit" class="ocr-btn ocr-btn-primary ocr-btn-block" id="ocr-absensi-submit" disabled style="margin-top:1rem">
                     <span class="material-symbols-outlined">send</span>
                     Kirim absensi
                 </button>
-                <button type="reset" class="btn btn-secondary btn-block" id="ocr-absensi-clear" style="margin-top:.65rem">
+                <button type="reset" class="ocr-btn ocr-btn-secondary ocr-btn-block" id="ocr-absensi-clear" style="margin-top:.65rem">
                     Hapus formulir
                 </button>
             </section>
         </form>
 
-        <aside class="card" aria-labelledby="ocr-roster-title">
-            <h2 class="card-title" id="ocr-roster-title">
-                <span class="material-symbols-outlined" style="color:var(--brand)">groups</span>
+        <aside class="ocr-card" aria-labelledby="ocr-roster-title">
+            <h2 class="ocr-card-title" id="ocr-roster-title">
+                <span class="material-symbols-outlined" style="color:#3952bc">groups</span>
                 Personil jaga hari ini
             </h2>
-            <p class="hint" style="margin-top:-.35rem">{{ $dutyDateLabel }} · hanya nama di daftar ini yang dapat absen.</p>
+            <p class="ocr-hint" style="margin-top:-.35rem">{{ $dutyDateLabel }} · hanya nama di daftar ini yang dapat absen.</p>
 
             @forelse ($rosterByShift as $shiftCode => $people)
-                <div class="roster-group">
+                <div class="ocr-roster-group">
                     <h3>{{ $people->first()->shift_code->label() }}</h3>
                     <ul>
                         @foreach ($people as $plan)
                             <li>
-                                <span class="roster-name">{{ $plan->personnel_name_snapshot }}</span>
-                                <span class="roster-sid">{{ $plan->personnel_source_key }}</span>
+                                <span class="ocr-roster-name">{{ $plan->personnel_name_snapshot }}</span>
+                                <span class="ocr-roster-sid">{{ $plan->personnel_source_key }}</span>
                             </li>
                         @endforeach
                     </ul>
                 </div>
             @empty
-                <p class="hint" style="margin-top:1rem">Belum ada jadwal Control Room untuk hari ini.</p>
+                <p class="ocr-hint" style="margin-top:1rem">Belum ada jadwal Control Room untuk hari ini.</p>
             @endforelse
         </aside>
 
-        <p class="footer-note">
+        <p class="ocr-footer">
             PT Berau Coal · Control Room (Pengawasan OCR)<br>
             Form ini hanya untuk personil yang dijadwalkan jaga hari ini.
         </p>
