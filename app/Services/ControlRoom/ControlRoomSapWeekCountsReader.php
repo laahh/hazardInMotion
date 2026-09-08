@@ -52,7 +52,7 @@ final class ControlRoomSapWeekCountsReader
         sort($sids);
         $dates = array_column($duties, 'date');
         sort($dates);
-        $cacheKey = 'control-room:sap-week-counts:v5:'.hash('sha1', implode(',', $sids).'|'.$dates[0].'|'.$dates[array_key_last($dates)]);
+        $cacheKey = 'control-room:sap-week-counts:v6:'.hash('sha1', implode(',', $sids).'|'.$dates[0].'|'.$dates[array_key_last($dates)]);
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['counts'], $cached['findings'])) {
             return ['loaded' => true, 'counts' => $cached['counts'], 'findings' => $cached['findings']];
@@ -62,11 +62,11 @@ final class ControlRoomSapWeekCountsReader
         $rangeEnd = $this->dutyWindow->reportingWindow(CarbonImmutable::parse($dates[array_key_last($dates)]))['end'];
 
         $failed = 0;
-        $findings = [
+        $findings = $this->uniqueByReport([
             ...$this->fetchHazardInspeksi($sids, $rangeStart, $rangeEnd, $failed),
             ...$this->fetchObservasi($sids, $rangeStart, $rangeEnd, $failed),
             ...$this->fetchOak($sids, $rangeStart, $rangeEnd, $failed),
-        ];
+        ]);
 
         if ($failed === 3) {
             return ['loaded' => false, 'counts' => [], 'findings' => []];
@@ -226,12 +226,14 @@ final class ControlRoomSapWeekCountsReader
     {
         $placeholders = implode(',', array_fill(0, count($sids), '?'));
         $sql = "
-            SELECT kode_sid_pelapor, nama_pelapor, tanggal_laporan, jenis_laporan,
-                   subketidaksesuaian, ketidaksesuaian, nama_goldenrule, lokasi, detil_lokasi
+            SELECT DISTINCT ON (id_laporan)
+                id_laporan, kode_sid_pelapor, nama_pelapor, tanggal_laporan, jenis_laporan,
+                subketidaksesuaian, ketidaksesuaian, nama_goldenrule, lokasi, detil_lokasi
             FROM bcbeats.mv_inspeksi_hazard
             WHERE kode_sid_pelapor IN ({$placeholders})
               AND tanggal_laporan >= CAST(? AS timestamp)
               AND tanggal_laporan < CAST(? AS timestamp)
+            ORDER BY id_laporan, tanggal_laporan
         ";
 
         $rows = $this->select($sql, [...$sids, $start->toDateTimeString(), $end->toDateTimeString()], 'hazard/inspeksi', $failed);
@@ -256,6 +258,7 @@ final class ControlRoomSapWeekCountsReader
                 goldenRule: (string) ($row->nama_goldenrule ?? ''),
                 lokasi: (string) ($row->lokasi ?? ''),
                 detilLokasi: (string) ($row->detil_lokasi ?? ''),
+                reportId: (string) ($row->id_laporan ?? ''),
             );
         }
 
@@ -271,11 +274,13 @@ final class ControlRoomSapWeekCountsReader
     {
         $placeholders = implode(',', array_fill(0, count($sids), '?'));
         $sql = "
-            SELECT kode_sid_pelapor, nama_pelapor, tanggal_observasi, jenis_kegiatan, tools_observasi, lokasi, detil_lokasi
+            SELECT DISTINCT ON (id_observasi)
+                id_observasi, kode_sid_pelapor, nama_pelapor, tanggal_observasi, jenis_kegiatan, tools_observasi, lokasi, detil_lokasi
             FROM bcbeats.mv_observasi
             WHERE kode_sid_pelapor IN ({$placeholders})
               AND tanggal_observasi >= CAST(? AS timestamp)
               AND tanggal_observasi < CAST(? AS timestamp)
+            ORDER BY id_observasi, tanggal_observasi
         ";
 
         $rows = $this->select($sql, [...$sids, $start->toDateTimeString(), $end->toDateTimeString()], 'observasi', $failed);
@@ -295,6 +300,7 @@ final class ControlRoomSapWeekCountsReader
                 goldenRule: '',
                 lokasi: (string) ($row->lokasi ?? ''),
                 detilLokasi: (string) ($row->detil_lokasi ?? ''),
+                reportId: (string) ($row->id_observasi ?? ''),
             );
         }
 
@@ -311,7 +317,7 @@ final class ControlRoomSapWeekCountsReader
         $placeholders = implode(',', array_fill(0, count($sids), '?'));
         $sql = "
             SELECT DISTINCT ON (id_oak)
-                kode_sid_pelapor, nama_pelapor, tanggal_submit, aktivitas, sub_aktivitas, lokasi, detil_lokasi
+                id_oak, kode_sid_pelapor, nama_pelapor, tanggal_submit, aktivitas, sub_aktivitas, lokasi, detil_lokasi
             FROM bcbeats.mv_oak
             WHERE kode_sid_pelapor IN ({$placeholders})
               AND tanggal_submit >= CAST(? AS timestamp)
@@ -336,10 +342,38 @@ final class ControlRoomSapWeekCountsReader
                 goldenRule: '',
                 lokasi: (string) ($row->lokasi ?? ''),
                 detilLokasi: (string) ($row->detil_lokasi ?? ''),
+                reportId: (string) ($row->id_oak ?? ''),
             );
         }
 
         return $findings;
+    }
+
+    /**
+     * Satu laporan SAP = satu baris. Observasi/OAK di MV dipecah per orang
+     * yang diamati — COUNT(*) polos menggandakan Total.
+     *
+     * @param  list<array<string, mixed>>  $findings
+     * @return list<array<string, mixed>>
+     */
+    public function uniqueByReport(array $findings): array
+    {
+        $seen = [];
+        $unique = [];
+        foreach ($findings as $finding) {
+            $component = strtolower(trim((string) ($finding['component'] ?? '')));
+            $reportId = trim((string) ($finding['report_id'] ?? ''));
+            $key = $reportId !== ''
+                ? $component.'|'.$reportId
+                : $component.'|'.($finding['sid'] ?? '').'|'.($finding['at'] ?? '').'|'.($finding['category'] ?? '');
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $unique[] = $finding;
+        }
+
+        return $unique;
     }
 
     /**
@@ -354,6 +388,7 @@ final class ControlRoomSapWeekCountsReader
         string $goldenRule,
         string $lokasi,
         string $detilLokasi,
+        string $reportId = '',
     ): array {
         return [
             'sid' => $sid,
@@ -365,6 +400,7 @@ final class ControlRoomSapWeekCountsReader
             'golden_rule' => trim($goldenRule),
             'lokasi' => trim($lokasi),
             'detil_lokasi' => trim($detilLokasi),
+            'report_id' => $reportId,
         ];
     }
 

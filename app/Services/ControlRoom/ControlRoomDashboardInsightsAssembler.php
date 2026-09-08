@@ -223,7 +223,7 @@ final class ControlRoomDashboardInsightsAssembler
 
         $rows = [];
         foreach ($namesBySid as $sid => $name) {
-            $personFindings = $bySid[$sid] ?? [];
+            $personFindings = $this->uniqueQualityFindings($bySid[$sid] ?? []);
             $categories = [];
             foreach ($personFindings as $finding) {
                 $categories[] = $this->findingCategory($finding);
@@ -273,6 +273,33 @@ final class ControlRoomDashboardInsightsAssembler
         }
 
         return $running;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $findings
+     * @return list<array<string, mixed>>
+     */
+    private function uniqueQualityFindings(array $findings): array
+    {
+        $seen = [];
+        $unique = [];
+        foreach ($findings as $finding) {
+            $component = strtolower(trim((string) ($finding['component'] ?? '')));
+            if (! in_array($component, ['hazard', 'inspeksi', 'observasi', 'oak'], true)) {
+                continue;
+            }
+            $reportId = trim((string) ($finding['report_id'] ?? ''));
+            $key = $reportId !== ''
+                ? $component.'|'.$reportId
+                : $component.'|'.($finding['at'] ?? '').'|'.($finding['category'] ?? '');
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $unique[] = $finding;
+        }
+
+        return $unique;
     }
 
     /**

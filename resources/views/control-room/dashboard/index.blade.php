@@ -432,7 +432,7 @@
                     <div class="ocr-card-header">
                         <div>
                             <h6>Kualitas Temuan per Personil</h6>
-                            <p class="ocr-card-kicker">Total = laporan SAP hari jaga (H) sampai H+1, sama seperti Detail. Kategori = sub ketidaksesuaian · Variasi = kategori unik / total. TBC, GR, dan Blindspot menunggu sumber data.</p>
+                            <p class="ocr-card-kicker">Total = jumlah laporan unik Hazard + Inspeksi + Observasi + OAK pada hari jaga (H) sampai H+1. Kategori = sub ketidaksesuaian · Variasi = kategori unik / total. TBC, GR, dan Blindspot menunggu sumber data.</p>
                         </div>
                     </div>
                     <div class="ocr-card-body ocr-card-body--flush">

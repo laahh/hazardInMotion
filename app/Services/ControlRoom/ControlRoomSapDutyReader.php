@@ -76,7 +76,7 @@ final class ControlRoomSapDutyReader
             return $this->payload($meta, [], reachable: false, errors: ['Sumber SAP (OBDS) tidak terjangkau.']);
         }
 
-        $cacheKey = 'control-room:sap-duty:v4:'.$sid.':'.$meta['date'];
+        $cacheKey = 'control-room:sap-duty:v5:'.$sid.':'.$meta['date'];
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['cards'])) {
             return $this->payload($meta, $cached['cards'], reachable: true);
@@ -126,7 +126,8 @@ final class ControlRoomSapDutyReader
     {
         $limit = self::PER_TYPE_LIMIT;
         $sql = "
-            SELECT id_laporan, tanggal_laporan, jenis_laporan, status_laporan,
+            SELECT DISTINCT ON (id_laporan)
+                   id_laporan, tanggal_laporan, jenis_laporan, status_laporan,
                    deskripsi_temuan, ketidaksesuaian, subketidaksesuaian, tools_observasi,
                    lokasi, detil_lokasi, latitude, longitude,
                    nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor,
@@ -135,6 +136,7 @@ final class ControlRoomSapDutyReader
             WHERE kode_sid_pelapor = ?
               AND tanggal_laporan >= CAST(? AS timestamp)
               AND tanggal_laporan < CAST(? AS timestamp)
+            ORDER BY id_laporan, tanggal_laporan
             LIMIT {$limit}
         ";
 
@@ -149,13 +151,15 @@ final class ControlRoomSapDutyReader
     {
         $limit = self::PER_TYPE_LIMIT;
         $sql = "
-            SELECT id_observasi, tanggal_observasi, jenis_kegiatan, catatan_observasi, tools_observasi,
+            SELECT DISTINCT ON (id_observasi)
+                   id_observasi, tanggal_observasi, jenis_kegiatan, catatan_observasi, tools_observasi,
                    lokasi, detil_lokasi, latitude, longitude, url_foto,
                    nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor
             FROM bcbeats.mv_observasi
             WHERE kode_sid_pelapor = ?
               AND tanggal_observasi >= CAST(? AS timestamp)
               AND tanggal_observasi < CAST(? AS timestamp)
+            ORDER BY id_observasi, tanggal_observasi
             LIMIT {$limit}
         ";
 

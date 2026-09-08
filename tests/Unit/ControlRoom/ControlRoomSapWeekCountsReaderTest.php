@@ -105,6 +105,19 @@ final class ControlRoomSapWeekCountsReaderTest extends TestCase
         $this->assertSame('Tidak menggunakan APD', $findings[0]['category']);
     }
 
+    public function test_satu_id_laporan_sap_hanya_dihitung_sekali(): void
+    {
+        $findings = $this->reader()->uniqueByReport([
+            ['component' => 'observasi', 'report_id' => '100', 'sid' => 'FJAVJ', 'at' => '2026-08-31 08:00:00', 'category' => 'A'],
+            ['component' => 'observasi', 'report_id' => '100', 'sid' => 'FJAVJ', 'at' => '2026-08-31 08:00:00', 'category' => 'B'],
+            ['component' => 'oak', 'report_id' => '11', 'sid' => 'FJAVJ', 'at' => '2026-08-31 09:00:00', 'category' => 'C'],
+            ['component' => 'oak', 'report_id' => '11', 'sid' => 'FJAVJ', 'at' => '2026-08-31 09:00:00', 'category' => 'D'],
+            ['component' => 'hazard', 'report_id' => '200', 'sid' => 'FJAVJ', 'at' => '2026-08-31 10:00:00', 'category' => 'E'],
+        ]);
+
+        $this->assertCount(3, $findings);
+    }
+
     private function reader(): ControlRoomSapWeekCountsReader
     {
         return new ControlRoomSapWeekCountsReader(

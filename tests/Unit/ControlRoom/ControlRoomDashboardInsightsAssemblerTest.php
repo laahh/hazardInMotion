@@ -99,6 +99,25 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         $this->assertSame(2, $insights['quality'][0]['total_findings']);
     }
 
+    public function test_kualitas_total_tidak_menggandakan_baris_observasi_yang_sama(): void
+    {
+        $insights = $this->assembler()->fromFindings(
+            [
+                $this->finding('FJAVJ', '2026-08-31 08:15:00', 'observasi', 'APD', '', reportId: '100'),
+                $this->finding('FJAVJ', '2026-08-31 08:15:00', 'observasi', 'APD', '', reportId: '100'),
+                $this->finding('FJAVJ', '2026-08-31 09:00:00', 'oak', 'Aktivitas', '', reportId: '11'),
+                $this->finding('FJAVJ', '2026-08-31 09:00:00', 'oak', 'Aktivitas', '', reportId: '11'),
+                $this->finding('FJAVJ', '2026-08-31 10:00:00', 'hazard', 'APD', '', reportId: '200'),
+            ],
+            $this->schedule(),
+            ['uncovered' => [], 'total' => 0],
+            [],
+            sapLoaded: true,
+        );
+
+        $this->assertSame(3, $insights['quality'][0]['total_findings']);
+    }
+
     public function test_kualitas_hanya_dari_orang_jaga_dan_jendela_tugas(): void
     {
         $insights = $this->assembler()->fromFindings(
@@ -170,6 +189,7 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         string $goldenRule,
         string $lokasi = '',
         string $detil = '',
+        string $reportId = '',
     ): array {
         return [
             'sid' => $sid,
@@ -181,6 +201,7 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
             'golden_rule' => $goldenRule,
             'lokasi' => $lokasi,
             'detil_lokasi' => $detil,
+            'report_id' => $reportId,
         ];
     }
 
