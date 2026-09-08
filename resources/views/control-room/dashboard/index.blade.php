@@ -74,6 +74,42 @@
             <i class="ri-information-line"></i>
             <span><strong>Sebagian mockup.</strong> KPI header dan ranking coverage masih fiktif. Pencapaian Personil, Pareto, Highlight, dan Kualitas memakai jadwal + laporan OBDS. Blindspot/TBC dari snapshot HSECM bila tabelnya ada. Tombol Detail menampilkan laporan pada jendela jaga.</span>
         </div> -->
+        <form method="GET" class="ocr-card">
+            <div class="ocr-toolbar">
+                <div class="ocr-toolbar-left">
+                    <div>
+                        <label for="ocr-site">Site</label>
+                        <select name="site" id="ocr-site" class="form-control" onchange="this.form.submit()">
+                            @foreach ($sites as $siteOption)
+                                <option value="{{ $siteOption->value }}" @selected($site === $siteOption)>{{ $siteOption->label() }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <input type="hidden" name="year" value="{{ $year }}">
+                    <input type="hidden" name="week" value="{{ $week }}">
+
+                    <div>
+                        <label>Minggu</label>
+                        <div class="ocr-week-stepper">
+                            <a href="{{ route('control-room.dashboard', ['site' => $site->value, 'year' => $prevYear, 'week' => $prevWeek]) }}" aria-label="Minggu sebelumnya">
+                                <i class="ri-arrow-left-s-line"></i>
+                            </a>
+                            <div class="ocr-week-label">
+                                <strong>{{ $weekRangeLabel }}</strong>
+                                <span>Minggu {{ $week }} · {{ $year }}</span>
+                            </div>
+                            <a href="{{ route('control-room.dashboard', ['site' => $site->value, 'year' => $nextYear, 'week' => $nextWeek]) }}" aria-label="Minggu berikutnya">
+                                <i class="ri-arrow-right-s-line"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="ocr-toolbar-right">
+                    <span class="ocr-sync">Jadwal, pencapaian, dan KPI: data asli</span>
+                </div>
+            </div>
+        </form>
 
         <section class="ocr-card ocr-board" aria-labelledby="ocr-board-title">
             <div class="ocr-card-header">
@@ -120,42 +156,7 @@
             </div>
         </section>
 
-        <form method="GET" class="ocr-card">
-            <div class="ocr-toolbar">
-                <div class="ocr-toolbar-left">
-                    <div>
-                        <label for="ocr-site">Site</label>
-                        <select name="site" id="ocr-site" class="form-control" onchange="this.form.submit()">
-                            @foreach ($sites as $siteOption)
-                                <option value="{{ $siteOption->value }}" @selected($site === $siteOption)>{{ $siteOption->label() }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <input type="hidden" name="year" value="{{ $year }}">
-                    <input type="hidden" name="week" value="{{ $week }}">
-
-                    <div>
-                        <label>Minggu</label>
-                        <div class="ocr-week-stepper">
-                            <a href="{{ route('control-room.dashboard', ['site' => $site->value, 'year' => $prevYear, 'week' => $prevWeek]) }}" aria-label="Minggu sebelumnya">
-                                <i class="ri-arrow-left-s-line"></i>
-                            </a>
-                            <div class="ocr-week-label">
-                                <strong>{{ $weekRangeLabel }}</strong>
-                                <span>Minggu {{ $week }} · {{ $year }}</span>
-                            </div>
-                            <a href="{{ route('control-room.dashboard', ['site' => $site->value, 'year' => $nextYear, 'week' => $nextWeek]) }}" aria-label="Minggu berikutnya">
-                                <i class="ri-arrow-right-s-line"></i>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-                <div class="ocr-toolbar-right">
-                    <span class="ocr-sync">Jadwal, pencapaian, dan KPI: data asli</span>
-                </div>
-            </div>
-        </form>
+      
 
         <div class="ocr-kpi-grid">
             @foreach ($mock['kpi'] as $card)
