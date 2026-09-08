@@ -11,6 +11,7 @@ use App\Http\Requests\ControlRoom\ControlRoomDashboardSapDetailRequest;
 use App\Services\ControlRoom\ControlRoomDashboardInsightsAssembler;
 use App\Services\ControlRoom\ControlRoomSapDutyReader;
 use App\Services\ControlRoom\ControlRoomSapWeekCountsReader;
+use App\Services\ControlRoom\ControlRoomSiteDutyBoardService;
 use App\Services\ControlRoom\DashboardMockDataProvider;
 use App\Services\ControlRoom\DashboardScheduleWeekAssembler;
 use Carbon\CarbonImmutable;
@@ -36,6 +37,7 @@ final class DashboardController extends Controller
         DashboardScheduleWeekAssembler $scheduleWeek,
         ControlRoomSapWeekCountsReader $sapWeekCounts,
         ControlRoomDashboardInsightsAssembler $insightsAssembler,
+        ControlRoomSiteDutyBoardService $siteDutyBoard,
     ): View {
         $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
         $previousWeekStart = CarbonImmutable::now()
@@ -84,6 +86,7 @@ final class DashboardController extends Controller
                 $previousSap['loaded'],
             ),
             'schedule' => $schedule,
+            'siteBoard' => $siteDutyBoard->build(),
         ]);
     }
 

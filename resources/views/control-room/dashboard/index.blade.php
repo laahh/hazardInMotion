@@ -75,6 +75,53 @@
             <span><strong>Sebagian mockup.</strong> KPI header dan ranking coverage masih fiktif. Pencapaian Personil, Pareto, Highlight, dan Kualitas memakai jadwal + laporan OBDS. Blindspot/TBC dari snapshot HSECM bila tabelnya ada. Tombol Detail menampilkan laporan pada jendela jaga.</span>
         </div>
 
+        <section class="ocr-card ocr-board" aria-labelledby="ocr-board-title">
+            <div class="ocr-card-header">
+                <div>
+                    <h6 id="ocr-board-title">Status Control Room</h6>
+                    <p class="ocr-card-kicker">{{ $siteBoard['dutyDateLabel'] }} · {{ $siteBoard['shift']->label() }} — hijau = ada jadwal dan sudah absen jaga, merah = belum lengkap.</p>
+                </div>
+                <div class="ocr-legend">
+                    <span class="ocr-legend-item"><span class="ocr-legend-swatch is-sesuai"></span> Terjaga</span>
+                    <span class="ocr-legend-item"><span class="ocr-legend-swatch is-absen"></span> Belum terjaga</span>
+                </div>
+            </div>
+            <div class="ocr-board-grid">
+                @foreach ($siteBoard['cards'] as $card)
+                    <a
+                        class="ocr-site-card is-{{ $card['tone'] }}{{ $site->value === $card['site'] ? ' is-current' : '' }}"
+                        href="{{ route('control-room.dashboard', ['site' => $card['site'], 'year' => $year, 'week' => $week]) }}"
+                    >
+                        <div class="ocr-site-card-top">
+                            <span class="ocr-site-code">{{ $card['site'] }}</span>
+                            <span class="ocr-site-state">{{ $card['state'] }}</span>
+                        </div>
+                        <p class="ocr-site-name">{{ $card['label'] }}</p>
+                        <ul class="ocr-site-flags">
+                            <li class="{{ $card['hasSchedule'] ? 'is-on' : 'is-off' }}">
+                                <i class="{{ $card['hasSchedule'] ? 'ri-calendar-check-line' : 'ri-calendar-close-line' }}"></i>
+                                Jadwal {{ $card['hasSchedule'] ? 'ada' : 'belum' }}
+                            </li>
+                            <li class="{{ $card['hasDuty'] ? 'is-on' : 'is-off' }}">
+                                <i class="{{ $card['hasDuty'] ? 'ri-user-follow-line' : 'ri-user-unfollow-line' }}"></i>
+                                Jaga {{ $card['hasDuty'] ? 'sudah absen' : 'belum absen' }}
+                            </li>
+                        </ul>
+                        @if ($card['scheduled'] !== [])
+                            <p class="ocr-site-people">
+                                {{ collect($card['scheduled'])->pluck('name')->take(2)->implode(', ') }}
+                                @if (count($card['scheduled']) > 2)
+                                    +{{ count($card['scheduled']) - 2 }}
+                                @endif
+                            </p>
+                        @else
+                            <p class="ocr-site-people is-empty">Belum ada personil dijadwalkan</p>
+                        @endif
+                    </a>
+                @endforeach
+            </div>
+        </section>
+
         <form method="GET" class="ocr-card">
             <div class="ocr-toolbar">
                 <div class="ocr-toolbar-left">

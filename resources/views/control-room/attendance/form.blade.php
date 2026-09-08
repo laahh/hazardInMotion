@@ -13,9 +13,9 @@
             <div class="ocr-hero-body">
                 <span class="ocr-badge">
                     <span class="material-symbols-outlined" style="font-size:15px">lock_open</span>
-                    Tanpa login
+                    Control Room
                 </span>
-                <h1>Absensi Jaga Control Room</h1>
+                <h1>Absensi Control Room</h1>
                 <p class="ocr-lead">Isi SID Anda. Tanggal terisi otomatis dari jadwal jaga. Lampirkan bukti (unggah file atau foto langsung).</p>
                 <span class="ocr-pill">
                     <span class="material-symbols-outlined" style="font-size:16px">calendar_today</span>

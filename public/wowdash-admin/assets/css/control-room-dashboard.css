@@ -162,6 +162,105 @@
     color: var(--text-secondary-light);
 }
 
+.ocr-board-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+}
+
+.ocr-site-card {
+    display: block;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    text-decoration: none;
+    color: inherit;
+    min-height: 132px;
+    transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.ocr-site-card:hover {
+    transform: translateY(-1px);
+    text-decoration: none;
+    color: inherit;
+}
+
+.ocr-site-card.is-green {
+    background: #f0fdf4;
+    border-color: #86efac;
+    box-shadow: inset 4px 0 0 #16a34a;
+}
+
+.ocr-site-card.is-red {
+    background: #fef2f2;
+    border-color: #fecaca;
+    box-shadow: inset 4px 0 0 #dc2626;
+}
+
+.ocr-site-card.is-current {
+    outline: 2px solid #3952bc;
+    outline-offset: 1px;
+}
+
+.ocr-site-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ocr-site-code {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: #475569;
+}
+
+.ocr-site-state {
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.ocr-site-card.is-green .ocr-site-state { color: #15803d; }
+.ocr-site-card.is-red .ocr-site-state { color: #b91c1c; }
+
+.ocr-site-name {
+    margin: 6px 0 8px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.ocr-site-flags {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.ocr-site-flags li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.ocr-site-flags li.is-on { color: #15803d; }
+.ocr-site-flags li.is-off { color: #b91c1c; }
+
+.ocr-site-people {
+    margin: 8px 0 0;
+    font-size: 11px;
+    color: #475569;
+    line-height: 1.35;
+}
+
+.ocr-site-people.is-empty {
+    color: #94a3b8;
+}
+
 /* KPI: tiga kartu merentang penuh lebar container */
 .ocr-dash .ocr-kpi-grid {
     display: grid;
@@ -1414,8 +1513,19 @@
     background: var(--dark-1);
 }
 
-[data-theme="dark"] .ocr-track {
-    background: rgba(255, 255, 255, 0.08);
+[data-theme="dark"] .ocr-site-card.is-green {
+    background: rgba(22, 163, 74, 0.12);
+    border-color: rgba(22, 163, 74, 0.35);
+}
+
+[data-theme="dark"] .ocr-site-card.is-red {
+    background: rgba(220, 38, 38, 0.12);
+    border-color: rgba(220, 38, 38, 0.35);
+}
+
+[data-theme="dark"] .ocr-site-code,
+[data-theme="dark"] .ocr-site-people {
+    color: var(--text-secondary-light);
 }
 
 [data-theme="dark"] .ocr-roster-name {
