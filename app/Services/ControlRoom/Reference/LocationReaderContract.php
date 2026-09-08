@@ -15,6 +15,16 @@ interface LocationReaderContract
     public function all(ControlRoomSiteCode $site): Collection;
 
     /**
+     * @return Collection<int, array{site: string, lokasi: string, detail_lokasi: string}>
+     */
+    public function forCoverage(ControlRoomSiteCode $site): Collection;
+
+    /**
+     * @return list<string>
+     */
+    public function sourceKeysFor(ControlRoomSiteCode $site): array;
+
+    /**
      * @return array{site: string, lokasi: string, detail_lokasi: string}|null
      */
     public function find(string $lokasi, string $detilLokasi): ?array;

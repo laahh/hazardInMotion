@@ -62,6 +62,22 @@
     $defaultDay = collect($scheduleDays)->firstWhere('is_today')
         ?? collect($scheduleDays)->first(fn (array $day): bool => $day['s1'] !== [] || $day['s2'] !== [])
         ?? $scheduleDays[0];
+    $coverageKpi = $locationCoverage['kpi'];
+    $coverageRows = $locationCoverage['rows'];
+    $coverageAttention = $locationCoverage['attention'];
+    $coverageScope = $site === \App\Enums\ControlRoomSiteCode::HeadOffice
+        ? 'Semua site operasi'
+        : $site->label();
+    $coverageLastAt = static function (?string $at): string {
+        if ($at === null || $at === '') {
+            return '—';
+        }
+        try {
+            return \Carbon\CarbonImmutable::parse($at)->locale('id')->translatedFormat('d M Y H:i');
+        } catch (\Throwable) {
+            return $at;
+        }
+    };
 @endphp
 
 @push('styles')
@@ -141,6 +157,134 @@
                         </p>
                     </a>
                 @endforeach
+            </div>
+        </section>
+
+        @if (! $locationCoverage['loaded'])
+            <div class="ocr-notice" role="status">
+                <i class="ri-error-warning-line"></i>
+                <span>Sumber SAP (OBDS) tidak terjangkau. Master lokasi tetap tampil; status tercover dikosongkan.</span>
+            </div>
+        @endif
+
+        <section class="ocr-cov" aria-labelledby="ocr-cov-title">
+            <div class="ocr-card-header ocr-cov-head">
+                <div>
+                    <h6 id="ocr-cov-title">Coverage Lokasi</h6>
+                    <p class="ocr-card-kicker">{{ $weekRangeLabel }} · {{ $coverageScope }} · tercover jika ada SAP (hazard / inspeksi / observasi / OAK) di lokasi + detil lokasi</p>
+                </div>
+            </div>
+            <div class="ocr-kpi-grid ocr-cov-kpi">
+                <div class="ocr-card ocr-kpi">
+                    <p class="ocr-kpi-label">Total lokasi</p>
+                    <p class="ocr-kpi-value">{{ $coverageKpi['total'] }}</p>
+                </div>
+                <div class="ocr-card ocr-kpi">
+                    <p class="ocr-kpi-label">Covered</p>
+                    <p class="ocr-kpi-value">{{ $coverageKpi['covered'] }}</p>
+                </div>
+                <div class="ocr-card ocr-kpi">
+                    <p class="ocr-kpi-label">Belum ter-cover</p>
+                    <p class="ocr-kpi-value">{{ $coverageKpi['uncovered'] }}</p>
+                </div>
+                <div class="ocr-card ocr-kpi">
+                    <p class="ocr-kpi-label">Coverage %</p>
+                    <p class="ocr-kpi-value">{{ number_format($coverageKpi['percent'], 1) }}%</p>
+                    <div class="ocr-track is-success"><span style="width: {{ min(100, $coverageKpi['percent']) }}%"></span></div>
+                </div>
+            </div>
+
+            <div class="ocr-cov-grid">
+                <div class="ocr-card ocr-cov-table-card">
+                    <div class="ocr-card-header">
+                        <div>
+                            <h6>Detail lokasi</h6>
+                            <p class="ocr-card-kicker">Filter di halaman, tanpa query ulang</p>
+                        </div>
+                    </div>
+                    <div class="ocr-cov-toolbar">
+                        <div class="ocr-seg" role="group" aria-label="Filter status coverage">
+                            <button type="button" class="is-active" data-cov-tab="all">Semua ({{ $coverageKpi['total'] }})</button>
+                            <button type="button" data-cov-tab="covered">Covered ({{ $coverageKpi['covered'] }})</button>
+                            <button type="button" data-cov-tab="uncovered">Belum ter-cover ({{ $coverageKpi['uncovered'] }})</button>
+                        </div>
+                        <label class="ocr-cov-search">
+                            <span class="visually-hidden">Cari lokasi</span>
+                            <input type="search" id="ocr-cov-q" placeholder="Cari site, lokasi, detil…" autocomplete="off">
+                        </label>
+                    </div>
+                    <div class="ocr-card-body ocr-card-body--flush">
+                        <div class="table-responsive ocr-cov-scroll">
+                            <table class="ocr-heat ocr-cov-table" id="ocr-cov-table">
+                                <thead>
+                                    <tr>
+                                        <th>No</th>
+                                        <th>Area / Site</th>
+                                        <th>Lokasi</th>
+                                        <th>Detail lokasi</th>
+                                        <th>Status</th>
+                                        <th>Terakhir ter-cover</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse ($coverageRows as $index => $row)
+                                        <tr
+                                            data-covered="{{ $row['covered'] ? '1' : '0' }}"
+                                            data-search="{{ mb_strtolower($row['site'].' '.$row['lokasi'].' '.$row['detail_lokasi']) }}"
+                                        >
+                                            <td>{{ $index + 1 }}</td>
+                                            <td>{{ $row['site'] }}</td>
+                                            <td>
+                                                {{ $row['lokasi'] }}
+                                                @if ($row['is_critical'])
+                                                    <span class="ocr-cov-flag">Kritis</span>
+                                                @endif
+                                            </td>
+                                            <td>{{ $row['detail_lokasi'] !== '' ? $row['detail_lokasi'] : '—' }}</td>
+                                            <td>
+                                                @if ($row['covered'])
+                                                    <span class="ocr-cov-status is-ok">Ter-cover</span>
+                                                @else
+                                                    <span class="ocr-cov-status is-gap">Belum ter-cover</span>
+                                                @endif
+                                            </td>
+                                            <td>{{ $coverageLastAt($row['last_at']) }}</td>
+                                        </tr>
+                                    @empty
+                                        <tr class="ocr-cov-empty-row">
+                                            <td colspan="6" class="text-secondary-light">Belum ada master lokasi untuk filter ini.</td>
+                                        </tr>
+                                    @endforelse
+                                    <tr class="ocr-cov-empty-filter" hidden>
+                                        <td colspan="6" class="text-secondary-light">Tidak ada lokasi yang cocok dengan filter.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ocr-card ocr-cov-attention">
+                    <div class="ocr-card-header">
+                        <div>
+                            <h6>Perlu perhatian</h6>
+                            <p class="ocr-card-kicker">Area kritis / high risk yang belum tercover minggu ini</p>
+                        </div>
+                    </div>
+                    <div class="ocr-card-body">
+                        @forelse ($coverageAttention as $item)
+                            <div class="ocr-cov-attn-row">
+                                <div>
+                                    <strong>{{ $item['lokasi'] }}</strong>
+                                    <span>{{ $item['detail_lokasi'] !== '' ? $item['detail_lokasi'] : '—' }}</span>
+                                    <em>{{ $item['site'] }}</em>
+                                </div>
+                            </div>
+                        @empty
+                            <p class="text-secondary-light mb-0">Tidak ada area kritis yang belum tercover pada minggu ini.</p>
+                        @endforelse
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -536,6 +680,49 @@
             tooltipTriggerList.forEach(function (el) {
                 new bootstrap.Tooltip(el);
             });
+
+            (function initCoverageFilter() {
+                var table = document.getElementById('ocr-cov-table');
+                if (!table) {
+                    return;
+                }
+                var q = document.getElementById('ocr-cov-q');
+                var emptyFilter = table.querySelector('.ocr-cov-empty-filter');
+                var tab = 'all';
+
+                function applyCoverageFilter() {
+                    var query = (q && q.value ? q.value : '').trim().toLowerCase();
+                    var rows = table.querySelectorAll('tbody tr[data-covered]');
+                    var visible = 0;
+                    rows.forEach(function (row) {
+                        var covered = row.getAttribute('data-covered') === '1';
+                        var matchTab = tab === 'all' || (tab === 'covered' && covered) || (tab === 'uncovered' && !covered);
+                        var haystack = row.getAttribute('data-search') || '';
+                        var matchQuery = query === '' || haystack.indexOf(query) !== -1;
+                        var show = matchTab && matchQuery;
+                        row.hidden = !show;
+                        if (show) {
+                            visible++;
+                        }
+                    });
+                    if (emptyFilter) {
+                        emptyFilter.hidden = visible !== 0 || rows.length === 0;
+                    }
+                }
+
+                document.querySelectorAll('[data-cov-tab]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        tab = btn.getAttribute('data-cov-tab') || 'all';
+                        document.querySelectorAll('[data-cov-tab]').forEach(function (el) {
+                            el.classList.toggle('is-active', el === btn);
+                        });
+                        applyCoverageFilter();
+                    });
+                });
+                if (q) {
+                    q.addEventListener('input', applyCoverageFilter);
+                }
+            })();
 
             function escapeHtml(value) {
                 return String(value)

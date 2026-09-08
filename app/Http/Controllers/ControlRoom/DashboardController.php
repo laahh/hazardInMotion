@@ -9,6 +9,7 @@ use App\Enums\ControlRoomSiteCode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ControlRoom\ControlRoomDashboardSapDetailRequest;
 use App\Services\ControlRoom\ControlRoomDashboardInsightsAssembler;
+use App\Services\ControlRoom\ControlRoomLocationCoverageService;
 use App\Services\ControlRoom\ControlRoomSapDutyReader;
 use App\Services\ControlRoom\ControlRoomSapWeekCountsReader;
 use App\Services\ControlRoom\ControlRoomSiteDutyBoardService;
@@ -38,6 +39,7 @@ final class DashboardController extends Controller
         ControlRoomSapWeekCountsReader $sapWeekCounts,
         ControlRoomDashboardInsightsAssembler $insightsAssembler,
         ControlRoomSiteDutyBoardService $siteDutyBoard,
+        ControlRoomLocationCoverageService $locationCoverage,
     ): View {
         $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
         $previousWeekStart = CarbonImmutable::now()
@@ -87,6 +89,7 @@ final class DashboardController extends Controller
             ),
             'schedule' => $schedule,
             'siteBoard' => $siteDutyBoard->build(),
+            'locationCoverage' => $locationCoverage->build($site, $weekStart),
         ]);
     }
 

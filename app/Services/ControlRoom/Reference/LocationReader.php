@@ -5,31 +5,26 @@ declare(strict_types=1);
 namespace App\Services\ControlRoom\Reference;
 
 use App\Enums\ControlRoomSiteCode;
+use App\Services\ControlRoom\ControlRoomSiteDutyBoardService;
 use App\Services\PembatasanLV\PembatasanLVOlapQuery;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Query langsung ke Postgres bcbeats.m_lokasi (hierarki site/lokasi/detil),
- * pola diambil dari App\Services\PembatasanLV\PembatasanLVSiteLokasiService.
- * TIDAK reuse LokasiNonKritisService/ClickHouse — ditolak eksplisit oleh user
- * untuk modul ini. Lihat plan-OCR.md 0.5 poin 4.
- *
- * isCritical() — bcbeats terbukti tidak punya kolom flag kritis (m_lokasi,
- * bep_vw_site_lokasi_detil_lokasi, dan m_pja* semua dicek, nihil — lihat
- * plan-OCR.md 0.5 poin 7). Sumber kekritisan yang dipakai: pola CONTAINS()
- * pada nama lokasi/detil_lokasi itu sendiri (persis rumus Tableau existing
- * yang diberikan user), divalidasi terhadap data nyata 2026-09-06 — 1.482
- * dari 8.684 baris di bep_vw_site_lokasi_detil_lokasi cocok pola ini
- * (mis. lokasi "(B7) Area Kritis Blok 7", "Aktivitas Area High Risk",
- * detil_lokasi "Area Pengeboran" di bawah lokasi "LATI").
+ * Master lokasi dari bcbeats.bep_vw_site_lokasi_detil_lokasi (kolom slim,
+ * tanpa geometry). Kekritisan = CONTAINS pada nama, bukan flag DB.
  */
 final class LocationReader implements LocationReaderContract
 {
     private const CACHE_TTL_SECONDS = 600;
 
-    private const CACHE_KEY = 'control-room:locations:m_lokasi';
+    private const CACHE_KEY = 'control-room:locations:v2:site-lokasi-detil';
+
+    /** @var array<string, list<string>> */
+    private const SITE_SOURCE_ALIASES = [
+        'BMO2' => ['BMO 2', 'BMO 2 BLOK 7', 'BMO 2 BLOK 8'],
+    ];
 
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
@@ -40,9 +35,54 @@ final class LocationReader implements LocationReaderContract
      */
     public function all(ControlRoomSiteCode $site): Collection
     {
+        $key = $site->sourceKey();
+
         return $this->fetchAll()
-            ->filter(fn (array $row): bool => $row['site'] === $site->sourceKey())
+            ->filter(fn (array $row): bool => $row['site'] === $key)
             ->values();
+    }
+
+    /**
+     * @return Collection<int, array{site: string, lokasi: string, detail_lokasi: string}>
+     */
+    public function forCoverage(ControlRoomSiteCode $site): Collection
+    {
+        return $this->filterBySite($this->fetchAll(), $site);
+    }
+
+    /**
+     * @param  Collection<int, array{site: string, lokasi: string, detail_lokasi: string}>|list<array{site: string, lokasi: string, detail_lokasi: string}>  $rows
+     * @return Collection<int, array{site: string, lokasi: string, detail_lokasi: string}>
+     */
+    public function filterBySite(Collection|array $rows, ControlRoomSiteCode $site): Collection
+    {
+        $allowed = array_fill_keys($this->sourceKeysFor($site), true);
+
+        return collect($rows)
+            ->filter(fn (array $row): bool => isset($allowed[$row['site'] ?? '']))
+            ->values();
+    }
+
+    /**
+     * Nilai kolom `site` di view lokasi untuk filter coverage.
+     * HO = semua site papan + alias BMO2; Marine/Eksplorasi/Jakarta tidak ikut.
+     *
+     * @return list<string>
+     */
+    public function sourceKeysFor(ControlRoomSiteCode $site): array
+    {
+        if ($site === ControlRoomSiteCode::HeadOffice) {
+            $keys = [];
+            foreach (ControlRoomSiteDutyBoardService::BOARD_SITE_CODES as $code) {
+                foreach ($this->aliasesFor(ControlRoomSiteCode::from($code)) as $key) {
+                    $keys[$key] = $key;
+                }
+            }
+
+            return array_values($keys);
+        }
+
+        return $this->aliasesFor($site);
     }
 
     /**
@@ -94,6 +134,14 @@ final class LocationReader implements LocationReaderContract
     }
 
     /**
+     * @return list<string>
+     */
+    private function aliasesFor(ControlRoomSiteCode $site): array
+    {
+        return self::SITE_SOURCE_ALIASES[$site->value] ?? [$site->sourceKey()];
+    }
+
+    /**
      * @return Collection<int, array{site: string, lokasi: string, detail_lokasi: string}>
      */
     private function fetchAll(): Collection
@@ -107,20 +155,12 @@ final class LocationReader implements LocationReaderContract
 
             $sql = <<<'SQL'
                 SELECT
-                    TRIM(site.nama) AS site,
-                    TRIM(lokasi.nama) AS lokasi,
-                    TRIM(detil.nama) AS detail_lokasi
-                FROM bcbeats.m_lokasi site
-                JOIN bcbeats.m_lokasi lokasi
-                    ON lokasi.id_parent = site.id
-                   AND lokasi.id_tipe = 200
-                   AND lokasi.is_active = '1'
-                JOIN bcbeats.m_lokasi detil
-                    ON detil.id_parent = lokasi.id
-                   AND detil.id_tipe = 300
-                   AND detil.is_active = '1'
-                WHERE site.id_tipe = 100
-                  AND site.is_active = '1'
+                    TRIM(site) AS site,
+                    TRIM(lokasi) AS lokasi,
+                    TRIM("Detil Lokasi") AS detail_lokasi
+                FROM bcbeats.bep_vw_site_lokasi_detil_lokasi
+                WHERE COALESCE(status_detil_lokasi, '0') = '1'
+                  AND BTRIM(COALESCE(lokasi, '')) <> ''
                 SQL;
 
             return collect($this->olap->select($sql, [], 3000))
