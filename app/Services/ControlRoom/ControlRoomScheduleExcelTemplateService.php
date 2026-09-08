@@ -135,13 +135,27 @@ final class ControlRoomScheduleExcelTemplateService
         $validation->setError('Isi S1 atau S2.');
         $sheet->setDataValidation('C2:C15', $validation);
 
+        $siteList = implode(',', array_map(
+            static fn (ControlRoomSiteCode $item): string => $item->value,
+            ControlRoomSiteCode::cases(),
+        ));
+        $siteValidation = $sheet->getCell('F2')->getDataValidation();
+        $siteValidation->setType(DataValidation::TYPE_LIST);
+        $siteValidation->setFormula1('"'.$siteList.'"');
+        $siteValidation->setAllowBlank(false);
+        $siteValidation->setShowDropDown(true);
+        $siteValidation->setShowErrorMessage(true);
+        $siteValidation->setErrorTitle('Site tidak valid');
+        $siteValidation->setError('Pilih site dari daftar.');
+        $sheet->setDataValidation('F2:F15', $siteValidation);
+
         $sheet->getComment('D2')->getText()->createTextRun('Wajib diisi. Salin SID dari sheet Personil. Baris SID kosong tidak diimpor.');
         $sheet->getComment('D2')->setWidth('240pt');
         $sheet->getComment('D2')->setHeight('60pt');
 
         $sheet->getProtection()->setSheet(false);
         $sheet->getStyle('A2:C15')->getProtection()->setLocked(Protection::PROTECTION_UNPROTECTED);
-        $sheet->getStyle('D2:E15')->getProtection()->setLocked(Protection::PROTECTION_UNPROTECTED);
+        $sheet->getStyle('D2:F15')->getProtection()->setLocked(Protection::PROTECTION_UNPROTECTED);
 
         $sheet->getColumnDimension('A')->setWidth(14);
         $sheet->getColumnDimension('B')->setWidth(14);
@@ -218,21 +232,22 @@ final class ControlRoomScheduleExcelTemplateService
             ['1. Buka sheet Jadwal. Kolom kuning (sid) wajib diisi untuk baris yang dijadwalkan.'],
             ['2. Salin SID dari sheet Personil (boleh filter nama). Nama opsional — sistem mengisi dari master.'],
             ['3. Jangan ubah header: hari, tanggal, shift, sid, nama, site.'],
-            ['4. Shift hanya S1 atau S2. Satu orang boleh S1 dan S2 di hari yang sama (akan ada peringatan).'],
-            ['5. Simpan file, unggah di halaman Jadwal Rencana untuk site dan minggu yang sama.'],
-            ['6. Baris SID kosong dilewati. Slot locked tidak ditimpa.'],
+            ['4. Shift hanya S1 atau S2. Kolom site memakai dropdown semua site Control Room.'],
+            ['5. Satu orang boleh S1 dan S2 di hari yang sama (akan ada peringatan).'],
+            ['6. Simpan file, unggah di halaman Jadwal Rencana untuk site dan minggu yang sama.'],
+            ['7. Baris SID kosong dilewati. Slot locked tidak ditimpa.'],
             [''],
             ['Pemetaan ke database control_room_schedule_plans'],
             ['Excel tanggal → date'],
             ['Excel shift → shift_code'],
             ['Excel sid → personnel_source_key'],
             ['Excel nama → personnel_name_snapshot (opsional)'],
-            ['Excel site → site_code (harus sama dengan site halaman)'],
+            ['Excel site → site_code (dropdown; harus sama dengan site yang dipilih saat unggah)'],
             ['year & week_number dihitung otomatis dari tanggal (ISO).'],
         ], null, 'A1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
         $sheet->getStyle('A6')->getFont()->setBold(true);
-        $sheet->getStyle('A14')->getFont()->setBold(true);
+        $sheet->getStyle('A15')->getFont()->setBold(true);
         $sheet->getColumnDimension('A')->setWidth(100);
         $sheet->getColumnDimension('B')->setWidth(48);
     }

@@ -30,27 +30,34 @@
     <div class="card shadow-none border mb-24">
         <div class="card-header">
             <h6 class="mb-0">Upload Excel per Minggu</h6>
-            <p class="text-secondary-light text-xs mb-0">Unduh template minggu ini (sheet Jadwal + daftar SID Personil), isi kolom kuning <strong>sid</strong>, lalu unggah. Satu baris = satu slot kalender.</p>
+            <p class="text-secondary-light text-xs mb-0">Pilih site di form unduh, lalu unduh template minggu itu (sheet Jadwal + daftar SID Personil). Isi kolom kuning <strong>sid</strong>; kolom <strong>site</strong> punya dropdown semua site. Unggah ke site yang sama.</p>
         </div>
         <div class="card-body">
             <div class="row g-3">
-                <div class="col-lg-5">
+                <div class="col-lg-6">
                     <form method="GET" action="{{ route('control-room.schedule.excel-template') }}" class="row g-2 align-items-end">
-                        <input type="hidden" name="site" value="{{ $site->value }}">
-                        <div class="col-4">
+                        <div class="col-12 col-sm-4">
+                            <label class="form-label text-sm mb-1" for="ocr-template-site">Site</label>
+                            <select name="site" id="ocr-template-site" class="form-control form-control-sm" required>
+                                @foreach ($sites as $siteOption)
+                                    <option value="{{ $siteOption->value }}" @selected($site === $siteOption)>{{ $siteOption->label() }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-6 col-sm-3">
                             <label class="form-label text-sm mb-1">Tahun</label>
                             <input type="number" name="year" class="form-control form-control-sm" value="{{ now()->isoWeekYear() }}" min="2020" max="2100" required>
                         </div>
-                        <div class="col-4">
+                        <div class="col-6 col-sm-3">
                             <label class="form-label text-sm mb-1">Minggu ISO</label>
                             <input type="number" name="week_number" class="form-control form-control-sm" min="1" max="53" value="{{ now()->isoWeek() }}" required>
                         </div>
-                        <div class="col-4">
+                        <div class="col-12 col-sm-2">
                             <button type="submit" class="btn btn-outline-secondary btn-sm w-100">Unduh Template</button>
                         </div>
                     </form>
                 </div>
-                <div class="col-lg-7">
+                <div class="col-lg-6">
                     <form method="POST" action="{{ route('control-room.schedule.excel-import') }}" enctype="multipart/form-data" class="row g-2 align-items-end">
                         @csrf
                         <input type="hidden" name="site_code" value="{{ $site->value }}">

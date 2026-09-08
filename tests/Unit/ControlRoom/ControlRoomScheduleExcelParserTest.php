@@ -106,6 +106,12 @@ final class ControlRoomScheduleExcelParserTest extends TestCase
         $this->assertSame('sid', $jadwal->getCell('D1')->getValue());
         $jadwal->setCellValue('D2', 'FJAVJ');
 
+        $siteValidation = $jadwal->getDataValidation('F2');
+        $this->assertSame(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST, $siteValidation->getType());
+        foreach (ControlRoomSiteCode::cases() as $siteCode) {
+            $this->assertStringContainsString($siteCode->value, $siteValidation->getFormula1());
+        }
+
         $path = sys_get_temp_dir().DIRECTORY_SEPARATOR.'ocr-template-'.uniqid('', true).'.xlsx';
         (new Xlsx($spreadsheet))->save($path);
         $spreadsheet->disconnectWorksheets();
