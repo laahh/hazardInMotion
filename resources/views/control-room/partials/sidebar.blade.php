@@ -57,6 +57,12 @@ $rr = function (string $name, array $params = []) {
                     <span>Data Quality</span>
                 </a>
             </li>
+            <li>
+                <a href="{{ $rr('control-room.tutorial.index') }}" class="{{ request()->routeIs('control-room.tutorial.*') ? 'active-page' : '' }}">
+                    <i class="ri-book-open-line menu-icon"></i>
+                    <span>Tutorial</span>
+                </a>
+            </li>
         </ul>
     </div>
 </aside>

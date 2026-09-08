@@ -23,6 +23,7 @@ final class AttendanceFormRecorder
     public function __construct(
         private readonly PersonnelReader $personnelReader,
         private readonly ControlRoomDutyRosterService $dutyRoster,
+        private readonly ControlRoomReplacementAttendanceService $replacementAttendance,
     ) {}
 
     /**
@@ -41,10 +42,12 @@ final class AttendanceFormRecorder
 
         $proofPath = $bukti->store('control-room/attendance-proofs/'.$plan->date->format('Y/m'), 'public');
 
+        $replacedSid = $this->replacementAttendance->replacedSid($plan);
         $payload = [
             'schedule_plan_id' => $plan->id,
             'personnel_name_snapshot' => $personnel->emp_name,
-            'status' => Attendance::STATUS_SESUAI_JADWAL,
+            'status' => $this->replacementAttendance->scheduledCheckInStatus($replacedSid),
+            'replacing_source_key' => $replacedSid,
             'checked_in_at' => now(),
         ];
 

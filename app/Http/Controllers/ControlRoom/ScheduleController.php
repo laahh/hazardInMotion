@@ -13,6 +13,7 @@ use App\Http\Requests\ControlRoom\ScheduleDestroyWeekRequest;
 use App\Http\Requests\ControlRoom\ScheduleUpdateRequest;
 use App\Models\ControlRoom\ScheduleChange;
 use App\Models\ControlRoom\SchedulePlan;
+use App\Services\ControlRoom\ControlRoomReplacementAttendanceService;
 use App\Services\ControlRoom\ControlRoomScheduleChangePresenter;
 use App\Services\ControlRoom\ControlRoomScheduleExcelParser;
 use App\Services\ControlRoom\ControlRoomScheduleExcelTemplateService;
@@ -37,6 +38,7 @@ final class ScheduleController extends Controller
     public function __construct(
         private readonly PersonnelReader $personnelReader,
         private readonly ControlRoomScheduleChangePresenter $changePresenter,
+        private readonly ControlRoomReplacementAttendanceService $replacementAttendance,
     ) {}
 
     public function index(Request $request): View
@@ -267,9 +269,11 @@ final class ScheduleController extends Controller
         $reason = trim((string) ($data['reason'] ?? ''));
         unset($data['reason']);
 
+        $previousSid = strtoupper((string) $plan->personnel_source_key);
+
         if (isset($data['personnel_source_key'])) {
             $data['personnel_source_key'] = strtoupper(trim((string) $data['personnel_source_key']));
-            if ($data['personnel_source_key'] !== strtoupper((string) $plan->personnel_source_key)) {
+            if ($data['personnel_source_key'] !== $previousSid) {
                 $personnel = $this->personnelReader->find($data['personnel_source_key']);
                 $data['personnel_name_snapshot'] = $personnel?->emp_name ?? $data['personnel_source_key'];
             }
@@ -292,6 +296,10 @@ final class ScheduleController extends Controller
         }
 
         $plan->refresh();
+        $newSid = strtoupper((string) $plan->personnel_source_key);
+        if ($newSid !== $previousSid) {
+            $this->replacementAttendance->recordAfterPersonnelChange($plan, $previousSid);
+        }
 
         if ($request->wantsJson()) {
             return response()->json([
