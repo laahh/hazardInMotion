@@ -99,7 +99,7 @@ final class ControlRoomDashboardInsightsAssembler
         return [
             'pareto' => $this->paretoFromFindings($usable),
             'highlight' => $this->highlightFromFindings($usable, $coverage, $tbcRows),
-            'quality' => $this->qualityFromFindings($usable, $scheduleDays, $coverage, $tbcRows),
+            'quality' => $sapLoaded ? $this->qualityFromFindings($usable, $scheduleDays) : [],
             'personnelCoverage' => $this->personnelCoverageFromFindings($usable, $scheduleDays),
         ];
     }
@@ -196,20 +196,21 @@ final class ControlRoomDashboardInsightsAssembler
     }
 
     /**
-     * Kualitas temuan personil jadwal: kategori = sub ketidaksesuaian
-     * (observasi/OAK memakai analog jenis kegiatan / sub aktivitas).
-     * Variasi = COUNT DISTINCT kategori / COUNT temuan saat jaga.
+     * Kualitas temuan personil jadwal. Total = jumlah laporan SAP pada hari
+     * jaga (H) sampai akhir H+1, sama dengan jendela tombol Detail.
+     * TBC / GR / Blindspot dikosongkan sampai sumber HSECM siap.
      *
      * @param  list<array<string, mixed>>  $findings
      * @param  list<array<string, mixed>>  $scheduleDays
-     * @param  array{uncovered: array<string, true>, total: int}  $coverage
-     * @param  list<array<string, mixed>>  $tbcRows
      * @return list<array<string, mixed>>
      */
-    private function qualityFromFindings(array $findings, array $scheduleDays, array $coverage, array $tbcRows): array
+    private function qualityFromFindings(array $findings, array $scheduleDays): array
     {
+        $scheduleDays = $this->runningScheduleDays($scheduleDays);
         $namesBySid = $this->namesBySid($scheduleDays);
-        $tbcByName = $this->tbcCountsByPelapor($tbcRows);
+        if ($namesBySid === []) {
+            return [];
+        }
 
         $bySid = [];
         foreach ($findings as $finding) {
@@ -223,29 +224,9 @@ final class ControlRoomDashboardInsightsAssembler
         $rows = [];
         foreach ($namesBySid as $sid => $name) {
             $personFindings = $bySid[$sid] ?? [];
-            if ($personFindings === []) {
-                continue;
-            }
-
             $categories = [];
-            $gr = 0;
-            $blindspot = 0;
             foreach ($personFindings as $finding) {
                 $categories[] = $this->findingCategory($finding);
-                if ($this->isGoldenRuleViolation((string) ($finding['golden_rule'] ?? ''))) {
-                    $gr++;
-                }
-                $locationKey = $this->locationKey(
-                    (string) ($finding['lokasi'] ?? ''),
-                    (string) ($finding['detil_lokasi'] ?? ''),
-                );
-                if ($coverage['total'] > 0) {
-                    if ($locationKey !== '' && isset($coverage['uncovered'][$locationKey])) {
-                        $blindspot++;
-                    }
-                } elseif ($this->locations->isCritical((string) ($finding['lokasi'] ?? ''), (string) ($finding['detil_lokasi'] ?? ''))) {
-                    $blindspot++;
-                }
             }
 
             $rows[] = [
@@ -253,16 +234,45 @@ final class ControlRoomDashboardInsightsAssembler
                 'sid' => $sid,
                 'total_findings' => count($personFindings),
                 'distinct_categories' => count(array_unique($categories)),
-                'variety_score' => $this->variety->score($categories),
-                'tbc' => $tbcByName[$this->normalizeName($name)] ?? 0,
-                'gr' => $gr,
-                'blindspot' => $blindspot,
+                'variety_score' => $personFindings === [] ? null : $this->variety->score($categories),
+                'tbc' => null,
+                'gr' => null,
+                'blindspot' => null,
             ];
         }
 
-        usort($rows, fn (array $a, array $b): int => $b['total_findings'] <=> $a['total_findings']);
+        usort($rows, function (array $a, array $b): int {
+            $byTotal = $b['total_findings'] <=> $a['total_findings'];
+            if ($byTotal !== 0) {
+                return $byTotal;
+            }
+
+            return strcasecmp((string) $a['name'], (string) $b['name']);
+        });
 
         return $rows;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $scheduleDays
+     * @return list<array<string, mixed>>
+     */
+    private function runningScheduleDays(array $scheduleDays): array
+    {
+        $today = CarbonImmutable::parse(now())->startOfDay();
+        $running = [];
+        foreach ($scheduleDays as $day) {
+            $date = (string) ($day['date'] ?? '');
+            if ($date === '') {
+                continue;
+            }
+            if (CarbonImmutable::parse($date)->startOfDay()->gt($today)) {
+                continue;
+            }
+            $running[] = $day;
+        }
+
+        return $running;
     }
 
     /**
@@ -567,24 +577,6 @@ final class ControlRoomDashboardInsightsAssembler
         return $names;
     }
 
-    /**
-     * @param  list<array<string, mixed>>  $tbcRows
-     * @return array<string, int>
-     */
-    private function tbcCountsByPelapor(array $tbcRows): array
-    {
-        $counts = [];
-        foreach ($tbcRows as $row) {
-            $name = $this->normalizeName((string) ($row['pelapor_all_karyawan'] ?? ''));
-            if ($name === '') {
-                continue;
-            }
-            $counts[$name] = ($counts[$name] ?? 0) + 1;
-        }
-
-        return $counts;
-    }
-
     private function locationKey(string $lokasi, string $detil): string
     {
         $lokasi = mb_strtolower(trim($lokasi));
@@ -594,10 +586,5 @@ final class ControlRoomDashboardInsightsAssembler
         }
 
         return $lokasi.'|'.$detil;
-    }
-
-    private function normalizeName(string $name): string
-    {
-        return mb_strtolower(trim(preg_replace('/\s+/', ' ', $name) ?? $name));
     }
 }

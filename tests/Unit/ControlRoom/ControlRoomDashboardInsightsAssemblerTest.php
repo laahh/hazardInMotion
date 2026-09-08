@@ -58,7 +58,7 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         $this->assertSame(50.0, $insights['highlight']['tbcPercentage']);
     }
 
-    public function test_kualitas_menghitung_variasi_dan_pelanggaran_golden_rule(): void
+    public function test_kualitas_menghitung_variasi_tanpa_dummy_tbc_gr_blindspot(): void
     {
         $insights = $this->assembler()->fromFindings(
             [
@@ -77,9 +77,26 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         $this->assertSame(3, $row['total_findings']);
         $this->assertSame(2, $row['distinct_categories']);
         $this->assertSame(0.67, $row['variety_score']);
-        $this->assertSame(1, $row['gr']);
-        $this->assertSame(2, $row['blindspot']);
-        $this->assertSame(2, $row['tbc']);
+        $this->assertNull($row['tbc']);
+        $this->assertNull($row['gr']);
+        $this->assertNull($row['blindspot']);
+    }
+
+    public function test_kualitas_total_menghitung_sap_hari_jaga_dan_h_plus_satu(): void
+    {
+        $insights = $this->assembler()->fromFindings(
+            [
+                $this->finding('FJAVJ', '2026-08-31 08:15:00', 'hazard', 'APD', ''),
+                $this->finding('FJAVJ', '2026-09-01 19:10:00', 'inspeksi', 'Kendaraan', ''),
+                $this->finding('FJAVJ', '2026-09-02 00:00:00', 'hazard', 'Di luar jendela', ''),
+            ],
+            $this->schedule(),
+            ['uncovered' => [], 'total' => 0],
+            [],
+            sapLoaded: true,
+        );
+
+        $this->assertSame(2, $insights['quality'][0]['total_findings']);
     }
 
     public function test_kualitas_hanya_dari_orang_jaga_dan_jendela_tugas(): void

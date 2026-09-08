@@ -432,7 +432,7 @@
                     <div class="ocr-card-header">
                         <div>
                             <h6>Kualitas Temuan per Personil</h6>
-                            <p class="ocr-card-kicker">Kategori = sub ketidaksesuaian · Variasi = kategori unik / total temuan saat jaga</p>
+                            <p class="ocr-card-kicker">Total = laporan SAP hari jaga (H) sampai H+1, sama seperti Detail. Kategori = sub ketidaksesuaian · Variasi = kategori unik / total. TBC, GR, dan Blindspot menunggu sumber data.</p>
                         </div>
                     </div>
                     <div class="ocr-card-body ocr-card-body--flush">
@@ -465,13 +465,13 @@
                                                     </div>
                                                 @endif
                                             </td>
-                                            <td class="text-center">{{ $row['tbc'] }}</td>
-                                            <td class="text-center">{{ $row['gr'] }}</td>
-                                            <td class="text-center">{{ $row['blindspot'] }}</td>
+                                            <td class="text-center">{{ $row['tbc'] === null ? '—' : $row['tbc'] }}</td>
+                                            <td class="text-center">{{ $row['gr'] === null ? '—' : $row['gr'] }}</td>
+                                            <td class="text-center">{{ $row['blindspot'] === null ? '—' : $row['blindspot'] }}</td>
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="7" class="text-secondary-light">Belum ada temuan SAP personil jadwal pada minggu ini.</td>
+                                            <td colspan="7" class="text-secondary-light">Belum ada personil jadwal pada minggu yang dipilih.</td>
                                         </tr>
                                     @endforelse
                                 </tbody>
