@@ -8,10 +8,16 @@ use App\Models\ControlRoom\ScheduleChange;
 use Illuminate\Support\Collection;
 
 /**
- * Menyusun riwayat ganti personil harian: "sebelumnya siapa jadi siapa".
+ * Menyusun riwayat ganti personil harian: "Nama (SID) → Nama (SID)".
  */
 final class ControlRoomScheduleChangePresenter
 {
+    /**
+     * SID dan nama dari satu simpanan sering tercatat 1–2 detik terpisah.
+     * Gabungkan selama field-nya belum ada di grup yang sama.
+     */
+    private const MERGE_WINDOW_SECONDS = 60;
+
     /**
      * @param  Collection<int, ScheduleChange>  $changes
      * @return list<array{at: string, by: string, reason: string, from: string, to: string, summary: string}>
@@ -19,21 +25,35 @@ final class ControlRoomScheduleChangePresenter
     public function timeline(Collection $changes): array
     {
         $groups = [];
-        foreach ($changes as $change) {
-            $at = $change->changed_at?->format('Y-m-d H:i:s') ?? '';
-            $key = $at.'|'.(string) $change->changed_by;
-            if (! isset($groups[$key])) {
-                $groups[$key] = [
-                    'at' => $change->changed_at?->copy()->timezone(config('app.timezone'))->format('d M Y H:i') ?? '—',
-                    'by' => $change->changedBy?->name ?? '—',
-                    'reason' => trim((string) $change->reason),
-                    'fields' => [],
+        $index = -1;
+
+        $sorted = $changes->sortBy(
+            fn (ScheduleChange $change): int => $change->changed_at?->getTimestamp() ?? 0
+        );
+
+        foreach ($sorted as $change) {
+            if ($index >= 0 && $this->belongsToGroup($groups[$index], $change)) {
+                $groups[$index]['fields'][$change->field] = [
+                    'old' => (string) $change->old_value,
+                    'new' => (string) $change->new_value,
                 ];
+                continue;
             }
-            $groups[$key]['fields'][$change->field] = [
-                'old' => (string) $change->old_value,
-                'new' => (string) $change->new_value,
+
+            $groups[] = [
+                'at' => $change->changed_at?->copy()->timezone(config('app.timezone'))->format('d M Y H:i') ?? '—',
+                'at_ts' => $change->changed_at?->getTimestamp() ?? 0,
+                'changed_by' => (string) $change->changed_by,
+                'by' => $change->changedBy?->name ?? '—',
+                'reason' => trim((string) $change->reason),
+                'fields' => [
+                    $change->field => [
+                        'old' => (string) $change->old_value,
+                        'new' => (string) $change->new_value,
+                    ],
+                ],
             ];
+            $index++;
         }
 
         $items = [];
@@ -85,5 +105,27 @@ final class ControlRoomScheduleChangePresenter
         }
 
         return '—';
+    }
+
+    /**
+     * @param  array{at_ts: int, changed_by: string, reason: string, fields: array<string, array{old: string, new: string}>}  $group
+     */
+    private function belongsToGroup(array $group, ScheduleChange $change): bool
+    {
+        if ((string) $change->changed_by !== $group['changed_by']) {
+            return false;
+        }
+
+        if (trim((string) $change->reason) !== $group['reason']) {
+            return false;
+        }
+
+        if (isset($group['fields'][$change->field])) {
+            return false;
+        }
+
+        $ts = $change->changed_at?->getTimestamp() ?? 0;
+
+        return abs($ts - $group['at_ts']) <= self::MERGE_WINDOW_SECONDS;
     }
 }

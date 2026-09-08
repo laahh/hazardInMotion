@@ -12,8 +12,10 @@ use App\Http\Requests\ControlRoom\AttendanceUpdateRequest;
 use App\Models\ControlRoom\Attendance;
 use App\Models\ControlRoom\SchedulePlan;
 use App\Services\ControlRoom\AttendanceFormRecorder;
+use App\Services\ControlRoom\ControlRoomDutyRosterService;
 use App\Services\ControlRoom\Reference\PersonnelReader;
 use App\Services\ControlRoom\Reference\ShiftResolver;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,12 +28,18 @@ final class AttendanceController extends Controller
         private readonly ShiftResolver $shiftResolver,
         private readonly PersonnelReader $personnelReader,
         private readonly AttendanceFormRecorder $attendanceFormRecorder,
+        private readonly ControlRoomDutyRosterService $dutyRoster,
     ) {}
 
     public function showForm(): View
     {
+        $dutyDate = $this->dutyRoster->dutyDate();
+
         return view('control-room.attendance.form', [
-            'defaultTanggal' => now()->toDateString(),
+            'defaultTanggal' => $dutyDate->toDateString(),
+            'dutyDateLabel' => $this->dutyRoster->dutyDateLabel($dutyDate),
+            'currentShift' => $this->dutyRoster->currentShift(),
+            'roster' => $this->dutyRoster->roster($dutyDate),
             'lookupUrl' => route('control-room.attendance.personnel'),
         ]);
     }
@@ -53,11 +61,25 @@ final class AttendanceController extends Controller
             $name = mb_convert_case(mb_strtolower($name, 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         }
 
+        $dutyDate = $this->dutyRoster->dutyDate();
+        $plan = $this->dutyRoster->findDuty((string) $personnel->sid, $dutyDate);
+        $scheduled = $plan instanceof SchedulePlan;
+
         return response()->json([
             'found' => true,
             'sid' => (string) $personnel->sid,
             'name' => $name,
             'site' => (string) $personnel->site_dedicated,
+            'scheduled' => $scheduled,
+            'tanggal' => $scheduled ? $plan->date->toDateString() : $dutyDate->toDateString(),
+            'tanggalLabel' => $this->dutyRoster->dutyDateLabel(
+                CarbonImmutable::parse($scheduled ? $plan->date->toDateString() : $dutyDate->toDateString())
+            ),
+            'shift' => $scheduled ? $plan->shift_code->value : null,
+            'shiftLabel' => $scheduled ? $plan->shift_code->label() : null,
+            'message' => $scheduled
+                ? 'Jadwal jaga dikenali. Tanggal diisi otomatis.'
+                : ControlRoomDutyRosterService::NOT_SCHEDULED_MESSAGE,
         ]);
     }
 
@@ -65,7 +87,7 @@ final class AttendanceController extends Controller
     {
         $bukti = $request->file('bukti');
         if (! $bukti instanceof UploadedFile) {
-            return back()->withErrors(['bukti' => 'Unggah bukti kehadiran (foto atau PDF).'])->withInput();
+            return back()->withErrors(['bukti' => 'Unggah atau ambil foto bukti kehadiran.'])->withInput();
         }
 
         $attendance = $this->attendanceFormRecorder->record(

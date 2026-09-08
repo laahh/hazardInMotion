@@ -60,6 +60,24 @@ final class ControlRoomScheduleChangePresenterTest extends TestCase
         $this->assertSame('Pertama', $timeline[1]['reason']);
     }
 
+    public function test_nama_dan_sid_selisih_detik_tetap_satu_baris(): void
+    {
+        $user = new User(['name' => 'OHS DIVISI']);
+        $nameAt = Carbon::parse('2026-09-08 09:24:01');
+        $sidAt = Carbon::parse('2026-09-08 09:24:02');
+
+        $timeline = (new ControlRoomScheduleChangePresenter())->timeline(collect([
+            $this->change('personnel_name_snapshot', 'IFA APRILLIANTO', 'INDRA NUR SIDIQ', 'Ifa ada LK3 Meeting', $nameAt, $user),
+            $this->change('personnel_source_key', 'C5BXK', 'S69PK', 'Ifa ada LK3 Meeting', $sidAt, $user),
+        ]));
+
+        $this->assertCount(1, $timeline);
+        $this->assertSame(
+            'IFA APRILLIANTO (C5BXK) → INDRA NUR SIDIQ (S69PK)',
+            $timeline[0]['summary'],
+        );
+    }
+
     public function test_person_label_menggabungkan_nama_dan_sid(): void
     {
         $presenter = new ControlRoomScheduleChangePresenter();

@@ -57,6 +57,9 @@ final class SchedulePlanObserver
             $reason = 'Ganti personil harian';
         }
 
+        $changedAt = now();
+        $changedBy = Auth::id();
+
         foreach (self::TRACKED_FIELDS as $field) {
             if (! array_key_exists($field, $original)) {
                 continue;
@@ -75,8 +78,8 @@ final class SchedulePlanObserver
                 'old_value' => $oldValue,
                 'new_value' => $newValue,
                 'reason' => $reason,
-                'changed_by' => Auth::id(),
-                'changed_at' => now(),
+                'changed_by' => $changedBy,
+                'changed_at' => $changedAt,
             ]);
         }
     }
