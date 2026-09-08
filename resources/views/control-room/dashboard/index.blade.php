@@ -70,10 +70,10 @@
 
 @section('content')
     <div class="ocr-dash">
-        <div class="ocr-notice" role="status">
+        <!-- <div class="ocr-notice" role="status">
             <i class="ri-information-line"></i>
             <span><strong>Sebagian mockup.</strong> KPI header dan ranking coverage masih fiktif. Pencapaian Personil, Pareto, Highlight, dan Kualitas memakai jadwal + laporan OBDS. Blindspot/TBC dari snapshot HSECM bila tabelnya ada. Tombol Detail menampilkan laporan pada jendela jaga.</span>
-        </div>
+        </div> -->
 
         <section class="ocr-card ocr-board" aria-labelledby="ocr-board-title">
             <div class="ocr-card-header">
