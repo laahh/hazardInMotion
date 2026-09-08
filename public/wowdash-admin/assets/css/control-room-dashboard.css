@@ -162,10 +162,19 @@
     color: var(--text-secondary-light);
 }
 
+.ocr-dash .ocr-board {
+    padding: 18px 20px 20px;
+}
+
+.ocr-dash .ocr-board .ocr-card-header {
+    padding: 0 0 16px;
+    margin-bottom: 4px;
+}
+
 .ocr-board-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
+    gap: 14px;
 }
 
 .ocr-site-stat {
