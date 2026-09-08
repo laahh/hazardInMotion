@@ -421,6 +421,9 @@
                                                         @foreach ($s1People as $person)
                                                             <div class="ocr-shift-person">
                                                                 <strong>{{ $person['name'] }}</strong>
+                                                                @if (($person['replacement'] ?? '') !== '')
+                                                                    <span class="ocr-shift-replace">{{ $person['replacement'] }}</span>
+                                                                @endif
                                                                 <span class="ocr-shift-status">{{ $statusLabel[$person['status']] ?? $person['status'] }}</span>
                                                             </div>
                                                         @endforeach
@@ -438,6 +441,9 @@
                                                         @foreach ($s2People as $person)
                                                             <div class="ocr-shift-person">
                                                                 <strong>{{ $person['name'] }}</strong>
+                                                                @if (($person['replacement'] ?? '') !== '')
+                                                                    <span class="ocr-shift-replace">{{ $person['replacement'] }}</span>
+                                                                @endif
                                                                 <span class="ocr-shift-status">{{ $statusLabel[$person['status']] ?? $person['status'] }}</span>
                                                             </div>
                                                         @endforeach
@@ -496,7 +502,12 @@
                                             @if ($index === 0)
                                                 <td class="ocr-heat-date" rowspan="{{ count($group['rows']) }}">{{ $group['date_label'] }}</td>
                                             @endif
-                                            <td class="ocr-heat-name">{{ $row['name'] }}</td>
+                                            <td class="ocr-heat-name">
+                                                {{ $row['name'] }}
+                                                @if (($row['replacement'] ?? '') !== '')
+                                                    <div class="ocr-heat-replace">{{ $row['replacement'] }}</div>
+                                                @endif
+                                            </td>
                                             <td class="text-center">{{ $row['shift'] }}</td>
                                             <td class="ocr-heat-cell {{ $heatClass($row['attendance_pct']) }}">{{ $heatLabel($row['attendance_pct']) }}</td>
                                             <td class="ocr-heat-cell {{ $heatClass($row['sap']) }}" title="{{ $row['sap_hint'] ?? '' }}">{{ $sapLabel($row['sap']) }}</td>
@@ -821,6 +832,8 @@
                     + '<span class="ocr-chip ' + klass + '">' + escapeHtml(statusLabel[status] || status) + '</span>'
                     + '</div>'
                     + '<p class="ocr-roster-name">' + escapeHtml(person.name || '—') + '</p>'
+                    + (person.replacement ? '<p class="ocr-roster-replace">' + escapeHtml(person.replacement) + '</p>' : '')
+                    + (person.catatan && person.catatan !== person.replacement ? '<p class="ocr-roster-note">' + escapeHtml(person.catatan) + '</p>' : '')
                     + renderCheckinout(person.checkinout || [])
                     + '</div>';
             }

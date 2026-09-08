@@ -53,6 +53,28 @@ final class DashboardMockDataProviderTest extends TestCase
         $this->assertTrue($mock['personnelCoverage'][0]['lead']);
     }
 
+    public function test_pencapaian_membawa_ringkasan_penggantian(): void
+    {
+        $days = [[
+            'date' => '2026-08-31',
+            's1' => [[
+                'name' => 'Ifa Aprillianto',
+                'sid' => 'C5BXK',
+                'status' => 'menggantikan',
+                'replacement' => 'Agung Nugroho (FJAVJ) → Ifa Aprillianto (C5BXK)',
+                'checkinout' => [],
+            ]],
+            's2' => [],
+        ]];
+
+        $mock = (new DashboardMockDataProvider())->build(CarbonImmutable::parse('2026-08-31'), $days);
+
+        $this->assertSame(
+            'Agung Nugroho (FJAVJ) → Ifa Aprillianto (C5BXK)',
+            $mock['achievementGroups'][0]['rows'][0]['replacement'],
+        );
+    }
+
     public function test_sap_mengikuti_target_satu_hazard_inspeksi_dan_observasi(): void
     {
         $days = [

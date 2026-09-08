@@ -58,7 +58,7 @@ final class SchedulePlanObserver
         }
 
         $changedAt = now();
-        $changedBy = Auth::id();
+        $changedBy = Auth::id() ?? $plan->created_by;
 
         foreach (self::TRACKED_FIELDS as $field) {
             if (! array_key_exists($field, $original)) {

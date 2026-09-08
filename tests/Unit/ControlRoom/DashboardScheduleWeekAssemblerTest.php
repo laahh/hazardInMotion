@@ -9,6 +9,7 @@ use App\Enums\ControlRoomSiteCode;
 use App\Models\ControlRoom\Attendance;
 use App\Models\ControlRoom\SchedulePlan;
 use App\Services\ControlRoom\ControlRoomRfidCheckinoutReader;
+use App\Services\ControlRoom\ControlRoomScheduleChangePresenter;
 use App\Services\ControlRoom\DashboardScheduleWeekAssembler;
 use App\Services\PembatasanLV\PembatasanLVOlapQuery;
 use Carbon\CarbonImmutable;
@@ -121,10 +122,47 @@ final class DashboardScheduleWeekAssemblerTest extends TestCase
         $this->assertSame($taps, $days[0]['s2'][0]['checkinout']);
     }
 
+    public function test_penggantian_menampilkan_dari_siapa_ke_siapa(): void
+    {
+        $weekStart = CarbonImmutable::parse('2026-08-31');
+        $plan = $this->plan(8, '2026-09-01', ControlRoomShiftCode::S1, 'C5BXK', 'IFA APRILLIANTO');
+        $attendance = $this->attendance(
+            20,
+            8,
+            '2026-09-01',
+            ControlRoomShiftCode::S1,
+            'C5BXK',
+            'IFA APRILLIANTO',
+            Attendance::STATUS_MENGGANTIKAN,
+            'FJAVJ',
+        );
+
+        $days = $this->assembler()->assemble(
+            $weekStart,
+            new Collection([$plan]),
+            new Collection([$attendance]),
+            CarbonImmutable::parse('2026-09-07'),
+            [],
+            [
+                8 => [
+                    'from' => 'Agung Nugroho (FJAVJ)',
+                    'to' => 'Ifa Aprillianto (C5BXK)',
+                    'summary' => 'Agung Nugroho (FJAVJ) → Ifa Aprillianto (C5BXK)',
+                ],
+            ],
+        )['days'];
+
+        $this->assertSame('menggantikan', $days[1]['s1'][0]['status']);
+        $this->assertSame('Ifa Aprillianto', $days[1]['s1'][0]['name']);
+        $this->assertSame('Agung Nugroho (FJAVJ) → Ifa Aprillianto (C5BXK)', $days[1]['s1'][0]['replacement']);
+        $this->assertSame('Agung Nugroho (FJAVJ) → Ifa Aprillianto (C5BXK)', $days[1]['s1'][0]['catatan']);
+    }
+
     private function assembler(): DashboardScheduleWeekAssembler
     {
         return new DashboardScheduleWeekAssembler(
-            new ControlRoomRfidCheckinoutReader(new PembatasanLVOlapQuery())
+            new ControlRoomRfidCheckinoutReader(new PembatasanLVOlapQuery()),
+            new ControlRoomScheduleChangePresenter(),
         );
     }
 
@@ -151,6 +189,7 @@ final class DashboardScheduleWeekAssemblerTest extends TestCase
         string $sid,
         string $name,
         string $status,
+        ?string $replacingSourceKey = null,
     ): Attendance {
         $attendance = new Attendance();
         $attendance->id = $id;
@@ -162,6 +201,7 @@ final class DashboardScheduleWeekAssemblerTest extends TestCase
             'personnel_source_key' => $sid,
             'personnel_name_snapshot' => $name,
             'status' => $status,
+            'replacing_source_key' => $replacingSourceKey,
             'checked_in_at' => $date.' 08:00:00',
         ]);
 

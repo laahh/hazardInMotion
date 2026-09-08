@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\ControlRoom;
 
 use App\Enums\ControlRoomShiftCode;
+use App\Enums\ControlRoomSiteCode;
 use App\Models\ControlRoom\SchedulePlan;
 use App\Services\ControlRoom\Reference\ShiftResolver;
 use Carbon\CarbonImmutable;
@@ -47,9 +48,9 @@ final class ControlRoomDutyRosterService
     /**
      * @return Collection<int, SchedulePlan>
      */
-    public function roster(CarbonImmutable $date): Collection
+    public function roster(CarbonImmutable $date, ?ControlRoomSiteCode $site = null): Collection
     {
-        return SchedulePlan::query()
+        $query = SchedulePlan::query()
             ->select([
                 'id',
                 'site_code',
@@ -58,20 +59,27 @@ final class ControlRoomDutyRosterService
                 'personnel_source_key',
                 'personnel_name_snapshot',
             ])
-            ->whereDate('date', $date->toDateString())
+            ->whereDate('date', $date->toDateString());
+
+        if ($site instanceof ControlRoomSiteCode) {
+            $query->where('site_code', $site->value);
+        }
+
+        return $query
+            ->orderBy('site_code')
             ->orderBy('shift_code')
             ->orderBy('personnel_name_snapshot')
             ->get();
     }
 
-    public function findDuty(string $sid, CarbonImmutable $date): ?SchedulePlan
+    public function findDuty(string $sid, CarbonImmutable $date, ?ControlRoomSiteCode $site = null): ?SchedulePlan
     {
         $sid = strtoupper(trim($sid));
         if ($sid === '') {
             return null;
         }
 
-        $plans = SchedulePlan::query()
+        $query = SchedulePlan::query()
             ->select([
                 'id',
                 'site_code',
@@ -81,11 +89,44 @@ final class ControlRoomDutyRosterService
                 'personnel_name_snapshot',
             ])
             ->whereDate('date', $date->toDateString())
-            ->whereRaw('upper(personnel_source_key) = ?', [$sid])
-            ->orderBy('shift_code')
-            ->get();
+            ->whereRaw('upper(personnel_source_key) = ?', [$sid]);
+
+        if ($site instanceof ControlRoomSiteCode) {
+            $query->where('site_code', $site->value);
+        }
+
+        $plans = $query->orderBy('shift_code')->get();
 
         return $this->pickPlan($plans, $this->currentShift());
+    }
+
+    public function findPlanForDuty(int $planId, CarbonImmutable $date, ?ControlRoomSiteCode $site = null): ?SchedulePlan
+    {
+        if ($planId < 1) {
+            return null;
+        }
+
+        $query = SchedulePlan::query()
+            ->select([
+                'id',
+                'site_code',
+                'date',
+                'shift_code',
+                'personnel_source_key',
+                'personnel_name_snapshot',
+                'status',
+                'created_by',
+            ])
+            ->where('id', $planId)
+            ->whereDate('date', $date->toDateString());
+
+        if ($site instanceof ControlRoomSiteCode) {
+            $query->where('site_code', $site->value);
+        }
+
+        $plan = $query->first();
+
+        return $plan instanceof SchedulePlan ? $plan : null;
     }
 
     /**

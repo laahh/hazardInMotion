@@ -13,10 +13,16 @@
             <div class="ocr-hero-body">
                 <span class="ocr-badge">
                     <span class="material-symbols-outlined" style="font-size:15px">lock_open</span>
-                    Control Room
+                    Control Room{{ $site ? ' · '.$site->value : '' }}
                 </span>
-                <h1>Absensi Control Room</h1>
-                <p class="ocr-lead">Isi SID Anda. Tanggal terisi otomatis dari jadwal jaga. Lampirkan bukti (unggah file atau foto langsung).</p>
+                <h1>Absensi Control Room{{ $site ? ' — '.$site->label() : '' }}</h1>
+                <p class="ocr-lead">
+                    @if ($site)
+                        Form ini hanya untuk jadwal site <strong>{{ $site->label() }}</strong>. Isi SID Anda. Jika Anda pengganti, gunakan tombol di bawah.
+                    @else
+                        Isi SID Anda. Tanggal terisi otomatis dari jadwal jaga. Lampirkan bukti (unggah file atau foto langsung).
+                    @endif
+                </p>
                 <span class="ocr-pill">
                     <span class="material-symbols-outlined" style="font-size:16px">calendar_today</span>
                     {{ $dutyDateLabel }}
@@ -58,6 +64,10 @@
             @csrf
             <input type="hidden" name="tanggal" id="tanggal" value="{{ old('tanggal', $defaultTanggal) }}">
             <input type="hidden" id="nama" name="nama" value="{{ old('nama') }}">
+            <input type="hidden" name="mode" id="ocr-mode" value="{{ old('mode', 'scheduled') }}">
+            @if ($site)
+                <input type="hidden" name="site" value="{{ $site->value }}">
+            @endif
 
             <section class="ocr-card" id="section-sid">
                 <h2 class="ocr-card-title"><span class="ocr-num">1</span> Cari SID Anda</h2>
@@ -103,11 +113,46 @@
                 <p id="ocr-not-scheduled-text">Anda tidak dijadwalkan hari ini jadi tidak bisa absen. Jika ada perubahan, hubungi admin.</p>
             </div>
 
+            <button type="button" class="ocr-btn ocr-btn-secondary ocr-btn-block" id="btn-pengganti" style="margin-bottom:.85rem" aria-pressed="false">
+                <span class="material-symbols-outlined">swap_horiz</span>
+                Saya pengganti
+            </button>
+
+            <section class="ocr-card" id="section-pengganti" hidden>
+                <h2 class="ocr-card-title"><span class="ocr-num">+</span> Gantikan personil terjadwal</h2>
+                <p class="ocr-hint" style="margin-top:-.5rem">Pilih siapa yang tidak bisa hadir. SID Anda tidak perlu ada di daftar jadwal.</p>
+                @if ($roster->isEmpty())
+                    <p class="ocr-hint" style="color:#dc2626">Belum ada personil terjadwal hari ini di site ini, jadi mode pengganti tidak bisa dipakai.</p>
+                @else
+                    <div class="ocr-replace-list" role="radiogroup" aria-label="Personil yang digantikan">
+                        @foreach ($roster as $plan)
+                            <label class="ocr-replace-option">
+                                <input
+                                    type="radio"
+                                    name="replacing_plan_id"
+                                    value="{{ $plan->id }}"
+                                    disabled
+                                    @checked((string) old('replacing_plan_id') === (string) $plan->id)
+                                >
+                                <span>
+                                    <strong>{{ $plan->personnel_name_snapshot }}</strong>
+                                    <small>{{ $plan->personnel_source_key }} · {{ $plan->site_code->value }} · {{ $plan->shift_code->label() }}</small>
+                                </span>
+                            </label>
+                        @endforeach
+                    </div>
+                    @error('replacing_plan_id')
+                        <p class="ocr-hint" style="color:#dc2626">{{ $message }}</p>
+                    @enderror
+                @endif
+            </section>
+
             <section class="ocr-card" id="section-jadwal">
                 <h2 class="ocr-card-title"><span class="ocr-num">2</span> Jadwal jaga</h2>
                 <div class="ocr-alert ocr-alert-info" style="margin:0">
                     <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-4px">event_available</span>
-                    Tanggal diisi otomatis dari roster Control Room. Hanya personil di daftar bawah yang dapat absen.
+                    Tanggal diisi otomatis dari roster Control Room{{ $site ? ' site '.$site->label() : '' }}.
+                    Personil terjadwal absen seperti biasa. Pengganti memakai tombol <strong>Saya pengganti</strong>.
                 </div>
             </section>
 
@@ -176,9 +221,9 @@
         <aside class="ocr-card" aria-labelledby="ocr-roster-title">
             <h2 class="ocr-card-title" id="ocr-roster-title">
                 <span class="material-symbols-outlined" style="color:#3952bc">groups</span>
-                Personil jaga hari ini
+                Personil jaga{{ $site ? ' '.$site->label() : '' }} hari ini
             </h2>
-            <p class="ocr-hint" style="margin-top:-.35rem">{{ $dutyDateLabel }} · hanya nama di daftar ini yang dapat absen.</p>
+            <p class="ocr-hint" style="margin-top:-.35rem">{{ $dutyDateLabel }} · personil di daftar ini absen biasa; pengganti tidak perlu ada di sini.</p>
 
             @forelse ($rosterByShift as $shiftCode => $people)
                 <div class="ocr-roster-group">
@@ -186,7 +231,7 @@
                     <ul>
                         @foreach ($people as $plan)
                             <li>
-                                <span class="ocr-roster-name">{{ $plan->personnel_name_snapshot }}</span>
+                                <span class="ocr-roster-name">{{ $plan->personnel_name_snapshot }}@if (! $site) <span class="ocr-roster-site">{{ $plan->site_code->value }}</span>@endif</span>
                                 <span class="ocr-roster-sid">{{ $plan->personnel_source_key }}</span>
                             </li>
                         @endforeach
@@ -199,7 +244,7 @@
 
         <p class="ocr-footer">
             PT Berau Coal · Control Room (Pengawasan OCR)<br>
-            Form ini hanya untuk personil yang dijadwalkan jaga hari ini.
+            Form ini untuk personil terjadwal dan pengganti di Control Room{{ $site ? ' '.$site->label() : '' }}.
         </p>
     </div>
 @endsection
@@ -215,7 +260,11 @@
             var defaultDateLabel = @json($dutyDateLabel);
             var defaultShiftLabel = @json($currentShift->label());
             var lookupUrl = @json($lookupUrl);
+            var siteCode = @json($site?->value);
             var notScheduledMessage = @json(\App\Services\ControlRoom\ControlRoomDutyRosterService::NOT_SCHEDULED_MESSAGE);
+            var modeInput = document.getElementById('ocr-mode');
+            var penggantiBtn = document.getElementById('btn-pengganti');
+            var penggantiSection = document.getElementById('section-pengganti');
             var sidInput = document.getElementById('sid');
             var namaInput = document.getElementById('nama');
             var sidStatus = document.getElementById('sid-status');
@@ -245,7 +294,45 @@
             var lookupTimer = null;
             var lookupSeq = 0;
             var scheduled = false;
+            var sidScheduled = false;
+            var foundActive = false;
+            var penggantiMode = false;
             var cameraStream = null;
+
+            function replacingSelected() {
+                return !!document.querySelector('input[name="replacing_plan_id"]:checked');
+            }
+
+            function setPengganti(on) {
+                penggantiMode = !!on;
+                modeInput.value = penggantiMode ? 'pengganti' : 'scheduled';
+                penggantiSection.hidden = !penggantiMode;
+                penggantiBtn.classList.toggle('is-active', penggantiMode);
+                penggantiBtn.setAttribute('aria-pressed', penggantiMode ? 'true' : 'false');
+                document.querySelectorAll('input[name="replacing_plan_id"]').forEach(function (el) {
+                    el.disabled = !penggantiMode;
+                });
+                if ((sidInput.value || '').trim().length >= 2) {
+                    lookupSid();
+                } else {
+                    refreshEligibility();
+                }
+            }
+
+            function refreshEligibility() {
+                if (penggantiMode) {
+                    var ok = foundActive && !sidScheduled && replacingSelected();
+                    var message = '';
+                    if (foundActive && sidScheduled) {
+                        message = 'SID ini sudah dijadwalkan. Gunakan absen biasa, bukan tombol pengganti.';
+                    } else if (foundActive && !replacingSelected()) {
+                        message = 'Pilih personil terjadwal yang Anda gantikan.';
+                    }
+                    setScheduled(ok, message);
+                    return;
+                }
+                setScheduled(sidScheduled, sidScheduled ? '' : (foundActive ? notScheduledMessage : ''));
+            }
 
             function setStatus(text, color) {
                 sidStatus.textContent = text || '';
@@ -369,9 +456,11 @@
 
                 if (sid.length < 2) {
                     namaInput.value = '';
-                    setScheduled(false, '');
+                    foundActive = false;
+                    sidScheduled = false;
                     resetDutyDisplay();
                     setStatus(sid.length ? 'Lanjutkan mengetik SID…' : '', '#64748b');
+                    refreshEligibility();
                     return;
                 }
 
@@ -379,7 +468,9 @@
                 lookupBtn.disabled = true;
                 setStatus('Mencari data…', '#64748b');
 
-                fetch(lookupUrl + '?sid=' + encodeURIComponent(sid), {
+                fetch(lookupUrl + '?sid=' + encodeURIComponent(sid)
+                    + (siteCode ? '&site=' + encodeURIComponent(siteCode) : '')
+                    + '&mode=' + encodeURIComponent(penggantiMode ? 'pengganti' : 'scheduled'), {
                     headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                     credentials: 'same-origin',
                 })
@@ -391,12 +482,16 @@
                         }
                         if (!data || !data.found) {
                             namaInput.value = '';
-                            setScheduled(false, '');
+                            foundActive = false;
+                            sidScheduled = false;
                             resetDutyDisplay();
                             setStatus('SID tidak ditemukan atau personil tidak aktif.', '#dc2626');
+                            refreshEligibility();
                             return;
                         }
 
+                        foundActive = true;
+                        sidScheduled = !!data.scheduled;
                         namaInput.value = data.name || '';
                         pvNama.textContent = data.name || '—';
                         if (data.tanggal) {
@@ -409,17 +504,11 @@
                         sidPreview.classList.add('is-visible');
                         step1.classList.add('is-done');
                         step2.classList.add('is-active');
-
-                        if (data.scheduled) {
-                            pvStatus.textContent = 'Dijadwalkan';
-                            setScheduled(true, '');
-                            setStatus(data.message || 'Jadwal jaga dikenali.', '#059669');
-                            return;
-                        }
-
-                        pvStatus.textContent = 'Tidak dijadwalkan';
-                        setScheduled(false, data.message || notScheduledMessage);
-                        setStatus(data.message || notScheduledMessage, '#dc2626');
+                        pvStatus.textContent = penggantiMode
+                            ? (sidScheduled ? 'Sudah dijadwalkan' : 'Pengganti')
+                            : (sidScheduled ? 'Dijadwalkan' : 'Tidak dijadwalkan');
+                        setStatus(data.message || '', sidScheduled && !penggantiMode ? '#059669' : (penggantiMode && !sidScheduled ? '#059669' : '#dc2626'));
+                        refreshEligibility();
                     })
                     .catch(function () {
                         lookupBtn.disabled = false;
@@ -427,8 +516,11 @@
                             return;
                         }
                         namaInput.value = '';
-                        setScheduled(false, '');
+                        foundActive = false;
+                        sidScheduled = false;
+                        resetDutyDisplay();
                         setStatus('Koneksi gagal. Periksa internet lalu coba lagi.', '#dc2626');
+                        refreshEligibility();
                     });
             }
 
@@ -442,6 +534,14 @@
             sidInput.addEventListener('input', function () {
                 window.clearTimeout(lookupTimer);
                 lookupTimer = window.setTimeout(lookupSid, 450);
+            });
+            if (penggantiBtn) {
+                penggantiBtn.addEventListener('click', function () {
+                    setPengganti(!penggantiMode);
+                });
+            }
+            document.querySelectorAll('input[name="replacing_plan_id"]').forEach(function (el) {
+                el.addEventListener('change', refreshEligibility);
             });
 
             dropzone.addEventListener('click', function () {
@@ -525,10 +625,13 @@
             clearBtn.addEventListener('click', function () {
                 window.setTimeout(function () {
                     namaInput.value = '';
+                    foundActive = false;
+                    sidScheduled = false;
                     setStatus('', '#64748b');
                     resetDutyDisplay();
                     resetPreview();
                     stopCamera();
+                    setPengganti(false);
                     setScheduled(false, '');
                     submit.innerHTML = '<span class="material-symbols-outlined">send</span> Kirim absensi';
                     fileInput.value = '';
@@ -542,9 +645,8 @@
             if (summary) {
                 summary.focus();
             }
-            if ((sidInput.value || '').trim().length >= 2) {
-                lookupSid();
-            } else {
+            setPengganti(modeInput && modeInput.value === 'pengganti');
+            if ((sidInput.value || '').trim().length < 2) {
                 setScheduled(false, '');
             }
         })();

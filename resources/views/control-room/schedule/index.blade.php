@@ -27,7 +27,7 @@
         </div>
     </div>
 
-    <div class="card shadow-none border mb-24">
+    <div class="card shadow-none border mb-24" id="ocr-schedule-upload">
         <div class="card-header">
             <h6 class="mb-0">Upload Excel per Minggu</h6>
             <p class="text-secondary-light text-xs mb-0">Pilih site di form unduh, lalu unduh template minggu itu (sheet Jadwal + daftar SID Personil). Isi kolom kuning <strong>sid</strong>; kolom <strong>site</strong> punya dropdown semua site. Unggah ke site yang sama.</p>
@@ -86,7 +86,7 @@
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
             <div>
                 <h6 class="mb-0">Kalender Jadwal — {{ $site->label() }}</h6>
-                <p class="text-secondary-light text-xs mb-0">Hanya menampilkan jadwal site <strong>{{ $site->value }}</strong>. Ganti site di filter atas atau di sini.</p>
+                <p class="text-secondary-light text-xs mb-0">Hanya menampilkan jadwal site <strong>{{ $site->value }}</strong>. Tanggal kosong tidak bisa diisi satuan — unggah template satu minggu (Senin–Minggu).</p>
             </div>
             <div style="min-width: 220px;">
                 <label class="form-label text-sm mb-1" for="ocr-calendar-site">Filter site</label>
@@ -329,6 +329,16 @@
         #schedule-calendar .ocr-sched-event--changed {
             box-shadow: inset 3px 0 0 #2563eb;
         }
+        #schedule-calendar td.ocr-sched-day--empty {
+            cursor: default;
+            background: #fafafa;
+        }
+        #schedule-calendar td.ocr-sched-day--empty:hover {
+            background: #f3f4f6;
+        }
+        #schedule-calendar td.ocr-sched-day--filled {
+            cursor: pointer;
+        }
         .ocr-sched-history-item {
             border-left: 3px solid #93c5fd;
             padding: 8px 12px;
@@ -369,6 +379,36 @@
             var editFormAlert = document.getElementById('edit-form-alert');
             var currentDeleteUrl = null;
             var currentChangesUrl = null;
+
+            function dateHasEvents(cal, dateStr) {
+                return cal.getEvents().some(function (event) {
+                    return (event.startStr || '').slice(0, 10) === dateStr;
+                });
+            }
+
+            function markScheduledDays(cal) {
+                var dates = {};
+                cal.getEvents().forEach(function (event) {
+                    var key = (event.startStr || '').slice(0, 10);
+                    if (key) {
+                        dates[key] = true;
+                    }
+                });
+                cal.el.querySelectorAll('td[data-date]').forEach(function (cell) {
+                    var date = cell.getAttribute('data-date');
+                    var filled = !!dates[date];
+                    cell.classList.toggle('ocr-sched-day--empty', !filled);
+                    cell.classList.toggle('ocr-sched-day--filled', filled);
+                });
+            }
+
+            function remindWeeklyInput() {
+                window.alert('Tanggal ini belum ada jadwal. Input harus sekaligus untuk satu minggu (Senin–Minggu) lewat unggah template Excel, bukan per tanggal.');
+                var upload = document.getElementById('ocr-schedule-upload');
+                if (upload) {
+                    upload.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
 
             function escapeHtml(value) {
                 return String(value || '')
@@ -530,6 +570,14 @@
                 height: 'auto',
                 dayMaxEvents: true,
                 eventDisplay: 'block',
+                datesSet: function (info) {
+                    markScheduledDays(info.view.calendar);
+                },
+                eventsSet: function () {
+                    if (calendar) {
+                        markScheduledDays(calendar);
+                    }
+                },
 
                 events: function (info, successCallback, failureCallback) {
                     var url = eventsUrl + '?site=' + encodeURIComponent(siteCode)
@@ -563,6 +611,11 @@
                 },
 
                 dateClick: function (info) {
+                    if (!dateHasEvents(info.view.calendar, info.dateStr)) {
+                        remindWeeklyInput();
+                        return;
+                    }
+
                     document.getElementById('modal-date-input').value = info.dateStr;
                     document.getElementById('modal-date-label').textContent = info.dateStr;
                     new bootstrap.Modal(document.getElementById('addScheduleModal')).show();

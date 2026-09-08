@@ -31,15 +31,17 @@ final class AttendanceController extends Controller
         private readonly ControlRoomDutyRosterService $dutyRoster,
     ) {}
 
-    public function showForm(): View
+    public function showForm(Request $request): View
     {
+        $site = $this->siteFromRequest($request);
         $dutyDate = $this->dutyRoster->dutyDate();
 
         return view('control-room.attendance.form', [
+            'site' => $site,
             'defaultTanggal' => $dutyDate->toDateString(),
             'dutyDateLabel' => $this->dutyRoster->dutyDateLabel($dutyDate),
             'currentShift' => $this->dutyRoster->currentShift(),
-            'roster' => $this->dutyRoster->roster($dutyDate),
+            'roster' => $this->dutyRoster->roster($dutyDate, $site),
             'lookupUrl' => route('control-room.attendance.personnel'),
         ]);
     }
@@ -61,9 +63,21 @@ final class AttendanceController extends Controller
             $name = mb_convert_case(mb_strtolower($name, 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         }
 
+        $site = $this->siteFromRequest($request);
         $dutyDate = $this->dutyRoster->dutyDate();
-        $plan = $this->dutyRoster->findDuty((string) $personnel->sid, $dutyDate);
+        $plan = $this->dutyRoster->findDuty((string) $personnel->sid, $dutyDate, $site);
         $scheduled = $plan instanceof SchedulePlan;
+        $pengganti = $request->query('mode') === AttendanceFormRecorder::MODE_PENGGANTI;
+
+        $message = $scheduled
+            ? 'Jadwal jaga dikenali. Tanggal diisi otomatis.'
+            : ControlRoomDutyRosterService::NOT_SCHEDULED_MESSAGE;
+
+        if ($pengganti) {
+            $message = $scheduled
+                ? 'SID ini sudah dijadwalkan. Gunakan absen biasa, bukan tombol pengganti.'
+                : 'SID dikenali. Pilih personil yang Anda gantikan, lalu unggah bukti.';
+        }
 
         return response()->json([
             'found' => true,
@@ -71,15 +85,14 @@ final class AttendanceController extends Controller
             'name' => $name,
             'site' => (string) $personnel->site_dedicated,
             'scheduled' => $scheduled,
+            'canReplace' => $pengganti && ! $scheduled,
             'tanggal' => $scheduled ? $plan->date->toDateString() : $dutyDate->toDateString(),
             'tanggalLabel' => $this->dutyRoster->dutyDateLabel(
                 CarbonImmutable::parse($scheduled ? $plan->date->toDateString() : $dutyDate->toDateString())
             ),
             'shift' => $scheduled ? $plan->shift_code->value : null,
             'shiftLabel' => $scheduled ? $plan->shift_code->label() : null,
-            'message' => $scheduled
-                ? 'Jadwal jaga dikenali. Tanggal diisi otomatis.'
-                : ControlRoomDutyRosterService::NOT_SCHEDULED_MESSAGE,
+            'message' => $message,
         ]);
     }
 
@@ -90,14 +103,16 @@ final class AttendanceController extends Controller
             return back()->withErrors(['bukti' => 'Unggah atau ambil foto bukti kehadiran.'])->withInput();
         }
 
-        $attendance = $this->attendanceFormRecorder->record(
-            $request->safe()->only(['sid', 'tanggal']),
-            $bukti,
-        );
+        $payload = $request->attendancePayload();
+        $attendance = $this->attendanceFormRecorder->record($payload, $bukti);
+        $redirectSite = $payload['site'] ?? $attendance->site_code->value;
+        $success = $payload['mode'] === AttendanceFormRecorder::MODE_PENGGANTI
+            ? "Absensi pengganti tercatat untuk {$attendance->personnel_name_snapshot} ({$attendance->personnel_source_key}). Jadwal dan riwayat penggantian sudah diperbarui."
+            : "Absensi tercatat untuk {$attendance->personnel_name_snapshot} ({$attendance->personnel_source_key}).";
 
         return redirect()
-            ->route('control-room.attendance.form')
-            ->with('success', "Absensi tercatat untuk {$attendance->personnel_name_snapshot} ({$attendance->personnel_source_key}).");
+            ->route('control-room.attendance.form', array_filter(['site' => $redirectSite]))
+            ->with('success', $success);
     }
 
     public function showCheckIn(Request $request): View
@@ -218,5 +233,20 @@ final class AttendanceController extends Controller
         $attendance->update($data);
 
         return back()->with('success', 'Absen dikoreksi.');
+    }
+
+    private function siteFromRequest(Request $request): ?ControlRoomSiteCode
+    {
+        $raw = trim((string) $request->input('site', $request->query('site', '')));
+        if ($raw === '') {
+            return null;
+        }
+
+        $site = ControlRoomSiteCode::tryFrom(strtoupper($raw));
+        if (! $site instanceof ControlRoomSiteCode) {
+            abort(404);
+        }
+
+        return $site;
     }
 }

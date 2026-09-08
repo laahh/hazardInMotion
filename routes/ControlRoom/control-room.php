@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\ControlRoom\AttendanceController;
+use App\Http\Controllers\ControlRoom\ControlRoomQrCodeController;
 use App\Http\Controllers\ControlRoom\DashboardController;
 use App\Http\Controllers\ControlRoom\DataQualityController;
 use App\Http\Controllers\ControlRoom\ScheduleController;
@@ -54,4 +55,5 @@ Route::middleware('auth')->group(function (): void {
     });
     Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
     Route::get('/data-quality', [DataQualityController::class, 'index'])->name('data-quality.index');
+    Route::get('/qr-code', [ControlRoomQrCodeController::class, 'index'])->name('qr-code.index');
 });

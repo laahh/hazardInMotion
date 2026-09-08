@@ -125,6 +125,7 @@ final class DashboardMockDataProvider
                         (string) ($person['sid'] ?? ''),
                         $sapCountsBySidDate,
                         $sapLoaded,
+                        (string) ($person['replacement'] ?? ''),
                     );
                 }
             }
@@ -147,6 +148,7 @@ final class DashboardMockDataProvider
         string $sid = '',
         array $sapCountsBySidDate = [],
         bool $sapLoaded = false,
+        string $replacement = '',
     ): array {
         $sid = strtoupper(trim($sid));
         $emptyCounts = ['hazard' => 0, 'inspeksi' => 0, 'observasi' => 0];
@@ -159,6 +161,7 @@ final class DashboardMockDataProvider
             'date' => $date,
             'date_label' => CarbonImmutable::parse($date)->format('n/j/Y'),
             'name' => $name,
+            'replacement' => $replacement,
             'shift' => $shift,
             'sid' => $sid,
             'attendance_pct' => $attendancePct,

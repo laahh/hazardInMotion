@@ -28,6 +28,12 @@ $rr = function (string $name, array $params = []) {
                 </a>
             </li>
             <li>
+                <a href="{{ $rr('control-room.qr-code.index') }}" class="{{ request()->routeIs('control-room.qr-code.*') ? 'active-page' : '' }}">
+                    <i class="ri-qr-code-line menu-icon"></i>
+                    <span>QR Code</span>
+                </a>
+            </li>
+            <li>
                 <a href="{{ $rr('control-room.attendance.form') }}" class="{{ request()->routeIs('control-room.attendance.form*') ? 'active-page' : '' }}">
                     <i class="ri-camera-line menu-icon"></i>
                     <span>Form Absensi</span>

@@ -149,6 +149,26 @@
         .ocr-roster-group li { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; padding: .7rem 0; border-bottom: 1px solid var(--ocr-line); }
         .ocr-roster-name { font-size: .9rem; font-weight: 600; color: var(--ocr-ink); }
         .ocr-roster-sid { font-size: .75rem; font-weight: 700; letter-spacing: .04em; color: var(--ocr-muted); }
+        .ocr-roster-site {
+            display: inline-block; margin-left: .35rem; font-size: .68rem; font-weight: 700;
+            letter-spacing: .04em; color: var(--ocr-brand); background: var(--ocr-brand-soft);
+            border-radius: 999px; padding: .1rem .45rem;
+        }
+        .ocr-replace-list { display: flex; flex-direction: column; gap: .5rem; }
+        .ocr-replace-option {
+            display: flex; align-items: flex-start; gap: .65rem;
+            border: 1.5px solid var(--ocr-line); border-radius: 12px; padding: .75rem .85rem;
+            cursor: pointer; background: #fafbfc;
+        }
+        .ocr-replace-option:has(input:checked) {
+            border-color: rgba(57,82,188,.45); background: var(--ocr-brand-soft);
+        }
+        .ocr-replace-option input { margin-top: .2rem; width: 1.1rem; height: 1.1rem; }
+        .ocr-replace-option strong { display: block; font-size: .9rem; }
+        .ocr-replace-option small { display: block; margin-top: .15rem; color: var(--ocr-muted); font-size: .75rem; }
+        #btn-pengganti.is-active {
+            background: var(--ocr-brand-soft); color: var(--ocr-brand); border-color: rgba(57,82,188,.35);
+        }
         .ocr-sr {
             position: absolute !important; width: 1px !important; height: 1px !important;
             padding: 0 !important; margin: -1px !important; overflow: hidden !important;

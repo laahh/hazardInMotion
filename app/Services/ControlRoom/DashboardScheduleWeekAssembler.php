@@ -7,6 +7,7 @@ namespace App\Services\ControlRoom;
 use App\Enums\ControlRoomShiftCode;
 use App\Enums\ControlRoomSiteCode;
 use App\Models\ControlRoom\Attendance;
+use App\Models\ControlRoom\ScheduleChange;
 use App\Models\ControlRoom\SchedulePlan;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -19,6 +20,7 @@ final class DashboardScheduleWeekAssembler
 {
     public function __construct(
         private readonly ControlRoomRfidCheckinoutReader $rfidReader,
+        private readonly ControlRoomScheduleChangePresenter $changePresenter,
     ) {}
 
     /**
@@ -79,6 +81,7 @@ final class DashboardScheduleWeekAssembler
             $attendances,
             $today,
             $withRfid ? $this->rfidReader->forDutySlots($slots) : [],
+            $this->replacementsByPlanId($plans),
         );
     }
 
@@ -86,6 +89,7 @@ final class DashboardScheduleWeekAssembler
      * @param  Collection<int, SchedulePlan>  $plans
      * @param  Collection<int, Attendance>  $attendances
      * @param  array<string, list<array<string, mixed>>>  $rfidBySlot
+     * @param  array<int, array{from: string, to: string, summary: string}>  $replacementsByPlanId
      * @return array{days: list<array<string, mixed>>}
      */
     public function assemble(
@@ -94,6 +98,7 @@ final class DashboardScheduleWeekAssembler
         Collection $attendances,
         ?CarbonInterface $today = null,
         array $rfidBySlot = [],
+        array $replacementsByPlanId = [],
     ): array {
         $todayDate = CarbonImmutable::parse($today ?? now())->toDateString();
         $replacedNames = $this->replacedNameIndex($plans);
@@ -114,7 +119,7 @@ final class DashboardScheduleWeekAssembler
 
             $date = $plan->date->toDateString();
             $shift = $plan->shift_code->value;
-            $peopleByDayShift[$date][$shift][] = $this->personFromPlan($plan, $attendance, $todayDate, $replacedNames, $rfidBySlot);
+            $peopleByDayShift[$date][$shift][] = $this->personFromPlan($plan, $attendance, $todayDate, $replacedNames, $rfidBySlot, $replacementsByPlanId);
         }
 
         foreach ($attendances as $attendance) {
@@ -124,7 +129,7 @@ final class DashboardScheduleWeekAssembler
 
             $date = $attendance->date->toDateString();
             $shift = $attendance->shift_code->value;
-            $peopleByDayShift[$date][$shift][] = $this->personFromUnplannedAttendance($attendance, $replacedNames, $rfidBySlot);
+            $peopleByDayShift[$date][$shift][] = $this->personFromUnplannedAttendance($attendance, $replacedNames, $rfidBySlot, $replacementsByPlanId);
         }
 
         $days = [];
@@ -184,7 +189,8 @@ final class DashboardScheduleWeekAssembler
     /**
      * @param  array<string, string>  $replacedNames
      * @param  array<string, list<array<string, mixed>>>  $rfidBySlot
-     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string, checkinout: list<array<string, mixed>>}
+     * @param  array<int, array{from: string, to: string, summary: string}>  $replacementsByPlanId
+     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string, checkinout: list<array<string, mixed>>, sid: string, replacement: string}
      */
     private function personFromPlan(
         SchedulePlan $plan,
@@ -192,9 +198,11 @@ final class DashboardScheduleWeekAssembler
         string $todayDate,
         array $replacedNames,
         array $rfidBySlot,
+        array $replacementsByPlanId = [],
     ): array {
         $name = $this->formatName((string) $plan->personnel_name_snapshot);
         $taps = $rfidBySlot[$this->slotKey($plan->date, $plan->shift_code, (string) $plan->personnel_source_key)] ?? [];
+        $replacement = $this->replacementSummary($plan->id, $attendance, $replacementsByPlanId, $replacedNames);
 
         if ($attendance === null) {
             $isPast = $plan->date->toDateString() < $todayDate;
@@ -204,9 +212,10 @@ final class DashboardScheduleWeekAssembler
                 $name,
                 planned: true,
                 status: $status,
-                catatan: $isPast ? 'Tidak ada absen' : 'Belum check-in',
+                catatan: $replacement !== '' ? $replacement : ($isPast ? 'Tidak ada absen' : 'Belum check-in'),
                 checkinout: $taps,
                 sid: (string) $plan->personnel_source_key,
+                replacement: $replacement,
             );
         }
 
@@ -214,39 +223,56 @@ final class DashboardScheduleWeekAssembler
             $name,
             planned: true,
             status: $this->mapAttendanceStatus($attendance, planned: true),
-            catatan: $this->catatanFromAttendance($attendance, $replacedNames),
+            catatan: $replacement !== '' ? $replacement : $this->catatanFromAttendance($attendance, $replacedNames),
             checkinout: $taps,
             sid: (string) $plan->personnel_source_key,
+            replacement: $replacement,
         );
     }
 
     /**
      * @param  array<string, string>  $replacedNames
      * @param  array<string, list<array<string, mixed>>>  $rfidBySlot
-     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string, checkinout: list<array<string, mixed>>}
+     * @param  array<int, array{from: string, to: string, summary: string}>  $replacementsByPlanId
+     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string, checkinout: list<array<string, mixed>>, sid: string, replacement: string}
      */
-    private function personFromUnplannedAttendance(Attendance $attendance, array $replacedNames, array $rfidBySlot): array
-    {
+    private function personFromUnplannedAttendance(
+        Attendance $attendance,
+        array $replacedNames,
+        array $rfidBySlot,
+        array $replacementsByPlanId = [],
+    ): array {
         $status = $attendance->status === Attendance::STATUS_MENGGANTIKAN
             ? 'menggantikan'
             : 'tidak_dijadwalkan';
+        $replacement = $this->replacementSummary($attendance->schedule_plan_id, $attendance, $replacementsByPlanId, $replacedNames);
 
         return $this->personPayload(
             $this->formatName((string) $attendance->personnel_name_snapshot),
             planned: false,
             status: $status,
-            catatan: $this->catatanFromAttendance($attendance, $replacedNames) ?: 'Hadir tanpa slot jadwal.',
+            catatan: $replacement !== ''
+                ? $replacement
+                : ($this->catatanFromAttendance($attendance, $replacedNames) ?: 'Hadir tanpa slot jadwal.'),
             checkinout: $rfidBySlot[$this->slotKey($attendance->date, $attendance->shift_code, (string) $attendance->personnel_source_key)] ?? [],
             sid: (string) $attendance->personnel_source_key,
+            replacement: $replacement,
         );
     }
 
     /**
      * @param  list<array<string, mixed>>  $checkinout
-     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string, checkinout: list<array<string, mixed>>, sid: string}
+     * @return array{name: string, short_name: string, initial: string, planned: bool, status: string, jabatan: string, lokasi: string, catatan: string, checkinout: list<array<string, mixed>>, sid: string, replacement: string}
      */
-    private function personPayload(string $name, bool $planned, string $status, string $catatan, array $checkinout = [], string $sid = ''): array
-    {
+    private function personPayload(
+        string $name,
+        bool $planned,
+        string $status,
+        string $catatan,
+        array $checkinout = [],
+        string $sid = '',
+        string $replacement = '',
+    ): array {
         $parts = preg_split('/\s+/', $name) ?: [$name];
 
         return [
@@ -260,6 +286,7 @@ final class DashboardScheduleWeekAssembler
             'catatan' => $catatan,
             'checkinout' => $checkinout,
             'sid' => strtoupper(trim($sid)),
+            'replacement' => $replacement,
         ];
     }
 
@@ -292,6 +319,65 @@ final class DashboardScheduleWeekAssembler
         }
 
         return $attendance->status === Attendance::STATUS_SESUAI_JADWAL ? '-' : '—';
+    }
+
+    /**
+     * @param  Collection<int, SchedulePlan>  $plans
+     * @return array<int, array{from: string, to: string, summary: string}>
+     */
+    private function replacementsByPlanId(Collection $plans): array
+    {
+        $ids = $plans->pluck('id')->filter()->map(fn (mixed $id): int => (int) $id)->all();
+        if ($ids === []) {
+            return [];
+        }
+
+        $changes = ScheduleChange::query()
+            ->with('changedBy:id,name')
+            ->whereIn('schedule_plan_id', $ids)
+            ->whereIn('field', ['personnel_source_key', 'personnel_name_snapshot'])
+            ->orderBy('changed_at')
+            ->get()
+            ->groupBy('schedule_plan_id');
+
+        $index = [];
+        foreach ($changes as $planId => $rows) {
+            $timeline = $this->changePresenter->timeline($rows);
+            $latest = $timeline[0] ?? null;
+            if ($latest === null || ($latest['from'] === '—' && $latest['to'] === '—')) {
+                continue;
+            }
+
+            $index[(int) $planId] = [
+                'from' => $latest['from'],
+                'to' => $latest['to'],
+                'summary' => $latest['summary'],
+            ];
+        }
+
+        return $index;
+    }
+
+    /**
+     * @param  array<int, array{from: string, to: string, summary: string}>  $replacementsByPlanId
+     * @param  array<string, string>  $replacedNames
+     */
+    private function replacementSummary(
+        mixed $planId,
+        ?Attendance $attendance,
+        array $replacementsByPlanId,
+        array $replacedNames,
+    ): string {
+        $id = (int) $planId;
+        if ($id > 0 && isset($replacementsByPlanId[$id]['summary'])) {
+            return (string) $replacementsByPlanId[$id]['summary'];
+        }
+
+        if ($attendance instanceof Attendance && $attendance->status === Attendance::STATUS_MENGGANTIKAN) {
+            return $this->catatanFromAttendance($attendance, $replacedNames);
+        }
+
+        return '';
     }
 
     private function slotKey(mixed $date, mixed $shift, string $sourceKey): string
