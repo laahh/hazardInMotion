@@ -7,183 +7,201 @@
 @endphp
 
 @section('content')
-    <main class="ocr-gf">
+    <div class="wrap">
+        <div class="hero">
+            <div class="hero-top"></div>
+            <div class="hero-body">
+                <span class="badge">
+                    <span class="material-symbols-outlined" style="font-size:15px">badge</span>
+                    Control Room
+                </span>
+                <h1>Absensi Jaga Control Room</h1>
+                <p class="lead">Isi SID Anda. Tanggal terisi otomatis dari jadwal jaga. Lampirkan bukti (unggah file atau foto langsung).</p>
+                <span class="period-pill">
+                    <span class="material-symbols-outlined" style="font-size:16px">calendar_today</span>
+                    {{ $dutyDateLabel }}
+                </span>
+            </div>
+        </div>
+
+        <div class="steps" aria-hidden="true">
+            <div class="step-dot is-active" id="step-dot-1"></div>
+            <div class="step-dot" id="step-dot-2"></div>
+            <div class="step-dot" id="step-dot-3"></div>
+        </div>
+
+        @if (session('success'))
+            <div class="alert alert-ok" role="status">
+                <strong>Absensi tercatat</strong>
+                <p>{{ session('success') }}</p>
+            </div>
+        @endif
+
+        @if ($errors->any())
+            <div class="alert alert-error" role="alert" tabindex="-1" id="ocr-gf-error-summary">
+                <strong>Periksa kembali:</strong>
+                <ul>
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
         <form
-            class="ocr-gf-form"
+            id="ocr-absensi-form"
             method="POST"
             action="{{ route('control-room.attendance.form.store') }}"
             enctype="multipart/form-data"
-            id="ocr-absensi-form"
             novalidate
         >
             @csrf
             <input type="hidden" name="tanggal" id="tanggal" value="{{ old('tanggal', $defaultTanggal) }}">
+            <input type="hidden" id="nama" name="nama" value="{{ old('nama') }}">
 
-            <section class="ocr-gf-card ocr-gf-card--title" aria-labelledby="ocr-gf-title">
-                <p class="ocr-gf-kicker">Control Room · Pengawasan OCR</p>
-                <h1 id="ocr-gf-title">Absensi jaga</h1>
-                <p class="ocr-gf-desc">Isi SID. Tanggal terisi otomatis dari jadwal jaga. Unggah file atau ambil foto sebagai bukti.</p>
+            <section class="card" id="section-sid">
+                <h2 class="card-title"><span class="num">1</span> Cari SID Anda</h2>
+                <div class="field" style="margin-bottom:0">
+                    <label for="sid">Nomor SID <span class="req">*</span></label>
+                    <div class="row">
+                        <input
+                            class="input input-mono{{ $errors->has('sid') ? ' is-invalid' : '' }}"
+                            type="text"
+                            id="sid"
+                            name="sid"
+                            value="{{ old('sid') }}"
+                            placeholder="Contoh: C5BXK"
+                            required
+                            maxlength="100"
+                            autocomplete="off"
+                            autocapitalize="characters"
+                            spellcheck="false"
+                        >
+                        <button type="button" class="btn btn-secondary" id="btn-lookup" style="white-space:nowrap">
+                            <span class="material-symbols-outlined">search</span>
+                            Cari
+                        </button>
+                    </div>
+                    <p class="hint">Ketik SID persis seperti di kartu identitas, lalu tekan <strong>Cari</strong>.</p>
+                    <p id="sid-status" class="hint" style="margin-top:.5rem" role="status" aria-live="polite"></p>
+                    @error('sid')
+                        <p class="hint" style="color:var(--danger)">{{ $message }}</p>
+                    @enderror
+                </div>
+                <div id="sid-preview" class="preview">
+                    <div class="preview-grid">
+                        <div><span>Nama</span><strong id="pv-nama">—</strong></div>
+                        <div><span>Tanggal jaga</span><strong id="tanggal-display">{{ $dutyDateLabel }}</strong></div>
+                        <div><span>Shift</span><strong id="shift-display">{{ $currentShift->label() }}</strong></div>
+                        <div><span>Status</span><strong id="pv-status">Menunggu SID</strong></div>
+                    </div>
+                </div>
             </section>
 
-            @if (session('success'))
-                <div class="ocr-gf-card ocr-gf-banner is-success" role="status">
-                    <strong>Absensi tercatat</strong>
-                    <p>{{ session('success') }}</p>
-                </div>
-            @endif
-
-            @if ($errors->any())
-                <div class="ocr-gf-card ocr-gf-banner is-error" role="alert" tabindex="-1" id="ocr-gf-error-summary">
-                    <strong>Absensi belum dapat diproses</strong>
-                    <ul>
-                        @foreach ($errors->keys() as $key)
-                            <li><a href="#{{ $key }}">{{ $errors->first($key) }}</a></li>
-                        @endforeach
-                    </ul>
-                </div>
-            @endif
-
-            <div class="ocr-gf-card ocr-gf-banner is-block" id="ocr-not-scheduled" role="alert" hidden>
+            <div class="alert alert-error" id="ocr-not-scheduled" role="alert" hidden>
                 <strong>Tidak dapat absen</strong>
                 <p id="ocr-not-scheduled-text">Anda tidak dijadwalkan hari ini jadi tidak bisa absen. Jika ada perubahan, hubungi admin.</p>
             </div>
 
-            <section class="ocr-gf-card{{ $errors->has('sid') ? ' is-invalid' : '' }}">
-                <label class="ocr-gf-question" for="sid">
-                    SID <span class="ocr-gf-req" aria-hidden="true">*</span>
-                </label>
-                <p class="ocr-gf-help" id="sid-help">Ketik kode SID. Nama dan jadwal akan dicek otomatis.</p>
-                <input
-                    id="sid"
-                    name="sid"
-                    type="text"
-                    inputmode="text"
-                    autocomplete="off"
-                    autocapitalize="characters"
-                    spellcheck="false"
-                    value="{{ old('sid') }}"
-                    class="ocr-gf-input{{ $errors->has('sid') ? ' is-invalid' : '' }}"
-                    placeholder="Contoh: C5BXK"
-                    required
-                    aria-required="true"
-                    aria-describedby="sid-help{{ $errors->has('sid') ? ' sid-error' : '' }}"
-                >
-                @error('sid')
-                    <p class="ocr-gf-error" id="sid-error"><i class="ri-error-warning-fill" aria-hidden="true"></i> {{ $message }}</p>
-                @enderror
-                <p class="ocr-gf-status" id="sid-status" role="status" aria-live="polite"></p>
+            <section class="card" id="section-jadwal">
+                <h2 class="card-title"><span class="num">2</span> Jadwal jaga</h2>
+                <div class="alert alert-info" style="margin:0">
+                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-4px">event_available</span>
+                    Tanggal diisi otomatis dari roster Control Room. Hanya personil di daftar bawah yang dapat absen.
+                </div>
             </section>
 
-            <section class="ocr-gf-card" id="ocr-gf-nama-card">
-                <label class="ocr-gf-question" for="nama">Nama</label>
-                <p class="ocr-gf-help" id="nama-help">Terisi otomatis setelah SID dikenali.</p>
-                <input
-                    id="nama"
-                    name="nama"
-                    type="text"
-                    value="{{ old('nama') }}"
-                    class="ocr-gf-input"
-                    placeholder="Menunggu SID..."
-                    readonly
-                    tabindex="-1"
-                    aria-readonly="true"
-                    aria-describedby="nama-help"
-                >
-            </section>
-
-            <section class="ocr-gf-card{{ $errors->has('tanggal') ? ' is-invalid' : '' }}">
-                <p class="ocr-gf-question" id="tanggal-label">
-                    Tanggal jaga <span class="ocr-gf-req" aria-hidden="true">*</span>
-                </p>
-                <p class="ocr-gf-help" id="tanggal-help">Diisi otomatis sesuai jadwal Control Room yang berjalan.</p>
-                <p class="ocr-gf-value" id="tanggal-display" aria-labelledby="tanggal-label" aria-describedby="tanggal-help">{{ $dutyDateLabel }}</p>
-                <p class="ocr-gf-shift" id="shift-display">Shift berjalan: {{ $currentShift->label() }}</p>
-                @error('tanggal')
-                    <p class="ocr-gf-error" id="tanggal-error"><i class="ri-error-warning-fill" aria-hidden="true"></i> {{ $message }}</p>
-                @enderror
-            </section>
-
-            <section class="ocr-gf-card{{ $errors->has('bukti') ? ' is-invalid' : '' }}" id="ocr-bukti-card">
-                <p class="ocr-gf-question" id="bukti-label">
-                    Bukti <span class="ocr-gf-req" aria-hidden="true">*</span>
-                </p>
-                <p class="ocr-gf-help" id="bukti-help">Unggah file atau ambil foto langsung. JPG, PNG, WEBP, atau PDF — maksimal 5 MB.</p>
-
-                <div class="ocr-gf-bukti-actions">
-                    <button type="button" class="ocr-gf-btn ocr-gf-btn--ghost" id="ocr-bukti-upload" aria-describedby="bukti-help">
-                        <i class="ri-upload-2-line" aria-hidden="true"></i> Unggah file
-                    </button>
-                    <button type="button" class="ocr-gf-btn ocr-gf-btn--ghost" id="ocr-bukti-camera">
-                        <i class="ri-camera-line" aria-hidden="true"></i> Ambil foto
-                    </button>
+            <section class="card" id="section-bukti">
+                <h2 class="card-title"><span class="num">3</span> Upload Bukti (Evidence)</h2>
+                <div class="alert alert-info" style="margin-top:0">
+                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-4px">info</span>
+                    Bisa unggah file atau ambil foto langsung. JPG, PNG, WEBP, atau PDF. Maksimal <strong>5 MB</strong>.
                 </div>
 
                 <input
+                    type="file"
                     id="bukti"
                     name="bukti"
-                    type="file"
                     accept="image/jpeg,image/png,image/webp,application/pdf"
+                    class="sr-only"
                     required
-                    aria-required="true"
-                    aria-labelledby="bukti-label"
-                    aria-describedby="bukti-help{{ $errors->has('bukti') ? ' bukti-error' : '' }}"
-                    hidden
                 >
                 <input
                     id="bukti-camera-fallback"
                     type="file"
                     accept="image/*"
                     capture="environment"
-                    hidden
+                    class="sr-only"
                     tabindex="-1"
                 >
 
-                <p class="ocr-gf-file-name" id="ocr-absensi-file-label">Belum ada bukti</p>
-                <img id="ocr-absensi-preview" class="ocr-gf-preview" alt="Pratinjau bukti" hidden>
+                <div class="dropzone is-disabled" id="dropzone" role="button" tabindex="0">
+                    <div class="dropzone-icon material-symbols-outlined">cloud_upload</div>
+                    <p class="dropzone-title">Ketuk untuk pilih file</p>
+                    <p class="dropzone-sub">atau seret &amp; lepas file ke sini</p>
+                    <p class="file-name" id="ocr-absensi-file-label"></p>
+                </div>
+                <img id="ocr-absensi-preview" class="preview-image" alt="Pratinjau bukti" hidden>
 
-                <div class="ocr-gf-camera" id="ocr-camera-panel" hidden>
+                <div class="btn-row">
+                    <button type="button" class="btn btn-secondary" id="ocr-bukti-camera" disabled>
+                        <span class="material-symbols-outlined">photo_camera</span>
+                        Ambil foto
+                    </button>
+                </div>
+
+                <div class="camera-panel" id="ocr-camera-panel" hidden>
                     <video id="ocr-camera-video" autoplay playsinline muted></video>
-                    <div class="ocr-gf-camera-bar">
-                        <button type="button" class="ocr-gf-btn ocr-gf-btn--solid" id="ocr-camera-shot">Ambil</button>
-                        <button type="button" class="ocr-gf-btn ocr-gf-btn--ghost" id="ocr-camera-cancel">Batal</button>
+                    <div class="camera-bar">
+                        <button type="button" class="btn btn-primary" id="ocr-camera-shot">Ambil</button>
+                        <button type="button" class="btn btn-secondary" id="ocr-camera-cancel">Batal</button>
                     </div>
-                    <p class="ocr-gf-help" id="ocr-camera-status" role="status"></p>
+                    <p class="camera-status" id="ocr-camera-status" role="status"></p>
                 </div>
                 <canvas id="ocr-camera-canvas" hidden></canvas>
-
                 @error('bukti')
-                    <p class="ocr-gf-error" id="bukti-error"><i class="ri-error-warning-fill" aria-hidden="true"></i> {{ $message }}</p>
+                    <p class="hint" style="color:var(--danger)">{{ $message }}</p>
                 @enderror
-            </section>
 
-            <div class="ocr-gf-actions">
-                <button type="submit" class="ocr-gf-submit" id="ocr-absensi-submit" disabled>Kirim absensi</button>
-                <button type="reset" class="ocr-gf-clear" id="ocr-absensi-clear">Hapus formulir</button>
-            </div>
+                <button type="submit" class="btn btn-primary btn-block" id="ocr-absensi-submit" disabled style="margin-top:1rem">
+                    <span class="material-symbols-outlined">send</span>
+                    Kirim absensi
+                </button>
+                <button type="reset" class="btn btn-secondary btn-block" id="ocr-absensi-clear" style="margin-top:.65rem">
+                    Hapus formulir
+                </button>
+            </section>
         </form>
 
-        <aside class="ocr-gf-card ocr-gf-roster" aria-labelledby="ocr-roster-title">
-            <p class="ocr-gf-kicker">Hari ini</p>
-            <h2 id="ocr-roster-title">Personil jaga Control Room</h2>
-            <p class="ocr-gf-help">{{ $dutyDateLabel }} · hanya nama di daftar ini yang dapat absen.</p>
+        <aside class="card" aria-labelledby="ocr-roster-title">
+            <h2 class="card-title" id="ocr-roster-title">
+                <span class="material-symbols-outlined" style="color:var(--brand)">groups</span>
+                Personil jaga hari ini
+            </h2>
+            <p class="hint" style="margin-top:-.35rem">{{ $dutyDateLabel }} · hanya nama di daftar ini yang dapat absen.</p>
 
             @forelse ($rosterByShift as $shiftCode => $people)
-                <div class="ocr-gf-roster-group">
+                <div class="roster-group">
                     <h3>{{ $people->first()->shift_code->label() }}</h3>
                     <ul>
                         @foreach ($people as $plan)
                             <li>
-                                <span class="ocr-gf-roster-name">{{ $plan->personnel_name_snapshot }}</span>
-                                <span class="ocr-gf-roster-sid">{{ $plan->personnel_source_key }}</span>
+                                <span class="roster-name">{{ $plan->personnel_name_snapshot }}</span>
+                                <span class="roster-sid">{{ $plan->personnel_source_key }}</span>
                             </li>
                         @endforeach
                     </ul>
                 </div>
             @empty
-                <p class="ocr-gf-empty">Belum ada jadwal Control Room untuk hari ini.</p>
+                <p class="hint" style="margin-top:1rem">Belum ada jadwal Control Room untuk hari ini.</p>
             @endforelse
         </aside>
-    </main>
+
+        <p class="footer-note">
+            PT Berau Coal · Control Room (Pengawasan OCR)<br>
+            Form ini hanya untuk personil yang dijadwalkan jaga hari ini.
+        </p>
+    </div>
 @endsection
 
 @push('scripts')
@@ -192,8 +210,10 @@
             var form = document.getElementById('ocr-absensi-form');
             var submit = document.getElementById('ocr-absensi-submit');
             var clearBtn = document.getElementById('ocr-absensi-clear');
+            var lookupBtn = document.getElementById('btn-lookup');
             var defaultDate = @json($defaultTanggal);
             var defaultDateLabel = @json($dutyDateLabel);
+            var defaultShiftLabel = @json($currentShift->label());
             var lookupUrl = @json($lookupUrl);
             var notScheduledMessage = @json(\App\Services\ControlRoom\ControlRoomDutyRosterService::NOT_SCHEDULED_MESSAGE);
             var sidInput = document.getElementById('sid');
@@ -202,11 +222,14 @@
             var tanggalInput = document.getElementById('tanggal');
             var tanggalDisplay = document.getElementById('tanggal-display');
             var shiftDisplay = document.getElementById('shift-display');
+            var pvNama = document.getElementById('pv-nama');
+            var pvStatus = document.getElementById('pv-status');
+            var sidPreview = document.getElementById('sid-preview');
             var notScheduled = document.getElementById('ocr-not-scheduled');
             var notScheduledText = document.getElementById('ocr-not-scheduled-text');
             var fileInput = document.getElementById('bukti');
             var cameraFallback = document.getElementById('bukti-camera-fallback');
-            var uploadBtn = document.getElementById('ocr-bukti-upload');
+            var dropzone = document.getElementById('dropzone');
             var cameraBtn = document.getElementById('ocr-bukti-camera');
             var fileLabel = document.getElementById('ocr-absensi-file-label');
             var preview = document.getElementById('ocr-absensi-preview');
@@ -216,35 +239,59 @@
             var cameraCancel = document.getElementById('ocr-camera-cancel');
             var cameraStatus = document.getElementById('ocr-camera-status');
             var cameraCanvas = document.getElementById('ocr-camera-canvas');
+            var step1 = document.getElementById('step-dot-1');
+            var step2 = document.getElementById('step-dot-2');
+            var step3 = document.getElementById('step-dot-3');
             var lookupTimer = null;
             var lookupSeq = 0;
             var scheduled = false;
             var cameraStream = null;
 
-            function setStatus(text, tone) {
+            function setStatus(text, color) {
                 sidStatus.textContent = text || '';
-                sidStatus.className = 'ocr-gf-status' + (tone ? ' ' + tone : '');
+                sidStatus.style.color = color || '#64748b';
+            }
+
+            function setSteps(level) {
+                [step1, step2, step3].forEach(function (dot, i) {
+                    dot.classList.toggle('is-done', i < level);
+                    dot.classList.toggle('is-active', i === level);
+                });
             }
 
             function setScheduled(ok, message) {
                 scheduled = !!ok;
                 submit.disabled = !scheduled;
+                submit.style.opacity = scheduled ? '' : '0.55';
+                submit.style.cursor = scheduled ? '' : 'not-allowed';
+                cameraBtn.disabled = !scheduled;
+                dropzone.classList.toggle('is-disabled', !scheduled);
                 notScheduled.hidden = scheduled || !message;
                 if (!scheduled && message) {
                     notScheduledText.textContent = message;
                 }
-                uploadBtn.disabled = !scheduled;
-                cameraBtn.disabled = !scheduled;
+                if (ok) {
+                    setSteps(2);
+                } else if ((sidInput.value || '').trim().length >= 2) {
+                    setSteps(0);
+                    step1.classList.add('is-active');
+                } else {
+                    setSteps(0);
+                }
             }
 
             function resetDutyDisplay() {
                 tanggalInput.value = defaultDate;
                 tanggalDisplay.textContent = defaultDateLabel;
-                shiftDisplay.textContent = 'Shift berjalan: {{ $currentShift->label() }}';
+                shiftDisplay.textContent = defaultShiftLabel;
+                pvNama.textContent = '—';
+                pvStatus.textContent = 'Menunggu SID';
+                sidPreview.classList.remove('is-visible');
             }
 
             function resetPreview() {
-                fileLabel.textContent = 'Belum ada bukti';
+                fileLabel.textContent = '';
+                dropzone.classList.remove('has-file');
                 preview.hidden = true;
                 preview.removeAttribute('src');
             }
@@ -252,6 +299,10 @@
             function assignFile(file, label) {
                 if (!file) {
                     resetPreview();
+                    return;
+                }
+                if (file.size > 5 * 1024 * 1024) {
+                    alert('Ukuran file terlalu besar. Maksimal 5 MB.');
                     return;
                 }
                 fileInput.setAttribute('name', 'bukti');
@@ -266,7 +317,10 @@
                         cameraFallback.setAttribute('name', 'bukti');
                     }
                 }
-                fileLabel.textContent = label || file.name;
+                fileLabel.textContent = '✓ ' + (label || file.name);
+                dropzone.classList.add('has-file');
+                setSteps(2);
+                step3.classList.add('is-active');
                 if (file.type.indexOf('image/') === 0) {
                     preview.src = URL.createObjectURL(file);
                     preview.hidden = false;
@@ -287,6 +341,9 @@
             }
 
             function startCamera() {
+                if (!scheduled) {
+                    return;
+                }
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                     cameraFallback.click();
                     return;
@@ -314,19 +371,21 @@
                     namaInput.value = '';
                     setScheduled(false, '');
                     resetDutyDisplay();
-                    setStatus(sid.length ? 'Lanjutkan mengetik SID...' : '', sid.length ? 'is-wait' : '');
+                    setStatus(sid.length ? 'Lanjutkan mengetik SID…' : '', '#64748b');
                     return;
                 }
 
                 var seq = ++lookupSeq;
-                setStatus('Mengecek jadwal...', 'is-wait');
+                lookupBtn.disabled = true;
+                setStatus('Mencari data…', '#64748b');
 
                 fetch(lookupUrl + '?sid=' + encodeURIComponent(sid), {
-                    headers: { Accept: 'application/json' },
+                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                     credentials: 'same-origin',
                 })
                     .then(function (res) { return res.json(); })
                     .then(function (data) {
+                        lookupBtn.disabled = false;
                         if (seq !== lookupSeq) {
                             return;
                         }
@@ -334,63 +393,91 @@
                             namaInput.value = '';
                             setScheduled(false, '');
                             resetDutyDisplay();
-                            setStatus('SID tidak ditemukan atau personil tidak aktif.', 'is-miss');
+                            setStatus('SID tidak ditemukan atau personil tidak aktif.', '#dc2626');
                             return;
                         }
 
                         namaInput.value = data.name || '';
+                        pvNama.textContent = data.name || '—';
                         if (data.tanggal) {
                             tanggalInput.value = data.tanggal;
                         }
                         if (data.tanggalLabel) {
                             tanggalDisplay.textContent = data.tanggalLabel;
                         }
-                        if (data.shiftLabel) {
-                            shiftDisplay.textContent = data.shiftLabel;
-                        } else {
-                            resetDutyDisplay();
-                        }
+                        shiftDisplay.textContent = data.shiftLabel || defaultShiftLabel;
+                        sidPreview.classList.add('is-visible');
+                        step1.classList.add('is-done');
+                        step2.classList.add('is-active');
 
                         if (data.scheduled) {
+                            pvStatus.textContent = 'Dijadwalkan';
                             setScheduled(true, '');
-                            setStatus(data.message || 'Jadwal jaga dikenali.', 'is-ok');
+                            setStatus(data.message || 'Jadwal jaga dikenali.', '#059669');
                             return;
                         }
 
+                        pvStatus.textContent = 'Tidak dijadwalkan';
                         setScheduled(false, data.message || notScheduledMessage);
-                        setStatus(data.message || notScheduledMessage, 'is-miss');
+                        setStatus(data.message || notScheduledMessage, '#dc2626');
                     })
                     .catch(function () {
+                        lookupBtn.disabled = false;
                         if (seq !== lookupSeq) {
                             return;
                         }
                         namaInput.value = '';
                         setScheduled(false, '');
-                        setStatus('Gagal mencari nama. Coba lagi.', 'is-miss');
+                        setStatus('Koneksi gagal. Periksa internet lalu coba lagi.', '#dc2626');
                     });
             }
 
+            lookupBtn.addEventListener('click', lookupSid);
+            sidInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    lookupSid();
+                }
+            });
             sidInput.addEventListener('input', function () {
                 window.clearTimeout(lookupTimer);
-                lookupTimer = window.setTimeout(lookupSid, 400);
-            });
-            sidInput.addEventListener('blur', function () {
-                window.clearTimeout(lookupTimer);
-                lookupSid();
+                lookupTimer = window.setTimeout(lookupSid, 450);
             });
 
-            uploadBtn.addEventListener('click', function () {
-                if (uploadBtn.disabled) {
+            dropzone.addEventListener('click', function () {
+                if (!scheduled) {
                     return;
                 }
                 fileInput.click();
             });
-            cameraBtn.addEventListener('click', function () {
-                if (cameraBtn.disabled) {
+            dropzone.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    if (scheduled) {
+                        fileInput.click();
+                    }
+                }
+            });
+            dropzone.addEventListener('dragover', function (e) {
+                if (!scheduled) {
                     return;
                 }
-                startCamera();
+                e.preventDefault();
+                dropzone.classList.add('is-dragover');
             });
+            dropzone.addEventListener('dragleave', function () {
+                dropzone.classList.remove('is-dragover');
+            });
+            dropzone.addEventListener('drop', function (e) {
+                e.preventDefault();
+                dropzone.classList.remove('is-dragover');
+                if (!scheduled || !e.dataTransfer.files.length) {
+                    return;
+                }
+                assignFile(e.dataTransfer.files[0]);
+            });
+
+            cameraBtn.addEventListener('click', startCamera);
             cameraCancel.addEventListener('click', stopCamera);
             cameraShot.addEventListener('click', function () {
                 if (!cameraStream) {
@@ -406,15 +493,13 @@
                         cameraStatus.textContent = 'Gagal mengambil foto. Coba unggah file.';
                         return;
                     }
-                    var file = new File([blob], 'bukti-kamera.jpg', { type: 'image/jpeg' });
-                    assignFile(file, 'Foto kamera');
+                    assignFile(new File([blob], 'bukti-kamera.jpg', { type: 'image/jpeg' }), 'Foto kamera');
                     stopCamera();
                 }, 'image/jpeg', 0.86);
             });
 
             fileInput.addEventListener('change', function () {
-                var file = fileInput.files && fileInput.files[0];
-                assignFile(file);
+                assignFile(fileInput.files && fileInput.files[0]);
             });
             cameraFallback.addEventListener('change', function () {
                 var file = cameraFallback.files && cameraFallback.files[0];
@@ -429,24 +514,26 @@
                 }
                 if (!(fileInput.files && fileInput.files[0]) && !(cameraFallback.files && cameraFallback.files[0])) {
                     e.preventDefault();
-                    fileLabel.textContent = 'Bukti wajib diunggah atau diambil lewat kamera.';
+                    fileLabel.textContent = 'Pilih file bukti atau ambil foto terlebih dahulu.';
+                    fileLabel.style.color = '#dc2626';
                     return;
                 }
                 submit.disabled = true;
-                submit.textContent = 'Mengirim...';
+                submit.innerHTML = '<span class="material-symbols-outlined">hourglass_top</span> Mengirim…';
             });
 
             clearBtn.addEventListener('click', function () {
                 window.setTimeout(function () {
                     namaInput.value = '';
-                    setStatus('', '');
+                    setStatus('', '#64748b');
                     resetDutyDisplay();
                     resetPreview();
                     stopCamera();
                     setScheduled(false, '');
-                    submit.textContent = 'Kirim absensi';
+                    submit.innerHTML = '<span class="material-symbols-outlined">send</span> Kirim absensi';
                     fileInput.value = '';
                     cameraFallback.value = '';
+                    fileLabel.style.color = '';
                 }, 0);
             });
 
