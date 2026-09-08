@@ -16,6 +16,9 @@ final class ControlRoomSiteCodeTest extends TestCase
         $this->assertSame(ControlRoomSiteCode::Smo, ControlRoomSiteCode::fromDedicated('SMO'));
         $this->assertSame(ControlRoomSiteCode::HeadOffice, ControlRoomSiteCode::fromDedicated('HO'));
         $this->assertSame(ControlRoomSiteCode::HeadOffice, ControlRoomSiteCode::fromDedicated(null));
-        $this->assertSame(ControlRoomSiteCode::HeadOffice, ControlRoomSiteCode::fromDedicated('UNKNOWN'));
+        $this->assertSame(ControlRoomSiteCode::Bmo1, ControlRoomSiteCode::fromRequest('BMO1'));
+        $this->assertSame(ControlRoomSiteCode::Bmo1, ControlRoomSiteCode::fromRequest('BMO 1'));
+        $this->assertSame(ControlRoomSiteCode::HeadOffice, ControlRoomSiteCode::fromRequest(''));
+        $this->assertSame(ControlRoomSiteCode::HeadOffice, ControlRoomSiteCode::fromRequest(null));
     }
 }

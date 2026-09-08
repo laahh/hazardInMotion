@@ -33,6 +33,24 @@ enum ControlRoomSiteCode: string
     }
 
     /**
+     * Petakan nilai site dari query string / form ke enum modul.
+     */
+    public static function fromRequest(?string $value): self
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return self::HeadOffice;
+        }
+
+        $matched = self::tryFrom($value);
+        if ($matched instanceof self) {
+            return $matched;
+        }
+
+        return self::fromDedicated($value);
+    }
+
+    /**
      * Petakan nilai site_dedicated personil (mis. "BMO 1", "HO") ke enum modul.
      */
     public static function fromDedicated(?string $dedicated): self

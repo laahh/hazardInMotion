@@ -41,7 +41,7 @@ final class ScheduleController extends Controller
 
     public function index(Request $request): View
     {
-        $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
+        $site = ControlRoomSiteCode::fromRequest($request->string('site')->toString());
 
         return view('control-room.schedule.index', [
             'site' => $site,
@@ -116,14 +116,15 @@ final class ScheduleController extends Controller
      */
     public function events(Request $request): JsonResponse
     {
-        $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
-        $start = CarbonImmutable::parse($request->string('start')->toString());
+        $site = ControlRoomSiteCode::fromRequest($request->string('site')->toString());
+        $start = CarbonImmutable::parse($request->string('start')->toString())->startOfDay();
         $end = CarbonImmutable::parse($request->string('end')->toString());
 
         $events = SchedulePlan::query()
             ->withCount('changes')
             ->where('site_code', $site->value)
-            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->where('date', '>=', $start->toDateString())
+            ->where('date', '<', $end->toDateString())
             ->orderBy('shift_code')
             ->get()
             ->map(function (SchedulePlan $plan): array {
@@ -144,6 +145,7 @@ final class ScheduleController extends Controller
                     'classNames' => $classes,
                     'extendedProps' => [
                         'scheduleId' => $plan->id,
+                        'site' => $plan->site_code->value,
                         'locked' => $plan->isLocked(),
                         'personnel' => $plan->personnel_name_snapshot,
                         'personnelSourceKey' => $plan->personnel_source_key,

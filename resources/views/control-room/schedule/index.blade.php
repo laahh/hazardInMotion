@@ -11,9 +11,9 @@
         <div class="card-body">
             <div class="row g-2 align-items-end">
                 <div class="col-md-4">
-                    <form method="GET" id="site-filter-form">
-                        <label class="form-label text-sm mb-1">Site</label>
-                        <select name="site" class="form-control" onchange="this.form.submit()">
+                    <form method="GET" id="site-filter-form" action="{{ route('control-room.schedule.index') }}">
+                        <label class="form-label text-sm mb-1" for="ocr-page-site">Site kalender</label>
+                        <select name="site" id="ocr-page-site" class="form-control" onchange="this.form.submit()">
                             @foreach ($sites as $siteOption)
                                 <option value="{{ $siteOption->value }}" @selected($site === $siteOption)>{{ $siteOption->label() }}</option>
                             @endforeach
@@ -83,6 +83,20 @@
     </div>
 
     <div class="card shadow-none border mb-24">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div>
+                <h6 class="mb-0">Kalender Jadwal — {{ $site->label() }}</h6>
+                <p class="text-secondary-light text-xs mb-0">Hanya menampilkan jadwal site <strong>{{ $site->value }}</strong>. Ganti site di filter atas atau di sini.</p>
+            </div>
+            <div style="min-width: 220px;">
+                <label class="form-label text-sm mb-1" for="ocr-calendar-site">Filter site</label>
+                <select id="ocr-calendar-site" class="form-control form-control-sm" aria-label="Filter kalender berdasarkan site">
+                    @foreach ($sites as $siteOption)
+                        <option value="{{ $siteOption->value }}" @selected($site === $siteOption)>{{ $siteOption->label() }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
         <div class="card-body">
             <div id="schedule-calendar"></div>
         </div>
@@ -336,6 +350,7 @@
             var siteCode = @json($site->value);
             var eventsUrl = @json(route('control-room.schedule.events'));
             var csrfToken = @json(csrf_token());
+            var scheduleIndexUrl = @json(route('control-room.schedule.index'));
 
             var editModalEl = document.getElementById('editScheduleModal');
             var editModal = new bootstrap.Modal(editModalEl);
@@ -577,6 +592,19 @@
             });
 
             calendar.render();
+
+            var calendarSite = document.getElementById('ocr-calendar-site');
+            if (calendarSite) {
+                calendarSite.addEventListener('change', function () {
+                    var next = calendarSite.value;
+                    if (!next || next === siteCode) {
+                        return;
+                    }
+                    var url = new URL(scheduleIndexUrl, window.location.origin);
+                    url.searchParams.set('site', next);
+                    window.location.assign(url.toString());
+                });
+            }
         })();
     </script>
 @endpush
