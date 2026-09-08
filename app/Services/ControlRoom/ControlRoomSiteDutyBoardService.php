@@ -16,6 +16,9 @@ use Carbon\CarbonInterface;
  */
 final class ControlRoomSiteDutyBoardService
 {
+    /** Site yang tampil di papan dashboard — tanpa Marine, Eksplorasi, Jakarta. */
+    public const BOARD_SITE_CODES = ['HO', 'BMO1', 'BMO2', 'BMO3', 'GMO', 'LMO', 'PMO', 'SMO'];
+
     public function __construct(
         private readonly ControlRoomDutyRosterService $dutyRoster,
     ) {}
@@ -52,12 +55,43 @@ final class ControlRoomSiteDutyBoardService
             ->get()
             ->groupBy(fn (Attendance $row): string => $row->site_code->value);
 
+        $from = $dutyDate->subDays(6);
+        $trendRows = Attendance::query()
+            ->selectRaw('site_code, date, count(*) as n')
+            ->whereBetween('date', [$from->toDateString(), $date])
+            ->whereIn('status', [Attendance::STATUS_SESUAI_JADWAL, Attendance::STATUS_MENGGANTIKAN])
+            ->whereNotNull('checked_in_at')
+            ->groupBy('site_code', 'date')
+            ->get();
+
+        $trendBySite = [];
+        foreach ($trendRows as $row) {
+            $siteKey = $row->site_code instanceof ControlRoomSiteCode
+                ? $row->site_code->value
+                : (string) $row->site_code;
+            $day = $row->date instanceof CarbonInterface
+                ? $row->date->toDateString()
+                : (string) $row->date;
+            $trendBySite[$siteKey][$day] = (int) $row->n;
+        }
+
         $cards = [];
         foreach (ControlRoomSiteCode::cases() as $site) {
+            if (! in_array($site->value, self::BOARD_SITE_CODES, true)) {
+                continue;
+            }
+
+            $trend = [];
+            for ($i = 6; $i >= 0; $i--) {
+                $day = $dutyDate->subDays($i)->toDateString();
+                $trend[] = $trendBySite[$site->value][$day] ?? 0;
+            }
+
             $cards[] = $this->composeCard(
                 $site,
                 $plans->get($site->value, collect()),
                 $attendances->get($site->value, collect()),
+                $trend,
             );
         }
 
@@ -114,11 +148,13 @@ final class ControlRoomSiteDutyBoardService
     /**
      * @param  \Illuminate\Support\Collection<int, SchedulePlan>  $plans
      * @param  \Illuminate\Support\Collection<int, Attendance>  $attendances
+     * @param  list<int>  $trend
      * @return array<string, mixed>
      */
-    public function composeCard(ControlRoomSiteCode $site, $plans, $attendances): array
+    public function composeCard(ControlRoomSiteCode $site, $plans, $attendances, array $trend = []): array
     {
         $state = $this->resolveState($plans->isNotEmpty(), $attendances->isNotEmpty());
+        $spark = $this->sparkline($trend === [] ? [0, 0, 0, 0, 0, 0, 0] : $trend);
 
         return [
             'site' => $site->value,
@@ -127,6 +163,8 @@ final class ControlRoomSiteDutyBoardService
             'state' => $state['state'],
             'hasSchedule' => $state['hasSchedule'],
             'hasDuty' => $state['hasDuty'],
+            'scheduledCount' => $plans->count(),
+            'presentCount' => $attendances->count(),
             'scheduled' => $plans->map(fn (SchedulePlan $plan): array => [
                 'sid' => strtoupper((string) $plan->personnel_source_key),
                 'name' => (string) $plan->personnel_name_snapshot,
@@ -135,6 +173,35 @@ final class ControlRoomSiteDutyBoardService
                 'sid' => strtoupper((string) $row->personnel_source_key),
                 'name' => (string) $row->personnel_name_snapshot,
             ])->values()->all(),
+            'sparkLine' => $spark['line'],
+            'sparkArea' => $spark['area'],
+        ];
+    }
+
+    /**
+     * @param  list<int|float>  $values
+     * @return array{line: string, area: string}
+     */
+    public function sparkline(array $values, int $width = 88, int $height = 36): array
+    {
+        $count = count($values);
+        if ($count < 2) {
+            return ['line' => '', 'area' => ''];
+        }
+
+        $max = max(1, (int) max($values));
+        $points = [];
+        foreach (array_values($values) as $index => $value) {
+            $x = round(($index / ($count - 1)) * $width, 1);
+            $y = round($height - 3 - ((float) $value / $max) * ($height - 8), 1);
+            $points[] = $x.','.$y;
+        }
+
+        $line = implode(' ', $points);
+
+        return [
+            'line' => $line,
+            'area' => '0,'.$height.' '.$line.' '.$width.','.$height,
         ];
     }
 }

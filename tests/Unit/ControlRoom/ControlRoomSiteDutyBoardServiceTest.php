@@ -52,6 +52,27 @@ final class ControlRoomSiteDutyBoardServiceTest extends TestCase
         $this->assertSame('BMO1', $card['site']);
         $this->assertSame('C5BXK', $card['scheduled'][0]['sid']);
         $this->assertSame('C5BXK', $card['present'][0]['sid']);
+        $this->assertNotSame('', $card['sparkLine']);
+    }
+
+    public function test_papan_hanya_delapan_site_operasi(): void
+    {
+        $this->assertSame(
+            ['HO', 'BMO1', 'BMO2', 'BMO3', 'GMO', 'LMO', 'PMO', 'SMO'],
+            ControlRoomSiteDutyBoardService::BOARD_SITE_CODES,
+        );
+        $this->assertNotContains('MARINE', ControlRoomSiteDutyBoardService::BOARD_SITE_CODES);
+        $this->assertNotContains('EKSPLORASI', ControlRoomSiteDutyBoardService::BOARD_SITE_CODES);
+        $this->assertNotContains('JAKARTA', ControlRoomSiteDutyBoardService::BOARD_SITE_CODES);
+    }
+
+    public function test_sparkline_menghasilkan_garis_dan_area(): void
+    {
+        $spark = $this->service()->sparkline([0, 1, 2, 1, 3, 2, 4]);
+
+        $this->assertNotSame('', $spark['line']);
+        $this->assertStringStartsWith('0,', $spark['area']);
+        $this->assertStringContainsString('88,', $spark['area']);
     }
 
     private function service(): ControlRoomSiteDutyBoardService

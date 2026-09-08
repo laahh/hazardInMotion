@@ -89,34 +89,32 @@
             <div class="ocr-board-grid">
                 @foreach ($siteBoard['cards'] as $card)
                     <a
-                        class="ocr-site-card is-{{ $card['tone'] }}{{ $site->value === $card['site'] ? ' is-current' : '' }}"
+                        class="ocr-site-stat is-{{ $card['tone'] }}{{ $site->value === $card['site'] ? ' is-current' : '' }}"
                         href="{{ route('control-room.dashboard', ['site' => $card['site'], 'year' => $year, 'week' => $week]) }}"
                     >
-                        <div class="ocr-site-card-top">
-                            <span class="ocr-site-code">{{ $card['site'] }}</span>
-                            <span class="ocr-site-state">{{ $card['state'] }}</span>
+                        <div class="ocr-site-stat-row">
+                            <span class="ocr-site-stat-icon" aria-hidden="true">
+                                <i class="{{ $card['tone'] === 'green' ? 'ri-user-follow-fill' : 'ri-user-unfollow-fill' }}"></i>
+                            </span>
+                            <div class="ocr-site-stat-copy">
+                                <p class="ocr-site-stat-kicker">{{ $card['site'] }}</p>
+                                <p class="ocr-site-stat-value">{{ $card['label'] }}</p>
+                            </div>
+                            <svg class="ocr-site-spark" viewBox="0 0 88 36" width="88" height="36" aria-hidden="true">
+                                <polygon class="ocr-site-spark-area" points="{{ $card['sparkArea'] }}"></polygon>
+                                <polyline class="ocr-site-spark-line" points="{{ $card['sparkLine'] }}" fill="none" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                            </svg>
                         </div>
-                        <p class="ocr-site-name">{{ $card['label'] }}</p>
-                        <ul class="ocr-site-flags">
-                            <li class="{{ $card['hasSchedule'] ? 'is-on' : 'is-off' }}">
-                                <i class="{{ $card['hasSchedule'] ? 'ri-calendar-check-line' : 'ri-calendar-close-line' }}"></i>
-                                Jadwal {{ $card['hasSchedule'] ? 'ada' : 'belum' }}
-                            </li>
-                            <li class="{{ $card['hasDuty'] ? 'is-on' : 'is-off' }}">
-                                <i class="{{ $card['hasDuty'] ? 'ri-user-follow-line' : 'ri-user-unfollow-line' }}"></i>
-                                Jaga {{ $card['hasDuty'] ? 'sudah absen' : 'belum absen' }}
-                            </li>
-                        </ul>
-                        @if ($card['scheduled'] !== [])
-                            <p class="ocr-site-people">
-                                {{ collect($card['scheduled'])->pluck('name')->take(2)->implode(', ') }}
-                                @if (count($card['scheduled']) > 2)
-                                    +{{ count($card['scheduled']) - 2 }}
-                                @endif
-                            </p>
-                        @else
-                            <p class="ocr-site-people is-empty">Belum ada personil dijadwalkan</p>
-                        @endif
+                        <p class="ocr-site-stat-foot">
+                            @if ($card['hasSchedule'])
+                                Jaga
+                                <span class="ocr-site-pill">{{ $card['presentCount'] }}/{{ $card['scheduledCount'] }}</span>
+                                {{ $card['state'] }}
+                            @else
+                                Jadwal
+                                <span class="ocr-site-pill">{{ $card['state'] }}</span>
+                            @endif
+                        </p>
                     </a>
                 @endforeach
             </div>
