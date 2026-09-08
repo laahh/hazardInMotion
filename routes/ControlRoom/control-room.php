@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\ControlRoom\AttendanceController;
 use App\Http\Controllers\ControlRoom\DashboardController;
+use App\Http\Controllers\ControlRoom\DataQualityController;
 use App\Http\Controllers\ControlRoom\ScheduleController;
 use Illuminate\Support\Facades\Route;
 
@@ -15,8 +16,7 @@ use Illuminate\Support\Facades\Route;
 | Didaftarkan dari routes/web.php lewat:
 |   Route::prefix('control-room')->name('control-room.')->group(base_path('routes/ControlRoom/control-room.php'));
 |
-| Route Fase 4 (Data SAP / Data Quality) belum didaftarkan di sini — menunggu
-| T0.1 (verifikasi mv_inspeksi_hazard dkk), lihat plan-OCR.md 0.5 poin 2.
+| Route Fase 4 Data SAP belum didaftarkan — Data Quality personil memakai jadwal + MV SAP.
 */
 
 Route::prefix('attendance')->name('attendance.')->middleware('throttle:30,1')->group(function (): void {
@@ -53,4 +53,5 @@ Route::middleware('auth')->group(function (): void {
         Route::put('/{attendance}', [AttendanceController::class, 'update'])->name('update');
     });
     Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
+    Route::get('/data-quality', [DataQualityController::class, 'index'])->name('data-quality.index');
 });

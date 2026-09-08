@@ -1,0 +1,67 @@
+/* Control Room Data Quality — scoped to .ocr-dq */
+
+.ocr-dash .ocr-dq-kpi {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ocr-dq-dist {
+    margin: 8px 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.ocr-dq-charts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.ocr-dq-sid {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.04em;
+}
+
+.ocr-dq-table tbody tr {
+    cursor: pointer;
+}
+
+.ocr-dq-table tbody tr.is-current {
+    background: #eef2ff;
+}
+
+.ocr-dq-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.ocr-dq-badge.is-good { background: #dcfce7; color: #15803d; }
+.ocr-dq-badge.is-mid { background: #ffedd5; color: #c2410c; }
+.ocr-dq-badge.is-low { background: #fee2e2; color: #b91c1c; }
+.ocr-dq-badge.is-empty { background: #f1f5f9; color: #475569; }
+
+@media (max-width: 991.98px) {
+    .ocr-dash .ocr-dq-kpi,
+    .ocr-dq-charts {
+        grid-template-columns: 1fr;
+    }
+}
+
+[data-theme="dark"] .ocr-dq-table tbody tr.is-current {
+    background: rgba(57, 82, 188, 0.18);
+}
+
+[data-theme="dark"] .ocr-dq-sid,
+[data-theme="dark"] .ocr-dq-dist {
+    color: var(--text-secondary-light);
+}

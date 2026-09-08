@@ -52,7 +52,7 @@ final class ControlRoomSapWeekCountsReader
         sort($sids);
         $dates = array_column($duties, 'date');
         sort($dates);
-        $cacheKey = 'control-room:sap-week-counts:v6:'.hash('sha1', implode(',', $sids).'|'.$dates[0].'|'.$dates[array_key_last($dates)]);
+        $cacheKey = 'control-room:sap-week-counts:v8:'.hash('sha1', implode(',', $sids).'|'.$dates[0].'|'.$dates[array_key_last($dates)]);
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['counts'], $cached['findings'])) {
             return ['loaded' => true, 'counts' => $cached['counts'], 'findings' => $cached['findings']];
@@ -389,6 +389,10 @@ final class ControlRoomSapWeekCountsReader
         string $lokasi,
         string $detilLokasi,
         string $reportId = '',
+        string $description = '',
+        string $photoUrl = '',
+        mixed $latitude = null,
+        mixed $longitude = null,
     ): array {
         return [
             'sid' => $sid,
@@ -401,6 +405,10 @@ final class ControlRoomSapWeekCountsReader
             'lokasi' => trim($lokasi),
             'detil_lokasi' => trim($detilLokasi),
             'report_id' => $reportId,
+            'description' => trim($description),
+            'photo_url' => trim($photoUrl),
+            'latitude' => $latitude,
+            'longitude' => $longitude,
         ];
     }
 

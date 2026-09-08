@@ -16,37 +16,37 @@ $rr = function (string $name, array $params = []) {
         <ul class="sidebar-menu" id="sidebar-menu">
             <li class="sidebar-menu-group-title">Control Room</li>
             <li>
-                <a href="{{ $rr('control-room.dashboard') }}">
+                <a href="{{ $rr('control-room.dashboard') }}" class="{{ request()->routeIs('control-room.dashboard') ? 'active-page' : '' }}">
                     <i class="ri-dashboard-line menu-icon"></i>
                     <span>Dashboard</span>
                 </a>
             </li>
             <li>
-                <a href="{{ $rr('control-room.schedule.index') }}">
+                <a href="{{ $rr('control-room.schedule.index') }}" class="{{ request()->routeIs('control-room.schedule.*') ? 'active-page' : '' }}">
                     <i class="ri-calendar-check-line menu-icon"></i>
                     <span>Jadwal Rencana</span>
                 </a>
             </li>
             <li>
-                <a href="{{ $rr('control-room.attendance.form') }}">
+                <a href="{{ $rr('control-room.attendance.form') }}" class="{{ request()->routeIs('control-room.attendance.form*') ? 'active-page' : '' }}">
                     <i class="ri-camera-line menu-icon"></i>
                     <span>Form Absensi</span>
                 </a>
             </li>
             <li>
-                <a href="{{ $rr('control-room.attendance.index') }}">
+                <a href="{{ $rr('control-room.attendance.index') }}" class="{{ request()->routeIs('control-room.attendance.index') || request()->routeIs('control-room.attendance.show') ? 'active-page' : '' }}">
                     <i class="ri-user-follow-line menu-icon"></i>
                     <span>Rekap Absen</span>
                 </a>
             </li>
             <li>
-                <a href="{{ $rr('control-room.sap.index') }}">
+                <a href="{{ $rr('control-room.sap.index') }}" class="{{ request()->routeIs('control-room.sap.*') ? 'active-page' : '' }}">
                     <i class="ri-file-list-3-line menu-icon"></i>
                     <span>Data SAP</span>
                 </a>
             </li>
             <li>
-                <a href="{{ $rr('control-room.data-quality.index') }}">
+                <a href="{{ $rr('control-room.data-quality.index') }}" class="{{ request()->routeIs('control-room.data-quality.*') ? 'active-page' : '' }}">
                     <i class="ri-shield-check-line menu-icon"></i>
                     <span>Data Quality</span>
                 </a>
