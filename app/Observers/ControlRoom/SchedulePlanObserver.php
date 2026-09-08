@@ -12,9 +12,9 @@ use Illuminate\Support\Facades\Auth;
 use InvalidArgumentException;
 
 /**
- * plan-OCR.md T3.2 — setiap perubahan pada SchedulePlan yang sudah `locked`
- * wajib menyertakan `changeReason` (diisi controller sebelum update()) dan
- * otomatis dicatat ke control_room_schedule_changes.
+ * plan-OCR.md T3.2 — setiap perubahan personil/shift/tanggal pada
+ * SchedulePlan (draft maupun locked) dicatat ke control_room_schedule_changes.
+ * Jadwal locked tetap wajib changeReason.
  */
 final class SchedulePlanObserver
 {
@@ -38,7 +38,7 @@ final class SchedulePlanObserver
             );
         }
 
-        $plan->pendingChangeLog = ($wasLocked && $changedTrackedFields !== [])
+        $plan->pendingChangeLog = $changedTrackedFields !== []
             ? array_intersect_key($plan->getOriginal(), array_flip(self::TRACKED_FIELDS))
             : null;
     }
@@ -50,6 +50,11 @@ final class SchedulePlanObserver
 
         if ($original === null) {
             return;
+        }
+
+        $reason = trim((string) $plan->changeReason);
+        if ($reason === '') {
+            $reason = 'Ganti personil harian';
         }
 
         foreach (self::TRACKED_FIELDS as $field) {
@@ -69,7 +74,7 @@ final class SchedulePlanObserver
                 'field' => $field,
                 'old_value' => $oldValue,
                 'new_value' => $newValue,
-                'reason' => (string) $plan->changeReason,
+                'reason' => $reason,
                 'changed_by' => Auth::id(),
                 'changed_at' => now(),
             ]);

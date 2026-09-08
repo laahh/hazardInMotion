@@ -5,7 +5,7 @@
 @section('content')
     <div class="card shadow-none border">
         <div class="card-header d-flex align-items-center justify-content-between">
-            <h6 class="mb-0">Riwayat Perubahan Jadwal Terkunci</h6>
+            <h6 class="mb-0">Riwayat Perubahan Jadwal</h6>
             <a href="{{ route('control-room.schedule.index') }}" class="text-primary-600 text-sm">&larr; Kembali ke Jadwal</a>
         </div>
         <div class="card-body p-0">
@@ -23,11 +23,20 @@
                         </tr>
                     </thead>
                     <tbody>
+                        @php
+                            $fieldLabels = [
+                                'personnel_source_key' => 'SID',
+                                'personnel_name_snapshot' => 'Personil',
+                                'shift_code' => 'Shift',
+                                'date' => 'Tanggal',
+                                'site_code' => 'Site',
+                            ];
+                        @endphp
                         @forelse ($changes as $change)
                             <tr>
                                 <td>{{ $change->changed_at->format('d M Y H:i') }}</td>
                                 <td>#{{ $change->schedule_plan_id }}</td>
-                                <td>{{ $change->field }}</td>
+                                <td>{{ $fieldLabels[$change->field] ?? $change->field }}</td>
                                 <td>{{ $change->old_value }}</td>
                                 <td>{{ $change->new_value }}</td>
                                 <td>{{ $change->reason }}</td>

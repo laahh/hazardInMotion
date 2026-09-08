@@ -13,11 +13,13 @@ use App\Http\Requests\ControlRoom\ScheduleDestroyWeekRequest;
 use App\Http\Requests\ControlRoom\ScheduleUpdateRequest;
 use App\Models\ControlRoom\ScheduleChange;
 use App\Models\ControlRoom\SchedulePlan;
+use App\Services\ControlRoom\ControlRoomScheduleChangePresenter;
 use App\Services\ControlRoom\ControlRoomScheduleExcelParser;
 use App\Services\ControlRoom\ControlRoomScheduleExcelTemplateService;
 use App\Services\ControlRoom\Reference\PersonnelReader;
 use App\Services\ControlRoom\ScheduleBulkAssignService;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,6 +36,7 @@ final class ScheduleController extends Controller
 
     public function __construct(
         private readonly PersonnelReader $personnelReader,
+        private readonly ControlRoomScheduleChangePresenter $changePresenter,
     ) {}
 
     public function index(Request $request): View
@@ -118,12 +121,17 @@ final class ScheduleController extends Controller
         $end = CarbonImmutable::parse($request->string('end')->toString());
 
         $events = SchedulePlan::query()
+            ->withCount('changes')
             ->where('site_code', $site->value)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
             ->orderBy('shift_code')
             ->get()
             ->map(function (SchedulePlan $plan): array {
                 $colors = self::SHIFT_COLORS[$plan->shift_code->value] ?? ['bg' => '#E5E7EB', 'border' => '#9CA3AF', 'text' => '#111827'];
+                $classes = ['ocr-sched-event', 'ocr-sched-event--'.$plan->shift_code->value];
+                if ($plan->changes_count > 0) {
+                    $classes[] = 'ocr-sched-event--changed';
+                }
 
                 return [
                     'id' => $plan->id,
@@ -133,7 +141,7 @@ final class ScheduleController extends Controller
                     'backgroundColor' => $colors['bg'],
                     'borderColor' => $colors['border'],
                     'textColor' => $colors['text'],
-                    'classNames' => ['ocr-sched-event', 'ocr-sched-event--'.$plan->shift_code->value],
+                    'classNames' => $classes,
                     'extendedProps' => [
                         'scheduleId' => $plan->id,
                         'locked' => $plan->isLocked(),
@@ -141,8 +149,10 @@ final class ScheduleController extends Controller
                         'personnelSourceKey' => $plan->personnel_source_key,
                         'shift' => $plan->shift_code->value,
                         'accent' => $colors['text'],
+                        'changesCount' => (int) $plan->changes_count,
                         'updateUrl' => route('control-room.schedule.update', $plan),
                         'deleteUrl' => route('control-room.schedule.destroy', $plan),
+                        'changesUrl' => route('control-room.schedule.plan-changes', $plan),
                     ],
                 ];
             });
@@ -233,6 +243,16 @@ final class ScheduleController extends Controller
             ->with('success', "Minggu {$data['week_number']} tahun {$data['year']} dihapus ({$count} baris). Absen terkait tidak dihapus.");
     }
 
+    public function planChanges(int $schedule): JsonResponse
+    {
+        $plan = SchedulePlan::query()->find($schedule);
+        if (! $plan instanceof SchedulePlan) {
+            return response()->json(['message' => 'Jadwal tidak ditemukan.'], 404);
+        }
+
+        return response()->json($this->historyPayload($plan));
+    }
+
     public function update(ScheduleUpdateRequest $request, int $schedule): RedirectResponse|JsonResponse
     {
         $plan = SchedulePlan::query()->find($schedule);
@@ -242,19 +262,42 @@ final class ScheduleController extends Controller
         }
 
         $data = $request->validated();
-        $reason = $data['reason'] ?? null;
+        $reason = trim((string) ($data['reason'] ?? ''));
         unset($data['reason']);
 
-        if (isset($data['personnel_source_key']) && $data['personnel_source_key'] !== $plan->personnel_source_key) {
-            $personnel = $this->personnelReader->find($data['personnel_source_key']);
-            $data['personnel_name_snapshot'] = $personnel?->emp_name ?? $data['personnel_source_key'];
+        if (isset($data['personnel_source_key'])) {
+            $data['personnel_source_key'] = strtoupper(trim((string) $data['personnel_source_key']));
+            if ($data['personnel_source_key'] !== strtoupper((string) $plan->personnel_source_key)) {
+                $personnel = $this->personnelReader->find($data['personnel_source_key']);
+                $data['personnel_name_snapshot'] = $personnel?->emp_name ?? $data['personnel_source_key'];
+            }
         }
 
-        $plan->changeReason = $reason;
-        $plan->update($data);
+        $plan->changeReason = $reason !== '' ? $reason : 'Ganti personil harian';
+
+        try {
+            $plan->update($data);
+        } catch (QueryException $e) {
+            if ($this->isUniqueSlotViolation($e)) {
+                $message = 'Personil ini sudah dijadwalkan di tanggal dan shift yang sama.';
+
+                return $request->wantsJson()
+                    ? response()->json(['message' => $message], 422)
+                    : back()->withErrors(['personnel_source_key' => $message]);
+            }
+
+            throw $e;
+        }
+
+        $plan->refresh();
 
         if ($request->wantsJson()) {
-            return response()->json(['message' => 'Jadwal diperbarui.']);
+            return response()->json([
+                'message' => 'Jadwal diperbarui.',
+                ...$this->historyPayload($plan),
+                'personnelSourceKey' => $plan->personnel_source_key,
+                'shift' => $plan->shift_code->value,
+            ]);
         }
 
         return back()->with('success', 'Jadwal diperbarui.');
@@ -299,6 +342,32 @@ final class ScheduleController extends Controller
             ->update(['status' => SchedulePlan::STATUS_LOCKED, 'locked_at' => now()]);
 
         return back()->with('success', "Minggu {$data['week_number']} dikunci sebagai baseline ({$updated} baris).");
+    }
+
+    /**
+     * @return array{current: string, history: list<array{at: string, by: string, reason: string, from: string, to: string, summary: string}>}
+     */
+    private function historyPayload(SchedulePlan $plan): array
+    {
+        return [
+            'current' => $this->changePresenter->personLabel(
+                $plan->personnel_name_snapshot,
+                $plan->personnel_source_key,
+            ),
+            'history' => $this->changePresenter->timeline(
+                $plan->changes()->with('changedBy')->orderBy('changed_at')->orderBy('id')->get()
+            ),
+        ];
+    }
+
+    private function isUniqueSlotViolation(QueryException $e): bool
+    {
+        $sqlState = (string) ($e->errorInfo[0] ?? '');
+        $message = $e->getMessage();
+
+        return $sqlState === '23000'
+            && (str_contains($message, 'control_room_schedule_plans_unique_slot')
+                || str_contains($message, 'Duplicate entry'));
     }
 
     private function missingScheduleResponse(Request $request): RedirectResponse|JsonResponse

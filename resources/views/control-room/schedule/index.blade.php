@@ -204,7 +204,7 @@
     </div>
 
     <div class="modal fade" id="editScheduleModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <form method="POST" id="edit-schedule-form">
                     @csrf
@@ -215,6 +215,10 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
+                        <div class="alert py-8 px-12 mb-16 text-xs" id="edit-form-alert" style="display:none" role="alert"></div>
+                        <p class="text-xs text-secondary-light mb-16">
+                            Saat ini: <strong id="edit-current-person">—</strong>
+                        </p>
                         <div class="mb-16">
                             <label class="form-label text-sm mb-1">Shift</label>
                             <select name="shift_code" id="edit-shift-select" class="form-control" required>
@@ -223,7 +227,7 @@
                             </select>
                         </div>
                         <div class="mb-16">
-                            <label class="form-label text-sm mb-1">Personil (ketik nama atau SID)</label>
+                            <label class="form-label text-sm mb-1">Personil baru (ketik nama atau SID)</label>
                             <input
                                 type="text"
                                 name="personnel_source_key"
@@ -235,19 +239,29 @@
                             >
                         </div>
                         <p class="text-warning-600 text-xs mb-8" id="edit-locked-note" style="display:none">
-                            <i class="ri-lock-line"></i> Jadwal ini sudah dikunci sebagai baseline — perubahan akan
-                            tetap tercatat di riwayat (lihat "Riwayat perubahan").
+                            <i class="ri-lock-line"></i> Jadwal ini sudah dikunci sebagai baseline — alasan perubahan wajib diisi.
                         </p>
-                        <div id="edit-reason-wrapper" style="display:none">
-                            <label class="form-label text-sm mb-1">Alasan Perubahan (wajib)</label>
-                            <textarea name="reason" id="edit-reason-input" class="form-control"></textarea>
+                        <div class="mb-16" id="edit-reason-wrapper">
+                            <label class="form-label text-sm mb-1">
+                                Alasan perubahan
+                                <span id="edit-reason-required-mark" class="text-danger-600" style="display:none">*</span>
+                            </label>
+                            <textarea name="reason" id="edit-reason-input" class="form-control" rows="2" placeholder="Contoh: cuti, sakit, ganti shift. Wajib jika jadwal terkunci."></textarea>
+                        </div>
+                        <div class="border-top pt-16">
+                            <div class="d-flex align-items-center justify-content-between mb-8">
+                                <label class="form-label text-sm mb-0">Riwayat ganti personil</label>
+                                <span class="text-xs text-secondary-light" id="edit-history-count"></span>
+                            </div>
+                            <p class="text-xs text-secondary-light mb-8">Sebelumnya siapa menjadi siapa pada tanggal &amp; shift ini.</p>
+                            <div id="edit-history-list" class="ocr-sched-history"></div>
                         </div>
                     </div>
                     <div class="modal-footer d-flex justify-content-between">
                         <button type="button" class="btn btn-outline-danger" id="edit-delete-btn">Hapus Jadwal</button>
                         <div>
                             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
-                            <button type="submit" class="btn btn-primary-600">Simpan Perubahan</button>
+                            <button type="submit" class="btn btn-primary-600" id="edit-save-btn">Simpan Perubahan</button>
                         </div>
                     </div>
                 </form>
@@ -291,6 +305,20 @@
         #schedule-calendar tr.ocr-sched-event--S2 a {
             color: #9a3412 !important;
         }
+        #schedule-calendar .ocr-sched-event--changed {
+            box-shadow: inset 3px 0 0 #2563eb;
+        }
+        .ocr-sched-history-item {
+            border-left: 3px solid #93c5fd;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            background: #f8fafc;
+            border-radius: 0 6px 6px 0;
+        }
+        .ocr-sched-history-arrow {
+            font-weight: 600;
+            color: #1e3a8a;
+        }
     </style>
 @endpush
 
@@ -307,12 +335,85 @@
             var editForm = document.getElementById('edit-schedule-form');
             var editShiftSelect = document.getElementById('edit-shift-select');
             var editPersonnelInput = document.getElementById('edit-personnel-input');
-            var editReasonWrapper = document.getElementById('edit-reason-wrapper');
             var editReasonInput = document.getElementById('edit-reason-input');
+            var editReasonRequiredMark = document.getElementById('edit-reason-required-mark');
             var editLockedNote = document.getElementById('edit-locked-note');
             var editDeleteBtn = document.getElementById('edit-delete-btn');
+            var editSaveBtn = document.getElementById('edit-save-btn');
             var editModalDateLabel = document.getElementById('edit-modal-date-label');
+            var editCurrentPerson = document.getElementById('edit-current-person');
+            var editHistoryList = document.getElementById('edit-history-list');
+            var editHistoryCount = document.getElementById('edit-history-count');
+            var editFormAlert = document.getElementById('edit-form-alert');
             var currentDeleteUrl = null;
+            var currentChangesUrl = null;
+
+            function escapeHtml(value) {
+                return String(value || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+            }
+
+            function showEditAlert(type, message) {
+                editFormAlert.className = 'alert py-8 px-12 mb-16 text-xs alert-' + type;
+                editFormAlert.textContent = message;
+                editFormAlert.style.display = '';
+            }
+
+            function hideEditAlert() {
+                editFormAlert.style.display = 'none';
+                editFormAlert.textContent = '';
+            }
+
+            function firstErrorMessage(data) {
+                if (data && data.errors) {
+                    var keys = Object.keys(data.errors);
+                    if (keys.length && data.errors[keys[0]] && data.errors[keys[0]][0]) {
+                        return data.errors[keys[0]][0];
+                    }
+                }
+                return (data && data.message) || 'Gagal menyimpan perubahan.';
+            }
+
+            function renderHistory(payload) {
+                var items = (payload && payload.history) || [];
+                if (payload && payload.current) {
+                    editCurrentPerson.textContent = payload.current;
+                }
+                editHistoryCount.textContent = items.length ? items.length + ' perubahan' : '';
+                if (!items.length) {
+                    editHistoryList.innerHTML = '<p class="text-xs text-secondary-light mb-0">Belum ada pergantian tercatat.</p>';
+                    return;
+                }
+
+                editHistoryList.innerHTML = items.map(function (item) {
+                    return (
+                        '<div class="ocr-sched-history-item">' +
+                        '<div class="ocr-sched-history-arrow text-sm">' + escapeHtml(item.summary) + '</div>' +
+                        '<div class="text-xs text-secondary-light mt-4">' +
+                        escapeHtml(item.at) + ' · ' + escapeHtml(item.by) +
+                        (item.reason ? ' · ' + escapeHtml(item.reason) : '') +
+                        '</div>' +
+                        '</div>'
+                    );
+                }).join('');
+            }
+
+            function loadHistory(url) {
+                if (!url) {
+                    renderHistory({ history: [] });
+                    return;
+                }
+                editHistoryList.innerHTML = '<p class="text-xs text-secondary-light mb-0">Memuat riwayat…</p>';
+                fetch(url, { headers: { Accept: 'application/json' } })
+                    .then(function (res) { return res.json(); })
+                    .then(renderHistory)
+                    .catch(function () {
+                        editHistoryList.innerHTML = '<p class="text-xs text-danger-600 mb-0">Gagal memuat riwayat.</p>';
+                    });
+            }
 
             function deleteCurrentSchedule() {
                 if (!currentDeleteUrl) {
@@ -347,6 +448,53 @@
             }
             editDeleteBtn.addEventListener('click', deleteCurrentSchedule);
 
+            editForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                hideEditAlert();
+                editSaveBtn.disabled = true;
+
+                var body = new FormData(editForm);
+
+                fetch(editForm.action, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: body,
+                }).then(function (res) {
+                    return res.json().then(function (data) {
+                        return { ok: res.ok, status: res.status, data: data };
+                    }).catch(function () {
+                        return { ok: res.ok, status: res.status, data: {} };
+                    });
+                }).then(function (result) {
+                    editSaveBtn.disabled = false;
+                    if (result.ok) {
+                        renderHistory(result.data);
+                        if (result.data.personnelSourceKey && result.data.current) {
+                            editPersonnelInput.value = result.data.current;
+                        }
+                        if (result.data.shift) {
+                            editShiftSelect.value = result.data.shift;
+                        }
+                        editReasonInput.value = '';
+                        showEditAlert('success', result.data.message || 'Jadwal diperbarui.');
+                        calendar.refetchEvents();
+                        return;
+                    }
+
+                    showEditAlert('danger', firstErrorMessage(result.data));
+                    if (result.status === 404) {
+                        calendar.refetchEvents();
+                    }
+                }).catch(function () {
+                    editSaveBtn.disabled = false;
+                    showEditAlert('danger', 'Gagal menyimpan perubahan.');
+                });
+            });
+
             var calendarEl = document.getElementById('schedule-calendar');
             var calendar = new FullCalendar.Calendar(calendarEl, {
                 headerToolbar: {
@@ -377,6 +525,9 @@
                     var initial = (props.personnel || '?').trim().charAt(0).toUpperCase();
                     var accent = props.accent || arg.event.textColor || '#111827';
                     var title = arg.event.title.replace(/</g, '&lt;');
+                    var changedMark = props.changesCount
+                        ? '<i class="ri-history-line flex-shrink-0" title="Ada riwayat ganti personil" style="font-size:11px;"></i>'
+                        : '';
 
                     return {
                         html:
@@ -384,6 +535,7 @@
                             '<span class="rounded-circle bg-white d-inline-flex align-items-center justify-content-center flex-shrink-0" ' +
                             'style="width:16px;height:16px;font-size:9px;font-weight:700;color:' + accent + ';">' + initial + '</span>' +
                             '<span class="text-truncate ocr-sched-title" style="font-size:11px;color:' + accent + ';font-weight:600;">' + title + '</span>' +
+                            changedMark +
                             '</div>',
                     };
                 },
@@ -396,17 +548,22 @@
 
                 eventClick: function (info) {
                     var props = info.event.extendedProps;
+                    var currentLabel = props.personnel + ' (' + props.personnelSourceKey + ')';
 
+                    hideEditAlert();
                     editForm.action = props.updateUrl;
                     editModalDateLabel.textContent = info.event.startStr;
                     editShiftSelect.value = props.shift;
-                    editPersonnelInput.value = props.personnel + ' (' + props.personnelSourceKey + ')';
+                    editPersonnelInput.value = currentLabel;
+                    editCurrentPerson.textContent = currentLabel;
                     editReasonInput.value = '';
-                    editReasonWrapper.style.display = props.locked ? '' : 'none';
-                    editReasonInput.required = props.locked;
+                    editReasonInput.required = !!props.locked;
+                    editReasonRequiredMark.style.display = props.locked ? '' : 'none';
                     editLockedNote.style.display = props.locked ? '' : 'none';
                     editDeleteBtn.style.display = props.locked ? 'none' : '';
                     currentDeleteUrl = props.deleteUrl;
+                    currentChangesUrl = props.changesUrl;
+                    loadHistory(currentChangesUrl);
 
                     editModal.show();
                 },

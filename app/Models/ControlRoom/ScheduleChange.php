@@ -9,8 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Change log jadwal — plan-OCR.md T3.2. Read-only untuk user; dibuat
- * otomatis oleh SchedulePlanObserver saat plan yang sudah locked diubah.
+ * Change log jadwal — plan-OCR.md T3.2. Dibuat otomatis oleh
+ * SchedulePlanObserver setiap ganti personil/shift (draft maupun locked).
  */
 final class ScheduleChange extends Model
 {

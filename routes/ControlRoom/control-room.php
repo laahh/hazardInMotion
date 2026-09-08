@@ -32,6 +32,7 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/copy', [ScheduleController::class, 'copy'])->name('copy');
         Route::post('/destroy-week', [ScheduleController::class, 'destroyWeek'])->name('destroy-week');
         Route::post('/lock', [ScheduleController::class, 'lock'])->name('lock');
+        Route::get('/{schedule}/changes', [ScheduleController::class, 'planChanges'])->whereNumber('schedule')->name('plan-changes');
         Route::put('/{schedule}', [ScheduleController::class, 'update'])->whereNumber('schedule')->name('update');
         Route::delete('/{schedule}', [ScheduleController::class, 'destroy'])->whereNumber('schedule')->name('destroy');
     });

@@ -36,7 +36,7 @@ final class ScheduleUpdateRequest extends FormRequest
             $raw = trim($matches[1]);
         }
 
-        $this->merge(['personnel_source_key' => $raw]);
+        $this->merge(['personnel_source_key' => strtoupper($raw)]);
     }
 
     public function rules(): array
@@ -57,14 +57,43 @@ final class ScheduleUpdateRequest extends FormRequest
     public function withValidator(ValidatorContract $validator): void
     {
         $validator->after(function (ValidatorContract $validator): void {
-            if (! $this->filled('personnel_source_key')) {
-                return;
+            if ($this->filled('personnel_source_key')) {
+                $reader = app(PersonnelReader::class);
+                if (! $reader->existsAndActive((string) $this->input('personnel_source_key'))) {
+                    $validator->errors()->add('personnel_source_key', 'Personil tidak ditemukan/tidak aktif di sumber data personil.');
+                }
             }
 
-            $reader = app(PersonnelReader::class);
-            if (! $reader->existsAndActive((string) $this->input('personnel_source_key'))) {
-                $validator->errors()->add('personnel_source_key', 'Personil tidak ditemukan/tidak aktif di sumber data personil.');
-            }
+            $this->rejectDuplicateSlot($validator);
         });
+    }
+
+    private function rejectDuplicateSlot(ValidatorContract $validator): void
+    {
+        $planId = (int) $this->route('schedule');
+        $plan = $planId > 0 ? SchedulePlan::query()->find($planId) : null;
+        if (! $plan instanceof SchedulePlan) {
+            return;
+        }
+
+        $sid = strtoupper(trim((string) ($this->input('personnel_source_key') ?: $plan->personnel_source_key)));
+        $shift = (string) ($this->input('shift_code') ?: $plan->shift_code->value);
+        $date = (string) ($this->input('date') ?: $plan->date->toDateString());
+        $site = (string) ($this->input('site_code') ?: $plan->site_code->value);
+
+        $clash = SchedulePlan::query()
+            ->where('site_code', $site)
+            ->whereDate('date', $date)
+            ->where('shift_code', $shift)
+            ->whereRaw('upper(personnel_source_key) = ?', [$sid])
+            ->where('id', '!=', $plan->id)
+            ->exists();
+
+        if ($clash) {
+            $validator->errors()->add(
+                'personnel_source_key',
+                'Personil ini sudah dijadwalkan di tanggal dan shift yang sama.'
+            );
+        }
     }
 }

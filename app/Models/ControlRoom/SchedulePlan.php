@@ -25,10 +25,8 @@ final class SchedulePlan extends Model
     protected $table = 'control_room_schedule_plans';
 
     /**
-     * Alasan perubahan — WAJIB diisi controller sebelum update() kalau plan
-     * ini sudah locked (lihat SchedulePlanObserver). Properti PHP asli
-     * (bukan lewat $fillable/$attributes), sengaja BUKAN kolom database,
-     * supaya tidak ikut masuk ke query UPDATE lewat magic setAttribute().
+     * Alasan perubahan — diisi controller sebelum update(). Wajib jika plan
+     * sudah locked; untuk draft boleh kosong (observer mengisi default).
      */
     public ?string $changeReason = null;
 
