@@ -79,7 +79,7 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
                 $this->finding('FJAVJ', '2026-08-31 08:15:00', 'hazard', 'APD', 'Tidak Melanggar Golden Rules'),
             ],
             $this->schedule(),
-            ['uncovered' => ['pit a|front' => true], 'total' => 10],
+            ['uncovered' => ['pit a|front' => ['lokasi' => 'Pit A', 'detil' => 'Front', 'status' => 'Belum tercover']], 'total' => 10],
             [[
                 'Date_for_Join' => '2026-08-31',
                 'deskripsi' => 'TBC tinggi',
@@ -99,7 +99,8 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         $this->assertSame('Tidak memakai APD', $gr['items'][0]['description']);
         $this->assertSame('PT Serasi Autoraya — ANDRIANSYAH', $gr['items'][0]['company_pic']);
         $this->assertSame('Closed', $gr['items'][0]['status']);
-        $this->assertSame('9374205', $insights['highlight']['blindspotItems'][0]['tasklist']);
+        $this->assertSame('—', $insights['highlight']['blindspotItems'][0]['tasklist']);
+        $this->assertSame('Pit A / Front', $insights['highlight']['blindspotItems'][0]['description']);
         $this->assertSame('TL-11', $insights['highlight']['tbcItems'][0]['tasklist']);
         $this->assertSame('TBC tinggi', $insights['highlight']['tbcItems'][0]['description']);
         $this->assertSame('PT Berau Coal — BUDI', $insights['highlight']['tbcItems'][0]['company_pic']);

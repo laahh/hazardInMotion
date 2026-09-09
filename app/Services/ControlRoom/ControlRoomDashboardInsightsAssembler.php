@@ -173,13 +173,6 @@ final class ControlRoomDashboardInsightsAssembler
             if ($component === 'hazard' || $component === 'inspeksi') {
                 $hazardInspeksi++;
             }
-            $locationKey = $this->locationKey(
-                (string) ($finding['lokasi'] ?? ''),
-                (string) ($finding['detil_lokasi'] ?? ''),
-            );
-            if ($locationKey !== '' && isset($uncovered[$locationKey])) {
-                $blindspotItems[] = $this->highlightItemFromFinding($finding);
-            }
             $rule = trim((string) ($finding['golden_rule'] ?? ''));
             if (! $this->isGoldenRuleViolation($rule)) {
                 continue;
@@ -200,10 +193,8 @@ final class ControlRoomDashboardInsightsAssembler
             ];
         }
 
-        if ($blindspotItems === []) {
-            foreach ($uncovered as $key => $meta) {
-                $blindspotItems[] = $this->highlightItemFromLocation($key, $meta);
-            }
+        foreach ($uncovered as $key => $meta) {
+            $blindspotItems[] = $this->highlightItemFromLocation($key, $meta);
         }
         usort($blindspotItems, $this->highlightItemSorter());
 
