@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Unit\ControlRoom;
 
-use App\Enums\ControlRoomSiteCode;
 use App\Services\ControlRoom\ControlRoomLocationCoverageService;
 use Tests\TestCase;
 
@@ -96,47 +95,6 @@ final class ControlRoomLocationCoverageServiceTest extends TestCase
         $this->assertTrue($payload['rows'][1]['covered']);
         $this->assertSame(2, $payload['kpi']['covered']);
         $this->assertSame(0, $payload['kpi']['uncovered']);
-    }
-
-    public function test_status_tercover_dari_hsecm_bukan_obds(): void
-    {
-        $payload = $this->service()->fromHsecmRows(
-            [
-                [
-                    'Site' => 'BMO 1',
-                    'Lokasi' => 'Pit A',
-                    'Detil_Lokasi' => 'Front',
-                    'Status_Coverage_dalam_1_Week' => 'Tercover',
-                    'Tercover' => 1,
-                    'Day_of_Date' => '2026-09-08',
-                ],
-                [
-                    'Site' => 'BMO 1',
-                    'Lokasi' => 'Workshop',
-                    'Detil_Lokasi' => 'Office',
-                    'Status_Coverage_dalam_1_Week' => 'Belum Tercover',
-                    'Tercover' => 0,
-                    'Day_of_Date' => '2026-09-08',
-                ],
-                [
-                    'Site' => 'GMO',
-                    'Lokasi' => 'Pit Lain',
-                    'Detil_Lokasi' => 'Front',
-                    'Status_Coverage_dalam_1_Week' => 'Tercover',
-                    'Tercover' => 1,
-                    'Day_of_Date' => '2026-09-08',
-                ],
-            ],
-            ControlRoomSiteCode::Bmo1,
-        );
-
-        $this->assertTrue($payload['loaded']);
-        $this->assertSame(2, $payload['kpi']['total']);
-        $this->assertSame(1, $payload['kpi']['covered']);
-        $this->assertSame(1, $payload['kpi']['uncovered']);
-        $this->assertTrue($payload['rows'][0]['covered']);
-        $this->assertSame('2026-09-08', $payload['rows'][0]['last_at']);
-        $this->assertFalse($payload['rows'][1]['covered']);
     }
 
     public function test_spasi_ganda_dan_beda_kapital_tetap_tercover(): void

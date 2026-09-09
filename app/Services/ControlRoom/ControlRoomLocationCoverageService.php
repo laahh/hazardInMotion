@@ -6,27 +6,22 @@ namespace App\Services\ControlRoom;
 
 use App\Enums\ControlRoomSiteCode;
 use App\Services\ControlRoom\Reference\LocationReader;
-use App\Services\Hsecm\HsecmDatabaseRepository;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Schema;
-use Throwable;
 
 /**
- * Coverage lokasi dari snapshot HSECM lokal
- * (`scr_hsecm_coverage_area_kritis_daily`), bukan query SAP/OBDS.
+ * Coverage lokasi master vs SAP minggu terpilih (hazard/inspeksi/observasi/OAK) di OBDS.
+ * Ter-cover = ada laporan SAP di lokasi+detil yang sama (bukan hanya SID jaga).
  */
 final class ControlRoomLocationCoverageService
 {
-    private const TABLE = 'scr_hsecm_coverage_area_kritis_daily';
-
     private const PAGE_CACHE_SECONDS = 180;
 
     public function __construct(
         private readonly LocationReader $locations,
-        private readonly HsecmDatabaseRepository $hsecm,
+        private readonly ControlRoomSapQualityFindingsReader $qualityFindings,
+        private readonly ControlRoomSapDutyReader $dutyWindow,
     ) {}
 
     /**
@@ -44,15 +39,15 @@ final class ControlRoomLocationCoverageService
     ): array {
         $today = CarbonImmutable::parse($now ?? now())->startOfDay();
         $cacheKey = sprintf(
-            'control-room:location-coverage:v3:%s:%s:%s',
+            'control-room:location-coverage:v4:%s:%s:%s',
             $weekStart->toDateString(),
             $site->value,
             $today->toDateString(),
         );
 
         /** @var array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>} */
-        return Cache::remember($cacheKey, self::PAGE_CACHE_SECONDS, function () use ($site): array {
-            return $this->buildUncached($site);
+        return Cache::remember($cacheKey, self::PAGE_CACHE_SECONDS, function () use ($site, $weekStart, $today): array {
+            return $this->buildUncached($site, $weekStart, $today);
         });
     }
 
@@ -162,123 +157,22 @@ final class ControlRoomLocationCoverageService
     }
 
     /**
-     * @param  list<array<string, mixed>>  $hsecmRows
      * @return array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}
      */
-    public function fromHsecmRows(array $hsecmRows, ControlRoomSiteCode $site, bool $loaded = true): array
-    {
-        $allowed = $this->allowedSites($site);
-        $master = [];
-        $coveredAt = [];
-        $seen = [];
+    private function buildUncached(
+        ControlRoomSiteCode $site,
+        CarbonImmutable $weekStart,
+        CarbonImmutable $today,
+    ): array {
+        $master = $this->locations->forCoverage($site)->all();
+        $weekEnd = $weekStart->addDays(6);
+        $lastDay = $weekEnd->lessThan($today) ? $weekEnd : $today;
+        $sap = $this->qualityFindings->locationHits(
+            $weekStart->startOfDay(),
+            $this->dutyWindow->reportingWindow($lastDay)['end'],
+        );
 
-        foreach ($hsecmRows as $row) {
-            $siteName = trim((string) ($row['Site'] ?? ''));
-            if (! $this->siteAllowed($siteName, $allowed)) {
-                continue;
-            }
-            $lokasi = trim((string) ($row['Lokasi'] ?? ''));
-            $detil = trim((string) ($row['Detil_Lokasi'] ?? ''));
-            if ($lokasi === '' && $detil === '') {
-                continue;
-            }
-            $uniq = mb_strtolower($siteName).'|'.$this->locationKey($lokasi, $detil);
-            $at = trim((string) ($row['Day_of_Date'] ?? ''));
-            $isCovered = ! $this->isUncovered($row);
-
-            if (! isset($seen[$uniq])) {
-                $seen[$uniq] = true;
-                $master[] = [
-                    'site' => $siteName,
-                    'lokasi' => $lokasi,
-                    'detail_lokasi' => $detil,
-                ];
-            }
-
-            if (! $isCovered) {
-                continue;
-            }
-            foreach ($this->locationKeys($lokasi, $detil) as $key) {
-                $stamp = $at !== '' ? $at : '1';
-                if (! isset($coveredAt[$key]) || $stamp > $coveredAt[$key]) {
-                    $coveredAt[$key] = $stamp;
-                }
-            }
-        }
-
-        return $this->evaluate($master, $coveredAt, $loaded);
-    }
-
-    /**
-     * @return array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}
-     */
-    private function buildUncached(ControlRoomSiteCode $site): array
-    {
-        if (! Schema::hasTable(self::TABLE)) {
-            return $this->evaluate([], [], loaded: false);
-        }
-
-        try {
-            $rows = $this->hsecm->rowsForBatchSlot(self::TABLE, null, [
-                'Site',
-                'Lokasi',
-                'Detil_Lokasi',
-                'Status_Coverage_dalam_1_Week',
-                'Tercover',
-                'Day_of_Date',
-            ]);
-        } catch (Throwable $e) {
-            Log::warning('ControlRoom HSECM coverage lokasi gagal: '.$e->getMessage());
-
-            return $this->evaluate([], [], loaded: false);
-        }
-
-        return $this->fromHsecmRows($rows, $site, loaded: true);
-    }
-
-    /**
-     * @return array<string, true>
-     */
-    private function allowedSites(ControlRoomSiteCode $site): array
-    {
-        $allowed = [];
-        foreach ($this->locations->sourceKeysFor($site) as $key) {
-            $allowed[$key] = true;
-            $allowed[mb_strtoupper(trim($key))] = true;
-        }
-
-        return $allowed;
-    }
-
-    /**
-     * @param  array<string, true>  $allowed
-     */
-    private function siteAllowed(string $siteName, array $allowed): bool
-    {
-        return isset($allowed[$siteName]) || isset($allowed[mb_strtoupper($siteName)]);
-    }
-
-    /**
-     * @param  array<string, mixed>  $row
-     */
-    private function isUncovered(array $row): bool
-    {
-        $status = mb_strtolower(trim((string) ($row['Status_Coverage_dalam_1_Week'] ?? '')));
-        if ($status !== '') {
-            if (str_contains($status, 'tidak') || str_contains($status, 'belum') || str_contains($status, 'gap')) {
-                return true;
-            }
-            if (str_contains($status, 'tercover')) {
-                return false;
-            }
-        }
-
-        $raw = $row['Tercover'] ?? null;
-        if (is_numeric($raw)) {
-            return (float) $raw < 1;
-        }
-
-        return $status === '';
+        return $this->evaluate($master, $this->coveredAt($sap['findings']), $sap['loaded']);
     }
 
     /**

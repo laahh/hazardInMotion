@@ -167,7 +167,7 @@
         @if (! $locationCoverage['loaded'])
             <div class="ocr-notice" role="status">
                 <i class="ri-error-warning-line"></i>
-                <span>Snapshot coverage HSECM belum tersedia. Master lokasi dan status tercover dikosongkan.</span>
+                <span>Sumber SAP (OBDS) tidak terjangkau. Master lokasi tetap tampil; status tercover dikosongkan.</span>
             </div>
         @endif
 
