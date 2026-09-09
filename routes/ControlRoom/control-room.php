@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\ControlRoom\AttendanceController;
 use App\Http\Controllers\ControlRoom\ControlRoomQrCodeController;
+use App\Http\Controllers\ControlRoom\ControlRoomSapController;
 use App\Http\Controllers\ControlRoom\ControlRoomTutorialController;
 use App\Http\Controllers\ControlRoom\DashboardController;
 use App\Http\Controllers\ControlRoom\DataQualityController;
@@ -18,7 +19,7 @@ use Illuminate\Support\Facades\Route;
 | Didaftarkan dari routes/web.php lewat:
 |   Route::prefix('control-room')->name('control-room.')->group(base_path('routes/ControlRoom/control-room.php'));
 |
-| Route Fase 4 Data SAP belum didaftarkan — Data Quality personil memakai jadwal + MV SAP.
+| Data SAP = tabel laporan MV SAP personil jaga minggu terpilih (read-only).
 */
 
 Route::prefix('attendance')->name('attendance.')->middleware('throttle:30,1')->group(function (): void {
@@ -56,6 +57,7 @@ Route::middleware('auth')->group(function (): void {
     });
     Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
     Route::get('/data-quality', [DataQualityController::class, 'index'])->name('data-quality.index');
+    Route::get('/sap', [ControlRoomSapController::class, 'index'])->name('sap.index');
     Route::get('/qr-code', [ControlRoomQrCodeController::class, 'index'])->name('qr-code.index');
     Route::get('/tutorial/embed', [ControlRoomTutorialController::class, 'embed'])->name('tutorial.embed');
     Route::get('/tutorial', [ControlRoomTutorialController::class, 'index'])->name('tutorial.index');

@@ -60,7 +60,7 @@ $rr = function (string $name, array $params = []) {
             <li>
                 <a href="{{ $rr('control-room.tutorial.index') }}" class="{{ request()->routeIs('control-room.tutorial.*') ? 'active-page' : '' }}">
                     <i class="ri-book-open-line menu-icon"></i>
-                    <span>Tutorial</span>
+                    <span>Panduan Indentifikasi Hazard</span>
                 </a>
             </li>
         </ul>

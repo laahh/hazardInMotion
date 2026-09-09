@@ -1,0 +1,54 @@
+/* Control Room Data SAP — scoped to .ocr-sap-page */
+
+.ocr-dash .ocr-sap-kpi {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ocr-sap-page .ocr-sap-table {
+    width: 100%;
+}
+
+.ocr-sap-page .ocr-dq-sid {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.04em;
+}
+
+.ocr-sap-type {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.ocr-sap-type.is-hazard { background: #fee2e2; color: #b91c1c; }
+.ocr-sap-type.is-inspeksi { background: #ffedd5; color: #c2410c; }
+.ocr-sap-type.is-observasi { background: #dbeafe; color: #1d4ed8; }
+.ocr-sap-type.is-oak { background: #dcfce7; color: #15803d; }
+
+.ocr-sap-id {
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.ocr-sap-tabs {
+    flex-wrap: wrap;
+}
+
+@media (max-width: 991.98px) {
+    .ocr-dash .ocr-sap-kpi {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+[data-theme="dark"] .ocr-sap-page .ocr-dq-sid,
+[data-theme="dark"] .ocr-sap-id {
+    color: var(--text-secondary-light);
+}
