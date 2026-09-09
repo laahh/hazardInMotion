@@ -31,6 +31,7 @@ Route::prefix('attendance')->name('attendance.')->middleware('throttle:30,1')->g
 Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard/sap-detail', [DashboardController::class, 'sapDetail'])->name('dashboard.sap-detail');
+    Route::get('/dashboard/sap-photos', [DashboardController::class, 'sapPhotos'])->name('dashboard.sap-photos');
 
     Route::prefix('schedule')->name('schedule.')->group(function (): void {
         Route::get('/excel-template', [ScheduleController::class, 'downloadExcelTemplate'])->name('excel-template');

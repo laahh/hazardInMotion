@@ -610,26 +610,26 @@
                 <div class="ocr-card-body">
                     <div class="ocr-gr-list">
                         @forelse ($mock['highlight']['goldenRules'] as $gr)
-                            <div class="ocr-gr-row">
+                            <button type="button" class="ocr-gr-row" data-highlight-kind="golden_rule" data-highlight-name="{{ $gr['name'] }}" aria-haspopup="dialog" aria-controls="ocr-highlight-modal">
                                 <span>{{ $gr['name'] }}</span>
                                 <strong>{{ $gr['count'] }}</strong>
                                 <div class="ocr-track is-primary"><span style="width: {{ ($gr['count'] / $maxGoldenRule) * 100 }}%"></span></div>
-                            </div>
+                            </button>
                         @empty
                             <p class="text-secondary-light mb-0">Tidak ada nama Golden Rule pada laporan minggu ini.</p>
                         @endforelse
                     </div>
                     <div class="ocr-highlight-metrics">
-                        <div class="ocr-metric-mini">
+                        <button type="button" class="ocr-metric-mini is-clickable" data-highlight-kind="blindspot" aria-haspopup="dialog" aria-controls="ocr-highlight-modal">
                             <p class="ocr-kpi-label">Blindspot</p>
                             <p class="ocr-kpi-value">{{ $mock['highlight']['blindspotCount'] }} <span class="fs-6 fw-normal text-secondary-light">/ {{ $mock['highlight']['blindspotTotal'] }}</span></p>
                             <div class="ocr-track is-danger"><span style="width: {{ $blindspotPct }}%"></span></div>
-                        </div>
-                        <div class="ocr-metric-mini">
+                        </button>
+                        <button type="button" class="ocr-metric-mini is-clickable" data-highlight-kind="tbc" aria-haspopup="dialog" aria-controls="ocr-highlight-modal">
                             <p class="ocr-kpi-label">Ratio TBC</p>
                             <p class="ocr-kpi-value">{{ $mock['highlight']['tbcPercentage'] === null ? '—' : number_format($mock['highlight']['tbcPercentage'], 1).'%' }}</p>
                             <div class="ocr-track is-warning"><span style="width: {{ min(100, $mock['highlight']['tbcPercentage'] ?? 0) }}%"></span></div>
-                        </div>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -727,6 +727,37 @@
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="ocr-highlight-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h6 class="modal-title" id="ocr-highlight-title">Detail Highlight Temuan</h6>
+                        <p class="ocr-card-kicker mb-0" id="ocr-highlight-meta"></p>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <table class="ocr-table ocr-highlight-table">
+                            <thead>
+                                <tr>
+                                    <th>Kode Tasklist</th>
+                                    <th>Tanggal temuan</th>
+                                    <th>Deskripsi temuan</th>
+                                    <th>Perusahaan &amp; PIC</th>
+                                    <th>Status temuan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ocr-highlight-body"></tbody>
+                        </table>
+                    </div>
+                    <p class="ocr-sap-status-msg" id="ocr-highlight-empty" hidden>Tidak ada temuan untuk kategori ini.</p>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @push('scripts')
@@ -740,6 +771,8 @@
             var shiftCardClass = @json($shiftCardClass);
             var defaultDate = @json($defaultDay['date']);
             var sapDetailUrl = @json(route('control-room.dashboard.sap-detail'));
+            var sapPhotosUrl = @json(route('control-room.dashboard.sap-photos'));
+            var highlightData = @json($mock['highlight']);
 
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
             tooltipTriggerList.forEach(function (el) {
@@ -1055,6 +1088,49 @@
                 });
             }
 
+            function sapPhotoMarkup(url, label, reportId) {
+                if (!url) {
+                    return '';
+                }
+                return '<figure class="ocr-sap-photo">'
+                    + '<figcaption class="ocr-sap-photo-label">' + escapeHtml(label) + '</figcaption>'
+                    + '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">'
+                    + '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(label + ' ' + reportId) + '" loading="lazy" onerror="this.closest(\'figure\').hidden=true">'
+                    + '</a></figure>';
+            }
+
+            function sapPhotoBlock(card) {
+                if (card.photo_page_id) {
+                    return '<div class="ocr-sap-photos" data-photo-page="' + escapeHtml(String(card.photo_page_id)) + '" data-report-id="' + escapeHtml(card.id) + '">'
+                        + '<p class="ocr-sap-muted">Memuat foto…</p>'
+                        + '</div>';
+                }
+                if (card.photo_url) {
+                    return sapPhotoMarkup(card.photo_url, 'Foto', card.id);
+                }
+                return '';
+            }
+
+            function hydrateSapPhotos() {
+                sapGrid.querySelectorAll('[data-photo-page]').forEach(function (el) {
+                    var id = el.getAttribute('data-photo-page');
+                    var reportId = el.getAttribute('data-report-id') || id;
+                    fetch(sapPhotosUrl + '?id=' + encodeURIComponent(id), {
+                        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                    })
+                        .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+                        .then(function (result) {
+                            var data = (result.ok && result.body && result.body.data) ? result.body.data : {};
+                            var html = sapPhotoMarkup(data.foto_temuan, 'Foto Temuan', reportId)
+                                + sapPhotoMarkup(data.foto_penyelesaian, 'Foto Penyelesaian', reportId);
+                            el.innerHTML = html;
+                        })
+                        .catch(function () {
+                            el.innerHTML = '';
+                        });
+                });
+            }
+
             function renderSapCards() {
                 var list = sapFilter === 'all' ? sapCards : sapCards.filter(function (card) {
                     return card.type === sapFilter;
@@ -1067,11 +1143,7 @@
                 }
                 sapStatus.hidden = true;
                 sapGrid.innerHTML = list.map(function (card) {
-                    var photo = card.photo_url
-                        ? '<a class="ocr-sap-photo" href="' + escapeHtml(card.photo_url) + '" target="_blank" rel="noopener">'
-                            + '<img src="' + escapeHtml(card.photo_url) + '" alt="Foto laporan ' + escapeHtml(card.id) + '" loading="lazy" onerror="this.parentElement.hidden=true">'
-                            + '</a>'
-                        : '';
+                    var photo = sapPhotoBlock(card);
                     var geotag = card.geotag ? ('GEOTAGGING Jam: ' + escapeHtml(card.geotag)) : 'Null';
                     var statusClass = (card.status || '').toLowerCase() === 'closed' ? 'is-closed' : 'is-plain';
                     return '<article class="ocr-sap-card" data-type="' + escapeHtml(card.type) + '">'
@@ -1091,6 +1163,7 @@
                         + '<span class="ocr-sap-badge ' + statusClass + '">' + escapeHtml(card.status || '—') + '</span>'
                         + '</article>';
                 }).join('');
+                hydrateSapPhotos();
             }
 
             document.querySelectorAll('[data-sap-filter]').forEach(function (btn) {
@@ -1101,6 +1174,69 @@
                     renderSapCards();
                 });
             });
+
+            (function initHighlightDetail() {
+                var modalEl = document.getElementById('ocr-highlight-modal');
+                var titleEl = document.getElementById('ocr-highlight-title');
+                var metaEl = document.getElementById('ocr-highlight-meta');
+                var bodyEl = document.getElementById('ocr-highlight-body');
+                var emptyEl = document.getElementById('ocr-highlight-empty');
+                if (!modalEl || !bodyEl) {
+                    return;
+                }
+                var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+                function highlightItems(kind, name) {
+                    if (kind === 'golden_rule') {
+                        var rules = highlightData.goldenRules || [];
+                        for (var i = 0; i < rules.length; i += 1) {
+                            if (rules[i].name === name) {
+                                return rules[i].items || [];
+                            }
+                        }
+                        return [];
+                    }
+                    if (kind === 'blindspot') {
+                        return highlightData.blindspotItems || [];
+                    }
+                    return highlightData.tbcItems || [];
+                }
+
+                function highlightTitle(kind, name) {
+                    if (kind === 'golden_rule') {
+                        return name || 'Golden Rule';
+                    }
+                    if (kind === 'blindspot') {
+                        return 'Blindspot';
+                    }
+                    return 'Ratio TBC';
+                }
+
+                document.querySelectorAll('[data-highlight-kind]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var kind = btn.getAttribute('data-highlight-kind');
+                        var name = btn.getAttribute('data-highlight-name') || '';
+                        var items = highlightItems(kind, name);
+                        titleEl.textContent = 'Highlight — ' + highlightTitle(kind, name);
+                        metaEl.textContent = items.length + ' temuan';
+                        bodyEl.innerHTML = items.map(function (item) {
+                            return '<tr>'
+                                + '<td>' + escapeHtml(item.tasklist || '—') + '</td>'
+                                + '<td>' + escapeHtml(item.found_at || '—') + '</td>'
+                                + '<td>' + escapeHtml(item.description || '—') + '</td>'
+                                + '<td>' + escapeHtml(item.company_pic || '—') + '</td>'
+                                + '<td>' + escapeHtml(item.status || '—') + '</td>'
+                                + '</tr>';
+                        }).join('');
+                        emptyEl.hidden = items.length > 0;
+                        var tableWrap = modalEl.querySelector('.table-responsive');
+                        if (tableWrap) {
+                            tableWrap.hidden = items.length === 0;
+                        }
+                        modal.show();
+                    });
+                });
+            })();
 
             document.querySelectorAll('.ocr-detail-btn').forEach(function (btn) {
                 btn.addEventListener('click', function () {

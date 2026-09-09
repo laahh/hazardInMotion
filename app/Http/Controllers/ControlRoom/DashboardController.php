@@ -8,10 +8,12 @@ use App\Enums\ControlRoomShiftCode;
 use App\Enums\ControlRoomSiteCode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ControlRoom\ControlRoomDashboardSapDetailRequest;
+use App\Http\Requests\ControlRoom\ControlRoomDashboardSapPhotosRequest;
 use App\Services\ControlRoom\ControlRoomDashboardInsightsAssembler;
 use App\Services\ControlRoom\ControlRoomLocationCoverageService;
 use App\Services\ControlRoom\ControlRoomReplacementAttendanceService;
 use App\Services\ControlRoom\ControlRoomSapDutyReader;
+use App\Services\ControlRoom\ControlRoomSapPhotoResolver;
 use App\Services\ControlRoom\ControlRoomSapWeekCountsReader;
 use App\Services\ControlRoom\ControlRoomSiteDutyBoardService;
 use App\Services\ControlRoom\DashboardMockDataProvider;
@@ -105,5 +107,13 @@ final class DashboardController extends Controller
             CarbonImmutable::parse($request->validated('date')),
             $shift,
         ));
+    }
+
+    public function sapPhotos(ControlRoomDashboardSapPhotosRequest $request, ControlRoomSapPhotoResolver $photos): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $photos->fromPhotoCarId((int) $request->validated('id')),
+        ]);
     }
 }

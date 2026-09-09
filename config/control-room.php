@@ -79,6 +79,21 @@ return [
 
     'sap_target_components' => ['hazard', 'inspeksi', 'observasi'],
 
+    /*
+    | Tools inspeksi/hazard yang dihitung di Control Room (OCR).
+    | Pengawasan Langsung, Teropong, Drone, dll. tidak masuk % SAP / Detail.
+    */
+    'inspeksi_hazard_tools' => [
+        'Real Time - CCTV Support',
+        'Real Time - Mining Eyes',
+        'Real Time - DMS',
+        'Real Time - CCTV Portable',
+        'Post Event - CCTV Support',
+        'Post Event - Mining Eyes',
+        'Post Event - DMS',
+        'Post Event - CCTV Portable',
+    ],
+
     'coverage_weight' => ['normal' => 1, 'critical' => 2],
 
     /*

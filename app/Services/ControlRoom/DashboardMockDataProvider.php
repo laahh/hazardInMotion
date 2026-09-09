@@ -23,7 +23,7 @@ final class DashboardMockDataProvider
      * @param  array<string, array{hazard: int, inspeksi: int, observasi: int}>  $sapCountsBySidDate
      * @param  array{
      *     pareto?: array{s1: list<array{hour: int, count: int, cumulative: float}>, s2: list<array{hour: int, count: int, cumulative: float}>},
-     *     highlight?: array{goldenRules: list<array{name: string, count: int}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float},
+     *     highlight?: array{goldenRules: list<array{name: string, count: int, items?: list<array<string, string>>}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float, blindspotItems?: list<array<string, string>>, tbcItems?: list<array<string, string>>},
      *     quality?: list<array<string, mixed>>,
      *     personnelCoverage?: list<array{name: string, lokasi: int, kritis: int, lead: bool}>
      * }  $insights
@@ -79,6 +79,8 @@ final class DashboardMockDataProvider
                 'blindspotCount' => 0,
                 'blindspotTotal' => 0,
                 'tbcPercentage' => null,
+                'blindspotItems' => [],
+                'tbcItems' => [],
             ],
             'quality' => $insights['quality'] ?? [],
         ];
@@ -191,7 +193,7 @@ final class DashboardMockDataProvider
         $mark = static fn (int $n): string => $n >= 1 ? 'ada' : 'belum';
         $observasi = (int) ($counts['observasi'] ?? 0) + (int) ($counts['oak'] ?? 0);
 
-        return 'Target 1 Hazard, 1 Inspeksi, 1 Observasi/OAK. Hazard: '.$mark((int) ($counts['hazard'] ?? 0))
+        return 'Target 1 Hazard, 1 Inspeksi, 1 Observasi/OAK (Hazard/Inspeksi hanya tools CCTV Support, Mining Eyes, DMS, CCTV Portable — Real Time & Post Event). Hazard: '.$mark((int) ($counts['hazard'] ?? 0))
             .', Inspeksi: '.$mark((int) ($counts['inspeksi'] ?? 0))
             .', Observasi/OAK: '.$mark($observasi).'.';
     }

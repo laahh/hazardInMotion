@@ -58,6 +58,53 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         $this->assertSame(50.0, $insights['highlight']['tbcPercentage']);
     }
 
+    public function test_highlight_kategori_menyertakan_detail_temuan(): void
+    {
+        $insights = $this->assembler()->fromFindings(
+            [
+                $this->finding(
+                    'FJAVJ',
+                    '2026-08-31 09:00:00',
+                    'inspeksi',
+                    'APD',
+                    'Isolasi Energi',
+                    'Pit A',
+                    'Front',
+                    '9374205',
+                    'Tidak memakai APD',
+                    'ANDRIANSYAH',
+                    'PT Serasi Autoraya',
+                    'CLOSED',
+                ),
+                $this->finding('FJAVJ', '2026-08-31 08:15:00', 'hazard', 'APD', 'Tidak Melanggar Golden Rules'),
+            ],
+            $this->schedule(),
+            ['uncovered' => ['pit a|front' => true], 'total' => 10],
+            [[
+                'Date_for_Join' => '2026-08-31',
+                'deskripsi' => 'TBC tinggi',
+                'pic' => 'BUDI',
+                'perusahaan_pic' => 'PT Berau Coal',
+                'status3' => 'OPEN',
+                'Task_Number' => 'TL-11',
+                'pelapor_all_karyawan' => 'Agung Nugroho',
+            ]],
+            sapLoaded: true,
+        );
+
+        $gr = collect($insights['highlight']['goldenRules'])->firstWhere('name', 'Isolasi Energi');
+        $this->assertNotNull($gr);
+        $this->assertSame('9374205', $gr['items'][0]['tasklist']);
+        $this->assertSame('2026-08-31 09:00:00', $gr['items'][0]['found_at']);
+        $this->assertSame('Tidak memakai APD', $gr['items'][0]['description']);
+        $this->assertSame('PT Serasi Autoraya — ANDRIANSYAH', $gr['items'][0]['company_pic']);
+        $this->assertSame('Closed', $gr['items'][0]['status']);
+        $this->assertSame('9374205', $insights['highlight']['blindspotItems'][0]['tasklist']);
+        $this->assertSame('TL-11', $insights['highlight']['tbcItems'][0]['tasklist']);
+        $this->assertSame('TBC tinggi', $insights['highlight']['tbcItems'][0]['description']);
+        $this->assertSame('PT Berau Coal — BUDI', $insights['highlight']['tbcItems'][0]['company_pic']);
+    }
+
     public function test_kualitas_menghitung_variasi_tanpa_dummy_tbc_gr_blindspot(): void
     {
         $insights = $this->assembler()->fromFindings(
@@ -190,6 +237,10 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         string $lokasi = '',
         string $detil = '',
         string $reportId = '',
+        string $description = '',
+        string $pic = '',
+        string $company = '',
+        string $status = '',
     ): array {
         return [
             'sid' => $sid,
@@ -202,6 +253,10 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
             'lokasi' => $lokasi,
             'detil_lokasi' => $detil,
             'report_id' => $reportId,
+            'description' => $description,
+            'pic' => $pic,
+            'company' => $company,
+            'status' => $status,
         ];
     }
 

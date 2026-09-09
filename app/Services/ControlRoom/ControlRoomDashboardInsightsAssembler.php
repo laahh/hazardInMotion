@@ -46,7 +46,7 @@ final class ControlRoomDashboardInsightsAssembler
      * @param  list<array<string, mixed>>  $findings
      * @return array{
      *     pareto: array{s1: list<array{hour: int, count: int, cumulative: float}>, s2: list<array{hour: int, count: int, cumulative: float}>},
-     *     highlight: array{goldenRules: list<array{name: string, count: int}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float},
+     *     highlight: array{goldenRules: list<array{name: string, count: int, items: list<array<string, string>>}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float, blindspotItems: list<array<string, string>>, tbcItems: list<array<string, string>>},
      *     quality: list<array<string, mixed>>,
      *     personnelCoverage: list<array{name: string, lokasi: int, kritis: int, lead: bool}>
      * }
@@ -60,7 +60,7 @@ final class ControlRoomDashboardInsightsAssembler
         bool $sapLoaded,
     ): array {
         $cacheKey = sprintf(
-            'control-room:insights-hsecm:v1:%s:%s:%s',
+            'control-room:insights-hsecm:v2:%s:%s:%s',
             $site->value,
             $weekStart->toDateString(),
             $weekEnd->toDateString(),
@@ -82,7 +82,7 @@ final class ControlRoomDashboardInsightsAssembler
      * @param  list<array<string, mixed>>  $tbcRows
      * @return array{
      *     pareto: array{s1: list<array{hour: int, count: int, cumulative: float}>, s2: list<array{hour: int, count: int, cumulative: float}>},
-     *     highlight: array{goldenRules: list<array{name: string, count: int}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float},
+     *     highlight: array{goldenRules: list<array{name: string, count: int, items: list<array<string, string>>}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float, blindspotItems: list<array<string, string>>, tbcItems: list<array<string, string>>},
      *     quality: list<array<string, mixed>>,
      *     personnelCoverage: list<array{name: string, lokasi: int, kritis: int, lead: bool}>
      * }
@@ -159,40 +159,184 @@ final class ControlRoomDashboardInsightsAssembler
      * @param  list<array<string, mixed>>  $findings
      * @param  array{uncovered: array<string, true>, total: int}  $coverage
      * @param  list<array<string, mixed>>  $tbcRows
-     * @return array{goldenRules: list<array{name: string, count: int}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float}
+     * @return array{goldenRules: list<array{name: string, count: int, items: list<array<string, string>>}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float, blindspotItems: list<array<string, string>>, tbcItems: list<array<string, string>>}
      */
     private function highlightFromFindings(array $findings, array $coverage, array $tbcRows): array
     {
         $golden = [];
+        $goldenItems = [];
         $hazardInspeksi = 0;
+        $blindspotItems = [];
+        $uncovered = $coverage['uncovered'] ?? [];
         foreach ($findings as $finding) {
             $component = (string) ($finding['component'] ?? '');
             if ($component === 'hazard' || $component === 'inspeksi') {
                 $hazardInspeksi++;
+            }
+            $locationKey = $this->locationKey(
+                (string) ($finding['lokasi'] ?? ''),
+                (string) ($finding['detil_lokasi'] ?? ''),
+            );
+            if ($locationKey !== '' && isset($uncovered[$locationKey])) {
+                $blindspotItems[] = $this->highlightItemFromFinding($finding);
             }
             $rule = trim((string) ($finding['golden_rule'] ?? ''));
             if (! $this->isGoldenRuleViolation($rule)) {
                 continue;
             }
             $golden[$rule] = ($golden[$rule] ?? 0) + 1;
+            $goldenItems[$rule][] = $this->highlightItemFromFinding($finding);
         }
 
         arsort($golden);
         $goldenRules = [];
         foreach ($golden as $name => $count) {
-            $goldenRules[] = ['name' => $name, 'count' => $count];
+            $items = $goldenItems[$name] ?? [];
+            usort($items, $this->highlightItemSorter());
+            $goldenRules[] = [
+                'name' => $name,
+                'count' => $count,
+                'items' => array_slice($items, 0, 100),
+            ];
         }
+
+        if ($blindspotItems === []) {
+            foreach ($uncovered as $key => $meta) {
+                $blindspotItems[] = $this->highlightItemFromLocation($key, $meta);
+            }
+        }
+        usort($blindspotItems, $this->highlightItemSorter());
 
         $tbcPercentage = $tbcRows === []
             ? null
             : $this->tbc->percentage(count($tbcRows), $hazardInspeksi);
+        $tbcItems = [];
+        foreach ($tbcRows as $row) {
+            $tbcItems[] = $this->highlightItemFromTbc($row);
+        }
+        usort($tbcItems, $this->highlightItemSorter());
 
         return [
             'goldenRules' => $goldenRules,
-            'blindspotCount' => count($coverage['uncovered']),
-            'blindspotTotal' => $coverage['total'],
+            'blindspotCount' => count($uncovered),
+            'blindspotTotal' => (int) ($coverage['total'] ?? 0),
             'tbcPercentage' => $tbcPercentage,
+            'blindspotItems' => array_slice($blindspotItems, 0, 100),
+            'tbcItems' => array_slice($tbcItems, 0, 100),
         ];
+    }
+
+    /**
+     * @return callable(array<string, string>, array<string, string>): int
+     */
+    private function highlightItemSorter(): callable
+    {
+        return static function (array $a, array $b): int {
+            return strcmp((string) ($b['found_at'] ?? ''), (string) ($a['found_at'] ?? ''));
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $finding
+     * @return array{tasklist: string, found_at: string, description: string, company_pic: string, status: string}
+     */
+    private function highlightItemFromFinding(array $finding): array
+    {
+        $description = trim((string) ($finding['description'] ?? ''));
+        if ($description === '') {
+            $description = trim((string) ($finding['category'] ?? ''));
+        }
+
+        return [
+            'tasklist' => $this->dash((string) ($finding['report_id'] ?? '')),
+            'found_at' => $this->dash((string) ($finding['at'] ?? '')),
+            'description' => $this->dash($description),
+            'company_pic' => $this->companyPic(
+                (string) ($finding['company'] ?? ''),
+                (string) ($finding['pic'] ?? ''),
+            ),
+            'status' => $this->statusLabel($finding['status'] ?? null),
+        ];
+    }
+
+    /**
+     * @return array{tasklist: string, found_at: string, description: string, company_pic: string, status: string}
+     */
+    private function highlightItemFromLocation(string $key, mixed $meta): array
+    {
+        $row = is_array($meta) ? $meta : [];
+        if ($row === []) {
+            [$lokasi, $detil] = array_pad(explode('|', $key, 2), 2, '');
+            $row = ['lokasi' => $lokasi, 'detil' => $detil, 'status' => 'Belum tercover'];
+        }
+        $lokasi = trim((string) ($row['lokasi'] ?? ''));
+        $detil = trim((string) ($row['detil'] ?? ''));
+        $place = trim($lokasi.($detil !== '' ? ' / '.$detil : ''));
+
+        return [
+            'tasklist' => '—',
+            'found_at' => '—',
+            'description' => $this->dash($place !== '' ? $place : 'Lokasi belum tercover'),
+            'company_pic' => '—',
+            'status' => $this->dash((string) ($row['status'] ?? 'Belum tercover')),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array{tasklist: string, found_at: string, description: string, company_pic: string, status: string}
+     */
+    private function highlightItemFromTbc(array $row): array
+    {
+        $description = trim((string) ($row['deskripsi'] ?? ''));
+        if ($description === '') {
+            $description = trim((string) ($row['kategori_TBC'] ?? $row['blindspot_TBC'] ?? ''));
+        }
+
+        return [
+            'tasklist' => $this->dash((string) ($row['Task_Number'] ?? '')),
+            'found_at' => $this->dash((string) ($row['Date_for_Join'] ?? '')),
+            'description' => $this->dash($description),
+            'company_pic' => $this->companyPic(
+                (string) ($row['perusahaan_pic'] ?? ''),
+                (string) ($row['pic'] ?? $row['pelapor_all_karyawan'] ?? ''),
+            ),
+            'status' => $this->statusLabel($row['status3'] ?? null),
+        ];
+    }
+
+    private function companyPic(string $company, string $pic): string
+    {
+        $company = trim($company);
+        $pic = trim($pic);
+        if ($company === '' && $pic === '') {
+            return '—';
+        }
+        if ($company === '') {
+            return $pic;
+        }
+        if ($pic === '') {
+            return $company;
+        }
+
+        return $company.' — '.$pic;
+    }
+
+    private function statusLabel(mixed $value): string
+    {
+        $status = trim((string) ($value ?? ''));
+        if ($status === '') {
+            return '—';
+        }
+
+        return ucfirst(mb_strtolower($status));
+    }
+
+    private function dash(string $value): string
+    {
+        $text = trim($value);
+
+        return $text !== '' ? $text : '—';
     }
 
     /**
@@ -420,7 +564,11 @@ final class ControlRoomDashboardInsightsAssembler
             }
             $key = $this->locationKey((string) ($arr['Lokasi'] ?? ''), (string) ($arr['Detil_Lokasi'] ?? ''));
             if ($key !== '') {
-                $uncovered[$key] = true;
+                $uncovered[$key] = [
+                    'lokasi' => trim((string) ($arr['Lokasi'] ?? '')),
+                    'detil' => trim((string) ($arr['Detil_Lokasi'] ?? '')),
+                    'status' => trim((string) ($arr['Status_Coverage_dalam_1_Week'] ?? 'Belum tercover')),
+                ];
             }
         }
 
@@ -443,8 +591,13 @@ final class ControlRoomDashboardInsightsAssembler
         $to = $weekEnd->toDateString();
 
         try {
-            $query = DB::table(self::TBC_TABLE)
-                ->select(['Date_for_Join', 'site', 'kategori_TBC', 'blindspot_TBC', 'pelapor_all_karyawan', 'validasi_GR']);
+            $columns = ['Date_for_Join', 'site', 'kategori_TBC', 'blindspot_TBC', 'pelapor_all_karyawan', 'validasi_GR'];
+            foreach (['deskripsi', 'pic', 'perusahaan_pic', 'status3', 'Task_Number'] as $optional) {
+                if (Schema::hasColumn(self::TBC_TABLE, $optional)) {
+                    $columns[] = $optional;
+                }
+            }
+            $query = DB::table(self::TBC_TABLE)->select($columns);
             if ($this->hsecm->hasBatchSlotSupport(self::TBC_TABLE)) {
                 $slot = $this->hsecm->latestBatchSlot(self::TBC_TABLE);
                 if ($slot === null) {

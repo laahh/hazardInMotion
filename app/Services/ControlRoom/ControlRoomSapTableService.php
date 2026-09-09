@@ -36,7 +36,7 @@ final class ControlRoomSapTableService
     ): array {
         $today = CarbonImmutable::parse($now ?? now())->startOfDay();
         $cacheKey = sprintf(
-            'control-room:sap-table:v1:%s:%s:%s',
+            'control-room:sap-table:v2:%s:%s:%s',
             $weekStart->toDateString(),
             $site?->value ?? 'ALL',
             $today->toDateString(),

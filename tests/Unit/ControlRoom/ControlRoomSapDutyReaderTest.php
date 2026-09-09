@@ -43,7 +43,7 @@ final class ControlRoomSapDutyReaderTest extends TestCase
                     'status_laporan' => 'CLOSED',
                     'deskripsi_temuan' => 'Tidak ada pengawas',
                     'subketidaksesuaian' => 'Tidak ada pengawas',
-                    'tools_observasi' => 'Pengawasan Langsung',
+                    'tools_observasi' => 'Post Event - Mining Eyes',
                     'lokasi' => '(B PMO) Pit Q1',
                     'detil_lokasi' => 'View Point KDC',
                     'latitude' => null,
@@ -66,10 +66,41 @@ final class ControlRoomSapDutyReaderTest extends TestCase
         $this->assertSame('HAZARD - Real Time - DMS', $cards[0]['headline']);
         $this->assertSame('09:23:00', $cards[0]['geotag']);
         $this->assertSame('Closed', $cards[0]['status']);
-        $this->assertSame('https://hseautomation.beraucoal.co.id/report/photoCar/9304931', $cards[0]['photo_url']);
+        $this->assertNull($cards[0]['photo_url']);
+        $this->assertSame('9304931', $cards[0]['photo_page_id']);
         $this->assertSame('inspeksi', $cards[1]['type']);
+        $this->assertSame('INSPEKSI - Post Event - Mining Eyes', $cards[1]['headline']);
         $this->assertNull($cards[1]['geotag']);
         $this->assertNull($cards[1]['photo_url']);
+        $this->assertSame('9340899', $cards[1]['photo_page_id']);
+    }
+
+    public function test_hazard_inspeksi_selain_tools_ocr_tidak_tampil(): void
+    {
+        $cards = $this->reader()->cardsFromRows(
+            [
+                (object) [
+                    'id_laporan' => 1,
+                    'tanggal_laporan' => '2026-08-31 09:00:00',
+                    'jenis_laporan' => 'HAZARD',
+                    'tools_observasi' => 'Pengawasan Langsung',
+                    'url_foto' => null,
+                ],
+                (object) [
+                    'id_laporan' => 2,
+                    'tanggal_laporan' => '2026-08-31 10:00:00',
+                    'jenis_laporan' => 'INSPEKSI',
+                    'tools_observasi' => 'Real Time - CCTV Support',
+                    'url_foto' => null,
+                ],
+            ],
+            [],
+            [],
+        );
+
+        $this->assertCount(1, $cards);
+        $this->assertSame('inspeksi', $cards[0]['type']);
+        $this->assertSame('INSPEKSI - Real Time - CCTV Support', $cards[0]['headline']);
     }
 
     public function test_oak_diduplikasi_per_id(): void
@@ -110,6 +141,77 @@ final class ControlRoomSapDutyReaderTest extends TestCase
         $this->assertCount(1, $cards);
         $this->assertSame('oak', $cards[0]['type']);
         $this->assertSame('11', $cards[0]['id']);
+        $this->assertSame('—', $cards[0]['pic']);
+    }
+
+    public function test_pic_observasi_dari_karyawan_dan_perusahaan_observee(): void
+    {
+        $cards = $this->reader()->cardsFromRows([], [
+            (object) [
+                'id_observasi' => 88,
+                'tanggal_observasi' => '2026-08-31 11:00:00',
+                'jenis_kegiatan' => 'Patroli',
+                'catatan_observasi' => 'Aman',
+                'nama_pelapor' => 'AGUNG NUGROHO',
+                'jabatan_fungsional_pelapor' => 'Pengawas',
+                'perusahaan_pelapor' => 'PT Berau Coal',
+                'nama_personil_diobservasi' => 'BUDI SANTOSO',
+                'perusahaan_personil_diobservasi' => 'PT Pamapersada Nusantara',
+                'jabatan_fungsional_personil_diobservasi' => 'Operator',
+                'lokasi' => 'Pit A',
+                'detil_lokasi' => 'Front',
+                'url_foto' => 'https://hseautomation.beraucoal.co.id/beats2/file/document/8266618',
+            ],
+        ], []);
+
+        $this->assertSame('BUDI SANTOSO', $cards[0]['pic']);
+        $this->assertSame('Operator — PT Pamapersada Nusantara', $cards[0]['pic_meta']);
+        $this->assertSame('AGUNG NUGROHO', $cards[0]['reporter']);
+        $this->assertSame('https://hseautomation.beraucoal.co.id/beats2/file/document/8266618', $cards[0]['photo_url']);
+        $this->assertNull($cards[0]['photo_page_id']);
+    }
+
+    public function test_pic_oak_mengutamakan_observee_bukan_observer(): void
+    {
+        $cards = $this->reader()->cardsFromRows([], [], [
+            (object) [
+                'id_oak' => 22,
+                'tanggal_submit' => '2026-08-31 19:10:00',
+                'aktivitas' => 'Observasi Alat',
+                'sub_aktivitas' => 'Dump truck',
+                'kesimpulan' => 'Aman',
+                'peran_dalam_tim' => 'OBSERVER',
+                'nama_team' => 'SALSABIELA FIRDAUSI',
+                'jabatan_fungsional_team' => 'Pengawas',
+                'perusahaan_observee' => null,
+                'nama_pelapor' => 'SALSABIELA FIRDAUSI',
+                'perusahaan_pelapor' => 'PT Pamapersada Nusantara',
+                'lokasi' => 'Pit A',
+                'detil_lokasi' => 'Front',
+                'url_foto' => null,
+            ],
+            (object) [
+                'id_oak' => 22,
+                'tanggal_submit' => '2026-08-31 19:10:00',
+                'aktivitas' => 'Observasi Alat',
+                'sub_aktivitas' => 'Dump truck',
+                'kesimpulan' => 'Aman',
+                'peran_dalam_tim' => 'OBSERVEE',
+                'nama_team' => 'ROFIUDIN',
+                'jabatan_fungsional_team' => 'Operator',
+                'perusahaan_observee' => 'PT Pamapersada Nusantara',
+                'nama_pelapor' => 'SALSABIELA FIRDAUSI',
+                'perusahaan_pelapor' => 'PT Pamapersada Nusantara',
+                'lokasi' => 'Pit A',
+                'detil_lokasi' => 'Front',
+                'url_foto' => null,
+            ],
+        ]);
+
+        $this->assertCount(1, $cards);
+        $this->assertSame('ROFIUDIN', $cards[0]['pic']);
+        $this->assertSame('Operator — PT Pamapersada Nusantara', $cards[0]['pic_meta']);
+        $this->assertSame('SALSABIELA FIRDAUSI', $cards[0]['reporter']);
     }
 
     public function test_jendela_laporan_hari_h_sampai_akhir_h_plus_satu(): void

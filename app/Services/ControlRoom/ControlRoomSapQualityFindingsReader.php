@@ -52,7 +52,7 @@ final class ControlRoomSapQualityFindingsReader
         sort($sids);
         $start = $from->startOfDay();
         $end = $this->dutyWindow->reportingWindow($lastDutyDate)['end'];
-        $cacheKey = 'control-room:sap-quality-findings:v2:'.hash(
+        $cacheKey = 'control-room:sap-quality-findings:v3:'.hash(
             'sha1',
             implode(',', $sids).'|'.$start->toDateTimeString().'|'.$end->toDateTimeString(),
         );
@@ -181,6 +181,7 @@ final class ControlRoomSapQualityFindingsReader
     private function fetchChunk(array $sids, CarbonImmutable $start, CarbonImmutable $end): ?array
     {
         $placeholders = implode(',', array_fill(0, count($sids), '?'));
+        $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate();
         $sql = "
             SELECT sid, at, component, category, lokasi, detil_lokasi, report_id, has_text, has_photo, has_geo
             FROM (
@@ -207,6 +208,7 @@ final class ControlRoomSapQualityFindingsReader
                 WHERE kode_sid_pelapor IN ({$placeholders})
                   AND tanggal_laporan >= CAST(? AS timestamp)
                   AND tanggal_laporan < CAST(? AS timestamp)
+                  AND {$tools['sql']}
                 ORDER BY id_laporan, tanggal_laporan
             ) hazard
             WHERE component IS NOT NULL
@@ -265,7 +267,7 @@ final class ControlRoomSapQualityFindingsReader
         ";
 
         $range = [$start->toDateTimeString(), $end->toDateTimeString()];
-        $bindings = [...$sids, ...$range, ...$sids, ...$range, ...$sids, ...$range];
+        $bindings = [...$sids, ...$range, ...$tools['bindings'], ...$sids, ...$range, ...$sids, ...$range];
 
         try {
             $rows = $this->olap->select($sql, $bindings, self::QUERY_TIMEOUT_MS);

@@ -52,7 +52,7 @@ final class ControlRoomSapWeekCountsReader
         sort($sids);
         $dates = array_column($duties, 'date');
         sort($dates);
-        $cacheKey = 'control-room:sap-week-counts:v8:'.hash('sha1', implode(',', $sids).'|'.$dates[0].'|'.$dates[array_key_last($dates)]);
+        $cacheKey = 'control-room:sap-week-counts:v10:'.hash('sha1', implode(',', $sids).'|'.$dates[0].'|'.$dates[array_key_last($dates)]);
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['counts'], $cached['findings'])) {
             return ['loaded' => true, 'counts' => $cached['counts'], 'findings' => $cached['findings']];
@@ -225,18 +225,27 @@ final class ControlRoomSapWeekCountsReader
     private function fetchHazardInspeksi(array $sids, CarbonImmutable $start, CarbonImmutable $end, int &$failed): array
     {
         $placeholders = implode(',', array_fill(0, count($sids), '?'));
+        $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate();
         $sql = "
             SELECT DISTINCT ON (id_laporan)
                 id_laporan, kode_sid_pelapor, nama_pelapor, tanggal_laporan, jenis_laporan,
-                subketidaksesuaian, ketidaksesuaian, nama_goldenrule, lokasi, detil_lokasi
+                subketidaksesuaian, ketidaksesuaian, nama_goldenrule, lokasi, detil_lokasi,
+                LEFT(COALESCE(deskripsi_temuan, ''), 400) AS deskripsi_temuan,
+                nama_pic, perusahaan_pic, status_laporan
             FROM bcbeats.mv_inspeksi_hazard
             WHERE kode_sid_pelapor IN ({$placeholders})
               AND tanggal_laporan >= CAST(? AS timestamp)
               AND tanggal_laporan < CAST(? AS timestamp)
+              AND {$tools['sql']}
             ORDER BY id_laporan, tanggal_laporan
         ";
 
-        $rows = $this->select($sql, [...$sids, $start->toDateTimeString(), $end->toDateTimeString()], 'hazard/inspeksi', $failed);
+        $rows = $this->select(
+            $sql,
+            [...$sids, $start->toDateTimeString(), $end->toDateTimeString(), ...$tools['bindings']],
+            'hazard/inspeksi',
+            $failed,
+        );
         $findings = [];
         foreach ($rows as $row) {
             $at = $this->parseAt($row->tanggal_laporan ?? null);
@@ -259,6 +268,10 @@ final class ControlRoomSapWeekCountsReader
                 lokasi: (string) ($row->lokasi ?? ''),
                 detilLokasi: (string) ($row->detil_lokasi ?? ''),
                 reportId: (string) ($row->id_laporan ?? ''),
+                description: (string) ($row->deskripsi_temuan ?? ''),
+                pic: (string) ($row->nama_pic ?? ''),
+                company: (string) ($row->perusahaan_pic ?? ''),
+                status: (string) ($row->status_laporan ?? ''),
             );
         }
 
@@ -393,6 +406,9 @@ final class ControlRoomSapWeekCountsReader
         string $photoUrl = '',
         mixed $latitude = null,
         mixed $longitude = null,
+        string $pic = '',
+        string $company = '',
+        string $status = '',
     ): array {
         return [
             'sid' => $sid,
@@ -409,6 +425,9 @@ final class ControlRoomSapWeekCountsReader
             'photo_url' => trim($photoUrl),
             'latitude' => $latitude,
             'longitude' => $longitude,
+            'pic' => trim($pic),
+            'company' => trim($company),
+            'status' => trim($status),
         ];
     }
 
