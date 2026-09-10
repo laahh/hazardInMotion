@@ -76,7 +76,7 @@ final class ControlRoomSapDutyReader
             return $this->payload($meta, [], reachable: false, errors: ['Sumber SAP (OBDS) tidak terjangkau.']);
         }
 
-        $cacheKey = 'control-room:sap-duty:v13:'.$sid.':'.$meta['date'];
+        $cacheKey = 'control-room:sap-duty:v14:'.$sid.':'.$meta['date'];
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['cards'])) {
             return $this->payload($meta, $cached['cards'], reachable: true);
@@ -146,6 +146,10 @@ final class ControlRoomSapDutyReader
     }
 
     /**
+     * mv_observasi tidak punya jabatan_fungsional_pelapor / perusahaan_pelapor.
+     * SELECT kolom itu membuat query gagal senyap → tab Observasi kosong
+     * sementara Kualitas tetap menghitung laporan yang sama.
+     *
      * @param  list<string>  $errors
      * @return list<object>
      */
@@ -157,7 +161,7 @@ final class ControlRoomSapDutyReader
             SELECT DISTINCT ON (id_observasi)
                    id_observasi, tanggal_observasi, jenis_kegiatan, catatan_observasi, tools_observasi,
                    lokasi, detil_lokasi, latitude, longitude, url_foto,
-                   nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor,
+                   nama_pelapor,
                    nama_personil_diobservasi, perusahaan_personil_diobservasi,
                    jabatan_fungsional_personil_diobservasi
             FROM bcbeats.mv_observasi

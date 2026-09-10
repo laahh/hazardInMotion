@@ -110,7 +110,7 @@ final class DashboardMockDataProviderTest extends TestCase
         $this->assertStringContainsString('1 dari 2', $mock['achievementGroups'][0]['rows'][0]['tbc_hint']);
     }
 
-    public function test_kualitas_total_mengikuti_jumlah_sap_pencapaian(): void
+    public function test_kualitas_total_tidak_dijumlah_dari_sap_counts_overlapping(): void
     {
         $days = [
             [
@@ -136,7 +136,7 @@ final class DashboardMockDataProviderTest extends TestCase
             insights: ['quality' => [[
                 'name' => 'Agung Nugroho',
                 'sid' => 'FJAVJ',
-                'total_findings' => 99,
+                'total_findings' => 2,
                 'distinct_categories' => 4,
                 'variety_score' => 0.5,
                 'tbc' => 1,
@@ -146,7 +146,7 @@ final class DashboardMockDataProviderTest extends TestCase
             ]]],
         );
 
-        $this->assertSame(9, $mock['quality'][0]['total_findings']);
+        $this->assertSame(2, $mock['quality'][0]['total_findings']);
         $this->assertSame(0.5, $mock['quality'][0]['variety_score']);
     }
 

@@ -291,6 +291,27 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         $this->assertSame(3, $insights['quality'][0]['total_findings']);
     }
 
+    public function test_kualitas_total_sama_dengan_kartu_detail_tanpa_dobel_jendela(): void
+    {
+        $insights = $this->assembler()->fromFindings(
+            [
+                $this->finding('FJAVJ', '2026-08-31 05:33:00', 'hazard', 'APD', '', reportId: '9370421'),
+                $this->finding('FJAVJ', '2026-08-31 05:36:00', 'inspeksi', 'Kendaraan', '', reportId: '9370423'),
+                $this->finding('FJAVJ', '2026-08-31 05:24:00', 'observasi', 'Penimbunan', '', reportId: '9370386'),
+                $this->finding('FJAVJ', '2026-08-31 05:27:00', 'observasi', 'Patroli', '', reportId: '9370394'),
+                $this->finding('FJAVJ', '2026-08-31 05:29:00', 'observasi', 'Patroli', '', reportId: '9370406'),
+                $this->finding('FJAVJ', '2026-08-31 05:33:00', 'hazard', 'APD', '', reportId: '9370421'),
+                $this->finding('FJAVJ', '2026-08-31 05:36:00', 'inspeksi', 'Kendaraan', '', reportId: '9370423'),
+            ],
+            $this->schedule(),
+            ['uncovered' => [], 'total' => 0],
+            [],
+            sapLoaded: true,
+        );
+
+        $this->assertSame(5, $insights['quality'][0]['total_findings']);
+    }
+
     public function test_kualitas_hanya_dari_orang_jaga_dan_jendela_tugas(): void
     {
         $insights = $this->assembler()->fromFindings(

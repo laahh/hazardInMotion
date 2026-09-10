@@ -212,6 +212,29 @@ final class ControlRoomSapDutyReaderTest extends TestCase
         $this->assertNull($cards[0]['photo_page_kind']);
     }
 
+    public function test_observasi_tetap_tampil_tanpa_jabatan_perusahaan_pelapor(): void
+    {
+        $cards = $this->reader()->cardsFromRows([], [
+            (object) [
+                'id_observasi' => 9370386,
+                'tanggal_observasi' => '2026-08-31 05:24:58',
+                'jenis_kegiatan' => 'Penimbunan material di Disposal',
+                'tools_observasi' => 'Real Time - Mining Eyes',
+                'catatan_observasi' => 'sudah dilakukan dengan aman',
+                'nama_pelapor' => 'DELISA SRI WINATRI',
+                'nama_personil_diobservasi' => 'AFRI EFFENDI',
+                'perusahaan_personil_diobservasi' => 'PT Madhani Talatah Nusantara',
+                'jabatan_fungsional_personil_diobservasi' => 'Manager',
+            ],
+        ], []);
+
+        $this->assertCount(1, $cards);
+        $this->assertSame('observasi', $cards[0]['type']);
+        $this->assertSame('9370386', $cards[0]['id']);
+        $this->assertSame('DELISA SRI WINATRI', $cards[0]['reporter']);
+        $this->assertSame('AFRI EFFENDI', $cards[0]['pic']);
+    }
+
     public function test_pic_oak_mengutamakan_observee_bukan_observer(): void
     {
         $cards = $this->reader()->cardsFromRows([], [], [

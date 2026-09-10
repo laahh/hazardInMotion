@@ -356,8 +356,8 @@ final class ControlRoomDashboardInsightsAssembler
     }
 
     /**
-     * Kualitas temuan personil jadwal. Total = jumlah laporan SAP pada hari
-     * jaga (H) sampai akhir H+1, sama dengan jendela tombol Detail.
+     * Kualitas temuan personil jadwal. Total = kartu SAP unik seperti modal
+     * Detail (satu laporan = satu), digabung semua hari jaga tanpa dobel.
      * TBC = Hazard/Inspeksi yang tasklist-nya sudah ada di GSheet (atau Excel fallback).
      *
      * @param  list<array<string, mixed>>  $findings
@@ -440,6 +440,9 @@ final class ControlRoomDashboardInsightsAssembler
     }
 
     /**
+     * Total = jumlah kartu SAP di modal Detail (satu laporan = satu baris).
+     * Observasi/OAK di MV bisa pecah per orang diamati — dihitung sekali per id.
+     *
      * @param  list<array<string, mixed>>  $findings
      * @return list<array<string, mixed>>
      */
@@ -455,7 +458,7 @@ final class ControlRoomDashboardInsightsAssembler
             $reportId = trim((string) ($finding['report_id'] ?? ''));
             $key = $reportId !== ''
                 ? $component.'|'.$reportId
-                : $component.'|'.($finding['at'] ?? '').'|'.($finding['category'] ?? '');
+                : $component.'|'.($finding['sid'] ?? '').'|'.($finding['at'] ?? '').'|'.($finding['category'] ?? '');
             if (isset($seen[$key])) {
                 continue;
             }

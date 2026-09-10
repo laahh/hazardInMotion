@@ -86,58 +86,8 @@ final class DashboardMockDataProvider
                 'blindspotItems' => [],
                 'tbcItems' => [],
             ],
-            'quality' => $this->qualityTotalsFromSap($insights['quality'] ?? [], $achievementRows, $sapLoaded),
+            'quality' => $insights['quality'] ?? [],
         ];
-    }
-
-    /**
-     * Total kualitas = jumlah laporan SAP di Pencapaian Personil
-     * (Hazard + Inspeksi + Observasi/OAK) per orang, unik per tanggal jaga.
-     *
-     * @param  list<array<string, mixed>>  $quality
-     * @param  list<array<string, mixed>>  $achievementRows
-     * @return list<array<string, mixed>>
-     */
-    private function qualityTotalsFromSap(array $quality, array $achievementRows, bool $sapLoaded): array
-    {
-        if (! $sapLoaded || $quality === []) {
-            return $quality;
-        }
-
-        $totals = [];
-        $seen = [];
-        foreach ($achievementRows as $row) {
-            $sid = strtoupper(trim((string) ($row['sid'] ?? '')));
-            $date = (string) ($row['date'] ?? '');
-            $slot = $sid.'|'.$date;
-            if ($sid === '' || isset($seen[$slot])) {
-                continue;
-            }
-            $seen[$slot] = true;
-            $counts = is_array($row['sap_counts'] ?? null) ? $row['sap_counts'] : [];
-            $totals[$sid] = ($totals[$sid] ?? 0)
-                + (int) ($counts['hazard'] ?? 0)
-                + (int) ($counts['inspeksi'] ?? 0)
-                + (int) ($counts['observasi'] ?? 0);
-        }
-
-        foreach ($quality as $index => $row) {
-            $sid = strtoupper(trim((string) ($row['sid'] ?? '')));
-            if ($sid !== '' && array_key_exists($sid, $totals)) {
-                $quality[$index]['total_findings'] = $totals[$sid];
-            }
-        }
-
-        usort($quality, function (array $a, array $b): int {
-            $byTotal = ((int) ($b['total_findings'] ?? 0)) <=> ((int) ($a['total_findings'] ?? 0));
-            if ($byTotal !== 0) {
-                return $byTotal;
-            }
-
-            return strcasecmp((string) ($a['name'] ?? ''), (string) ($b['name'] ?? ''));
-        });
-
-        return $quality;
     }
 
     /**
