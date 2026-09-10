@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\ControlRoom\AttendanceController;
 use App\Http\Controllers\ControlRoom\ControlRoomQrCodeController;
 use App\Http\Controllers\ControlRoom\ControlRoomSapController;
+use App\Http\Controllers\ControlRoom\ControlRoomTbcValidationController;
 use App\Http\Controllers\ControlRoom\ControlRoomTutorialController;
 use App\Http\Controllers\ControlRoom\DashboardController;
 use App\Http\Controllers\ControlRoom\DataQualityController;
@@ -62,4 +63,15 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/qr-code', [ControlRoomQrCodeController::class, 'index'])->name('qr-code.index');
     Route::get('/tutorial/embed', [ControlRoomTutorialController::class, 'embed'])->name('tutorial.embed');
     Route::get('/tutorial', [ControlRoomTutorialController::class, 'index'])->name('tutorial.index');
+
+    Route::prefix('tbc-validations')->name('tbc-validations.')->group(function (): void {
+        Route::get('/', [ControlRoomTbcValidationController::class, 'index'])->name('index');
+        Route::get('/create', [ControlRoomTbcValidationController::class, 'create'])->name('create');
+        Route::post('/', [ControlRoomTbcValidationController::class, 'store'])->name('store');
+        Route::get('/excel-template', [ControlRoomTbcValidationController::class, 'excelTemplate'])->name('excel-template');
+        Route::post('/excel-import', [ControlRoomTbcValidationController::class, 'excelImport'])->name('excel-import');
+        Route::get('/{tbcValidation}/edit', [ControlRoomTbcValidationController::class, 'edit'])->whereNumber('tbcValidation')->name('edit');
+        Route::put('/{tbcValidation}', [ControlRoomTbcValidationController::class, 'update'])->whereNumber('tbcValidation')->name('update');
+        Route::delete('/{tbcValidation}', [ControlRoomTbcValidationController::class, 'destroy'])->whereNumber('tbcValidation')->name('destroy');
+    });
 });

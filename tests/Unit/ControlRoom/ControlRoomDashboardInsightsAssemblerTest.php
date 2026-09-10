@@ -58,6 +58,37 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         $this->assertSame(50.0, $insights['highlight']['tbcPercentage']);
     }
 
+    public function test_tbc_excel_hanya_tasklist_yang_cocok_report_id_hazard_inspeksi(): void
+    {
+        $findings = [
+            $this->finding('FJAVJ', '2026-08-31 08:15:00', 'hazard', 'APD', '', reportId: '9374205'),
+            $this->finding('FJAVJ', '2026-08-31 09:00:00', 'inspeksi', 'APD', '', reportId: '111'),
+            $this->finding('FJAVJ', '2026-08-31 10:00:00', 'observasi', 'APD', '', reportId: '999'),
+        ];
+        $validations = [
+            ['tasklist' => '9374205', 'kronologi_singkat' => 'TBC dari Excel', 'sid_pekerja_terlibat' => 'FJAVJ', 'to_be_concerned_hazard' => 'Valid', 'no_alert' => 'Alert'],
+            ['tasklist' => '999', 'kronologi_singkat' => 'Observasi tidak dihitung'],
+            ['tasklist' => 'TIDAK-ADA', 'kronologi_singkat' => 'Bukan minggu ini'],
+        ];
+
+        $matched = $this->assembler()->tbcRowsMatchingFindings($findings, $validations);
+        $this->assertCount(1, $matched);
+        $this->assertSame('9374205', $matched[0]['tasklist']);
+        $this->assertSame('TBC dari Excel', $matched[0]['deskripsi']);
+
+        $insights = $this->assembler()->fromFindings(
+            $findings,
+            $this->schedule(),
+            ['uncovered' => [], 'total' => 0],
+            $matched,
+            sapLoaded: true,
+        );
+        $this->assertSame(50.0, $insights['highlight']['tbcPercentage']);
+        $this->assertSame('9374205', $insights['highlight']['tbcItems'][0]['tasklist']);
+        $this->assertSame('TBC dari Excel', $insights['highlight']['tbcItems'][0]['description']);
+        $this->assertSame('FJAVJ', $insights['highlight']['tbcItems'][0]['company_pic']);
+    }
+
     public function test_highlight_kategori_menyertakan_detail_temuan(): void
     {
         $insights = $this->assembler()->fromFindings(

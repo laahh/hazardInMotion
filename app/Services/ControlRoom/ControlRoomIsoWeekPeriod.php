@@ -8,7 +8,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 
 /**
- * Periode filter Control Room: ISO week Senin–Minggu.
+ * Periode filter Control Room: Minggu–Sabtu.
+ * Nomor minggu tetap ISO (picker HTML type=week), rentang operasional
+ * dimulai Minggu sebelum Senin ISO sampai Sabtu.
  */
 final class ControlRoomIsoWeekPeriod
 {
@@ -19,9 +21,9 @@ final class ControlRoomIsoWeekPeriod
         public readonly CarbonImmutable $end,
     ) {}
 
-    public static function fromRequest(Request $request, ?CarbonImmutable $defaultMonday = null): self
+    public static function fromRequest(Request $request, ?CarbonImmutable $defaultIsoMonday = null): self
     {
-        $defaultMonday ??= CarbonImmutable::now()
+        $defaultIsoMonday ??= CarbonImmutable::now()
             ->setISODate((int) now()->isoWeekYear(), (int) now()->isoWeek(), 1)
             ->subWeek()
             ->startOfDay();
@@ -31,8 +33,8 @@ final class ControlRoomIsoWeekPeriod
             return self::of((int) $matches[1], (int) $matches[2]);
         }
 
-        $year = (int) $request->integer('year', (int) $defaultMonday->isoWeekYear());
-        $week = (int) $request->integer('week', (int) $defaultMonday->isoWeek());
+        $year = (int) $request->integer('year', (int) $defaultIsoMonday->isoWeekYear());
+        $week = (int) $request->integer('week', (int) $defaultIsoMonday->isoWeek());
 
         return self::of($year, $week);
     }
@@ -40,24 +42,19 @@ final class ControlRoomIsoWeekPeriod
     public static function of(int $year, int $week): self
     {
         $week = max(1, min(53, $week));
-        $start = CarbonImmutable::now()->setISODate($year, $week, 1)->startOfDay();
+        $monday = CarbonImmutable::now()->setISODate($year, $week, 1)->startOfDay();
 
-        return new self(
-            (int) $start->isoWeekYear(),
-            (int) $start->isoWeek(),
-            $start,
-            $start->addDays(6)->endOfDay(),
-        );
+        return self::fromSunday($monday->subDay());
     }
 
     public function previous(): self
     {
-        return self::fromMonday($this->start->subWeek());
+        return self::fromSunday($this->start->subWeek());
     }
 
     public function next(): self
     {
-        return self::fromMonday($this->start->addWeek());
+        return self::fromSunday($this->start->addWeek());
     }
 
     public function isoWeekValue(): string
@@ -71,15 +68,49 @@ final class ControlRoomIsoWeekPeriod
             .' – '.$this->end->locale('id')->translatedFormat('l d M Y');
     }
 
-    private static function fromMonday(CarbonImmutable $monday): self
+    /**
+     * @return array{
+     *     year: int,
+     *     week: int,
+     *     isoWeekValue: string,
+     *     weekRangeLabel: string,
+     *     weekStart: CarbonImmutable,
+     *     weekEnd: CarbonImmutable,
+     *     prevYear: int,
+     *     prevWeek: int,
+     *     nextYear: int,
+     *     nextWeek: int
+     * }
+     */
+    public function viewData(): array
     {
-        $monday = $monday->startOfDay();
+        $prev = $this->previous();
+        $next = $this->next();
+
+        return [
+            'year' => $this->year,
+            'week' => $this->week,
+            'isoWeekValue' => $this->isoWeekValue(),
+            'weekRangeLabel' => $this->rangeLabel(),
+            'weekStart' => $this->start,
+            'weekEnd' => $this->end,
+            'prevYear' => $prev->year,
+            'prevWeek' => $prev->week,
+            'nextYear' => $next->year,
+            'nextWeek' => $next->week,
+        ];
+    }
+
+    private static function fromSunday(CarbonImmutable $sunday): self
+    {
+        $sunday = $sunday->startOfDay();
+        $monday = $sunday->addDay();
 
         return new self(
             (int) $monday->isoWeekYear(),
             (int) $monday->isoWeek(),
-            $monday,
-            $monday->addDays(6)->endOfDay(),
+            $sunday,
+            $sunday->addDays(6)->endOfDay(),
         );
     }
 }

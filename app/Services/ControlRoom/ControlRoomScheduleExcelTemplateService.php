@@ -55,8 +55,9 @@ final class ControlRoomScheduleExcelTemplateService
      */
     public function spreadsheet(ControlRoomSiteCode $site, int $year, int $week, Collection $personnel = new Collection()): Spreadsheet
     {
-        $weekStart = CarbonImmutable::now()->setISODate($year, $week, 1)->startOfDay();
-        $weekEnd = $weekStart->addDays(6);
+        $period = ControlRoomIsoWeekPeriod::of($year, $week);
+        $weekStart = $period->start;
+        $weekEnd = $period->end->startOfDay();
         $spreadsheet = new Spreadsheet();
 
         $this->writeJadwalSheet($spreadsheet, $site, $year, $week, $weekStart);
@@ -225,8 +226,8 @@ final class ControlRoomScheduleExcelTemplateService
         $sheet->fromArray([
             ['Template upload jadwal Control Room'],
             ['Site', $site->value.' — '.$site->label()],
-            ['Minggu ISO', 'W'.$week.'/'.$year],
-            ['Rentang tanggal', $weekStart->toDateString().' s/d '.$weekEnd->toDateString().' (Senin–Minggu)'],
+            ['Minggu', 'W'.$week.'/'.$year],
+            ['Rentang tanggal', $weekStart->toDateString().' s/d '.$weekEnd->toDateString().' (Minggu–Sabtu)'],
             [''],
             ['Cara isi'],
             ['1. Buka sheet Jadwal. Kolom kuning (sid) wajib diisi untuk baris yang dijadwalkan.'],

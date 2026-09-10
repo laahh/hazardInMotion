@@ -97,40 +97,23 @@
         <form method="GET" class="ocr-card" action="{{ route('control-room.dashboard') }}">
             <div class="ocr-toolbar">
                 <div class="ocr-toolbar-left">
-                    <div>
+        <div>
                         <label for="ocr-dash-site">Site</label>
                         <select name="site" id="ocr-dash-site" class="form-control" onchange="this.form.submit()">
-                            @foreach ($sites as $siteOption)
+                        @foreach ($sites as $siteOption)
                                 <option value="{{ $siteOption->value }}" @selected($site->value === $siteOption->value)>{{ $siteOption->label() }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div>
-                        <label for="ocr-dash-iso-week">Minggu (Senin–Minggu)</label>
-                        <input
-                            type="week"
-                            name="iso_week"
-                            id="ocr-dash-iso-week"
-                            class="form-control"
-                            value="{{ $isoWeekValue }}"
-                            onchange="this.form.submit()"
-                        >
-                    </div>
-                    <div>
-                        <label>Periode</label>
-                        <div class="ocr-week-stepper">
-                            <a href="{{ route('control-room.dashboard', ['site' => $site->value, 'year' => $prevYear, 'week' => $prevWeek]) }}" aria-label="Minggu sebelumnya">
-                                <i class="ri-arrow-left-s-line"></i>
-                            </a>
-                            <div class="ocr-week-label">
-                                <strong>{{ $weekRangeLabel }}</strong>
-                                <span>ISO Minggu {{ $week }} · {{ $year }} · Senin–Minggu</span>
-                            </div>
-                            <a href="{{ route('control-room.dashboard', ['site' => $site->value, 'year' => $nextYear, 'week' => $nextWeek]) }}" aria-label="Minggu berikutnya">
-                                <i class="ri-arrow-right-s-line"></i>
-                            </a>
-                        </div>
-                    </div>
+                        @endforeach
+                    </select>
+                </div>
+                    @include('control-room.partials.week-period-filter', [
+                        'weekInputId' => 'ocr-dash-iso-week',
+                        'isoWeekValue' => $isoWeekValue,
+                        'weekRangeLabel' => $weekRangeLabel,
+                        'year' => $year,
+                        'week' => $week,
+                        'prevWeekUrl' => route('control-room.dashboard', ['site' => $site->value, 'year' => $prevYear, 'week' => $prevWeek]),
+                        'nextWeekUrl' => route('control-room.dashboard', ['site' => $site->value, 'year' => $nextYear, 'week' => $nextWeek]),
+                    ])
                 </div>
                 <div class="ocr-toolbar-right">
                     <span class="ocr-sync">Jadwal, pencapaian, dan KPI: data asli</span>
@@ -153,7 +136,7 @@
                 @foreach ($siteBoard['cards'] as $card)
                     <a
                         class="ocr-site-stat is-{{ $card['tone'] }}{{ $site->value === $card['site'] ? ' is-current' : '' }}"
-                        href="{{ route('control-room.dashboard', ['site' => $card['site'], 'year' => $year, 'week' => $week]) }}"
+                        href="{{ route('control-room.dashboard', ['site' => $card['site'], 'year' => $year, 'week' => $week, 'iso_week' => $isoWeekValue]) }}"
                     >
                         <div class="ocr-site-stat-row">
                             <span class="ocr-site-stat-icon" aria-hidden="true">
@@ -372,9 +355,9 @@
                     <p class="ocr-kpi-label">{{ $card['label'] }}</p>
                     <p class="ocr-kpi-sub">{{ $card['deltaLabel'] }}</p>
                     <div class="ocr-track is-{{ $card['color'] }}"><span style="width: {{ min(100, $card['progress']) }}%"></span></div>
-                </div>
-            @endforeach
-        </div>
+            </div>
+        @endforeach
+    </div>
 
         <div class="ocr-card ocr-cal-card">
             <div class="ocr-card-header">
@@ -563,8 +546,8 @@
                     <div>
                         <h6>Coverage Personil</h6>
                         <p class="ocr-card-kicker">Lokasi unik yang dilaporkan saat jadwal jaga · kritis mengikuti CONTAINS Lokasi/Detil Lokasi</p>
-                    </div>
-                </div>
+            </div>
+        </div>
                 <div class="ocr-card-body ocr-card-body--flush">
                     <div class="table-responsive">
                         <table class="ocr-heat ocr-heat--coverage">
@@ -650,9 +633,9 @@
                             <div class="ocr-track is-warning"><span style="width: {{ min(100, $mock['highlight']['tbcPercentage'] ?? 0) }}%"></span></div>
                         </button>
                     </div> -->
-                </div>
             </div>
         </div>
+    </div>
 
         <div class="row gy-4">
             <div class="col-lg-7">
@@ -664,23 +647,23 @@
                         </div>
                     </div>
                     <div class="ocr-card-body ocr-card-body--flush">
-                        <div class="table-responsive">
+            <div class="table-responsive">
                             <table class="ocr-table">
-                                <thead>
-                                    <tr>
-                                        <th>Nama</th>
+                    <thead>
+                        <tr>
+                            <th>Nama</th>
                                         <th class="text-center">Total</th>
                                         <th class="text-center">Kategori</th>
                                         <th>Variasi</th>
                                         <th class="text-center">TBC</th>
                                         <th class="text-center">GR</th>
                                         <th class="text-center">Blindspot</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
+                        </tr>
+                    </thead>
+                    <tbody>
                                     @forelse ($mock['quality'] as $row)
                                         <tr>
-                                            <td>{{ $row['name'] }}</td>
+                                <td>{{ $row['name'] }}</td>
                                             <td class="text-center">{{ $row['total_findings'] }}</td>
                                             <td class="text-center">{{ $row['distinct_categories'] }}</td>
                                             <td>
@@ -700,13 +683,13 @@
                                     @empty
                                         <tr>
                                             <td colspan="7" class="text-secondary-light">Belum ada personil jadwal pada minggu yang dipilih.</td>
-                                        </tr>
+                            </tr>
                                     @endforelse
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
             </div>
             <div class="col-lg-5">
                 <div class="ocr-card h-100">
@@ -717,7 +700,7 @@
                         </div>
                     </div>
                     <div class="ocr-card-body"><div id="chart-quality-scatter"></div></div>
-                </div>
+        </div>
             </div>
         </div>
     </div>
@@ -729,7 +712,7 @@
                     <div>
                         <h6 class="modal-title" id="ocr-sap-title">Detail SAP</h6>
                         <p class="ocr-card-kicker mb-0" id="ocr-sap-meta"></p>
-                    </div>
+                </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
                 <div class="modal-body">
@@ -739,7 +722,7 @@
                         <button type="button" data-sap-filter="inspeksi">Inspeksi</button>
                         <button type="button" data-sap-filter="observasi">Observasi</button>
                         <button type="button" data-sap-filter="oak">OAK</button>
-                    </div>
+            </div>
                     <p class="ocr-sap-status-msg" id="ocr-sap-status">Memuat laporan…</p>
                     <div class="ocr-sap-grid" id="ocr-sap-grid"></div>
                 </div>

@@ -52,7 +52,6 @@ final class DashboardController extends Controller
         $weekStart = $period->start;
         $weekEnd = $period->end;
         $prev = $period->previous();
-        $next = $period->next();
         $schedule = $scheduleWeek->build($site, $weekStart);
         $sapWeek = $sapWeekCounts->forScheduleDays($schedule['days']);
         $insights = $insightsAssembler->build(
@@ -67,17 +66,8 @@ final class DashboardController extends Controller
         $previousSap = $sapWeekCounts->forScheduleDays($previousSchedule['days'], withFindings: false);
 
         return view('control-room.dashboard.index', [
+            ...$period->viewData(),
             'site' => $site,
-            'year' => $period->year,
-            'week' => $period->week,
-            'isoWeekValue' => $period->isoWeekValue(),
-            'weekRangeLabel' => $period->rangeLabel(),
-            'weekStart' => $weekStart,
-            'weekEnd' => $weekEnd,
-            'prevYear' => $prev->year,
-            'prevWeek' => $prev->week,
-            'nextYear' => $next->year,
-            'nextWeek' => $next->week,
             'sites' => ControlRoomSiteCode::cases(),
             'mock' => $mock->build(
                 $weekStart,

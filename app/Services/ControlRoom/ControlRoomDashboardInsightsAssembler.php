@@ -6,6 +6,7 @@ namespace App\Services\ControlRoom;
 
 use App\Enums\ControlRoomShiftCode;
 use App\Enums\ControlRoomSiteCode;
+use App\Models\ControlRoom\ControlRoomTbcValidation;
 use App\Services\ControlRoom\Metrics\FindingVariety;
 use App\Services\ControlRoom\Metrics\TbcValidity;
 use App\Services\ControlRoom\Reference\LocationReader;
@@ -27,8 +28,6 @@ use Throwable;
 final class ControlRoomDashboardInsightsAssembler
 {
     private const COVERAGE_TABLE = 'scr_hsecm_coverage_area_kritis_daily';
-
-    private const TBC_TABLE = 'scr_hsecm_blindspot_tbc_gr';
 
     private const HSECM_CACHE_SECONDS = 300;
 
@@ -60,19 +59,21 @@ final class ControlRoomDashboardInsightsAssembler
         bool $sapLoaded,
     ): array {
         $cacheKey = sprintf(
-            'control-room:insights-hsecm:v2:%s:%s:%s',
+            'control-room:insights-hsecm:v3:%s:%s:%s',
             $site->value,
             $weekStart->toDateString(),
             $weekEnd->toDateString(),
         );
-        $hsecm = Cache::remember($cacheKey, self::HSECM_CACHE_SECONDS, function () use ($site, $weekStart, $weekEnd): array {
+        $hsecm = Cache::remember($cacheKey, self::HSECM_CACHE_SECONDS, function () use ($site): array {
             return [
                 'coverage' => $this->loadCoverage($site),
-                'tbc' => $this->loadTbcRows($site, $weekStart, $weekEnd),
             ];
         });
 
-        return $this->fromFindings($findings, $scheduleDays, $hsecm['coverage'], $hsecm['tbc'], $sapLoaded);
+        $usable = $sapLoaded ? $this->onDutyFindings($findings, $scheduleDays) : [];
+        $tbcRows = $this->loadTbcValidationsForFindings($usable);
+
+        return $this->fromFindings($findings, $scheduleDays, $hsecm['coverage'], $tbcRows, $sapLoaded);
     }
 
     /**
@@ -279,20 +280,20 @@ final class ControlRoomDashboardInsightsAssembler
      */
     private function highlightItemFromTbc(array $row): array
     {
-        $description = trim((string) ($row['deskripsi'] ?? ''));
+        $description = trim((string) ($row['deskripsi'] ?? $row['kronologi_singkat'] ?? ''));
         if ($description === '') {
-            $description = trim((string) ($row['kategori_TBC'] ?? $row['blindspot_TBC'] ?? ''));
+            $description = trim((string) ($row['kategori_TBC'] ?? $row['to_be_concerned_hazard'] ?? $row['blindspot_TBC'] ?? ''));
         }
 
         return [
-            'tasklist' => $this->dash((string) ($row['Task_Number'] ?? '')),
+            'tasklist' => $this->dash((string) ($row['Task_Number'] ?? $row['tasklist'] ?? '')),
             'found_at' => $this->dash((string) ($row['Date_for_Join'] ?? '')),
             'description' => $this->dash($description),
             'company_pic' => $this->companyPic(
                 (string) ($row['perusahaan_pic'] ?? ''),
-                (string) ($row['pic'] ?? $row['pelapor_all_karyawan'] ?? ''),
+                (string) ($row['pic'] ?? $row['sid_pekerja_terlibat'] ?? $row['pelapor_all_karyawan'] ?? ''),
             ),
-            'status' => $this->statusLabel($row['status3'] ?? null),
+            'status' => $this->statusLabel($row['status3'] ?? $row['no_alert'] ?? null),
         ];
     }
 
@@ -567,50 +568,100 @@ final class ControlRoomDashboardInsightsAssembler
     }
 
     /**
-     * TBC dari latest batch_slot + Date_for_Join minggu ini — bukan dump
-     * semua scrape di rentang tanggal.
+     * TBC Excel yang Tasklist-nya sama dengan id laporan Hazard/Inspeksi
+     * pada jendela jaga minggu terpilih.
      *
+     * @param  list<array<string, mixed>>  $findings
+     * @param  list<array<string, mixed>>  $validations
      * @return list<array<string, mixed>>
      */
-    private function loadTbcRows(ControlRoomSiteCode $site, CarbonInterface $weekStart, CarbonInterface $weekEnd): array
+    public function tbcRowsMatchingFindings(array $findings, array $validations): array
     {
-        if (! Schema::hasTable(self::TBC_TABLE)) {
+        $findingByReport = [];
+        foreach ($findings as $finding) {
+            $component = strtolower(trim((string) ($finding['component'] ?? '')));
+            if (! in_array($component, ['hazard', 'inspeksi'], true)) {
+                continue;
+            }
+            $reportId = trim((string) ($finding['report_id'] ?? ''));
+            if ($reportId === '') {
+                continue;
+            }
+            $findingByReport[$reportId] = $finding;
+        }
+
+        $matched = [];
+        foreach ($validations as $row) {
+            $tasklist = trim((string) ($row['tasklist'] ?? $row['Task_Number'] ?? ''));
+            if ($tasklist === '' || ! isset($findingByReport[$tasklist])) {
+                continue;
+            }
+            $matched[] = $this->mapValidationToTbcRow($row, $findingByReport[$tasklist]);
+        }
+
+        return $matched;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $findings
+     * @return list<array<string, mixed>>
+     */
+    private function loadTbcValidationsForFindings(array $findings): array
+    {
+        if (! Schema::hasTable('control_room_tbc_validations')) {
             return [];
         }
 
-        $from = $weekStart->toDateString();
-        $to = $weekEnd->toDateString();
+        $reportIds = [];
+        foreach ($findings as $finding) {
+            $component = strtolower(trim((string) ($finding['component'] ?? '')));
+            if (! in_array($component, ['hazard', 'inspeksi'], true)) {
+                continue;
+            }
+            $reportId = trim((string) ($finding['report_id'] ?? ''));
+            if ($reportId !== '') {
+                $reportIds[$reportId] = $reportId;
+            }
+        }
+        if ($reportIds === []) {
+            return [];
+        }
 
         try {
-            $columns = ['Date_for_Join', 'site', 'kategori_TBC', 'blindspot_TBC', 'pelapor_all_karyawan', 'validasi_GR'];
-            foreach (['deskripsi', 'pic', 'perusahaan_pic', 'status3', 'Task_Number'] as $optional) {
-                if (Schema::hasColumn(self::TBC_TABLE, $optional)) {
-                    $columns[] = $optional;
-                }
-            }
-            $query = DB::table(self::TBC_TABLE)->select($columns);
-            if ($this->hsecm->hasBatchSlotSupport(self::TBC_TABLE)) {
-                $slot = $this->hsecm->latestBatchSlot(self::TBC_TABLE);
-                if ($slot === null) {
-                    return [];
-                }
-                $query->where('batch_slot', $slot);
-            }
-            $this->applySiteFilter($query, $site, 'site');
-            $query->where(function ($inner) use ($from, $to): void {
-                $inner->whereNull('Date_for_Join')
-                    ->orWhere(function ($dates) use ($from, $to): void {
-                        $dates->whereDate('Date_for_Join', '>=', $from)
-                            ->whereDate('Date_for_Join', '<=', $to);
-                    });
-            });
-
-            return $query->get()->map(static fn (object $row): array => (array) $row)->all();
+            $rows = ControlRoomTbcValidation::query()
+                ->whereIn('tasklist', array_values($reportIds))
+                ->get()
+                ->map(static fn (ControlRoomTbcValidation $row): array => $row->toArray())
+                ->all();
         } catch (Throwable $e) {
-            Log::warning('ControlRoom HSECM TBC gagal: '.$e->getMessage());
+            Log::warning('ControlRoom Validasi TBC gagal: '.$e->getMessage());
 
             return [];
         }
+
+        return $this->tbcRowsMatchingFindings($findings, $rows);
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, mixed>  $finding
+     * @return array<string, mixed>
+     */
+    private function mapValidationToTbcRow(array $row, array $finding): array
+    {
+        return [
+            'tasklist' => trim((string) ($row['tasklist'] ?? '')),
+            'Task_Number' => trim((string) ($row['tasklist'] ?? '')),
+            'Date_for_Join' => (string) ($finding['at'] ?? ''),
+            'deskripsi' => trim((string) ($row['kronologi_singkat'] ?? '')),
+            'kategori_TBC' => trim((string) ($row['to_be_concerned_hazard'] ?? '')),
+            'pic' => trim((string) ($row['sid_pekerja_terlibat'] ?? '')),
+            'perusahaan_pic' => '',
+            'status3' => trim((string) ($row['no_alert'] ?? '')),
+            'kronologi_singkat' => trim((string) ($row['kronologi_singkat'] ?? '')),
+            'sid_pekerja_terlibat' => trim((string) ($row['sid_pekerja_terlibat'] ?? '')),
+            'to_be_concerned_hazard' => trim((string) ($row['to_be_concerned_hazard'] ?? '')),
+        ];
     }
 
     private function applySiteFilter(Builder $query, ControlRoomSiteCode $site, string $column): void

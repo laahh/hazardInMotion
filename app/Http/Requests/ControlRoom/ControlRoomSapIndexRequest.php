@@ -30,6 +30,7 @@ final class ControlRoomSapIndexRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'iso_week' => ['sometimes', 'nullable', 'string', 'regex:/^\d{4}-W\d{1,2}$/i'],
             'year' => ['sometimes', 'integer', 'min:2020', 'max:2100'],
             'week' => ['sometimes', 'integer', 'min:1', 'max:53'],
             'site' => ['sometimes', 'nullable', 'string', Rule::in(ControlRoomSiteDutyBoardService::BOARD_SITE_CODES)],

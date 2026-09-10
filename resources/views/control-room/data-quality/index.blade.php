@@ -3,8 +3,7 @@
 @section('page-title', 'Data Quality')
 
 @php
-    $weekRangeLabel = $weekStart->locale('id')->translatedFormat('d M').' – '.$weekEnd->locale('id')->translatedFormat('d M Y');
-    $filter = ['year' => $year, 'week' => $week];
+    $filter = ['year' => $year, 'week' => $week, 'iso_week' => $isoWeekValue];
     if ($site !== null) {
         $filter['site'] = $site->value;
     }
@@ -37,23 +36,15 @@
                             @endforeach
                         </select>
                     </div>
-                    <input type="hidden" name="year" value="{{ $year }}">
-                    <input type="hidden" name="week" value="{{ $week }}">
-                    <div>
-                        <label>Minggu</label>
-                        <div class="ocr-week-stepper">
-                            <a href="{{ route('control-room.data-quality.index', array_merge($filter, ['year' => $prevYear, 'week' => $prevWeek])) }}" aria-label="Minggu sebelumnya">
-                                <i class="ri-arrow-left-s-line"></i>
-                            </a>
-                            <div class="ocr-week-label">
-                                <strong>{{ $weekRangeLabel }}</strong>
-                                <span>Minggu {{ $week }} · {{ $year }}</span>
-                            </div>
-                            <a href="{{ route('control-room.data-quality.index', array_merge($filter, ['year' => $nextYear, 'week' => $nextWeek])) }}" aria-label="Minggu berikutnya">
-                                <i class="ri-arrow-right-s-line"></i>
-                            </a>
-                        </div>
-                    </div>
+                    @include('control-room.partials.week-period-filter', [
+                        'weekInputId' => 'ocr-dq-iso-week',
+                        'isoWeekValue' => $isoWeekValue,
+                        'weekRangeLabel' => $weekRangeLabel,
+                        'year' => $year,
+                        'week' => $week,
+                        'prevWeekUrl' => route('control-room.data-quality.index', array_merge($filter, ['year' => $prevYear, 'week' => $prevWeek])),
+                        'nextWeekUrl' => route('control-room.data-quality.index', array_merge($filter, ['year' => $nextYear, 'week' => $nextWeek])),
+                    ])
                 </div>
                 <div class="ocr-toolbar-right">
                     <span class="ocr-sync">Evaluasi SAP unik H s/d H+1 · TBC / GR / Blindspot belum dipakai</span>

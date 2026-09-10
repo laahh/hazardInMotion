@@ -2,36 +2,38 @@
 
 @section('page-title', 'Absen')
 
+@push('styles')
+    <link rel="stylesheet" href="{{ asset('wowdash-admin/assets/css/control-room-dashboard.css') }}?v={{ filemtime(public_path('wowdash-admin/assets/css/control-room-dashboard.css')) }}">
+@endpush
+
 @section('content')
-    <form method="GET" class="card shadow-none border mb-24">
-        <div class="card-body">
-            <div class="row g-2 align-items-end">
-                <div class="col-md-3">
-                    <label class="form-label text-sm mb-1">Site</label>
-                    <select name="site" class="form-control">
+    <form method="GET" class="ocr-card mb-24" action="{{ route('control-room.attendance.index') }}">
+        <div class="ocr-toolbar">
+            <div class="ocr-toolbar-left">
+                <div>
+                    <label class="form-label text-sm mb-1" for="ocr-absen-site">Site</label>
+                    <select name="site" id="ocr-absen-site" class="form-control" onchange="this.form.submit()">
                         @foreach ($sites as $siteOption)
                             <option value="{{ $siteOption->value }}" @selected($site === $siteOption)>{{ $siteOption->label() }}</option>
                         @endforeach
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label text-sm mb-1">Tahun</label>
-                    <input type="number" name="year" value="{{ $year }}" class="form-control">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label text-sm mb-1">Minggu</label>
-                    <input type="number" name="week" value="{{ $week }}" min="1" max="53" class="form-control">
-                </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary-600 w-100">Terapkan Filter</button>
-                </div>
+                @include('control-room.partials.week-period-filter', [
+                    'weekInputId' => 'ocr-absen-iso-week',
+                    'isoWeekValue' => $isoWeekValue,
+                    'weekRangeLabel' => $weekRangeLabel,
+                    'year' => $year,
+                    'week' => $week,
+                    'prevWeekUrl' => route('control-room.attendance.index', ['site' => $site->value, 'year' => $prevYear, 'week' => $prevWeek]),
+                    'nextWeekUrl' => route('control-room.attendance.index', ['site' => $site->value, 'year' => $nextYear, 'week' => $nextWeek]),
+                ])
             </div>
         </div>
     </form>
 
     <div class="card shadow-none border">
         <div class="card-header d-flex align-items-center justify-content-between">
-            <h6 class="mb-0">Rekap Absen Minggu {{ $week }} / {{ $year }} — {{ $site->label() }}</h6>
+            <h6 class="mb-0">Rekap Absen {{ $weekRangeLabel }} — {{ $site->label() }}</h6>
             <a href="{{ route('control-room.attendance.form') }}" class="btn btn-primary-600 btn-sm">
                 <i class="ri-camera-line"></i> Form Absensi
             </a>

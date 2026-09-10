@@ -52,6 +52,12 @@ $rr = function (string $name, array $params = []) {
                 </a>
             </li>
             <li>
+                <a href="{{ $rr('control-room.tbc-validations.index') }}" class="{{ request()->routeIs('control-room.tbc-validations.*') ? 'active-page' : '' }}">
+                    <i class="ri-shield-star-line menu-icon"></i>
+                    <span>Validasi TBC</span>
+                </a>
+            </li>
+            <li>
                 <a href="{{ $rr('control-room.data-quality.index') }}" class="{{ request()->routeIs('control-room.data-quality.*') ? 'active-page' : '' }}">
                     <i class="ri-shield-check-line menu-icon"></i>
                     <span>Data Quality</span>

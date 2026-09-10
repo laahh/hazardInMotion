@@ -86,7 +86,7 @@
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
             <div>
                 <h6 class="mb-0">Kalender Jadwal — {{ $site->label() }}</h6>
-                <p class="text-secondary-light text-xs mb-0">Hanya menampilkan jadwal site <strong>{{ $site->value }}</strong>. Tanggal kosong tidak bisa diisi satuan — unggah template satu minggu (Senin–Minggu).</p>
+                <p class="text-secondary-light text-xs mb-0">Hanya menampilkan jadwal site <strong>{{ $site->value }}</strong>. Tanggal kosong tidak bisa diisi satuan — unggah template satu minggu (Minggu–Sabtu).</p>
             </div>
             <div style="min-width: 220px;">
                 <label class="form-label text-sm mb-1" for="ocr-calendar-site">Filter site</label>
@@ -403,7 +403,7 @@
             }
 
             function remindWeeklyInput() {
-                window.alert('Tanggal ini belum ada jadwal. Input harus sekaligus untuk satu minggu (Senin–Minggu) lewat unggah template Excel, bukan per tanggal.');
+                window.alert('Tanggal ini belum ada jadwal. Input harus sekaligus untuk satu minggu (Minggu–Sabtu) lewat unggah template Excel, bukan per tanggal.');
                 var upload = document.getElementById('ocr-schedule-upload');
                 if (upload) {
                     upload.scrollIntoView({ behavior: 'smooth', block: 'start' });

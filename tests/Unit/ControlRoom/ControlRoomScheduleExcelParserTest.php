@@ -61,7 +61,7 @@ final class ControlRoomScheduleExcelParserTest extends TestCase
 
         $this->assertTrue($result->hasErrors());
         $this->assertSame([], $result->assignments);
-        $this->assertStringContainsString('di luar ISO week', $result->errors[0]);
+        $this->assertStringContainsString('di luar minggu', $result->errors[0]);
 
         @unlink($path);
     }
@@ -122,7 +122,7 @@ final class ControlRoomScheduleExcelParserTest extends TestCase
         $this->assertCount(1, $result->assignments);
         $this->assertSame('FJAVJ', $result->assignments[0]['personnel_source_key']);
         $this->assertSame('S1', $result->assignments[0]['shift_code']);
-        $this->assertSame($date->toDateString(), $result->assignments[0]['date']);
+        $this->assertSame('2026-08-30', $result->assignments[0]['date']);
 
         @unlink($path);
     }

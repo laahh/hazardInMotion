@@ -13,6 +13,7 @@ use App\Models\ControlRoom\Attendance;
 use App\Models\ControlRoom\SchedulePlan;
 use App\Services\ControlRoom\AttendanceFormRecorder;
 use App\Services\ControlRoom\ControlRoomDutyRosterService;
+use App\Services\ControlRoom\ControlRoomIsoWeekPeriod;
 use App\Services\ControlRoom\Reference\PersonnelReader;
 use App\Services\ControlRoom\Reference\ShiftResolver;
 use Carbon\CarbonImmutable;
@@ -130,23 +131,17 @@ final class AttendanceController extends Controller
     public function index(Request $request): View
     {
         $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
-        $year = (int) $request->integer('year', (int) now()->isoFormat('GGGG'));
-        $week = (int) $request->integer('week', (int) now()->isoWeek());
-
-        $weekStart = now()->setISODate($year, $week, 1)->startOfDay();
-        $weekEnd = $weekStart->copy()->addDays(6)->endOfDay();
-
+        $period = ControlRoomIsoWeekPeriod::fromRequest($request);
         $attendances = Attendance::query()
             ->where('site_code', $site->value)
-            ->whereBetween('date', [$weekStart, $weekEnd])
+            ->whereBetween('date', [$period->start->toDateString(), $period->end->toDateString()])
             ->orderBy('date')
             ->orderBy('shift_code')
             ->paginate(100);
 
         return view('control-room.attendance.index', [
+            ...$period->viewData(),
             'site' => $site,
-            'year' => $year,
-            'week' => $week,
             'sites' => ControlRoomSiteCode::cases(),
             'attendances' => $attendances,
         ]);

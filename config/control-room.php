@@ -128,4 +128,22 @@ return [
         'sheet_id' => env('CONTROL_ROOM_GSHEET_TBC_ID'),
         'gid' => env('CONTROL_ROOM_GSHEET_TBC_GID', '0'),
     ],
+
+    /*
+    | Opsi dropdown Rootcause Aktual pada template Excel / form Validasi TBC.
+    | Kosong = teks bebas. Isi daftar di sini tanpa ubah kode.
+    */
+    'tbc_rootcause_options' => [
+        // 'Manusia',
+        // 'Metode',
+        // 'Mesin',
+        // 'Material',
+        // 'Lingkungan',
+        // 'Pengawasan',
+    ],
+
+    'tbc_no_alert_options' => [
+        'Alert',
+        'No Alert',
+    ],
 ];

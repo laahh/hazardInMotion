@@ -64,8 +64,9 @@ final class ControlRoomScheduleExcelParser
             ]);
         }
 
-        $weekStart = CarbonImmutable::now()->setISODate($year, $week, 1)->startOfDay();
-        $weekEnd = $weekStart->addDays(6);
+        $period = ControlRoomIsoWeekPeriod::of($year, $week);
+        $weekStart = $period->start;
+        $weekEnd = $period->end->startOfDay();
         $errors = [];
         $assignments = [];
         $seen = [];
@@ -103,7 +104,7 @@ final class ControlRoomScheduleExcelParser
             }
 
             if ($date->lt($weekStart) || $date->gt($weekEnd)) {
-                $errors[] = "Baris {$excelRow}: tanggal {$date->toDateString()} di luar ISO week {$week}/{$year} ({$weekStart->toDateString()} – {$weekEnd->toDateString()}).";
+                $errors[] = "Baris {$excelRow}: tanggal {$date->toDateString()} di luar minggu {$week}/{$year} ({$weekStart->toDateString()} – {$weekEnd->toDateString()}, Minggu–Sabtu).";
                 continue;
             }
 
