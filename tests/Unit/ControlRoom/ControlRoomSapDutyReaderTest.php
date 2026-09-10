@@ -233,6 +233,11 @@ final class ControlRoomSapDutyReaderTest extends TestCase
         $this->assertSame('9370386', $cards[0]['id']);
         $this->assertSame('DELISA SRI WINATRI', $cards[0]['reporter']);
         $this->assertSame('AFRI EFFENDI', $cards[0]['pic']);
+        $this->assertNull($cards[0]['photo_url']);
+        $this->assertSame('9370386', $cards[0]['photo_page_id']);
+        $this->assertSame('document', $cards[0]['photo_page_kind']);
+        $this->assertSame('2026-08-31 05:24:58', $cards[0]['submitted_label']);
+        $this->assertNull($cards[0]['geotag']);
     }
 
     public function test_pic_oak_mengutamakan_observee_bukan_observer(): void
@@ -349,6 +354,8 @@ final class ControlRoomSapDutyReaderTest extends TestCase
         );
 
         $this->assertNull($cards[0]['photo_url']);
+        $this->assertSame('9', $cards[0]['photo_page_id']);
+        $this->assertSame('document', $cards[0]['photo_page_kind']);
         $this->assertSame('https://hseautomation.beraucoal.co.id/beats2/file/16821057', $cards[1]['photo_url']);
     }
 

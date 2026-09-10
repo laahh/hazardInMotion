@@ -1132,25 +1132,29 @@
                 sapStatus.hidden = true;
                 sapGrid.innerHTML = list.map(function (card) {
                     var photo = sapPhotoBlock(card);
-                    var geotag = card.geotag ? ('GEOTAGGING Jam: ' + escapeHtml(card.geotag)) : 'Null';
-                    var statusClass = (card.status || '').toLowerCase() === 'closed' ? 'is-closed' : 'is-plain';
+                    var geotag = card.geotag
+                        ? '<p class="ocr-sap-geotag">GEOTAGGING Jam: ' + escapeHtml(card.geotag) + '</p>'
+                        : '';
+                    var status = (card.status && card.status !== '—')
+                        ? '<span class="ocr-sap-badge ' + ((card.status || '').toLowerCase() === 'closed' ? 'is-closed' : 'is-plain') + '">' + escapeHtml(card.status) + '</span>'
+                        : '';
                     var tbcMark = showTbc ? tbcBadge(card) : '';
                     return '<article class="ocr-sap-card" data-type="' + escapeHtml(card.type) + '">'
                         + photo
                         + '<p class="ocr-sap-id">' + escapeHtml(card.id) + '</p>'
-                        + '<p class="ocr-sap-geotag">' + geotag + '</p>'
-                        + '<p>Submit BEATS: ' + escapeHtml(card.submitted_label) + '</p>'
+                        + geotag
+                        + '<p>Submit BEATS: ' + escapeHtml(card.submitted_label || '—') + '</p>'
                         + '<p class="ocr-sap-headline">' + escapeHtml(card.headline) + '</p>'
-                        + '<p>' + escapeHtml(card.subcategory) + '</p>'
-                        + '<p class="ocr-sap-desc">' + escapeHtml(card.description) + '</p>'
-                        + '<p>PIC: ' + escapeHtml(card.pic) + '</p>'
-                        + '<p class="ocr-sap-muted">' + escapeHtml(card.pic_meta) + '</p>'
-                        + '<p>Pelapor: ' + escapeHtml(card.reporter) + '</p>'
-                        + '<p class="ocr-sap-muted">' + escapeHtml(card.reporter_meta) + '</p>'
-                        + '<p>Lokasi: ' + escapeHtml(card.location) + '</p>'
-                        + '<p>Detail Lok: ' + escapeHtml(card.location_detail) + '</p>'
+                        + (card.subcategory ? '<p>' + escapeHtml(card.subcategory) + '</p>' : '')
+                        + (card.description ? '<p class="ocr-sap-desc">' + escapeHtml(card.description) + '</p>' : '')
+                        + (card.pic ? '<p>PIC: ' + escapeHtml(card.pic) + '</p>' : '')
+                        + (card.pic_meta && card.pic_meta !== '—' ? '<p class="ocr-sap-muted">' + escapeHtml(card.pic_meta) + '</p>' : '')
+                        + (card.reporter ? '<p>Pelapor: ' + escapeHtml(card.reporter) + '</p>' : '')
+                        + (card.reporter_meta && card.reporter_meta !== '—' ? '<p class="ocr-sap-muted">' + escapeHtml(card.reporter_meta) + '</p>' : '')
+                        + (card.location ? '<p>Lokasi: ' + escapeHtml(card.location) + '</p>' : '')
+                        + (card.location_detail ? '<p>Detail Lok: ' + escapeHtml(card.location_detail) + '</p>' : '')
                         + tbcMark
-                        + '<span class="ocr-sap-badge ' + statusClass + '">' + escapeHtml(card.status || '—') + '</span>'
+                        + status
                         + '</article>';
                 }).join('');
                 hydrateSapPhotos();

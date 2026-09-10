@@ -76,7 +76,7 @@ final class ControlRoomSapDutyReader
             return $this->payload($meta, [], reachable: false, errors: ['Sumber SAP (OBDS) tidak terjangkau.']);
         }
 
-        $cacheKey = 'control-room:sap-duty:v14:'.$sid.':'.$meta['date'];
+        $cacheKey = 'control-room:sap-duty:v15:'.$sid.':'.$meta['date'];
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['cards'])) {
             return $this->payload($meta, $cached['cards'], reachable: true);
@@ -156,20 +156,23 @@ final class ControlRoomSapDutyReader
     private function fetchObservasi(string $sid, CarbonImmutable $start, CarbonImmutable $end, array &$errors): array
     {
         $limit = self::PER_TYPE_LIMIT;
-        $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate();
+        $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate('o.tools_observasi');
         $sql = "
-            SELECT DISTINCT ON (id_observasi)
-                   id_observasi, tanggal_observasi, jenis_kegiatan, catatan_observasi, tools_observasi,
-                   lokasi, detil_lokasi, latitude, longitude, url_foto,
-                   nama_pelapor,
-                   nama_personil_diobservasi, perusahaan_personil_diobservasi,
-                   jabatan_fungsional_personil_diobservasi
-            FROM bcbeats.mv_observasi
-            WHERE kode_sid_pelapor = ?
-              AND tanggal_observasi >= CAST(? AS timestamp)
-              AND tanggal_observasi < CAST(? AS timestamp)
+            SELECT DISTINCT ON (o.id_observasi)
+                   o.id_observasi, o.tanggal_observasi, o.jenis_kegiatan, o.catatan_observasi, o.tools_observasi,
+                   o.lokasi, o.detil_lokasi, o.latitude, o.longitude, o.url_foto,
+                   o.nama_pelapor,
+                   k.nama_jabatan AS jabatan_fungsional_pelapor,
+                   k.\"PERUSAHAAN\" AS perusahaan_pelapor,
+                   o.nama_personil_diobservasi, o.perusahaan_personil_diobservasi,
+                   o.jabatan_fungsional_personil_diobservasi
+            FROM bcbeats.mv_observasi o
+            LEFT JOIN bcbeats.m_karyawan_table k ON k.id = o.id_pelapor
+            WHERE o.kode_sid_pelapor = ?
+              AND o.tanggal_observasi >= CAST(? AS timestamp)
+              AND o.tanggal_observasi < CAST(? AS timestamp)
               AND {$tools['sql']}
-            ORDER BY id_observasi, tanggal_observasi
+            ORDER BY o.id_observasi, o.tanggal_observasi
             LIMIT {$limit}
         ";
 
@@ -316,6 +319,7 @@ final class ControlRoomSapDutyReader
             $at = $this->parseTime($row->tanggal_observasi ?? null);
             $kegiatan = $this->text($row->jenis_kegiatan ?? null);
             $id = (string) ($row->id_observasi ?? '');
+            $photo = $this->observasiPhotoRef($id, $row->photo_id ?? null, $row->url_foto ?? null);
 
             $cards[] = $this->card(
                 id: $id,
@@ -335,9 +339,9 @@ final class ControlRoomSapDutyReader
                 location: $this->text($row->lokasi ?? null),
                 locationDetail: $this->text($row->detil_lokasi ?? null),
                 status: '—',
-                photoUrl: $this->beatsFileImageUrl($row->url_foto ?? null, $row->photo_id ?? null),
-                photoPageId: null,
-                photoPageKind: null,
+                photoUrl: $photo['url'],
+                photoPageId: $photo['pageId'],
+                photoPageKind: $photo['kind'],
                 latitude: $row->latitude ?? null,
                 longitude: $row->longitude ?? null,
             );
@@ -450,6 +454,9 @@ final class ControlRoomSapDutyReader
         if ($value === null || $value === '') {
             return null;
         }
+        if ($value instanceof \DateTimeInterface) {
+            return CarbonImmutable::parse($value);
+        }
 
         return CarbonImmutable::parse((string) $value);
     }
@@ -517,6 +524,38 @@ final class ControlRoomSapDutyReader
         }
 
         return ['id' => null, 'kind' => null];
+    }
+
+    /**
+     * Observasi: file gambar = file_foto.id (PK) yang sama dengan id_observasi.
+     * url /beats2/file/document/{id} bukan img src.
+     *
+     * @return array{url: ?string, pageId: ?string, kind: ?string}
+     */
+    private function observasiPhotoRef(string $reportId, mixed $photoId, mixed $url): array
+    {
+        $explicit = trim((string) ($photoId ?? ''));
+        if (ctype_digit($explicit)) {
+            return [
+                'url' => $this->beatsFileImageUrl($url, $explicit),
+                'pageId' => null,
+                'kind' => null,
+            ];
+        }
+
+        $id = trim($reportId);
+
+        return ctype_digit($id)
+            ? [
+                'url' => null,
+                'pageId' => $id,
+                'kind' => ControlRoomSapPhotoResolver::KIND_DOCUMENT,
+            ]
+            : [
+                'url' => $this->beatsFileImageUrl($url, null),
+                'pageId' => null,
+                'kind' => null,
+            ];
     }
 
     private function toolsHeadline(string $typeLabel, string $tools): string
