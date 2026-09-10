@@ -1631,6 +1631,10 @@
     align-items: start;
 }
 
+.ocr-cov-grid--daily {
+    grid-template-columns: minmax(0, 1fr) 280px;
+}
+
 .ocr-cov-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -1676,49 +1680,110 @@
     white-space: nowrap;
 }
 
-.ocr-cov-table td.ocr-cov-days-cell {
+.ocr-cov-table--daily td.ocr-cov-name,
+.ocr-cov-table--daily td.ocr-cov-detail {
     white-space: normal;
+    max-width: 220px;
+    line-height: 1.35;
+}
+
+.ocr-cov-table--daily .ocr-cov-dow,
+.ocr-cov-table--daily .ocr-cov-cell {
+    width: 36px;
+    min-width: 36px;
+    padding-left: 4px;
+    padding-right: 4px;
+    text-align: center;
+}
+
+.ocr-cov-table--daily .ocr-cov-dow {
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary-light);
+}
+
+.ocr-cov-table--daily .ocr-cov-score-head,
+.ocr-cov-table--daily .ocr-cov-score {
+    text-align: center;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.ocr-cov-score {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.ocr-cov-score b {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.ocr-cov-score.is-ok b {
+    color: #15803d;
+}
+
+.ocr-cov-score.is-gap b {
+    color: #b91c1c;
+}
+
+.ocr-cov-score span {
+    color: var(--text-secondary-light);
+    font-weight: 600;
 }
 
 .ocr-cov-days {
     display: inline-flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    align-items: center;
     gap: 4px;
 }
 
-.ocr-cov-day {
-    min-width: 28px;
+.ocr-cov-days--attn {
+    margin-top: 6px;
+}
+
+.ocr-cov-swatch {
+    width: 28px;
     height: 28px;
-    padding: 0 4px;
-    border-radius: 6px;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
+    border-radius: 8px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    font-size: 15px;
     line-height: 1;
+    flex: 0 0 28px;
 }
 
-.ocr-cov-day.is-ok {
+.ocr-cov-swatch.is-sm {
+    width: 12px;
+    height: 12px;
+    flex-basis: 12px;
+    border-radius: 3px;
+}
+
+.ocr-cov-swatch.is-ok {
     background: #dcfce7;
     color: #15803d;
+    box-shadow: inset 0 0 0 1px rgba(22, 163, 74, 0.18);
 }
 
-.ocr-cov-day.is-miss {
+.ocr-cov-swatch.is-miss {
     background: #fee2e2;
     color: #b91c1c;
+    box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.16);
 }
 
-.ocr-cov-day.is-pending {
+.ocr-cov-swatch.is-pending {
     background: #f3f4f6;
     color: #9ca3af;
+    box-shadow: inset 0 0 0 1px rgba(17, 24, 39, 0.06);
 }
 
 .ocr-cov-day-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px 14px;
+    gap: 10px 16px;
     padding: 0 16px 12px;
     margin: 0;
     font-size: 12px;
@@ -1729,6 +1794,14 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
+}
+
+.ocr-cov-day-legend .ocr-cov-swatch {
+    width: 20px;
+    height: 20px;
+    flex-basis: 20px;
+    font-size: 12px;
+    border-radius: 6px;
 }
 
 .ocr-cov-site {
@@ -1857,8 +1930,16 @@
 }
 
 .ocr-cov-attn-row strong,
-.ocr-cov-attn-row span {
+.ocr-cov-attn-row > div > span {
     display: block;
+}
+
+.ocr-cov-attn-row .ocr-cov-days {
+    display: flex;
+}
+
+.ocr-cov-attn-row .ocr-cov-swatch {
+    display: inline-flex;
 }
 
 .ocr-cov-attn-row strong {
@@ -1936,7 +2017,8 @@
     }
 
     .ocr-dash .ocr-cov-kpi,
-    .ocr-cov-grid {
+    .ocr-cov-grid,
+    .ocr-cov-grid--daily {
         grid-template-columns: 1fr;
     }
 
@@ -2122,17 +2204,28 @@
     stroke: rgba(72, 127, 255, 0.2);
 }
 
-[data-theme="dark"] .ocr-cov-day.is-ok {
-    background: rgba(22, 163, 74, 0.22);
+[data-theme="dark"] .ocr-cov-score.is-ok b {
     color: #86efac;
 }
 
-[data-theme="dark"] .ocr-cov-day.is-miss {
-    background: rgba(220, 38, 38, 0.22);
+[data-theme="dark"] .ocr-cov-score.is-gap b {
     color: #fca5a5;
 }
 
-[data-theme="dark"] .ocr-cov-day.is-pending {
+[data-theme="dark"] .ocr-cov-swatch.is-ok {
+    background: rgba(22, 163, 74, 0.22);
+    color: #86efac;
+    box-shadow: inset 0 0 0 1px rgba(134, 239, 172, 0.18);
+}
+
+[data-theme="dark"] .ocr-cov-swatch.is-miss {
+    background: rgba(220, 38, 38, 0.22);
+    color: #fca5a5;
+    box-shadow: inset 0 0 0 1px rgba(252, 165, 165, 0.18);
+}
+
+[data-theme="dark"] .ocr-cov-swatch.is-pending {
     background: rgba(255, 255, 255, 0.06);
     color: #9ca3af;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }

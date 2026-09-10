@@ -9,7 +9,7 @@
     $tableId = 'ocr-cov-table-'.$mode;
     $searchId = 'ocr-cov-q-'.$mode;
     $titleId = 'ocr-cov-table-title-'.$mode;
-    $colspan = $isDaily ? 8 : 7;
+    $colspan = $isDaily ? 13 : 7;
     $kpiSubTotal = $isDaily ? 'Area kritis / high risk' : 'Lokasi yang dipantau';
     $kpiSubCovered = $isDaily ? 'Ada SAP setiap hari wajib' : 'Sudah ada ≥1 SAP minggu ini';
     $kpiSubUncovered = $isDaily ? 'Belum ada SAP harian' : 'Lokasi belum ter-cover';
@@ -64,7 +64,7 @@
         </div>
     </div>
 
-    <div class="ocr-cov-grid">
+    <div class="ocr-cov-grid{{ $isDaily ? ' ocr-cov-grid--daily' : '' }}">
         <div class="ocr-card ocr-cov-table-card">
             <div class="ocr-card-header">
                 <div>
@@ -86,14 +86,14 @@
             </div>
             @if ($isDaily)
                 <p class="ocr-cov-day-legend">
-                    <span><span class="ocr-cov-day is-ok">Hari</span> ada SAP</span>
-                    <span><span class="ocr-cov-day is-miss">Hari</span> tanpa SAP</span>
-                    <span><span class="ocr-cov-day is-pending">Hari</span> belum lewat</span>
+                    <span><span class="ocr-cov-swatch is-ok" aria-hidden="true"><i class="ri-check-line"></i></span> ada SAP</span>
+                    <span><span class="ocr-cov-swatch is-miss" aria-hidden="true"><i class="ri-close-line"></i></span> tanpa SAP</span>
+                    <span><span class="ocr-cov-swatch is-pending" aria-hidden="true"></span> belum lewat</span>
                 </p>
             @endif
             <div class="ocr-card-body ocr-card-body--flush">
                 <div class="table-responsive ocr-cov-scroll">
-                    <table class="ocr-heat ocr-cov-table" id="{{ $tableId }}">
+                    <table class="ocr-heat ocr-cov-table{{ $isDaily ? ' ocr-cov-table--daily' : '' }}" id="{{ $tableId }}">
                         <thead>
                             <tr>
                                 <th>No</th>
@@ -101,11 +101,21 @@
                                 <th>Lokasi</th>
                                 <th>Detail Lokasi</th>
                                 @if ($isDaily)
-                                    <th>Harian</th>
+                                    @foreach (($rows[0]['day_marks'] ?? []) as $mark)
+                                        <th class="ocr-cov-dow" scope="col" title="{{ $mark['date'] }}">{{ $mark['label'] }}</th>
+                                    @endforeach
+                                    @if (($rows[0]['day_marks'] ?? []) === [])
+                                        @foreach (['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'] as $dow)
+                                            <th class="ocr-cov-dow" scope="col">{{ $dow }}</th>
+                                        @endforeach
+                                    @endif
+                                    <th class="ocr-cov-score-head">SAP</th>
                                 @endif
                                 <th>Status</th>
-                                <th>Terakhir Ter-cover</th>
-                                <th>Missed / Gap</th>
+                                @unless ($isDaily)
+                                    <th>Terakhir Ter-cover</th>
+                                    <th>Missed / Gap</th>
+                                @endunless
                             </tr>
                         </thead>
                         <tbody>
@@ -121,20 +131,31 @@
                                             {{ $row['site'] }}
                                         </span>
                                     </td>
-                                    <td>
+                                    <td class="ocr-cov-name">
                                         {{ $row['lokasi'] }}
                                         @if ($row['is_critical'])
                                             <span class="ocr-cov-flag">{{ str_contains(mb_strtolower($row['lokasi']), 'risk') ? 'High Risk' : 'Kritis' }}</span>
                                         @endif
                                     </td>
-                                    <td>{{ $row['detail_lokasi'] !== '' ? $row['detail_lokasi'] : '—' }}</td>
+                                    <td class="ocr-cov-detail">{{ $row['detail_lokasi'] !== '' ? $row['detail_lokasi'] : '—' }}</td>
                                     @if ($isDaily)
-                                        <td class="ocr-cov-days-cell">
-                                            <div class="ocr-cov-days" aria-label="Status SAP harian">
-                                                @foreach ($row['day_marks'] as $mark)
-                                                    <span class="ocr-cov-day is-{{ $mark['state'] }}" title="{{ $mark['label'] }} {{ $mark['date'] }}">{{ $mark['label'] }}</span>
-                                                @endforeach
-                                            </div>
+                                        @foreach ($row['day_marks'] as $mark)
+                                            @php
+                                                $dayTitle = $mark['label'].' '.$mark['date'].' · '.($mark['state'] === 'ok' ? 'ada SAP' : ($mark['state'] === 'miss' ? 'tanpa SAP' : 'belum lewat'));
+                                            @endphp
+                                            <td class="ocr-cov-cell">
+                                                <span class="ocr-cov-swatch is-{{ $mark['state'] }}" title="{{ $dayTitle }}">
+                                                    @if ($mark['state'] === 'ok')
+                                                        <i class="ri-check-line" aria-hidden="true"></i>
+                                                    @elseif ($mark['state'] === 'miss')
+                                                        <i class="ri-close-line" aria-hidden="true"></i>
+                                                    @endif
+                                                    <span class="visually-hidden">{{ $dayTitle }}</span>
+                                                </span>
+                                            </td>
+                                        @endforeach
+                                        <td class="ocr-cov-score {{ $row['covered'] ? 'is-ok' : 'is-gap' }}" title="Terakhir ter-cover: {{ $coverageLastAt($row['last_at']) }}">
+                                            <b>{{ (int) ($row['covered_days'] ?? 0) }}</b><span>/{{ (int) ($row['required_days'] ?? 0) }}</span>
                                         </td>
                                     @endif
                                     <td>
@@ -144,8 +165,10 @@
                                             <span class="ocr-cov-pill is-gap">Belum ter-cover</span>
                                         @endif
                                     </td>
-                                    <td>{{ $coverageLastAt($row['last_at']) }}</td>
-                                    <td class="{{ $row['covered'] ? '' : 'ocr-cov-gap' }}">{{ $row['gap_label'] }}</td>
+                                    @unless ($isDaily)
+                                        <td>{{ $coverageLastAt($row['last_at']) }}</td>
+                                        <td class="{{ $row['covered'] ? '' : 'ocr-cov-gap' }}">{{ $row['gap_label'] }}</td>
+                                    @endunless
                                 </tr>
                             @empty
                                 <tr class="ocr-cov-empty-row">
@@ -179,6 +202,13 @@
                         <div>
                             <strong>{{ $item['detail_lokasi'] !== '' ? $item['detail_lokasi'] : $item['lokasi'] }}</strong>
                             <span>{{ $item['lokasi'] }} · {{ $item['site'] }}</span>
+                            @if ($isDaily && ($item['day_marks'] ?? []) !== [])
+                                <div class="ocr-cov-days ocr-cov-days--attn" aria-hidden="true">
+                                    @foreach ($item['day_marks'] as $mark)
+                                        <span class="ocr-cov-swatch is-{{ $mark['state'] }} is-sm" title="{{ $mark['label'] }}"></span>
+                                    @endforeach
+                                </div>
+                            @endif
                         </div>
                         <div class="ocr-cov-attn-meta">
                             <b>{{ $item['gap_label'] }}</b>
