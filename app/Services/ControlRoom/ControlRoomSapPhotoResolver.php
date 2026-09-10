@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * URL photoCar dan /beats2/file/document/{id} adalah halaman HTML, bukan file gambar.
- * Foto temuan/penyelesaian ada di /beats2/file/{id}.
+ * Hazard/Inspeksi: /report/photoCar/{id} adalah halaman HTML; foto ada di /beats2/file/{id}.
+ * OAK/Observasi: /beats2/file/document/{id} adalah file gambar (PNG/JPEG), dipakai langsung.
  */
 final class ControlRoomSapPhotoResolver
 {
@@ -57,10 +57,10 @@ final class ControlRoomSapPhotoResolver
             return ['foto_temuan' => null, 'foto_penyelesaian' => null];
         }
 
-        /** @var array{foto_temuan: ?string, foto_penyelesaian: ?string} */
-        return Cache::remember('control-room:sap-photos:document:v1:'.$id, self::CACHE_SECONDS, function () use ($id): array {
-            return $this->fetchPage(self::HOST.'/beats2/file/document/'.$id, $id, 'document');
-        });
+        return [
+            'foto_temuan' => self::HOST.'/beats2/file/document/'.$id,
+            'foto_penyelesaian' => null,
+        ];
     }
 
     /**

@@ -145,7 +145,11 @@ final class ControlRoomSapDutyReaderTest extends TestCase
         $this->assertCount(1, $cards);
         $this->assertSame('oak', $cards[0]['type']);
         $this->assertSame('11', $cards[0]['id']);
+        $this->assertSame('OAK - Real Time - CCTV Support', $cards[0]['headline']);
+        $this->assertSame('Observasi Alat — Dump truck', $cards[0]['subcategory']);
         $this->assertSame('—', $cards[0]['pic']);
+        $this->assertSame('https://hseautomation.beraucoal.co.id/beats2/file/document/11', $cards[0]['photo_url']);
+        $this->assertNull($cards[0]['photo_page_id']);
     }
 
     public function test_pic_observasi_dari_karyawan_dan_perusahaan_observee(): void
@@ -169,12 +173,14 @@ final class ControlRoomSapDutyReaderTest extends TestCase
             ],
         ], []);
 
+        $this->assertSame('OBSERVASI - Real Time - CCTV Support', $cards[0]['headline']);
+        $this->assertSame('Patroli', $cards[0]['subcategory']);
         $this->assertSame('BUDI SANTOSO', $cards[0]['pic']);
         $this->assertSame('Operator — PT Pamapersada Nusantara', $cards[0]['pic_meta']);
         $this->assertSame('AGUNG NUGROHO', $cards[0]['reporter']);
-        $this->assertNull($cards[0]['photo_url']);
-        $this->assertSame('8266618', $cards[0]['photo_page_id']);
-        $this->assertSame('document', $cards[0]['photo_page_kind']);
+        $this->assertSame('https://hseautomation.beraucoal.co.id/beats2/file/document/8266618', $cards[0]['photo_url']);
+        $this->assertNull($cards[0]['photo_page_id']);
+        $this->assertNull($cards[0]['photo_page_kind']);
     }
 
     public function test_pic_oak_mengutamakan_observee_bukan_observer(): void
@@ -261,8 +267,10 @@ final class ControlRoomSapDutyReaderTest extends TestCase
         $this->assertCount(2, $cards);
         $this->assertSame('observasi', $cards[0]['type']);
         $this->assertSame('2', $cards[0]['id']);
+        $this->assertSame('OBSERVASI - Real Time - Mining Eyes', $cards[0]['headline']);
         $this->assertSame('oak', $cards[1]['type']);
         $this->assertSame('4', $cards[1]['id']);
+        $this->assertSame('OAK - Post Event - CCTV Portable', $cards[1]['headline']);
     }
 
     public function test_jendela_laporan_hari_h_sampai_akhir_h_plus_satu(): void

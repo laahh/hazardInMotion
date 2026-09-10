@@ -76,7 +76,7 @@ final class ControlRoomSapDutyReader
             return $this->payload($meta, [], reachable: false, errors: ['Sumber SAP (OBDS) tidak terjangkau.']);
         }
 
-        $cacheKey = 'control-room:sap-duty:v9:'.$sid.':'.$meta['date'];
+        $cacheKey = 'control-room:sap-duty:v11:'.$sid.':'.$meta['date'];
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['cards'])) {
             return $this->payload($meta, $cached['cards'], reachable: true);
@@ -261,15 +261,15 @@ final class ControlRoomSapDutyReader
             }
             $jenis = strtoupper(trim((string) ($row->jenis_laporan ?? '')));
             $type = $jenis === 'INSPEKSI' ? 'inspeksi' : 'hazard';
+            $typeLabel = $jenis !== '' ? $jenis : 'HAZARD';
             $at = $this->parseTime($row->tanggal_laporan ?? null);
-            $headline = trim($jenis.($tools !== '—' ? ' - '.$tools : ''));
             $photo = $this->photoRef($row->url_foto ?? null, $row->id_laporan ?? null, fallbackToReportId: true);
 
             $cards[] = $this->card(
                 id: (string) ($row->id_laporan ?? ''),
                 type: $type,
-                typeLabel: $jenis !== '' ? $jenis : 'HAZARD',
-                headline: $headline !== '' ? $headline : 'HAZARD',
+                typeLabel: $typeLabel,
+                headline: $this->toolsHeadline($typeLabel, $tools),
                 at: $at,
                 subcategory: $this->text($row->subketidaksesuaian ?? $row->ketidaksesuaian ?? null),
                 description: $this->text($row->deskripsi_temuan ?? null),
@@ -304,14 +304,14 @@ final class ControlRoomSapDutyReader
                 continue;
             }
             $at = $this->parseTime($row->tanggal_observasi ?? null);
-            $kegiatan = $this->text($row->jenis_kegiatan ?? $row->tools_observasi ?? null);
-            $photo = $this->photoRef($row->url_foto ?? null, $row->id_observasi ?? null, fallbackToReportId: false);
+            $kegiatan = $this->text($row->jenis_kegiatan ?? null);
+            $id = (string) ($row->id_observasi ?? '');
 
             $cards[] = $this->card(
-                id: (string) ($row->id_observasi ?? ''),
+                id: $id,
                 type: 'observasi',
                 typeLabel: 'OBSERVASI',
-                headline: $kegiatan !== '—' ? 'OBSERVASI - '.$kegiatan : 'OBSERVASI',
+                headline: $this->toolsHeadline('OBSERVASI', $tools),
                 at: $at,
                 subcategory: $kegiatan,
                 description: $this->text($row->catatan_observasi ?? null),
@@ -325,9 +325,9 @@ final class ControlRoomSapDutyReader
                 location: $this->text($row->lokasi ?? null),
                 locationDetail: $this->text($row->detil_lokasi ?? null),
                 status: '—',
-                photoUrl: $this->photoUrl($row->url_foto ?? null),
-                photoPageId: $photo['id'],
-                photoPageKind: $photo['kind'],
+                photoUrl: $this->fileDocumentUrl($row->url_foto ?? null, $id),
+                photoPageId: null,
+                photoPageKind: null,
                 latitude: $row->latitude ?? null,
                 longitude: $row->longitude ?? null,
             );
@@ -358,15 +358,14 @@ final class ControlRoomSapDutyReader
             $at = $this->parseTime($row->tanggal_submit ?? null);
             $aktivitas = $this->text($row->aktivitas ?? null);
             $key = $id !== '' ? $id : 'row-'.count($cardsById);
-            $photo = $this->photoRef($row->url_foto ?? null, $row->id_oak ?? null, fallbackToReportId: false);
 
             $cardsById[$key] = $this->card(
                 id: $id,
                 type: 'oak',
                 typeLabel: 'OAK',
-                headline: $aktivitas !== '—' ? 'OAK - '.$aktivitas : 'OAK',
+                headline: $this->toolsHeadline('OAK', $tools),
                 at: $at,
-                subcategory: $this->text($row->sub_aktivitas ?? null),
+                subcategory: $this->joinNonEmpty($aktivitas, $this->text($row->sub_aktivitas ?? null)),
                 description: $this->text($row->kesimpulan ?? null),
                 pic: $this->text($row->nama_team ?? null),
                 picMeta: $this->roleCompany(
@@ -378,9 +377,9 @@ final class ControlRoomSapDutyReader
                 location: $this->text($row->lokasi ?? null),
                 locationDetail: $this->text($row->detil_lokasi ?? null),
                 status: '—',
-                photoUrl: $this->photoUrl($row->url_foto ?? null),
-                photoPageId: $photo['id'],
-                photoPageKind: $photo['kind'],
+                photoUrl: $this->fileDocumentUrl($row->url_foto ?? null, $id),
+                photoPageId: null,
+                photoPageKind: null,
                 latitude: $row->latitude ?? null,
                 longitude: $row->longitude ?? null,
             );
@@ -465,11 +464,25 @@ final class ControlRoomSapDutyReader
         if (preg_match('#/report/photoCar/#i', $url) === 1) {
             return null;
         }
-        if (preg_match('#/beats2/file/document/#i', $url) === 1) {
+
+        return $url;
+    }
+
+    /**
+     * OAK/Observasi: /beats2/file/document/{id} adalah file gambar, bukan HTML.
+     */
+    private function fileDocumentUrl(mixed $url, mixed $reportId): ?string
+    {
+        $direct = $this->photoUrl($url);
+        if ($direct !== null) {
+            return $direct;
+        }
+        $id = trim((string) ($reportId ?? ''));
+        if (! ctype_digit($id)) {
             return null;
         }
 
-        return $url;
+        return ControlRoomSapPhotoResolver::HOST.'/beats2/file/document/'.$id;
     }
 
     /**
@@ -481,9 +494,6 @@ final class ControlRoomSapDutyReader
         if (preg_match('#/report/photoCar/(\d+)#i', $url, $matches) === 1) {
             return ['id' => $matches[1], 'kind' => ControlRoomSapPhotoResolver::KIND_PHOTOCAR];
         }
-        if (preg_match('#/beats2/file/document/(\d+)#i', $url, $matches) === 1) {
-            return ['id' => $matches[1], 'kind' => ControlRoomSapPhotoResolver::KIND_DOCUMENT];
-        }
         if ($fallbackToReportId) {
             $id = trim((string) ($reportId ?? ''));
 
@@ -493,6 +503,21 @@ final class ControlRoomSapDutyReader
         }
 
         return ['id' => null, 'kind' => null];
+    }
+
+    private function toolsHeadline(string $typeLabel, string $tools): string
+    {
+        return $tools !== '—' ? $typeLabel.' - '.$tools : $typeLabel;
+    }
+
+    private function joinNonEmpty(string $primary, string $secondary): string
+    {
+        $parts = array_values(array_filter(
+            [$primary, $secondary],
+            fn (string $part): bool => $part !== '' && $part !== '—',
+        ));
+
+        return $parts === [] ? '—' : implode(' — ', $parts);
     }
 
     private function text(mixed $value): string
