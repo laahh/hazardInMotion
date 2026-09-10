@@ -638,7 +638,7 @@
                             <p class="text-secondary-light mb-0">Tidak ada nama Golden Rule pada laporan minggu ini.</p>
                         @endforelse
                     </div>
-                    <div class="ocr-highlight-metrics">
+                    <!-- <div class="ocr-highlight-metrics">
                         <button type="button" class="ocr-metric-mini is-clickable" data-highlight-kind="blindspot" aria-haspopup="dialog" aria-controls="ocr-highlight-modal">
                             <p class="ocr-kpi-label">Blindspot</p>
                             <p class="ocr-kpi-value">{{ $mock['highlight']['blindspotCount'] }} <span class="fs-6 fw-normal text-secondary-light">/ {{ $mock['highlight']['blindspotTotal'] }}</span></p>
@@ -649,7 +649,7 @@
                             <p class="ocr-kpi-value">{{ $mock['highlight']['tbcPercentage'] === null ? '—' : number_format($mock['highlight']['tbcPercentage'], 1).'%' }}</p>
                             <div class="ocr-track is-warning"><span style="width: {{ min(100, $mock['highlight']['tbcPercentage'] ?? 0) }}%"></span></div>
                         </button>
-                    </div>
+                    </div> -->
                 </div>
             </div>
         </div>
