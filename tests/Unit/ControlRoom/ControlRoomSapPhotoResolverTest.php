@@ -67,11 +67,11 @@ final class ControlRoomSapPhotoResolverTest extends TestCase
         );
     }
 
-    public function test_from_document_id_memakai_url_gambar_langsung(): void
+    public function test_from_document_id_memakai_url_file_bukan_document(): void
     {
         $this->assertSame(
             [
-                'foto_temuan' => 'https://hseautomation.beraucoal.co.id/beats2/file/document/8266618',
+                'foto_temuan' => 'https://hseautomation.beraucoal.co.id/beats2/file/8266618',
                 'foto_penyelesaian' => null,
             ],
             (new ControlRoomSapPhotoResolver())->resolve(8266618, ControlRoomSapPhotoResolver::KIND_DOCUMENT),

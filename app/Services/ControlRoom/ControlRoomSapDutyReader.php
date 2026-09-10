@@ -76,7 +76,7 @@ final class ControlRoomSapDutyReader
             return $this->payload($meta, [], reachable: false, errors: ['Sumber SAP (OBDS) tidak terjangkau.']);
         }
 
-        $cacheKey = 'control-room:sap-duty:v11:'.$sid.':'.$meta['date'];
+        $cacheKey = 'control-room:sap-duty:v13:'.$sid.':'.$meta['date'];
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['cards'])) {
             return $this->payload($meta, $cached['cards'], reachable: true);
@@ -183,12 +183,18 @@ final class ControlRoomSapDutyReader
         $sql = "
             SELECT DISTINCT ON (o.id_oak)
                 o.id_oak, o.tanggal_submit, o.aktivitas, o.sub_aktivitas, o.kesimpulan, o.tools_observasi,
-                o.lokasi, o.detil_lokasi, o.latitude, o.longitude, o.url_foto,
+                o.lokasi, o.detil_lokasi, o.latitude, o.longitude,
                 o.nama_pelapor, o.jabatan_fungsional_pelapor, o.perusahaan_pelapor,
                 o.nama_team, o.jabatan_fungsional_team, o.peran_dalam_tim,
-                k.\"PERUSAHAAN\" AS perusahaan_observee
+                k.\"PERUSAHAAN\" AS perusahaan_observee,
+                r.photo_id,
+                CASE
+                    WHEN r.photo_id IS NULL THEN NULL
+                    ELSE concat('https://hseautomation.beraucoal.co.id/beats2/file/', r.photo_id)
+                END AS url_foto
             FROM bcbeats.mv_oak o
             LEFT JOIN bcbeats.m_karyawan_table k ON k.id = o.id_karyawan_team
+            LEFT JOIN bcbeats.oak_register r ON r.id = o.id_oak
             WHERE o.kode_sid_pelapor = ?
               AND o.tanggal_submit >= CAST(? AS timestamp)
               AND o.tanggal_submit < CAST(? AS timestamp)
@@ -325,7 +331,7 @@ final class ControlRoomSapDutyReader
                 location: $this->text($row->lokasi ?? null),
                 locationDetail: $this->text($row->detil_lokasi ?? null),
                 status: '—',
-                photoUrl: $this->fileDocumentUrl($row->url_foto ?? null, $id),
+                photoUrl: $this->beatsFileImageUrl($row->url_foto ?? null, $row->photo_id ?? null),
                 photoPageId: null,
                 photoPageKind: null,
                 latitude: $row->latitude ?? null,
@@ -377,7 +383,7 @@ final class ControlRoomSapDutyReader
                 location: $this->text($row->lokasi ?? null),
                 locationDetail: $this->text($row->detil_lokasi ?? null),
                 status: '—',
-                photoUrl: $this->fileDocumentUrl($row->url_foto ?? null, $id),
+                photoUrl: $this->beatsFileImageUrl($row->url_foto ?? null, $row->photo_id ?? null),
                 photoPageId: null,
                 photoPageKind: null,
                 latitude: $row->latitude ?? null,
@@ -464,25 +470,29 @@ final class ControlRoomSapDutyReader
         if (preg_match('#/report/photoCar/#i', $url) === 1) {
             return null;
         }
+        if (preg_match('#/beats2/file/document/#i', $url) === 1) {
+            return null;
+        }
 
         return $url;
     }
 
     /**
-     * OAK/Observasi: /beats2/file/document/{id} adalah file gambar, bukan HTML.
+     * Gambar OAK/Observasi: /beats2/file/{photo_id} (bukan /file/document/{id laporan}).
      */
-    private function fileDocumentUrl(mixed $url, mixed $reportId): ?string
+    private function beatsFileImageUrl(mixed $url, mixed $photoId): ?string
     {
-        $direct = $this->photoUrl($url);
-        if ($direct !== null) {
-            return $direct;
-        }
-        $id = trim((string) ($reportId ?? ''));
-        if (! ctype_digit($id)) {
-            return null;
+        $id = trim((string) ($photoId ?? ''));
+        if (ctype_digit($id)) {
+            return ControlRoomSapPhotoResolver::HOST.'/beats2/file/'.$id;
         }
 
-        return ControlRoomSapPhotoResolver::HOST.'/beats2/file/document/'.$id;
+        $url = trim((string) ($url ?? ''));
+        if (preg_match('#^https?://hseautomation\.beraucoal\.co\.id/beats2/file/\d+$#i', $url) === 1) {
+            return $url;
+        }
+
+        return $this->photoUrl($url);
     }
 
     /**

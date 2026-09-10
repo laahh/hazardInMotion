@@ -120,6 +120,7 @@ final class ControlRoomSapDutyReaderTest extends TestCase
                 'latitude' => null,
                 'longitude' => null,
                 'url_foto' => null,
+                'photo_id' => 16821057,
                 'nama_pelapor' => 'ALI',
                 'jabatan_fungsional_pelapor' => null,
                 'perusahaan_pelapor' => null,
@@ -136,6 +137,7 @@ final class ControlRoomSapDutyReaderTest extends TestCase
                 'latitude' => null,
                 'longitude' => null,
                 'url_foto' => null,
+                'photo_id' => 16821057,
                 'nama_pelapor' => 'ALI',
                 'jabatan_fungsional_pelapor' => null,
                 'perusahaan_pelapor' => null,
@@ -148,8 +150,34 @@ final class ControlRoomSapDutyReaderTest extends TestCase
         $this->assertSame('OAK - Real Time - CCTV Support', $cards[0]['headline']);
         $this->assertSame('Observasi Alat — Dump truck', $cards[0]['subcategory']);
         $this->assertSame('—', $cards[0]['pic']);
-        $this->assertSame('https://hseautomation.beraucoal.co.id/beats2/file/document/11', $cards[0]['photo_url']);
+        $this->assertSame('https://hseautomation.beraucoal.co.id/beats2/file/16821057', $cards[0]['photo_url']);
         $this->assertNull($cards[0]['photo_page_id']);
+    }
+
+    public function test_oak_foto_mengikuti_kolom_foto_export_beats(): void
+    {
+        $cards = $this->reader()->cardsFromRows([], [], [
+            (object) [
+                'id_oak' => 5951697,
+                'tanggal_submit' => '2026-09-06 00:02:00',
+                'aktivitas' => 'Dumping',
+                'sub_aktivitas' => 'CCV Dumping di ROM',
+                'kesimpulan' => 'Pekerjaan Dilanjutkan',
+                'tools_observasi' => 'Real Time - CCTV Support',
+                'photo_id' => 16821057,
+                'url_foto' => 'https://hseautomation.beraucoal.co.id/beats2/file/document/5951697',
+                'peran_dalam_tim' => 'OBSERVEE',
+                'nama_team' => 'BAYU ADI WICAKSONO',
+                'nama_pelapor' => 'AKHMAD JUNAEDI',
+            ],
+        ]);
+
+        $this->assertSame('oak', $cards[0]['type']);
+        $this->assertSame('5951697', $cards[0]['id']);
+        $this->assertSame(
+            'https://hseautomation.beraucoal.co.id/beats2/file/16821057',
+            $cards[0]['photo_url'],
+        );
     }
 
     public function test_pic_observasi_dari_karyawan_dan_perusahaan_observee(): void
@@ -170,6 +198,7 @@ final class ControlRoomSapDutyReaderTest extends TestCase
                 'lokasi' => 'Pit A',
                 'detil_lokasi' => 'Front',
                 'url_foto' => 'https://hseautomation.beraucoal.co.id/beats2/file/document/8266618',
+                'photo_id' => 16821057,
             ],
         ], []);
 
@@ -178,7 +207,7 @@ final class ControlRoomSapDutyReaderTest extends TestCase
         $this->assertSame('BUDI SANTOSO', $cards[0]['pic']);
         $this->assertSame('Operator — PT Pamapersada Nusantara', $cards[0]['pic_meta']);
         $this->assertSame('AGUNG NUGROHO', $cards[0]['reporter']);
-        $this->assertSame('https://hseautomation.beraucoal.co.id/beats2/file/document/8266618', $cards[0]['photo_url']);
+        $this->assertSame('https://hseautomation.beraucoal.co.id/beats2/file/16821057', $cards[0]['photo_url']);
         $this->assertNull($cards[0]['photo_page_id']);
         $this->assertNull($cards[0]['photo_page_kind']);
     }
@@ -271,6 +300,33 @@ final class ControlRoomSapDutyReaderTest extends TestCase
         $this->assertSame('oak', $cards[1]['type']);
         $this->assertSame('4', $cards[1]['id']);
         $this->assertSame('OAK - Post Event - CCTV Portable', $cards[1]['headline']);
+    }
+
+    public function test_url_document_bukan_gambar_oak_observasi(): void
+    {
+        $cards = $this->reader()->cardsFromRows(
+            [],
+            [
+                (object) [
+                    'id_observasi' => 9,
+                    'tanggal_observasi' => '2026-08-31 11:00:00',
+                    'tools_observasi' => 'Real Time - CCTV Support',
+                    'url_foto' => 'https://hseautomation.beraucoal.co.id/beats2/file/document/9',
+                ],
+            ],
+            [
+                (object) [
+                    'id_oak' => 8,
+                    'tanggal_submit' => '2026-08-31 19:00:00',
+                    'tools_observasi' => 'Post Event - DMS',
+                    'url_foto' => 'https://hseautomation.beraucoal.co.id/beats2/file/document/8',
+                    'photo_id' => 16821057,
+                ],
+            ],
+        );
+
+        $this->assertNull($cards[0]['photo_url']);
+        $this->assertSame('https://hseautomation.beraucoal.co.id/beats2/file/16821057', $cards[1]['photo_url']);
     }
 
     public function test_jendela_laporan_hari_h_sampai_akhir_h_plus_satu(): void

@@ -11,7 +11,7 @@ use Throwable;
 
 /**
  * Hazard/Inspeksi: /report/photoCar/{id} adalah halaman HTML; foto ada di /beats2/file/{id}.
- * OAK/Observasi: /beats2/file/document/{id} adalah file gambar (PNG/JPEG), dipakai langsung.
+ * OAK/Observasi: /beats2/file/{photo_id} adalah file gambar. /file/document/{id laporan} bukan img src.
  */
 final class ControlRoomSapPhotoResolver
 {
@@ -58,7 +58,7 @@ final class ControlRoomSapPhotoResolver
         }
 
         return [
-            'foto_temuan' => self::HOST.'/beats2/file/document/'.$id,
+            'foto_temuan' => self::HOST.'/beats2/file/'.$id,
             'foto_penyelesaian' => null,
         ];
     }
