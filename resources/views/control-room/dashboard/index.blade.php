@@ -563,13 +563,27 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="ocr-sap-filters" id="ocr-sap-filters" hidden>
-                        <button type="button" class="is-active" data-sap-filter="all">Semua</button>
-                        <button type="button" data-sap-filter="hazard">Hazard</button>
-                        <button type="button" data-sap-filter="inspeksi">Inspeksi</button>
-                        <button type="button" data-sap-filter="observasi">Observasi</button>
-                        <button type="button" data-sap-filter="oak">OAK</button>
-            </div>
+                    <div class="ocr-seg ocr-detail-tabs" role="tablist" aria-label="Jenis detail personil">
+                        <button type="button" role="tab" id="ocr-detail-tab-sap" class="is-active" aria-selected="true" aria-controls="ocr-sap-pane-sap" data-detail-pane="sap">SAP</button>
+                        <button type="button" role="tab" id="ocr-detail-tab-tbc" aria-selected="false" aria-controls="ocr-sap-pane-tbc" data-detail-pane="tbc">TBC</button>
+                    </div>
+                    <div id="ocr-sap-pane-sap" role="tabpanel" aria-labelledby="ocr-detail-tab-sap">
+                        <div class="ocr-sap-filters" id="ocr-sap-filters" hidden>
+                            <button type="button" class="is-active" data-sap-filter="all">Semua</button>
+                            <button type="button" data-sap-filter="hazard">Hazard</button>
+                            <button type="button" data-sap-filter="inspeksi">Inspeksi</button>
+                            <button type="button" data-sap-filter="observasi">Observasi</button>
+                            <button type="button" data-sap-filter="oak">OAK</button>
+                        </div>
+                    </div>
+                    <div id="ocr-sap-pane-tbc" role="tabpanel" aria-labelledby="ocr-detail-tab-tbc" hidden>
+                        <p class="ocr-card-kicker ocr-tbc-kicker" id="ocr-tbc-kicker">Hazard &amp; Inspeksi orang ini pada jendela jaga. Sudah TBC = tasklist ada di Google Sheet.</p>
+                        <div class="ocr-sap-filters" id="ocr-tbc-filters" hidden>
+                            <button type="button" class="is-active" data-tbc-filter="all">Semua</button>
+                            <button type="button" data-tbc-filter="sudah">Sudah TBC</button>
+                            <button type="button" data-tbc-filter="belum">Belum TBC</button>
+                        </div>
+                    </div>
                     <p class="ocr-sap-status-msg" id="ocr-sap-status">Memuat laporan…</p>
                     <div class="ocr-sap-grid" id="ocr-sap-grid"></div>
                 </div>
@@ -966,7 +980,11 @@
             }).render();
 
             var sapCards = [];
+            var tbcCards = [];
+            var tbcLoaded = false;
             var sapFilter = 'all';
+            var tbcFilter = 'all';
+            var detailPane = 'sap';
             var sapModalEl = document.getElementById('ocr-sap-modal');
             var sapModal = sapModalEl ? new bootstrap.Modal(sapModalEl) : null;
             var sapTitle = document.getElementById('ocr-sap-title');
@@ -974,12 +992,30 @@
             var sapStatus = document.getElementById('ocr-sap-status');
             var sapGrid = document.getElementById('ocr-sap-grid');
             var sapFilters = document.getElementById('ocr-sap-filters');
+            var tbcFilters = document.getElementById('ocr-tbc-filters');
+            var sapPane = document.getElementById('ocr-sap-pane-sap');
+            var tbcPane = document.getElementById('ocr-sap-pane-tbc');
+
+            function setDetailPane(pane) {
+                detailPane = pane;
+                if (sapPane) {
+                    sapPane.hidden = pane !== 'sap';
+                }
+                if (tbcPane) {
+                    tbcPane.hidden = pane !== 'tbc';
+                }
+                document.querySelectorAll('[data-detail-pane]').forEach(function (btn) {
+                    var active = btn.getAttribute('data-detail-pane') === pane;
+                    btn.classList.toggle('is-active', active);
+                    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+                });
+                renderDetailCards();
+            }
 
             function setSapFilterCounts(counts) {
                 document.querySelectorAll('[data-sap-filter]').forEach(function (btn) {
                     var key = btn.getAttribute('data-sap-filter');
-                    var label = key === 'all' ? 'Semua' : btn.getAttribute('data-sap-filter');
-                    label = {
+                    var label = {
                         all: 'Semua',
                         hazard: 'Hazard',
                         inspeksi: 'Inspeksi',
@@ -989,6 +1025,29 @@
                     var n = counts && counts[key] != null ? counts[key] : 0;
                     btn.textContent = label + ' (' + n + ')';
                 });
+            }
+
+            function setTbcFilterCounts(counts) {
+                document.querySelectorAll('[data-tbc-filter]').forEach(function (btn) {
+                    var key = btn.getAttribute('data-tbc-filter');
+                    var label = {
+                        all: 'Semua',
+                        sudah: 'Sudah TBC',
+                        belum: 'Belum TBC'
+                    }[key] || key;
+                    var n = counts && counts[key] != null ? counts[key] : 0;
+                    btn.textContent = label + ' (' + n + ')';
+                });
+            }
+
+            function tbcBadge(card) {
+                if (card.tbc === 'sudah') {
+                    return '<span class="ocr-sap-badge is-tbc-yes">Sudah TBC</span>';
+                }
+                if (card.tbc === 'belum') {
+                    return '<span class="ocr-sap-badge is-tbc-no">Belum TBC</span>';
+                }
+                return '<span class="ocr-sap-badge is-tbc-wait">TBC belum termuat</span>';
             }
 
             function sapPhotoMarkup(url, label, reportId) {
@@ -1040,10 +1099,34 @@
                 var list = sapFilter === 'all' ? sapCards : sapCards.filter(function (card) {
                     return card.type === sapFilter;
                 });
+                renderCardList(list, sapCards.length, 'Tidak ada laporan untuk filter ini.', false);
+            }
+
+            function renderTbcCards() {
+                var list = tbcFilter === 'all' ? tbcCards : tbcCards.filter(function (card) {
+                    return card.tbc === tbcFilter;
+                });
+                var empty = tbcCards.length
+                    ? 'Tidak ada Hazard/Inspeksi untuk filter TBC ini.'
+                    : 'Tidak ada Hazard/Inspeksi pada jendela jaga ini.';
+                renderCardList(list, tbcCards.length, empty, true);
+            }
+
+            function renderDetailCards() {
+                if (detailPane === 'tbc') {
+                    renderTbcCards();
+                    return;
+                }
+                renderSapCards();
+            }
+
+            function renderCardList(list, sourceCount, emptyText, showTbc) {
                 if (!list.length) {
                     sapGrid.innerHTML = '';
                     sapStatus.hidden = false;
-                    sapStatus.textContent = sapCards.length ? 'Tidak ada laporan untuk filter ini.' : sapStatus.textContent;
+                    if (sourceCount || detailPane === 'tbc') {
+                        sapStatus.textContent = emptyText;
+                    }
                     return;
                 }
                 sapStatus.hidden = true;
@@ -1051,6 +1134,7 @@
                     var photo = sapPhotoBlock(card);
                     var geotag = card.geotag ? ('GEOTAGGING Jam: ' + escapeHtml(card.geotag)) : 'Null';
                     var statusClass = (card.status || '').toLowerCase() === 'closed' ? 'is-closed' : 'is-plain';
+                    var tbcMark = showTbc ? tbcBadge(card) : '';
                     return '<article class="ocr-sap-card" data-type="' + escapeHtml(card.type) + '">'
                         + photo
                         + '<p class="ocr-sap-id">' + escapeHtml(card.id) + '</p>'
@@ -1065,6 +1149,7 @@
                         + '<p class="ocr-sap-muted">' + escapeHtml(card.reporter_meta) + '</p>'
                         + '<p>Lokasi: ' + escapeHtml(card.location) + '</p>'
                         + '<p>Detail Lok: ' + escapeHtml(card.location_detail) + '</p>'
+                        + tbcMark
                         + '<span class="ocr-sap-badge ' + statusClass + '">' + escapeHtml(card.status || '—') + '</span>'
                         + '</article>';
                 }).join('');
@@ -1077,6 +1162,21 @@
                     document.querySelectorAll('[data-sap-filter]').forEach(function (el) { el.classList.remove('is-active'); });
                     btn.classList.add('is-active');
                     renderSapCards();
+                });
+            });
+
+            document.querySelectorAll('[data-tbc-filter]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    tbcFilter = btn.getAttribute('data-tbc-filter');
+                    document.querySelectorAll('[data-tbc-filter]').forEach(function (el) { el.classList.remove('is-active'); });
+                    btn.classList.add('is-active');
+                    renderTbcCards();
+                });
+            });
+
+            document.querySelectorAll('[data-detail-pane]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    setDetailPane(btn.getAttribute('data-detail-pane'));
                 });
             });
 
@@ -1150,15 +1250,24 @@
                     var shift = btn.getAttribute('data-shift');
                     var name = btn.getAttribute('data-name') || sid;
                     sapCards = [];
+                    tbcCards = [];
+                    tbcLoaded = false;
                     sapFilter = 'all';
+                    tbcFilter = 'all';
                     sapGrid.innerHTML = '';
                     sapFilters.hidden = true;
+                    if (tbcFilters) {
+                        tbcFilters.hidden = true;
+                    }
                     sapStatus.hidden = false;
                     sapStatus.textContent = 'Memuat laporan…';
-                    sapTitle.textContent = 'Detail SAP — ' + name;
+                    sapTitle.textContent = 'Detail — ' + name;
                     sapMeta.textContent = shift + ' · ' + date + ' · SID ' + sid;
                     setSapFilterCounts({ all: 0, hazard: 0, inspeksi: 0, observasi: 0, oak: 0 });
+                    setTbcFilterCounts({ all: 0, sudah: 0, belum: 0 });
                     document.querySelectorAll('[data-sap-filter]').forEach(function (el) { el.classList.toggle('is-active', el.getAttribute('data-sap-filter') === 'all'); });
+                    document.querySelectorAll('[data-tbc-filter]').forEach(function (el) { el.classList.toggle('is-active', el.getAttribute('data-tbc-filter') === 'all'); });
+                    setDetailPane('sap');
                     if (sapModal) {
                         sapModal.show();
                     }
@@ -1173,9 +1282,15 @@
                             }
                             var data = result.body;
                             sapCards = data.cards || [];
+                            tbcCards = data.tbc_cards || [];
+                            tbcLoaded = !!data.tbc_loaded;
                             sapMeta.textContent = shift + ' · jendela ' + (data.window_start || '') + ' – ' + (data.window_end || '') + ' · SID ' + sid;
                             setSapFilterCounts(data.counts || {});
+                            setTbcFilterCounts(data.tbc_counts || {});
                             sapFilters.hidden = false;
+                            if (tbcFilters) {
+                                tbcFilters.hidden = false;
+                            }
                             if (!data.reachable) {
                                 sapStatus.textContent = (data.errors && data.errors.length) ? data.errors.join(' ') : 'Sumber SAP (OBDS) tidak terjangkau.';
                                 sapGrid.innerHTML = '';
@@ -1194,9 +1309,10 @@
                             var extra = [];
                             if (data.truncated) extra.push('Menampilkan maksimal 40 laporan per jenis.');
                             if (data.errors && data.errors.length) extra.push(data.errors.join(' '));
+                            if (detailPane === 'tbc' && !tbcLoaded) extra.push('Sumber TBC belum termuat.');
                             sapStatus.textContent = extra.join(' ');
                             sapStatus.hidden = extra.length === 0;
-                            renderSapCards();
+                            renderDetailCards();
                         })
                         .catch(function () {
                             sapStatus.textContent = 'Gagal memuat detail SAP.';

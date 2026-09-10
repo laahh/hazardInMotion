@@ -13,6 +13,7 @@ use App\Services\ControlRoom\ControlRoomDashboardInsightsAssembler;
 use App\Services\ControlRoom\ControlRoomIsoWeekPeriod;
 use App\Services\ControlRoom\ControlRoomLocationCoverageService;
 use App\Services\ControlRoom\ControlRoomReplacementAttendanceService;
+use App\Services\ControlRoom\ControlRoomSapDetailTbcEnricher;
 use App\Services\ControlRoom\ControlRoomSapDutyReader;
 use App\Services\ControlRoom\ControlRoomSapPhotoResolver;
 use App\Services\ControlRoom\ControlRoomSapWeekCountsReader;
@@ -106,15 +107,18 @@ final class DashboardController extends Controller
         ]);
     }
 
-    public function sapDetail(ControlRoomDashboardSapDetailRequest $request, ControlRoomSapDutyReader $reader): JsonResponse
-    {
+    public function sapDetail(
+        ControlRoomDashboardSapDetailRequest $request,
+        ControlRoomSapDutyReader $reader,
+        ControlRoomSapDetailTbcEnricher $tbc,
+    ): JsonResponse {
         $shift = ControlRoomShiftCode::from($request->validated('shift'));
 
-        return response()->json($reader->forDuty(
+        return response()->json($tbc->enrich($reader->forDuty(
             $request->validated('sid'),
             CarbonImmutable::parse($request->validated('date')),
             $shift,
-        ));
+        )));
     }
 
     public function sapPhotos(ControlRoomDashboardSapPhotosRequest $request, ControlRoomSapPhotoResolver $photos): JsonResponse

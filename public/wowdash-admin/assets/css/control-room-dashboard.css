@@ -1174,6 +1174,36 @@
     color: #fff;
 }
 
+.ocr-detail-tabs {
+    margin-bottom: 14px;
+}
+
+.ocr-detail-tabs button {
+    min-height: 36px;
+    min-width: 72px;
+    padding: 6px 16px;
+    font-size: 12px;
+}
+
+.ocr-tbc-kicker {
+    margin: 0 0 10px;
+}
+
+.ocr-sap-badge.is-tbc-yes {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.ocr-sap-badge.is-tbc-no {
+    background: #ffedd5;
+    color: #9a3412;
+}
+
+.ocr-sap-badge.is-tbc-wait {
+    background: #e5e7eb;
+    color: #374151;
+}
+
 .ocr-sap-status-msg {
     margin: 0 0 12px;
     font-size: 13px;
