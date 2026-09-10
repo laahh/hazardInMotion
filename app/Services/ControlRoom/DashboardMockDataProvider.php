@@ -25,7 +25,9 @@ final class DashboardMockDataProvider
      *     pareto?: array{s1: list<array{hour: int, count: int, cumulative: float}>, s2: list<array{hour: int, count: int, cumulative: float}>},
      *     highlight?: array{goldenRules: list<array{name: string, count: int, items?: list<array<string, string>>}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float, blindspotItems?: list<array<string, string>>, tbcItems?: list<array<string, string>>},
      *     quality?: list<array<string, mixed>>,
-     *     personnelCoverage?: list<array{name: string, lokasi: int, kritis: int, lead: bool}>
+     *     personnelCoverage?: list<array{name: string, lokasi: int, kritis: int, lead: bool}>,
+     *     tbcBySlot?: array<string, ?float>,
+     *     tbcMetaBySid?: array<string, array{matched: int, total: int, percent: ?float}>
      * }  $insights
      * @param  list<array<string, mixed>>  $previousScheduleDays
      * @param  array<string, array{hazard: int, inspeksi: int, observasi: int}>  $previousSapCounts
@@ -49,6 +51,8 @@ final class DashboardMockDataProvider
             $sapLoaded,
             $weekFrom,
             $today,
+            $insights['tbcBySlot'] ?? [],
+            $insights['tbcMetaBySid'] ?? [],
         );
         $previousRows = $this->achievementRowsFromSchedule(
             $previousScheduleDays,
@@ -91,6 +95,8 @@ final class DashboardMockDataProvider
      *
      * @param  list<array<string, mixed>>  $scheduleDays
      * @param  array<string, array{hazard: int, inspeksi: int, observasi: int}>  $sapCountsBySidDate
+     * @param  array<string, ?float>  $tbcBySlot
+     * @param  array<string, array{matched: int, total: int, percent: ?float}>  $tbcMetaBySid
      * @return list<array<string, mixed>>
      */
     private function achievementRowsFromSchedule(
@@ -99,6 +105,8 @@ final class DashboardMockDataProvider
         bool $sapLoaded,
         CarbonImmutable $weekFrom,
         CarbonImmutable $today,
+        array $tbcBySlot = [],
+        array $tbcMetaBySid = [],
     ): array {
         $weekTo = $weekFrom->addDays(6);
         $visibleUntil = $today->lessThan($weekTo) ? $today : $weekTo;
@@ -128,6 +136,8 @@ final class DashboardMockDataProvider
                         $sapCountsBySidDate,
                         $sapLoaded,
                         (string) ($person['replacement'] ?? ''),
+                        $tbcBySlot,
+                        $tbcMetaBySid,
                     );
                 }
             }
@@ -139,6 +149,8 @@ final class DashboardMockDataProvider
     /**
      * @param  list<array<string, mixed>>  $taps
      * @param  array<string, array{hazard: int, inspeksi: int, observasi: int}>  $sapCountsBySidDate
+     * @param  array<string, ?float>  $tbcBySlot
+     * @param  array<string, array{matched: int, total: int, percent: ?float}>  $tbcMetaBySid
      * @return array<string, mixed>
      */
     private function achievementRow(
@@ -151,6 +163,8 @@ final class DashboardMockDataProvider
         array $sapCountsBySidDate = [],
         bool $sapLoaded = false,
         string $replacement = '',
+        array $tbcBySlot = [],
+        array $tbcMetaBySid = [],
     ): array {
         $sid = strtoupper(trim($sid));
         $emptyCounts = ['hazard' => 0, 'inspeksi' => 0, 'observasi' => 0];
@@ -158,6 +172,10 @@ final class DashboardMockDataProvider
         $sap = ($sapLoaded && $sid !== '' && $attendancePct !== null)
             ? $this->sapAchievement->percentage($counts)
             : null;
+        $tbcMeta = $tbcMetaBySid[$sid] ?? null;
+        $tbc = is_array($tbcMeta)
+            ? ($tbcMeta['percent'] ?? null)
+            : ($tbcBySlot[$sid.'|'.$date] ?? null);
 
         return [
             'date' => $date,
@@ -170,9 +188,34 @@ final class DashboardMockDataProvider
             'sap' => $sap,
             'sap_counts' => $counts,
             'sap_hint' => $this->sapHint($counts, $sapLoaded, $sid, $attendancePct),
-            'tbc' => null,
+            'tbc' => $tbc,
+            'tbc_hint' => $this->tbcHint($tbc, $tbcMeta),
             'checkinout' => $taps,
         ];
+    }
+
+    /**
+     * @param  array{matched: int, total: int, percent: ?float}|null  $tbcMeta
+     */
+    private function tbcHint(?float $tbc, ?array $tbcMeta): string
+    {
+        if ($tbcMeta !== null) {
+            $total = (int) ($tbcMeta['total'] ?? 0);
+            if ($total === 0) {
+                return 'Tidak ada Hazard/Inspeksi orang ini selama jaga minggu terpilih — % TBC tidak dihitung.';
+            }
+
+            return sprintf(
+                '%d dari %d Hazard/Inspeksi orang ini sudah valid TBC (tasklist ada di Google Sheet). Rumus: valid TBC ÷ (Hazard + Inspeksi).',
+                (int) ($tbcMeta['matched'] ?? 0),
+                $total,
+            );
+        }
+        if ($tbc === null) {
+            return 'Sumber TBC belum termuat, atau tidak ada Hazard/Inspeksi pada slot ini.';
+        }
+
+        return '% TBC = valid TBC ÷ (Hazard + Inspeksi) orang ini selama jaga minggu terpilih.';
     }
 
     /**
@@ -303,7 +346,7 @@ final class DashboardMockDataProvider
                 delta: null,
                 icon: 'ri-shield-check-line',
                 color: 'danger',
-                formula: 'Jumlah temuan TBC HSECM / total hazard + inspeksi minggu ini. Kosong bila tabel TBC belum ada.',
+                formula: 'Valid TBC ÷ (Hazard + Inspeksi) semua orang jaga Control Room minggu ini. Observasi/OAK tidak dihitung.',
             ),
         ];
     }

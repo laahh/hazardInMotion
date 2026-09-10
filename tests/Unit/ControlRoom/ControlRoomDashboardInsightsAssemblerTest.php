@@ -87,6 +87,100 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         $this->assertSame('9374205', $insights['highlight']['tbcItems'][0]['tasklist']);
         $this->assertSame('TBC dari Excel', $insights['highlight']['tbcItems'][0]['description']);
         $this->assertSame('FJAVJ', $insights['highlight']['tbcItems'][0]['company_pic']);
+        $this->assertSame([], $insights['tbcBySlot']);
+    }
+
+    public function test_tbc_loaded_menandai_sudah_dan_belum_plus_persentase_slot(): void
+    {
+        $findings = [
+            $this->finding('FJAVJ', '2026-08-31 08:15:00', 'hazard', 'APD', '', reportId: '9374205', description: 'Tidak memakai APD'),
+            $this->finding('FJAVJ', '2026-08-31 09:00:00', 'inspeksi', 'APD', '', reportId: '111', description: 'Inspeksi unit'),
+            $this->finding('FJAVJ', '2026-08-31 10:00:00', 'observasi', 'APD', '', reportId: '999'),
+        ];
+        $matched = $this->assembler()->tbcRowsMatchingFindings($findings, [
+            ['Tasklist' => '9374205'],
+        ]);
+
+        $insights = $this->assembler()->fromFindings(
+            $findings,
+            $this->schedule(),
+            ['uncovered' => [], 'total' => 0],
+            $matched,
+            sapLoaded: true,
+            tbcLoaded: true,
+        );
+
+        $this->assertSame(50.0, $insights['highlight']['tbcPercentage']);
+        $this->assertSame(50.0, $insights['tbcBySlot']['FJAVJ|2026-08-31']);
+        $this->assertSame(1, $insights['tbcMetaBySid']['FJAVJ']['matched']);
+        $this->assertSame(2, $insights['tbcMetaBySid']['FJAVJ']['total']);
+        $this->assertSame(50.0, $insights['tbcMetaBySid']['FJAVJ']['percent']);
+        $statuses = array_column($insights['highlight']['tbcItems'], 'status', 'tasklist');
+        $this->assertSame('Belum TBC', $statuses['111']);
+        $this->assertSame('Sudah TBC', $statuses['9374205']);
+        $this->assertArrayNotHasKey('999', $statuses);
+        $this->assertSame(1, $insights['quality'][0]['tbc']);
+        $this->assertSame(2, $insights['quality'][0]['tbc_basis']);
+    }
+
+    public function test_tbc_loaded_tanpa_cocokan_menghasilkan_nol_persen(): void
+    {
+        $insights = $this->assembler()->fromFindings(
+            [
+                $this->finding('FJAVJ', '2026-08-31 08:15:00', 'hazard', 'APD', '', reportId: '9374205'),
+                $this->finding('FJAVJ', '2026-08-31 09:00:00', 'inspeksi', 'APD', '', reportId: '111'),
+            ],
+            $this->schedule(),
+            ['uncovered' => [], 'total' => 0],
+            [],
+            sapLoaded: true,
+            tbcLoaded: true,
+        );
+
+        $this->assertSame(0.0, $insights['highlight']['tbcPercentage']);
+        $this->assertSame(0.0, $insights['tbcBySlot']['FJAVJ|2026-08-31']);
+        $this->assertSame(0, $insights['quality'][0]['tbc']);
+        $this->assertSame(2, $insights['quality'][0]['tbc_basis']);
+        $this->assertSame('Belum TBC', $insights['highlight']['tbcItems'][0]['status']);
+    }
+
+    public function test_persen_tbc_personil_akumulasi_semua_hari_jaga_orang_itu(): void
+    {
+        $days = [
+            [
+                'date' => '2026-08-31',
+                's1' => [['name' => 'Agung Nugroho', 'sid' => 'FJAVJ']],
+                's2' => [],
+            ],
+            [
+                'date' => '2026-09-01',
+                's1' => [['name' => 'Agung Nugroho', 'sid' => 'FJAVJ']],
+                's2' => [],
+            ],
+        ];
+        $findings = [
+            $this->finding('FJAVJ', '2026-08-31 08:15:00', 'hazard', 'APD', '', reportId: '9374205'),
+            $this->finding('FJAVJ', '2026-09-01 09:00:00', 'inspeksi', 'APD', '', reportId: '111'),
+            $this->finding('FJAVJ', '2026-09-01 10:00:00', 'observasi', 'APD', '', reportId: '999'),
+        ];
+        $matched = $this->assembler()->tbcRowsMatchingFindings($findings, [
+            ['Tasklist' => '9374205'],
+        ]);
+
+        $insights = $this->assembler()->fromFindings(
+            $findings,
+            $days,
+            ['uncovered' => [], 'total' => 0],
+            $matched,
+            sapLoaded: true,
+            tbcLoaded: true,
+        );
+
+        $this->assertSame(50.0, $insights['tbcMetaBySid']['FJAVJ']['percent']);
+        $this->assertSame(50.0, $insights['tbcBySlot']['FJAVJ|2026-08-31']);
+        $this->assertSame(50.0, $insights['tbcBySlot']['FJAVJ|2026-09-01']);
+        $this->assertSame(1, $insights['quality'][0]['tbc']);
+        $this->assertSame(2, $insights['quality'][0]['tbc_basis']);
     }
 
     public function test_highlight_kategori_menyertakan_detail_temuan(): void

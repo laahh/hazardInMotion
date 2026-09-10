@@ -53,6 +53,63 @@ final class DashboardMockDataProviderTest extends TestCase
         $this->assertTrue($mock['personnelCoverage'][0]['lead']);
     }
 
+    public function test_pencapaian_mengisi_persen_tbc_dari_slot(): void
+    {
+        $days = [[
+            'date' => '2026-08-31',
+            's1' => [[
+                'name' => 'Agung Nugroho',
+                'sid' => 'FJAVJ',
+                'status' => 'sesuai',
+                'checkinout' => [],
+            ]],
+            's2' => [],
+        ]];
+
+        $mock = (new DashboardMockDataProvider())->build(
+            CarbonImmutable::parse('2026-08-31'),
+            $days,
+            [],
+            sapLoaded: true,
+            insights: ['tbcBySlot' => ['FJAVJ|2026-08-31' => 50.0]],
+        );
+
+        $this->assertSame(50.0, $mock['achievementGroups'][0]['rows'][0]['tbc']);
+        $this->assertStringContainsString('valid TBC', $mock['achievementGroups'][0]['rows'][0]['tbc_hint']);
+    }
+
+    public function test_pencapaian_tbc_mengikuti_total_orang_bukan_slot(): void
+    {
+        $days = [
+            [
+                'date' => '2026-08-31',
+                's1' => [['name' => 'Agung Nugroho', 'sid' => 'FJAVJ', 'status' => 'sesuai', 'checkinout' => []]],
+                's2' => [],
+            ],
+            [
+                'date' => '2026-09-01',
+                's1' => [['name' => 'Agung Nugroho', 'sid' => 'FJAVJ', 'status' => 'sesuai', 'checkinout' => []]],
+                's2' => [],
+            ],
+        ];
+
+        $mock = (new DashboardMockDataProvider())->build(
+            CarbonImmutable::parse('2026-08-31'),
+            $days,
+            [],
+            sapLoaded: true,
+            insights: [
+                'tbcMetaBySid' => [
+                    'FJAVJ' => ['matched' => 1, 'total' => 2, 'percent' => 50.0],
+                ],
+            ],
+        );
+
+        $this->assertSame(50.0, $mock['achievementGroups'][0]['rows'][0]['tbc']);
+        $this->assertSame(50.0, $mock['achievementGroups'][1]['rows'][0]['tbc']);
+        $this->assertStringContainsString('1 dari 2', $mock['achievementGroups'][0]['rows'][0]['tbc_hint']);
+    }
+
     public function test_pencapaian_membawa_ringkasan_penggantian(): void
     {
         $days = [[

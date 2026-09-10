@@ -11,6 +11,7 @@ use App\Services\ControlRoom\Metrics\FindingVariety;
 use App\Services\ControlRoom\Metrics\TbcValidity;
 use App\Services\ControlRoom\Reference\LocationReader;
 use App\Services\ControlRoom\Reference\ShiftResolver;
+use App\Services\ControlRoom\Source\GSheetTbcReader;
 use App\Services\Hsecm\HsecmDatabaseRepository;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -31,6 +32,8 @@ final class ControlRoomDashboardInsightsAssembler
 
     private const HSECM_CACHE_SECONDS = 300;
 
+    private readonly GSheetTbcReader $gsheetTbc;
+
     public function __construct(
         private readonly ShiftResolver $shifts,
         private readonly FindingVariety $variety,
@@ -38,7 +41,10 @@ final class ControlRoomDashboardInsightsAssembler
         private readonly LocationReader $locations,
         private readonly HsecmDatabaseRepository $hsecm,
         private readonly ControlRoomSapDutyReader $dutyWindow,
-    ) {}
+        ?GSheetTbcReader $gsheetTbc = null,
+    ) {
+        $this->gsheetTbc = $gsheetTbc ?? new GSheetTbcReader();
+    }
 
     /**
      * @param  list<array<string, mixed>>  $scheduleDays
@@ -47,7 +53,8 @@ final class ControlRoomDashboardInsightsAssembler
      *     pareto: array{s1: list<array{hour: int, count: int, cumulative: float}>, s2: list<array{hour: int, count: int, cumulative: float}>},
      *     highlight: array{goldenRules: list<array{name: string, count: int, items: list<array<string, string>>}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float, blindspotItems: list<array<string, string>>, tbcItems: list<array<string, string>>},
      *     quality: list<array<string, mixed>>,
-     *     personnelCoverage: list<array{name: string, lokasi: int, kritis: int, lead: bool}>
+     *     personnelCoverage: list<array{name: string, lokasi: int, kritis: int, lead: bool}>,
+     *     tbcBySlot: array<string, ?float>
      * }
      */
     public function build(
@@ -71,9 +78,16 @@ final class ControlRoomDashboardInsightsAssembler
         });
 
         $usable = $sapLoaded ? $this->onDutyFindings($findings, $scheduleDays) : [];
-        $tbcRows = $this->loadTbcValidationsForFindings($usable);
+        $tbcLookup = $this->loadTbcValidationsForFindings($usable);
 
-        return $this->fromFindings($findings, $scheduleDays, $hsecm['coverage'], $tbcRows, $sapLoaded);
+        return $this->fromFindings(
+            $findings,
+            $scheduleDays,
+            $hsecm['coverage'],
+            $tbcLookup['rows'],
+            $sapLoaded,
+            $tbcLookup['loaded'],
+        );
     }
 
     /**
@@ -85,7 +99,8 @@ final class ControlRoomDashboardInsightsAssembler
      *     pareto: array{s1: list<array{hour: int, count: int, cumulative: float}>, s2: list<array{hour: int, count: int, cumulative: float}>},
      *     highlight: array{goldenRules: list<array{name: string, count: int, items: list<array<string, string>>}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float, blindspotItems: list<array<string, string>>, tbcItems: list<array<string, string>>},
      *     quality: list<array<string, mixed>>,
-     *     personnelCoverage: list<array{name: string, lokasi: int, kritis: int, lead: bool}>
+     *     personnelCoverage: list<array{name: string, lokasi: int, kritis: int, lead: bool}>,
+     *     tbcBySlot: array<string, ?float>
      * }
      */
     public function fromFindings(
@@ -94,14 +109,19 @@ final class ControlRoomDashboardInsightsAssembler
         array $coverage,
         array $tbcRows,
         bool $sapLoaded,
+        bool $tbcLoaded = false,
     ): array {
         $usable = $sapLoaded ? $this->onDutyFindings($findings, $scheduleDays) : [];
+        $matchedIds = $this->matchedTasklistSet($tbcRows);
+        $tbcMeta = $tbcLoaded ? $this->tbcMetaBySid($usable, $scheduleDays, $matchedIds) : [];
 
         return [
             'pareto' => $this->paretoFromFindings($usable),
-            'highlight' => $this->highlightFromFindings($usable, $coverage, $tbcRows),
-            'quality' => $sapLoaded ? $this->qualityFromFindings($usable, $scheduleDays) : [],
+            'highlight' => $this->highlightFromFindings($usable, $coverage, $tbcRows, $tbcLoaded),
+            'quality' => $sapLoaded ? $this->qualityFromFindings($usable, $scheduleDays, $matchedIds, $tbcLoaded) : [],
             'personnelCoverage' => $this->personnelCoverageFromFindings($usable, $scheduleDays),
+            'tbcBySlot' => $this->tbcPercentBySidDate($scheduleDays, $tbcMeta),
+            'tbcMetaBySid' => $tbcMeta,
         ];
     }
 
@@ -162,7 +182,7 @@ final class ControlRoomDashboardInsightsAssembler
      * @param  list<array<string, mixed>>  $tbcRows
      * @return array{goldenRules: list<array{name: string, count: int, items: list<array<string, string>>}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float, blindspotItems: list<array<string, string>>, tbcItems: list<array<string, string>>}
      */
-    private function highlightFromFindings(array $findings, array $coverage, array $tbcRows): array
+    private function highlightFromFindings(array $findings, array $coverage, array $tbcRows, bool $tbcLoaded = false): array
     {
         $golden = [];
         $goldenItems = [];
@@ -199,14 +219,18 @@ final class ControlRoomDashboardInsightsAssembler
         }
         usort($blindspotItems, $this->highlightItemSorter());
 
-        $tbcPercentage = $tbcRows === []
+        $tbcPercentage = (! $tbcLoaded && $tbcRows === [])
             ? null
             : $this->tbc->percentage(count($tbcRows), $hazardInspeksi);
-        $tbcItems = [];
-        foreach ($tbcRows as $row) {
-            $tbcItems[] = $this->highlightItemFromTbc($row);
+        $tbcItems = $tbcLoaded
+            ? $this->tbcHighlightItemsFromFindings($findings, $this->matchedTasklistSet($tbcRows))
+            : [];
+        if ($tbcItems === []) {
+            foreach ($tbcRows as $row) {
+                $tbcItems[] = $this->highlightItemFromTbc($row);
+            }
+            usort($tbcItems, $this->highlightItemSorter());
         }
-        usort($tbcItems, $this->highlightItemSorter());
 
         return [
             'goldenRules' => $goldenRules,
@@ -334,13 +358,14 @@ final class ControlRoomDashboardInsightsAssembler
     /**
      * Kualitas temuan personil jadwal. Total = jumlah laporan SAP pada hari
      * jaga (H) sampai akhir H+1, sama dengan jendela tombol Detail.
-     * TBC / GR / Blindspot dikosongkan sampai sumber HSECM siap.
+     * TBC = Hazard/Inspeksi yang tasklist-nya sudah ada di GSheet (atau Excel fallback).
      *
      * @param  list<array<string, mixed>>  $findings
      * @param  list<array<string, mixed>>  $scheduleDays
+     * @param  array<string, true>  $matchedIds
      * @return list<array<string, mixed>>
      */
-    private function qualityFromFindings(array $findings, array $scheduleDays): array
+    private function qualityFromFindings(array $findings, array $scheduleDays, array $matchedIds = [], bool $tbcLoaded = false): array
     {
         $scheduleDays = $this->runningScheduleDays($scheduleDays);
         $namesBySid = $this->namesBySid($scheduleDays);
@@ -365,13 +390,16 @@ final class ControlRoomDashboardInsightsAssembler
                 $categories[] = $this->findingCategory($finding);
             }
 
+            $tbcCounts = $this->tbcCountsForPerson($personFindings, $matchedIds);
+
             $rows[] = [
                 'name' => $name,
                 'sid' => $sid,
                 'total_findings' => count($personFindings),
                 'distinct_categories' => count(array_unique($categories)),
                 'variety_score' => $personFindings === [] ? null : $this->variety->score($categories),
-                'tbc' => null,
+                'tbc' => $tbcLoaded ? $tbcCounts['matched'] : null,
+                'tbc_basis' => $tbcLoaded ? $tbcCounts['total'] : null,
                 'gr' => null,
                 'blindspot' => null,
             ];
@@ -568,8 +596,8 @@ final class ControlRoomDashboardInsightsAssembler
     }
 
     /**
-     * TBC Excel yang Tasklist-nya sama dengan id laporan Hazard/Inspeksi
-     * pada jendela jaga minggu terpilih.
+     * TBC (GSheet atau Excel) yang Tasklist-nya sama dengan id laporan
+     * Hazard/Inspeksi pada jendela jaga minggu terpilih.
      *
      * @param  list<array<string, mixed>>  $findings
      * @param  list<array<string, mixed>>  $validations
@@ -592,7 +620,7 @@ final class ControlRoomDashboardInsightsAssembler
 
         $matched = [];
         foreach ($validations as $row) {
-            $tasklist = trim((string) ($row['tasklist'] ?? $row['Task_Number'] ?? ''));
+            $tasklist = trim((string) ($row['tasklist'] ?? $row['Tasklist'] ?? $row['Task_Number'] ?? ''));
             if ($tasklist === '' || ! isset($findingByReport[$tasklist])) {
                 continue;
             }
@@ -604,27 +632,37 @@ final class ControlRoomDashboardInsightsAssembler
 
     /**
      * @param  list<array<string, mixed>>  $findings
-     * @return list<array<string, mixed>>
+     * @return array{rows: list<array<string, mixed>>, loaded: bool}
      */
     private function loadTbcValidationsForFindings(array $findings): array
     {
-        if (! Schema::hasTable('control_room_tbc_validations')) {
-            return [];
+        $reportIds = $this->hazardInspeksiReportIds($findings);
+        if ($reportIds === []) {
+            return ['rows' => [], 'loaded' => false];
         }
 
-        $reportIds = [];
-        foreach ($findings as $finding) {
-            $component = strtolower(trim((string) ($finding['component'] ?? '')));
-            if (! in_array($component, ['hazard', 'inspeksi'], true)) {
-                continue;
-            }
-            $reportId = trim((string) ($finding['report_id'] ?? ''));
-            if ($reportId !== '') {
-                $reportIds[$reportId] = $reportId;
+        if ($this->gsheetTbc->isConfigured()) {
+            $gsheet = $this->gsheetTbc->matchingRows(array_values($reportIds));
+            if ($gsheet['loaded']) {
+                return [
+                    'rows' => $this->tbcRowsMatchingFindings($findings, $gsheet['rows']),
+                    'loaded' => true,
+                ];
             }
         }
-        if ($reportIds === []) {
-            return [];
+
+        return $this->loadExcelTbcValidationsForFindings($findings, $reportIds);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $findings
+     * @param  array<string, string>  $reportIds
+     * @return array{rows: list<array<string, mixed>>, loaded: bool}
+     */
+    private function loadExcelTbcValidationsForFindings(array $findings, array $reportIds): array
+    {
+        if (! Schema::hasTable('control_room_tbc_validations')) {
+            return ['rows' => [], 'loaded' => false];
         }
 
         try {
@@ -636,10 +674,173 @@ final class ControlRoomDashboardInsightsAssembler
         } catch (Throwable $e) {
             Log::warning('ControlRoom Validasi TBC gagal: '.$e->getMessage());
 
+            return ['rows' => [], 'loaded' => false];
+        }
+
+        return [
+            'rows' => $this->tbcRowsMatchingFindings($findings, $rows),
+            'loaded' => true,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $findings
+     * @return array<string, string>
+     */
+    private function hazardInspeksiReportIds(array $findings): array
+    {
+        $reportIds = [];
+        foreach ($findings as $finding) {
+            $component = strtolower(trim((string) ($finding['component'] ?? '')));
+            if (! in_array($component, ['hazard', 'inspeksi'], true)) {
+                continue;
+            }
+            $reportId = trim((string) ($finding['report_id'] ?? ''));
+            if ($reportId !== '') {
+                $reportIds[$reportId] = $reportId;
+            }
+        }
+
+        return $reportIds;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $tbcRows
+     * @return array<string, true>
+     */
+    private function matchedTasklistSet(array $tbcRows): array
+    {
+        $matched = [];
+        foreach ($tbcRows as $row) {
+            $tasklist = trim((string) ($row['tasklist'] ?? $row['Tasklist'] ?? $row['Task_Number'] ?? ''));
+            if ($tasklist !== '') {
+                $matched[$tasklist] = true;
+            }
+        }
+
+        return $matched;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $findings
+     * @param  array<string, true>  $matchedIds
+     * @return list<array{tasklist: string, found_at: string, description: string, company_pic: string, status: string}>
+     */
+    private function tbcHighlightItemsFromFindings(array $findings, array $matchedIds): array
+    {
+        $items = [];
+        foreach ($findings as $finding) {
+            $component = strtolower(trim((string) ($finding['component'] ?? '')));
+            if (! in_array($component, ['hazard', 'inspeksi'], true)) {
+                continue;
+            }
+            $item = $this->highlightItemFromFinding($finding);
+            $reportId = trim((string) ($finding['report_id'] ?? ''));
+            $item['status'] = ($reportId !== '' && isset($matchedIds[$reportId]))
+                ? 'Sudah TBC'
+                : 'Belum TBC';
+            $items[] = $item;
+        }
+
+        usort($items, function (array $a, array $b): int {
+            $byStatus = strcmp((string) ($a['status'] ?? ''), (string) ($b['status'] ?? ''));
+            if ($byStatus !== 0) {
+                return $byStatus;
+            }
+
+            return strcmp((string) ($b['found_at'] ?? ''), (string) ($a['found_at'] ?? ''));
+        });
+
+        return array_slice($items, 0, 100);
+    }
+
+    /**
+     * % TBC personil = valid TBC / (Hazard + Inspeksi unik) orang itu selama
+     * jaga minggu terpilih. Nilai yang sama dipakai di setiap slot tanggalnya.
+     *
+     * @param  list<array<string, mixed>>  $scheduleDays
+     * @param  array<string, array{matched: int, total: int, percent: ?float}>  $meta
+     * @return array<string, ?float>
+     */
+    private function tbcPercentBySidDate(array $scheduleDays, array $meta): array
+    {
+        if ($meta === []) {
             return [];
         }
 
-        return $this->tbcRowsMatchingFindings($findings, $rows);
+        $percents = [];
+        foreach ($this->runningScheduleDays($scheduleDays) as $day) {
+            $date = (string) ($day['date'] ?? '');
+            if ($date === '') {
+                continue;
+            }
+            foreach (['s1', 's2'] as $shiftKey) {
+                foreach ($day[$shiftKey] ?? [] as $person) {
+                    $sid = strtoupper(trim((string) ($person['sid'] ?? '')));
+                    if ($sid === '') {
+                        continue;
+                    }
+                    $percents[$sid.'|'.$date] = $meta[$sid]['percent'] ?? null;
+                }
+            }
+        }
+
+        return $percents;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $findings
+     * @param  list<array<string, mixed>>  $scheduleDays
+     * @param  array<string, true>  $matchedIds
+     * @return array<string, array{matched: int, total: int, percent: ?float}>
+     */
+    private function tbcMetaBySid(array $findings, array $scheduleDays, array $matchedIds): array
+    {
+        $namesBySid = $this->namesBySid($this->runningScheduleDays($scheduleDays));
+        $bySid = [];
+        foreach ($findings as $finding) {
+            $sid = strtoupper(trim((string) ($finding['sid'] ?? '')));
+            if ($sid === '' || ! isset($namesBySid[$sid])) {
+                continue;
+            }
+            $bySid[$sid][] = $finding;
+        }
+
+        $meta = [];
+        foreach ($namesBySid as $sid => $_name) {
+            $counts = $this->tbcCountsForPerson($this->uniqueQualityFindings($bySid[$sid] ?? []), $matchedIds);
+            $meta[$sid] = [
+                'matched' => $counts['matched'],
+                'total' => $counts['total'],
+                'percent' => $this->tbc->percentage($counts['matched'], $counts['total']),
+            ];
+        }
+
+        return $meta;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $personFindings
+     * @param  array<string, true>  $matchedIds
+     * @return array{matched: int, total: int}
+     */
+    private function tbcCountsForPerson(array $personFindings, array $matchedIds): array
+    {
+        $matched = 0;
+        $total = 0;
+        foreach ($personFindings as $finding) {
+            $component = strtolower(trim((string) ($finding['component'] ?? '')));
+            if (! in_array($component, ['hazard', 'inspeksi'], true)) {
+                continue;
+            }
+            $total++;
+            $reportId = trim((string) ($finding['report_id'] ?? ''));
+            if ($reportId !== '' && isset($matchedIds[$reportId])) {
+                $matched++;
+            }
+        }
+
+        return ['matched' => $matched, 'total' => $total];
     }
 
     /**
@@ -650,8 +851,8 @@ final class ControlRoomDashboardInsightsAssembler
     private function mapValidationToTbcRow(array $row, array $finding): array
     {
         return [
-            'tasklist' => trim((string) ($row['tasklist'] ?? '')),
-            'Task_Number' => trim((string) ($row['tasklist'] ?? '')),
+            'tasklist' => trim((string) ($row['tasklist'] ?? $row['Tasklist'] ?? $row['Task_Number'] ?? '')),
+            'Task_Number' => trim((string) ($row['tasklist'] ?? $row['Tasklist'] ?? $row['Task_Number'] ?? '')),
             'Date_for_Join' => (string) ($finding['at'] ?? ''),
             'deskripsi' => trim((string) ($row['kronologi_singkat'] ?? '')),
             'kategori_TBC' => trim((string) ($row['to_be_concerned_hazard'] ?? '')),

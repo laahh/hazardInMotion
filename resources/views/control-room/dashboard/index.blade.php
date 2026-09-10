@@ -319,7 +319,7 @@
                 <div class="ocr-card-header">
                     <div>
                         <h6>Pencapaian Personil</h6>
-                        <p class="ocr-card-kicker">% pencapaian berdasarkan kehadiran sesuai jadwal, SAP berdasarkan target (1 Hazard, 1 Inspeksi, 1 Observasi/OAK), dan % TBC dari Hazard &amp; Inspeksi. Klik Detail untuk laporan SAP selama jaga.</p>
+                        <p class="ocr-card-kicker">% pencapaian berdasarkan kehadiran sesuai jadwal, SAP berdasarkan target (1 Hazard, 1 Inspeksi, 1 Observasi/OAK), dan % TBC per orang = valid TBC ÷ (Hazard + Inspeksi) selama jaga minggu ini. Observasi/OAK tidak masuk rumus TBC. Klik Detail untuk laporan SAP selama jaga.</p>
                     </div>
                 </div>
                 <div class="ocr-card-body ocr-card-body--flush">
@@ -352,7 +352,7 @@
                                             <td class="text-center">{{ $row['shift'] }}</td>
                                             <td class="ocr-heat-cell {{ $heatClass($row['attendance_pct']) }}">{{ $heatLabel($row['attendance_pct']) }}</td>
                                             <td class="ocr-heat-cell {{ $heatClass($row['sap']) }}" title="{{ $row['sap_hint'] ?? '' }}">{{ $sapLabel($row['sap']) }}</td>
-                                            <td class="ocr-heat-cell {{ $heatClass($row['tbc']) }}">{{ $heatLabel($row['tbc']) }}</td>
+                                            <td class="ocr-heat-cell {{ $heatClass($row['tbc']) }}" title="{{ $row['tbc_hint'] ?? '' }}">{{ $heatLabel($row['tbc']) }}</td>
                                             <td class="text-center">
                                                 @if (($row['sid'] ?? '') !== '')
                                                     <button
@@ -515,7 +515,15 @@
                                                     </div>
                                                 @endif
                                             </td>
-                                            <td class="text-center">{{ $row['tbc'] === null ? '—' : $row['tbc'] }}</td>
+                                            <td class="text-center">
+                                                @if ($row['tbc'] === null || (int) ($row['tbc_basis'] ?? -1) === 0)
+                                                    —
+                                                @elseif (array_key_exists('tbc_basis', $row) && $row['tbc_basis'] !== null)
+                                                    {{ $row['tbc'] }}/{{ $row['tbc_basis'] }}
+                                                @else
+                                                    {{ $row['tbc'] }}
+                                                @endif
+                                            </td>
                                             <td class="text-center">{{ $row['gr'] === null ? '—' : $row['gr'] }}</td>
                                             <td class="text-center">{{ $row['blindspot'] === null ? '—' : $row['blindspot'] }}</td>
                                         </tr>

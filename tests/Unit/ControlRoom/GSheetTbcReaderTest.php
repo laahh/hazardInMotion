@@ -76,4 +76,42 @@ final class GSheetTbcReaderTest extends TestCase
 
         $this->assertCount(0, $reader->fetch());
     }
+
+    public function test_matching_rows_hanya_tasklist_yang_diminta(): void
+    {
+        Http::fake([
+            'docs.google.com/*' => Http::sequence()
+                ->push("Tasklist,Kategori\n9374205,TBC\n", 200, ['Content-Type' => 'text/csv'])
+                ->push("Tasklist,Kategori\n9374205,TBC\n111,Skip\n", 200, ['Content-Type' => 'text/csv']),
+        ]);
+
+        $reader = new GSheetTbcReader(sheetId: 'fake-sheet-match', gid: '0');
+        $result = $reader->matchingRows(['9374205', '999']);
+
+        $this->assertTrue($result['loaded']);
+        $this->assertCount(1, $result['rows']);
+        $this->assertSame('9374205', $result['rows'][0]['Tasklist']);
+        $this->assertSame(1, $reader->tasklistHeaderIndex(['Tanggal', 'Tasklist', 'PIC']));
+    }
+
+    public function test_matching_rows_tanpa_sheet_id_tidak_loaded(): void
+    {
+        $reader = new GSheetTbcReader(sheetId: '', gid: '0');
+
+        $this->assertFalse($reader->isConfigured());
+        $this->assertSame(['loaded' => false, 'rows' => []], $reader->matchingRows(['9374205']));
+    }
+
+    public function test_matching_rows_html_tidak_melempar_ke_dashboard(): void
+    {
+        Http::fake([
+            'docs.google.com/*' => Http::response('<html>Sign in</html>', 200, ['Content-Type' => 'text/html']),
+        ]);
+
+        $reader = new GSheetTbcReader(sheetId: 'fake-sheet-html', gid: '0');
+        $result = $reader->matchingRows(['9374205']);
+
+        $this->assertFalse($result['loaded']);
+        $this->assertSame([], $result['rows']);
+    }
 }

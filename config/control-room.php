@@ -119,14 +119,16 @@ return [
     ],
 
     /*
-    | Google Sheet tasklist TBC (lihat plan-OCR.md T1.5).
-    | BELUM DIISI — menunggu Sheet ID/gid dari pemilik sheet (Lampiran D #23).
-    | Jangan hardcode ID di sini sampai dikonfirmasi; GSheetTbcReader akan
-    | menolak berjalan (exception jelas) selama nilai ini kosong.
+    | Google Sheet validasi TBC (Hazard To Be Concern). Sheet harus
+    | "Anyone with the link → Viewer" supaya CSV/GViz bisa dibaca tanpa
+    | service account. Dashboard hanya men-query tasklist yang cocok dengan
+    | report_id Hazard/Inspeksi orang jaga — bukan unduh seluruh sheet.
     */
     'gsheet_tbc' => [
-        'sheet_id' => env('CONTROL_ROOM_GSHEET_TBC_ID'),
+        'sheet_id' => env('CONTROL_ROOM_GSHEET_TBC_ID', '1PQhAqJTXE7vTBdwjierj9uDuszqiBQcSMIiSZVD_AKw'),
         'gid' => env('CONTROL_ROOM_GSHEET_TBC_GID', '0'),
+        'cache_seconds' => (int) env('CONTROL_ROOM_GSHEET_TBC_CACHE', 900),
+        'timeout' => (int) env('CONTROL_ROOM_GSHEET_TBC_TIMEOUT', 12),
     ],
 
     /*
