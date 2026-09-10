@@ -19,11 +19,13 @@ use Throwable;
  */
 final class ControlRoomSapWeekCountsReader
 {
-    public const SID_CHUNK = 12;
+    public const SID_CHUNK = 16;
 
     private const CACHE_SECONDS = 300;
 
-    private const QUERY_TIMEOUT_MS = 4000;
+    private const PAST_CACHE_SECONDS = 21600;
+
+    private const QUERY_TIMEOUT_MS = 6000;
 
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
@@ -54,10 +56,7 @@ final class ControlRoomSapWeekCountsReader
         sort($sids);
         $dates = array_column($duties, 'date');
         sort($dates);
-        $cacheKey = 'control-room:sap-week-counts:v12:'.($withFindings ? 'full' : 'counts').':'.hash(
-            'sha1',
-            implode(',', $sids).'|'.$dates[0].'|'.$dates[array_key_last($dates)],
-        );
+        $cacheKey = $this->cacheKey($sids, $dates, $withFindings);
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['counts'], $cached['findings'])) {
             return ['loaded' => true, 'counts' => $cached['counts'], 'findings' => $cached['findings']];
@@ -95,9 +94,58 @@ final class ControlRoomSapWeekCountsReader
 
         $counts = $this->countForDuties($events, $duties);
         $onDuty = $withFindings ? $this->findingsOnDuty($findings, $duties) : [];
-        Cache::put($cacheKey, ['counts' => $counts, 'findings' => $onDuty], self::CACHE_SECONDS);
+        Cache::put($cacheKey, ['counts' => $counts, 'findings' => $onDuty], $this->cacheTtl($dates));
 
         return ['loaded' => true, 'counts' => $counts, 'findings' => $onDuty];
+    }
+
+    /**
+     * Hasil cache saja — tidak memukul OBDS. Null jika belum pernah sukses di-cache.
+     *
+     * @param  list<array<string, mixed>>  $scheduleDays
+     * @return array{loaded: bool, counts: array<string, array{hazard: int, inspeksi: int, observasi: int}>, findings: list<array<string, mixed>>}|null
+     */
+    public function cachedForScheduleDays(array $scheduleDays, bool $withFindings = true): ?array
+    {
+        $duties = $this->dutiesFromSchedule($scheduleDays);
+        if ($duties === []) {
+            return ['loaded' => true, 'counts' => [], 'findings' => []];
+        }
+        $sids = array_values(array_unique(array_column($duties, 'sid')));
+        sort($sids);
+        $dates = array_column($duties, 'date');
+        sort($dates);
+        $cached = Cache::get($this->cacheKey($sids, $dates, $withFindings));
+        if (! is_array($cached) || ! isset($cached['counts'], $cached['findings'])) {
+            return null;
+        }
+
+        return ['loaded' => true, 'counts' => $cached['counts'], 'findings' => $cached['findings']];
+    }
+
+    /**
+     * @param  list<string>  $sids
+     * @param  list<string>  $dates
+     */
+    private function cacheKey(array $sids, array $dates, bool $withFindings): string
+    {
+        return 'control-room:sap-week-counts:v13:'.($withFindings ? 'full' : 'counts').':'.hash(
+            'sha1',
+            implode(',', $sids).'|'.($dates[0] ?? '').'|'.($dates[array_key_last($dates)] ?? ''),
+        );
+    }
+
+    /**
+     * @param  list<string>  $dates
+     */
+    private function cacheTtl(array $dates): int
+    {
+        $last = (string) ($dates[array_key_last($dates)] ?? '');
+        if ($last !== '' && $last < CarbonImmutable::now()->toDateString()) {
+            return self::PAST_CACHE_SECONDS;
+        }
+
+        return self::CACHE_SECONDS;
     }
 
     /**

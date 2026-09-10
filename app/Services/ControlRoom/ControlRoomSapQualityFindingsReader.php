@@ -22,9 +22,11 @@ final class ControlRoomSapQualityFindingsReader
 
     private const LOCATION_HITS_CACHE_SECONDS = 300;
 
+    private const LOCATION_HITS_PAST_CACHE_SECONDS = 21600;
+
     private const QUERY_TIMEOUT_MS = 4000;
 
-    private const LOCATION_HITS_TIMEOUT_MS = 6000;
+    private const LOCATION_HITS_TIMEOUT_MS = 10000;
 
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
@@ -83,10 +85,11 @@ final class ControlRoomSapQualityFindingsReader
 
     /**
      * Pasangan lokasi+detil per hari yang muncul di SAP pada jendela minggu (semua pelapor).
+     * Satu UNION ALL (hazard+observasi+OAK), bukan 3 round-trip sequential.
      *
      * @return array{loaded: bool, findings: list<array{lokasi: string, detil_lokasi: string, at: string}>}
      */
-    public function locationHits(CarbonImmutable $start, CarbonImmutable $end): array
+    public function locationHits(CarbonImmutable $start, CarbonImmutable $end, int $cacheSeconds = self::LOCATION_HITS_CACHE_SECONDS): array
     {
         if (! $this->olap->isReachable()) {
             return ['loaded' => false, 'findings' => []];
@@ -94,22 +97,25 @@ final class ControlRoomSapQualityFindingsReader
 
         $from = $start->startOfDay();
         $until = CarbonImmutable::parse($end);
-        $merged = [];
-        $ok = 0;
-        foreach (['hazard', 'observasi', 'oak'] as $source) {
-            $rows = $this->fetchLocationHitsSource($source, $from, $until);
-            if ($rows === null) {
-                continue;
-            }
-            $ok++;
-            $merged = [...$merged, ...$rows];
+        $ttl = max(self::LOCATION_HITS_CACHE_SECONDS, min($cacheSeconds, self::LOCATION_HITS_PAST_CACHE_SECONDS));
+        $cacheKey = 'control-room:sap-location-hits:v6:'.$from->toDateTimeString().'|'.$until->toDateTimeString();
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && isset($cached['findings'])) {
+            /** @var list<array{lokasi: string, detil_lokasi: string, at: string}> $findings */
+            $findings = $cached['findings'];
+
+            return ['loaded' => true, 'findings' => $findings];
         }
 
-        if ($ok === 0) {
+        $rows = $this->fetchLocationHits($from, $until);
+        if ($rows === null) {
             return ['loaded' => false, 'findings' => []];
         }
 
-        return ['loaded' => true, 'findings' => $this->collapseLocationHits($merged)];
+        $findings = $this->collapseLocationHits($rows);
+        Cache::put($cacheKey, ['findings' => $findings], $ttl);
+
+        return ['loaded' => true, 'findings' => $findings];
     }
 
     /**
@@ -149,52 +155,39 @@ final class ControlRoomSapQualityFindingsReader
     /**
      * @return list<array{lokasi: string, detil_lokasi: string, at: string}>|null
      */
-    private function fetchLocationHitsSource(string $source, CarbonImmutable $from, CarbonImmutable $until): ?array
+    private function fetchLocationHits(CarbonImmutable $from, CarbonImmutable $until): ?array
     {
-        $cacheKey = 'control-room:sap-location-hits:v5:'.$source.':'.$from->toDateTimeString().'|'.$until->toDateTimeString();
-        $cached = Cache::get($cacheKey);
-        if (is_array($cached)) {
-            /** @var list<array{lokasi: string, detil_lokasi: string, at: string}> */
-            return $cached;
-        }
-
-        $sql = match ($source) {
-            'hazard' => <<<'SQL'
-                SELECT lokasi, detil_lokasi, MAX(tanggal_laporan) AS at
+        $sql = <<<'SQL'
+            SELECT lokasi, detil_lokasi, MAX(at) AS at
+            FROM (
+                SELECT lokasi, detil_lokasi, tanggal_laporan AS at
                 FROM bcbeats.mv_inspeksi_hazard
                 WHERE tanggal_laporan >= CAST(? AS timestamp)
                   AND tanggal_laporan < CAST(? AS timestamp)
-                GROUP BY lokasi, detil_lokasi, CAST(tanggal_laporan AS date)
-                SQL,
-            'observasi' => <<<'SQL'
-                SELECT lokasi, detil_lokasi, MAX(tanggal_observasi) AS at
+                UNION ALL
+                SELECT lokasi, detil_lokasi, tanggal_observasi AS at
                 FROM bcbeats.mv_observasi
                 WHERE tanggal_observasi >= CAST(? AS timestamp)
                   AND tanggal_observasi < CAST(? AS timestamp)
-                GROUP BY lokasi, detil_lokasi, CAST(tanggal_observasi AS date)
-                SQL,
-            'oak' => <<<'SQL'
-                SELECT lokasi, detil_lokasi, MAX(tanggal_submit) AS at
+                UNION ALL
+                SELECT lokasi, detil_lokasi, tanggal_submit AS at
                 FROM bcbeats.mv_oak
                 WHERE tanggal_submit >= CAST(? AS timestamp)
                   AND tanggal_submit < CAST(? AS timestamp)
                   AND peran_dalam_tim = 'OBSERVEE'
-                GROUP BY lokasi, detil_lokasi, CAST(tanggal_submit AS date)
-                SQL,
-            default => null,
-        };
-        if ($sql === null) {
-            return null;
-        }
+            ) sap
+            GROUP BY lokasi, detil_lokasi, CAST(at AS date)
+            SQL;
+        $range = [$from->toDateTimeString(), $until->toDateTimeString()];
 
         try {
-            $rows = $this->olap->select($sql, [$from->toDateTimeString(), $until->toDateTimeString()], self::LOCATION_HITS_TIMEOUT_MS, [
+            $rows = $this->olap->select($sql, [...$range, ...$range, ...$range], self::LOCATION_HITS_TIMEOUT_MS, [
                 'jit' => 'off',
                 'work_mem' => '64MB',
                 'max_parallel_workers_per_gather' => '0',
             ]);
         } catch (Throwable $e) {
-            Log::warning('ControlRoom SAP location hits '.$source.' gagal: '.$e->getMessage());
+            Log::warning('ControlRoom SAP location hits gagal: '.$e->getMessage());
 
             return null;
         }
@@ -221,8 +214,6 @@ final class ControlRoomSapQualityFindingsReader
                 'at' => $at,
             ];
         }
-
-        Cache::put($cacheKey, $findings, self::LOCATION_HITS_CACHE_SECONDS);
 
         return $findings;
     }

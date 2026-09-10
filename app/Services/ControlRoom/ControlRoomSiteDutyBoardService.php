@@ -9,6 +9,7 @@ use App\Enums\ControlRoomSiteCode;
 use App\Models\ControlRoom\Attendance;
 use App\Models\ControlRoom\SchedulePlan;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Papan status live semua Control Room: hijau jika ada jadwal shift
@@ -35,6 +36,29 @@ final class ControlRoomSiteDutyBoardService
     {
         $dutyDate = $this->dutyRoster->dutyDate($now);
         $shift = $this->dutyRoster->currentShift($now);
+        $cacheKey = 'control-room:site-board:v1:'.$dutyDate->toDateString().':'.$shift->value;
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && isset($cached['cards'], $cached['dutyDate'])) {
+            /** @var array{dutyDate: string, dutyDateLabel: string, shift: ControlRoomShiftCode, cards: list<array<string, mixed>>} */
+            return $cached;
+        }
+
+        $payload = $this->buildUncached($dutyDate, $shift, $now);
+        Cache::put($cacheKey, $payload, 45);
+
+        return $payload;
+    }
+
+    /**
+     * @return array{
+     *     dutyDate: string,
+     *     dutyDateLabel: string,
+     *     shift: ControlRoomShiftCode,
+     *     cards: list<array<string, mixed>>
+     * }
+     */
+    private function buildUncached(CarbonInterface $dutyDate, ControlRoomShiftCode $shift, ?CarbonInterface $now): array
+    {
         $date = $dutyDate->toDateString();
 
         $plans = SchedulePlan::query()

@@ -21,6 +21,8 @@ final class ControlRoomLocationCoverageService
 {
     private const PAGE_CACHE_SECONDS = 180;
 
+    private const PAST_PAGE_CACHE_SECONDS = 21600;
+
     /** @var list<string> */
     private const DAY_SHORT = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
@@ -43,8 +45,11 @@ final class ControlRoomLocationCoverageService
         ?CarbonInterface $now = null,
     ): array {
         $today = CarbonImmutable::parse($now ?? now())->startOfDay();
+        $ttl = $weekStart->addDays(6)->lessThan($today)
+            ? self::PAST_PAGE_CACHE_SECONDS
+            : self::PAGE_CACHE_SECONDS;
         $cacheKey = sprintf(
-            'control-room:location-coverage:v7:%s:%s:%s',
+            'control-room:location-coverage:v8:%s:%s:%s',
             $weekStart->toDateString(),
             $site->value,
             $today->toDateString(),
@@ -58,7 +63,7 @@ final class ControlRoomLocationCoverageService
 
         $payload = $this->buildUncached($site, $weekStart, $today);
         if ($payload['loaded']) {
-            Cache::put($cacheKey, $payload, self::PAGE_CACHE_SECONDS);
+            Cache::put($cacheKey, $payload, $ttl);
         }
 
         return $payload;
@@ -295,6 +300,7 @@ final class ControlRoomLocationCoverageService
         $sap = $this->qualityFindings->locationHits(
             $weekStart->startOfDay(),
             $this->dutyWindow->reportingWindow($lastDay)['end'],
+            $weekEnd->lessThan($today) ? 21600 : 300,
         );
         $hits = $this->coveredHits($sap['findings']);
         $weekDates = $this->weekDates($weekStart);

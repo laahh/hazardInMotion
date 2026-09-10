@@ -8,6 +8,7 @@ use App\Enums\ControlRoomShiftCode;
 use App\Services\PembatasanLV\PembatasanLVOlapQuery;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -47,9 +48,23 @@ final class ControlRoomRfidCheckinoutReader
         }
 
         $range = $this->queryRange($slots);
-        $rows = $this->fetchRows(array_values($sids), $range['start'], $range['end']);
+        $sidList = array_values($sids);
+        sort($sidList);
+        $cacheKey = 'control-room:rfid-slots:v1:'.hash(
+            'sha1',
+            implode(',', $sidList).'|'.$range['start']->toDateTimeString().'|'.$range['end']->toDateTimeString(),
+        );
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached)) {
+            /** @var array<string, list<array<string, mixed>>> */
+            return $cached;
+        }
 
-        return $this->groupRowsIntoSlots($slots, $rows);
+        $rows = $this->fetchRows($sidList, $range['start'], $range['end']);
+        $grouped = $this->groupRowsIntoSlots($slots, $rows);
+        Cache::put($cacheKey, $grouped, 180);
+
+        return $grouped;
     }
 
     /**

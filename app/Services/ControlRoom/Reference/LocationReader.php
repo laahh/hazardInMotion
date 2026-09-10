@@ -146,33 +146,40 @@ final class LocationReader implements LocationReaderContract
      */
     private function fetchAll(): Collection
     {
-        $rows = Cache::remember(self::CACHE_KEY, self::CACHE_TTL_SECONDS, function (): array {
-            if (! $this->olap->isReachable()) {
-                Log::warning('LocationReader: Postgres OLAP (pgsql_direct/pgsql_ssh) tidak terjangkau, mengembalikan collection kosong.');
+        $cached = Cache::get(self::CACHE_KEY);
+        if (is_array($cached) && $cached !== []) {
+            return collect($cached);
+        }
 
-                return [];
-            }
+        if (! $this->olap->isReachable()) {
+            Log::warning('LocationReader: Postgres OLAP (pgsql_direct/pgsql_ssh) tidak terjangkau, mengembalikan collection kosong.');
 
-            $sql = <<<'SQL'
-                SELECT
-                    TRIM(site) AS site,
-                    TRIM(lokasi) AS lokasi,
-                    TRIM("Detil Lokasi") AS detail_lokasi
-                FROM bcbeats.bep_vw_site_lokasi_detil_lokasi
-                WHERE COALESCE(status_detil_lokasi, '0') = '1'
-                  AND BTRIM(COALESCE(lokasi, '')) <> ''
-                SQL;
+            return collect();
+        }
 
-            return collect($this->olap->select($sql, [], 3000))
-                ->map(fn (object $row): array => [
-                    'site' => trim((string) ($row->site ?? '')),
-                    'lokasi' => trim((string) ($row->lokasi ?? '')),
-                    'detail_lokasi' => trim((string) ($row->detail_lokasi ?? '')),
-                ])
-                ->filter(fn (array $row): bool => $row['lokasi'] !== '')
-                ->values()
-                ->all();
-        });
+        $sql = <<<'SQL'
+            SELECT
+                TRIM(site) AS site,
+                TRIM(lokasi) AS lokasi,
+                TRIM("Detil Lokasi") AS detail_lokasi
+            FROM bcbeats.bep_vw_site_lokasi_detil_lokasi
+            WHERE COALESCE(status_detil_lokasi, '0') = '1'
+              AND BTRIM(COALESCE(lokasi, '')) <> ''
+            SQL;
+
+        $rows = collect($this->olap->select($sql, [], 3000))
+            ->map(fn (object $row): array => [
+                'site' => trim((string) ($row->site ?? '')),
+                'lokasi' => trim((string) ($row->lokasi ?? '')),
+                'detail_lokasi' => trim((string) ($row->detail_lokasi ?? '')),
+            ])
+            ->filter(fn (array $row): bool => $row['lokasi'] !== '')
+            ->values()
+            ->all();
+
+        if ($rows !== []) {
+            Cache::put(self::CACHE_KEY, $rows, self::CACHE_TTL_SECONDS);
+        }
 
         return collect($rows);
     }

@@ -22,6 +22,7 @@ use App\Services\ControlRoom\DashboardScheduleWeekAssembler;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 /**
@@ -43,16 +44,17 @@ final class DashboardController extends Controller
         ControlRoomSapWeekCountsReader $sapWeekCounts,
         ControlRoomDashboardInsightsAssembler $insightsAssembler,
         ControlRoomSiteDutyBoardService $siteDutyBoard,
-        ControlRoomLocationCoverageService $locationCoverage,
         ControlRoomReplacementAttendanceService $replacementAttendance,
     ): View {
-        $replacementAttendance->ensureDutyDateCheckins();
+        if (Cache::add('control-room:dash-duty-checkins', 1, 60)) {
+            $replacementAttendance->ensureDutyDateCheckins();
+        }
         $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
         $period = ControlRoomIsoWeekPeriod::fromRequest($request);
         $weekStart = $period->start;
         $weekEnd = $period->end;
         $prev = $period->previous();
-        $schedule = $scheduleWeek->build($site, $weekStart);
+        $schedule = $scheduleWeek->build($site, $weekStart, withRfid: false);
         $sapWeek = $sapWeekCounts->forScheduleDays($schedule['days']);
         $insights = $insightsAssembler->build(
             $site,
@@ -63,7 +65,8 @@ final class DashboardController extends Controller
             $sapWeek['loaded'],
         );
         $previousSchedule = $scheduleWeek->build($site, $prev->start, withRfid: false);
-        $previousSap = $sapWeekCounts->forScheduleDays($previousSchedule['days'], withFindings: false);
+        $previousSap = $sapWeekCounts->cachedForScheduleDays($previousSchedule['days'], withFindings: false)
+            ?? ['loaded' => false, 'counts' => [], 'findings' => []];
 
         return view('control-room.dashboard.index', [
             ...$period->viewData(),
@@ -81,7 +84,25 @@ final class DashboardController extends Controller
             ),
             'schedule' => $schedule,
             'siteBoard' => $siteDutyBoard->build(),
-            'locationCoverage' => $locationCoverage->build($site, $weekStart),
+            'coverageUrl' => route('control-room.dashboard.coverage', [
+                'site' => $site->value,
+                'year' => $period->year,
+                'week' => $period->week,
+                'iso_week' => $period->isoWeekValue(),
+            ]),
+        ]);
+    }
+
+    public function coverage(Request $request, ControlRoomLocationCoverageService $locationCoverage): View
+    {
+        set_time_limit(60);
+        $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
+        $period = ControlRoomIsoWeekPeriod::fromRequest($request);
+
+        return view('control-room.dashboard.partials.coverage-section', [
+            'locationCoverage' => $locationCoverage->build($site, $period->start),
+            'weekRangeLabel' => $period->rangeLabel(),
+            'site' => $site,
         ]);
     }
 

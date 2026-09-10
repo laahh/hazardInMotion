@@ -62,21 +62,9 @@
     $defaultDay = collect($scheduleDays)->firstWhere('is_today')
         ?? collect($scheduleDays)->first(fn (array $day): bool => $day['s1'] !== [] || $day['s2'] !== [])
         ?? $scheduleDays[0];
-    $coverageDaily = $locationCoverage['daily'] ?? ['kpi' => ['total' => 0, 'covered' => 0, 'uncovered' => 0, 'percent' => 0.0], 'rows' => [], 'attention' => []];
-    $coverageWeekly = $locationCoverage['weekly'] ?? ['kpi' => ['total' => 0, 'covered' => 0, 'uncovered' => 0, 'percent' => 0.0], 'rows' => [], 'attention' => []];
     $coverageScope = $site === \App\Enums\ControlRoomSiteCode::HeadOffice
         ? 'Semua site operasi'
         : $site->label();
-    $coverageLastAt = static function (?string $at): string {
-        if ($at === null || $at === '') {
-            return '—';
-        }
-        try {
-            return \Carbon\CarbonImmutable::parse($at)->locale('id')->translatedFormat('d M Y');
-        } catch (\Throwable) {
-            return $at;
-        }
-    };
     $personnelCoverage = $mock['personnelCoverage'];
     $personnelLokasiMax = max(1, ...(array_column($personnelCoverage, 'lokasi') ?: [0]));
     $personnelKritisMax = max(1, ...(array_column($personnelCoverage, 'kritis') ?: [0]));
@@ -164,45 +152,26 @@
             </div>
         </section>
 
-        @if (! $locationCoverage['loaded'])
-            <div class="ocr-notice" role="status">
-                <i class="ri-error-warning-line"></i>
-                <span>Sumber SAP (OBDS) tidak terjangkau. Master lokasi tetap tampil; status tercover dikosongkan.</span>
-            </div>
-        @endif
-
-        <section class="ocr-cov" data-cov-root aria-labelledby="ocr-cov-title">
-            <div class="ocr-cov-head">
-                <div>
-                    <h6 id="ocr-cov-title">Coverage Lokasi</h6>
-                    <p class="ocr-card-kicker">{{ $weekRangeLabel }} · {{ $coverageScope }}</p>
+        <div id="ocr-cov-mount" data-coverage-url="{{ $coverageUrl }}">
+            <section class="ocr-cov" aria-labelledby="ocr-cov-title">
+                <div class="ocr-cov-head">
+                    <div>
+                        <h6 id="ocr-cov-title">Coverage Lokasi</h6>
+                        <p class="ocr-card-kicker">{{ $weekRangeLabel }} · {{ $coverageScope }}</p>
+                    </div>
                 </div>
-                <div class="ocr-seg ocr-cov-mode" role="tablist" aria-label="Jenis coverage lokasi">
-                    <button type="button" role="tab" id="ocr-cov-mode-daily" aria-selected="true" aria-controls="ocr-cov-panel-daily" data-cov-mode="daily" class="is-active">Harian</button>
-                    <button type="button" role="tab" id="ocr-cov-mode-weekly" aria-selected="false" aria-controls="ocr-cov-panel-weekly" data-cov-mode="weekly">Mingguan</button>
+                <div class="ocr-cov-skeleton" role="status" aria-live="polite">
+                    <p class="ocr-cov-skeleton-copy">Memuat coverage lokasi…</p>
+                    <div class="ocr-kpi-grid ocr-cov-kpi">
+                        <div class="ocr-card ocr-cov-stat ocr-cov-skel-card"></div>
+                        <div class="ocr-card ocr-cov-stat ocr-cov-skel-card"></div>
+                        <div class="ocr-card ocr-cov-stat ocr-cov-skel-card"></div>
+                        <div class="ocr-card ocr-cov-stat ocr-cov-skel-card"></div>
+                    </div>
+                    <div class="ocr-card ocr-cov-skel-table"></div>
                 </div>
-            </div>
-            <div id="ocr-cov-panel-daily">
-                @include('control-room.dashboard.partials.coverage-mode', [
-                    'mode' => 'daily',
-                    'panel' => $coverageDaily,
-                    'visible' => true,
-                    'weekRangeLabel' => $weekRangeLabel,
-                    'coverageScope' => $coverageScope,
-                    'coverageLastAt' => $coverageLastAt,
-                ])
-            </div>
-            <div id="ocr-cov-panel-weekly">
-                @include('control-room.dashboard.partials.coverage-mode', [
-                    'mode' => 'weekly',
-                    'panel' => $coverageWeekly,
-                    'visible' => false,
-                    'weekRangeLabel' => $weekRangeLabel,
-                    'coverageScope' => $coverageScope,
-                    'coverageLastAt' => $coverageLastAt,
-                ])
-            </div>
-        </section>
+            </section>
+        </div>
 
         <div class="ocr-kpi-grid">
             @foreach ($mock['kpi'] as $card)
@@ -651,8 +620,7 @@
                 new bootstrap.Tooltip(el);
             });
 
-            (function initCoverage() {
-                var root = document.querySelector('[data-cov-root]');
+            function bindCoverage(root) {
                 if (!root) {
                     return;
                 }
@@ -740,6 +708,34 @@
                 });
                 root.querySelectorAll('[data-cov-panel]').forEach(initPanel);
                 setMode('daily');
+            }
+
+            (function loadCoveragePanel() {
+                var mount = document.getElementById('ocr-cov-mount');
+                if (!mount) {
+                    return;
+                }
+                var url = mount.getAttribute('data-coverage-url');
+                if (!url) {
+                    return;
+                }
+                fetch(url, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'text/html'
+                    },
+                    credentials: 'same-origin'
+                }).then(function (res) {
+                    if (!res.ok) {
+                        throw new Error('coverage ' + res.status);
+                    }
+                    return res.text();
+                }).then(function (html) {
+                    mount.innerHTML = html;
+                    bindCoverage(mount.querySelector('[data-cov-root]'));
+                }).catch(function () {
+                    mount.innerHTML = '<div class="ocr-notice" role="alert"><i class="ri-error-warning-line"></i><span>Coverage lokasi gagal dimuat. Muat ulang halaman atau pilih minggu lagi.</span></div>';
+                });
             })();
 
             function escapeHtml(value) {

@@ -120,7 +120,22 @@ final class ControlRoomSapWeekCountsReaderTest extends TestCase
 
     public function test_sid_dipecah_supaya_query_olap_tidak_timeout(): void
     {
-        $this->assertSame(12, ControlRoomSapWeekCountsReader::SID_CHUNK);
+        $this->assertSame(16, ControlRoomSapWeekCountsReader::SID_CHUNK);
+    }
+
+    public function test_cached_for_schedule_days_kosong_tanpa_query(): void
+    {
+        $this->assertSame(
+            ['loaded' => true, 'counts' => [], 'findings' => []],
+            $this->reader()->cachedForScheduleDays([]),
+        );
+    }
+
+    public function test_cached_for_schedule_days_null_jika_belum_ada_cache(): void
+    {
+        $this->assertNull($this->reader()->cachedForScheduleDays([
+            ['date' => '2026-08-31', 's1' => [['sid' => 'FJAVJ']], 's2' => []],
+        ]));
     }
 
     private function reader(): ControlRoomSapWeekCountsReader
