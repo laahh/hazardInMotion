@@ -24,7 +24,7 @@ final class ControlRoomSapQualityFindingsReader
 
     private const QUERY_TIMEOUT_MS = 4000;
 
-    private const LOCATION_HITS_TIMEOUT_MS = 8000;
+    private const LOCATION_HITS_TIMEOUT_MS = 6000;
 
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
@@ -94,55 +94,104 @@ final class ControlRoomSapQualityFindingsReader
 
         $from = $start->startOfDay();
         $until = CarbonImmutable::parse($end);
-        $cacheKey = 'control-room:sap-location-hits:v3:'.$from->toDateTimeString().'|'.$until->toDateTimeString();
-        $cached = Cache::get($cacheKey);
-        if (is_array($cached) && isset($cached['findings'])) {
-            return ['loaded' => true, 'findings' => $cached['findings']];
+        $merged = [];
+        $ok = 0;
+        foreach (['hazard', 'observasi', 'oak'] as $source) {
+            $rows = $this->fetchLocationHitsSource($source, $from, $until);
+            if ($rows === null) {
+                continue;
+            }
+            $ok++;
+            $merged = [...$merged, ...$rows];
         }
 
-        // Index tanggal + GROUP BY. OAK di MV terpecah 3 peran per id — cukup OBSERVEE.
-        $sql = <<<'SQL'
-            SELECT lokasi, detil_lokasi, MAX(at) AS at
-            FROM (
+        if ($ok === 0) {
+            return ['loaded' => false, 'findings' => []];
+        }
+
+        return ['loaded' => true, 'findings' => $this->collapseLocationHits($merged)];
+    }
+
+    /**
+     * Satu kunci lokasi+detil, timestamp terakhir.
+     *
+     * @param  list<array{lokasi: string, detil_lokasi: string, at: string}>  $findings
+     * @return list<array{lokasi: string, detil_lokasi: string, at: string}>
+     */
+    public function collapseLocationHits(array $findings): array
+    {
+        $best = [];
+        foreach ($findings as $finding) {
+            $lokasi = trim((string) ($finding['lokasi'] ?? ''));
+            $detil = trim((string) ($finding['detil_lokasi'] ?? ''));
+            $at = trim((string) ($finding['at'] ?? ''));
+            if ($at === '' || ($lokasi === '' && $detil === '')) {
+                continue;
+            }
+            $key = $lokasi."\n".$detil;
+            if (! isset($best[$key]) || $at > $best[$key]['at']) {
+                $best[$key] = [
+                    'lokasi' => $lokasi,
+                    'detil_lokasi' => $detil,
+                    'at' => $at,
+                ];
+            }
+        }
+
+        return array_values($best);
+    }
+
+    /**
+     * @return list<array{lokasi: string, detil_lokasi: string, at: string}>|null
+     */
+    private function fetchLocationHitsSource(string $source, CarbonImmutable $from, CarbonImmutable $until): ?array
+    {
+        $cacheKey = 'control-room:sap-location-hits:v4:'.$source.':'.$from->toDateTimeString().'|'.$until->toDateTimeString();
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached)) {
+            /** @var list<array{lokasi: string, detil_lokasi: string, at: string}> */
+            return $cached;
+        }
+
+        $sql = match ($source) {
+            'hazard' => <<<'SQL'
                 SELECT lokasi, detil_lokasi, MAX(tanggal_laporan) AS at
                 FROM bcbeats.mv_inspeksi_hazard
                 WHERE tanggal_laporan >= CAST(? AS timestamp)
                   AND tanggal_laporan < CAST(? AS timestamp)
                 GROUP BY lokasi, detil_lokasi
-
-                UNION ALL
-
+                SQL,
+            'observasi' => <<<'SQL'
                 SELECT lokasi, detil_lokasi, MAX(tanggal_observasi) AS at
                 FROM bcbeats.mv_observasi
                 WHERE tanggal_observasi >= CAST(? AS timestamp)
                   AND tanggal_observasi < CAST(? AS timestamp)
                 GROUP BY lokasi, detil_lokasi
-
-                UNION ALL
-
+                SQL,
+            'oak' => <<<'SQL'
                 SELECT lokasi, detil_lokasi, MAX(tanggal_submit) AS at
                 FROM bcbeats.mv_oak
                 WHERE tanggal_submit >= CAST(? AS timestamp)
                   AND tanggal_submit < CAST(? AS timestamp)
                   AND peran_dalam_tim = 'OBSERVEE'
                 GROUP BY lokasi, detil_lokasi
-            ) sap
-            GROUP BY lokasi, detil_lokasi
-            SQL;
-
-        $range = [$from->toDateTimeString(), $until->toDateTimeString()];
-        $bindings = [...$range, ...$range, ...$range];
+                SQL,
+            default => null,
+        };
+        if ($sql === null) {
+            return null;
+        }
 
         try {
-            $rows = $this->olap->select($sql, $bindings, self::LOCATION_HITS_TIMEOUT_MS, [
+            $rows = $this->olap->select($sql, [$from->toDateTimeString(), $until->toDateTimeString()], self::LOCATION_HITS_TIMEOUT_MS, [
                 'jit' => 'off',
                 'work_mem' => '64MB',
                 'max_parallel_workers_per_gather' => '0',
             ]);
         } catch (Throwable $e) {
-            Log::warning('ControlRoom SAP location hits gagal: '.$e->getMessage());
+            Log::warning('ControlRoom SAP location hits '.$source.' gagal: '.$e->getMessage());
 
-            return ['loaded' => false, 'findings' => []];
+            return null;
         }
 
         $findings = [];
@@ -168,9 +217,9 @@ final class ControlRoomSapQualityFindingsReader
             ];
         }
 
-        Cache::put($cacheKey, ['findings' => $findings], self::LOCATION_HITS_CACHE_SECONDS);
+        Cache::put($cacheKey, $findings, self::LOCATION_HITS_CACHE_SECONDS);
 
-        return ['loaded' => true, 'findings' => $findings];
+        return $findings;
     }
 
     /**

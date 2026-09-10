@@ -39,16 +39,24 @@ final class ControlRoomLocationCoverageService
     ): array {
         $today = CarbonImmutable::parse($now ?? now())->startOfDay();
         $cacheKey = sprintf(
-            'control-room:location-coverage:v5:%s:%s:%s',
+            'control-room:location-coverage:v6:%s:%s:%s',
             $weekStart->toDateString(),
             $site->value,
             $today->toDateString(),
         );
 
-        /** @var array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>} */
-        return Cache::remember($cacheKey, self::PAGE_CACHE_SECONDS, function () use ($site, $weekStart, $today): array {
-            return $this->buildUncached($site, $weekStart, $today);
-        });
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && ($cached['loaded'] ?? false) === true && isset($cached['kpi'], $cached['rows'])) {
+            /** @var array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>} */
+            return $cached;
+        }
+
+        $payload = $this->buildUncached($site, $weekStart, $today);
+        if ($payload['loaded']) {
+            Cache::put($cacheKey, $payload, self::PAGE_CACHE_SECONDS);
+        }
+
+        return $payload;
     }
 
     /**

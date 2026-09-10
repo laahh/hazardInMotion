@@ -71,6 +71,24 @@ final class DashboardScheduleWeekAssemblerTest extends TestCase
         $this->assertFalse($days[2]['s1'][0]['planned']);
     }
 
+    public function test_tujuh_hari_kalender_dimulai_senin(): void
+    {
+        $weekStart = CarbonImmutable::parse('2026-08-31');
+        $days = $this->assembler()->assemble(
+            $weekStart,
+            new Collection(),
+            new Collection(),
+            CarbonImmutable::parse('2026-09-07'),
+        )['days'];
+
+        $this->assertCount(7, $days);
+        $this->assertSame(1, $weekStart->dayOfWeekIso);
+        $this->assertSame('2026-08-31', $days[0]['date']);
+        $this->assertSame('Senin', $days[0]['weekday']);
+        $this->assertSame('2026-09-06', $days[6]['date']);
+        $this->assertSame('Minggu', $days[6]['weekday']);
+    }
+
     public function test_jadwal_hari_ini_tanpa_absen_jadi_belum_absen(): void
     {
         $weekStart = CarbonImmutable::parse('2026-09-07');

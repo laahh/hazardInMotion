@@ -114,6 +114,10 @@
     height: 38px;
 }
 
+.ocr-toolbar input[type="week"] {
+    min-width: 180px;
+}
+
 .ocr-week-stepper {
     display: flex;
     align-items: center;

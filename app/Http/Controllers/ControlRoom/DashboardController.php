@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ControlRoom\ControlRoomDashboardSapDetailRequest;
 use App\Http\Requests\ControlRoom\ControlRoomDashboardSapPhotosRequest;
 use App\Services\ControlRoom\ControlRoomDashboardInsightsAssembler;
+use App\Services\ControlRoom\ControlRoomIsoWeekPeriod;
 use App\Services\ControlRoom\ControlRoomLocationCoverageService;
 use App\Services\ControlRoom\ControlRoomReplacementAttendanceService;
 use App\Services\ControlRoom\ControlRoomSapDutyReader;
@@ -47,17 +48,11 @@ final class DashboardController extends Controller
     ): View {
         $replacementAttendance->ensureDutyDateCheckins();
         $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
-        $previousWeekStart = CarbonImmutable::now()
-            ->setISODate((int) now()->isoWeekYear(), (int) now()->isoWeek(), 1)
-            ->subWeek();
-        $year = (int) $request->integer('year', (int) $previousWeekStart->isoWeekYear());
-        $week = (int) $request->integer('week', (int) $previousWeekStart->isoWeek());
-        $week = max(1, min(53, $week));
-
-        $weekStart = CarbonImmutable::now()->setISODate($year, $week, 1)->startOfDay();
-        $weekEnd = $weekStart->addDays(6)->endOfDay();
-        $prevWeekStart = $weekStart->subWeek();
-        $nextWeekStart = $weekStart->addWeek();
+        $period = ControlRoomIsoWeekPeriod::fromRequest($request);
+        $weekStart = $period->start;
+        $weekEnd = $period->end;
+        $prev = $period->previous();
+        $next = $period->next();
         $schedule = $scheduleWeek->build($site, $weekStart);
         $sapWeek = $sapWeekCounts->forScheduleDays($schedule['days']);
         $insights = $insightsAssembler->build(
@@ -68,19 +63,21 @@ final class DashboardController extends Controller
             $sapWeek['findings'] ?? [],
             $sapWeek['loaded'],
         );
-        $previousSchedule = $scheduleWeek->build($site, $prevWeekStart, withRfid: false);
+        $previousSchedule = $scheduleWeek->build($site, $prev->start, withRfid: false);
         $previousSap = $sapWeekCounts->forScheduleDays($previousSchedule['days'], withFindings: false);
 
         return view('control-room.dashboard.index', [
             'site' => $site,
-            'year' => (int) $weekStart->isoWeekYear(),
-            'week' => (int) $weekStart->isoWeek(),
+            'year' => $period->year,
+            'week' => $period->week,
+            'isoWeekValue' => $period->isoWeekValue(),
+            'weekRangeLabel' => $period->rangeLabel(),
             'weekStart' => $weekStart,
             'weekEnd' => $weekEnd,
-            'prevYear' => (int) $prevWeekStart->isoWeekYear(),
-            'prevWeek' => (int) $prevWeekStart->isoWeek(),
-            'nextYear' => (int) $nextWeekStart->isoWeekYear(),
-            'nextWeek' => (int) $nextWeekStart->isoWeek(),
+            'prevYear' => $prev->year,
+            'prevWeek' => $prev->week,
+            'nextYear' => $next->year,
+            'nextWeek' => $next->week,
             'sites' => ControlRoomSiteCode::cases(),
             'mock' => $mock->build(
                 $weekStart,

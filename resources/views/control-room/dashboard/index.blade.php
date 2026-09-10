@@ -31,7 +31,7 @@
     $blindspotPct = $mock['highlight']['blindspotTotal'] > 0
         ? round(($mock['highlight']['blindspotCount'] / $mock['highlight']['blindspotTotal']) * 100, 1)
         : 0;
-    $weekRangeLabel = $weekStart->locale('id')->translatedFormat('d M').' – '.$weekEnd->locale('id')->translatedFormat('d M Y');
+    $weekRangeLabel = $weekRangeLabel ?? ($weekStart->locale('id')->translatedFormat('l d M').' – '.$weekEnd->locale('id')->translatedFormat('l d M Y'));
     $heatClass = static function (?float $value): string {
         if ($value === null) {
             return 'is-heat-empty';
@@ -94,18 +94,37 @@
             <i class="ri-information-line"></i>
             <span><strong>Sebagian mockup.</strong> KPI header dan ranking coverage masih fiktif. Pencapaian Personil, Pareto, Highlight, dan Kualitas memakai jadwal + laporan OBDS. Blindspot/TBC dari snapshot HSECM bila tabelnya ada. Tombol Detail menampilkan laporan pada jendela jaga.</span>
         </div> -->
-        <div class="ocr-card">
+        <form method="GET" class="ocr-card" action="{{ route('control-room.dashboard') }}">
             <div class="ocr-toolbar">
                 <div class="ocr-toolbar-left">
                     <div>
-                        <label>Minggu</label>
+                        <label for="ocr-dash-site">Site</label>
+                        <select name="site" id="ocr-dash-site" class="form-control" onchange="this.form.submit()">
+                            @foreach ($sites as $siteOption)
+                                <option value="{{ $siteOption->value }}" @selected($site->value === $siteOption->value)>{{ $siteOption->label() }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label for="ocr-dash-iso-week">Minggu (Senin–Minggu)</label>
+                        <input
+                            type="week"
+                            name="iso_week"
+                            id="ocr-dash-iso-week"
+                            class="form-control"
+                            value="{{ $isoWeekValue }}"
+                            onchange="this.form.submit()"
+                        >
+                    </div>
+                    <div>
+                        <label>Periode</label>
                         <div class="ocr-week-stepper">
                             <a href="{{ route('control-room.dashboard', ['site' => $site->value, 'year' => $prevYear, 'week' => $prevWeek]) }}" aria-label="Minggu sebelumnya">
                                 <i class="ri-arrow-left-s-line"></i>
                             </a>
                             <div class="ocr-week-label">
                                 <strong>{{ $weekRangeLabel }}</strong>
-                                <span>Minggu {{ $week }} · {{ $year }}</span>
+                                <span>ISO Minggu {{ $week }} · {{ $year }} · Senin–Minggu</span>
                             </div>
                             <a href="{{ route('control-room.dashboard', ['site' => $site->value, 'year' => $nextYear, 'week' => $nextWeek]) }}" aria-label="Minggu berikutnya">
                                 <i class="ri-arrow-right-s-line"></i>
@@ -117,7 +136,7 @@
                     <span class="ocr-sync">Jadwal, pencapaian, dan KPI: data asli</span>
                 </div>
             </div>
-        </div>
+        </form>
 
         <section class="ocr-card ocr-board" aria-labelledby="ocr-board-title">
             <div class="ocr-card-header">
