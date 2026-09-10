@@ -110,6 +110,46 @@ final class DashboardMockDataProviderTest extends TestCase
         $this->assertStringContainsString('1 dari 2', $mock['achievementGroups'][0]['rows'][0]['tbc_hint']);
     }
 
+    public function test_kualitas_total_mengikuti_jumlah_sap_pencapaian(): void
+    {
+        $days = [
+            [
+                'date' => '2026-08-31',
+                's1' => [['name' => 'Agung Nugroho', 'sid' => 'FJAVJ', 'status' => 'sesuai', 'checkinout' => []]],
+                's2' => [],
+            ],
+            [
+                'date' => '2026-09-01',
+                's1' => [['name' => 'Agung Nugroho', 'sid' => 'FJAVJ', 'status' => 'sesuai', 'checkinout' => []]],
+                's2' => [],
+            ],
+        ];
+
+        $mock = (new DashboardMockDataProvider())->build(
+            CarbonImmutable::parse('2026-08-31'),
+            $days,
+            [
+                'FJAVJ|2026-08-31' => ['hazard' => 2, 'inspeksi' => 1, 'observasi' => 3],
+                'FJAVJ|2026-09-01' => ['hazard' => 1, 'inspeksi' => 0, 'observasi' => 2],
+            ],
+            sapLoaded: true,
+            insights: ['quality' => [[
+                'name' => 'Agung Nugroho',
+                'sid' => 'FJAVJ',
+                'total_findings' => 99,
+                'distinct_categories' => 4,
+                'variety_score' => 0.5,
+                'tbc' => 1,
+                'tbc_basis' => 3,
+                'gr' => null,
+                'blindspot' => null,
+            ]]],
+        );
+
+        $this->assertSame(9, $mock['quality'][0]['total_findings']);
+        $this->assertSame(0.5, $mock['quality'][0]['variety_score']);
+    }
+
     public function test_pencapaian_membawa_ringkasan_penggantian(): void
     {
         $days = [[
