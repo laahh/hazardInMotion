@@ -76,7 +76,7 @@ final class ControlRoomSapDutyReader
             return $this->payload($meta, [], reachable: false, errors: ['Sumber SAP (OBDS) tidak terjangkau.']);
         }
 
-        $cacheKey = 'control-room:sap-duty:v8:'.$sid.':'.$meta['date'];
+        $cacheKey = 'control-room:sap-duty:v9:'.$sid.':'.$meta['date'];
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['cards'])) {
             return $this->payload($meta, $cached['cards'], reachable: true);
@@ -152,6 +152,7 @@ final class ControlRoomSapDutyReader
     private function fetchObservasi(string $sid, CarbonImmutable $start, CarbonImmutable $end, array &$errors): array
     {
         $limit = self::PER_TYPE_LIMIT;
+        $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate();
         $sql = "
             SELECT DISTINCT ON (id_observasi)
                    id_observasi, tanggal_observasi, jenis_kegiatan, catatan_observasi, tools_observasi,
@@ -163,11 +164,12 @@ final class ControlRoomSapDutyReader
             WHERE kode_sid_pelapor = ?
               AND tanggal_observasi >= CAST(? AS timestamp)
               AND tanggal_observasi < CAST(? AS timestamp)
+              AND {$tools['sql']}
             ORDER BY id_observasi, tanggal_observasi
             LIMIT {$limit}
         ";
 
-        return $this->select($sql, [$sid, $start->toDateTimeString(), $end->toDateTimeString()], 'observasi', $errors);
+        return $this->select($sql, [$sid, $start->toDateTimeString(), $end->toDateTimeString(), ...$tools['bindings']], 'observasi', $errors);
     }
 
     /**
@@ -177,6 +179,7 @@ final class ControlRoomSapDutyReader
     private function fetchOak(string $sid, CarbonImmutable $start, CarbonImmutable $end, array &$errors): array
     {
         $limit = self::PER_TYPE_LIMIT;
+        $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate('o.tools_observasi');
         $sql = "
             SELECT DISTINCT ON (o.id_oak)
                 o.id_oak, o.tanggal_submit, o.aktivitas, o.sub_aktivitas, o.kesimpulan, o.tools_observasi,
@@ -189,13 +192,14 @@ final class ControlRoomSapDutyReader
             WHERE o.kode_sid_pelapor = ?
               AND o.tanggal_submit >= CAST(? AS timestamp)
               AND o.tanggal_submit < CAST(? AS timestamp)
+              AND {$tools['sql']}
             ORDER BY o.id_oak,
                      CASE WHEN UPPER(BTRIM(COALESCE(o.peran_dalam_tim, ''))) = 'OBSERVEE' THEN 0 ELSE 1 END,
                      o.tanggal_submit
             LIMIT {$limit}
         ";
 
-        return $this->select($sql, [$sid, $start->toDateTimeString(), $end->toDateTimeString()], 'OAK', $errors);
+        return $this->select($sql, [$sid, $start->toDateTimeString(), $end->toDateTimeString(), ...$tools['bindings']], 'OAK', $errors);
     }
 
     /**
@@ -259,6 +263,7 @@ final class ControlRoomSapDutyReader
             $type = $jenis === 'INSPEKSI' ? 'inspeksi' : 'hazard';
             $at = $this->parseTime($row->tanggal_laporan ?? null);
             $headline = trim($jenis.($tools !== '—' ? ' - '.$tools : ''));
+            $photo = $this->photoRef($row->url_foto ?? null, $row->id_laporan ?? null, fallbackToReportId: true);
 
             $cards[] = $this->card(
                 id: (string) ($row->id_laporan ?? ''),
@@ -276,7 +281,8 @@ final class ControlRoomSapDutyReader
                 locationDetail: $this->text($row->detil_lokasi ?? null),
                 status: $this->statusLabel($row->status_laporan ?? null),
                 photoUrl: $this->photoUrl($row->url_foto ?? null),
-                photoPageId: $this->photoPageId($row->url_foto ?? null, $row->id_laporan ?? null),
+                photoPageId: $photo['id'],
+                photoPageKind: $photo['kind'],
                 latitude: $row->latitude ?? null,
                 longitude: $row->longitude ?? null,
             );
@@ -293,8 +299,13 @@ final class ControlRoomSapDutyReader
     {
         $cards = [];
         foreach ($rows as $row) {
+            $tools = $this->text($row->tools_observasi ?? null);
+            if (! ControlRoomInspeksiHazardToolFilter::matches($tools === '—' ? '' : $tools)) {
+                continue;
+            }
             $at = $this->parseTime($row->tanggal_observasi ?? null);
             $kegiatan = $this->text($row->jenis_kegiatan ?? $row->tools_observasi ?? null);
+            $photo = $this->photoRef($row->url_foto ?? null, $row->id_observasi ?? null, fallbackToReportId: false);
 
             $cards[] = $this->card(
                 id: (string) ($row->id_observasi ?? ''),
@@ -315,7 +326,8 @@ final class ControlRoomSapDutyReader
                 locationDetail: $this->text($row->detil_lokasi ?? null),
                 status: '—',
                 photoUrl: $this->photoUrl($row->url_foto ?? null),
-                photoPageId: null,
+                photoPageId: $photo['id'],
+                photoPageKind: $photo['kind'],
                 latitude: $row->latitude ?? null,
                 longitude: $row->longitude ?? null,
             );
@@ -338,9 +350,15 @@ final class ControlRoomSapDutyReader
                 continue;
             }
 
+            $tools = $this->text($row->tools_observasi ?? null);
+            if (! ControlRoomInspeksiHazardToolFilter::matches($tools === '—' ? '' : $tools)) {
+                continue;
+            }
+
             $at = $this->parseTime($row->tanggal_submit ?? null);
             $aktivitas = $this->text($row->aktivitas ?? null);
             $key = $id !== '' ? $id : 'row-'.count($cardsById);
+            $photo = $this->photoRef($row->url_foto ?? null, $row->id_oak ?? null, fallbackToReportId: false);
 
             $cardsById[$key] = $this->card(
                 id: $id,
@@ -361,7 +379,8 @@ final class ControlRoomSapDutyReader
                 locationDetail: $this->text($row->detil_lokasi ?? null),
                 status: '—',
                 photoUrl: $this->photoUrl($row->url_foto ?? null),
-                photoPageId: null,
+                photoPageId: $photo['id'],
+                photoPageKind: $photo['kind'],
                 latitude: $row->latitude ?? null,
                 longitude: $row->longitude ?? null,
             );
@@ -392,6 +411,7 @@ final class ControlRoomSapDutyReader
         ?string $photoPageId,
         mixed $latitude,
         mixed $longitude,
+        ?string $photoPageKind = null,
     ): array {
         return [
             'id' => $id !== '' ? $id : '—',
@@ -412,6 +432,7 @@ final class ControlRoomSapDutyReader
             'status' => $status,
             'photo_url' => $photoUrl,
             'photo_page_id' => $photoPageId,
+            'photo_page_kind' => $photoPageKind,
         ];
     }
 
@@ -444,19 +465,34 @@ final class ControlRoomSapDutyReader
         if (preg_match('#/report/photoCar/#i', $url) === 1) {
             return null;
         }
+        if (preg_match('#/beats2/file/document/#i', $url) === 1) {
+            return null;
+        }
 
         return $url;
     }
 
-    private function photoPageId(mixed $url, mixed $reportId): ?string
+    /**
+     * @return array{id: ?string, kind: ?string}
+     */
+    private function photoRef(mixed $url, mixed $reportId, bool $fallbackToReportId): array
     {
         $url = trim((string) ($url ?? ''));
         if (preg_match('#/report/photoCar/(\d+)#i', $url, $matches) === 1) {
-            return $matches[1];
+            return ['id' => $matches[1], 'kind' => ControlRoomSapPhotoResolver::KIND_PHOTOCAR];
         }
-        $id = trim((string) ($reportId ?? ''));
+        if (preg_match('#/beats2/file/document/(\d+)#i', $url, $matches) === 1) {
+            return ['id' => $matches[1], 'kind' => ControlRoomSapPhotoResolver::KIND_DOCUMENT];
+        }
+        if ($fallbackToReportId) {
+            $id = trim((string) ($reportId ?? ''));
 
-        return ctype_digit($id) ? $id : null;
+            return ctype_digit($id)
+                ? ['id' => $id, 'kind' => ControlRoomSapPhotoResolver::KIND_PHOTOCAR]
+                : ['id' => null, 'kind' => null];
+        }
+
+        return ['id' => null, 'kind' => null];
     }
 
     private function text(mixed $value): string

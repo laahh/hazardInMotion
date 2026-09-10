@@ -47,7 +47,7 @@ final class ControlRoomInspeksiHazardToolFilter
      */
     public static function sqlPredicate(string $column = 'tools_observasi'): array
     {
-        if ($column !== 'tools_observasi') {
+        if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/', $column) !== 1) {
             return ['sql' => 'FALSE', 'bindings' => []];
         }
         $allowed = self::allowed();
@@ -58,7 +58,7 @@ final class ControlRoomInspeksiHazardToolFilter
         $placeholders = implode(',', array_fill(0, count($allowed), '?'));
 
         return [
-            'sql' => 'BTRIM(COALESCE('.$column.", '')) IN ({$placeholders})",
+            'sql' => $column.' IN ('.$placeholders.')',
             'bindings' => $allowed,
         ];
     }

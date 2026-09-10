@@ -1101,7 +1101,8 @@
 
             function sapPhotoBlock(card) {
                 if (card.photo_page_id) {
-                    return '<div class="ocr-sap-photos" data-photo-page="' + escapeHtml(String(card.photo_page_id)) + '" data-report-id="' + escapeHtml(card.id) + '">'
+                    var kind = card.photo_page_kind || 'photocar';
+                    return '<div class="ocr-sap-photos" data-photo-page="' + escapeHtml(String(card.photo_page_id)) + '" data-photo-kind="' + escapeHtml(kind) + '" data-report-id="' + escapeHtml(card.id) + '">'
                         + '<p class="ocr-sap-muted">Memuat foto…</p>'
                         + '</div>';
                 }
@@ -1114,8 +1115,9 @@
             function hydrateSapPhotos() {
                 sapGrid.querySelectorAll('[data-photo-page]').forEach(function (el) {
                     var id = el.getAttribute('data-photo-page');
+                    var kind = el.getAttribute('data-photo-kind') || 'photocar';
                     var reportId = el.getAttribute('data-report-id') || id;
-                    fetch(sapPhotosUrl + '?id=' + encodeURIComponent(id), {
+                    fetch(sapPhotosUrl + '?id=' + encodeURIComponent(id) + '&kind=' + encodeURIComponent(kind), {
                         headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
                     })
                         .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })

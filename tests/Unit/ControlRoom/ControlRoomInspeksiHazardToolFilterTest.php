@@ -27,4 +27,22 @@ final class ControlRoomInspeksiHazardToolFilterTest extends TestCase
         $this->assertFalse(ControlRoomInspeksiHazardToolFilter::matches('Real Time - Teropong'));
         $this->assertFalse(ControlRoomInspeksiHazardToolFilter::matches(''));
     }
+
+    public function test_sql_predicate_menerima_kolom_bertabel(): void
+    {
+        $pred = ControlRoomInspeksiHazardToolFilter::sqlPredicate('o.tools_observasi');
+
+        $this->assertStringContainsString('o.tools_observasi IN (', $pred['sql']);
+        $this->assertStringNotContainsString('BTRIM', $pred['sql']);
+        $this->assertNotSame('FALSE', $pred['sql']);
+        $this->assertCount(8, $pred['bindings']);
+    }
+
+    public function test_sql_predicate_menolak_kolom_tidak_aman(): void
+    {
+        $pred = ControlRoomInspeksiHazardToolFilter::sqlPredicate('tools_observasi; DROP TABLE x');
+
+        $this->assertSame('FALSE', $pred['sql']);
+        $this->assertSame([], $pred['bindings']);
+    }
 }

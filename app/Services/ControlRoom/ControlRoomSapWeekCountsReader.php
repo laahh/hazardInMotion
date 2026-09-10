@@ -19,6 +19,8 @@ use Throwable;
  */
 final class ControlRoomSapWeekCountsReader
 {
+    public const SID_CHUNK = 12;
+
     private const CACHE_SECONDS = 300;
 
     private const QUERY_TIMEOUT_MS = 4000;
@@ -36,7 +38,7 @@ final class ControlRoomSapWeekCountsReader
      *     findings: list<array<string, mixed>>
      * }
      */
-    public function forScheduleDays(array $scheduleDays): array
+    public function forScheduleDays(array $scheduleDays, bool $withFindings = true): array
     {
         $empty = ['loaded' => true, 'counts' => [], 'findings' => []];
         $duties = $this->dutiesFromSchedule($scheduleDays);
@@ -52,7 +54,10 @@ final class ControlRoomSapWeekCountsReader
         sort($sids);
         $dates = array_column($duties, 'date');
         sort($dates);
-        $cacheKey = 'control-room:sap-week-counts:v10:'.hash('sha1', implode(',', $sids).'|'.$dates[0].'|'.$dates[array_key_last($dates)]);
+        $cacheKey = 'control-room:sap-week-counts:v12:'.($withFindings ? 'full' : 'counts').':'.hash(
+            'sha1',
+            implode(',', $sids).'|'.$dates[0].'|'.$dates[array_key_last($dates)],
+        );
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['counts'], $cached['findings'])) {
             return ['loaded' => true, 'counts' => $cached['counts'], 'findings' => $cached['findings']];
@@ -61,16 +66,22 @@ final class ControlRoomSapWeekCountsReader
         $rangeStart = CarbonImmutable::parse($dates[0])->startOfDay();
         $rangeEnd = $this->dutyWindow->reportingWindow(CarbonImmutable::parse($dates[array_key_last($dates)]))['end'];
 
-        $failed = 0;
-        $findings = $this->uniqueByReport([
-            ...$this->fetchHazardInspeksi($sids, $rangeStart, $rangeEnd, $failed),
-            ...$this->fetchObservasi($sids, $rangeStart, $rangeEnd, $failed),
-            ...$this->fetchOak($sids, $rangeStart, $rangeEnd, $failed),
-        ]);
+        $chunksOk = 0;
+        $findings = [];
+        foreach (array_chunk($sids, self::SID_CHUNK) as $chunk) {
+            $chunkFindings = $this->fetchChunk($chunk, $rangeStart, $rangeEnd, $withFindings);
+            if ($chunkFindings === null) {
+                continue;
+            }
+            $chunksOk++;
+            $findings = [...$findings, ...$chunkFindings];
+        }
 
-        if ($failed === 3) {
+        if ($chunksOk === 0) {
             return ['loaded' => false, 'counts' => [], 'findings' => []];
         }
+
+        $findings = $this->uniqueByReport($findings);
 
         $events = [];
         foreach ($findings as $finding) {
@@ -83,7 +94,7 @@ final class ControlRoomSapWeekCountsReader
         }
 
         $counts = $this->countForDuties($events, $duties);
-        $onDuty = $this->findingsOnDuty($findings, $duties);
+        $onDuty = $withFindings ? $this->findingsOnDuty($findings, $duties) : [];
         Cache::put($cacheKey, ['counts' => $counts, 'findings' => $onDuty], self::CACHE_SECONDS);
 
         return ['loaded' => true, 'counts' => $counts, 'findings' => $onDuty];
@@ -179,18 +190,6 @@ final class ControlRoomSapWeekCountsReader
         };
     }
 
-    private function componentFromJenis(string $jenis): ?string
-    {
-        if (str_contains($jenis, 'INSPEKSI')) {
-            return 'inspeksi';
-        }
-        if (str_contains($jenis, 'HAZARD')) {
-            return 'hazard';
-        }
-
-        return null;
-    }
-
     /**
      * @param  list<array<string, mixed>>  $scheduleDays
      * @return list<array{sid: string, date: string}>
@@ -218,148 +217,154 @@ final class ControlRoomSapWeekCountsReader
     }
 
     /**
+     * Satu UNION ALL per chunk SID: BitmapAnd SID+tanggal, tanpa DISTINCT ON
+     * (dedupe di uniqueByReport). Tools IN sargable.
+     *
      * @param  list<string>  $sids
-     * @param  int  $failed
-     * @return list<array<string, mixed>>
+     * @return list<array<string, mixed>>|null
      */
-    private function fetchHazardInspeksi(array $sids, CarbonImmutable $start, CarbonImmutable $end, int &$failed): array
+    private function fetchChunk(array $sids, CarbonImmutable $start, CarbonImmutable $end, bool $withDetails): ?array
     {
         $placeholders = implode(',', array_fill(0, count($sids), '?'));
         $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate();
+        $hazardDetail = $withDetails
+            ? "COALESCE(NULLIF(BTRIM(COALESCE(subketidaksesuaian, '')), ''), NULLIF(BTRIM(COALESCE(ketidaksesuaian, '')), ''), '') AS category,
+                    COALESCE(nama_goldenrule, '') AS golden_rule,
+                    COALESCE(lokasi, '') AS lokasi,
+                    COALESCE(detil_lokasi, '') AS detil_lokasi,
+                    CAST(id_laporan AS text) AS report_id,
+                    LEFT(COALESCE(deskripsi_temuan, ''), 400) AS description,
+                    COALESCE(nama_pic, '') AS pic,
+                    COALESCE(perusahaan_pic, '') AS company,
+                    COALESCE(status_laporan, '') AS status"
+            : "'' AS category, '' AS golden_rule, '' AS lokasi, '' AS detil_lokasi,
+                    CAST(id_laporan AS text) AS report_id,
+                    '' AS description, '' AS pic, '' AS company, '' AS status";
+        $observasiDetail = $withDetails
+            ? "COALESCE(NULLIF(BTRIM(COALESCE(jenis_kegiatan, '')), ''), NULLIF(BTRIM(COALESCE(tools_observasi, '')), ''), '') AS category,
+                    '' AS golden_rule,
+                    COALESCE(lokasi, '') AS lokasi,
+                    COALESCE(detil_lokasi, '') AS detil_lokasi,
+                    CAST(id_observasi AS text) AS report_id,
+                    '' AS description, '' AS pic, '' AS company, '' AS status"
+            : "'' AS category, '' AS golden_rule, '' AS lokasi, '' AS detil_lokasi,
+                    CAST(id_observasi AS text) AS report_id,
+                    '' AS description, '' AS pic, '' AS company, '' AS status";
+        $oakDetail = $withDetails
+            ? "COALESCE(NULLIF(BTRIM(COALESCE(sub_aktivitas, '')), ''), NULLIF(BTRIM(COALESCE(aktivitas, '')), ''), '') AS category,
+                    '' AS golden_rule,
+                    COALESCE(lokasi, '') AS lokasi,
+                    COALESCE(detil_lokasi, '') AS detil_lokasi,
+                    CAST(id_oak AS text) AS report_id,
+                    '' AS description, '' AS pic, '' AS company, '' AS status"
+            : "'' AS category, '' AS golden_rule, '' AS lokasi, '' AS detil_lokasi,
+                    CAST(id_oak AS text) AS report_id,
+                    '' AS description, '' AS pic, '' AS company, '' AS status";
+
         $sql = "
-            SELECT DISTINCT ON (id_laporan)
-                id_laporan, kode_sid_pelapor, nama_pelapor, tanggal_laporan, jenis_laporan,
-                subketidaksesuaian, ketidaksesuaian, nama_goldenrule, lokasi, detil_lokasi,
-                LEFT(COALESCE(deskripsi_temuan, ''), 400) AS deskripsi_temuan,
-                nama_pic, perusahaan_pic, status_laporan
-            FROM bcbeats.mv_inspeksi_hazard
-            WHERE kode_sid_pelapor IN ({$placeholders})
-              AND tanggal_laporan >= CAST(? AS timestamp)
-              AND tanggal_laporan < CAST(? AS timestamp)
-              AND {$tools['sql']}
-            ORDER BY id_laporan, tanggal_laporan
-        ";
+            SELECT sid, at, component, category, golden_rule, lokasi, detil_lokasi, report_id, description, pic, company, status, name
+            FROM (
+                SELECT
+                    kode_sid_pelapor AS sid,
+                    tanggal_laporan AS at,
+                    CASE
+                        WHEN POSITION('INSPEKSI' IN UPPER(COALESCE(jenis_laporan, ''))) > 0 THEN 'inspeksi'
+                        WHEN POSITION('HAZARD' IN UPPER(COALESCE(jenis_laporan, ''))) > 0 THEN 'hazard'
+                        ELSE NULL
+                    END AS component,
+                    {$hazardDetail},
+                    COALESCE(nama_pelapor, '') AS name
+                FROM bcbeats.mv_inspeksi_hazard
+                WHERE kode_sid_pelapor IN ({$placeholders})
+                  AND tanggal_laporan >= CAST(? AS timestamp)
+                  AND tanggal_laporan < CAST(? AS timestamp)
+                  AND {$tools['sql']}
+            ) hazard
+            WHERE component IS NOT NULL
 
-        $rows = $this->select(
-            $sql,
-            [...$sids, $start->toDateTimeString(), $end->toDateTimeString(), ...$tools['bindings']],
-            'hazard/inspeksi',
-            $failed,
-        );
-        $findings = [];
-        foreach ($rows as $row) {
-            $at = $this->parseAt($row->tanggal_laporan ?? null);
-            $sid = strtoupper(trim((string) ($row->kode_sid_pelapor ?? '')));
-            if ($at === null || $sid === '') {
-                continue;
-            }
-            $jenis = strtoupper(trim((string) ($row->jenis_laporan ?? '')));
-            $component = $this->componentFromJenis($jenis);
-            if ($component === null) {
-                continue;
-            }
-            $findings[] = $this->finding(
-                sid: $sid,
-                name: (string) ($row->nama_pelapor ?? ''),
-                at: $at,
-                component: $component,
-                category: $this->firstText($row->subketidaksesuaian ?? null, $row->ketidaksesuaian ?? null),
-                goldenRule: (string) ($row->nama_goldenrule ?? ''),
-                lokasi: (string) ($row->lokasi ?? ''),
-                detilLokasi: (string) ($row->detil_lokasi ?? ''),
-                reportId: (string) ($row->id_laporan ?? ''),
-                description: (string) ($row->deskripsi_temuan ?? ''),
-                pic: (string) ($row->nama_pic ?? ''),
-                company: (string) ($row->perusahaan_pic ?? ''),
-                status: (string) ($row->status_laporan ?? ''),
-            );
-        }
+            UNION ALL
 
-        return $findings;
-    }
-
-    /**
-     * @param  list<string>  $sids
-     * @param  int  $failed
-     * @return list<array<string, mixed>>
-     */
-    private function fetchObservasi(array $sids, CarbonImmutable $start, CarbonImmutable $end, int &$failed): array
-    {
-        $placeholders = implode(',', array_fill(0, count($sids), '?'));
-        $sql = "
-            SELECT DISTINCT ON (id_observasi)
-                id_observasi, kode_sid_pelapor, nama_pelapor, tanggal_observasi, jenis_kegiatan, tools_observasi, lokasi, detil_lokasi
+            SELECT
+                kode_sid_pelapor AS sid,
+                tanggal_observasi AS at,
+                'observasi'::text AS component,
+                {$observasiDetail},
+                COALESCE(nama_pelapor, '') AS name
             FROM bcbeats.mv_observasi
             WHERE kode_sid_pelapor IN ({$placeholders})
               AND tanggal_observasi >= CAST(? AS timestamp)
               AND tanggal_observasi < CAST(? AS timestamp)
-            ORDER BY id_observasi, tanggal_observasi
+              AND {$tools['sql']}
+
+            UNION ALL
+
+            SELECT
+                kode_sid_pelapor AS sid,
+                tanggal_submit AS at,
+                'oak'::text AS component,
+                {$oakDetail},
+                COALESCE(nama_pelapor, '') AS name
+            FROM bcbeats.mv_oak
+            WHERE kode_sid_pelapor IN ({$placeholders})
+              AND tanggal_submit >= CAST(? AS timestamp)
+              AND tanggal_submit < CAST(? AS timestamp)
+              AND {$tools['sql']}
+              AND peran_dalam_tim = 'OBSERVEE'
         ";
 
-        $rows = $this->select($sql, [...$sids, $start->toDateTimeString(), $end->toDateTimeString()], 'observasi', $failed);
+        $range = [$start->toDateTimeString(), $end->toDateTimeString()];
+        $bindings = [
+            ...$sids, ...$range, ...$tools['bindings'],
+            ...$sids, ...$range, ...$tools['bindings'],
+            ...$sids, ...$range, ...$tools['bindings'],
+        ];
+
+        $rows = $this->select($sql, $bindings, 'union');
+        if ($rows === null) {
+            return null;
+        }
+
         $findings = [];
         foreach ($rows as $row) {
-            $at = $this->parseAt($row->tanggal_observasi ?? null);
-            $sid = strtoupper(trim((string) ($row->kode_sid_pelapor ?? '')));
-            if ($at === null || $sid === '') {
-                continue;
+            $mapped = $this->mapChunkRow($row);
+            if ($mapped !== null) {
+                $findings[] = $mapped;
             }
-            $findings[] = $this->finding(
-                sid: $sid,
-                name: (string) ($row->nama_pelapor ?? ''),
-                at: $at,
-                component: 'observasi',
-                category: $this->firstText($row->jenis_kegiatan ?? null, $row->tools_observasi ?? null),
-                goldenRule: '',
-                lokasi: (string) ($row->lokasi ?? ''),
-                detilLokasi: (string) ($row->detil_lokasi ?? ''),
-                reportId: (string) ($row->id_observasi ?? ''),
-            );
         }
 
         return $findings;
     }
 
     /**
-     * @param  list<string>  $sids
-     * @param  int  $failed
-     * @return list<array<string, mixed>>
+     * @return array<string, mixed>|null
      */
-    private function fetchOak(array $sids, CarbonImmutable $start, CarbonImmutable $end, int &$failed): array
+    private function mapChunkRow(object $row): ?array
     {
-        $placeholders = implode(',', array_fill(0, count($sids), '?'));
-        $sql = "
-            SELECT DISTINCT ON (id_oak)
-                id_oak, kode_sid_pelapor, nama_pelapor, tanggal_submit, aktivitas, sub_aktivitas, lokasi, detil_lokasi
-            FROM bcbeats.mv_oak
-            WHERE kode_sid_pelapor IN ({$placeholders})
-              AND tanggal_submit >= CAST(? AS timestamp)
-              AND tanggal_submit < CAST(? AS timestamp)
-            ORDER BY id_oak, tanggal_submit
-        ";
-
-        $rows = $this->select($sql, [...$sids, $start->toDateTimeString(), $end->toDateTimeString()], 'OAK', $failed);
-        $findings = [];
-        foreach ($rows as $row) {
-            $at = $this->parseAt($row->tanggal_submit ?? null);
-            $sid = strtoupper(trim((string) ($row->kode_sid_pelapor ?? '')));
-            if ($at === null || $sid === '') {
-                continue;
-            }
-            $findings[] = $this->finding(
-                sid: $sid,
-                name: (string) ($row->nama_pelapor ?? ''),
-                at: $at,
-                component: 'oak',
-                category: $this->firstText($row->sub_aktivitas ?? null, $row->aktivitas ?? null),
-                goldenRule: '',
-                lokasi: (string) ($row->lokasi ?? ''),
-                detilLokasi: (string) ($row->detil_lokasi ?? ''),
-                reportId: (string) ($row->id_oak ?? ''),
-            );
+        $rawComponent = strtolower(trim((string) ($row->component ?? '')));
+        if (! in_array($rawComponent, ['hazard', 'inspeksi', 'observasi', 'oak'], true)) {
+            return null;
+        }
+        $sid = strtoupper(trim((string) ($row->sid ?? '')));
+        $at = $this->parseAt($row->at ?? null);
+        if ($sid === '' || $at === null) {
+            return null;
         }
 
-        return $findings;
+        return $this->finding(
+            sid: $sid,
+            name: (string) ($row->name ?? ''),
+            at: $at,
+            component: $rawComponent,
+            category: (string) ($row->category ?? ''),
+            goldenRule: (string) ($row->golden_rule ?? ''),
+            lokasi: (string) ($row->lokasi ?? ''),
+            detilLokasi: (string) ($row->detil_lokasi ?? ''),
+            reportId: (string) ($row->report_id ?? ''),
+            description: (string) ($row->description ?? ''),
+            pic: (string) ($row->pic ?? ''),
+            company: (string) ($row->company ?? ''),
+            status: (string) ($row->status ?? ''),
+        );
     }
 
     /**
@@ -431,31 +436,21 @@ final class ControlRoomSapWeekCountsReader
         ];
     }
 
-    private function firstText(mixed ...$values): string
-    {
-        foreach ($values as $value) {
-            $text = trim((string) ($value ?? ''));
-            if ($text !== '') {
-                return $text;
-            }
-        }
-
-        return '';
-    }
-
     /**
      * @param  list<mixed>  $bindings
-     * @return list<object>
+     * @return list<object>|null
      */
-    private function select(string $sql, array $bindings, string $source, int &$failed): array
+    private function select(string $sql, array $bindings, string $source): ?array
     {
         try {
-            return $this->olap->select($sql, $bindings, self::QUERY_TIMEOUT_MS);
+            return $this->olap->select($sql, $bindings, self::QUERY_TIMEOUT_MS, [
+                'jit' => 'off',
+                'max_parallel_workers_per_gather' => '0',
+            ]);
         } catch (Throwable $e) {
             Log::warning('ControlRoom SAP week counts '.$source.' gagal: '.$e->getMessage());
-            $failed++;
 
-            return [];
+            return null;
         }
     }
 

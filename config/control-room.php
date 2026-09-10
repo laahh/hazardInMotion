@@ -80,8 +80,9 @@ return [
     'sap_target_components' => ['hazard', 'inspeksi', 'observasi'],
 
     /*
-    | Tools inspeksi/hazard yang dihitung di Control Room (OCR).
-    | Pengawasan Langsung, Teropong, Drone, dll. tidak masuk % SAP / Detail.
+    | Tools pengamatan yang dihitung di Control Room (OCR).
+    | Berlaku untuk Hazard, Inspeksi, Observasi, dan OAK.
+    | Pengawasan Langsung, Teropong, Drone, dll. tidak masuk % SAP / Detail / Kualitas.
     */
     'inspeksi_hazard_tools' => [
         'Real Time - CCTV Support',

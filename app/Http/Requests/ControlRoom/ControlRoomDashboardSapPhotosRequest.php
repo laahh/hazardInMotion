@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\ControlRoom;
 
+use App\Services\ControlRoom\ControlRoomSapPhotoResolver;
 use Illuminate\Foundation\Http\FormRequest;
 
 final class ControlRoomDashboardSapPhotosRequest extends FormRequest
@@ -17,6 +18,7 @@ final class ControlRoomDashboardSapPhotosRequest extends FormRequest
     {
         $this->merge([
             'id' => $this->query('id', $this->input('id')),
+            'kind' => $this->query('kind', $this->input('kind', ControlRoomSapPhotoResolver::KIND_PHOTOCAR)),
         ]);
     }
 
@@ -27,6 +29,7 @@ final class ControlRoomDashboardSapPhotosRequest extends FormRequest
     {
         return [
             'id' => ['required', 'integer', 'min:1'],
+            'kind' => ['sometimes', 'in:photocar,document'],
         ];
     }
 

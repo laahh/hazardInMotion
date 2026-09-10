@@ -39,7 +39,7 @@ final class ControlRoomLocationCoverageService
     ): array {
         $today = CarbonImmutable::parse($now ?? now())->startOfDay();
         $cacheKey = sprintf(
-            'control-room:location-coverage:v4:%s:%s:%s',
+            'control-room:location-coverage:v5:%s:%s:%s',
             $weekStart->toDateString(),
             $site->value,
             $today->toDateString(),

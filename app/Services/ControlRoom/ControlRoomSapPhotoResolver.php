@@ -10,14 +10,28 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * URL photoCar adalah halaman HTML, bukan file gambar.
+ * URL photoCar dan /beats2/file/document/{id} adalah halaman HTML, bukan file gambar.
  * Foto temuan/penyelesaian ada di /beats2/file/{id}.
  */
 final class ControlRoomSapPhotoResolver
 {
     public const HOST = 'https://hseautomation.beraucoal.co.id';
 
+    public const KIND_PHOTOCAR = 'photocar';
+
+    public const KIND_DOCUMENT = 'document';
+
     private const CACHE_SECONDS = 3600;
+
+    /**
+     * @return array{foto_temuan: ?string, foto_penyelesaian: ?string}
+     */
+    public function resolve(int $id, string $kind = self::KIND_PHOTOCAR): array
+    {
+        return $kind === self::KIND_DOCUMENT
+            ? $this->fromDocumentId($id)
+            : $this->fromPhotoCarId($id);
+    }
 
     /**
      * @return array{foto_temuan: ?string, foto_penyelesaian: ?string}
@@ -30,7 +44,22 @@ final class ControlRoomSapPhotoResolver
 
         /** @var array{foto_temuan: ?string, foto_penyelesaian: ?string} */
         return Cache::remember('control-room:sap-photos:v1:'.$id, self::CACHE_SECONDS, function () use ($id): array {
-            return $this->fetchPhotoCar($id);
+            return $this->fetchPage(self::HOST.'/report/photoCar/'.$id, $id, 'photoCar');
+        });
+    }
+
+    /**
+     * @return array{foto_temuan: ?string, foto_penyelesaian: ?string}
+     */
+    public function fromDocumentId(int $id): array
+    {
+        if ($id <= 0) {
+            return ['foto_temuan' => null, 'foto_penyelesaian' => null];
+        }
+
+        /** @var array{foto_temuan: ?string, foto_penyelesaian: ?string} */
+        return Cache::remember('control-room:sap-photos:document:v1:'.$id, self::CACHE_SECONDS, function () use ($id): array {
+            return $this->fetchPage(self::HOST.'/beats2/file/document/'.$id, $id, 'document');
         });
     }
 
@@ -61,9 +90,8 @@ final class ControlRoomSapPhotoResolver
     /**
      * @return array{foto_temuan: ?string, foto_penyelesaian: ?string}
      */
-    private function fetchPhotoCar(int $id): array
+    private function fetchPage(string $url, int $id, string $source): array
     {
-        $url = self::HOST.'/report/photoCar/'.$id;
         try {
             $response = Http::timeout(10)->get($url);
             if (! $response->successful()) {
@@ -72,7 +100,7 @@ final class ControlRoomSapPhotoResolver
 
             return $this->parseHtml($response->body());
         } catch (Throwable $e) {
-            Log::warning('ControlRoom SAP photoCar gagal: '.$e->getMessage(), ['id' => $id]);
+            Log::warning('ControlRoom SAP '.$source.' gagal: '.$e->getMessage(), ['id' => $id]);
 
             return ['foto_temuan' => null, 'foto_penyelesaian' => null];
         }

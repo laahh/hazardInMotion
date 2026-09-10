@@ -52,7 +52,7 @@ final class ControlRoomSapQualityFindingsReader
         sort($sids);
         $start = $from->startOfDay();
         $end = $this->dutyWindow->reportingWindow($lastDutyDate)['end'];
-        $cacheKey = 'control-room:sap-quality-findings:v3:'.hash(
+        $cacheKey = 'control-room:sap-quality-findings:v5:'.hash(
             'sha1',
             implode(',', $sids).'|'.$start->toDateTimeString().'|'.$end->toDateTimeString(),
         );
@@ -94,13 +94,13 @@ final class ControlRoomSapQualityFindingsReader
 
         $from = $start->startOfDay();
         $until = CarbonImmutable::parse($end);
-        $cacheKey = 'control-room:sap-location-hits:v2:'.$from->toDateTimeString().'|'.$until->toDateTimeString();
+        $cacheKey = 'control-room:sap-location-hits:v3:'.$from->toDateTimeString().'|'.$until->toDateTimeString();
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['findings'])) {
             return ['loaded' => true, 'findings' => $cached['findings']];
         }
 
-        // Satu round-trip: index tanggal per MV, GROUP BY dulu (bukan UNION 48rb baris + BTRIM).
+        // Index tanggal + GROUP BY. OAK di MV terpecah 3 peran per id — cukup OBSERVEE.
         $sql = <<<'SQL'
             SELECT lokasi, detil_lokasi, MAX(at) AS at
             FROM (
@@ -124,6 +124,7 @@ final class ControlRoomSapQualityFindingsReader
                 FROM bcbeats.mv_oak
                 WHERE tanggal_submit >= CAST(? AS timestamp)
                   AND tanggal_submit < CAST(? AS timestamp)
+                  AND peran_dalam_tim = 'OBSERVEE'
                 GROUP BY lokasi, detil_lokasi
             ) sap
             GROUP BY lokasi, detil_lokasi
@@ -136,7 +137,7 @@ final class ControlRoomSapQualityFindingsReader
             $rows = $this->olap->select($sql, $bindings, self::LOCATION_HITS_TIMEOUT_MS, [
                 'jit' => 'off',
                 'work_mem' => '64MB',
-                'max_parallel_workers_per_gather' => '2',
+                'max_parallel_workers_per_gather' => '0',
             ]);
         } catch (Throwable $e) {
             Log::warning('ControlRoom SAP location hits gagal: '.$e->getMessage());
@@ -236,6 +237,7 @@ final class ControlRoomSapQualityFindingsReader
                 WHERE kode_sid_pelapor IN ({$placeholders})
                   AND tanggal_observasi >= CAST(? AS timestamp)
                   AND tanggal_observasi < CAST(? AS timestamp)
+                  AND {$tools['sql']}
                 ORDER BY id_observasi, tanggal_observasi
             ) observasi
 
@@ -262,12 +264,18 @@ final class ControlRoomSapQualityFindingsReader
                 WHERE kode_sid_pelapor IN ({$placeholders})
                   AND tanggal_submit >= CAST(? AS timestamp)
                   AND tanggal_submit < CAST(? AS timestamp)
+                  AND {$tools['sql']}
+                  AND peran_dalam_tim = 'OBSERVEE'
                 ORDER BY id_oak, tanggal_submit
             ) oak
         ";
 
         $range = [$start->toDateTimeString(), $end->toDateTimeString()];
-        $bindings = [...$sids, ...$range, ...$tools['bindings'], ...$sids, ...$range, ...$sids, ...$range];
+        $bindings = [
+            ...$sids, ...$range, ...$tools['bindings'],
+            ...$sids, ...$range, ...$tools['bindings'],
+            ...$sids, ...$range, ...$tools['bindings'],
+        ];
 
         try {
             $rows = $this->olap->select($sql, $bindings, self::QUERY_TIMEOUT_MS);

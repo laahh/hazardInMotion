@@ -118,6 +118,11 @@ final class ControlRoomSapWeekCountsReaderTest extends TestCase
         $this->assertCount(3, $findings);
     }
 
+    public function test_sid_dipecah_supaya_query_olap_tidak_timeout(): void
+    {
+        $this->assertSame(12, ControlRoomSapWeekCountsReader::SID_CHUNK);
+    }
+
     private function reader(): ControlRoomSapWeekCountsReader
     {
         return new ControlRoomSapWeekCountsReader(

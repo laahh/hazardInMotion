@@ -69,7 +69,7 @@ final class DashboardController extends Controller
             $sapWeek['loaded'],
         );
         $previousSchedule = $scheduleWeek->build($site, $prevWeekStart, withRfid: false);
-        $previousSap = $sapWeekCounts->forScheduleDays($previousSchedule['days']);
+        $previousSap = $sapWeekCounts->forScheduleDays($previousSchedule['days'], withFindings: false);
 
         return view('control-room.dashboard.index', [
             'site' => $site,
@@ -111,9 +111,14 @@ final class DashboardController extends Controller
 
     public function sapPhotos(ControlRoomDashboardSapPhotosRequest $request, ControlRoomSapPhotoResolver $photos): JsonResponse
     {
+        $validated = $request->validated();
+
         return response()->json([
             'success' => true,
-            'data' => $photos->fromPhotoCarId((int) $request->validated('id')),
+            'data' => $photos->resolve(
+                (int) $validated['id'],
+                (string) ($validated['kind'] ?? ControlRoomSapPhotoResolver::KIND_PHOTOCAR),
+            ),
         ]);
     }
 }
