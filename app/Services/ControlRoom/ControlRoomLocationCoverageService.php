@@ -12,11 +12,17 @@ use Illuminate\Support\Facades\Cache;
 
 /**
  * Coverage lokasi master vs SAP minggu terpilih (hazard/inspeksi/observasi/OAK) di OBDS.
- * Ter-cover = ada laporan SAP di lokasi+detil yang sama (bukan hanya SID jaga).
+ *
+ * Weekly: semua lokasi, ter-cover jika ada ≥1 SAP dalam minggu.
+ * Daily: hanya area kritis / high risk, ter-cover jika ada SAP di setiap hari
+ * yang sudah lewat pada minggu terpilih.
  */
 final class ControlRoomLocationCoverageService
 {
     private const PAGE_CACHE_SECONDS = 180;
+
+    /** @var list<string> */
+    private const DAY_SHORT = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
     public function __construct(
         private readonly LocationReader $locations,
@@ -27,9 +33,8 @@ final class ControlRoomLocationCoverageService
     /**
      * @return array{
      *     loaded: bool,
-     *     kpi: array{total: int, covered: int, uncovered: int, percent: float},
-     *     rows: list<array<string, mixed>>,
-     *     attention: list<array<string, mixed>>
+     *     daily: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>},
+     *     weekly: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}
      * }
      */
     public function build(
@@ -39,15 +44,15 @@ final class ControlRoomLocationCoverageService
     ): array {
         $today = CarbonImmutable::parse($now ?? now())->startOfDay();
         $cacheKey = sprintf(
-            'control-room:location-coverage:v6:%s:%s:%s',
+            'control-room:location-coverage:v7:%s:%s:%s',
             $weekStart->toDateString(),
             $site->value,
             $today->toDateString(),
         );
 
         $cached = Cache::get($cacheKey);
-        if (is_array($cached) && ($cached['loaded'] ?? false) === true && isset($cached['kpi'], $cached['rows'])) {
-            /** @var array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>} */
+        if (is_array($cached) && ($cached['loaded'] ?? false) === true && isset($cached['daily'], $cached['weekly'])) {
+            /** @var array{loaded: bool, daily: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}, weekly: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}} */
             return $cached;
         }
 
@@ -71,6 +76,29 @@ final class ControlRoomLocationCoverageService
      */
     public function evaluate(array $master, array $coveredAt, bool $loaded = true): array
     {
+        $hits = [];
+        foreach ($coveredAt as $key => $at) {
+            if (! is_string($at) || $at === '') {
+                continue;
+            }
+            $hits[(string) $key] = ['last_at' => $at, 'days' => []];
+        }
+
+        return $this->evaluateWeekly($master, $hits, $loaded);
+    }
+
+    /**
+     * @param  list<array{site: string, lokasi: string, detail_lokasi: string}>  $master
+     * @param  array<string, array{last_at: string, days: array<string, true>}>  $hits
+     * @return array{
+     *     loaded: bool,
+     *     kpi: array{total: int, covered: int, uncovered: int, percent: float},
+     *     rows: list<array<string, mixed>>,
+     *     attention: list<array<string, mixed>>
+     * }
+     */
+    public function evaluateWeekly(array $master, array $hits, bool $loaded = true): array
+    {
         $rows = [];
         $attention = [];
         $covered = 0;
@@ -78,7 +106,8 @@ final class ControlRoomLocationCoverageService
         foreach ($master as $item) {
             $lokasi = (string) ($item['lokasi'] ?? '');
             $detil = (string) ($item['detail_lokasi'] ?? '');
-            $lastAt = $this->latestCoveredAt($lokasi, $detil, $coveredAt);
+            $hit = $this->hitFor($lokasi, $detil, $hits);
+            $lastAt = $hit['last_at'];
             $isCovered = is_string($lastAt) && $lastAt !== '';
             $isCritical = $this->locations->isCritical($lokasi, $detil);
             if ($isCovered) {
@@ -92,6 +121,8 @@ final class ControlRoomLocationCoverageService
                 'is_critical' => $isCritical,
                 'covered' => $isCovered,
                 'last_at' => $isCovered ? $lastAt : null,
+                'gap_label' => $isCovered ? '—' : 'Minggu ini',
+                'day_marks' => [],
             ];
             $rows[] = $row;
             if ($isCritical && ! $isCovered) {
@@ -99,41 +130,72 @@ final class ControlRoomLocationCoverageService
             }
         }
 
-        usort($rows, function (array $a, array $b): int {
-            $bySite = strcasecmp((string) $a['site'], (string) $b['site']);
-            if ($bySite !== 0) {
-                return $bySite;
+        return $this->packPanel($rows, $attention, $covered, $loaded);
+    }
+
+    /**
+     * @param  list<array{site: string, lokasi: string, detail_lokasi: string}>  $master
+     * @param  array<string, array{last_at: string, days: array<string, true>}>  $hits
+     * @param  list<string>  $requiredDates
+     * @param  list<string>  $weekDates
+     * @return array{
+     *     loaded: bool,
+     *     kpi: array{total: int, covered: int, uncovered: int, percent: float},
+     *     rows: list<array<string, mixed>>,
+     *     attention: list<array<string, mixed>>
+     * }
+     */
+    public function evaluateDaily(
+        array $master,
+        array $hits,
+        array $requiredDates,
+        array $weekDates,
+        bool $loaded = true,
+    ): array {
+        $requiredSet = array_fill_keys($requiredDates, true);
+        $rows = [];
+        $attention = [];
+        $covered = 0;
+
+        foreach ($master as $item) {
+            $lokasi = (string) ($item['lokasi'] ?? '');
+            $detil = (string) ($item['detail_lokasi'] ?? '');
+            if (! $this->locations->isCritical($lokasi, $detil)) {
+                continue;
             }
-            $byLokasi = strcasecmp((string) $a['lokasi'], (string) $b['lokasi']);
-            if ($byLokasi !== 0) {
-                return $byLokasi;
+
+            $hit = $this->hitFor($lokasi, $detil, $hits);
+            $days = $hit['days'];
+            $missing = [];
+            foreach ($requiredDates as $date) {
+                if (! isset($days[$date])) {
+                    $missing[] = $date;
+                }
+            }
+            $isCovered = $requiredDates !== [] && $missing === [];
+            if ($isCovered) {
+                $covered++;
             }
 
-            return strcasecmp((string) $a['detail_lokasi'], (string) $b['detail_lokasi']);
-        });
-
-        usort($attention, function (array $a, array $b): int {
-            $byLokasi = strcasecmp((string) $a['lokasi'], (string) $b['lokasi']);
-            if ($byLokasi !== 0) {
-                return $byLokasi;
+            $row = [
+                'site' => (string) ($item['site'] ?? ''),
+                'lokasi' => $lokasi,
+                'detail_lokasi' => $detil,
+                'is_critical' => true,
+                'covered' => $isCovered,
+                'last_at' => $hit['last_at'],
+                'gap_label' => $this->dailyGapLabel($requiredDates, $missing),
+                'covered_days' => count($requiredDates) - count($missing),
+                'required_days' => count($requiredDates),
+                'day_marks' => $this->dayMarks($weekDates, $days, $requiredSet),
+            ];
+            $rows[] = $row;
+            if (! $isCovered) {
+                $attention[] = $row;
             }
+        }
 
-            return strcasecmp((string) $a['detail_lokasi'], (string) $b['detail_lokasi']);
-        });
-
-        $total = count($rows);
-
-        return [
-            'loaded' => $loaded,
-            'kpi' => [
-                'total' => $total,
-                'covered' => $covered,
-                'uncovered' => $total - $covered,
-                'percent' => $total === 0 ? 0.0 : round($covered / $total * 100, 1),
-            ],
-            'rows' => $rows,
-            'attention' => $attention,
-        ];
+        return $this->packPanel($rows, $attention, $covered, $loaded);
     }
 
     public function locationKey(string $lokasi, string $detil): string
@@ -165,7 +227,62 @@ final class ControlRoomLocationCoverageService
     }
 
     /**
-     * @return array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}
+     * @param  list<array<string, mixed>>  $findings
+     * @return array<string, string>
+     */
+    public function coveredAt(array $findings): array
+    {
+        $covered = [];
+        foreach ($this->coveredHits($findings) as $key => $hit) {
+            $covered[$key] = $hit['last_at'];
+        }
+
+        return $covered;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $findings
+     * @return array<string, array{last_at: string, days: array<string, true>}>
+     */
+    public function coveredHits(array $findings): array
+    {
+        $covered = [];
+        foreach ($findings as $finding) {
+            $at = trim((string) ($finding['at'] ?? ''));
+            if ($at === '') {
+                continue;
+            }
+            try {
+                $day = CarbonImmutable::parse($at)->toDateString();
+            } catch (\Throwable) {
+                continue;
+            }
+            $detil = (string) ($finding['detil_lokasi'] ?? $finding['detail_lokasi'] ?? '');
+            foreach ($this->locationKeys((string) ($finding['lokasi'] ?? ''), $detil) as $key) {
+                if (! isset($covered[$key])) {
+                    $covered[$key] = [
+                        'last_at' => $at,
+                        'days' => [$day => true],
+                    ];
+
+                    continue;
+                }
+                if ($at > $covered[$key]['last_at']) {
+                    $covered[$key]['last_at'] = $at;
+                }
+                $covered[$key]['days'][$day] = true;
+            }
+        }
+
+        return $covered;
+    }
+
+    /**
+     * @return array{
+     *     loaded: bool,
+     *     daily: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>},
+     *     weekly: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}
+     * }
      */
     private function buildUncached(
         ControlRoomSiteCode $site,
@@ -179,50 +296,157 @@ final class ControlRoomLocationCoverageService
             $weekStart->startOfDay(),
             $this->dutyWindow->reportingWindow($lastDay)['end'],
         );
+        $hits = $this->coveredHits($sap['findings']);
+        $weekDates = $this->weekDates($weekStart);
+        $requiredDates = array_values(array_filter(
+            $weekDates,
+            static fn (string $date): bool => $date <= $today->toDateString(),
+        ));
 
-        return $this->evaluate($master, $this->coveredAt($sap['findings']), $sap['loaded']);
+        return [
+            'loaded' => $sap['loaded'],
+            'daily' => $this->evaluateDaily($master, $hits, $requiredDates, $weekDates, $sap['loaded']),
+            'weekly' => $this->evaluateWeekly($master, $hits, $sap['loaded']),
+        ];
     }
 
     /**
-     * @param  list<array<string, mixed>>  $findings
-     * @return array<string, string>
+     * @param  array<string, array{last_at: string, days: array<string, true>}>  $hits
+     * @return array{last_at: string|null, days: array<string, true>}
      */
-    public function coveredAt(array $findings): array
+    private function hitFor(string $lokasi, string $detil, array $hits): array
     {
-        $covered = [];
-        foreach ($findings as $finding) {
-            $at = trim((string) ($finding['at'] ?? ''));
-            if ($at === '') {
+        $lastAt = null;
+        $days = [];
+        foreach ($this->locationKeys($lokasi, $detil) as $key) {
+            $hit = $hits[$key] ?? null;
+            if ($hit === null) {
                 continue;
             }
-            $detil = (string) ($finding['detil_lokasi'] ?? $finding['detail_lokasi'] ?? '');
-            foreach ($this->locationKeys((string) ($finding['lokasi'] ?? ''), $detil) as $key) {
-                if (! isset($covered[$key]) || $at > $covered[$key]) {
-                    $covered[$key] = $at;
+            if ($lastAt === null || $hit['last_at'] > $lastAt) {
+                $lastAt = $hit['last_at'];
+            }
+            foreach ($hit['days'] as $day => $flag) {
+                if ($flag) {
+                    $days[$day] = true;
                 }
             }
         }
 
-        return $covered;
+        return ['last_at' => $lastAt, 'days' => $days];
     }
 
     /**
-     * @param  array<string, string>  $coveredAt
+     * @param  list<array<string, mixed>>  $rows
+     * @param  list<array<string, mixed>>  $attention
+     * @return array{
+     *     loaded: bool,
+     *     kpi: array{total: int, covered: int, uncovered: int, percent: float},
+     *     rows: list<array<string, mixed>>,
+     *     attention: list<array<string, mixed>>
+     * }
      */
-    private function latestCoveredAt(string $lokasi, string $detil, array $coveredAt): ?string
+    private function packPanel(array $rows, array $attention, int $covered, bool $loaded): array
     {
-        $latest = null;
-        foreach ($this->locationKeys($lokasi, $detil) as $key) {
-            $at = $coveredAt[$key] ?? null;
-            if (! is_string($at) || $at === '') {
-                continue;
+        $this->sortCoverageRows($rows);
+        $this->sortCoverageRows($attention);
+        $total = count($rows);
+
+        return [
+            'loaded' => $loaded,
+            'kpi' => [
+                'total' => $total,
+                'covered' => $covered,
+                'uncovered' => $total - $covered,
+                'percent' => $total === 0 ? 0.0 : round($covered / $total * 100, 1),
+            ],
+            'rows' => $rows,
+            'attention' => $attention,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function sortCoverageRows(array &$rows): void
+    {
+        usort($rows, function (array $a, array $b): int {
+            $bySite = strcasecmp((string) $a['site'], (string) $b['site']);
+            if ($bySite !== 0) {
+                return $bySite;
             }
-            if ($latest === null || $at > $latest) {
-                $latest = $at;
+            $byLokasi = strcasecmp((string) $a['lokasi'], (string) $b['lokasi']);
+            if ($byLokasi !== 0) {
+                return $byLokasi;
             }
+
+            return strcasecmp((string) $a['detail_lokasi'], (string) $b['detail_lokasi']);
+        });
+    }
+
+    /**
+     * @param  list<string>  $requiredDates
+     * @param  list<string>  $missing
+     */
+    private function dailyGapLabel(array $requiredDates, array $missing): string
+    {
+        if ($requiredDates === []) {
+            return 'Belum dimulai';
+        }
+        if ($missing === []) {
+            return '—';
         }
 
-        return $latest;
+        return implode(', ', array_map(fn (string $date): string => $this->dayShort($date), $missing));
+    }
+
+    /**
+     * @param  list<string>  $weekDates
+     * @param  array<string, true>  $days
+     * @param  array<string, true>  $requiredSet
+     * @return list<array{date: string, label: string, state: string}>
+     */
+    private function dayMarks(array $weekDates, array $days, array $requiredSet): array
+    {
+        $marks = [];
+        foreach ($weekDates as $date) {
+            if (isset($days[$date])) {
+                $state = 'ok';
+            } elseif (isset($requiredSet[$date])) {
+                $state = 'miss';
+            } else {
+                $state = 'pending';
+            }
+            $marks[] = [
+                'date' => $date,
+                'label' => $this->dayShort($date),
+                'state' => $state,
+            ];
+        }
+
+        return $marks;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function weekDates(CarbonImmutable $weekStart): array
+    {
+        $dates = [];
+        for ($i = 0; $i < 7; $i++) {
+            $dates[] = $weekStart->addDays($i)->toDateString();
+        }
+
+        return $dates;
+    }
+
+    private function dayShort(string $date): string
+    {
+        try {
+            return self::DAY_SHORT[(int) CarbonImmutable::parse($date)->dayOfWeek] ?? $date;
+        } catch (\Throwable) {
+            return $date;
+        }
     }
 
     /**

@@ -82,7 +82,7 @@ final class ControlRoomSapQualityFindingsReader
     }
 
     /**
-     * Pasangan lokasi+detil yang muncul di SAP pada jendela minggu (semua pelapor).
+     * Pasangan lokasi+detil per hari yang muncul di SAP pada jendela minggu (semua pelapor).
      *
      * @return array{loaded: bool, findings: list<array{lokasi: string, detil_lokasi: string, at: string}>}
      */
@@ -113,7 +113,7 @@ final class ControlRoomSapQualityFindingsReader
     }
 
     /**
-     * Satu kunci lokasi+detil, timestamp terakhir.
+     * Satu kunci lokasi+detil+hari, timestamp terakhir hari itu.
      *
      * @param  list<array{lokasi: string, detil_lokasi: string, at: string}>  $findings
      * @return list<array{lokasi: string, detil_lokasi: string, at: string}>
@@ -128,7 +128,12 @@ final class ControlRoomSapQualityFindingsReader
             if ($at === '' || ($lokasi === '' && $detil === '')) {
                 continue;
             }
-            $key = $lokasi."\n".$detil;
+            try {
+                $date = CarbonImmutable::parse($at)->toDateString();
+            } catch (Throwable) {
+                continue;
+            }
+            $key = $lokasi."\n".$detil."\n".$date;
             if (! isset($best[$key]) || $at > $best[$key]['at']) {
                 $best[$key] = [
                     'lokasi' => $lokasi,
@@ -146,7 +151,7 @@ final class ControlRoomSapQualityFindingsReader
      */
     private function fetchLocationHitsSource(string $source, CarbonImmutable $from, CarbonImmutable $until): ?array
     {
-        $cacheKey = 'control-room:sap-location-hits:v4:'.$source.':'.$from->toDateTimeString().'|'.$until->toDateTimeString();
+        $cacheKey = 'control-room:sap-location-hits:v5:'.$source.':'.$from->toDateTimeString().'|'.$until->toDateTimeString();
         $cached = Cache::get($cacheKey);
         if (is_array($cached)) {
             /** @var list<array{lokasi: string, detil_lokasi: string, at: string}> */
@@ -159,14 +164,14 @@ final class ControlRoomSapQualityFindingsReader
                 FROM bcbeats.mv_inspeksi_hazard
                 WHERE tanggal_laporan >= CAST(? AS timestamp)
                   AND tanggal_laporan < CAST(? AS timestamp)
-                GROUP BY lokasi, detil_lokasi
+                GROUP BY lokasi, detil_lokasi, CAST(tanggal_laporan AS date)
                 SQL,
             'observasi' => <<<'SQL'
                 SELECT lokasi, detil_lokasi, MAX(tanggal_observasi) AS at
                 FROM bcbeats.mv_observasi
                 WHERE tanggal_observasi >= CAST(? AS timestamp)
                   AND tanggal_observasi < CAST(? AS timestamp)
-                GROUP BY lokasi, detil_lokasi
+                GROUP BY lokasi, detil_lokasi, CAST(tanggal_observasi AS date)
                 SQL,
             'oak' => <<<'SQL'
                 SELECT lokasi, detil_lokasi, MAX(tanggal_submit) AS at
@@ -174,7 +179,7 @@ final class ControlRoomSapQualityFindingsReader
                 WHERE tanggal_submit >= CAST(? AS timestamp)
                   AND tanggal_submit < CAST(? AS timestamp)
                   AND peran_dalam_tim = 'OBSERVEE'
-                GROUP BY lokasi, detil_lokasi
+                GROUP BY lokasi, detil_lokasi, CAST(tanggal_submit AS date)
                 SQL,
             default => null,
         };

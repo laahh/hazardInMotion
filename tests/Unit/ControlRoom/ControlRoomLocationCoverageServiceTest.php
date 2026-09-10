@@ -161,6 +161,102 @@ final class ControlRoomLocationCoverageServiceTest extends TestCase
         $this->assertSame(1, $payload['kpi']['uncovered']);
     }
 
+    public function test_daily_hanya_area_kritis_dan_wajib_sap_tiap_hari(): void
+    {
+        $service = $this->service();
+        $weekDates = [
+            '2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02',
+            '2026-09-03', '2026-09-04', '2026-09-05',
+        ];
+        $payload = $service->evaluateDaily(
+            [
+                ['site' => 'GMO', 'lokasi' => 'Aktivitas Area High Risk', 'detail_lokasi' => 'Pompa'],
+                ['site' => 'GMO', 'lokasi' => 'Workshop', 'detail_lokasi' => 'Office'],
+            ],
+            $service->coveredHits([
+                ['lokasi' => 'Aktivitas Area High Risk', 'detil_lokasi' => 'Pompa', 'at' => '2026-08-31 08:00:00'],
+                ['lokasi' => 'Workshop', 'detil_lokasi' => 'Office', 'at' => '2026-08-31 09:00:00'],
+            ]),
+            ['2026-08-31', '2026-09-01'],
+            $weekDates,
+        );
+
+        $this->assertSame(1, $payload['kpi']['total']);
+        $this->assertSame(0, $payload['kpi']['covered']);
+        $this->assertSame(1, $payload['kpi']['uncovered']);
+        $this->assertFalse($payload['rows'][0]['covered']);
+        $this->assertSame('Sel', $payload['rows'][0]['gap_label']);
+        $this->assertCount(1, $payload['attention']);
+        $this->assertSame('Aktivitas Area High Risk', $payload['rows'][0]['lokasi']);
+    }
+
+    public function test_daily_tercover_jika_semua_hari_wajib_punya_sap(): void
+    {
+        $service = $this->service();
+        $payload = $service->evaluateDaily(
+            [
+                ['site' => 'LMO', 'lokasi' => '(B7) Area Kritis Blok 7', 'detail_lokasi' => 'Front'],
+            ],
+            $service->coveredHits([
+                ['lokasi' => '(B7) Area Kritis Blok 7', 'detil_lokasi' => 'Front', 'at' => '2026-08-31 08:00:00'],
+                ['lokasi' => '(B7) Area Kritis Blok 7', 'detil_lokasi' => 'Front', 'at' => '2026-09-01 07:30:00'],
+            ]),
+            ['2026-08-31', '2026-09-01'],
+            ['2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05'],
+        );
+
+        $this->assertTrue($payload['rows'][0]['covered']);
+        $this->assertSame(1, $payload['kpi']['covered']);
+        $this->assertSame([], $payload['attention']);
+        $this->assertSame('—', $payload['rows'][0]['gap_label']);
+        $this->assertSame(2, $payload['rows'][0]['covered_days']);
+        $this->assertSame('ok', $payload['rows'][0]['day_marks'][1]['state']);
+        $this->assertSame('ok', $payload['rows'][0]['day_marks'][2]['state']);
+        $this->assertSame('pending', $payload['rows'][0]['day_marks'][3]['state']);
+    }
+
+    public function test_daily_tanpa_sap_dianggap_tidak_tercover(): void
+    {
+        $payload = $this->service()->evaluateDaily(
+            [
+                ['site' => 'BMO 1', 'lokasi' => '(B PMO) Area Kritis', 'detail_lokasi' => 'Disposal OPD Q1 KDC'],
+            ],
+            [],
+            ['2026-08-31'],
+            ['2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05'],
+        );
+
+        $this->assertFalse($payload['rows'][0]['covered']);
+        $this->assertNull($payload['rows'][0]['last_at']);
+        $this->assertSame('Sen', $payload['rows'][0]['gap_label']);
+        $this->assertSame('miss', $payload['rows'][0]['day_marks'][1]['state']);
+    }
+
+    public function test_weekly_cukup_satu_sap_meski_tidak_setiap_hari(): void
+    {
+        $service = $this->service();
+        $hits = $service->coveredHits([
+            ['lokasi' => 'Aktivitas Area High Risk', 'detil_lokasi' => 'Pompa', 'at' => '2026-08-31 08:00:00'],
+        ]);
+        $weekly = $service->evaluateWeekly(
+            [
+                ['site' => 'GMO', 'lokasi' => 'Aktivitas Area High Risk', 'detail_lokasi' => 'Pompa'],
+            ],
+            $hits,
+        );
+        $daily = $service->evaluateDaily(
+            [
+                ['site' => 'GMO', 'lokasi' => 'Aktivitas Area High Risk', 'detail_lokasi' => 'Pompa'],
+            ],
+            $hits,
+            ['2026-08-31', '2026-09-01'],
+            ['2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05'],
+        );
+
+        $this->assertTrue($weekly['rows'][0]['covered']);
+        $this->assertFalse($daily['rows'][0]['covered']);
+    }
+
     private function service(): ControlRoomLocationCoverageService
     {
         return $this->app->make(ControlRoomLocationCoverageService::class);
