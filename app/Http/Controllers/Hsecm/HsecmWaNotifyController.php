@@ -44,7 +44,6 @@ class HsecmWaNotifyController extends Controller
             'filters' => $filters,
             'filterOptions' => $filterOptions,
             'recipients' => $recipients,
-            'fonnteConfigured' => $this->waNotifyService->fonnteConfigured(),
         ]));
     }
 
@@ -100,13 +99,12 @@ class HsecmWaNotifyController extends Controller
 
     public function send(Request $request, int $index): RedirectResponse
     {
-        $channel = $request->input('channel', 'wa_me') === 'fonnte' ? 'fonnte' : 'wa_me';
-        $result = $this->waNotifyService->send($index, $request, $channel);
+        $result = $this->waNotifyService->send($index, $request);
 
         $redirect = $this->redirectToIndex($request)
             ->with($result['success'] ? 'success' : 'error', $result['message']);
 
-        if ($channel === 'wa_me' && $result['success'] && ! empty($result['wa_url'])) {
+        if ($result['success'] && ! empty($result['wa_url'])) {
             $redirect->with('wa_url', $result['wa_url']);
         }
 

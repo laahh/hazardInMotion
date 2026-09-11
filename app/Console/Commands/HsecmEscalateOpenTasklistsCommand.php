@@ -13,9 +13,9 @@ class HsecmEscalateOpenTasklistsCommand extends Command
     protected $signature = 'hsecm:escalate-open-tasklists
                             {--dry-run : Simulasi tanpa kirim / update escalate}
                             {--email= : Batasi hanya ke alamat email ini}
-                            {--channel=both : email|wa|both — email SMTP dan/atau WA Fonnte}';
+                            {--channel=email : Hanya email SMTP (nilai wa|both diabaikan, Fonnte sudah dihapus)}';
 
-    protected $description = 'Escalate notifikasi (email/WA Fonnte) untuk tasklist yang belum closed (H+1 08:00, lalu tiap 6 jam)';
+    protected $description = 'Escalate notifikasi email untuk tasklist yang belum closed (H+1 08:00, lalu tiap 6 jam)';
 
     public function handle(HsecmShiftEmailDispatchService $dispatchService): int
     {

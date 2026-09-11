@@ -6,7 +6,6 @@ namespace App\Services\Hsecm;
 
 use App\Mail\HsecmSummaryMail;
 use App\Models\Hsecm\HsecmTasklist;
-use App\Services\FonnteService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -20,7 +19,6 @@ class HsecmShiftEmailDispatchService
         private readonly HsecmDatabaseRepository $repository,
         private readonly HsecmWaRecipientRepository $recipientRepository,
         private readonly HsecmTasklistService $tasklistService,
-        private readonly FonnteService $fonnteService,
     ) {}
 
     /**
@@ -39,7 +37,7 @@ class HsecmShiftEmailDispatchService
         ?string $overridePerusahaan = null,
         string $shift = 'auto',
         ?array $onlyEmails = null,
-        string $channel = 'both',
+        string $channel = 'email',
     ): array {
         $now = ($now ?? now())->timezone('Asia/Makassar');
         $window = $this->resolveShiftWindow('midshift', $shift, $now);
@@ -76,7 +74,7 @@ class HsecmShiftEmailDispatchService
         ?string $overridePerusahaan = null,
         string $shift = 'auto',
         ?array $onlyEmails = null,
-        string $channel = 'both',
+        string $channel = 'email',
     ): array {
         $now = ($now ?? now())->timezone('Asia/Makassar');
         $window = $this->resolveShiftWindow('endshift', $shift, $now);
@@ -159,7 +157,7 @@ class HsecmShiftEmailDispatchService
         bool $dryRun = false,
         ?Carbon $now = null,
         ?string $onlyEmail = null,
-        string $channel = 'both',
+        string $channel = 'email',
     ): array {
         $channel = $this->normalizeChannel($channel);
         $now = ($now ?? now())->timezone('Asia/Makassar');
@@ -300,7 +298,7 @@ class HsecmShiftEmailDispatchService
         string $shiftLabel = '',
         ?array $onlyEmails = null,
         bool $useLatestBatchSlot = false,
-        string $channel = 'both',
+        string $channel = 'email',
     ): array {
         $channel = $this->normalizeChannel($channel);
         $now = ($now ?? now())->timezone('Asia/Makassar');
@@ -535,31 +533,20 @@ class HsecmShiftEmailDispatchService
         string $ctaLabel = 'Buka Dashboard',
         string $monitoringUrl = '',
         string $tasklistUrl = '',
-        string $channel = 'both',
+        string $channel = 'email',
     ): array {
-        $channel = $this->normalizeChannel($channel);
+        $this->normalizeChannel($channel);
+
         $nama = (string) ($recipient['nama'] ?? '-');
         $email = trim((string) ($recipient['email'] ?? ''));
         $phoneRaw = trim((string) ($recipient['no'] ?? ''));
-        $phone = $this->fonnteService->normalizePhoneNumber($phoneRaw);
-
-        $wantEmail = in_array($channel, ['email', 'both'], true);
-        $wantWa = in_array($channel, ['wa', 'both'], true);
 
         if ($dryRun) {
-            $parts = [];
-            if ($wantEmail) {
-                $parts[] = $email !== '' ? "email→{$email}" : 'email→(invalid)';
-            }
-            if ($wantWa) {
-                $parts[] = $phone !== '' ? "wa→{$phone}" : 'wa→(no phone)';
-            }
-
             return [
                 'nama' => $nama,
                 'email' => $email,
                 'success' => true,
-                'message' => 'Dry-run '.$mode.' ['.$channel.'] '.implode('; ', $parts)
+                'message' => 'Dry-run '.$mode.' [email] '.($email !== '' ? "email→{$email}" : 'email→(invalid)')
                     .' scope='.$this->scopeLabel(
                         $this->normalizeNullable($filters['site'] ?? null),
                         trim((string) ($filters['perusahaan'] ?? ''))
@@ -571,273 +558,73 @@ class HsecmShiftEmailDispatchService
             ];
         }
 
-        $parts = [];
-        $emailOk = null;
-        $waOk = null;
-
-        if ($wantEmail) {
-            if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $emailOk = false;
-                $parts[] = 'Email tidak valid';
-            } else {
-                try {
-                    Mail::to($email)->send(new HsecmSummaryMail(
-                        recipient: [
-                            'nama' => $nama,
-                            'role' => (string) ($recipient['role'] ?? ''),
-                            'site' => $recipient['site'] ?? null,
-                            'perusahaan' => (string) ($recipient['perusahaan'] ?? ''),
-                            'no' => $phoneRaw,
-                            'email' => $email,
-                        ],
-                        scope: [
-                            'site' => (string) ($filters['site'] ?? ''),
-                            'perusahaan' => (string) ($filters['perusahaan'] ?? ''),
-                            'week' => (string) ($filters['week'] ?? ''),
-                            'year' => (string) ($filters['year'] ?? ''),
-                            'batch_slot' => (string) ($filters['batch_slot'] ?? ''),
-                        ],
-                        emailNarrative: $narrative,
-                        dashboardUrl: $ctaUrl,
-                        generatedAt: now()->timezone('Asia/Makassar')->format('d/m/Y H:i').' WITA',
-                        mode: $mode,
-                        batchSlotLabel: $batchSlotLabel,
-                        escalateCount: $escalateCount,
-                        ctaLabel: $ctaLabel,
-                        monitoringUrl: $monitoringUrl,
-                        tasklistUrl: $tasklistUrl,
-                    ));
-                    $emailOk = true;
-                    $parts[] = 'Email OK';
-                } catch (\Throwable $e) {
-                    report($e);
-                    $emailOk = false;
-                    $parts[] = 'Email gagal: '.$e->getMessage();
-                }
-            }
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return [
+                'nama' => $nama,
+                'email' => $email,
+                'success' => false,
+                'message' => 'Email tidak valid',
+            ];
         }
 
-        if ($wantWa) {
-            if ($phone === '') {
-                $waOk = false;
-                $parts[] = 'WA skip: nomor tidak valid';
-            } elseif (trim((string) config('services.fonnte.token', '')) === '') {
-                $waOk = false;
-                $parts[] = 'WA gagal: FONNTE_API_TOKEN kosong';
-            } else {
-                $message = $this->composeWaMessage(
-                    mode: $mode,
-                    recipient: $recipient,
-                    filters: $filters,
-                    narrative: $narrative,
-                    ctaUrl: $ctaUrl,
-                    ctaLabel: $ctaLabel,
-                    monitoringUrl: $monitoringUrl,
-                    tasklistUrl: $tasklistUrl,
-                    batchSlotLabel: $batchSlotLabel,
-                    escalateCount: $escalateCount,
-                );
-                $result = $this->fonnteService->sendMessage($phone, $message);
-                $waOk = (bool) ($result['success'] ?? false);
-                $parts[] = $waOk
-                    ? 'WA Fonnte OK → '.$phone
-                    : 'WA Fonnte gagal: '.($result['response']['error'] ?? $result['status'] ?? 'unknown');
-            }
+        try {
+            Mail::to($email)->send(new HsecmSummaryMail(
+                recipient: [
+                    'nama' => $nama,
+                    'role' => (string) ($recipient['role'] ?? ''),
+                    'site' => $recipient['site'] ?? null,
+                    'perusahaan' => (string) ($recipient['perusahaan'] ?? ''),
+                    'no' => $phoneRaw,
+                    'email' => $email,
+                ],
+                scope: [
+                    'site' => (string) ($filters['site'] ?? ''),
+                    'perusahaan' => (string) ($filters['perusahaan'] ?? ''),
+                    'week' => (string) ($filters['week'] ?? ''),
+                    'year' => (string) ($filters['year'] ?? ''),
+                    'batch_slot' => (string) ($filters['batch_slot'] ?? ''),
+                ],
+                emailNarrative: $narrative,
+                dashboardUrl: $ctaUrl,
+                generatedAt: now()->timezone('Asia/Makassar')->format('d/m/Y H:i').' WITA',
+                mode: $mode,
+                batchSlotLabel: $batchSlotLabel,
+                escalateCount: $escalateCount,
+                ctaLabel: $ctaLabel,
+                monitoringUrl: $monitoringUrl,
+                tasklistUrl: $tasklistUrl,
+            ));
+
+            return [
+                'nama' => $nama,
+                'email' => $email,
+                'success' => true,
+                'message' => 'Email OK',
+            ];
+        } catch (\Throwable $e) {
+            report($e);
+
+            return [
+                'nama' => $nama,
+                'email' => $email,
+                'success' => false,
+                'message' => 'Email gagal: '.$e->getMessage(),
+            ];
         }
-
-        $success = $this->resolveChannelSuccess($wantEmail, $wantWa, $emailOk, $waOk);
-
-        return [
-            'nama' => $nama,
-            'email' => $email,
-            'success' => $success,
-            'message' => implode(' | ', $parts),
-        ];
     }
 
     /**
-     * Sukses bila channel yang diminta berhasil; untuk both cukup salah satu OK
-     * (channel yang invalid/skip tidak mematikan jika channel lain OK).
+     * Channel WA Fonnte sudah dihapus. Nilai wa|both tetap diterima
+     * agar cron/script lama tidak error, lalu dipetakan ke email.
      */
-    private function resolveChannelSuccess(
-        bool $wantEmail,
-        bool $wantWa,
-        ?bool $emailOk,
-        ?bool $waOk,
-    ): bool {
-        if ($wantEmail && $wantWa) {
-            return ($emailOk === true) || ($waOk === true);
-        }
-        if ($wantEmail) {
-            return $emailOk === true;
-        }
-
-        return $waOk === true;
-    }
-
-    /**
-     * @param  array<string, mixed>  $recipient
-     * @param  array<string, mixed>  $filters
-     * @param  array{exposure?: list<array<string, mixed>>, gaps?: list<array<string, mixed>>}  $narrative
-     */
-    private function composeWaMessage(
-        string $mode,
-        array $recipient,
-        array $filters,
-        array $narrative,
-        string $ctaUrl,
-        string $ctaLabel,
-        string $monitoringUrl,
-        string $tasklistUrl,
-        string $batchSlotLabel,
-        int $escalateCount,
-    ): string {
-        $nama = (string) ($recipient['nama'] ?? '-');
-        $role = trim((string) ($recipient['role'] ?? ''));
-        if ($role === '') {
-            $role = 'PENANGGUNG JAWAB OPERASIONAL';
-        }
-
-        $siteLabel = trim((string) ($filters['site'] ?? '')) !== ''
-            ? (string) $filters['site']
-            : (($recipient['site'] ?? null) ?: 'Semua Site');
-        $companyLabel = trim((string) ($filters['perusahaan'] ?? '')) !== ''
-            ? (string) $filters['perusahaan']
-            : ((string) ($recipient['perusahaan'] ?? '-'));
-
-        $modeLabel = match ($mode) {
-            'midshift' => 'Midshift',
-            'endshift' => 'Akhir Shift',
-            'endshift_summary' => 'Akhir Shift Summary',
-            'escalate' => 'Escalate #'.max(1, $escalateCount),
-            default => strtoupper($mode),
-        };
-
-        $exposure = collect($narrative['exposure'] ?? [])
-            ->filter(static fn (array $s): bool => (bool) ($s['available'] ?? true))
-            ->values()
-            ->all();
-        $gaps = collect($narrative['gaps'] ?? [])
-            ->filter(static fn (array $s): bool => (bool) ($s['available'] ?? true))
-            ->values()
-            ->all();
-
-        $title = match ($mode) {
-            'endshift' => '*Akhir Shift — Tasklist Perbaikan*',
-            'endshift_summary' => '*Akhir Shift — Summary*',
-            default => '*Daily Monitoring & Intervensi — '.$modeLabel.'*',
-        };
-
-        $lines = [
-            $title,
-            $siteLabel.' · '.$companyLabel,
-        ];
-
-        if ($batchSlotLabel !== '') {
-            $lines[] = 'Batch: '.$batchSlotLabel;
-        }
-
-        $lines[] = '';
-        $lines[] = 'Yth. *'.$nama.'*';
-        $lines[] = '';
-        if ($mode === 'endshift') {
-            $lines[] = $role.' · Shift telah *berakhir*. Berikut gap yang *wajib diperbaiki* melalui Tasklist.';
-        } elseif ($mode === 'endshift_summary') {
-            $lines[] = $role.' · Shift telah *berakhir*. Berikut ringkasan gap untuk scope Anda (tanpa link Tasklist).';
-        } else {
-            $lines[] = $role.' · Ringkasan highlight gap untuk scope Anda.';
-        }
-        $lines[] = '';
-        $lines[] = '*Exposure:*';
-
-        $expNo = 1;
-        foreach ($exposure as $section) {
-            $lines[] = $this->formatNarrativeWaLine($expNo, $section);
-            $expNo++;
-        }
-        if ($exposure === []) {
-            $lines[] = '_Tidak ada item exposure._';
-        }
-
-        $lines[] = '';
-        $lines[] = $mode === 'endshift' ? '*Gap yang harus diperbaiki:*' : '*Gap concern:*';
-
-        $gapNo = 1;
-        foreach ($gaps as $section) {
-            $lines[] = $this->formatNarrativeWaLine($gapNo, $section);
-            $gapNo++;
-        }
-        if ($gaps === []) {
-            $lines[] = '_Tidak ada gap concern._';
-        }
-
-        $primaryUrl = $tasklistUrl !== '' ? $tasklistUrl : '';
-        if ($mode === 'endshift') {
-            // Endshift tasklist: hanya pakai URL token, jangan fallback ke Aksi PJO.
-            $isToken = $primaryUrl !== ''
-                && str_contains($primaryUrl, '/hsecm/tasklist/')
-                && ! str_contains($primaryUrl, '/hsecm/tasklist/open')
-                && ! str_contains($primaryUrl, '/hsecm/pjo-action');
-            if (! $isToken) {
-                $primaryUrl = '';
-            }
-        } elseif ($primaryUrl === '') {
-            $primaryUrl = $ctaUrl !== '' ? $ctaUrl : $monitoringUrl;
-        }
-
-        if ($primaryUrl !== '') {
-            $lines[] = '';
-            if ($mode === 'endshift') {
-                $lines[] = '*WAJIB — Buka Tasklist* (klik link → halaman inputasi, upload evidence & submit):';
-            } else {
-                $lines[] = $ctaLabel.':';
-            }
-            $lines[] = $primaryUrl;
-        }
-
-        if ($monitoringUrl !== '' && $monitoringUrl !== $primaryUrl) {
-            $lines[] = '';
-            $lines[] = 'Dashboard:';
-            $lines[] = $monitoringUrl;
-        }
-
-        $lines[] = '';
-        $lines[] = match ($mode) {
-            'endshift' => 'Mohon selesaikan gap di atas melalui Tasklist agar tidak berulang di shift berikutnya.',
-            'endshift_summary' => 'Mohon gap di atas dikontrol & ditindaklanjuti. Upload evidence dilakukan oleh PIC per site+perusahaan melalui Tasklist.',
-            default => 'Mohon gap di atas dikontrol & ditindaklanjuti agar tidak berulang di shift berikutnya.',
-        };
-        $lines[] = '';
-        $lines[] = '_'.now()->timezone('Asia/Makassar')->format('d/m/Y H:i').' WITA_';
-
-        return implode("\n", $lines);
-    }
-
-    /**
-     * @param  array<string, mixed>  $section
-     */
-    private function formatNarrativeWaLine(int $number, array $section): string
-    {
-        $title = (string) ($section['title'] ?? '-');
-        $value = (string) ($section['value'] ?? '—');
-        $action = trim((string) ($section['action'] ?? ''));
-
-        $line = $number.'. '.$title.': *'.$value.'*';
-        if ($action !== '') {
-            $line .= ' — '.$action;
-        }
-
-        return $line;
-    }
-
     private function normalizeChannel(string $channel): string
     {
         $channel = strtolower(trim($channel));
         if (! in_array($channel, ['email', 'wa', 'both'], true)) {
-            throw new RuntimeException('Channel tidak valid. Gunakan email|wa|both.');
+            throw new RuntimeException('Channel tidak valid. Gunakan email.');
         }
 
-        return $channel;
+        return 'email';
     }
 
     /**

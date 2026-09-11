@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services\Hsecm;
 
 use App\Mail\HsecmSummaryMail;
-use App\Services\FonnteService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -14,7 +13,6 @@ class HsecmWaNotifyService
 {
     public function __construct(
         private readonly HsecmDashboardService $dashboardService,
-        private readonly FonnteService $fonnteService,
         private readonly HsecmWaRecipientRepository $recipientRepository,
     ) {}
 
@@ -120,7 +118,7 @@ class HsecmWaNotifyService
                 $summary = $summaryCache[$cacheKey];
 
                 $message = $this->composeMessage($recipient, $filters, $summary);
-                $phone = $this->fonnteService->normalizePhoneNumber((string) ($recipient['no'] ?? ''));
+                $phone = $this->normalizePhoneNumber((string) ($recipient['no'] ?? ''));
 
                 return [
                     'index' => $index,
@@ -302,7 +300,7 @@ class HsecmWaNotifyService
     /**
      * @return array{success: bool, message: string, wa_url?: string, channel: string}
      */
-    public function send(int $index, Request $request, string $channel = 'wa_me'): array
+    public function send(int $index, Request $request): array
     {
         $rows = $this->buildRecipientRows($request);
         $row = collect($rows)->firstWhere('index', $index);
@@ -311,7 +309,7 @@ class HsecmWaNotifyService
             return [
                 'success' => false,
                 'message' => 'Kontak tidak ditemukan.',
-                'channel' => $channel,
+                'channel' => 'wa_me',
             ];
         }
 
@@ -319,20 +317,7 @@ class HsecmWaNotifyService
             return [
                 'success' => false,
                 'message' => 'Nomor WhatsApp tidak valid untuk '.$row['nama'].'.',
-                'channel' => $channel,
-            ];
-        }
-
-        if ($channel === 'fonnte') {
-            $result = $this->fonnteService->sendMessage($row['phone_normalized'], $row['message']);
-
-            return [
-                'success' => (bool) ($result['success'] ?? false),
-                'message' => ($result['success'] ?? false)
-                    ? 'Pesan berhasil dikirim via Fonnte ke '.$row['nama'].'.'
-                    : 'Gagal kirim Fonnte: '.($result['response']['error'] ?? $result['status'] ?? 'unknown'),
-                'channel' => 'fonnte',
-                'wa_url' => $row['wa_url'],
+                'channel' => 'wa_me',
             ];
         }
 
@@ -344,9 +329,31 @@ class HsecmWaNotifyService
         ];
     }
 
-    public function fonnteConfigured(): bool
+    private function normalizePhoneNumber(string $phone): string
     {
-        return trim((string) config('services.fonnte.token', '')) !== '';
+        $phone = preg_replace('/[\s\-\(\)]+/', '', trim($phone)) ?? '';
+
+        if ($phone === '') {
+            return '';
+        }
+
+        if (str_starts_with($phone, '+62')) {
+            return substr($phone, 1);
+        }
+
+        if (str_starts_with($phone, '0')) {
+            return '62'.substr($phone, 1);
+        }
+
+        if (str_starts_with($phone, '62')) {
+            return $phone;
+        }
+
+        if (preg_match('/^8\d{8,12}$/', $phone)) {
+            return '62'.$phone;
+        }
+
+        return $phone;
     }
 
     /**

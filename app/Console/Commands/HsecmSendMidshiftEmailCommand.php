@@ -11,14 +11,14 @@ use Throwable;
 class HsecmSendMidshiftEmailCommand extends Command
 {
     protected $signature = 'hsecm:send-midshift-email
-                            {--dry-run : Simulasi tanpa kirim email/WA}
+                            {--dry-run : Simulasi tanpa kirim email}
                             {--email= : Batasi hanya ke alamat email ini}
                             {--site= : Scope site jika email belum terdaftar}
                             {--perusahaan= : Scope perusahaan jika email belum terdaftar}
                             {--shift=auto : auto|day|night — day=slot 12:00, night=slot 00:00}
-                            {--channel=both : email|wa|both — email SMTP dan/atau WA Fonnte}';
+                            {--channel=email : Hanya email SMTP (nilai wa|both diabaikan, Fonnte sudah dihapus)}';
 
-    protected $description = 'Kirim notifikasi Monitoring & Intervensi tengah shift (email/WA Fonnte)';
+    protected $description = 'Kirim notifikasi Monitoring & Intervensi tengah shift (email)';
 
     public function handle(HsecmShiftEmailDispatchService $dispatchService): int
     {

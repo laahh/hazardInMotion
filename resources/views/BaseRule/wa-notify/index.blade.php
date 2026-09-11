@@ -83,11 +83,6 @@
          <span class="material-symbols-outlined text-sm">refresh</span>
          Refresh Summary
       </button>
-      @if($fonnteConfigured)
-      <span class="hsecm-badge hsecm-badge--success">Fonnte siap</span>
-      @else
-      <span class="hsecm-badge hsecm-badge--warning">Fonnte belum dikonfigurasi — gunakan Buka WA</span>
-      @endif
    </div>
 </form>
 
@@ -336,12 +331,6 @@
                            <span class="material-symbols-outlined text-sm">chat</span>
                            Buka WA
                         </button>
-                        @if($fonnteConfigured)
-                        <button type="submit" form="hsecm-fonnte-{{ $row['index'] }}" class="inline-flex items-center gap-1.5 rounded-xl border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-800 hover:bg-teal-50" onclick="return confirm('Kirim pesan via Fonnte ke {{ $row['nama'] }}?')">
-                           <span class="material-symbols-outlined text-sm">send</span>
-                           Kirim Fonnte
-                        </button>
-                        @endif
                         @if(!empty($row['editable']))
                         <button
                            type="button"
@@ -408,18 +397,9 @@
 </form>
 <form id="hsecm-wa-{{ $row['index'] }}" method="POST" action="{{ route('hsecm.wa-notify.send', $row['index']) }}" class="hidden">
    @csrf
-   <input type="hidden" name="channel" value="wa_me">
    <input type="hidden" name="week" value="{{ $filters['week'] ?? '' }}">
    <input type="hidden" name="year" value="{{ $filters['year'] ?? '' }}">
 </form>
-@if($fonnteConfigured)
-<form id="hsecm-fonnte-{{ $row['index'] }}" method="POST" action="{{ route('hsecm.wa-notify.send', $row['index']) }}" class="hidden">
-   @csrf
-   <input type="hidden" name="channel" value="fonnte">
-   <input type="hidden" name="week" value="{{ $filters['week'] ?? '' }}">
-   <input type="hidden" name="year" value="{{ $filters['year'] ?? '' }}">
-</form>
-@endif
 @if(!empty($row['deletable']))
 <form id="hsecm-delete-{{ $row['index'] }}" method="POST" action="{{ route('hsecm.wa-notify.recipients.destroy', $row['id']) }}" class="hidden">
    @csrf
