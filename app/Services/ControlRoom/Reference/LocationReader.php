@@ -13,13 +13,14 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Master lokasi dari bcbeats.bep_vw_site_lokasi_detil_lokasi (kolom slim,
- * tanpa geometry). Kekritisan = CONTAINS pada nama, bukan flag DB.
+ * tanpa geometry). Hanya baris aktif penuh: status_site, status_lokasi, dan
+ * status_detil_lokasi = '1'. Kekritisan = CONTAINS pada nama, bukan flag DB.
  */
 final class LocationReader implements LocationReaderContract
 {
     private const CACHE_TTL_SECONDS = 600;
 
-    private const CACHE_KEY = 'control-room:locations:v3:site-lokasi-detil';
+    private const CACHE_KEY = 'control-room:locations:v4:site-lokasi-detil-aktif';
 
     /** @var array<string, list<string>> */
     private const SITE_SOURCE_ALIASES = [
@@ -169,7 +170,9 @@ final class LocationReader implements LocationReaderContract
                 TRIM(lokasi) AS lokasi,
                 TRIM(\"Detil Lokasi\") AS detail_lokasi
             FROM bcbeats.bep_vw_site_lokasi_detil_lokasi
-            WHERE COALESCE(status_detil_lokasi, '0') = '1'
+            WHERE COALESCE(status_site, '0') = '1'
+              AND COALESCE(status_lokasi, '0') = '1'
+              AND COALESCE(status_detil_lokasi, '0') = '1'
               AND BTRIM(COALESCE(lokasi, '')) <> ''
               AND TRIM(site) IN ({$placeholders})
         ";
@@ -213,7 +216,9 @@ final class LocationReader implements LocationReaderContract
                 TRIM(lokasi) AS lokasi,
                 TRIM("Detil Lokasi") AS detail_lokasi
             FROM bcbeats.bep_vw_site_lokasi_detil_lokasi
-            WHERE COALESCE(status_detil_lokasi, '0') = '1'
+            WHERE COALESCE(status_site, '0') = '1'
+              AND COALESCE(status_lokasi, '0') = '1'
+              AND COALESCE(status_detil_lokasi, '0') = '1'
               AND BTRIM(COALESCE(lokasi, '')) <> ''
             SQL;
 
