@@ -81,7 +81,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:v11:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:v13:'.$dimension.':'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             $stats = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($dimension, $filters): array {
                 return $this->buildStats($dimension, $filters);
@@ -120,7 +120,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:overview:v11:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:overview:v13:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters): array {
                 $overview = [];
@@ -177,7 +177,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            return Cache::remember('evaluasi_well:install_stats:filter_options:v5', self::CACHE_TTL, function (): array {
+            return Cache::remember('evaluasi_well:install_stats:filter_options:v7', self::CACHE_TTL, function (): array {
                 $rows = $this->rawEmployeeRows();
                 $sites = [];
                 $companies = [];
@@ -192,6 +192,7 @@ final class SportEvaluationInstallStatsService
                         'jabatan_fungsional' => $row['jabatan'],
                         'site' => $row['site'],
                         'nama' => $row['nama'],
+                        'company' => $row['company'],
                     ])) {
                         continue;
                     }
@@ -449,7 +450,7 @@ final class SportEvaluationInstallStatsService
             'available' => true,
             'dimension' => $dimension,
             'dimension_label' => self::DIMENSION_LABELS[$dimension] ?? 'Site',
-            'footnote' => 'Filter global mempengaruhi seluruh ringkasan. Divisi digabung per grup sejenis. Karyawan status AKTIF (exclude VISITOR).',
+            'footnote' => 'Filter global mempengaruhi seluruh ringkasan. Divisi digabung per grup sejenis. Karyawan status AKTIF (exclude VISITOR, Politeknik Sinarmas, Sinarmas Maritim, Fusi).',
             'message' => null,
             'summary' => [
                 'total' => $totalAll,
@@ -516,6 +517,7 @@ final class SportEvaluationInstallStatsService
                 'jabatan_fungsional' => $row['jabatan'],
                 'site' => $row['site'],
                 'nama' => $row['nama'],
+                'company' => $row['company'],
             ])) {
                 continue;
             }
@@ -656,7 +658,7 @@ final class SportEvaluationInstallStatsService
         ];
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:daily_trend:v2:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:daily_trend:v4:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters, $empty): array {
                 $end = Carbon::now()->endOfDay();
@@ -689,6 +691,7 @@ final class SportEvaluationInstallStatsService
                             'jabatan_fungsional' => $row['jabatan'],
                             'site' => $row['site'],
                             'nama' => $row['nama'],
+                            'company' => $row['company'],
                         ])) {
                             continue;
                         }
@@ -1006,7 +1009,7 @@ final class SportEvaluationInstallStatsService
             'available' => false,
             'dimension' => $dimension,
             'dimension_label' => self::DIMENSION_LABELS[$dimension] ?? 'Site',
-            'footnote' => 'Filter global mempengaruhi seluruh ringkasan. Divisi digabung per grup sejenis. Karyawan status AKTIF (exclude VISITOR).',
+            'footnote' => 'Filter global mempengaruhi seluruh ringkasan. Divisi digabung per grup sejenis. Karyawan status AKTIF (exclude VISITOR, Politeknik Sinarmas, Sinarmas Maritim, Fusi).',
             'message' => $message,
             'summary' => [
                 'total' => 0,

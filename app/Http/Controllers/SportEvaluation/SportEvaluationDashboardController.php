@@ -1522,7 +1522,7 @@ class SportEvaluationDashboardController extends Controller
         }
 
         try {
-            $cached = Cache::remember('evaluasi_well:active_employees_filters_v7:'.$this->scopeCacheKey(), 120, function (): array {
+            $cached = Cache::remember('evaluasi_well:active_employees_filters_v9:'.$this->scopeCacheKey(), 120, function (): array {
                 $base = $this->activeEmployeesBaseQuery();
 
                 $belumInstall = (clone $base)
@@ -1633,7 +1633,8 @@ class SportEvaluationDashboardController extends Controller
 
     /**
      * Karyawan status AKTIF, exclude VISITOR/Presiden Direktur/Direktur tanpa
-     * site (atau site HO), site Jakarta & Poltek, dan nama dummy.
+     * site (atau site HO), site Jakarta & Poltek, perusahaan Politeknik Sinarmas /
+     * Sinarmas Maritim / Fusi, dan nama dummy.
      */
     private function activeEmployeesBaseQuery(): Builder
     {

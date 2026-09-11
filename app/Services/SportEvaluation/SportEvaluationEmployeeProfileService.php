@@ -980,7 +980,7 @@ final class SportEvaluationEmployeeProfileService
             'sport_eval:profile:v2:'.$userId,
             'evaluasi_well:weekly_uploads:filters_v2',
             'evaluasi_well:install_stats:raw_employees:v3',
-            'evaluasi_well:install_stats:filter_options:v5',
+            'evaluasi_well:install_stats:filter_options:v7',
             'evaluasi_well:install_stats:kpi_card_total:v1',
             'evaluasi_well:nutrition:dashboard',
         ];

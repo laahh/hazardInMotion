@@ -27,7 +27,7 @@ final class SportEvaluationActiveStatsService
 
     private const FOOTNOTE = 'User aktif (luas) = food photo / workout / komunitas / Main Bareng minggu terpilih. '
         .'Evaluasi = jumlah upload makanan (photo) + olahraga. '
-        .'Breakdown dimensi memakai karyawan status AKTIF (exclude VISITOR); angka KPI kartu bisa berbeda.';
+        .'Breakdown dimensi memakai karyawan status AKTIF (exclude VISITOR, Politeknik Sinarmas, Sinarmas Maritim, Fusi); angka KPI kartu bisa berbeda.';
 
     /** @var array<string, string> */
     private const DIMENSION_COLUMNS = [
@@ -65,6 +65,7 @@ final class SportEvaluationActiveStatsService
         private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
         private readonly SportEvaluationCompanyAliasResolver $companyAliasResolver,
         private readonly SportEvaluationMitraAssignmentService $mitraAssignmentService,
+        private readonly SportEvaluationEmployeeExclusionRules $exclusionRules,
     ) {}
 
     /**
@@ -146,7 +147,7 @@ final class SportEvaluationActiveStatsService
         try {
             $scopeKey = $this->mitraAssignmentService->cacheKeySuffix($scope);
             $stats = Cache::remember(
-                'evaluasi_well:active_stats:v5:'.$dimension.':'.$week['start'].':'.$scopeKey,
+                'evaluasi_well:active_stats:v7:'.$dimension.':'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($dimension, $week, $scope): array {
                     return $this->buildStats($dimension, $week, $scope);
@@ -231,14 +232,14 @@ final class SportEvaluationActiveStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:overview:v4:'.$week['start'].':'.$scopeKey,
+                'evaluasi_well:active_stats:overview:v6:'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($week, $scope, $scopeKey): array {
                     $overview = [];
 
                     foreach (array_keys(self::DIMENSION_COLUMNS) as $dimension) {
                         $stats = Cache::remember(
-                            'evaluasi_well:active_stats:v5:'.$dimension.':'.$week['start'].':'.$scopeKey,
+                            'evaluasi_well:active_stats:v7:'.$dimension.':'.$week['start'].':'.$scopeKey,
                             self::CACHE_TTL,
                             function () use ($dimension, $week, $scope): array {
                                 return $this->buildStats($dimension, $week, $scope);
@@ -457,6 +458,8 @@ final class SportEvaluationActiveStatsService
         $db = DB::connection(BewellConnectionService::CONNECTION);
         [$inSql, $inBindings] = $this->userIdInClause('e.id', $scope);
 
+        [$companySql, $companyBindings] = $this->exclusionRules->companyNotExcludedPredicate('e');
+
         $sql = '
             SELECT
                 '.$dimExpr.' AS dim_name,
@@ -482,6 +485,7 @@ final class SportEvaluationActiveStatsService
             ) AS w ON w.user_id = a.user_id
             WHERE e.status_karyawan = ?
               AND UPPER(TRIM(COALESCE(e.jabatan_fungsional, \'\'))) <> ?
+              AND '.$companySql.'
               '.$inSql.'
             GROUP BY '.$dimExpr.'
             ORDER BY active_users DESC, food_evals + workout_evals DESC, dim_name ASC
@@ -490,6 +494,7 @@ final class SportEvaluationActiveStatsService
         $bindings = array_merge(
             $this->activeUsersUnionBindings($from, $to),
             ['photo', $from, $to, $from, $to, 'AKTIF', 'VISITOR'],
+            $companyBindings,
             $inBindings
         );
 
@@ -504,6 +509,13 @@ final class SportEvaluationActiveStatsService
             $name = $dimension === 'company'
                 ? ($this->companyAliasResolver->resolve($rawName) ?: 'Tidak diketahui')
                 : $rawName;
+
+            if ($dimension === 'company' && $this->exclusionRules->isExcludedCompany($rawName)) {
+                continue;
+            }
+            if ($dimension === 'company' && $this->exclusionRules->isExcludedCompany($name)) {
+                continue;
+            }
 
             if (! isset($rows[$name])) {
                 $rows[$name] = [
@@ -555,6 +567,7 @@ final class SportEvaluationActiveStatsService
     {
         $db = DB::connection(BewellConnectionService::CONNECTION);
         [$inSql, $inBindings] = $this->userIdInClause('e.id', $scope);
+        [$companySql, $companyBindings] = $this->exclusionRules->companyNotExcludedPredicate('e');
 
         $sql = '
             SELECT
@@ -582,12 +595,14 @@ final class SportEvaluationActiveStatsService
             ) AS w ON w.user_id = a.user_id
             WHERE e.status_karyawan = ?
               AND UPPER(TRIM(COALESCE(e.jabatan_fungsional, \'\'))) <> ?
+              AND '.$companySql.'
               '.$inSql.'
         ';
 
         $bindings = array_merge(
             $this->activeUsersUnionBindings($from, $to),
             ['photo', $from, $to, $from, $to, 'AKTIF', 'VISITOR'],
+            $companyBindings,
             $inBindings
         );
 
@@ -670,6 +685,7 @@ final class SportEvaluationActiveStatsService
         $db = DB::connection(BewellConnectionService::CONNECTION);
         $limit = self::LEADERBOARD_LIMIT;
         [$inSql, $inBindings] = $this->userIdInClause('e.id', $scope);
+        [$companySql, $companyBindings] = $this->exclusionRules->companyNotExcludedPredicate('e');
 
             $sql = '
             SELECT
@@ -702,6 +718,7 @@ final class SportEvaluationActiveStatsService
             LEFT JOIN ('.$this->activeUsersUnionSql().') AS a ON a.user_id = e.id
             WHERE e.status_karyawan = ?
               AND UPPER(TRIM(COALESCE(e.jabatan_fungsional, \'\'))) <> ?
+              AND '.$companySql.'
               '.$inSql.'
               AND (
                     COALESCE(f.food_cnt, 0) > 0
@@ -716,27 +733,34 @@ final class SportEvaluationActiveStatsService
             ['photo', $from, $to, $from, $to],
             $this->activeUsersUnionBindings($from, $to),
             ['AKTIF', 'VISITOR'],
+            $companyBindings,
             $inBindings
         );
 
         $queryRows = $db->select($sql, $bindings);
         $leaderboard = [];
 
-        foreach ($queryRows as $i => $row) {
+        foreach ($queryRows as $row) {
+            $rawCompany = isset($row->perusahaan) ? (string) $row->perusahaan : null;
+            $resolvedCompany = $this->companyAliasResolver->resolve($rawCompany);
+            if ($this->exclusionRules->isExcludedCompany($rawCompany)
+                || $this->exclusionRules->isExcludedCompany($resolvedCompany)
+            ) {
+                continue;
+            }
+
             $food = (int) ($row->food_evals ?? 0);
             $workout = (int) ($row->workout_evals ?? 0);
 
             $leaderboard[] = [
-                'rank' => $i + 1,
+                'rank' => count($leaderboard) + 1,
                 'user_id' => (int) ($row->user_id ?? 0),
                 'nama' => (string) ($row->nama ?? '-'),
                 'site' => $this->siteResolver->resolveOrDash(
                     isset($row->kode_sid) ? (string) $row->kode_sid : null,
                     isset($row->site) ? (string) $row->site : null,
                 ),
-                'perusahaan' => ($resolved = $this->companyAliasResolver->resolve(
-                    isset($row->perusahaan) ? (string) $row->perusahaan : null
-                )) !== '' ? $resolved : '-',
+                'perusahaan' => $resolvedCompany !== '' ? $resolvedCompany : '-',
                 'jabatan' => (string) ($row->jabatan ?? '-'),
                 'food_evals' => $food,
                 'workout_evals' => $workout,
