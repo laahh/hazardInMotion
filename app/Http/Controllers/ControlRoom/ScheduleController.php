@@ -7,6 +7,10 @@ namespace App\Http\Controllers\ControlRoom;
 use App\Enums\ControlRoomSiteCode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ControlRoom\ControlRoomScheduleExcelImportRequest;
+use App\Http\Requests\ControlRoom\ControlRoomScheduleShareRequest;
+use App\Services\ControlRoom\ControlRoomIsoWeekPeriod;
+use App\Services\ControlRoom\ControlRoomScheduleShareExcelService;
+use App\Services\ControlRoom\ControlRoomScheduleShareGridBuilder;
 use App\Http\Requests\ControlRoom\ScheduleBulkRequest;
 use App\Http\Requests\ControlRoom\ScheduleCopyRequest;
 use App\Http\Requests\ControlRoom\ScheduleDestroyWeekRequest;
@@ -49,6 +53,8 @@ final class ScheduleController extends Controller
             'site' => $site,
             'sites' => ControlRoomSiteCode::cases(),
             'personnel' => $this->personnelReader->all(),
+            'shareYear' => (int) now()->isoWeekYear(),
+            'shareWeek' => (int) now()->isoWeek(),
         ]);
     }
 
@@ -391,6 +397,39 @@ final class ScheduleController extends Controller
                     'site' => $request->input('site_code') ?: $request->input('site'),
                 ]))
                 ->withErrors(['schedule' => $message]);
+    }
+
+    public function share(
+        ControlRoomScheduleShareRequest $request,
+        ControlRoomScheduleShareGridBuilder $builder,
+    ): View {
+        $grid = $this->shareGrid($request, $builder);
+
+        return view('control-room.schedule.share', [
+            'grid' => $grid,
+            'period' => ControlRoomIsoWeekPeriod::of((int) $grid['year'], (int) $grid['week']),
+        ]);
+    }
+
+    public function shareExcel(
+        ControlRoomScheduleShareRequest $request,
+        ControlRoomScheduleShareGridBuilder $builder,
+        ControlRoomScheduleShareExcelService $excel,
+    ): StreamedResponse {
+        return $excel->download($this->shareGrid($request, $builder));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function shareGrid(
+        ControlRoomScheduleShareRequest $request,
+        ControlRoomScheduleShareGridBuilder $builder,
+    ): array {
+        $year = (int) $request->integer('year', (int) now()->isoWeekYear());
+        $period = ControlRoomIsoWeekPeriod::of($year, $request->weekNumber());
+
+        return $builder->fromDatabase($period, $request->siteFilter(), $request->allSites());
     }
 
     public function changes(Request $request): View

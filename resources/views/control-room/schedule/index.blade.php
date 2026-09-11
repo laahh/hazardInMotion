@@ -88,13 +88,38 @@
                 <h6 class="mb-0">Kalender Jadwal — {{ $site->label() }}</h6>
                 <p class="text-secondary-light text-xs mb-0">Hanya menampilkan jadwal site <strong>{{ $site->value }}</strong>. Tanggal kosong tidak bisa diisi satuan — unggah template satu minggu (Minggu–Sabtu).</p>
             </div>
-            <div style="min-width: 220px;">
-                <label class="form-label text-sm mb-1" for="ocr-calendar-site">Filter site</label>
-                <select id="ocr-calendar-site" class="form-control form-control-sm" aria-label="Filter kalender berdasarkan site">
-                    @foreach ($sites as $siteOption)
-                        <option value="{{ $siteOption->value }}" @selected($site === $siteOption)>{{ $siteOption->label() }}</option>
-                    @endforeach
-                </select>
+            <div class="d-flex flex-wrap align-items-end gap-2">
+                <div style="min-width: 180px;">
+                    <label class="form-label text-sm mb-1" for="ocr-calendar-site">Filter site</label>
+                    <select id="ocr-calendar-site" class="form-control form-control-sm" aria-label="Filter kalender berdasarkan site">
+                        @foreach ($sites as $siteOption)
+                            <option value="{{ $siteOption->value }}" @selected($site === $siteOption)>{{ $siteOption->label() }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="btn-group">
+                    <a
+                        id="ocr-share-week"
+                        class="btn btn-primary-600 btn-sm"
+                        href="{{ route('control-room.schedule.share', ['site' => $site->value, 'year' => $shareYear, 'week' => $shareWeek, 'scope' => 'site']) }}"
+                    >
+                        <i class="ri-share-forward-line"></i> Bagikan minggu
+                    </a>
+                    <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                        <span class="visually-hidden">Opsi bagikan</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <a class="dropdown-item" id="ocr-share-week-site" href="{{ route('control-room.schedule.share', ['site' => $site->value, 'year' => $shareYear, 'week' => $shareWeek, 'scope' => 'site']) }}">Poster site ini</a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" id="ocr-share-week-all" href="{{ route('control-room.schedule.share', ['site' => $site->value, 'year' => $shareYear, 'week' => $shareWeek, 'scope' => 'all']) }}">Poster semua site</a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" id="ocr-share-week-xlsx" href="{{ route('control-room.schedule.share.excel', ['site' => $site->value, 'year' => $shareYear, 'week' => $shareWeek, 'scope' => 'site']) }}">Unduh Excel site ini</a>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </div>
         <div class="card-body">
@@ -361,6 +386,8 @@
             var eventsUrl = @json(route('control-room.schedule.events'));
             var csrfToken = @json(csrf_token());
             var scheduleIndexUrl = @json(route('control-room.schedule.index'));
+            var shareUrl = @json(route('control-room.schedule.share'));
+            var shareExcelUrl = @json(route('control-room.schedule.share.excel'));
 
             var editModalEl = document.getElementById('editScheduleModal');
             var editModal = new bootstrap.Modal(editModalEl);
@@ -379,6 +406,54 @@
             var editFormAlert = document.getElementById('edit-form-alert');
             var currentDeleteUrl = null;
             var currentChangesUrl = null;
+
+            function isoWeekFromMonday(date) {
+                var d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+                var dayNum = d.getUTCDay() || 7;
+                d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+                var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+                var week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+                return { year: d.getUTCFullYear(), week: week };
+            }
+
+            function controlRoomWeek(date) {
+                var local = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                var sunday = new Date(local);
+                sunday.setDate(local.getDate() - local.getDay());
+                var monday = new Date(sunday);
+                monday.setDate(sunday.getDate() + 1);
+                return isoWeekFromMonday(monday);
+            }
+
+            function shareHref(base, week, scope) {
+                return base + '?site=' + encodeURIComponent(siteCode)
+                    + '&year=' + week.year
+                    + '&week=' + week.week
+                    + '&scope=' + scope;
+            }
+
+            function syncShareLinks(date) {
+                var week = controlRoomWeek(date);
+                var siteLink = shareHref(shareUrl, week, 'site');
+                var allLink = shareHref(shareUrl, week, 'all');
+                var xlsxLink = shareHref(shareExcelUrl, week, 'site');
+                var weekBtn = document.getElementById('ocr-share-week');
+                var siteBtn = document.getElementById('ocr-share-week-site');
+                var allBtn = document.getElementById('ocr-share-week-all');
+                var xlsxBtn = document.getElementById('ocr-share-week-xlsx');
+                if (weekBtn) {
+                    weekBtn.href = siteLink;
+                }
+                if (siteBtn) {
+                    siteBtn.href = siteLink;
+                }
+                if (allBtn) {
+                    allBtn.href = allLink;
+                }
+                if (xlsxBtn) {
+                    xlsxBtn.href = xlsxLink;
+                }
+            }
 
             function dateHasEvents(cal, dateStr) {
                 return cal.getEvents().some(function (event) {
@@ -572,6 +647,7 @@
                 eventDisplay: 'block',
                 datesSet: function (info) {
                     markScheduledDays(info.view.calendar);
+                    syncShareLinks(info.view.calendar.getDate());
                 },
                 eventsSet: function () {
                     if (calendar) {
@@ -645,6 +721,7 @@
             });
 
             calendar.render();
+            syncShareLinks(calendar.getDate());
 
             var calendarSite = document.getElementById('ocr-calendar-site');
             if (calendarSite) {
