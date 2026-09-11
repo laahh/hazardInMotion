@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Unit\ControlRoom;
 
+use App\Enums\ControlRoomSiteCode;
 use App\Services\ControlRoom\ControlRoomLocationCoverageService;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 final class ControlRoomLocationCoverageServiceTest extends TestCase
@@ -161,13 +164,9 @@ final class ControlRoomLocationCoverageServiceTest extends TestCase
         $this->assertSame(1, $payload['kpi']['uncovered']);
     }
 
-    public function test_daily_hanya_area_kritis_dan_wajib_sap_tiap_hari(): void
+    public function test_daily_menampilkan_semua_lokasi_dan_hanya_tanggal_terpilih(): void
     {
         $service = $this->service();
-        $weekDates = [
-            '2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02',
-            '2026-09-03', '2026-09-04', '2026-09-05',
-        ];
         $payload = $service->evaluateDaily(
             [
                 ['site' => 'GMO', 'lokasi' => 'Aktivitas Area High Risk', 'detail_lokasi' => 'Pompa'],
@@ -177,20 +176,48 @@ final class ControlRoomLocationCoverageServiceTest extends TestCase
                 ['lokasi' => 'Aktivitas Area High Risk', 'detil_lokasi' => 'Pompa', 'at' => '2026-08-31 08:00:00'],
                 ['lokasi' => 'Workshop', 'detil_lokasi' => 'Office', 'at' => '2026-08-31 09:00:00'],
             ]),
-            ['2026-08-31', '2026-09-01'],
-            $weekDates,
+            '2026-08-31',
         );
 
-        $this->assertSame(1, $payload['kpi']['total']);
+        $this->assertSame(2, $payload['kpi']['total']);
+        $this->assertSame(2, $payload['kpi']['covered']);
+        $this->assertSame(0, $payload['kpi']['uncovered']);
+        $this->assertSame(1, $payload['critical_count']);
+        $this->assertSame(1, $payload['noncritical_count']);
+        $this->assertTrue($payload['rows'][0]['is_critical']);
+        $this->assertFalse($payload['rows'][1]['is_critical']);
+        $this->assertTrue($payload['rows'][0]['covered']);
+        $this->assertTrue($payload['rows'][1]['covered']);
+        $this->assertSame(['2026-08-31'], $payload['rows'][0]['covered_dates']);
+        $this->assertSame([], $payload['attention']);
+        $this->assertSame('2026-08-31', $payload['selected_date']);
+    }
+
+    public function test_daily_sap_hari_lain_tidak_mencover_tanggal_terpilih(): void
+    {
+        $service = $this->service();
+        $payload = $service->evaluateDaily(
+            [
+                ['site' => 'GMO', 'lokasi' => 'Aktivitas Area High Risk', 'detail_lokasi' => 'Pompa'],
+                ['site' => 'GMO', 'lokasi' => 'Workshop', 'detail_lokasi' => 'Office'],
+            ],
+            $service->coveredHits([
+                ['lokasi' => 'Aktivitas Area High Risk', 'detil_lokasi' => 'Pompa', 'at' => '2026-08-31 08:00:00'],
+                ['lokasi' => 'Workshop', 'detil_lokasi' => 'Office', 'at' => '2026-08-31 09:00:00'],
+            ]),
+            '2026-09-01',
+        );
+
+        $this->assertSame(2, $payload['kpi']['total']);
         $this->assertSame(0, $payload['kpi']['covered']);
-        $this->assertSame(1, $payload['kpi']['uncovered']);
+        $this->assertSame(2, $payload['kpi']['uncovered']);
         $this->assertFalse($payload['rows'][0]['covered']);
         $this->assertSame('Sel', $payload['rows'][0]['gap_label']);
         $this->assertCount(1, $payload['attention']);
-        $this->assertSame('Aktivitas Area High Risk', $payload['rows'][0]['lokasi']);
+        $this->assertSame('Aktivitas Area High Risk', $payload['attention'][0]['lokasi']);
     }
 
-    public function test_daily_tercover_jika_semua_hari_wajib_punya_sap(): void
+    public function test_daily_tercover_jika_ada_sap_pada_tanggal_terpilih(): void
     {
         $service = $this->service();
         $payload = $service->evaluateDaily(
@@ -201,18 +228,14 @@ final class ControlRoomLocationCoverageServiceTest extends TestCase
                 ['lokasi' => '(B7) Area Kritis Blok 7', 'detil_lokasi' => 'Front', 'at' => '2026-08-31 08:00:00'],
                 ['lokasi' => '(B7) Area Kritis Blok 7', 'detil_lokasi' => 'Front', 'at' => '2026-09-01 07:30:00'],
             ]),
-            ['2026-08-31', '2026-09-01'],
-            ['2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05'],
+            '2026-09-01',
         );
 
         $this->assertTrue($payload['rows'][0]['covered']);
         $this->assertSame(1, $payload['kpi']['covered']);
         $this->assertSame([], $payload['attention']);
         $this->assertSame('—', $payload['rows'][0]['gap_label']);
-        $this->assertSame(2, $payload['rows'][0]['covered_days']);
-        $this->assertSame('ok', $payload['rows'][0]['day_marks'][1]['state']);
-        $this->assertSame('ok', $payload['rows'][0]['day_marks'][2]['state']);
-        $this->assertSame('pending', $payload['rows'][0]['day_marks'][3]['state']);
+        $this->assertSame(['2026-08-31', '2026-09-01'], $payload['rows'][0]['covered_dates']);
     }
 
     public function test_daily_tanpa_sap_dianggap_tidak_tercover(): void
@@ -222,14 +245,31 @@ final class ControlRoomLocationCoverageServiceTest extends TestCase
                 ['site' => 'BMO 1', 'lokasi' => '(B PMO) Area Kritis', 'detail_lokasi' => 'Disposal OPD Q1 KDC'],
             ],
             [],
-            ['2026-08-31'],
-            ['2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05'],
+            '2026-08-31',
         );
 
         $this->assertFalse($payload['rows'][0]['covered']);
         $this->assertNull($payload['rows'][0]['last_at']);
         $this->assertSame('Sen', $payload['rows'][0]['gap_label']);
-        $this->assertSame('miss', $payload['rows'][0]['day_marks'][1]['state']);
+        $this->assertSame([], $payload['rows'][0]['covered_dates']);
+    }
+
+    public function test_daily_kritis_dari_detil_lokasi_ikut_ditandai(): void
+    {
+        $payload = $this->service()->evaluateDaily(
+            [
+                ['site' => 'BMO 1', 'lokasi' => 'Pit A', 'detail_lokasi' => 'Area Eksplorasi Q1'],
+                ['site' => 'BMO 1', 'lokasi' => 'Pit A', 'detail_lokasi' => 'Office'],
+            ],
+            [],
+            '2026-09-01',
+        );
+
+        $this->assertTrue($payload['rows'][0]['is_critical']);
+        $this->assertFalse($payload['rows'][1]['is_critical']);
+        $this->assertSame(1, $payload['critical_count']);
+        $this->assertSame(1, $payload['noncritical_count']);
+        $this->assertSame('Area Eksplorasi Q1', $payload['attention'][0]['detail_lokasi']);
     }
 
     public function test_weekly_cukup_satu_sap_meski_tidak_setiap_hari(): void
@@ -244,17 +284,54 @@ final class ControlRoomLocationCoverageServiceTest extends TestCase
             ],
             $hits,
         );
-        $daily = $service->evaluateDaily(
+        $dailyOtherDay = $service->evaluateDaily(
             [
                 ['site' => 'GMO', 'lokasi' => 'Aktivitas Area High Risk', 'detail_lokasi' => 'Pompa'],
             ],
             $hits,
-            ['2026-08-31', '2026-09-01'],
-            ['2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05'],
+            '2026-09-01',
+        );
+        $dailySameDay = $service->evaluateDaily(
+            [
+                ['site' => 'GMO', 'lokasi' => 'Aktivitas Area High Risk', 'detail_lokasi' => 'Pompa'],
+            ],
+            $hits,
+            '2026-08-31',
         );
 
         $this->assertTrue($weekly['rows'][0]['covered']);
-        $this->assertFalse($daily['rows'][0]['covered']);
+        $this->assertFalse($dailyOtherDay['rows'][0]['covered']);
+        $this->assertTrue($dailySameDay['rows'][0]['covered']);
+    }
+
+    public function test_build_memakai_hasil_terakhir_saat_obds_baru_saja_gagal(): void
+    {
+        $this->travelTo('2026-09-11 08:00:00');
+        $weekStart = CarbonImmutable::parse('2026-09-06');
+        $good = [
+            'loaded' => true,
+            'daily' => [
+                'loaded' => true,
+                'kpi' => ['total' => 1, 'covered' => 1, 'uncovered' => 0, 'percent' => 100.0],
+                'rows' => [],
+                'attention' => [],
+            ],
+            'weekly' => [
+                'loaded' => true,
+                'kpi' => ['total' => 1, 'covered' => 1, 'uncovered' => 0, 'percent' => 100.0],
+                'rows' => [],
+                'attention' => [],
+            ],
+        ];
+        $cacheKey = 'control-room:location-coverage:v10:2026-09-06:HO:2026-09-11';
+        Cache::put($cacheKey.':miss', true, 60);
+        Cache::put('control-room:location-coverage:v10:last:2026-09-06:HO', $good, 60);
+
+        $payload = $this->service()->build(ControlRoomSiteCode::HeadOffice, $weekStart);
+        $this->travelBack();
+
+        $this->assertTrue($payload['loaded']);
+        $this->assertSame(100.0, $payload['daily']['kpi']['percent']);
     }
 
     private function service(): ControlRoomLocationCoverageService

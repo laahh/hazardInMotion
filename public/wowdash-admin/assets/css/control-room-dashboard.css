@@ -1703,6 +1703,63 @@
     grid-template-columns: minmax(0, 1fr) 280px;
 }
 
+.ocr-cov-daywrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 4px 2px;
+}
+
+.ocr-cov-daywrap-label {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary-light);
+}
+
+.ocr-cov-daybar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.ocr-cov-daybar button {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 72px;
+    padding: 8px 10px;
+    border: 1px solid var(--neutral-200);
+    border-radius: 12px;
+    background: var(--white);
+    color: var(--text-primary-light);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.ocr-cov-daybar button small {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary-light);
+}
+
+.ocr-cov-daybar button.is-active {
+    border-color: var(--primary-500);
+    background: var(--primary-50);
+    color: var(--primary-700);
+}
+
+.ocr-cov-daybar button.is-active small {
+    color: var(--primary-600);
+}
+
+.ocr-cov-daybar button.is-future {
+    opacity: 0.55;
+}
+
 .ocr-cov-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -1712,7 +1769,15 @@
     padding: 0 16px 12px;
 }
 
-.ocr-cov-tabs {
+.ocr-cov-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.ocr-cov-tabs,
+.ocr-cov-kind {
     flex-wrap: wrap;
 }
 
@@ -2051,6 +2116,10 @@
     min-height: 44px;
 }
 
+.ocr-cov-attn-more[hidden] {
+    display: none;
+}
+
 .ocr-cov-attn-more:hover {
     background: #f8fafc;
 }
@@ -2232,6 +2301,18 @@
     background: var(--dark-1);
     border-color: rgba(255, 255, 255, 0.12);
     color: var(--white);
+}
+
+[data-theme="dark"] .ocr-cov-daybar button {
+    background: rgba(15, 23, 42, 0.45);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #f9fafb;
+}
+
+[data-theme="dark"] .ocr-cov-daybar button.is-active {
+    background: rgba(37, 99, 235, 0.2);
+    border-color: var(--primary-500);
+    color: #dbeafe;
 }
 
 [data-theme="dark"] .ocr-cov-skel-card,

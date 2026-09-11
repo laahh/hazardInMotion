@@ -651,16 +651,195 @@
                     covered: 'Detail Lokasi Covered',
                     uncovered: 'Detail Lokasi Belum Ter-cover'
                 };
+                var kindLabels = {
+                    all: 'Semua lokasi pada tanggal terpilih',
+                    critical: 'Lokasi kritis / high risk',
+                    noncritical: 'Lokasi non-kritis'
+                };
+                var attnKickers = {
+                    all: 'Area kritis / high risk tanpa SAP pada tanggal terpilih',
+                    critical: 'Lokasi kritis / high risk tanpa SAP pada tanggal terpilih',
+                    noncritical: 'Lokasi non-kritis tanpa SAP pada tanggal terpilih'
+                };
 
                 function initPanel(panel) {
                     var table = panel.querySelector('.ocr-cov-table');
                     if (!table) {
                         return;
                     }
+                    var isDaily = panel.getAttribute('data-cov-panel') === 'daily';
                     var q = panel.querySelector('.ocr-cov-search input');
                     var emptyFilter = table.querySelector('.ocr-cov-empty-filter');
                     var title = panel.querySelector('h6[id^="ocr-cov-table-title"]');
+                    var more = panel.querySelector('[data-cov-more]');
+                    var attnBody = panel.querySelector('[data-cov-attention-body]');
                     var tab = 'uncovered';
+                    var kind = 'all';
+                    var selectedDate = panel.getAttribute('data-selected-date') || '';
+
+                    function activeDayButton() {
+                        return panel.querySelector('[data-cov-day].is-active');
+                    }
+
+                    function dayLabel() {
+                        var btn = activeDayButton();
+                        return btn ? (btn.getAttribute('data-cov-day-label') || '') : '';
+                    }
+
+                    function dayDisplay() {
+                        var btn = activeDayButton();
+                        if (!btn) {
+                            return selectedDate;
+                        }
+                        return (btn.getAttribute('data-cov-day-label') || '') + ', ' + (btn.getAttribute('data-cov-day-display') || '');
+                    }
+
+                    function coveredDates(row) {
+                        return (row.getAttribute('data-covered-dates') || '').split(',').filter(Boolean);
+                    }
+
+                    function matchesKind(row) {
+                        if (!isDaily || kind === 'all') {
+                            return true;
+                        }
+                        var critical = row.getAttribute('data-critical') === '1';
+                        return kind === 'critical' ? critical : !critical;
+                    }
+
+                    function setText(selector, value) {
+                        var el = panel.querySelector(selector);
+                        if (el) {
+                            el.textContent = value;
+                        }
+                    }
+
+                    function applyDailyCoverage() {
+                        if (!isDaily) {
+                            return;
+                        }
+                        panel.setAttribute('data-selected-date', selectedDate);
+                        table.querySelectorAll('tbody tr[data-covered]').forEach(function (row) {
+                            var has = coveredDates(row).indexOf(selectedDate) !== -1;
+                            row.setAttribute('data-covered', has ? '1' : '0');
+                            var pill = row.querySelector('.ocr-cov-pill');
+                            if (pill) {
+                                pill.classList.toggle('is-ok', has);
+                                pill.classList.toggle('is-gap', !has);
+                                pill.textContent = has ? 'Ter-cover' : 'Belum ter-cover';
+                            }
+                            var dot = row.querySelector('.ocr-cov-dot');
+                            if (dot) {
+                                dot.classList.toggle('is-ok', has);
+                                dot.classList.toggle('is-gap', !has);
+                            }
+                            var gap = row.querySelector('[data-cov-gap]');
+                            if (gap) {
+                                gap.textContent = has ? '—' : (dayLabel() || '—');
+                                gap.classList.toggle('ocr-cov-gap', !has);
+                            }
+                        });
+                    }
+
+                    function updateKpi(scoped) {
+                        var total = scoped.length;
+                        var covered = scoped.filter(function (row) {
+                            return row.getAttribute('data-covered') === '1';
+                        }).length;
+                        var uncovered = total - covered;
+                        var pct = total === 0 ? 0 : Math.round(covered / total * 1000) / 10;
+                        setText('[data-cov-kpi="total"]', String(total));
+                        setText('[data-cov-kpi="covered"]', String(covered));
+                        setText('[data-cov-kpi="uncovered"]', String(uncovered));
+                        setText('[data-cov-kpi="percent"]', pct.toFixed(1) + '%');
+                        var ring = panel.querySelector('[data-cov-ring]');
+                        if (ring) {
+                            ring.setAttribute('stroke-dasharray', pct + ', 100');
+                        }
+                        if (isDaily) {
+                            setText('[data-cov-kpi-sub="total"]', kindLabels[kind] || kindLabels.all);
+                            setText('[data-cov-kpi-sub="percent"]', 'dari ' + total + ' lokasi pada tanggal terpilih');
+                            var scope = (root.getAttribute('data-coverage-scope') || '').trim();
+                            setText('[data-cov-table-kicker]', dayDisplay() + ' · 1 SAP pada tanggal ini cukup' + (scope ? ' · ' + scope : ''));
+                            setText('[data-cov-attn-kicker]', attnKickers[kind] || attnKickers.all);
+                        }
+                        var tabAll = panel.querySelector('[data-cov-tab="all"]');
+                        var tabCovered = panel.querySelector('[data-cov-tab="covered"]');
+                        var tabUncovered = panel.querySelector('[data-cov-tab="uncovered"]');
+                        if (tabAll) {
+                            tabAll.textContent = 'Semua Lokasi (' + total + ')';
+                        }
+                        if (tabCovered) {
+                            tabCovered.textContent = 'Covered (' + covered + ')';
+                        }
+                        if (tabUncovered) {
+                            tabUncovered.textContent = 'Belum Ter-cover (' + uncovered + ')';
+                        }
+                        if (more) {
+                            more.hidden = uncovered === 0;
+                        }
+                        return { total: total, covered: covered, uncovered: uncovered };
+                    }
+
+                    function updateAttention(scoped) {
+                        if (!attnBody || !isDaily) {
+                            return;
+                        }
+                        var items = scoped.filter(function (row) {
+                            if (row.getAttribute('data-covered') === '1') {
+                                return false;
+                            }
+                            if (kind === 'all') {
+                                return row.getAttribute('data-critical') === '1';
+                            }
+                            return true;
+                        });
+                        var html = '';
+                        items.slice(0, 25).forEach(function (row) {
+                            var lokasi = row.getAttribute('data-lokasi') || '';
+                            var detail = row.getAttribute('data-detail') || '';
+                            var site = row.getAttribute('data-site') || '';
+                            var gap = dayLabel() || '—';
+                            html += '<div class="ocr-cov-attn-row"><div><strong>'
+                                + escapeHtml(detail !== '' ? detail : lokasi)
+                                + '</strong><span>'
+                                + escapeHtml(lokasi + ' · ' + site)
+                                + '</span></div><div class="ocr-cov-attn-meta"><b>'
+                                + escapeHtml(gap)
+                                + '</b><small>tanpa SAP</small></div></div>';
+                        });
+                        if (html === '') {
+                            var emptyMsg = kind === 'noncritical'
+                                ? 'Semua lokasi non-kritis sudah ter-cover pada tanggal ini.'
+                                : 'Semua area kritis / high risk sudah ter-cover pada tanggal ini.';
+                            html = '<p class="text-secondary-light mb-0" data-cov-attention-empty>' + emptyMsg + '</p>';
+                        }
+                        attnBody.innerHTML = html;
+                    }
+
+                    function applyCoverageFilter() {
+                        applyDailyCoverage();
+                        var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr[data-covered]'));
+                        var scoped = rows.filter(matchesKind);
+                        updateKpi(scoped);
+                        updateAttention(scoped);
+                        var query = (q && q.value ? q.value : '').trim().toLowerCase();
+                        var visible = 0;
+                        rows.forEach(function (row) {
+                            var covered = row.getAttribute('data-covered') === '1';
+                            var matchKind = matchesKind(row);
+                            var matchTab = tab === 'all' || (tab === 'covered' && covered) || (tab === 'uncovered' && !covered);
+                            var haystack = row.getAttribute('data-search') || '';
+                            var matchQuery = query === '' || haystack.indexOf(query) !== -1;
+                            var show = matchKind && matchTab && matchQuery;
+                            row.hidden = !show;
+                            if (show) {
+                                visible++;
+                            }
+                        });
+                        if (emptyFilter) {
+                            emptyFilter.hidden = visible !== 0 || scoped.length === 0;
+                        }
+                    }
 
                     function setTab(next) {
                         tab = next || 'uncovered';
@@ -673,24 +852,22 @@
                         applyCoverageFilter();
                     }
 
-                    function applyCoverageFilter() {
-                        var query = (q && q.value ? q.value : '').trim().toLowerCase();
-                        var rows = table.querySelectorAll('tbody tr[data-covered]');
-                        var visible = 0;
-                        rows.forEach(function (row) {
-                            var covered = row.getAttribute('data-covered') === '1';
-                            var matchTab = tab === 'all' || (tab === 'covered' && covered) || (tab === 'uncovered' && !covered);
-                            var haystack = row.getAttribute('data-search') || '';
-                            var matchQuery = query === '' || haystack.indexOf(query) !== -1;
-                            var show = matchTab && matchQuery;
-                            row.hidden = !show;
-                            if (show) {
-                                visible++;
-                            }
+                    function setKind(next) {
+                        kind = next || 'all';
+                        panel.querySelectorAll('[data-cov-kind]').forEach(function (el) {
+                            el.classList.toggle('is-active', el.getAttribute('data-cov-kind') === kind);
                         });
-                        if (emptyFilter) {
-                            emptyFilter.hidden = visible !== 0 || rows.length === 0;
-                        }
+                        applyCoverageFilter();
+                    }
+
+                    function setDay(date) {
+                        selectedDate = date || selectedDate;
+                        panel.querySelectorAll('[data-cov-day]').forEach(function (el) {
+                            var active = el.getAttribute('data-cov-day') === selectedDate;
+                            el.classList.toggle('is-active', active);
+                            el.setAttribute('aria-checked', active ? 'true' : 'false');
+                        });
+                        applyCoverageFilter();
                     }
 
                     panel.querySelectorAll('[data-cov-tab]').forEach(function (btn) {
@@ -698,7 +875,16 @@
                             setTab(btn.getAttribute('data-cov-tab'));
                         });
                     });
-                    var more = panel.querySelector('[data-cov-more]');
+                    panel.querySelectorAll('[data-cov-kind]').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            setKind(btn.getAttribute('data-cov-kind'));
+                        });
+                    });
+                    panel.querySelectorAll('[data-cov-day]').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            setDay(btn.getAttribute('data-cov-day'));
+                        });
+                    });
                     if (more) {
                         more.addEventListener('click', function () {
                             setTab('uncovered');

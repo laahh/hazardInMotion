@@ -22,7 +22,7 @@
     </div>
 @endif
 
-<section class="ocr-cov" data-cov-root aria-labelledby="ocr-cov-title">
+<section class="ocr-cov" data-cov-root data-coverage-scope="{{ $coverageScope }}" aria-labelledby="ocr-cov-title">
     <div class="ocr-cov-head">
         <div>
             <h6 id="ocr-cov-title">Coverage Lokasi</h6>

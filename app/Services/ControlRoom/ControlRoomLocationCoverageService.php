@@ -14,14 +14,20 @@ use Illuminate\Support\Facades\Cache;
  * Coverage lokasi master vs SAP minggu terpilih (hazard/inspeksi/observasi/OAK) di OBDS.
  *
  * Weekly: semua lokasi, ter-cover jika ada ≥1 SAP dalam minggu.
- * Daily: hanya area kritis / high risk, ter-cover jika ada SAP di setiap hari
- * yang sudah lewat pada minggu terpilih.
+ * Daily: semua lokasi, ter-cover jika ada ≥1 SAP pada tanggal yang dipilih
+ * (bukan kumulatif 7 hari). Filter kritis/non-kritis memakai rumus CONTAINS.
  */
 final class ControlRoomLocationCoverageService
 {
-    private const PAGE_CACHE_SECONDS = 180;
+    private const PAGE_CACHE_TTL = 'v10';
+
+    private const PAGE_CACHE_SECONDS = 300;
 
     private const PAST_PAGE_CACHE_SECONDS = 21600;
+
+    private const LAST_GOOD_CACHE_SECONDS = 86400;
+
+    private const MISS_CACHE_SECONDS = 20;
 
     /** @var list<string> */
     private const DAY_SHORT = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -49,10 +55,17 @@ final class ControlRoomLocationCoverageService
             ? self::PAST_PAGE_CACHE_SECONDS
             : self::PAGE_CACHE_SECONDS;
         $cacheKey = sprintf(
-            'control-room:location-coverage:v8:%s:%s:%s',
+            'control-room:location-coverage:%s:%s:%s:%s',
+            self::PAGE_CACHE_TTL,
             $weekStart->toDateString(),
             $site->value,
             $today->toDateString(),
+        );
+        $lastGoodKey = sprintf(
+            'control-room:location-coverage:%s:last:%s:%s',
+            self::PAGE_CACHE_TTL,
+            $weekStart->toDateString(),
+            $site->value,
         );
 
         $cached = Cache::get($cacheKey);
@@ -61,12 +74,21 @@ final class ControlRoomLocationCoverageService
             return $cached;
         }
 
+        if (Cache::get($cacheKey.':miss')) {
+            return $this->lastGoodCoverage($lastGoodKey) ?? $this->packCoverage($site, $weekStart, $today, [], false);
+        }
+
         $payload = $this->buildUncached($site, $weekStart, $today);
         if ($payload['loaded']) {
             Cache::put($cacheKey, $payload, $ttl);
+            Cache::put($lastGoodKey, $payload, self::LAST_GOOD_CACHE_SECONDS);
+
+            return $payload;
         }
 
-        return $payload;
+        Cache::put($cacheKey.':miss', true, self::MISS_CACHE_SECONDS);
+
+        return $this->lastGoodCoverage($lastGoodKey) ?? $payload;
     }
 
     /**
@@ -141,66 +163,66 @@ final class ControlRoomLocationCoverageService
     /**
      * @param  list<array{site: string, lokasi: string, detail_lokasi: string}>  $master
      * @param  array<string, array{last_at: string, days: array<string, true>}>  $hits
-     * @param  list<string>  $requiredDates
-     * @param  list<string>  $weekDates
      * @return array{
      *     loaded: bool,
+     *     selected_date: string,
      *     kpi: array{total: int, covered: int, uncovered: int, percent: float},
      *     rows: list<array<string, mixed>>,
-     *     attention: list<array<string, mixed>>
+     *     attention: list<array<string, mixed>>,
+     *     critical_count: int,
+     *     noncritical_count: int
      * }
      */
     public function evaluateDaily(
         array $master,
         array $hits,
-        array $requiredDates,
-        array $weekDates,
+        string $selectedDate,
         bool $loaded = true,
     ): array {
-        $requiredSet = array_fill_keys($requiredDates, true);
         $rows = [];
         $attention = [];
         $covered = 0;
+        $criticalCount = 0;
 
         foreach ($master as $item) {
             $lokasi = (string) ($item['lokasi'] ?? '');
             $detil = (string) ($item['detail_lokasi'] ?? '');
-            if (! $this->locations->isCritical($lokasi, $detil)) {
-                continue;
-            }
-
             $hit = $this->hitFor($lokasi, $detil, $hits);
             $days = $hit['days'];
-            $missing = [];
-            foreach ($requiredDates as $date) {
-                if (! isset($days[$date])) {
-                    $missing[] = $date;
-                }
-            }
-            $isCovered = $requiredDates !== [] && $missing === [];
+            $isCovered = $selectedDate !== '' && isset($days[$selectedDate]);
+            $isCritical = $this->locations->isCritical($lokasi, $detil);
             if ($isCovered) {
                 $covered++;
             }
+            if ($isCritical) {
+                $criticalCount++;
+            }
+
+            $coveredDates = array_keys($days);
+            sort($coveredDates);
 
             $row = [
                 'site' => (string) ($item['site'] ?? ''),
                 'lokasi' => $lokasi,
                 'detail_lokasi' => $detil,
-                'is_critical' => true,
+                'is_critical' => $isCritical,
                 'covered' => $isCovered,
                 'last_at' => $hit['last_at'],
-                'gap_label' => $this->dailyGapLabel($requiredDates, $missing),
-                'covered_days' => count($requiredDates) - count($missing),
-                'required_days' => count($requiredDates),
-                'day_marks' => $this->dayMarks($weekDates, $days, $requiredSet),
+                'gap_label' => $isCovered ? '—' : $this->dayShort($selectedDate),
+                'covered_dates' => array_values($coveredDates),
             ];
             $rows[] = $row;
-            if (! $isCovered) {
+            if ($isCritical && ! $isCovered) {
                 $attention[] = $row;
             }
         }
 
-        return $this->packPanel($rows, $attention, $covered, $loaded);
+        $panel = $this->packPanel($rows, $attention, $covered, $loaded);
+        $panel['selected_date'] = $selectedDate;
+        $panel['critical_count'] = $criticalCount;
+        $panel['noncritical_count'] = count($rows) - $criticalCount;
+
+        return $panel;
     }
 
     public function locationKey(string $lokasi, string $detil): string
@@ -294,7 +316,6 @@ final class ControlRoomLocationCoverageService
         CarbonImmutable $weekStart,
         CarbonImmutable $today,
     ): array {
-        $master = $this->locations->forCoverage($site)->all();
         $weekEnd = $weekStart->addDays(6);
         $lastDay = $weekEnd->lessThan($today) ? $weekEnd : $today;
         $sap = $this->qualityFindings->locationHits(
@@ -302,18 +323,53 @@ final class ControlRoomLocationCoverageService
             $this->dutyWindow->reportingWindow($lastDay)['end'],
             $weekEnd->lessThan($today) ? 21600 : 300,
         );
-        $hits = $this->coveredHits($sap['findings']);
-        $weekDates = $this->weekDates($weekStart);
-        $requiredDates = array_values(array_filter(
-            $weekDates,
-            static fn (string $date): bool => $date <= $today->toDateString(),
-        ));
+
+        return $this->packCoverage($site, $weekStart, $today, $this->coveredHits($sap['findings']), $sap['loaded']);
+    }
+
+    /**
+     * @param  array<string, array{last_at: string, days: array<string, true>}>  $hits
+     * @return array{
+     *     loaded: bool,
+     *     daily: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>},
+     *     weekly: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}
+     * }
+     */
+    private function packCoverage(
+        ControlRoomSiteCode $site,
+        CarbonImmutable $weekStart,
+        CarbonImmutable $today,
+        array $hits,
+        bool $loaded,
+    ): array {
+        $master = $this->locations->forCoverage($site)->all();
+        $selectedDate = $this->defaultDailyDate($weekStart, $today);
+        $daily = $this->evaluateDaily($master, $hits, $selectedDate, $loaded);
+        $daily['week_days'] = $this->weekDayOptions($weekStart, $today, $selectedDate);
 
         return [
-            'loaded' => $sap['loaded'],
-            'daily' => $this->evaluateDaily($master, $hits, $requiredDates, $weekDates, $sap['loaded']),
-            'weekly' => $this->evaluateWeekly($master, $hits, $sap['loaded']),
+            'loaded' => $loaded,
+            'daily' => $daily,
+            'weekly' => $this->evaluateWeekly($master, $hits, $loaded),
         ];
+    }
+
+    /**
+     * @return array{
+     *     loaded: bool,
+     *     daily: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>},
+     *     weekly: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}
+     * }|null
+     */
+    private function lastGoodCoverage(string $key): ?array
+    {
+        $cached = Cache::get($key);
+        if (! is_array($cached) || ! isset($cached['daily'], $cached['weekly'])) {
+            return null;
+        }
+
+        /** @var array{loaded: bool, daily: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}, weekly: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}} */
+        return $cached;
     }
 
     /**
@@ -391,59 +447,46 @@ final class ControlRoomLocationCoverageService
     }
 
     /**
-     * @param  list<string>  $requiredDates
-     * @param  list<string>  $missing
+     * Default tanggal Daily: hari ini jika masih dalam minggu terpilih,
+     * hari terakhir minggu jika minggu sudah lewat, hari pertama jika minggu belum mulai.
      */
-    private function dailyGapLabel(array $requiredDates, array $missing): string
+    private function defaultDailyDate(CarbonImmutable $weekStart, CarbonImmutable $today): string
     {
-        if ($requiredDates === []) {
-            return 'Belum dimulai';
+        $weekEnd = $weekStart->addDays(6);
+        if ($today->lessThan($weekStart)) {
+            return $weekStart->toDateString();
         }
-        if ($missing === []) {
-            return '—';
+        if ($today->greaterThan($weekEnd)) {
+            return $weekEnd->toDateString();
         }
 
-        return implode(', ', array_map(fn (string $date): string => $this->dayShort($date), $missing));
+        return $today->toDateString();
     }
 
     /**
-     * @param  list<string>  $weekDates
-     * @param  array<string, true>  $days
-     * @param  array<string, true>  $requiredSet
-     * @return list<array{date: string, label: string, state: string}>
+     * @return list<array{date: string, label: string, display: string, is_today: bool, is_future: bool, selected: bool}>
      */
-    private function dayMarks(array $weekDates, array $days, array $requiredSet): array
-    {
-        $marks = [];
-        foreach ($weekDates as $date) {
-            if (isset($days[$date])) {
-                $state = 'ok';
-            } elseif (isset($requiredSet[$date])) {
-                $state = 'miss';
-            } else {
-                $state = 'pending';
-            }
-            $marks[] = [
-                'date' => $date,
-                'label' => $this->dayShort($date),
-                'state' => $state,
+    private function weekDayOptions(
+        CarbonImmutable $weekStart,
+        CarbonImmutable $today,
+        string $selectedDate,
+    ): array {
+        $todayIso = $today->toDateString();
+        $options = [];
+        for ($i = 0; $i < 7; $i++) {
+            $date = $weekStart->addDays($i);
+            $iso = $date->toDateString();
+            $options[] = [
+                'date' => $iso,
+                'label' => self::DAY_SHORT[(int) $date->dayOfWeek] ?? $iso,
+                'display' => $date->locale('id')->translatedFormat('j M'),
+                'is_today' => $iso === $todayIso,
+                'is_future' => $iso > $todayIso,
+                'selected' => $iso === $selectedDate,
             ];
         }
 
-        return $marks;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function weekDates(CarbonImmutable $weekStart): array
-    {
-        $dates = [];
-        for ($i = 0; $i < 7; $i++) {
-            $dates[] = $weekStart->addDays($i)->toDateString();
-        }
-
-        return $dates;
+        return $options;
     }
 
     private function dayShort(string $date): string

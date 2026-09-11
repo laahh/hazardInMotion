@@ -24,9 +24,11 @@ final class ControlRoomSapQualityFindingsReader
 
     private const LOCATION_HITS_PAST_CACHE_SECONDS = 21600;
 
+    private const LOCATION_HITS_STALE_SECONDS = 86400;
+
     private const QUERY_TIMEOUT_MS = 4000;
 
-    private const LOCATION_HITS_TIMEOUT_MS = 10000;
+    private const LOCATION_HITS_TIMEOUT_MS = 6000;
 
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
@@ -47,10 +49,6 @@ final class ControlRoomSapQualityFindingsReader
             return ['loaded' => true, 'findings' => []];
         }
 
-        if (! $this->olap->isReachable()) {
-            return ['loaded' => false, 'findings' => []];
-        }
-
         sort($sids);
         $start = $from->startOfDay();
         $end = $this->dutyWindow->reportingWindow($lastDutyDate)['end'];
@@ -61,6 +59,10 @@ final class ControlRoomSapQualityFindingsReader
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['findings'])) {
             return ['loaded' => true, 'findings' => $cached['findings']];
+        }
+
+        if (! $this->olap->isReachable()) {
+            return ['loaded' => false, 'findings' => []];
         }
 
         $findings = [];
@@ -83,39 +85,62 @@ final class ControlRoomSapQualityFindingsReader
         return ['loaded' => true, 'findings' => $findings];
     }
 
+    public static function locationHitsDayCacheKey(string $date): string
+    {
+        return 'control-room:sap-location-hits:v7:day:'.$date;
+    }
+
+    public static function locationHitsStaleCacheKey(string $date): string
+    {
+        return 'control-room:sap-location-hits:v7:stale:'.$date;
+    }
+
     /**
-     * Pasangan lokasi+detil per hari yang muncul di SAP pada jendela minggu (semua pelapor).
-     * Satu UNION ALL (hazard+observasi+OAK), bukan 3 round-trip sequential.
+     * Pasangan lokasi+detil per hari. Cache per tanggal dulu (hari lalu 6 jam,
+     * hari ini 5 menit), baru query OBDS untuk hari yang belum ada. Tiga sumber
+     * di-agregat terpisah (index tanggal), tools OCR saja.
      *
      * @return array{loaded: bool, findings: list<array{lokasi: string, detil_lokasi: string, at: string}>}
      */
     public function locationHits(CarbonImmutable $start, CarbonImmutable $end, int $cacheSeconds = self::LOCATION_HITS_CACHE_SECONDS): array
     {
-        if (! $this->olap->isReachable()) {
-            return ['loaded' => false, 'findings' => []];
-        }
-
         $from = $start->startOfDay();
         $until = CarbonImmutable::parse($end);
-        $ttl = max(self::LOCATION_HITS_CACHE_SECONDS, min($cacheSeconds, self::LOCATION_HITS_PAST_CACHE_SECONDS));
-        $cacheKey = 'control-room:sap-location-hits:v6:'.$from->toDateTimeString().'|'.$until->toDateTimeString();
-        $cached = Cache::get($cacheKey);
-        if (is_array($cached) && isset($cached['findings'])) {
-            /** @var list<array{lokasi: string, detil_lokasi: string, at: string}> $findings */
-            $findings = $cached['findings'];
+        $days = $this->datesInRange($from, $until);
+        if ($days === []) {
+            return ['loaded' => true, 'findings' => []];
+        }
 
+        $byDay = [];
+        $missing = [];
+        foreach ($days as $date) {
+            $cached = Cache::get(self::locationHitsDayCacheKey($date));
+            if (is_array($cached)) {
+                $byDay[$date] = $cached;
+                continue;
+            }
+            $missing[] = $date;
+        }
+
+        if ($missing !== []) {
+            $fetched = $this->fetchAndStoreMissingDays($missing, $cacheSeconds);
+            foreach ($fetched as $date => $rows) {
+                $byDay[$date] = $rows;
+            }
+        }
+
+        $findings = [];
+        foreach ($days as $date) {
+            foreach ($byDay[$date] ?? [] as $row) {
+                $findings[] = $row;
+            }
+        }
+
+        if ($byDay !== [] || $missing === []) {
             return ['loaded' => true, 'findings' => $findings];
         }
 
-        $rows = $this->fetchLocationHits($from, $until);
-        if ($rows === null) {
-            return ['loaded' => false, 'findings' => []];
-        }
-
-        $findings = $this->collapseLocationHits($rows);
-        Cache::put($cacheKey, ['findings' => $findings], $ttl);
-
-        return ['loaded' => true, 'findings' => $findings];
+        return ['loaded' => false, 'findings' => []];
     }
 
     /**
@@ -153,41 +178,151 @@ final class ControlRoomSapQualityFindingsReader
     }
 
     /**
+     * @param  list<string>  $missing
+     * @return array<string, list<array{lokasi: string, detil_lokasi: string, at: string}>>
+     */
+    private function fetchAndStoreMissingDays(array $missing, int $cacheSeconds): array
+    {
+        $stored = [];
+        $rangeStart = CarbonImmutable::parse($missing[0])->startOfDay();
+        $rangeEnd = CarbonImmutable::parse($missing[array_key_last($missing)])->addDay()->startOfDay();
+        $rows = $this->fetchLocationHits($rangeStart, $rangeEnd);
+
+        if ($rows === null) {
+            foreach ($missing as $date) {
+                $stale = Cache::get(self::locationHitsStaleCacheKey($date));
+                if (is_array($stale)) {
+                    $stored[$date] = $stale;
+                }
+            }
+
+            return $stored;
+        }
+
+        $byDay = [];
+        foreach ($this->collapseLocationHits($rows) as $finding) {
+            try {
+                $date = CarbonImmutable::parse($finding['at'])->toDateString();
+            } catch (Throwable) {
+                continue;
+            }
+            $byDay[$date][] = $finding;
+        }
+
+        $now = CarbonImmutable::now()->startOfDay();
+        foreach ($missing as $date) {
+            $hits = $byDay[$date] ?? [];
+            $this->rememberDayHits($date, $hits, $cacheSeconds, CarbonImmutable::parse($date)->lt($now));
+            $stored[$date] = $hits;
+        }
+
+        return $stored;
+    }
+
+    /**
+     * @param  list<array{lokasi: string, detil_lokasi: string, at: string}>  $hits
+     */
+    private function rememberDayHits(string $date, array $hits, int $cacheSeconds, bool $isPast): void
+    {
+        $ttl = $isPast
+            ? self::LOCATION_HITS_PAST_CACHE_SECONDS
+            : max(self::LOCATION_HITS_CACHE_SECONDS, min($cacheSeconds, self::LOCATION_HITS_PAST_CACHE_SECONDS));
+        Cache::put(self::locationHitsDayCacheKey($date), $hits, $ttl);
+        Cache::put(self::locationHitsStaleCacheKey($date), $hits, self::LOCATION_HITS_STALE_SECONDS);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function datesInRange(CarbonImmutable $from, CarbonImmutable $until): array
+    {
+        $days = [];
+        $cursor = $from->startOfDay();
+        $end = $until->greaterThan($until->startOfDay()) ? $until->startOfDay()->addDay() : $until->startOfDay();
+        while ($cursor->lt($end)) {
+            $days[] = $cursor->toDateString();
+            $cursor = $cursor->addDay();
+        }
+
+        return $days;
+    }
+
+    /**
+     * Tiga query terpisah (index tanggal + GROUP BY), tools OCR. Satu sumber
+     * timeout tidak membatalkan yang lain.
+     *
      * @return list<array{lokasi: string, detil_lokasi: string, at: string}>|null
      */
     private function fetchLocationHits(CarbonImmutable $from, CarbonImmutable $until): ?array
     {
-        $sql = <<<'SQL'
-            SELECT lokasi, detil_lokasi, MAX(at) AS at
-            FROM (
-                SELECT lokasi, detil_lokasi, tanggal_laporan AS at
-                FROM bcbeats.mv_inspeksi_hazard
-                WHERE tanggal_laporan >= CAST(? AS timestamp)
-                  AND tanggal_laporan < CAST(? AS timestamp)
-                UNION ALL
-                SELECT lokasi, detil_lokasi, tanggal_observasi AS at
-                FROM bcbeats.mv_observasi
-                WHERE tanggal_observasi >= CAST(? AS timestamp)
-                  AND tanggal_observasi < CAST(? AS timestamp)
-                UNION ALL
-                SELECT lokasi, detil_lokasi, tanggal_submit AS at
-                FROM bcbeats.mv_oak
-                WHERE tanggal_submit >= CAST(? AS timestamp)
-                  AND tanggal_submit < CAST(? AS timestamp)
-                  AND peran_dalam_tim = 'OBSERVEE'
-            ) sap
-            GROUP BY lokasi, detil_lokasi, CAST(at AS date)
-            SQL;
+        $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate();
         $range = [$from->toDateTimeString(), $until->toDateTimeString()];
+        $ok = 0;
+        $findings = [];
 
+        $sources = [
+            'hazard' => [
+                'sql' => "
+                    SELECT lokasi, detil_lokasi, MAX(tanggal_laporan) AS at
+                    FROM bcbeats.mv_inspeksi_hazard
+                    WHERE tanggal_laporan >= CAST(? AS timestamp)
+                      AND tanggal_laporan < CAST(? AS timestamp)
+                      AND {$tools['sql']}
+                    GROUP BY lokasi, detil_lokasi, CAST(tanggal_laporan AS date)
+                ",
+                'bindings' => [...$range, ...$tools['bindings']],
+            ],
+            'observasi' => [
+                'sql' => "
+                    SELECT lokasi, detil_lokasi, MAX(tanggal_observasi) AS at
+                    FROM bcbeats.mv_observasi
+                    WHERE tanggal_observasi >= CAST(? AS timestamp)
+                      AND tanggal_observasi < CAST(? AS timestamp)
+                      AND {$tools['sql']}
+                    GROUP BY lokasi, detil_lokasi, CAST(tanggal_observasi AS date)
+                ",
+                'bindings' => [...$range, ...$tools['bindings']],
+            ],
+            'oak' => [
+                'sql' => "
+                    SELECT lokasi, detil_lokasi, MAX(tanggal_submit) AS at
+                    FROM bcbeats.mv_oak
+                    WHERE tanggal_submit >= CAST(? AS timestamp)
+                      AND tanggal_submit < CAST(? AS timestamp)
+                      AND {$tools['sql']}
+                      AND peran_dalam_tim = 'OBSERVEE'
+                    GROUP BY lokasi, detil_lokasi, CAST(tanggal_submit AS date)
+                ",
+                'bindings' => [...$range, ...$tools['bindings']],
+            ],
+        ];
+
+        foreach ($sources as $source => $query) {
+            $rows = $this->selectLocationHits($source, $query['sql'], $query['bindings']);
+            if ($rows === null) {
+                continue;
+            }
+            $ok++;
+            $findings = [...$findings, ...$rows];
+        }
+
+        return $ok === 0 ? null : $findings;
+    }
+
+    /**
+     * @param  list<mixed>  $bindings
+     * @return list<array{lokasi: string, detil_lokasi: string, at: string}>|null
+     */
+    private function selectLocationHits(string $source, string $sql, array $bindings): ?array
+    {
         try {
-            $rows = $this->olap->select($sql, [...$range, ...$range, ...$range], self::LOCATION_HITS_TIMEOUT_MS, [
+            $rows = $this->olap->select($sql, $bindings, self::LOCATION_HITS_TIMEOUT_MS, [
                 'jit' => 'off',
-                'work_mem' => '64MB',
+                'work_mem' => '32MB',
                 'max_parallel_workers_per_gather' => '0',
             ]);
         } catch (Throwable $e) {
-            Log::warning('ControlRoom SAP location hits gagal: '.$e->getMessage());
+            Log::warning('ControlRoom SAP location hits '.$source.' gagal: '.$e->getMessage());
 
             return null;
         }

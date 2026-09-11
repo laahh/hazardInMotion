@@ -76,7 +76,7 @@ final class ControlRoomSapDutyReader
             return $this->payload($meta, [], reachable: false, errors: ['Sumber SAP (OBDS) tidak terjangkau.']);
         }
 
-        $cacheKey = 'control-room:sap-duty:v15:'.$sid.':'.$meta['date'];
+        $cacheKey = 'control-room:sap-duty:v16:'.$sid.':'.$meta['date'];
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['cards'])) {
             return $this->payload($meta, $cached['cards'], reachable: true);
@@ -156,23 +156,20 @@ final class ControlRoomSapDutyReader
     private function fetchObservasi(string $sid, CarbonImmutable $start, CarbonImmutable $end, array &$errors): array
     {
         $limit = self::PER_TYPE_LIMIT;
-        $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate('o.tools_observasi');
+        $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate();
         $sql = "
-            SELECT DISTINCT ON (o.id_observasi)
-                   o.id_observasi, o.tanggal_observasi, o.jenis_kegiatan, o.catatan_observasi, o.tools_observasi,
-                   o.lokasi, o.detil_lokasi, o.latitude, o.longitude, o.url_foto,
-                   o.nama_pelapor,
-                   k.nama_jabatan AS jabatan_fungsional_pelapor,
-                   k.\"PERUSAHAAN\" AS perusahaan_pelapor,
-                   o.nama_personil_diobservasi, o.perusahaan_personil_diobservasi,
-                   o.jabatan_fungsional_personil_diobservasi
-            FROM bcbeats.mv_observasi o
-            LEFT JOIN bcbeats.m_karyawan_table k ON k.id = o.id_pelapor
-            WHERE o.kode_sid_pelapor = ?
-              AND o.tanggal_observasi >= CAST(? AS timestamp)
-              AND o.tanggal_observasi < CAST(? AS timestamp)
+            SELECT DISTINCT ON (id_observasi)
+                   id_observasi, tanggal_observasi, jenis_kegiatan, catatan_observasi, tools_observasi,
+                   lokasi, detil_lokasi, latitude, longitude, url_foto,
+                   nama_pelapor,
+                   nama_personil_diobservasi, perusahaan_personil_diobservasi,
+                   jabatan_fungsional_personil_diobservasi
+            FROM bcbeats.mv_observasi
+            WHERE kode_sid_pelapor = ?
+              AND tanggal_observasi >= CAST(? AS timestamp)
+              AND tanggal_observasi < CAST(? AS timestamp)
               AND {$tools['sql']}
-            ORDER BY o.id_observasi, o.tanggal_observasi
+            ORDER BY id_observasi, tanggal_observasi
             LIMIT {$limit}
         ";
 
