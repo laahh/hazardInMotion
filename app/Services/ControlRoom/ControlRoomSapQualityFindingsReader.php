@@ -87,23 +87,23 @@ final class ControlRoomSapQualityFindingsReader
 
     public static function locationHitsDayCacheKey(string $date): string
     {
-        return 'control-room:sap-location-hits:v8:day:'.$date;
+        return 'control-room:sap-location-hits:v9:day:'.$date;
     }
 
     public static function locationHitsStaleCacheKey(string $date): string
     {
-        return 'control-room:sap-location-hits:v8:stale:'.$date;
+        return 'control-room:sap-location-hits:v9:stale:'.$date;
     }
 
     public static function locationHitsRangeCacheKey(string $from, string $untilExclusive): string
     {
-        return 'control-room:sap-location-hits:v8:range:'.$from.':'.$untilExclusive;
+        return 'control-room:sap-location-hits:v9:range:'.$from.':'.$untilExclusive;
     }
 
     /**
-     * Pasangan lokasi+detil per hari. Cache per tanggal dulu (hari lalu 6 jam,
-     * hari ini 5 menit), baru query OBDS per hari yang belum ada — bukan
-     * rentang 7 hari sekaligus. Tiga sumber terpisah, index tanggal, tools OCR.
+     * Pasangan lokasi+detil per hari untuk coverage area. Semua jenis SAP
+     * (hazard/inspeksi/observasi/OAK), tanpa filter tools OCR — filter itu
+     * hanya untuk statistik personil jaga. Cache per tanggal dulu.
      *
      * @return array{loaded: bool, findings: list<array{lokasi: string, detil_lokasi: string, at: string}>}
      */
@@ -149,8 +149,8 @@ final class ControlRoomSapQualityFindingsReader
     }
 
     /**
-     * Satu kali scan rentang kalender (tanpa GROUP BY tanggal) untuk coverage
-     * mingguan: cukup ≥1 SAP di lokasi selama periode.
+     * Satu kali scan rentang kalender untuk coverage mingguan: ≥1 SAP semua
+     * jenis di lokasi selama periode, tanpa filter tools OCR.
      *
      * @return array{loaded: bool, findings: list<array{lokasi: string, detil_lokasi: string, at: string}>}
      */
@@ -301,9 +301,9 @@ final class ControlRoomSapQualityFindingsReader
     }
 
     /**
-     * Tiga query terpisah (index tanggal + GROUP BY lokasi/detil), tools OCR.
-     * Satu sumber timeout tidak membatalkan yang lain. Tanpa CAST(date) di
-     * GROUP BY supaya planner tetap pakai ix_*_tanggal.
+     * Tiga query terpisah (index tanggal + GROUP BY lokasi/detil), semua jenis
+     * SAP tanpa filter tools OCR. Satu sumber timeout tidak membatalkan yang
+     * lain. Tanpa CAST(date) di GROUP BY supaya planner tetap pakai ix_*_tanggal.
      *
      * @return list<array{lokasi: string, detil_lokasi: string, at: string}>|null
      */
@@ -312,49 +312,10 @@ final class ControlRoomSapQualityFindingsReader
         CarbonImmutable $until,
         int $timeoutMs = self::LOCATION_HITS_TIMEOUT_MS,
     ): ?array {
-        $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate();
-        $range = [$from->toDateTimeString(), $until->toDateTimeString()];
         $ok = 0;
         $findings = [];
 
-        $sources = [
-            'hazard' => [
-                'sql' => "
-                    SELECT lokasi, detil_lokasi, MAX(tanggal_laporan) AS at
-                    FROM bcbeats.mv_inspeksi_hazard
-                    WHERE tanggal_laporan >= CAST(? AS timestamp)
-                      AND tanggal_laporan < CAST(? AS timestamp)
-                      AND {$tools['sql']}
-                    GROUP BY lokasi, detil_lokasi
-                ",
-                'bindings' => [...$range, ...$tools['bindings']],
-            ],
-            'observasi' => [
-                'sql' => "
-                    SELECT lokasi, detil_lokasi, MAX(tanggal_observasi) AS at
-                    FROM bcbeats.mv_observasi
-                    WHERE tanggal_observasi >= CAST(? AS timestamp)
-                      AND tanggal_observasi < CAST(? AS timestamp)
-                      AND {$tools['sql']}
-                    GROUP BY lokasi, detil_lokasi
-                ",
-                'bindings' => [...$range, ...$tools['bindings']],
-            ],
-            'oak' => [
-                'sql' => "
-                    SELECT lokasi, detil_lokasi, MAX(tanggal_submit) AS at
-                    FROM bcbeats.mv_oak
-                    WHERE tanggal_submit >= CAST(? AS timestamp)
-                      AND tanggal_submit < CAST(? AS timestamp)
-                      AND {$tools['sql']}
-                      AND peran_dalam_tim = 'OBSERVEE'
-                    GROUP BY lokasi, detil_lokasi
-                ",
-                'bindings' => [...$range, ...$tools['bindings']],
-            ],
-        ];
-
-        foreach ($sources as $source => $query) {
+        foreach ($this->locationHitQueries($from, $until) as $source => $query) {
             $rows = $this->selectLocationHits($source, $query['sql'], $query['bindings'], $timeoutMs);
             if ($rows === null) {
                 continue;
@@ -364,6 +325,50 @@ final class ControlRoomSapQualityFindingsReader
         }
 
         return $ok === 0 ? null : $findings;
+    }
+
+    /**
+     * SQL coverage lokasi: semua jenis SAP, tanpa tools OCR.
+     *
+     * @return array<string, array{sql: string, bindings: list<string>}>
+     */
+    public function locationHitQueries(CarbonImmutable $from, CarbonImmutable $until): array
+    {
+        $range = [$from->toDateTimeString(), $until->toDateTimeString()];
+
+        return [
+            'hazard' => [
+                'sql' => '
+                    SELECT lokasi, detil_lokasi, MAX(tanggal_laporan) AS at
+                    FROM bcbeats.mv_inspeksi_hazard
+                    WHERE tanggal_laporan >= CAST(? AS timestamp)
+                      AND tanggal_laporan < CAST(? AS timestamp)
+                    GROUP BY lokasi, detil_lokasi
+                ',
+                'bindings' => $range,
+            ],
+            'observasi' => [
+                'sql' => '
+                    SELECT lokasi, detil_lokasi, MAX(tanggal_observasi) AS at
+                    FROM bcbeats.mv_observasi
+                    WHERE tanggal_observasi >= CAST(? AS timestamp)
+                      AND tanggal_observasi < CAST(? AS timestamp)
+                    GROUP BY lokasi, detil_lokasi
+                ',
+                'bindings' => $range,
+            ],
+            'oak' => [
+                'sql' => "
+                    SELECT lokasi, detil_lokasi, MAX(tanggal_submit) AS at
+                    FROM bcbeats.mv_oak
+                    WHERE tanggal_submit >= CAST(? AS timestamp)
+                      AND tanggal_submit < CAST(? AS timestamp)
+                      AND peran_dalam_tim = 'OBSERVEE'
+                    GROUP BY lokasi, detil_lokasi
+                ",
+                'bindings' => $range,
+            ],
+        ];
     }
 
     /**
@@ -412,6 +417,7 @@ final class ControlRoomSapQualityFindingsReader
 
     /**
      * Satu statement per chunk: BitmapAnd SID+tanggal, tanpa TOAST foto/deskripsi.
+     * Tetap filter tools OCR — ini statistik personil jaga, bukan coverage area.
      *
      * @param  list<string>  $sids
      * @return list<array<string, mixed>>|null

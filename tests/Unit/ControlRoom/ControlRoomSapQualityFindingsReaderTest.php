@@ -79,6 +79,21 @@ final class ControlRoomSapQualityFindingsReaderTest extends TestCase
         $this->assertSame('Pit A', $result['findings'][0]['lokasi']);
     }
 
+    public function test_location_hits_tidak_memfilter_tools_ocr(): void
+    {
+        $queries = $this->reader()->locationHitQueries(
+            CarbonImmutable::parse('2026-09-06'),
+            CarbonImmutable::parse('2026-09-07'),
+        );
+
+        $this->assertSame(['hazard', 'observasi', 'oak'], array_keys($queries));
+        foreach ($queries as $query) {
+            $this->assertStringNotContainsString('tools_observasi', $query['sql']);
+            $this->assertStringNotContainsString('IN (', $query['sql']);
+            $this->assertSame(['2026-09-06 00:00:00', '2026-09-07 00:00:00'], $query['bindings']);
+        }
+    }
+
     private function reader(): ControlRoomSapQualityFindingsReader
     {
         return new ControlRoomSapQualityFindingsReader(

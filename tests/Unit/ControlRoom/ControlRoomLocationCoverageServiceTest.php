@@ -323,9 +323,9 @@ final class ControlRoomLocationCoverageServiceTest extends TestCase
                 'attention' => [],
             ],
         ];
-        $cacheKey = 'control-room:location-coverage:v11:daily:2026-09-06:HO:2026-09-11';
+        $cacheKey = 'control-room:location-coverage:v12:daily:2026-09-06:HO:2026-09-11';
         Cache::put($cacheKey.':miss', true, 60);
-        Cache::put('control-room:location-coverage:v11:daily:last:2026-09-06:HO:2026-09-11', $good, 60);
+        Cache::put('control-room:location-coverage:v12:daily:last:2026-09-06:HO:2026-09-11', $good, 60);
 
         $payload = $this->service()->build(ControlRoomSiteCode::HeadOffice, $weekStart);
         $this->travelBack();

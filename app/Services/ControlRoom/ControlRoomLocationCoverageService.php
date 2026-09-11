@@ -13,13 +13,14 @@ use Illuminate\Support\Facades\Cache;
 /**
  * Coverage lokasi master vs SAP minggu terpilih (hazard/inspeksi/observasi/OAK) di OBDS.
  *
- * Weekly: semua lokasi, ter-cover jika ada ≥1 SAP dalam minggu.
- * Daily: semua lokasi, ter-cover jika ada ≥1 SAP pada tanggal yang dipilih
- * (bukan kumulatif 7 hari). Filter kritis/non-kritis memakai rumus CONTAINS.
+ * Weekly: semua lokasi, ter-cover jika ada ≥1 SAP semua jenis dalam minggu.
+ * Daily: semua lokasi, ter-cover jika ada ≥1 SAP semua jenis pada tanggal
+ * yang dipilih (bukan kumulatif 7 hari). Tools OCR tidak dipakai di sini —
+ * filter itu hanya untuk statistik personil jaga. Kritis = CONTAINS.
  */
 final class ControlRoomLocationCoverageService
 {
-    private const PAGE_CACHE_TTL = 'v11';
+    private const PAGE_CACHE_TTL = 'v12';
 
     private const PAGE_CACHE_SECONDS = 300;
 

@@ -825,7 +825,7 @@
                             setText('[data-cov-kpi-sub="total"]', kindLabels[kind] || kindLabels.all);
                             setText('[data-cov-kpi-sub="percent"]', 'dari ' + total + ' lokasi pada tanggal terpilih');
                             var scope = (root.getAttribute('data-coverage-scope') || '').trim();
-                            setText('[data-cov-table-kicker]', dayDisplay() + ' · 1 SAP pada tanggal ini cukup' + (scope ? ' · ' + scope : ''));
+                            setText('[data-cov-table-kicker]', dayDisplay() + ' · 1 SAP semua jenis cukup' + (scope ? ' · ' + scope : ''));
                             setText('[data-cov-attn-kicker]', attnKickers[kind] || attnKickers.all);
                         }
                         var tabAll = panel.querySelector('[data-cov-tab="all"]');

@@ -31,14 +31,14 @@
     $coverageScope = $coverageScope ?? '';
     $colspan = $isDaily ? 6 : 7;
     $kpiSubTotal = $isDaily ? 'Semua lokasi pada tanggal terpilih' : 'Lokasi yang dipantau';
-    $kpiSubCovered = $isDaily ? 'Ada ≥1 SAP pada tanggal ini' : 'Sudah ada ≥1 SAP minggu ini';
+    $kpiSubCovered = $isDaily ? 'Ada ≥1 SAP semua jenis pada tanggal ini' : 'Sudah ada ≥1 SAP semua jenis minggu ini';
     $kpiSubUncovered = $isDaily ? 'Belum ada SAP pada tanggal ini' : 'Lokasi belum ter-cover';
     $kpiSubPercent = $isDaily
         ? 'dari '.$kpi['total'].' lokasi pada tanggal terpilih'
         : 'dari total '.$kpi['total'].' lokasi';
     $tableKicker = $isDaily
-        ? $selectedDateLabel.' · 1 SAP pada tanggal ini cukup'
-        : $weekRangeLabel.' · 1 SAP dalam minggu cukup';
+        ? $selectedDateLabel.' · 1 SAP semua jenis cukup'
+        : $weekRangeLabel.' · 1 SAP semua jenis dalam minggu cukup';
     $attnKicker = $isDaily
         ? 'Area kritis / high risk tanpa SAP pada tanggal terpilih'
         : 'Area kritis / high risk yang belum ter-cover minggu ini';
