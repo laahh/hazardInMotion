@@ -152,7 +152,7 @@
             </div>
         </section>
 
-        <div id="ocr-cov-mount" data-coverage-url="{{ $coverageUrl }}">
+        <div id="ocr-cov-mount" data-coverage-url="{{ $coverageUrl }}" data-coverage-date="{{ $coverageDate }}">
             <section class="ocr-cov" aria-labelledby="ocr-cov-title">
                 <div class="ocr-cov-head">
                     <div>
@@ -642,8 +642,8 @@
                 new bootstrap.Tooltip(el);
             });
 
-            function bindCoverage(root) {
-                if (!root) {
+            function bindCoverage(root, mount) {
+                if (!root || !mount) {
                     return;
                 }
                 var titles = {
@@ -661,6 +661,72 @@
                     critical: 'Lokasi kritis / high risk tanpa SAP pada tanggal terpilih',
                     noncritical: 'Lokasi non-kritis tanpa SAP pada tanggal terpilih'
                 };
+
+                var weeklyLoaded = !root.querySelector('[data-cov-pending]');
+
+                function coverageRequest(params) {
+                    var url = new URL(mount.getAttribute('data-coverage-url'), window.location.origin);
+                    Object.keys(params).forEach(function (key) {
+                        url.searchParams.set(key, params[key]);
+                    });
+                    return url.toString();
+                }
+
+                function fetchPartial(params) {
+                    return fetch(coverageRequest(params), {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'text/html'
+                        },
+                        credentials: 'same-origin'
+                    }).then(function (res) {
+                        if (!res.ok) {
+                            throw new Error('coverage ' + res.status);
+                        }
+                        return res.text();
+                    });
+                }
+
+                function loadDaily(date) {
+                    var host = document.getElementById('ocr-cov-panel-daily');
+                    if (!host) {
+                        return;
+                    }
+                    host.classList.add('is-loading');
+                    fetchPartial({ mode: 'daily', date: date, partial: 'daily' }).then(function (html) {
+                        host.innerHTML = html;
+                        var next = host.querySelector('[data-cov-panel]');
+                        if (next) {
+                            next.hidden = false;
+                            initPanel(next);
+                        }
+                    }).catch(function () {
+                        host.innerHTML = '<div class="ocr-notice" role="alert"><i class="ri-error-warning-line"></i><span>Coverage harian gagal dimuat. Coba tanggal lain.</span></div>';
+                    }).finally(function () {
+                        host.classList.remove('is-loading');
+                    });
+                }
+
+                function loadWeekly() {
+                    var host = document.getElementById('ocr-cov-panel-weekly');
+                    if (!host || weeklyLoaded) {
+                        return;
+                    }
+                    host.classList.add('is-loading');
+                    fetchPartial({ mode: 'weekly', partial: 'weekly' }).then(function (html) {
+                        host.innerHTML = html;
+                        weeklyLoaded = true;
+                        var next = host.querySelector('[data-cov-panel]');
+                        if (next) {
+                            next.hidden = false;
+                            initPanel(next);
+                        }
+                    }).catch(function () {
+                        host.innerHTML = '<div class="ocr-notice" role="alert"><i class="ri-error-warning-line"></i><span>Coverage mingguan gagal dimuat.</span></div>';
+                    }).finally(function () {
+                        host.classList.remove('is-loading');
+                    });
+                }
 
                 function initPanel(panel) {
                     var table = panel.querySelector('.ocr-cov-table');
@@ -861,13 +927,10 @@
                     }
 
                     function setDay(date) {
-                        selectedDate = date || selectedDate;
-                        panel.querySelectorAll('[data-cov-day]').forEach(function (el) {
-                            var active = el.getAttribute('data-cov-day') === selectedDate;
-                            el.classList.toggle('is-active', active);
-                            el.setAttribute('aria-checked', active ? 'true' : 'false');
-                        });
-                        applyCoverageFilter();
+                        if (!date || date === selectedDate) {
+                            return;
+                        }
+                        loadDaily(date);
                     }
 
                     panel.querySelectorAll('[data-cov-tab]').forEach(function (btn) {
@@ -907,6 +970,9 @@
                     root.querySelectorAll('[data-cov-panel]').forEach(function (panel) {
                         panel.hidden = panel.getAttribute('data-cov-panel') !== mode;
                     });
+                    if (mode === 'weekly') {
+                        loadWeekly();
+                    }
                 }
 
                 root.querySelectorAll('[data-cov-mode]').forEach(function (btn) {
@@ -927,7 +993,13 @@
                 if (!url) {
                     return;
                 }
-                fetch(url, {
+                var initial = new URL(url, window.location.origin);
+                initial.searchParams.set('mode', 'daily');
+                var initialDate = mount.getAttribute('data-coverage-date');
+                if (initialDate) {
+                    initial.searchParams.set('date', initialDate);
+                }
+                fetch(initial.toString(), {
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest',
                         'Accept': 'text/html'
@@ -940,7 +1012,7 @@
                     return res.text();
                 }).then(function (html) {
                     mount.innerHTML = html;
-                    bindCoverage(mount.querySelector('[data-cov-root]'));
+                    bindCoverage(mount.querySelector('[data-cov-root]'), mount);
                 }).catch(function () {
                     mount.innerHTML = '<div class="ocr-notice" role="alert"><i class="ri-error-warning-line"></i><span>Coverage lokasi gagal dimuat. Muat ulang halaman atau pilih minggu lagi.</span></div>';
                 });

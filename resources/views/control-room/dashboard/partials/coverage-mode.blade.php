@@ -17,6 +17,18 @@
     $tableId = 'ocr-cov-table-'.$mode;
     $searchId = 'ocr-cov-q-'.$mode;
     $titleId = 'ocr-cov-table-title-'.$mode;
+    $coverageLastAt = $coverageLastAt ?? static function (?string $at): string {
+        if ($at === null || $at === '') {
+            return '—';
+        }
+        try {
+            return \Carbon\CarbonImmutable::parse($at)->locale('id')->translatedFormat('d M Y');
+        } catch (\Throwable) {
+            return $at;
+        }
+    };
+    $weekRangeLabel = $weekRangeLabel ?? '';
+    $coverageScope = $coverageScope ?? '';
     $colspan = $isDaily ? 6 : 7;
     $kpiSubTotal = $isDaily ? 'Semua lokasi pada tanggal terpilih' : 'Lokasi yang dipantau';
     $kpiSubCovered = $isDaily ? 'Ada ≥1 SAP pada tanggal ini' : 'Sudah ada ≥1 SAP minggu ini';

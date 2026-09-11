@@ -59,6 +59,26 @@ final class ControlRoomSapQualityFindingsReaderTest extends TestCase
         $this->assertSame('Workshop', $result['findings'][1]['lokasi']);
     }
 
+    public function test_location_hits_range_memakai_cache_tanpa_query_obds(): void
+    {
+        $this->travelTo('2026-09-11 08:00:00');
+        Cache::put(
+            ControlRoomSapQualityFindingsReader::locationHitsRangeCacheKey('2026-09-06', '2026-09-12'),
+            [['lokasi' => 'Pit A', 'detil_lokasi' => 'Front', 'at' => '2026-09-08 08:00:00']],
+            60,
+        );
+
+        $result = $this->reader()->locationHitsRange(
+            CarbonImmutable::parse('2026-09-06'),
+            CarbonImmutable::parse('2026-09-12'),
+        );
+        $this->travelBack();
+
+        $this->assertTrue($result['loaded']);
+        $this->assertCount(1, $result['findings']);
+        $this->assertSame('Pit A', $result['findings'][0]['lokasi']);
+    }
+
     private function reader(): ControlRoomSapQualityFindingsReader
     {
         return new ControlRoomSapQualityFindingsReader(

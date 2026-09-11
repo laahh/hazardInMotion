@@ -87,18 +87,23 @@ final class ControlRoomSapQualityFindingsReader
 
     public static function locationHitsDayCacheKey(string $date): string
     {
-        return 'control-room:sap-location-hits:v7:day:'.$date;
+        return 'control-room:sap-location-hits:v8:day:'.$date;
     }
 
     public static function locationHitsStaleCacheKey(string $date): string
     {
-        return 'control-room:sap-location-hits:v7:stale:'.$date;
+        return 'control-room:sap-location-hits:v8:stale:'.$date;
+    }
+
+    public static function locationHitsRangeCacheKey(string $from, string $untilExclusive): string
+    {
+        return 'control-room:sap-location-hits:v8:range:'.$from.':'.$untilExclusive;
     }
 
     /**
      * Pasangan lokasi+detil per hari. Cache per tanggal dulu (hari lalu 6 jam,
-     * hari ini 5 menit), baru query OBDS untuk hari yang belum ada. Tiga sumber
-     * di-agregat terpisah (index tanggal), tools OCR saja.
+     * hari ini 5 menit), baru query OBDS per hari yang belum ada — bukan
+     * rentang 7 hari sekaligus. Tiga sumber terpisah, index tanggal, tools OCR.
      *
      * @return array{loaded: bool, findings: list<array{lokasi: string, detil_lokasi: string, at: string}>}
      */
@@ -144,6 +149,58 @@ final class ControlRoomSapQualityFindingsReader
     }
 
     /**
+     * Satu kali scan rentang kalender (tanpa GROUP BY tanggal) untuk coverage
+     * mingguan: cukup ≥1 SAP di lokasi selama periode.
+     *
+     * @return array{loaded: bool, findings: list<array{lokasi: string, detil_lokasi: string, at: string}>}
+     */
+    public function locationHitsRange(
+        CarbonImmutable $start,
+        CarbonImmutable $endExclusive,
+        int $cacheSeconds = self::LOCATION_HITS_CACHE_SECONDS,
+    ): array {
+        $from = $start->startOfDay();
+        $until = $endExclusive->startOfDay();
+        if (! $from->lt($until)) {
+            return ['loaded' => true, 'findings' => []];
+        }
+
+        $today = CarbonImmutable::now()->startOfDay();
+        if ($from->gt($today)) {
+            return ['loaded' => true, 'findings' => []];
+        }
+        if ($until->gt($today->addDay())) {
+            $until = $today->addDay();
+        }
+
+        $cacheKey = self::locationHitsRangeCacheKey($from->toDateString(), $until->toDateString());
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached)) {
+            return ['loaded' => true, 'findings' => $cached];
+        }
+
+        $staleKey = $cacheKey.':stale';
+        $rows = $this->fetchLocationHits($from, $until, 8000);
+        if ($rows === null) {
+            $stale = Cache::get($staleKey);
+
+            return is_array($stale)
+                ? ['loaded' => true, 'findings' => $stale]
+                : ['loaded' => false, 'findings' => []];
+        }
+
+        $collapsed = $this->collapseLocationHits($rows);
+        $past = $until->lte($today);
+        $ttl = $past
+            ? self::LOCATION_HITS_PAST_CACHE_SECONDS
+            : max(self::LOCATION_HITS_CACHE_SECONDS, min($cacheSeconds, self::LOCATION_HITS_PAST_CACHE_SECONDS));
+        Cache::put($cacheKey, $collapsed, $ttl);
+        Cache::put($staleKey, $collapsed, self::LOCATION_HITS_STALE_SECONDS);
+
+        return ['loaded' => true, 'findings' => $collapsed];
+    }
+
+    /**
      * Satu kunci lokasi+detil+hari, timestamp terakhir hari itu.
      *
      * @param  list<array{lokasi: string, detil_lokasi: string, at: string}>  $findings
@@ -184,35 +241,27 @@ final class ControlRoomSapQualityFindingsReader
     private function fetchAndStoreMissingDays(array $missing, int $cacheSeconds): array
     {
         $stored = [];
-        $rangeStart = CarbonImmutable::parse($missing[0])->startOfDay();
-        $rangeEnd = CarbonImmutable::parse($missing[array_key_last($missing)])->addDay()->startOfDay();
-        $rows = $this->fetchLocationHits($rangeStart, $rangeEnd);
+        $now = CarbonImmutable::now()->startOfDay();
+        foreach ($missing as $date) {
+            $day = CarbonImmutable::parse($date)->startOfDay();
+            if ($day->gt($now)) {
+                $this->rememberDayHits($date, [], $cacheSeconds, false);
+                $stored[$date] = [];
+                continue;
+            }
 
-        if ($rows === null) {
-            foreach ($missing as $date) {
+            $rows = $this->fetchLocationHits($day, $day->addDay());
+            if ($rows === null) {
                 $stale = Cache::get(self::locationHitsStaleCacheKey($date));
                 if (is_array($stale)) {
                     $stored[$date] = $stale;
                 }
-            }
 
-            return $stored;
-        }
-
-        $byDay = [];
-        foreach ($this->collapseLocationHits($rows) as $finding) {
-            try {
-                $date = CarbonImmutable::parse($finding['at'])->toDateString();
-            } catch (Throwable) {
                 continue;
             }
-            $byDay[$date][] = $finding;
-        }
 
-        $now = CarbonImmutable::now()->startOfDay();
-        foreach ($missing as $date) {
-            $hits = $byDay[$date] ?? [];
-            $this->rememberDayHits($date, $hits, $cacheSeconds, CarbonImmutable::parse($date)->lt($now));
+            $hits = $this->collapseLocationHits($rows);
+            $this->rememberDayHits($date, $hits, $cacheSeconds, $day->lt($now));
             $stored[$date] = $hits;
         }
 
@@ -239,6 +288,10 @@ final class ControlRoomSapQualityFindingsReader
         $days = [];
         $cursor = $from->startOfDay();
         $end = $until->greaterThan($until->startOfDay()) ? $until->startOfDay()->addDay() : $until->startOfDay();
+        $today = CarbonImmutable::now()->startOfDay();
+        if ($end->gt($today->addDay())) {
+            $end = $today->addDay();
+        }
         while ($cursor->lt($end)) {
             $days[] = $cursor->toDateString();
             $cursor = $cursor->addDay();
@@ -248,13 +301,17 @@ final class ControlRoomSapQualityFindingsReader
     }
 
     /**
-     * Tiga query terpisah (index tanggal + GROUP BY), tools OCR. Satu sumber
-     * timeout tidak membatalkan yang lain.
+     * Tiga query terpisah (index tanggal + GROUP BY lokasi/detil), tools OCR.
+     * Satu sumber timeout tidak membatalkan yang lain. Tanpa CAST(date) di
+     * GROUP BY supaya planner tetap pakai ix_*_tanggal.
      *
      * @return list<array{lokasi: string, detil_lokasi: string, at: string}>|null
      */
-    private function fetchLocationHits(CarbonImmutable $from, CarbonImmutable $until): ?array
-    {
+    private function fetchLocationHits(
+        CarbonImmutable $from,
+        CarbonImmutable $until,
+        int $timeoutMs = self::LOCATION_HITS_TIMEOUT_MS,
+    ): ?array {
         $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate();
         $range = [$from->toDateTimeString(), $until->toDateTimeString()];
         $ok = 0;
@@ -268,7 +325,7 @@ final class ControlRoomSapQualityFindingsReader
                     WHERE tanggal_laporan >= CAST(? AS timestamp)
                       AND tanggal_laporan < CAST(? AS timestamp)
                       AND {$tools['sql']}
-                    GROUP BY lokasi, detil_lokasi, CAST(tanggal_laporan AS date)
+                    GROUP BY lokasi, detil_lokasi
                 ",
                 'bindings' => [...$range, ...$tools['bindings']],
             ],
@@ -279,7 +336,7 @@ final class ControlRoomSapQualityFindingsReader
                     WHERE tanggal_observasi >= CAST(? AS timestamp)
                       AND tanggal_observasi < CAST(? AS timestamp)
                       AND {$tools['sql']}
-                    GROUP BY lokasi, detil_lokasi, CAST(tanggal_observasi AS date)
+                    GROUP BY lokasi, detil_lokasi
                 ",
                 'bindings' => [...$range, ...$tools['bindings']],
             ],
@@ -291,14 +348,14 @@ final class ControlRoomSapQualityFindingsReader
                       AND tanggal_submit < CAST(? AS timestamp)
                       AND {$tools['sql']}
                       AND peran_dalam_tim = 'OBSERVEE'
-                    GROUP BY lokasi, detil_lokasi, CAST(tanggal_submit AS date)
+                    GROUP BY lokasi, detil_lokasi
                 ",
                 'bindings' => [...$range, ...$tools['bindings']],
             ],
         ];
 
         foreach ($sources as $source => $query) {
-            $rows = $this->selectLocationHits($source, $query['sql'], $query['bindings']);
+            $rows = $this->selectLocationHits($source, $query['sql'], $query['bindings'], $timeoutMs);
             if ($rows === null) {
                 continue;
             }
@@ -313,10 +370,10 @@ final class ControlRoomSapQualityFindingsReader
      * @param  list<mixed>  $bindings
      * @return list<array{lokasi: string, detil_lokasi: string, at: string}>|null
      */
-    private function selectLocationHits(string $source, string $sql, array $bindings): ?array
+    private function selectLocationHits(string $source, string $sql, array $bindings, int $timeoutMs = self::LOCATION_HITS_TIMEOUT_MS): ?array
     {
         try {
-            $rows = $this->olap->select($sql, $bindings, self::LOCATION_HITS_TIMEOUT_MS, [
+            $rows = $this->olap->select($sql, $bindings, $timeoutMs, [
                 'jit' => 'off',
                 'work_mem' => '32MB',
                 'max_parallel_workers_per_gather' => '0',

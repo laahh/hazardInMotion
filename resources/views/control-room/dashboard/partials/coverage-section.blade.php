@@ -44,13 +44,27 @@
         ])
     </div>
     <div id="ocr-cov-panel-weekly">
-        @include('control-room.dashboard.partials.coverage-mode', [
-            'mode' => 'weekly',
-            'panel' => $coverageWeekly,
-            'visible' => false,
-            'weekRangeLabel' => $weekRangeLabel,
-            'coverageScope' => $coverageScope,
-            'coverageLastAt' => $coverageLastAt,
-        ])
+        @if (! empty($coverageWeekly['pending']))
+            <div class="ocr-cov-panel" data-cov-panel="weekly" data-cov-pending="1" hidden>
+                <div class="ocr-cov-skeleton" role="status">
+                    <p class="ocr-cov-skeleton-copy">Memuat coverage mingguan…</p>
+                    <div class="ocr-kpi-grid ocr-cov-kpi">
+                        <div class="ocr-card ocr-cov-stat ocr-cov-skel-card"></div>
+                        <div class="ocr-card ocr-cov-stat ocr-cov-skel-card"></div>
+                        <div class="ocr-card ocr-cov-stat ocr-cov-skel-card"></div>
+                        <div class="ocr-card ocr-cov-stat ocr-cov-skel-card"></div>
+                    </div>
+                </div>
+            </div>
+        @else
+            @include('control-room.dashboard.partials.coverage-mode', [
+                'mode' => 'weekly',
+                'panel' => $coverageWeekly,
+                'visible' => false,
+                'weekRangeLabel' => $weekRangeLabel,
+                'coverageScope' => $coverageScope,
+                'coverageLastAt' => $coverageLastAt,
+            ])
+        @endif
     </div>
 </section>

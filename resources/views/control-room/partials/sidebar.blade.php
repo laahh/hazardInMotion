@@ -33,12 +33,12 @@ $rr = function (string $name, array $params = []) {
                     <span>QR Code</span>
                 </a>
             </li>
-            <li>
+            <!-- <li>
                 <a href="{{ $rr('control-room.attendance.form') }}" class="{{ request()->routeIs('control-room.attendance.form*') ? 'active-page' : '' }}">
                     <i class="ri-camera-line menu-icon"></i>
                     <span>Form Absensi</span>
                 </a>
-            </li>
+            </li> -->
             <li>
                 <a href="{{ $rr('control-room.attendance.index') }}" class="{{ request()->routeIs('control-room.attendance.index') || request()->routeIs('control-room.attendance.show') ? 'active-page' : '' }}">
                     <i class="ri-user-follow-line menu-icon"></i>
@@ -51,12 +51,12 @@ $rr = function (string $name, array $params = []) {
                     <span>Data SAP</span>
                 </a>
             </li>
-            <li>
+            <!-- <li>
                 <a href="{{ $rr('control-room.tbc-validations.index') }}" class="{{ request()->routeIs('control-room.tbc-validations.*') ? 'active-page' : '' }}">
                     <i class="ri-shield-star-line menu-icon"></i>
                     <span>Validasi TBC</span>
                 </a>
-            </li>
+            </li> -->
             <li>
                 <a href="{{ $rr('control-room.data-quality.index') }}" class="{{ request()->routeIs('control-room.data-quality.*') ? 'active-page' : '' }}">
                     <i class="ri-shield-check-line menu-icon"></i>
@@ -66,7 +66,7 @@ $rr = function (string $name, array $params = []) {
             <li>
                 <a href="{{ $rr('control-room.tutorial.index') }}" class="{{ request()->routeIs('control-room.tutorial.*') ? 'active-page' : '' }}">
                     <i class="ri-book-open-line menu-icon"></i>
-                    <span>Panduan Indentifikasi Hazard</span>
+                    <span>Panduan Identifikasi Hazard</span>
                 </a>
             </li>
         </ul>

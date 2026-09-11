@@ -46,6 +46,7 @@ final class DashboardController extends Controller
         ControlRoomDashboardInsightsAssembler $insightsAssembler,
         ControlRoomSiteDutyBoardService $siteDutyBoard,
         ControlRoomReplacementAttendanceService $replacementAttendance,
+        ControlRoomLocationCoverageService $locationCoverage,
     ): View {
         if (Cache::add('control-room:dash-duty-checkins', 1, 60)) {
             $replacementAttendance->ensureDutyDateCheckins();
@@ -91,17 +92,49 @@ final class DashboardController extends Controller
                 'week' => $period->week,
                 'iso_week' => $period->isoWeekValue(),
             ]),
+            'coverageDate' => $locationCoverage->defaultDailyDate($weekStart),
         ]);
     }
 
     public function coverage(Request $request, ControlRoomLocationCoverageService $locationCoverage): View
     {
-        set_time_limit(60);
         $site = ControlRoomSiteCode::from($request->string('site', ControlRoomSiteCode::HeadOffice->value)->toString());
         $period = ControlRoomIsoWeekPeriod::fromRequest($request);
+        $mode = $request->string('mode', 'daily')->toString() === 'weekly' ? 'weekly' : 'daily';
+        set_time_limit($mode === 'weekly' ? 30 : 15);
+        $selectedDate = $request->input('date');
+        $payload = $locationCoverage->build(
+            $site,
+            $period->start,
+            now(),
+            is_string($selectedDate) ? $selectedDate : null,
+            $mode,
+        );
+        $coverageScope = $site === ControlRoomSiteCode::HeadOffice
+            ? 'Semua site operasi'
+            : $site->label();
+        $partial = $request->string('partial', '')->toString();
+        if ($partial === 'daily') {
+            return view('control-room.dashboard.partials.coverage-mode', [
+                'mode' => 'daily',
+                'panel' => $payload['daily'],
+                'visible' => true,
+                'weekRangeLabel' => $period->rangeLabel(),
+                'coverageScope' => $coverageScope,
+            ]);
+        }
+        if ($partial === 'weekly') {
+            return view('control-room.dashboard.partials.coverage-mode', [
+                'mode' => 'weekly',
+                'panel' => $payload['weekly'],
+                'visible' => true,
+                'weekRangeLabel' => $period->rangeLabel(),
+                'coverageScope' => $coverageScope,
+            ]);
+        }
 
         return view('control-room.dashboard.partials.coverage-section', [
-            'locationCoverage' => $locationCoverage->build($site, $period->start),
+            'locationCoverage' => $payload,
             'weekRangeLabel' => $period->rangeLabel(),
             'site' => $site,
         ]);

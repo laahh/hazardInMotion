@@ -70,9 +70,9 @@
                                     </span>
                                 </td>
                                 <td>{{ $attendance->checked_in_at->format('H:i') }}</td>
-                                <td class="text-end">
+                                <!-- <td class="text-end">
                                     <a href="{{ route('control-room.attendance.show', $attendance) }}" class="btn btn-outline-primary btn-sm">Detail</a>
-                                </td>
+                                </td> -->
                             </tr>
                         @empty
                             <tr>

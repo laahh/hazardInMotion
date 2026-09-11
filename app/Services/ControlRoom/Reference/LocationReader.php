@@ -19,7 +19,7 @@ final class LocationReader implements LocationReaderContract
 {
     private const CACHE_TTL_SECONDS = 600;
 
-    private const CACHE_KEY = 'control-room:locations:v2:site-lokasi-detil';
+    private const CACHE_KEY = 'control-room:locations:v3:site-lokasi-detil';
 
     /** @var array<string, list<string>> */
     private const SITE_SOURCE_ALIASES = [
@@ -37,9 +37,7 @@ final class LocationReader implements LocationReaderContract
     {
         $key = $site->sourceKey();
 
-        return $this->fetchAll()
-            ->filter(fn (array $row): bool => $row['site'] === $key)
-            ->values();
+        return $this->fetchForSites([$key]);
     }
 
     /**
@@ -47,7 +45,7 @@ final class LocationReader implements LocationReaderContract
      */
     public function forCoverage(ControlRoomSiteCode $site): Collection
     {
-        return $this->filterBySite($this->fetchAll(), $site);
+        return $this->fetchForSites($this->sourceKeysFor($site));
     }
 
     /**
@@ -139,6 +137,58 @@ final class LocationReader implements LocationReaderContract
     private function aliasesFor(ControlRoomSiteCode $site): array
     {
         return self::SITE_SOURCE_ALIASES[$site->value] ?? [$site->sourceKey()];
+    }
+
+    /**
+     * @param  list<string>  $sites
+     * @return Collection<int, array{site: string, lokasi: string, detail_lokasi: string}>
+     */
+    private function fetchForSites(array $sites): Collection
+    {
+        $sites = array_values(array_unique(array_filter($sites)));
+        if ($sites === []) {
+            return collect();
+        }
+        sort($sites);
+        $cacheKey = self::CACHE_KEY.':'.hash('sha1', implode("\n", $sites));
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && $cached !== []) {
+            return collect($cached);
+        }
+
+        if (! $this->olap->isReachable()) {
+            Log::warning('LocationReader: Postgres OLAP (pgsql_direct/pgsql_ssh) tidak terjangkau, mengembalikan collection kosong.');
+
+            return collect();
+        }
+
+        $placeholders = implode(',', array_fill(0, count($sites), '?'));
+        $sql = "
+            SELECT
+                TRIM(site) AS site,
+                TRIM(lokasi) AS lokasi,
+                TRIM(\"Detil Lokasi\") AS detail_lokasi
+            FROM bcbeats.bep_vw_site_lokasi_detil_lokasi
+            WHERE COALESCE(status_detil_lokasi, '0') = '1'
+              AND BTRIM(COALESCE(lokasi, '')) <> ''
+              AND TRIM(site) IN ({$placeholders})
+        ";
+
+        $rows = collect($this->olap->select($sql, $sites, 3000))
+            ->map(fn (object $row): array => [
+                'site' => trim((string) ($row->site ?? '')),
+                'lokasi' => trim((string) ($row->lokasi ?? '')),
+                'detail_lokasi' => trim((string) ($row->detail_lokasi ?? '')),
+            ])
+            ->filter(fn (array $row): bool => $row['lokasi'] !== '')
+            ->values()
+            ->all();
+
+        if ($rows !== []) {
+            Cache::put($cacheKey, $rows, self::CACHE_TTL_SECONDS);
+        }
+
+        return collect($rows);
     }
 
     /**

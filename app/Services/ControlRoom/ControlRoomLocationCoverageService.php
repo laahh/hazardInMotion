@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Cache;
  */
 final class ControlRoomLocationCoverageService
 {
-    private const PAGE_CACHE_TTL = 'v10';
+    private const PAGE_CACHE_TTL = 'v11';
 
     private const PAGE_CACHE_SECONDS = 300;
 
@@ -35,50 +35,42 @@ final class ControlRoomLocationCoverageService
     public function __construct(
         private readonly LocationReader $locations,
         private readonly ControlRoomSapQualityFindingsReader $qualityFindings,
-        private readonly ControlRoomSapDutyReader $dutyWindow,
     ) {}
 
     /**
      * @return array{
      *     loaded: bool,
-     *     daily: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>},
-     *     weekly: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}
+     *     daily: array{loaded: bool, pending?: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>},
+     *     weekly: array{loaded: bool, pending?: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}
      * }
      */
     public function build(
         ControlRoomSiteCode $site,
         CarbonImmutable $weekStart,
         ?CarbonInterface $now = null,
+        ?string $selectedDate = null,
+        string $mode = 'daily',
     ): array {
         $today = CarbonImmutable::parse($now ?? now())->startOfDay();
+        $mode = $mode === 'weekly' ? 'weekly' : 'daily';
+        $date = $this->clampSelectedDate($weekStart, $today, $selectedDate);
         $ttl = $weekStart->addDays(6)->lessThan($today)
             ? self::PAST_PAGE_CACHE_SECONDS
             : self::PAGE_CACHE_SECONDS;
-        $cacheKey = sprintf(
-            'control-room:location-coverage:%s:%s:%s:%s',
-            self::PAGE_CACHE_TTL,
-            $weekStart->toDateString(),
-            $site->value,
-            $today->toDateString(),
-        );
-        $lastGoodKey = sprintf(
-            'control-room:location-coverage:%s:last:%s:%s',
-            self::PAGE_CACHE_TTL,
-            $weekStart->toDateString(),
-            $site->value,
-        );
+        $cacheKey = $this->pageCacheKey($mode, $weekStart, $site, $today, $date);
+        $lastGoodKey = $this->lastGoodKey($mode, $weekStart, $site, $date);
 
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && ($cached['loaded'] ?? false) === true && isset($cached['daily'], $cached['weekly'])) {
-            /** @var array{loaded: bool, daily: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}, weekly: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}} */
             return $cached;
         }
 
         if (Cache::get($cacheKey.':miss')) {
-            return $this->lastGoodCoverage($lastGoodKey) ?? $this->packCoverage($site, $weekStart, $today, [], false);
+            return $this->lastGoodCoverage($lastGoodKey)
+                ?? $this->packCoverage($site, $weekStart, $today, $date, $mode, [], false);
         }
 
-        $payload = $this->buildUncached($site, $weekStart, $today);
+        $payload = $this->buildUncached($site, $weekStart, $today, $date, $mode);
         if ($payload['loaded']) {
             Cache::put($cacheKey, $payload, $ttl);
             Cache::put($lastGoodKey, $payload, self::LAST_GOOD_CACHE_SECONDS);
@@ -89,6 +81,15 @@ final class ControlRoomLocationCoverageService
         Cache::put($cacheKey.':miss', true, self::MISS_CACHE_SECONDS);
 
         return $this->lastGoodCoverage($lastGoodKey) ?? $payload;
+    }
+
+    public function defaultDailyDate(CarbonImmutable $weekStart, ?CarbonInterface $now = null): string
+    {
+        return $this->clampSelectedDate(
+            $weekStart,
+            CarbonImmutable::parse($now ?? now())->startOfDay(),
+            null,
+        );
     }
 
     /**
@@ -315,43 +316,148 @@ final class ControlRoomLocationCoverageService
         ControlRoomSiteCode $site,
         CarbonImmutable $weekStart,
         CarbonImmutable $today,
+        string $selectedDate,
+        string $mode,
     ): array {
-        $weekEnd = $weekStart->addDays(6);
-        $lastDay = $weekEnd->lessThan($today) ? $weekEnd : $today;
-        $sap = $this->qualityFindings->locationHits(
-            $weekStart->startOfDay(),
-            $this->dutyWindow->reportingWindow($lastDay)['end'],
-            $weekEnd->lessThan($today) ? 21600 : 300,
-        );
+        $ttl = $weekStart->addDays(6)->lessThan($today)
+            ? self::PAST_PAGE_CACHE_SECONDS
+            : self::PAGE_CACHE_SECONDS;
 
-        return $this->packCoverage($site, $weekStart, $today, $this->coveredHits($sap['findings']), $sap['loaded']);
+        if ($mode === 'weekly') {
+            $weekEnd = $weekStart->addDays(6);
+            $lastDay = $weekEnd->lessThan($today) ? $weekEnd : $today;
+            if ($lastDay->lt($weekStart)) {
+                return $this->packCoverage($site, $weekStart, $today, $selectedDate, $mode, [], true);
+            }
+            $sap = $this->qualityFindings->locationHitsRange(
+                $weekStart->startOfDay(),
+                $lastDay->addDay()->startOfDay(),
+                $ttl,
+            );
+
+            return $this->packCoverage($site, $weekStart, $today, $selectedDate, $mode, $this->coveredHits($sap['findings']), $sap['loaded']);
+        }
+
+        $day = CarbonImmutable::parse($selectedDate)->startOfDay();
+        if ($day->gt($today)) {
+            return $this->packCoverage($site, $weekStart, $today, $selectedDate, $mode, [], true);
+        }
+
+        $sap = $this->qualityFindings->locationHits($day, $day->addDay(), $ttl);
+
+        return $this->packCoverage($site, $weekStart, $today, $selectedDate, $mode, $this->coveredHits($sap['findings']), $sap['loaded']);
     }
 
     /**
      * @param  array<string, array{last_at: string, days: array<string, true>}>  $hits
      * @return array{
      *     loaded: bool,
-     *     daily: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>},
-     *     weekly: array{loaded: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}
+     *     daily: array{loaded: bool, pending?: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>},
+     *     weekly: array{loaded: bool, pending?: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>}
      * }
      */
     private function packCoverage(
         ControlRoomSiteCode $site,
         CarbonImmutable $weekStart,
         CarbonImmutable $today,
+        string $selectedDate,
+        string $mode,
         array $hits,
         bool $loaded,
     ): array {
         $master = $this->locations->forCoverage($site)->all();
-        $selectedDate = $this->defaultDailyDate($weekStart, $today);
+
+        if ($mode === 'weekly') {
+            return [
+                'loaded' => $loaded,
+                'daily' => $this->pendingPanel(),
+                'weekly' => $this->evaluateWeekly($master, $hits, $loaded),
+            ];
+        }
+
         $daily = $this->evaluateDaily($master, $hits, $selectedDate, $loaded);
         $daily['week_days'] = $this->weekDayOptions($weekStart, $today, $selectedDate);
 
         return [
             'loaded' => $loaded,
             'daily' => $daily,
-            'weekly' => $this->evaluateWeekly($master, $hits, $loaded),
+            'weekly' => $this->pendingPanel(),
         ];
+    }
+
+    /**
+     * @return array{loaded: bool, pending: bool, kpi: array{total: int, covered: int, uncovered: int, percent: float}, rows: list<array<string, mixed>>, attention: list<array<string, mixed>>, critical_count: int, noncritical_count: int}
+     */
+    private function pendingPanel(): array
+    {
+        return [
+            'loaded' => true,
+            'pending' => true,
+            'kpi' => ['total' => 0, 'covered' => 0, 'uncovered' => 0, 'percent' => 0.0],
+            'rows' => [],
+            'attention' => [],
+            'critical_count' => 0,
+            'noncritical_count' => 0,
+        ];
+    }
+
+    private function pageCacheKey(
+        string $mode,
+        CarbonImmutable $weekStart,
+        ControlRoomSiteCode $site,
+        CarbonImmutable $today,
+        string $selectedDate,
+    ): string {
+        $suffix = $mode === 'weekly' ? $today->toDateString() : $selectedDate;
+
+        return sprintf(
+            'control-room:location-coverage:%s:%s:%s:%s:%s',
+            self::PAGE_CACHE_TTL,
+            $mode,
+            $weekStart->toDateString(),
+            $site->value,
+            $suffix,
+        );
+    }
+
+    private function lastGoodKey(
+        string $mode,
+        CarbonImmutable $weekStart,
+        ControlRoomSiteCode $site,
+        string $selectedDate,
+    ): string {
+        return sprintf(
+            'control-room:location-coverage:%s:%s:last:%s:%s:%s',
+            self::PAGE_CACHE_TTL,
+            $mode,
+            $weekStart->toDateString(),
+            $site->value,
+            $mode === 'weekly' ? 'week' : $selectedDate,
+        );
+    }
+
+    private function clampSelectedDate(
+        CarbonImmutable $weekStart,
+        CarbonImmutable $today,
+        ?string $selectedDate,
+    ): string {
+        $weekEnd = $weekStart->addDays(6);
+        $fallback = $today->lt($weekStart)
+            ? $weekStart->toDateString()
+            : ($today->gt($weekEnd) ? $weekEnd->toDateString() : $today->toDateString());
+        if ($selectedDate === null || $selectedDate === '') {
+            return $fallback;
+        }
+        try {
+            $day = CarbonImmutable::parse($selectedDate)->startOfDay();
+        } catch (\Throwable) {
+            return $fallback;
+        }
+        if ($day->lt($weekStart) || $day->gt($weekEnd)) {
+            return $fallback;
+        }
+
+        return $day->toDateString();
     }
 
     /**
@@ -444,23 +550,6 @@ final class ControlRoomLocationCoverageService
 
             return strcasecmp((string) $a['detail_lokasi'], (string) $b['detail_lokasi']);
         });
-    }
-
-    /**
-     * Default tanggal Daily: hari ini jika masih dalam minggu terpilih,
-     * hari terakhir minggu jika minggu sudah lewat, hari pertama jika minggu belum mulai.
-     */
-    private function defaultDailyDate(CarbonImmutable $weekStart, CarbonImmutable $today): string
-    {
-        $weekEnd = $weekStart->addDays(6);
-        if ($today->lessThan($weekStart)) {
-            return $weekStart->toDateString();
-        }
-        if ($today->greaterThan($weekEnd)) {
-            return $weekEnd->toDateString();
-        }
-
-        return $today->toDateString();
     }
 
     /**

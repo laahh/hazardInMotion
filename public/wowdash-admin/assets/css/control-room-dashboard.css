@@ -1570,6 +1570,13 @@
     gap: 14px;
 }
 
+.ocr-cov-panel.is-loading,
+#ocr-cov-panel-daily.is-loading,
+#ocr-cov-panel-weekly.is-loading {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
 .ocr-cov-panel[hidden] {
     display: none !important;
 }
