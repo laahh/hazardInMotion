@@ -56,7 +56,9 @@ final class DashboardController extends Controller
         $weekStart = $period->start;
         $weekEnd = $period->end;
         $prev = $period->previous();
-        $schedule = $scheduleWeek->build($site, $weekStart, withRfid: false);
+        // RFID hanya untuk minggu yang ditampilkan (detail roster check-in/out).
+        // Minggu sebelumnya cukup untuk delta KPI — tanpa query RFID.
+        $schedule = $scheduleWeek->build($site, $weekStart, withRfid: true);
         $sapWeek = $sapWeekCounts->forScheduleDays($schedule['days']);
         $insights = $insightsAssembler->build(
             $site,
