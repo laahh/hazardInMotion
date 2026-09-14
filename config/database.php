@@ -220,7 +220,7 @@ return [
         ],
 
         /*
-        | Besigma live data di Postgres OLAP (database `besigma`).
+        | Besigma live data di Postgres OLAP (database `besigma_db`).
         | Tidak memakai MySQL jumphost lama; share tunnel lokal yang sama
         | dengan pgsql_ssh (127.0.0.1:5433 → RDS), tapi DB name terpisah.
         */
@@ -228,7 +228,7 @@ return [
             'driver' => 'pgsql',
             'host' => env('BESIGMA_DB_HOST', env('PG_SSH_HOST', '127.0.0.1')),
             'port' => env('BESIGMA_DB_PORT', env('PG_SSH_LOCAL_PORT', '5433')),
-            'database' => env('BESIGMA_DB_DATABASE', 'besigma'),
+            'database' => env('BESIGMA_DB_DATABASE', 'besigma_db'),
             'username' => env('BESIGMA_DB_USERNAME', env('PG_SSH_USER', 'safety_evaluator_2')),
             'password' => env('BESIGMA_DB_PASSWORD', env('PG_SSH_PASSWORD', 'safety123')),
             'charset' => 'utf8',

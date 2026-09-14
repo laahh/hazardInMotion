@@ -10,7 +10,7 @@ use Throwable;
 
 /**
  * Pemeriksa koneksi Postgres Besigma lewat tunnel OLAP (127.0.0.1:5433).
- * Database target: `besigma` (terpisah dari hse_automation di pgsql_ssh).
+ * Database target: `besigma_db` (terpisah dari hse_automation di pgsql_ssh).
  */
 final class BesigmaConnectionService
 {
@@ -229,7 +229,7 @@ final class BesigmaConnectionService
         return [
             'host' => (string) ($cfg['host'] ?? '127.0.0.1'),
             'port' => (int) ($cfg['port'] ?? 5433),
-            'database' => (string) ($cfg['database'] ?? 'besigma'),
+            'database' => (string) ($cfg['database'] ?? 'besigma_db'),
             'username' => (string) ($cfg['username'] ?? 'safety_evaluator_2'),
             'driver' => (string) ($cfg['driver'] ?? 'pgsql'),
             'search_path' => (string) ($cfg['search_path'] ?? 'public'),
@@ -249,10 +249,32 @@ final class BesigmaConnectionService
         }
 
         if (str_contains($message, 'does not exist') || str_contains($message, '3D000')) {
-            return 'Tunnel terbuka, tetapi database tidak ditemukan. Pastikan BESIGMA_DB_DATABASE=besigma.';
+            return 'Tunnel terbuka, tetapi database tidak ditemukan. Pastikan BESIGMA_DB_DATABASE=besigma_db.';
         }
 
-        return 'Tunnel terbuka, tetapi query Postgres gagal. Periksa user, database `besigma`, search_path, dan log RDS.';
+        if (
+            str_contains($message, 'timeout expired')
+            || str_contains($message, 'Connection refused')
+            || str_contains($message, '08006')
+        ) {
+            return 'Port 5433 terbuka, tetapi Postgres tidak merespons. Biasanya tunnel SSH OLAP belum jalan atau sudah mati. Tutup proses lama di 5433, lalu jalankan setup-ssh-tunnel.bat (bukan setup-ssh-tunnel-besigma.bat MySQL). Pastikan PG_PORT=5432 di .env.';
+        }
+
+        return 'Tunnel terbuka, tetapi query Postgres gagal. Periksa user, database `besigma_db`, search_path, dan log RDS.';
+    }
+
+    /**
+     * Cek apakah tunnel OLAP (pgsql_ssh) bisa query — membantu bedakan masalah tunnel vs database besigma_db.
+     */
+    public function olapTunnelProbe(): ?array
+    {
+        try {
+            DB::connection('pgsql_ssh')->select('SELECT current_database() AS db_name, 1 AS ok');
+
+            return ['ok' => true, 'database' => (string) config('database.connections.pgsql_ssh.database')];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
     }
 
     private function circuitIsOpen(): bool

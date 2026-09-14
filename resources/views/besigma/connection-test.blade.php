@@ -23,7 +23,7 @@
     <div>
         @if ($connected)
             <strong>Koneksi berhasil.</strong> Postgres OLAP
-            <code>{{ ($target['host'] ?? '127.0.0.1').':'.($target['port'] ?? 5433) }}/{{ $target['database'] ?? ($probe['database'] ?? 'besigma') }}</code>
+            <code>{{ ($target['host'] ?? '127.0.0.1').':'.($target['port'] ?? 5433) }}/{{ $target['database'] ?? ($probe['database'] ?? 'besigma_db') }}</code>
             sebagai <code>{{ $probe['username'] ?? ($target['username'] ?? '—') }}</code>.
             Katalog: {{ count($tables) }} objek (tabel/view), {{ count($boundaryTables) }} terkait boundary.
         @else
@@ -119,7 +119,7 @@
                         </tr>
                         <tr>
                             <th>BESIGMA_DB_DATABASE</th>
-                            <td><code>{{ $target['database'] ?? 'besigma' }}</code></td>
+                            <td><code>{{ $target['database'] ?? 'besigma_db' }}</code></td>
                         </tr>
                         <tr>
                             <th>BESIGMA_DB_USERNAME</th>
@@ -132,11 +132,26 @@
                     </tbody>
                 </table>
                 <p class="text-muted small mb-2">Jumphost MySQL lama (<code>BESIGMA_SSH_*</code> / port 3307) diabaikan. Tunnel yang dipakai sama dengan <code>pgsql_ssh</code>:</p>
-                <pre class="bg-light p-3 rounded small mb-0">BESIGMA_DB_HOST=127.0.0.1
+                <pre class="bg-light p-3 rounded small mb-3">BESIGMA_DB_HOST=127.0.0.1
 BESIGMA_DB_PORT=5433
-BESIGMA_DB_DATABASE=besigma
+BESIGMA_DB_DATABASE=besigma_db
 BESIGMA_DB_USERNAME=safety_evaluator_2
 BESIGMA_DB_PASSWORD=safety123</pre>
+                @if (isset($olapTunnel))
+                    <div class="alert {{ ($olapTunnel['ok'] ?? false) ? 'alert-success' : 'alert-warning' }} py-2 small mb-3">
+                        @if ($olapTunnel['ok'] ?? false)
+                            Tunnel OLAP (<code>pgsql_ssh</code> / {{ $olapTunnel['database'] ?? 'hse_automation' }}) hidup.
+                            @if (! $connected)
+                                Masalah kemungkinan di database <code>besigma_db</code> (nama DB / hak akses user), bukan tunnel.
+                            @endif
+                        @else
+                            Tunnel OLAP (<code>pgsql_ssh</code>) juga gagal — jalankan <code>setup-ssh-tunnel.bat</code> dan biarkan jendela tetap terbuka.
+                        @endif
+                    </div>
+                @endif
+                <p class="text-muted small mb-2">Jika TCP terbuka tapi query timeout (~3 detik): proses di port 5433 bukan tunnel Postgres yang valid. Restart tunnel:</p>
+                <pre class="bg-light p-3 rounded small mb-0">setup-ssh-tunnel.bat
+# forward: 127.0.0.1:5433 → RDS:5432</pre>
             </div>
         </div>
     </div>

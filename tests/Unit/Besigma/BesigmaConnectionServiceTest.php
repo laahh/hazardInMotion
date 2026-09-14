@@ -33,7 +33,7 @@ final class BesigmaConnectionServiceTest extends TestCase
         $this->assertSame('pgsql', $target['driver']);
         $this->assertSame('127.0.0.1', $target['host']);
         $this->assertSame(5433, $target['port']);
-        $this->assertSame('besigma', $target['database']);
+        $this->assertSame('besigma_db', $target['database']);
         $this->assertSame('safety_evaluator_2', $target['username']);
     }
 
