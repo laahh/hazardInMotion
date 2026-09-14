@@ -109,6 +109,8 @@ final class BesigmaConnectionService
     public function probe(): array
     {
         $this->forgetCachedStatus();
+
+        app(BesigmaTunnelService::class)->applyRuntimeConfig();
         DB::purge(self::CONNECTION);
 
         $target = $this->targetMeta();
@@ -196,7 +198,7 @@ final class BesigmaConnectionService
         return [
             'host' => (string) ($cfg['host'] ?? env('PG_HOST', '')),
             'port' => (int) ($cfg['port'] ?? env('PG_PORT', 5432)),
-            'database' => (string) ($cfg['database'] ?? 'besigma_db'),
+            'database' => (string) ($cfg['database'] ?? 'besigma'),
             'username' => (string) ($cfg['username'] ?? 'safety_evaluator_2'),
             'driver' => (string) ($cfg['driver'] ?? 'pgsql'),
             'search_path' => (string) ($cfg['search_path'] ?? 'public'),
@@ -217,7 +219,7 @@ final class BesigmaConnectionService
         }
 
         if (str_contains($message, 'does not exist') || str_contains($message, '3D000')) {
-            return 'RDS terjangkau, tetapi database tidak ditemukan. Pastikan BESIGMA_DB_DATABASE=besigma_db.';
+            return 'RDS terjangkau, tetapi database tidak ditemukan. Coba BESIGMA_DB_DATABASE=besigma (bukan besigma_db — itu nama connection Laravel, bukan nama DB di RDS).';
         }
 
         if (

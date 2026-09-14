@@ -226,11 +226,11 @@ return [
         */
         'besigma_db' => [
             'driver' => 'pgsql',
-            'host' => env('BESIGMA_DB_HOST', env('PG_HOST', 'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com')),
-            'port' => env('BESIGMA_DB_PORT', env('PG_PORT', '5432')),
-            'database' => env('BESIGMA_DB_DATABASE', 'besigma_db'),
-            'username' => env('BESIGMA_DB_USERNAME', env('PG_SSH_USER', 'safety_evaluator_2')),
-            'password' => env('BESIGMA_DB_PASSWORD', env('PG_SSH_PASSWORD', 'safety123')),
+            'host' => env('BESIGMA_DB_HOST') ?: env('PG_HOST', 'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com'),
+            'port' => env('BESIGMA_DB_PORT') ?: env('PG_PORT', '5432'),
+            'database' => env('BESIGMA_DB_DATABASE', 'besigma'),
+            'username' => env('BESIGMA_DB_USERNAME') ?: env('PG_SSH_USER', 'safety_evaluator_2'),
+            'password' => env('BESIGMA_DB_PASSWORD') ?: env('PG_SSH_PASSWORD', 'safety123'),
             'charset' => 'utf8',
             'prefix' => '',
             'prefix_indexes' => true,

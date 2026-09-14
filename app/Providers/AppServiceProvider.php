@@ -45,6 +45,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->ensureOpenSslCaBundle();
+        $this->app->make(\App\Services\Besigma\BesigmaTunnelService::class)->applyRuntimeConfig();
 
         // 🔑 Force HTTPS for asset URLs in production
         if ($this->app->environment('production')) {

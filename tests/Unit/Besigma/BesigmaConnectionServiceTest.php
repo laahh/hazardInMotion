@@ -20,7 +20,7 @@ final class BesigmaConnectionServiceTest extends TestCase
 
         $this->assertSame('pgsql', $target['driver']);
         $this->assertSame('direct', $target['mode']);
-        $this->assertSame('besigma_db', $target['database']);
+        $this->assertSame('besigma', $target['database']);
         $this->assertSame('safety_evaluator_2', $target['username']);
         $this->assertSame(
             config('database.connections.besigma_db.host'),
@@ -32,11 +32,11 @@ final class BesigmaConnectionServiceTest extends TestCase
         );
     }
 
-    public function test_runtime_config_does_not_rewrite_rds_host_to_loopback(): void
+    public function test_runtime_config_rewrites_legacy_tunnel_to_direct_rds(): void
     {
         config([
-            'database.connections.besigma_db.host' => 'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com',
-            'database.connections.besigma_db.port' => 5432,
+            'database.connections.besigma_db.host' => '127.0.0.1',
+            'database.connections.besigma_db.port' => 3307,
         ]);
 
         app(\App\Services\Besigma\BesigmaTunnelService::class)->applyRuntimeConfig();

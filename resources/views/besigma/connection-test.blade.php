@@ -130,10 +130,10 @@
                         </tr>
                     </tbody>
                 </table>
-                <p class="text-muted small mb-2">Besigma tidak memakai tunnel SSH 5433. Kosongkan <code>BESIGMA_DB_HOST</code> agar fallback ke <code>PG_HOST</code>:</p>
-                <pre class="bg-light p-3 rounded small mb-3">PG_HOST=postgresql-olap-bc-production...
-PG_PORT=5432
-BESIGMA_DB_DATABASE=besigma_db
+                <p class="text-muted small mb-2">Besigma <strong>direct RDS</strong> — jangan pakai <code>127.0.0.1:3307</code> (MySQL lama) atau <code>:5433</code> (tunnel):</p>
+                <pre class="bg-light p-3 rounded small mb-3">BESIGMA_DB_HOST=postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com
+BESIGMA_DB_PORT=5432
+BESIGMA_DB_DATABASE=besigma
 BESIGMA_DB_USERNAME=safety_evaluator_2
 BESIGMA_DB_PASSWORD=safety123</pre>
                 @if (isset($rfidDirect))
