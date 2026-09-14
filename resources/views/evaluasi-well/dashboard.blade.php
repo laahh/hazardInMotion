@@ -2079,6 +2079,11 @@
             ? route('evaluasi-well.mitra.active-stats')
             : ($ajaxRoutes['activeStats'] ?? route('evaluasi-well.active-stats'))
     );
+    var exportUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.active-stats.export')
+            : ($ajaxRoutes['activeStatsExport'] ?? route('evaluasi-well.active-stats.export'))
+    );
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
     var mitraMode = @json((bool) ($mitraMode ?? false));
     var mitraScope = @json($mitraScope) || {site: '', perusahaan: '', companies: [], pairs: []};
@@ -2125,6 +2130,7 @@
     var leaderboardEmptyEl = document.getElementById('active-stats-leaderboard-empty');
     var leaderboardBadge = document.getElementById('active-leaderboard-total-badge');
     var openStatusBtn = document.getElementById('active-stats-open-status-btn');
+    var exportBtn = document.getElementById('active-stats-export-btn');
     var cardEl = document.getElementById('total-user-aktif-card');
 
     var dimensionUnit = {
@@ -2148,6 +2154,28 @@
 
     function cacheKey(dimension, weekStart) {
         return dimension + '|' + (weekStart || '');
+    }
+
+    function updateExportHref(weekStart) {
+        if (!exportBtn) {
+            return;
+        }
+        var params = {};
+        if (weekStart) {
+            params.week_start = weekStart;
+        }
+        if (mitraMode) {
+            if (typeof window.evaluasiWellAppendMitraScope === 'function') {
+                window.evaluasiWellAppendMitraScope(params, true, mitraScope);
+            } else {
+                if (mitraScope.site) params.site = mitraScope.site;
+                if (mitraScope.perusahaan) {
+                    params.perusahaan = mitraScope.perusahaan;
+                    params.company = mitraScope.perusahaan;
+                }
+            }
+        }
+        exportBtn.setAttribute('href', appendQuery(exportUrl, params));
     }
 
     function setLoading(isLoading) {
@@ -2574,6 +2602,7 @@
         if (weekSelectEl && currentWeekStart) {
             weekSelectEl.value = currentWeekStart;
         }
+        updateExportHref(currentWeekStart);
 
         renderSummary(payload);
         if (!overviewRendered || !(payload.overview && payload.overview.length)) {
@@ -2706,8 +2735,13 @@
         weekSelectEl.addEventListener('change', function () {
             currentWeekStart = weekSelectEl.value || '';
             overviewRendered = false;
+            updateExportHref(currentWeekStart);
             loadDimension(currentDimension || 'site', currentWeekStart);
         });
+    }
+
+    if (exportBtn) {
+        updateExportHref(currentWeekStart);
     }
 
     if (openStatusBtn) {
@@ -2748,6 +2782,7 @@
     'installStats' => route('evaluasi-well.install-stats'),
     'installStatsExport' => route('evaluasi-well.install-stats.export'),
     'activeStats' => route('evaluasi-well.active-stats'),
+    'activeStatsExport' => route('evaluasi-well.active-stats.export'),
     'index' => route('evaluasi-well.index'),
   ];
 @endphp

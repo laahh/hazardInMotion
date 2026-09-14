@@ -43,6 +43,8 @@ Route::middleware('evaluasi-well.access')
 
         Route::get('/active-stats', [SportEvaluationDashboardController::class, 'activeStats'])
             ->name('active-stats');
+        Route::get('/active-stats/export', [SportEvaluationDashboardController::class, 'activeStatsExport'])
+            ->name('active-stats.export');
 
         Route::get('/mitra', [SportEvaluationMitraDashboardController::class, 'index'])
             ->name('mitra.index');
@@ -52,6 +54,8 @@ Route::middleware('evaluasi-well.access')
             ->name('mitra.install-stats.export');
         Route::get('/mitra/active-stats', [SportEvaluationMitraDashboardController::class, 'activeStats'])
             ->name('mitra.active-stats');
+        Route::get('/mitra/active-stats/export', [SportEvaluationMitraDashboardController::class, 'activeStatsExport'])
+            ->name('mitra.active-stats.export');
         Route::get('/mitra/not-installed/data', [SportEvaluationMitraDashboardController::class, 'notInstalledData'])
             ->name('mitra.not-installed.data');
         Route::get('/mitra/not-installed/export', [SportEvaluationMitraDashboardController::class, 'notInstalledExport'])

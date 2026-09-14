@@ -362,22 +362,15 @@ class SportEvaluationDashboardController extends Controller
         } catch (Throwable $e) {
             report($e);
 
-            $fallbackWeekStart = Carbon::now()->startOfWeek()->toDateString();
-            $fallbackWeekEnd = Carbon::now()->endOfWeek()->toDateString();
+            $fallbackWeek = $this->activeStatsService->resolveWeekRange(null);
 
             return response()->json([
                 'available' => false,
                 'dimension' => 'site',
                 'dimension_label' => 'Site',
-                'footnote' => 'User aktif (luas) = food photo / workout / komunitas / Main Bareng. Evaluasi = food + workout.',
+                'footnote' => 'User aktif (luas) = food photo / workout / komunitas / Main Bareng minggu terpilih (Minggu–Sabtu). Evaluasi = food + workout.',
                 'message' => 'Gagal memuat statistik user aktif.',
-                'week' => [
-                    'start' => $fallbackWeekStart,
-                    'end' => $fallbackWeekEnd,
-                    'label' => Carbon::now()->startOfWeek()->format('d M')
-                        .' – '.Carbon::now()->endOfWeek()->format('d M Y'),
-                    'prev_start' => Carbon::now()->subWeek()->startOfWeek()->toDateString(),
-                ],
+                'week' => $fallbackWeek,
                 'week_options' => [],
                 'weekly_trend' => [
                     'labels' => [],
@@ -403,6 +396,68 @@ class SportEvaluationDashboardController extends Controller
                 ],
                 'leaderboard' => [],
             ]);
+        }
+    }
+
+    /**
+     * Export Excel daftar user aktif (luas) minggu terpilih (Minggu–Sabtu).
+     */
+    public function activeStatsExport(Request $request): JsonResponse
+    {
+        $this->ensureMitraAssignmentScope($request);
+
+        if (! $this->connection->isUp()) {
+            return response()->json(['message' => 'Koneksi BeWell tidak tersedia.'], 503);
+        }
+
+        $weekStart = is_string($request->input('week_start'))
+            ? $request->input('week_start')
+            : null;
+
+        try {
+            $payload = $this->activeStatsService->getActiveUsersForExport(
+                $weekStart,
+                $this->indexFilters,
+            );
+            $week = $payload['week'];
+            $rows = $payload['rows'];
+
+            $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
+                'Nama',
+                'Site',
+                'Perusahaan',
+                'Jabatan',
+                'Food',
+                'Workout',
+                'Eval',
+                'Tanggal Aktif',
+            ]);
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('User Aktif');
+
+            $rowNum = 2;
+            foreach ($rows as $row) {
+                $sheet->fromArray([
+                    $row['nama'],
+                    $row['site'],
+                    $row['perusahaan'],
+                    $row['jabatan'],
+                    $row['food_evals'],
+                    $row['workout_evals'],
+                    $row['total_evals'],
+                    $row['tanggal_aktif'],
+                ], null, 'A'.$rowNum);
+                $rowNum++;
+            }
+
+            SpreadsheetExporter::download(
+                $spreadsheet,
+                'evaluasi_well_user_aktif_'.$week['start'].'_'.$week['end'].'_'.date('Ymd_His').'.xlsx'
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => 'Gagal mengekspor data user aktif.'], 500);
         }
     }
 
@@ -697,25 +752,24 @@ class SportEvaluationDashboardController extends Controller
         }
 
         try {
-            $now = Carbon::now();
-            $thisWeekStart = $now->copy()->startOfWeek();
-            $thisWeekEnd = $now->copy()->endOfWeek();
-            $lastWeekStart = $now->copy()->subWeek()->startOfWeek();
-            $lastWeekEnd = $now->copy()->subWeek()->endOfWeek();
-
-            $thisWeek = $this->activeStatsService->countActiveUsersInRange(
-                $thisWeekStart->format('Y-m-d H:i:s'),
-                $thisWeekEnd->format('Y-m-d H:i:s'),
-                $this->indexFilters,
-            );
-            $lastWeek = $this->activeStatsService->countActiveUsersInRange(
-                $lastWeekStart->format('Y-m-d H:i:s'),
-                $lastWeekEnd->format('Y-m-d H:i:s'),
-                $this->indexFilters,
+            $thisWeek = $this->activeStatsService->resolveWeekRange(null);
+            $lastWeek = $this->activeStatsService->resolveWeekRange(
+                Carbon::parse($thisWeek['prev_start'])->toDateString()
             );
 
-            $activeUsersTotal = $thisWeek;
-            $activeUsersWeekIncrease = max(0, $thisWeek - $lastWeek);
+            $thisWeekCount = $this->activeStatsService->countActiveUsersInRange(
+                $thisWeek['start'].' 00:00:00',
+                Carbon::parse($thisWeek['end'])->endOfDay()->format('Y-m-d H:i:s'),
+                $this->indexFilters,
+            );
+            $lastWeekCount = $this->activeStatsService->countActiveUsersInRange(
+                $lastWeek['start'].' 00:00:00',
+                Carbon::parse($lastWeek['end'])->endOfDay()->format('Y-m-d H:i:s'),
+                $this->indexFilters,
+            );
+
+            $activeUsersTotal = $thisWeekCount;
+            $activeUsersWeekIncrease = max(0, $thisWeekCount - $lastWeekCount);
         } catch (Throwable $e) {
             report($e);
         }

@@ -25,7 +25,12 @@ final class SportEvaluationActiveStatsService
 
     private const TREND_WEEKS = 12;
 
-    private const FOOTNOTE = 'User aktif (luas) = food photo / workout / komunitas / Main Bareng minggu terpilih. '
+    /** Minggu kalender filter: Minggu → Sabtu. */
+    private const WEEK_START_DAY = Carbon::SUNDAY;
+
+    private const WEEK_END_DAY = Carbon::SATURDAY;
+
+    private const FOOTNOTE = 'User aktif (luas) = food photo / workout / komunitas / Main Bareng minggu terpilih (Minggu–Sabtu). '
         .'Evaluasi = jumlah upload makanan (photo) + olahraga. '
         .'Breakdown dimensi memakai karyawan status AKTIF (exclude VISITOR, Politeknik Sinarmas, Sinarmas Maritim, Fusi); angka KPI kartu bisa berbeda.';
 
@@ -147,7 +152,7 @@ final class SportEvaluationActiveStatsService
         try {
             $scopeKey = $this->mitraAssignmentService->cacheKeySuffix($scope);
             $stats = Cache::remember(
-                'evaluasi_well:active_stats:v7:'.$dimension.':'.$week['start'].':'.$scopeKey,
+                'evaluasi_well:active_stats:v8:'.$dimension.':'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($dimension, $week, $scope): array {
                     return $this->buildStats($dimension, $week, $scope);
@@ -232,14 +237,14 @@ final class SportEvaluationActiveStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:overview:v6:'.$week['start'].':'.$scopeKey,
+                'evaluasi_well:active_stats:overview:v7:'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($week, $scope, $scopeKey): array {
                     $overview = [];
 
                     foreach (array_keys(self::DIMENSION_COLUMNS) as $dimension) {
                         $stats = Cache::remember(
-                            'evaluasi_well:active_stats:v7:'.$dimension.':'.$week['start'].':'.$scopeKey,
+                            'evaluasi_well:active_stats:v8:'.$dimension.':'.$week['start'].':'.$scopeKey,
                             self::CACHE_TTL,
                             function () use ($dimension, $week, $scope): array {
                                 return $this->buildStats($dimension, $week, $scope);
@@ -289,7 +294,7 @@ final class SportEvaluationActiveStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:weekly_trend:v2:'.$scopeKey,
+                'evaluasi_well:active_stats:weekly_trend:v3:'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($scope): array {
                     $now = Carbon::now();
@@ -298,13 +303,13 @@ final class SportEvaluationActiveStatsService
                     $weekStarts = [];
 
                     for ($i = self::TREND_WEEKS - 1; $i >= 0; $i--) {
-                        $start = $now->copy()->subWeeks($i)->startOfWeek();
-                        $end = $now->copy()->subWeeks($i)->endOfWeek();
+                        $start = $now->copy()->subWeeks($i)->startOfWeek(self::WEEK_START_DAY);
+                        $end = $start->copy()->endOfWeek(self::WEEK_END_DAY);
                         $labels[] = $start->format('d M');
                         $weekStarts[] = $start->toDateString();
                         $activeUsers[] = $this->countActiveUsersInRange(
                             $start->format('Y-m-d H:i:s'),
-                            $end->format('Y-m-d H:i:s'),
+                            $end->endOfDay()->format('Y-m-d H:i:s'),
                             $scope,
                         );
                     }
@@ -390,7 +395,11 @@ final class SportEvaluationActiveStatsService
         $from = $week['start'].' 00:00:00';
         $to = Carbon::parse($week['end'])->endOfDay()->format('Y-m-d H:i:s');
         $prevFrom = $week['prev_start'].' 00:00:00';
-        $prevTo = Carbon::parse($week['prev_start'])->endOfWeek()->endOfDay()->format('Y-m-d H:i:s');
+        $prevTo = Carbon::parse($week['prev_start'])
+            ->startOfWeek(self::WEEK_START_DAY)
+            ->endOfWeek(self::WEEK_END_DAY)
+            ->endOfDay()
+            ->format('Y-m-d H:i:s');
         $scope = $this->normalizeScopeFilters($scope);
 
         $kpiCardTotal = $this->countActiveUsersInRange($from, $to, $scope);
@@ -873,20 +882,73 @@ final class SportEvaluationActiveStatsService
     }
 
     /**
+     * Resolusi rentang minggu (Minggu–Sabtu) untuk filter modal / export / KPI.
+     *
+     * @return array{start: string, end: string, label: string, prev_start: string}
+     */
+    public function resolveWeekRange(?string $weekStart = null): array
+    {
+        return $this->resolveWeek($weekStart);
+    }
+
+    /**
+     * Daftar user aktif (luas) untuk export Excel.
+     *
+     * @param  array{site?:string,perusahaan?:string,company?:string,companies?:mixed,pairs?:mixed}  $filters
+     * @return array{
+     *     week: array{start: string, end: string, label: string, prev_start: string},
+     *     rows: list<array{
+     *         nama: string,
+     *         site: string,
+     *         perusahaan: string,
+     *         jabatan: string,
+     *         food_evals: int,
+     *         workout_evals: int,
+     *         total_evals: int,
+     *         tanggal_aktif: string
+     *     }>
+     * }
+     */
+    public function getActiveUsersForExport(?string $weekStart = null, array $filters = []): array
+    {
+        $week = $this->resolveWeek($weekStart);
+        $empty = ['week' => $week, 'rows' => []];
+
+        if (! $this->connection->isUp()) {
+            return $empty;
+        }
+
+        try {
+            $from = $week['start'].' 00:00:00';
+            $to = Carbon::parse($week['end'])->endOfDay()->format('Y-m-d H:i:s');
+            $scope = $this->normalizeScopeFilters($filters);
+
+            return [
+                'week' => $week,
+                'rows' => $this->queryActiveUsersForExport($from, $to, $scope),
+            ];
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        }
+    }
+
+    /**
      * @return array{start: string, end: string, label: string, prev_start: string}
      */
     private function resolveWeek(?string $weekStart): array
     {
         try {
             $start = $weekStart !== null && $weekStart !== ''
-                ? Carbon::parse($weekStart)->startOfWeek()
-                : Carbon::now()->startOfWeek();
+                ? Carbon::parse($weekStart)->startOfWeek(self::WEEK_START_DAY)
+                : Carbon::now()->startOfWeek(self::WEEK_START_DAY);
         } catch (Throwable) {
-            $start = Carbon::now()->startOfWeek();
+            $start = Carbon::now()->startOfWeek(self::WEEK_START_DAY);
         }
 
-        $end = $start->copy()->endOfWeek();
-        $prevStart = $start->copy()->subWeek()->startOfWeek();
+        $end = $start->copy()->endOfWeek(self::WEEK_END_DAY);
+        $prevStart = $start->copy()->subWeek()->startOfWeek(self::WEEK_START_DAY);
 
         return [
             'start' => $start->toDateString(),
@@ -907,8 +969,8 @@ final class SportEvaluationActiveStatsService
 
         foreach ($starts as $startDate) {
             try {
-                $start = Carbon::parse($startDate)->startOfWeek();
-                $end = $start->copy()->endOfWeek();
+                $start = Carbon::parse($startDate)->startOfWeek(self::WEEK_START_DAY);
+                $end = $start->copy()->endOfWeek(self::WEEK_END_DAY);
                 $options[] = [
                     'start' => $start->toDateString(),
                     'label' => $start->format('d M').' – '.$end->format('d M Y'),
@@ -927,6 +989,147 @@ final class SportEvaluationActiveStatsService
         }
 
         return array_reverse($options);
+    }
+
+    /**
+     * @param  array{site:string,company:string,perusahaan:string,pairs:list,companies:list}  $scope
+     * @return list<array{
+     *     nama: string,
+     *     site: string,
+     *     perusahaan: string,
+     *     jabatan: string,
+     *     food_evals: int,
+     *     workout_evals: int,
+     *     total_evals: int,
+     *     tanggal_aktif: string
+     * }>
+     */
+    private function queryActiveUsersForExport(string $from, string $to, array $scope = []): array
+    {
+        $db = DB::connection(BewellConnectionService::CONNECTION);
+        [$inSql, $inBindings] = $this->userIdInClause('e.id', $scope);
+        [$companySql, $companyBindings] = $this->exclusionRules->companyNotExcludedPredicate('e');
+
+        $sql = '
+            SELECT
+                e.id AS user_id,
+                COALESCE(NULLIF(TRIM(e.nama), \'\'), \'-\') AS nama,
+                e.kode_sid,
+                e.site,
+                COALESCE(NULLIF(TRIM(e.nama_perusahaan), \'\'), \'-\') AS perusahaan,
+                COALESCE(NULLIF(TRIM(e.jabatan_fungsional), \'\'), \'-\') AS jabatan,
+                COALESCE(f.food_cnt, 0) AS food_evals,
+                COALESCE(w.workout_cnt, 0) AS workout_evals,
+                d.tanggal_aktif
+            FROM employee_profiles e
+            INNER JOIN ('.$this->activeUsersActivityDatesSql().') AS d ON d.user_id = e.id
+            LEFT JOIN (
+                SELECT user_id, COUNT(*) AS food_cnt
+                FROM food_analyses
+                WHERE source_type = ?
+                  AND user_id IS NOT NULL
+                  AND created_at BETWEEN ? AND ?
+                GROUP BY user_id
+            ) AS f ON f.user_id = e.id
+            LEFT JOIN (
+                SELECT user_id, COUNT(*) AS workout_cnt
+                FROM workout_analyses
+                WHERE user_id IS NOT NULL
+                  AND created_at BETWEEN ? AND ?
+                GROUP BY user_id
+            ) AS w ON w.user_id = e.id
+            WHERE e.status_karyawan = ?
+              AND UPPER(TRIM(COALESCE(e.jabatan_fungsional, \'\'))) <> ?
+              AND '.$companySql.'
+              '.$inSql.'
+            ORDER BY nama ASC
+        ';
+
+        $bindings = array_merge(
+            $this->activeUsersUnionBindings($from, $to),
+            ['photo', $from, $to, $from, $to],
+            ['AKTIF', 'VISITOR'],
+            $companyBindings,
+            $inBindings
+        );
+
+        $queryRows = $db->select($sql, $bindings);
+        $rows = [];
+
+        foreach ($queryRows as $row) {
+            $rawCompany = isset($row->perusahaan) ? (string) $row->perusahaan : null;
+            $resolvedCompany = $this->companyAliasResolver->resolve($rawCompany);
+            if ($this->exclusionRules->isExcludedCompany($rawCompany)
+                || $this->exclusionRules->isExcludedCompany($resolvedCompany)
+            ) {
+                continue;
+            }
+
+            $food = (int) ($row->food_evals ?? 0);
+            $workout = (int) ($row->workout_evals ?? 0);
+            $tanggalAktif = '-';
+            if (! empty($row->tanggal_aktif)) {
+                try {
+                    $tanggalAktif = Carbon::parse((string) $row->tanggal_aktif)->format('d/m/Y');
+                } catch (Throwable) {
+                    $tanggalAktif = (string) $row->tanggal_aktif;
+                }
+            }
+
+            $rows[] = [
+                'nama' => (string) ($row->nama ?? '-'),
+                'site' => $this->siteResolver->resolveOrDash(
+                    isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                    isset($row->site) ? (string) $row->site : null,
+                ),
+                'perusahaan' => $resolvedCompany !== '' ? $resolvedCompany : '-',
+                'jabatan' => (string) ($row->jabatan ?? '-'),
+                'food_evals' => $food,
+                'workout_evals' => $workout,
+                'total_evals' => $food + $workout,
+                'tanggal_aktif' => $tanggalAktif,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function activeUsersActivityDatesSql(): string
+    {
+        return '
+            SELECT user_id, MAX(aktif_at) AS tanggal_aktif FROM (
+                SELECT user_id, created_at AS aktif_at FROM food_analyses
+                    WHERE source_type = ? AND user_id IS NOT NULL
+                      AND created_at BETWEEN ? AND ?
+                UNION ALL
+                SELECT user_id, created_at AS aktif_at FROM workout_analyses
+                    WHERE user_id IS NOT NULL
+                      AND created_at BETWEEN ? AND ?
+                UNION ALL
+                SELECT author_user_id AS user_id, created_at AS aktif_at FROM community_posts
+                    WHERE author_user_id IS NOT NULL
+                      AND created_at BETWEEN ? AND ?
+                UNION ALL
+                SELECT user_id, joined_at AS aktif_at FROM community_members
+                    WHERE user_id IS NOT NULL
+                      AND joined_at BETWEEN ? AND ?
+                UNION ALL
+                SELECT user_id, created_at AS aktif_at FROM community_event_rsvps
+                    WHERE user_id IS NOT NULL
+                      AND created_at BETWEEN ? AND ?
+                UNION ALL
+                SELECT host_user_id AS user_id, starts_at AS aktif_at FROM open_play_events
+                    WHERE host_user_id IS NOT NULL
+                      AND starts_at BETWEEN ? AND ?
+                UNION ALL
+                SELECT p.user_id, e.starts_at AS aktif_at
+                    FROM open_play_participants p
+                    INNER JOIN open_play_events e ON e.id = p.event_id
+                    WHERE p.user_id IS NOT NULL
+                      AND e.starts_at BETWEEN ? AND ?
+            ) AS activity
+            GROUP BY user_id
+        ';
     }
 
     private function resolveDimension(string $dimension): string

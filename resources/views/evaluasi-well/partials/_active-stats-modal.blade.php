@@ -6,7 +6,7 @@
         <div class="min-w-0 pe-12">
           <h5 class="modal-title fw-bold text-lg mb-4" id="activeStatsModalLabel">Detail Total User Aktif</h5>
           <p id="active-stats-footnote" class="text-sm text-secondary-light mb-0">
-            User aktif (luas) = food photo / workout / komunitas / Main Bareng. Evaluasi = food + workout.
+            User aktif (luas) = food photo / workout / komunitas / Main Bareng. Evaluasi = food + workout. Filter minggu: Minggu–Sabtu.
           </p>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
@@ -198,11 +198,17 @@
         </div>
       </div>
 
-      <div class="modal-footer border-top py-16 px-24">
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Tutup</button>
-        <button type="button" class="btn btn-primary-600 btn-sm" id="active-stats-open-status-btn">
-          Buka Status Install (User Aktif)
-        </button>
+      <div class="modal-footer border-top py-16 px-24 d-flex flex-wrap gap-2 justify-content-between">
+        <a href="#" id="active-stats-export-btn" class="btn btn-success-600 btn-sm d-inline-flex align-items-center gap-1">
+          <iconify-icon icon="solar:download-minimalistic-bold" class="text-md"></iconify-icon>
+          Download Excel
+        </a>
+        <div class="d-flex flex-wrap gap-2">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Tutup</button>
+          <button type="button" class="btn btn-primary-600 btn-sm" id="active-stats-open-status-btn">
+            Buka Status Install (User Aktif)
+          </button>
+        </div>
       </div>
     </div>
   </div>
