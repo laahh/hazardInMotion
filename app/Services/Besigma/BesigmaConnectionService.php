@@ -10,7 +10,8 @@ use Throwable;
 
 /**
  * Pemeriksa koneksi Postgres Besigma langsung ke RDS (PG_HOST:PG_PORT).
- * Database target: `besigma_db` — pola sama dengan RFID (pgsql_direct).
+ * Database target: `besigma` — pola sama dengan RFID (pgsql_direct).
+ * Nama connection Laravel tetap `besigma_db`.
  */
 final class BesigmaConnectionService
 {
@@ -230,7 +231,7 @@ final class BesigmaConnectionService
             return 'RDS tidak merespons dalam batas waktu. Periksa PG_HOST/PG_PORT dan akses jaringan (security group), bukan tunnel SSH 5433.';
         }
 
-        return 'RDS terjangkau, tetapi query Postgres gagal. Periksa user, database `besigma_db`, search_path, dan log RDS.';
+        return 'RDS terjangkau, tetapi query Postgres gagal. Periksa user, database `besigma`, search_path, dan log RDS.';
     }
 
     /**

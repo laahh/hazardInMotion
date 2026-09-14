@@ -22,7 +22,7 @@
     <div>
         @if ($connected)
             <strong>Koneksi berhasil.</strong> Postgres direct RDS
-            <code>{{ ($target['host'] ?? 'PG_HOST').':'.($target['port'] ?? 5432) }}/{{ $target['database'] ?? ($probe['database'] ?? 'besigma_db') }}</code>
+            <code>{{ ($target['host'] ?? 'PG_HOST').':'.($target['port'] ?? 5432) }}/{{ $target['database'] ?? ($probe['database'] ?? 'besigma') }}</code>
             sebagai <code>{{ $probe['username'] ?? ($target['username'] ?? '—') }}</code>.
             Katalog: {{ count($tables) }} objek (tabel/view), {{ count($boundaryTables) }} terkait boundary.
         @else
@@ -122,7 +122,7 @@
                         </tr>
                         <tr>
                             <th>BESIGMA_DB_DATABASE</th>
-                            <td><code>{{ $target['database'] ?? 'besigma_db' }}</code></td>
+                            <td><code>{{ $target['database'] ?? 'besigma' }}</code></td>
                         </tr>
                         <tr>
                             <th>BESIGMA_DB_USERNAME</th>
@@ -141,7 +141,7 @@ BESIGMA_DB_PASSWORD=safety123</pre>
                         @if ($rfidDirect['ok'] ?? false)
                             RFID direct (<code>pgsql_direct</code> / {{ $rfidDirect['database'] ?? 'hse_automation' }}) hidup.
                             @if (! $connected)
-                                Jaringan RDS OK — cek database <code>besigma_db</code> atau hak user.
+                                Jaringan RDS OK — cek database <code>besigma</code> atau hak user.
                             @endif
                         @else
                             RFID direct juga gagal — app server belum bisa reach RDS (security group / VPN).

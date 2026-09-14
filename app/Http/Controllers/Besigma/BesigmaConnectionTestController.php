@@ -12,7 +12,7 @@ use Illuminate\Http\Response;
 use Illuminate\View\View;
 
 /**
- * Halaman tes koneksi direct RDS Postgres Besigma (database `besigma_db`).
+ * Halaman tes koneksi direct RDS Postgres Besigma (database `besigma`).
  */
 final class BesigmaConnectionTestController extends Controller
 {

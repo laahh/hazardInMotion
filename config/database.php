@@ -220,9 +220,9 @@ return [
         ],
 
         /*
-        | Besigma live data di Postgres OLAP (database `besigma_db`).
-        | Koneksi LANGSUNG ke RDS (PG_HOST:PG_PORT) — sama pola dengan RFID
-        | (pgsql_direct), bukan tunnel SSH/jumphost (pgsql_ssh).
+        | Besigma live data di Postgres OLAP (database Postgres: `besigma`).
+        | Connection Laravel tetap bernama besigma_db. Koneksi LANGSUNG ke RDS
+        | (PG_HOST:PG_PORT) — sama pola RFID (pgsql_direct), bukan tunnel SSH.
         */
         'besigma_db' => [
             'driver' => 'pgsql',
