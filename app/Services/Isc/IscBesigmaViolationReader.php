@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Isc;
 
 use App\Services\Besigma\BesigmaConnectionService;
+use App\Services\Besigma\BesigmaSchema;
 use App\Services\Besigma\BesigmaTunnelService;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -96,12 +97,12 @@ final class IscBesigmaViolationReader
                     s.code AS site_code_raw,
                     s.name AS site_name,
                     p.name AS pit_name
-                FROM boundary_violations v
-                INNER JOIN users u ON u.id = v.user_id AND u.is_deleted = 0
-                LEFT JOIN companies c ON c.id = u.company_id
-                LEFT JOIN boundaries b ON b.id = v.boundary_id
-                LEFT JOIN sites s ON s.id = v.site_id
-                LEFT JOIN pits p ON p.id = b.pit_id
+                FROM ".BesigmaSchema::qualify('boundary_violations')." v
+                INNER JOIN ".BesigmaSchema::qualify('users')." u ON u.id = v.user_id AND u.is_deleted = 0
+                LEFT JOIN ".BesigmaSchema::qualify('companies')." c ON c.id = u.company_id
+                LEFT JOIN ".BesigmaSchema::qualify('boundaries')." b ON b.id = v.boundary_id
+                LEFT JOIN ".BesigmaSchema::qualify('sites')." s ON s.id = v.site_id
+                LEFT JOIN ".BesigmaSchema::qualify('pits')." p ON p.id = b.pit_id
                 WHERE v.is_deleted = 0
                   AND v.deleted_at IS NULL
                   AND v.status IN ({$placeholders})
@@ -188,11 +189,11 @@ final class IscBesigmaViolationReader
                     s.code AS site_code_raw,
                     s.name AS site_name,
                     p.name AS pit_name
-                FROM boundary_violation_units v
-                INNER JOIN units u ON u.id = v.unit_id
-                LEFT JOIN boundaries b ON b.id = v.boundary_id
-                LEFT JOIN sites s ON s.id = v.site_id
-                LEFT JOIN pits p ON p.id = b.pit_id
+                FROM ".BesigmaSchema::qualify('boundary_violation_units')." v
+                INNER JOIN ".BesigmaSchema::qualify('units')." u ON u.id = v.unit_id
+                LEFT JOIN ".BesigmaSchema::qualify('boundaries')." b ON b.id = v.boundary_id
+                LEFT JOIN ".BesigmaSchema::qualify('sites')." s ON s.id = v.site_id
+                LEFT JOIN ".BesigmaSchema::qualify('pits')." p ON p.id = b.pit_id
                 WHERE v.is_deleted = 0
                   AND v.deleted_at IS NULL
                   AND v.status IN ({$placeholders})

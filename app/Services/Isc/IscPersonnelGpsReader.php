@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Services\Isc;
 
 use App\Services\Besigma\BesigmaConnectionService;
+use App\Services\Besigma\BesigmaSchema;
 use App\Services\Besigma\BesigmaTunnelService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 final class IscPersonnelGpsReader
@@ -108,8 +108,8 @@ final class IscPersonnelGpsReader
         try {
             foreach (array_chunk(array_keys($normalized), self::SID_CHUNK) as $chunk) {
                 $rows = DB::connection(self::CONNECTION)
-                    ->table('users as u')
-                    ->leftJoin('companies as c', 'c.id', '=', 'u.company_id')
+                    ->table(BesigmaSchema::table('users as u'))
+                    ->leftJoin(BesigmaSchema::table('companies as c'), 'c.id', '=', 'u.company_id')
                     ->where('u.is_deleted', 0)
                     ->whereRaw('UPPER(TRIM(u.sid_code)) IN ('.implode(',', array_fill(0, count($chunk), '?')).')', $chunk)
                     ->select([
@@ -242,11 +242,11 @@ final class IscPersonnelGpsReader
     private function rowsFromLogsToday(): ?\Illuminate\Support\Collection
     {
         try {
-            if (! Schema::connection(self::CONNECTION)->hasTable('user_gps_logs')) {
+            if (! BesigmaSchema::hasTable('user_gps_logs', self::CONNECTION)) {
                 return null;
             }
             $latest = DB::connection(self::CONNECTION)
-                ->table('user_gps_logs')
+                ->table(BesigmaSchema::qualify('user_gps_logs'))
                 ->selectRaw('user_id, MAX(updated_at) as max_at')
                 ->where('updated_at', '>=', self::todayStart())
                 ->where('updated_at', '<', self::tomorrowStart())
@@ -257,12 +257,12 @@ final class IscPersonnelGpsReader
             return DB::connection(self::CONNECTION)
                 ->query()
                 ->fromSub($latest, 'latest')
-                ->join('user_gps_logs as g', function ($join): void {
+                ->join(BesigmaSchema::table('user_gps_logs as g'), function ($join): void {
                     $join->on('g.user_id', '=', 'latest.user_id')
                         ->on('g.updated_at', '=', 'latest.max_at');
                 })
-                ->join('users as u', 'u.id', '=', 'g.user_id')
-                ->leftJoin('companies as c', 'c.id', '=', 'u.company_id')
+                ->join(BesigmaSchema::table('users as u'), 'u.id', '=', 'g.user_id')
+                ->leftJoin(BesigmaSchema::table('companies as c'), 'c.id', '=', 'u.company_id')
                 ->where('u.is_deleted', 0)
                 ->whereNotNull('g.latitude')
                 ->whereNotNull('g.longitude')
@@ -285,9 +285,9 @@ final class IscPersonnelGpsReader
     private function gpsQuery(string $table)
     {
         return DB::connection(self::CONNECTION)
-            ->table($table.' as g')
-            ->join('users as u', 'u.id', '=', 'g.user_id')
-            ->leftJoin('companies as c', 'c.id', '=', 'u.company_id')
+            ->table(BesigmaSchema::table($table.' as g'))
+            ->join(BesigmaSchema::table('users as u'), 'u.id', '=', 'g.user_id')
+            ->leftJoin(BesigmaSchema::table('companies as c'), 'c.id', '=', 'u.company_id')
             ->where('u.is_deleted', 0)
             ->whereNotNull('g.latitude')
             ->whereNotNull('g.longitude')

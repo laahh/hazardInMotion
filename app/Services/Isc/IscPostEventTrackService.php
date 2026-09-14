@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Isc;
 
 use App\Services\Besigma\BesigmaConnectionService;
+use App\Services\Besigma\BesigmaSchema;
 use App\Services\Besigma\BesigmaTunnelService;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -235,8 +236,8 @@ final class IscPostEventTrackService
                     u.site_assignment,
                     u.functional_position,
                     c.name AS company_name
-                FROM users u
-                LEFT JOIN companies c ON c.id = u.company_id
+                FROM ".BesigmaSchema::qualify('users')." u
+                LEFT JOIN ".BesigmaSchema::qualify('companies')." c ON c.id = u.company_id
                 WHERE u.is_deleted = 0
                   AND (
                     u.fullname LIKE ?
@@ -278,9 +279,9 @@ final class IscPostEventTrackService
                     u.site_assignment,
                     u.functional_position,
                     c.name AS company_name
-                FROM user_gps_latests g
-                INNER JOIN users u ON u.id = g.user_id AND u.is_deleted = 0
-                LEFT JOIN companies c ON c.id = u.company_id
+                FROM ".BesigmaSchema::qualify('user_gps_latests')." g
+                INNER JOIN ".BesigmaSchema::qualify('users')." u ON u.id = g.user_id AND u.is_deleted = 0
+                LEFT JOIN ".BesigmaSchema::qualify('companies')." c ON c.id = u.company_id
                 WHERE g.updated_at >= ?
                   AND g.updated_at < ?
                   AND g.latitude IS NOT NULL
@@ -345,7 +346,7 @@ final class IscPostEventTrackService
             $like = '%'.$this->likeNeedle($search).'%';
             $rows = DB::connection(self::CONNECTION)->select("
                 SELECT id AS unit_id, vehicle_number, vehicle_name, vendor_name
-                FROM units
+                FROM ".BesigmaSchema::qualify('units')."
                 WHERE vehicle_number LIKE ?
                    OR vehicle_name LIKE ?
                    OR vendor_name LIKE ?
@@ -377,7 +378,7 @@ final class IscPostEventTrackService
                     g.vehicle_name,
                     g.vendor_name,
                     g.vehicle_type
-                FROM unit_gps_latests g
+                FROM ".BesigmaSchema::qualify('unit_gps_latests')." g
                 WHERE g.updated_at >= ?
                   AND g.updated_at < ?
                   AND g.latitude IS NOT NULL
@@ -406,7 +407,7 @@ final class IscPostEventTrackService
                     g.vehicle_name,
                     g.vendor_name,
                     g.vehicle_type
-                FROM unit_gps_latests g
+                FROM ".BesigmaSchema::qualify('unit_gps_latests')." g
                 WHERE g.latitude IS NOT NULL
                   AND g.longitude IS NOT NULL
                   AND (
@@ -541,7 +542,7 @@ final class IscPostEventTrackService
         try {
             $rows = DB::connection(self::CONNECTION)->select("
                 SELECT latitude, longitude, updated_at
-                FROM user_gps_logs
+                FROM ".BesigmaSchema::qualify('user_gps_logs')."
                 WHERE user_id = ?
                   AND updated_at >= ?
                   AND updated_at < ?
@@ -567,7 +568,7 @@ final class IscPostEventTrackService
         try {
             $rows = DB::connection(self::CONNECTION)->select("
                 SELECT latitude, longitude, updated_at
-                FROM unit_gps_logs
+                FROM ".BesigmaSchema::qualify('unit_gps_logs')."
                 WHERE (unit_id = ? OR integration_id = ?)
                   AND updated_at >= ?
                   AND updated_at < ?
@@ -580,7 +581,7 @@ final class IscPostEventTrackService
             try {
                 $rows = DB::connection(self::CONNECTION)->select("
                     SELECT latitude, longitude, updated_at
-                    FROM unit_gps_logs
+                    FROM ".BesigmaSchema::qualify('unit_gps_logs')."
                     WHERE unit_id = ?
                       AND updated_at >= ?
                       AND updated_at < ?
@@ -647,11 +648,11 @@ final class IscPostEventTrackService
                     b.name AS boundary_name,
                     s.code AS site_code_raw,
                     s.name AS site_name
-                FROM boundary_violations v
-                INNER JOIN users u ON u.id = v.user_id AND u.is_deleted = 0
-                LEFT JOIN companies c ON c.id = u.company_id
-                LEFT JOIN boundaries b ON b.id = v.boundary_id
-                LEFT JOIN sites s ON s.id = v.site_id
+                FROM ".BesigmaSchema::qualify('boundary_violations')." v
+                INNER JOIN ".BesigmaSchema::qualify('users')." u ON u.id = v.user_id AND u.is_deleted = 0
+                LEFT JOIN ".BesigmaSchema::qualify('companies')." c ON c.id = u.company_id
+                LEFT JOIN ".BesigmaSchema::qualify('boundaries')." b ON b.id = v.boundary_id
+                LEFT JOIN ".BesigmaSchema::qualify('sites')." s ON s.id = v.site_id
                 WHERE v.is_deleted = 0
                   AND v.deleted_at IS NULL
                   AND v.created_at >= ?
@@ -715,10 +716,10 @@ final class IscPostEventTrackService
                     b.name AS boundary_name,
                     s.code AS site_code_raw,
                     s.name AS site_name
-                FROM boundary_violation_units v
-                INNER JOIN units u ON u.id = v.unit_id
-                LEFT JOIN boundaries b ON b.id = v.boundary_id
-                LEFT JOIN sites s ON s.id = v.site_id
+                FROM ".BesigmaSchema::qualify('boundary_violation_units')." v
+                INNER JOIN ".BesigmaSchema::qualify('units')." u ON u.id = v.unit_id
+                LEFT JOIN ".BesigmaSchema::qualify('boundaries')." b ON b.id = v.boundary_id
+                LEFT JOIN ".BesigmaSchema::qualify('sites')." s ON s.id = v.site_id
                 WHERE v.is_deleted = 0
                   AND v.deleted_at IS NULL
                   AND v.created_at >= ?
