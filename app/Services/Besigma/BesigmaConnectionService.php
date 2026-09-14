@@ -202,7 +202,7 @@ final class BesigmaConnectionService
             'database' => (string) ($cfg['database'] ?? 'besigma'),
             'username' => (string) ($cfg['username'] ?? 'safety_evaluator_2'),
             'driver' => (string) ($cfg['driver'] ?? 'pgsql'),
-            'search_path' => (string) ($cfg['search_path'] ?? 'public'),
+            'search_path' => (string) ($cfg['search_path'] ?? 'besigma_db,public'),
             'mode' => 'direct',
         ];
     }

@@ -21,28 +21,37 @@ final class BesigmaTunnelService
     private const SOCKET_TIMEOUT_SECONDS = 3;
 
     /**
-     * Paksa direct RDS jika .env / config cache masih menunjuk tunnel lama.
+     * Paksa direct RDS + schema besigma_db jika config masih tunnel lama / search_path salah.
      */
     public function applyRuntimeConfig(): void
     {
         $cfg = config('database.connections.'.self::CONNECTION, []);
         $host = strtolower(trim((string) ($cfg['host'] ?? '')));
         $port = (int) ($cfg['port'] ?? 0);
+        $searchPath = (string) ($cfg['search_path'] ?? '');
 
         $isLegacyTunnel = in_array($host, self::LOOPBACK_HOSTS, true)
             || in_array($port, self::LEGACY_TUNNEL_PORTS, true);
 
-        if (! $isLegacyTunnel) {
+        $updates = [];
+
+        if ($isLegacyTunnel) {
+            $updates['database.connections.'.self::CONNECTION.'.host'] = (string) (env('BESIGMA_DB_HOST') ?: env('PG_HOST', self::RDS_HOST));
+            $updates['database.connections.'.self::CONNECTION.'.port'] = (int) (env('BESIGMA_DB_PORT') ?: env('PG_PORT', 5432));
+        }
+
+        // Tabel live ada di schema Postgres `besigma_db` (bukan public).
+        if ($searchPath === '' || $searchPath === 'public' || ! str_contains($searchPath, 'besigma_db')) {
+            $updates['database.connections.'.self::CONNECTION.'.search_path'] = (string) (
+                env('BESIGMA_DB_SEARCH_PATH') ?: 'besigma_db,public'
+            );
+        }
+
+        if ($updates === []) {
             return;
         }
 
-        $directHost = (string) (env('BESIGMA_DB_HOST') ?: env('PG_HOST', self::RDS_HOST));
-        $directPort = (int) (env('BESIGMA_DB_PORT') ?: env('PG_PORT', 5432));
-
-        config([
-            'database.connections.'.self::CONNECTION.'.host' => $directHost,
-            'database.connections.'.self::CONNECTION.'.port' => $directPort,
-        ]);
+        config($updates);
 
         try {
             \Illuminate\Support\Facades\DB::purge(self::CONNECTION);

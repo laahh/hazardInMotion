@@ -234,7 +234,7 @@ return [
             'charset' => 'utf8',
             'prefix' => '',
             'prefix_indexes' => true,
-            'search_path' => env('BESIGMA_DB_SEARCH_PATH', 'public'),
+            'search_path' => env('BESIGMA_DB_SEARCH_PATH', 'besigma_db,public'),
             'sslmode' => env('BESIGMA_DB_SSLMODE', 'prefer'),
             'gssencmode' => 'disable',
             'connect_timeout' => (int) env('BESIGMA_DB_CONNECT_TIMEOUT', env('PG_CONNECT_TIMEOUT', 8)),

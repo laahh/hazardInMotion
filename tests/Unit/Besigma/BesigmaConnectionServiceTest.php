@@ -21,6 +21,7 @@ final class BesigmaConnectionServiceTest extends TestCase
         $this->assertSame('pgsql', $target['driver']);
         $this->assertSame('direct', $target['mode']);
         $this->assertSame('besigma', $target['database']);
+        $this->assertStringContainsString('besigma_db', $target['search_path']);
         $this->assertSame('safety_evaluator_2', $target['username']);
         $this->assertSame(
             config('database.connections.besigma_db.host'),

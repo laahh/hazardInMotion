@@ -71,7 +71,7 @@
                         </tr>
                         <tr>
                             <th>Search path</th>
-                            <td><code>{{ $target['search_path'] ?? 'public' }}</code></td>
+                            <td><code>{{ $target['search_path'] ?? 'besigma_db,public' }}</code></td>
                         </tr>
                         <tr>
                             <th>Versi server</th>
@@ -135,7 +135,8 @@
 BESIGMA_DB_PORT=5432
 BESIGMA_DB_DATABASE=besigma
 BESIGMA_DB_USERNAME=safety_evaluator_2
-BESIGMA_DB_PASSWORD=safety123</pre>
+BESIGMA_DB_PASSWORD=safety123
+BESIGMA_DB_SEARCH_PATH=besigma_db,public</pre>
                 @if (isset($rfidDirect))
                     <div class="alert {{ ($rfidDirect['ok'] ?? false) ? 'alert-success' : 'alert-warning' }} py-2 small mb-0">
                         @if ($rfidDirect['ok'] ?? false)
