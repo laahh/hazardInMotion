@@ -270,6 +270,7 @@ final class BesigmaConnectionService
     {
         $tableRows = DB::connection(self::CONNECTION)->select(
             "SELECT
+                n.nspname AS table_schema,
                 c.relname AS table_name,
                 CASE c.relkind
                     WHEN 'r' THEN 'BASE TABLE'
@@ -283,14 +284,17 @@ final class BesigmaConnectionService
                 COALESCE(obj_description(c.oid), '') AS table_comment
              FROM pg_class c
              INNER JOIN pg_namespace n ON n.oid = c.relnamespace
-             WHERE n.nspname = ANY (current_schemas(false))
+             WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+               AND n.nspname NOT LIKE 'pg\\_temp\\_%'
+               AND n.nspname NOT LIKE 'pg\\_toast\\_temp\\_%'
                AND c.relkind IN ('r', 'p', 'v', 'm')
                AND NOT c.relispartition
-             ORDER BY c.relname"
+             ORDER BY n.nspname, c.relname"
         );
 
         $columnRows = DB::connection(self::CONNECTION)->select(
             "SELECT
+                cols.table_schema,
                 cols.table_name,
                 cols.column_name,
                 cols.data_type AS column_type,
@@ -316,18 +320,21 @@ final class BesigmaConnectionService
              ) pk ON pk.table_schema = cols.table_schema
                  AND pk.table_name = cols.table_name
                  AND pk.column_name = cols.column_name
-             WHERE cols.table_schema = ANY (current_schemas(false))
-             ORDER BY cols.table_name, cols.ordinal_position"
+             WHERE cols.table_schema NOT IN ('pg_catalog', 'information_schema')
+             ORDER BY cols.table_schema, cols.table_name, cols.ordinal_position"
         );
 
         $schema = [];
         foreach ($tableRows as $tableRow) {
+            $tableSchema = (string) ($tableRow->table_schema ?? 'public');
             $name = (string) ($tableRow->table_name ?? '');
             if ($name === '') {
                 continue;
             }
-            $schema[$name] = [
-                'name' => $name,
+            $key = $tableSchema === 'public' ? $name : $tableSchema.'.'.$name;
+            $schema[$key] = [
+                'name' => $key,
+                'schema' => $tableSchema,
                 'type' => (string) ($this->rowAttr($tableRow, 'table_type') ?? 'BASE TABLE'),
                 'engine' => ($engine = $this->rowAttr($tableRow, 'engine')) !== null && $engine !== ''
                     ? (string) $engine
@@ -341,13 +348,16 @@ final class BesigmaConnectionService
         }
 
         foreach ($columnRows as $columnRow) {
+            $tableSchema = (string) ($columnRow->table_schema ?? 'public');
             $table = (string) ($columnRow->table_name ?? '');
             if ($table === '') {
                 continue;
             }
-            if (! isset($schema[$table])) {
-                $schema[$table] = [
-                    'name' => $table,
+            $key = $tableSchema === 'public' ? $table : $tableSchema.'.'.$table;
+            if (! isset($schema[$key])) {
+                $schema[$key] = [
+                    'name' => $key,
+                    'schema' => $tableSchema,
                     'type' => 'BASE TABLE',
                     'engine' => null,
                     'approx_rows' => null,
@@ -355,7 +365,7 @@ final class BesigmaConnectionService
                     'columns' => [],
                 ];
             }
-            $schema[$table]['columns'][] = [
+            $schema[$key]['columns'][] = [
                 'name' => (string) ($this->rowAttr($columnRow, 'column_name') ?? ''),
                 'type' => (string) ($this->rowAttr($columnRow, 'column_type') ?? ''),
                 'nullable' => strtoupper((string) ($this->rowAttr($columnRow, 'is_nullable') ?? '')) === 'YES',

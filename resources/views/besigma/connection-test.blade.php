@@ -270,7 +270,13 @@ BESIGMA_DB_PASSWORD=safety123</pre>
     </div>
 </div>
 @elseif ($connected)
-<div class="alert alert-warning mt-3">Koneksi hidup, tetapi information_schema tidak mengembalikan tabel.</div>
+<div class="alert alert-warning mt-3">
+    <strong>Koneksi hidup, tetapi 0 tabel terlihat.</strong>
+    Kemungkinan: (1) database <code>besigma</code> masih kosong / belum di-sync ke OLAP,
+    (2) tabel ada di schema lain dan user belum punya privilege <code>USAGE</code>/<code>SELECT</code>,
+    atau (3) user <code>safety_evaluator_2</code> tidak punya akses katalog.
+    Cek di RDS: <code>SELECT schemaname, count(*) FROM pg_tables GROUP BY 1;</code>
+</div>
 @endif
 @endsection
 
