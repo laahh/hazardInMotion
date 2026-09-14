@@ -11,6 +11,7 @@ use Illuminate\Database\Query\Builder;
  * "karyawan" di dashboard Evaluasi Well: jabatan Presiden Direktur, Direktur
  * tanpa site/site HO, site Jakarta & Poltek, perusahaan di luar hitungan
  * persentase Performance (Politeknik Sinarmas, Sinarmas Maritim, Fusi),
+ * PT Berau Coal + departemen internship/poltek/kampus merdeka/prakerin,
  * dan nama dummy/testing.
  *
  * Semua kondisi sengaja dicek dari kolom mentah employee_profiles (bukan
@@ -35,16 +36,34 @@ final class SportEvaluationEmployeeExclusionRules
      */
     public const EXCLUDED_COMPANY_COMPACT = 'POLITEKNIKSINARMASBERAUCOAL';
 
+    /** Compact nama PT Berau Coal (bukan Yayasan / Politeknik * Berau Coal). */
+    public const BERAU_COAL_COMPACT = 'PTBERAUCOAL';
+
+    public const BERAU_COAL_COMPACT_ALT = 'BERAUCOAL';
+
+    /**
+     * Departemen PT Berau Coal yang dikecualikan dari Total User Aktif.
+     *
+     * @var list<string>
+     */
+    public const EXCLUDED_BERAU_DEPARTMENT_PATTERNS = [
+        '%INTERNSHIP%',
+        '%POLTEK%',
+        '%KAMPUS%MERDEKA%',
+        '%PRAKERIN%',
+    ];
+
     public const DUMMY_NAME_LIKE = '%DUMMY%';
 
     /**
      * Terapkan exclude jabatan (Presiden Direktur, Direktur tanpa site/HO),
      * site Jakarta/Poltek, perusahaan Performance yang dikecualikan,
-     * dan nama dummy ke builder ber-alias 'e'.
+     * PT Berau Coal + departemen internship, dan nama dummy ke builder ber-alias 'e'.
      */
     public function applyToQuery(Builder $query): Builder
     {
         [$companySql, $companyBindings] = $this->companyNotExcludedPredicate('e');
+        [$berauSql, $berauBindings] = $this->berauInternDepartmentNotExcludedPredicate('e');
 
         return $query
             ->whereRaw("UPPER(TRIM(COALESCE(e.jabatan_fungsional, ''))) NOT IN ('VISITOR', 'PRESIDEN DIREKTUR')")
@@ -54,6 +73,7 @@ final class SportEvaluationEmployeeExclusionRules
             )")
             ->whereRaw("UPPER(TRIM(COALESCE(e.site, ''))) NOT IN ('JAKARTA', 'POLTEK')")
             ->whereRaw($companySql, $companyBindings)
+            ->whereRaw($berauSql, $berauBindings)
             ->where(function (Builder $q): void {
                 $q->whereNull('e.nama')
                     ->orWhereRaw('UPPER(e.nama) NOT LIKE ?', [self::DUMMY_NAME_LIKE]);
@@ -107,6 +127,76 @@ final class SportEvaluationEmployeeExclusionRules
         return str_starts_with($compact, 'FUSI') || str_starts_with($compact, 'PTFUSI');
     }
 
+    /**
+     * Predikat SQL: bukan (PT Berau Coal AND departemen internship/poltek/kampus merdeka/prakerin).
+     *
+     * @return array{0: string, 1: list<string>}
+     */
+    public function berauInternDepartmentNotExcludedPredicate(string $alias = 'e'): array
+    {
+        $safe = $this->safeAlias($alias);
+        $compact = $this->companyCompactSqlExpr($safe);
+        $dept = "UPPER(TRIM(COALESCE({$safe}.departement, '')))";
+
+        $deptClauses = [];
+        foreach (self::EXCLUDED_BERAU_DEPARTMENT_PATTERNS as $pattern) {
+            $deptClauses[] = "{$dept} LIKE ?";
+        }
+
+        return [
+            "NOT (
+                ({$compact} = ? OR {$compact} = ?)
+                AND (".implode(' OR ', $deptClauses).')
+            )',
+            array_merge(
+                [self::BERAU_COAL_COMPACT, self::BERAU_COAL_COMPACT_ALT],
+                self::EXCLUDED_BERAU_DEPARTMENT_PATTERNS,
+            ),
+        ];
+    }
+
+    /**
+     * Gabungan exclude perusahaan Performance + Berau intern departments (untuk Active Stats).
+     *
+     * @return array{0: string, 1: list<string>}
+     */
+    public function activeStatsEmployeeNotExcludedPredicate(string $alias = 'e'): array
+    {
+        [$companySql, $companyBindings] = $this->companyNotExcludedPredicate($alias);
+        [$berauSql, $berauBindings] = $this->berauInternDepartmentNotExcludedPredicate($alias);
+
+        return [
+            '('.$companySql.') AND ('.$berauSql.')',
+            array_merge($companyBindings, $berauBindings),
+        ];
+    }
+
+    public function isBerauCoalCompany(?string $company): bool
+    {
+        $compact = $this->compactCompanyName((string) $company);
+
+        return $compact === self::BERAU_COAL_COMPACT || $compact === self::BERAU_COAL_COMPACT_ALT;
+    }
+
+    public function isExcludedBerauInternDepartment(?string $company, ?string $departement): bool
+    {
+        if (! $this->isBerauCoalCompany($company)) {
+            return false;
+        }
+
+        $dept = mb_strtoupper(trim((string) $departement));
+        if ($dept === '') {
+            return false;
+        }
+
+        $compactDept = str_replace([' ', '.', ',', '-'], '', $dept);
+
+        return str_contains($compactDept, 'INTERNSHIP')
+            || str_contains($compactDept, 'POLTEK')
+            || str_contains($compactDept, 'KAMPUSMERDEKA')
+            || str_contains($compactDept, 'PRAKERIN');
+    }
+
     public function compactCompanyName(string $company): string
     {
         $upper = mb_strtoupper(trim($company));
@@ -150,7 +240,8 @@ final class SportEvaluationEmployeeExclusionRules
      *     site?:string|null,
      *     nama?:string|null,
      *     nama_perusahaan?:string|null,
-     *     company?:string|null
+     *     company?:string|null,
+     *     departement?:string|null
      * }  $row
      */
     public function isExcludedRow(array $row): bool
@@ -158,6 +249,7 @@ final class SportEvaluationEmployeeExclusionRules
         $jabatan = (string) ($row['jabatan_fungsional'] ?? '');
         $site = $row['site'] ?? null;
         $company = $row['nama_perusahaan'] ?? $row['company'] ?? null;
+        $companyString = is_string($company) ? $company : null;
 
         if ($this->isExcludedJabatanFungsional($jabatan)) {
             return true;
@@ -171,7 +263,14 @@ final class SportEvaluationEmployeeExclusionRules
             return true;
         }
 
-        if ($this->isExcludedCompany(is_string($company) ? $company : null)) {
+        if ($this->isExcludedCompany($companyString)) {
+            return true;
+        }
+
+        if ($this->isExcludedBerauInternDepartment(
+            $companyString,
+            isset($row['departement']) && is_string($row['departement']) ? $row['departement'] : null,
+        )) {
             return true;
         }
 

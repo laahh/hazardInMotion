@@ -32,7 +32,8 @@ final class SportEvaluationActiveStatsService
 
     private const FOOTNOTE = 'User aktif (luas) = food photo / workout / komunitas / Main Bareng minggu terpilih (Minggu–Sabtu). '
         .'Evaluasi = jumlah upload makanan (photo) + olahraga. '
-        .'Breakdown dimensi memakai karyawan status AKTIF (exclude VISITOR, Politeknik Sinarmas, Sinarmas Maritim, Fusi); angka KPI kartu bisa berbeda.';
+        .'Breakdown dimensi memakai karyawan status AKTIF (exclude VISITOR, Politeknik Sinarmas, Sinarmas Maritim, Fusi, '
+        .'serta PT Berau Coal departemen Internship/Poltek/Kampus Merdeka/Prakerin); angka KPI kartu bisa berbeda.';
 
     /** @var array<string, string> */
     private const DIMENSION_COLUMNS = [
@@ -152,7 +153,7 @@ final class SportEvaluationActiveStatsService
         try {
             $scopeKey = $this->mitraAssignmentService->cacheKeySuffix($scope);
             $stats = Cache::remember(
-                'evaluasi_well:active_stats:v8:'.$dimension.':'.$week['start'].':'.$scopeKey,
+                'evaluasi_well:active_stats:v9:'.$dimension.':'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($dimension, $week, $scope): array {
                     return $this->buildStats($dimension, $week, $scope);
@@ -184,10 +185,18 @@ final class SportEvaluationActiveStatsService
         $db = DB::connection(BewellConnectionService::CONNECTION);
         $scope = $this->normalizeScopeFilters($filters);
         [$inSql, $inBindings] = $this->userIdInClause('active_users.user_id', $scope);
+        [$berauSql, $berauBindings] = $this->exclusionRules->berauInternDepartmentNotExcludedPredicate('e');
 
         $row = $db->selectOne(
-            'SELECT COUNT(*) AS c FROM ('.$this->activeUsersUnionSql().') AS active_users WHERE 1 = 1'.$inSql,
-            array_merge($this->activeUsersUnionBindings($from, $to), $inBindings)
+            'SELECT COUNT(*) AS c
+             FROM ('.$this->activeUsersUnionSql().') AS active_users
+             LEFT JOIN employee_profiles e ON e.id = active_users.user_id
+             WHERE '.$berauSql.$inSql,
+            array_merge(
+                $this->activeUsersUnionBindings($from, $to),
+                $berauBindings,
+                $inBindings
+            )
         );
 
         return (int) ($row->c ?? 0);
@@ -237,14 +246,14 @@ final class SportEvaluationActiveStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:overview:v7:'.$week['start'].':'.$scopeKey,
+                'evaluasi_well:active_stats:overview:v8:'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($week, $scope, $scopeKey): array {
                     $overview = [];
 
                     foreach (array_keys(self::DIMENSION_COLUMNS) as $dimension) {
                         $stats = Cache::remember(
-                            'evaluasi_well:active_stats:v8:'.$dimension.':'.$week['start'].':'.$scopeKey,
+                            'evaluasi_well:active_stats:v9:'.$dimension.':'.$week['start'].':'.$scopeKey,
                             self::CACHE_TTL,
                             function () use ($dimension, $week, $scope): array {
                                 return $this->buildStats($dimension, $week, $scope);
@@ -294,7 +303,7 @@ final class SportEvaluationActiveStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:weekly_trend:v3:'.$scopeKey,
+                'evaluasi_well:active_stats:weekly_trend:v4:'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($scope): array {
                     $now = Carbon::now();
@@ -467,7 +476,7 @@ final class SportEvaluationActiveStatsService
         $db = DB::connection(BewellConnectionService::CONNECTION);
         [$inSql, $inBindings] = $this->userIdInClause('e.id', $scope);
 
-        [$companySql, $companyBindings] = $this->exclusionRules->companyNotExcludedPredicate('e');
+        [$companySql, $companyBindings] = $this->exclusionRules->activeStatsEmployeeNotExcludedPredicate('e');
 
         $sql = '
             SELECT
@@ -576,7 +585,7 @@ final class SportEvaluationActiveStatsService
     {
         $db = DB::connection(BewellConnectionService::CONNECTION);
         [$inSql, $inBindings] = $this->userIdInClause('e.id', $scope);
-        [$companySql, $companyBindings] = $this->exclusionRules->companyNotExcludedPredicate('e');
+        [$companySql, $companyBindings] = $this->exclusionRules->activeStatsEmployeeNotExcludedPredicate('e');
 
         $sql = '
             SELECT
@@ -694,7 +703,7 @@ final class SportEvaluationActiveStatsService
         $db = DB::connection(BewellConnectionService::CONNECTION);
         $limit = self::LEADERBOARD_LIMIT;
         [$inSql, $inBindings] = $this->userIdInClause('e.id', $scope);
-        [$companySql, $companyBindings] = $this->exclusionRules->companyNotExcludedPredicate('e');
+        [$companySql, $companyBindings] = $this->exclusionRules->activeStatsEmployeeNotExcludedPredicate('e');
 
             $sql = '
             SELECT
@@ -703,6 +712,7 @@ final class SportEvaluationActiveStatsService
                 e.kode_sid,
                 e.site,
                 COALESCE(NULLIF(TRIM(e.nama_perusahaan), \'\'), \'-\') AS perusahaan,
+                COALESCE(NULLIF(TRIM(e.departement), \'\'), \'\') AS departement,
                 COALESCE(NULLIF(TRIM(e.jabatan_fungsional), \'\'), \'-\') AS jabatan,
                 COALESCE(f.food_cnt, 0) AS food_evals,
                 COALESCE(w.workout_cnt, 0) AS workout_evals,
@@ -752,8 +762,11 @@ final class SportEvaluationActiveStatsService
         foreach ($queryRows as $row) {
             $rawCompany = isset($row->perusahaan) ? (string) $row->perusahaan : null;
             $resolvedCompany = $this->companyAliasResolver->resolve($rawCompany);
+            $departement = isset($row->departement) ? (string) $row->departement : null;
             if ($this->exclusionRules->isExcludedCompany($rawCompany)
                 || $this->exclusionRules->isExcludedCompany($resolvedCompany)
+                || $this->exclusionRules->isExcludedBerauInternDepartment($rawCompany, $departement)
+                || $this->exclusionRules->isExcludedBerauInternDepartment($resolvedCompany, $departement)
             ) {
                 continue;
             }
@@ -1008,7 +1021,7 @@ final class SportEvaluationActiveStatsService
     {
         $db = DB::connection(BewellConnectionService::CONNECTION);
         [$inSql, $inBindings] = $this->userIdInClause('e.id', $scope);
-        [$companySql, $companyBindings] = $this->exclusionRules->companyNotExcludedPredicate('e');
+        [$companySql, $companyBindings] = $this->exclusionRules->activeStatsEmployeeNotExcludedPredicate('e');
 
         $sql = '
             SELECT
@@ -1017,6 +1030,7 @@ final class SportEvaluationActiveStatsService
                 e.kode_sid,
                 e.site,
                 COALESCE(NULLIF(TRIM(e.nama_perusahaan), \'\'), \'-\') AS perusahaan,
+                COALESCE(NULLIF(TRIM(e.departement), \'\'), \'\') AS departement,
                 COALESCE(NULLIF(TRIM(e.jabatan_fungsional), \'\'), \'-\') AS jabatan,
                 COALESCE(f.food_cnt, 0) AS food_evals,
                 COALESCE(w.workout_cnt, 0) AS workout_evals,
@@ -1059,8 +1073,11 @@ final class SportEvaluationActiveStatsService
         foreach ($queryRows as $row) {
             $rawCompany = isset($row->perusahaan) ? (string) $row->perusahaan : null;
             $resolvedCompany = $this->companyAliasResolver->resolve($rawCompany);
+            $departement = isset($row->departement) ? (string) $row->departement : null;
             if ($this->exclusionRules->isExcludedCompany($rawCompany)
                 || $this->exclusionRules->isExcludedCompany($resolvedCompany)
+                || $this->exclusionRules->isExcludedBerauInternDepartment($rawCompany, $departement)
+                || $this->exclusionRules->isExcludedBerauInternDepartment($resolvedCompany, $departement)
             ) {
                 continue;
             }

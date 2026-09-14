@@ -82,6 +82,66 @@ final class SportEvaluationEmployeeExclusionRulesTest extends TestCase
         ]));
     }
 
+    public function test_excludes_berau_coal_intern_departments(): void
+    {
+        $this->assertTrue($this->rules->isExcludedBerauInternDepartment('PT Berau Coal', 'Internship'));
+        $this->assertTrue($this->rules->isExcludedBerauInternDepartment('PT Berau Coal', 'Dept Poltek'));
+        $this->assertTrue($this->rules->isExcludedBerauInternDepartment('PT Berau Coal', 'Kampus Merdeka'));
+        $this->assertTrue($this->rules->isExcludedBerauInternDepartment('Berau Coal', 'Prakerin Site'));
+        $this->assertTrue($this->rules->isExcludedBerauInternDepartment('PT. Berau Coal', 'KAMPUS-MERDEKA'));
+
+        $this->assertFalse($this->rules->isExcludedBerauInternDepartment('PT Berau Coal', 'Mining Operation'));
+        $this->assertFalse($this->rules->isExcludedBerauInternDepartment('PT Pamapersada Nusantara', 'Internship'));
+        $this->assertFalse($this->rules->isExcludedBerauInternDepartment('Yayasan Dharma Bakti Berau Coal', 'Poltek'));
+        $this->assertFalse($this->rules->isExcludedBerauInternDepartment('PT Berau Coal', null));
+        $this->assertFalse($this->rules->isExcludedBerauInternDepartment(null, 'Internship'));
+    }
+
+    public function test_excluded_row_honors_berau_intern_department(): void
+    {
+        $this->assertTrue($this->rules->isExcludedRow([
+            'jabatan_fungsional' => 'Intern',
+            'site' => 'BMO',
+            'nama' => 'Andi',
+            'company' => 'PT Berau Coal',
+            'departement' => 'Internship',
+        ]));
+
+        $this->assertFalse($this->rules->isExcludedRow([
+            'jabatan_fungsional' => 'Operator',
+            'site' => 'BMO',
+            'nama' => 'Budi',
+            'company' => 'PT Berau Coal',
+            'departement' => 'Production',
+        ]));
+    }
+
+    public function test_berau_intern_sql_predicate(): void
+    {
+        [$sql, $bindings] = $this->rules->berauInternDepartmentNotExcludedPredicate('e');
+
+        $this->assertStringContainsString('departement', $sql);
+        $this->assertStringContainsString('NOT (', $sql);
+        $this->assertSame([
+            'PTBERAUCOAL',
+            'BERAUCOAL',
+            '%INTERNSHIP%',
+            '%POLTEK%',
+            '%KAMPUS%MERDEKA%',
+            '%PRAKERIN%',
+        ], $bindings);
+    }
+
+    public function test_active_stats_employee_predicate_includes_company_and_berau(): void
+    {
+        [$sql, $bindings] = $this->rules->activeStatsEmployeeNotExcludedPredicate('e');
+
+        $this->assertStringContainsString('POLITEKNIKSINARMAS', implode(',', $bindings));
+        $this->assertStringContainsString('PTBERAUCOAL', implode(',', $bindings));
+        $this->assertStringContainsString('INTERNSHIP', implode(',', $bindings));
+        $this->assertStringContainsString('AND', $sql);
+    }
+
     public function test_company_sql_predicate_covers_all_excluded_companies(): void
     {
         [$sql, $bindings] = $this->rules->companyNotExcludedPredicate('e');
