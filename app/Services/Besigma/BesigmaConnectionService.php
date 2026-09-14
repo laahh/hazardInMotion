@@ -133,8 +133,9 @@ final class BesigmaConnectionService
         DB::purge(self::CONNECTION);
 
         $tunnel = $this->tunnelMeta();
-        $keyExists = is_file($tunnel['ssh_pkey']);
-        $tcpReachable = $tunnelService->isTcpReachable($tunnel['local_host'], $tunnel['local_port']);
+        $target = $this->targetMeta();
+        $keyExists = $tunnel['ssh_pkey'] !== '' && is_file($tunnel['ssh_pkey']);
+        $tcpReachable = $tunnelService->isTcpReachable($target['host'], $target['port']);
 
         $base = [
             'connected' => false,
@@ -150,24 +151,21 @@ final class BesigmaConnectionService
             'schema' => [],
             'error' => null,
             'hint' => null,
+            'target' => $target,
             'tunnel' => $tunnel,
         ];
 
-        $usesLoopback = in_array($tunnel['local_host'], ['127.0.0.1', 'localhost', '::1'], true);
-
-        if (! $keyExists) {
-            $base['hint'] = 'File private key JumpHost tidak ditemukan. Pastikan JumpHostVPC2.pem ada, atau set BESIGMA_SSH_PKEY / SSH_PKEY.';
-        }
+        $usesLoopback = in_array($target['host'], ['127.0.0.1', 'localhost', '::1'], true);
 
         if (! $tcpReachable) {
             $base['error'] = sprintf(
                 'Host %s:%d tidak merespons.',
-                $tunnel['local_host'],
-                $tunnel['local_port']
+                $target['host'],
+                $target['port']
             );
             $base['hint'] = $usesLoopback
-                ? 'Tunnel SSH OLAP belum aktif di 127.0.0.1:5433. Jalankan setup-ssh-tunnel / start tunnel VPC2 ke RDS Postgres.'
-                : 'App server tidak bisa tembus RDS langsung. Laravel harus memakai 127.0.0.1:5433 lewat JumpHost.';
+                ? 'Tunnel SSH OLAP belum aktif di 127.0.0.1:5433. Pastikan tunnel pgsql_ssh / JumpHost VPC2 ke RDS sudah jalan. BESIGMA_SSH_* MySQL lama tidak dipakai.'
+                : 'Laravel harus connect ke 127.0.0.1:5433 (tunnel OLAP), bukan langsung ke RDS.';
 
             return $base;
         }
@@ -204,6 +202,7 @@ final class BesigmaConnectionService
                 'schema' => $schema,
                 'error' => null,
                 'hint' => null,
+                'target' => $target,
                 'tunnel' => $tunnel,
             ];
         } catch (Throwable $e) {
@@ -216,6 +215,25 @@ final class BesigmaConnectionService
 
             return $base;
         }
+    }
+
+    /**
+     * Target koneksi Laravel ke Postgres OLAP (tanpa password).
+     *
+     * @return array{host:string,port:int,database:string,username:string,driver:string,search_path:string}
+     */
+    public function targetMeta(): array
+    {
+        $cfg = config('database.connections.'.self::CONNECTION, []);
+
+        return [
+            'host' => (string) ($cfg['host'] ?? '127.0.0.1'),
+            'port' => (int) ($cfg['port'] ?? 5433),
+            'database' => (string) ($cfg['database'] ?? 'besigma'),
+            'username' => (string) ($cfg['username'] ?? 'safety_evaluator_2'),
+            'driver' => (string) ($cfg['driver'] ?? 'pgsql'),
+            'search_path' => (string) ($cfg['search_path'] ?? 'public'),
+        ];
     }
 
     private function hintForProbeFailure(Throwable $e, bool $tcpReachable): string

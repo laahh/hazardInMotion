@@ -5,6 +5,7 @@
 @section('content')
 @php
     $connected = (bool) ($probe['connected'] ?? false);
+    $target = $probe['target'] ?? [];
     $tunnel = $probe['tunnel'] ?? [];
     $schema = is_array($probe['schema'] ?? null) ? $probe['schema'] : [];
     $tables = is_array($probe['tables'] ?? null) ? $probe['tables'] : [];
@@ -21,10 +22,12 @@
     <i class="material-icons-outlined">{{ $connected ? 'check_circle' : 'error_outline' }}</i>
     <div>
         @if ($connected)
-            <strong>Koneksi berhasil.</strong> Laravel masuk ke Postgres Besigma lewat <code>{{ ($tunnel['local_host'] ?? '127.0.0.1').':'.($tunnel['local_port'] ?? 5433) }}</code>.
+            <strong>Koneksi berhasil.</strong> Postgres OLAP
+            <code>{{ ($target['host'] ?? '127.0.0.1').':'.($target['port'] ?? 5433) }}/{{ $target['database'] ?? ($probe['database'] ?? 'besigma') }}</code>
+            sebagai <code>{{ $probe['username'] ?? ($target['username'] ?? '—') }}</code>.
             Katalog: {{ count($tables) }} objek (tabel/view), {{ count($boundaryTables) }} terkait boundary.
         @else
-            <strong>Koneksi gagal.</strong> {{ $probe['error'] ?? 'Tidak dapat terhubung ke besigma_db.' }}
+            <strong>Koneksi gagal.</strong> {{ $probe['error'] ?? 'Tidak dapat terhubung ke Postgres OLAP besigma.' }}
             @if (!empty($probe['hint']))
                 <div class="mt-1">{{ $probe['hint'] }}</div>
             @endif
@@ -36,7 +39,7 @@
     <div class="col-lg-6">
         <div class="card">
             <div class="card-header bg-white py-3">
-                <h6 class="mb-0">Hasil tes Postgres</h6>
+                <h6 class="mb-0">Hasil tes Postgres OLAP</h6>
             </div>
             <div class="card-body">
                 <table class="table table-sm mb-0">
@@ -52,20 +55,24 @@
                             </td>
                         </tr>
                         <tr>
-                            <th>TCP ke host Laravel</th>
+                            <th>TCP {{ ($target['host'] ?? '127.0.0.1').':'.($target['port'] ?? 5433) }}</th>
                             <td>{{ ($probe['tcp_reachable'] ?? false) ? 'Terbuka' : 'Tidak merespons' }}</td>
                         </tr>
                         <tr>
-                            <th>File key PEM</th>
-                            <td>{{ ($probe['key_exists'] ?? false) ? 'Ada' : 'Tidak ditemukan' }}</td>
+                            <th>Driver</th>
+                            <td><code>{{ $target['driver'] ?? 'pgsql' }}</code></td>
                         </tr>
                         <tr>
                             <th>Database</th>
-                            <td><code>{{ $probe['database'] ?? '—' }}</code></td>
+                            <td><code>{{ $probe['database'] ?? ($target['database'] ?? '—') }}</code></td>
                         </tr>
                         <tr>
-                            <th>User MySQL</th>
-                            <td><code>{{ $probe['username'] ?? '—' }}</code></td>
+                            <th>User Postgres</th>
+                            <td><code>{{ $probe['username'] ?? ($target['username'] ?? '—') }}</code></td>
+                        </tr>
+                        <tr>
+                            <th>Search path</th>
+                            <td><code>{{ $target['search_path'] ?? 'public' }}</code></td>
                         </tr>
                         <tr>
                             <th>Versi server</th>
@@ -97,35 +104,39 @@
     <div class="col-lg-6">
         <div class="card">
             <div class="card-header bg-white py-3">
-                <h6 class="mb-0">Jalur tunnel OLAP</h6>
+                <h6 class="mb-0">Target .env (OLAP)</h6>
             </div>
             <div class="card-body">
                 <table class="table table-sm mb-3">
                     <tbody>
                         <tr>
-                            <th class="w-40">Local (Laravel)</th>
-                            <td><code>{{ ($tunnel['local_host'] ?? '127.0.0.1').':'.($tunnel['local_port'] ?? 5433) }}</code></td>
+                            <th class="w-40">BESIGMA_DB_HOST</th>
+                            <td><code>{{ $target['host'] ?? '127.0.0.1' }}</code></td>
                         </tr>
                         <tr>
-                            <th>Jump host</th>
-                            <td><code>{{ ($tunnel['ssh_user'] ?? '').'@'.($tunnel['ssh_host'] ?? '').':'.($tunnel['ssh_port'] ?? 22) }}</code></td>
+                            <th>BESIGMA_DB_PORT</th>
+                            <td><code>{{ $target['port'] ?? 5433 }}</code></td>
                         </tr>
                         <tr>
-                            <th>Remote Postgres</th>
-                            <td><code>{{ ($tunnel['remote_host'] ?? '').':'.($tunnel['remote_port'] ?? 5432) }}</code></td>
+                            <th>BESIGMA_DB_DATABASE</th>
+                            <td><code>{{ $target['database'] ?? 'besigma' }}</code></td>
                         </tr>
                         <tr>
-                            <th>Private key</th>
-                            <td class="text-break"><code>{{ $tunnel['ssh_pkey'] ?? '—' }}</code></td>
+                            <th>BESIGMA_DB_USERNAME</th>
+                            <td><code>{{ $target['username'] ?? 'safety_evaluator_2' }}</code></td>
+                        </tr>
+                        <tr>
+                            <th>Remote RDS (via tunnel)</th>
+                            <td><code>{{ ($tunnel['remote_host'] ?? 'postgresql-olap-bc-production…').':'.($tunnel['remote_port'] ?? 5432) }}</code></td>
                         </tr>
                     </tbody>
                 </table>
-                <p class="text-muted small mb-2">Besigma memakai database Postgres <code>besigma</code> lewat tunnel yang sama dengan <code>pgsql_ssh</code>:</p>
-                <pre class="bg-light p-3 rounded small mb-0"># tunnel OLAP (port 5433)
-BESIGMA_DB_HOST=127.0.0.1
+                <p class="text-muted small mb-2">Jumphost MySQL lama (<code>BESIGMA_SSH_*</code> / port 3307) diabaikan. Tunnel yang dipakai sama dengan <code>pgsql_ssh</code>:</p>
+                <pre class="bg-light p-3 rounded small mb-0">BESIGMA_DB_HOST=127.0.0.1
 BESIGMA_DB_PORT=5433
 BESIGMA_DB_DATABASE=besigma
-BESIGMA_DB_USERNAME=safety_evaluator_2</pre>
+BESIGMA_DB_USERNAME=safety_evaluator_2
+BESIGMA_DB_PASSWORD=safety123</pre>
             </div>
         </div>
     </div>

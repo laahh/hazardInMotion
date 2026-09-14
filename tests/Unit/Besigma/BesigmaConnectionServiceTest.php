@@ -26,6 +26,17 @@ final class BesigmaConnectionServiceTest extends TestCase
         $this->assertArrayNotHasKey('ssh_pkey_contents', $meta);
     }
 
+    public function test_target_meta_uses_olap_besigma_database(): void
+    {
+        $target = app(BesigmaConnectionService::class)->targetMeta();
+
+        $this->assertSame('pgsql', $target['driver']);
+        $this->assertSame('127.0.0.1', $target['host']);
+        $this->assertSame(5433, $target['port']);
+        $this->assertSame('besigma', $target['database']);
+        $this->assertSame('safety_evaluator_2', $target['username']);
+    }
+
     public function test_runtime_config_rewrites_direct_rds_host_to_loopback_tunnel(): void
     {
         config([
