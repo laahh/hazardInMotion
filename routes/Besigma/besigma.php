@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | Modul Besigma — tes koneksi jumphost MySQL
 |--------------------------------------------------------------------------
-| Akses Postgres database `besigma_db` lewat tunnel OLAP (setup-ssh-tunnel → localhost:5433).
+| Akses Postgres database `besigma_db` langsung ke RDS (PG_HOST:PG_PORT), sama pola RFID.
 | Connection Laravel: besigma_db (pgsql). Tidak mengubah PG_SSH_DATABASE=hse_automation.
 | Di-require di dalam grup middleware 'auth' pada routes/web.php.
 */

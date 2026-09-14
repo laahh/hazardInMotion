@@ -12,7 +12,7 @@ use Illuminate\Http\Response;
 use Illuminate\View\View;
 
 /**
- * Halaman tes apakah tunnel OLAP Postgres Besigma (database `besigma_db`) hidup.
+ * Halaman tes koneksi direct RDS Postgres Besigma (database `besigma_db`).
  */
 final class BesigmaConnectionTestController extends Controller
 {
@@ -40,7 +40,7 @@ final class BesigmaConnectionTestController extends Controller
 
         return view('besigma.connection-test', [
             'probe' => $probe,
-            'olapTunnel' => $this->connection->olapTunnelProbe(),
+            'rfidDirect' => $this->connection->rfidDirectProbe(),
             'schemaText' => $this->connection->schemaAsText($schema),
         ]);
     }

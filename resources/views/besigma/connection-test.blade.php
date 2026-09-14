@@ -6,7 +6,6 @@
 @php
     $connected = (bool) ($probe['connected'] ?? false);
     $target = $probe['target'] ?? [];
-    $tunnel = $probe['tunnel'] ?? [];
     $schema = is_array($probe['schema'] ?? null) ? $probe['schema'] : [];
     $tables = is_array($probe['tables'] ?? null) ? $probe['tables'] : [];
     $boundaryTables = array_values(array_filter(
@@ -16,14 +15,14 @@
     $schemaJson = json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 @endphp
 
-<x-page-title title="Besigma" pagetitle="Tes Koneksi OLAP" />
+<x-page-title title="Besigma" pagetitle="Tes Koneksi Direct RDS" />
 
 <div class="alert {{ $connected ? 'alert-success' : 'alert-danger' }} d-flex align-items-start gap-2" role="alert">
     <i class="material-icons-outlined">{{ $connected ? 'check_circle' : 'error_outline' }}</i>
     <div>
         @if ($connected)
-            <strong>Koneksi berhasil.</strong> Postgres OLAP
-            <code>{{ ($target['host'] ?? '127.0.0.1').':'.($target['port'] ?? 5433) }}/{{ $target['database'] ?? ($probe['database'] ?? 'besigma_db') }}</code>
+            <strong>Koneksi berhasil.</strong> Postgres direct RDS
+            <code>{{ ($target['host'] ?? 'PG_HOST').':'.($target['port'] ?? 5432) }}/{{ $target['database'] ?? ($probe['database'] ?? 'besigma_db') }}</code>
             sebagai <code>{{ $probe['username'] ?? ($target['username'] ?? '—') }}</code>.
             Katalog: {{ count($tables) }} objek (tabel/view), {{ count($boundaryTables) }} terkait boundary.
         @else
@@ -55,7 +54,7 @@
                             </td>
                         </tr>
                         <tr>
-                            <th>TCP {{ ($target['host'] ?? '127.0.0.1').':'.($target['port'] ?? 5433) }}</th>
+                            <th>TCP {{ ($target['host'] ?? 'PG_HOST').':'.($target['port'] ?? 5432) }}</th>
                             <td>{{ ($probe['tcp_reachable'] ?? false) ? 'Terbuka' : 'Tidak merespons' }}</td>
                         </tr>
                         <tr>
@@ -104,18 +103,22 @@
     <div class="col-lg-6">
         <div class="card">
             <div class="card-header bg-white py-3">
-                <h6 class="mb-0">Target .env (OLAP)</h6>
+                <h6 class="mb-0">Target .env (direct RDS)</h6>
             </div>
             <div class="card-body">
                 <table class="table table-sm mb-3">
                     <tbody>
                         <tr>
-                            <th class="w-40">BESIGMA_DB_HOST</th>
-                            <td><code>{{ $target['host'] ?? '127.0.0.1' }}</code></td>
+                            <th class="w-40">Mode</th>
+                            <td><code>{{ $target['mode'] ?? 'direct' }}</code> (sama seperti RFID)</td>
                         </tr>
                         <tr>
-                            <th>BESIGMA_DB_PORT</th>
-                            <td><code>{{ $target['port'] ?? 5433 }}</code></td>
+                            <th>PG_HOST / BESIGMA_DB_HOST</th>
+                            <td><code>{{ $target['host'] ?? 'PG_HOST' }}</code></td>
+                        </tr>
+                        <tr>
+                            <th>PG_PORT / BESIGMA_DB_PORT</th>
+                            <td><code>{{ $target['port'] ?? 5432 }}</code></td>
                         </tr>
                         <tr>
                             <th>BESIGMA_DB_DATABASE</th>
@@ -125,33 +128,26 @@
                             <th>BESIGMA_DB_USERNAME</th>
                             <td><code>{{ $target['username'] ?? 'safety_evaluator_2' }}</code></td>
                         </tr>
-                        <tr>
-                            <th>Remote RDS (via tunnel)</th>
-                            <td><code>{{ ($tunnel['remote_host'] ?? 'postgresql-olap-bc-production…').':'.($tunnel['remote_port'] ?? 5432) }}</code></td>
-                        </tr>
                     </tbody>
                 </table>
-                <p class="text-muted small mb-2">Jumphost MySQL lama (<code>BESIGMA_SSH_*</code> / port 3307) diabaikan. Tunnel yang dipakai sama dengan <code>pgsql_ssh</code>:</p>
-                <pre class="bg-light p-3 rounded small mb-3">BESIGMA_DB_HOST=127.0.0.1
-BESIGMA_DB_PORT=5433
+                <p class="text-muted small mb-2">Besigma tidak memakai tunnel SSH 5433. Kosongkan <code>BESIGMA_DB_HOST</code> agar fallback ke <code>PG_HOST</code>:</p>
+                <pre class="bg-light p-3 rounded small mb-3">PG_HOST=postgresql-olap-bc-production...
+PG_PORT=5432
 BESIGMA_DB_DATABASE=besigma_db
 BESIGMA_DB_USERNAME=safety_evaluator_2
 BESIGMA_DB_PASSWORD=safety123</pre>
-                @if (isset($olapTunnel))
-                    <div class="alert {{ ($olapTunnel['ok'] ?? false) ? 'alert-success' : 'alert-warning' }} py-2 small mb-3">
-                        @if ($olapTunnel['ok'] ?? false)
-                            Tunnel OLAP (<code>pgsql_ssh</code> / {{ $olapTunnel['database'] ?? 'hse_automation' }}) hidup.
+                @if (isset($rfidDirect))
+                    <div class="alert {{ ($rfidDirect['ok'] ?? false) ? 'alert-success' : 'alert-warning' }} py-2 small mb-0">
+                        @if ($rfidDirect['ok'] ?? false)
+                            RFID direct (<code>pgsql_direct</code> / {{ $rfidDirect['database'] ?? 'hse_automation' }}) hidup.
                             @if (! $connected)
-                                Masalah kemungkinan di database <code>besigma_db</code> (nama DB / hak akses user), bukan tunnel.
+                                Jaringan RDS OK — cek database <code>besigma_db</code> atau hak user.
                             @endif
                         @else
-                            Tunnel OLAP (<code>pgsql_ssh</code>) juga gagal — jalankan <code>setup-ssh-tunnel.bat</code> dan biarkan jendela tetap terbuka.
+                            RFID direct juga gagal — app server belum bisa reach RDS (security group / VPN).
                         @endif
                     </div>
                 @endif
-                <p class="text-muted small mb-2">Jika TCP terbuka tapi query timeout (~3 detik): proses di port 5433 bukan tunnel Postgres yang valid. Restart tunnel:</p>
-                <pre class="bg-light p-3 rounded small mb-0">setup-ssh-tunnel.bat
-# forward: 127.0.0.1:5433 → RDS:5432</pre>
             </div>
         </div>
     </div>

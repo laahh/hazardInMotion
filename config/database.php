@@ -221,13 +221,13 @@ return [
 
         /*
         | Besigma live data di Postgres OLAP (database `besigma_db`).
-        | Tidak memakai MySQL jumphost lama; share tunnel lokal yang sama
-        | dengan pgsql_ssh (127.0.0.1:5433 → RDS), tapi DB name terpisah.
+        | Koneksi LANGSUNG ke RDS (PG_HOST:PG_PORT) — sama pola dengan RFID
+        | (pgsql_direct), bukan tunnel SSH/jumphost (pgsql_ssh).
         */
         'besigma_db' => [
             'driver' => 'pgsql',
-            'host' => env('BESIGMA_DB_HOST', env('PG_SSH_HOST', '127.0.0.1')),
-            'port' => env('BESIGMA_DB_PORT', env('PG_SSH_LOCAL_PORT', '5433')),
+            'host' => env('BESIGMA_DB_HOST', env('PG_HOST', 'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com')),
+            'port' => env('BESIGMA_DB_PORT', env('PG_PORT', '5432')),
             'database' => env('BESIGMA_DB_DATABASE', 'besigma_db'),
             'username' => env('BESIGMA_DB_USERNAME', env('PG_SSH_USER', 'safety_evaluator_2')),
             'password' => env('BESIGMA_DB_PASSWORD', env('PG_SSH_PASSWORD', 'safety123')),
@@ -237,20 +237,10 @@ return [
             'search_path' => env('BESIGMA_DB_SEARCH_PATH', 'public'),
             'sslmode' => env('BESIGMA_DB_SSLMODE', 'prefer'),
             'gssencmode' => 'disable',
-            'connect_timeout' => (int) env('BESIGMA_DB_CONNECT_TIMEOUT', 8),
+            'connect_timeout' => (int) env('BESIGMA_DB_CONNECT_TIMEOUT', env('PG_CONNECT_TIMEOUT', 8)),
             'options' => [
-                PDO::ATTR_TIMEOUT => (int) env('BESIGMA_DB_CONNECT_TIMEOUT', 8),
+                PDO::ATTR_TIMEOUT => (int) env('BESIGMA_DB_CONNECT_TIMEOUT', env('PG_CONNECT_TIMEOUT', 8)),
             ],
-            // SSH tunnel metadata (sama dengan JumpHost VPC2 → PG RDS)
-            'ssh_host' => env('BESIGMA_SSH_HOST', env('SSH_HOST', '13.212.87.127')),
-            'ssh_port' => env('BESIGMA_SSH_PORT', env('SSH_PORT', 22)),
-            'ssh_user' => env('BESIGMA_SSH_USER', env('SSH_USER', 'ubuntu')),
-            'ssh_pkey' => env('BESIGMA_SSH_PKEY', env('SSH_PKEY', public_path('JumpHostVPC2.pem'))),
-            'remote_host' => env('BESIGMA_REMOTE_HOST', env('PG_HOST', 'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com')),
-            'remote_port' => env('BESIGMA_REMOTE_PORT', env('PG_PORT', 5432)),
-            'local_port' => env('BESIGMA_LOCAL_PORT', env('PG_SSH_LOCAL_PORT', 5433)),
-            'pg_host' => env('PG_HOST', 'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com'),
-            'pg_port' => env('PG_PORT', 5432),
         ],
 
         /*

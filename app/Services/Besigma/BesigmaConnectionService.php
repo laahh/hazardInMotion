@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * Pemeriksa koneksi Postgres Besigma lewat tunnel OLAP (127.0.0.1:5433).
- * Database target: `besigma_db` (terpisah dari hse_automation di pgsql_ssh).
+ * Pemeriksa koneksi Postgres Besigma langsung ke RDS (PG_HOST:PG_PORT).
+ * Database target: `besigma_db` — pola sama dengan RFID (pgsql_direct).
  */
 final class BesigmaConnectionService
 {
@@ -25,6 +25,8 @@ final class BesigmaConnectionService
     private const DOWN_TTL_SECONDS = 120;
 
     private const BLOCKED_TTL_SECONDS = 900;
+
+    private const SOCKET_TIMEOUT_SECONDS = 3;
 
     private ?bool $requestCache = null;
 
@@ -41,6 +43,13 @@ final class BesigmaConnectionService
         $cached = Cache::get(self::CACHE_KEY);
         if (is_bool($cached)) {
             return $this->requestCache = $cached;
+        }
+
+        $target = $this->targetMeta();
+        if (! $this->isTcpReachable($target['host'], $target['port'])) {
+            Cache::put(self::CACHE_KEY, false, self::DOWN_TTL_SECONDS);
+
+            return $this->requestCache = false;
         }
 
         try {
@@ -79,12 +88,11 @@ final class BesigmaConnectionService
     }
 
     /**
-     * Tes koneksi nyata (tanpa cache) untuk halaman diagnostik tunnel OLAP.
+     * Tes koneksi nyata (tanpa cache) untuk halaman diagnostik direct RDS.
      *
      * @return array{
      *     connected: bool,
      *     tcp_reachable: bool,
-     *     key_exists: bool,
      *     latency_ms: float|null,
      *     database: string|null,
      *     username: string|null,
@@ -92,55 +100,23 @@ final class BesigmaConnectionService
      *     server_time: string|null,
      *     table_count: int|null,
      *     tables: list<string>,
-     *     schema: list<array{
-     *         name:string,
-     *         type:string,
-     *         engine:?string,
-     *         approx_rows:?int,
-     *         comment:string,
-     *         columns:list<array{
-     *             name:string,
-     *             type:string,
-     *             nullable:bool,
-     *             key:string,
-     *             default:mixed,
-     *             extra:string,
-     *             comment:string
-     *         }>
-     *     }>,
+     *     schema: list<array<string, mixed>>,
      *     error: string|null,
      *     hint: string|null,
-     *     tunnel: array{
-     *         local_host: string,
-     *         local_port: int,
-     *         ssh_host: string,
-     *         ssh_port: int,
-     *         ssh_user: string,
-     *         ssh_pkey: string,
-     *         remote_host: string,
-     *         remote_port: int
-     *     }
+     *     target: array{host:string,port:int,database:string,username:string,driver:string,search_path:string,mode:string}
      * }
      */
     public function probe(): array
     {
         $this->forgetCachedStatus();
-
-        $tunnelService = app(BesigmaTunnelService::class);
-        $tunnelService->applyRuntimeConfig();
-        $tunnelService->ensureListening();
-
         DB::purge(self::CONNECTION);
 
-        $tunnel = $this->tunnelMeta();
         $target = $this->targetMeta();
-        $keyExists = $tunnel['ssh_pkey'] !== '' && is_file($tunnel['ssh_pkey']);
-        $tcpReachable = $tunnelService->isTcpReachable($target['host'], $target['port']);
+        $tcpReachable = $this->isTcpReachable($target['host'], $target['port']);
 
         $base = [
             'connected' => false,
             'tcp_reachable' => $tcpReachable,
-            'key_exists' => $keyExists,
             'latency_ms' => null,
             'database' => null,
             'username' => null,
@@ -152,10 +128,7 @@ final class BesigmaConnectionService
             'error' => null,
             'hint' => null,
             'target' => $target,
-            'tunnel' => $tunnel,
         ];
-
-        $usesLoopback = in_array($target['host'], ['127.0.0.1', 'localhost', '::1'], true);
 
         if (! $tcpReachable) {
             $base['error'] = sprintf(
@@ -163,9 +136,7 @@ final class BesigmaConnectionService
                 $target['host'],
                 $target['port']
             );
-            $base['hint'] = $usesLoopback
-                ? 'Tunnel SSH OLAP belum aktif di 127.0.0.1:5433. Pastikan tunnel pgsql_ssh / JumpHost VPC2 ke RDS sudah jalan. BESIGMA_SSH_* MySQL lama tidak dipakai.'
-                : 'Laravel harus connect ke 127.0.0.1:5433 (tunnel OLAP), bukan langsung ke RDS.';
+            $base['hint'] = 'Besigma memakai koneksi direct RDS (sama seperti RFID). Pastikan app server bisa reach PG_HOST:PG_PORT (security group / VPN). Tunnel SSH 5433 tidak diperlukan.';
 
             return $base;
         }
@@ -191,7 +162,6 @@ final class BesigmaConnectionService
             return [
                 'connected' => true,
                 'tcp_reachable' => true,
-                'key_exists' => $keyExists,
                 'latency_ms' => $latencyMs,
                 'database' => isset($row->db_name) ? (string) $row->db_name : null,
                 'username' => isset($row->db_user) ? (string) $row->db_user : null,
@@ -203,7 +173,6 @@ final class BesigmaConnectionService
                 'error' => null,
                 'hint' => null,
                 'target' => $target,
-                'tunnel' => $tunnel,
             ];
         } catch (Throwable $e) {
             report($e);
@@ -218,21 +187,20 @@ final class BesigmaConnectionService
     }
 
     /**
-     * Target koneksi Laravel ke Postgres OLAP (tanpa password).
-     *
-     * @return array{host:string,port:int,database:string,username:string,driver:string,search_path:string}
+     * @return array{host:string,port:int,database:string,username:string,driver:string,search_path:string,mode:string}
      */
     public function targetMeta(): array
     {
         $cfg = config('database.connections.'.self::CONNECTION, []);
 
         return [
-            'host' => (string) ($cfg['host'] ?? '127.0.0.1'),
-            'port' => (int) ($cfg['port'] ?? 5433),
+            'host' => (string) ($cfg['host'] ?? env('PG_HOST', '')),
+            'port' => (int) ($cfg['port'] ?? env('PG_PORT', 5432)),
             'database' => (string) ($cfg['database'] ?? 'besigma_db'),
             'username' => (string) ($cfg['username'] ?? 'safety_evaluator_2'),
             'driver' => (string) ($cfg['driver'] ?? 'pgsql'),
             'search_path' => (string) ($cfg['search_path'] ?? 'public'),
+            'mode' => 'direct',
         ];
     }
 
@@ -241,15 +209,15 @@ final class BesigmaConnectionService
         $message = $e->getMessage();
 
         if (! $tcpReachable) {
-            return 'Jalankan SSH tunnel OLAP ke port 5433 terlebih dahulu (sama dengan pgsql_ssh).';
+            return 'RDS tidak terjangkau dari app server. Periksa PG_HOST, PG_PORT, dan security group (sama seperti koneksi RFID).';
         }
 
         if (str_contains($message, 'password authentication failed') || str_contains($message, '28P01')) {
-            return 'Tunnel terbuka, tetapi login ditolak. Periksa BESIGMA_DB_USERNAME / BESIGMA_DB_PASSWORD / BESIGMA_DB_DATABASE di .env.';
+            return 'RDS terjangkau, tetapi login ditolak. Periksa BESIGMA_DB_USERNAME / BESIGMA_DB_PASSWORD / BESIGMA_DB_DATABASE di .env.';
         }
 
         if (str_contains($message, 'does not exist') || str_contains($message, '3D000')) {
-            return 'Tunnel terbuka, tetapi database tidak ditemukan. Pastikan BESIGMA_DB_DATABASE=besigma_db.';
+            return 'RDS terjangkau, tetapi database tidak ditemukan. Pastikan BESIGMA_DB_DATABASE=besigma_db.';
         }
 
         if (
@@ -257,21 +225,24 @@ final class BesigmaConnectionService
             || str_contains($message, 'Connection refused')
             || str_contains($message, '08006')
         ) {
-            return 'Port 5433 terbuka, tetapi Postgres tidak merespons. Biasanya tunnel SSH OLAP belum jalan atau sudah mati. Tutup proses lama di 5433, lalu jalankan setup-ssh-tunnel.bat (bukan setup-ssh-tunnel-besigma.bat MySQL). Pastikan PG_PORT=5432 di .env.';
+            return 'RDS tidak merespons dalam batas waktu. Periksa PG_HOST/PG_PORT dan akses jaringan (security group), bukan tunnel SSH 5433.';
         }
 
-        return 'Tunnel terbuka, tetapi query Postgres gagal. Periksa user, database `besigma_db`, search_path, dan log RDS.';
+        return 'RDS terjangkau, tetapi query Postgres gagal. Periksa user, database `besigma_db`, search_path, dan log RDS.';
     }
 
     /**
-     * Cek apakah tunnel OLAP (pgsql_ssh) bisa query — membantu bedakan masalah tunnel vs database besigma_db.
+     * Bandingkan dengan koneksi RFID (pgsql_direct / hse_automation).
      */
-    public function olapTunnelProbe(): ?array
+    public function rfidDirectProbe(): ?array
     {
         try {
-            DB::connection('pgsql_ssh')->select('SELECT current_database() AS db_name, 1 AS ok');
+            DB::connection('pgsql_direct')->select('SELECT current_database() AS db_name, 1 AS ok');
 
-            return ['ok' => true, 'database' => (string) config('database.connections.pgsql_ssh.database')];
+            return [
+                'ok' => true,
+                'database' => (string) config('database.connections.pgsql_direct.database'),
+            ];
         } catch (Throwable $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -286,30 +257,11 @@ final class BesigmaConnectionService
     {
         $message = $e->getMessage();
 
-        return str_contains($message, '1129')
-            || str_contains($message, 'is blocked because of many connection errors')
-            || str_contains($message, 'too many connections');
+        return str_contains($message, 'too many connections');
     }
 
     /**
-     * Katalog read-only semua tabel + kolom di search_path saat ini.
-     *
-     * @return list<array{
-     *     name:string,
-     *     type:string,
-     *     engine:?string,
-     *     approx_rows:?int,
-     *     comment:string,
-     *     columns:list<array{
-     *         name:string,
-     *         type:string,
-     *         nullable:bool,
-     *         key:string,
-     *         default:mixed,
-     *         extra:string,
-     *         comment:string
-     *     }>
-     * }>
+     * @return list<array<string, mixed>>
      */
     public function describeAllTables(): array
     {
@@ -415,8 +367,6 @@ final class BesigmaConnectionService
     }
 
     /**
-     * Ringkasan teks semua tabel+kolom, mudah disalin ke chat.
-     *
      * @param  list<array<string, mixed>>  $schema
      */
     public function schemaAsText(array $schema): string
@@ -466,41 +416,8 @@ final class BesigmaConnectionService
         return null;
     }
 
-    /**
-     * @return array{
-     *     local_host: string,
-     *     local_port: int,
-     *     ssh_host: string,
-     *     ssh_port: int,
-     *     ssh_user: string,
-     *     ssh_pkey: string,
-     *     remote_host: string,
-     *     remote_port: int
-     * }
-     */
-    public function tunnelMeta(): array
-    {
-        $cfg = config('database.connections.'.self::CONNECTION, []);
-        $pkey = (string) ($cfg['ssh_pkey'] ?? '');
-        $fallbackPkey = public_path('JumpHostVPC2.pem');
-        if ($pkey === '' || ! is_file($pkey)) {
-            $pkey = app(BesigmaTunnelService::class)->resolvePrivateKey($pkey !== '' ? $pkey : $fallbackPkey);
-        }
-
-        return [
-            'local_host' => (string) ($cfg['host'] ?? '127.0.0.1'),
-            'local_port' => (int) ($cfg['port'] ?? $cfg['local_port'] ?? 5433),
-            'ssh_host' => (string) ($cfg['ssh_host'] ?? ''),
-            'ssh_port' => (int) ($cfg['ssh_port'] ?? 22),
-            'ssh_user' => (string) ($cfg['ssh_user'] ?? ''),
-            'ssh_pkey' => $pkey,
-            'remote_host' => (string) ($cfg['remote_host'] ?? $cfg['pg_host'] ?? ''),
-            'remote_port' => (int) ($cfg['remote_port'] ?? $cfg['pg_port'] ?? 5432),
-        ];
-    }
-
     public function isTcpReachable(string $host, int $port): bool
     {
-        return app(BesigmaTunnelService::class)->isTcpReachable($host, $port);
+        return app(BesigmaTunnelService::class)->isTcpReachable($host, $port, self::SOCKET_TIMEOUT_SECONDS);
     }
 }

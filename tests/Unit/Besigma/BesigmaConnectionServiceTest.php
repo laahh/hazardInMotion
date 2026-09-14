@@ -14,44 +14,38 @@ final class BesigmaConnectionServiceTest extends TestCase
         $this->assertSame('besigma_db', BesigmaConnectionService::CONNECTION);
     }
 
-    public function test_tunnel_meta_maps_config_without_password(): void
-    {
-        $meta = app(BesigmaConnectionService::class)->tunnelMeta();
-
-        $this->assertSame('127.0.0.1', $meta['local_host']);
-        $this->assertSame(5433, $meta['local_port']);
-        $this->assertNotSame('', $meta['ssh_host']);
-        $this->assertNotSame('', $meta['remote_host']);
-        $this->assertArrayNotHasKey('password', $meta);
-        $this->assertArrayNotHasKey('ssh_pkey_contents', $meta);
-    }
-
-    public function test_target_meta_uses_olap_besigma_database(): void
+    public function test_target_meta_uses_direct_rds_defaults(): void
     {
         $target = app(BesigmaConnectionService::class)->targetMeta();
 
         $this->assertSame('pgsql', $target['driver']);
-        $this->assertSame('127.0.0.1', $target['host']);
-        $this->assertSame(5433, $target['port']);
+        $this->assertSame('direct', $target['mode']);
         $this->assertSame('besigma_db', $target['database']);
         $this->assertSame('safety_evaluator_2', $target['username']);
+        $this->assertSame(
+            config('database.connections.besigma_db.host'),
+            $target['host']
+        );
+        $this->assertSame(
+            (int) config('database.connections.besigma_db.port'),
+            $target['port']
+        );
     }
 
-    public function test_runtime_config_rewrites_direct_rds_host_to_loopback_tunnel(): void
+    public function test_runtime_config_does_not_rewrite_rds_host_to_loopback(): void
     {
         config([
             'database.connections.besigma_db.host' => 'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com',
             'database.connections.besigma_db.port' => 5432,
-            'database.connections.besigma_db.remote_host' => 'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com',
-            'database.connections.besigma_db.local_port' => 5433,
-            'database.connections.besigma_db.ssh_host' => '52.74.245.15',
         ]);
 
         app(\App\Services\Besigma\BesigmaTunnelService::class)->applyRuntimeConfig();
 
-        $this->assertSame('127.0.0.1', config('database.connections.besigma_db.host'));
-        $this->assertSame(5433, (int) config('database.connections.besigma_db.port'));
-        $this->assertSame('13.212.87.127', config('database.connections.besigma_db.ssh_host'));
+        $this->assertSame(
+            'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com',
+            config('database.connections.besigma_db.host')
+        );
+        $this->assertSame(5432, (int) config('database.connections.besigma_db.port'));
     }
 
     public function test_probe_returns_diagnostic_keys(): void
@@ -60,12 +54,12 @@ final class BesigmaConnectionServiceTest extends TestCase
 
         $this->assertArrayHasKey('connected', $probe);
         $this->assertArrayHasKey('tcp_reachable', $probe);
-        $this->assertArrayHasKey('key_exists', $probe);
-        $this->assertArrayHasKey('tunnel', $probe);
+        $this->assertArrayHasKey('target', $probe);
         $this->assertArrayHasKey('schema', $probe);
         $this->assertIsBool($probe['connected']);
         $this->assertIsArray($probe['tables']);
         $this->assertIsArray($probe['schema']);
+        $this->assertSame('direct', $probe['target']['mode'] ?? null);
 
         if (! $probe['connected']) {
             $this->assertNotEmpty($probe['error']);

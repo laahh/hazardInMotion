@@ -45,7 +45,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->ensureOpenSslCaBundle();
-        $this->bindBesigmaThroughOlapTunnel();
 
         // 🔑 Force HTTPS for asset URLs in production
         if ($this->app->environment('production')) {
@@ -89,19 +88,6 @@ class AppServiceProvider extends ServiceProvider
         });
 
         \App\Models\ControlRoom\SchedulePlan::observe(\App\Observers\ControlRoom\SchedulePlanObserver::class);
-    }
-
-    /**
-     * Besigma Postgres (DB `besigma`) lewat tunnel OLAP 127.0.0.1:5433.
-     */
-    private function bindBesigmaThroughOlapTunnel(): void
-    {
-        $tunnel = $this->app->make(\App\Services\Besigma\BesigmaTunnelService::class);
-        $tunnel->applyRuntimeConfig();
-
-        if (! $this->app->runningUnitTests()) {
-            $tunnel->ensureListening();
-        }
     }
 
     /**
