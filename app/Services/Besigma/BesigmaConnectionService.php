@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * Pemeriksa koneksi MySQL Besigma lewat SSH jumphost (setup-ssh-tunnel-besigma.bat).
- * Laravel connect ke 127.0.0.1:3307; tunnel harus sudah berjalan secara manual.
+ * Pemeriksa koneksi Postgres Besigma lewat tunnel OLAP (127.0.0.1:5433).
+ * Database target: `besigma` (terpisah dari hse_automation di pgsql_ssh).
  */
 final class BesigmaConnectionService
 {
@@ -79,7 +79,7 @@ final class BesigmaConnectionService
     }
 
     /**
-     * Tes koneksi nyata (tanpa cache) untuk halaman diagnostik jumphost.
+     * Tes koneksi nyata (tanpa cache) untuk halaman diagnostik tunnel OLAP.
      *
      * @return array{
      *     connected: bool,
@@ -156,7 +156,7 @@ final class BesigmaConnectionService
         $usesLoopback = in_array($tunnel['local_host'], ['127.0.0.1', 'localhost', '::1'], true);
 
         if (! $keyExists) {
-            $base['hint'] = 'File private key jumphost tidak ditemukan. Pastikan public/bsigma-jumpserver.pem ada, atau set BESIGMA_SSH_PKEY ke path Linux di server.';
+            $base['hint'] = 'File private key JumpHost tidak ditemukan. Pastikan JumpHostVPC2.pem ada, atau set BESIGMA_SSH_PKEY / SSH_PKEY.';
         }
 
         if (! $tcpReachable) {
@@ -166,8 +166,8 @@ final class BesigmaConnectionService
                 $tunnel['local_port']
             );
             $base['hint'] = $usesLoopback
-                ? 'Tunnel SSH belum aktif di 127.0.0.1:3307. Di server, pastikan proses ssh -L ke jumphost 52.74.245.15 masih jalan (setup-ssh-tunnel-besigma.sh).'
-                : 'App server tidak bisa tembus MySQL langsung. Laravel harus memakai 127.0.0.1:3307 lewat jumphost.';
+                ? 'Tunnel SSH OLAP belum aktif di 127.0.0.1:5433. Jalankan setup-ssh-tunnel / start tunnel VPC2 ke RDS Postgres.'
+                : 'App server tidak bisa tembus RDS langsung. Laravel harus memakai 127.0.0.1:5433 lewat JumpHost.';
 
             return $base;
         }
@@ -176,7 +176,7 @@ final class BesigmaConnectionService
 
         try {
             $row = DB::connection(self::CONNECTION)->selectOne(
-                'SELECT DATABASE() AS db_name, USER() AS db_user, VERSION() AS db_version, NOW() AS db_time'
+                'SELECT current_database() AS db_name, current_user AS db_user, version() AS db_version, NOW() AS db_time'
             );
 
             $latencyMs = round((microtime(true) - $started) * 1000, 1);
@@ -222,19 +222,19 @@ final class BesigmaConnectionService
     {
         $message = $e->getMessage();
 
-        if (str_contains($message, '1129') || str_contains($message, 'is blocked because of many connection errors')) {
-            return 'MariaDB memblokir host penghubung (error 1129). FLUSH HOSTS hanya membuka blokir sekali. Agar tidak berulang: (1) jaga tunnel SSH tetap hidup (autossh/systemd Restart=always), (2) naikkan max_connect_errors di MariaDB Besigma, (3) aplikasi sekarang berhenti mengetuk DB 15 menit setelah 1129. Setelah FLUSH HOSTS, buka tes ulang.';
-        }
-
         if (! $tcpReachable) {
-            return 'Jalankan setup-ssh-tunnel-besigma.bat terlebih dahulu.';
+            return 'Jalankan SSH tunnel OLAP ke port 5433 terlebih dahulu (sama dengan pgsql_ssh).';
         }
 
-        if (str_contains($message, '1045') || str_contains($message, 'Access denied')) {
+        if (str_contains($message, 'password authentication failed') || str_contains($message, '28P01')) {
             return 'Tunnel terbuka, tetapi login ditolak. Periksa BESIGMA_DB_USERNAME / BESIGMA_DB_PASSWORD / BESIGMA_DB_DATABASE di .env.';
         }
 
-        return 'Tunnel terbuka, tetapi query MySQL gagal. Periksa user, database, dan log MariaDB Besigma.';
+        if (str_contains($message, 'does not exist') || str_contains($message, '3D000')) {
+            return 'Tunnel terbuka, tetapi database tidak ditemukan. Pastikan BESIGMA_DB_DATABASE=besigma.';
+        }
+
+        return 'Tunnel terbuka, tetapi query Postgres gagal. Periksa user, database `besigma`, search_path, dan log RDS.';
     }
 
     private function circuitIsOpen(): bool
@@ -247,11 +247,12 @@ final class BesigmaConnectionService
         $message = $e->getMessage();
 
         return str_contains($message, '1129')
-            || str_contains($message, 'is blocked because of many connection errors');
+            || str_contains($message, 'is blocked because of many connection errors')
+            || str_contains($message, 'too many connections');
     }
 
     /**
-     * Katalog read-only semua tabel + kolom di DATABASE() saat ini.
+     * Katalog read-only semua tabel + kolom di search_path saat ini.
      *
      * @return list<array{
      *     name:string,
@@ -273,35 +274,60 @@ final class BesigmaConnectionService
     public function describeAllTables(): array
     {
         $tableRows = DB::connection(self::CONNECTION)->select(
-            'SELECT
-                TABLE_NAME AS table_name,
-                TABLE_TYPE AS table_type,
-                ENGINE AS engine,
-                TABLE_ROWS AS approx_rows,
-                TABLE_COMMENT AS table_comment
-             FROM information_schema.TABLES
-             WHERE TABLE_SCHEMA = DATABASE()
-             ORDER BY TABLE_NAME'
+            "SELECT
+                c.relname AS table_name,
+                CASE c.relkind
+                    WHEN 'r' THEN 'BASE TABLE'
+                    WHEN 'p' THEN 'BASE TABLE'
+                    WHEN 'v' THEN 'VIEW'
+                    WHEN 'm' THEN 'MATERIALIZED VIEW'
+                    ELSE c.relkind::text
+                END AS table_type,
+                NULL::text AS engine,
+                GREATEST(c.reltuples, 0)::bigint AS approx_rows,
+                COALESCE(obj_description(c.oid), '') AS table_comment
+             FROM pg_class c
+             INNER JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = ANY (current_schemas(false))
+               AND c.relkind IN ('r', 'p', 'v', 'm')
+               AND NOT c.relispartition
+             ORDER BY c.relname"
         );
 
         $columnRows = DB::connection(self::CONNECTION)->select(
-            'SELECT
-                TABLE_NAME AS table_name,
-                COLUMN_NAME AS column_name,
-                COLUMN_TYPE AS column_type,
-                IS_NULLABLE AS is_nullable,
-                COLUMN_KEY AS column_key,
-                COLUMN_DEFAULT AS column_default,
-                EXTRA AS extra,
-                COLUMN_COMMENT AS column_comment
-             FROM information_schema.COLUMNS
-             WHERE TABLE_SCHEMA = DATABASE()
-             ORDER BY TABLE_NAME, ORDINAL_POSITION'
+            "SELECT
+                cols.table_name,
+                cols.column_name,
+                cols.data_type AS column_type,
+                cols.is_nullable,
+                CASE
+                    WHEN pk.column_name IS NOT NULL THEN 'PRI'
+                    ELSE ''
+                END AS column_key,
+                cols.column_default,
+                '' AS extra,
+                '' AS column_comment
+             FROM information_schema.columns cols
+             LEFT JOIN (
+                SELECT
+                    n.nspname AS table_schema,
+                    c.relname AS table_name,
+                    a.attname AS column_name
+                FROM pg_index i
+                INNER JOIN pg_class c ON c.oid = i.indrelid
+                INNER JOIN pg_namespace n ON n.oid = c.relnamespace
+                INNER JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY (i.indkey)
+                WHERE i.indisprimary
+             ) pk ON pk.table_schema = cols.table_schema
+                 AND pk.table_name = cols.table_name
+                 AND pk.column_name = cols.column_name
+             WHERE cols.table_schema = ANY (current_schemas(false))
+             ORDER BY cols.table_name, cols.ordinal_position"
         );
 
         $schema = [];
         foreach ($tableRows as $tableRow) {
-            $name = (string) ($tableRow->table_name ?? $tableRow->TABLE_NAME ?? '');
+            $name = (string) ($tableRow->table_name ?? '');
             if ($name === '') {
                 continue;
             }
@@ -320,7 +346,7 @@ final class BesigmaConnectionService
         }
 
         foreach ($columnRows as $columnRow) {
-            $table = (string) ($columnRow->table_name ?? $columnRow->TABLE_NAME ?? '');
+            $table = (string) ($columnRow->table_name ?? '');
             if ($table === '') {
                 continue;
             }
@@ -416,20 +442,20 @@ final class BesigmaConnectionService
     {
         $cfg = config('database.connections.'.self::CONNECTION, []);
         $pkey = (string) ($cfg['ssh_pkey'] ?? '');
-        $fallbackPkey = public_path('bsigma-jumpserver.pem');
+        $fallbackPkey = public_path('JumpHostVPC2.pem');
         if ($pkey === '' || ! is_file($pkey)) {
-            $pkey = $fallbackPkey;
+            $pkey = app(BesigmaTunnelService::class)->resolvePrivateKey($pkey !== '' ? $pkey : $fallbackPkey);
         }
 
         return [
             'local_host' => (string) ($cfg['host'] ?? '127.0.0.1'),
-            'local_port' => (int) ($cfg['port'] ?? $cfg['local_port'] ?? 3307),
+            'local_port' => (int) ($cfg['port'] ?? $cfg['local_port'] ?? 5433),
             'ssh_host' => (string) ($cfg['ssh_host'] ?? ''),
             'ssh_port' => (int) ($cfg['ssh_port'] ?? 22),
             'ssh_user' => (string) ($cfg['ssh_user'] ?? ''),
             'ssh_pkey' => $pkey,
-            'remote_host' => (string) ($cfg['remote_host'] ?? ''),
-            'remote_port' => (int) ($cfg['remote_port'] ?? 3306),
+            'remote_host' => (string) ($cfg['remote_host'] ?? $cfg['pg_host'] ?? ''),
+            'remote_port' => (int) ($cfg['remote_port'] ?? $cfg['pg_port'] ?? 5432),
         ];
     }
 

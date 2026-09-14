@@ -15,13 +15,13 @@
     $schemaJson = json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 @endphp
 
-<x-page-title title="Besigma" pagetitle="Tes Koneksi Jumphost" />
+<x-page-title title="Besigma" pagetitle="Tes Koneksi OLAP" />
 
 <div class="alert {{ $connected ? 'alert-success' : 'alert-danger' }} d-flex align-items-start gap-2" role="alert">
     <i class="material-icons-outlined">{{ $connected ? 'check_circle' : 'error_outline' }}</i>
     <div>
         @if ($connected)
-            <strong>Koneksi berhasil.</strong> Laravel masuk ke Besigma lewat <code>{{ ($tunnel['local_host'] ?? '127.0.0.1').':'.($tunnel['local_port'] ?? 3307) }}</code>.
+            <strong>Koneksi berhasil.</strong> Laravel masuk ke Postgres Besigma lewat <code>{{ ($tunnel['local_host'] ?? '127.0.0.1').':'.($tunnel['local_port'] ?? 5433) }}</code>.
             Katalog: {{ count($tables) }} objek (tabel/view), {{ count($boundaryTables) }} terkait boundary.
         @else
             <strong>Koneksi gagal.</strong> {{ $probe['error'] ?? 'Tidak dapat terhubung ke besigma_db.' }}
@@ -36,7 +36,7 @@
     <div class="col-lg-6">
         <div class="card">
             <div class="card-header bg-white py-3">
-                <h6 class="mb-0">Hasil tes MySQL</h6>
+                <h6 class="mb-0">Hasil tes Postgres</h6>
             </div>
             <div class="card-body">
                 <table class="table table-sm mb-0">
@@ -97,22 +97,22 @@
     <div class="col-lg-6">
         <div class="card">
             <div class="card-header bg-white py-3">
-                <h6 class="mb-0">Jalur jumphost</h6>
+                <h6 class="mb-0">Jalur tunnel OLAP</h6>
             </div>
             <div class="card-body">
                 <table class="table table-sm mb-3">
                     <tbody>
                         <tr>
                             <th class="w-40">Local (Laravel)</th>
-                            <td><code>{{ ($tunnel['local_host'] ?? '127.0.0.1').':'.($tunnel['local_port'] ?? 3307) }}</code></td>
+                            <td><code>{{ ($tunnel['local_host'] ?? '127.0.0.1').':'.($tunnel['local_port'] ?? 5433) }}</code></td>
                         </tr>
                         <tr>
                             <th>Jump host</th>
                             <td><code>{{ ($tunnel['ssh_user'] ?? '').'@'.($tunnel['ssh_host'] ?? '').':'.($tunnel['ssh_port'] ?? 22) }}</code></td>
                         </tr>
                         <tr>
-                            <th>Remote MySQL</th>
-                            <td><code>{{ ($tunnel['remote_host'] ?? '').':'.($tunnel['remote_port'] ?? 3306) }}</code></td>
+                            <th>Remote Postgres</th>
+                            <td><code>{{ ($tunnel['remote_host'] ?? '').':'.($tunnel['remote_port'] ?? 5432) }}</code></td>
                         </tr>
                         <tr>
                             <th>Private key</th>
@@ -120,10 +120,12 @@
                         </tr>
                     </tbody>
                 </table>
-                <p class="text-muted small mb-2">App server tidak tembus MySQL langsung. Di Linux, buka tunnel lalu arahkan Laravel ke localhost:</p>
-                <pre class="bg-light p-3 rounded small mb-0">bash setup-ssh-tunnel-besigma.sh
+                <p class="text-muted small mb-2">Besigma memakai database Postgres <code>besigma</code> lewat tunnel yang sama dengan <code>pgsql_ssh</code>:</p>
+                <pre class="bg-light p-3 rounded small mb-0"># tunnel OLAP (port 5433)
 BESIGMA_DB_HOST=127.0.0.1
-BESIGMA_DB_PORT=3307</pre>
+BESIGMA_DB_PORT=5433
+BESIGMA_DB_DATABASE=besigma
+BESIGMA_DB_USERNAME=safety_evaluator_2</pre>
             </div>
         </div>
     </div>
@@ -133,8 +135,8 @@ BESIGMA_DB_PORT=3307</pre>
 <div class="card mt-3">
     <div class="card-header bg-white py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
         <div>
-            <h6 class="mb-0">Katalog tabel besigma_db</h6>
-            <p class="text-muted small mb-0">Semua tabel/view beserta kolom. Jumlah baris = perkiraan InnoDB, bukan COUNT(*).</p>
+            <h6 class="mb-0">Katalog tabel besigma</h6>
+            <p class="text-muted small mb-0">Semua tabel/view di search_path. Jumlah baris = perkiraan Postgres (reltuples), bukan COUNT(*).</p>
         </div>
         <input type="search" id="besigma-table-filter" class="form-control form-control-sm" style="max-width: 260px" placeholder="Cari tabel / kolom…">
     </div>

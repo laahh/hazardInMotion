@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | Modul Besigma — tes koneksi jumphost MySQL
 |--------------------------------------------------------------------------
-| Akses besigma_db lewat SSH tunnel manual (setup-ssh-tunnel-besigma.bat, port 3307).
+| Akses Postgres database `besigma` lewat tunnel OLAP (setup-ssh-tunnel → localhost:5433).
+| Connection Laravel: besigma_db (pgsql). Tidak mengubah PG_SSH_DATABASE=hse_automation.
 | Di-require di dalam grup middleware 'auth' pada routes/web.php.
 */
 

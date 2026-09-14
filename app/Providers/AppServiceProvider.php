@@ -45,7 +45,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->ensureOpenSslCaBundle();
-        $this->bindBesigmaThroughJumphostTunnel();
+        $this->bindBesigmaThroughOlapTunnel();
 
         // 🔑 Force HTTPS for asset URLs in production
         if ($this->app->environment('production')) {
@@ -92,9 +92,9 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * Besigma MySQL tidak tembus dari app server; pakai SSH tunnel 127.0.0.1:3307.
+     * Besigma Postgres (DB `besigma`) lewat tunnel OLAP 127.0.0.1:5433.
      */
-    private function bindBesigmaThroughJumphostTunnel(): void
+    private function bindBesigmaThroughOlapTunnel(): void
     {
         $tunnel = $this->app->make(\App\Services\Besigma\BesigmaTunnelService::class);
         $tunnel->applyRuntimeConfig();

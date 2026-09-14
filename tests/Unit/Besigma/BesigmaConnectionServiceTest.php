@@ -19,28 +19,28 @@ final class BesigmaConnectionServiceTest extends TestCase
         $meta = app(BesigmaConnectionService::class)->tunnelMeta();
 
         $this->assertSame('127.0.0.1', $meta['local_host']);
-        $this->assertSame(3307, $meta['local_port']);
+        $this->assertSame(5433, $meta['local_port']);
         $this->assertNotSame('', $meta['ssh_host']);
         $this->assertNotSame('', $meta['remote_host']);
         $this->assertArrayNotHasKey('password', $meta);
         $this->assertArrayNotHasKey('ssh_pkey_contents', $meta);
     }
 
-    public function test_runtime_config_rewrites_direct_mysql_host_to_loopback_tunnel(): void
+    public function test_runtime_config_rewrites_direct_rds_host_to_loopback_tunnel(): void
     {
         config([
-            'database.connections.besigma_db.host' => '10.11.58.139',
-            'database.connections.besigma_db.port' => 3306,
-            'database.connections.besigma_db.remote_host' => '10.11.58.139',
-            'database.connections.besigma_db.local_port' => 3307,
-            'database.connections.besigma_db.ssh_host' => '13.250.29.29',
+            'database.connections.besigma_db.host' => 'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com',
+            'database.connections.besigma_db.port' => 5432,
+            'database.connections.besigma_db.remote_host' => 'postgresql-olap-bc-production.cgehsbzl48r0.ap-southeast-1.rds.amazonaws.com',
+            'database.connections.besigma_db.local_port' => 5433,
+            'database.connections.besigma_db.ssh_host' => '52.74.245.15',
         ]);
 
         app(\App\Services\Besigma\BesigmaTunnelService::class)->applyRuntimeConfig();
 
         $this->assertSame('127.0.0.1', config('database.connections.besigma_db.host'));
-        $this->assertSame(3307, (int) config('database.connections.besigma_db.port'));
-        $this->assertSame('52.74.245.15', config('database.connections.besigma_db.ssh_host'));
+        $this->assertSame(5433, (int) config('database.connections.besigma_db.port'));
+        $this->assertSame('13.212.87.127', config('database.connections.besigma_db.ssh_host'));
     }
 
     public function test_probe_returns_diagnostic_keys(): void
@@ -68,24 +68,24 @@ final class BesigmaConnectionServiceTest extends TestCase
             [
                 'name' => 'boundaries',
                 'type' => 'BASE TABLE',
-                'engine' => 'InnoDB',
+                'engine' => null,
                 'approx_rows' => 12,
                 'columns' => [
-                    ['name' => 'id', 'type' => 'bigint', 'key' => 'PRI', 'nullable' => false, 'extra' => 'auto_increment'],
+                    ['name' => 'id', 'type' => 'uuid', 'key' => 'PRI', 'nullable' => false, 'extra' => ''],
                     ['name' => 'polygon', 'type' => 'json', 'key' => '', 'nullable' => true, 'extra' => ''],
                 ],
             ],
         ]);
 
-        $this->assertStringContainsString('boundaries (BASE TABLE, InnoDB, ~12 rows, 2 cols)', $text);
-        $this->assertStringContainsString('id bigint PRI NOT NULL auto_increment', $text);
+        $this->assertStringContainsString('boundaries (BASE TABLE, ~12 rows, 2 cols)', $text);
+        $this->assertStringContainsString('id uuid PRI NOT NULL', $text);
         $this->assertStringContainsString('polygon json NULL', $text);
     }
 
     public function test_host_blocked_opens_circuit_so_is_up_does_not_retry(): void
     {
         $service = app(BesigmaConnectionService::class);
-        $service->rememberFailure(new \RuntimeException("SQLSTATE[HY000] [1129] Host '10.11.58.7' is blocked because of many connection errors"));
+        $service->rememberFailure(new \RuntimeException('FATAL: too many connections for role "safety_evaluator_2"'));
 
         $this->assertFalse($service->isUp());
         $this->assertTrue(\Illuminate\Support\Facades\Cache::has('besigma:circuit_v1'));

@@ -89,6 +89,10 @@ Route::prefix('control-room')
     ->name('control-room.')
     ->group(base_path('routes/ControlRoom/control-room.php'));
 
+Route::prefix('pnc-monitoring')
+    ->name('pnc-monitoring.')
+    ->group(base_path('routes/PncMonitoring/pnc-monitoring.php'));
+
 Auth::routes();
 
 // URL salah setelah login: /login/maps (dst.) → arahkan ke path yang benar (/maps).

@@ -385,7 +385,7 @@ final class IscBoundaryMapService
         try {
             $rows = DB::connection(self::CONNECTION)->select(
                 'SELECT '.$columns.'
-                 FROM `'.$table.'`
+                 FROM '.$table.'
                  WHERE is_deleted = 0
                  ORDER BY created_at DESC
                  LIMIT '.self::OVERLAY_LIMIT
@@ -424,7 +424,7 @@ final class IscBoundaryMapService
 
         try {
             $count = DB::connection(self::CONNECTION)->selectOne(
-                'SELECT COUNT(*) AS c FROM `'.$table.'`'
+                'SELECT COUNT(*) AS c FROM '.$table
             );
 
             return [

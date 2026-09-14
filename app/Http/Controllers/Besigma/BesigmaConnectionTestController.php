@@ -12,7 +12,7 @@ use Illuminate\Http\Response;
 use Illuminate\View\View;
 
 /**
- * Halaman tes apakah jumphost Besigma (setup-ssh-tunnel-besigma.bat) hidup.
+ * Halaman tes apakah tunnel OLAP Postgres Besigma (database `besigma`) hidup.
  */
 final class BesigmaConnectionTestController extends Controller
 {
