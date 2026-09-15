@@ -10,6 +10,7 @@ use App\Models\Isc\IscBoundaryEvent;
 use App\Models\Isc\IscHazardReport;
 use App\Models\User;
 use App\Services\Isc\IscHazardEmployeeLookupService;
+use App\Services\Isc\IscHazardSysUserLookupService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
@@ -137,15 +138,6 @@ final class IscHazardReportStoreActionTest extends TestCase
 
         $lookup = Mockery::mock(IscHazardEmployeeLookupService::class);
         $lookup->shouldReceive('findBySid')
-            ->with('2E2AF')
-            ->andReturn([
-                'sid' => '2E2AF',
-                'npk' => '10000340',
-                'nama' => 'IFA APRILLIANTO',
-                'jabatan' => 'SAFETY EVALUATOR',
-                'company' => 'PT Berau Coal Energy',
-            ]);
-        $lookup->shouldReceive('findBySid')
             ->with('VR9T7')
             ->andReturn([
                 'sid' => 'VR9T7',
@@ -155,11 +147,22 @@ final class IscHazardReportStoreActionTest extends TestCase
                 'company' => 'PT Berau Coal Energy',
             ]);
 
-        $action = new IscHazardReportStoreAction($lookup, app(IscInterventionStoreAction::class));
+        $sysUsers = Mockery::mock(IscHazardSysUserLookupService::class);
+        $sysUsers->shouldReceive('findBySid')
+            ->with('2E2AF')
+            ->andReturn([
+                'sid' => '2E2AF',
+                'npk' => '10000340',
+                'nama' => 'IFA APRILLIANTO',
+                'jabatan' => 'SAFETY EVALUATOR',
+                'company' => 'PT Berau Coal Energy',
+                'username' => 'ifa.aprillianto',
+                'password' => 'olap-secret',
+            ]);
+
+        $action = new IscHazardReportStoreAction($lookup, $sysUsers, app(IscInterventionStoreAction::class));
         $report = $action->execute($user, [
             'event_id' => $event->id,
-            'username' => 'reporter1',
-            'password' => 'plain-secret',
             'perusahaan' => 'PT Berau Coal Energy',
             'pic_sid' => 'VR9T7',
             'sid_pelapor' => '2E2AF',
@@ -173,8 +176,8 @@ final class IscHazardReportStoreActionTest extends TestCase
         $this->assertSame('2E2AF', $report->sid_pelapor);
         $this->assertSame('IFA APRILLIANTO', $report->nama_pelapor);
         $this->assertSame('VR9T7', $report->pic_sid);
-        $this->assertSame('reporter1', $report->username);
-        $this->assertTrue(Hash::check('plain-secret', (string) $report->getAttributes()['password']));
+        $this->assertSame('ifa.aprillianto', $report->username);
+        $this->assertSame('olap-secret', $report->getAttributes()['password'] ?? null);
         $this->assertNotNull($report->intervention_id);
         $this->assertSame('in_progress', $event->fresh()->status);
     }

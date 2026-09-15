@@ -14,6 +14,7 @@
   var mapsInterventionsUrl = mapEl.getAttribute("data-maps-interventions-url") || "";
   var mapsHazardReportsUrl = mapEl.getAttribute("data-maps-hazard-reports-url") || "";
   var mapsHazardEmployeesUrl = mapEl.getAttribute("data-maps-hazard-employees-url") || "";
+  var mapsHazardSysUserUrl = mapEl.getAttribute("data-maps-hazard-sysuser-url") || "";
   var interventionsUrl = mapEl.getAttribute("data-interventions-url") || "";
 
   var listEl = document.getElementById("zone-list");
@@ -2381,6 +2382,24 @@
     if (jabatan) {
       jabatan.value = row.jabatan || "";
     }
+    if (prefix === "pelapor") {
+      fillAccessCredentials(row);
+    }
+  }
+
+  function fillAccessCredentials(row) {
+    var username = document.getElementById("gm-hazard-username");
+    var password = document.getElementById("gm-hazard-password");
+    if (username) {
+      username.value = (row && row.username) || "";
+    }
+    if (password) {
+      password.value = (row && row.password) || "";
+    }
+  }
+
+  function clearAccessCredentials() {
+    fillAccessCredentials({ username: "", password: "" });
   }
 
   function openHazardReport(row) {
@@ -2399,6 +2418,7 @@
       return;
     }
     form.reset();
+    clearAccessCredentials();
     setHazardMsg("");
     var eventInput = document.getElementById("gm-hazard-event-id");
     if (eventInput) {
@@ -2413,7 +2433,9 @@
         sid: row.sid,
         npk: "",
         nama: row.name || "",
-        jabatan: row.job_title || ""
+        jabatan: row.job_title || "",
+        username: "",
+        password: ""
       });
       lookupSidFill("pelapor", row.sid);
     }
@@ -2452,7 +2474,35 @@
     }
   }
 
+  function lookupSysUserBySid(sid) {
+    if (!mapsHazardSysUserUrl || !sid || String(sid).trim().length < 2) {
+      return;
+    }
+    fetch(mapsHazardSysUserUrl + (mapsHazardSysUserUrl.indexOf("?") >= 0 ? "&" : "?") + "q=" + encodeURIComponent(String(sid).trim()), {
+      headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" }
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        var user = payload && payload.user ? payload.user : null;
+        if (!user) {
+          clearAccessCredentials();
+          setHazardMsg("SID tidak ditemukan di bep_vw_karyawan_sysuser_user_role.", true);
+          return;
+        }
+        fillPersonFields("pelapor", user);
+        setHazardMsg("Akses terisi dari SID " + (user.sid || sid) + ".", false);
+      })
+      .catch(function () {
+        clearAccessCredentials();
+        setHazardMsg("Gagal lookup SID ke hse_automation.", true);
+      });
+  }
+
   function lookupSidFill(prefix, sid) {
+    if (prefix === "pelapor") {
+      lookupSysUserBySid(sid);
+      return;
+    }
     if (!mapsHazardEmployeesUrl || !sid || String(sid).trim().length < 2) {
       return;
     }
@@ -3052,9 +3102,16 @@
     });
   }
   var pelaporSid = document.getElementById("gm-hazard-pelapor-sid");
+  var pelaporSidTimer = 0;
   if (pelaporSid) {
     pelaporSid.addEventListener("blur", function () {
       lookupSidFill("pelapor", pelaporSid.value);
+    });
+    pelaporSid.addEventListener("input", function () {
+      clearTimeout(pelaporSidTimer);
+      pelaporSidTimer = setTimeout(function () {
+        lookupSidFill("pelapor", pelaporSid.value);
+      }, 450);
     });
   }
   var picSid = document.getElementById("gm-hazard-pic-sid");

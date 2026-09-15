@@ -8,6 +8,7 @@ use App\Models\Isc\IscBoundaryEvent;
 use App\Models\Isc\IscHazardReport;
 use App\Models\User;
 use App\Services\Isc\IscHazardEmployeeLookupService;
+use App\Services\Isc\IscHazardSysUserLookupService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -16,6 +17,7 @@ final class IscHazardReportStoreAction
 {
     public function __construct(
         private readonly IscHazardEmployeeLookupService $employees,
+        private readonly IscHazardSysUserLookupService $sysUsers,
         private readonly IscInterventionStoreAction $interventions,
     ) {}
 
@@ -30,11 +32,13 @@ final class IscHazardReportStoreAction
             $payload['pic_nama'] ?? null,
             $payload['pic_jabatan'] ?? null,
         );
-        $pelapor = $this->resolvePerson(
+        $pelapor = $this->resolvePelapor(
             (string) ($payload['sid_pelapor'] ?? ''),
             $payload['npk_pelapor'] ?? null,
             $payload['nama_pelapor'] ?? null,
             $payload['jabatan_pelapor'] ?? null,
+            $payload['username'] ?? null,
+            $payload['password'] ?? null,
         );
 
         $eventId = isset($payload['event_id']) ? (int) $payload['event_id'] : null;
@@ -52,8 +56,8 @@ final class IscHazardReportStoreAction
             'event_id' => ($isDemo || $eventId === null || $eventId < 1) ? null : $eventId,
             'intervention_id' => null,
             'created_by' => $user->id,
-            'username' => $payload['username'] ?? null,
-            'password' => $payload['password'] ?? null,
+            'username' => $pelapor['username'],
+            'password' => $pelapor['password'],
             'perusahaan' => $payload['perusahaan'] ?? null,
             'pic_sid' => $pic['sid'] !== '' ? $pic['sid'] : null,
             'pic_npk' => $pic['npk'],
@@ -116,6 +120,30 @@ final class IscHazardReportStoreAction
             'npk' => $this->nullableString($npk) ?? ($found['npk'] ?? null),
             'nama' => $this->nullableString($nama) ?? ($found['nama'] ?? null),
             'jabatan' => $this->nullableString($jabatan) ?? ($found['jabatan'] ?? null),
+        ];
+    }
+
+    /**
+     * @return array{sid:string,npk:?string,nama:?string,jabatan:?string,username:?string,password:?string}
+     */
+    private function resolvePelapor(
+        string $sid,
+        mixed $npk,
+        mixed $nama,
+        mixed $jabatan,
+        mixed $username,
+        mixed $password,
+    ): array {
+        $sid = strtoupper(trim($sid));
+        $found = $sid !== '' ? $this->sysUsers->findBySid($sid) : null;
+
+        return [
+            'sid' => $sid,
+            'npk' => $this->nullableString($npk) ?? ($found['npk'] ?? null),
+            'nama' => $this->nullableString($nama) ?? ($found['nama'] ?? null),
+            'jabatan' => $this->nullableString($jabatan) ?? ($found['jabatan'] ?? null),
+            'username' => $this->nullableString($username) ?? ($found['username'] ?? null),
+            'password' => $this->nullableString($password) ?? ($found['password'] ?? null),
         ];
     }
 

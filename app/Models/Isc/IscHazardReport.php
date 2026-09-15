@@ -59,7 +59,7 @@ final class IscHazardReport extends Model
     protected function casts(): array
     {
         return [
-            'password' => 'hashed',
+            // Password dari OLAP disimpan apa adanya (bukan re-hash Laravel).
             'is_observasi_area_kritis' => 'boolean',
         ];
     }

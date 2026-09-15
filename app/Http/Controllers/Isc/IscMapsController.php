@@ -42,6 +42,7 @@ final class IscMapsController extends Controller
             'mapsInterventionsUrl' => route('isc.maps.interventions', ['source' => 'demo']),
             'mapsHazardReportsUrl' => route('isc.maps.hazard-reports.store'),
             'mapsHazardEmployeesUrl' => route('isc.maps.hazard-employees'),
+            'mapsHazardSysUserUrl' => route('isc.maps.hazard-sysuser'),
             'interventionsUrl' => route('isc.interventions.index'),
             'wmsUrl' => '',
             'wmsLayer' => IscBasemapProxyService::WMS_LAYER,

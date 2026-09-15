@@ -40,6 +40,9 @@ Route::prefix('isc')
         Route::get('/maps/hazard-employees', [IscMapsInterventionController::class, 'lookupEmployees'])
             ->middleware('auth')
             ->name('maps.hazard-employees');
+        Route::get('/maps/hazard-sysuser', [IscMapsInterventionController::class, 'lookupSysUser'])
+            ->middleware('auth')
+            ->name('maps.hazard-sysuser');
         Route::post('/maps/hazard-reports', [IscMapsInterventionController::class, 'storeHazardReport'])
             ->middleware('auth')
             ->name('maps.hazard-reports.store');

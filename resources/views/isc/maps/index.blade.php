@@ -18,6 +18,7 @@
     data-maps-interventions-url="{{ $mapsInterventionsUrl }}"
     data-maps-hazard-reports-url="{{ $mapsHazardReportsUrl }}"
     data-maps-hazard-employees-url="{{ $mapsHazardEmployeesUrl }}"
+    data-maps-hazard-sysuser-url="{{ $mapsHazardSysUserUrl }}"
     data-interventions-url="{{ $interventionsUrl }}"
     data-connected="{{ $connected ? '1' : '0' }}"
     data-wms-url="{{ $wmsUrl }}"
@@ -538,10 +539,12 @@
 
         <section class="gm-hazard-sec">
           <h3>Akses</h3>
-          <div class="gm-hazard-grid">
-            <label>Username<input type="text" name="username" autocomplete="username" maxlength="100"></label>
-            <label>Password<input type="password" name="password" autocomplete="new-password" maxlength="255"></label>
-          </div>
+          <p class="gm-hazard-hint">Input SID pelapor</p>
+          <label>SID Pelapor
+            <input type="text" name="sid_pelapor" id="gm-hazard-pelapor-sid" maxlength="64" required placeholder="Kode SID">
+          </label>
+          <input type="hidden" name="username" id="gm-hazard-username" value="">
+          <input type="hidden" name="password" id="gm-hazard-password" value="">
         </section>
 
         <section class="gm-hazard-sec">
@@ -593,18 +596,12 @@
 
         <section class="gm-hazard-sec">
           <h3>Pelapor</h3>
-          <p class="gm-hazard-hint">Input SID saja — NPK, Nama, dan Jabatan terisi otomatis.</p>
-          <div class="gm-hazard-grid">
-            <label>SID Pelapor
-              <input type="text" name="sid_pelapor" id="gm-hazard-pelapor-sid" maxlength="64" required placeholder="Kode SID">
-            </label>
-            <label>NPK<input type="text" name="npk_pelapor" id="gm-hazard-pelapor-npk" maxlength="64" readonly></label>
-          </div>
+          <p class="gm-hazard-hint">Terisi otomatis dari SID pada bagian Akses.</p>
+          <input type="hidden" name="npk_pelapor" id="gm-hazard-pelapor-npk" value="">
           <div class="gm-hazard-grid">
             <label>Nama<input type="text" name="nama_pelapor" id="gm-hazard-pelapor-nama" maxlength="255" readonly></label>
             <label>Jabatan<input type="text" name="jabatan_pelapor" id="gm-hazard-pelapor-jabatan" maxlength="255" readonly></label>
           </div>
-          <button type="button" class="gm-hazard-link" data-hazard-lookup="pelapor">Cari Pelapor (Nama / NPK / SID)</button>
         </section>
 
         <section class="gm-hazard-sec">

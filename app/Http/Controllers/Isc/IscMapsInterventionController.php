@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Isc\IscHazardReportStoreRequest;
 use App\Http\Requests\Isc\IscInterventionStoreRequest;
 use App\Services\Isc\IscHazardEmployeeLookupService;
+use App\Services\Isc\IscHazardSysUserLookupService;
 use App\Services\Isc\IscMapsInterventionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,7 @@ final class IscMapsInterventionController extends Controller
         private readonly IscInterventionStoreAction $storeAction,
         private readonly IscHazardReportStoreAction $hazardStoreAction,
         private readonly IscHazardEmployeeLookupService $employees,
+        private readonly IscHazardSysUserLookupService $sysUsers,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -76,6 +78,33 @@ final class IscMapsInterventionController extends Controller
         return response()->json([
             'success' => true,
             'results' => $this->employees->search($q),
+        ]);
+    }
+
+    /**
+     * Lookup akses (username/password) + profil pelapor by SID dari hse_automation.
+     */
+    public function lookupSysUser(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->query('q', $request->query('sid', '')));
+        if (mb_strlen($q) < 2) {
+            return response()->json(['success' => true, 'results' => [], 'user' => null]);
+        }
+
+        $results = $this->sysUsers->search($q);
+        $exact = null;
+        $sid = strtoupper($q);
+        foreach ($results as $row) {
+            if (strtoupper((string) ($row['sid'] ?? '')) === $sid) {
+                $exact = $row;
+                break;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'results' => $results,
+            'user' => $exact ?? ($results[0] ?? null),
         ]);
     }
 }
