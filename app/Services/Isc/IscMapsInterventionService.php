@@ -45,7 +45,7 @@ final class IscMapsInterventionService
     {
         $canCreate = $user?->can('create', IscIntervention::class) ?? false;
         if ($demo || ! IscSchema::eventsReady()) {
-            return $this->fromRows($this->demoTasks(), 'demo', IscSchema::eventsReady(), $canCreate && IscSchema::eventsReady());
+            return $this->fromRows($this->demoTasks(), 'demo', true, $canCreate || $demo);
         }
 
         $columns = [
@@ -66,6 +66,11 @@ final class IscMapsInterventionService
             ->orderByDesc('entered_at')
             ->limit(self::LIST_LIMIT)
             ->get();
+
+        // Belum ada event lokal (Besigma belum connect / sync) → tampilkan dummy.
+        if ($events->isEmpty()) {
+            return $this->fromRows($this->demoTasks(), 'demo', true, true);
+        }
 
         $rows = [];
         foreach ($events as $event) {
@@ -230,7 +235,7 @@ final class IscMapsInterventionService
             'duration_seconds' => $duration,
             'entered_at' => is_string($entered) ? $entered : null,
             'hazard_name' => $event['hazard_name'] ?? null,
-            'show_url' => $id > 0 ? route('isc.interventions.show', $id) : null,
+            'show_url' => ($id > 0 && $id < 9000) ? route('isc.interventions.show', $id) : null,
         ];
     }
 }

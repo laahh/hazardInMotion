@@ -11,12 +11,61 @@ use Throwable;
 
 /**
  * Cari karyawan Besigma untuk PIC / Pelapor (SID, NPK, Nama).
+ * Jika Besigma belum connect → fallback dataset dummy.
  */
 final class IscHazardEmployeeLookupService
 {
     public const CONNECTION = 'besigma_db';
 
     public const LIMIT = 30;
+
+    /**
+     * @var list<array{sid:string,npk:?string,nama:string,jabatan:?string,company:?string}>
+     */
+    private const DEMO_EMPLOYEES = [
+        [
+            'sid' => '2E2AF',
+            'npk' => '10000340',
+            'nama' => 'Ifa Aprillianto',
+            'jabatan' => 'Safety Evaluator',
+            'company' => 'PT Berau Coal Energy',
+        ],
+        [
+            'sid' => 'VR9T7',
+            'npk' => '10000100',
+            'nama' => 'Demo PIC GMO',
+            'jabatan' => 'Pengawas',
+            'company' => 'PT Berau Coal Energy',
+        ],
+        [
+            'sid' => 'KIYX2',
+            'npk' => '10000210',
+            'nama' => 'Demo Personel Punan',
+            'jabatan' => 'Operator',
+            'company' => 'Mitra Kerja',
+        ],
+        [
+            'sid' => 'BC002',
+            'npk' => '10000401',
+            'nama' => 'Budi Santoso',
+            'jabatan' => 'Pengawas Pit',
+            'company' => 'PT Pamapersada',
+        ],
+        [
+            'sid' => 'BC006',
+            'npk' => '10000402',
+            'nama' => 'Farah Ningsih',
+            'jabatan' => 'HSE Officer',
+            'company' => 'PT Berau Coal',
+        ],
+        [
+            'sid' => 'BC001',
+            'npk' => '10000403',
+            'nama' => 'Andi Pratama',
+            'jabatan' => 'Operator Hauling',
+            'company' => 'PT Berau Coal',
+        ],
+    ];
 
     public function __construct(
         private readonly BesigmaConnectionService $connection,
@@ -28,10 +77,44 @@ final class IscHazardEmployeeLookupService
     public function search(string $query): array
     {
         $q = trim($query);
-        if ($q === '' || ! $this->connection->isUp()) {
+        if ($q === '') {
             return [];
         }
 
+        if ($this->connection->isUp()) {
+            $live = $this->searchLive($q);
+            if ($live !== []) {
+                return $live;
+            }
+        }
+
+        return $this->searchDemo($q);
+    }
+
+    /**
+     * @return array{sid:string,npk:?string,nama:string,jabatan:?string,company:?string}|null
+     */
+    public function findBySid(string $sid): ?array
+    {
+        $sid = strtoupper(trim($sid));
+        if ($sid === '') {
+            return null;
+        }
+
+        foreach ($this->search($sid) as $row) {
+            if (strtoupper($row['sid']) === $sid) {
+                return $row;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<array{sid:string,npk:?string,nama:string,jabatan:?string,company:?string}>
+     */
+    private function searchLive(string $q): array
+    {
         try {
             $like = '%'.$q.'%';
             $rows = DB::connection(self::CONNECTION)->select(
@@ -85,21 +168,23 @@ final class IscHazardEmployeeLookupService
     }
 
     /**
-     * @return array{sid:string,npk:?string,nama:string,jabatan:?string,company:?string}|null
+     * @return list<array{sid:string,npk:?string,nama:string,jabatan:?string,company:?string}>
      */
-    public function findBySid(string $sid): ?array
+    private function searchDemo(string $q): array
     {
-        $sid = strtoupper(trim($sid));
-        if ($sid === '') {
-            return null;
-        }
-
-        foreach ($this->search($sid) as $row) {
-            if (strtoupper($row['sid']) === $sid) {
-                return $row;
+        $needle = mb_strtolower($q);
+        $out = [];
+        foreach (self::DEMO_EMPLOYEES as $row) {
+            $hay = mb_strtolower(($row['sid'] ?? '').' '.($row['npk'] ?? '').' '.($row['nama'] ?? ''));
+            if (! str_contains($hay, $needle)) {
+                continue;
+            }
+            $out[] = $row;
+            if (count($out) >= self::LIMIT) {
+                break;
             }
         }
 
-        return null;
+        return $out;
     }
 }

@@ -19,6 +19,7 @@ final class IscMapsInterventionServiceTest extends TestCase
 
         $this->assertSame('demo', $data['source']);
         $this->assertNotEmpty($data['tasks']);
+        $this->assertTrue($data['can_create']);
         $first = $data['tasks'][0];
         $this->assertArrayHasKey('entity', $first);
         $this->assertArrayHasKey('hazard_kind', $first);
@@ -29,6 +30,9 @@ final class IscMapsInterventionServiceTest extends TestCase
         $this->assertContains('unit', $kinds);
         $this->assertGreaterThan(0, $data['summary']['open']);
         $this->assertArrayHasKey('employee_danger', $data['summary']['kinds']);
+        $sites = array_column($data['tasks'], 'site_code');
+        $this->assertContains('SMO', $sites);
+        $this->assertContains('GMO', $sites);
     }
 
     public function test_local_payload_maps_sync_columns(): void

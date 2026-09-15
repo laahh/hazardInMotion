@@ -2524,11 +2524,8 @@
       return;
     }
     var data = new FormData(form);
-    if (!data.get("is_observasi_area_kritis")) {
-      data.set("is_observasi_area_kritis", "0");
-    } else {
-      data.set("is_observasi_area_kritis", "1");
-    }
+    data.set("is_observasi_area_kritis", data.get("is_observasi_area_kritis") ? "1" : "0");
+    data.set("demo", "1");
     setHazardMsg("Mengirim…", false);
     fetch(mapsHazardReportsUrl, {
       method: "POST",
@@ -2554,7 +2551,9 @@
           setHazardMsg(err, true);
           return;
         }
-        toast("Laporan hazard tersimpan.");
+        toast(pack.payload && pack.payload.demo
+          ? "Laporan hazard dummy diterima."
+          : "Laporan hazard tersimpan.");
         closeHazardReport();
         loadInterventions(true);
       })

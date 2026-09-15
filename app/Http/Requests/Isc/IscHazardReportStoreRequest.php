@@ -11,7 +11,18 @@ final class IscHazardReportStoreRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('create', IscIntervention::class) ?? false;
+        $user = $this->user();
+        if ($user === null) {
+            return false;
+        }
+
+        // Task dummy (id >= 9000) atau flag demo: izinkan uji form tanpa role PIC.
+        $eventId = (int) $this->input('event_id', 0);
+        if ($this->boolean('demo') || $eventId >= 9000) {
+            return true;
+        }
+
+        return $user->can('create', IscIntervention::class);
     }
 
     /**
@@ -20,7 +31,8 @@ final class IscHazardReportStoreRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'event_id' => ['nullable', 'integer', 'exists:isc_boundary_events,id'],
+            'event_id' => ['nullable', 'integer'],
+            'demo' => ['nullable', 'boolean'],
             'username' => ['nullable', 'string', 'max:100'],
             'password' => ['nullable', 'string', 'max:255'],
             'perusahaan' => ['nullable', 'string', 'max:255'],

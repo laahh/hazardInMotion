@@ -55,10 +55,14 @@ final class IscMapsInterventionController extends Controller
 
         return response()->json([
             'success' => true,
+            'demo' => $report->status === 'demo',
             'report_id' => $report->id,
             'event_id' => $report->event_id,
             'intervention_id' => $report->intervention_id,
             'status' => $report->status,
+            'message' => $report->status === 'demo'
+                ? 'Laporan hazard dummy diterima (Belum disimpan ke DB).'
+                : null,
         ], 201);
     }
 
