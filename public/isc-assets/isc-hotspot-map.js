@@ -2566,14 +2566,37 @@
       return;
     }
     rows.innerHTML = "<tr><td colspan=\"4\">Mencari…</td></tr>";
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = setTimeout(function () {
+      if (controller) {
+        controller.abort();
+      }
+    }, 12000);
     fetch(mapsHazardEmployeesUrl + (mapsHazardEmployeesUrl.indexOf("?") >= 0 ? "&" : "?") + "q=" + encodeURIComponent(q), {
-      headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" }
+      headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
+      signal: controller ? controller.signal : undefined,
+      credentials: "same-origin"
     })
-      .then(function (res) { return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; }); })
+      .then(function (res) {
+        return res.text().then(function (text) {
+          var payload = null;
+          try {
+            payload = text ? JSON.parse(text) : null;
+          } catch (err) {
+            payload = null;
+          }
+          return { ok: res.ok, status: res.status, payload: payload };
+        });
+      })
       .then(function (pack) {
-        var list = (pack.payload && pack.payload.results) || [];
+        clearTimeout(timer);
+        if (!pack.payload) {
+          rows.innerHTML = "<tr><td colspan=\"4\">Respons tidak valid (login/session?). Refresh halaman.</td></tr>";
+          return;
+        }
+        var list = pack.payload.results || [];
         if (!pack.ok || !list.length) {
-          rows.innerHTML = "<tr><td colspan=\"4\">Tidak ada hasil.</td></tr>";
+          rows.innerHTML = "<tr><td colspan=\"4\">" + esc(pack.payload.message || "Tidak ada hasil.") + "</td></tr>";
           return;
         }
         rows.innerHTML = "";
@@ -2591,8 +2614,12 @@
           rows.appendChild(tr);
         });
       })
-      .catch(function () {
-        rows.innerHTML = "<tr><td colspan=\"4\">Gagal mencari karyawan.</td></tr>";
+      .catch(function (err) {
+        clearTimeout(timer);
+        var msg = err && err.name === "AbortError"
+          ? "Timeout mencari karyawan. Coba SID exact (contoh S69PK)."
+          : "Gagal mencari karyawan.";
+        rows.innerHTML = "<tr><td colspan=\"4\">" + msg + "</td></tr>";
       });
   }
 

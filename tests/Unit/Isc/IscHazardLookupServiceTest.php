@@ -30,6 +30,15 @@ final class IscHazardLookupServiceTest extends TestCase
         $this->assertSame('Budi Santoso', $row['nama']);
     }
 
+    public function test_employee_search_demo_includes_s69pk(): void
+    {
+        $results = app(IscHazardEmployeeLookupService::class)->search('S69PK');
+
+        $this->assertNotEmpty($results);
+        $this->assertSame('S69PK', $results[0]['sid']);
+        $this->assertSame('INDRA NUR SIDIQ', $results[0]['nama']);
+    }
+
     public function test_sysuser_view_is_bcbeats(): void
     {
         $this->assertSame('bcbeats.bep_vw_karyawan_sysuser_user_role', IscHazardSysUserLookupService::VIEW);

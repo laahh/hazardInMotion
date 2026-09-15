@@ -65,6 +65,13 @@ final class IscHazardEmployeeLookupService
             'jabatan' => 'Operator Hauling',
             'company' => 'PT Berau Coal',
         ],
+        [
+            'sid' => 'S69PK',
+            'npk' => '11001584',
+            'nama' => 'INDRA NUR SIDIQ',
+            'jabatan' => 'Manager',
+            'company' => 'PT Berau Coal',
+        ],
     ];
 
     /**
@@ -78,9 +85,29 @@ final class IscHazardEmployeeLookupService
         }
 
         if (! app()->runningUnitTests()) {
-            $live = $this->searchLive($q);
-            if ($live !== []) {
-                return $live;
+            // SID/kode pendek: exact dulu, jangan lanjut ke ILIKE full-scan.
+            if ($this->looksLikeSid($q)) {
+                try {
+                    $exact = $this->findLiveBySid(strtoupper($q));
+                    if ($exact !== null) {
+                        return [$exact];
+                    }
+
+                    return $this->searchDemo($q);
+                } catch (Throwable $e) {
+                    report($e);
+
+                    return $this->searchDemo($q);
+                }
+            }
+
+            try {
+                $live = $this->searchLive($q);
+                if ($live !== []) {
+                    return $live;
+                }
+            } catch (Throwable $e) {
+                report($e);
             }
         }
 
@@ -98,9 +125,13 @@ final class IscHazardEmployeeLookupService
         }
 
         if (! app()->runningUnitTests()) {
-            $exact = $this->findLiveBySid($sid);
-            if ($exact !== null) {
-                return $exact;
+            try {
+                $exact = $this->findLiveBySid($sid);
+                if ($exact !== null) {
+                    return $exact;
+                }
+            } catch (Throwable $e) {
+                report($e);
             }
         }
 
@@ -113,12 +144,34 @@ final class IscHazardEmployeeLookupService
         return null;
     }
 
+    private function looksLikeSid(string $q): bool
+    {
+        return (bool) preg_match('/^[A-Za-z0-9]{3,12}$/', $q);
+    }
+
     /**
      * @return array{sid:string,npk:?string,nama:string,jabatan:?string,company:?string}|null
      */
     private function findLiveBySid(string $sid): ?array
     {
-        try {
+        $this->applyStatementTimeout();
+
+        // Equality tanpa UPPER/TRIM di WHERE agar bisa pakai index view/base table.
+        $row = DB::connection(self::CONNECTION)->selectOne(
+            'SELECT
+                UPPER(TRIM(kode_sid::text)) AS sid,
+                NULLIF(TRIM(nik::text), \'\') AS npk,
+                NULLIF(TRIM(nama::text), \'\') AS nama,
+                NULLIF(TRIM(COALESCE(jabatan_fungsional, jabatan_struktural)::text), \'\') AS jabatan,
+                NULLIF(TRIM(nama_perusahaan::text), \'\') AS company
+             FROM '.self::VIEW.'
+             WHERE kode_sid = ?
+             LIMIT 1',
+            [$sid]
+        );
+
+        // Fallback: case-insensitive bila data tersimpan beda casing.
+        if ($row === null) {
             $row = DB::connection(self::CONNECTION)->selectOne(
                 'SELECT
                     UPPER(TRIM(kode_sid::text)) AS sid,
@@ -127,16 +180,10 @@ final class IscHazardEmployeeLookupService
                     NULLIF(TRIM(COALESCE(jabatan_fungsional, jabatan_struktural)::text), \'\') AS jabatan,
                     NULLIF(TRIM(nama_perusahaan::text), \'\') AS company
                  FROM '.self::VIEW.'
-                 WHERE kode_sid IS NOT NULL
-                   AND UPPER(TRIM(kode_sid::text)) = ?
-                 ORDER BY nama ASC NULLS LAST
+                 WHERE kode_sid ILIKE ?
                  LIMIT 1',
                 [$sid]
             );
-        } catch (Throwable $e) {
-            report($e);
-
-            return null;
         }
 
         if ($row === null) {
@@ -152,25 +199,48 @@ final class IscHazardEmployeeLookupService
     private function searchLive(string $q): array
     {
         try {
-            $like = '%'.$q.'%';
-            $rows = DB::connection(self::CONNECTION)->select(
-                'SELECT
-                    UPPER(TRIM(kode_sid::text)) AS sid,
-                    NULLIF(TRIM(nik::text), \'\') AS npk,
-                    NULLIF(TRIM(nama::text), \'\') AS nama,
-                    NULLIF(TRIM(COALESCE(jabatan_fungsional, jabatan_struktural)::text), \'\') AS jabatan,
-                    NULLIF(TRIM(nama_perusahaan::text), \'\') AS company
-                 FROM '.self::VIEW.'
-                 WHERE kode_sid IS NOT NULL
-                   AND (
-                        kode_sid::text ILIKE ?
-                        OR nik::text ILIKE ?
-                        OR nama::text ILIKE ?
-                   )
-                 ORDER BY nama ASC NULLS LAST
-                 LIMIT '.self::LIMIT,
-                [$like, $like, $like]
-            );
+            $this->applyStatementTimeout();
+            $prefix = $q.'%';
+            $contains = '%'.$q.'%';
+            $looksLikeCode = (bool) preg_match('/^[A-Za-z0-9]{2,20}$/', $q);
+
+            // Kode SID/NIK: hanya prefix (hindari full-scan ILIKE '%q%' di kolom besar).
+            if ($looksLikeCode) {
+                $rows = DB::connection(self::CONNECTION)->select(
+                    'SELECT
+                        UPPER(TRIM(kode_sid::text)) AS sid,
+                        NULLIF(TRIM(nik::text), \'\') AS npk,
+                        NULLIF(TRIM(nama::text), \'\') AS nama,
+                        NULLIF(TRIM(COALESCE(jabatan_fungsional, jabatan_struktural)::text), \'\') AS jabatan,
+                        NULLIF(TRIM(nama_perusahaan::text), \'\') AS company
+                     FROM '.self::VIEW.'
+                     WHERE kode_sid IS NOT NULL
+                       AND (
+                            kode_sid::text ILIKE ?
+                            OR nik::text ILIKE ?
+                       )
+                     ORDER BY
+                        CASE WHEN kode_sid::text ILIKE ? THEN 0 ELSE 1 END,
+                        nama ASC NULLS LAST
+                     LIMIT '.self::LIMIT,
+                    [$prefix, $prefix, $q]
+                );
+            } else {
+                $rows = DB::connection(self::CONNECTION)->select(
+                    'SELECT
+                        UPPER(TRIM(kode_sid::text)) AS sid,
+                        NULLIF(TRIM(nik::text), \'\') AS npk,
+                        NULLIF(TRIM(nama::text), \'\') AS nama,
+                        NULLIF(TRIM(COALESCE(jabatan_fungsional, jabatan_struktural)::text), \'\') AS jabatan,
+                        NULLIF(TRIM(nama_perusahaan::text), \'\') AS company
+                     FROM '.self::VIEW.'
+                     WHERE kode_sid IS NOT NULL
+                       AND nama::text ILIKE ?
+                     ORDER BY nama ASC NULLS LAST
+                     LIMIT '.self::LIMIT,
+                    [$contains]
+                );
+            }
         } catch (Throwable $e) {
             report($e);
 
@@ -187,6 +257,16 @@ final class IscHazardEmployeeLookupService
         }
 
         return $out;
+    }
+
+    private function applyStatementTimeout(): void
+    {
+        try {
+            // SET (bukan LOCAL) agar berlaku di luar transaction block.
+            DB::connection(self::CONNECTION)->statement("SET statement_timeout = '8000'");
+        } catch (Throwable) {
+            // Beberapa role tidak boleh SET; biarkan query jalan tanpa timeout eksplisit.
+        }
     }
 
     /**

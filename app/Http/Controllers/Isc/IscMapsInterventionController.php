@@ -95,9 +95,22 @@ final class IscMapsInterventionController extends Controller
             return response()->json(['success' => true, 'results' => []]);
         }
 
+        try {
+            $results = $this->employees->search($q);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mencari karyawan: '.$e->getMessage(),
+                'results' => [],
+            ], 504);
+        }
+
         return response()->json([
             'success' => true,
-            'results' => $this->employees->search($q),
+            'results' => $results,
+            'source' => 'bcsid.bep_vw_safety_all_karyawan',
         ]);
     }
 

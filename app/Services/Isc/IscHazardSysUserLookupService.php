@@ -92,6 +92,13 @@ final class IscHazardSysUserLookupService
         }
 
         if (! app()->runningUnitTests()) {
+            if (preg_match('/^[A-Za-z0-9]{3,12}$/', $q) === 1) {
+                $exact = $this->findLiveBySid(strtoupper($q));
+                if ($exact !== null) {
+                    return [$exact];
+                }
+            }
+
             $live = $this->searchLive($q);
             if ($live !== []) {
                 return $live;
@@ -142,12 +149,28 @@ final class IscHazardSysUserLookupService
                     NULLIF(TRIM("Username"::text), \'\') AS username,
                     NULLIF(TRIM("Password"::text), \'\') AS password
                  FROM '.self::VIEW.'
-                 WHERE kode_sid IS NOT NULL
-                   AND UPPER(TRIM(kode_sid::text)) = ?
+                 WHERE kode_sid = ?
                  ORDER BY tanggal_buat DESC NULLS LAST
                  LIMIT 1',
                 [$sid]
             );
+
+            if ($row === null) {
+                $row = DB::connection(self::CONNECTION)->selectOne(
+                    'SELECT
+                        UPPER(TRIM(kode_sid::text)) AS sid,
+                        NULLIF(TRIM(nama::text), \'\') AS nama,
+                        NULLIF(TRIM(jabatan_fungsional::text), \'\') AS jabatan,
+                        NULLIF(TRIM(nama_perusahaan::text), \'\') AS company,
+                        NULLIF(TRIM("Username"::text), \'\') AS username,
+                        NULLIF(TRIM("Password"::text), \'\') AS password
+                     FROM '.self::VIEW.'
+                     WHERE kode_sid ILIKE ?
+                     ORDER BY tanggal_buat DESC NULLS LAST
+                     LIMIT 1',
+                    [$sid]
+                );
+            }
         } catch (Throwable $e) {
             report($e);
 
