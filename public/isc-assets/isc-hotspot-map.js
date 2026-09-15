@@ -3556,12 +3556,8 @@
     }
     var data = new FormData(form);
     data.set("is_observasi_area_kritis", data.get("is_observasi_area_kritis") ? "1" : "0");
-    var eventId = Number(data.get("event_id") || 0);
-    if (eventId >= 9000) {
-      data.set("demo", "1");
-    } else {
-      data.delete("demo");
-    }
+    // Selalu simpan ke DB — jangan kirim flag demo.
+    data.delete("demo");
     var fotoField = data.get("foto");
     var hasFoto = fotoField && typeof fotoField === "object" && Number(fotoField.size || 0) > 0;
     if (!hasFoto && hazardAutoFotoBlob) {
@@ -3584,12 +3580,15 @@
       })
       .then(function (pack) {
         if (!pack.ok) {
-          var err = pack.payload && pack.payload.message
-            ? pack.payload.message
-            : (pack.payload && pack.payload.errors
-              ? Object.values(pack.payload.errors).flat().join(" ")
-              : "Gagal mengirim laporan hazard.");
+          var err = pack.status === 403
+            ? "Akses ditolak: login sebagai PIC / admin ISC untuk menyimpan ke database."
+            : (pack.payload && pack.payload.message
+              ? pack.payload.message
+              : (pack.payload && pack.payload.errors
+                ? Object.values(pack.payload.errors).flat().join(" ")
+                : "Gagal mengirim laporan hazard."));
           setHazardMsg(err, true);
+          toast(err);
           return;
         }
         var persisted = !!(pack.payload && pack.payload.persisted);
@@ -3598,10 +3597,8 @@
           setHazardMsg("Tersimpan ke database" + (rid ? (" (ID " + rid + ")") : "") + ".", false);
           toast(pack.payload.message || ("Laporan hazard tersimpan" + (rid ? (" #" + rid) : "") + "."));
         } else {
-          setHazardMsg(pack.payload && pack.payload.message
-            ? pack.payload.message
-            : "Laporan dummy (tidak masuk DB).", true);
-          toast("Laporan hazard dummy — belum ke database.");
+          setHazardMsg("Gagal menyimpan ke database. Coba lagi atau hubungi admin.", true);
+          toast("Gagal menyimpan laporan hazard ke database.");
         }
         clearHazardAutoFoto();
         closeHazardReport();

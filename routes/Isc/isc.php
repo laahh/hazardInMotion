@@ -36,7 +36,7 @@ Route::prefix('isc')
         Route::get('/maps/post-event/trail', [IscPostEventTrackController::class, 'trail'])->name('maps.post-event.trail');
         Route::get('/maps/cctv', [IscCctvMapController::class, 'index'])->name('maps.cctv');
         Route::get('/maps/interventions', [IscMapsInterventionController::class, 'index'])->name('maps.interventions');
-        // Lookup & submit hazard: dibuka untuk uji dummy (auth tetap dicek di FormRequest).
+        // Lookup hazard: auth saja. Submit laporan: auth + authorize PIC di FormRequest (selalu ke DB).
         Route::get('/maps/hazard-employees', [IscMapsInterventionController::class, 'lookupEmployees'])
             ->middleware('auth')
             ->name('maps.hazard-employees');

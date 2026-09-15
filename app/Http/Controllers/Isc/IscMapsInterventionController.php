@@ -69,20 +69,18 @@ final class IscMapsInterventionController extends Controller
             ], 500);
         }
 
-        $isDemo = $report->status === 'demo' || ! $report->exists;
-
         return response()->json([
             'success' => true,
-            'demo' => $isDemo,
-            'persisted' => ! $isDemo,
+            'demo' => false,
+            'persisted' => $report->exists,
             'report_id' => $report->id,
             'event_id' => $report->event_id,
             'intervention_id' => $report->intervention_id,
             'status' => $report->status,
             'foto_path' => $report->foto_path,
-            'message' => $isDemo
-                ? 'Laporan hazard dummy diterima (Belum disimpan ke DB).'
-                : 'Laporan hazard berhasil disimpan ke database.',
+            'message' => $report->exists
+                ? 'Laporan hazard berhasil disimpan ke database (ID '.$report->id.').'
+                : 'Gagal menyimpan laporan hazard ke database.',
         ], 201);
     }
 

@@ -16,12 +16,7 @@ final class IscHazardReportStoreRequest extends FormRequest
             return false;
         }
 
-        // Task dummy (id >= 9000) atau flag demo: izinkan uji form tanpa role PIC.
-        $eventId = (int) $this->input('event_id', 0);
-        if ($this->boolean('demo') || $eventId >= 9000) {
-            return true;
-        }
-
+        // Wajib PIC/admin — tidak ada bypass demo (laporan selalu ke DB).
         return $user->can('create', IscIntervention::class);
     }
 
@@ -32,7 +27,6 @@ final class IscHazardReportStoreRequest extends FormRequest
     {
         return [
             'event_id' => ['nullable', 'integer'],
-            'demo' => ['nullable', 'boolean'],
             'username' => ['nullable', 'string', 'max:100'],
             'password' => ['nullable', 'string', 'max:255'],
             'perusahaan' => ['nullable', 'string', 'max:255'],
@@ -60,8 +54,20 @@ final class IscHazardReportStoreRequest extends FormRequest
         ];
     }
 
+    public function messages(): array
+    {
+        return [
+            'sid_pelapor.required' => 'SID pelapor wajib diisi.',
+        ];
+    }
+
     protected function prepareForValidation(): void
     {
+        // Abaikan flag demo lama dari client — tidak dipakai lagi.
+        if ($this->has('demo')) {
+            $this->request->remove('demo');
+        }
+
         if ($this->has('is_observasi_area_kritis')) {
             $this->merge([
                 'is_observasi_area_kritis' => filter_var(
@@ -84,5 +90,10 @@ final class IscHazardReportStoreRequest extends FormRequest
         if (! $this->filled('password')) {
             $this->merge(['password' => null]);
         }
+    }
+
+    protected function failedAuthorization(): void
+    {
+        abort(403, 'Hanya PIC / admin ISC yang dapat menyimpan laporan hazard ke database.');
     }
 }

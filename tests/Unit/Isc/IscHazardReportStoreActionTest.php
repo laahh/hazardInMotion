@@ -173,6 +173,8 @@ final class IscHazardReportStoreActionTest extends TestCase
         ]);
 
         $this->assertInstanceOf(IscHazardReport::class, $report);
+        $this->assertTrue($report->exists);
+        $this->assertSame('submitted', $report->status);
         $this->assertSame('2E2AF', $report->sid_pelapor);
         $this->assertSame('IFA APRILLIANTO', $report->nama_pelapor);
         $this->assertSame('VR9T7', $report->pic_sid);
@@ -180,5 +182,33 @@ final class IscHazardReportStoreActionTest extends TestCase
         $this->assertSame('olap-secret', $report->getAttributes()['password'] ?? null);
         $this->assertNotNull($report->intervention_id);
         $this->assertSame('in_progress', $event->fresh()->status);
+        $this->assertSame(1, IscHazardReport::query()->count());
+    }
+
+    public function test_store_persists_even_when_event_id_is_demo_range(): void
+    {
+        $user = User::query()->create([
+            'name' => 'PIC Test 2',
+            'email' => 'pic-hazard-2@example.com',
+            'password' => Hash::make('secret'),
+        ]);
+
+        $lookup = Mockery::mock(IscHazardEmployeeLookupService::class);
+        $lookup->shouldReceive('findBySid')->andReturn(null);
+        $sysUsers = Mockery::mock(IscHazardSysUserLookupService::class);
+        $sysUsers->shouldReceive('findBySid')->andReturn(null);
+
+        $action = new IscHazardReportStoreAction($lookup, $sysUsers, app(IscInterventionStoreAction::class));
+        $report = $action->execute($user, [
+            'event_id' => 9001,
+            'sid_pelapor' => 'S69PK',
+            'nama_pelapor' => 'Tester',
+            'deskripsi_temuan' => 'Harus masuk DB meski event demo',
+        ]);
+
+        $this->assertTrue($report->exists);
+        $this->assertNull($report->event_id);
+        $this->assertSame('submitted', $report->status);
+        $this->assertSame(1, IscHazardReport::query()->where('sid_pelapor', 'S69PK')->count());
     }
 }
