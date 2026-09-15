@@ -565,7 +565,7 @@
             <label>Nama PIC<input type="text" name="pic_nama" id="gm-hazard-pic-nama" maxlength="255" readonly></label>
             <label>Jabatan PIC<input type="text" name="pic_jabatan" id="gm-hazard-pic-jabatan" maxlength="255" readonly></label>
           </div>
-          <button type="button" class="gm-hazard-link" data-hazard-lookup="pic">Cari PIC (Nama / NPK / SID)</button>
+          <button type="button" class="gm-hazard-link" data-hazard-lookup="pic">Cari PIC (Nama / NIK / SID)</button>
         </section>
 
         <section class="gm-hazard-sec">

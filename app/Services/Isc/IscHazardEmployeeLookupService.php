@@ -4,18 +4,18 @@ declare(strict_types=1);
 
 namespace App\Services\Isc;
 
-use App\Services\Besigma\BesigmaConnectionService;
-use App\Services\Besigma\BesigmaSchema;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * Cari karyawan Besigma untuk PIC / Pelapor (SID, NPK, Nama).
- * Jika Besigma belum connect → fallback dataset dummy.
+ * Cari karyawan PIC dari hse_automation (pgsql_direct):
+ * bcsid.bep_vw_safety_all_karyawan
  */
 final class IscHazardEmployeeLookupService
 {
-    public const CONNECTION = 'besigma_db';
+    public const CONNECTION = 'pgsql_direct';
+
+    public const VIEW = 'bcsid.bep_vw_safety_all_karyawan';
 
     public const LIMIT = 30;
 
@@ -67,10 +67,6 @@ final class IscHazardEmployeeLookupService
         ],
     ];
 
-    public function __construct(
-        private readonly BesigmaConnectionService $connection,
-    ) {}
-
     /**
      * @return list<array{sid:string,npk:?string,nama:string,jabatan:?string,company:?string}>
      */
@@ -81,7 +77,7 @@ final class IscHazardEmployeeLookupService
             return [];
         }
 
-        if ($this->connection->isUp()) {
+        if (! app()->runningUnitTests()) {
             $live = $this->searchLive($q);
             if ($live !== []) {
                 return $live;
@@ -101,13 +97,53 @@ final class IscHazardEmployeeLookupService
             return null;
         }
 
-        foreach ($this->search($sid) as $row) {
+        if (! app()->runningUnitTests()) {
+            $exact = $this->findLiveBySid($sid);
+            if ($exact !== null) {
+                return $exact;
+            }
+        }
+
+        foreach ($this->searchDemo($sid) as $row) {
             if (strtoupper($row['sid']) === $sid) {
                 return $row;
             }
         }
 
         return null;
+    }
+
+    /**
+     * @return array{sid:string,npk:?string,nama:string,jabatan:?string,company:?string}|null
+     */
+    private function findLiveBySid(string $sid): ?array
+    {
+        try {
+            $row = DB::connection(self::CONNECTION)->selectOne(
+                'SELECT
+                    UPPER(TRIM(kode_sid::text)) AS sid,
+                    NULLIF(TRIM(nik::text), \'\') AS npk,
+                    NULLIF(TRIM(nama::text), \'\') AS nama,
+                    NULLIF(TRIM(COALESCE(jabatan_fungsional, jabatan_struktural)::text), \'\') AS jabatan,
+                    NULLIF(TRIM(nama_perusahaan::text), \'\') AS company
+                 FROM '.self::VIEW.'
+                 WHERE kode_sid IS NOT NULL
+                   AND UPPER(TRIM(kode_sid::text)) = ?
+                 ORDER BY nama ASC NULLS LAST
+                 LIMIT 1',
+                [$sid]
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+
+        if ($row === null) {
+            return null;
+        }
+
+        return $this->mapRow($row);
     }
 
     /**
@@ -119,52 +155,58 @@ final class IscHazardEmployeeLookupService
             $like = '%'.$q.'%';
             $rows = DB::connection(self::CONNECTION)->select(
                 'SELECT
-                    u.sid_code,
-                    u.npk,
-                    u.fullname,
-                    u.functional_position,
-                    u.structural_position,
-                    c.name AS company_name
-                 FROM '.BesigmaSchema::qualify('users').' u
-                 LEFT JOIN '.BesigmaSchema::qualify('companies').' c ON c.id = u.company_id
-                 WHERE '.BesigmaSchema::flagIsFalse('u.is_deleted').'
+                    UPPER(TRIM(kode_sid::text)) AS sid,
+                    NULLIF(TRIM(nik::text), \'\') AS npk,
+                    NULLIF(TRIM(nama::text), \'\') AS nama,
+                    NULLIF(TRIM(COALESCE(jabatan_fungsional, jabatan_struktural)::text), \'\') AS jabatan,
+                    NULLIF(TRIM(nama_perusahaan::text), \'\') AS company
+                 FROM '.self::VIEW.'
+                 WHERE kode_sid IS NOT NULL
                    AND (
-                        u.sid_code ILIKE ?
-                        OR CAST(u.npk AS TEXT) ILIKE ?
-                        OR u.fullname ILIKE ?
+                        kode_sid::text ILIKE ?
+                        OR nik::text ILIKE ?
+                        OR nama::text ILIKE ?
                    )
-                 ORDER BY u.fullname ASC
+                 ORDER BY nama ASC NULLS LAST
                  LIMIT '.self::LIMIT,
                 [$like, $like, $like]
             );
         } catch (Throwable $e) {
             report($e);
-            $this->connection->rememberFailure($e);
 
             return [];
         }
 
         $out = [];
         foreach ($rows as $row) {
-            $sid = strtoupper(trim((string) ($row->sid_code ?? '')));
-            $nama = trim((string) ($row->fullname ?? ''));
-            if ($sid === '' && $nama === '') {
+            $mapped = $this->mapRow($row);
+            if ($mapped === null) {
                 continue;
             }
-            $jabatan = trim((string) ($row->functional_position ?? $row->structural_position ?? ''));
-            $npk = trim((string) ($row->npk ?? ''));
-            $out[] = [
-                'sid' => $sid,
-                'npk' => $npk !== '' ? $npk : null,
-                'nama' => $nama !== '' ? $nama : $sid,
-                'jabatan' => $jabatan !== '' ? $jabatan : null,
-                'company' => isset($row->company_name) && trim((string) $row->company_name) !== ''
-                    ? trim((string) $row->company_name)
-                    : null,
-            ];
+            $out[] = $mapped;
         }
 
         return $out;
+    }
+
+    /**
+     * @return array{sid:string,npk:?string,nama:string,jabatan:?string,company:?string}|null
+     */
+    private function mapRow(object $row): ?array
+    {
+        $sid = strtoupper(trim((string) ($row->sid ?? '')));
+        if ($sid === '') {
+            return null;
+        }
+        $nama = trim((string) ($row->nama ?? ''));
+
+        return [
+            'sid' => $sid,
+            'npk' => $this->nullableString($row->npk ?? null),
+            'nama' => $nama !== '' ? $nama : $sid,
+            'jabatan' => $this->nullableString($row->jabatan ?? null),
+            'company' => $this->nullableString($row->company ?? null),
+        ];
     }
 
     /**
@@ -186,5 +228,15 @@ final class IscHazardEmployeeLookupService
         }
 
         return $out;
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        $trimmed = trim((string) $value);
+
+        return $trimmed !== '' ? $trimmed : null;
     }
 }

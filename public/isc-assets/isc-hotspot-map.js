@@ -2486,7 +2486,7 @@
         var user = payload && payload.user ? payload.user : null;
         if (!user) {
           clearAccessCredentials();
-          setHazardMsg("SID tidak ditemukan di bep_vw_karyawan_sysuser_user_role.", true);
+          setHazardMsg("SID tidak ditemukan di bcbeats.bep_vw_karyawan_sysuser_user_role.", true);
           return;
         }
         fillPersonFields("pelapor", user);

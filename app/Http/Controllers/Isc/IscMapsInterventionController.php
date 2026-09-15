@@ -91,20 +91,15 @@ final class IscMapsInterventionController extends Controller
             return response()->json(['success' => true, 'results' => [], 'user' => null]);
         }
 
-        $results = $this->sysUsers->search($q);
-        $exact = null;
-        $sid = strtoupper($q);
-        foreach ($results as $row) {
-            if (strtoupper((string) ($row['sid'] ?? '')) === $sid) {
-                $exact = $row;
-                break;
-            }
-        }
+        // Prefer exact SID match (case-insensitive).
+        $exact = $this->sysUsers->findBySid($q);
+        $results = $exact !== null ? [$exact] : $this->sysUsers->search($q);
 
         return response()->json([
             'success' => true,
             'results' => $results,
             'user' => $exact ?? ($results[0] ?? null),
+            'source' => 'bcbeats.bep_vw_karyawan_sysuser_user_role',
         ]);
     }
 }

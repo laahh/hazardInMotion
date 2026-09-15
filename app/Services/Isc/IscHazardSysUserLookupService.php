@@ -9,13 +9,15 @@ use Throwable;
 
 /**
  * Lookup akses pelapor dari hse_automation (pgsql_direct):
- * bcsid.bep_vw_karyawan_sysuser_user_role
+ * bcbeats.bep_vw_karyawan_sysuser_user_role
+ *
+ * Catatan: kolom Username/Password case-sensitive (quoted identifiers).
  */
 final class IscHazardSysUserLookupService
 {
     public const CONNECTION = 'pgsql_direct';
 
-    public const VIEW = 'bcsid.bep_vw_karyawan_sysuser_user_role';
+    public const VIEW = 'bcbeats.bep_vw_karyawan_sysuser_user_role';
 
     public const LIMIT = 30;
 
@@ -109,13 +111,54 @@ final class IscHazardSysUserLookupService
             return null;
         }
 
-        foreach ($this->search($sid) as $row) {
+        if (! app()->runningUnitTests()) {
+            $exact = $this->findLiveBySid($sid);
+            if ($exact !== null) {
+                return $exact;
+            }
+        }
+
+        foreach ($this->searchDemo($sid) as $row) {
             if (strtoupper($row['sid']) === $sid) {
                 return $row;
             }
         }
 
         return null;
+    }
+
+    /**
+     * @return array{sid:string,npk:?string,nama:string,jabatan:?string,company:?string,username:?string,password:?string}|null
+     */
+    private function findLiveBySid(string $sid): ?array
+    {
+        try {
+            $row = DB::connection(self::CONNECTION)->selectOne(
+                'SELECT
+                    UPPER(TRIM(kode_sid::text)) AS sid,
+                    NULLIF(TRIM(nama::text), \'\') AS nama,
+                    NULLIF(TRIM(jabatan_fungsional::text), \'\') AS jabatan,
+                    NULLIF(TRIM(nama_perusahaan::text), \'\') AS company,
+                    NULLIF(TRIM("Username"::text), \'\') AS username,
+                    NULLIF(TRIM("Password"::text), \'\') AS password
+                 FROM '.self::VIEW.'
+                 WHERE kode_sid IS NOT NULL
+                   AND UPPER(TRIM(kode_sid::text)) = ?
+                 ORDER BY tanggal_buat DESC NULLS LAST
+                 LIMIT 1',
+                [$sid]
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+
+        if ($row === null) {
+            return null;
+        }
+
+        return $this->mapRow($row);
     }
 
     /**
@@ -127,72 +170,61 @@ final class IscHazardSysUserLookupService
             $like = '%'.$q.'%';
             $rows = DB::connection(self::CONNECTION)->select(
                 'SELECT
-                    TRIM(kode_sid::text) AS sid,
+                    UPPER(TRIM(kode_sid::text)) AS sid,
                     NULLIF(TRIM(nama::text), \'\') AS nama,
                     NULLIF(TRIM(jabatan_fungsional::text), \'\') AS jabatan,
                     NULLIF(TRIM(nama_perusahaan::text), \'\') AS company,
-                    NULLIF(TRIM(COALESCE("Username", username)::text), \'\') AS username,
-                    NULLIF(TRIM(COALESCE("Password", password)::text), \'\') AS password
+                    NULLIF(TRIM("Username"::text), \'\') AS username,
+                    NULLIF(TRIM("Password"::text), \'\') AS password
                  FROM '.self::VIEW.'
                  WHERE kode_sid IS NOT NULL
                    AND (
                         kode_sid::text ILIKE ?
                         OR nama::text ILIKE ?
-                        OR COALESCE("Username", username)::text ILIKE ?
+                        OR "Username"::text ILIKE ?
                    )
                  ORDER BY nama ASC NULLS LAST
                  LIMIT '.self::LIMIT,
                 [$like, $like, $like]
             );
         } catch (Throwable $e) {
-            // Fallback jika identifier Username/Password berbeda casing.
-            try {
-                $like = '%'.$q.'%';
-                $rows = DB::connection(self::CONNECTION)->select(
-                    'SELECT
-                        TRIM(kode_sid::text) AS sid,
-                        NULLIF(TRIM(nama::text), \'\') AS nama,
-                        NULLIF(TRIM(jabatan_fungsional::text), \'\') AS jabatan,
-                        NULLIF(TRIM(nama_perusahaan::text), \'\') AS company,
-                        NULLIF(TRIM(username::text), \'\') AS username,
-                        NULLIF(TRIM(password::text), \'\') AS password
-                     FROM '.self::VIEW.'
-                     WHERE kode_sid IS NOT NULL
-                       AND (
-                            kode_sid::text ILIKE ?
-                            OR nama::text ILIKE ?
-                            OR username::text ILIKE ?
-                       )
-                     ORDER BY nama ASC NULLS LAST
-                     LIMIT '.self::LIMIT,
-                    [$like, $like, $like]
-                );
-            } catch (Throwable $inner) {
-                report($inner);
+            report($e);
 
-                return [];
-            }
+            return [];
         }
 
         $out = [];
         foreach ($rows as $row) {
-            $sid = strtoupper(trim((string) ($row->sid ?? '')));
-            if ($sid === '') {
+            $mapped = $this->mapRow($row);
+            if ($mapped === null) {
                 continue;
             }
-            $nama = trim((string) ($row->nama ?? ''));
-            $out[] = [
-                'sid' => $sid,
-                'npk' => null,
-                'nama' => $nama !== '' ? $nama : $sid,
-                'jabatan' => $this->nullableString($row->jabatan ?? null),
-                'company' => $this->nullableString($row->company ?? null),
-                'username' => $this->nullableString($row->username ?? null),
-                'password' => $this->nullableString($row->password ?? null),
-            ];
+            $out[] = $mapped;
         }
 
         return $out;
+    }
+
+    /**
+     * @return array{sid:string,npk:?string,nama:string,jabatan:?string,company:?string,username:?string,password:?string}|null
+     */
+    private function mapRow(object $row): ?array
+    {
+        $sid = strtoupper(trim((string) ($row->sid ?? '')));
+        if ($sid === '') {
+            return null;
+        }
+        $nama = trim((string) ($row->nama ?? ''));
+
+        return [
+            'sid' => $sid,
+            'npk' => null,
+            'nama' => $nama !== '' ? $nama : $sid,
+            'jabatan' => $this->nullableString($row->jabatan ?? null),
+            'company' => $this->nullableString($row->company ?? null),
+            'username' => $this->nullableString($row->username ?? null),
+            'password' => $this->nullableString($row->password ?? null),
+        ];
     }
 
     /**
