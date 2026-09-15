@@ -10,9 +10,9 @@ use Illuminate\Database\Query\Builder;
  * Aturan exclude tambahan (di luar status_karyawan = AKTIF) untuk populasi
  * "karyawan" di dashboard Evaluasi Well: jabatan Presiden Direktur, Direktur
  * tanpa site/site HO, site Jakarta & Poltek, perusahaan di luar hitungan
- * persentase Performance (Politeknik Sinarmas, Sinarmas Maritim, Fusi),
- * PT Berau Coal + departemen internship/poltek/kampus merdeka/prakerin,
- * dan nama dummy/testing.
+ * persentase Performance (Politeknik Sinarmas, Sinarmas Maritim, Fusi,
+ * Yayasan Dharma Bakti), PT Berau Coal + departemen internship/poltek/kampus
+ * merdeka/prakerin, dan nama dummy/testing.
  *
  * Semua kondisi sengaja dicek dari kolom mentah employee_profiles (bukan
  * resolved site dari karyawan_well) supaya tetap 1 WHERE ringan — join/lookup
@@ -81,7 +81,8 @@ final class SportEvaluationEmployeeExclusionRules
     }
 
     /**
-     * Predikat SQL: nama_perusahaan bukan Politeknik Sinarmas, Sinarmas Maritim, atau Fusi.
+     * Predikat SQL: nama_perusahaan bukan Politeknik Sinarmas, Sinarmas Maritim,
+     * Fusi, atau Yayasan Dharma Bakti.
      *
      * @return array{0: string, 1: list<string>}
      */
@@ -96,6 +97,7 @@ final class SportEvaluationEmployeeExclusionRules
                 OR {$compact} LIKE ?
                 OR {$compact} LIKE ?
                 OR {$compact} LIKE ?
+                OR {$compact} LIKE ?
             )",
             [
                 '%POLITEKNIKSINARMAS%',
@@ -103,6 +105,7 @@ final class SportEvaluationEmployeeExclusionRules
                 '%SINARMAS%MARITIN%',
                 'FUSI%',
                 'PTFUSI%',
+                '%YAYASANDHARMABAKTI%',
             ],
         ];
     }
@@ -121,6 +124,10 @@ final class SportEvaluationEmployeeExclusionRules
         if (str_contains($compact, 'SINARMAS')
             && (str_contains($compact, 'MARITIM') || str_contains($compact, 'MARITIN'))
         ) {
+            return true;
+        }
+
+        if (str_contains($compact, 'YAYASANDHARMABAKTI')) {
             return true;
         }
 

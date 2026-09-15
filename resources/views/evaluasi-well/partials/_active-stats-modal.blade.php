@@ -6,7 +6,7 @@
         <div class="min-w-0 pe-12">
           <h5 class="modal-title fw-bold text-lg mb-4" id="activeStatsModalLabel">Detail Total User Aktif</h5>
           <p id="active-stats-footnote" class="text-sm text-secondary-light mb-0">
-            User aktif (luas) = food photo / workout / komunitas / Main Bareng. Evaluasi = food + workout. Filter minggu: Minggu–Sabtu. Exclude PT Berau Coal: Internship, Poltek, Kampus Merdeka, Prakerin.
+            User aktif (luas) = food photo / workout / komunitas / Main Bareng. Evaluasi = food + workout. Filter minggu: Minggu–Sabtu. Exclude: Yayasan Dharma Bakti; PT Berau Coal (Internship, Poltek, Kampus Merdeka, Prakerin).
           </p>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>

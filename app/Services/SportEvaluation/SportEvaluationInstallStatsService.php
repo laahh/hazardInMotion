@@ -450,7 +450,7 @@ final class SportEvaluationInstallStatsService
             'available' => true,
             'dimension' => $dimension,
             'dimension_label' => self::DIMENSION_LABELS[$dimension] ?? 'Site',
-            'footnote' => 'Filter global mempengaruhi seluruh ringkasan. Divisi digabung per grup sejenis. Karyawan status AKTIF (exclude VISITOR, Politeknik Sinarmas, Sinarmas Maritim, Fusi).',
+            'footnote' => 'Filter global mempengaruhi seluruh ringkasan. Divisi digabung per grup sejenis. Karyawan status AKTIF (exclude VISITOR, Politeknik Sinarmas, Sinarmas Maritim, Fusi, Yayasan Dharma Bakti).',
             'message' => null,
             'summary' => [
                 'total' => $totalAll,
@@ -1009,7 +1009,7 @@ final class SportEvaluationInstallStatsService
             'available' => false,
             'dimension' => $dimension,
             'dimension_label' => self::DIMENSION_LABELS[$dimension] ?? 'Site',
-            'footnote' => 'Filter global mempengaruhi seluruh ringkasan. Divisi digabung per grup sejenis. Karyawan status AKTIF (exclude VISITOR, Politeknik Sinarmas, Sinarmas Maritim, Fusi).',
+            'footnote' => 'Filter global mempengaruhi seluruh ringkasan. Divisi digabung per grup sejenis. Karyawan status AKTIF (exclude VISITOR, Politeknik Sinarmas, Sinarmas Maritim, Fusi, Yayasan Dharma Bakti).',
             'message' => $message,
             'summary' => [
                 'total' => 0,

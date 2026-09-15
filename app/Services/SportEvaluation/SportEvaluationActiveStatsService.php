@@ -33,7 +33,7 @@ final class SportEvaluationActiveStatsService
     private const FOOTNOTE = 'User aktif (luas) = food photo / workout / komunitas / Main Bareng minggu terpilih (Minggu–Sabtu). '
         .'Evaluasi = jumlah upload makanan (photo) + olahraga. '
         .'Breakdown dimensi memakai karyawan status AKTIF (exclude VISITOR, Politeknik Sinarmas, Sinarmas Maritim, Fusi, '
-        .'serta PT Berau Coal departemen Internship/Poltek/Kampus Merdeka/Prakerin); angka KPI kartu bisa berbeda.';
+        .'Yayasan Dharma Bakti, serta PT Berau Coal departemen Internship/Poltek/Kampus Merdeka/Prakerin); angka KPI kartu bisa berbeda.';
 
     /** @var array<string, string> */
     private const DIMENSION_COLUMNS = [
@@ -153,7 +153,7 @@ final class SportEvaluationActiveStatsService
         try {
             $scopeKey = $this->mitraAssignmentService->cacheKeySuffix($scope);
             $stats = Cache::remember(
-                'evaluasi_well:active_stats:v9:'.$dimension.':'.$week['start'].':'.$scopeKey,
+                'evaluasi_well:active_stats:v10:'.$dimension.':'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($dimension, $week, $scope): array {
                     return $this->buildStats($dimension, $week, $scope);
@@ -185,16 +185,16 @@ final class SportEvaluationActiveStatsService
         $db = DB::connection(BewellConnectionService::CONNECTION);
         $scope = $this->normalizeScopeFilters($filters);
         [$inSql, $inBindings] = $this->userIdInClause('active_users.user_id', $scope);
-        [$berauSql, $berauBindings] = $this->exclusionRules->berauInternDepartmentNotExcludedPredicate('e');
+        [$excludeSql, $excludeBindings] = $this->exclusionRules->activeStatsEmployeeNotExcludedPredicate('e');
 
         $row = $db->selectOne(
             'SELECT COUNT(*) AS c
              FROM ('.$this->activeUsersUnionSql().') AS active_users
              LEFT JOIN employee_profiles e ON e.id = active_users.user_id
-             WHERE '.$berauSql.$inSql,
+             WHERE (e.id IS NULL OR ('.$excludeSql.'))'.$inSql,
             array_merge(
                 $this->activeUsersUnionBindings($from, $to),
-                $berauBindings,
+                $excludeBindings,
                 $inBindings
             )
         );
@@ -246,14 +246,14 @@ final class SportEvaluationActiveStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:overview:v8:'.$week['start'].':'.$scopeKey,
+                'evaluasi_well:active_stats:overview:v9:'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($week, $scope, $scopeKey): array {
                     $overview = [];
 
                     foreach (array_keys(self::DIMENSION_COLUMNS) as $dimension) {
                         $stats = Cache::remember(
-                            'evaluasi_well:active_stats:v9:'.$dimension.':'.$week['start'].':'.$scopeKey,
+                            'evaluasi_well:active_stats:v10:'.$dimension.':'.$week['start'].':'.$scopeKey,
                             self::CACHE_TTL,
                             function () use ($dimension, $week, $scope): array {
                                 return $this->buildStats($dimension, $week, $scope);
@@ -303,7 +303,7 @@ final class SportEvaluationActiveStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:weekly_trend:v4:'.$scopeKey,
+                'evaluasi_well:active_stats:weekly_trend:v5:'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($scope): array {
                     $now = Carbon::now();

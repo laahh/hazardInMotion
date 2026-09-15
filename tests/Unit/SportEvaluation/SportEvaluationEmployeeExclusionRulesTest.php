@@ -42,10 +42,17 @@ final class SportEvaluationEmployeeExclusionRulesTest extends TestCase
         $this->assertTrue($this->rules->isExcludedCompany('Fusi Solusi Transformasi'));
     }
 
+    public function test_excludes_yayasan_dharma_bakti_company_variants(): void
+    {
+        $this->assertTrue($this->rules->isExcludedCompany('Yayasan Dharma Bakti'));
+        $this->assertTrue($this->rules->isExcludedCompany('Yayasan Dharma Bakti Berau Coal'));
+        $this->assertTrue($this->rules->isExcludedCompany('YAYASAN DHARMA BAKTI'));
+        $this->assertTrue($this->rules->isExcludedCompany('Yayasan Dharma-Bakti Berau Coal'));
+    }
+
     public function test_does_not_exclude_other_companies(): void
     {
         $this->assertFalse($this->rules->isExcludedCompany('PT Berau Coal'));
-        $this->assertFalse($this->rules->isExcludedCompany('Yayasan Dharma Bakti Berau Coal'));
         $this->assertFalse($this->rules->isExcludedCompany('PT Pamapersada Nusantara'));
         $this->assertFalse($this->rules->isExcludedCompany(null));
         $this->assertFalse($this->rules->isExcludedCompany(''));
@@ -72,6 +79,13 @@ final class SportEvaluationEmployeeExclusionRulesTest extends TestCase
             'site' => 'GMO',
             'nama' => 'Cici',
             'company' => 'PT Fusi Solusi Transformasi',
+        ]));
+
+        $this->assertTrue($this->rules->isExcludedRow([
+            'jabatan_fungsional' => 'Staff',
+            'site' => 'BMO',
+            'nama' => 'Dewi',
+            'company' => 'Yayasan Dharma Bakti Berau Coal',
         ]));
 
         $this->assertFalse($this->rules->isExcludedRow([
@@ -137,6 +151,7 @@ final class SportEvaluationEmployeeExclusionRulesTest extends TestCase
         [$sql, $bindings] = $this->rules->activeStatsEmployeeNotExcludedPredicate('e');
 
         $this->assertStringContainsString('POLITEKNIKSINARMAS', implode(',', $bindings));
+        $this->assertStringContainsString('YAYASANDHARMABAKTI', implode(',', $bindings));
         $this->assertStringContainsString('PTBERAUCOAL', implode(',', $bindings));
         $this->assertStringContainsString('INTERNSHIP', implode(',', $bindings));
         $this->assertStringContainsString('AND', $sql);
@@ -154,6 +169,7 @@ final class SportEvaluationEmployeeExclusionRulesTest extends TestCase
             '%SINARMAS%MARITIN%',
             'FUSI%',
             'PTFUSI%',
+            '%YAYASANDHARMABAKTI%',
         ], $bindings);
     }
 }
