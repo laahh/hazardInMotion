@@ -3784,6 +3784,10 @@
         renderPeople((payload && payload.people) || []);
         renderHazards((payload && payload.hazard_features) || []);
         applyScope();
+        // Warm sync Intervensi dari data live yang sama dengan Beranda.
+        if (payload && payload.source === "live" && mapsInterventionsUrl) {
+          loadInterventions(railView === "interventions");
+        }
       })
       .catch(function () {});
   }

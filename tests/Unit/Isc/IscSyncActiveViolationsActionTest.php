@@ -94,7 +94,7 @@ final class IscSyncActiveViolationsActionTest extends TestCase
         $this->assertNull($unit->lat);
     }
 
-    public function test_closes_open_when_besigma_inactive_and_keeps_in_progress(): void
+    public function test_skips_close_when_besigma_unreachable(): void
     {
         $this->requireSqlite();
         Event::fake([IscHazardEntered::class]);
@@ -114,11 +114,42 @@ final class IscSyncActiveViolationsActionTest extends TestCase
 
         $result = $this->action()->execute(false);
 
-        $this->assertSame(1, $result['closed']);
-        $this->assertSame('closed', $open->fresh()->status);
-        $this->assertNotNull($open->fresh()->exited_at);
+        $this->assertTrue($result['skipped']);
+        $this->assertSame(0, $result['closed']);
+        $this->assertSame('open', $open->fresh()->status);
         $this->assertSame('in_progress', $busy->fresh()->status);
-        $this->assertNotNull($busy->fresh()->exited_at);
+    }
+
+    public function test_reopens_closed_violation_by_besigma_id(): void
+    {
+        $this->requireSqlite();
+        Event::fake([IscHazardEntered::class]);
+        $this->createEventTable();
+
+        $demo = app(IscPobDemoDataset::class)->activeViolations();
+        $firstPerson = $demo['people'][0] ?? null;
+        $this->assertIsArray($firstPerson);
+        $vid = (string) ($firstPerson['id'] ?? '');
+        $this->assertNotSame('', $vid);
+
+        IscBoundaryEvent::query()->create($this->eventAttrs([
+            'besigma_violation_id' => $vid,
+            'person_key' => 'sid:'.mb_strtoupper((string) ($firstPerson['sid'] ?? 'X')),
+            'user_id' => (string) ($firstPerson['user_id'] ?? 'u-x'),
+            'hazard_boundary_id' => (string) ($firstPerson['boundary_id'] ?? 'hz'),
+            'status' => 'closed',
+            'exited_at' => now()->subHour(),
+            'name' => 'Closed lama',
+        ]));
+
+        $result = $this->action()->execute(true);
+
+        $this->assertGreaterThanOrEqual(1, $result['reopened']);
+        $this->assertSame(1, IscBoundaryEvent::query()->where('besigma_violation_id', $vid)->count());
+        $reopened = IscBoundaryEvent::query()->where('besigma_violation_id', $vid)->first();
+        $this->assertNotNull($reopened);
+        $this->assertSame('open', $reopened->status);
+        $this->assertNull($reopened->exited_at);
     }
 
     public function test_action_source_never_mentions_besigma_connection(): void

@@ -4,17 +4,23 @@ declare(strict_types=1);
 
 namespace App\Services\Isc;
 
+use App\Actions\Isc\IscSyncActiveViolationsAction;
 use App\Models\Isc\IscBoundaryEvent;
 use App\Models\Isc\IscIntervention;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Throwable;
 
 /**
- * Tasklist intervensi dari event lokal (bukan scan Besigma di request UI).
+ * Tasklist intervensi: sumber kebenaran = pelanggaran live Besigma (sama Beranda).
+ * Tabel lokal hanya menyimpan state agar form intervensi punya event_id.
  */
 final class IscMapsInterventionService
 {
-    public const LIST_LIMIT = 80;
+    public const LIST_LIMIT = 250;
+
+    public const POB_LIVE_CACHE_KEY = 'isc.pob.snapshot.live.v6';
 
     /**
      * @var list<string>
@@ -36,6 +42,8 @@ final class IscMapsInterventionService
         private readonly IscPobDemoDataset $demo,
         private readonly IscHazardBoundaryClassifier $hazard,
         private readonly IscSiteNormalizer $sites,
+        private readonly IscBesigmaViolationReader $violations,
+        private readonly IscSyncActiveViolationsAction $sync,
     ) {}
 
     /**
@@ -52,6 +60,191 @@ final class IscMapsInterventionService
             return $this->fromRows([], 'local', false, false);
         }
 
+        $pack = $this->activeViolationPack();
+        if ($pack !== null) {
+            $this->syncPackQuietly($pack);
+
+            return $this->fromRows(
+                $this->loadOpenTaskRows(),
+                $pack['source'],
+                true,
+                $canCreate,
+            );
+        }
+
+        return $this->fromRows($this->loadOpenTaskRows(), 'local', true, $canCreate);
+    }
+
+    /**
+     * Pack pelanggaran aktif: reader live dulu, fallback cache POB Beranda (TTL singkat).
+     *
+     * @return array{people:list<array<string,mixed>>,units:list<array<string,mixed>>,source:string}|null
+     */
+    private function activeViolationPack(): ?array
+    {
+        try {
+            $this->violations->warmUp(true);
+            if ($this->violations->isUp()) {
+                $people = $this->violations->people();
+                $units = $this->violations->units();
+                if (! $this->violations->isUp()) {
+                    return $this->packFromPobCache();
+                }
+                if ($people === [] && $units === []) {
+                    return null;
+                }
+
+                return [
+                    'people' => $people,
+                    'units' => $units,
+                    'source' => 'besigma',
+                ];
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        return $this->packFromPobCache();
+    }
+
+    /**
+     * @return array{people:list<array<string,mixed>>,units:list<array<string,mixed>>,source:string}|null
+     */
+    private function packFromPobCache(): ?array
+    {
+        $cached = Cache::get(self::POB_LIVE_CACHE_KEY);
+        if (! is_array($cached) || ($cached['source'] ?? '') !== 'live') {
+            return null;
+        }
+
+        $people = [];
+        $units = [];
+        $seenPeople = [];
+        $seenUnits = [];
+        foreach ($cached['people'] ?? [] as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $vid = trim((string) ($row['besigma_violation_id'] ?? ''));
+            $fromViolation = (bool) ($row['from_violation'] ?? false);
+            if ($vid === '' && ! $fromViolation) {
+                continue;
+            }
+            if (($row['entity'] ?? 'person') === 'unit') {
+                $key = $vid !== '' ? $vid : ('unit:'.(string) ($row['unit_id'] ?? ''));
+                if ($key === 'unit:' || isset($seenUnits[$key])) {
+                    continue;
+                }
+                $seenUnits[$key] = true;
+                $units[] = $this->personLikeToViolationRow($row, true);
+                continue;
+            }
+
+            $key = $vid !== '' ? $vid : ('user:'.(string) ($row['user_id'] ?? $row['sid'] ?? ''));
+            if ($key === 'user:' || isset($seenPeople[$key])) {
+                continue;
+            }
+            $seenPeople[$key] = true;
+            $people[] = $this->personLikeToViolationRow($row, false);
+        }
+
+        if ($people === [] && $units === []) {
+            // Ringkasan kinds di cache: kalau Beranda bilang ada N, tapi people tidak
+            // membawa violation id, jangan pakai cache kosong.
+            return null;
+        }
+
+        return [
+            'people' => $people,
+            'units' => $units,
+            'source' => 'pob_cache',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function personLikeToViolationRow(array $row, bool $unit): array
+    {
+        if ($unit) {
+            return [
+                'id' => (string) ($row['besigma_violation_id'] ?? ''),
+                'unit_id' => (string) ($row['unit_id'] ?? ''),
+                'sid' => (string) ($row['sid'] ?? ''),
+                'name' => (string) ($row['name'] ?? 'Unit'),
+                'company' => $row['company'] ?? null,
+                'site' => $row['site'] ?? $row['site_label'] ?? null,
+                'site_code' => $row['site_code'] ?? null,
+                'boundary_id' => (string) ($row['hazard_boundary_id'] ?? ''),
+                'hazard_name' => $row['hazard_name'] ?? null,
+                'status' => (string) ($row['besigma_status'] ?? ''),
+                'entered_at' => $row['entered_at'] ?? null,
+                'lat' => $row['lat'] ?? null,
+                'lng' => $row['lng'] ?? null,
+            ];
+        }
+
+        return [
+            'id' => (string) ($row['besigma_violation_id'] ?? ''),
+            'user_id' => (string) ($row['user_id'] ?? ''),
+            'sid' => (string) ($row['sid'] ?? ''),
+            'name' => (string) ($row['name'] ?? ''),
+            'company' => $row['company'] ?? null,
+            'job_title' => $row['job_title'] ?? null,
+            'site' => $row['site'] ?? $row['site_label'] ?? null,
+            'site_code' => $row['site_code'] ?? null,
+            'boundary_id' => (string) ($row['hazard_boundary_id'] ?? ''),
+            'hazard_name' => $row['hazard_name'] ?? null,
+            'hazard_kind' => $row['hazard_kind'] ?? IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER,
+            'is_competency' => ($row['hazard_kind'] ?? '') === IscHazardBoundaryClassifier::KIND_EMPLOYEE_COMPETENCE ? 1 : 0,
+            'status' => (string) ($row['besigma_status'] ?? ''),
+            'entered_at' => $row['entered_at'] ?? null,
+            'lat' => $row['lat'] ?? null,
+            'lng' => $row['lng'] ?? null,
+        ];
+    }
+
+    /**
+     * @param  array{people:list<array<string,mixed>>,units:list<array<string,mixed>>,source:string}  $pack
+     */
+    private function syncPackQuietly(array $pack): void
+    {
+        if (! IscSchema::violationSyncReady()) {
+            return;
+        }
+
+        try {
+            $liveTotal = count($pack['people']) + count($pack['units']);
+            $localOpen = IscBoundaryEvent::query()
+                ->whereIn('status', ['open', 'in_progress'])
+                ->count();
+
+            if ($localOpen >= $liveTotal && $pack['source'] !== 'besigma') {
+                return;
+            }
+
+            // Karyawan dulu (tanpa close) supaya HUD "Bahaya karyawan" cepat selaras Beranda.
+            if ($pack['people'] !== []) {
+                $this->sync->executeFromPack($pack['people'], [], closeOrphans: false);
+            }
+
+            // Full pack sekali. Close orphan HANYA dari live Besigma (cache POB bisa parsial).
+            $this->sync->executeFromPack(
+                $pack['people'],
+                $pack['units'],
+                closeOrphans: $pack['source'] === 'besigma',
+            );
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function loadOpenTaskRows(): array
+    {
         $columns = [
             'id', 'person_key', 'sid', 'name', 'company', 'job_title', 'lat', 'lng',
             'iupk_site', 'hazard_boundary_id', 'hazard_name', 'entered_at', 'exited_at',
@@ -76,7 +269,7 @@ final class IscMapsInterventionService
             $rows[] = $this->fromEvent($event, $syncReady);
         }
 
-        return $this->fromRows($rows, 'local', true, $canCreate);
+        return $rows;
     }
 
     /**

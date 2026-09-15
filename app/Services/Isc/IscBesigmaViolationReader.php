@@ -39,6 +39,14 @@ final class IscBesigmaViolationReader
     }
 
     /**
+     * Clear circuit/cache agar sync Intervensi tidak tertahan status down palsu.
+     */
+    public function warmUp(bool $fresh = true): void
+    {
+        $this->connection->prepareForUse($fresh);
+    }
+
+    /**
      * @return array<string, int>
      */
     public function kindCounts(): array

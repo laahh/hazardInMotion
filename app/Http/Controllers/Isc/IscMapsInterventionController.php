@@ -6,7 +6,6 @@ namespace App\Http\Controllers\Isc;
 
 use App\Actions\Isc\IscHazardReportStoreAction;
 use App\Actions\Isc\IscInterventionStoreAction;
-use App\Actions\Isc\IscSyncActiveViolationsAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Isc\IscHazardReportStoreRequest;
 use App\Http\Requests\Isc\IscInterventionStoreRequest;
@@ -17,7 +16,6 @@ use App\Services\Isc\IscHazardSysUserLookupService;
 use App\Services\Isc\IscMapsInterventionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 final class IscMapsInterventionController extends Controller
@@ -30,33 +28,16 @@ final class IscMapsInterventionController extends Controller
         private readonly IscHazardSysUserLookupService $sysUsers,
         private readonly IscHazardLocationLookupService $locations,
         private readonly IscHazardPjaLookupService $pja,
-        private readonly IscSyncActiveViolationsAction $syncViolations,
     ) {}
 
     public function index(Request $request): JsonResponse
     {
         $demo = $request->query('source') === 'demo';
-        if (! $demo) {
-            $this->syncLiveViolationsQuietly();
-        }
 
         return response()->json([
             'success' => true,
             ...$this->tasks->payload($request->user(), $demo),
         ]);
-    }
-
-    private function syncLiveViolationsQuietly(): void
-    {
-        try {
-            Cache::remember('isc.maps.sync_active_violations.v1', 60, function (): bool {
-                $this->syncViolations->execute(false);
-
-                return true;
-            });
-        } catch (Throwable $e) {
-            report($e);
-        }
     }
 
     public function store(IscInterventionStoreRequest $request): JsonResponse

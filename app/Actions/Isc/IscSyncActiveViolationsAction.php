@@ -12,6 +12,7 @@ use App\Services\Isc\IscHazardBoundaryClassifier;
 use App\Services\Isc\IscPobDemoDataset;
 use App\Services\Isc\IscSchema;
 use App\Services\Isc\IscSiteNormalizer;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Throwable;
@@ -32,7 +33,7 @@ final class IscSyncActiveViolationsAction
     ) {}
 
     /**
-     * @return array{created:int,updated:int,closed:int,skipped:bool,message:?string}
+     * @return array{created:int,updated:int,closed:int,reopened:int,skipped:bool,message:?string}
      */
     public function execute(bool $demo = false): array
     {
@@ -41,28 +42,66 @@ final class IscSyncActiveViolationsAction
                 'created' => 0,
                 'updated' => 0,
                 'closed' => 0,
+                'reopened' => 0,
                 'skipped' => true,
                 'message' => 'Kolom sync pelanggaran belum ada. Jalankan migration isc_boundary_events setelah konfirmasi.',
             ];
         }
 
-        $rows = $this->activeRows($demo);
+        $snapshot = $this->activeSnapshot($demo);
+        if (! $snapshot['ok']) {
+            return [
+                'created' => 0,
+                'updated' => 0,
+                'closed' => 0,
+                'reopened' => 0,
+                'skipped' => true,
+                'message' => $snapshot['message'],
+            ];
+        }
+
+        $rows = $snapshot['rows'];
         $open = IscBoundaryEvent::query()->whereIn('status', ['open', 'in_progress'])->get();
         $index = $this->indexOpen($open);
 
         $seenIds = [];
         $created = 0;
         $updated = 0;
+        $reopened = 0;
         foreach ($rows as $row) {
             $existing = $this->findExisting($index, $row);
+            if ($existing === null) {
+                $existing = $this->findClosedMatch($row);
+            }
+
             if ($existing !== null) {
+                $wasClosed = $existing->status === 'closed';
                 $this->refreshEvent($existing, $row);
+                $this->remember($index, $existing);
                 $seenIds[(int) $existing->id] = true;
-                $updated++;
+                if ($wasClosed) {
+                    $reopened++;
+                } else {
+                    $updated++;
+                }
                 continue;
             }
 
-            $event = IscBoundaryEvent::query()->create($this->createPayload($row));
+            try {
+                $event = IscBoundaryEvent::query()->create($this->createPayload($row));
+            } catch (QueryException $e) {
+                // Race / UNIQUE besigma_violation_id: reopen baris closed yang bentrok.
+                $recovered = $this->recoverDuplicateCreate($e, $row);
+                if ($recovered === null) {
+                    throw $e;
+                }
+                $this->refreshEvent($recovered, $row);
+                $this->remember($index, $recovered);
+                $seenIds[(int) $recovered->id] = true;
+                $reopened++;
+                continue;
+            }
+
             $this->remember($index, $event);
             $seenIds[(int) $event->id] = true;
             $created++;
@@ -73,6 +112,7 @@ final class IscSyncActiveViolationsAction
             }
         }
 
+        // Hanya tutup orphan jika snapshot live/demo sukses terbaca.
         $closed = 0;
         foreach ($open as $event) {
             if (isset($seenIds[(int) $event->id])) {
@@ -92,33 +132,79 @@ final class IscSyncActiveViolationsAction
             'created' => $created,
             'updated' => $updated,
             'closed' => $closed,
+            'reopened' => $reopened,
             'skipped' => false,
             'message' => null,
         ];
     }
 
     /**
-     * @return list<array<string, mixed>>
+     * @return array{ok:bool,rows:list<array<string,mixed>>,message:?string}
      */
-    private function activeRows(bool $demo): array
+    private function activeSnapshot(bool $demo): array
     {
         if ($demo) {
             $pack = $this->demo->activeViolations();
-            $people = is_array($pack['people'] ?? null) ? $pack['people'] : [];
-            $units = is_array($pack['units'] ?? null) ? $pack['units'] : [];
-        } else {
-            $people = $this->violations->people();
-            $units = $this->violations->units();
+
+            return [
+                'ok' => true,
+                'rows' => $this->mapActiveRows($pack['people'] ?? [], $pack['units'] ?? []),
+                'message' => null,
+            ];
         }
 
+        $this->violations->warmUp(true);
+
+        if (! $this->violations->isUp()) {
+            return [
+                'ok' => false,
+                'rows' => [],
+                'message' => 'Besigma tidak terjangkau — sync dilewati (tidak menutup pelanggaran lokal).',
+            ];
+        }
+
+        $people = $this->violations->people();
+        $units = $this->violations->units();
+
+        // people()/units() mengembalikan [] + rememberFailure saat query error.
+        if (! $this->violations->isUp()) {
+            return [
+                'ok' => false,
+                'rows' => [],
+                'message' => 'Gagal membaca pelanggaran Besigma — sync dilewati (tidak menutup pelanggaran lokal).',
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'rows' => $this->mapActiveRows($people, $units),
+            'message' => null,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>|mixed  $people
+     * @param  list<array<string, mixed>>|mixed  $units
+     * @return list<array<string, mixed>>
+     */
+    private function mapActiveRows(mixed $people, mixed $units): array
+    {
+        $people = is_array($people) ? $people : [];
+        $units = is_array($units) ? $units : [];
         $rows = [];
         foreach ($people as $person) {
+            if (! is_array($person)) {
+                continue;
+            }
             $mapped = $this->mapPerson($person);
             if ($mapped !== null) {
                 $rows[] = $mapped;
             }
         }
         foreach ($units as $unit) {
+            if (! is_array($unit)) {
+                continue;
+            }
             $mapped = $this->mapUnit($unit);
             if ($mapped !== null) {
                 $rows[] = $mapped;
@@ -301,6 +387,63 @@ final class IscSyncActiveViolationsAction
         return $index['pair:'.$pair] ?? null;
     }
 
+    /**
+     * Cari baris closed dengan violation id / fallback yang sama (untuk reopen).
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function findClosedMatch(array $row): ?IscBoundaryEvent
+    {
+        $vid = trim((string) ($row['besigma_violation_id'] ?? ''));
+        if ($vid !== '') {
+            $byVid = IscBoundaryEvent::query()
+                ->where('besigma_violation_id', $vid)
+                ->orderByDesc('id')
+                ->first();
+            if ($byVid !== null) {
+                return $byVid;
+            }
+        }
+
+        $personKey = trim((string) ($row['person_key'] ?? ''));
+        $boundaryId = trim((string) ($row['hazard_boundary_id'] ?? ''));
+        if ($personKey === '') {
+            return null;
+        }
+
+        $query = IscBoundaryEvent::query()
+            ->where('person_key', $personKey)
+            ->where('status', 'closed')
+            ->orderByDesc('id');
+
+        if ($boundaryId !== '') {
+            $query->where('hazard_boundary_id', $boundaryId);
+        } else {
+            $query->where(function ($q): void {
+                $q->whereNull('hazard_boundary_id')->orWhere('hazard_boundary_id', '');
+            });
+        }
+
+        return $query->first();
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function recoverDuplicateCreate(QueryException $e, array $row): ?IscBoundaryEvent
+    {
+        $sqlState = (string) ($e->errorInfo[0] ?? '');
+        $message = mb_strtolower($e->getMessage());
+        $isDuplicate = $sqlState === '23000'
+            || str_contains($message, 'unique')
+            || str_contains($message, 'duplicate');
+        if (! $isDuplicate) {
+            return null;
+        }
+
+        return $this->findClosedMatch($row);
+    }
+
     private function eventFallbackKey(IscBoundaryEvent $event): string
     {
         $entity = (string) ($event->entity ?: 'person');
@@ -325,6 +468,7 @@ final class IscSyncActiveViolationsAction
         $event->hazard_kind = $row['hazard_kind'];
         $event->besigma_status = $row['besigma_status'];
         $event->entity = $row['entity'];
+        $event->hazard_boundary_id = $row['hazard_boundary_id'] ?? $event->hazard_boundary_id;
         if ($row['besigma_violation_id'] !== null) {
             $event->besigma_violation_id = $row['besigma_violation_id'];
         }
@@ -340,7 +484,14 @@ final class IscSyncActiveViolationsAction
         if ($row['lng'] !== null) {
             $event->lng = $row['lng'];
         }
+        if ($event->status === 'closed') {
+            $event->status = 'open';
+        }
         $event->exited_at = null;
+        $event->duration_seconds = null;
+        if (! empty($row['entered_at']) && $event->entered_at === null) {
+            $event->entered_at = $row['entered_at'];
+        }
         $event->save();
     }
 
