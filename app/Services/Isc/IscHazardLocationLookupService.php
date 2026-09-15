@@ -151,7 +151,13 @@ SQL;
             return true;
         }
 
-        // BMO → BMO 1 / BMO 2 / BMO 3
+        // Form EXPLORASI ↔ view EKSPLORASI
+        if (in_array($form, ['EXPLORASI', 'EKSPLORASI'], true)
+            && in_array($view, ['EXPLORASI', 'EKSPLORASI'], true)) {
+            return true;
+        }
+
+        // BMO → BMO 1 / BMO 2 / BMO 3 (legacy); exact "BMO 1" already handled above
         return str_starts_with($view, $form.' ') || str_starts_with($view, $form);
     }
 

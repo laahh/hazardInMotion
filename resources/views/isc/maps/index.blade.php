@@ -586,11 +586,15 @@
             <label>Site
               <select name="site" id="gm-hazard-site">
                 <option value="">Pilih site</option>
-                <option value="BMO">BMO</option>
-                <option value="LMO">LMO</option>
-                <option value="GMO">GMO</option>
+                <option value="BMO 1">BMO 1</option>
+                <option value="BMO 2">BMO 2</option>
+                <option value="BMO 3">BMO 3</option>
                 <option value="SMO">SMO</option>
-                <option value="PUNAN">PUNAN</option>
+                <option value="GMO">GMO</option>
+                <option value="LMO">LMO</option>
+                <option value="HO">HO</option>
+                <option value="EXPLORASI">EXPLORASI</option>
+                <option value="MARINE">MARINE</option>
               </select>
             </label>
             <label>Lokasi
@@ -640,14 +644,18 @@
 
         <section class="gm-hazard-sec">
           <h3>Temuan</h3>
-          <label>Unggah Foto<input type="file" name="foto" accept="image/jpeg,image/png,image/webp"></label>
+          <label>Unggah Foto
+            <input type="file" name="foto" id="gm-hazard-foto" accept="image/jpeg,image/png,image/webp">
+            <span class="gm-hazard-hint" id="gm-hazard-foto-status"></span>
+            <img id="gm-hazard-foto-preview" class="gm-hazard-foto-preview" alt="Preview foto jejak GPS" hidden>
+          </label>
           <label class="gm-hazard-check">
             <input type="checkbox" name="is_observasi_area_kritis" value="1">
             Apakah laporan berkaitan dengan Observasi Area Kritis?
           </label>
           <div class="gm-hazard-grid">
-            <label>Ketidaksesuaian<input type="text" name="ketidaksesuaian" maxlength="255"></label>
-            <label>Sub Ketidaksesuaian<input type="text" name="sub_ketidaksesuaian" maxlength="255"></label>
+            <label>Ketidaksesuaian<input type="text" name="ketidaksesuaian" id="gm-hazard-ketidaksesuaian" maxlength="255"></label>
+            <label>Sub Ketidaksesuaian<input type="text" name="sub_ketidaksesuaian" id="gm-hazard-sub-ketidaksesuaian" maxlength="255"></label>
           </div>
           <label>Quick Action<input type="text" name="quick_action" maxlength="255"></label>
           <label>Deskripsi Temuan<textarea name="deskripsi_temuan" id="gm-hazard-deskripsi" rows="5" maxlength="5000" placeholder="Terisi otomatis dari pelanggaran BeSigma"></textarea></label>

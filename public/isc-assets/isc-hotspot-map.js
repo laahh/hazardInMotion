@@ -2345,6 +2345,9 @@
 
   var hazardPickerTarget = "pelapor";
   var hazardActiveRow = null;
+  var hazardAutoFotoBlob = null;
+  var hazardAutoFotoName = "";
+  var hazardTrailFotoSeq = 0;
 
   function hazardModal() {
     return document.getElementById("gm-hazard-modal");
@@ -2434,6 +2437,35 @@
     fillAccessCredentials({ username: "", password: "" });
   }
 
+  function resolveHazardSiteOption(row) {
+    var options = ["BMO 1", "BMO 2", "BMO 3", "SMO", "GMO", "LMO", "HO", "EXPLORASI", "MARINE"];
+    if (!row) {
+      return "";
+    }
+    var site = String(row.site || "").trim().toUpperCase();
+    var code = String(row.site_code || "").trim().toUpperCase();
+    var i;
+    for (i = 0; i < options.length; i += 1) {
+      if (site === options[i].toUpperCase() || code === options[i].toUpperCase()) {
+        return options[i];
+      }
+    }
+    if (site.indexOf("BMO 1") >= 0) return "BMO 1";
+    if (site.indexOf("BMO 2") >= 0) return "BMO 2";
+    if (site.indexOf("BMO 3") >= 0) return "BMO 3";
+    if (site.indexOf("EKSPLORASI") >= 0 || code === "EKSPLORASI" || code === "EXPLORASI") {
+      return "EXPLORASI";
+    }
+    if (site.indexOf("MARINE") >= 0 || code === "MARINE") return "MARINE";
+    if (site === "HO" || code === "HO") return "HO";
+    for (i = 0; i < options.length; i += 1) {
+      if (options[i].indexOf(" ") === -1 && (code === options[i] || site === options[i])) {
+        return options[i];
+      }
+    }
+    return "";
+  }
+
   function openHazardReport(row) {
     if (!ivCanCreate) {
       toast("Hanya PIC yang dapat mengirim laporan hazard.");
@@ -2451,14 +2483,15 @@
     }
     form.reset();
     clearAccessCredentials();
+    clearHazardAutoFoto();
     setHazardMsg("");
     var eventInput = document.getElementById("gm-hazard-event-id");
     if (eventInput) {
       eventInput.value = row && row.id ? String(row.id) : "";
     }
     var site = document.getElementById("gm-hazard-site");
-    if (site && row && row.site_code) {
-      site.value = row.site_code;
+    if (site) {
+      site.value = resolveHazardSiteOption(row);
     }
     if (row && (row.entity || "person") === "person" && row.sid) {
       fillPersonFields("pelapor", {
@@ -2472,7 +2505,278 @@
       lookupSidFill("pelapor", row.sid);
     }
     fillAutoDeskripsiTemuan(row);
+    fillAutoKetidaksesuaian();
+    prepareHazardTrailFoto(row);
     modal.hidden = false;
+  }
+
+  function clearHazardAutoFoto() {
+    hazardTrailFotoSeq += 1;
+    hazardAutoFotoBlob = null;
+    hazardAutoFotoName = "";
+    var preview = document.getElementById("gm-hazard-foto-preview");
+    var status = document.getElementById("gm-hazard-foto-status");
+    var input = document.getElementById("gm-hazard-foto");
+    if (preview) {
+      if (preview.src && preview.src.indexOf("blob:") === 0) {
+        try { URL.revokeObjectURL(preview.src); } catch (err) {}
+      }
+      preview.removeAttribute("src");
+      preview.hidden = true;
+    }
+    if (status) {
+      status.textContent = "";
+    }
+    if (input) {
+      input.value = "";
+    }
+  }
+
+  function assignHazardFotoFromBlob(blob, filename) {
+    if (!blob) {
+      return;
+    }
+    hazardAutoFotoBlob = blob;
+    hazardAutoFotoName = filename || "besigma-trail-historis.png";
+    var input = document.getElementById("gm-hazard-foto");
+    if (input && typeof DataTransfer !== "undefined") {
+      try {
+        var dt = new DataTransfer();
+        dt.items.add(new File([blob], hazardAutoFotoName, { type: blob.type || "image/png" }));
+        input.files = dt.files;
+      } catch (err) {
+        // Fallback: blob tetap di-append saat submit.
+      }
+    }
+    var preview = document.getElementById("gm-hazard-foto-preview");
+    if (preview) {
+      if (preview.src && preview.src.indexOf("blob:") === 0) {
+        try { URL.revokeObjectURL(preview.src); } catch (e2) {}
+      }
+      preview.src = URL.createObjectURL(blob);
+      preview.hidden = false;
+    }
+    var status = document.getElementById("gm-hazard-foto-status");
+    if (status) {
+      status.textContent = "Foto otomatis dari jejak GPS historis BeSigma (bisa diganti manual).";
+    }
+  }
+
+  function renderTrailSnapshotBlob(row, points) {
+    return new Promise(function (resolve) {
+      var pts = (points || []).map(function (p) {
+        return { lat: Number(p.lat), lng: Number(p.lng), at: p.at || null };
+      }).filter(function (p) {
+        return !!p.lat && !!p.lng;
+      });
+      if (!pts.length) {
+        resolve(null);
+        return;
+      }
+
+      var w = 960;
+      var h = 540;
+      var pad = 48;
+      var minLat = pts[0].lat;
+      var maxLat = pts[0].lat;
+      var minLng = pts[0].lng;
+      var maxLng = pts[0].lng;
+      pts.forEach(function (p) {
+        minLat = Math.min(minLat, p.lat);
+        maxLat = Math.max(maxLat, p.lat);
+        minLng = Math.min(minLng, p.lng);
+        maxLng = Math.max(maxLng, p.lng);
+      });
+      var latSpan = Math.max(maxLat - minLat, 0.0008);
+      var lngSpan = Math.max(maxLng - minLng, 0.0008);
+      minLat -= latSpan * 0.08;
+      maxLat += latSpan * 0.08;
+      minLng -= lngSpan * 0.08;
+      maxLng += lngSpan * 0.08;
+
+      var canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      var ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+
+      var grad = ctx.createLinearGradient(0, 0, w, h);
+      grad.addColorStop(0, "#0f172a");
+      grad.addColorStop(1, "#1e293b");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // subtle grid
+      ctx.strokeStyle = "rgba(148,163,184,0.18)";
+      ctx.lineWidth = 1;
+      for (var gx = pad; gx < w - pad; gx += 40) {
+        ctx.beginPath();
+        ctx.moveTo(gx, pad + 36);
+        ctx.lineTo(gx, h - pad);
+        ctx.stroke();
+      }
+      for (var gy = pad + 36; gy < h - pad; gy += 40) {
+        ctx.beginPath();
+        ctx.moveTo(pad, gy);
+        ctx.lineTo(w - pad, gy);
+        ctx.stroke();
+      }
+
+      var when = formatHazardDateTime(row && row.entered_at);
+      var title = "[ Auto Input BeSigma ] Jejak GPS Historis";
+      var sub = [
+        (row && row.name) || "—",
+        row && row.sid ? ("SID " + row.sid) : null,
+        when.tanggal + " " + when.jam,
+        (row && (row.hazard_name || row.hazard_kind_label)) || null
+      ].filter(Boolean).join(" · ");
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "bold 22px Segoe UI, Arial, sans-serif";
+      ctx.fillText(title, 24, 34);
+      ctx.font = "14px Segoe UI, Arial, sans-serif";
+      ctx.fillStyle = "#cbd5e1";
+      ctx.fillText(sub, 24, 56);
+
+      function project(lat, lng) {
+        var x = pad + ((lng - minLng) / (maxLng - minLng || 1)) * (w - pad * 2);
+        var y = pad + 44 + ((maxLat - lat) / (maxLat - minLat || 1)) * (h - pad * 2 - 52);
+        return [x, y];
+      }
+
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 3.5;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      pts.forEach(function (p, idx) {
+        var xy = project(p.lat, p.lng);
+        if (idx === 0) {
+          ctx.moveTo(xy[0], xy[1]);
+        } else {
+          ctx.lineTo(xy[0], xy[1]);
+        }
+      });
+      ctx.stroke();
+
+      var start = project(pts[0].lat, pts[0].lng);
+      var end = project(pts[pts.length - 1].lat, pts[pts.length - 1].lng);
+      ctx.fillStyle = "#22c55e";
+      ctx.beginPath();
+      ctx.arc(start[0], start[1], 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f97316";
+      ctx.beginPath();
+      ctx.arc(end[0], end[1], 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#e2e8f0";
+      ctx.font = "12px Segoe UI, Arial, sans-serif";
+      ctx.fillText("Start", start[0] + 10, start[1] - 8);
+      ctx.fillText("Akhir / pelanggaran", end[0] + 10, end[1] - 8);
+      ctx.fillText(pts.length + " titik GPS", 24, h - 18);
+
+      if (typeof canvas.toBlob === "function") {
+        canvas.toBlob(function (blob) {
+          resolve(blob || null);
+        }, "image/png");
+        return;
+      }
+      try {
+        var dataUrl = canvas.toDataURL("image/png");
+        var parts = dataUrl.split(",");
+        var bin = atob(parts[1] || "");
+        var arr = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i += 1) {
+          arr[i] = bin.charCodeAt(i);
+        }
+        resolve(new Blob([arr], { type: "image/png" }));
+      } catch (err) {
+        resolve(null);
+      }
+    });
+  }
+
+  function prepareHazardTrailFoto(row) {
+    var status = document.getElementById("gm-hazard-foto-status");
+    var seq = ++hazardTrailFotoSeq;
+    if (!row || !postEventTrailUrl) {
+      if (status) {
+        status.textContent = "Jejak GPS tidak tersedia — unggah foto manual.";
+      }
+      return;
+    }
+    var entity = (row.entity || "person") === "unit" ? "unit" : "person";
+    var id = entity === "unit"
+      ? String(row.unit_id || "")
+      : String(row.user_id || row.sid || "");
+    if (!id) {
+      if (status) {
+        status.textContent = "ID Besigma belum ada — unggah foto manual.";
+      }
+      return;
+    }
+    if (status) {
+      status.textContent = "Mengambil jejak GPS historis untuk foto otomatis…";
+    }
+    var date = dateFromTimestamp(row.entered_at) || todayIsoDate();
+    fetch(withQuery(postEventTrailUrl, {
+      entity: entity,
+      id: id,
+      date: date
+    }), { headers: { Accept: "application/json" }, credentials: "same-origin" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("HTTP " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (payload) {
+        if (seq !== hazardTrailFotoSeq) {
+          return null;
+        }
+        var points = (payload && payload.points) || [];
+        drawTrail(row, points, {
+          silent: true,
+          violationLabel: row.hazard_kind_label || row.hazard_name || ""
+        });
+        return renderTrailSnapshotBlob(row, points);
+      })
+      .then(function (blob) {
+        if (seq !== hazardTrailFotoSeq) {
+          return;
+        }
+        if (!blob) {
+          if (status) {
+            status.textContent = "Titik GPS belum cukup — unggah foto manual.";
+          }
+          return;
+        }
+        var sid = String((row && row.sid) || (row && row.id) || "trail").replace(/[^\w-]+/g, "");
+        assignHazardFotoFromBlob(blob, "besigma-trail-" + sid + "-" + date + ".png");
+      })
+      .catch(function () {
+        if (seq !== hazardTrailFotoSeq) {
+          return;
+        }
+        if (status) {
+          status.textContent = "Gagal memuat jejak GPS — unggah foto manual.";
+        }
+      });
+  }
+
+  function fillAutoKetidaksesuaian() {
+    var utama = document.getElementById("gm-hazard-ketidaksesuaian");
+    var sub = document.getElementById("gm-hazard-sub-ketidaksesuaian");
+    if (utama) {
+      utama.value = "Tingkah Laku Pekerja";
+    }
+    if (sub) {
+      sub.value = "Pekerja berada di luar kabin di area tambang";
+    }
   }
 
   function formatHazardDateTime(iso) {
@@ -2711,6 +3015,7 @@
       modal.hidden = true;
     }
     hazardActiveRow = null;
+    clearHazardAutoFoto();
   }
 
   function openHazardPicker(target) {
@@ -2871,6 +3176,11 @@
     } else {
       data.delete("demo");
     }
+    var fotoField = data.get("foto");
+    var hasFoto = fotoField && typeof fotoField === "object" && Number(fotoField.size || 0) > 0;
+    if (!hasFoto && hazardAutoFotoBlob) {
+      data.set("foto", hazardAutoFotoBlob, hazardAutoFotoName || "besigma-trail-historis.png");
+    }
     setHazardMsg("Mengirim…", false);
     fetch(mapsHazardReportsUrl, {
       method: "POST",
@@ -2899,6 +3209,7 @@
         toast(pack.payload && pack.payload.demo
           ? "Laporan hazard dummy diterima."
           : "Laporan hazard tersimpan.");
+        clearHazardAutoFoto();
         closeHazardReport();
         loadInterventions(true);
       })
@@ -3450,6 +3761,27 @@
   var hazardForm = document.getElementById("gm-hazard-form");
   if (hazardForm) {
     initHazardComboboxes();
+    var fotoInput = document.getElementById("gm-hazard-foto");
+    if (fotoInput) {
+      fotoInput.addEventListener("change", function () {
+        if (fotoInput.files && fotoInput.files.length) {
+          hazardAutoFotoBlob = null;
+          hazardAutoFotoName = "";
+          var preview = document.getElementById("gm-hazard-foto-preview");
+          var status = document.getElementById("gm-hazard-foto-status");
+          if (preview) {
+            if (preview.src && preview.src.indexOf("blob:") === 0) {
+              try { URL.revokeObjectURL(preview.src); } catch (err) {}
+            }
+            preview.src = URL.createObjectURL(fotoInput.files[0]);
+            preview.hidden = false;
+          }
+          if (status) {
+            status.textContent = "Foto diganti manual.";
+          }
+        }
+      });
+    }
     hazardForm.addEventListener("submit", function (event) {
       event.preventDefault();
       submitHazardReport(hazardForm);

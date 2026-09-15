@@ -1813,6 +1813,16 @@ div.gm-hud-metric:hover { transform: none; }
   font-size: .75rem;
   color: #64748b;
 }
+.gm-hazard-foto-preview {
+  display: block;
+  margin-top: 8px;
+  width: min(100%, 420px);
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #0f172a;
+}
 @media (max-width: 640px) {
   .gm-hazard-grid { grid-template-columns: 1fr; }
 }
