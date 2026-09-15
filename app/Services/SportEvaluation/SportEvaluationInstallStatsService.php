@@ -177,7 +177,7 @@ final class SportEvaluationInstallStatsService
         }
 
         try {
-            return Cache::remember('evaluasi_well:install_stats:filter_options:v7', self::CACHE_TTL, function (): array {
+            return Cache::remember('evaluasi_well:install_stats:filter_options:v8', self::CACHE_TTL, function (): array {
                 $rows = $this->rawEmployeeRows();
                 $sites = [];
                 $companies = [];
@@ -193,7 +193,8 @@ final class SportEvaluationInstallStatsService
                         'site' => $row['site'],
                         'nama' => $row['nama'],
                         'company' => $row['company'],
-                    ])) {
+                        'departement' => $row['departement'],
+                    ]) || $this->exclusionRules->isExcludedSite($site)) {
                         continue;
                     }
 
@@ -518,7 +519,8 @@ final class SportEvaluationInstallStatsService
                 'site' => $row['site'],
                 'nama' => $row['nama'],
                 'company' => $row['company'],
-            ])) {
+                'departement' => $row['departement'],
+            ]) || $this->exclusionRules->isExcludedSite($resolvedSite)) {
                 continue;
             }
 
@@ -575,7 +577,7 @@ final class SportEvaluationInstallStatsService
     private function rawEmployeeRows(): array
     {
         /** @var list<array{id:int,kode_sid:string,site:string,divisi:string,company:string,departement:string,jabatan:string,nama:string,is_installed:bool}> */
-        return Cache::remember('evaluasi_well:install_stats:raw_employees:v3', self::CACHE_TTL, function (): array {
+        return Cache::remember('evaluasi_well:install_stats:raw_employees:v4', self::CACHE_TTL, function (): array {
             $db = DB::connection(BewellConnectionService::CONNECTION);
 
             $sql = '
@@ -692,7 +694,8 @@ final class SportEvaluationInstallStatsService
                             'site' => $row['site'],
                             'nama' => $row['nama'],
                             'company' => $row['company'],
-                        ])) {
+                            'departement' => $row['departement'],
+                        ]) || $this->exclusionRules->isExcludedSite($resolvedSite)) {
                             continue;
                         }
                         $divisiGroup = $this->divisiGroupResolver->resolve($row['divisi']);
@@ -854,7 +857,7 @@ final class SportEvaluationInstallStatsService
     private function kpiCardTotal(): int
     {
         try {
-            return (int) Cache::remember('evaluasi_well:install_stats:kpi_card_total:v1', self::CACHE_TTL, function (): int {
+            return (int) Cache::remember('evaluasi_well:install_stats:kpi_card_total:v2', self::CACHE_TTL, function (): int {
                 $db = DB::connection(BewellConnectionService::CONNECTION);
 
                 $installSignalsSql = '

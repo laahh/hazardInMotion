@@ -288,7 +288,7 @@ final class SportEvaluationEmployeeExclusionRules
     {
         $column = $this->safeAlias($alias).'.nama_perusahaan';
 
-        return "REPLACE(REPLACE(REPLACE(UPPER(TRIM(COALESCE({$column}, ''))), ' ', ''), '.', ''), '-', '')";
+        return "REPLACE(REPLACE(REPLACE(REPLACE(UPPER(TRIM(COALESCE({$column}, ''))), ' ', ''), '.', ''), '-', ''), ',', '')";
     }
 
     private function safeAlias(string $alias): string

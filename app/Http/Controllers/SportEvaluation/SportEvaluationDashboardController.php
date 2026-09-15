@@ -1345,6 +1345,9 @@ class SportEvaluationDashboardController extends Controller
 
     /**
      * Distribusi karyawan AKTIF per site (jumlah + persen dari total).
+     * Populasi sama dengan Status Install: status AKTIF + exclusion rules
+     * (Yayasan Dharma Bakti, Berau intern/poltek/kampus merdeka/prakerin, dll).
+     * Site memakai site_dedicated karyawan_well (fallback employee_profiles.site).
      *
      * @return array{siteRows:array<int,array<string,mixed>>, siteTotalEmployees:int}
      */
@@ -1358,28 +1361,51 @@ class SportEvaluationDashboardController extends Controller
         }
 
         try {
-            $db = DB::connection(BewellConnectionService::CONNECTION);
+            $employees = $this->activeEmployeesBaseQuery()
+                ->get([
+                    'e.kode_sid',
+                    'e.site',
+                    'e.nama',
+                    'e.nama_perusahaan',
+                    'e.departement',
+                    'e.jabatan_fungsional',
+                ]);
 
-            $employeesQuery = $db->table('employee_profiles as e')
-                ->where('e.status_karyawan', 'AKTIF');
-            $this->exclusionRules->applyToQuery($employeesQuery);
-            $this->applyScopedUserIds($employeesQuery, 'e.id');
-            $employees = $employeesQuery->get(['e.kode_sid', 'e.site']);
-
-            $siteTotalEmployees = $employees->count();
             $counts = [];
 
             foreach ($employees as $employee) {
-                $siteName = $this->siteResolver->resolve(
+                $rawSite = isset($employee->site) ? (string) $employee->site : null;
+                $resolvedSite = $this->siteResolver->resolve(
                     isset($employee->kode_sid) ? (string) $employee->kode_sid : null,
-                    isset($employee->site) ? (string) $employee->site : null,
+                    $rawSite,
                 );
-                if ($siteName === '') {
-                    $siteName = 'Tidak diketahui';
+
+                if ($this->exclusionRules->isExcludedRow([
+                    'jabatan_fungsional' => isset($employee->jabatan_fungsional)
+                        ? (string) $employee->jabatan_fungsional
+                        : null,
+                    'site' => $rawSite,
+                    'nama' => isset($employee->nama) ? (string) $employee->nama : null,
+                    'company' => isset($employee->nama_perusahaan)
+                        ? (string) $employee->nama_perusahaan
+                        : null,
+                    'departement' => isset($employee->departement)
+                        ? (string) $employee->departement
+                        : null,
+                ])) {
+                    continue;
                 }
+
+                // Exclude juga jika site_dedicated (data asli) Jakarta/Poltek.
+                if ($this->exclusionRules->isExcludedSite($resolvedSite)) {
+                    continue;
+                }
+
+                $siteName = $resolvedSite !== '' ? $resolvedSite : 'Tidak diketahui';
                 $counts[$siteName] = ($counts[$siteName] ?? 0) + 1;
             }
 
+            $siteTotalEmployees = (int) array_sum($counts);
             arsort($counts);
             $barClasses = ['bg-primary-600', 'bg-orange', 'bg-yellow', 'bg-success-main', 'bg-info-main', 'bg-indigo'];
             $i = 0;
