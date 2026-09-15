@@ -1723,6 +1723,7 @@ div.gm-hud-metric:hover { transform: none; }
 .gm-hazard-reset,
 .gm-hazard-submit,
 .gm-task-hazard,
+.gm-task-trail,
 .gm-hazard-pick,
 #gm-hazard-picker-go {
   border: 0;
@@ -1738,7 +1739,19 @@ div.gm-hud-metric:hover { transform: none; }
   background: #15803d;
   color: #fff;
 }
-.gm-task-hazard { width: 100%; }
+.gm-task-trail {
+  background: #0f172a;
+  color: #fff;
+}
+.gm-task-hazard,
+.gm-task-trail { width: 100%; }
+.gm-task-form .gm-task-actions a {
+  display: inline-block;
+  text-align: center;
+  font-size: .78rem;
+  font-weight: 600;
+  color: #0369a1;
+}
 .gm-hazard-msg {
   margin: 0;
   font-size: .8rem;

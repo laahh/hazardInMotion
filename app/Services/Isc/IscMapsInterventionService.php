@@ -174,6 +174,8 @@ final class IscMapsInterventionService
             'hazard_kind_label' => $this->hazard->label($kind !== '' ? $kind : null),
             'besigma_violation_id' => $syncReady ? ($event->besigma_violation_id ?: null) : null,
             'besigma_status' => $syncReady ? ($event->besigma_status ?: null) : null,
+            'user_id' => $syncReady ? ($event->user_id ?: null) : null,
+            'unit_id' => $syncReady ? ($event->unit_id ?: null) : null,
             'name' => (string) $event->name,
             'sid' => $event->sid,
             'company' => $event->company,
@@ -188,6 +190,10 @@ final class IscMapsInterventionService
             'entered_at' => $event->entered_at?->toIso8601String(),
             'hazard_name' => $event->hazard_name,
             'show_url' => route('isc.interventions.show', $event->id),
+            'has_trail' => $syncReady && (
+                ($entity === 'unit' && trim((string) ($event->unit_id ?? '')) !== '')
+                || ($entity !== 'unit' && trim((string) ($event->user_id ?? '')) !== '')
+            ),
         ];
     }
 
@@ -221,6 +227,8 @@ final class IscMapsInterventionService
             'hazard_kind_label' => $this->hazard->label($kind !== '' ? $kind : null),
             'besigma_violation_id' => $event['besigma_violation_id'] ?? null,
             'besigma_status' => $event['besigma_status'] ?? null,
+            'user_id' => $event['user_id'] ?? null,
+            'unit_id' => $event['unit_id'] ?? null,
             'name' => (string) ($event['name'] ?? ''),
             'sid' => $event['sid'] ?? null,
             'company' => $event['company'] ?? null,
@@ -235,6 +243,8 @@ final class IscMapsInterventionService
             'entered_at' => is_string($entered) ? $entered : null,
             'hazard_name' => $event['hazard_name'] ?? null,
             'show_url' => ($id > 0 && $id < 9000) ? route('isc.interventions.show', $id) : null,
+            'has_trail' => trim((string) ($event['user_id'] ?? '')) !== ''
+                || trim((string) ($event['unit_id'] ?? '')) !== '',
         ];
     }
 }

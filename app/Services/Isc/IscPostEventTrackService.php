@@ -124,20 +124,57 @@ final class IscPostEventTrackService
 
         $from = IscPersonnelGpsReader::dayStart($date);
         $to = IscPersonnelGpsReader::dayEndExclusive($date);
+        $resolvedId = $id;
+        if ($entity !== 'unit') {
+            $resolvedId = $this->resolvePersonTrailId($id);
+        }
         $points = $entity === 'unit'
-            ? $this->unitTrailPoints($id, $from, $to)
-            : $this->personTrailPoints($id, $from, $to);
+            ? $this->unitTrailPoints($resolvedId, $from, $to)
+            : $this->personTrailPoints($resolvedId, $from, $to);
         $thinned = self::downsample($points, self::TRAIL_MAX_POINTS, self::MIN_MOVE_METERS);
 
         return [
             'source' => 'live',
             'entity' => $entity === 'unit' ? 'unit' : 'person',
-            'id' => $id,
+            'id' => $resolvedId,
             'date' => $date,
             'point_count' => count($thinned),
             'raw_point_count' => count($points),
             'points' => $thinned,
         ];
+    }
+
+    /**
+     * Terima user_id UUID atau kode SID.
+     */
+    private function resolvePersonTrailId(string $id): string
+    {
+        $id = trim($id);
+        if ($id === '') {
+            return $id;
+        }
+        // UUID-ish → pakai langsung.
+        if (preg_match('/^[0-9a-f-]{32,36}$/i', $id) === 1) {
+            return $id;
+        }
+
+        try {
+            $row = DB::connection(self::CONNECTION)->selectOne(
+                'SELECT id
+                 FROM '.BesigmaSchema::qualify('users').'
+                 WHERE '.BesigmaSchema::flagIsFalse('is_deleted').'
+                   AND UPPER(TRIM(sid_code)) = ?
+                 LIMIT 1',
+                [strtoupper($id)]
+            );
+            if ($row && isset($row->id) && (string) $row->id !== '') {
+                return (string) $row->id;
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        return $id;
     }
 
     /**

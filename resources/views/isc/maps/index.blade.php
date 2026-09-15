@@ -398,7 +398,7 @@
             <button type="button" class="gm-hud-site" data-iv-site="SMO">SMO <b id="hud-iv-SMO">0</b></button>
             <button type="button" class="gm-hud-site" data-iv-site="PUNAN">PUN <b id="hud-iv-PUNAN">0</b></button>
           </div>
-          <p class="gm-hud-foot">Buka Laporan Hazard dari kartu task. Bukti dan verifikasi di halaman detail.</p>
+          <p class="gm-hud-foot">Detail &amp; bukti menampilkan jejak GPS di peta (seperti Post-event). Laporan Hazard untuk kirim form.</p>
         </article>
         <div id="gm-iv-cards" class="gm-hud-place-stack"></div>
       </div>

@@ -2680,11 +2680,14 @@
         ? "<div class=\"gm-task-form\">" +
           "<div class=\"gm-task-actions\">" +
           "<button type=\"button\" class=\"gm-task-hazard\">Laporan Hazard</button>" +
-          (row.show_url ? "<a href=\"" + esc(row.show_url) + "\">Detail &amp; bukti</a>" : "") +
+          "<button type=\"button\" class=\"gm-task-trail\">Detail &amp; bukti</button>" +
+          (row.show_url ? "<a href=\"" + esc(row.show_url) + "\">Form bukti</a>" : "") +
           "</div></div>"
-        : "<div class=\"gm-task-form\"><p class=\"gm-hud-hint\" style=\"margin:0\">Hanya PIC yang dapat mengajukan laporan." +
-          (row.show_url ? " <a href=\"" + esc(row.show_url) + "\">Buka detail</a>" : "") +
-          "</p></div>";
+        : "<div class=\"gm-task-form\">" +
+          "<div class=\"gm-task-actions\">" +
+          "<button type=\"button\" class=\"gm-task-trail\">Detail &amp; bukti</button>" +
+          (row.show_url ? "<a href=\"" + esc(row.show_url) + "\">Form bukti</a>" : "") +
+          "</div></div>";
       card.innerHTML =
         "<button type=\"button\" class=\"gm-task-head\">" +
         "<span class=\"gm-pin " + ((row.entity || "person") === "unit" ? "unit" : "people") + "\">" + pinSvg() + "</span>" +
@@ -2693,6 +2696,7 @@
         "</button>" + formHtml;
       card.querySelector(".gm-task-head").addEventListener("click", function () {
         openInterventionForm(card, row);
+        loadInterventionTrail(row);
       });
       var hazardBtn = card.querySelector(".gm-task-hazard");
       if (hazardBtn) {
@@ -2702,9 +2706,63 @@
           openHazardReport(row);
         });
       }
+      var trailBtn = card.querySelector(".gm-task-trail");
+      if (trailBtn) {
+        trailBtn.addEventListener("click", function (event) {
+          event.preventDefault();
+          openInterventionForm(card, row);
+          loadInterventionTrail(row);
+        });
+      }
       target.appendChild(card);
     });
     replayViewAnim();
+  }
+
+  function loadInterventionTrail(row) {
+    if (!postEventTrailUrl || !row) {
+      toast("Jejak GPS tidak tersedia.");
+      return;
+    }
+    var entity = (row.entity || "person") === "unit" ? "unit" : "person";
+    var id = entity === "unit"
+      ? String(row.unit_id || "")
+      : String(row.user_id || row.sid || "");
+    if (!id) {
+      toast("ID Besigma belum ada pada task ini — sync pelanggaran dulu.");
+      if (row.has_point && row.lat != null && row.lng != null) {
+        map.setView([Number(row.lat), Number(row.lng)], Math.max(map.getZoom(), 15));
+      }
+      return;
+    }
+    var date = dateFromTimestamp(row.entered_at) || todayIsoDate();
+    toast("Memuat jalur GPS…");
+    fetch(withQuery(postEventTrailUrl, {
+      entity: entity,
+      id: id,
+      date: date
+    }), { headers: { Accept: "application/json" } })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("HTTP " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (payload) {
+        drawTrail(row, (payload && payload.points) || [], {
+          violationLabel: row.hazard_kind_label || row.hazard_name || ""
+        });
+        var count = (payload && payload.point_count) || ((payload && payload.points) || []).length;
+        if (count) {
+          toast((row.name || row.sid || "Task") + ": " + count + " titik GPS (" + date + ")");
+        }
+      })
+      .catch(function () {
+        toast("Gagal memuat jejak GPS. Coba lagi.");
+        if (row.has_point && row.lat != null && row.lng != null) {
+          map.setView([Number(row.lat), Number(row.lng)], Math.max(map.getZoom(), 15));
+        }
+      });
   }
 
   function loadInterventions(paint) {
