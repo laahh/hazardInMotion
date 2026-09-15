@@ -550,7 +550,8 @@
         <section class="gm-hazard-sec">
           <h3>Penanggung Jawab</h3>
           <label>Perusahaan
-            <select name="perusahaan">
+            <select name="perusahaan" id="gm-hazard-perusahaan">
+              <option value="">Pilih perusahaan</option>
               <option value="PT Berau Coal Energy">PT Berau Coal Energy</option>
               <option value="Mitra Kerja">Mitra Kerja</option>
             </select>

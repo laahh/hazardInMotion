@@ -19,7 +19,7 @@ final class IscMapsInterventionServiceTest extends TestCase
 
         $this->assertSame('demo', $data['source']);
         $this->assertNotEmpty($data['tasks']);
-        $this->assertTrue($data['can_create']);
+        $this->assertFalse($data['can_create']);
         $first = $data['tasks'][0];
         $this->assertArrayHasKey('entity', $first);
         $this->assertArrayHasKey('hazard_kind', $first);

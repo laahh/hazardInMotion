@@ -44,8 +44,12 @@ final class IscMapsInterventionService
     public function payload(?User $user, bool $demo = false): array
     {
         $canCreate = $user?->can('create', IscIntervention::class) ?? false;
-        if ($demo || ! IscSchema::eventsReady()) {
-            return $this->fromRows($this->demoTasks(), 'demo', true, $canCreate || $demo);
+        if ($demo) {
+            return $this->fromRows($this->demoTasks(), 'demo', true, $canCreate);
+        }
+
+        if (! IscSchema::eventsReady()) {
+            return $this->fromRows([], 'local', false, false);
         }
 
         $columns = [
@@ -66,11 +70,6 @@ final class IscMapsInterventionService
             ->orderByDesc('entered_at')
             ->limit(self::LIST_LIMIT)
             ->get();
-
-        // Belum ada event lokal (Besigma belum connect / sync) → tampilkan dummy.
-        if ($events->isEmpty()) {
-            return $this->fromRows($this->demoTasks(), 'demo', true, true);
-        }
 
         $rows = [];
         foreach ($events as $event) {

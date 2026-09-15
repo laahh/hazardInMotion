@@ -2385,6 +2385,34 @@
     if (prefix === "pelapor") {
       fillAccessCredentials(row);
     }
+    if (prefix === "pic") {
+      setPerusahaanFromPic(row.company || "");
+    }
+  }
+
+  function setPerusahaanFromPic(company) {
+    var select = document.getElementById("gm-hazard-perusahaan");
+    if (!select) {
+      return;
+    }
+    var value = String(company || "").trim();
+    if (!value) {
+      return;
+    }
+    var found = false;
+    Array.prototype.forEach.call(select.options, function (opt) {
+      if (String(opt.value).toLowerCase() === value.toLowerCase()) {
+        opt.selected = true;
+        found = true;
+      }
+    });
+    if (!found) {
+      var opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = value;
+      opt.selected = true;
+      select.appendChild(opt);
+    }
   }
 
   function fillAccessCredentials(row) {
@@ -2575,7 +2603,12 @@
     }
     var data = new FormData(form);
     data.set("is_observasi_area_kritis", data.get("is_observasi_area_kritis") ? "1" : "0");
-    data.set("demo", "1");
+    var eventId = Number(data.get("event_id") || 0);
+    if (eventId >= 9000) {
+      data.set("demo", "1");
+    } else {
+      data.delete("demo");
+    }
     setHazardMsg("Mengirim…", false);
     fetch(mapsHazardReportsUrl, {
       method: "POST",
