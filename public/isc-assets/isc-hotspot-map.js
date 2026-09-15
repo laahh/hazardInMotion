@@ -12,6 +12,8 @@
   var postEventTrailUrl = mapEl.getAttribute("data-post-event-trail-url") || "";
   var cctvUrl = mapEl.getAttribute("data-cctv-url") || "";
   var mapsInterventionsUrl = mapEl.getAttribute("data-maps-interventions-url") || "";
+  var mapsHazardReportsUrl = mapEl.getAttribute("data-maps-hazard-reports-url") || "";
+  var mapsHazardEmployeesUrl = mapEl.getAttribute("data-maps-hazard-employees-url") || "";
   var interventionsUrl = mapEl.getAttribute("data-interventions-url") || "";
 
   var listEl = document.getElementById("zone-list");
@@ -2336,46 +2338,233 @@
     focusInterventionTask(row);
   }
 
-  function submitIntervention(row, form) {
-    var type = (form.querySelector("[name=\"type\"]") || {}).value || "";
-    var notes = (form.querySelector("[name=\"notes\"]") || {}).value || "";
-    var msg = form.querySelector(".gm-task-msg");
-    if (!mapsInterventionsUrl) {
+  var hazardPickerTarget = "pelapor";
+  var hazardActiveRow = null;
+
+  function hazardModal() {
+    return document.getElementById("gm-hazard-modal");
+  }
+
+  function hazardPicker() {
+    return document.getElementById("gm-hazard-picker");
+  }
+
+  function setHazardMsg(text, isError) {
+    var msg = document.getElementById("gm-hazard-msg");
+    if (!msg) {
       return;
     }
-    fetch(mapsInterventionsUrl, {
+    if (!text) {
+      msg.hidden = true;
+      msg.textContent = "";
+      return;
+    }
+    msg.hidden = false;
+    msg.textContent = text;
+    msg.classList.toggle("is-error", !!isError);
+  }
+
+  function fillPersonFields(prefix, row) {
+    var sid = document.getElementById("gm-hazard-" + prefix + "-sid");
+    var npk = document.getElementById("gm-hazard-" + prefix + "-npk");
+    var nama = document.getElementById("gm-hazard-" + prefix + "-nama");
+    var jabatan = document.getElementById("gm-hazard-" + prefix + "-jabatan");
+    if (sid) {
+      sid.value = row.sid || "";
+    }
+    if (npk) {
+      npk.value = row.npk || "";
+    }
+    if (nama) {
+      nama.value = row.nama || "";
+    }
+    if (jabatan) {
+      jabatan.value = row.jabatan || "";
+    }
+  }
+
+  function openHazardReport(row) {
+    if (!ivCanCreate) {
+      toast("Hanya PIC yang dapat mengirim laporan hazard.");
+      return;
+    }
+    if (!mapsHazardReportsUrl) {
+      toast("Endpoint laporan hazard belum tersedia.");
+      return;
+    }
+    hazardActiveRow = row || null;
+    var modal = hazardModal();
+    var form = document.getElementById("gm-hazard-form");
+    if (!modal || !form) {
+      return;
+    }
+    form.reset();
+    setHazardMsg("");
+    var eventInput = document.getElementById("gm-hazard-event-id");
+    if (eventInput) {
+      eventInput.value = row && row.id ? String(row.id) : "";
+    }
+    var site = document.getElementById("gm-hazard-site");
+    if (site && row && row.site_code) {
+      site.value = row.site_code;
+    }
+    if (row && (row.entity || "person") === "person" && row.sid) {
+      fillPersonFields("pelapor", {
+        sid: row.sid,
+        npk: "",
+        nama: row.name || "",
+        jabatan: row.job_title || ""
+      });
+      lookupSidFill("pelapor", row.sid);
+    }
+    modal.hidden = false;
+  }
+
+  function closeHazardReport() {
+    var modal = hazardModal();
+    if (modal) {
+      modal.hidden = true;
+    }
+    hazardActiveRow = null;
+  }
+
+  function openHazardPicker(target) {
+    hazardPickerTarget = target === "pic" ? "pic" : "pelapor";
+    var picker = hazardPicker();
+    var rows = document.getElementById("gm-hazard-picker-rows");
+    var q = document.getElementById("gm-hazard-picker-q");
+    if (rows) {
+      rows.innerHTML = "<tr><td colspan=\"4\">Ketik minimal 2 karakter lalu Cari.</td></tr>";
+    }
+    if (q) {
+      q.value = "";
+      q.focus();
+    }
+    if (picker) {
+      picker.hidden = false;
+    }
+  }
+
+  function closeHazardPicker() {
+    var picker = hazardPicker();
+    if (picker) {
+      picker.hidden = true;
+    }
+  }
+
+  function lookupSidFill(prefix, sid) {
+    if (!mapsHazardEmployeesUrl || !sid || String(sid).trim().length < 2) {
+      return;
+    }
+    fetch(mapsHazardEmployeesUrl + (mapsHazardEmployeesUrl.indexOf("?") >= 0 ? "&" : "?") + "q=" + encodeURIComponent(String(sid).trim()), {
+      headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" }
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        var list = (payload && payload.results) || [];
+        var hit = list.find(function (r) {
+          return String(r.sid || "").toUpperCase() === String(sid).toUpperCase();
+        }) || list[0];
+        if (hit) {
+          fillPersonFields(prefix, hit);
+        }
+      })
+      .catch(function () {});
+  }
+
+  function runHazardEmployeeSearch() {
+    var qEl = document.getElementById("gm-hazard-picker-q");
+    var rows = document.getElementById("gm-hazard-picker-rows");
+    var q = qEl ? String(qEl.value || "").trim() : "";
+    if (!rows) {
+      return;
+    }
+    if (q.length < 2) {
+      rows.innerHTML = "<tr><td colspan=\"4\">Minimal 2 karakter.</td></tr>";
+      return;
+    }
+    if (!mapsHazardEmployeesUrl) {
+      rows.innerHTML = "<tr><td colspan=\"4\">Lookup karyawan tidak tersedia.</td></tr>";
+      return;
+    }
+    rows.innerHTML = "<tr><td colspan=\"4\">Mencari…</td></tr>";
+    fetch(mapsHazardEmployeesUrl + (mapsHazardEmployeesUrl.indexOf("?") >= 0 ? "&" : "?") + "q=" + encodeURIComponent(q), {
+      headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" }
+    })
+      .then(function (res) { return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; }); })
+      .then(function (pack) {
+        var list = (pack.payload && pack.payload.results) || [];
+        if (!pack.ok || !list.length) {
+          rows.innerHTML = "<tr><td colspan=\"4\">Tidak ada hasil.</td></tr>";
+          return;
+        }
+        rows.innerHTML = "";
+        list.forEach(function (row) {
+          var tr = document.createElement("tr");
+          tr.innerHTML =
+            "<td>" + esc(row.sid || "—") + "</td>" +
+            "<td>" + esc(row.npk || "—") + "</td>" +
+            "<td>" + esc(row.nama || "—") + "</td>" +
+            "<td><button type=\"button\" class=\"gm-hazard-pick\">Pilih</button></td>";
+          tr.querySelector(".gm-hazard-pick").addEventListener("click", function () {
+            fillPersonFields(hazardPickerTarget, row);
+            closeHazardPicker();
+          });
+          rows.appendChild(tr);
+        });
+      })
+      .catch(function () {
+        rows.innerHTML = "<tr><td colspan=\"4\">Gagal mencari karyawan.</td></tr>";
+      });
+  }
+
+  function submitHazardReport(form) {
+    if (!mapsHazardReportsUrl) {
+      setHazardMsg("Endpoint laporan hazard belum tersedia.", true);
+      return;
+    }
+    var data = new FormData(form);
+    if (!data.get("is_observasi_area_kritis")) {
+      data.set("is_observasi_area_kritis", "0");
+    } else {
+      data.set("is_observasi_area_kritis", "1");
+    }
+    setHazardMsg("Mengirim…", false);
+    fetch(mapsHazardReportsUrl, {
       method: "POST",
       headers: {
         Accept: "application/json",
-        "Content-Type": "application/json",
         "X-CSRF-TOKEN": csrfToken(),
         "X-Requested-With": "XMLHttpRequest"
       },
-      body: JSON.stringify({ event_id: row.id, type: type, notes: notes })
+      body: data
     })
       .then(function (res) {
         return res.json().then(function (payload) {
-          return { ok: res.ok, payload: payload };
+          return { ok: res.ok, status: res.status, payload: payload };
         });
       })
       .then(function (pack) {
         if (!pack.ok) {
           var err = pack.payload && pack.payload.message
             ? pack.payload.message
-            : "Gagal menyimpan intervensi.";
-          if (msg) {
-            msg.textContent = err;
-          } else {
-            toast(err);
-          }
+            : (pack.payload && pack.payload.errors
+              ? Object.values(pack.payload.errors).flat().join(" ")
+              : "Gagal mengirim laporan hazard.");
+          setHazardMsg(err, true);
           return;
         }
-        toast("Metode intervensi tersimpan.");
+        toast("Laporan hazard tersimpan.");
+        closeHazardReport();
         loadInterventions(true);
       })
       .catch(function () {
-        toast("Gagal menyimpan intervensi.");
+        setHazardMsg("Gagal mengirim laporan hazard.", true);
       });
+  }
+
+  function submitIntervention(row, form) {
+    openHazardReport(row);
   }
 
   function renderInterventionCards() {
@@ -2406,13 +2595,12 @@
         .filter(Boolean)
         .join(" · ");
       var formHtml = ivCanCreate
-        ? "<form class=\"gm-task-form\" data-event-id=\"" + esc(row.id) + "\">" +
-          "<label>Metode<select name=\"type\">" + ivTypeOptions() + "</select></label>" +
-          "<label>Catatan<textarea name=\"notes\" maxlength=\"2000\" placeholder=\"Opsional. Bukti diunggah di halaman detail.\"></textarea></label>" +
-          "<div class=\"gm-task-actions\"><button type=\"submit\">Simpan metode</button>" +
+        ? "<div class=\"gm-task-form\">" +
+          "<div class=\"gm-task-actions\">" +
+          "<button type=\"button\" class=\"gm-task-hazard\">Laporan Hazard</button>" +
           (row.show_url ? "<a href=\"" + esc(row.show_url) + "\">Detail &amp; bukti</a>" : "") +
-          "</div><p class=\"gm-task-msg\"></p></form>"
-        : "<div class=\"gm-task-form\"><p class=\"gm-hud-hint\" style=\"margin:0\">Hanya PIC yang dapat mengajukan metode." +
+          "</div></div>"
+        : "<div class=\"gm-task-form\"><p class=\"gm-hud-hint\" style=\"margin:0\">Hanya PIC yang dapat mengajukan laporan." +
           (row.show_url ? " <a href=\"" + esc(row.show_url) + "\">Buka detail</a>" : "") +
           "</p></div>";
       card.innerHTML =
@@ -2424,11 +2612,12 @@
       card.querySelector(".gm-task-head").addEventListener("click", function () {
         openInterventionForm(card, row);
       });
-      var form = card.querySelector("form");
-      if (form) {
-        form.addEventListener("submit", function (event) {
+      var hazardBtn = card.querySelector(".gm-task-hazard");
+      if (hazardBtn) {
+        hazardBtn.addEventListener("click", function (event) {
           event.preventDefault();
-          submitIntervention(row, form);
+          openInterventionForm(card, row);
+          openHazardReport(row);
         });
       }
       target.appendChild(card);
@@ -2843,6 +3032,49 @@
   if (ivBtn) {
     ivBtn.addEventListener("click", function () {
       setRailView("interventions");
+    });
+  }
+  document.querySelectorAll("[data-hazard-close]").forEach(function (el) {
+    el.addEventListener("click", closeHazardReport);
+  });
+  document.querySelectorAll("[data-picker-close]").forEach(function (el) {
+    el.addEventListener("click", closeHazardPicker);
+  });
+  document.querySelectorAll("[data-hazard-lookup]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      openHazardPicker(btn.getAttribute("data-hazard-lookup") || "pelapor");
+    });
+  });
+  var hazardForm = document.getElementById("gm-hazard-form");
+  if (hazardForm) {
+    hazardForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      submitHazardReport(hazardForm);
+    });
+  }
+  var pelaporSid = document.getElementById("gm-hazard-pelapor-sid");
+  if (pelaporSid) {
+    pelaporSid.addEventListener("blur", function () {
+      lookupSidFill("pelapor", pelaporSid.value);
+    });
+  }
+  var picSid = document.getElementById("gm-hazard-pic-sid");
+  if (picSid) {
+    picSid.addEventListener("blur", function () {
+      lookupSidFill("pic", picSid.value);
+    });
+  }
+  var pickerGo = document.getElementById("gm-hazard-picker-go");
+  if (pickerGo) {
+    pickerGo.addEventListener("click", runHazardEmployeeSearch);
+  }
+  var pickerQ = document.getElementById("gm-hazard-picker-q");
+  if (pickerQ) {
+    pickerQ.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        runHazardEmployeeSearch();
+      }
     });
   }
   document.querySelectorAll("[data-iv-entity]").forEach(function (btn) {

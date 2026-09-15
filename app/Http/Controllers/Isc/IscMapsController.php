@@ -24,6 +24,8 @@ final class IscMapsController extends Controller
 
     public function index(): View
     {
+        // Samakan bootstrap dengan /besigma/connection-test (fresh probe path).
+        $this->boundaries->prepareLikeConnectionTest();
         $status = $this->boundaries->tableStatus();
 
         return view('isc.maps.index', [
@@ -38,6 +40,8 @@ final class IscMapsController extends Controller
             'postEventTrailUrl' => route('isc.maps.post-event.trail', ['source' => $status['connected'] ? 'live' : 'demo']),
             'cctvUrl' => route('isc.maps.cctv'),
             'mapsInterventionsUrl' => route('isc.maps.interventions', ['source' => $status['connected'] ? 'live' : 'demo']),
+            'mapsHazardReportsUrl' => route('isc.maps.hazard-reports.store'),
+            'mapsHazardEmployeesUrl' => route('isc.maps.hazard-employees'),
             'interventionsUrl' => route('isc.interventions.index'),
             'wmsUrl' => '',
             'wmsLayer' => IscBasemapProxyService::WMS_LAYER,

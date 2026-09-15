@@ -6,7 +6,6 @@ namespace App\Services\Isc;
 
 use App\Services\Besigma\BesigmaConnectionService;
 use App\Services\Besigma\BesigmaSchema;
-use App\Services\Besigma\BesigmaTunnelService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -18,7 +17,7 @@ final class IscBoundaryMapService
 {
     public const CONNECTION = 'besigma_db';
 
-    public const CACHE_KEY = 'isc.besigma.boundaries.geojson.v3';
+    public const CACHE_KEY = 'isc.besigma.boundaries.geojson.v4';
 
     public const CACHE_TTL_SECONDS = 45;
 
@@ -37,6 +36,7 @@ final class IscBoundaryMapService
         'boundary_risks',
         'boundary_risk_levels',
         'boundary_status',
+        'boundary_statuses',
         'boundary_violations',
         'boundary_violation_units',
         'sites',
@@ -68,7 +68,6 @@ final class IscBoundaryMapService
 
     public function __construct(
         private readonly BesigmaConnectionService $connection,
-        private readonly BesigmaTunnelService $tunnel,
         private readonly IscBoundaryGeometryMapper $geometry,
         private readonly IscHazardBoundaryClassifier $hazard,
         private readonly IscSiteNormalizer $sites,
@@ -76,9 +75,16 @@ final class IscBoundaryMapService
 
     public function isUp(): bool
     {
-        $this->tunnel->applyRuntimeConfig();
-
         return $this->connection->isUp();
+    }
+
+    /**
+     * Bootstrap sama seperti /besigma/connection-test sebelum baca peta.
+     */
+    public function prepareLikeConnectionTest(): void
+    {
+        $this->connection->prepareForUse(true);
+        Cache::forget(self::CACHE_KEY);
     }
 
     /**
@@ -225,7 +231,7 @@ final class IscBoundaryMapService
             $people = DB::connection(self::CONNECTION)->select("
                 SELECT is_competency, COUNT(DISTINCT user_id) AS c
                 FROM ".BesigmaSchema::qualify('boundary_violations')."
-                WHERE is_deleted = 0
+                WHERE ".BesigmaSchema::flagIsFalse('is_deleted')."
                   AND deleted_at IS NULL
                   AND status IN ('WARNING', 'STANDBY', 'DANGER')
                 GROUP BY is_competency
@@ -240,7 +246,7 @@ final class IscBoundaryMapService
             $units = DB::connection(self::CONNECTION)->selectOne("
                 SELECT COUNT(DISTINCT unit_id) AS c
                 FROM ".BesigmaSchema::qualify('boundary_violation_units')."
-                WHERE is_deleted = 0
+                WHERE ".BesigmaSchema::flagIsFalse('is_deleted')."
                   AND deleted_at IS NULL
                   AND status IN ('WARNING', 'STANDBY', 'DANGER')
             ");
@@ -256,10 +262,15 @@ final class IscBoundaryMapService
     private function boundariesSql(): string
     {
         $competencies = BesigmaSchema::qualify('boundary_competencies');
-        $status = BesigmaSchema::qualify('boundary_status');
+        $status = BesigmaSchema::resolveTable('boundary_statuses', 'boundary_status')
+            ?? BesigmaSchema::qualify('boundary_status');
         $boundaries = BesigmaSchema::qualify('boundaries');
         $sites = BesigmaSchema::qualify('sites');
         $pits = BesigmaSchema::qualify('pits');
+        $notDeleted = BesigmaSchema::flagIsFalse('b.is_deleted');
+        $isActive = BesigmaSchema::flagIsTrue('b.is_active');
+        $compNotDeleted = BesigmaSchema::flagIsFalse('bc.is_deleted');
+        $statusNotDeleted = BesigmaSchema::flagIsFalse('bs.is_deleted');
 
         return "
             SELECT
@@ -282,22 +293,22 @@ final class IscBoundaryMapService
                     SELECT 1
                     FROM {$competencies} bc
                     WHERE bc.boundary_id = b.id
-                      AND bc.is_deleted = 0
+                      AND {$compNotDeleted}
                       AND bc.deleted_at IS NULL
                 ) THEN 1 ELSE 0 END AS has_competency,
                 (
                     SELECT bs.status
                     FROM {$status} bs
                     WHERE bs.boundary_id = b.id
-                      AND bs.is_deleted = 0
+                      AND {$statusNotDeleted}
                     ORDER BY bs.created_at DESC
                     LIMIT 1
                 ) AS boundary_status
             FROM {$boundaries} b
             LEFT JOIN {$sites} s ON s.id = b.site_id
             LEFT JOIN {$pits} p ON p.id = b.pit_id
-            WHERE b.is_deleted = 0
-              AND b.is_active = 1
+            WHERE {$notDeleted}
+              AND {$isActive}
         ";
     }
 
@@ -358,7 +369,7 @@ final class IscBoundaryMapService
             $rows = DB::connection(self::CONNECTION)->select("
                 SELECT boundary_id AS bid, COUNT(*) AS c
                 FROM ".BesigmaSchema::qualify('boundary_violations')."
-                WHERE is_deleted = 0
+                WHERE ".BesigmaSchema::flagIsFalse('is_deleted')."
                   AND deleted_at IS NULL
                   AND status IN ('WARNING', 'STANDBY', 'DANGER')
                 GROUP BY boundary_id
@@ -393,7 +404,7 @@ final class IscBoundaryMapService
             $rows = DB::connection(self::CONNECTION)->select(
                 'SELECT '.$columns.'
                  FROM '.BesigmaSchema::qualify($table).'
-                 WHERE is_deleted = 0
+                 WHERE '.BesigmaSchema::flagIsFalse('is_deleted').'
                  ORDER BY created_at DESC
                  LIMIT '.self::OVERLAY_LIMIT
             );

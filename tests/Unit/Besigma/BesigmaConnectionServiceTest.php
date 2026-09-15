@@ -96,4 +96,13 @@ final class BesigmaConnectionServiceTest extends TestCase
         $this->assertFalse($service->isUp());
         $this->assertTrue(\Illuminate\Support\Facades\Cache::has('besigma:circuit_v1'));
     }
+
+    public function test_sql_error_does_not_open_circuit(): void
+    {
+        $service = app(BesigmaConnectionService::class);
+        $service->forgetCachedStatus();
+        $service->rememberFailure(new \RuntimeException('SQLSTATE[42P01]: Undefined table: relation "boundary_status" does not exist'));
+
+        $this->assertFalse(\Illuminate\Support\Facades\Cache::has('besigma:circuit_v1'));
+    }
 }

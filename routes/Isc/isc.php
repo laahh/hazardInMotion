@@ -42,6 +42,10 @@ Route::prefix('isc')
             Route::get('/interventions/{event}', [IscInterventionsController::class, 'show'])->name('interventions.show');
             Route::post('/interventions', [IscInterventionsController::class, 'store'])->name('interventions.store');
             Route::post('/maps/interventions', [IscMapsInterventionController::class, 'store'])->name('maps.interventions.store');
+            Route::post('/maps/hazard-reports', [IscMapsInterventionController::class, 'storeHazardReport'])
+                ->name('maps.hazard-reports.store');
+            Route::get('/maps/hazard-employees', [IscMapsInterventionController::class, 'lookupEmployees'])
+                ->name('maps.hazard-employees');
             Route::post('/interventions/{intervention}/evidence', [IscInterventionsController::class, 'storeEvidence'])->name('interventions.evidence');
             Route::post('/interventions/{intervention}/verify', [IscInterventionsController::class, 'verify'])->name('interventions.verify');
             Route::get('/post-event', [IscPostEventController::class, 'index'])->name('post-event.index');

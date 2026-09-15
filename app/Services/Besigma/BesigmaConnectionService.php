@@ -31,11 +31,31 @@ final class BesigmaConnectionService
 
     private ?bool $requestCache = null;
 
+    /**
+     * Siapkan koneksi seperti /besigma/connection-test (probe):
+     * applyRuntimeConfig (+ purge saat fresh). Opsional hapus circuit/cache agar
+     * maps tidak tertahan status "down" dari error SQL lama.
+     */
+    public function prepareForUse(bool $fresh = false): void
+    {
+        if ($fresh) {
+            $this->forgetCachedStatus();
+        }
+
+        app(BesigmaTunnelService::class)->applyRuntimeConfig();
+
+        if ($fresh) {
+            DB::purge(self::CONNECTION);
+        }
+    }
+
     public function isUp(): bool
     {
         if ($this->requestCache !== null) {
             return $this->requestCache;
         }
+
+        app(BesigmaTunnelService::class)->applyRuntimeConfig();
 
         if ($this->circuitIsOpen()) {
             return $this->requestCache = false;
@@ -80,12 +100,36 @@ final class BesigmaConnectionService
 
     public function rememberFailure(Throwable $e): void
     {
+        // Hanya error koneksi/jaringan yang membuka circuit.
+        // Error SQL (kolom/tabel) tidak boleh memaksa /isc/maps ke mode demo.
+        if (! $this->isConnectionFailure($e)) {
+            return;
+        }
+
         $ttl = $this->isHostBlockedError($e) ? self::BLOCKED_TTL_SECONDS : self::DOWN_TTL_SECONDS;
         Cache::put(self::CACHE_KEY, false, $ttl);
         Cache::put(self::CIRCUIT_KEY, [
             'until' => now()->addSeconds($ttl)->toIso8601String(),
             'error' => $e->getMessage(),
         ], $ttl);
+    }
+
+    public function isConnectionFailure(Throwable $e): bool
+    {
+        $message = strtolower($e->getMessage());
+
+        return $this->isHostBlockedError($e)
+            || str_contains($message, 'timeout')
+            || str_contains($message, 'timed out')
+            || str_contains($message, 'could not connect')
+            || str_contains($message, 'connection refused')
+            || str_contains($message, 'connection to server')
+            || str_contains($message, 'server closed the connection')
+            || str_contains($message, 'no route to host')
+            || str_contains($message, 'name or service not known')
+            || str_contains($message, 'sqlstate[08006]')
+            || str_contains($message, 'sqlstate[08001]')
+            || str_contains($message, 'sqlstate[57p01]');
     }
 
     /**
@@ -109,10 +153,7 @@ final class BesigmaConnectionService
      */
     public function probe(): array
     {
-        $this->forgetCachedStatus();
-
-        app(BesigmaTunnelService::class)->applyRuntimeConfig();
-        DB::purge(self::CONNECTION);
+        $this->prepareForUse(true);
 
         $target = $this->targetMeta();
         $tcpReachable = $this->isTcpReachable($target['host'], $target['port']);

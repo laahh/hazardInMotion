@@ -110,7 +110,7 @@ final class IscPersonnelGpsReader
                 $rows = DB::connection(self::CONNECTION)
                     ->table(BesigmaSchema::table('users as u'))
                     ->leftJoin(BesigmaSchema::table('companies as c'), 'c.id', '=', 'u.company_id')
-                    ->where('u.is_deleted', 0)
+                    ->whereRaw(BesigmaSchema::flagIsFalse('u.is_deleted'))
                     ->whereRaw('UPPER(TRIM(u.sid_code)) IN ('.implode(',', array_fill(0, count($chunk), '?')).')', $chunk)
                     ->select([
                         'u.id',
@@ -263,7 +263,7 @@ final class IscPersonnelGpsReader
                 })
                 ->join(BesigmaSchema::table('users as u'), 'u.id', '=', 'g.user_id')
                 ->leftJoin(BesigmaSchema::table('companies as c'), 'c.id', '=', 'u.company_id')
-                ->where('u.is_deleted', 0)
+                ->whereRaw(BesigmaSchema::flagIsFalse('u.is_deleted'))
                 ->whereNotNull('g.latitude')
                 ->whereNotNull('g.longitude')
                 ->where('g.latitude', '!=', '')
@@ -288,7 +288,7 @@ final class IscPersonnelGpsReader
             ->table(BesigmaSchema::table($table.' as g'))
             ->join(BesigmaSchema::table('users as u'), 'u.id', '=', 'g.user_id')
             ->leftJoin(BesigmaSchema::table('companies as c'), 'c.id', '=', 'u.company_id')
-            ->where('u.is_deleted', 0)
+            ->whereRaw(BesigmaSchema::flagIsFalse('u.is_deleted'))
             ->whereNotNull('g.latitude')
             ->whereNotNull('g.longitude')
             ->where('g.latitude', '!=', '')

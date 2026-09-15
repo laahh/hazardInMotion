@@ -34,12 +34,21 @@ final class IscPobSnapshotService
      */
     public function snapshot(bool $fresh = false, bool $demo = true): array
     {
-        $key = $demo ? 'isc.pob.snapshot.demo.v5' : 'isc.pob.snapshot.live.v5';
+        $key = $demo ? 'isc.pob.snapshot.demo.v6' : 'isc.pob.snapshot.live.v6';
         if ($fresh) {
             Cache::forget($key);
         }
 
-        return Cache::remember($key, 10, fn (): array => $demo ? $this->buildDemo() : $this->buildLive());
+        return Cache::remember($key, 10, function () use ($demo): array {
+            if ($demo) {
+                return $this->buildDemo();
+            }
+
+            // Samakan bootstrap dengan /besigma/connection-test sebelum baca live.
+            $this->boundaries->prepareLikeConnectionTest();
+
+            return $this->buildLive();
+        });
     }
 
     /**

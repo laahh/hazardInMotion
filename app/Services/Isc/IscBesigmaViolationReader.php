@@ -98,12 +98,12 @@ final class IscBesigmaViolationReader
                     s.name AS site_name,
                     p.name AS pit_name
                 FROM ".BesigmaSchema::qualify('boundary_violations')." v
-                INNER JOIN ".BesigmaSchema::qualify('users')." u ON u.id = v.user_id AND u.is_deleted = 0
+                INNER JOIN ".BesigmaSchema::qualify('users')." u ON u.id = v.user_id AND ".BesigmaSchema::flagIsFalse('u.is_deleted')."
                 LEFT JOIN ".BesigmaSchema::qualify('companies')." c ON c.id = u.company_id
                 LEFT JOIN ".BesigmaSchema::qualify('boundaries')." b ON b.id = v.boundary_id
                 LEFT JOIN ".BesigmaSchema::qualify('sites')." s ON s.id = v.site_id
                 LEFT JOIN ".BesigmaSchema::qualify('pits')." p ON p.id = b.pit_id
-                WHERE v.is_deleted = 0
+                WHERE ".BesigmaSchema::flagIsFalse('v.is_deleted')."
                   AND v.deleted_at IS NULL
                   AND v.status IN ({$placeholders})
                 ORDER BY v.created_at DESC
@@ -194,7 +194,7 @@ final class IscBesigmaViolationReader
                 LEFT JOIN ".BesigmaSchema::qualify('boundaries')." b ON b.id = v.boundary_id
                 LEFT JOIN ".BesigmaSchema::qualify('sites')." s ON s.id = v.site_id
                 LEFT JOIN ".BesigmaSchema::qualify('pits')." p ON p.id = b.pit_id
-                WHERE v.is_deleted = 0
+                WHERE ".BesigmaSchema::flagIsFalse('v.is_deleted')."
                   AND v.deleted_at IS NULL
                   AND v.status IN ({$placeholders})
                 ORDER BY v.created_at DESC

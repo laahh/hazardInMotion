@@ -16,6 +16,8 @@
     data-post-event-trail-url="{{ $postEventTrailUrl }}"
     data-cctv-url="{{ $cctvUrl }}"
     data-maps-interventions-url="{{ $mapsInterventionsUrl }}"
+    data-maps-hazard-reports-url="{{ $mapsHazardReportsUrl }}"
+    data-maps-hazard-employees-url="{{ $mapsHazardEmployeesUrl }}"
     data-interventions-url="{{ $interventionsUrl }}"
     data-connected="{{ $connected ? '1' : '0' }}"
     data-wms-url="{{ $wmsUrl }}"
@@ -395,7 +397,7 @@
             <button type="button" class="gm-hud-site" data-iv-site="SMO">SMO <b id="hud-iv-SMO">0</b></button>
             <button type="button" class="gm-hud-site" data-iv-site="PUNAN">PUN <b id="hud-iv-PUNAN">0</b></button>
           </div>
-          <p class="gm-hud-foot">Pilih metode di kartu. Bukti dan verifikasi di halaman detail.</p>
+          <p class="gm-hud-foot">Buka Laporan Hazard dari kartu task. Bukti dan verifikasi di halaman detail.</p>
         </article>
         <div id="gm-iv-cards" class="gm-hud-place-stack"></div>
       </div>
@@ -523,6 +525,145 @@
   </button>
 
   <div class="gm-toast" id="gm-toast" hidden></div>
+
+  <div class="gm-hazard-modal" id="gm-hazard-modal" hidden>
+    <div class="gm-hazard-backdrop" data-hazard-close></div>
+    <div class="gm-hazard-dialog" role="dialog" aria-modal="true" aria-labelledby="gm-hazard-title">
+      <header class="gm-hazard-head">
+        <h2 id="gm-hazard-title">Laporan Hazard</h2>
+        <button type="button" class="gm-hazard-x" data-hazard-close aria-label="Tutup">×</button>
+      </header>
+      <form id="gm-hazard-form" class="gm-hazard-body" enctype="multipart/form-data">
+        <input type="hidden" name="event_id" id="gm-hazard-event-id" value="">
+
+        <section class="gm-hazard-sec">
+          <h3>Akses</h3>
+          <div class="gm-hazard-grid">
+            <label>Username<input type="text" name="username" autocomplete="username" maxlength="100"></label>
+            <label>Password<input type="password" name="password" autocomplete="new-password" maxlength="255"></label>
+          </div>
+        </section>
+
+        <section class="gm-hazard-sec">
+          <h3>Penanggung Jawab</h3>
+          <label>Perusahaan
+            <select name="perusahaan">
+              <option value="PT Berau Coal Energy">PT Berau Coal Energy</option>
+              <option value="Mitra Kerja">Mitra Kerja</option>
+            </select>
+          </label>
+          <div class="gm-hazard-grid">
+            <label>SID PIC
+              <input type="text" name="pic_sid" id="gm-hazard-pic-sid" maxlength="64" placeholder="Kode SID">
+            </label>
+            <label>NPK PIC<input type="text" name="pic_npk" id="gm-hazard-pic-npk" maxlength="64" readonly></label>
+          </div>
+          <div class="gm-hazard-grid">
+            <label>Nama PIC<input type="text" name="pic_nama" id="gm-hazard-pic-nama" maxlength="255" readonly></label>
+            <label>Jabatan PIC<input type="text" name="pic_jabatan" id="gm-hazard-pic-jabatan" maxlength="255" readonly></label>
+          </div>
+          <button type="button" class="gm-hazard-link" data-hazard-lookup="pic">Cari PIC (Nama / NPK / SID)</button>
+        </section>
+
+        <section class="gm-hazard-sec">
+          <h3>Lokasi</h3>
+          <label>Tools Pengamatan
+            <select name="tools_pengamatan">
+              <option value="Post Event - BeSigma">Post Event - BeSigma</option>
+              <option value="Real Time">Real Time</option>
+              <option value="Pengawasan Langsung">Pengawasan Langsung</option>
+            </select>
+          </label>
+          <div class="gm-hazard-grid">
+            <label>Site
+              <select name="site" id="gm-hazard-site">
+                <option value="">Pilih site</option>
+                <option value="BMO">BMO</option>
+                <option value="LMO">LMO</option>
+                <option value="GMO">GMO</option>
+                <option value="SMO">SMO</option>
+                <option value="PUNAN">PUNAN</option>
+              </select>
+            </label>
+            <label>Lokasi<input type="text" name="lokasi" maxlength="255"></label>
+          </div>
+          <label>Detail Lokasi<input type="text" name="detail_lokasi" maxlength="255"></label>
+          <label>Keterangan Lokasi<textarea name="keterangan_lokasi" rows="2" maxlength="2000"></textarea></label>
+        </section>
+
+        <section class="gm-hazard-sec">
+          <h3>Pelapor</h3>
+          <p class="gm-hazard-hint">Input SID saja — NPK, Nama, dan Jabatan terisi otomatis.</p>
+          <div class="gm-hazard-grid">
+            <label>SID Pelapor
+              <input type="text" name="sid_pelapor" id="gm-hazard-pelapor-sid" maxlength="64" required placeholder="Kode SID">
+            </label>
+            <label>NPK<input type="text" name="npk_pelapor" id="gm-hazard-pelapor-npk" maxlength="64" readonly></label>
+          </div>
+          <div class="gm-hazard-grid">
+            <label>Nama<input type="text" name="nama_pelapor" id="gm-hazard-pelapor-nama" maxlength="255" readonly></label>
+            <label>Jabatan<input type="text" name="jabatan_pelapor" id="gm-hazard-pelapor-jabatan" maxlength="255" readonly></label>
+          </div>
+          <button type="button" class="gm-hazard-link" data-hazard-lookup="pelapor">Cari Pelapor (Nama / NPK / SID)</button>
+        </section>
+
+        <section class="gm-hazard-sec">
+          <h3>PJA</h3>
+          <div class="gm-hazard-grid">
+            <label>Area PJA BC<input type="text" name="area_pja_bc" maxlength="255"></label>
+            <label>Area PJA Mitra Kerja<input type="text" name="area_pja_mitra" maxlength="255"></label>
+          </div>
+        </section>
+
+        <section class="gm-hazard-sec">
+          <h3>Temuan</h3>
+          <label>Unggah Foto<input type="file" name="foto" accept="image/jpeg,image/png,image/webp"></label>
+          <label class="gm-hazard-check">
+            <input type="checkbox" name="is_observasi_area_kritis" value="1">
+            Apakah laporan berkaitan dengan Observasi Area Kritis?
+          </label>
+          <div class="gm-hazard-grid">
+            <label>Ketidaksesuaian<input type="text" name="ketidaksesuaian" maxlength="255"></label>
+            <label>Sub Ketidaksesuaian<input type="text" name="sub_ketidaksesuaian" maxlength="255"></label>
+          </div>
+          <label>Quick Action<input type="text" name="quick_action" maxlength="255"></label>
+          <label>Deskripsi Temuan<textarea name="deskripsi_temuan" rows="4" maxlength="5000"></textarea></label>
+        </section>
+
+        <p class="gm-hazard-msg" id="gm-hazard-msg" hidden></p>
+        <footer class="gm-hazard-foot">
+          <button type="reset" class="gm-hazard-reset">Reset</button>
+          <button type="submit" class="gm-hazard-submit">Kirim Laporan Hazard</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <div class="gm-hazard-picker" id="gm-hazard-picker" hidden>
+    <div class="gm-hazard-backdrop" data-picker-close></div>
+    <div class="gm-hazard-picker-dialog" role="dialog" aria-modal="true" aria-label="Pilih Karyawan">
+      <header class="gm-hazard-head">
+        <h2>Pilih Karyawan</h2>
+        <button type="button" class="gm-hazard-x" data-picker-close aria-label="Tutup">×</button>
+      </header>
+      <div class="gm-hazard-picker-body">
+        <div class="gm-hazard-picker-search">
+          <input type="search" id="gm-hazard-picker-q" placeholder="Nama / NPK / Kode SID">
+          <button type="button" id="gm-hazard-picker-go">Cari</button>
+        </div>
+        <div class="gm-hazard-picker-table-wrap">
+          <table>
+            <thead>
+              <tr><th>Kode SID</th><th>NPK</th><th>Nama</th><th></th></tr>
+            </thead>
+            <tbody id="gm-hazard-picker-rows">
+              <tr><td colspan="4">Ketik minimal 2 karakter lalu Cari.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
 @endsection
 

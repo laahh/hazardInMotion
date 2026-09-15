@@ -73,4 +73,40 @@ final class BesigmaSchema
             return false;
         }
     }
+
+    /**
+     * Ambil kandidat tabel pertama yang ada (ex: boundary_statuses | boundary_status).
+     */
+    public static function resolveTable(string ...$candidates): ?string
+    {
+        foreach ($candidates as $candidate) {
+            $name = trim($candidate);
+            if ($name === '') {
+                continue;
+            }
+            if (self::hasTable($name)) {
+                return self::qualify($name);
+            }
+        }
+
+        $first = trim((string) ($candidates[0] ?? ''));
+
+        return $first !== '' ? self::qualify($first) : null;
+    }
+
+    /**
+     * Predikat flag false/0 — aman untuk boolean / smallint / text di Postgres.
+     */
+    public static function flagIsFalse(string $column): string
+    {
+        return "(COALESCE({$column}::text, '0') IN ('0', 'false', 'f', 'FALSE', 'False'))";
+    }
+
+    /**
+     * Predikat flag true/1 — aman untuk boolean / smallint / text di Postgres.
+     */
+    public static function flagIsTrue(string $column): string
+    {
+        return "(COALESCE({$column}::text, '0') IN ('1', 'true', 't', 'TRUE', 'True'))";
+    }
 }

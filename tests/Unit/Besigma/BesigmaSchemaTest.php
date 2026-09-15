@@ -25,4 +25,12 @@ final class BesigmaSchemaTest extends TestCase
     {
         $this->assertSame('besigma_db.boundaries', BesigmaSchema::qualify('besigma_db.boundaries'));
     }
+
+    public function test_flag_predicates_are_text_safe(): void
+    {
+        $this->assertStringContainsString("is_deleted::text", BesigmaSchema::flagIsFalse('is_deleted'));
+        $this->assertStringContainsString("'0'", BesigmaSchema::flagIsFalse('u.is_deleted'));
+        $this->assertStringContainsString("is_active::text", BesigmaSchema::flagIsTrue('is_active'));
+        $this->assertStringContainsString("'1'", BesigmaSchema::flagIsTrue('b.is_active'));
+    }
 }

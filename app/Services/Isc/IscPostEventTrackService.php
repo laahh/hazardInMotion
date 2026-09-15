@@ -238,7 +238,7 @@ final class IscPostEventTrackService
                     c.name AS company_name
                 FROM ".BesigmaSchema::qualify('users')." u
                 LEFT JOIN ".BesigmaSchema::qualify('companies')." c ON c.id = u.company_id
-                WHERE u.is_deleted = 0
+                WHERE ".BesigmaSchema::flagIsFalse('u.is_deleted')."
                   AND (
                     u.fullname LIKE ?
                     OR u.sid_code LIKE ?
@@ -280,7 +280,7 @@ final class IscPostEventTrackService
                     u.functional_position,
                     c.name AS company_name
                 FROM ".BesigmaSchema::qualify('user_gps_latests')." g
-                INNER JOIN ".BesigmaSchema::qualify('users')." u ON u.id = g.user_id AND u.is_deleted = 0
+                INNER JOIN ".BesigmaSchema::qualify('users')." u ON u.id = g.user_id AND ".BesigmaSchema::flagIsFalse('u.is_deleted')."
                 LEFT JOIN ".BesigmaSchema::qualify('companies')." c ON c.id = u.company_id
                 WHERE g.updated_at >= ?
                   AND g.updated_at < ?
@@ -649,11 +649,11 @@ final class IscPostEventTrackService
                     s.code AS site_code_raw,
                     s.name AS site_name
                 FROM ".BesigmaSchema::qualify('boundary_violations')." v
-                INNER JOIN ".BesigmaSchema::qualify('users')." u ON u.id = v.user_id AND u.is_deleted = 0
+                INNER JOIN ".BesigmaSchema::qualify('users')." u ON u.id = v.user_id AND ".BesigmaSchema::flagIsFalse('u.is_deleted')."
                 LEFT JOIN ".BesigmaSchema::qualify('companies')." c ON c.id = u.company_id
                 LEFT JOIN ".BesigmaSchema::qualify('boundaries')." b ON b.id = v.boundary_id
                 LEFT JOIN ".BesigmaSchema::qualify('sites')." s ON s.id = v.site_id
-                WHERE v.is_deleted = 0
+                WHERE ".BesigmaSchema::flagIsFalse('v.is_deleted')."
                   AND v.deleted_at IS NULL
                   AND v.created_at >= ?
                   AND v.created_at < ?
@@ -720,7 +720,7 @@ final class IscPostEventTrackService
                 INNER JOIN ".BesigmaSchema::qualify('units')." u ON u.id = v.unit_id
                 LEFT JOIN ".BesigmaSchema::qualify('boundaries')." b ON b.id = v.boundary_id
                 LEFT JOIN ".BesigmaSchema::qualify('sites')." s ON s.id = v.site_id
-                WHERE v.is_deleted = 0
+                WHERE ".BesigmaSchema::flagIsFalse('v.is_deleted')."
                   AND v.deleted_at IS NULL
                   AND v.created_at >= ?
                   AND v.created_at < ?
