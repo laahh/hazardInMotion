@@ -2523,6 +2523,7 @@
       }
       preview.removeAttribute("src");
       preview.hidden = true;
+      preview.setAttribute("hidden", "hidden");
     }
     if (status) {
       status.textContent = "";
@@ -2532,7 +2533,7 @@
     }
   }
 
-  function assignHazardFotoFromBlob(blob, filename) {
+  function assignHazardFotoFromBlob(blob, filename, statusText) {
     if (!blob) {
       return;
     }
@@ -2555,10 +2556,11 @@
       }
       preview.src = URL.createObjectURL(blob);
       preview.hidden = false;
+      preview.removeAttribute("hidden");
     }
     var status = document.getElementById("gm-hazard-foto-status");
     if (status) {
-      status.textContent = "Foto otomatis dari jejak GPS historis BeSigma (bisa diganti manual).";
+      status.textContent = statusText || "Foto otomatis dari jejak GPS historis BeSigma (bisa diganti manual).";
     }
   }
 
@@ -2581,20 +2583,267 @@
     }
   }
 
-  function waitForMapPaint(ms) {
+  function canvasToBlobPromise(canvas, type, quality) {
     return new Promise(function (resolve) {
-      var settled = false;
-      function done() {
-        if (settled) {
-          return;
+      if (!canvas) {
+        resolve(null);
+        return;
+      }
+      if (typeof canvas.toBlob === "function") {
+        canvas.toBlob(function (blob) {
+          resolve(blob || null);
+        }, type || "image/jpeg", quality == null ? 0.92 : quality);
+        return;
+      }
+      try {
+        var dataUrl = canvas.toDataURL(type || "image/jpeg", quality == null ? 0.92 : quality);
+        var parts = dataUrl.split(",");
+        var bin = atob(parts[1] || "");
+        var arr = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i += 1) {
+          arr[i] = bin.charCodeAt(i);
         }
-        settled = true;
+        resolve(new Blob([arr], { type: type || "image/jpeg" }));
+      } catch (err) {
+        resolve(null);
+      }
+    });
+  }
+
+  function latLngToWorldPx(lat, lng, zoom) {
+    var scale = Math.pow(2, zoom) * 256;
+    var x = (Number(lng) + 180) / 360 * scale;
+    var sin = Math.sin(Number(lat) * Math.PI / 180);
+    sin = Math.min(Math.max(sin, -0.9999), 0.9999);
+    var y = (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * scale;
+    return { x: x, y: y };
+  }
+
+  function loadImageCors(url) {
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.crossOrigin = "anonymous";
+      var timer = setTimeout(function () {
+        resolve(null);
+      }, 4000);
+      img.onload = function () {
+        clearTimeout(timer);
+        resolve(img);
+      };
+      img.onerror = function () {
+        clearTimeout(timer);
+        resolve(null);
+      };
+      img.src = url;
+    });
+  }
+
+  /**
+   * Snapshot satelit + jejak, diproyeksikan persis seperti view Leaflet saat ini
+   * (setelah drawTrail/fitBounds), agar titik GPS sama dengan yang di maps.
+   */
+  function renderSatelliteTrailSnapshotBlob(row, points) {
+    var pts = (points || []).map(function (p) {
+      return { lat: Number(p.lat), lng: Number(p.lng), at: p.at || null };
+    }).filter(function (p) {
+      return !!p.lat && !!p.lng;
+    });
+    if (pts.length < 1) {
+      return Promise.resolve(null);
+    }
+
+    map.invalidateSize(false);
+    var size = map.getSize();
+    if (!size || !size.x || !size.y) {
+      return renderTrailSnapshotBlob(row, points);
+    }
+
+    var zoom = map.getZoom();
+    var tileZoom = Math.floor(zoom);
+    var scale = map.getZoomScale(zoom, tileZoom);
+    var outW = Math.max(640, Math.round(size.x));
+    var outH = Math.max(400, Math.round(size.y));
+    // Samakan rasio dengan ukuran peta aktual.
+    var maxW = 1280;
+    if (outW > maxW) {
+      var shrink = maxW / outW;
+      outW = maxW;
+      outH = Math.round(outH * shrink);
+    }
+
+    var containerScaleX = outW / size.x;
+    var containerScaleY = outH / size.y;
+
+    function toCanvasPoint(lat, lng) {
+      var pt = map.latLngToContainerPoint(L.latLng(lat, lng));
+      return {
+        x: pt.x * containerScaleX,
+        y: pt.y * containerScaleY
+      };
+    }
+
+    // Pixel bounds pada tileZoom (WebMercator Leaflet).
+    var nw = map.getBounds().getNorthWest();
+    var se = map.getBounds().getSouthEast();
+    var nwPx = map.project(nw, tileZoom);
+    var sePx = map.project(se, tileZoom);
+    var tileSize = 256;
+    var minTileX = Math.floor(nwPx.x / tileSize) - 1;
+    var maxTileX = Math.floor(sePx.x / tileSize) + 1;
+    var minTileY = Math.floor(nwPx.y / tileSize) - 1;
+    var maxTileY = Math.floor(sePx.y / tileSize) + 1;
+    var maxIndex = Math.pow(2, tileZoom) - 1;
+    minTileX = Math.max(0, minTileX);
+    minTileY = Math.max(0, minTileY);
+    maxTileX = Math.min(maxIndex, maxTileX);
+    maxTileY = Math.min(maxIndex, maxTileY);
+
+    var jobs = [];
+    var tx;
+    var ty;
+    for (tx = minTileX; tx <= maxTileX; tx += 1) {
+      for (ty = minTileY; ty <= maxTileY; ty += 1) {
+        var tileUrl;
+        if (wmtsProxyUrl && wmtsProxyUrl.indexOf("{z}") >= 0) {
+          tileUrl = wmtsProxyUrl
+            .replace("{z}", String(tileZoom))
+            .replace("{x}", String(tx))
+            .replace("{y}", String(ty));
+        } else {
+          tileUrl = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/" +
+            tileZoom + "/" + ty + "/" + tx;
+        }
+        jobs.push({ x: tx, y: ty, url: tileUrl });
+      }
+    }
+    if (jobs.length > 64) {
+      jobs = jobs.slice(0, 64);
+    }
+
+    return Promise.all(jobs.map(function (job) {
+      return loadImageCors(job.url).then(function (img) {
+        return { x: job.x, y: job.y, img: img };
+      });
+    })).then(function (tiles) {
+      var loaded = tiles.filter(function (t) { return !!t.img; });
+      var canvas = document.createElement("canvas");
+      canvas.width = outW;
+      canvas.height = outH;
+      var ctx = canvas.getContext("2d");
+      if (!ctx) {
+        return null;
+      }
+      ctx.fillStyle = "#0b1220";
+      ctx.fillRect(0, 0, outW, outH);
+
+      if (loaded.length) {
+        loaded.forEach(function (tile) {
+          // Sudut NW tile di CRS tileZoom → container point peta saat ini.
+          var tileNw = map.unproject([tile.x * tileSize, tile.y * tileSize], tileZoom);
+          var tileSe = map.unproject([(tile.x + 1) * tileSize, (tile.y + 1) * tileSize], tileZoom);
+          var pNw = map.latLngToContainerPoint(tileNw);
+          var pSe = map.latLngToContainerPoint(tileSe);
+          var dx = pNw.x * containerScaleX;
+          var dy = pNw.y * containerScaleY;
+          var dw = (pSe.x - pNw.x) * containerScaleX;
+          var dh = (pSe.y - pNw.y) * containerScaleY;
+          try {
+            ctx.drawImage(tile.img, dx, dy, dw, dh);
+          } catch (err) {}
+        });
+      }
+
+      // Jejak — titik diproyeksi lewat Leaflet (sama dengan maps).
+      ctx.strokeStyle = "#c5221f";
+      ctx.lineWidth = 4;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      pts.forEach(function (p, idx) {
+        var xy = toCanvasPoint(p.lat, p.lng);
+        if (idx === 0) ctx.moveTo(xy.x, xy.y);
+        else ctx.lineTo(xy.x, xy.y);
+      });
+      ctx.stroke();
+
+      var step = Math.max(1, Math.floor(pts.length / 5));
+      var i;
+      for (i = step; i < pts.length - 1; i += step) {
+        var mid = toCanvasPoint(pts[i].lat, pts[i].lng);
+        ctx.beginPath();
+        ctx.fillStyle = "#c5221f";
+        ctx.arc(mid.x, mid.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.fillStyle = "#fff";
+        ctx.arc(mid.x, mid.y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      var start = toCanvasPoint(pts[0].lat, pts[0].lng);
+      var end = toCanvasPoint(pts[pts.length - 1].lat, pts[pts.length - 1].lng);
+      ctx.fillStyle = "#16a34a";
+      ctx.beginPath();
+      ctx.arc(start.x, start.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ea580c";
+      ctx.beginPath();
+      ctx.arc(end.x, end.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      var jam = clockHmFromIso(row && row.entered_at) || clockHmFromIso(pts[pts.length - 1].at);
+      var tip = (row && (row.hazard_kind_label || row.hazard_name)) || "Pelanggaran Batas Bahaya Karyawan";
+      if (jam) tip += " - " + jam;
+      var tipW = Math.min(outW - 24, Math.max(220, tip.length * 7.2));
+      var tipX = Math.min(outW - tipW - 12, Math.max(12, end.x - tipW / 2));
+      var tipY = Math.max(58, end.y - 48);
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.strokeStyle = "rgba(15,23,42,0.25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(tipX, tipY, tipW, 34, 6);
+      } else {
+        ctx.rect(tipX, tipY, tipW, 34);
+      }
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#0f172a";
+      ctx.font = "bold 13px Segoe UI, Arial, sans-serif";
+      ctx.fillText(tip, tipX + 10, tipY + 22);
+
+      var when = formatHazardDateTime(row && row.entered_at);
+      ctx.fillStyle = "rgba(15,23,42,0.72)";
+      ctx.fillRect(0, 0, outW, 52);
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "bold 16px Segoe UI, Arial, sans-serif";
+      ctx.fillText("[ Auto Input BeSigma ] Jejak GPS Historis", 14, 22);
+      ctx.font = "12px Segoe UI, Arial, sans-serif";
+      ctx.fillStyle = "#cbd5e1";
+      ctx.fillText([
+        (row && row.name) || "—",
+        row && row.sid ? ("SID " + row.sid) : null,
+        when.tanggal + " " + when.jam,
+        pts.length + " titik",
+        "z" + zoom.toFixed(1)
+      ].filter(Boolean).join(" · "), 14, 42);
+
+      return canvasToBlobPromise(canvas, "image/jpeg", 0.92);
+    });
+  }
+
+  function waitMapReadyForCapture(ms) {
+    return new Promise(function (resolve) {
+      var done = false;
+      function finish() {
+        if (done) return;
+        done = true;
         resolve();
       }
       map.once("moveend", function () {
-        setTimeout(done, Math.max(500, (ms || 1200) * 0.55));
+        setTimeout(finish, 700);
       });
-      setTimeout(done, ms || 1600);
+      setTimeout(finish, ms || 1600);
     });
   }
 
@@ -2610,20 +2859,34 @@
         return;
       }
       var modal = hazardModal();
-      var modalWasHidden = !modal || modal.hidden;
-      // Sembunyikan modal sebentar agar capture fokus ke peta satelit + trail.
+      var finished = false;
+      function finish(blob) {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        mapEl.classList.remove("is-capturing-hazard");
+        if (modal) {
+          modal.style.visibility = "";
+        }
+        resolve(blob || null);
+      }
       if (modal && !modal.hidden) {
         modal.style.visibility = "hidden";
       }
       mapEl.classList.add("is-capturing-hazard");
       map.invalidateSize(false);
 
+      var timer = setTimeout(function () {
+        finish(null);
+      }, 5000);
+
       html2canvas(container, {
         useCORS: true,
         allowTaint: false,
         backgroundColor: "#0b1220",
         logging: false,
-        scale: Math.min(2, window.devicePixelRatio || 1),
+        scale: 1,
         ignoreElements: function (el) {
           if (!el || !el.classList) {
             return false;
@@ -2633,23 +2896,13 @@
             || el.id === "gm-toast";
         }
       }).then(function (canvas) {
-        mapEl.classList.remove("is-capturing-hazard");
-        if (modal && !modalWasHidden) {
-          modal.style.visibility = "";
-        }
-        if (!canvas || typeof canvas.toBlob !== "function") {
-          resolve(null);
-          return;
-        }
-        canvas.toBlob(function (blob) {
-          resolve(blob || null);
-        }, "image/jpeg", 0.92);
+        clearTimeout(timer);
+        return canvasToBlobPromise(canvas, "image/jpeg", 0.92);
+      }).then(function (blob) {
+        finish(blob);
       }).catch(function () {
-        mapEl.classList.remove("is-capturing-hazard");
-        if (modal && !modalWasHidden) {
-          modal.style.visibility = "";
-        }
-        resolve(null);
+        clearTimeout(timer);
+        finish(null);
       });
     });
   }
@@ -2717,20 +2970,17 @@
       }
 
       var when = formatHazardDateTime(row && row.entered_at);
-      var title = "[ Auto Input BeSigma ] Jejak GPS Historis";
-      var sub = [
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "bold 22px Segoe UI, Arial, sans-serif";
+      ctx.fillText("[ Auto Input BeSigma ] Jejak GPS Historis", 24, 34);
+      ctx.font = "14px Segoe UI, Arial, sans-serif";
+      ctx.fillStyle = "#cbd5e1";
+      ctx.fillText([
         (row && row.name) || "—",
         row && row.sid ? ("SID " + row.sid) : null,
         when.tanggal + " " + when.jam,
         (row && (row.hazard_name || row.hazard_kind_label)) || null
-      ].filter(Boolean).join(" · ");
-
-      ctx.fillStyle = "#f8fafc";
-      ctx.font = "bold 22px Segoe UI, Arial, sans-serif";
-      ctx.fillText(title, 24, 34);
-      ctx.font = "14px Segoe UI, Arial, sans-serif";
-      ctx.fillStyle = "#cbd5e1";
-      ctx.fillText(sub, 24, 56);
+      ].filter(Boolean).join(" · "), 24, 56);
 
       function project(lat, lng) {
         var x = pad + ((lng - minLng) / (maxLng - minLng || 1)) * (w - pad * 2);
@@ -2745,11 +2995,8 @@
       ctx.beginPath();
       pts.forEach(function (p, idx) {
         var xy = project(p.lat, p.lng);
-        if (idx === 0) {
-          ctx.moveTo(xy[0], xy[1]);
-        } else {
-          ctx.lineTo(xy[0], xy[1]);
-        }
+        if (idx === 0) ctx.moveTo(xy[0], xy[1]);
+        else ctx.lineTo(xy[0], xy[1]);
       });
       ctx.stroke();
 
@@ -2763,20 +3010,13 @@
       ctx.beginPath();
       ctx.arc(end[0], end[1], 7, 0, Math.PI * 2);
       ctx.fill();
-
       ctx.fillStyle = "#e2e8f0";
       ctx.font = "12px Segoe UI, Arial, sans-serif";
       ctx.fillText("Start", start[0] + 10, start[1] - 8);
       ctx.fillText("Akhir / pelanggaran", end[0] + 10, end[1] - 8);
       ctx.fillText(pts.length + " titik GPS", 24, h - 18);
 
-      if (typeof canvas.toBlob === "function") {
-        canvas.toBlob(function (blob) {
-          resolve(blob || null);
-        }, "image/png");
-        return;
-      }
-      resolve(null);
+      canvasToBlobPromise(canvas, "image/png", 0.92).then(resolve);
     });
   }
 
@@ -2803,6 +3043,8 @@
       status.textContent = "Menyiapkan peta satelit + jejak GPS historis…";
     }
     var date = dateFromTimestamp(row.entered_at) || todayIsoDate();
+    var sid = String((row && row.sid) || (row && row.id) || "trail").replace(/[^\w-]+/g, "");
+
     fetch(withQuery(postEventTrailUrl, {
       entity: entity,
       id: id,
@@ -2816,16 +3058,29 @@
       })
       .then(function (payload) {
         if (seq !== hazardTrailFotoSeq) {
-          return null;
+          return;
         }
         var points = (payload && payload.points) || [];
         if (!points.length) {
-          return null;
+          if (status) {
+            status.textContent = "Titik GPS belum cukup — unggah foto manual.";
+          }
+          return;
         }
 
-        // Samakan tampilan dengan "Detail & bukti": satelit + zona + trail.
-        setBasemap("sgi");
+        var jam = clockHmFromIso(row.entered_at) || clockHmFromIso(points[points.length - 1] && points[points.length - 1].at);
+        var labelBase = row.hazard_kind_label || row.hazard_name || "Pelanggaran Batas Bahaya Karyawan";
+        var violationLabel = jam ? (labelBase + " - " + jam) : labelBase;
+
+        // Samakan view dengan maps: sembunyikan modal sebentar → fit trail → capture.
+        var modal = hazardModal();
+        if (modal && !modal.hidden) {
+          modal.style.visibility = "hidden";
+        }
+        mapEl.classList.add("is-capturing-hazard");
+
         try {
+          setBasemap("sgi");
           if (row.hazard_name || row.hazard_boundary_id || row.hazard_kind) {
             var feature = findViolatedBoundaryFeature(row);
             if (feature && feature.geometry) {
@@ -2834,54 +3089,64 @@
               violationFocusLayer.addTo(map);
             }
           }
+          map.invalidateSize(false);
+          drawTrail(row, points, { silent: true, violationLabel: violationLabel });
         } catch (err) {}
 
-        var jam = clockHmFromIso(row.entered_at) || clockHmFromIso(points[points.length - 1] && points[points.length - 1].at);
-        var labelBase = row.hazard_kind_label || row.hazard_name || "Pelanggaran Batas Bahaya Karyawan";
-        var violationLabel = jam ? (labelBase + " - " + jam) : labelBase;
-
-        drawTrail(row, points, {
-          silent: true,
-          violationLabel: violationLabel
-        });
-        map.invalidateSize(false);
-
-        return waitForMapPaint(1800).then(function () {
+        return waitMapReadyForCapture(1800).then(function () {
           if (seq !== hazardTrailFotoSeq) {
             return null;
           }
-          return captureMapViewBlob();
-        }).then(function (mapBlob) {
+          // Proyeksi titik = map.latLngToContainerPoint (sama dengan Leaflet di layar).
+          return renderSatelliteTrailSnapshotBlob(row, points);
+        }).then(function (satBlob) {
+          mapEl.classList.remove("is-capturing-hazard");
+          if (modal) {
+            modal.style.visibility = "";
+          }
           if (seq !== hazardTrailFotoSeq) {
-            return null;
+            return;
           }
-          if (mapBlob) {
-            return mapBlob;
+          if (satBlob) {
+            assignHazardFotoFromBlob(
+              satBlob,
+              "besigma-trail-map-" + sid + "-" + date + ".jpg",
+              "Foto otomatis disamakan dengan view maps (bisa diganti manual)."
+            );
+            return;
           }
-          // Fallback jika tile satelit gagal di-capture (CORS/dll).
-          return renderTrailSnapshotBlob(row, points);
+          return renderTrailSnapshotBlob(row, points).then(function (schemaBlob) {
+            if (seq !== hazardTrailFotoSeq) {
+              return;
+            }
+            if (schemaBlob) {
+              assignHazardFotoFromBlob(
+                schemaBlob,
+                "besigma-trail-" + sid + "-" + date + ".png",
+                "Foto otomatis dari jejak GPS (mode skematik)."
+              );
+              return;
+            }
+            if (status) {
+              status.textContent = "Gagal membuat foto otomatis — unggah foto manual.";
+            }
+          });
+        }).catch(function () {
+          mapEl.classList.remove("is-capturing-hazard");
+          if (modal) {
+            modal.style.visibility = "";
+          }
+          throw new Error("capture-failed");
         });
-      })
-      .then(function (blob) {
-        if (seq !== hazardTrailFotoSeq) {
-          return;
-        }
-        if (!blob) {
-          if (status) {
-            status.textContent = "Titik GPS belum cukup / gagal capture peta — unggah foto manual.";
-          }
-          return;
-        }
-        var sid = String((row && row.sid) || (row && row.id) || "trail").replace(/[^\w-]+/g, "");
-        var ext = (blob.type || "").indexOf("jpeg") >= 0 ? ".jpg" : ".png";
-        assignHazardFotoFromBlob(blob, "besigma-trail-map-" + sid + "-" + date + ext);
-        if (status) {
-          status.textContent = "Foto otomatis dari peta satelit + jejak GPS (bisa diganti manual).";
-        }
       })
       .catch(function () {
         if (seq !== hazardTrailFotoSeq) {
           return;
+        }
+        mapEl.classList.remove("is-capturing-hazard");
+        var modal2 = hazardModal();
+        if (modal2) {
+          modal2.style.visibility = "";
         }
         if (status) {
           status.textContent = "Gagal memuat jejak GPS — unggah foto manual.";

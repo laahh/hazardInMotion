@@ -1823,6 +1823,9 @@ div.gm-hud-metric:hover { transform: none; }
   border: 1px solid #e2e8f0;
   background: #0f172a;
 }
+.gm-hazard-foto-preview[hidden] {
+  display: none !important;
+}
 #map.is-capturing-hazard .leaflet-control-container {
   display: none !important;
 }
