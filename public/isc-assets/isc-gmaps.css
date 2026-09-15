@@ -1768,6 +1768,51 @@ div.gm-hud-metric:hover { transform: none; }
 .gm-hazard-picker-table-wrap th { background: #f8fafc; position: sticky; top: 0; }
 .gm-hazard-pick,
 #gm-hazard-picker-go { background: #0f172a; color: #fff; }
+.gm-hazard-combo {
+  position: relative;
+}
+.gm-hazard-combo input {
+  width: 100%;
+}
+.gm-hazard-combo-list {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 220px;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+.gm-hazard-combo-list[hidden] { display: none !important; }
+.gm-hazard-combo-list button {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: .82rem;
+  color: #0f172a;
+  cursor: pointer;
+}
+.gm-hazard-combo-list button:hover,
+.gm-hazard-combo-list button:focus {
+  background: #f1f5f9;
+  outline: none;
+}
+.gm-hazard-combo-empty {
+  padding: 8px 12px;
+  font-size: .75rem;
+  color: #64748b;
+}
 @media (max-width: 640px) {
   .gm-hazard-grid { grid-template-columns: 1fr; }
 }

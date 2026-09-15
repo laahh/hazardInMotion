@@ -11,6 +11,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Isc\IscHazardReportStoreRequest;
 use App\Http\Requests\Isc\IscInterventionStoreRequest;
 use App\Services\Isc\IscHazardEmployeeLookupService;
+use App\Services\Isc\IscHazardLocationLookupService;
+use App\Services\Isc\IscHazardPjaLookupService;
 use App\Services\Isc\IscHazardSysUserLookupService;
 use App\Services\Isc\IscMapsInterventionService;
 use Illuminate\Http\JsonResponse;
@@ -26,6 +28,8 @@ final class IscMapsInterventionController extends Controller
         private readonly IscHazardReportStoreAction $hazardStoreAction,
         private readonly IscHazardEmployeeLookupService $employees,
         private readonly IscHazardSysUserLookupService $sysUsers,
+        private readonly IscHazardLocationLookupService $locations,
+        private readonly IscHazardPjaLookupService $pja,
         private readonly IscSyncActiveViolationsAction $syncViolations,
     ) {}
 
@@ -133,6 +137,59 @@ final class IscMapsInterventionController extends Controller
             'results' => $results,
             'user' => $exact ?? ($results[0] ?? null),
             'source' => 'bcbeats.bep_vw_karyawan_sysuser_user_role',
+        ]);
+    }
+
+    public function lookupLokasi(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->query('q', ''));
+        $site = trim((string) $request->query('site', ''));
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->locations->lokasiOptions($q, $site),
+            'source' => IscHazardLocationLookupService::VIEW,
+        ]);
+    }
+
+    public function lookupDetailLokasi(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->query('q', ''));
+        $lokasi = trim((string) $request->query('lokasi', ''));
+        $site = trim((string) $request->query('site', ''));
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->locations->detailLokasiOptions($lokasi, $q, $site),
+            'source' => IscHazardLocationLookupService::VIEW,
+        ]);
+    }
+
+    public function lookupPjaBc(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->query('q', ''));
+        $lokasi = trim((string) $request->query('lokasi', ''));
+        $site = trim((string) $request->query('site', ''));
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->pja->bcOptions($q, $lokasi, $site),
+            'suggest' => $lokasi !== '' ? $this->pja->suggestForLokasi($lokasi, $site) : null,
+            'source' => IscHazardPjaLookupService::VIEW,
+        ]);
+    }
+
+    public function lookupPjaMitra(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->query('q', ''));
+        $lokasi = trim((string) $request->query('lokasi', ''));
+        $site = trim((string) $request->query('site', ''));
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->pja->mitraOptions($q, $lokasi, $site),
+            'suggest' => $lokasi !== '' ? $this->pja->suggestForLokasi($lokasi, $site) : null,
+            'source' => IscHazardPjaLookupService::VIEW,
         ]);
     }
 }

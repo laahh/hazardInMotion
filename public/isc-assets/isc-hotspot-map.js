@@ -15,6 +15,10 @@
   var mapsHazardReportsUrl = mapEl.getAttribute("data-maps-hazard-reports-url") || "";
   var mapsHazardEmployeesUrl = mapEl.getAttribute("data-maps-hazard-employees-url") || "";
   var mapsHazardSysUserUrl = mapEl.getAttribute("data-maps-hazard-sysuser-url") || "";
+  var mapsHazardLokasiUrl = mapEl.getAttribute("data-maps-hazard-lokasi-url") || "";
+  var mapsHazardDetailLokasiUrl = mapEl.getAttribute("data-maps-hazard-detail-lokasi-url") || "";
+  var mapsHazardPjaBcUrl = mapEl.getAttribute("data-maps-hazard-pja-bc-url") || "";
+  var mapsHazardPjaMitraUrl = mapEl.getAttribute("data-maps-hazard-pja-mitra-url") || "";
   var interventionsUrl = mapEl.getAttribute("data-interventions-url") || "";
 
   var listEl = document.getElementById("zone-list");
@@ -2467,7 +2471,238 @@
       });
       lookupSidFill("pelapor", row.sid);
     }
+    fillAutoDeskripsiTemuan(row);
     modal.hidden = false;
+  }
+
+  function formatHazardDateTime(iso) {
+    if (!iso) {
+      return { tanggal: "—", jam: "—" };
+    }
+    try {
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) {
+        return { tanggal: String(iso), jam: "—" };
+      }
+      var tanggal = d.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric"
+      });
+      var jam = d.toLocaleTimeString("id-ID", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      });
+      return { tanggal: tanggal, jam: jam };
+    } catch (err) {
+      return { tanggal: String(iso), jam: "—" };
+    }
+  }
+
+  function buildAutoDeskripsiTemuan(row) {
+    if (!row) {
+      return "";
+    }
+    var nama = String(row.name || "—").trim() || "—";
+    var sid = String(row.sid || "—").trim() || "—";
+    var when = formatHazardDateTime(row.entered_at);
+    var pelanggaran = String(
+      row.hazard_name ||
+      row.hazard_kind_label ||
+      row.hazard_kind ||
+      "pelanggaran boundary BeSigma"
+    ).trim();
+    var site = String(row.site || row.site_code || "").trim();
+    var sitePart = site ? (" di site " + site) : "";
+    return (
+      "[ Auto Input BeSigma ] Terdapat karyawan atas nama " + nama +
+      " dengan SID " + sid +
+      " pada tanggal " + when.tanggal +
+      " jam " + when.jam +
+      sitePart +
+      " melakukan pelanggaran: " + pelanggaran + "."
+    );
+  }
+
+  function fillAutoDeskripsiTemuan(row) {
+    var el = document.getElementById("gm-hazard-deskripsi");
+    if (!el) {
+      return;
+    }
+    el.value = buildAutoDeskripsiTemuan(row);
+  }
+
+  function hazardComboUrl(attrName) {
+    if (attrName === "data-maps-hazard-lokasi-url") return mapsHazardLokasiUrl;
+    if (attrName === "data-maps-hazard-detail-lokasi-url") return mapsHazardDetailLokasiUrl;
+    if (attrName === "data-maps-hazard-pja-bc-url") return mapsHazardPjaBcUrl;
+    if (attrName === "data-maps-hazard-pja-mitra-url") return mapsHazardPjaMitraUrl;
+    return mapEl.getAttribute(attrName) || "";
+  }
+
+  function suggestPjaFromLokasi() {
+    var lokasiEl = document.getElementById("gm-hazard-lokasi");
+    var siteEl = document.getElementById("gm-hazard-site");
+    var lokasi = lokasiEl ? String(lokasiEl.value || "").trim() : "";
+    if (!lokasi || !mapsHazardPjaBcUrl) {
+      return;
+    }
+    var url = mapsHazardPjaBcUrl + (mapsHazardPjaBcUrl.indexOf("?") >= 0 ? "&" : "?") +
+      "lokasi=" + encodeURIComponent(lokasi) +
+      "&site=" + encodeURIComponent(siteEl ? String(siteEl.value || "") : "");
+    fetch(url, {
+      headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin"
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        var suggest = payload && payload.suggest ? payload.suggest : null;
+        if (!suggest) {
+          return;
+        }
+        var bc = document.getElementById("gm-hazard-pja-bc");
+        var mk = document.getElementById("gm-hazard-pja-mitra");
+        if (bc && suggest.area_pja_bc && !String(bc.value || "").trim()) {
+          bc.value = suggest.area_pja_bc;
+        }
+        if (mk && suggest.area_pja_mitra && !String(mk.value || "").trim()) {
+          mk.value = suggest.area_pja_mitra;
+        }
+      })
+      .catch(function () {});
+  }
+
+  function initHazardComboboxes() {
+    var form = document.getElementById("gm-hazard-form");
+    if (!form) {
+      return;
+    }
+
+    function debounce(fn, wait) {
+      var t = 0;
+      return function () {
+        var args = arguments;
+        var self = this;
+        clearTimeout(t);
+        t = setTimeout(function () { fn.apply(self, args); }, wait);
+      };
+    }
+
+    form.querySelectorAll("[data-gm-hazard-combo]").forEach(function (wrap) {
+      var input = wrap.querySelector("input");
+      var list = wrap.querySelector(".gm-hazard-combo-list");
+      var urlAttr = wrap.getAttribute("data-url-attr") || "";
+      var useSite = wrap.getAttribute("data-site-param") === "1";
+      var useLokasi = wrap.getAttribute("data-lokasi-param") === "1";
+      var clearTargets = String(wrap.getAttribute("data-clear-targets") || "")
+        .split(",")
+        .map(function (s) { return s.trim(); })
+        .filter(Boolean);
+      var lastItems = [];
+      if (!input || !list || !urlAttr) {
+        return;
+      }
+
+      function hideList() {
+        list.hidden = true;
+      }
+
+      function renderItems(items) {
+        lastItems = items || [];
+        if (!lastItems.length) {
+          list.innerHTML = "<li class=\"gm-hazard-combo-empty\">Tidak ada data</li>";
+          list.hidden = false;
+          return;
+        }
+        list.innerHTML = lastItems.map(function (item, idx) {
+          var label = esc(item.label || item.value || "");
+          return "<li><button type=\"button\" data-gm-combo-idx=\"" + idx + "\">" + label + "</button></li>";
+        }).join("");
+        list.hidden = false;
+      }
+
+      var fetchOptions = debounce(function () {
+        var base = hazardComboUrl(urlAttr);
+        if (!base) {
+          renderItems([]);
+          return;
+        }
+        var url = new URL(base, window.location.origin);
+        var q = String(input.value || "").trim();
+        if (q) {
+          url.searchParams.set("q", q);
+        }
+        if (useSite) {
+          var siteEl = document.getElementById("gm-hazard-site");
+          if (siteEl && siteEl.value) {
+            url.searchParams.set("site", siteEl.value);
+          }
+        }
+        if (useLokasi) {
+          var lokasiEl = document.getElementById("gm-hazard-lokasi");
+          if (lokasiEl && lokasiEl.value) {
+            url.searchParams.set("lokasi", lokasiEl.value);
+          }
+        }
+        fetch(url.toString(), {
+          headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
+          credentials: "same-origin"
+        })
+          .then(function (res) { return res.json(); })
+          .then(function (payload) { renderItems((payload && payload.data) || []); })
+          .catch(function () { renderItems([]); });
+      }, 250);
+
+      input.addEventListener("focus", fetchOptions);
+      input.addEventListener("input", function () {
+        clearTargets.forEach(function (sel) {
+          var target = form.querySelector(sel);
+          if (target) {
+            target.value = "";
+          }
+        });
+        fetchOptions();
+      });
+      input.addEventListener("blur", function () {
+        setTimeout(hideList, 160);
+      });
+      list.addEventListener("mousedown", function (event) {
+        event.preventDefault();
+        var btn = event.target.closest("[data-gm-combo-idx]");
+        if (!btn) {
+          return;
+        }
+        var item = lastItems[parseInt(btn.getAttribute("data-gm-combo-idx"), 10)];
+        if (!item) {
+          return;
+        }
+        input.value = item.label || item.value || "";
+        hideList();
+        if (input.id === "gm-hazard-lokasi") {
+          clearTargets.forEach(function (sel) {
+            var target = form.querySelector(sel);
+            if (target) {
+              target.value = "";
+            }
+          });
+          suggestPjaFromLokasi();
+        }
+      });
+    });
+
+    var siteSelect = document.getElementById("gm-hazard-site");
+    if (siteSelect) {
+      siteSelect.addEventListener("change", function () {
+        ["gm-hazard-lokasi", "gm-hazard-detail-lokasi", "gm-hazard-pja-bc", "gm-hazard-pja-mitra"].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el) {
+            el.value = "";
+          }
+        });
+      });
+    }
   }
 
   function closeHazardReport() {
@@ -3214,6 +3449,7 @@
   });
   var hazardForm = document.getElementById("gm-hazard-form");
   if (hazardForm) {
+    initHazardComboboxes();
     hazardForm.addEventListener("submit", function (event) {
       event.preventDefault();
       submitHazardReport(hazardForm);

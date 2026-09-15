@@ -19,6 +19,10 @@
     data-maps-hazard-reports-url="{{ $mapsHazardReportsUrl }}"
     data-maps-hazard-employees-url="{{ $mapsHazardEmployeesUrl }}"
     data-maps-hazard-sysuser-url="{{ $mapsHazardSysUserUrl }}"
+    data-maps-hazard-lokasi-url="{{ $mapsHazardLokasiUrl }}"
+    data-maps-hazard-detail-lokasi-url="{{ $mapsHazardDetailLokasiUrl }}"
+    data-maps-hazard-pja-bc-url="{{ $mapsHazardPjaBcUrl }}"
+    data-maps-hazard-pja-mitra-url="{{ $mapsHazardPjaMitraUrl }}"
     data-interventions-url="{{ $interventionsUrl }}"
     data-connected="{{ $connected ? '1' : '0' }}"
     data-wms-url="{{ $wmsUrl }}"
@@ -589,9 +593,19 @@
                 <option value="PUNAN">PUNAN</option>
               </select>
             </label>
-            <label>Lokasi<input type="text" name="lokasi" maxlength="255"></label>
+            <label>Lokasi
+              <div class="gm-hazard-combo" data-gm-hazard-combo data-url-attr="data-maps-hazard-lokasi-url" data-site-param="1" data-clear-targets="#gm-hazard-detail-lokasi,#gm-hazard-pja-bc,#gm-hazard-pja-mitra">
+                <input type="text" name="lokasi" id="gm-hazard-lokasi" maxlength="255" autocomplete="off" placeholder="Cari lokasi…">
+                <ul class="gm-hazard-combo-list" hidden></ul>
+              </div>
+            </label>
           </div>
-          <label>Detail Lokasi<input type="text" name="detail_lokasi" maxlength="255"></label>
+          <label>Detail Lokasi
+            <div class="gm-hazard-combo" data-gm-hazard-combo data-url-attr="data-maps-hazard-detail-lokasi-url" data-site-param="1" data-lokasi-param="1">
+              <input type="text" name="detail_lokasi" id="gm-hazard-detail-lokasi" maxlength="255" autocomplete="off" placeholder="Pilih lokasi dulu, lalu cari detail…">
+              <ul class="gm-hazard-combo-list" hidden></ul>
+            </div>
+          </label>
           <label>Keterangan Lokasi<textarea name="keterangan_lokasi" rows="2" maxlength="2000"></textarea></label>
         </section>
 
@@ -607,9 +621,20 @@
 
         <section class="gm-hazard-sec">
           <h3>PJA</h3>
+          <p class="gm-hazard-hint">Dari bcbeats.wan_vw_relasi_lokasi_pja (terfilter lokasi bila dipilih).</p>
           <div class="gm-hazard-grid">
-            <label>Area PJA BC<input type="text" name="area_pja_bc" maxlength="255"></label>
-            <label>Area PJA Mitra Kerja<input type="text" name="area_pja_mitra" maxlength="255"></label>
+            <label>Area PJA BC
+              <div class="gm-hazard-combo" data-gm-hazard-combo data-url-attr="data-maps-hazard-pja-bc-url" data-site-param="1" data-lokasi-param="1">
+                <input type="text" name="area_pja_bc" id="gm-hazard-pja-bc" maxlength="255" autocomplete="off" placeholder="Cari Area PJA BC…">
+                <ul class="gm-hazard-combo-list" hidden></ul>
+              </div>
+            </label>
+            <label>Area PJA Mitra Kerja
+              <div class="gm-hazard-combo" data-gm-hazard-combo data-url-attr="data-maps-hazard-pja-mitra-url" data-site-param="1" data-lokasi-param="1">
+                <input type="text" name="area_pja_mitra" id="gm-hazard-pja-mitra" maxlength="255" autocomplete="off" placeholder="Cari Area PJA Mitra…">
+                <ul class="gm-hazard-combo-list" hidden></ul>
+              </div>
+            </label>
           </div>
         </section>
 
@@ -625,7 +650,7 @@
             <label>Sub Ketidaksesuaian<input type="text" name="sub_ketidaksesuaian" maxlength="255"></label>
           </div>
           <label>Quick Action<input type="text" name="quick_action" maxlength="255"></label>
-          <label>Deskripsi Temuan<textarea name="deskripsi_temuan" rows="4" maxlength="5000"></textarea></label>
+          <label>Deskripsi Temuan<textarea name="deskripsi_temuan" id="gm-hazard-deskripsi" rows="5" maxlength="5000" placeholder="Terisi otomatis dari pelanggaran BeSigma"></textarea></label>
         </section>
 
         <p class="gm-hazard-msg" id="gm-hazard-msg" hidden></p>

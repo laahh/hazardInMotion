@@ -43,6 +43,18 @@ Route::prefix('isc')
         Route::get('/maps/hazard-sysuser', [IscMapsInterventionController::class, 'lookupSysUser'])
             ->middleware('auth')
             ->name('maps.hazard-sysuser');
+        Route::get('/maps/hazard-lokasi', [IscMapsInterventionController::class, 'lookupLokasi'])
+            ->middleware('auth')
+            ->name('maps.hazard-lokasi');
+        Route::get('/maps/hazard-detail-lokasi', [IscMapsInterventionController::class, 'lookupDetailLokasi'])
+            ->middleware('auth')
+            ->name('maps.hazard-detail-lokasi');
+        Route::get('/maps/hazard-pja-bc', [IscMapsInterventionController::class, 'lookupPjaBc'])
+            ->middleware('auth')
+            ->name('maps.hazard-pja-bc');
+        Route::get('/maps/hazard-pja-mitra', [IscMapsInterventionController::class, 'lookupPjaMitra'])
+            ->middleware('auth')
+            ->name('maps.hazard-pja-mitra');
         Route::post('/maps/hazard-reports', [IscMapsInterventionController::class, 'storeHazardReport'])
             ->middleware('auth')
             ->name('maps.hazard-reports.store');
