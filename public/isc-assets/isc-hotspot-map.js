@@ -2562,6 +2562,98 @@
     }
   }
 
+  function clockHmFromIso(iso) {
+    if (!iso) {
+      return "";
+    }
+    try {
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) {
+        return "";
+      }
+      return d.toLocaleTimeString("id-ID", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      });
+    } catch (err) {
+      return "";
+    }
+  }
+
+  function waitForMapPaint(ms) {
+    return new Promise(function (resolve) {
+      var settled = false;
+      function done() {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve();
+      }
+      map.once("moveend", function () {
+        setTimeout(done, Math.max(500, (ms || 1200) * 0.55));
+      });
+      setTimeout(done, ms || 1600);
+    });
+  }
+
+  function captureMapViewBlob() {
+    return new Promise(function (resolve) {
+      if (typeof html2canvas !== "function") {
+        resolve(null);
+        return;
+      }
+      var container = map.getContainer();
+      if (!container) {
+        resolve(null);
+        return;
+      }
+      var modal = hazardModal();
+      var modalWasHidden = !modal || modal.hidden;
+      // Sembunyikan modal sebentar agar capture fokus ke peta satelit + trail.
+      if (modal && !modal.hidden) {
+        modal.style.visibility = "hidden";
+      }
+      mapEl.classList.add("is-capturing-hazard");
+      map.invalidateSize(false);
+
+      html2canvas(container, {
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: "#0b1220",
+        logging: false,
+        scale: Math.min(2, window.devicePixelRatio || 1),
+        ignoreElements: function (el) {
+          if (!el || !el.classList) {
+            return false;
+          }
+          return el.classList.contains("leaflet-control-container")
+            || el.classList.contains("gm-loading")
+            || el.id === "gm-toast";
+        }
+      }).then(function (canvas) {
+        mapEl.classList.remove("is-capturing-hazard");
+        if (modal && !modalWasHidden) {
+          modal.style.visibility = "";
+        }
+        if (!canvas || typeof canvas.toBlob !== "function") {
+          resolve(null);
+          return;
+        }
+        canvas.toBlob(function (blob) {
+          resolve(blob || null);
+        }, "image/jpeg", 0.92);
+      }).catch(function () {
+        mapEl.classList.remove("is-capturing-hazard");
+        if (modal && !modalWasHidden) {
+          modal.style.visibility = "";
+        }
+        resolve(null);
+      });
+    });
+  }
+
   function renderTrailSnapshotBlob(row, points) {
     return new Promise(function (resolve) {
       var pts = (points || []).map(function (p) {
@@ -2609,7 +2701,6 @@
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
 
-      // subtle grid
       ctx.strokeStyle = "rgba(148,163,184,0.18)";
       ctx.lineWidth = 1;
       for (var gx = pad; gx < w - pad; gx += 40) {
@@ -2685,18 +2776,7 @@
         }, "image/png");
         return;
       }
-      try {
-        var dataUrl = canvas.toDataURL("image/png");
-        var parts = dataUrl.split(",");
-        var bin = atob(parts[1] || "");
-        var arr = new Uint8Array(bin.length);
-        for (var i = 0; i < bin.length; i += 1) {
-          arr[i] = bin.charCodeAt(i);
-        }
-        resolve(new Blob([arr], { type: "image/png" }));
-      } catch (err) {
-        resolve(null);
-      }
+      resolve(null);
     });
   }
 
@@ -2720,7 +2800,7 @@
       return;
     }
     if (status) {
-      status.textContent = "Mengambil jejak GPS historis untuk foto otomatis…";
+      status.textContent = "Menyiapkan peta satelit + jejak GPS historis…";
     }
     var date = dateFromTimestamp(row.entered_at) || todayIsoDate();
     fetch(withQuery(postEventTrailUrl, {
@@ -2739,11 +2819,48 @@
           return null;
         }
         var points = (payload && payload.points) || [];
+        if (!points.length) {
+          return null;
+        }
+
+        // Samakan tampilan dengan "Detail & bukti": satelit + zona + trail.
+        setBasemap("sgi");
+        try {
+          if (row.hazard_name || row.hazard_boundary_id || row.hazard_kind) {
+            var feature = findViolatedBoundaryFeature(row);
+            if (feature && feature.geometry) {
+              clearViolatedBoundary();
+              violationFocusLayer.addData(feature);
+              violationFocusLayer.addTo(map);
+            }
+          }
+        } catch (err) {}
+
+        var jam = clockHmFromIso(row.entered_at) || clockHmFromIso(points[points.length - 1] && points[points.length - 1].at);
+        var labelBase = row.hazard_kind_label || row.hazard_name || "Pelanggaran Batas Bahaya Karyawan";
+        var violationLabel = jam ? (labelBase + " - " + jam) : labelBase;
+
         drawTrail(row, points, {
           silent: true,
-          violationLabel: row.hazard_kind_label || row.hazard_name || ""
+          violationLabel: violationLabel
         });
-        return renderTrailSnapshotBlob(row, points);
+        map.invalidateSize(false);
+
+        return waitForMapPaint(1800).then(function () {
+          if (seq !== hazardTrailFotoSeq) {
+            return null;
+          }
+          return captureMapViewBlob();
+        }).then(function (mapBlob) {
+          if (seq !== hazardTrailFotoSeq) {
+            return null;
+          }
+          if (mapBlob) {
+            return mapBlob;
+          }
+          // Fallback jika tile satelit gagal di-capture (CORS/dll).
+          return renderTrailSnapshotBlob(row, points);
+        });
       })
       .then(function (blob) {
         if (seq !== hazardTrailFotoSeq) {
@@ -2751,12 +2868,16 @@
         }
         if (!blob) {
           if (status) {
-            status.textContent = "Titik GPS belum cukup — unggah foto manual.";
+            status.textContent = "Titik GPS belum cukup / gagal capture peta — unggah foto manual.";
           }
           return;
         }
         var sid = String((row && row.sid) || (row && row.id) || "trail").replace(/[^\w-]+/g, "");
-        assignHazardFotoFromBlob(blob, "besigma-trail-" + sid + "-" + date + ".png");
+        var ext = (blob.type || "").indexOf("jpeg") >= 0 ? ".jpg" : ".png";
+        assignHazardFotoFromBlob(blob, "besigma-trail-map-" + sid + "-" + date + ext);
+        if (status) {
+          status.textContent = "Foto otomatis dari peta satelit + jejak GPS (bisa diganti manual).";
+        }
       })
       .catch(function () {
         if (seq !== hazardTrailFotoSeq) {
