@@ -3592,9 +3592,17 @@
           setHazardMsg(err, true);
           return;
         }
-        toast(pack.payload && pack.payload.demo
-          ? "Laporan hazard dummy diterima."
-          : "Laporan hazard tersimpan.");
+        var persisted = !!(pack.payload && pack.payload.persisted);
+        var rid = pack.payload && pack.payload.report_id ? String(pack.payload.report_id) : "";
+        if (persisted) {
+          setHazardMsg("Tersimpan ke database" + (rid ? (" (ID " + rid + ")") : "") + ".", false);
+          toast(pack.payload.message || ("Laporan hazard tersimpan" + (rid ? (" #" + rid) : "") + "."));
+        } else {
+          setHazardMsg(pack.payload && pack.payload.message
+            ? pack.payload.message
+            : "Laporan dummy (tidak masuk DB).", true);
+          toast("Laporan hazard dummy — belum ke database.");
+        }
         clearHazardAutoFoto();
         closeHazardReport();
         loadInterventions(true);

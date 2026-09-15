@@ -73,22 +73,35 @@ final class IscMapsInterventionController extends Controller
 
     public function storeHazardReport(IscHazardReportStoreRequest $request): JsonResponse
     {
-        $report = $this->hazardStoreAction->execute(
-            $request->user(),
-            $request->validated(),
-            $request->file('foto'),
-        );
+        try {
+            $report = $this->hazardStoreAction->execute(
+                $request->user(),
+                $request->validated(),
+                $request->file('foto'),
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menyimpan laporan hazard: '.$e->getMessage(),
+            ], 500);
+        }
+
+        $isDemo = $report->status === 'demo' || ! $report->exists;
 
         return response()->json([
             'success' => true,
-            'demo' => $report->status === 'demo',
+            'demo' => $isDemo,
+            'persisted' => ! $isDemo,
             'report_id' => $report->id,
             'event_id' => $report->event_id,
             'intervention_id' => $report->intervention_id,
             'status' => $report->status,
-            'message' => $report->status === 'demo'
+            'foto_path' => $report->foto_path,
+            'message' => $isDemo
                 ? 'Laporan hazard dummy diterima (Belum disimpan ke DB).'
-                : null,
+                : 'Laporan hazard berhasil disimpan ke database.',
         ], 201);
     }
 

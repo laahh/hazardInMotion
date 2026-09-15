@@ -10,8 +10,10 @@ use App\Models\User;
 use App\Services\Isc\IscHazardEmployeeLookupService;
 use App\Services\Isc\IscHazardSysUserLookupService;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use RuntimeException;
+use Throwable;
 
 final class IscHazardReportStoreAction
 {
@@ -45,15 +47,33 @@ final class IscHazardReportStoreAction
         $isDemo = (bool) ($payload['demo'] ?? false) || ($eventId !== null && $eventId >= 9000);
         $tableReady = Schema::hasTable('isc_hazard_reports');
 
+        if (! $isDemo && ! $tableReady) {
+            throw new RuntimeException(
+                'Tabel isc_hazard_reports belum tersedia. Jalankan migration terlebih dahulu.'
+            );
+        }
+
+        if ($pelapor['sid'] === '') {
+            throw new RuntimeException('SID pelapor wajib diisi.');
+        }
+
+        // Hanya tautkan event yang benar-benar ada (hindari gagal FK).
+        $resolvedEventId = null;
+        if (! $isDemo && $eventId !== null && $eventId > 0) {
+            $resolvedEventId = IscBoundaryEvent::query()->whereKey($eventId)->exists()
+                ? $eventId
+                : null;
+        }
+
         $fotoPath = null;
-        if ($foto instanceof UploadedFile && $tableReady && ! $isDemo) {
+        if ($foto instanceof UploadedFile && ! $isDemo && $tableReady) {
             $fotoPath = $foto->store('isc-hazard-reports', 'public');
         } elseif ($foto instanceof UploadedFile) {
             $fotoPath = 'demo/'.$foto->getClientOriginalName();
         }
 
         $attrs = [
-            'event_id' => ($isDemo || $eventId === null || $eventId < 1) ? null : $eventId,
+            'event_id' => $resolvedEventId,
             'intervention_id' => null,
             'created_by' => $user->id,
             'username' => $pelapor['username'],
@@ -80,10 +100,10 @@ final class IscHazardReportStoreAction
             'sub_ketidaksesuaian' => $payload['sub_ketidaksesuaian'] ?? null,
             'quick_action' => $payload['quick_action'] ?? null,
             'deskripsi_temuan' => $payload['deskripsi_temuan'] ?? null,
-            'status' => $isDemo || ! $tableReady ? 'demo' : 'submitted',
+            'status' => $isDemo ? 'demo' : 'submitted',
         ];
 
-        if ($isDemo || ! $tableReady) {
+        if ($isDemo) {
             $report = new IscHazardReport($attrs);
             $report->id = 700000 + random_int(1, 99999);
             $report->exists = false;
@@ -91,20 +111,38 @@ final class IscHazardReportStoreAction
             return $report;
         }
 
-        return DB::transaction(function () use ($user, $payload, $attrs, $eventId): IscHazardReport {
-            $interventionId = null;
-            if ($eventId !== null && $eventId > 0 && IscBoundaryEvent::query()->whereKey($eventId)->exists()) {
+        // Persist langsung ke DB (bukan demo in-memory).
+        $report = IscHazardReport::query()->create($attrs);
+
+        // Intervensi opsional — dipisah agar gagal FK/role tidak mengorbankan laporan.
+        if ($resolvedEventId !== null) {
+            try {
                 $intervention = $this->interventions->execute($user, [
-                    'event_id' => $eventId,
+                    'event_id' => $resolvedEventId,
                     'type' => 'lainnya',
                     'notes' => $payload['deskripsi_temuan'] ?? null,
                 ], []);
-                $interventionId = $intervention->id;
+                $report->intervention_id = $intervention->id;
+                $report->save();
+            } catch (Throwable $e) {
+                report($e);
+                Log::warning('IscHazardReportStoreAction: gagal buat intervention, laporan tetap tersimpan', [
+                    'report_id' => $report->id,
+                    'event_id' => $resolvedEventId,
+                    'error' => $e->getMessage(),
+                ]);
             }
-            $attrs['intervention_id'] = $interventionId;
+        }
 
-            return IscHazardReport::query()->create($attrs);
-        });
+        Log::info('IscHazardReportStoreAction: laporan tersimpan', [
+            'report_id' => $report->id,
+            'event_id' => $report->event_id,
+            'intervention_id' => $report->intervention_id,
+            'sid_pelapor' => $report->sid_pelapor,
+            'created_by' => $report->created_by,
+        ]);
+
+        return $report->fresh() ?? $report;
     }
 
     /**
