@@ -360,15 +360,17 @@
 
     var labels = @json($activeTrendLabels ?? []);
     var series = @json($activeTrendSeries ?? []);
+    var userCounts = @json($activeTrendUserCounts ?? []);
     var chartColor = '#487fff';
 
     if (!labels.length) {
         labels = ['W1','W2','W3','W4','W5','W6','W7','W8','W9','W10','W11','W12'];
         series = [0,0,0,0,0,0,0,0,0,0,0,0];
+        userCounts = [0,0,0,0,0,0,0,0,0,0,0,0];
     }
 
     new ApexCharts(el, {
-        series: [{ name: 'User Aktif', data: series }],
+        series: [{ name: 'Partisipasi Aktif', data: series }],
         chart: {
             type: 'area',
             width: '100%',
@@ -422,11 +424,27 @@
             },
             tooltip: { enabled: false }
         },
-        yaxis: { labels: { show: false } },
+        yaxis: {
+            labels: { show: false },
+            min: 0,
+            forceNiceScale: true
+        },
         tooltip: {
+            shared: false,
+            intersect: true,
             y: {
-                formatter: function (val) {
-                    return val + ' user';
+                formatter: function (val, opts) {
+                    var idx = opts && typeof opts.dataPointIndex === 'number'
+                        ? opts.dataPointIndex
+                        : -1;
+                    var users = idx >= 0 && userCounts[idx] !== undefined
+                        ? Number(userCounts[idx] || 0)
+                        : 0;
+                    var pct = Number(val || 0).toLocaleString('id-ID', {
+                        minimumFractionDigits: 1,
+                        maximumFractionDigits: 1
+                    });
+                    return users.toLocaleString('id-ID') + ' user · ' + pct + '%';
                 }
             }
         }
@@ -3036,11 +3054,11 @@
             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
               <div>
                 <h6 class="mb-2 fw-bold text-lg">Pertumbuhan User Aktif</h6>
-                <span class="text-sm fw-medium text-secondary-light">Weekly Report</span>
+                <span class="text-sm fw-medium text-secondary-light">% partisipasi · Minggu–Sabtu</span>
               </div>
               <div class="text-end">
-                <h6 class="mb-2 fw-bold text-lg">{{ number_format($activeTrendThisWeek ?? 0) }}</h6>
-                <span class="bg-success-focus ps-12 pe-12 pt-2 pb-2 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($activeTrendWeekIncrease ?? 0) }}</span>
+                <h6 class="mb-2 fw-bold text-lg">{{ number_format($activeTrendThisWeekPercent ?? 0, 1) }}%</h6>
+                <span class="bg-success-focus ps-12 pe-12 pt-2 pb-2 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($activeTrendWeekIncrease ?? 0) }} user</span>
               </div>
             </div>
             <div id="revenue-chart" class="mt-28"></div>

@@ -133,7 +133,9 @@ class SportEvaluationDashboardController extends Controller
             'topKomunitas' => [],
             'activeTrendLabels' => [],
             'activeTrendSeries' => [],
+            'activeTrendUserCounts' => [],
             'activeTrendThisWeek' => 0,
+            'activeTrendThisWeekPercent' => 0.0,
             'activeTrendWeekIncrease' => 0,
             'adoptionInstall' => 0,
             'adoptionLoginSuccess' => 0,
@@ -1013,6 +1015,7 @@ class SportEvaluationDashboardController extends Controller
             $rows = $db->table('communities as c')
                 ->leftJoin('community_members as m', 'm.community_id', '=', 'c.id')
                 ->selectRaw('c.id, c.name, COALESCE(COUNT(m.user_id), 0) as members')
+                ->whereRaw('UPPER(TRIM(c.name)) <> ?', ['RUNNING SUNDAY MORNING'])
                 ->groupBy('c.id', 'c.name')
                 ->orderByDesc('members')
                 ->limit(4)
@@ -1040,12 +1043,15 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Tren user aktif 12 minggu terakhir (sama definisi aktif dengan kartu Active Users).
+     * Tren partisipasi user aktif 12 minggu terakhir (Minggu–Sabtu).
+     * Series chart = % aktif / total karyawan; tooltip memakai jumlah user absolut.
      *
      * @return array{
      *     activeTrendLabels:array<int,string>,
-     *     activeTrendSeries:array<int,int>,
+     *     activeTrendSeries:array<int,float>,
+     *     activeTrendUserCounts:array<int,int>,
      *     activeTrendThisWeek:int,
+     *     activeTrendThisWeekPercent:float,
      *     activeTrendWeekIncrease:int
      * }
      */
@@ -1053,27 +1059,45 @@ class SportEvaluationDashboardController extends Controller
     {
         $activeTrendLabels = [];
         $activeTrendSeries = [];
+        $activeTrendUserCounts = [];
         $activeTrendThisWeek = 0;
+        $activeTrendThisWeekPercent = 0.0;
         $activeTrendWeekIncrease = 0;
 
         if (! $this->connection->isUp()) {
             return compact(
                 'activeTrendLabels',
                 'activeTrendSeries',
+                'activeTrendUserCounts',
                 'activeTrendThisWeek',
+                'activeTrendThisWeekPercent',
                 'activeTrendWeekIncrease',
             );
         }
 
         try {
-            // Pakai service yang sudah di-cache (hindari 12× query UNION berat per request).
             $trend = $this->activeStatsService->getWeeklyTrend($this->indexFilters);
             $activeTrendLabels = $trend['labels'] ?? [];
-            $activeTrendSeries = $trend['active_users'] ?? [];
-            $count = count($activeTrendSeries);
-            $activeTrendThisWeek = $count > 0 ? (int) $activeTrendSeries[$count - 1] : 0;
-            $prevWeek = $count > 1 ? (int) $activeTrendSeries[$count - 2] : 0;
+            $activeTrendUserCounts = array_map(
+                static fn (mixed $value): int => (int) $value,
+                $trend['active_users'] ?? [],
+            );
+
+            $totalKaryawan = (int) $this->activeEmployeesBaseQuery()->count('e.id');
+            $activeTrendSeries = [];
+            foreach ($activeTrendUserCounts as $activeCount) {
+                $activeTrendSeries[] = $totalKaryawan > 0
+                    ? round(($activeCount / $totalKaryawan) * 100, 1)
+                    : 0.0;
+            }
+
+            $count = count($activeTrendUserCounts);
+            $activeTrendThisWeek = $count > 0 ? $activeTrendUserCounts[$count - 1] : 0;
+            $prevWeek = $count > 1 ? $activeTrendUserCounts[$count - 2] : 0;
             $activeTrendWeekIncrease = max(0, $activeTrendThisWeek - $prevWeek);
+            $activeTrendThisWeekPercent = $count > 0
+                ? (float) $activeTrendSeries[$count - 1]
+                : 0.0;
         } catch (Throwable $e) {
             report($e);
         }
@@ -1081,7 +1105,9 @@ class SportEvaluationDashboardController extends Controller
         return compact(
             'activeTrendLabels',
             'activeTrendSeries',
+            'activeTrendUserCounts',
             'activeTrendThisWeek',
+            'activeTrendThisWeekPercent',
             'activeTrendWeekIncrease',
         );
     }
