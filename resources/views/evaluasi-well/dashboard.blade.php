@@ -346,6 +346,49 @@
   #installPeopleTable td {
     vertical-align: middle;
   }
+
+  .dt-container:has(#wellnessMetricsTable) .dt-layout-row,
+  #wellnessMetricsTable_wrapper .dt-layout-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+  }
+
+  .dt-container:has(#wellnessMetricsTable) .dt-paging,
+  #wellnessMetricsTable_wrapper .dt-paging {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.375rem;
+  }
+
+  .dt-container:has(#wellnessMetricsTable) .dt-paging .dt-paging-button,
+  #wellnessMetricsTable_wrapper .dt-paging .dt-paging-button {
+    width: auto !important;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.625rem !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    line-height: 1 !important;
+    border-radius: 6px !important;
+  }
+
+  #wellnessMetricsTable th,
+  #wellnessMetricsTable td {
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  #wellnessMetricsTable thead th {
+    font-weight: 600;
+  }
 </style>
 @endsection
 
@@ -380,7 +423,11 @@
         });
     }
 
-    new ApexCharts(el, {
+    function resolveChartHeight() {
+        return Math.max(el.clientHeight || 0, 110);
+    }
+
+    var chartOptions = {
         series: [{ name: 'Partisipasi / minggu', data: series }],
         chart: {
             type: 'area',
@@ -472,7 +519,27 @@
                     + '</div>';
             }
         }
-    }).render();
+    };
+
+    var chart = null;
+
+    function syncChartHeight() {
+        if (!chart) {
+            return;
+        }
+        var nextHeight = resolveChartHeight();
+        if (nextHeight > 0) {
+            chart.updateOptions({ chart: { height: nextHeight } }, false, true);
+        }
+    }
+
+    requestAnimationFrame(function () {
+        chartOptions.chart.height = resolveChartHeight();
+        chart = new ApexCharts(el, chartOptions);
+        chart.render().then(syncChartHeight);
+    });
+
+    window.addEventListener('resize', syncChartHeight);
 })();
 </script>
 <script>
@@ -1034,6 +1101,358 @@
                 table.ajax.reload();
                 updateExportHref();
             }
+        });
+    }
+
+    updateExportHref();
+})();
+</script>
+<script>
+(function () {
+    var tableEl = document.querySelector('#wellnessMetricsTable');
+    if (!tableEl || typeof DataTable === 'undefined') {
+        return;
+    }
+
+    if (DataTable.ext) {
+        DataTable.ext.errMode = 'none';
+    }
+
+    var mitraMode = @json((bool) ($mitraMode ?? false));
+    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '', 'companies' => [], 'pairs' => []]) || {site: '', perusahaan: '', companies: [], pairs: []};
+    var employeeShowBase = @json(url('/evaluasi-well/employees'));
+    var kpiUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.wellness-metrics.kpi')
+            : ($ajaxRoutes['wellnessMetricsKpi'] ?? route('evaluasi-well.wellness-metrics.kpi'))
+    );
+    var dataUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.wellness-metrics.data')
+            : ($ajaxRoutes['wellnessMetricsData'] ?? route('evaluasi-well.wellness-metrics.data'))
+    );
+    var exportUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.wellness-metrics.export')
+            : ($ajaxRoutes['wellnessMetricsExport'] ?? route('evaluasi-well.wellness-metrics.export'))
+    );
+
+    var weekEl = document.querySelector('#wellness-week');
+    var siteEl = document.querySelector('#wellness-site');
+    var companyEl = document.querySelector('#wellness-company');
+    var applyBtn = document.querySelector('#wellness-apply-btn');
+    var resetBtn = document.querySelector('#wellness-reset-btn');
+    var exportBtn = document.querySelector('#wellness-export-btn');
+    var totalBadge = document.querySelector('#wellness-total-badge');
+    var weekLabelEl = document.querySelector('#wellness-week-label');
+
+    if (mitraMode) {
+        var hasMultiScope = window.evaluasiWellMitraHasMultiScope(mitraScope);
+        if (siteEl) {
+            if (!hasMultiScope && mitraScope.site && !Array.from(siteEl.options).some(function (opt) { return opt.value === mitraScope.site; })) {
+                siteEl.appendChild(new Option(mitraScope.site, mitraScope.site, true, true));
+            }
+            siteEl.value = hasMultiScope ? '' : (mitraScope.site || '');
+            siteEl.disabled = true;
+        }
+        if (companyEl) {
+            if (!hasMultiScope && mitraScope.perusahaan && !Array.from(companyEl.options).some(function (opt) { return opt.value === mitraScope.perusahaan; })) {
+                companyEl.appendChild(new Option(mitraScope.perusahaan, mitraScope.perusahaan, true, true));
+            }
+            companyEl.value = hasMultiScope ? '' : (mitraScope.perusahaan || '');
+            companyEl.disabled = true;
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function formatNum(value, digits) {
+        return Number(value || 0).toLocaleString('id-ID', {
+            minimumFractionDigits: digits,
+            maximumFractionDigits: digits
+        });
+    }
+
+    function currentFilters() {
+        var filters = {
+            week_start: weekEl ? weekEl.value : '',
+            site: mitraMode ? '' : (siteEl ? siteEl.value : ''),
+            company: mitraMode ? '' : (companyEl ? companyEl.value : '')
+        };
+        return window.evaluasiWellAppendMitraScope(filters, mitraMode, mitraScope);
+    }
+
+    function updateExportHref() {
+        if (!exportBtn) {
+            return;
+        }
+        var filters = currentFilters();
+        var params = new URLSearchParams();
+        Object.keys(filters).forEach(function (key) {
+            if (filters[key] !== undefined && filters[key] !== null && String(filters[key]) !== '') {
+                params.set(key, filters[key]);
+            }
+        });
+        var searchApi = table.search();
+        if (searchApi) {
+            params.set('search', searchApi);
+        }
+        exportBtn.href = exportUrl + (exportUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
+    }
+
+    function applyKpiPayload(payload) {
+        if (!payload) {
+            return;
+        }
+        var durasiEl = document.querySelector('#wellness-kpi-durasi');
+        var durasiInc = document.querySelector('#wellness-kpi-durasi-inc');
+        var intensitasEl = document.querySelector('#wellness-kpi-intensitas');
+        var intensitasDist = document.querySelector('#wellness-kpi-intensitas-dist');
+        var intensitasInc = document.querySelector('#wellness-kpi-intensitas-inc');
+        var frekuensiEl = document.querySelector('#wellness-kpi-frekuensi');
+        var frekuensiInc = document.querySelector('#wellness-kpi-frekuensi-inc');
+        var kaloriOut = document.querySelector('#wellness-kpi-kalori-out');
+        var kaloriIn = document.querySelector('#wellness-kpi-kalori-in');
+        var kaloriInc = document.querySelector('#wellness-kpi-kalori-inc');
+        var makroProtein = document.querySelector('#wellness-kpi-makro-protein');
+        var makroPcf = document.querySelector('#wellness-kpi-makro-pcf');
+        var makroInc = document.querySelector('#wellness-kpi-makro-inc');
+
+        if (durasiEl) {
+            durasiEl.innerHTML = formatNum(payload.durasi_total_minutes, 1) + ' <span class="text-sm fw-medium text-secondary-light">menit</span>';
+        }
+        if (durasiInc) {
+            durasiInc.textContent = '+' + formatNum(payload.durasi_increase, 1) + ' (' + formatNum(payload.durasi_increase_percent, 1) + '%)';
+        }
+        if (intensitasEl) {
+            intensitasEl.innerHTML = formatNum(payload.intensitas_avg_hr, 1) + ' <span class="text-sm fw-medium text-secondary-light">bpm</span>';
+        }
+        if (intensitasDist) {
+            intensitasDist.textContent = 'Low ' + formatNum(payload.intensitas_low, 0)
+                + ' · Med ' + formatNum(payload.intensitas_med, 0)
+                + ' · High ' + formatNum(payload.intensitas_high, 0);
+        }
+        if (intensitasInc) {
+            intensitasInc.textContent = '+' + formatNum(payload.intensitas_increase, 1) + ' (' + formatNum(payload.intensitas_increase_percent, 1) + '%)';
+        }
+        if (frekuensiEl) {
+            frekuensiEl.innerHTML = formatNum(payload.frekuensi_total, 0) + ' <span class="text-sm fw-medium text-secondary-light">sesi</span>';
+        }
+        if (frekuensiInc) {
+            frekuensiInc.textContent = '+' + formatNum(payload.frekuensi_increase, 0) + ' (' + formatNum(payload.frekuensi_increase_percent, 1) + '%)';
+        }
+        if (kaloriOut) {
+            kaloriOut.innerHTML = formatNum(payload.kalori_out, 1) + ' <span class="text-sm fw-medium text-secondary-light">kkal out</span>';
+        }
+        if (kaloriIn) {
+            kaloriIn.textContent = 'In ' + formatNum(payload.kalori_in, 1) + ' kkal';
+        }
+        if (kaloriInc) {
+            kaloriInc.textContent = '+' + formatNum(payload.kalori_increase, 1) + ' (' + formatNum(payload.kalori_increase_percent, 1) + '%)';
+        }
+        if (makroProtein) {
+            makroProtein.innerHTML = formatNum(payload.makro_protein, 1) + ' <span class="text-sm fw-medium text-secondary-light">g protein</span>';
+        }
+        if (makroPcf) {
+            makroPcf.textContent = 'Karbo ' + formatNum(payload.makro_carbs, 1) + ' g · Lemak ' + formatNum(payload.makro_fats, 1) + ' g';
+        }
+        if (makroInc) {
+            makroInc.textContent = '+' + formatNum(payload.makro_increase, 1) + ' (' + formatNum(payload.makro_increase_percent, 1) + '%)';
+        }
+        if (totalBadge && payload.user_count !== undefined) {
+            totalBadge.textContent = formatNum(payload.user_count, 0);
+        }
+        if (weekLabelEl && payload.week && payload.week.label) {
+            weekLabelEl.textContent = payload.week.label;
+        }
+    }
+
+    function refreshKpi() {
+        var filters = currentFilters();
+        var params = new URLSearchParams();
+        Object.keys(filters).forEach(function (key) {
+            if (filters[key] !== undefined && filters[key] !== null && String(filters[key]) !== '') {
+                params.set(key, filters[key]);
+            }
+        });
+        fetch(kpiUrl + (kpiUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString(), {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        }).then(function (res) {
+            return res.ok ? res.json() : null;
+        }).then(function (payload) {
+            if (payload) {
+                applyKpiPayload(payload);
+            }
+        }).catch(function () {});
+    }
+
+    var table = new DataTable(tableEl, {
+        processing: true,
+        serverSide: true,
+        searching: true,
+        pageLength: 10,
+        lengthMenu: [10, 25, 50, 100],
+        order: [[0, 'asc']],
+        columnDefs: [
+            { orderable: false, targets: [4, 5, 6] }
+        ],
+        ajax: {
+            url: dataUrl,
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            data: function (d) {
+                var filters = currentFilters();
+                d.week_start = filters.week_start;
+                d.site = filters.site;
+                d.company = filters.company;
+                if (mitraMode && filters.company) {
+                    d.perusahaan = filters.company;
+                }
+                if (filters.companies) {
+                    d.companies = filters.companies;
+                }
+                if (filters.pairs) {
+                    d.pairs = filters.pairs;
+                }
+            },
+            error: function (xhr, error) {
+                if (typeof console !== 'undefined' && console.error) {
+                    console.error('Metrik Wellness: gagal memuat data', error, xhr && xhr.status);
+                }
+            }
+        },
+        columns: [
+            {
+                data: 'nama',
+                render: function (data, type, row) {
+                    if (type !== 'display') {
+                        return data;
+                    }
+                    return '<a href="' + employeeShowBase + '/' + row.id + '" class="text-primary-light hover-text-primary fw-medium">'
+                        + escapeHtml(data)
+                        + '</a>';
+                }
+            },
+            { data: 'site' },
+            { data: 'perusahaan' },
+            { data: 'jabatan' },
+            {
+                data: 'durasi_minutes',
+                render: function (data) {
+                    return formatNum(data, 1);
+                }
+            },
+            {
+                data: 'avg_hr',
+                render: function (data) {
+                    return data === null || data === undefined ? '-' : formatNum(data, 1);
+                }
+            },
+            { data: 'intensitas' },
+            {
+                data: 'frekuensi',
+                render: function (data) {
+                    return formatNum(data, 0);
+                }
+            },
+            {
+                data: 'kalori_out',
+                render: function (data) {
+                    return formatNum(data, 1);
+                }
+            },
+            {
+                data: 'kalori_in',
+                render: function (data) {
+                    return formatNum(data, 1);
+                }
+            },
+            {
+                data: 'protein_g',
+                render: function (data) {
+                    return formatNum(data, 1);
+                }
+            },
+            {
+                data: 'carbs_g',
+                render: function (data) {
+                    return formatNum(data, 1);
+                }
+            },
+            {
+                data: 'fats_g',
+                render: function (data) {
+                    return formatNum(data, 1);
+                }
+            }
+        ],
+        language: {
+            processing: 'Memuat...',
+            search: 'Cari:',
+            lengthMenu: 'Tampilkan _MENU_ data',
+            info: 'Menampilkan _START_–_END_ dari _TOTAL_ data',
+            infoEmpty: 'Tidak ada data',
+            infoFiltered: '(difilter dari _MAX_ total data)',
+            zeroRecords: 'Tidak ada data untuk filter ini.',
+            paginate: {
+                first: '«',
+                last: '»',
+                next: '›',
+                previous: '‹'
+            }
+        }
+    });
+
+    table.on('draw', function () {
+        if (totalBadge) {
+            totalBadge.textContent = Number(table.page.info().recordsDisplay || 0).toLocaleString('id-ID');
+        }
+        updateExportHref();
+    });
+
+    table.on('search.dt', function () {
+        updateExportHref();
+    });
+
+    function reloadAll() {
+        refreshKpi();
+        table.ajax.reload();
+        updateExportHref();
+    }
+
+    if (applyBtn) {
+        applyBtn.addEventListener('click', reloadAll);
+    }
+
+    if (weekEl) {
+        weekEl.addEventListener('change', reloadAll);
+    }
+
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+            if (weekEl && weekEl.options.length) {
+                weekEl.selectedIndex = 0;
+            }
+            if (siteEl) {
+                siteEl.value = mitraMode ? (window.evaluasiWellMitraHasMultiScope(mitraScope) ? '' : (mitraScope.site || '')) : '';
+            }
+            if (companyEl) {
+                companyEl.value = mitraMode ? (window.evaluasiWellMitraHasMultiScope(mitraScope) ? '' : (mitraScope.perusahaan || '')) : '';
+            }
+            table.search('');
+            reloadAll();
         });
     }
 
@@ -3085,7 +3504,7 @@
                 <span class="bg-success-focus ps-12 pe-12 pt-2 pb-2 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($activeTrendWeekIncrease ?? 0) }} user</span>
               </div>
             </div>
-            <div id="revenue-chart" class="mt-12 flex-grow-1" style="min-height: 0;"></div>
+            <div id="revenue-chart" class="mt-12 flex-grow-1" style="min-height: 0; height: 100%;"></div>
           </div>
         </div>
       </div>
@@ -3322,6 +3741,7 @@
       </div>
       <!-- Top User End -->
 
+      @include('evaluasi-well.partials._wellness-metrics')
 
       <!-- Belum Install Start -->
       <div class="col-12">

@@ -13,6 +13,7 @@ use App\Services\SportEvaluation\SportEvaluationEmployeeExclusionRules;
 use App\Services\SportEvaluation\SportEvaluationInstallStatsService;
 use App\Services\SportEvaluation\SportEvaluationKaryawanWellSiteResolver;
 use App\Services\SportEvaluation\SportEvaluationMitraAssignmentService;
+use App\Services\SportEvaluation\SportEvaluationWellnessMetricsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -27,6 +28,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
         BewellConnectionService $connection,
         SportEvaluationInstallStatsService $installStatsService,
         SportEvaluationActiveStatsService $activeStatsService,
+        SportEvaluationWellnessMetricsService $wellnessMetricsService,
         SportEvaluationKaryawanWellSiteResolver $siteResolver,
         SportEvaluationDivisiGroupResolver $divisiGroupResolver,
         SportEvaluationMitraAssignmentService $mitraAssignmentService,
@@ -39,6 +41,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
             $connection,
             $installStatsService,
             $activeStatsService,
+            $wellnessMetricsService,
             $siteResolver,
             $divisiGroupResolver,
             $mitraAssignmentService,
@@ -118,6 +121,32 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
                 'notInstalledDepartements' => [],
                 'notInstalledJabatanFungsionals' => [],
                 'notInstalledWeekLabel' => '',
+                'wellnessDurasiTotal' => 0.0,
+                'wellnessDurasiIncrease' => 0.0,
+                'wellnessDurasiIncreasePercent' => 0.0,
+                'wellnessIntensitasAvgHr' => 0.0,
+                'wellnessIntensitasIncrease' => 0.0,
+                'wellnessIntensitasIncreasePercent' => 0.0,
+                'wellnessIntensitasLow' => 0,
+                'wellnessIntensitasMed' => 0,
+                'wellnessIntensitasHigh' => 0,
+                'wellnessFrekuensiTotal' => 0,
+                'wellnessFrekuensiIncrease' => 0,
+                'wellnessFrekuensiIncreasePercent' => 0.0,
+                'wellnessKaloriOut' => 0.0,
+                'wellnessKaloriIn' => 0.0,
+                'wellnessKaloriIncrease' => 0.0,
+                'wellnessKaloriIncreasePercent' => 0.0,
+                'wellnessMakroProtein' => 0.0,
+                'wellnessMakroCarbs' => 0.0,
+                'wellnessMakroFats' => 0.0,
+                'wellnessMakroIncrease' => 0.0,
+                'wellnessMakroIncreasePercent' => 0.0,
+                'wellnessUserCount' => 0,
+                'wellnessWeek' => ['start' => '', 'end' => '', 'label' => '', 'prev_start' => ''],
+                'wellnessWeekOptions' => [],
+                'wellnessSites' => [],
+                'wellnessCompanies' => [],
             ]);
         }
 
@@ -202,6 +231,51 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
         return parent::activeStatsExport($request);
     }
 
+    public function wellnessMetricsKpi(Request $request): JsonResponse
+    {
+        $scope = $this->requireScopeOrEmpty($request);
+        if ($scope === null) {
+            return response()->json(['available' => false, 'message' => 'Scope mitra belum dipilih.']);
+        }
+
+        $this->applyForcedIndexFilters($scope);
+        $request->merge($this->assignmentService->toFilterPayload($scope));
+
+        return parent::wellnessMetricsKpi($request);
+    }
+
+    public function wellnessMetricsData(Request $request): JsonResponse
+    {
+        $draw = (int) $request->input('draw', 1);
+        $scope = $this->requireScopeOrEmpty($request);
+        if ($scope === null) {
+            return response()->json([
+                'draw' => $draw,
+                'data' => [],
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+            ]);
+        }
+
+        $this->applyForcedIndexFilters($scope);
+        $request->merge($this->assignmentService->toFilterPayload($scope));
+
+        return parent::wellnessMetricsData($request);
+    }
+
+    public function wellnessMetricsExport(Request $request): JsonResponse
+    {
+        $scope = $this->requireScopeOrEmpty($request);
+        if ($scope === null) {
+            return response()->json(['message' => 'Scope mitra belum dipilih.'], 422);
+        }
+
+        $this->applyForcedIndexFilters($scope);
+        $request->merge($this->assignmentService->toFilterPayload($scope));
+
+        return parent::wellnessMetricsExport($request);
+    }
+
     public function notInstalledData(Request $request): JsonResponse
     {
         $draw = (int) $request->input('draw', 1);
@@ -269,6 +343,9 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
             'installStatsExport' => route('evaluasi-well.mitra.install-stats.export'),
             'activeStats' => route('evaluasi-well.mitra.active-stats'),
             'activeStatsExport' => route('evaluasi-well.mitra.active-stats.export'),
+            'wellnessMetricsKpi' => route('evaluasi-well.mitra.wellness-metrics.kpi'),
+            'wellnessMetricsData' => route('evaluasi-well.mitra.wellness-metrics.data'),
+            'wellnessMetricsExport' => route('evaluasi-well.mitra.wellness-metrics.export'),
             'index' => route('evaluasi-well.mitra.index'),
         ];
     }

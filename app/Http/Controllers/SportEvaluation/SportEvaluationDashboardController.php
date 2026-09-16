@@ -14,6 +14,7 @@ use App\Services\SportEvaluation\SportEvaluationEmployeeExclusionRules;
 use App\Services\SportEvaluation\SportEvaluationInstallStatsService;
 use App\Services\SportEvaluation\SportEvaluationKaryawanWellSiteResolver;
 use App\Services\SportEvaluation\SportEvaluationMitraAssignmentService;
+use App\Services\SportEvaluation\SportEvaluationWellnessMetricsService;
 use App\Support\SpreadsheetExporter;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
@@ -50,6 +51,7 @@ class SportEvaluationDashboardController extends Controller
         private readonly BewellConnectionService $connection,
         private readonly SportEvaluationInstallStatsService $installStatsService,
         private readonly SportEvaluationActiveStatsService $activeStatsService,
+        private readonly SportEvaluationWellnessMetricsService $wellnessMetricsService,
         private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
         private readonly SportEvaluationDivisiGroupResolver $divisiGroupResolver,
         private readonly SportEvaluationMitraAssignmentService $mitraAssignmentService,
@@ -77,6 +79,7 @@ class SportEvaluationDashboardController extends Controller
         if (! $this->connection->isUp()) {
             return array_merge(
                 $this->emptyDashboardPayload(),
+                $this->wellnessMetricsService->getDashboardPayload($this->indexFilters),
                 [
                     'mitraMode' => $this->hasIndexScope(),
                     'mitraScope' => $this->indexFilters,
@@ -98,6 +101,7 @@ class SportEvaluationDashboardController extends Controller
             $this->siteDistributionData(),
             $this->weeklyActivityData(),
             $this->notInstalledFilterData(),
+            $this->wellnessMetricsService->getDashboardPayload($this->indexFilters),
             [
                 'mitraMode' => $this->hasIndexScope(),
                 'mitraScope' => $this->indexFilters,
@@ -164,6 +168,32 @@ class SportEvaluationDashboardController extends Controller
             'notInstalledDepartements' => [],
             'notInstalledJabatanFungsionals' => [],
             'notInstalledWeekLabel' => '',
+            'wellnessDurasiTotal' => 0.0,
+            'wellnessDurasiIncrease' => 0.0,
+            'wellnessDurasiIncreasePercent' => 0.0,
+            'wellnessIntensitasAvgHr' => 0.0,
+            'wellnessIntensitasIncrease' => 0.0,
+            'wellnessIntensitasIncreasePercent' => 0.0,
+            'wellnessIntensitasLow' => 0,
+            'wellnessIntensitasMed' => 0,
+            'wellnessIntensitasHigh' => 0,
+            'wellnessFrekuensiTotal' => 0,
+            'wellnessFrekuensiIncrease' => 0,
+            'wellnessFrekuensiIncreasePercent' => 0.0,
+            'wellnessKaloriOut' => 0.0,
+            'wellnessKaloriIn' => 0.0,
+            'wellnessKaloriIncrease' => 0.0,
+            'wellnessKaloriIncreasePercent' => 0.0,
+            'wellnessMakroProtein' => 0.0,
+            'wellnessMakroCarbs' => 0.0,
+            'wellnessMakroFats' => 0.0,
+            'wellnessMakroIncrease' => 0.0,
+            'wellnessMakroIncreasePercent' => 0.0,
+            'wellnessUserCount' => 0,
+            'wellnessWeek' => ['start' => '', 'end' => '', 'label' => '', 'prev_start' => ''],
+            'wellnessWeekOptions' => [],
+            'wellnessSites' => [],
+            'wellnessCompanies' => [],
         ];
     }
 
@@ -466,6 +496,147 @@ class SportEvaluationDashboardController extends Controller
             report($e);
 
             return response()->json(['message' => 'Gagal mengekspor data user aktif.'], 500);
+        }
+    }
+
+    /**
+     * KPI JSON metrik wellness (saat ganti minggu di dashboard).
+     */
+    public function wellnessMetricsKpi(Request $request): JsonResponse
+    {
+        $this->ensureMitraAssignmentScope($request);
+
+        $weekStart = is_string($request->input('week_start'))
+            ? $request->input('week_start')
+            : null;
+
+        try {
+            return response()->json(
+                $this->wellnessMetricsService->getKpiPayload($this->indexFilters, $weekStart)
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json(['available' => false, 'message' => 'Gagal memuat KPI wellness.'], 500);
+        }
+    }
+
+    /**
+     * DataTables server-side metrik wellness per karyawan.
+     */
+    public function wellnessMetricsData(Request $request): JsonResponse
+    {
+        $this->ensureMitraAssignmentScope($request);
+        $draw = (int) $request->input('draw', 1);
+
+        $weekStart = is_string($request->input('week_start'))
+            ? $request->input('week_start')
+            : null;
+        $site = trim((string) $request->input('site', ''));
+        $company = trim((string) $request->input('company', $request->input('perusahaan', '')));
+        $search = trim((string) $request->input('search.value', ''));
+        $start = max(0, (int) $request->input('start', 0));
+        $length = (int) $request->input('length', 10);
+        if ($length < 1) {
+            $length = 10;
+        }
+        if ($length > 100) {
+            $length = 100;
+        }
+        $orderColumnIndex = (int) data_get($request->input('order'), '0.column', 0);
+        $orderDir = (string) data_get($request->input('order'), '0.dir', 'asc');
+
+        return response()->json(
+            $this->wellnessMetricsService->datatable(
+                $draw,
+                $start,
+                $length,
+                $search,
+                $orderColumnIndex,
+                $orderDir,
+                $this->indexFilters,
+                $weekStart,
+                $site,
+                $company,
+            )
+        );
+    }
+
+    /**
+     * Export Excel metrik wellness per karyawan.
+     */
+    public function wellnessMetricsExport(Request $request): JsonResponse
+    {
+        $this->ensureMitraAssignmentScope($request);
+
+        if (! $this->connection->isUp()) {
+            return response()->json(['message' => 'Koneksi BeWell tidak tersedia.'], 503);
+        }
+
+        $weekStart = is_string($request->input('week_start'))
+            ? $request->input('week_start')
+            : null;
+        $site = trim((string) $request->input('site', ''));
+        $company = trim((string) $request->input('company', $request->input('perusahaan', '')));
+        $search = trim((string) $request->query('search', ''));
+
+        try {
+            $payload = $this->wellnessMetricsService->exportRows(
+                $this->indexFilters,
+                $weekStart,
+                $site,
+                $company,
+                $search,
+            );
+            $week = $payload['week'];
+            $rows = $payload['rows'];
+
+            $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
+                'Nama',
+                'Site',
+                'Perusahaan',
+                'Jabatan',
+                'Durasi (menit)',
+                'Avg HR',
+                'Intensitas',
+                'Frekuensi',
+                'Kalori Out',
+                'Kalori In',
+                'Protein (g)',
+                'Karbo (g)',
+                'Lemak (g)',
+            ]);
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Metrik Wellness');
+
+            $rowNum = 2;
+            foreach ($rows as $row) {
+                $sheet->fromArray([
+                    $row['nama'],
+                    $row['site'],
+                    $row['perusahaan'],
+                    $row['jabatan'],
+                    $row['durasi_minutes'],
+                    $row['avg_hr'] ?? '-',
+                    $row['intensitas'],
+                    $row['frekuensi'],
+                    $row['kalori_out'],
+                    $row['kalori_in'],
+                    $row['protein_g'],
+                    $row['carbs_g'],
+                    $row['fats_g'],
+                ], null, 'A'.$rowNum);
+                $rowNum++;
+            }
+
+            SpreadsheetExporter::download(
+                $spreadsheet,
+                'evaluasi_well_metrik_wellness_'.$week['start'].'_'.$week['end'].'_'.date('Ymd_His').'.xlsx'
+            );
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => 'Gagal mengekspor metrik wellness.'], 500);
         }
     }
 

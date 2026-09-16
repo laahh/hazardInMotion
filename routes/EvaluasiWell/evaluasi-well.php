@@ -46,6 +46,13 @@ Route::middleware('evaluasi-well.access')
         Route::get('/active-stats/export', [SportEvaluationDashboardController::class, 'activeStatsExport'])
             ->name('active-stats.export');
 
+        Route::get('/wellness-metrics/kpi', [SportEvaluationDashboardController::class, 'wellnessMetricsKpi'])
+            ->name('wellness-metrics.kpi');
+        Route::get('/wellness-metrics/data', [SportEvaluationDashboardController::class, 'wellnessMetricsData'])
+            ->name('wellness-metrics.data');
+        Route::get('/wellness-metrics/export', [SportEvaluationDashboardController::class, 'wellnessMetricsExport'])
+            ->name('wellness-metrics.export');
+
         Route::get('/mitra', [SportEvaluationMitraDashboardController::class, 'index'])
             ->name('mitra.index');
         Route::get('/mitra/install-stats', [SportEvaluationMitraDashboardController::class, 'installStats'])
@@ -56,6 +63,12 @@ Route::middleware('evaluasi-well.access')
             ->name('mitra.active-stats');
         Route::get('/mitra/active-stats/export', [SportEvaluationMitraDashboardController::class, 'activeStatsExport'])
             ->name('mitra.active-stats.export');
+        Route::get('/mitra/wellness-metrics/kpi', [SportEvaluationMitraDashboardController::class, 'wellnessMetricsKpi'])
+            ->name('mitra.wellness-metrics.kpi');
+        Route::get('/mitra/wellness-metrics/data', [SportEvaluationMitraDashboardController::class, 'wellnessMetricsData'])
+            ->name('mitra.wellness-metrics.data');
+        Route::get('/mitra/wellness-metrics/export', [SportEvaluationMitraDashboardController::class, 'wellnessMetricsExport'])
+            ->name('mitra.wellness-metrics.export');
         Route::get('/mitra/not-installed/data', [SportEvaluationMitraDashboardController::class, 'notInstalledData'])
             ->name('mitra.not-installed.data');
         Route::get('/mitra/not-installed/export', [SportEvaluationMitraDashboardController::class, 'notInstalledExport'])
