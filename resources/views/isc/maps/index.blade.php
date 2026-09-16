@@ -41,14 +41,6 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20H4z"/><path d="M9 20v-6h6v6"/></svg>
       <span>Beranda</span>
     </button>
-    <button type="button" class="gm-rail-btn" id="gm-saved-btn" data-rail="saved">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v16l-5-3-5 3z"/></svg>
-      <span>Disimpan</span>
-    </button>
-    <button type="button" class="gm-rail-btn" id="gm-recents-btn" data-rail="recents">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>
-      <span>Terbaru</span>
-    </button>
     <button type="button" class="gm-rail-btn" id="gm-postevent-btn" data-rail="postevent">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V7"/><path d="M4 19h16"/><path d="M8 15l3-4 3 3 4-6"/></svg>
       <span>Post-event</span>
@@ -262,44 +254,6 @@
         </article>
       </div>
 
-      <div class="gm-hud-view" data-view="saved" id="gm-view-saved" hidden>
-        <article class="gm-hud-card is-saved">
-          <div class="gm-hud-card-top">
-            <span class="gm-hud-ico saved" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M7 4h10v16l-5-3-5 3z"/></svg>
-            </span>
-            <div class="gm-hud-head">
-              <p class="gm-hud-kicker">Lokasi disimpan</p>
-              <p class="gm-hud-value"><b id="hud-saved-count">0</b> <small>tempat</small></p>
-            </div>
-            <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
-              <path d="M2 20 C12 20 18 8 28 12 C38 16 42 24 54 16 C66 8 74 14 86 10" />
-            </svg>
-          </div>
-          <p class="gm-hud-foot">Boundary atau zona yang Anda tandai</p>
-        </article>
-        <div id="gm-saved-cards" class="gm-hud-place-stack"></div>
-      </div>
-
-      <div class="gm-hud-view" data-view="recents" id="gm-view-recents" hidden>
-        <article class="gm-hud-card is-recent">
-          <div class="gm-hud-card-top">
-            <span class="gm-hud-ico recent" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>
-            </span>
-            <div class="gm-hud-head">
-              <p class="gm-hud-kicker">Dilihat baru-baru ini</p>
-              <p class="gm-hud-value"><b id="hud-recent-count">0</b> <small>tempat</small></p>
-            </div>
-            <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
-              <path d="M2 16 C10 16 14 24 24 18 C34 12 40 6 50 12 C60 18 68 22 86 14" />
-            </svg>
-          </div>
-          <p class="gm-hud-foot">Zona yang terakhir dibuka di peta</p>
-        </article>
-        <div id="gm-recent-cards" class="gm-hud-place-stack"></div>
-      </div>
-
       <div class="gm-hud-view" data-view="postevent" id="gm-view-postevent" hidden>
         <article class="gm-hud-card is-postevent">
           <div class="gm-hud-card-top">
@@ -411,6 +365,10 @@
     <aside class="gm-panel is-closed" id="gm-panel" aria-label="Hasil peta">
       <div class="gm-results" id="gm-results">
         <div class="gm-results-head">
+          <button type="button" class="gm-panel-back" id="gm-panel-back" aria-label="Kembali ke beranda">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7"/></svg>
+            <span>Kembali</span>
+          </button>
           <div>
             <p class="gm-kicker">Boundary Besigma</p>
             <p id="gm-status">{{ $connected ? 'Besigma terhubung' : 'IUPK tampil · Besigma belum terhubung' }}</p>

@@ -1125,6 +1125,31 @@
     syncShell();
   }
 
+  function exitPanelToHome() {
+    listMode = "all";
+    rosterFilter = { type: "in", site: hudSite, safety: "", kind: "" };
+    document.querySelectorAll("[data-roster]").forEach(function (el) {
+      el.classList.remove("is-on");
+    });
+    var exportBtn = document.getElementById("gm-roster-export");
+    if (exportBtn) {
+      exportBtn.hidden = true;
+    }
+    var kicker = document.querySelector(".gm-results-head .gm-kicker");
+    if (kicker) {
+      kicker.textContent = "Boundary Besigma";
+    }
+    if (liveStatus) {
+      liveStatus.textContent = mapEl.getAttribute("data-connected") === "1"
+        ? "Besigma terhubung"
+        : "IUPK tampil · Besigma belum terhubung";
+    }
+    closePlace();
+    closePanel();
+    applyScope();
+    syncShell();
+  }
+
   function replayViewAnim() {
     var view = document.querySelector(".gm-hud-view.is-on");
     if (!view) {
@@ -1137,6 +1162,9 @@
 
   function setRailView(name) {
     railView = name || "home";
+    if (railView === "saved" || railView === "recents") {
+      railView = "home";
+    }
     document.querySelectorAll("[data-rail]").forEach(function (el) {
       el.classList.toggle("is-on", el.getAttribute("data-rail") === railView);
     });
@@ -1153,13 +1181,7 @@
     }
     closePanel();
     closePlace();
-    if (railView === "saved") {
-      listMode = "saved";
-      paintSavedView();
-    } else if (railView === "recents") {
-      listMode = "recents";
-      paintRecentsView();
-    } else if (railView === "menu") {
+    if (railView === "menu") {
       listMode = "all";
       paintMenuView();
     } else if (railView === "postevent") {
@@ -4051,6 +4073,15 @@
     }
     closePlace();
   });
+  var panelBack = document.getElementById("gm-panel-back");
+  if (panelBack) {
+    panelBack.addEventListener("click", function () {
+      if (searchInput) {
+        searchInput.value = query;
+      }
+      exitPanelToHome();
+    });
+  }
   var rosterExport = document.getElementById("gm-roster-export");
   if (rosterExport) {
     rosterExport.addEventListener("click", function () {
@@ -4079,13 +4110,6 @@
     });
   }
 
-  document.getElementById("gm-saved-btn").addEventListener("click", function () {
-    setRailView("saved");
-  });
-
-  document.getElementById("gm-recents-btn").addEventListener("click", function () {
-    setRailView("recents");
-  });
   var postEventBtn = document.getElementById("gm-postevent-btn");
   if (postEventBtn) {
     postEventBtn.addEventListener("click", function () {

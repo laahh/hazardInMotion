@@ -776,6 +776,42 @@ div.gm-hud-metric:hover { transform: none; }
   padding: 16px 16px 10px;
 }
 
+.gm-panel-back {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 12px 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: #f1f3f4;
+  color: var(--gm-ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.gm-panel-back:hover {
+  background: #e8eaed;
+}
+
+.gm-panel-back svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.gm-results-head > div:first-of-type {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .gm-kicker {
   margin: 0 0 2px;
   color: var(--gm-blue);
