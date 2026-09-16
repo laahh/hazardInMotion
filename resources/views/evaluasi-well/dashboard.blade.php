@@ -2876,6 +2876,31 @@
           
           <div class="col-xxl-4 col-sm-6">
             <div
+              class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-3"
+              id="total-karyawan-card"
+            >
+              <div class="card-body p-0">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+                  
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="mb-0 w-48-px h-48-px bg-yellow text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
+                        <iconify-icon icon="mingcute:user-3-fill" class="icon"></iconify-icon>  
+                      </span>
+                      <div>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total Karyawan</span>
+                        <h6 class="fw-semibold">{{ number_format($totalKaryawan ?? $siteTotalEmployees ?? 0) }}</h6>
+                      </div>
+                    </div>
+                  
+                    <div id="total-sales-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+                </div>
+                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalKaryawanWeekIncrease ?? 0) }}</span> this week</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-xxl-4 col-sm-6">
+            <div
               class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-1 cursor-pointer"
               role="button"
               tabindex="0"
@@ -2932,28 +2957,6 @@
                     <div id="active-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
                 <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($activeUsersWeekIncrease ?? 0) }}</span> this week</p>
-              </div>
-            </div>
-          </div>
-          
-          <div class="col-xxl-4 col-sm-6">
-            <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-3">
-              <div class="card-body p-0">
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
-                  
-                    <div class="d-flex align-items-center gap-2">
-                      <span class="mb-0 w-48-px h-48-px bg-yellow text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
-                        <iconify-icon icon="iconamoon:discount-fill" class="icon"></iconify-icon>  
-                      </span>
-                      <div>
-                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total Strava Connect</span>
-                        <h6 class="fw-semibold">50 orang</h6>
-                      </div>
-                    </div>
-                  
-                    <div id="total-sales-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
-                </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalStravaConnectWeekIncrease ?? 0) }}</span> this week</p>
               </div>
             </div>
           </div>

@@ -88,7 +88,7 @@ class SportEvaluationDashboardController extends Controller
         return array_merge(
             $this->newUsersCardData(),
             $this->activeUsersCardData(),
-            $this->stravaConnectCardData(),
+            $this->totalKaryawanCardData(),
             $this->engagementCardsData(),
             $this->topKomunitasData(),
             $this->activeUsersWeeklyTrendData(),
@@ -116,8 +116,8 @@ class SportEvaluationDashboardController extends Controller
             'newUsersWeekIncrease' => 0,
             'activeUsersTotal' => 0,
             'activeUsersWeekIncrease' => 0,
-            'totalStravaConnect' => 0,
-            'totalStravaConnectWeekIncrease' => 0,
+            'totalKaryawan' => 0,
+            'totalKaryawanWeekIncrease' => 0,
             'totalKomunitas' => 0,
             'totalKomunitasWeekIncrease' => 0,
             'totalMainBareng' => 0,
@@ -778,47 +778,46 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Total Strava Connect = jumlah user di strava_connections.
+     * Total Karyawan = karyawan status AKTIF setelah exclusion rules
+     * (VISITOR, Yayasan Dharma Bakti, Berau intern/poltek/kampus merdeka/prakerin, dll).
      *
-     * @return array{totalStravaConnect:int, totalStravaConnectWeekIncrease:int}
+     * @return array{totalKaryawan:int, totalKaryawanWeekIncrease:int}
      */
-    private function stravaConnectCardData(): array
+    private function totalKaryawanCardData(): array
     {
-        $totalStravaConnect = 0;
-        $totalStravaConnectWeekIncrease = 0;
+        $totalKaryawan = 0;
+        $totalKaryawanWeekIncrease = 0;
 
         if (! $this->connection->isUp()) {
-            return compact('totalStravaConnect', 'totalStravaConnectWeekIncrease');
+            return compact('totalKaryawan', 'totalKaryawanWeekIncrease');
         }
 
         try {
-            $db = DB::connection(BewellConnectionService::CONNECTION);
-            $now = Carbon::now();
-            $weekStart = $now->copy()->startOfWeek()->format('Y-m-d H:i:s');
-            $weekEnd = $now->copy()->endOfWeek()->format('Y-m-d H:i:s');
-            $lastWeekStart = $now->copy()->subWeek()->startOfWeek()->format('Y-m-d H:i:s');
-            $lastWeekEnd = $now->copy()->subWeek()->endOfWeek()->format('Y-m-d H:i:s');
+            $totalKaryawan = (int) $this->activeEmployeesBaseQuery()->count('e.id');
 
-            $totalStravaConnect = (int) $this->applyScopedUserIds(
-                $db->table('strava_connections'),
-                'user_id'
-            )->count();
+            $week = $this->activeStatsService->resolveWeekRange(null);
+            $from = $week['start'].' 00:00:00';
+            $to = Carbon::parse($week['end'])->endOfDay()->format('Y-m-d H:i:s');
+            $prevFrom = $week['prev_start'].' 00:00:00';
+            $prevTo = Carbon::parse($week['prev_start'])
+                ->startOfWeek(Carbon::SUNDAY)
+                ->endOfWeek(Carbon::SATURDAY)
+                ->endOfDay()
+                ->format('Y-m-d H:i:s');
 
-            $thisWeek = (int) $this->applyScopedUserIds(
-                $db->table('strava_connections')->whereBetween('connected_at', [$weekStart, $weekEnd]),
-                'user_id'
-            )->count();
-            $lastWeek = (int) $this->applyScopedUserIds(
-                $db->table('strava_connections')->whereBetween('connected_at', [$lastWeekStart, $lastWeekEnd]),
-                'user_id'
-            )->count();
+            $thisWeek = (int) $this->activeEmployeesBaseQuery()
+                ->whereBetween('e.created_at', [$from, $to])
+                ->count('e.id');
+            $lastWeek = (int) $this->activeEmployeesBaseQuery()
+                ->whereBetween('e.created_at', [$prevFrom, $prevTo])
+                ->count('e.id');
 
-            $totalStravaConnectWeekIncrease = max(0, $thisWeek - $lastWeek);
+            $totalKaryawanWeekIncrease = max(0, $thisWeek - $lastWeek);
         } catch (Throwable $e) {
             report($e);
         }
 
-        return compact('totalStravaConnect', 'totalStravaConnectWeekIncrease');
+        return compact('totalKaryawan', 'totalKaryawanWeekIncrease');
     }
 
     /**
