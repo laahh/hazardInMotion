@@ -114,16 +114,22 @@ class SportEvaluationDashboardController extends Controller
         return [
             'newUsersTotal' => 0,
             'newUsersWeekIncrease' => 0,
+            'newUsersWeekIncreasePercent' => 0.0,
             'activeUsersTotal' => 0,
             'activeUsersWeekIncrease' => 0,
+            'activeUsersWeekIncreasePercent' => 0.0,
             'totalKaryawan' => 0,
             'totalKaryawanWeekIncrease' => 0,
+            'totalKaryawanWeekIncreasePercent' => 0.0,
             'totalKomunitas' => 0,
             'totalKomunitasWeekIncrease' => 0,
+            'totalKomunitasWeekIncreasePercent' => 0.0,
             'totalMainBareng' => 0,
             'totalMainBarengWeekIncrease' => 0,
+            'totalMainBarengWeekIncreasePercent' => 0.0,
             'totalGoalAktif' => 0,
             'totalGoalAktifWeekIncrease' => 0,
+            'totalGoalAktifWeekIncreasePercent' => 0.0,
             'topKomunitas' => [],
             'activeTrendLabels' => [],
             'activeTrendSeries' => [],
@@ -668,20 +674,21 @@ class SportEvaluationDashboardController extends Controller
      * Total user install = distinct user yang pernah login_success
      * ATAU punya aktivitas (food/workout) di tanggal berapa pun.
      *
-     * @return array{newUsersTotal:int, newUsersWeekIncrease:int}
+     * @return array{newUsersTotal:int, newUsersWeekIncrease:int, newUsersWeekIncreasePercent:float}
      */
     private function newUsersCardData(): array
     {
         $newUsersTotal = 0;
         $newUsersWeekIncrease = 0;
+        $newUsersWeekIncreasePercent = 0.0;
 
         if (! $this->connection->isUp()) {
-            return compact('newUsersTotal', 'newUsersWeekIncrease');
+            return compact('newUsersTotal', 'newUsersWeekIncrease', 'newUsersWeekIncreasePercent');
         }
 
         try {
             $cached = Cache::remember(
-                'evaluasi_well:new_users_card_v1:'.$this->scopeCacheKey(),
+                'evaluasi_well:new_users_card_v2:'.$this->scopeCacheKey(),
                 300,
                 function (): array {
                     $db = DB::connection(BewellConnectionService::CONNECTION);
@@ -704,7 +711,8 @@ class SportEvaluationDashboardController extends Controller
                     );
                     $total = (int) ($row->c ?? 0);
 
-                    $weekStart = Carbon::now()->startOfWeek()->format('Y-m-d H:i:s');
+                    $week = $this->activeStatsService->resolveWeekRange(null);
+                    $weekStart = $week['start'].' 00:00:00';
 
                     $row = $db->selectOne(
                         'SELECT COUNT(*) AS c FROM (
@@ -717,79 +725,105 @@ class SportEvaluationDashboardController extends Controller
                         array_merge(['login_success'], $inBindings, [$weekStart])
                     );
 
+                    $increase = (int) ($row->c ?? 0);
+
                     return [
                         'newUsersTotal' => $total,
-                        'newUsersWeekIncrease' => (int) ($row->c ?? 0),
+                        'newUsersWeekIncrease' => $increase,
+                        'newUsersWeekIncreasePercent' => $this->weekIncreasePercent($increase, $total),
                     ];
                 }
             );
 
             $newUsersTotal = (int) $cached['newUsersTotal'];
             $newUsersWeekIncrease = (int) $cached['newUsersWeekIncrease'];
+            $newUsersWeekIncreasePercent = (float) $cached['newUsersWeekIncreasePercent'];
         } catch (Throwable $e) {
             report($e);
         }
 
-        return compact('newUsersTotal', 'newUsersWeekIncrease');
+        return compact('newUsersTotal', 'newUsersWeekIncrease', 'newUsersWeekIncreasePercent');
     }
 
     /**
-     * Active users minggu ini: minimal salah satu dari
+     * Active users minggu ini (Minggu–Sabtu): minimal salah satu dari
      * - upload foto makan (food_analyses.source_type = photo)
      * - workout_analyses
      * - aktivitas komunitas (post / join / RSVP)
      * - Main Bareng (host / participant open_play)
      *
-     * @return array{activeUsersTotal:int, activeUsersWeekIncrease:int}
+     * Increase = user aktif minggu ini yang belum aktif minggu sebelumnya.
+     *
+     * @return array{activeUsersTotal:int, activeUsersWeekIncrease:int, activeUsersWeekIncreasePercent:float}
      */
     private function activeUsersCardData(): array
     {
         $activeUsersTotal = 0;
         $activeUsersWeekIncrease = 0;
+        $activeUsersWeekIncreasePercent = 0.0;
 
         if (! $this->connection->isUp()) {
-            return compact('activeUsersTotal', 'activeUsersWeekIncrease');
+            return compact('activeUsersTotal', 'activeUsersWeekIncrease', 'activeUsersWeekIncreasePercent');
         }
 
         try {
-            $thisWeek = $this->activeStatsService->resolveWeekRange(null);
-            $lastWeek = $this->activeStatsService->resolveWeekRange(
-                Carbon::parse($thisWeek['prev_start'])->toDateString()
+            $cached = Cache::remember(
+                'evaluasi_well:active_users_card_v3:'.$this->scopeCacheKey(),
+                300,
+                function (): array {
+                    $thisWeek = $this->activeStatsService->resolveWeekRange(null);
+                    $lastWeek = $this->activeStatsService->resolveWeekRange($thisWeek['prev_start']);
+
+                    $from = $thisWeek['start'].' 00:00:00';
+                    $to = Carbon::parse($thisWeek['end'])->endOfDay()->format('Y-m-d H:i:s');
+                    $prevFrom = $lastWeek['start'].' 00:00:00';
+                    $prevTo = Carbon::parse($lastWeek['end'])->endOfDay()->format('Y-m-d H:i:s');
+
+                    $total = $this->activeStatsService->countActiveUsersInRange(
+                        $from,
+                        $to,
+                        $this->indexFilters,
+                    );
+                    $increase = $this->activeStatsService->countNewlyActiveUsersVsPreviousWeek(
+                        $from,
+                        $to,
+                        $prevFrom,
+                        $prevTo,
+                        $this->indexFilters,
+                    );
+
+                    return [
+                        'activeUsersTotal' => $total,
+                        'activeUsersWeekIncrease' => $increase,
+                        'activeUsersWeekIncreasePercent' => $this->weekIncreasePercent($increase, $total),
+                    ];
+                }
             );
 
-            $thisWeekCount = $this->activeStatsService->countActiveUsersInRange(
-                $thisWeek['start'].' 00:00:00',
-                Carbon::parse($thisWeek['end'])->endOfDay()->format('Y-m-d H:i:s'),
-                $this->indexFilters,
-            );
-            $lastWeekCount = $this->activeStatsService->countActiveUsersInRange(
-                $lastWeek['start'].' 00:00:00',
-                Carbon::parse($lastWeek['end'])->endOfDay()->format('Y-m-d H:i:s'),
-                $this->indexFilters,
-            );
-
-            $activeUsersTotal = $thisWeekCount;
-            $activeUsersWeekIncrease = max(0, $thisWeekCount - $lastWeekCount);
+            $activeUsersTotal = (int) $cached['activeUsersTotal'];
+            $activeUsersWeekIncrease = (int) $cached['activeUsersWeekIncrease'];
+            $activeUsersWeekIncreasePercent = (float) $cached['activeUsersWeekIncreasePercent'];
         } catch (Throwable $e) {
             report($e);
         }
 
-        return compact('activeUsersTotal', 'activeUsersWeekIncrease');
+        return compact('activeUsersTotal', 'activeUsersWeekIncrease', 'activeUsersWeekIncreasePercent');
     }
 
     /**
      * Total Karyawan = karyawan status AKTIF setelah exclusion rules
      * (VISITOR, Yayasan Dharma Bakti, Berau intern/poltek/kampus merdeka/prakerin, dll).
      *
-     * @return array{totalKaryawan:int, totalKaryawanWeekIncrease:int}
+     * @return array{totalKaryawan:int, totalKaryawanWeekIncrease:int, totalKaryawanWeekIncreasePercent:float}
      */
     private function totalKaryawanCardData(): array
     {
         $totalKaryawan = 0;
         $totalKaryawanWeekIncrease = 0;
+        $totalKaryawanWeekIncreasePercent = 0.0;
 
         if (! $this->connection->isUp()) {
-            return compact('totalKaryawan', 'totalKaryawanWeekIncrease');
+            return compact('totalKaryawan', 'totalKaryawanWeekIncrease', 'totalKaryawanWeekIncreasePercent');
         }
 
         try {
@@ -813,11 +847,15 @@ class SportEvaluationDashboardController extends Controller
                 ->count('e.id');
 
             $totalKaryawanWeekIncrease = max(0, $thisWeek - $lastWeek);
+            $totalKaryawanWeekIncreasePercent = $this->weekIncreasePercent(
+                $totalKaryawanWeekIncrease,
+                $totalKaryawan,
+            );
         } catch (Throwable $e) {
             report($e);
         }
 
-        return compact('totalKaryawan', 'totalKaryawanWeekIncrease');
+        return compact('totalKaryawan', 'totalKaryawanWeekIncrease', 'totalKaryawanWeekIncreasePercent');
     }
 
     /**
@@ -826,39 +864,49 @@ class SportEvaluationDashboardController extends Controller
      * @return array{
      *     totalKomunitas:int,
      *     totalKomunitasWeekIncrease:int,
+     *     totalKomunitasWeekIncreasePercent:float,
      *     totalMainBareng:int,
      *     totalMainBarengWeekIncrease:int,
+     *     totalMainBarengWeekIncreasePercent:float,
      *     totalGoalAktif:int,
-     *     totalGoalAktifWeekIncrease:int
+     *     totalGoalAktifWeekIncrease:int,
+     *     totalGoalAktifWeekIncreasePercent:float
      * }
      */
     private function engagementCardsData(): array
     {
         $totalKomunitas = 0;
         $totalKomunitasWeekIncrease = 0;
+        $totalKomunitasWeekIncreasePercent = 0.0;
         $totalMainBareng = 0;
         $totalMainBarengWeekIncrease = 0;
+        $totalMainBarengWeekIncreasePercent = 0.0;
         $totalGoalAktif = 0;
         $totalGoalAktifWeekIncrease = 0;
+        $totalGoalAktifWeekIncreasePercent = 0.0;
 
         if (! $this->connection->isUp()) {
             return compact(
                 'totalKomunitas',
                 'totalKomunitasWeekIncrease',
+                'totalKomunitasWeekIncreasePercent',
                 'totalMainBareng',
                 'totalMainBarengWeekIncrease',
+                'totalMainBarengWeekIncreasePercent',
                 'totalGoalAktif',
                 'totalGoalAktifWeekIncrease',
+                'totalGoalAktifWeekIncreasePercent',
             );
         }
 
         try {
             $db = DB::connection(BewellConnectionService::CONNECTION);
-            $now = Carbon::now();
-            $weekStart = $now->copy()->startOfWeek()->format('Y-m-d H:i:s');
-            $weekEnd = $now->copy()->endOfWeek()->format('Y-m-d H:i:s');
-            $lastWeekStart = $now->copy()->subWeek()->startOfWeek()->format('Y-m-d H:i:s');
-            $lastWeekEnd = $now->copy()->subWeek()->endOfWeek()->format('Y-m-d H:i:s');
+            $week = $this->activeStatsService->resolveWeekRange(null);
+            $lastWeek = $this->activeStatsService->resolveWeekRange($week['prev_start']);
+            $weekStart = $week['start'].' 00:00:00';
+            $weekEnd = Carbon::parse($week['end'])->endOfDay()->format('Y-m-d H:i:s');
+            $lastWeekStart = $lastWeek['start'].' 00:00:00';
+            $lastWeekEnd = Carbon::parse($lastWeek['end'])->endOfDay()->format('Y-m-d H:i:s');
 
             $totalKomunitas = (int) $db->table('communities')->count();
             $komunitasThisWeek = (int) $db->table('communities')
@@ -868,6 +916,10 @@ class SportEvaluationDashboardController extends Controller
                 ->whereBetween('created_at', [$lastWeekStart, $lastWeekEnd])
                 ->count();
             $totalKomunitasWeekIncrease = max(0, $komunitasThisWeek - $komunitasLastWeek);
+            $totalKomunitasWeekIncreasePercent = $this->weekIncreasePercent(
+                $totalKomunitasWeekIncrease,
+                $totalKomunitas,
+            );
 
             $totalMainBareng = (int) $db->table('open_play_events')->count();
             $mainBarengThisWeek = (int) $db->table('open_play_events')
@@ -877,6 +929,10 @@ class SportEvaluationDashboardController extends Controller
                 ->whereBetween('starts_at', [$lastWeekStart, $lastWeekEnd])
                 ->count();
             $totalMainBarengWeekIncrease = max(0, $mainBarengThisWeek - $mainBarengLastWeek);
+            $totalMainBarengWeekIncreasePercent = $this->weekIncreasePercent(
+                $totalMainBarengWeekIncrease,
+                $totalMainBareng,
+            );
 
             $totalGoalAktif = (int) $this->applyScopedUserIds(
                 $db->table('user_goals')->where('status', 'active'),
@@ -895,6 +951,10 @@ class SportEvaluationDashboardController extends Controller
                 'user_id'
             )->count();
             $totalGoalAktifWeekIncrease = max(0, $goalThisWeek - $goalLastWeek);
+            $totalGoalAktifWeekIncreasePercent = $this->weekIncreasePercent(
+                $totalGoalAktifWeekIncrease,
+                $totalGoalAktif,
+            );
         } catch (Throwable $e) {
             report($e);
         }
@@ -902,11 +962,29 @@ class SportEvaluationDashboardController extends Controller
         return compact(
             'totalKomunitas',
             'totalKomunitasWeekIncrease',
+            'totalKomunitasWeekIncreasePercent',
             'totalMainBareng',
             'totalMainBarengWeekIncrease',
+            'totalMainBarengWeekIncreasePercent',
             'totalGoalAktif',
             'totalGoalAktifWeekIncrease',
+            'totalGoalAktifWeekIncreasePercent',
         );
+    }
+
+    /**
+     * Persentase kenaikan minggu ini vs baseline (total sebelum kenaikan).
+     */
+    private function weekIncreasePercent(int $increase, int $total): float
+    {
+        $increase = max(0, $increase);
+        $baseline = max(0, $total - $increase);
+
+        if ($baseline <= 0) {
+            return $increase > 0 ? 100.0 : 0.0;
+        }
+
+        return round(($increase / $baseline) * 100, 1);
     }
 
     /**

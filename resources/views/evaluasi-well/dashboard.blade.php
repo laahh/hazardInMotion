@@ -2894,7 +2894,7 @@
                   
                     <div id="total-sales-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalKaryawanWeekIncrease ?? 0) }}</span> this week</p>
+                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalKaryawanWeekIncrease ?? 0) }} ({{ number_format($totalKaryawanWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
               </div>
             </div>
           </div>
@@ -2925,7 +2925,7 @@
                   
                     <div id="new-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($newUsersWeekIncrease ?? 0) }}</span> this week</p>
+                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($newUsersWeekIncrease ?? 0) }} ({{ number_format($newUsersWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
               </div>
             </div>
           </div>
@@ -2956,7 +2956,7 @@
                   
                     <div id="active-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($activeUsersWeekIncrease ?? 0) }}</span> this week</p>
+                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($activeUsersWeekIncrease ?? 0) }} ({{ number_format($activeUsersWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
               </div>
             </div>
           </div>
@@ -2978,7 +2978,7 @@
                   
                     <div id="conversion-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalKomunitasWeekIncrease ?? 0) }}</span> this week</p>
+                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalKomunitasWeekIncrease ?? 0) }} ({{ number_format($totalKomunitasWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
               </div>
             </div>
           </div>
@@ -3000,7 +3000,7 @@
                   
                     <div id="leads-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalMainBarengWeekIncrease ?? 0) }}</span> this week</p>
+                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalMainBarengWeekIncrease ?? 0) }} ({{ number_format($totalMainBarengWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
               </div>
             </div>
           </div>
@@ -3022,7 +3022,7 @@
                   
                     <div id="total-profit-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalGoalAktifWeekIncrease ?? 0) }}</span> this week</p>
+                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalGoalAktifWeekIncrease ?? 0) }} ({{ number_format($totalGoalAktifWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
               </div>
             </div>
           </div>

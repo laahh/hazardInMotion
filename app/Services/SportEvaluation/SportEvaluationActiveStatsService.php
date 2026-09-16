@@ -153,7 +153,7 @@ final class SportEvaluationActiveStatsService
         try {
             $scopeKey = $this->mitraAssignmentService->cacheKeySuffix($scope);
             $stats = Cache::remember(
-                'evaluasi_well:active_stats:v10:'.$dimension.':'.$week['start'].':'.$scopeKey,
+                'evaluasi_well:active_stats:v11:'.$dimension.':'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($dimension, $week, $scope): array {
                     return $this->buildStats($dimension, $week, $scope);
@@ -196,6 +196,49 @@ final class SportEvaluationActiveStatsService
                 $this->activeUsersUnionBindings($from, $to),
                 $excludeBindings,
                 $inBindings
+            )
+        );
+
+        return (int) ($row->c ?? 0);
+    }
+
+    /**
+     * User aktif minggu ini yang belum aktif di minggu sebelumnya (Minggu–Sabtu).
+     * Dipakai untuk "Increase by +N this week" di kartu KPI.
+     *
+     * @param  array{site?:string,perusahaan?:string,company?:string,companies?:mixed,pairs?:mixed}  $filters
+     */
+    public function countNewlyActiveUsersVsPreviousWeek(
+        string $from,
+        string $to,
+        string $prevFrom,
+        string $prevTo,
+        array $filters = [],
+    ): int {
+        $db = DB::connection(BewellConnectionService::CONNECTION);
+        $scope = $this->normalizeScopeFilters($filters);
+        [$inSql, $inBindings] = $this->userIdInClause('this_week.user_id', $scope);
+        [$excludeSql, $excludeBindings] = $this->exclusionRules->activeStatsEmployeeNotExcludedPredicate('e');
+
+        $row = $db->selectOne(
+            'SELECT COUNT(*) AS c
+             FROM (
+                SELECT this_week.user_id
+                FROM ('.$this->activeUsersUnionSql().') AS this_week
+                LEFT JOIN employee_profiles e ON e.id = this_week.user_id
+                WHERE (e.id IS NULL OR ('.$excludeSql.'))
+                  '.$inSql.'
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM ('.$this->activeUsersUnionSql().') AS prev_week
+                    WHERE prev_week.user_id = this_week.user_id
+                  )
+             ) AS newly_active',
+            array_merge(
+                $this->activeUsersUnionBindings($from, $to),
+                $excludeBindings,
+                $inBindings,
+                $this->activeUsersUnionBindings($prevFrom, $prevTo),
             )
         );
 
@@ -246,14 +289,14 @@ final class SportEvaluationActiveStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:overview:v9:'.$week['start'].':'.$scopeKey,
+                'evaluasi_well:active_stats:overview:v10:'.$week['start'].':'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($week, $scope, $scopeKey): array {
                     $overview = [];
 
                     foreach (array_keys(self::DIMENSION_COLUMNS) as $dimension) {
                         $stats = Cache::remember(
-                            'evaluasi_well:active_stats:v10:'.$dimension.':'.$week['start'].':'.$scopeKey,
+                            'evaluasi_well:active_stats:v11:'.$dimension.':'.$week['start'].':'.$scopeKey,
                             self::CACHE_TTL,
                             function () use ($dimension, $week, $scope): array {
                                 return $this->buildStats($dimension, $week, $scope);
@@ -412,8 +455,13 @@ final class SportEvaluationActiveStatsService
         $scope = $this->normalizeScopeFilters($scope);
 
         $kpiCardTotal = $this->countActiveUsersInRange($from, $to, $scope);
-        $prevKpi = $this->countActiveUsersInRange($prevFrom, $prevTo, $scope);
-        $weekIncrease = max(0, $kpiCardTotal - $prevKpi);
+        $weekIncrease = $this->countNewlyActiveUsersVsPreviousWeek(
+            $from,
+            $to,
+            $prevFrom,
+            $prevTo,
+            $scope,
+        );
 
         $rows = $this->queryDimensionRows($dimension, $from, $to, $scope);
         $activeScoped = (int) array_sum(array_column($rows, 'active_users'));
