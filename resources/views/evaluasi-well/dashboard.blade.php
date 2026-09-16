@@ -1119,7 +1119,7 @@
     }
 
     var mitraMode = @json((bool) ($mitraMode ?? false));
-    var mitraScope = @json($mitraScope ?? ['site' => '', 'perusahaan' => '', 'companies' => [], 'pairs' => []]) || {site: '', perusahaan: '', companies: [], pairs: []};
+    var mitraScope = @json($mitraScope) || {site: '', perusahaan: '', companies: [], pairs: []};
     var employeeShowBase = @json(url('/evaluasi-well/employees'));
     var kpiUrl = @json(
         ($mitraMode ?? false)
