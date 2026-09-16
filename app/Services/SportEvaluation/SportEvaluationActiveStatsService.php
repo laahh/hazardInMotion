@@ -346,7 +346,7 @@ final class SportEvaluationActiveStatsService
 
         try {
             return Cache::remember(
-                'evaluasi_well:active_stats:weekly_trend:v5:'.$scopeKey,
+                'evaluasi_well:active_stats:weekly_trend:v6:'.$scopeKey,
                 self::CACHE_TTL,
                 function () use ($scope): array {
                     $now = Carbon::now();
@@ -357,7 +357,7 @@ final class SportEvaluationActiveStatsService
                     for ($i = self::TREND_WEEKS - 1; $i >= 0; $i--) {
                         $start = $now->copy()->subWeeks($i)->startOfWeek(self::WEEK_START_DAY);
                         $end = $start->copy()->endOfWeek(self::WEEK_END_DAY);
-                        $labels[] = $start->format('d M');
+                        $labels[] = $start->format('d').'–'.$end->format('d M');
                         $weekStarts[] = $start->toDateString();
                         $activeUsers[] = $this->countActiveUsersInRange(
                             $start->format('Y-m-d H:i:s'),

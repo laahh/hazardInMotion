@@ -369,13 +369,25 @@
         userCounts = [0,0,0,0,0,0,0,0,0,0,0,0];
     }
 
+    function formatUsers(value) {
+        return Number(value || 0).toLocaleString('id-ID');
+    }
+
+    function formatPct(value) {
+        return Number(value || 0).toLocaleString('id-ID', {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1
+        });
+    }
+
     new ApexCharts(el, {
-        series: [{ name: 'Partisipasi Aktif', data: series }],
+        series: [{ name: 'Partisipasi / minggu', data: series }],
         chart: {
             type: 'area',
             width: '100%',
-            height: 162,
+            height: 180,
             toolbar: { show: false },
+            zoom: { enabled: false },
             padding: { left: 0, right: 0, top: 0, bottom: 0 }
         },
         dataLabels: { enabled: false },
@@ -387,12 +399,12 @@
         },
         grid: {
             show: true,
-            borderColor: 'transparent',
-            strokeDashArray: 0,
+            borderColor: '#EEF2F7',
+            strokeDashArray: 4,
             position: 'back',
             xaxis: { lines: { show: false } },
             yaxis: { lines: { show: false } },
-            padding: { top: -30, right: 0, bottom: -10, left: 0 }
+            padding: { top: -10, right: 8, bottom: 0, left: 8 }
         },
         fill: {
             type: 'gradient',
@@ -403,26 +415,31 @@
                 shadeIntensity: 0.5,
                 gradientToColors: [chartColor + '00'],
                 inverseColors: false,
-                opacityFrom: 0.6,
-                opacityTo: 0.3,
+                opacityFrom: 0.55,
+                opacityTo: 0.15,
                 stops: [0, 100]
             }
         },
         markers: {
             colors: [chartColor],
-            strokeWidth: 3,
-            size: 0,
-            hover: { size: 10 }
+            strokeColors: '#ffffff',
+            strokeWidth: 2,
+            size: 3,
+            hover: { size: 7 }
         },
         xaxis: {
             categories: labels,
+            tickPlacement: 'on',
             labels: {
                 show: true,
-                style: { fontSize: '11px' },
-                rotate: -45,
-                hideOverlappingLabels: true
+                style: { fontSize: '10px' },
+                rotate: -40,
+                hideOverlappingLabels: true,
+                trim: true
             },
-            tooltip: { enabled: false }
+            tooltip: { enabled: false },
+            axisBorder: { show: false },
+            axisTicks: { show: false }
         },
         yaxis: {
             labels: { show: false },
@@ -430,22 +447,28 @@
             forceNiceScale: true
         },
         tooltip: {
+            enabled: true,
             shared: false,
-            intersect: true,
-            y: {
-                formatter: function (val, opts) {
-                    var idx = opts && typeof opts.dataPointIndex === 'number'
-                        ? opts.dataPointIndex
-                        : -1;
-                    var users = idx >= 0 && userCounts[idx] !== undefined
-                        ? Number(userCounts[idx] || 0)
-                        : 0;
-                    var pct = Number(val || 0).toLocaleString('id-ID', {
-                        minimumFractionDigits: 1,
-                        maximumFractionDigits: 1
-                    });
-                    return users.toLocaleString('id-ID') + ' user · ' + pct + '%';
-                }
+            intersect: false,
+            followCursor: true,
+            custom: function (opts) {
+                var idx = opts.dataPointIndex;
+                var weekLabel = labels[idx] || '-';
+                var users = userCounts[idx] !== undefined ? userCounts[idx] : 0;
+                var pct = (opts.series[opts.seriesIndex] && opts.series[opts.seriesIndex][idx] !== undefined)
+                    ? opts.series[opts.seriesIndex][idx]
+                    : 0;
+
+                return ''
+                    + '<div style="padding:10px 12px;min-width:150px;">'
+                    +   '<div style="font-size:11px;color:#6b7280;margin-bottom:4px;">Minggu ' + weekLabel + '</div>'
+                    +   '<div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:2px;">'
+                    +     formatUsers(users) + ' user aktif'
+                    +   '</div>'
+                    +   '<div style="font-size:12px;color:#487fff;font-weight:600;">'
+                    +     formatPct(pct) + '% partisipasi'
+                    +   '</div>'
+                    + '</div>';
             }
         }
     }).render();
@@ -3054,7 +3077,7 @@
             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
               <div>
                 <h6 class="mb-2 fw-bold text-lg">Pertumbuhan User Aktif</h6>
-                <span class="text-sm fw-medium text-secondary-light">% partisipasi · Minggu–Sabtu</span>
+                <span class="text-sm fw-medium text-secondary-light">Per minggu (Minggu–Sabtu)</span>
               </div>
               <div class="text-end">
                 <h6 class="mb-2 fw-bold text-lg">{{ number_format($activeTrendThisWeekPercent ?? 0, 1) }}%</h6>
@@ -3224,7 +3247,7 @@
 
           <div class="card-body">
             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-              <h6 class="mb-2 fw-bold text-lg mb-0">Distribusi per Site</h6>
+              <h6 class="mb-2 fw-bold text-lg mb-0">Tren Partisipasi Aktif Per Site</h6>
               <span class="text-sm fw-medium text-secondary-light">{{ number_format($siteTotalEmployees ?? 0) }} karyawan</span>
             </div>
           </div>
@@ -3263,7 +3286,7 @@
 
           <div class="card-body">
             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-              <h6 class="mb-2 fw-bold text-lg mb-0">Top User</h6>
+              <h6 class="mb-2 fw-bold text-lg mb-0">Top User Aktif</h6>
               <a href="{{ route('evaluasi-well.leaderboard') }}" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
                 Lihat Semua
                 <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
