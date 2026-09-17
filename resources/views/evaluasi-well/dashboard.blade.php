@@ -631,27 +631,37 @@
 }
 .activity-pattern-metric {
   border: 1px solid #E2E8F0;
-  background: #fff;
-  border-radius: 10px;
-  padding: 14px;
+  background: #F8FFFC;
+  border-radius: 12px;
+  padding: 16px 14px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
 }
 .activity-pattern-metric__icon {
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 14px;
+  font-size: 20px;
+  background: #ECFDF5;
+  color: #10B981;
+}
+.activity-pattern-metric__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .activity-pattern-metric__label {
   font-size: 12px;
   font-weight: 500;
   color: #64748B;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 .activity-pattern-metric__value {
   font-size: 18px;
@@ -660,14 +670,10 @@
   line-height: 1.25;
   letter-spacing: -0.01em;
 }
-.activity-pattern-metric__value--compact {
-  font-size: 15px;
-  line-height: 1.35;
-}
 .activity-pattern-metric__sub {
-  margin-top: 4px;
+  margin-top: 0;
   font-size: 12px;
-  color: #94A3B8;
+  color: #64748B;
   line-height: 1.3;
 }
 .activity-pattern-heatmap .ap-heatmap {
@@ -758,9 +764,6 @@
   }
   .activity-pattern-metric__value {
     font-size: 16px;
-  }
-  .activity-pattern-metric__value--compact {
-    font-size: 14px;
   }
 }
 </style>
@@ -1872,6 +1875,12 @@
     renderWellnessCharts(wellnessChartsInitial);
 })();
 </script>
+<script>
+(function () {
+    var modalEl = document.getElementById('installStatsModal');
+    if (!modalEl) {
+        return;
+    }
 
     var dataUrl = @json(
         ($mitraMode ?? false)
@@ -3955,49 +3964,50 @@
             <div class="row g-3 flex-shrink-0 activity-pattern-metrics">
               <div class="col-sm-6 col-xl-3">
                 <div class="activity-pattern-metric h-100">
-                  <div class="d-flex align-items-center gap-2 mb-8">
-                    <span class="activity-pattern-metric__icon" style="background:#EFF6FF;color:#2563EB;">
-                      <iconify-icon icon="solar:calendar-mark-bold"></iconify-icon>
-                    </span>
-                    <span class="activity-pattern-metric__label">Hari Tertinggi</span>
-                  </div>
-                  <div class="activity-pattern-metric__value" id="activity-pattern-peak-day">{{ $activityPatternPeakDayLabel ?? '02 Sep 2026' }}</div>
-                  <div class="activity-pattern-metric__sub" id="activity-pattern-peak-count">{{ number_format($activityPatternPeakDayCount ?? 2041) }} user aktif</div>
-                </div>
-              </div>
-              <div class="col-sm-6 col-xl-3">
-                <div class="activity-pattern-metric h-100">
-                  <div class="d-flex align-items-center gap-2 mb-8">
-                    <span class="activity-pattern-metric__icon" style="background:#ECFDF5;color:#16A34A;">
-                      <iconify-icon icon="solar:chart-2-bold"></iconify-icon>
-                    </span>
-                    <span class="activity-pattern-metric__label">Rata-rata Harian</span>
-                  </div>
-                  <div class="activity-pattern-metric__value" id="activity-pattern-avg">{{ number_format($activityPatternAvgDaily ?? 1159) }} user aktif</div>
-                </div>
-              </div>
-              <div class="col-sm-6 col-xl-3">
-                <div class="activity-pattern-metric h-100">
-                  <div class="d-flex align-items-center gap-2 mb-8">
-                    <span class="activity-pattern-metric__icon" style="background:#FFF7ED;color:#EA580C;">
-                      <iconify-icon icon="solar:graph-up-bold"></iconify-icon>
-                    </span>
-                    <span class="activity-pattern-metric__label">Hari Kerja vs Akhir Pekan</span>
-                  </div>
-                  <div class="activity-pattern-metric__value activity-pattern-metric__value--compact" id="activity-pattern-ratio">
-                    {{ number_format((float) ($activityPatternWeekdayRatio ?? 1.8), 1) }}x lebih tinggi di hari kerja
+                  <span class="activity-pattern-metric__icon">
+                    <iconify-icon icon="solar:calendar-mark-bold"></iconify-icon>
+                  </span>
+                  <div class="activity-pattern-metric__body">
+                    <div class="activity-pattern-metric__label">Hari Tertinggi</div>
+                    <div class="activity-pattern-metric__value" id="activity-pattern-peak-day">{{ $activityPatternPeakDayLabel ?? '02 Sep 2026' }}</div>
+                    <div class="activity-pattern-metric__sub" id="activity-pattern-peak-count">{{ number_format($activityPatternPeakDayCount ?? 2041) }} user aktif</div>
                   </div>
                 </div>
               </div>
               <div class="col-sm-6 col-xl-3">
                 <div class="activity-pattern-metric h-100">
-                  <div class="d-flex align-items-center gap-2 mb-8">
-                    <span class="activity-pattern-metric__icon" style="background:#EFF6FF;color:#2563EB;">
-                      <iconify-icon icon="solar:clock-circle-bold"></iconify-icon>
-                    </span>
-                    <span class="activity-pattern-metric__label">Waktu Puncak</span>
+                  <span class="activity-pattern-metric__icon">
+                    <iconify-icon icon="solar:chart-2-bold"></iconify-icon>
+                  </span>
+                  <div class="activity-pattern-metric__body">
+                    <div class="activity-pattern-metric__label">Rata-rata Harian</div>
+                    <div class="activity-pattern-metric__value" id="activity-pattern-avg">{{ number_format($activityPatternAvgDaily ?? 1159) }}</div>
+                    <div class="activity-pattern-metric__sub">user aktif</div>
                   </div>
-                  <div class="activity-pattern-metric__value" id="activity-pattern-peak-hour">{{ $activityPatternPeakHourLabel ?? '08:00 – 10:00' }} WITA</div>
+                </div>
+              </div>
+              <div class="col-sm-6 col-xl-3">
+                <div class="activity-pattern-metric h-100">
+                  <span class="activity-pattern-metric__icon">
+                    <iconify-icon icon="solar:graph-up-bold"></iconify-icon>
+                  </span>
+                  <div class="activity-pattern-metric__body">
+                    <div class="activity-pattern-metric__label">Hari Kerja vs Akhir Pekan</div>
+                    <div class="activity-pattern-metric__value" id="activity-pattern-ratio">{{ number_format((float) ($activityPatternWeekdayRatio ?? 1.8), 1) }}x</div>
+                    <div class="activity-pattern-metric__sub">lebih tinggi di hari kerja</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-sm-6 col-xl-3">
+                <div class="activity-pattern-metric h-100">
+                  <span class="activity-pattern-metric__icon">
+                    <iconify-icon icon="solar:clock-circle-bold"></iconify-icon>
+                  </span>
+                  <div class="activity-pattern-metric__body">
+                    <div class="activity-pattern-metric__label">Waktu Puncak</div>
+                    <div class="activity-pattern-metric__value" id="activity-pattern-peak-hour">{{ $activityPatternPeakHourLabel ?? '08:00 – 10:00' }}</div>
+                    <div class="activity-pattern-metric__sub">WITA</div>
+                  </div>
                 </div>
               </div>
             </div>
