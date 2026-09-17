@@ -1324,33 +1324,88 @@
             };
         });
         el.innerHTML = '';
+
+        if (!rows.length) {
+            el.innerHTML = '<p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data makronutrien.</p>';
+            return;
+        }
+
+        var maxPct = 0;
+        rows.forEach(function (item) {
+            if (item.pct > maxPct) {
+                maxPct = item.pct;
+            }
+        });
+        // Skala dinamis: nilai kecil (mis. 0,1%) tetap terlihat; tetap cap di 100.
+        var xMax = maxPct <= 0 ? 1 : Math.min(100, Math.max(1, Math.ceil(maxPct * 1.6 * 10) / 10));
+
         wellnessChartInstances.macro = new ApexCharts(el, {
             series: [{
                 name: '% target terpenuhi',
                 data: rows.map(function (item) { return item.pct; })
             }],
-            chart: { type: 'bar', height: 280, toolbar: { show: false } },
+            chart: {
+                type: 'bar',
+                height: Math.max(260, rows.length * 56),
+                toolbar: { show: false },
+                parentHeightOffset: 0
+            },
             plotOptions: {
-                bar: { horizontal: true, borderRadius: 4, barHeight: '48%', distributed: true }
+                bar: {
+                    horizontal: true,
+                    borderRadius: 4,
+                    barHeight: '52%',
+                    distributed: true,
+                    dataLabels: {
+                        position: 'top'
+                    }
+                }
             },
             colors: ['#487FFF', '#45B369', '#FF9F29', '#8252E9'],
             legend: { show: false },
             dataLabels: {
                 enabled: true,
+                textAnchor: 'start',
+                offsetX: 8,
                 formatter: function (val, opts) {
                     var item = rows[opts.dataPointIndex] || {};
                     if (item.available === false) {
                         return 'belum tersedia';
                     }
-                    return formatNum(val, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)';
+                    return formatNum(item.pct, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)';
                 },
-                style: { fontSize: '11px', colors: ['#111827'] }
+                style: {
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    colors: ['#202124']
+                },
+                background: {
+                    enabled: false
+                }
             },
             xaxis: {
                 categories: rows.map(function (item) { return item.label; }),
-                max: 100
+                min: 0,
+                max: xMax,
+                tickAmount: 5,
+                labels: {
+                    formatter: function (val) {
+                        return formatNum(val, val >= 10 ? 0 : 1) + '%';
+                    },
+                    style: { fontSize: '11px', colors: ['#6B7280'] }
+                }
             },
-            grid: { borderColor: '#E5E7EB', strokeDashArray: 4 },
+            yaxis: {
+                labels: {
+                    maxWidth: 160,
+                    style: { fontSize: '12px', fontWeight: 500, colors: ['#202124'] }
+                }
+            },
+            grid: {
+                borderColor: '#E5E7EB',
+                strokeDashArray: 4,
+                padding: { left: 8, right: 48 }
+            },
             tooltip: {
                 y: {
                     formatter: function (val, opts) {
@@ -1358,7 +1413,7 @@
                         if (item.available === false) {
                             return 'Data serat belum tersedia di BeWell';
                         }
-                        return formatNum(val, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)';
+                        return formatNum(item.pct, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)';
                     }
                 }
             }

@@ -195,7 +195,7 @@
               <span class="text-sm text-secondary-light">% karyawan yang rata-rata harian memenuhi target</span>
             </div>
           </div>
-          <div id="wellness-chart-macro" style="min-height: 280px;"></div>
+          <div id="wellness-chart-macro" style="min-height: 300px;"></div>
         </div>
       </div>
     </div>
