@@ -1431,71 +1431,46 @@ class SportEvaluationDashboardController extends Controller
 
     /**
      * Dummy pola aktivitas meniru mock desain dashboard (24 Aug – 17 Sep 2026).
+     * Format calendar heatmap (GitHub-style): kolom = minggu, baris = Senin–Minggu.
      *
      * @return array<string, mixed>
      */
     private function dummyActivityPatternPayload(): array
     {
-        // Urutan baris mock: Minggu (atas) → Senin (bawah).
-        $weekdayNames = ['Minggu', 'Sabtu', 'Jumat', 'Kamis', 'Rabu', 'Selasa', 'Senin'];
-
-        $dates = [];
-        $cursor = Carbon::parse('2026-08-24');
-        $end = Carbon::parse('2026-09-17');
-        while ($cursor->lte($end)) {
-            $dates[] = $cursor->copy();
-            $cursor->addDay();
-        }
-
-        $labels = array_map(
-            static fn (Carbon $d): string => $d->format('d M'),
-            $dates
-        );
-
-        /*
-         * Matriks 7×25 (band warna mock):
-         * 0–50, 51–100, 101–200, 201–400, >400
-         * Weekend lebih terang; puncak gelap di hari kerja awal September.
-         */
-        $matrix = [
-            // Minggu
-            [40, 55, 48, 62, 45, 70, 58, 80, 95, 110, 90, 75, 68, 85, 100, 120, 95, 70, 60, 78, 88, 72, 65, 55, 42],
-            // Sabtu
-            [55, 70, 65, 80, 60, 95, 85, 110, 130, 150, 120, 100, 90, 115, 140, 160, 130, 95, 80, 105, 125, 100, 85, 70, 55],
-            // Jumat
-            [180, 220, 260, 240, 200, 160, 140, 320, 380, 450, 420, 360, 200, 280, 340, 390, 360, 300, 180, 250, 310, 280, 240, 200, 160],
-            // Kamis
-            [200, 250, 290, 270, 230, 170, 150, 360, 420, 520, 480, 400, 210, 300, 370, 430, 400, 330, 190, 270, 340, 300, 260, 220, 180],
-            // Rabu
-            [220, 270, 310, 290, 250, 180, 160, 390, 460, 580, 520, 430, 220, 320, 400, 470, 440, 350, 200, 290, 360, 320, 280, 240, 190],
-            // Selasa
-            [240, 300, 340, 320, 270, 190, 170, 420, 510, 680, 600, 470, 230, 350, 430, 510, 480, 380, 210, 310, 390, 350, 300, 250, 200],
-            // Senin
-            [260, 320, 360, 340, 290, 200, 180, 450, 560, 700, 720, 510, 240, 380, 460, 540, 500, 400, 220, 330, 410, 370, 320, 270, 210],
+        $dailyProfile = [
+            '2026-08-24' => 820,
+            '2026-08-25' => 940,
+            '2026-08-26' => 1010,
+            '2026-08-27' => 980,
+            '2026-08-28' => 890,
+            '2026-08-29' => 420,
+            '2026-08-30' => 310,
+            '2026-08-31' => 1120,
+            '2026-09-01' => 1380,
+            '2026-09-02' => 2041,
+            '2026-09-03' => 1760,
+            '2026-09-04' => 1490,
+            '2026-09-05' => 560,
+            '2026-09-06' => 380,
+            '2026-09-07' => 1280,
+            '2026-09-08' => 1410,
+            '2026-09-09' => 1520,
+            '2026-09-10' => 1470,
+            '2026-09-11' => 1330,
+            '2026-09-12' => 510,
+            '2026-09-13' => 340,
+            '2026-09-14' => 1190,
+            '2026-09-15' => 1260,
+            '2026-09-16' => 1180,
+            '2026-09-17' => 980,
         ];
 
-        // 02 Sep 2026 = Rabu → baris Rabu (index 4), kolom 9.
-        $matrix[4][9] = 2041;
-
-        $series = [];
-        foreach ($weekdayNames as $rowIndex => $name) {
-            $data = [];
-            foreach ($labels as $colIndex => $label) {
-                $data[] = [
-                    'x' => $label,
-                    'y' => (int) ($matrix[$rowIndex][$colIndex] ?? 0),
-                ];
-            }
-            $series[] = [
-                'name' => $name,
-                'data' => $data,
-            ];
-        }
+        $heatmap = $this->buildCalendarHeatmapSeries($dailyProfile);
 
         return [
             'adoptionTrendRangeLabel' => '24 Aug 2026 – 17 Sep 2026',
-            'activityPatternSeries' => $series,
-            'activityPatternCategories' => $labels,
+            'activityPatternSeries' => $heatmap['series'],
+            'activityPatternCategories' => $heatmap['categories'],
             'activityPatternPeakDayLabel' => '02 Sep 2026',
             'activityPatternPeakDayCount' => 2041,
             'activityPatternAvgDaily' => 1159,
@@ -1506,11 +1481,100 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
+     * Calendar heatmap: kolom = minggu (Senin awal), baris = Senin–Minggu,
+     * setiap tanggal hanya satu sel.
+     *
+     * @param  array<string, int>  $dailyByDate  map Y-m-d => jumlah user aktif
+     * @return array{
+     *     series: list<array{name: string, data: list<array<string, mixed>>}>,
+     *     categories: list<string>
+     * }
+     */
+    private function buildCalendarHeatmapSeries(array $dailyByDate): array
+    {
+        if ($dailyByDate === []) {
+            return ['series' => [], 'categories' => []];
+        }
+
+        ksort($dailyByDate);
+        $dateKeys = array_keys($dailyByDate);
+        $start = Carbon::parse($dateKeys[0])->startOfDay();
+        $end = Carbon::parse($dateKeys[array_key_last($dateKeys)])->startOfDay();
+
+        $weekdayNames = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+        $dowToName = [
+            Carbon::MONDAY => 'Senin',
+            Carbon::TUESDAY => 'Selasa',
+            Carbon::WEDNESDAY => 'Rabu',
+            Carbon::THURSDAY => 'Kamis',
+            Carbon::FRIDAY => 'Jumat',
+            Carbon::SATURDAY => 'Sabtu',
+            Carbon::SUNDAY => 'Minggu',
+        ];
+
+        $gridStart = $start->copy()->startOfWeek(Carbon::MONDAY);
+        $gridEnd = $end->copy()->endOfWeek(Carbon::SUNDAY);
+
+        $weekLabels = [];
+        $seriesData = [];
+        foreach ($weekdayNames as $name) {
+            $seriesData[$name] = [];
+        }
+
+        $cursor = $gridStart->copy();
+        $weekIndex = -1;
+        while ($cursor->lte($gridEnd)) {
+            if ((int) $cursor->dayOfWeek === Carbon::MONDAY) {
+                $weekIndex++;
+                $weekLabels[] = $cursor->translatedFormat('d M');
+                foreach ($weekdayNames as $name) {
+                    $seriesData[$name][$weekIndex] = [
+                        'x' => $weekLabels[$weekIndex],
+                        'y' => null,
+                        'date' => null,
+                        'date_label' => null,
+                        'empty' => true,
+                    ];
+                }
+            }
+
+            $rowName = $dowToName[(int) $cursor->dayOfWeek] ?? 'Senin';
+            $key = $cursor->format('Y-m-d');
+            $inRange = $cursor->betweenIncluded($start, $end);
+
+            if ($inRange) {
+                $seriesData[$rowName][$weekIndex] = [
+                    'x' => $weekLabels[$weekIndex],
+                    'y' => (int) ($dailyByDate[$key] ?? 0),
+                    'date' => $key,
+                    'date_label' => $cursor->translatedFormat('d M Y'),
+                    'empty' => false,
+                ];
+            }
+
+            $cursor->addDay();
+        }
+
+        $series = [];
+        foreach ($weekdayNames as $name) {
+            $series[] = [
+                'name' => $name,
+                'data' => array_values($seriesData[$name]),
+            ];
+        }
+
+        return [
+            'series' => $series,
+            'categories' => $weekLabels,
+        ];
+    }
+
+    /**
      * @param  list<string>  $dates
      * @param  list<string>  $labels
      * @param  list<int>  $activeUsers
      * @return array{
-     *     series: list<array{name: string, data: list<array{x: string, y: int|null}>}>,
+     *     series: list<array{name: string, data: list<array<string, mixed>>}>,
      *     categories: list<string>,
      *     peak_day_label: string,
      *     peak_day_count: int,
@@ -1525,16 +1589,7 @@ class SportEvaluationDashboardController extends Controller
         array $activeUsers,
         string $rangeLabel,
     ): array {
-        $weekdayNames = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-        // Carbon dayOfWeek: 0=Sun … 6=Sat → index Senin-first
-        $dowToIndex = [1 => 0, 2 => 1, 3 => 2, 4 => 3, 5 => 4, 6 => 5, 0 => 6];
-
-        $categories = $labels;
-        $seriesData = [];
-        foreach ($weekdayNames as $name) {
-            $seriesData[$name] = [];
-        }
-
+        $dailyByDate = [];
         $peakCount = -1;
         $peakLabel = '–';
         $weekdaySum = 0.0;
@@ -1544,29 +1599,23 @@ class SportEvaluationDashboardController extends Controller
         $totalSum = 0;
         $totalDays = 0;
 
-        $count = min(count($dates), count($activeUsers), count($labels));
+        $count = min(count($dates), count($activeUsers));
         for ($i = 0; $i < $count; $i++) {
             $date = (string) $dates[$i];
-            $label = (string) $labels[$i];
             $value = (int) $activeUsers[$i];
-            $dow = Carbon::parse($date)->dayOfWeek;
-            $rowIndex = $dowToIndex[$dow] ?? 0;
-            $rowName = $weekdayNames[$rowIndex];
-
-            foreach ($weekdayNames as $name) {
-                $seriesData[$name][] = [
-                    'x' => $label,
-                    'y' => $name === $rowName ? $value : 0,
-                ];
-            }
+            $carbon = Carbon::parse($date);
+            $key = $carbon->format('Y-m-d');
+            $dailyByDate[$key] = $value;
 
             $totalSum += $value;
             $totalDays++;
             if ($value > $peakCount) {
                 $peakCount = $value;
-                $peakLabel = Carbon::parse($date)->translatedFormat('d M Y');
+                $peakLabel = $carbon->translatedFormat('d M Y');
             }
-            if ($dow >= 1 && $dow <= 5) {
+
+            $dow = (int) $carbon->dayOfWeek;
+            if ($dow >= Carbon::MONDAY && $dow <= Carbon::FRIDAY) {
                 $weekdaySum += $value;
                 $weekdayDays++;
             } else {
@@ -1575,13 +1624,7 @@ class SportEvaluationDashboardController extends Controller
             }
         }
 
-        $series = [];
-        foreach ($weekdayNames as $name) {
-            $series[] = [
-                'name' => $name,
-                'data' => $seriesData[$name],
-            ];
-        }
+        $heatmap = $this->buildCalendarHeatmapSeries($dailyByDate);
 
         $avgDaily = $totalDays > 0 ? (int) round($totalSum / $totalDays) : 0;
         $weekdayAvg = $weekdayDays > 0 ? $weekdaySum / $weekdayDays : 0.0;
@@ -1608,8 +1651,8 @@ class SportEvaluationDashboardController extends Controller
         }
 
         return [
-            'series' => $series,
-            'categories' => $categories,
+            'series' => $heatmap['series'],
+            'categories' => $heatmap['categories'],
             'peak_day_label' => $peakLabel,
             'peak_day_count' => max(0, $peakCount),
             'avg_daily' => $avgDaily,

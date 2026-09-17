@@ -389,6 +389,256 @@
   #wellnessMetricsTable thead th {
     font-weight: 600;
   }
+
+  /* Wellness distribution cards */
+  .wc-card {
+    overflow: hidden;
+    position: relative;
+  }
+  .wc-card__head-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 22px;
+  }
+  .wc-card__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #ECFDF5;
+    color: #166534;
+    border: 1px solid #BBF7D0;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.3;
+    max-width: 100%;
+  }
+  .wc-card__badge iconify-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .wc-tip {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.45;
+  }
+  .wc-tip iconify-icon { font-size: 18px; margin-top: 1px; }
+  .wc-tip--green { background: #ECFDF5; color: #166534; }
+  .wc-tip--slate { background: #F1F5F9; color: #334155; }
+  .wc-tip--rose { background: #FFF1F2; color: #9F1239; }
+  .wc-axis-label {
+    text-align: center;
+    font-size: 11px;
+    color: #94A3B8;
+    font-weight: 500;
+  }
+  .wc-legend .wc-legend__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .wc-legend .wc-legend__icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: #fff;
+    font-size: 16px;
+  }
+  .wc-legend .wc-legend__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0F172A;
+    margin: 0;
+    line-height: 1.3;
+  }
+  .wc-legend .wc-legend__meta {
+    font-size: 12px;
+    color: #64748B;
+    margin: 2px 0 0;
+  }
+  .wc-top-sports {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    justify-content: center;
+  }
+  .wc-top-sports__row {
+    display: grid;
+    grid-template-columns: 28px 28px minmax(72px, 120px) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+  }
+  .wc-top-sports__rank {
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    background: #16A34A;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .wc-top-sports__sport-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: #ECFDF5;
+    color: #16A34A;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+  .wc-top-sports__name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0F172A;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .wc-top-sports__track {
+    height: 18px;
+    background: #F1F5F9;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .wc-top-sports__bar {
+    height: 100%;
+    background: linear-gradient(90deg, #22C55E, #16A34A);
+    border-radius: 999px;
+    min-width: 4px;
+  }
+  .wc-top-sports__meta {
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    white-space: nowrap;
+    min-width: 88px;
+    text-align: right;
+  }
+  .wc-macro-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    justify-content: center;
+  }
+  .wc-macro__row {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+  }
+  .wc-macro__label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0F172A;
+  }
+  .wc-macro__icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .wc-macro__track {
+    position: relative;
+    height: 22px;
+    background: #E2E8F0;
+    border-radius: 999px;
+    overflow: visible;
+  }
+  .wc-macro__fill {
+    height: 100%;
+    border-radius: 999px;
+    min-width: 0;
+  }
+  .wc-macro__meta {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    font-weight: 700;
+    color: #0F172A;
+    white-space: nowrap;
+    padding-left: 8px;
+    pointer-events: none;
+  }
+  .wc-macro__meta.is-outside {
+    color: #334155;
+  }
+  .wc-insight {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .wc-insight__icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: #ECFDF5;
+    color: #16A34A;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+  .wc-card--sports::after,
+  .wc-card--freq::after,
+  .wc-card--calorie::after {
+    content: '';
+    position: absolute;
+    right: -20px;
+    bottom: 48px;
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0.12;
+  }
+  .wc-card--sports::after { background: radial-gradient(circle, #16A34A 0%, transparent 70%); }
+  .wc-card--freq::after { background: radial-gradient(circle, #0EA5E9 0%, transparent 70%); }
+  .wc-card--calorie::after { background: radial-gradient(circle, #EA580C 0%, transparent 70%); }
+  @media (max-width: 768px) {
+    .wc-top-sports__row {
+      grid-template-columns: 24px 24px minmax(64px, 90px) minmax(0, 1fr);
+    }
+    .wc-top-sports__meta {
+      grid-column: 4;
+      text-align: left;
+      min-width: 0;
+    }
+    .wc-macro__row {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+  }
 </style>
 @endsection
 
@@ -553,7 +803,7 @@
     var categories = @json($activityPatternCategories ?? []);
 
     function formatNumber(value) {
-        return Number(value || 0).toLocaleString('en-US');
+        return Number(value || 0).toLocaleString('id-ID');
     }
 
     function colorFor(value) {
@@ -578,25 +828,33 @@
         return;
     }
 
-    // Mock: Minggu di atas → Senin di bawah; label tanggal di bawah grid.
+    // Calendar heatmap: Senin di atas → Minggu di bawah; kolom = minggu.
     var ordered = series.slice();
-    var preferred = ['Minggu', 'Sabtu', 'Jumat', 'Kamis', 'Rabu', 'Selasa', 'Senin'];
+    var preferred = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
     ordered.sort(function (a, b) {
         return preferred.indexOf(a.name) - preferred.indexOf(b.name);
     });
 
     var colCount = categories.length;
     var html = '';
-    html += '<div class="ap-heatmap" style="--ap-cols:' + colCount + ';">';
+    html += '<div class="ap-heatmap ap-heatmap--calendar" style="--ap-cols:' + colCount + ';">';
 
     ordered.forEach(function (row) {
         html += '<div class="ap-heatmap-ylabel">' + escapeHtml(row.name) + '</div>';
         html += '<div class="ap-heatmap-row">';
         (row.data || []).forEach(function (cell) {
-            var value = cell && typeof cell === 'object' ? Number(cell.y || 0) : Number(cell || 0);
-            var xLabel = cell && typeof cell === 'object' ? (cell.x || '') : '';
+            var isEmpty = !cell || cell.empty === true || cell.y === null || cell.y === undefined;
+            if (isEmpty) {
+                html += '<div class="ap-heatmap-cell is-empty" title=""></div>';
+                return;
+            }
+            var value = Number(cell.y || 0);
+            var dateLabel = cell.date_label || cell.x || '';
+            var tip = escapeHtml(dateLabel) + ' | ' + formatNumber(value) + ' user aktif';
             html += '<div class="ap-heatmap-cell" style="background:' + colorFor(value) + ';"'
-                + ' title="' + escapeHtml(row.name) + ' · ' + escapeHtml(xLabel) + ': ' + formatNumber(value) + ' user aktif">'
+                + ' title="' + tip + '"'
+                + ' data-date="' + escapeHtml(cell.date || '') + '"'
+                + ' data-value="' + value + '">'
                 + '</div>';
         });
         html += '</div>';
@@ -604,20 +862,12 @@
 
     html += '<div class="ap-heatmap-corner"></div>';
     html += '<div class="ap-heatmap-xlabels">';
-    categories.forEach(function (label, idx) {
-        var parts = String(label).split(/\s+/);
-        var day = parts[0] || label;
-        var month = parts[1] || '';
-        var showMonth = idx === 0
-            || idx === categories.length - 1
-            || day === '01'
-            || day === '10'
-            || day === '17';
-        var shortLabel = showMonth && month ? (day + ' ' + month) : day;
-        html += '<div class="ap-heatmap-xlabel" title="' + escapeHtml(label) + '"><span>' + escapeHtml(shortLabel) + '</span></div>';
+    categories.forEach(function (label) {
+        html += '<div class="ap-heatmap-xlabel" title="Minggu mulai ' + escapeHtml(label) + '"><span>' + escapeHtml(label) + '</span></div>';
     });
     html += '</div>';
     html += '</div>';
+    html += '<p class="ap-heatmap-hint mb-0 mt-8">Kolom = minggu · baris = hari · hover sel untuk melihat tanggal & jumlah user aktif</p>';
 
     el.innerHTML = html;
 })();
@@ -678,50 +928,51 @@
 }
 .activity-pattern-heatmap .ap-heatmap {
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
-  grid-template-rows: repeat(7, minmax(24px, 1fr)) 48px;
-  gap: 5px 10px;
+  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-rows: repeat(7, minmax(28px, 1fr)) 36px;
+  gap: 6px 12px;
   align-items: stretch;
   overflow: visible;
   height: 100%;
-  min-height: 240px;
+  min-height: 260px;
+}
+.activity-pattern-heatmap .ap-heatmap--calendar {
+  max-width: 520px;
 }
 #barChart.activity-pattern-heatmap {
   overflow: visible;
-  min-height: 240px;
+  min-height: 260px;
   display: flex;
   flex-direction: column;
 }
 #barChart.activity-pattern-heatmap .ap-heatmap {
   flex: 1 1 auto;
 }
-.activity-pattern-heatmap .ap-heatmap-corner { min-height: 48px; }
+.activity-pattern-heatmap .ap-heatmap-corner { min-height: 28px; }
 .activity-pattern-heatmap .ap-heatmap-xlabels {
   display: grid;
   grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
-  gap: 3px;
-  min-height: 48px;
-  align-items: start;
-  padding-top: 6px;
+  gap: 6px;
+  min-height: 28px;
+  align-items: center;
   overflow: visible;
 }
 .activity-pattern-heatmap .ap-heatmap-xlabel {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   min-width: 0;
   overflow: visible;
-  height: 48px;
 }
 .activity-pattern-heatmap .ap-heatmap-xlabel span {
   display: inline-block;
-  font-size: 10px;
-  line-height: 1.1;
-  color: #94A3B8;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #64748B;
+  font-weight: 500;
   white-space: nowrap;
-  transform: rotate(-55deg);
-  transform-origin: top left;
-  margin-left: 4px;
+  transform: none;
+  margin: 0;
 }
 .activity-pattern-heatmap .ap-heatmap-ylabel {
   display: flex;
@@ -736,34 +987,55 @@
 .activity-pattern-heatmap .ap-heatmap-row {
   display: grid;
   grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
-  gap: 3px;
+  gap: 6px;
   height: 100%;
-  min-height: 22px;
+  min-height: 28px;
 }
 .activity-pattern-heatmap .ap-heatmap-cell {
   height: 100%;
-  min-height: 22px;
-  border-radius: 5px;
+  min-height: 28px;
+  aspect-ratio: 1 / 1;
+  max-height: 44px;
+  justify-self: stretch;
+  border-radius: 6px;
   border: 1px solid rgba(255,255,255,.75);
+  cursor: default;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.activity-pattern-heatmap .ap-heatmap-cell:not(.is-empty):hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.35);
+  z-index: 1;
+  position: relative;
+}
+.activity-pattern-heatmap .ap-heatmap-cell.is-empty {
+  background: #F1F5F9;
+  border: 1px dashed #E2E8F0;
+  cursor: default;
+}
+.activity-pattern-heatmap .ap-heatmap-hint {
+  font-size: 11px;
+  color: #94A3B8;
 }
 @media (max-width: 768px) {
   .activity-pattern-heatmap .ap-heatmap {
-    grid-template-columns: 48px minmax(0, 1fr);
-    gap: 4px 6px;
-    min-height: 200px;
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 4px 8px;
+    min-height: 220px;
+    max-width: 100%;
+  }
+  .activity-pattern-heatmap .ap-heatmap--calendar {
+    max-width: 100%;
   }
   .activity-pattern-heatmap .ap-heatmap-cell {
-    min-height: 16px;
-    border-radius: 3px;
+    min-height: 20px;
+    border-radius: 4px;
   }
   .activity-pattern-heatmap .ap-heatmap-xlabel span {
-    font-size: 8px;
+    font-size: 10px;
   }
   .activity-pattern-heatmap .ap-heatmap-ylabel {
     font-size: 11px;
-  }
-  .activity-pattern-metric__value {
-    font-size: 16px;
   }
 }
 </style>
@@ -1305,6 +1577,28 @@
         macro: null
     };
     var bucketColors = ['#487FFF', '#45B369', '#FF9F29', '#EF4A00', '#8252E9'];
+    var durationLegendMeta = [
+        { icon: 'mdi:clock-outline', color: '#487FFF' },
+        { icon: 'mdi:clock-outline', color: '#45B369' },
+        { icon: 'mdi:close-circle', color: '#FF9F29' }
+    ];
+    var frequencyLegendMeta = [
+        { icon: 'mdi:calendar-month-outline', color: '#487FFF' },
+        { icon: 'mdi:calendar-month-outline', color: '#45B369' },
+        { icon: 'mdi:close-circle', color: '#FF9F29' }
+    ];
+    var calorieLegendMeta = [
+        { icon: 'mdi:arrow-up-bold', color: '#487FFF' },
+        { icon: 'mdi:check-bold', color: '#45B369' },
+        { icon: 'mdi:arrow-down-bold', color: '#FF9F29' },
+        { icon: 'mdi:close-circle', color: '#EF4A00' }
+    ];
+    var macroIconMap = {
+        Protein: { icon: 'mdi:food-steak', color: '#16A34A' },
+        Karbohidrat: { icon: 'mdi:rice', color: '#0EA5E9' },
+        Lemak: { icon: 'mdi:oil', color: '#F97316' },
+        Serat: { icon: 'mdi:leaf', color: '#22C55E' }
+    };
 
     function destroyChart(key) {
         if (wellnessChartInstances[key]) {
@@ -1313,23 +1607,49 @@
         }
     }
 
-    function renderBucketLegend(elId, items, colors) {
+    function setBadgeText(elId, text) {
+        var el = document.getElementById(elId);
+        if (!el) {
+            return;
+        }
+        var span = el.querySelector('span');
+        if (span) {
+            span.textContent = text;
+        } else {
+            el.textContent = text;
+        }
+    }
+
+    function sportIconFor(label) {
+        var l = String(label || '').toLowerCase();
+        if (l.indexOf('jalan') !== -1 || l.indexOf('lari') !== -1 || l.indexOf('run') !== -1) return 'mdi:run';
+        if (l.indexOf('workout') !== -1 || l.indexOf('gym') !== -1 || l.indexOf('angkat') !== -1) return 'mdi:dumbbell';
+        if (l.indexOf('sepeda') !== -1 || l.indexOf('bike') !== -1) return 'mdi:bike';
+        if (l.indexOf('renang') !== -1 || l.indexOf('swim') !== -1) return 'mdi:swim';
+        if (l.indexOf('badminton') !== -1) return 'mdi:badminton';
+        if (l.indexOf('futsal') !== -1 || l.indexOf('sepak') !== -1) return 'mdi:soccer';
+        if (l.indexOf('yoga') !== -1) return 'mdi:yoga';
+        if (l.indexOf('tenis') !== -1) return 'mdi:tennis';
+        return 'mdi:walk';
+    }
+
+    function renderBucketLegend(elId, items, meta) {
         var el = document.getElementById(elId);
         if (!el) {
             return;
         }
         el.innerHTML = (items || []).map(function (item, i) {
-            var color = colors[i % colors.length];
-            return '<li class="d-flex align-items-start gap-2 ' + (i < items.length - 1 ? 'mb-12' : '') + '">'
-                + '<span class="w-12-px h-12-px rounded-circle flex-shrink-0 mt-4" style="background:' + color + '"></span>'
+            var m = (meta && meta[i]) ? meta[i] : { icon: 'mdi:circle', color: bucketColors[i % bucketColors.length] };
+            return '<li class="wc-legend__item ' + (i < items.length - 1 ? 'mb-14' : '') + '">'
+                + '<span class="wc-legend__icon" style="background:' + m.color + '"><iconify-icon icon="' + m.icon + '"></iconify-icon></span>'
                 + '<div class="min-w-0">'
-                + '<p class="mb-0 text-sm fw-medium text-primary-light">' + escapeHtml(item.label) + '</p>'
-                + '<p class="mb-0 text-xs text-secondary-light">' + formatNum(item.pct, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)</p>'
+                + '<p class="wc-legend__title">' + escapeHtml(item.label) + '</p>'
+                + '<p class="wc-legend__meta">' + formatNum(item.pct, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)</p>'
                 + '</div></li>';
         }).join('');
     }
 
-    function renderDonutChart(key, elId, legendId, items) {
+    function renderDonutChart(key, elId, legendId, items, legendMeta, badgeId, totalEmployees) {
         var el = document.getElementById(elId);
         if (!el || typeof ApexCharts === 'undefined') {
             return;
@@ -1337,31 +1657,58 @@
         destroyChart(key);
         var series = (items || []).map(function (item) { return Number(item.count) || 0; });
         var labels = (items || []).map(function (item) { return item.label; });
+        var colors = (legendMeta || []).map(function (m) { return m.color; });
+        if (!colors.length) {
+            colors = bucketColors.slice(0, series.length);
+        }
+        var total = Number(totalEmployees) || series.reduce(function (a, b) { return a + b; }, 0);
+        if (badgeId) {
+            setBadgeText(badgeId, 'Total Karyawan ' + formatNum(total, 0));
+        }
+
         var hasData = series.some(function (v) { return v > 0; });
         if (!hasData) {
             el.innerHTML = '<p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data.</p>';
-            renderBucketLegend(legendId, items || [], bucketColors);
+            renderBucketLegend(legendId, items || [], legendMeta);
             return;
         }
         el.innerHTML = '';
         wellnessChartInstances[key] = new ApexCharts(el, {
             series: series,
             labels: labels,
-            chart: { type: 'donut', height: 220, toolbar: { show: false } },
-            colors: bucketColors.slice(0, series.length),
+            chart: { type: 'donut', height: 230, toolbar: { show: false } },
+            colors: colors,
             legend: { show: false },
+            stroke: { width: 2, colors: ['#fff'] },
             dataLabels: { enabled: false },
             plotOptions: {
                 pie: {
                     donut: {
-                        size: '68%',
+                        size: '72%',
                         labels: {
                             show: true,
+                            name: {
+                                show: true,
+                                fontSize: '12px',
+                                color: '#64748B',
+                                offsetY: -6
+                            },
+                            value: {
+                                show: true,
+                                fontSize: '20px',
+                                fontWeight: 700,
+                                color: '#0F172A',
+                                offsetY: 6,
+                                formatter: function () {
+                                    return formatNum(total, 0);
+                                }
+                            },
                             total: {
                                 show: true,
                                 label: 'Karyawan',
-                                formatter: function (w) {
-                                    var total = w.globals.seriesTotals.reduce(function (a, b) { return a + b; }, 0);
+                                fontSize: '12px',
+                                color: '#64748B',
+                                formatter: function () {
                                     return formatNum(total, 0);
                                 }
                             }
@@ -1379,77 +1726,66 @@
             }
         });
         wellnessChartInstances[key].render();
-        renderBucketLegend(legendId, items || [], bucketColors);
+        renderBucketLegend(legendId, items || [], legendMeta);
     }
 
-    function renderTopSportsChart(items) {
+    function renderTopSportsChart(items, totalEmployees, sportParticipants) {
         var el = document.getElementById('wellness-chart-top-sports');
         var emptyEl = document.getElementById('wellness-chart-top-sports-empty');
-        if (!el || typeof ApexCharts === 'undefined') {
+        if (!el) {
             return;
         }
         destroyChart('topSports');
         var rows = items || [];
+        var totalAktif = Number(totalEmployees) || 0;
+        var totalPartisipasi = Number(sportParticipants);
+        if (!Number.isFinite(totalPartisipasi) || totalPartisipasi < 0) {
+            totalPartisipasi = rows.reduce(function (sum, item) { return sum + (Number(item.count) || 0); }, 0);
+        }
+        var partisipasiPct = totalAktif > 0 ? (totalPartisipasi / totalAktif) * 100 : 0;
+        setBadgeText(
+            'wellness-chart-top-sports-badge',
+            'Total partisipasi olahraga ' + formatNum(totalPartisipasi, 0) + ' karyawan (' + formatNum(partisipasiPct, 1) + '%)'
+        );
+
         if (!rows.length) {
+            el.innerHTML = '';
             el.classList.add('d-none');
             if (emptyEl) emptyEl.classList.remove('d-none');
             return;
         }
         el.classList.remove('d-none');
         if (emptyEl) emptyEl.classList.add('d-none');
-        el.innerHTML = '';
-        wellnessChartInstances.topSports = new ApexCharts(el, {
-            series: [{
-                name: 'Karyawan',
-                data: rows.map(function (item) { return Number(item.count) || 0; })
-            }],
-            chart: { type: 'bar', height: 260, toolbar: { show: false } },
-            plotOptions: {
-                bar: { horizontal: true, borderRadius: 4, barHeight: '55%' }
-            },
-            colors: ['#487FFF'],
-            dataLabels: {
-                enabled: true,
-                formatter: function (val, opts) {
-                    var item = rows[opts.dataPointIndex] || {};
-                    return formatNum(item.pct || 0, 1) + '% (' + formatNum(val, 0) + ')';
-                },
-                style: { fontSize: '11px', colors: ['#111827'] },
-                offsetX: 4
-            },
-            xaxis: {
-                categories: rows.map(function (item) { return item.label; }),
-                labels: { style: { fontSize: '11px' } }
-            },
-            yaxis: { labels: { style: { fontSize: '12px' } } },
-            grid: { borderColor: '#E5E7EB', strokeDashArray: 4 },
-            tooltip: {
-                y: {
-                    formatter: function (val, opts) {
-                        var item = rows[opts.dataPointIndex] || {};
-                        return formatNum(val, 0) + ' karyawan (' + formatNum(item.pct || 0, 1) + '%)';
-                    }
-                }
-            }
-        });
-        wellnessChartInstances.topSports.render();
+
+        var maxCount = Math.max.apply(null, rows.map(function (item) { return Number(item.count) || 0; }).concat([1]));
+        el.innerHTML = rows.map(function (item, idx) {
+            var count = Number(item.count) || 0;
+            var width = Math.max(4, Math.round((count / maxCount) * 100));
+            return '<div class="wc-top-sports__row">'
+                + '<span class="wc-top-sports__rank">' + (idx + 1) + '</span>'
+                + '<span class="wc-top-sports__sport-icon"><iconify-icon icon="' + sportIconFor(item.label) + '"></iconify-icon></span>'
+                + '<span class="wc-top-sports__name" title="' + escapeHtml(item.label) + '">' + escapeHtml(item.label) + '</span>'
+                + '<div class="wc-top-sports__track"><div class="wc-top-sports__bar" style="width:' + width + '%"></div></div>'
+                + '<span class="wc-top-sports__meta">' + formatNum(item.pct || 0, 1) + '% (' + formatNum(count, 0) + ')</span>'
+                + '</div>';
+        }).join('');
     }
 
     function renderMacroChart(items) {
         var el = document.getElementById('wellness-chart-macro');
-        if (!el || typeof ApexCharts === 'undefined') {
+        var insightEl = document.getElementById('wellness-chart-macro-insight');
+        if (!el) {
             return;
         }
         destroyChart('macro');
         var rows = (items || []).map(function (item) {
             return {
-                label: item.available === false ? (item.label + ' (belum tersedia)') : item.label,
+                label: item.label,
                 count: Number(item.count) || 0,
                 pct: Number(item.pct) || 0,
                 available: item.available !== false
             };
         });
-        el.innerHTML = '';
 
         if (!rows.length) {
             el.innerHTML = '<p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data makronutrien.</p>';
@@ -1458,103 +1794,55 @@
 
         var maxPct = 0;
         rows.forEach(function (item) {
-            if (item.pct > maxPct) {
-                maxPct = item.pct;
-            }
+            if (item.pct > maxPct) maxPct = item.pct;
         });
-        // Skala dinamis: nilai kecil (mis. 0,1%) tetap terlihat; tetap cap di 100.
-        var xMax = maxPct <= 0 ? 1 : Math.min(100, Math.max(1, Math.ceil(maxPct * 1.6 * 10) / 10));
+        var scaleMax = maxPct <= 0 ? 1 : Math.max(1, Math.ceil(maxPct * 1.8 * 10) / 10);
 
-        wellnessChartInstances.macro = new ApexCharts(el, {
-            series: [{
-                name: '% target terpenuhi',
-                data: rows.map(function (item) { return item.pct; })
-            }],
-            chart: {
-                type: 'bar',
-                height: Math.max(260, rows.length * 56),
-                toolbar: { show: false },
-                parentHeightOffset: 0
-            },
-            plotOptions: {
-                bar: {
-                    horizontal: true,
-                    borderRadius: 4,
-                    barHeight: '52%',
-                    distributed: true,
-                    dataLabels: {
-                        position: 'top'
-                    }
-                }
-            },
-            colors: ['#487FFF', '#45B369', '#FF9F29', '#8252E9'],
-            legend: { show: false },
-            dataLabels: {
-                enabled: true,
-                textAnchor: 'start',
-                offsetX: 8,
-                formatter: function (val, opts) {
-                    var item = rows[opts.dataPointIndex] || {};
-                    if (item.available === false) {
-                        return 'belum tersedia';
-                    }
-                    return formatNum(item.pct, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)';
-                },
-                style: {
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    colors: ['#202124']
-                },
-                background: {
-                    enabled: false
-                }
-            },
-            xaxis: {
-                categories: rows.map(function (item) { return item.label; }),
-                min: 0,
-                max: xMax,
-                tickAmount: 5,
-                labels: {
-                    formatter: function (val) {
-                        return formatNum(val, val >= 10 ? 0 : 1) + '%';
-                    },
-                    style: { fontSize: '11px', colors: ['#6B7280'] }
-                }
-            },
-            yaxis: {
-                labels: {
-                    maxWidth: 160,
-                    style: { fontSize: '12px', fontWeight: 500, colors: ['#202124'] }
-                }
-            },
-            grid: {
-                borderColor: '#E5E7EB',
-                strokeDashArray: 4,
-                padding: { left: 8, right: 48 }
-            },
-            tooltip: {
-                y: {
-                    formatter: function (val, opts) {
-                        var item = rows[opts.dataPointIndex] || {};
-                        if (item.available === false) {
-                            return 'Data serat belum tersedia di BeWell';
-                        }
-                        return formatNum(item.pct, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)';
-                    }
-                }
+        el.innerHTML = rows.map(function (item) {
+            var meta = macroIconMap[item.label] || { icon: 'mdi:circle', color: '#16A34A' };
+            var fillPct = item.available === false ? 0 : Math.min(100, (item.pct / scaleMax) * 100);
+            var metaText = item.available === false
+                ? 'belum tersedia'
+                : (formatNum(item.pct, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)');
+            var outside = fillPct < 28;
+            return '<div class="wc-macro__row">'
+                + '<div class="wc-macro__label">'
+                +   '<span class="wc-macro__icon" style="background:' + meta.color + '"><iconify-icon icon="' + meta.icon + '"></iconify-icon></span>'
+                +   '<span>' + escapeHtml(item.label) + '</span>'
+                + '</div>'
+                + '<div class="wc-macro__track">'
+                +   '<div class="wc-macro__fill" style="width:' + fillPct + '%;background:' + meta.color + ';"></div>'
+                +   '<span class="wc-macro__meta' + (outside ? ' is-outside' : '') + '" style="left:' + (outside ? Math.max(fillPct, 0) : 0) + '%;padding-left:' + (outside ? '8px' : '8px') + ';">' + escapeHtml(metaText) + '</span>'
+                + '</div>'
+                + '</div>';
+        }).join('');
+
+        if (insightEl) {
+            var lowCount = rows.filter(function (r) { return r.available && r.pct < 5; }).length;
+            if (lowCount >= 2) {
+                insightEl.textContent = 'Sebagian besar karyawan belum memenuhi target makronutrien harian. Dorong kebiasaan makan seimbang agar asupan protein, karbohidrat, lemak, dan serat lebih optimal.';
+            } else {
+                insightEl.textContent = 'Pencapaian target makronutrien masih bisa ditingkatkan. Fokuskan edukasi nutrisi pada kategori dengan partisipasi terendah.';
             }
-        });
-        wellnessChartInstances.macro.render();
+        }
     }
 
     function renderWellnessCharts(charts) {
         if (!charts) {
             return;
         }
-        renderTopSportsChart(charts.top_sports || []);
-        renderDonutChart('duration', 'wellness-chart-duration', 'wellness-chart-duration-legend', charts.duration_buckets || []);
-        renderDonutChart('frequency', 'wellness-chart-frequency', 'wellness-chart-frequency-legend', charts.frequency_buckets || []);
-        renderDonutChart('calorie', 'wellness-chart-calorie', 'wellness-chart-calorie-legend', charts.calorie_buckets || []);
+        var totalEmployees = Number(charts.total_employees) || 0;
+        var noSportBucket = (charts.duration_buckets || []).find(function (item) {
+            return /tidak ada/i.test(String(item.label || ''));
+        });
+        var sportParticipants = Math.max(
+            0,
+            totalEmployees - (noSportBucket ? (Number(noSportBucket.count) || 0) : 0)
+        );
+        renderTopSportsChart(charts.top_sports || [], totalEmployees, sportParticipants);
+        renderDonutChart('duration', 'wellness-chart-duration', 'wellness-chart-duration-legend', charts.duration_buckets || [], durationLegendMeta, 'wellness-chart-duration-badge', totalEmployees);
+        renderDonutChart('frequency', 'wellness-chart-frequency', 'wellness-chart-frequency-legend', charts.frequency_buckets || [], frequencyLegendMeta, 'wellness-chart-frequency-badge', totalEmployees);
+        renderDonutChart('calorie', 'wellness-chart-calorie', 'wellness-chart-calorie-legend', charts.calorie_buckets || [], calorieLegendMeta, 'wellness-chart-calorie-badge', totalEmployees);
         renderMacroChart(charts.macro_attainment || []);
     }
 

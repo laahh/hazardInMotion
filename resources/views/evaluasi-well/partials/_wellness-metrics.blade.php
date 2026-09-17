@@ -105,97 +105,183 @@
   </div>
 </div>
 
-{{-- Chart distribusi wellness (di atas Detail Metrik) --}}
+{{-- Chart distribusi wellness (desain kartu insight) --}}
 <div class="col-12">
   <div class="row gy-4" id="wellness-charts-section">
+    {{-- Top 5 Olahraga --}}
     <div class="col-xxl-6 col-xl-6">
-      <div class="card h-100 radius-8 border-0">
-        <div class="card-body p-24">
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-16">
-            <div>
-              <h6 class="mb-0 fw-bold text-lg">Top 5 Olahraga</h6>
-              <span class="text-sm text-secondary-light">Olahraga paling umum · % dari karyawan aktif</span>
+      <div class="card h-100 radius-12 border-0 shadow-sm wc-card wc-card--sports">
+        <div class="card-body p-24 d-flex flex-column">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-16">
+            <div class="d-flex align-items-start gap-3 min-w-0">
+              <span class="wc-card__head-icon" style="background:#14532D;color:#fff;">
+                <iconify-icon icon="mdi:run"></iconify-icon>
+              </span>
+              <div class="min-w-0">
+                <h6 class="mb-1 fw-bold text-lg" style="color:#0F172A;">Top 5 Olahraga</h6>
+                <span class="text-sm d-block" style="color:#64748B;">Olahraga paling umum · % dari karyawan aktif</span>
+              </div>
             </div>
+            <span class="wc-card__badge" id="wellness-chart-top-sports-badge">
+              <iconify-icon icon="mdi:account-group"></iconify-icon>
+              <span>Total partisipasi olahraga –</span>
+            </span>
           </div>
-          <div id="wellness-chart-top-sports" style="min-height: 260px;"></div>
+          <div id="wellness-chart-top-sports" class="wc-top-sports flex-grow-1" style="min-height: 260px;"></div>
           <p id="wellness-chart-top-sports-empty" class="text-secondary-light text-sm mb-0 text-center py-40 d-none">Belum ada data olahraga minggu ini.</p>
+          <div class="wc-axis-label mt-8">Jumlah Karyawan</div>
         </div>
       </div>
     </div>
 
+    {{-- Durasi Olahraga --}}
     <div class="col-xxl-6 col-xl-6">
-      <div class="card h-100 radius-8 border-0">
-        <div class="card-body p-24">
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-16">
-            <div>
-              <h6 class="mb-0 fw-bold text-lg">Durasi Olahraga</h6>
-              <span class="text-sm text-secondary-light">Menit/minggu (Minggu–Sabtu)</span>
+      <div class="card h-100 radius-12 border-0 shadow-sm wc-card">
+        <div class="card-body p-24 d-flex flex-column">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-12">
+            <div class="d-flex align-items-start gap-3 min-w-0">
+              <span class="wc-card__head-icon" style="background:#16A34A;color:#fff;">
+                <iconify-icon icon="mdi:clock-outline"></iconify-icon>
+              </span>
+              <div class="min-w-0">
+                <h6 class="mb-1 fw-bold text-lg" style="color:#0F172A;">Durasi Olahraga</h6>
+                <span class="text-sm d-block" style="color:#64748B;">Menit/minggu (Minggu–Sabtu)</span>
+              </div>
             </div>
+            <span class="wc-card__badge" id="wellness-chart-duration-badge">
+              <iconify-icon icon="mdi:account-group"></iconify-icon>
+              <span>Total Karyawan –</span>
+            </span>
           </div>
-          <div class="row align-items-center g-3">
-            <div class="col-sm-7">
+          <div class="row align-items-center g-3 flex-grow-1">
+            <div class="col-sm-6">
               <div id="wellness-chart-duration" style="min-height: 220px;"></div>
             </div>
-            <div class="col-sm-5">
-              <ul class="list-unstyled mb-0" id="wellness-chart-duration-legend"></ul>
+            <div class="col-sm-6">
+              <ul class="list-unstyled mb-0 wc-legend" id="wellness-chart-duration-legend"></ul>
             </div>
+          </div>
+          <div class="wc-tip wc-tip--green mt-16">
+            <iconify-icon icon="mdi:run" class="flex-shrink-0"></iconify-icon>
+            <span>Yuk, luangkan waktu minimal 150 menit aktivitas fisik setiap minggu untuk hidup lebih sehat!</span>
           </div>
         </div>
       </div>
     </div>
 
+    {{-- Frekuensi Olahraga --}}
     <div class="col-xxl-6 col-xl-6">
-      <div class="card h-100 radius-8 border-0">
-        <div class="card-body p-24">
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-16">
-            <div>
-              <h6 class="mb-0 fw-bold text-lg">Frekuensi Olahraga</h6>
-              <span class="text-sm text-secondary-light">Hari unik workout / minggu</span>
+      <div class="card h-100 radius-12 border-0 shadow-sm wc-card wc-card--freq">
+        <div class="card-body p-24 d-flex flex-column">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-12">
+            <div class="d-flex align-items-start gap-3 min-w-0">
+              <span class="wc-card__head-icon" style="background:#16A34A;color:#fff;">
+                <iconify-icon icon="mdi:calendar-month-outline"></iconify-icon>
+              </span>
+              <div class="min-w-0">
+                <h6 class="mb-1 fw-bold text-lg" style="color:#0F172A;">Frekuensi Olahraga</h6>
+                <span class="text-sm d-block" style="color:#64748B;">Hari unik workout / minggu</span>
+              </div>
             </div>
+            <span class="wc-card__badge" id="wellness-chart-frequency-badge">
+              <iconify-icon icon="mdi:account-group"></iconify-icon>
+              <span>Total Karyawan –</span>
+            </span>
           </div>
-          <div class="row align-items-center g-3">
-            <div class="col-sm-7">
+          <div class="row align-items-center g-3 flex-grow-1">
+            <div class="col-sm-6">
               <div id="wellness-chart-frequency" style="min-height: 220px;"></div>
             </div>
-            <div class="col-sm-5">
-              <ul class="list-unstyled mb-0" id="wellness-chart-frequency-legend"></ul>
+            <div class="col-sm-6">
+              <ul class="list-unstyled mb-0 wc-legend" id="wellness-chart-frequency-legend"></ul>
             </div>
+          </div>
+          <div class="wc-tip wc-tip--slate mt-16">
+            <iconify-icon icon="mdi:format-quote-close" class="flex-shrink-0" style="color:#16A34A;"></iconify-icon>
+            <span>Konsistensi kecil setiap hari, membawa perubahan besar.</span>
           </div>
         </div>
       </div>
     </div>
 
+    {{-- Kalori Makanan --}}
     <div class="col-xxl-6 col-xl-6">
-      <div class="card h-100 radius-8 border-0">
-        <div class="card-body p-24">
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-16">
-            <div>
-              <h6 class="mb-0 fw-bold text-lg">Kalori Makanan</h6>
-              <span class="text-sm text-secondary-light">Rata-rata harian vs target</span>
+      <div class="card h-100 radius-12 border-0 shadow-sm wc-card wc-card--calorie">
+        <div class="card-body p-24 d-flex flex-column">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-12">
+            <div class="d-flex align-items-start gap-3 min-w-0">
+              <span class="wc-card__head-icon" style="background:#EA580C;color:#fff;">
+                <iconify-icon icon="mdi:fire"></iconify-icon>
+              </span>
+              <div class="min-w-0">
+                <h6 class="mb-1 fw-bold text-lg" style="color:#0F172A;">Kalori Makanan</h6>
+                <span class="text-sm d-block" style="color:#64748B;">Rata-rata harian vs target</span>
+              </div>
             </div>
+            <span class="wc-card__badge" id="wellness-chart-calorie-badge">
+              <iconify-icon icon="mdi:account-group"></iconify-icon>
+              <span>Total Karyawan –</span>
+            </span>
           </div>
-          <div class="row align-items-center g-3">
-            <div class="col-sm-7">
+          <div class="row align-items-center g-3 flex-grow-1">
+            <div class="col-sm-6">
               <div id="wellness-chart-calorie" style="min-height: 220px;"></div>
             </div>
-            <div class="col-sm-5">
-              <ul class="list-unstyled mb-0" id="wellness-chart-calorie-legend"></ul>
+            <div class="col-sm-6">
+              <ul class="list-unstyled mb-0 wc-legend" id="wellness-chart-calorie-legend"></ul>
             </div>
+          </div>
+          <div class="wc-tip wc-tip--rose mt-16">
+            <iconify-icon icon="mdi:silverware-fork-knife" class="flex-shrink-0"></iconify-icon>
+            <span>Penuhi kebutuhan kalori seimbang untuk energi dan performa yang lebih baik.</span>
           </div>
         </div>
       </div>
     </div>
 
+    {{-- Makronutrien --}}
     <div class="col-12">
-      <div class="card h-100 radius-8 border-0">
+      <div class="card h-100 radius-12 border-0 shadow-sm wc-card wc-card--macro">
         <div class="card-body p-24">
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-16">
-            <div>
-              <h6 class="mb-0 fw-bold text-lg">Makronutrien</h6>
-              <span class="text-sm text-secondary-light">% karyawan yang rata-rata harian memenuhi target</span>
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
+            <div class="d-flex align-items-start gap-3 min-w-0">
+              <span class="wc-card__head-icon" style="background:#16A34A;color:#fff;">
+                <iconify-icon icon="mdi:leaf"></iconify-icon>
+              </span>
+              <div class="min-w-0">
+                <h6 class="mb-1 fw-bold text-lg" style="color:#0F172A;">Makronutrien</h6>
+                <span class="text-sm d-block" style="color:#64748B;">% karyawan yang rata-rata harian memenuhi target</span>
+              </div>
+            </div>
+            <div class="d-flex align-items-center flex-wrap gap-3" id="wellness-chart-macro-legend">
+              <span class="d-inline-flex align-items-center gap-2 text-sm" style="color:#475569;">
+                <span class="rounded-1" style="width:14px;height:14px;background:#16A34A;"></span>Memenuhi target
+              </span>
+              <span class="d-inline-flex align-items-center gap-2 text-sm" style="color:#475569;">
+                <span class="rounded-1" style="width:14px;height:14px;background:#E2E8F0;"></span>Belum memenuhi target
+              </span>
             </div>
           </div>
-          <div id="wellness-chart-macro" style="min-height: 300px;"></div>
+          <div class="row g-4 align-items-stretch">
+            <div class="col-lg-8">
+              <div id="wellness-chart-macro" class="wc-macro-chart" style="min-height: 280px;"></div>
+              <div class="wc-axis-label mt-8">% Karyawan</div>
+            </div>
+            <div class="col-lg-4">
+              <div class="wc-insight h-100">
+                <div class="d-flex align-items-center gap-2 mb-10">
+                  <span class="wc-insight__icon">
+                    <iconify-icon icon="mdi:chart-bar"></iconify-icon>
+                  </span>
+                  <h6 class="mb-0 fw-bold" style="color:#0F172A;">Insight</h6>
+                </div>
+                <p class="mb-0 text-sm lh-base" style="color:#475569;" id="wellness-chart-macro-insight">
+                  Sebagian besar karyawan belum memenuhi target makronutrien harian. Dorong kebiasaan makan seimbang agar asupan protein, karbohidrat, lemak, dan serat lebih optimal.
+                </p>
+                <p class="mb-0 mt-16 fw-semibold text-sm" style="color:#16A34A;font-style:italic;">Better Nutrition · Brighter Tomorrow</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
