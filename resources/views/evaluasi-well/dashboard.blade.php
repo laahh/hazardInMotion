@@ -454,6 +454,29 @@
     mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 30%, #000 58%);
     -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 30%, #000 58%);
   }
+  .wc-card__bg--duration {
+    top: auto;
+    bottom: 0;
+    right: 0;
+    width: min(46%, 250px);
+    height: 78%;
+    max-height: none;
+    object-fit: cover;
+    object-position: center 30%;
+    opacity: 0.42;
+    mask-image:
+      linear-gradient(120deg, transparent 0%, transparent 14%, rgba(0,0,0,.35) 38%, #000 66%),
+      linear-gradient(180deg, transparent 0%, #000 26%, #000 100%);
+    -webkit-mask-image:
+      linear-gradient(120deg, transparent 0%, transparent 14%, rgba(0,0,0,.35) 38%, #000 66%),
+      linear-gradient(180deg, transparent 0%, #000 26%, #000 100%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+  .wc-card--duration .wc-duration-body {
+    position: relative;
+    z-index: 1;
+  }
   .wc-card .card-body { z-index: 1; position: relative; }
   .wc-card__head-icon {
     width: 44px;

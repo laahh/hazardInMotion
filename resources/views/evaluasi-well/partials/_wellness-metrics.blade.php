@@ -138,7 +138,8 @@
 
     {{-- Durasi Olahraga --}}
     <div class="col-xxl-6 col-xl-6">
-      <div class="card h-100 wc-card">
+      <div class="card h-100 wc-card wc-card--has-bg wc-card--duration">
+        <img class="wc-card__bg wc-card__bg--duration" src="{{ asset('evaluasi-well-assets/images/wellness/bg-activity.png') }}" alt="" aria-hidden="true">
         <div class="card-body p-24 d-flex flex-column">
           <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
             <div class="d-flex align-items-start gap-3 min-w-0">
@@ -155,7 +156,7 @@
               <span>Total Karyawan –</span>
             </div>
           </div>
-          <div class="row align-items-center g-3 flex-grow-1">
+          <div class="row align-items-center g-3 flex-grow-1 wc-duration-body">
             <div class="col-5 col-sm-5">
               <div id="wellness-chart-duration" class="wc-donut"></div>
             </div>
