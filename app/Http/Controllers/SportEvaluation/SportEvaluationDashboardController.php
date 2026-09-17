@@ -160,7 +160,16 @@ class SportEvaluationDashboardController extends Controller
             'adoptionTrendLabels' => [],
             'adoptionTrendNewInstalls' => [],
             'adoptionTrendActiveUsers' => [],
+            'adoptionTrendDates' => [],
             'adoptionTrendRangeLabel' => '',
+            'activityPatternSeries' => [],
+            'activityPatternCategories' => [],
+            'activityPatternPeakDayLabel' => '–',
+            'activityPatternPeakDayCount' => 0,
+            'activityPatternAvgDaily' => 0,
+            'activityPatternWeekdayRatio' => 0.0,
+            'activityPatternPeakHourLabel' => '–',
+            'activityPatternInsight' => 'Belum ada cukup data untuk insight pola aktivitas.',
             'compositionOlahraga' => 0,
             'compositionNutrisi' => 0,
             'compositionSosial' => 0,
@@ -1301,21 +1310,9 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Pola Aktivitas Penggunaan Aktif: ringkasan KPI + chart area 4 minggu.
+     * Pola Aktivitas Penggunaan Aktif: heatmap harian + ringkasan 4 minggu.
      *
-     * @return array{
-     *     adoptionInstall:int,
-     *     adoptionLoginSuccess:int,
-     *     adoptionAktif:int,
-     *     adoptionNewInstallsPeriod:int,
-     *     adoptionAvgDailyUsage:int,
-     *     adoptionChartLabels:array<int,string>,
-     *     adoptionChartSeries:array<int,int>,
-     *     adoptionTrendLabels:array<int,string>,
-     *     adoptionTrendNewInstalls:array<int,int>,
-     *     adoptionTrendActiveUsers:array<int,int>,
-     *     adoptionTrendRangeLabel:string
-     * }
+     * @return array<string, mixed>
      */
     private function loginAdoptionData(): array
     {
@@ -1329,22 +1326,42 @@ class SportEvaluationDashboardController extends Controller
         $adoptionTrendLabels = [];
         $adoptionTrendNewInstalls = [];
         $adoptionTrendActiveUsers = [];
+        $adoptionTrendDates = [];
         $adoptionTrendRangeLabel = '';
+        $activityPatternSeries = [];
+        $activityPatternCategories = [];
+        $activityPatternPeakDayLabel = '–';
+        $activityPatternPeakDayCount = 0;
+        $activityPatternAvgDaily = 0;
+        $activityPatternWeekdayRatio = 0.0;
+        $activityPatternPeakHourLabel = '–';
+        $activityPatternInsight = 'Belum ada cukup data untuk insight pola aktivitas.';
+
+        $empty = compact(
+            'adoptionInstall',
+            'adoptionLoginSuccess',
+            'adoptionAktif',
+            'adoptionNewInstallsPeriod',
+            'adoptionAvgDailyUsage',
+            'adoptionChartLabels',
+            'adoptionChartSeries',
+            'adoptionTrendLabels',
+            'adoptionTrendNewInstalls',
+            'adoptionTrendActiveUsers',
+            'adoptionTrendDates',
+            'adoptionTrendRangeLabel',
+            'activityPatternSeries',
+            'activityPatternCategories',
+            'activityPatternPeakDayLabel',
+            'activityPatternPeakDayCount',
+            'activityPatternAvgDaily',
+            'activityPatternWeekdayRatio',
+            'activityPatternPeakHourLabel',
+            'activityPatternInsight',
+        );
 
         if (! $this->connection->isUp()) {
-            return compact(
-                'adoptionInstall',
-                'adoptionLoginSuccess',
-                'adoptionAktif',
-                'adoptionNewInstallsPeriod',
-                'adoptionAvgDailyUsage',
-                'adoptionChartLabels',
-                'adoptionChartSeries',
-                'adoptionTrendLabels',
-                'adoptionTrendNewInstalls',
-                'adoptionTrendActiveUsers',
-                'adoptionTrendRangeLabel',
-            );
+            return $empty;
         }
 
         try {
@@ -1378,6 +1395,7 @@ class SportEvaluationDashboardController extends Controller
             $adoptionTrendLabels = $trend['labels'] ?? [];
             $adoptionTrendNewInstalls = $trend['new_installs'] ?? [];
             $adoptionTrendActiveUsers = $trend['active_users'] ?? [];
+            $adoptionTrendDates = $trend['dates'] ?? [];
             $adoptionTrendRangeLabel = (string) ($trend['range_label'] ?? '');
 
             $adoptionNewInstallsPeriod = array_sum($adoptionTrendNewInstalls);
@@ -1386,9 +1404,30 @@ class SportEvaluationDashboardController extends Controller
                 ? (int) round(array_sum($adoptionTrendActiveUsers) / $days)
                 : 0;
 
-            // Compat lama (jika partial lain masih baca series bulanan).
             $adoptionChartLabels = $adoptionTrendLabels;
             $adoptionChartSeries = $adoptionTrendActiveUsers;
+
+            $pattern = $this->buildActivityPatternPayload(
+                $adoptionTrendDates,
+                $adoptionTrendLabels,
+                $adoptionTrendActiveUsers,
+                $adoptionTrendRangeLabel,
+            );
+            $activityPatternSeries = $pattern['series'];
+            $activityPatternCategories = $pattern['categories'];
+            $activityPatternPeakDayLabel = $pattern['peak_day_label'];
+            $activityPatternPeakDayCount = $pattern['peak_day_count'];
+            $activityPatternAvgDaily = $pattern['avg_daily'];
+            $activityPatternWeekdayRatio = $pattern['weekday_ratio'];
+            $activityPatternInsight = $pattern['insight'];
+
+            if ($adoptionTrendDates !== []) {
+                $from = $adoptionTrendDates[0].' 00:00:00';
+                $to = Carbon::parse($adoptionTrendDates[array_key_last($adoptionTrendDates)])
+                    ->endOfDay()
+                    ->format('Y-m-d H:i:s');
+                $activityPatternPeakHourLabel = $this->resolvePeakHourLabel($from, $to);
+            }
         } catch (Throwable $e) {
             report($e);
         }
@@ -1404,8 +1443,191 @@ class SportEvaluationDashboardController extends Controller
             'adoptionTrendLabels',
             'adoptionTrendNewInstalls',
             'adoptionTrendActiveUsers',
+            'adoptionTrendDates',
             'adoptionTrendRangeLabel',
+            'activityPatternSeries',
+            'activityPatternCategories',
+            'activityPatternPeakDayLabel',
+            'activityPatternPeakDayCount',
+            'activityPatternAvgDaily',
+            'activityPatternWeekdayRatio',
+            'activityPatternPeakHourLabel',
+            'activityPatternInsight',
         );
+    }
+
+    /**
+     * @param  list<string>  $dates
+     * @param  list<string>  $labels
+     * @param  list<int>  $activeUsers
+     * @return array{
+     *     series: list<array{name: string, data: list<array{x: string, y: int|null}>}>,
+     *     categories: list<string>,
+     *     peak_day_label: string,
+     *     peak_day_count: int,
+     *     avg_daily: int,
+     *     weekday_ratio: float,
+     *     insight: string
+     * }
+     */
+    private function buildActivityPatternPayload(
+        array $dates,
+        array $labels,
+        array $activeUsers,
+        string $rangeLabel,
+    ): array {
+        $weekdayNames = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+        // Carbon dayOfWeek: 0=Sun … 6=Sat → index Senin-first
+        $dowToIndex = [1 => 0, 2 => 1, 3 => 2, 4 => 3, 5 => 4, 6 => 5, 0 => 6];
+
+        $categories = $labels;
+        $seriesData = [];
+        foreach ($weekdayNames as $name) {
+            $seriesData[$name] = [];
+        }
+
+        $peakCount = -1;
+        $peakLabel = '–';
+        $weekdaySum = 0.0;
+        $weekdayDays = 0;
+        $weekendSum = 0.0;
+        $weekendDays = 0;
+        $totalSum = 0;
+        $totalDays = 0;
+
+        $count = min(count($dates), count($activeUsers), count($labels));
+        for ($i = 0; $i < $count; $i++) {
+            $date = (string) $dates[$i];
+            $label = (string) $labels[$i];
+            $value = (int) $activeUsers[$i];
+            $dow = Carbon::parse($date)->dayOfWeek;
+            $rowIndex = $dowToIndex[$dow] ?? 0;
+            $rowName = $weekdayNames[$rowIndex];
+
+            foreach ($weekdayNames as $name) {
+                $seriesData[$name][] = [
+                    'x' => $label,
+                    'y' => $name === $rowName ? $value : 0,
+                ];
+            }
+
+            $totalSum += $value;
+            $totalDays++;
+            if ($value > $peakCount) {
+                $peakCount = $value;
+                $peakLabel = Carbon::parse($date)->translatedFormat('d M Y');
+            }
+            if ($dow >= 1 && $dow <= 5) {
+                $weekdaySum += $value;
+                $weekdayDays++;
+            } else {
+                $weekendSum += $value;
+                $weekendDays++;
+            }
+        }
+
+        $series = [];
+        foreach ($weekdayNames as $name) {
+            $series[] = [
+                'name' => $name,
+                'data' => $seriesData[$name],
+            ];
+        }
+
+        $avgDaily = $totalDays > 0 ? (int) round($totalSum / $totalDays) : 0;
+        $weekdayAvg = $weekdayDays > 0 ? $weekdaySum / $weekdayDays : 0.0;
+        $weekendAvg = $weekendDays > 0 ? $weekendSum / $weekendDays : 0.0;
+        $ratio = $weekendAvg > 0
+            ? round($weekdayAvg / $weekendAvg, 1)
+            : ($weekdayAvg > 0 ? 99.0 : 0.0);
+
+        $insight = 'Belum ada cukup data untuk insight pola aktivitas.';
+        if ($totalDays > 0 && $peakCount >= 0) {
+            if ($weekdayAvg >= $weekendAvg && $weekdayAvg > 0) {
+                $insight = 'Aktivitas tertinggi biasanya terjadi pada hari kerja'
+                    .($peakLabel !== '–' ? ', dengan puncak di '.$peakLabel : '')
+                    .'. Manfaatkan momentum ini untuk program engagement.';
+            } elseif ($weekendAvg > $weekdayAvg) {
+                $insight = 'Aktivitas lebih tinggi di akhir pekan'
+                    .($peakLabel !== '–' ? ', puncak pada '.$peakLabel : '')
+                    .'. Pertimbangkan konten engagement khusus weekend.';
+            } else {
+                $insight = 'Pola aktivitas relatif merata sepanjang minggu'
+                    .($rangeLabel !== '' ? ' ('.$rangeLabel.')' : '')
+                    .'.';
+            }
+        }
+
+        return [
+            'series' => $series,
+            'categories' => $categories,
+            'peak_day_label' => $peakLabel,
+            'peak_day_count' => max(0, $peakCount),
+            'avg_daily' => $avgDaily,
+            'weekday_ratio' => $ratio,
+            'insight' => $insight,
+        ];
+    }
+
+    private function resolvePeakHourLabel(string $from, string $to): string
+    {
+        try {
+            $db = DB::connection(BewellConnectionService::CONNECTION);
+            [$inSql, $inBindings] = $this->scopedUserIdSql('s.user_id');
+
+            $signalsSql = '
+                SELECT user_id, created_at FROM login_audit
+                    WHERE event = ? AND user_id IS NOT NULL
+                      AND created_at BETWEEN ? AND ?
+                UNION ALL
+                SELECT user_id, created_at FROM food_analyses
+                    WHERE user_id IS NOT NULL
+                      AND created_at BETWEEN ? AND ?
+                UNION ALL
+                SELECT user_id, created_at FROM workout_analyses
+                    WHERE user_id IS NOT NULL
+                      AND created_at BETWEEN ? AND ?
+            ';
+
+            $rows = $db->select(
+                'SELECT HOUR(s.created_at) AS h, COUNT(*) AS c
+                 FROM ('.$signalsSql.') AS s
+                 WHERE 1 = 1'.$inSql.'
+                 GROUP BY HOUR(s.created_at)',
+                array_merge(
+                    ['login_success', $from, $to, $from, $to, $from, $to],
+                    $inBindings
+                )
+            );
+
+            $hours = array_fill(0, 24, 0);
+            foreach ($rows as $row) {
+                $h = (int) ($row->h ?? -1);
+                if ($h >= 0 && $h <= 23) {
+                    $hours[$h] = (int) ($row->c ?? 0);
+                }
+            }
+
+            $bestStart = 0;
+            $bestSum = -1;
+            for ($h = 0; $h <= 22; $h++) {
+                $sum = $hours[$h] + $hours[$h + 1];
+                if ($sum > $bestSum) {
+                    $bestSum = $sum;
+                    $bestStart = $h;
+                }
+            }
+
+            if ($bestSum <= 0) {
+                return '–';
+            }
+
+            return sprintf('%02d:00 – %02d:00 WITA', $bestStart, $bestStart + 2);
+        } catch (Throwable $e) {
+            report($e);
+
+            return '–';
+        }
     }
 
     /**

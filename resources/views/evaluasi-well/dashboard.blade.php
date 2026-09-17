@@ -549,92 +549,75 @@
         return;
     }
 
-    var labels = @json($adoptionTrendLabels ?? $adoptionChartLabels ?? []);
-    var newInstalls = @json($adoptionTrendNewInstalls ?? []);
-    var activeUsers = @json($adoptionTrendActiveUsers ?? []);
+    var series = @json($activityPatternSeries ?? []);
+    var categories = @json($activityPatternCategories ?? []);
 
     function formatNumber(value) {
         var n = Number(value) || 0;
         return n.toLocaleString('id-ID');
     }
 
-    if (!labels.length) {
-        el.innerHTML = '<p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data tren untuk rentang ini.</p>';
+    if (!series.length || !categories.length) {
+        el.innerHTML = '<p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data pola aktivitas untuk rentang ini.</p>';
         return;
     }
 
     new ApexCharts(el, {
-        series: [
-            { name: 'Install Baru', data: newInstalls },
-            { name: 'Penggunaan (User Aktif)', data: activeUsers }
-        ],
+        series: series,
         chart: {
-            type: 'area',
-            height: 310,
+            type: 'heatmap',
+            height: 300,
             toolbar: { show: false },
             parentHeightOffset: 0,
-            zoom: { enabled: false },
             fontFamily: 'inherit'
         },
-        stroke: {
-            curve: 'smooth',
-            width: [3, 3]
-        },
-        colors: ['#487FFF', '#45b369'],
-        fill: {
-            type: 'gradient',
-            gradient: {
-                shadeIntensity: 1,
-                opacityFrom: 0.32,
-                opacityTo: 0.05,
-                stops: [0, 85, 100]
-            }
-        },
-        markers: {
-            size: 0,
-            hover: { size: 5 }
-        },
         dataLabels: { enabled: false },
-        grid: {
-            show: true,
-            borderColor: '#E5E7EB',
-            strokeDashArray: 4,
-            padding: { left: 8, right: 12, top: 0, bottom: 0 }
+        stroke: {
+            width: 2,
+            colors: ['#ffffff']
         },
-        xaxis: {
-            categories: labels,
-            tickAmount: Math.min(9, Math.max(4, Math.ceil(labels.length / 3))),
-            labels: {
-                style: { colors: '#6B7280', fontSize: '11px' },
-                rotate: -30,
-                hideOverlappingLabels: true
-            },
-            axisBorder: { show: false },
-            axisTicks: { show: false }
-        },
-        yaxis: {
-            min: 0,
-            labels: {
-                style: { colors: '#6B7280', fontSize: '11px' },
-                formatter: function (value) {
-                    return formatNumber(value);
+        plotOptions: {
+            heatmap: {
+                radius: 4,
+                enableShades: false,
+                colorScale: {
+                    ranges: [
+                        { from: 0, to: 0, color: '#F3F4F6', name: 'Kosong' },
+                        { from: 1, to: 50, color: '#E8F5E9', name: '0–50' },
+                        { from: 51, to: 100, color: '#A5D6A7', name: '51–100' },
+                        { from: 101, to: 200, color: '#66BB6A', name: '101–200' },
+                        { from: 201, to: 400, color: '#43A047', name: '201–400' },
+                        { from: 401, to: 100000, color: '#2E7D32', name: '>400' }
+                    ]
                 }
             }
         },
-        legend: {
-            position: 'top',
-            horizontalAlign: 'left',
-            fontSize: '12px',
-            fontWeight: 500,
-            markers: { width: 10, height: 10, radius: 12 },
-            itemMargin: { horizontal: 12, vertical: 0 }
+        legend: { show: false },
+        grid: {
+            padding: { top: 0, right: 8, bottom: 0, left: 0 }
+        },
+        xaxis: {
+            type: 'category',
+            labels: {
+                style: { colors: '#6B7280', fontSize: '10px' },
+                rotate: -35,
+                hideOverlappingLabels: true,
+                trim: true
+            },
+            tooltip: { enabled: false }
+        },
+        yaxis: {
+            labels: {
+                style: { colors: '#374151', fontSize: '12px', fontWeight: 500 }
+            }
         },
         tooltip: {
-            shared: true,
-            intersect: false,
             y: {
                 formatter: function (value) {
-                    return formatNumber(value) + ' user';
+                    if (!value) {
+                        return 'Tidak ada data';
+                    }
+                    return formatNumber(value) + ' user aktif';
                 }
             }
         }
@@ -3798,54 +3781,95 @@
       <div class="col-xxl-8">
         <div class="card h-100 radius-8 border-0">
           <div class="card-body p-24">
-            <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-              <div>
+            <div class="d-flex align-items-start flex-wrap gap-3 justify-content-between mb-16">
+              <div class="min-w-0">
                 <h6 class="mb-2 fw-bold text-lg">Pola Aktivitas Penggunaan Aktif</h6>
-                <span class="text-sm fw-medium text-secondary-light">
+                <span class="text-sm fw-medium text-secondary-light d-block">
+                  Kapan karyawan paling aktif menggunakan BeWELL?
+                </span>
+                <span class="text-xs text-secondary-light" id="activity-pattern-range">
                   @if(!empty($adoptionTrendRangeLabel))
-                    4 minggu terakhir · {{ $adoptionTrendRangeLabel }}
+                    {{ $adoptionTrendRangeLabel }}
                   @else
-                    4 minggu terakhir (termasuk minggu berjalan)
+                    4 minggu terakhir
                   @endif
                 </span>
               </div>
-              <span class="text-xs text-secondary-light text-end">Install baru = first signal · Penggunaan = user aktif harian</span>
-            </div>
-
-            <div class="mt-20 d-flex justify-content-center flex-wrap gap-3">
-
-              <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
-                <span class="bg-primary-50 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-primary-600 group-hover:bg-primary-600 group-hover:text-white">
-                  <iconify-icon icon="solar:download-minimalistic-bold" class="icon"></iconify-icon>
+              <div class="bg-success-50 border border-success-100 radius-8 p-12 d-flex align-items-start gap-2" style="max-width: 320px;">
+                <span class="w-32-px h-32-px rounded-circle bg-success-main text-white d-inline-flex align-items-center justify-content-center flex-shrink-0">
+                  <iconify-icon icon="solar:calendar-bold" class="text-md"></iconify-icon>
                 </span>
-                <div>
-                  <span class="text-secondary-light text-sm fw-medium">Total Install</span>
-                  <h6 class="text-md fw-semibold mb-0">{{ number_format($adoptionInstall ?? 0) }}</h6>
-                </div>
-              </div>
-
-              <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
-                <span class="bg-info-50 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-info-main group-hover:bg-primary-600 group-hover:text-white">
-                  <iconify-icon icon="solar:user-plus-bold" class="icon"></iconify-icon>
-                </span>
-                <div>
-                  <span class="text-secondary-light text-sm fw-medium">Install Baru (4 mg)</span>
-                  <h6 class="text-md fw-semibold mb-0">{{ number_format($adoptionNewInstallsPeriod ?? 0) }}</h6>
-                </div>
-              </div>
-
-              <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
-                <span class="bg-success-50 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-success-main group-hover:bg-primary-600 group-hover:text-white">
-                  <iconify-icon icon="solar:user-check-bold" class="icon"></iconify-icon>
-                </span>
-                <div>
-                  <span class="text-secondary-light text-sm fw-medium">Rata-rata Penggunaan</span>
-                  <h6 class="text-md fw-semibold mb-0">{{ number_format($adoptionAvgDailyUsage ?? 0) }}<span class="text-xs text-secondary-light fw-medium"> /hari</span></h6>
-                </div>
+                <p class="mb-0 text-xs text-secondary-light" id="activity-pattern-insight">{{ $activityPatternInsight ?? 'Belum ada cukup data untuk insight pola aktivitas.' }}</p>
               </div>
             </div>
-            
-            <div id="barChart" class="barChart mt-12"></div>
+
+            <div id="barChart" class="barChart" style="min-height: 280px;"></div>
+
+            <div class="d-flex align-items-center flex-wrap gap-2 mt-8 mb-16" id="activity-pattern-legend">
+              <span class="text-xs text-secondary-light me-4">Jumlah user aktif</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs text-secondary-light"><span class="w-14-px h-14-px radius-4" style="background:#E8F5E9;"></span>0–50</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs text-secondary-light"><span class="w-14-px h-14-px radius-4" style="background:#A5D6A7;"></span>51–100</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs text-secondary-light"><span class="w-14-px h-14-px radius-4" style="background:#66BB6A;"></span>101–200</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs text-secondary-light"><span class="w-14-px h-14-px radius-4" style="background:#43A047;"></span>201–400</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs text-secondary-light"><span class="w-14-px h-14-px radius-4" style="background:#2E7D32;"></span>&gt;400</span>
+            </div>
+
+            <div class="row g-3">
+              <div class="col-sm-6 col-xl-3">
+                <div class="border radius-8 p-12 h-100">
+                  <div class="d-flex align-items-center gap-2 mb-8">
+                    <span class="w-28-px h-28-px rounded-circle bg-primary-50 text-primary-600 d-inline-flex align-items-center justify-content-center">
+                      <iconify-icon icon="solar:calendar-mark-bold"></iconify-icon>
+                    </span>
+                    <span class="text-xs text-secondary-light fw-medium">Hari Tertinggi</span>
+                  </div>
+                  <h6 class="mb-0 fw-semibold text-sm" id="activity-pattern-peak-day">{{ $activityPatternPeakDayLabel ?? '–' }}</h6>
+                  <span class="text-xs text-secondary-light" id="activity-pattern-peak-count">{{ number_format($activityPatternPeakDayCount ?? 0) }} user aktif</span>
+                </div>
+              </div>
+              <div class="col-sm-6 col-xl-3">
+                <div class="border radius-8 p-12 h-100">
+                  <div class="d-flex align-items-center gap-2 mb-8">
+                    <span class="w-28-px h-28-px rounded-circle bg-success-50 text-success-main d-inline-flex align-items-center justify-content-center">
+                      <iconify-icon icon="solar:chart-bold"></iconify-icon>
+                    </span>
+                    <span class="text-xs text-secondary-light fw-medium">Rata-rata Harian</span>
+                  </div>
+                  <h6 class="mb-0 fw-semibold text-sm" id="activity-pattern-avg">{{ number_format($activityPatternAvgDaily ?? 0) }} user aktif</h6>
+                </div>
+              </div>
+              <div class="col-sm-6 col-xl-3">
+                <div class="border radius-8 p-12 h-100">
+                  <div class="d-flex align-items-center gap-2 mb-8">
+                    <span class="w-28-px h-28-px rounded-circle bg-warning-50 text-warning-main d-inline-flex align-items-center justify-content-center">
+                      <iconify-icon icon="solar:graph-up-bold"></iconify-icon>
+                    </span>
+                    <span class="text-xs text-secondary-light fw-medium">Hari Kerja vs Akhir Pekan</span>
+                  </div>
+                  <h6 class="mb-0 fw-semibold text-sm" id="activity-pattern-ratio">
+                    @php $ratio = (float) ($activityPatternWeekdayRatio ?? 0); @endphp
+                    @if($ratio >= 99)
+                      Lebih tinggi di hari kerja
+                    @elseif($ratio > 0)
+                      {{ number_format($ratio, 1) }}x lebih tinggi di hari kerja
+                    @else
+                      –
+                    @endif
+                  </h6>
+                </div>
+              </div>
+              <div class="col-sm-6 col-xl-3">
+                <div class="border radius-8 p-12 h-100">
+                  <div class="d-flex align-items-center gap-2 mb-8">
+                    <span class="w-28-px h-28-px rounded-circle bg-info-50 text-info-main d-inline-flex align-items-center justify-content-center">
+                      <iconify-icon icon="solar:clock-circle-bold"></iconify-icon>
+                    </span>
+                    <span class="text-xs text-secondary-light fw-medium">Waktu Puncak</span>
+                  </div>
+                  <h6 class="mb-0 fw-semibold text-sm" id="activity-pattern-peak-hour">{{ $activityPatternPeakHourLabel ?? '–' }}</h6>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
