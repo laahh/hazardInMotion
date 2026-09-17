@@ -3434,7 +3434,7 @@
                         <iconify-icon icon="mingcute:user-follow-fill" class="icon"></iconify-icon>  
                       </span>
                       <div>
-                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total User Aktif</span>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total User Aktif Minggu Ini</span>
                         <h6 class="fw-semibold">{{ number_format($activeUsersTotal ?? 0) }}</h6>
                       </div>
                     </div>
