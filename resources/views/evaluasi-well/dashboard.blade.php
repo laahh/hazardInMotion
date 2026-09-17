@@ -3794,13 +3794,13 @@
       </div>
       <!-- Pertumbuhan User Aktif End -->
 
-      <!-- Tren Install & Penggunaan Harian start -->
+      <!-- Pola Aktivitas Penggunaan Aktif start -->
       <div class="col-xxl-8">
         <div class="card h-100 radius-8 border-0">
           <div class="card-body p-24">
             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
               <div>
-                <h6 class="mb-2 fw-bold text-lg">Tren Install &amp; Penggunaan Harian</h6>
+                <h6 class="mb-2 fw-bold text-lg">Pola Aktivitas Penggunaan Aktif</h6>
                 <span class="text-sm fw-medium text-secondary-light">
                   @if(!empty($adoptionTrendRangeLabel))
                     4 minggu terakhir · {{ $adoptionTrendRangeLabel }}
@@ -3849,7 +3849,7 @@
           </div>
         </div>
       </div>
-      <!-- Tren Install & Penggunaan Harian End -->
+      <!-- Pola Aktivitas Penggunaan Aktif End -->
 
       <!-- Campaign Static start -->
       <div class="col-xxl-4">

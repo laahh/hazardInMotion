@@ -153,7 +153,7 @@
           <div class="border radius-8 overflow-hidden mb-24" id="install-stats-trend-section">
             <div class="px-16 py-12 border-bottom bg-neutral-50 d-flex align-items-center justify-content-between flex-wrap gap-2">
               <div>
-                <h6 class="mb-0 fw-semibold text-md">Tren Install & Penggunaan Harian</h6>
+                <h6 class="mb-0 fw-semibold text-md">Pola Aktivitas Penggunaan Aktif</h6>
                 <span class="text-xs text-secondary-light" id="install-stats-trend-subtitle">
                   4 minggu terakhir (termasuk minggu berjalan)
                 </span>

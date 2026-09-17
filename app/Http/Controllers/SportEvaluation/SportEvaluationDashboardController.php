@@ -1301,7 +1301,7 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Tren Install & Penggunaan Harian: ringkasan KPI + chart area 4 minggu.
+     * Pola Aktivitas Penggunaan Aktif: ringkasan KPI + chart area 4 minggu.
      *
      * @return array{
      *     adoptionInstall:int,
