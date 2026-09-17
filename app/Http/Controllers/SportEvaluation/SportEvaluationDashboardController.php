@@ -1748,10 +1748,13 @@ class SportEvaluationDashboardController extends Controller
 
             $hours = array_fill(0, 24, 0);
             foreach ($rows as $row) {
-                $h = (int) ($row->h ?? -1);
-                if ($h >= 0 && $h <= 23) {
-                    $hours[$h] = (int) ($row->c ?? 0);
+                $hUtc = (int) ($row->h ?? -1);
+                if ($hUtc < 0 || $hUtc > 23) {
+                    continue;
                 }
+                // created_at tersimpan UTC → konversi ke WITA (UTC+8).
+                $hWita = ($hUtc + 8) % 24;
+                $hours[$hWita] += (int) ($row->c ?? 0);
             }
 
             $bestStart = 0;

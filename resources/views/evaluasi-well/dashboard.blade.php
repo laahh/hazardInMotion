@@ -496,6 +496,64 @@
     color: #16A34A;
     flex-shrink: 0;
   }
+  .wc-card__badge--stack {
+    border-radius: 14px;
+    padding: 10px 14px;
+    align-items: center;
+  }
+  .wc-card__badge-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .wc-card__badge-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: #64748B;
+    line-height: 1.2;
+  }
+  .wc-card__badge-value {
+    display: block;
+    font-size: 16px;
+    font-weight: 700;
+    color: #0F172A;
+    line-height: 1.2;
+  }
+  .wc-card__bg--frequency {
+    width: min(48%, 260px);
+    max-height: 62%;
+    opacity: 0.92;
+    bottom: -4px;
+    right: -2px;
+    mask-image: linear-gradient(135deg, transparent 0%, transparent 12%, rgba(0,0,0,.75) 36%, #000 62%);
+    -webkit-mask-image: linear-gradient(135deg, transparent 0%, transparent 12%, rgba(0,0,0,.75) 36%, #000 62%);
+  }
+  .wc-card--frequency .wc-frequency-body {
+    position: relative;
+    z-index: 1;
+  }
+  .wc-donut--frequency { min-height: 230px; }
+  .wc-legend--frequency .wc-legend__item {
+    align-items: center;
+    gap: 12px;
+  }
+  .wc-legend--frequency .wc-legend__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+  .wc-legend--frequency .wc-legend__icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+  .wc-legend--frequency .wc-legend__title {
+    font-size: 14px;
+    font-weight: 700;
+  }
   .wc-tip {
     display: flex;
     align-items: flex-start;
@@ -510,11 +568,14 @@
   .wc-tip--green { background: #ECFDF5; color: #166534; border: 1px solid #BBF7D0; }
   .wc-tip--quote {
     background: #ECFDF5;
-    color: #166534;
+    color: #334155;
     border: 1px solid #BBF7D0;
-    padding-right: min(42%, 220px);
+    padding-right: min(46%, 240px);
+    position: relative;
+    z-index: 1;
   }
-  .wc-tip--quote iconify-icon { color: #16A34A; font-size: 22px; }
+  .wc-tip--quote iconify-icon { color: #16A34A; font-size: 26px; }
+  .wc-tip--quote strong { color: #15803D; font-weight: 700; }
   .wc-tip--rose {
     background: #FFF1F2;
     color: #9F1239;
@@ -1110,7 +1171,7 @@
 
     function colorFor(value) {
         var n = Number(value) || 0;
-        if (n <= 0) return '#ECFDF5';
+        if (n <= 0) return '#E2E8F0';
         if (n <= thresholds[1]) return '#ECFDF5';
         if (n <= thresholds[2]) return '#A7F3D0';
         if (n <= thresholds[3]) return '#6EE7B7';
@@ -1132,7 +1193,8 @@
             return;
         }
         var bands = [
-            { color: '#ECFDF5', border: '1px solid #D1FAE5', label: '≤' + formatNumber(thresholds[1]) },
+            { color: '#E2E8F0', border: '1px solid #CBD5E1', label: '0' },
+            { color: '#ECFDF5', border: '1px solid #D1FAE5', label: '1–' + formatNumber(thresholds[1]) },
             { color: '#A7F3D0', border: '0', label: formatNumber(thresholds[1] + 1) + '–' + formatNumber(thresholds[2]) },
             { color: '#6EE7B7', border: '0', label: formatNumber(thresholds[2] + 1) + '–' + formatNumber(thresholds[3]) },
             { color: '#34D399', border: '0', label: formatNumber(thresholds[3] + 1) + '–' + formatNumber(thresholds[4]) },
@@ -1179,7 +1241,8 @@
             var value = Number(cell.y || 0);
             var dateLabel = cell.date_label || cell.x || '';
             var tip = escapeHtml(dateLabel) + ' | ' + formatNumber(value) + ' user aktif';
-            html += '<div class="ap-heatmap-cell" style="background:' + colorFor(value) + ';"'
+            var zeroClass = value <= 0 ? ' is-zero' : '';
+            html += '<div class="ap-heatmap-cell' + zeroClass + '" style="background:' + colorFor(value) + ';"'
                 + ' data-tip="' + tip + '"'
                 + ' data-date="' + escapeHtml(cell.date || '') + '"'
                 + ' data-value="' + value + '"'
@@ -1374,10 +1437,14 @@
   z-index: 1;
   position: relative;
 }
-.activity-pattern-heatmap .ap-heatmap-cell.is-empty {
-  background: #F1F5F9;
-  border: 1px dashed #E2E8F0;
+.activity-pattern-heatmap .ap-heatmap-cell.is-empty,
+.activity-pattern-heatmap .ap-heatmap-cell.is-zero {
+  background: #E2E8F0 !important;
+  border: 1px solid #CBD5E1;
   cursor: default;
+}
+.activity-pattern-heatmap .ap-heatmap-cell.is-empty {
+  border-style: dashed;
 }
 .activity-pattern-heatmap .ap-heatmap-tooltip {
   position: absolute;
@@ -1972,9 +2039,9 @@
         { icon: 'mdi:close-circle', color: '#F97316' }
     ];
     var frequencyLegendMeta = [
-        { icon: 'mdi:calendar-month-outline', color: '#3B82F6' },
-        { icon: 'mdi:calendar-month-outline', color: '#16A34A' },
-        { icon: 'mdi:close-circle', color: '#F97316' }
+        { icon: 'mdi:calendar-check', color: '#3B82F6' },
+        { icon: 'mdi:calendar-check', color: '#16A34A' },
+        { icon: 'mdi:close', color: '#F97316' }
     ];
     var calorieLegendMeta = [
         { icon: 'mdi:arrow-up-bold', color: '#3B82F6' },
@@ -1999,12 +2066,26 @@
     function setBadgeHtml(elId, text) {
         var el = document.getElementById(elId);
         if (!el) return;
-        var span = el.querySelector('span');
+        var valueEl = el.querySelector('.wc-card__badge-value');
+        if (valueEl) {
+            var match = String(text || '').match(/([\d.,]+)\s*$/);
+            valueEl.textContent = match ? match[1] : text;
+            return;
+        }
+        var span = el.querySelector('span:not(.wc-card__badge-copy):not(.wc-card__badge-label):not(.wc-card__badge-value)');
         if (span) {
             span.textContent = text;
             return;
         }
         el.appendChild(document.createTextNode(text));
+    }
+
+    function setStackedBadgeValue(elId, total) {
+        var valueEl = document.querySelector('#' + elId + ' .wc-card__badge-value')
+            || document.getElementById(elId + '-value');
+        if (valueEl) {
+            valueEl.textContent = formatNum(total, 0);
+        }
     }
 
     function sportIconFor(label) {
@@ -2041,13 +2122,23 @@
     function renderBucketLegend(elId, items, meta) {
         var el = document.getElementById(elId);
         if (!el) return;
+        var withDot = el.classList.contains('wc-legend--frequency') || el.classList.contains('wc-legend--dot');
         el.innerHTML = (items || []).map(function (item, i) {
             var m = (meta && meta[i]) ? meta[i] : { icon: 'mdi:circle', color: '#94A3B8' };
-            return '<li class="wc-legend__item ' + (i < items.length - 1 ? 'mb-14' : '') + '">'
-                + '<span class="wc-legend__icon" style="background:' + m.color + '"><iconify-icon icon="' + (m.icon || 'mdi:circle') + '"></iconify-icon></span>'
+            var color = m.color || '#94A3B8';
+            var count = Number(item.count) || 0;
+            if (count <= 0) {
+                color = '#94A3B8';
+            }
+            var dot = withDot
+                ? '<span class="wc-legend__dot" style="background:' + color + ';"></span>'
+                : '';
+            return '<li class="wc-legend__item ' + (i < items.length - 1 ? 'mb-16' : '') + '">'
+                + dot
+                + '<span class="wc-legend__icon" style="background:' + color + '"><iconify-icon icon="' + (m.icon || 'mdi:circle') + '"></iconify-icon></span>'
                 + '<div class="min-w-0">'
                 + '<p class="wc-legend__title">' + escapeHtml(item.label) + '</p>'
-                + '<p class="wc-legend__meta">' + formatNum(item.pct, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)</p>'
+                + '<p class="wc-legend__meta">' + formatNum(item.pct, 1) + '% (' + formatNum(count, 0) + ' karyawan)</p>'
                 + '</div></li>';
         }).join('');
     }
@@ -2058,10 +2149,19 @@
         destroyChart(key);
         var series = (items || []).map(function (item) { return Number(item.count) || 0; });
         var labels = (items || []).map(function (item) { return item.label; });
-        var colors = (legendMeta || []).map(function (m) { return m.color; });
+        var colors = (legendMeta || []).map(function (m, i) {
+            var count = Number((items || [])[i] && (items || [])[i].count) || 0;
+            if (count <= 0) return '#CBD5E1';
+            return m.color;
+        });
         var total = Number(totalEmployees) || series.reduce(function (a, b) { return a + b; }, 0);
         if (badgeId) {
-            setBadgeHtml(badgeId, 'Total Karyawan ' + formatNum(total, 0));
+            var badgeEl = document.getElementById(badgeId);
+            if (badgeEl && badgeEl.classList.contains('wc-card__badge--stack')) {
+                setStackedBadgeValue(badgeId, total);
+            } else {
+                setBadgeHtml(badgeId, 'Total Karyawan ' + formatNum(total, 0));
+            }
         }
 
         var hasData = series.some(function (v) { return v > 0; });
@@ -2071,10 +2171,11 @@
             return;
         }
         el.innerHTML = '';
+        var isFrequency = key === 'frequency';
         wellnessChartInstances[key] = new ApexCharts(el, {
             series: series,
             labels: labels,
-            chart: { type: 'donut', height: 210, toolbar: { show: false } },
+            chart: { type: 'donut', height: isFrequency ? 230 : 210, toolbar: { show: false } },
             colors: colors,
             legend: { show: false },
             stroke: { width: 3, colors: ['#fff'] },
@@ -2082,13 +2183,13 @@
             plotOptions: {
                 pie: {
                     donut: {
-                        size: '70%',
+                        size: isFrequency ? '72%' : '70%',
                         labels: {
                             show: true,
-                            name: { show: true, fontSize: '12px', color: '#64748B', offsetY: -4 },
+                            name: { show: true, fontSize: '13px', color: '#64748B', offsetY: -6 },
                             value: {
                                 show: true,
-                                fontSize: '22px',
+                                fontSize: isFrequency ? '24px' : '22px',
                                 fontWeight: 700,
                                 color: '#0F172A',
                                 offsetY: 8,
@@ -2097,7 +2198,7 @@
                             total: {
                                 show: true,
                                 label: 'Karyawan',
-                                fontSize: '12px',
+                                fontSize: '13px',
                                 fontWeight: 500,
                                 color: '#64748B',
                                 formatter: function () { return formatNum(total, 0); }

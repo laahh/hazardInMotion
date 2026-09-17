@@ -173,8 +173,8 @@
 
     {{-- Frekuensi Olahraga --}}
     <div class="col-xxl-6 col-xl-6">
-      <div class="card h-100 wc-card wc-card--has-bg wc-card--bg-br">
-        <img class="wc-card__bg wc-card__bg--br" src="{{ asset('evaluasi-well-assets/images/wellness/bg-frequency.png') }}" alt="" aria-hidden="true">
+      <div class="card h-100 wc-card wc-card--has-bg wc-card--frequency">
+        <img class="wc-card__bg wc-card__bg--br wc-card__bg--frequency" src="{{ asset('evaluasi-well-assets/images/wellness/bg-frequency.png') }}" alt="" aria-hidden="true">
         <div class="card-body p-24 d-flex flex-column">
           <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
             <div class="d-flex align-items-start gap-3 min-w-0">
@@ -186,22 +186,25 @@
                 <span class="wc-card__subtitle">Hari unik workout / minggu</span>
               </div>
             </div>
-            <div class="wc-card__badge" id="wellness-chart-frequency-badge">
+            <div class="wc-card__badge wc-card__badge--stack" id="wellness-chart-frequency-badge">
               <iconify-icon icon="mdi:account-group"></iconify-icon>
-              <span>Total Karyawan –</span>
+              <span class="wc-card__badge-copy">
+                <span class="wc-card__badge-label">Total Karyawan</span>
+                <strong class="wc-card__badge-value" id="wellness-chart-frequency-badge-value">–</strong>
+              </span>
             </div>
           </div>
-          <div class="row align-items-center g-3 flex-grow-1">
+          <div class="row align-items-center g-3 flex-grow-1 wc-frequency-body">
             <div class="col-5 col-sm-5">
-              <div id="wellness-chart-frequency" class="wc-donut"></div>
+              <div id="wellness-chart-frequency" class="wc-donut wc-donut--frequency"></div>
             </div>
             <div class="col-7 col-sm-7">
-              <ul class="list-unstyled mb-0 wc-legend" id="wellness-chart-frequency-legend"></ul>
+              <ul class="list-unstyled mb-0 wc-legend wc-legend--frequency" id="wellness-chart-frequency-legend"></ul>
             </div>
           </div>
           <div class="wc-tip wc-tip--quote mt-20">
             <iconify-icon icon="mdi:format-quote-close" class="flex-shrink-0"></iconify-icon>
-            <span>Konsistensi kecil setiap hari, membawa perubahan besar.</span>
+            <span>Konsistensi <strong>kecil</strong> setiap hari, <strong>membawa</strong> perubahan besar.</span>
           </div>
         </div>
       </div>
