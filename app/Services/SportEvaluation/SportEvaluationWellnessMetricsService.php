@@ -18,7 +18,7 @@ final class SportEvaluationWellnessMetricsService
 {
     private const CACHE_TTL = 300;
 
-    private const CACHE_VERSION = 'v1';
+    private const CACHE_VERSION = 'v2';
 
     private const CHUNK_SIZE = 500;
 
@@ -31,6 +31,20 @@ final class SportEvaluationWellnessMetricsService
     private const HR_LOW_MAX = 119.0;
 
     private const HR_MED_MAX = 149.0;
+
+    private const DEFAULT_CALORIE_TARGET = 2000.0;
+
+    private const DEFAULT_PROTEIN_TARGET = 75.0;
+
+    private const DEFAULT_CARB_TARGET = 250.0;
+
+    private const DEFAULT_FAT_TARGET = 70.0;
+
+    private const DEFAULT_FIBER_TARGET = 25.0;
+
+    private const DURATION_ADEQUATE_MIN = 150.0;
+
+    private const FREQUENCY_ADEQUATE_DAYS = 5;
 
     public function __construct(
         private readonly BewellConnectionService $connection,
@@ -46,8 +60,12 @@ final class SportEvaluationWellnessMetricsService
      * @param  array<string, mixed>  $scope
      * @return array<string, mixed>
      */
-    public function getDashboardPayload(array $scope = [], ?string $weekStart = null): array
-    {
+    public function getDashboardPayload(
+        array $scope = [],
+        ?string $weekStart = null,
+        string $site = '',
+        string $company = '',
+    ): array {
         $week = $this->resolveWeek($weekStart);
         $empty = $this->emptyDashboardPayload($week);
 
@@ -57,15 +75,17 @@ final class SportEvaluationWellnessMetricsService
 
         try {
             $scope = $this->normalizeScopeFilters($scope);
+            $site = trim($site);
+            $company = trim($company);
             $scopeKey = $this->mitraAssignmentService->cacheKeySuffix($scope);
             $cacheKey = 'evaluasi_well:wellness_metrics:dash:'.self::CACHE_VERSION.':'.sha1(
-                $week['start'].'|'.$scopeKey
+                $week['start'].'|'.$scopeKey.'|'.$site.'|'.$company
             );
 
-            return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($week, $scope): array {
-                $current = $this->aggregateWeekMetrics($week['start'], $week['end'], $scope);
+            return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($week, $scope, $site, $company): array {
+                $current = $this->aggregateWeekMetrics($week['start'], $week['end'], $scope, $site, $company);
                 $prevWeek = $this->resolveWeek($week['prev_start']);
-                $previous = $this->aggregateWeekMetrics($prevWeek['start'], $prevWeek['end'], $scope);
+                $previous = $this->aggregateWeekMetrics($prevWeek['start'], $prevWeek['end'], $scope, $site, $company);
 
                 return array_merge(
                     $this->mapMetricsToCardPayload($current, $previous),
@@ -75,6 +95,7 @@ final class SportEvaluationWellnessMetricsService
                         'wellnessSites' => $this->filterSites($scope),
                         'wellnessCompanies' => $this->filterCompanies($scope),
                         'wellnessUserCount' => $current['active_users'],
+                        'wellnessCharts' => $this->getDistributionCharts($week, $scope, $site, $company),
                     ]
                 );
             });
@@ -86,14 +107,18 @@ final class SportEvaluationWellnessMetricsService
     }
 
     /**
-     * KPI JSON saat ganti minggu di UI.
+     * KPI JSON saat ganti minggu / filter di UI.
      *
      * @param  array<string, mixed>  $scope
      * @return array<string, mixed>
      */
-    public function getKpiPayload(array $scope = [], ?string $weekStart = null): array
-    {
-        $payload = $this->getDashboardPayload($scope, $weekStart);
+    public function getKpiPayload(
+        array $scope = [],
+        ?string $weekStart = null,
+        string $site = '',
+        string $company = '',
+    ): array {
+        $payload = $this->getDashboardPayload($scope, $weekStart, $site, $company);
 
         return [
             'available' => $this->connection->isUp(),
@@ -120,6 +145,7 @@ final class SportEvaluationWellnessMetricsService
             'makro_fats' => $payload['wellnessMakroFats'],
             'makro_increase' => $payload['wellnessMakroIncrease'],
             'makro_increase_percent' => $payload['wellnessMakroIncreasePercent'],
+            'charts' => $payload['wellnessCharts'] ?? $this->emptyChartsPayload(),
         ];
     }
 
@@ -483,7 +509,487 @@ final class SportEvaluationWellnessMetricsService
             'wellnessWeekOptions' => $this->buildWeekOptions(),
             'wellnessSites' => [],
             'wellnessCompanies' => [],
+            'wellnessCharts' => $this->emptyChartsPayload(),
         ];
+    }
+
+    /**
+     * Chart distribusi di atas Detail Metrik Wellness.
+     *
+     * @param  array{start: string, end: string, label: string, prev_start: string}  $week
+     * @param  array<string, mixed>  $scope
+     * @return array<string, mixed>
+     */
+    public function getDistributionCharts(
+        array $week,
+        array $scope = [],
+        string $site = '',
+        string $company = '',
+    ): array {
+        $empty = $this->emptyChartsPayload();
+        if (! $this->connection->isUp()) {
+            return $empty;
+        }
+
+        try {
+            $scope = $this->normalizeScopeFilters($scope);
+            $site = trim($site);
+            $company = trim($company);
+            $from = $week['start'].' 00:00:00';
+            $to = Carbon::parse($week['end'])->endOfDay()->format('Y-m-d H:i:s');
+            $totalAktif = $this->countAktifEmployees($scope, $site, $company);
+
+            return [
+                'total_employees' => $totalAktif,
+                'top_sports' => $this->buildTopSportsChart($from, $to, $scope, $site, $company, $totalAktif),
+                'duration_buckets' => $this->buildDurationBuckets($from, $to, $scope, $site, $company, $totalAktif),
+                'frequency_buckets' => $this->buildFrequencyBuckets($from, $to, $scope, $site, $company, $totalAktif),
+                'calorie_buckets' => $this->buildCalorieBuckets($from, $to, $week['start'], $week['end'], $scope, $site, $company, $totalAktif),
+                'macro_attainment' => $this->buildMacroAttainment($from, $to, $week['start'], $week['end'], $scope, $site, $company, $totalAktif),
+            ];
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptyChartsPayload(): array
+    {
+        return [
+            'total_employees' => 0,
+            'top_sports' => [],
+            'duration_buckets' => [
+                $this->bucketRow('≥150 menit/minggu', 0, 0),
+                $this->bucketRow('<150 menit/minggu', 0, 0),
+                $this->bucketRow('Tidak ada olahraga', 0, 0),
+            ],
+            'frequency_buckets' => [
+                $this->bucketRow('5–7 hari/minggu', 0, 0),
+                $this->bucketRow('<5 hari/minggu', 0, 0),
+                $this->bucketRow('Tidak ada olahraga', 0, 0),
+            ],
+            'calorie_buckets' => [
+                $this->bucketRow('Melebihi target kalori', 0, 0),
+                $this->bucketRow('50–100% target kalori', 0, 0),
+                $this->bucketRow('<50% target kalori', 0, 0),
+                $this->bucketRow('Tidak ada kalori', 0, 0),
+            ],
+            'macro_attainment' => [
+                $this->macroRow('Protein', 0, 0, true),
+                $this->macroRow('Karbohidrat', 0, 0, true),
+                $this->macroRow('Lemak', 0, 0, true),
+                $this->macroRow('Serat', 0, 0, false),
+            ],
+        ];
+    }
+
+    /**
+     * @return array{label: string, count: int, pct: float}
+     */
+    private function bucketRow(string $label, int $count, int $total): array
+    {
+        return [
+            'label' => $label,
+            'count' => $count,
+            'pct' => $total > 0 ? round(($count / $total) * 100, 1) : 0.0,
+        ];
+    }
+
+    /**
+     * @return array{label: string, count: int, pct: float, available: bool}
+     */
+    private function macroRow(string $label, int $count, int $total, bool $available): array
+    {
+        return [
+            'label' => $label,
+            'count' => $available ? $count : 0,
+            'pct' => ($available && $total > 0) ? round(($count / $total) * 100, 1) : 0.0,
+            'available' => $available,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $scope
+     */
+    private function countAktifEmployees(array $scope, string $site = '', string $company = ''): int
+    {
+        return (int) $this->applyEmployeeFilters(
+            $this->applyScopeToEmployees(
+                $this->exclusionRules->applyToQuery(
+                    DB::connection(BewellConnectionService::CONNECTION)
+                        ->table('employee_profiles as e')
+                        ->where('e.status_karyawan', 'AKTIF')
+                ),
+                $scope
+            ),
+            $site,
+            $company
+        )->count('e.id');
+    }
+
+    /**
+     * @param  array<string, mixed>  $scope
+     * @return list<array{label: string, count: int, pct: float}>
+     */
+    private function buildTopSportsChart(
+        string $from,
+        string $to,
+        array $scope,
+        string $site,
+        string $company,
+        int $totalAktif,
+    ): array {
+        $jenisExpr = "CASE WHEN TRIM(COALESCE(w.activity_type, '')) = '' THEN 'Lainnya' ELSE w.activity_type END";
+        $rows = $this->workoutBaseQuery($from, $to, $scope, $site, $company)
+            ->selectRaw($jenisExpr.' as jenis')
+            ->selectRaw('COUNT(DISTINCT w.user_id) as c')
+            ->groupByRaw($jenisExpr)
+            ->orderByDesc('c')
+            ->limit(5)
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $count = (int) ($row->c ?? 0);
+            $out[] = [
+                'label' => (string) ($row->jenis ?: 'Lainnya'),
+                'count' => $count,
+                'pct' => $totalAktif > 0 ? round(($count / $totalAktif) * 100, 1) : 0.0,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $scope
+     * @return list<array{label: string, count: int, pct: float}>
+     */
+    private function buildDurationBuckets(
+        string $from,
+        string $to,
+        array $scope,
+        string $site,
+        string $company,
+        int $totalAktif,
+    ): array {
+        $userIds = $this->workoutBaseQuery($from, $to, $scope, $site, $company)
+            ->distinct()
+            ->pluck('w.user_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+
+        $parsed = $this->parsedWorkoutMetricsForUsers($userIds, $from, $to);
+        $parsedBelowOrZero = 0;
+        $parsedAdequate = 0;
+        foreach ($userIds as $uid) {
+            $minutes = (float) (($parsed[$uid]['duration_minutes'] ?? 0));
+            if ($minutes >= self::DURATION_ADEQUATE_MIN) {
+                $parsedAdequate++;
+            } else {
+                $parsedBelowOrZero++;
+            }
+        }
+
+        $withWorkout = count($userIds);
+        $none = max(0, $totalAktif - $withWorkout);
+
+        return [
+            $this->bucketRow('≥150 menit/minggu', $parsedAdequate, $totalAktif),
+            $this->bucketRow('<150 menit/minggu', $parsedBelowOrZero, $totalAktif),
+            $this->bucketRow('Tidak ada olahraga', $none, $totalAktif),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $scope
+     * @return list<array{label: string, count: int, pct: float}>
+     */
+    private function buildFrequencyBuckets(
+        string $from,
+        string $to,
+        array $scope,
+        string $site,
+        string $company,
+        int $totalAktif,
+    ): array {
+        $rows = $this->workoutBaseQuery($from, $to, $scope, $site, $company)
+            ->selectRaw('w.user_id')
+            ->selectRaw('COUNT(DISTINCT DATE(w.created_at)) as days')
+            ->groupBy('w.user_id')
+            ->get();
+
+        $adequate = 0;
+        $below = 0;
+        foreach ($rows as $row) {
+            $days = (int) ($row->days ?? 0);
+            if ($days >= self::FREQUENCY_ADEQUATE_DAYS) {
+                $adequate++;
+            } elseif ($days > 0) {
+                $below++;
+            }
+        }
+
+        $withWorkout = $adequate + $below;
+        $none = max(0, $totalAktif - $withWorkout);
+
+        return [
+            $this->bucketRow('5–7 hari/minggu', $adequate, $totalAktif),
+            $this->bucketRow('<5 hari/minggu', $below, $totalAktif),
+            $this->bucketRow('Tidak ada olahraga', $none, $totalAktif),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $scope
+     * @return list<array{label: string, count: int, pct: float}>
+     */
+    private function buildCalorieBuckets(
+        string $from,
+        string $to,
+        string $weekStart,
+        string $weekEnd,
+        array $scope,
+        string $site,
+        string $company,
+        int $totalAktif,
+    ): array {
+        $nutrition = $this->perUserNutritionAverages($from, $to, $weekStart, $weekEnd, $scope, $site, $company);
+        $over = 0;
+        $mid = 0;
+        $low = 0;
+        $none = 0;
+
+        $loggedUserIds = [];
+        foreach ($nutrition as $userId => $row) {
+            $loggedUserIds[$userId] = true;
+            $avg = (float) ($row['avg_calories'] ?? 0);
+            $target = (float) ($row['calorie_target'] ?? self::DEFAULT_CALORIE_TARGET);
+            if ($target <= 0) {
+                $target = self::DEFAULT_CALORIE_TARGET;
+            }
+            if ($avg <= 0) {
+                $none++;
+                continue;
+            }
+            $ratio = $avg / $target;
+            if ($ratio > 1.0) {
+                $over++;
+            } elseif ($ratio >= 0.5) {
+                $mid++;
+            } else {
+                $low++;
+            }
+        }
+
+        $none += max(0, $totalAktif - count($loggedUserIds));
+
+        return [
+            $this->bucketRow('Melebihi target kalori', $over, $totalAktif),
+            $this->bucketRow('50–100% target kalori', $mid, $totalAktif),
+            $this->bucketRow('<50% target kalori', $low, $totalAktif),
+            $this->bucketRow('Tidak ada kalori', $none, $totalAktif),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $scope
+     * @return list<array{label: string, count: int, pct: float, available: bool}>
+     */
+    private function buildMacroAttainment(
+        string $from,
+        string $to,
+        string $weekStart,
+        string $weekEnd,
+        array $scope,
+        string $site,
+        string $company,
+        int $totalAktif,
+    ): array {
+        $hasFiber = $this->foodHasFiberColumn();
+        $nutrition = $this->perUserNutritionAverages($from, $to, $weekStart, $weekEnd, $scope, $site, $company, $hasFiber);
+
+        $proteinOk = 0;
+        $carbOk = 0;
+        $fatOk = 0;
+        $fiberOk = 0;
+
+        foreach ($nutrition as $row) {
+            if ((float) ($row['avg_protein'] ?? 0) >= (float) ($row['protein_target'] ?? self::DEFAULT_PROTEIN_TARGET)) {
+                $proteinOk++;
+            }
+            if ((float) ($row['avg_carbs'] ?? 0) >= (float) ($row['carb_target'] ?? self::DEFAULT_CARB_TARGET)) {
+                $carbOk++;
+            }
+            if ((float) ($row['avg_fats'] ?? 0) >= (float) ($row['fat_target'] ?? self::DEFAULT_FAT_TARGET)) {
+                $fatOk++;
+            }
+            if ($hasFiber && (float) ($row['avg_fiber'] ?? 0) >= (float) ($row['fiber_target'] ?? self::DEFAULT_FIBER_TARGET)) {
+                $fiberOk++;
+            }
+        }
+
+        return [
+            $this->macroRow('Protein', $proteinOk, $totalAktif, true),
+            $this->macroRow('Karbohidrat', $carbOk, $totalAktif, true),
+            $this->macroRow('Lemak', $fatOk, $totalAktif, true),
+            $this->macroRow('Serat', $fiberOk, $totalAktif, $hasFiber),
+        ];
+    }
+
+    /**
+     * Rata-rata asupan harian per user di minggu (hari dengan log makanan).
+     *
+     * @param  array<string, mixed>  $scope
+     * @return array<int, array{
+     *     avg_calories: float,
+     *     avg_protein: float,
+     *     avg_carbs: float,
+     *     avg_fats: float,
+     *     avg_fiber: float,
+     *     calorie_target: float,
+     *     protein_target: float,
+     *     carb_target: float,
+     *     fat_target: float,
+     *     fiber_target: float
+     * }>
+     */
+    private function perUserNutritionAverages(
+        string $from,
+        string $to,
+        string $weekStart,
+        string $weekEnd,
+        array $scope,
+        string $site,
+        string $company,
+        bool $includeFiber = false,
+    ): array {
+        $fiberSelect = $includeFiber
+            ? 'COALESCE(SUM(f.fiber_g), 0) as fiber_g'
+            : '0 as fiber_g';
+
+        $dailyRows = $this->foodBaseQuery($from, $to, $scope, $site, $company)
+            ->selectRaw('f.user_id')
+            ->selectRaw('DATE(f.created_at) as d')
+            ->selectRaw('COALESCE(SUM(f.total_calories), 0) as calories')
+            ->selectRaw('COALESCE(SUM(f.protein_g), 0) as protein_g')
+            ->selectRaw('COALESCE(SUM(f.carbs_g), 0) as carbs_g')
+            ->selectRaw('COALESCE(SUM(f.fats_g), 0) as fats_g')
+            ->selectRaw($fiberSelect)
+            ->groupByRaw('f.user_id, DATE(f.created_at)')
+            ->get();
+
+        /** @var array<int, array<string, array{calories: float, protein: float, carbs: float, fats: float, fiber: float}>> $byUserDay */
+        $byUserDay = [];
+        $userIds = [];
+        foreach ($dailyRows as $row) {
+            $userId = (int) $row->user_id;
+            $date = (string) $row->d;
+            $userIds[$userId] = true;
+            $byUserDay[$userId][$date] = [
+                'calories' => (float) ($row->calories ?? 0),
+                'protein' => (float) ($row->protein_g ?? 0),
+                'carbs' => (float) ($row->carbs_g ?? 0),
+                'fats' => (float) ($row->fats_g ?? 0),
+                'fiber' => (float) ($row->fiber_g ?? 0),
+            ];
+        }
+
+        $ids = array_keys($userIds);
+        $targetsByUser = $this->loadUserTargets($ids, $weekStart, $weekEnd);
+
+        $result = [];
+        foreach ($byUserDay as $userId => $days) {
+            $dayCount = count($days);
+            if ($dayCount < 1) {
+                continue;
+            }
+            $sumCal = 0.0;
+            $sumPro = 0.0;
+            $sumCarb = 0.0;
+            $sumFat = 0.0;
+            $sumFiber = 0.0;
+            $sumCalTarget = 0.0;
+            $sumProTarget = 0.0;
+            $sumCarbTarget = 0.0;
+            foreach ($days as $date => $vals) {
+                $sumCal += $vals['calories'];
+                $sumPro += $vals['protein'];
+                $sumCarb += $vals['carbs'];
+                $sumFat += $vals['fats'];
+                $sumFiber += $vals['fiber'];
+                $t = $targetsByUser[$userId][$date] ?? null;
+                $sumCalTarget += (float) ($t['calorie_target'] ?? self::DEFAULT_CALORIE_TARGET);
+                $sumProTarget += (float) ($t['protein_target'] ?? self::DEFAULT_PROTEIN_TARGET);
+                $sumCarbTarget += (float) ($t['carb_target'] ?? self::DEFAULT_CARB_TARGET);
+            }
+            $result[$userId] = [
+                'avg_calories' => $sumCal / $dayCount,
+                'avg_protein' => $sumPro / $dayCount,
+                'avg_carbs' => $sumCarb / $dayCount,
+                'avg_fats' => $sumFat / $dayCount,
+                'avg_fiber' => $sumFiber / $dayCount,
+                'calorie_target' => $sumCalTarget / $dayCount,
+                'protein_target' => $sumProTarget / $dayCount,
+                'carb_target' => $sumCarbTarget / $dayCount,
+                'fat_target' => self::DEFAULT_FAT_TARGET,
+                'fiber_target' => self::DEFAULT_FIBER_TARGET,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  list<int>  $userIds
+     * @return array<int, array<string, array{calorie_target: float, protein_target: float, carb_target: float}>>
+     */
+    private function loadUserTargets(array $userIds, string $weekStart, string $weekEnd): array
+    {
+        $out = [];
+        if ($userIds === []) {
+            return $out;
+        }
+
+        foreach (array_chunk($userIds, 800) as $chunkIds) {
+            $rows = DB::connection(BewellConnectionService::CONNECTION)
+                ->table('goal_daily_targets')
+                ->whereIn('user_id', $chunkIds)
+                ->whereBetween('target_date', [$weekStart, $weekEnd])
+                ->get(['user_id', 'target_date', 'calorie_target', 'protein_target_g', 'carb_target_g']);
+
+            foreach ($rows as $row) {
+                $userId = (int) $row->user_id;
+                $date = (string) $row->target_date;
+                $out[$userId][$date] = [
+                    'calorie_target' => (float) ($row->calorie_target ?? self::DEFAULT_CALORIE_TARGET) ?: self::DEFAULT_CALORIE_TARGET,
+                    'protein_target' => (float) ($row->protein_target_g ?? self::DEFAULT_PROTEIN_TARGET) ?: self::DEFAULT_PROTEIN_TARGET,
+                    'carb_target' => (float) ($row->carb_target_g ?? self::DEFAULT_CARB_TARGET) ?: self::DEFAULT_CARB_TARGET,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    private function foodHasFiberColumn(): bool
+    {
+        return (bool) Cache::remember('evaluasi_well:food_analyses_has_fiber_g', 3600, function (): bool {
+            try {
+                $cols = DB::connection(BewellConnectionService::CONNECTION)
+                    ->select("SHOW COLUMNS FROM food_analyses LIKE 'fiber_g'");
+
+                return $cols !== [];
+            } catch (Throwable $e) {
+                report($e);
+
+                return false;
+            }
+        });
     }
 
     /**
@@ -503,18 +1009,23 @@ final class SportEvaluationWellnessMetricsService
      *     active_users: int
      * }
      */
-    private function aggregateWeekMetrics(string $startDate, string $endDate, array $scope): array
-    {
+    private function aggregateWeekMetrics(
+        string $startDate,
+        string $endDate,
+        array $scope,
+        string $site = '',
+        string $company = '',
+    ): array {
         $from = $startDate.' 00:00:00';
         $to = Carbon::parse($endDate)->endOfDay()->format('Y-m-d H:i:s');
 
-        $workoutAgg = $this->workoutBaseQuery($from, $to, $scope)
+        $workoutAgg = $this->workoutBaseQuery($from, $to, $scope, $site, $company)
             ->selectRaw('COUNT(w.id) as frekuensi')
             ->selectRaw('COUNT(DISTINCT w.user_id) as users')
             ->selectRaw('COALESCE(SUM(w.calories_kcal), 0) as kalori_out')
             ->first();
 
-        $foodAgg = $this->foodBaseQuery($from, $to, $scope)
+        $foodAgg = $this->foodBaseQuery($from, $to, $scope, $site, $company)
             ->selectRaw('COALESCE(SUM(f.total_calories), 0) as kalori_in')
             ->selectRaw('COALESCE(SUM(f.protein_g), 0) as protein_g')
             ->selectRaw('COALESCE(SUM(f.carbs_g), 0) as carbs_g')
@@ -529,7 +1040,7 @@ final class SportEvaluationWellnessMetricsService
         $hrMed = 0;
         $hrHigh = 0;
 
-        $this->workoutBaseQuery($from, $to, $scope)
+        $this->workoutBaseQuery($from, $to, $scope, $site, $company)
             ->select(['w.workout_time', 'w.avg_heart_rate'])
             ->orderBy('w.id')
             ->chunk(self::CHUNK_SIZE, function ($chunk) use (&$durationMinutes, &$hrSum, &$hrCount, &$hrLow, &$hrMed, &$hrHigh): void {
@@ -562,7 +1073,7 @@ final class SportEvaluationWellnessMetricsService
 
         $workoutUsers = (int) ($workoutAgg->users ?? 0);
         $foodUsers = (int) ($foodAgg->users ?? 0);
-        $activeUsers = (int) (clone $this->usersWithActivityBaseQuery($from, $to, $scope))->count();
+        $activeUsers = (int) (clone $this->usersWithActivityBaseQuery($from, $to, $scope, $site, $company))->count();
 
         return [
             'duration_minutes' => round($durationMinutes, 1),

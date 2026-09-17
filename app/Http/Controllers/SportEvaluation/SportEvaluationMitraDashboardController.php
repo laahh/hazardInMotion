@@ -154,6 +154,14 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
                 'wellnessWeekOptions' => [],
                 'wellnessSites' => [],
                 'wellnessCompanies' => [],
+                'wellnessCharts' => [
+                    'total_employees' => 0,
+                    'top_sports' => [],
+                    'duration_buckets' => [],
+                    'frequency_buckets' => [],
+                    'calorie_buckets' => [],
+                    'macro_attainment' => [],
+                ],
             ]);
         }
 

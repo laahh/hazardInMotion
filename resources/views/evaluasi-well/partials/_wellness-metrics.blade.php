@@ -105,6 +105,103 @@
   </div>
 </div>
 
+{{-- Chart distribusi wellness (di atas Detail Metrik) --}}
+<div class="col-12">
+  <div class="row gy-4" id="wellness-charts-section">
+    <div class="col-xxl-6 col-xl-6">
+      <div class="card h-100 radius-8 border-0">
+        <div class="card-body p-24">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-16">
+            <div>
+              <h6 class="mb-0 fw-bold text-lg">Top 5 Olahraga</h6>
+              <span class="text-sm text-secondary-light">Olahraga paling umum · % dari karyawan aktif</span>
+            </div>
+          </div>
+          <div id="wellness-chart-top-sports" style="min-height: 260px;"></div>
+          <p id="wellness-chart-top-sports-empty" class="text-secondary-light text-sm mb-0 text-center py-40 d-none">Belum ada data olahraga minggu ini.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xxl-6 col-xl-6">
+      <div class="card h-100 radius-8 border-0">
+        <div class="card-body p-24">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-16">
+            <div>
+              <h6 class="mb-0 fw-bold text-lg">Durasi Olahraga</h6>
+              <span class="text-sm text-secondary-light">Menit/minggu (Minggu–Sabtu)</span>
+            </div>
+          </div>
+          <div class="row align-items-center g-3">
+            <div class="col-sm-7">
+              <div id="wellness-chart-duration" style="min-height: 220px;"></div>
+            </div>
+            <div class="col-sm-5">
+              <ul class="list-unstyled mb-0" id="wellness-chart-duration-legend"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xxl-6 col-xl-6">
+      <div class="card h-100 radius-8 border-0">
+        <div class="card-body p-24">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-16">
+            <div>
+              <h6 class="mb-0 fw-bold text-lg">Frekuensi Olahraga</h6>
+              <span class="text-sm text-secondary-light">Hari unik workout / minggu</span>
+            </div>
+          </div>
+          <div class="row align-items-center g-3">
+            <div class="col-sm-7">
+              <div id="wellness-chart-frequency" style="min-height: 220px;"></div>
+            </div>
+            <div class="col-sm-5">
+              <ul class="list-unstyled mb-0" id="wellness-chart-frequency-legend"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xxl-6 col-xl-6">
+      <div class="card h-100 radius-8 border-0">
+        <div class="card-body p-24">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-16">
+            <div>
+              <h6 class="mb-0 fw-bold text-lg">Kalori Makanan</h6>
+              <span class="text-sm text-secondary-light">Rata-rata harian vs target</span>
+            </div>
+          </div>
+          <div class="row align-items-center g-3">
+            <div class="col-sm-7">
+              <div id="wellness-chart-calorie" style="min-height: 220px;"></div>
+            </div>
+            <div class="col-sm-5">
+              <ul class="list-unstyled mb-0" id="wellness-chart-calorie-legend"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12">
+      <div class="card h-100 radius-8 border-0">
+        <div class="card-body p-24">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-16">
+            <div>
+              <h6 class="mb-0 fw-bold text-lg">Makronutrien</h6>
+              <span class="text-sm text-secondary-light">% karyawan yang rata-rata harian memenuhi target</span>
+            </div>
+          </div>
+          <div id="wellness-chart-macro" style="min-height: 280px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="col-12">
   <div class="card radius-8 border-0 shadow-sm">
     <div class="card-header border-bottom bg-base py-16 px-24">

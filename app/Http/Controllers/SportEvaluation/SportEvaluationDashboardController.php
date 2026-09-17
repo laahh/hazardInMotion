@@ -524,10 +524,12 @@ class SportEvaluationDashboardController extends Controller
         $weekStart = is_string($request->input('week_start'))
             ? $request->input('week_start')
             : null;
+        $site = trim((string) $request->input('site', ''));
+        $company = trim((string) $request->input('company', $request->input('perusahaan', '')));
 
         try {
             return response()->json(
-                $this->wellnessMetricsService->getKpiPayload($this->indexFilters, $weekStart)
+                $this->wellnessMetricsService->getKpiPayload($this->indexFilters, $weekStart, $site, $company)
             );
         } catch (Throwable $e) {
             report($e);

@@ -1170,6 +1170,213 @@
     var totalBadge = document.querySelector('#wellness-total-badge');
     var weekLabelEl = document.querySelector('#wellness-week-label');
 
+    var wellnessChartsInitial = @json($wellnessCharts ?? null);
+    var wellnessChartInstances = {
+        topSports: null,
+        duration: null,
+        frequency: null,
+        calorie: null,
+        macro: null
+    };
+    var bucketColors = ['#487FFF', '#45B369', '#FF9F29', '#EF4A00', '#8252E9'];
+
+    function destroyChart(key) {
+        if (wellnessChartInstances[key]) {
+            wellnessChartInstances[key].destroy();
+            wellnessChartInstances[key] = null;
+        }
+    }
+
+    function renderBucketLegend(elId, items, colors) {
+        var el = document.getElementById(elId);
+        if (!el) {
+            return;
+        }
+        el.innerHTML = (items || []).map(function (item, i) {
+            var color = colors[i % colors.length];
+            return '<li class="d-flex align-items-start gap-2 ' + (i < items.length - 1 ? 'mb-12' : '') + '">'
+                + '<span class="w-12-px h-12-px rounded-circle flex-shrink-0 mt-4" style="background:' + color + '"></span>'
+                + '<div class="min-w-0">'
+                + '<p class="mb-0 text-sm fw-medium text-primary-light">' + escapeHtml(item.label) + '</p>'
+                + '<p class="mb-0 text-xs text-secondary-light">' + formatNum(item.pct, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)</p>'
+                + '</div></li>';
+        }).join('');
+    }
+
+    function renderDonutChart(key, elId, legendId, items) {
+        var el = document.getElementById(elId);
+        if (!el || typeof ApexCharts === 'undefined') {
+            return;
+        }
+        destroyChart(key);
+        var series = (items || []).map(function (item) { return Number(item.count) || 0; });
+        var labels = (items || []).map(function (item) { return item.label; });
+        var hasData = series.some(function (v) { return v > 0; });
+        if (!hasData) {
+            el.innerHTML = '<p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data.</p>';
+            renderBucketLegend(legendId, items || [], bucketColors);
+            return;
+        }
+        el.innerHTML = '';
+        wellnessChartInstances[key] = new ApexCharts(el, {
+            series: series,
+            labels: labels,
+            chart: { type: 'donut', height: 220, toolbar: { show: false } },
+            colors: bucketColors.slice(0, series.length),
+            legend: { show: false },
+            dataLabels: { enabled: false },
+            plotOptions: {
+                pie: {
+                    donut: {
+                        size: '68%',
+                        labels: {
+                            show: true,
+                            total: {
+                                show: true,
+                                label: 'Karyawan',
+                                formatter: function (w) {
+                                    var total = w.globals.seriesTotals.reduce(function (a, b) { return a + b; }, 0);
+                                    return formatNum(total, 0);
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            tooltip: {
+                y: {
+                    formatter: function (value, opts) {
+                        var item = (items || [])[opts.seriesIndex] || {};
+                        return formatNum(value, 0) + ' karyawan (' + formatNum(item.pct || 0, 1) + '%)';
+                    }
+                }
+            }
+        });
+        wellnessChartInstances[key].render();
+        renderBucketLegend(legendId, items || [], bucketColors);
+    }
+
+    function renderTopSportsChart(items) {
+        var el = document.getElementById('wellness-chart-top-sports');
+        var emptyEl = document.getElementById('wellness-chart-top-sports-empty');
+        if (!el || typeof ApexCharts === 'undefined') {
+            return;
+        }
+        destroyChart('topSports');
+        var rows = items || [];
+        if (!rows.length) {
+            el.classList.add('d-none');
+            if (emptyEl) emptyEl.classList.remove('d-none');
+            return;
+        }
+        el.classList.remove('d-none');
+        if (emptyEl) emptyEl.classList.add('d-none');
+        el.innerHTML = '';
+        wellnessChartInstances.topSports = new ApexCharts(el, {
+            series: [{
+                name: 'Karyawan',
+                data: rows.map(function (item) { return Number(item.count) || 0; })
+            }],
+            chart: { type: 'bar', height: 260, toolbar: { show: false } },
+            plotOptions: {
+                bar: { horizontal: true, borderRadius: 4, barHeight: '55%' }
+            },
+            colors: ['#487FFF'],
+            dataLabels: {
+                enabled: true,
+                formatter: function (val, opts) {
+                    var item = rows[opts.dataPointIndex] || {};
+                    return formatNum(item.pct || 0, 1) + '% (' + formatNum(val, 0) + ')';
+                },
+                style: { fontSize: '11px', colors: ['#111827'] },
+                offsetX: 4
+            },
+            xaxis: {
+                categories: rows.map(function (item) { return item.label; }),
+                labels: { style: { fontSize: '11px' } }
+            },
+            yaxis: { labels: { style: { fontSize: '12px' } } },
+            grid: { borderColor: '#E5E7EB', strokeDashArray: 4 },
+            tooltip: {
+                y: {
+                    formatter: function (val, opts) {
+                        var item = rows[opts.dataPointIndex] || {};
+                        return formatNum(val, 0) + ' karyawan (' + formatNum(item.pct || 0, 1) + '%)';
+                    }
+                }
+            }
+        });
+        wellnessChartInstances.topSports.render();
+    }
+
+    function renderMacroChart(items) {
+        var el = document.getElementById('wellness-chart-macro');
+        if (!el || typeof ApexCharts === 'undefined') {
+            return;
+        }
+        destroyChart('macro');
+        var rows = (items || []).map(function (item) {
+            return {
+                label: item.available === false ? (item.label + ' (belum tersedia)') : item.label,
+                count: Number(item.count) || 0,
+                pct: Number(item.pct) || 0,
+                available: item.available !== false
+            };
+        });
+        el.innerHTML = '';
+        wellnessChartInstances.macro = new ApexCharts(el, {
+            series: [{
+                name: '% target terpenuhi',
+                data: rows.map(function (item) { return item.pct; })
+            }],
+            chart: { type: 'bar', height: 280, toolbar: { show: false } },
+            plotOptions: {
+                bar: { horizontal: true, borderRadius: 4, barHeight: '48%', distributed: true }
+            },
+            colors: ['#487FFF', '#45B369', '#FF9F29', '#8252E9'],
+            legend: { show: false },
+            dataLabels: {
+                enabled: true,
+                formatter: function (val, opts) {
+                    var item = rows[opts.dataPointIndex] || {};
+                    if (item.available === false) {
+                        return 'belum tersedia';
+                    }
+                    return formatNum(val, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)';
+                },
+                style: { fontSize: '11px', colors: ['#111827'] }
+            },
+            xaxis: {
+                categories: rows.map(function (item) { return item.label; }),
+                max: 100
+            },
+            grid: { borderColor: '#E5E7EB', strokeDashArray: 4 },
+            tooltip: {
+                y: {
+                    formatter: function (val, opts) {
+                        var item = rows[opts.dataPointIndex] || {};
+                        if (item.available === false) {
+                            return 'Data serat belum tersedia di BeWell';
+                        }
+                        return formatNum(val, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)';
+                    }
+                }
+            }
+        });
+        wellnessChartInstances.macro.render();
+    }
+
+    function renderWellnessCharts(charts) {
+        if (!charts) {
+            return;
+        }
+        renderTopSportsChart(charts.top_sports || []);
+        renderDonutChart('duration', 'wellness-chart-duration', 'wellness-chart-duration-legend', charts.duration_buckets || []);
+        renderDonutChart('frequency', 'wellness-chart-frequency', 'wellness-chart-frequency-legend', charts.frequency_buckets || []);
+        renderDonutChart('calorie', 'wellness-chart-calorie', 'wellness-chart-calorie-legend', charts.calorie_buckets || []);
+        renderMacroChart(charts.macro_attainment || []);
+    }
+
     if (mitraMode) {
         var hasMultiScope = window.evaluasiWellMitraHasMultiScope(mitraScope);
         if (siteEl) {
@@ -1295,6 +1502,9 @@
         }
         if (weekLabelEl && payload.week && payload.week.label) {
             weekLabelEl.textContent = payload.week.label;
+        }
+        if (payload.charts) {
+            renderWellnessCharts(payload.charts);
         }
     }
 
@@ -1481,14 +1691,9 @@
     }
 
     updateExportHref();
+    renderWellnessCharts(wellnessChartsInitial);
 })();
 </script>
-<script>
-(function () {
-    var modalEl = document.getElementById('installStatsModal');
-    if (!modalEl) {
-        return;
-    }
 
     var dataUrl = @json(
         ($mitraMode ?? false)
@@ -3434,7 +3639,7 @@
                         <iconify-icon icon="mingcute:user-follow-fill" class="icon"></iconify-icon>  
                       </span>
                       <div>
-                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total User Aktif Minggu Ini</span>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total User Aktif</span>
                         <h6 class="fw-semibold">{{ number_format($activeUsersTotal ?? 0) }}</h6>
                       </div>
                     </div>
@@ -3520,7 +3725,7 @@
           <div class="card-body p-3 d-flex flex-column flex-grow-1" style="min-height: 0;">
             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between flex-shrink-0">
               <div>
-                <h6 class="mb-1 fw-bold text-lg">Pertumbuhan User Aktif</h6>
+                <h6 class="mb-1 fw-bold text-lg">Tren Partisipasi Aktif (%)</h6>
                 <span class="text-sm fw-medium text-secondary-light">Per minggu (Minggu–Sabtu)</span>
               </div>
               <div class="text-end">
