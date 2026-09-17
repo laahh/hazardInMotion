@@ -934,15 +934,15 @@
     var categories = @json($activityPatternCategories ?? []);
 
     function formatNumber(value) {
-        return Number(value || 0).toLocaleString('en-US');
+        return Number(value || 0).toLocaleString('id-ID');
     }
 
     function colorFor(value) {
         var n = Number(value) || 0;
-        if (n <= 50) return '#ECFDF5';
-        if (n <= 100) return '#A7F3D0';
-        if (n <= 200) return '#6EE7B7';
-        if (n <= 400) return '#34D399';
+        if (n <= 400) return '#ECFDF5';
+        if (n <= 800) return '#A7F3D0';
+        if (n <= 1200) return '#6EE7B7';
+        if (n <= 1600) return '#34D399';
         return '#059669';
     }
 
@@ -959,25 +959,35 @@
         return;
     }
 
-    // Mock: Minggu di atas → Senin di bawah; label tanggal di bawah grid.
+    // Calendar heatmap: Senin di atas → Minggu di bawah; kolom = minggu.
     var ordered = series.slice();
-    var preferred = ['Minggu', 'Sabtu', 'Jumat', 'Kamis', 'Rabu', 'Selasa', 'Senin'];
+    var preferred = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
     ordered.sort(function (a, b) {
         return preferred.indexOf(a.name) - preferred.indexOf(b.name);
     });
 
     var colCount = categories.length;
     var html = '';
-    html += '<div class="ap-heatmap" style="--ap-cols:' + colCount + ';">';
+    html += '<div class="ap-heatmap ap-heatmap--calendar" style="--ap-cols:' + colCount + ';">';
 
     ordered.forEach(function (row) {
         html += '<div class="ap-heatmap-ylabel">' + escapeHtml(row.name) + '</div>';
         html += '<div class="ap-heatmap-row">';
         (row.data || []).forEach(function (cell) {
-            var value = cell && typeof cell === 'object' ? Number(cell.y || 0) : Number(cell || 0);
-            var xLabel = cell && typeof cell === 'object' ? (cell.x || '') : '';
+            var isEmpty = !cell || cell.empty === true || cell.y === null || cell.y === undefined;
+            if (isEmpty) {
+                html += '<div class="ap-heatmap-cell is-empty" aria-hidden="true"></div>';
+                return;
+            }
+            var value = Number(cell.y || 0);
+            var dateLabel = cell.date_label || cell.x || '';
+            var tip = escapeHtml(dateLabel) + ' | ' + formatNumber(value) + ' user aktif';
             html += '<div class="ap-heatmap-cell" style="background:' + colorFor(value) + ';"'
-                + ' title="' + escapeHtml(row.name) + ' · ' + escapeHtml(xLabel) + ': ' + formatNumber(value) + ' user aktif">'
+                + ' data-tip="' + tip + '"'
+                + ' data-date="' + escapeHtml(cell.date || '') + '"'
+                + ' data-value="' + value + '"'
+                + ' role="img"'
+                + ' aria-label="' + tip + '">'
                 + '</div>';
         });
         html += '</div>';
@@ -985,22 +995,30 @@
 
     html += '<div class="ap-heatmap-corner"></div>';
     html += '<div class="ap-heatmap-xlabels">';
-    categories.forEach(function (label, idx) {
-        var parts = String(label).split(/\s+/);
-        var day = parts[0] || label;
-        var month = parts[1] || '';
-        var showMonth = idx === 0
-            || idx === categories.length - 1
-            || day === '01'
-            || day === '10'
-            || day === '17';
-        var shortLabel = showMonth && month ? (day + ' ' + month) : day;
-        html += '<div class="ap-heatmap-xlabel" title="' + escapeHtml(label) + '"><span>' + escapeHtml(shortLabel) + '</span></div>';
+    categories.forEach(function (label) {
+        html += '<div class="ap-heatmap-xlabel" title="Minggu mulai ' + escapeHtml(label) + '"><span>' + escapeHtml(label) + '</span></div>';
     });
     html += '</div>';
     html += '</div>';
+    html += '<div class="ap-heatmap-tooltip" id="ap-heatmap-tooltip" hidden></div>';
 
     el.innerHTML = html;
+
+    var tipEl = el.querySelector('#ap-heatmap-tooltip');
+    el.querySelectorAll('.ap-heatmap-cell:not(.is-empty)').forEach(function (cell) {
+        cell.addEventListener('mouseenter', function () {
+            if (!tipEl) return;
+            tipEl.textContent = cell.getAttribute('data-tip') || '';
+            tipEl.hidden = false;
+            var rect = cell.getBoundingClientRect();
+            var host = el.getBoundingClientRect();
+            tipEl.style.left = (rect.left - host.left + rect.width / 2) + 'px';
+            tipEl.style.top = (rect.top - host.top - 8) + 'px';
+        });
+        cell.addEventListener('mouseleave', function () {
+            if (tipEl) tipEl.hidden = true;
+        });
+    });
 })();
 </script>
 <style>
@@ -1057,52 +1075,56 @@
   color: #64748B;
   line-height: 1.3;
 }
+.activity-pattern-heatmap {
+  position: relative;
+}
 .activity-pattern-heatmap .ap-heatmap {
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
-  grid-template-rows: repeat(7, minmax(24px, 1fr)) 48px;
-  gap: 5px 10px;
+  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-rows: repeat(7, minmax(28px, 1fr)) 36px;
+  gap: 6px 12px;
   align-items: stretch;
   overflow: visible;
   height: 100%;
-  min-height: 240px;
+  min-height: 260px;
+}
+.activity-pattern-heatmap .ap-heatmap--calendar {
+  max-width: 520px;
 }
 #barChart.activity-pattern-heatmap {
   overflow: visible;
-  min-height: 240px;
+  min-height: 260px;
   display: flex;
   flex-direction: column;
 }
 #barChart.activity-pattern-heatmap .ap-heatmap {
   flex: 1 1 auto;
 }
-.activity-pattern-heatmap .ap-heatmap-corner { min-height: 48px; }
+.activity-pattern-heatmap .ap-heatmap-corner { min-height: 28px; }
 .activity-pattern-heatmap .ap-heatmap-xlabels {
   display: grid;
   grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
-  gap: 3px;
-  min-height: 48px;
-  align-items: start;
-  padding-top: 6px;
+  gap: 6px;
+  min-height: 28px;
+  align-items: center;
   overflow: visible;
 }
 .activity-pattern-heatmap .ap-heatmap-xlabel {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   min-width: 0;
   overflow: visible;
-  height: 48px;
 }
 .activity-pattern-heatmap .ap-heatmap-xlabel span {
   display: inline-block;
-  font-size: 10px;
-  line-height: 1.1;
-  color: #94A3B8;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #64748B;
+  font-weight: 500;
   white-space: nowrap;
-  transform: rotate(-55deg);
-  transform-origin: top left;
-  margin-left: 4px;
+  transform: none;
+  margin: 0;
 }
 .activity-pattern-heatmap .ap-heatmap-ylabel {
   display: flex;
@@ -1117,28 +1139,72 @@
 .activity-pattern-heatmap .ap-heatmap-row {
   display: grid;
   grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
-  gap: 3px;
+  gap: 6px;
   height: 100%;
-  min-height: 22px;
+  min-height: 28px;
 }
 .activity-pattern-heatmap .ap-heatmap-cell {
   height: 100%;
-  min-height: 22px;
-  border-radius: 5px;
+  min-height: 28px;
+  aspect-ratio: 1 / 1;
+  max-height: 44px;
+  justify-self: stretch;
+  border-radius: 6px;
   border: 1px solid rgba(255,255,255,.75);
+  cursor: default;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.activity-pattern-heatmap .ap-heatmap-cell:not(.is-empty):hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.35);
+  z-index: 1;
+  position: relative;
+}
+.activity-pattern-heatmap .ap-heatmap-cell.is-empty {
+  background: #F1F5F9;
+  border: 1px dashed #E2E8F0;
+  cursor: default;
+}
+.activity-pattern-heatmap .ap-heatmap-tooltip {
+  position: absolute;
+  z-index: 20;
+  transform: translate(-50%, -100%);
+  background: #0F172A;
+  color: #F8FAFC;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  padding: 8px 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
+}
+.activity-pattern-heatmap .ap-heatmap-tooltip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #0F172A;
 }
 @media (max-width: 768px) {
   .activity-pattern-heatmap .ap-heatmap {
-    grid-template-columns: 48px minmax(0, 1fr);
-    gap: 4px 6px;
-    min-height: 200px;
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 4px 8px;
+    min-height: 220px;
+    max-width: 100%;
+  }
+  .activity-pattern-heatmap .ap-heatmap--calendar {
+    max-width: 100%;
   }
   .activity-pattern-heatmap .ap-heatmap-cell {
-    min-height: 16px;
-    border-radius: 3px;
+    min-height: 20px;
+    border-radius: 4px;
   }
   .activity-pattern-heatmap .ap-heatmap-xlabel span {
-    font-size: 8px;
+    font-size: 10px;
   }
   .activity-pattern-heatmap .ap-heatmap-ylabel {
     font-size: 11px;
@@ -4324,25 +4390,29 @@
 
       <!-- Pola Aktivitas Penggunaan Aktif start -->
       <div class="col-xxl-8 d-flex">
-        <div class="card h-100 w-100 radius-12 border-0 shadow-sm activity-pattern-card">
-          <div class="card-body p-24 d-flex flex-column h-100">
-            <div class="d-flex align-items-start flex-wrap gap-3 justify-content-between mb-12 flex-shrink-0">
-              <div class="min-w-0">
-                <h6 class="mb-4 fw-bold text-lg" style="color:#0F172A;">Pola Aktivitas Penggunaan Aktif</h6>
-                <span class="text-sm d-block" style="color:#64748B;">
-                  Kapan karyawan paling aktif menggunakan BeWELL?
+        <div class="card h-100 w-100 wc-card wc-card--has-bg activity-pattern-card">
+          <img class="wc-card__bg" src="{{ asset('evaluasi-well-assets/images/wellness/bg-activity.png') }}" alt="" aria-hidden="true">
+          <div class="card-body p-24 d-flex flex-column h-100 position-relative">
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16 flex-shrink-0">
+              <div class="d-flex align-items-start gap-3 min-w-0">
+                <span class="wc-card__head-icon">
+                  <iconify-icon icon="mdi:calendar-month-outline"></iconify-icon>
                 </span>
-                <span class="text-xs d-block mt-4" style="color:#94A3B8;" id="activity-pattern-range">
-                  @if(!empty($adoptionTrendRangeLabel))
-                    {{ $adoptionTrendRangeLabel }}
-                  @else
-                    24 Aug 2026 – 17 Sep 2026
-                  @endif
-                </span>
+                <div class="min-w-0">
+                  <h6 class="mb-1 fw-bold text-lg wc-card__title">Pola Aktivitas Penggunaan Aktif</h6>
+                  <span class="wc-card__subtitle">Kapan karyawan paling aktif menggunakan BeWELL?</span>
+                  <span class="text-xs d-block mt-4" style="color:#94A3B8;" id="activity-pattern-range">
+                    @if(!empty($adoptionTrendRangeLabel))
+                      {{ $adoptionTrendRangeLabel }}
+                    @else
+                      24 Aug 2026 – 17 Sep 2026
+                    @endif
+                  </span>
+                </div>
               </div>
-              <div class="radius-8 px-14 py-12 d-flex align-items-start gap-2" style="max-width: 360px; background:#ECFDF5;">
-                <iconify-icon icon="solar:calendar-bold" class="text-lg flex-shrink-0 mt-1" style="color:#16A34A;"></iconify-icon>
-                <p class="mb-0 text-xs fw-medium lh-base" style="color:#166534;" id="activity-pattern-insight">{{ $activityPatternInsight ?? 'Aktivitas tertinggi biasanya terjadi pada hari kerja, dengan puncak di awal September. Manfaatkan momentum ini untuk program engagement.' }}</p>
+              <div class="wc-card__badge" id="activity-pattern-badge">
+                <iconify-icon icon="mdi:account-group"></iconify-icon>
+                <span>Puncak {{ number_format($activityPatternPeakDayCount ?? 2041, 0, ',', '.') }} user · {{ $activityPatternPeakDayLabel ?? '02 Sep 2026' }}</span>
               </div>
             </div>
 
@@ -4350,11 +4420,16 @@
 
             <div class="d-flex align-items-center flex-wrap gap-3 mb-16 flex-shrink-0" id="activity-pattern-legend">
               <span class="text-xs fw-medium" style="color:#64748B;">Jumlah user aktif</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#ECFDF5;border:1px solid #D1FAE5;"></span>0–50</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#A7F3D0;"></span>51–100</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#6EE7B7;"></span>101–200</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#34D399;"></span>201–400</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#059669;"></span>&gt;400</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#ECFDF5;border:1px solid #D1FAE5;"></span>≤400</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#A7F3D0;"></span>401–800</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#6EE7B7;"></span>801–1.200</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#34D399;"></span>1.201–1.600</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#059669;"></span>&gt;1.600</span>
+            </div>
+
+            <div class="wc-tip wc-tip--green mb-16 flex-shrink-0">
+              <iconify-icon icon="solar:calendar-bold" class="flex-shrink-0"></iconify-icon>
+              <span id="activity-pattern-insight">{{ $activityPatternInsight ?? 'Aktivitas tertinggi biasanya terjadi pada hari kerja, dengan puncak di awal September. Manfaatkan momentum ini untuk program engagement.' }}</span>
             </div>
 
             <div class="row g-3 flex-shrink-0 activity-pattern-metrics">
