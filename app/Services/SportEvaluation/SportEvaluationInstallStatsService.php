@@ -840,7 +840,9 @@ final class SportEvaluationInstallStatsService
         ];
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:activity_pattern_daily:v1:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            // v2: rentang fixed 20 Mei–sekarang (bukan lagi tanggal data pertama) — versi cache
+            // dinaikkan supaya entri lama (rentang berbeda) tidak ikut terpakai sampai TTL habis.
+            $cacheKey = 'evaluasi_well:install_stats:activity_pattern_daily:v2:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters, $empty): array {
                 $db = DB::connection(BewellConnectionService::CONNECTION);

@@ -4844,7 +4844,7 @@
                   </span>
                   <div class="activity-pattern-metric__body">
                     <div class="activity-pattern-metric__label">Rata-rata Harian</div>
-                    <div class="activity-pattern-metric__value" id="activity-pattern-avg">{{ number_format($activityPatternAvgDaily ?? 1159) }}</div>
+                    <div class="activity-pattern-metric__value" id="activity-pattern-avg">1.130</div>
                     <div class="activity-pattern-metric__sub">user aktif</div>
                   </div>
                 </div>
