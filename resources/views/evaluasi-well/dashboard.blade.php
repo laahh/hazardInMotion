@@ -1075,12 +1075,46 @@
         return Number(value || 0).toLocaleString('id-ID');
     }
 
+    function collectValues(rows) {
+        var values = [];
+        rows.forEach(function (row) {
+            (row.data || []).forEach(function (cell) {
+                if (!cell || cell.empty === true || cell.y === null || cell.y === undefined) {
+                    return;
+                }
+                values.push(Number(cell.y) || 0);
+            });
+        });
+        return values;
+    }
+
+    function buildThresholds(values) {
+        var positive = values.filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; });
+        if (!positive.length) {
+            return [0, 1, 2, 3, 4];
+        }
+        var max = positive[positive.length - 1];
+        if (max <= 4) {
+            return [0, 1, 2, 3, max];
+        }
+        return [
+            0,
+            Math.max(1, Math.round(max * 0.2)),
+            Math.max(2, Math.round(max * 0.4)),
+            Math.max(3, Math.round(max * 0.6)),
+            Math.max(4, Math.round(max * 0.8))
+        ];
+    }
+
+    var thresholds = buildThresholds(collectValues(series));
+
     function colorFor(value) {
         var n = Number(value) || 0;
-        if (n <= 400) return '#ECFDF5';
-        if (n <= 800) return '#A7F3D0';
-        if (n <= 1200) return '#6EE7B7';
-        if (n <= 1600) return '#34D399';
+        if (n <= 0) return '#ECFDF5';
+        if (n <= thresholds[1]) return '#ECFDF5';
+        if (n <= thresholds[2]) return '#A7F3D0';
+        if (n <= thresholds[3]) return '#6EE7B7';
+        if (n <= thresholds[4]) return '#34D399';
         return '#059669';
     }
 
@@ -1092,10 +1126,34 @@
             .replace(/"/g, '&quot;');
     }
 
+    function updateLegend() {
+        var legend = document.querySelector('#activity-pattern-legend');
+        if (!legend) {
+            return;
+        }
+        var bands = [
+            { color: '#ECFDF5', border: '1px solid #D1FAE5', label: '≤' + formatNumber(thresholds[1]) },
+            { color: '#A7F3D0', border: '0', label: formatNumber(thresholds[1] + 1) + '–' + formatNumber(thresholds[2]) },
+            { color: '#6EE7B7', border: '0', label: formatNumber(thresholds[2] + 1) + '–' + formatNumber(thresholds[3]) },
+            { color: '#34D399', border: '0', label: formatNumber(thresholds[3] + 1) + '–' + formatNumber(thresholds[4]) },
+            { color: '#059669', border: '0', label: '>' + formatNumber(thresholds[4]) }
+        ];
+        var html = '<span class="text-xs fw-medium" style="color:#64748B;">Jumlah user aktif</span>';
+        bands.forEach(function (band) {
+            html += '<span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;">'
+                + '<span class="rounded-1" style="width:14px;height:14px;background:' + band.color + ';border:' + band.border + ';"></span>'
+                + band.label
+                + '</span>';
+        });
+        legend.innerHTML = html;
+    }
+
     if (!series.length || !categories.length) {
         el.innerHTML = '<p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data pola aktivitas untuk rentang ini.</p>';
         return;
     }
+
+    updateLegend();
 
     // Calendar heatmap: Senin di atas → Minggu di bawah; kolom = minggu.
     var ordered = series.slice();

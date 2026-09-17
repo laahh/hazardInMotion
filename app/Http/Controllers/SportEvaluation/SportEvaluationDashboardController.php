@@ -1310,7 +1310,7 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Pola Aktivitas Penggunaan Aktif: heatmap harian + ringkasan 4 minggu.
+     * Pola Aktivitas Penggunaan Aktif: heatmap kalender dari data pertama sampai hari ini.
      *
      * @return array<string, mixed>
      */
@@ -1361,7 +1361,7 @@ class SportEvaluationDashboardController extends Controller
         );
 
         if (! $this->connection->isUp()) {
-            return array_merge($empty, $this->dummyActivityPatternPayload());
+            return $empty;
         }
 
         try {
@@ -1406,14 +1406,40 @@ class SportEvaluationDashboardController extends Controller
 
             $adoptionChartLabels = $adoptionTrendLabels;
             $adoptionChartSeries = $adoptionTrendActiveUsers;
+
+            $activityTrend = $this->installStatsService->getActivityPatternDailyTrend($this->indexFilters);
+            $activityDates = $activityTrend['dates'] ?? [];
+            $activityLabels = $activityTrend['labels'] ?? [];
+            $activityUsers = $activityTrend['active_users'] ?? [];
+            $activityRangeLabel = (string) ($activityTrend['range_label'] ?? '');
+
+            if ($activityDates !== [] && $activityUsers !== []) {
+                $built = $this->buildActivityPatternPayload(
+                    $activityDates,
+                    $activityLabels,
+                    $activityUsers,
+                    $activityRangeLabel,
+                );
+                $activityPatternSeries = $built['series'];
+                $activityPatternCategories = $built['categories'];
+                $activityPatternPeakDayLabel = $built['peak_day_label'];
+                $activityPatternPeakDayCount = $built['peak_day_count'];
+                $activityPatternAvgDaily = $built['avg_daily'];
+                $activityPatternWeekdayRatio = $built['weekday_ratio'];
+                $activityPatternInsight = $built['insight'];
+                $adoptionTrendRangeLabel = $activityRangeLabel !== ''
+                    ? $activityRangeLabel
+                    : $adoptionTrendRangeLabel;
+
+                $from = Carbon::parse((string) $activityDates[0])->startOfDay()->format('Y-m-d H:i:s');
+                $to = Carbon::parse((string) $activityDates[array_key_last($activityDates)])->endOfDay()->format('Y-m-d H:i:s');
+                $activityPatternPeakHourLabel = $this->resolvePeakHourLabel($from, $to);
+            }
         } catch (Throwable $e) {
             report($e);
         }
 
-        // Dummy UI heatmap sesuai mock desain (sementara).
-        $dummy = $this->dummyActivityPatternPayload();
-
-        return array_merge(compact(
+        return compact(
             'adoptionInstall',
             'adoptionLoginSuccess',
             'adoptionAktif',
@@ -1426,7 +1452,15 @@ class SportEvaluationDashboardController extends Controller
             'adoptionTrendActiveUsers',
             'adoptionTrendDates',
             'adoptionTrendRangeLabel',
-        ), $dummy);
+            'activityPatternSeries',
+            'activityPatternCategories',
+            'activityPatternPeakDayLabel',
+            'activityPatternPeakDayCount',
+            'activityPatternAvgDaily',
+            'activityPatternWeekdayRatio',
+            'activityPatternPeakHourLabel',
+            'activityPatternInsight',
+        );
     }
 
     /**
@@ -1734,7 +1768,7 @@ class SportEvaluationDashboardController extends Controller
                 return '–';
             }
 
-            return sprintf('%02d:00 – %02d:00 WITA', $bestStart, $bestStart + 2);
+            return sprintf('%02d:00 – %02d:00', $bestStart, $bestStart + 2);
         } catch (Throwable $e) {
             report($e);
 

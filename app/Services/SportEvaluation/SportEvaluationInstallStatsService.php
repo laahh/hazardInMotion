@@ -818,6 +818,175 @@ final class SportEvaluationInstallStatsService
     }
 
     /**
+     * Tren harian user aktif untuk heatmap pola aktivitas:
+     * dari tanggal data pertama tersedia sampai hari ini (maks. 1 tahun).
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{
+     *     labels: list<string>,
+     *     dates: list<string>,
+     *     active_users: list<int>,
+     *     range_label: string
+     * }
+     */
+    public function getActivityPatternDailyTrend(array $filters = []): array
+    {
+        $filters = $this->normalizeFilters($filters);
+        $empty = [
+            'labels' => [],
+            'dates' => [],
+            'active_users' => [],
+            'range_label' => '',
+        ];
+
+        try {
+            $cacheKey = 'evaluasi_well:install_stats:activity_pattern_daily:v1:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+
+            return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters, $empty): array {
+                $db = DB::connection(BewellConnectionService::CONNECTION);
+                $end = Carbon::now()->endOfDay();
+
+                $firstRow = $db->selectOne("
+                    SELECT MIN(first_at) AS first_at
+                    FROM (
+                        SELECT MIN(created_at) AS first_at FROM login_audit
+                            WHERE event = ? AND user_id IS NOT NULL
+                        UNION ALL
+                        SELECT MIN(created_at) AS first_at FROM food_analyses
+                            WHERE user_id IS NOT NULL
+                        UNION ALL
+                        SELECT MIN(created_at) AS first_at FROM workout_analyses
+                            WHERE user_id IS NOT NULL
+                    ) AS sources
+                ", ['login_success']);
+
+                $firstAt = (string) ($firstRow->first_at ?? '');
+                if ($firstAt === '') {
+                    return $empty;
+                }
+
+                $start = Carbon::parse($firstAt)->startOfDay();
+                $earliestAllowed = $end->copy()->subYear()->startOfDay();
+                if ($start->lt($earliestAllowed)) {
+                    $start = $earliestAllowed;
+                }
+
+                $buckets = [];
+                $cursor = $start->copy();
+                while ($cursor->lte($end)) {
+                    $key = $cursor->toDateString();
+                    $buckets[$key] = [
+                        'label' => $cursor->format('d M'),
+                        'active_users' => 0,
+                    ];
+                    $cursor->addDay();
+                }
+
+                if ($buckets === []) {
+                    return $empty;
+                }
+
+                $rangeLabel = $start->translatedFormat('d M Y').' – '.$end->translatedFormat('d M Y');
+                $userIds = null;
+
+                if ($this->hasActiveFilters($filters)) {
+                    $userIds = [];
+                    foreach ($this->rawEmployeeRows() as $row) {
+                        $resolvedSite = $this->siteResolver->resolve($row['kode_sid'], $row['site']);
+                        if ($this->exclusionRules->isExcludedRow([
+                            'jabatan_fungsional' => $row['jabatan'],
+                            'site' => $row['site'],
+                            'nama' => $row['nama'],
+                            'company' => $row['company'],
+                            'departement' => $row['departement'],
+                        ]) || $this->exclusionRules->isExcludedSite($resolvedSite)) {
+                            continue;
+                        }
+                        $divisiGroup = $this->divisiGroupResolver->resolve($row['divisi']);
+                        if (! $this->mitraAssignmentService->rowMatchesScope($filters, $resolvedSite, $row['company'])) {
+                            continue;
+                        }
+                        if ($filters['division_group'] !== '' && $divisiGroup !== $filters['division_group']) {
+                            continue;
+                        }
+                        if ($filters['departement'] !== '' && ! str_contains(mb_strtolower($row['departement']), mb_strtolower($filters['departement']))) {
+                            continue;
+                        }
+                        if ($filters['jabatan'] !== '' && $row['jabatan'] !== $filters['jabatan']) {
+                            continue;
+                        }
+                        if ($filters['install'] === 'sudah' && ! $row['is_installed']) {
+                            continue;
+                        }
+                        if ($filters['install'] === 'belum' && $row['is_installed']) {
+                            continue;
+                        }
+                        if (($row['id'] ?? 0) > 0) {
+                            $userIds[] = (int) $row['id'];
+                        }
+                    }
+                    $userIds = array_values(array_unique($userIds));
+                    if ($userIds === []) {
+                        return [
+                            'labels' => array_column($buckets, 'label'),
+                            'dates' => array_keys($buckets),
+                            'active_users' => array_fill(0, count($buckets), 0),
+                            'range_label' => $rangeLabel,
+                        ];
+                    }
+                }
+
+                $from = $start->format('Y-m-d H:i:s');
+                $to = $end->format('Y-m-d H:i:s');
+
+                $signalsSql = '
+                    SELECT user_id, created_at FROM login_audit
+                        WHERE event = ? AND user_id IS NOT NULL
+                          AND created_at BETWEEN ? AND ?
+                    UNION ALL
+                    SELECT user_id, created_at FROM food_analyses
+                        WHERE user_id IS NOT NULL
+                          AND created_at BETWEEN ? AND ?
+                    UNION ALL
+                    SELECT user_id, created_at FROM workout_analyses
+                        WHERE user_id IS NOT NULL
+                          AND created_at BETWEEN ? AND ?
+                ';
+
+                $activeSql = '
+                    SELECT DATE(s.created_at) AS d, COUNT(DISTINCT s.user_id) AS c
+                    FROM ('.$signalsSql.') AS s
+                ';
+                $activeBindings = ['login_success', $from, $to, $from, $to, $from, $to];
+                if ($userIds !== null) {
+                    $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+                    $activeSql .= ' WHERE s.user_id IN ('.$placeholders.')';
+                    $activeBindings = array_merge($activeBindings, $userIds);
+                }
+                $activeSql .= ' GROUP BY DATE(s.created_at)';
+
+                foreach ($db->select($activeSql, $activeBindings) as $row) {
+                    $d = (string) ($row->d ?? '');
+                    if (isset($buckets[$d])) {
+                        $buckets[$d]['active_users'] = (int) ($row->c ?? 0);
+                    }
+                }
+
+                return [
+                    'labels' => array_column($buckets, 'label'),
+                    'dates' => array_keys($buckets),
+                    'active_users' => array_map(static fn (array $b): int => $b['active_users'], array_values($buckets)),
+                    'range_label' => $rangeLabel,
+                ];
+            });
+        } catch (Throwable $e) {
+            report($e);
+
+            return $empty;
+        }
+    }
+
+    /**
      * @param  list<array{name: string, total: int, installed: int, not_installed: int, pct: float, bar_class: string}>  $rows
      * @return array{categories: list<string>, installed: list<int>, not_installed: list<int>}
      */
