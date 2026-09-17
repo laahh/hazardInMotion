@@ -1977,136 +1977,188 @@ class SportEvaluationDashboardController extends Controller
         }
 
         try {
-            $cached = Cache::remember('evaluasi_well:top_users_year:'.$this->scopeCacheKey(), 300, function (): array {
-                $db = DB::connection(BewellConnectionService::CONNECTION);
-                $yearStart = Carbon::now()->startOfYear()->format('Y-m-d H:i:s');
-                $yearEnd = Carbon::now()->endOfYear()->format('Y-m-d H:i:s');
-                [$inSql, $inBindings] = $this->scopedUserIdSql('e.id');
-
-                $rows = $db->select(
-                    'SELECT
-                        e.id,
-                        e.nama,
-                        e.kode_sid,
-                        e.divisi,
-                        e.avatar_url,
-                        e.foto,
-                        s.food_cnt,
-                        s.workout_cnt,
-                        s.community_cnt,
-                        s.open_play_cnt,
-                        s.total_cnt
-                    FROM (
-                        SELECT
-                            user_id,
-                            SUM(food_cnt) AS food_cnt,
-                            SUM(workout_cnt) AS workout_cnt,
-                            SUM(community_cnt) AS community_cnt,
-                            SUM(open_play_cnt) AS open_play_cnt,
-                            SUM(food_cnt + workout_cnt + community_cnt + open_play_cnt) AS total_cnt
-                        FROM (
-                            SELECT user_id, COUNT(*) AS food_cnt, 0 AS workout_cnt, 0 AS community_cnt, 0 AS open_play_cnt
-                            FROM food_analyses
-                            WHERE source_type = ?
-                              AND user_id IS NOT NULL
-                              AND created_at BETWEEN ? AND ?
-                            GROUP BY user_id
-
-                            UNION ALL
-
-                            SELECT user_id, 0 AS food_cnt, COUNT(*) AS workout_cnt, 0 AS community_cnt, 0 AS open_play_cnt
-                            FROM workout_analyses
-                            WHERE user_id IS NOT NULL
-                              AND created_at BETWEEN ? AND ?
-                            GROUP BY user_id
-
-                            UNION ALL
-
-                            SELECT user_id, 0 AS food_cnt, 0 AS workout_cnt, COUNT(*) AS community_cnt, 0 AS open_play_cnt
-                            FROM (
-                                SELECT author_user_id AS user_id FROM community_posts
-                                    WHERE author_user_id IS NOT NULL
-                                      AND created_at BETWEEN ? AND ?
-                                UNION ALL
-                                SELECT user_id FROM community_event_rsvps
-                                    WHERE user_id IS NOT NULL
-                                      AND created_at BETWEEN ? AND ?
-                            ) community_acts
-                            GROUP BY user_id
-
-                            UNION ALL
-
-                            SELECT user_id, 0 AS food_cnt, 0 AS workout_cnt, 0 AS community_cnt, COUNT(*) AS open_play_cnt
-                            FROM (
-                                SELECT host_user_id AS user_id FROM open_play_events
-                                    WHERE host_user_id IS NOT NULL
-                                      AND starts_at BETWEEN ? AND ?
-                                UNION ALL
-                                SELECT p.user_id
-                                    FROM open_play_participants p
-                                    INNER JOIN open_play_events e2 ON e2.id = p.event_id
-                                    WHERE p.user_id IS NOT NULL
-                                      AND e2.starts_at BETWEEN ? AND ?
-                            ) open_play_acts
-                            GROUP BY user_id
-                        ) parts
-                        GROUP BY user_id
-                    ) s
-                    INNER JOIN employee_profiles e ON e.id = s.user_id
-                    WHERE 1 = 1'.$inSql.'
-                    ORDER BY s.total_cnt DESC, e.nama ASC
-                    LIMIT 6',
-                    array_merge(
-                        [
-                            'photo', $yearStart, $yearEnd,
-                            $yearStart, $yearEnd,
-                            $yearStart, $yearEnd,
-                            $yearStart, $yearEnd,
-                            $yearStart, $yearEnd,
-                            $yearStart, $yearEnd,
-                        ],
-                        $inBindings
-                    )
-                );
-
-                $placeholders = [
-                    'evaluasi-well-assets/images/users/user1.png',
-                    'evaluasi-well-assets/images/users/user2.png',
-                    'evaluasi-well-assets/images/users/user3.png',
-                    'evaluasi-well-assets/images/users/user4.png',
-                    'evaluasi-well-assets/images/users/user5.png',
-                ];
-
-                $result = [];
-                foreach ($rows as $i => $row) {
-                    $avatar = trim((string) ($row->avatar_url ?: $row->foto ?: ''));
-                    if ($avatar === '') {
-                        $avatar = asset($placeholders[$i % count($placeholders)]);
-                    }
-
-                    $result[] = [
-                        'id' => (int) $row->id,
-                        'nama' => (string) ($row->nama ?: 'User #'.$row->id),
-                        'kode_sid' => (string) ($row->kode_sid ?: '-'),
-                        'divisi' => (string) ($row->divisi ?: '-'),
-                        'avatar' => $avatar,
-                        'food_cnt' => (int) $row->food_cnt,
-                        'workout_cnt' => (int) $row->workout_cnt,
-                        'community_cnt' => (int) $row->community_cnt,
-                        'open_play_cnt' => (int) $row->open_play_cnt,
-                        'total_cnt' => (int) $row->total_cnt,
-                    ];
-                }
-
-                return $result;
-            });
-
-            $topUsers = $cached;
+            $topUsers = Cache::remember(
+                'evaluasi_well:top_users_year:'.$this->scopeCacheKey(),
+                300,
+                fn (): array => $this->topUsersRows(6)
+            );
         } catch (Throwable $e) {
             report($e);
         }
 
         return compact('topUsers');
+    }
+
+    /**
+     * Ranking frekuensi makanan + olahraga + komunitas + main bareng (tahun berjalan),
+     * dipakai oleh kartu "Top User Aktif" (limit kecil) dan modal "Lihat Semua" (limit besar).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function topUsersRows(int $limit): array
+    {
+        $db = DB::connection(BewellConnectionService::CONNECTION);
+        $yearStart = Carbon::now()->startOfYear()->format('Y-m-d H:i:s');
+        $yearEnd = Carbon::now()->endOfYear()->format('Y-m-d H:i:s');
+        [$inSql, $inBindings] = $this->scopedUserIdSql('e.id');
+
+        $rows = $db->select(
+            'SELECT
+                e.id,
+                e.nama,
+                e.kode_sid,
+                e.site,
+                e.nama_perusahaan,
+                e.divisi,
+                e.avatar_url,
+                e.foto,
+                s.food_cnt,
+                s.workout_cnt,
+                s.community_cnt,
+                s.open_play_cnt,
+                s.total_cnt
+            FROM (
+                SELECT
+                    user_id,
+                    SUM(food_cnt) AS food_cnt,
+                    SUM(workout_cnt) AS workout_cnt,
+                    SUM(community_cnt) AS community_cnt,
+                    SUM(open_play_cnt) AS open_play_cnt,
+                    SUM(food_cnt + workout_cnt + community_cnt + open_play_cnt) AS total_cnt
+                FROM (
+                    SELECT user_id, COUNT(*) AS food_cnt, 0 AS workout_cnt, 0 AS community_cnt, 0 AS open_play_cnt
+                    FROM food_analyses
+                    WHERE source_type = ?
+                      AND user_id IS NOT NULL
+                      AND created_at BETWEEN ? AND ?
+                    GROUP BY user_id
+
+                    UNION ALL
+
+                    SELECT user_id, 0 AS food_cnt, COUNT(*) AS workout_cnt, 0 AS community_cnt, 0 AS open_play_cnt
+                    FROM workout_analyses
+                    WHERE user_id IS NOT NULL
+                      AND created_at BETWEEN ? AND ?
+                    GROUP BY user_id
+
+                    UNION ALL
+
+                    SELECT user_id, 0 AS food_cnt, 0 AS workout_cnt, COUNT(*) AS community_cnt, 0 AS open_play_cnt
+                    FROM (
+                        SELECT author_user_id AS user_id FROM community_posts
+                            WHERE author_user_id IS NOT NULL
+                              AND created_at BETWEEN ? AND ?
+                        UNION ALL
+                        SELECT user_id FROM community_event_rsvps
+                            WHERE user_id IS NOT NULL
+                              AND created_at BETWEEN ? AND ?
+                    ) community_acts
+                    GROUP BY user_id
+
+                    UNION ALL
+
+                    SELECT user_id, 0 AS food_cnt, 0 AS workout_cnt, 0 AS community_cnt, COUNT(*) AS open_play_cnt
+                    FROM (
+                        SELECT host_user_id AS user_id FROM open_play_events
+                            WHERE host_user_id IS NOT NULL
+                              AND starts_at BETWEEN ? AND ?
+                        UNION ALL
+                        SELECT p.user_id
+                            FROM open_play_participants p
+                            INNER JOIN open_play_events e2 ON e2.id = p.event_id
+                            WHERE p.user_id IS NOT NULL
+                              AND e2.starts_at BETWEEN ? AND ?
+                    ) open_play_acts
+                    GROUP BY user_id
+                ) parts
+                GROUP BY user_id
+            ) s
+            INNER JOIN employee_profiles e ON e.id = s.user_id
+            WHERE 1 = 1'.$inSql.'
+            ORDER BY s.total_cnt DESC, e.nama ASC
+            LIMIT '.max(1, min(200, $limit)),
+            array_merge(
+                [
+                    'photo', $yearStart, $yearEnd,
+                    $yearStart, $yearEnd,
+                    $yearStart, $yearEnd,
+                    $yearStart, $yearEnd,
+                    $yearStart, $yearEnd,
+                    $yearStart, $yearEnd,
+                ],
+                $inBindings
+            )
+        );
+
+        $placeholders = [
+            'evaluasi-well-assets/images/users/user1.png',
+            'evaluasi-well-assets/images/users/user2.png',
+            'evaluasi-well-assets/images/users/user3.png',
+            'evaluasi-well-assets/images/users/user4.png',
+            'evaluasi-well-assets/images/users/user5.png',
+        ];
+
+        $result = [];
+        foreach ($rows as $i => $row) {
+            $avatar = trim((string) ($row->avatar_url ?: $row->foto ?: ''));
+            if ($avatar === '') {
+                $avatar = asset($placeholders[$i % count($placeholders)]);
+            }
+
+            $result[] = [
+                'id' => (int) $row->id,
+                'nama' => (string) ($row->nama ?: 'User #'.$row->id),
+                'kode_sid' => (string) ($row->kode_sid ?: '-'),
+                'site' => $this->siteResolver->resolveOrDash(
+                    isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                    isset($row->site) ? (string) $row->site : null,
+                ),
+                'perusahaan' => (string) (trim((string) ($row->nama_perusahaan ?? '')) !== '' ? $row->nama_perusahaan : '-'),
+                'divisi' => (string) ($row->divisi ?: '-'),
+                'avatar' => $avatar,
+                'food_cnt' => (int) $row->food_cnt,
+                'workout_cnt' => (int) $row->workout_cnt,
+                'community_cnt' => (int) $row->community_cnt,
+                'open_play_cnt' => (int) $row->open_play_cnt,
+                'total_cnt' => (int) $row->total_cnt,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * JSON untuk modal "Lihat Semua" pada kartu Top User Aktif.
+     */
+    public function topUsersLeaderboard(Request $request): JsonResponse
+    {
+        $this->ensureScopedIndexFilters($request);
+
+        if (! $this->connection->isUp()) {
+            return response()->json(['data' => []]);
+        }
+
+        try {
+            $rows = Cache::remember(
+                'evaluasi_well:top_users_leaderboard:'.$this->scopeCacheKey(),
+                300,
+                fn (): array => $this->topUsersRows(50)
+            );
+
+            $data = [];
+            foreach ($rows as $i => $row) {
+                $data[] = array_merge($row, [
+                    'rank' => $i + 1,
+                    'employee_url' => route('evaluasi-well.employees.show', $row['id']),
+                ]);
+            }
+
+            return response()->json(['data' => $data]);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json(['data' => []]);
+        }
     }
 
     /**

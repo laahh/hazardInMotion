@@ -1,5 +1,41 @@
 ﻿@extends('evaluasi-well.layouts.app')
 
+@php
+  // Dihitung di sini (bukan di section('content')) supaya tersedia untuk
+  // section('page-scripts') juga — Blade mengeksekusi section berdasarkan urutan
+  // di file, bukan urutan @yield di layout, dan page-scripts ada sebelum content.
+  $mitraMode = (bool) ($mitraMode ?? false);
+  $mitraNeedsPicker = (bool) ($mitraNeedsPicker ?? false);
+  $mitraIsManager = (bool) ($mitraIsManager ?? false);
+  $mitraScopeLabel = $mitraScopeLabel ?? null;
+  $mitraScope = $mitraScope ?? ['site' => '', 'perusahaan' => '', 'pairs' => [], 'companies' => []];
+  $siteOptions = $siteOptions ?? [];
+  $companyOptions = $companyOptions ?? [];
+  $dashboardFilters = $dashboardFilters ?? ['site' => '', 'perusahaan' => '', 'division_group' => ''];
+  $dashboardFilterOptions = $dashboardFilterOptions ?? ['sites' => [], 'companies' => [], 'division_groups' => []];
+  $dashboardFilterActiveCount = collect($dashboardFilters)->filter(fn ($value) => trim((string) $value) !== '')->count();
+  // Dikirim ke tiap endpoint AJAX lewat parameter khusus (scope_*) supaya tidak
+  // bentrok dengan filter lokal tiap modal/tabel (site/company/division_group).
+  $dashboardScopeQuery = array_filter([
+    'scope_site' => $dashboardFilters['site'] ?? '',
+    'scope_perusahaan' => $dashboardFilters['perusahaan'] ?? '',
+    'scope_division' => $dashboardFilters['division_group'] ?? '',
+  ], fn ($value) => trim((string) $value) !== '');
+  $ajaxRoutes = $ajaxRoutes ?? [
+    'notInstalledData' => route('evaluasi-well.not-installed.data', $dashboardScopeQuery),
+    'notInstalledExport' => route('evaluasi-well.not-installed.export', $dashboardScopeQuery),
+    'installStats' => route('evaluasi-well.install-stats', $dashboardScopeQuery),
+    'installStatsExport' => route('evaluasi-well.install-stats.export', $dashboardScopeQuery),
+    'activeStats' => route('evaluasi-well.active-stats', $dashboardScopeQuery),
+    'activeStatsExport' => route('evaluasi-well.active-stats.export', $dashboardScopeQuery),
+    'wellnessMetricsKpi' => route('evaluasi-well.wellness-metrics.kpi', $dashboardScopeQuery),
+    'wellnessMetricsData' => route('evaluasi-well.wellness-metrics.data', $dashboardScopeQuery),
+    'wellnessMetricsExport' => route('evaluasi-well.wellness-metrics.export', $dashboardScopeQuery),
+    'topUsersLeaderboard' => route('evaluasi-well.top-users.leaderboard', $dashboardScopeQuery),
+    'index' => route('evaluasi-well.index'),
+  ];
+@endphp
+
 @section('title', ($mitraMode ?? false) ? 'Mitra Kerja' : 'Dashboard')
 
 @section('css')
@@ -22,6 +58,12 @@
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
   }
   #site-boundary-map .site-boundary-tooltip::before { display: none; }
+  #site-boundary-map .leaflet-control-zoom a {
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    font-size: 14px;
+  }
 </style>
 @if ($mitraMode ?? false)
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
@@ -565,13 +607,16 @@
     line-height: 1.2;
   }
   .wc-card__bg--frequency {
-    width: min(48%, 260px);
+    top: 22%;
+    bottom: auto;
+    right: 0;
+    width: min(44%, 230px);
     max-height: 62%;
-    opacity: 0.92;
-    bottom: -4px;
-    right: -2px;
-    mask-image: linear-gradient(135deg, transparent 0%, transparent 12%, rgba(0,0,0,.75) 36%, #000 62%);
-    -webkit-mask-image: linear-gradient(135deg, transparent 0%, transparent 12%, rgba(0,0,0,.75) 36%, #000 62%);
+    opacity: 0.48;
+    object-fit: contain;
+    object-position: right bottom;
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 30%, #000 58%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 30%, #000 58%);
   }
   .wc-card--frequency .wc-frequency-body {
     position: relative;
@@ -4502,40 +4547,132 @@
     }
 })();
 </script>
+<script>
+(function () {
+    var modalEl = document.getElementById('topUsersModal');
+    if (!modalEl) {
+        return;
+    }
+
+    var dataUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.top-users.leaderboard')
+            : ($ajaxRoutes['topUsersLeaderboard'] ?? route('evaluasi-well.top-users.leaderboard'))
+    );
+    var employeeShowBase = @json(url('/evaluasi-well/employees'));
+    var table = null;
+    var loaded = false;
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function formatNum(value) {
+        return Number(value || 0).toLocaleString('id-ID');
+    }
+
+    function ensureTable(rows) {
+        var tableEl = document.getElementById('topUsersTable');
+        if (!tableEl || typeof DataTable === 'undefined') {
+            return;
+        }
+
+        if (table) {
+            table.clear();
+            table.rows.add(rows);
+            table.draw();
+            return;
+        }
+
+        table = new DataTable(tableEl, {
+            data: rows,
+            pageLength: 10,
+            lengthMenu: [10, 25, 50],
+            order: [[7, 'desc']],
+            columns: [
+                { data: 'rank', className: 'text-secondary-light' },
+                {
+                    data: 'nama',
+                    render: function (data, type, row) {
+                        if (type !== 'display') {
+                            return data;
+                        }
+                        return '<div class="d-flex align-items-center gap-2 min-w-0">'
+                            + '<img src="' + escapeHtml(row.avatar) + '" alt="" class="w-32-px h-32-px rounded-circle flex-shrink-0" style="object-fit:cover;" onerror="this.style.visibility=\'hidden\'">'
+                            + '<a href="' + row.employee_url + '" class="text-primary-light hover-text-primary fw-medium text-truncate">' + escapeHtml(data) + '</a>'
+                            + '</div>';
+                    }
+                },
+                { data: 'site' },
+                { data: 'perusahaan' },
+                { data: 'food_cnt', className: 'text-end', render: function (d) { return formatNum(d); } },
+                { data: 'workout_cnt', className: 'text-end', render: function (d) { return formatNum(d); } },
+                {
+                    data: null,
+                    className: 'text-end',
+                    render: function (data, type, row) {
+                        var social = (Number(row.community_cnt) || 0) + (Number(row.open_play_cnt) || 0);
+                        return type === 'display' ? formatNum(social) : social;
+                    }
+                },
+                { data: 'total_cnt', className: 'text-end fw-semibold', render: function (d) { return formatNum(d); } }
+            ],
+            language: {
+                processing: 'Memuat...',
+                search: 'Cari:',
+                lengthMenu: 'Tampilkan _MENU_ data',
+                info: 'Menampilkan _START_–_END_ dari _TOTAL_ data',
+                infoEmpty: 'Tidak ada data',
+                infoFiltered: '(difilter dari _MAX_ total data)',
+                zeroRecords: 'Tidak ada data ditemukan.',
+                paginate: { first: '«', last: '»', next: '›', previous: '‹' }
+            }
+        });
+    }
+
+    function loadLeaderboard() {
+        var loadingEl = document.getElementById('top-users-loading');
+        var emptyEl = document.getElementById('top-users-empty');
+        var tableWrap = document.querySelector('#topUsersModal .table-responsive');
+        if (loadingEl) loadingEl.classList.remove('d-none');
+
+        fetch(dataUrl, {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (res) {
+            return res.ok ? res.json() : { data: [] };
+        }).then(function (payload) {
+            var rows = (payload && payload.data) || [];
+            if (rows.length === 0) {
+                if (tableWrap) tableWrap.classList.add('d-none');
+                if (emptyEl) emptyEl.classList.remove('d-none');
+            } else {
+                if (tableWrap) tableWrap.classList.remove('d-none');
+                if (emptyEl) emptyEl.classList.add('d-none');
+                ensureTable(rows);
+            }
+            loaded = true;
+        }).catch(function () {
+            if (emptyEl) emptyEl.classList.remove('d-none');
+        }).finally(function () {
+            if (loadingEl) loadingEl.classList.add('d-none');
+        });
+    }
+
+    modalEl.addEventListener('show.bs.modal', function () {
+        if (!loaded) {
+            loadLeaderboard();
+        }
+    });
+})();
+</script>
 @endsection
 
 @section('content')
-@php
-  $mitraMode = (bool) ($mitraMode ?? false);
-  $mitraNeedsPicker = (bool) ($mitraNeedsPicker ?? false);
-  $mitraIsManager = (bool) ($mitraIsManager ?? false);
-  $mitraScopeLabel = $mitraScopeLabel ?? null;
-  $mitraScope = $mitraScope ?? ['site' => '', 'perusahaan' => '', 'pairs' => [], 'companies' => []];
-  $siteOptions = $siteOptions ?? [];
-  $companyOptions = $companyOptions ?? [];
-  $dashboardFilters = $dashboardFilters ?? ['site' => '', 'perusahaan' => '', 'division_group' => ''];
-  $dashboardFilterOptions = $dashboardFilterOptions ?? ['sites' => [], 'companies' => [], 'division_groups' => []];
-  $dashboardFilterActiveCount = collect($dashboardFilters)->filter(fn ($value) => trim((string) $value) !== '')->count();
-  // Dikirim ke tiap endpoint AJAX lewat parameter khusus (scope_*) supaya tidak
-  // bentrok dengan filter lokal tiap modal/tabel (site/company/division_group).
-  $dashboardScopeQuery = array_filter([
-    'scope_site' => $dashboardFilters['site'] ?? '',
-    'scope_perusahaan' => $dashboardFilters['perusahaan'] ?? '',
-    'scope_division' => $dashboardFilters['division_group'] ?? '',
-  ], fn ($value) => trim((string) $value) !== '');
-  $ajaxRoutes = $ajaxRoutes ?? [
-    'notInstalledData' => route('evaluasi-well.not-installed.data', $dashboardScopeQuery),
-    'notInstalledExport' => route('evaluasi-well.not-installed.export', $dashboardScopeQuery),
-    'installStats' => route('evaluasi-well.install-stats', $dashboardScopeQuery),
-    'installStatsExport' => route('evaluasi-well.install-stats.export', $dashboardScopeQuery),
-    'activeStats' => route('evaluasi-well.active-stats', $dashboardScopeQuery),
-    'activeStatsExport' => route('evaluasi-well.active-stats.export', $dashboardScopeQuery),
-    'wellnessMetricsKpi' => route('evaluasi-well.wellness-metrics.kpi', $dashboardScopeQuery),
-    'wellnessMetricsData' => route('evaluasi-well.wellness-metrics.data', $dashboardScopeQuery),
-    'wellnessMetricsExport' => route('evaluasi-well.wellness-metrics.export', $dashboardScopeQuery),
-    'index' => route('evaluasi-well.index'),
-  ];
-@endphp
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
   <div>
     <h6 class="fw-semibold mb-0">{{ $mitraMode ? 'Mitra Kerja' : 'Dashboard' }}</h6>
@@ -5058,15 +5195,15 @@
 
       <!-- Top User Start -->
       <div class="col-xxl-4">
-        <div class="card">
+        <div class="card h-100">
 
           <div class="card-body">
             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
               <h6 class="mb-2 fw-bold text-lg mb-0">Top User Aktif</h6>
-              <a href="{{ route('evaluasi-well.leaderboard', array_filter(['site' => $dashboardFilters['site'] ?? '', 'perusahaan' => $dashboardFilters['perusahaan'] ?? '', 'division_group' => $dashboardFilters['division_group'] ?? ''])) }}" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
+              <button type="button" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1 btn btn-link p-0 border-0" data-bs-toggle="modal" data-bs-target="#topUsersModal">
                 Lihat Semua
                 <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
-              </a>
+              </button>
             </div>
 
             <div class="mt-32">
@@ -5229,6 +5366,7 @@
 
 @include('evaluasi-well.partials._install-stats-modal')
 @include('evaluasi-well.partials._active-stats-modal')
+@include('evaluasi-well.partials._top-users-modal')
 @unless ($mitraMode)
 @include('evaluasi-well.partials._dashboard-filter-modal')
 @endunless
@@ -5306,16 +5444,23 @@
     var boundaryData = window.IUPK_BOUNDARY || { type: 'FeatureCollection', features: [] };
 
     var map = L.map(mapEl, {
-        zoomControl: false,
+        zoomControl: true,
         attributionControl: false,
         scrollWheelZoom: false,
-        dragging: false,
-        doubleClickZoom: false,
-        boxZoom: false,
-        keyboard: false,
-        touchZoom: false,
-        tap: false
+        dragging: true,
+        doubleClickZoom: true,
+        boxZoom: true,
+        keyboard: true,
+        touchZoom: true,
+        tap: true
     });
+    map.zoomControl.setPosition('topright');
+
+    // Scroll-zoom hanya aktif saat peta di-klik/hover, supaya scroll wheel
+    // di kartu kecil ini tidak "menyandera" scroll halaman dashboard.
+    mapEl.addEventListener('mouseenter', function () { map.scrollWheelZoom.enable(); });
+    mapEl.addEventListener('mouseleave', function () { map.scrollWheelZoom.disable(); });
+    map.on('click', function () { map.scrollWheelZoom.enable(); });
 
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         maxZoom: 18,

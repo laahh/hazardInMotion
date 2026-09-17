@@ -175,7 +175,7 @@
     {{-- Frekuensi Olahraga --}}
     <div class="col-xxl-6 col-xl-6">
       <div class="card h-100 wc-card wc-card--has-bg wc-card--frequency">
-        <img class="wc-card__bg wc-card__bg--br wc-card__bg--frequency" src="{{ asset('evaluasi-well-assets/images/wellness/bg-frequency.png') }}" alt="" aria-hidden="true">
+        <img class="wc-card__bg wc-card__bg--frequency" src="{{ asset('evaluasi-well-assets/images/wellness/bg-frequency.png') }}" alt="" aria-hidden="true">
         <div class="card-body p-24 d-flex flex-column">
           <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
             <div class="d-flex align-items-start gap-3 min-w-0">

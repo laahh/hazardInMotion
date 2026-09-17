@@ -332,6 +332,19 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
         return parent::notInstalledExport($request);
     }
 
+    public function topUsersLeaderboard(Request $request): JsonResponse
+    {
+        $scope = $this->requireScopeOrEmpty($request);
+        if ($scope === null) {
+            return response()->json(['data' => []]);
+        }
+
+        $this->applyForcedIndexFilters($scope);
+        $request->merge($this->assignmentService->toFilterPayload($scope));
+
+        return parent::topUsersLeaderboard($request);
+    }
+
     /**
      * @return array{
      *     site: string,

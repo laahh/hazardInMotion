@@ -30,6 +30,8 @@ Route::middleware('evaluasi-well.access')
         Route::get('/trend', [SportEvaluationDashboardController::class, 'trend'])->name('trend');
         Route::get('/distribution', [SportEvaluationDashboardController::class, 'distribution'])->name('distribution');
         Route::get('/leaderboard', [SportEvaluationDashboardController::class, 'leaderboard'])->name('leaderboard');
+        Route::get('/top-users/leaderboard', [SportEvaluationDashboardController::class, 'topUsersLeaderboard'])
+            ->name('top-users.leaderboard');
 
         Route::get('/not-installed/data', [SportEvaluationDashboardController::class, 'notInstalledData'])
             ->name('not-installed.data');
@@ -73,6 +75,8 @@ Route::middleware('evaluasi-well.access')
             ->name('mitra.not-installed.data');
         Route::get('/mitra/not-installed/export', [SportEvaluationMitraDashboardController::class, 'notInstalledExport'])
             ->name('mitra.not-installed.export');
+        Route::get('/mitra/top-users/leaderboard', [SportEvaluationMitraDashboardController::class, 'topUsersLeaderboard'])
+            ->name('mitra.top-users.leaderboard');
 
         Route::get('/mitra-assignments', [SportEvaluationMitraAssignmentController::class, 'index'])
             ->name('mitra-assignments.index');
