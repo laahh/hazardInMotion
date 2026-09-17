@@ -347,9 +347,9 @@
               @endforeach
             </select>
           </div>
-          <div class="col-xl-4 col-md-12 d-flex flex-wrap gap-2">
-            <button type="button" id="wellness-apply-btn" class="btn btn-sm btn-primary-600 radius-8">Terapkan</button>
-            <button type="button" id="wellness-reset-btn" class="btn btn-sm btn-outline-secondary-600 radius-8">Reset</button>
+          <div class="col-xl-3 col-md-12 d-flex flex-nowrap gap-2">
+            <button type="button" id="wellness-apply-btn" class="btn btn-sm btn-primary-600 radius-8 text-nowrap">Terapkan</button>
+            <button type="button" id="wellness-reset-btn" class="btn btn-sm btn-outline-secondary-600 radius-8 text-nowrap">Reset</button>
           </div>
         </div>
       </div>

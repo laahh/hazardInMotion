@@ -5262,7 +5262,7 @@
           <div class="card-body p-24">
             <div class="bg-neutral-50 border radius-8 p-16 mb-20">
               <div class="row g-3 align-items-end">
-                <div class="col-xl-2 col-md-4 col-sm-6">
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-1">
                   <label for="not-installed-site" class="form-label text-sm fw-medium mb-6">Site</label>
                   <select id="not-installed-site" class="form-select form-select-sm">
                     <option value="">Semua Site</option>
@@ -5271,7 +5271,7 @@
                     @endforeach
                   </select>
                 </div>
-                <div class="col-xl-2 col-md-4 col-sm-6">
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-2">
                   <label for="not-installed-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
                   <select id="not-installed-company" class="form-select form-select-sm">
                     <option value="">Semua Perusahaan</option>
@@ -5280,7 +5280,7 @@
                     @endforeach
                   </select>
                 </div>
-                <div class="col-xl-2 col-md-4 col-sm-6">
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-1">
                   <label for="not-installed-division" class="form-label text-sm fw-medium mb-6">Divisi</label>
                   <input
                     id="not-installed-division"
@@ -5296,7 +5296,7 @@
                     @endforeach
                   </datalist>
                 </div>
-                <div class="col-xl-2 col-md-4 col-sm-6">
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-2">
                   <label for="not-installed-departement" class="form-label text-sm fw-medium mb-6">Departemen</label>
                   <input
                     id="not-installed-departement"
@@ -5312,7 +5312,7 @@
                     @endforeach
                   </datalist>
                 </div>
-                <div class="col-xl-2 col-md-4 col-sm-6">
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-2">
                   <label for="not-installed-jabatan-fungsional" class="form-label text-sm fw-medium mb-6">Jabatan Fungsional</label>
                   <select id="not-installed-jabatan-fungsional" class="form-select form-select-sm">
                     <option value="">Semua Jabatan</option>
@@ -5321,7 +5321,7 @@
                     @endforeach
                   </select>
                 </div>
-                <div class="col-xl-2 col-md-4 col-sm-6">
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-1">
                   <label for="not-installed-install" class="form-label text-sm fw-medium mb-6">Install</label>
                   <select id="not-installed-install" class="form-select form-select-sm">
                     <option value="">Semua</option>
@@ -5329,7 +5329,7 @@
                     <option value="sudah">Sudah</option>
                   </select>
                 </div>
-                <div class="col-xl-2 col-md-4 col-sm-6">
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-1">
                   <label for="not-installed-user-aktif" class="form-label text-sm fw-medium mb-6">User Aktif</label>
                   <select id="not-installed-user-aktif" class="form-select form-select-sm">
                     <option value="">Semua</option>
@@ -5337,10 +5337,10 @@
                     <option value="tidak">Tidak</option>
                   </select>
                 </div>
-                <div class="col-xl-2 col-md-4 col-sm-6">
-                  <div class="d-flex gap-2">
-                    <button type="button" id="not-installed-reset-btn" class="btn btn-sm btn-outline-secondary w-100">Reset</button>
-                    <button type="button" id="not-installed-apply-btn" class="btn btn-sm btn-primary-600 w-100">Filter</button>
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-2">
+                  <div class="d-flex flex-nowrap gap-2">
+                    <button type="button" id="not-installed-reset-btn" class="btn btn-sm btn-outline-secondary w-100 text-nowrap">Reset</button>
+                    <button type="button" id="not-installed-apply-btn" class="btn btn-sm btn-primary-600 w-100 text-nowrap">Filter</button>
                   </div>
                 </div>
               </div>
