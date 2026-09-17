@@ -623,16 +623,71 @@
 })();
 </script>
 <style>
+.activity-pattern-card {
+  min-height: 100%;
+}
+.activity-pattern-side {
+  min-height: 100%;
+}
+.activity-pattern-metric {
+  border: 1px solid #E2E8F0;
+  background: #fff;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+}
+.activity-pattern-metric__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.activity-pattern-metric__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748B;
+  line-height: 1.2;
+}
+.activity-pattern-metric__value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0F172A;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.activity-pattern-metric__value--compact {
+  font-size: 15px;
+  line-height: 1.35;
+}
+.activity-pattern-metric__sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #94A3B8;
+  line-height: 1.3;
+}
 .activity-pattern-heatmap .ap-heatmap {
   display: grid;
   grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-rows: repeat(7, minmax(24px, 1fr)) 48px;
   gap: 5px 10px;
   align-items: stretch;
   overflow: visible;
+  height: 100%;
+  min-height: 240px;
 }
 #barChart.activity-pattern-heatmap {
   overflow: visible;
-  min-height: 280px;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+}
+#barChart.activity-pattern-heatmap .ap-heatmap {
+  flex: 1 1 auto;
 }
 .activity-pattern-heatmap .ap-heatmap-corner { min-height: 48px; }
 .activity-pattern-heatmap .ap-heatmap-xlabels {
@@ -676,9 +731,12 @@
   display: grid;
   grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
   gap: 3px;
+  height: 100%;
+  min-height: 22px;
 }
 .activity-pattern-heatmap .ap-heatmap-cell {
-  height: 28px;
+  height: 100%;
+  min-height: 22px;
   border-radius: 5px;
   border: 1px solid rgba(255,255,255,.75);
 }
@@ -686,9 +744,10 @@
   .activity-pattern-heatmap .ap-heatmap {
     grid-template-columns: 48px minmax(0, 1fr);
     gap: 4px 6px;
+    min-height: 200px;
   }
   .activity-pattern-heatmap .ap-heatmap-cell {
-    height: 20px;
+    min-height: 16px;
     border-radius: 3px;
   }
   .activity-pattern-heatmap .ap-heatmap-xlabel span {
@@ -696,6 +755,12 @@
   }
   .activity-pattern-heatmap .ap-heatmap-ylabel {
     font-size: 11px;
+  }
+  .activity-pattern-metric__value {
+    font-size: 16px;
+  }
+  .activity-pattern-metric__value--compact {
+    font-size: 14px;
   }
 }
 </style>
@@ -3853,10 +3918,10 @@
       <!-- Pertumbuhan User Aktif End -->
 
       <!-- Pola Aktivitas Penggunaan Aktif start -->
-      <div class="col-xxl-8">
-        <div class="card h-100 radius-12 border-0 shadow-sm">
-          <div class="card-body p-24">
-            <div class="d-flex align-items-start flex-wrap gap-3 justify-content-between mb-16">
+      <div class="col-xxl-8 d-flex">
+        <div class="card h-100 w-100 radius-12 border-0 shadow-sm activity-pattern-card">
+          <div class="card-body p-24 d-flex flex-column h-100">
+            <div class="d-flex align-items-start flex-wrap gap-3 justify-content-between mb-12 flex-shrink-0">
               <div class="min-w-0">
                 <h6 class="mb-4 fw-bold text-lg" style="color:#0F172A;">Pola Aktivitas Penggunaan Aktif</h6>
                 <span class="text-sm d-block" style="color:#64748B;">
@@ -3876,9 +3941,9 @@
               </div>
             </div>
 
-            <div id="barChart" class="activity-pattern-heatmap mb-10" aria-label="Heatmap pola aktivitas"></div>
+            <div id="barChart" class="activity-pattern-heatmap flex-grow-1 mb-8" aria-label="Heatmap pola aktivitas"></div>
 
-            <div class="d-flex align-items-center flex-wrap gap-3 mb-20" id="activity-pattern-legend">
+            <div class="d-flex align-items-center flex-wrap gap-3 mb-16 flex-shrink-0" id="activity-pattern-legend">
               <span class="text-xs fw-medium" style="color:#64748B;">Jumlah user aktif</span>
               <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#ECFDF5;border:1px solid #D1FAE5;"></span>0–50</span>
               <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#A7F3D0;"></span>51–100</span>
@@ -3887,50 +3952,52 @@
               <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#059669;"></span>&gt;400</span>
             </div>
 
-            <div class="row g-3">
+            <div class="row g-3 flex-shrink-0 activity-pattern-metrics">
               <div class="col-sm-6 col-xl-3">
-                <div class="h-100 radius-8 px-14 py-14" style="border:1px solid #E2E8F0;background:#fff;">
+                <div class="activity-pattern-metric h-100">
                   <div class="d-flex align-items-center gap-2 mb-8">
-                    <span class="w-28-px h-28-px rounded-circle d-inline-flex align-items-center justify-content-center" style="background:#EFF6FF;color:#2563EB;">
-                      <iconify-icon icon="solar:calendar-mark-bold" class="text-md"></iconify-icon>
+                    <span class="activity-pattern-metric__icon" style="background:#EFF6FF;color:#2563EB;">
+                      <iconify-icon icon="solar:calendar-mark-bold"></iconify-icon>
                     </span>
-                    <span class="text-xs fw-medium" style="color:#64748B;">Hari Tertinggi</span>
+                    <span class="activity-pattern-metric__label">Hari Tertinggi</span>
                   </div>
-                  <h5 class="mb-2 fw-bold" style="color:#0F172A;" id="activity-pattern-peak-day">{{ $activityPatternPeakDayLabel ?? '02 Sep 2026' }}</h5>
-                  <span class="text-xs" style="color:#94A3B8;" id="activity-pattern-peak-count">{{ number_format($activityPatternPeakDayCount ?? 2041) }} user aktif</span>
+                  <div class="activity-pattern-metric__value" id="activity-pattern-peak-day">{{ $activityPatternPeakDayLabel ?? '02 Sep 2026' }}</div>
+                  <div class="activity-pattern-metric__sub" id="activity-pattern-peak-count">{{ number_format($activityPatternPeakDayCount ?? 2041) }} user aktif</div>
                 </div>
               </div>
               <div class="col-sm-6 col-xl-3">
-                <div class="h-100 radius-8 px-14 py-14" style="border:1px solid #E2E8F0;background:#fff;">
+                <div class="activity-pattern-metric h-100">
                   <div class="d-flex align-items-center gap-2 mb-8">
-                    <span class="w-28-px h-28-px rounded-circle d-inline-flex align-items-center justify-content-center" style="background:#ECFDF5;color:#16A34A;">
-                      <iconify-icon icon="solar:chart-2-bold" class="text-md"></iconify-icon>
+                    <span class="activity-pattern-metric__icon" style="background:#ECFDF5;color:#16A34A;">
+                      <iconify-icon icon="solar:chart-2-bold"></iconify-icon>
                     </span>
-                    <span class="text-xs fw-medium" style="color:#64748B;">Rata-rata Harian</span>
+                    <span class="activity-pattern-metric__label">Rata-rata Harian</span>
                   </div>
-                  <h5 class="mb-0 fw-bold" style="color:#0F172A;" id="activity-pattern-avg">{{ number_format($activityPatternAvgDaily ?? 1159) }} user aktif</h5>
+                  <div class="activity-pattern-metric__value" id="activity-pattern-avg">{{ number_format($activityPatternAvgDaily ?? 1159) }} user aktif</div>
                 </div>
               </div>
               <div class="col-sm-6 col-xl-3">
-                <div class="h-100 radius-8 px-14 py-14" style="border:1px solid #E2E8F0;background:#fff;">
+                <div class="activity-pattern-metric h-100">
                   <div class="d-flex align-items-center gap-2 mb-8">
-                    <span class="w-28-px h-28-px rounded-circle d-inline-flex align-items-center justify-content-center" style="background:#FFF7ED;color:#EA580C;">
-                      <iconify-icon icon="solar:graph-up-bold" class="text-md"></iconify-icon>
+                    <span class="activity-pattern-metric__icon" style="background:#FFF7ED;color:#EA580C;">
+                      <iconify-icon icon="solar:graph-up-bold"></iconify-icon>
                     </span>
-                    <span class="text-xs fw-medium" style="color:#64748B;">Hari Kerja vs Akhir Pekan</span>
+                    <span class="activity-pattern-metric__label">Hari Kerja vs Akhir Pekan</span>
                   </div>
-                  <h5 class="mb-0 fw-bold" style="color:#0F172A;" id="activity-pattern-ratio">{{ number_format((float) ($activityPatternWeekdayRatio ?? 1.8), 1) }}x lebih tinggi di hari kerja</h5>
+                  <div class="activity-pattern-metric__value activity-pattern-metric__value--compact" id="activity-pattern-ratio">
+                    {{ number_format((float) ($activityPatternWeekdayRatio ?? 1.8), 1) }}x lebih tinggi di hari kerja
+                  </div>
                 </div>
               </div>
               <div class="col-sm-6 col-xl-3">
-                <div class="h-100 radius-8 px-14 py-14" style="border:1px solid #E2E8F0;background:#fff;">
+                <div class="activity-pattern-metric h-100">
                   <div class="d-flex align-items-center gap-2 mb-8">
-                    <span class="w-28-px h-28-px rounded-circle d-inline-flex align-items-center justify-content-center" style="background:#EFF6FF;color:#2563EB;">
-                      <iconify-icon icon="solar:clock-circle-bold" class="text-md"></iconify-icon>
+                    <span class="activity-pattern-metric__icon" style="background:#EFF6FF;color:#2563EB;">
+                      <iconify-icon icon="solar:clock-circle-bold"></iconify-icon>
                     </span>
-                    <span class="text-xs fw-medium" style="color:#64748B;">Waktu Puncak</span>
+                    <span class="activity-pattern-metric__label">Waktu Puncak</span>
                   </div>
-                  <h5 class="mb-0 fw-bold" style="color:#0F172A;" id="activity-pattern-peak-hour">{{ $activityPatternPeakHourLabel ?? '08:00 – 10:00' }} WITA</h5>
+                  <div class="activity-pattern-metric__value" id="activity-pattern-peak-hour">{{ $activityPatternPeakHourLabel ?? '08:00 – 10:00' }} WITA</div>
                 </div>
               </div>
             </div>
@@ -3940,10 +4007,9 @@
       <!-- Pola Aktivitas Penggunaan Aktif End -->
 
       <!-- Campaign Static start -->
-      <div class="col-xxl-4">
-        <div class="row gy-4">
-          <div class="col-xxl-12 col-sm-6">
-            <div class="card h-100 radius-8 border-0">
+      <div class="col-xxl-4 d-flex">
+        <div class="d-flex flex-column gap-4 w-100 h-100 activity-pattern-side">
+          <div class="card flex-grow-1 radius-8 border-0">
               <div class="card-body p-24">
                 <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between mb-20">
                   <h6 class="mb-0 fw-bold text-lg">Top Komunitas</h6>
@@ -3974,9 +4040,7 @@
 
               </div>
             </div>
-          </div>
-          <div class="col-xxl-12 col-sm-6">
-            <div class="card h-100 radius-8 border-0 overflow-hidden">
+          <div class="card flex-grow-1 radius-8 border-0 overflow-hidden">
               <div class="card-body p-24">
                 <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
                   <h6 class="mb-2 fw-bold text-lg">Komposisi Aktivitas</h6>
@@ -4003,7 +4067,6 @@
 
               </div>
             </div>
-          </div>
         </div>
       </div>  
       <!-- Campaign Static End -->
