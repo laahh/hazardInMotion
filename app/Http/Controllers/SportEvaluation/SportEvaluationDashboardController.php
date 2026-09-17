@@ -287,6 +287,8 @@ class SportEvaluationDashboardController extends Controller
      */
     public function installStats(Request $request): JsonResponse
     {
+        $this->ensureScopedIndexFilters($request);
+
         $dimension = is_string($request->input('dimension'))
             ? $request->input('dimension')
             : 'site';
@@ -336,7 +338,7 @@ class SportEvaluationDashboardController extends Controller
      */
     public function installStatsExport(Request $request): JsonResponse
     {
-        $this->ensureMitraAssignmentScope($request);
+        $this->ensureScopedIndexFilters($request);
 
         if (! $this->connection->isUp()) {
             return response()->json(['message' => 'Koneksi BeWell tidak tersedia.'], 503);
@@ -472,6 +474,8 @@ class SportEvaluationDashboardController extends Controller
      */
     public function activeStats(Request $request): JsonResponse
     {
+        $this->ensureScopedIndexFilters($request);
+
         $dimension = is_string($request->input('dimension'))
             ? $request->input('dimension')
             : 'site';
@@ -481,7 +485,7 @@ class SportEvaluationDashboardController extends Controller
             : null;
 
         try {
-            return response()->json($this->activeStatsService->getStats($dimension, $weekStart));
+            return response()->json($this->activeStatsService->getStats($dimension, $weekStart, $this->indexFilters));
         } catch (Throwable $e) {
             report($e);
 
@@ -527,7 +531,7 @@ class SportEvaluationDashboardController extends Controller
      */
     public function activeStatsExport(Request $request): JsonResponse
     {
-        $this->ensureMitraAssignmentScope($request);
+        $this->ensureScopedIndexFilters($request);
 
         if (! $this->connection->isUp()) {
             return response()->json(['message' => 'Koneksi BeWell tidak tersedia.'], 503);
@@ -589,7 +593,7 @@ class SportEvaluationDashboardController extends Controller
      */
     public function wellnessMetricsKpi(Request $request): JsonResponse
     {
-        $this->ensureMitraAssignmentScope($request);
+        $this->ensureScopedIndexFilters($request);
 
         $weekStart = is_string($request->input('week_start'))
             ? $request->input('week_start')
@@ -613,7 +617,7 @@ class SportEvaluationDashboardController extends Controller
      */
     public function wellnessMetricsData(Request $request): JsonResponse
     {
-        $this->ensureMitraAssignmentScope($request);
+        $this->ensureScopedIndexFilters($request);
         $draw = (int) $request->input('draw', 1);
 
         $weekStart = is_string($request->input('week_start'))
@@ -654,7 +658,7 @@ class SportEvaluationDashboardController extends Controller
      */
     public function wellnessMetricsExport(Request $request): JsonResponse
     {
-        $this->ensureMitraAssignmentScope($request);
+        $this->ensureScopedIndexFilters($request);
 
         if (! $this->connection->isUp()) {
             return response()->json(['message' => 'Koneksi BeWell tidak tersedia.'], 503);
@@ -732,7 +736,7 @@ class SportEvaluationDashboardController extends Controller
      */
     public function notInstalledData(Request $request): JsonResponse
     {
-        $this->ensureMitraAssignmentScope($request);
+        $this->ensureScopedIndexFilters($request);
         $draw = (int) $request->input('draw', 1);
 
         if (! $this->connection->isUp()) {
@@ -841,7 +845,7 @@ class SportEvaluationDashboardController extends Controller
      */
     public function notInstalledExport(Request $request): JsonResponse
     {
-        $this->ensureMitraAssignmentScope($request);
+        $this->ensureScopedIndexFilters($request);
         if (! $this->connection->isUp()) {
             return response()->json(['message' => 'Koneksi BeWell tidak tersedia.'], 503);
         }
@@ -2701,6 +2705,37 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
+     * Terapkan scope Mitra Kerja (jika ada assignment) ATAU filter global dashboard
+     * (site/perusahaan/divisi dari tombol Filter) ke $this->indexFilters, dipakai
+     * oleh seluruh endpoint AJAX (install stats, active stats, wellness metrics,
+     * status install) supaya "Filter" di header dashboard memengaruhi semua konten.
+     * Dikirim lewat parameter khusus (scope_site/scope_perusahaan/scope_division)
+     * agar tidak bentrok dengan filter lokal tiap modal/tabel (site/company/division_group).
+     */
+    protected function ensureScopedIndexFilters(Request $request): void
+    {
+        $this->ensureMitraAssignmentScope($request);
+
+        if ($this->hasIndexScope()) {
+            return;
+        }
+
+        $site = trim((string) $request->input('scope_site', ''));
+        $perusahaan = trim((string) $request->input('scope_perusahaan', ''));
+        $division = trim((string) $request->input('scope_division', ''));
+
+        if ($site === '' && $perusahaan === '' && $division === '') {
+            return;
+        }
+
+        $this->applyForcedIndexFilters([
+            'site' => $site,
+            'perusahaan' => $perusahaan,
+            'division_group' => $division,
+        ]);
+    }
+
+    /**
      * User Mitra Kerja: kunci query ke assignment meskipun AJAX mengenai
      * endpoint dashboard global (bukan /mitra/...). Manager tidak di-kunci.
      */
@@ -2762,14 +2797,31 @@ class SportEvaluationDashboardController extends Controller
      */
     protected function installStatsFiltersFromRequest(Request $request): array
     {
+        // Filter lokal modal (jika diisi) menang; kalau kosong, jatuh ke filter
+        // global dashboard (indexFilters) supaya tombol Filter tetap berlaku.
+        $site = trim((string) $request->input('site', ''));
+        if ($site === '') {
+            $site = (string) ($this->indexFilters['site'] ?? '');
+        }
+
+        $company = trim((string) $request->input('company', $request->input('perusahaan', '')));
+        if ($company === '') {
+            $company = (string) ($this->indexFilters['perusahaan'] ?? '');
+        }
+
+        $divisionGroup = trim((string) $request->input('division_group', $request->input('division', '')));
+        if ($divisionGroup === '') {
+            $divisionGroup = (string) ($this->indexFilters['division_group'] ?? '');
+        }
+
         return $this->installStatsService->normalizeFilters([
-            'site' => $request->input('site'),
-            'division_group' => $request->input('division_group', $request->input('division')),
+            'site' => $site,
+            'division_group' => $divisionGroup,
             'jabatan' => $request->input('jabatan', $request->input('jabatan_fungsional')),
-            'company' => $request->input('company'),
+            'company' => $company,
+            'perusahaan' => $company,
             'departement' => $request->input('departement'),
             'install' => $request->input('install'),
-            'perusahaan' => $request->input('perusahaan', $request->input('company')),
             'companies' => $request->input('companies'),
             'pairs' => $request->input('pairs'),
         ]);

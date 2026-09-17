@@ -4434,13 +4434,26 @@
   $mitraScope = $mitraScope ?? ['site' => '', 'perusahaan' => '', 'pairs' => [], 'companies' => []];
   $siteOptions = $siteOptions ?? [];
   $companyOptions = $companyOptions ?? [];
+  $dashboardFilters = $dashboardFilters ?? ['site' => '', 'perusahaan' => '', 'division_group' => ''];
+  $dashboardFilterOptions = $dashboardFilterOptions ?? ['sites' => [], 'companies' => [], 'division_groups' => []];
+  $dashboardFilterActiveCount = collect($dashboardFilters)->filter(fn ($value) => trim((string) $value) !== '')->count();
+  // Dikirim ke tiap endpoint AJAX lewat parameter khusus (scope_*) supaya tidak
+  // bentrok dengan filter lokal tiap modal/tabel (site/company/division_group).
+  $dashboardScopeQuery = array_filter([
+    'scope_site' => $dashboardFilters['site'] ?? '',
+    'scope_perusahaan' => $dashboardFilters['perusahaan'] ?? '',
+    'scope_division' => $dashboardFilters['division_group'] ?? '',
+  ], fn ($value) => trim((string) $value) !== '');
   $ajaxRoutes = $ajaxRoutes ?? [
-    'notInstalledData' => route('evaluasi-well.not-installed.data'),
-    'notInstalledExport' => route('evaluasi-well.not-installed.export'),
-    'installStats' => route('evaluasi-well.install-stats'),
-    'installStatsExport' => route('evaluasi-well.install-stats.export'),
-    'activeStats' => route('evaluasi-well.active-stats'),
-    'activeStatsExport' => route('evaluasi-well.active-stats.export'),
+    'notInstalledData' => route('evaluasi-well.not-installed.data', $dashboardScopeQuery),
+    'notInstalledExport' => route('evaluasi-well.not-installed.export', $dashboardScopeQuery),
+    'installStats' => route('evaluasi-well.install-stats', $dashboardScopeQuery),
+    'installStatsExport' => route('evaluasi-well.install-stats.export', $dashboardScopeQuery),
+    'activeStats' => route('evaluasi-well.active-stats', $dashboardScopeQuery),
+    'activeStatsExport' => route('evaluasi-well.active-stats.export', $dashboardScopeQuery),
+    'wellnessMetricsKpi' => route('evaluasi-well.wellness-metrics.kpi', $dashboardScopeQuery),
+    'wellnessMetricsData' => route('evaluasi-well.wellness-metrics.data', $dashboardScopeQuery),
+    'wellnessMetricsExport' => route('evaluasi-well.wellness-metrics.export', $dashboardScopeQuery),
     'index' => route('evaluasi-well.index'),
   ];
 @endphp
@@ -4451,17 +4464,42 @@
       <div class="text-secondary-light text-sm mt-4">{{ $mitraScopeLabel }}</div>
     @endif
   </div>
+  @if ($mitraMode)
   <ul class="d-flex align-items-center gap-2">
     <li class="fw-medium">
       <a href="{{ $ajaxRoutes['index'] ?? route('evaluasi-well.index') }}" class="d-flex align-items-center gap-1 hover-text-primary">
         <iconify-icon icon="solar:home-smile-angle-outline" class="icon text-lg"></iconify-icon>
-        {{ $mitraMode ? 'Mitra Kerja' : 'Dashboard' }}
+        Mitra Kerja
       </a>
     </li>
     <li>-</li>
     <li class="fw-medium">Evaluasi Olahraga</li>
   </ul>
+  @else
+  <button type="button" class="btn btn-outline-primary-600 radius-8 px-16 py-8 d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#dashboardFilterModal">
+    <iconify-icon icon="solar:tuning-2-outline" class="icon text-lg"></iconify-icon>
+    Filter
+    @if ($dashboardFilterActiveCount > 0)
+      <span class="bg-primary-600 text-white text-xs fw-semibold w-20-px h-20-px d-inline-flex align-items-center justify-content-center rounded-circle">{{ $dashboardFilterActiveCount }}</span>
+    @endif
+  </button>
+  @endif
 </div>
+@if (! $mitraMode && $dashboardFilterActiveCount > 0)
+<div class="d-flex flex-wrap align-items-center gap-2 mb-24 mt-n16">
+  <span class="text-sm text-secondary-light">Filter aktif:</span>
+  @if (($dashboardFilters['site'] ?? '') !== '')
+    <span class="bg-primary-50 text-primary-600 text-xs fw-medium px-10 py-4 rounded-pill">Site: {{ $dashboardFilters['site'] }}</span>
+  @endif
+  @if (($dashboardFilters['perusahaan'] ?? '') !== '')
+    <span class="bg-primary-50 text-primary-600 text-xs fw-medium px-10 py-4 rounded-pill">Perusahaan: {{ $dashboardFilters['perusahaan'] }}</span>
+  @endif
+  @if (($dashboardFilters['division_group'] ?? '') !== '')
+    <span class="bg-primary-50 text-primary-600 text-xs fw-medium px-10 py-4 rounded-pill">Divisi: {{ $dashboardFilters['division_group'] }}</span>
+  @endif
+  <a href="{{ route('evaluasi-well.index') }}" class="text-danger-600 text-xs fw-medium hover-text-primary">Hapus semua filter</a>
+</div>
+@endif
 
 @if ($mitraMode && $mitraNeedsPicker)
 <div class="card radius-8 border-0 shadow-sm mb-24">
@@ -4945,7 +4983,7 @@
           <div class="card-body">
             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
               <h6 class="mb-2 fw-bold text-lg mb-0">Top User Aktif</h6>
-              <a href="{{ route('evaluasi-well.leaderboard') }}" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
+              <a href="{{ route('evaluasi-well.leaderboard', array_filter(['site' => $dashboardFilters['site'] ?? '', 'perusahaan' => $dashboardFilters['perusahaan'] ?? '', 'division_group' => $dashboardFilters['division_group'] ?? ''])) }}" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
                 Lihat Semua
                 <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
               </a>
@@ -5111,6 +5149,9 @@
 
 @include('evaluasi-well.partials._install-stats-modal')
 @include('evaluasi-well.partials._active-stats-modal')
+@unless ($mitraMode)
+@include('evaluasi-well.partials._dashboard-filter-modal')
+@endunless
 @endunless
 @endsection
 
