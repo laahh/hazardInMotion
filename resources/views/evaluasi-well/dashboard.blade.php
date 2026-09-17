@@ -1193,7 +1193,7 @@
             return;
         }
         var bands = [
-            { color: '#E2E8F0', border: '1px solid #CBD5E1', label: '0' },
+            { color: '#E2E8F0', border: '0', label: '0' },
             { color: '#ECFDF5', border: '1px solid #D1FAE5', label: '1–' + formatNumber(thresholds[1]) },
             { color: '#A7F3D0', border: '0', label: formatNumber(thresholds[1] + 1) + '–' + formatNumber(thresholds[2]) },
             { color: '#6EE7B7', border: '0', label: formatNumber(thresholds[2] + 1) + '–' + formatNumber(thresholds[3]) },
@@ -1440,11 +1440,14 @@
 .activity-pattern-heatmap .ap-heatmap-cell.is-empty,
 .activity-pattern-heatmap .ap-heatmap-cell.is-zero {
   background: #E2E8F0 !important;
-  border: 1px solid #CBD5E1;
+  border: 1px solid rgba(255,255,255,.75);
+  box-shadow: none;
   cursor: default;
 }
-.activity-pattern-heatmap .ap-heatmap-cell.is-empty {
-  border-style: dashed;
+.activity-pattern-heatmap .ap-heatmap-cell.is-empty:hover,
+.activity-pattern-heatmap .ap-heatmap-cell.is-zero:hover {
+  transform: none;
+  box-shadow: none;
 }
 .activity-pattern-heatmap .ap-heatmap-tooltip {
   position: absolute;
