@@ -3,6 +3,26 @@
 @section('title', ($mitraMode ?? false) ? 'Mitra Kerja' : 'Dashboard')
 
 @section('css')
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  #site-boundary-map {
+    height: 180px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #eef2f7;
+  }
+  #site-boundary-map .leaflet-tile-pane { filter: saturate(1.05); }
+  #site-boundary-map .site-boundary-tooltip {
+    background: rgba(15, 23, 42, 0.92);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+  }
+  #site-boundary-map .site-boundary-tooltip::before { display: none; }
+</style>
 @if ($mitraMode ?? false)
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
 <style>
@@ -5001,10 +5021,11 @@
         <div class="card radius-8 border-0 h-100">
 
           <div class="card-body">
-            <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+            <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between mb-16">
               <h6 class="mb-2 fw-bold text-lg mb-0">Tren Partisipasi Aktif Per Site</h6>
               <span class="text-sm fw-medium text-secondary-light">{{ number_format($siteTotalEmployees ?? 0) }} karyawan</span>
             </div>
+            <div id="site-boundary-map"></div>
           </div>
 
           <div class="card-body p-24 pt-0 max-h-350-px scroll-sm overflow-y-auto">
@@ -5234,4 +5255,105 @@
 })(jQuery);
 </script>
 @endif
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ asset('isc-assets/BounderyBC.js') }}"></script>
+<script>
+(function () {
+    var mapEl = document.getElementById('site-boundary-map');
+    if (!mapEl || typeof L === 'undefined') {
+        return;
+    }
+
+    var siteRows = @json($siteRows ?? []);
+    var siteByName = {};
+    siteRows.forEach(function (site) {
+        siteByName[String(site.name || '').trim().toUpperCase()] = site;
+    });
+
+    // Gradasi hijau muda (partisipasi rendah) -> hijau tua (partisipasi tinggi),
+    // dibatasi di rentang wajar untuk kartu "Tren Partisipasi Aktif Per Site" (0-25%).
+    function colorForPercent(pct) {
+        var stops = [
+            { p: 0, c: [220, 237, 224] },
+            { p: 12, c: [134, 208, 154] },
+            { p: 25, c: [22, 163, 74] }
+        ];
+        var p = Math.max(0, Math.min(25, Number(pct) || 0));
+        var lo = stops[0], hi = stops[stops.length - 1];
+        for (var i = 0; i < stops.length - 1; i++) {
+            if (p >= stops[i].p && p <= stops[i + 1].p) {
+                lo = stops[i];
+                hi = stops[i + 1];
+                break;
+            }
+        }
+        var span = (hi.p - lo.p) || 1;
+        var t = Math.max(0, Math.min(1, (p - lo.p) / span));
+        var rgb = [0, 1, 2].map(function (i) {
+            return Math.round(lo.c[i] + (hi.c[i] - lo.c[i]) * t);
+        });
+        return 'rgb(' + rgb.join(',') + ')';
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    var boundaryData = window.IUPK_BOUNDARY || { type: 'FeatureCollection', features: [] };
+
+    var map = L.map(mapEl, {
+        zoomControl: false,
+        attributionControl: false,
+        scrollWheelZoom: false,
+        dragging: false,
+        doubleClickZoom: false,
+        boxZoom: false,
+        keyboard: false,
+        touchZoom: false,
+        tap: false
+    });
+
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 18,
+        minZoom: 8
+    }).addTo(map);
+
+    var boundaryLayer = L.geoJSON(boundaryData, {
+        style: function (feature) {
+            var props = (feature && feature.properties) || {};
+            var siteName = String(props.Layer || '').trim().toUpperCase();
+            var site = siteByName[siteName];
+
+            return {
+                color: '#ffffff',
+                weight: 1,
+                fillColor: site ? colorForPercent(site.percent) : '#94A3B8',
+                fillOpacity: site ? 0.78 : 0.32
+            };
+        },
+        onEachFeature: function (feature, featureLayer) {
+            var props = (feature && feature.properties) || {};
+            var siteName = String(props.Layer || '').trim().toUpperCase();
+            var site = siteByName[siteName];
+            var label = site
+                ? '<strong>' + escapeHtml(site.name) + '</strong><br>'
+                    + Number(site.total).toLocaleString('id-ID') + ' karyawan &middot; ' + site.percent + '%'
+                : '<strong>' + escapeHtml(props.Layer || props.Site || 'Area') + '</strong><br>Belum ada data partisipasi';
+            featureLayer.bindTooltip(label, { className: 'site-boundary-tooltip', sticky: true });
+        }
+    }).addTo(map);
+
+    if (boundaryLayer.getBounds().isValid()) {
+        map.fitBounds(boundaryLayer.getBounds(), { padding: [8, 8] });
+    } else {
+        map.setView([2.08, 117.42], 10);
+    }
+
+    setTimeout(function () { map.invalidateSize(); }, 200);
+})();
+</script>
 @endsection
