@@ -113,7 +113,7 @@ final class SportEvaluationMitraDashboardController extends SportEvaluationDashb
                 'activityPatternPeakDayCount' => 2041,
                 'activityPatternAvgDaily' => 1159,
                 'activityPatternWeekdayRatio' => 1.8,
-                'activityPatternPeakHourLabel' => '08:00 – 10:00 WITA',
+                'activityPatternPeakHourLabel' => '08:00 – 10:00',
                 'activityPatternInsight' => 'Aktivitas tertinggi biasanya terjadi pada hari kerja, dengan puncak di awal September. Manfaatkan momentum ini untuk program engagement.',
                 'compositionOlahraga' => 0,
                 'compositionNutrisi' => 0,

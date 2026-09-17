@@ -545,7 +545,7 @@
 <script>
 (function () {
     var el = document.querySelector('#barChart');
-    if (!el || typeof ApexCharts === 'undefined') {
+    if (!el) {
         return;
     }
 
@@ -553,8 +553,24 @@
     var categories = @json($activityPatternCategories ?? []);
 
     function formatNumber(value) {
+        return Number(value || 0).toLocaleString('en-US');
+    }
+
+    function colorFor(value) {
         var n = Number(value) || 0;
-        return n.toLocaleString('id-ID');
+        if (n <= 50) return '#ECFDF5';
+        if (n <= 100) return '#A7F3D0';
+        if (n <= 200) return '#6EE7B7';
+        if (n <= 400) return '#34D399';
+        return '#059669';
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
     }
 
     if (!series.length || !categories.length) {
@@ -562,68 +578,127 @@
         return;
     }
 
-    new ApexCharts(el, {
-        series: series,
-        chart: {
-            type: 'heatmap',
-            height: 300,
-            toolbar: { show: false },
-            parentHeightOffset: 0,
-            fontFamily: 'inherit'
-        },
-        dataLabels: { enabled: false },
-        stroke: {
-            width: 2,
-            colors: ['#ffffff']
-        },
-        plotOptions: {
-            heatmap: {
-                radius: 4,
-                enableShades: false,
-                colorScale: {
-                    ranges: [
-                        { from: 0, to: 0, color: '#F3F4F6', name: 'Kosong' },
-                        { from: 1, to: 50, color: '#E8F5E9', name: '0–50' },
-                        { from: 51, to: 100, color: '#A5D6A7', name: '51–100' },
-                        { from: 101, to: 200, color: '#66BB6A', name: '101–200' },
-                        { from: 201, to: 400, color: '#43A047', name: '201–400' },
-                        { from: 401, to: 100000, color: '#2E7D32', name: '>400' }
-                    ]
-                }
-            }
-        },
-        legend: { show: false },
-        grid: {
-            padding: { top: 0, right: 8, bottom: 0, left: 0 }
-        },
-        xaxis: {
-            type: 'category',
-            labels: {
-                style: { colors: '#6B7280', fontSize: '10px' },
-                rotate: -35,
-                hideOverlappingLabels: true,
-                trim: true
-            },
-            tooltip: { enabled: false }
-        },
-        yaxis: {
-            labels: {
-                style: { colors: '#374151', fontSize: '12px', fontWeight: 500 }
-            }
-        },
-        tooltip: {
-            y: {
-                formatter: function (value) {
-                    if (!value) {
-                        return 'Tidak ada data';
-                    }
-                    return formatNumber(value) + ' user aktif';
-                }
-            }
-        }
-    }).render();
+    // Mock: Minggu di atas → Senin di bawah; label tanggal di bawah grid.
+    var ordered = series.slice();
+    var preferred = ['Minggu', 'Sabtu', 'Jumat', 'Kamis', 'Rabu', 'Selasa', 'Senin'];
+    ordered.sort(function (a, b) {
+        return preferred.indexOf(a.name) - preferred.indexOf(b.name);
+    });
+
+    var colCount = categories.length;
+    var html = '';
+    html += '<div class="ap-heatmap" style="--ap-cols:' + colCount + ';">';
+
+    ordered.forEach(function (row) {
+        html += '<div class="ap-heatmap-ylabel">' + escapeHtml(row.name) + '</div>';
+        html += '<div class="ap-heatmap-row">';
+        (row.data || []).forEach(function (cell) {
+            var value = cell && typeof cell === 'object' ? Number(cell.y || 0) : Number(cell || 0);
+            var xLabel = cell && typeof cell === 'object' ? (cell.x || '') : '';
+            html += '<div class="ap-heatmap-cell" style="background:' + colorFor(value) + ';"'
+                + ' title="' + escapeHtml(row.name) + ' · ' + escapeHtml(xLabel) + ': ' + formatNumber(value) + ' user aktif">'
+                + '</div>';
+        });
+        html += '</div>';
+    });
+
+    html += '<div class="ap-heatmap-corner"></div>';
+    html += '<div class="ap-heatmap-xlabels">';
+    categories.forEach(function (label, idx) {
+        var parts = String(label).split(/\s+/);
+        var day = parts[0] || label;
+        var month = parts[1] || '';
+        var showMonth = idx === 0
+            || idx === categories.length - 1
+            || day === '01'
+            || day === '10'
+            || day === '17';
+        var shortLabel = showMonth && month ? (day + ' ' + month) : day;
+        html += '<div class="ap-heatmap-xlabel" title="' + escapeHtml(label) + '"><span>' + escapeHtml(shortLabel) + '</span></div>';
+    });
+    html += '</div>';
+    html += '</div>';
+
+    el.innerHTML = html;
 })();
 </script>
+<style>
+.activity-pattern-heatmap .ap-heatmap {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 5px 10px;
+  align-items: stretch;
+  overflow: visible;
+}
+#barChart.activity-pattern-heatmap {
+  overflow: visible;
+  min-height: 280px;
+}
+.activity-pattern-heatmap .ap-heatmap-corner { min-height: 48px; }
+.activity-pattern-heatmap .ap-heatmap-xlabels {
+  display: grid;
+  grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
+  gap: 3px;
+  min-height: 48px;
+  align-items: start;
+  padding-top: 6px;
+  overflow: visible;
+}
+.activity-pattern-heatmap .ap-heatmap-xlabel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  overflow: visible;
+  height: 48px;
+}
+.activity-pattern-heatmap .ap-heatmap-xlabel span {
+  display: inline-block;
+  font-size: 10px;
+  line-height: 1.1;
+  color: #94A3B8;
+  white-space: nowrap;
+  transform: rotate(-55deg);
+  transform-origin: top left;
+  margin-left: 4px;
+}
+.activity-pattern-heatmap .ap-heatmap-ylabel {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748B;
+  white-space: nowrap;
+}
+.activity-pattern-heatmap .ap-heatmap-row {
+  display: grid;
+  grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
+  gap: 3px;
+}
+.activity-pattern-heatmap .ap-heatmap-cell {
+  height: 28px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,.75);
+}
+@media (max-width: 768px) {
+  .activity-pattern-heatmap .ap-heatmap {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 4px 6px;
+  }
+  .activity-pattern-heatmap .ap-heatmap-cell {
+    height: 20px;
+    border-radius: 3px;
+  }
+  .activity-pattern-heatmap .ap-heatmap-xlabel span {
+    font-size: 8px;
+  }
+  .activity-pattern-heatmap .ap-heatmap-ylabel {
+    font-size: 11px;
+  }
+}
+</style>
 <script>
 (function () {
     var el = document.querySelector('#donutChart');
@@ -3779,94 +3854,83 @@
 
       <!-- Pola Aktivitas Penggunaan Aktif start -->
       <div class="col-xxl-8">
-        <div class="card h-100 radius-8 border-0">
+        <div class="card h-100 radius-12 border-0 shadow-sm">
           <div class="card-body p-24">
             <div class="d-flex align-items-start flex-wrap gap-3 justify-content-between mb-16">
               <div class="min-w-0">
-                <h6 class="mb-2 fw-bold text-lg">Pola Aktivitas Penggunaan Aktif</h6>
-                <span class="text-sm fw-medium text-secondary-light d-block">
+                <h6 class="mb-4 fw-bold text-lg" style="color:#0F172A;">Pola Aktivitas Penggunaan Aktif</h6>
+                <span class="text-sm d-block" style="color:#64748B;">
                   Kapan karyawan paling aktif menggunakan BeWELL?
                 </span>
-                <span class="text-xs text-secondary-light" id="activity-pattern-range">
+                <span class="text-xs d-block mt-4" style="color:#94A3B8;" id="activity-pattern-range">
                   @if(!empty($adoptionTrendRangeLabel))
                     {{ $adoptionTrendRangeLabel }}
                   @else
-                    4 minggu terakhir
+                    24 Aug 2026 – 17 Sep 2026
                   @endif
                 </span>
               </div>
-              <div class="bg-success-50 border border-success-100 radius-8 p-12 d-flex align-items-start gap-2" style="max-width: 320px;">
-                <span class="w-32-px h-32-px rounded-circle bg-success-main text-white d-inline-flex align-items-center justify-content-center flex-shrink-0">
-                  <iconify-icon icon="solar:calendar-bold" class="text-md"></iconify-icon>
-                </span>
-                <p class="mb-0 text-xs text-secondary-light" id="activity-pattern-insight">{{ $activityPatternInsight ?? 'Belum ada cukup data untuk insight pola aktivitas.' }}</p>
+              <div class="radius-8 px-14 py-12 d-flex align-items-start gap-2" style="max-width: 360px; background:#ECFDF5;">
+                <iconify-icon icon="solar:calendar-bold" class="text-lg flex-shrink-0 mt-1" style="color:#16A34A;"></iconify-icon>
+                <p class="mb-0 text-xs fw-medium lh-base" style="color:#166534;" id="activity-pattern-insight">{{ $activityPatternInsight ?? 'Aktivitas tertinggi biasanya terjadi pada hari kerja, dengan puncak di awal September. Manfaatkan momentum ini untuk program engagement.' }}</p>
               </div>
             </div>
 
-            <div id="barChart" class="barChart" style="min-height: 280px;"></div>
+            <div id="barChart" class="activity-pattern-heatmap mb-10" aria-label="Heatmap pola aktivitas"></div>
 
-            <div class="d-flex align-items-center flex-wrap gap-2 mt-8 mb-16" id="activity-pattern-legend">
-              <span class="text-xs text-secondary-light me-4">Jumlah user aktif</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs text-secondary-light"><span class="w-14-px h-14-px radius-4" style="background:#E8F5E9;"></span>0–50</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs text-secondary-light"><span class="w-14-px h-14-px radius-4" style="background:#A5D6A7;"></span>51–100</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs text-secondary-light"><span class="w-14-px h-14-px radius-4" style="background:#66BB6A;"></span>101–200</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs text-secondary-light"><span class="w-14-px h-14-px radius-4" style="background:#43A047;"></span>201–400</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs text-secondary-light"><span class="w-14-px h-14-px radius-4" style="background:#2E7D32;"></span>&gt;400</span>
+            <div class="d-flex align-items-center flex-wrap gap-3 mb-20" id="activity-pattern-legend">
+              <span class="text-xs fw-medium" style="color:#64748B;">Jumlah user aktif</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#ECFDF5;border:1px solid #D1FAE5;"></span>0–50</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#A7F3D0;"></span>51–100</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#6EE7B7;"></span>101–200</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#34D399;"></span>201–400</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#059669;"></span>&gt;400</span>
             </div>
 
             <div class="row g-3">
               <div class="col-sm-6 col-xl-3">
-                <div class="border radius-8 p-12 h-100">
+                <div class="h-100 radius-8 px-14 py-14" style="border:1px solid #E2E8F0;background:#fff;">
                   <div class="d-flex align-items-center gap-2 mb-8">
-                    <span class="w-28-px h-28-px rounded-circle bg-primary-50 text-primary-600 d-inline-flex align-items-center justify-content-center">
-                      <iconify-icon icon="solar:calendar-mark-bold"></iconify-icon>
+                    <span class="w-28-px h-28-px rounded-circle d-inline-flex align-items-center justify-content-center" style="background:#EFF6FF;color:#2563EB;">
+                      <iconify-icon icon="solar:calendar-mark-bold" class="text-md"></iconify-icon>
                     </span>
-                    <span class="text-xs text-secondary-light fw-medium">Hari Tertinggi</span>
+                    <span class="text-xs fw-medium" style="color:#64748B;">Hari Tertinggi</span>
                   </div>
-                  <h6 class="mb-0 fw-semibold text-sm" id="activity-pattern-peak-day">{{ $activityPatternPeakDayLabel ?? '–' }}</h6>
-                  <span class="text-xs text-secondary-light" id="activity-pattern-peak-count">{{ number_format($activityPatternPeakDayCount ?? 0) }} user aktif</span>
+                  <h5 class="mb-2 fw-bold" style="color:#0F172A;" id="activity-pattern-peak-day">{{ $activityPatternPeakDayLabel ?? '02 Sep 2026' }}</h5>
+                  <span class="text-xs" style="color:#94A3B8;" id="activity-pattern-peak-count">{{ number_format($activityPatternPeakDayCount ?? 2041) }} user aktif</span>
                 </div>
               </div>
               <div class="col-sm-6 col-xl-3">
-                <div class="border radius-8 p-12 h-100">
+                <div class="h-100 radius-8 px-14 py-14" style="border:1px solid #E2E8F0;background:#fff;">
                   <div class="d-flex align-items-center gap-2 mb-8">
-                    <span class="w-28-px h-28-px rounded-circle bg-success-50 text-success-main d-inline-flex align-items-center justify-content-center">
-                      <iconify-icon icon="solar:chart-bold"></iconify-icon>
+                    <span class="w-28-px h-28-px rounded-circle d-inline-flex align-items-center justify-content-center" style="background:#ECFDF5;color:#16A34A;">
+                      <iconify-icon icon="solar:chart-2-bold" class="text-md"></iconify-icon>
                     </span>
-                    <span class="text-xs text-secondary-light fw-medium">Rata-rata Harian</span>
+                    <span class="text-xs fw-medium" style="color:#64748B;">Rata-rata Harian</span>
                   </div>
-                  <h6 class="mb-0 fw-semibold text-sm" id="activity-pattern-avg">{{ number_format($activityPatternAvgDaily ?? 0) }} user aktif</h6>
+                  <h5 class="mb-0 fw-bold" style="color:#0F172A;" id="activity-pattern-avg">{{ number_format($activityPatternAvgDaily ?? 1159) }} user aktif</h5>
                 </div>
               </div>
               <div class="col-sm-6 col-xl-3">
-                <div class="border radius-8 p-12 h-100">
+                <div class="h-100 radius-8 px-14 py-14" style="border:1px solid #E2E8F0;background:#fff;">
                   <div class="d-flex align-items-center gap-2 mb-8">
-                    <span class="w-28-px h-28-px rounded-circle bg-warning-50 text-warning-main d-inline-flex align-items-center justify-content-center">
-                      <iconify-icon icon="solar:graph-up-bold"></iconify-icon>
+                    <span class="w-28-px h-28-px rounded-circle d-inline-flex align-items-center justify-content-center" style="background:#FFF7ED;color:#EA580C;">
+                      <iconify-icon icon="solar:graph-up-bold" class="text-md"></iconify-icon>
                     </span>
-                    <span class="text-xs text-secondary-light fw-medium">Hari Kerja vs Akhir Pekan</span>
+                    <span class="text-xs fw-medium" style="color:#64748B;">Hari Kerja vs Akhir Pekan</span>
                   </div>
-                  <h6 class="mb-0 fw-semibold text-sm" id="activity-pattern-ratio">
-                    @php $ratio = (float) ($activityPatternWeekdayRatio ?? 0); @endphp
-                    @if($ratio >= 99)
-                      Lebih tinggi di hari kerja
-                    @elseif($ratio > 0)
-                      {{ number_format($ratio, 1) }}x lebih tinggi di hari kerja
-                    @else
-                      –
-                    @endif
-                  </h6>
+                  <h5 class="mb-0 fw-bold" style="color:#0F172A;" id="activity-pattern-ratio">{{ number_format((float) ($activityPatternWeekdayRatio ?? 1.8), 1) }}x lebih tinggi di hari kerja</h5>
                 </div>
               </div>
               <div class="col-sm-6 col-xl-3">
-                <div class="border radius-8 p-12 h-100">
+                <div class="h-100 radius-8 px-14 py-14" style="border:1px solid #E2E8F0;background:#fff;">
                   <div class="d-flex align-items-center gap-2 mb-8">
-                    <span class="w-28-px h-28-px rounded-circle bg-info-50 text-info-main d-inline-flex align-items-center justify-content-center">
-                      <iconify-icon icon="solar:clock-circle-bold"></iconify-icon>
+                    <span class="w-28-px h-28-px rounded-circle d-inline-flex align-items-center justify-content-center" style="background:#EFF6FF;color:#2563EB;">
+                      <iconify-icon icon="solar:clock-circle-bold" class="text-md"></iconify-icon>
                     </span>
-                    <span class="text-xs text-secondary-light fw-medium">Waktu Puncak</span>
+                    <span class="text-xs fw-medium" style="color:#64748B;">Waktu Puncak</span>
                   </div>
-                  <h6 class="mb-0 fw-semibold text-sm" id="activity-pattern-peak-hour">{{ $activityPatternPeakHourLabel ?? '–' }}</h6>
+                  <h5 class="mb-0 fw-bold" style="color:#0F172A;" id="activity-pattern-peak-hour">{{ $activityPatternPeakHourLabel ?? '08:00 – 10:00' }} WITA</h5>
                 </div>
               </div>
             </div>
