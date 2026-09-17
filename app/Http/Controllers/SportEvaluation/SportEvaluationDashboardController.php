@@ -1361,7 +1361,7 @@ class SportEvaluationDashboardController extends Controller
         );
 
         if (! $this->connection->isUp()) {
-            return $empty;
+            return array_merge($empty, $this->dummyActivityPatternPayload());
         }
 
         try {
@@ -1406,33 +1406,14 @@ class SportEvaluationDashboardController extends Controller
 
             $adoptionChartLabels = $adoptionTrendLabels;
             $adoptionChartSeries = $adoptionTrendActiveUsers;
-
-            $pattern = $this->buildActivityPatternPayload(
-                $adoptionTrendDates,
-                $adoptionTrendLabels,
-                $adoptionTrendActiveUsers,
-                $adoptionTrendRangeLabel,
-            );
-            $activityPatternSeries = $pattern['series'];
-            $activityPatternCategories = $pattern['categories'];
-            $activityPatternPeakDayLabel = $pattern['peak_day_label'];
-            $activityPatternPeakDayCount = $pattern['peak_day_count'];
-            $activityPatternAvgDaily = $pattern['avg_daily'];
-            $activityPatternWeekdayRatio = $pattern['weekday_ratio'];
-            $activityPatternInsight = $pattern['insight'];
-
-            if ($adoptionTrendDates !== []) {
-                $from = $adoptionTrendDates[0].' 00:00:00';
-                $to = Carbon::parse($adoptionTrendDates[array_key_last($adoptionTrendDates)])
-                    ->endOfDay()
-                    ->format('Y-m-d H:i:s');
-                $activityPatternPeakHourLabel = $this->resolvePeakHourLabel($from, $to);
-            }
         } catch (Throwable $e) {
             report($e);
         }
 
-        return compact(
+        // Dummy UI heatmap sesuai mock desain (sementara).
+        $dummy = $this->dummyActivityPatternPayload();
+
+        return array_merge(compact(
             'adoptionInstall',
             'adoptionLoginSuccess',
             'adoptionAktif',
@@ -1445,15 +1426,93 @@ class SportEvaluationDashboardController extends Controller
             'adoptionTrendActiveUsers',
             'adoptionTrendDates',
             'adoptionTrendRangeLabel',
-            'activityPatternSeries',
-            'activityPatternCategories',
-            'activityPatternPeakDayLabel',
-            'activityPatternPeakDayCount',
-            'activityPatternAvgDaily',
-            'activityPatternWeekdayRatio',
-            'activityPatternPeakHourLabel',
-            'activityPatternInsight',
-        );
+        ), $dummy);
+    }
+
+    /**
+     * Dummy pola aktivitas meniru mock desain dashboard (24 Aug – 17 Sep 2026).
+     *
+     * @return array<string, mixed>
+     */
+    private function dummyActivityPatternPayload(): array
+    {
+        $weekdayNames = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+        $dowToIndex = [1 => 0, 2 => 1, 3 => 2, 4 => 3, 5 => 4, 6 => 5, 0 => 6];
+
+        // Profil harian (mirip mock): weekday tinggi, weekend rendah, puncak 2 Sep.
+        $dailyProfile = [
+            '2026-08-24' => 820,  // Sen
+            '2026-08-25' => 940,
+            '2026-08-26' => 1010,
+            '2026-08-27' => 980,
+            '2026-08-28' => 890,
+            '2026-08-29' => 420,  // Sab
+            '2026-08-30' => 310,  // Min
+            '2026-08-31' => 1120,
+            '2026-09-01' => 1380,
+            '2026-09-02' => 2041, // peak
+            '2026-09-03' => 1760,
+            '2026-09-04' => 1490,
+            '2026-09-05' => 560,
+            '2026-09-06' => 380,
+            '2026-09-07' => 1280,
+            '2026-09-08' => 1410,
+            '2026-09-09' => 1520,
+            '2026-09-10' => 1470,
+            '2026-09-11' => 1330,
+            '2026-09-12' => 510,
+            '2026-09-13' => 340,
+            '2026-09-14' => 1190,
+            '2026-09-15' => 1260,
+            '2026-09-16' => 1180,
+            '2026-09-17' => 980,
+        ];
+
+        $labels = [];
+        $seriesData = [];
+        foreach ($weekdayNames as $name) {
+            $seriesData[$name] = [];
+        }
+
+        foreach ($dailyProfile as $date => $value) {
+            $carbon = Carbon::parse($date);
+            $label = $carbon->format('d M');
+            $labels[] = $label;
+            $rowName = $weekdayNames[$dowToIndex[$carbon->dayOfWeek]];
+
+            foreach ($weekdayNames as $name) {
+                // Isi seluruh grid agar mirip mock (bukan sel kosong diagonal).
+                if ($name === $rowName) {
+                    $cell = $value;
+                } elseif (in_array($name, ['Sabtu', 'Minggu'], true)) {
+                    $cell = (int) max(80, round($value * 0.28));
+                } else {
+                    $noise = (($carbon->day + strlen($name)) % 7) * 35;
+                    $cell = (int) max(120, round($value * 0.72) - $noise);
+                }
+                $seriesData[$name][] = ['x' => $label, 'y' => $cell];
+            }
+        }
+
+        $series = [];
+        foreach ($weekdayNames as $name) {
+            $series[] = [
+                'name' => $name,
+                'data' => $seriesData[$name],
+            ];
+        }
+
+        return [
+            'adoptionTrendRangeLabel' => '24 Aug 2026 – 17 Sep 2026',
+            'activityPatternSeries' => $series,
+            'activityPatternCategories' => $labels,
+            'activityPatternPeakDayLabel' => '02 Sep 2026',
+            'activityPatternPeakDayCount' => 2041,
+            'activityPatternAvgDaily' => 1159,
+            'activityPatternWeekdayRatio' => 1.8,
+            'activityPatternPeakHourLabel' => '08:00 – 10:00 WITA',
+            'activityPatternInsight' => 'Aktivitas tertinggi biasanya terjadi pada hari kerja, dengan puncak di awal September. Manfaatkan momentum ini untuk program engagement.',
+        ];
     }
 
     /**
