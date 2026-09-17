@@ -246,51 +246,45 @@
     {{-- Makronutrien --}}
     <div class="col-12">
       <div class="card h-100 wc-card wc-card--macro">
-        <div class="card-body p-24">
-          <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
-            <div class="d-flex align-items-start gap-3 min-w-0">
-              <span class="wc-card__head-icon">
-                <iconify-icon icon="mdi:leaf"></iconify-icon>
-              </span>
-              <div class="min-w-0">
-                <h6 class="mb-1 fw-bold text-lg wc-card__title">Makronutrien</h6>
-                <span class="wc-card__subtitle">% karyawan yang rata-rata harian memenuhi target</span>
+        <div class="wc-macro-layout">
+          <div class="wc-macro-main">
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
+              <div class="d-flex align-items-start gap-3 min-w-0">
+                <span class="wc-card__head-icon">
+                  <iconify-icon icon="mdi:leaf"></iconify-icon>
+                </span>
+                <div class="min-w-0">
+                  <h6 class="mb-1 fw-bold text-lg wc-card__title">Makronutrien</h6>
+                  <span class="wc-card__subtitle">% karyawan yang rata-rata harian memenuhi target</span>
+                </div>
+              </div>
+              <div class="d-flex align-items-center flex-wrap gap-3" id="wellness-chart-macro-legend">
+                <span class="d-inline-flex align-items-center gap-2 text-sm" style="color:#475569;">
+                  <span class="rounded-1" style="width:14px;height:14px;background:#16A34A;"></span>Memenuhi target
+                </span>
+                <span class="d-inline-flex align-items-center gap-2 text-sm" style="color:#475569;">
+                  <span class="rounded-1" style="width:14px;height:14px;background:#E2E8F0;"></span>Belum memenuhi target
+                </span>
               </div>
             </div>
-            <div class="d-flex align-items-center flex-wrap gap-3" id="wellness-chart-macro-legend">
-              <span class="d-inline-flex align-items-center gap-2 text-sm" style="color:#475569;">
-                <span class="rounded-1" style="width:14px;height:14px;background:#16A34A;"></span>Memenuhi target
-              </span>
-              <span class="d-inline-flex align-items-center gap-2 text-sm" style="color:#475569;">
-                <span class="rounded-1" style="width:14px;height:14px;background:#E2E8F0;"></span>Belum memenuhi target
-              </span>
-            </div>
+            <div id="wellness-chart-macro" class="wc-macro-chart"></div>
+            <div class="wc-axis wc-axis--macro" id="wellness-chart-macro-axis"></div>
+            <div class="wc-axis-label">% Karyawan</div>
           </div>
-          <div class="row g-4 align-items-stretch">
-            <div class="col-lg-7">
-              <div id="wellness-chart-macro" class="wc-macro-chart"></div>
-              <div class="wc-axis wc-axis--macro" id="wellness-chart-macro-axis"></div>
-              <div class="wc-axis-label">% Karyawan</div>
-            </div>
-            <div class="col-lg-5">
-              <div class="wc-macro-side">
-                <div class="wc-insight">
-                  <div class="d-flex align-items-center gap-2 mb-10">
-                    <span class="wc-insight__icon">
-                      <iconify-icon icon="mdi:chart-bar"></iconify-icon>
-                    </span>
-                    <h6 class="mb-0 fw-bold" style="color:#0F172A;">Insight</h6>
-                  </div>
-                  <p class="mb-0 text-sm lh-base" style="color:#475569;" id="wellness-chart-macro-insight">
-                    Masih banyak karyawan yang belum memenuhi target makronutrien harian. Mari tingkatkan kesadaran akan pentingnya pola makan seimbang untuk mendukung kesehatan dan produktivitas.
-                  </p>
-                </div>
-                <div class="wc-macro-visual">
-                  <img src="{{ asset('evaluasi-well-assets/images/wellness/bg-macro.png') }}" alt="Better nutrition" class="wc-macro-visual__img">
-                  <p class="wc-macro-visual__caption">Better Nutrition,<br>Brighter Tomorrow</p>
-                </div>
+          <div class="wc-macro-panel">
+            <img src="{{ asset('evaluasi-well-assets/images/wellness/bg-macro.png') }}" alt="" class="wc-macro-panel__bg" aria-hidden="true">
+            <div class="wc-insight">
+              <div class="d-flex align-items-center gap-2 mb-10">
+                <span class="wc-insight__icon">
+                  <iconify-icon icon="mdi:chart-bar"></iconify-icon>
+                </span>
+                <h6 class="mb-0 fw-bold" style="color:#0F172A;">Insight</h6>
               </div>
+              <p class="mb-0 text-sm lh-base" style="color:#475569;" id="wellness-chart-macro-insight">
+                Masih banyak karyawan yang belum memenuhi target makronutrien harian. Mari tingkatkan kesadaran akan pentingnya pola makan seimbang untuk mendukung kesehatan dan produktivitas.
+              </p>
             </div>
+            <p class="wc-macro-panel__caption">Better Nutrition<br>Brighter Tomorrow</p>
           </div>
         </div>
       </div>

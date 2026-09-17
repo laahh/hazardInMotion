@@ -1430,53 +1430,73 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Dummy pola aktivitas meniru mock desain dashboard (24 Aug – 17 Sep 2026).
+     * Dummy pola aktivitas: awal tahun sampai hari ini.
      * Format calendar heatmap (GitHub-style): kolom = minggu, baris = Senin–Minggu.
      *
      * @return array<string, mixed>
      */
     private function dummyActivityPatternPayload(): array
     {
-        $dailyProfile = [
-            '2026-08-24' => 820,
-            '2026-08-25' => 940,
-            '2026-08-26' => 1010,
-            '2026-08-27' => 980,
-            '2026-08-28' => 890,
-            '2026-08-29' => 420,
-            '2026-08-30' => 310,
-            '2026-08-31' => 1120,
-            '2026-09-01' => 1380,
-            '2026-09-02' => 2041,
-            '2026-09-03' => 1760,
-            '2026-09-04' => 1490,
-            '2026-09-05' => 560,
-            '2026-09-06' => 380,
-            '2026-09-07' => 1280,
-            '2026-09-08' => 1410,
-            '2026-09-09' => 1520,
-            '2026-09-10' => 1470,
-            '2026-09-11' => 1330,
-            '2026-09-12' => 510,
-            '2026-09-13' => 340,
-            '2026-09-14' => 1190,
-            '2026-09-15' => 1260,
-            '2026-09-16' => 1180,
-            '2026-09-17' => 980,
-        ];
+        $start = Carbon::now()->startOfYear()->startOfDay();
+        $end = Carbon::now()->startOfDay();
+        $totalDays = max(1, (int) $start->diffInDays($end) + 1);
 
-        $heatmap = $this->buildCalendarHeatmapSeries($dailyProfile);
+        $dailyProfile = [];
+        $cursor = $start->copy();
+        $dayIndex = 0;
+
+        while ($cursor->lte($end)) {
+            $key = $cursor->format('Y-m-d');
+            $dow = (int) $cursor->dayOfWeek;
+            $progress = $dayIndex / $totalDays;
+
+            // Pertumbuhan gradual sepanjang tahun.
+            $base = (int) round(160 + ($progress * 1250) + (sin($dayIndex / 9) * 70));
+
+            if ($dow === Carbon::SATURDAY) {
+                $value = (int) round($base * 0.38);
+            } elseif ($dow === Carbon::SUNDAY) {
+                $value = (int) round($base * 0.28);
+            } else {
+                $boost = match ($dow) {
+                    Carbon::TUESDAY, Carbon::WEDNESDAY => 1.18,
+                    Carbon::MONDAY, Carbon::THURSDAY => 1.08,
+                    default => 1.0,
+                };
+                $value = (int) round($base * $boost);
+            }
+
+            $dailyProfile[$key] = max(25, $value);
+            $cursor->addDay();
+            $dayIndex++;
+        }
+
+        // Pertahankan puncak mock yang sudah dikenal.
+        $peakKey = '2026-09-02';
+        if ($start->lte(Carbon::parse($peakKey)) && $end->gte(Carbon::parse($peakKey))) {
+            $dailyProfile[$peakKey] = 2041;
+        }
+
+        $dates = array_keys($dailyProfile);
+        $labels = array_map(
+            static fn (string $d): string => Carbon::parse($d)->format('d M'),
+            $dates
+        );
+        $values = array_values($dailyProfile);
+        $rangeLabel = $start->translatedFormat('d M Y').' – '.$end->translatedFormat('d M Y');
+
+        $built = $this->buildActivityPatternPayload($dates, $labels, $values, $rangeLabel);
 
         return [
-            'adoptionTrendRangeLabel' => '24 Aug 2026 – 17 Sep 2026',
-            'activityPatternSeries' => $heatmap['series'],
-            'activityPatternCategories' => $heatmap['categories'],
-            'activityPatternPeakDayLabel' => '02 Sep 2026',
-            'activityPatternPeakDayCount' => 2041,
-            'activityPatternAvgDaily' => 1159,
-            'activityPatternWeekdayRatio' => 1.8,
+            'adoptionTrendRangeLabel' => $rangeLabel,
+            'activityPatternSeries' => $built['series'],
+            'activityPatternCategories' => $built['categories'],
+            'activityPatternPeakDayLabel' => $built['peak_day_label'],
+            'activityPatternPeakDayCount' => $built['peak_day_count'],
+            'activityPatternAvgDaily' => $built['avg_daily'],
+            'activityPatternWeekdayRatio' => $built['weekday_ratio'],
             'activityPatternPeakHourLabel' => '08:00 – 10:00',
-            'activityPatternInsight' => 'Aktivitas tertinggi biasanya terjadi pada hari kerja, dengan puncak di awal September. Manfaatkan momentum ini untuk program engagement.',
+            'activityPatternInsight' => $built['insight'],
         ];
     }
 

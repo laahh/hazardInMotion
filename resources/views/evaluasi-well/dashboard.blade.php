@@ -415,10 +415,23 @@
     -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.35) 28%, #000 55%, #000 100%);
   }
   .wc-card__bg--sports {
-    top: 18%;
-    width: min(52%, 300px);
-    max-height: 78%;
-    opacity: 0.42;
+    top: auto;
+    bottom: 0;
+    right: 0;
+    width: min(55%, 320px);
+    height: 88%;
+    max-height: none;
+    object-fit: cover;
+    object-position: 70% bottom;
+    opacity: 0.45;
+    mask-image:
+      linear-gradient(90deg, transparent 0%, rgba(0,0,0,.25) 22%, #000 52%, #000 100%),
+      linear-gradient(180deg, transparent 0%, #000 22%, #000 100%);
+    -webkit-mask-image:
+      linear-gradient(90deg, transparent 0%, rgba(0,0,0,.25) 22%, #000 52%, #000 100%),
+      linear-gradient(180deg, transparent 0%, #000 22%, #000 100%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
   }
   .wc-card__bg--br {
     top: auto;
@@ -528,11 +541,11 @@
   }
   .wc-axis--macro {
     padding-left: 162px;
-    padding-right: 152px;
+    padding-right: 120px;
   }
   .wc-axis--macro::before {
     left: 162px;
-    right: 152px;
+    right: 120px;
   }
   .wc-axis__tick {
     font-size: 11px;
@@ -734,11 +747,66 @@
     gap: 14px;
     height: 100%;
   }
+  .wc-card--macro {
+    overflow: hidden;
+  }
+  .wc-card--macro > .card-body {
+    padding: 0 !important;
+  }
+  .wc-macro-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.95fr);
+    align-items: stretch;
+    min-height: 340px;
+  }
+  .wc-macro-main {
+    padding: 24px 20px 24px 24px;
+    min-width: 0;
+  }
+  .wc-macro-panel {
+    position: relative;
+    min-height: 320px;
+    overflow: hidden;
+    background: #F1F5F9;
+  }
+  .wc-macro-panel__bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center center;
+    display: block;
+    z-index: 0;
+  }
+  .wc-macro-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(90deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.35) 18%, transparent 38%);
+    pointer-events: none;
+  }
+  .wc-macro-panel::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 42%;
+    z-index: 1;
+    background: linear-gradient(180deg, transparent 0%, rgba(15, 23, 42, 0.28) 100%);
+    pointer-events: none;
+  }
   .wc-insight {
-    background: #F8FAFC;
+    position: relative;
+    z-index: 2;
+    margin: 22px 20px 0;
+    background: #fff;
     border: 1px solid #E2E8F0;
-    border-radius: 12px;
-    padding: 16px;
+    border-radius: 14px;
+    padding: 16px 18px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
   }
   .wc-insight__icon {
     width: 32px;
@@ -750,6 +818,31 @@
     align-items: center;
     justify-content: center;
     font-size: 16px;
+  }
+  .wc-macro-panel__caption {
+    position: absolute;
+    left: 22px;
+    right: 22px;
+    bottom: 22px;
+    z-index: 2;
+    margin: 0;
+    font-family: 'Segoe Script', 'Brush Script MT', 'Apple Chancery', cursive;
+    font-style: italic;
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 2px 12px rgba(15, 23, 42, 0.45);
+    pointer-events: none;
+  }
+  .wc-macro-panel__caption::after {
+    content: '';
+    display: block;
+    width: 88px;
+    height: 4px;
+    margin-top: 8px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #22C55E, #86EFAC);
   }
   .wc-macro-visual {
     position: relative;
@@ -790,6 +883,12 @@
     pointer-events: none;
   }
   @media (max-width: 991px) {
+    .wc-macro-layout {
+      grid-template-columns: 1fr;
+    }
+    .wc-macro-panel {
+      min-height: 280px;
+    }
     .wc-card__bg { opacity: 0.12; }
   }
   @media (max-width: 768px) {
@@ -1007,6 +1106,7 @@
 
     var colCount = categories.length;
     var html = '';
+    html += '<div class="ap-heatmap-scroll">';
     html += '<div class="ap-heatmap ap-heatmap--calendar" style="--ap-cols:' + colCount + ';">';
 
     ordered.forEach(function (row) {
@@ -1034,9 +1134,16 @@
 
     html += '<div class="ap-heatmap-corner"></div>';
     html += '<div class="ap-heatmap-xlabels">';
-    categories.forEach(function (label) {
-        html += '<div class="ap-heatmap-xlabel" title="Minggu mulai ' + escapeHtml(label) + '"><span>' + escapeHtml(label) + '</span></div>';
+    var prevMonth = '';
+    categories.forEach(function (label, idx) {
+        var parts = String(label).split(/\s+/);
+        var month = parts[1] || '';
+        var show = idx === 0 || month !== prevMonth;
+        prevMonth = month || prevMonth;
+        var text = show ? escapeHtml(label) : '';
+        html += '<div class="ap-heatmap-xlabel' + (show ? '' : ' is-muted') + '" title="Minggu mulai ' + escapeHtml(label) + '"><span>' + text + '</span></div>';
     });
+    html += '</div>';
     html += '</div>';
     html += '</div>';
     html += '<div class="ap-heatmap-tooltip" id="ap-heatmap-tooltip" hidden></div>';
@@ -1117,15 +1224,22 @@
 .activity-pattern-heatmap {
   position: relative;
 }
+.activity-pattern-heatmap .ap-heatmap-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+}
 .activity-pattern-heatmap .ap-heatmap {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  grid-template-rows: repeat(7, minmax(28px, 1fr)) 36px;
-  gap: 6px 12px;
+  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-rows: repeat(7, minmax(18px, 1fr)) 28px;
+  gap: 3px 8px;
   align-items: stretch;
   overflow: visible;
   height: 100%;
-  min-height: 260px;
+  min-height: 240px;
+  min-width: max(100%, calc(58px + var(--ap-cols) * 14px));
 }
 .activity-pattern-heatmap .ap-heatmap--calendar {
   max-width: none;
@@ -1133,32 +1247,32 @@
 }
 #barChart.activity-pattern-heatmap {
   overflow: visible;
-  min-height: 260px;
+  min-height: 240px;
   display: flex;
   flex-direction: column;
 }
 #barChart.activity-pattern-heatmap .ap-heatmap {
   flex: 1 1 auto;
 }
-.activity-pattern-heatmap .ap-heatmap-corner { min-height: 28px; }
+.activity-pattern-heatmap .ap-heatmap-corner { min-height: 24px; }
 .activity-pattern-heatmap .ap-heatmap-xlabels {
   display: grid;
   grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
-  gap: 6px;
-  min-height: 28px;
+  gap: 3px;
+  min-height: 24px;
   align-items: center;
   overflow: visible;
 }
 .activity-pattern-heatmap .ap-heatmap-xlabel {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
   overflow: visible;
 }
 .activity-pattern-heatmap .ap-heatmap-xlabel span {
   display: inline-block;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.2;
   color: #64748B;
   font-weight: 500;
@@ -1166,12 +1280,15 @@
   transform: none;
   margin: 0;
 }
+.activity-pattern-heatmap .ap-heatmap-xlabel.is-muted span {
+  opacity: 0;
+}
 .activity-pattern-heatmap .ap-heatmap-ylabel {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   padding-right: 2px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: #64748B;
   white-space: nowrap;
@@ -1179,16 +1296,16 @@
 .activity-pattern-heatmap .ap-heatmap-row {
   display: grid;
   grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
-  gap: 6px;
+  gap: 3px;
   height: 100%;
-  min-height: 28px;
+  min-height: 16px;
 }
 .activity-pattern-heatmap .ap-heatmap-cell {
   height: 100%;
-  min-height: 28px;
+  min-height: 16px;
   width: 100%;
   justify-self: stretch;
-  border-radius: 6px;
+  border-radius: 3px;
   border: 1px solid rgba(255,255,255,.75);
   cursor: default;
   transition: transform .12s ease, box-shadow .12s ease;
@@ -4444,7 +4561,7 @@
                     @if(!empty($adoptionTrendRangeLabel))
                       {{ $adoptionTrendRangeLabel }}
                     @else
-                      24 Aug 2026 – 17 Sep 2026
+                      {{ now()->startOfYear()->translatedFormat('d M Y') }} – {{ now()->translatedFormat('d M Y') }}
                     @endif
                   </span>
                 </div>
