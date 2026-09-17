@@ -305,7 +305,7 @@
             <span id="wellness-total-badge" class="bg-primary-50 text-primary-600 text-sm fw-medium px-12 py-2 rounded-pill">{{ number_format($wellnessUserCount ?? 0) }}</span>
           </div>
           <p class="text-sm text-secondary-light mb-0">
-            Per karyawan · minggu <span id="wellness-week-label">{{ $wellnessWeek['label'] ?? 'Minggu–Sabtu' }}</span>
+            Per karyawan · periode <span id="wellness-week-label">{{ $wellnessWeek['label'] ?? 'Minggu–Sabtu' }}</span>
             · Durasi dari workout · Intensitas dari avg HR (Low &lt;120 · Med 120–149 · High ≥150)
           </p>
         </div>
@@ -320,15 +320,13 @@
     <div class="card-body p-24">
       <div class="bg-neutral-50 border radius-8 p-16 mb-20">
         <div class="row g-3 align-items-end">
-          <div class="col-xl-3 col-md-4 col-sm-6">
-            <label for="wellness-week" class="form-label text-sm fw-medium mb-6">Minggu (Minggu–Sabtu)</label>
-            <select id="wellness-week" class="form-select form-select-sm">
-              @forelse (($wellnessWeekOptions ?? []) as $opt)
-                <option value="{{ $opt['start'] }}" @selected(($wellnessWeek['start'] ?? '') === $opt['start'])>{{ $opt['label'] }}</option>
-              @empty
-                <option value="">Minggu ini</option>
-              @endforelse
-            </select>
+          <div class="col-xl-2 col-md-4 col-sm-6">
+            <label for="wellness-date-from" class="form-label text-sm fw-medium mb-6">Dari Tanggal</label>
+            <input type="date" id="wellness-date-from" class="form-control form-control-sm" value="{{ $wellnessWeek['start'] ?? '' }}">
+          </div>
+          <div class="col-xl-2 col-md-4 col-sm-6">
+            <label for="wellness-date-to" class="form-label text-sm fw-medium mb-6">Sampai Tanggal</label>
+            <input type="date" id="wellness-date-to" class="form-control form-control-sm" value="{{ $wellnessWeek['end'] ?? '' }}">
           </div>
           <div class="col-xl-2 col-md-4 col-sm-6">
             <label for="wellness-site" class="form-label text-sm fw-medium mb-6">Site</label>
@@ -369,6 +367,7 @@
               <th>Frekuensi</th>
               <th>Kalori Out</th>
               <th>Kalori In</th>
+              <th style="min-width:170px">Target Kalori</th>
               <th>Protein (g)</th>
               <th>Karbo (g)</th>
               <th>Lemak (g)</th>

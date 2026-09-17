@@ -2019,7 +2019,10 @@
             : ($ajaxRoutes['wellnessMetricsExport'] ?? route('evaluasi-well.wellness-metrics.export'))
     );
 
-    var weekEl = document.querySelector('#wellness-week');
+    var dateFromEl = document.querySelector('#wellness-date-from');
+    var dateToEl = document.querySelector('#wellness-date-to');
+    var defaultWellnessDateFrom = @json($wellnessWeek['start'] ?? '');
+    var defaultWellnessDateTo = @json($wellnessWeek['end'] ?? '');
     var siteEl = document.querySelector('#wellness-site');
     var companyEl = document.querySelector('#wellness-company');
     var applyBtn = document.querySelector('#wellness-apply-btn');
@@ -2373,9 +2376,26 @@
         });
     }
 
+    function renderCalorieTargetBar(kaloriIn, targetKalori, pct) {
+        var target = Number(targetKalori) || 0;
+        var actual = Number(kaloriIn) || 0;
+        var percent = Number(pct) || 0;
+        var barWidth = Math.max(0, Math.min(100, percent));
+        var barColor = percent >= 100
+            ? 'rgba(22, 163, 74, 0.32)'
+            : (percent >= 50 ? 'rgba(59, 130, 246, 0.28)' : 'rgba(249, 115, 22, 0.28)');
+        return '<div class="wellness-databar-cell" style="position:relative; min-width:150px; height:22px; background:#F1F5F9; border-radius:4px; overflow:hidden;">'
+            + '<div style="position:absolute; inset:0 auto 0 0; height:100%; width:' + barWidth + '%; background:' + barColor + ';"></div>'
+            + '<span style="position:relative; z-index:1; display:flex; align-items:center; height:100%; padding:0 8px; font-size:12px; font-weight:500; color:#0F172A; white-space:nowrap;">'
+            + formatNum(actual, 0) + ' / ' + formatNum(target, 0) + ' kkal (' + formatNum(percent, 0) + '%)'
+            + '</span>'
+            + '</div>';
+    }
+
     function currentFilters() {
         var filters = {
-            week_start: weekEl ? weekEl.value : '',
+            date_from: dateFromEl ? dateFromEl.value : '',
+            date_to: dateToEl ? dateToEl.value : '',
             site: mitraMode ? '' : (siteEl ? siteEl.value : ''),
             company: mitraMode ? '' : (companyEl ? companyEl.value : '')
         };
@@ -2500,7 +2520,7 @@
         lengthMenu: [10, 25, 50, 100],
         order: [[0, 'asc']],
         columnDefs: [
-            { orderable: false, targets: [4, 5, 6] }
+            { orderable: false, targets: [4, 5, 6, 10] }
         ],
         ajax: {
             url: dataUrl,
@@ -2510,7 +2530,8 @@
             },
             data: function (d) {
                 var filters = currentFilters();
-                d.week_start = filters.week_start;
+                d.date_from = filters.date_from;
+                d.date_to = filters.date_to;
                 d.site = filters.site;
                 d.company = filters.company;
                 if (mitraMode && filters.company) {
@@ -2576,6 +2597,15 @@
                 }
             },
             {
+                data: null,
+                render: function (data, type, row) {
+                    if (type !== 'display') {
+                        return Number(row.kalori_progress_pct) || 0;
+                    }
+                    return renderCalorieTargetBar(row.kalori_in, row.target_kalori, row.kalori_progress_pct);
+                }
+            },
+            {
                 data: 'protein_g',
                 render: function (data) {
                     return formatNum(data, 1);
@@ -2632,14 +2662,20 @@
         applyBtn.addEventListener('click', reloadAll);
     }
 
-    if (weekEl) {
-        weekEl.addEventListener('change', reloadAll);
+    if (dateFromEl) {
+        dateFromEl.addEventListener('change', reloadAll);
+    }
+    if (dateToEl) {
+        dateToEl.addEventListener('change', reloadAll);
     }
 
     if (resetBtn) {
         resetBtn.addEventListener('click', function () {
-            if (weekEl && weekEl.options.length) {
-                weekEl.selectedIndex = 0;
+            if (dateFromEl) {
+                dateFromEl.value = defaultWellnessDateFrom;
+            }
+            if (dateToEl) {
+                dateToEl.value = defaultWellnessDateTo;
             }
             if (siteEl) {
                 siteEl.value = mitraMode ? (window.evaluasiWellMitraHasMultiScope(mitraScope) ? '' : (mitraScope.site || '')) : '';

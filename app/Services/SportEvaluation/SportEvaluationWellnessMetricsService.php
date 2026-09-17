@@ -42,6 +42,9 @@ final class SportEvaluationWellnessMetricsService
 
     private const DEFAULT_FIBER_TARGET = 25.0;
 
+    /** Default target kalori harian untuk kolom "Target Kalori" saat karyawan belum punya goal aktif. */
+    private const TARGET_KALORI_DEFAULT = 2300.0;
+
     private const DURATION_ADEQUATE_MIN = 150.0;
 
     private const FREQUENCY_ADEQUATE_DAYS = 5;
@@ -65,8 +68,10 @@ final class SportEvaluationWellnessMetricsService
         ?string $weekStart = null,
         string $site = '',
         string $company = '',
+        ?string $dateFrom = null,
+        ?string $dateTo = null,
     ): array {
-        $week = $this->resolveWeek($weekStart);
+        $week = $this->resolveRange($dateFrom, $dateTo, $weekStart);
         $empty = $this->emptyDashboardPayload($week);
 
         if (! $this->connection->isUp()) {
@@ -79,13 +84,12 @@ final class SportEvaluationWellnessMetricsService
             $company = trim($company);
             $scopeKey = $this->mitraAssignmentService->cacheKeySuffix($scope);
             $cacheKey = 'evaluasi_well:wellness_metrics:dash:'.self::CACHE_VERSION.':'.sha1(
-                $week['start'].'|'.$scopeKey.'|'.$site.'|'.$company
+                $week['start'].'|'.$week['end'].'|'.$scopeKey.'|'.$site.'|'.$company
             );
 
             return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($week, $scope, $site, $company): array {
                 $current = $this->aggregateWeekMetrics($week['start'], $week['end'], $scope, $site, $company);
-                $prevWeek = $this->resolveWeek($week['prev_start']);
-                $previous = $this->aggregateWeekMetrics($prevWeek['start'], $prevWeek['end'], $scope, $site, $company);
+                $previous = $this->aggregateWeekMetrics($week['prev_start'], $week['prev_end'], $scope, $site, $company);
 
                 return array_merge(
                     $this->mapMetricsToCardPayload($current, $previous),
@@ -117,8 +121,10 @@ final class SportEvaluationWellnessMetricsService
         ?string $weekStart = null,
         string $site = '',
         string $company = '',
+        ?string $dateFrom = null,
+        ?string $dateTo = null,
     ): array {
-        $payload = $this->getDashboardPayload($scope, $weekStart, $site, $company);
+        $payload = $this->getDashboardPayload($scope, $weekStart, $site, $company, $dateFrom, $dateTo);
 
         return [
             'available' => $this->connection->isUp(),
@@ -166,6 +172,8 @@ final class SportEvaluationWellnessMetricsService
         ?string $weekStart = null,
         string $site = '',
         string $company = '',
+        ?string $dateFrom = null,
+        ?string $dateTo = null,
     ): array {
         $empty = [
             'draw' => $draw,
@@ -179,7 +187,7 @@ final class SportEvaluationWellnessMetricsService
         }
 
         try {
-            $week = $this->resolveWeek($weekStart);
+            $week = $this->resolveRange($dateFrom, $dateTo, $weekStart);
             $scope = $this->normalizeScopeFilters($scope);
             $from = $week['start'].' 00:00:00';
             $to = Carbon::parse($week['end'])->endOfDay()->format('Y-m-d H:i:s');
@@ -200,6 +208,8 @@ final class SportEvaluationWellnessMetricsService
             }
             $recordsFiltered = (int) (clone $filtered)->count();
 
+            // Kolom index 10 (Target Kalori) sengaja tidak ada di map ini karena
+            // dihitung setelah query (bukan kolom SQL) — non-orderable di JS (columnDefs).
             $orderable = [
                 0 => 'e.nama',
                 1 => 'e.site',
@@ -208,9 +218,9 @@ final class SportEvaluationWellnessMetricsService
                 7 => 'frekuensi',
                 8 => 'kalori_out',
                 9 => 'kalori_in',
-                10 => 'protein_g',
-                11 => 'carbs_g',
-                12 => 'fats_g',
+                11 => 'protein_g',
+                12 => 'carbs_g',
+                13 => 'fats_g',
             ];
             $orderCol = $orderable[$orderColumnIndex] ?? 'e.nama';
             $dir = strtolower($orderDir) === 'desc' ? 'desc' : 'asc';
@@ -224,12 +234,15 @@ final class SportEvaluationWellnessMetricsService
 
             $userIds = $rows->pluck('user_id')->map(static fn ($id): int => (int) $id)->all();
             $parsed = $this->parsedWorkoutMetricsForUsers($userIds, $from, $to);
+            $targets = $this->loadCalorieTargetTotals($userIds, $week['start'], $week['end']);
 
             $data = [];
             foreach ($rows as $row) {
                 $userId = (int) $row->user_id;
                 $metrics = $parsed[$userId] ?? ['duration_minutes' => 0.0, 'avg_hr' => null, 'hr_samples' => 0];
                 $avgHr = $metrics['avg_hr'];
+                $kaloriIn = round((float) ($row->kalori_in ?? 0), 1);
+                $targetKalori = round((float) ($targets[$userId] ?? self::TARGET_KALORI_DEFAULT), 1);
                 $data[] = [
                     'id' => $userId,
                     'nama' => (string) ($row->nama ?: 'User #'.$userId),
@@ -244,7 +257,9 @@ final class SportEvaluationWellnessMetricsService
                     'intensitas' => $this->intensityLabel($avgHr !== null ? (float) $avgHr : null),
                     'frekuensi' => (int) ($row->frekuensi ?? 0),
                     'kalori_out' => round((float) ($row->kalori_out ?? 0), 1),
-                    'kalori_in' => round((float) ($row->kalori_in ?? 0), 1),
+                    'kalori_in' => $kaloriIn,
+                    'target_kalori' => $targetKalori,
+                    'kalori_progress_pct' => $this->calorieProgressPercent($kaloriIn, $targetKalori),
                     'protein_g' => round((float) ($row->protein_g ?? 0), 1),
                     'carbs_g' => round((float) ($row->carbs_g ?? 0), 1),
                     'fats_g' => round((float) ($row->fats_g ?? 0), 1),
@@ -279,8 +294,10 @@ final class SportEvaluationWellnessMetricsService
         string $site = '',
         string $company = '',
         string $search = '',
+        ?string $dateFrom = null,
+        ?string $dateTo = null,
     ): array {
-        $week = $this->resolveWeek($weekStart);
+        $week = $this->resolveRange($dateFrom, $dateTo, $weekStart);
         $empty = ['week' => $week, 'rows' => []];
 
         if (! $this->connection->isUp()) {
@@ -305,14 +322,19 @@ final class SportEvaluationWellnessMetricsService
             }
 
             $rows = [];
-            $query->orderBy('e.nama')->chunk(self::CHUNK_SIZE, function ($chunk) use (&$rows, $from, $to): void {
+            $weekStartDate = $week['start'];
+            $weekEndDate = $week['end'];
+            $query->orderBy('e.nama')->chunk(self::CHUNK_SIZE, function ($chunk) use (&$rows, $from, $to, $weekStartDate, $weekEndDate): void {
                 $userIds = $chunk->pluck('user_id')->map(static fn ($id): int => (int) $id)->all();
                 $parsed = $this->parsedWorkoutMetricsForUsers($userIds, $from, $to);
+                $targets = $this->loadCalorieTargetTotals($userIds, $weekStartDate, $weekEndDate);
 
                 foreach ($chunk as $row) {
                     $userId = (int) $row->user_id;
                     $metrics = $parsed[$userId] ?? ['duration_minutes' => 0.0, 'avg_hr' => null];
                     $avgHr = $metrics['avg_hr'];
+                    $kaloriIn = round((float) ($row->kalori_in ?? 0), 1);
+                    $targetKalori = round((float) ($targets[$userId] ?? self::TARGET_KALORI_DEFAULT), 1);
                     $rows[] = [
                         'nama' => (string) ($row->nama ?: 'User #'.$userId),
                         'site' => $this->siteResolver->resolveOrDash(
@@ -326,7 +348,9 @@ final class SportEvaluationWellnessMetricsService
                         'intensitas' => $this->intensityLabel($avgHr !== null ? (float) $avgHr : null),
                         'frekuensi' => (int) ($row->frekuensi ?? 0),
                         'kalori_out' => round((float) ($row->kalori_out ?? 0), 1),
-                        'kalori_in' => round((float) ($row->kalori_in ?? 0), 1),
+                        'kalori_in' => $kaloriIn,
+                        'target_kalori' => $targetKalori,
+                        'kalori_progress_pct' => $this->calorieProgressPercent($kaloriIn, $targetKalori),
                         'protein_g' => round((float) ($row->protein_g ?? 0), 1),
                         'carbs_g' => round((float) ($row->carbs_g ?? 0), 1),
                         'fats_g' => round((float) ($row->fats_g ?? 0), 1),
@@ -364,6 +388,68 @@ final class SportEvaluationWellnessMetricsService
             'label' => $start->format('d M').' – '.$end->format('d M Y'),
             'prev_start' => $prevStart->toDateString(),
         ];
+    }
+
+    /**
+     * Resolve rentang tanggal custom (date_from/date_to) untuk filter "Detail Metrik
+     * Wellness". Kalau salah satu kosong/tidak valid, fallback ke minggu (Minggu–Sabtu)
+     * seperti sebelumnya supaya perilaku default tetap sama.
+     *
+     * @return array{start: string, end: string, label: string, prev_start: string, prev_end: string}
+     */
+    public function resolveRange(?string $dateFrom = null, ?string $dateTo = null, ?string $weekStart = null): array
+    {
+        $from = $this->parseDateOrNull($dateFrom);
+        $to = $this->parseDateOrNull($dateTo);
+
+        if ($from === null || $to === null) {
+            $week = $this->resolveWeek($weekStart);
+            $prevWeek = $this->resolveWeek($week['prev_start']);
+
+            return [
+                'start' => $week['start'],
+                'end' => $week['end'],
+                'label' => $week['label'],
+                'prev_start' => $prevWeek['start'],
+                'prev_end' => $prevWeek['end'],
+            ];
+        }
+
+        if ($to->lt($from)) {
+            [$from, $to] = [$to, $from];
+        }
+
+        $maxSpanDays = 366;
+        if ($from->diffInDays($to) > $maxSpanDays) {
+            $from = $to->copy()->subDays($maxSpanDays);
+        }
+
+        $daySpan = $from->diffInDays($to) + 1;
+        $prevEnd = $from->copy()->subDay();
+        $prevStart = $prevEnd->copy()->subDays($daySpan - 1);
+
+        return [
+            'start' => $from->toDateString(),
+            'end' => $to->toDateString(),
+            'label' => $from->isSameDay($to)
+                ? $from->format('d M Y')
+                : $from->format('d M Y').' – '.$to->format('d M Y'),
+            'prev_start' => $prevStart->toDateString(),
+            'prev_end' => $prevEnd->toDateString(),
+        ];
+    }
+
+    private function parseDateOrNull(?string $value): ?Carbon
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->startOfDay();
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -942,6 +1028,63 @@ final class SportEvaluationWellnessMetricsService
         }
 
         return $result;
+    }
+
+    /**
+     * Total target kalori per karyawan untuk seluruh rentang tanggal (bukan rata-rata
+     * harian), supaya sebanding dengan "Kalori In" di tabel/export yang juga dijumlah
+     * per rentang. Hari yang tidak punya goal aktif (tidak ada baris di goal_daily_targets)
+     * memakai default TARGET_KALORI_DEFAULT per hari.
+     *
+     * @param  list<int>  $userIds
+     * @return array<int, float>
+     */
+    private function loadCalorieTargetTotals(array $userIds, string $rangeStart, string $rangeEnd): array
+    {
+        $out = [];
+        if ($userIds === []) {
+            return $out;
+        }
+
+        $totalDays = max(1, (int) Carbon::parse($rangeStart)->diffInDays(Carbon::parse($rangeEnd)) + 1);
+
+        foreach (array_chunk($userIds, 800) as $chunkIds) {
+            $rows = DB::connection(BewellConnectionService::CONNECTION)
+                ->table('goal_daily_targets')
+                ->whereIn('user_id', $chunkIds)
+                ->whereBetween('target_date', [$rangeStart, $rangeEnd])
+                ->selectRaw('user_id, COALESCE(SUM(calorie_target), 0) as target_sum, COUNT(*) as target_days')
+                ->groupBy('user_id')
+                ->get();
+
+            foreach ($rows as $row) {
+                $userId = (int) $row->user_id;
+                $targetDays = (int) $row->target_days;
+                $missingDays = max(0, $totalDays - $targetDays);
+                $out[$userId] = (float) $row->target_sum + $missingDays * self::TARGET_KALORI_DEFAULT;
+            }
+        }
+
+        foreach ($userIds as $userId) {
+            if (! array_key_exists($userId, $out)) {
+                $out[$userId] = $totalDays * self::TARGET_KALORI_DEFAULT;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Persentase capaian kalori terhadap target, dibatasi ke bawah di 0%.
+     * Tidak dibatasi ke atas supaya "melebihi target" tetap terlihat di progress bar.
+     */
+    private function calorieProgressPercent(float $kaloriIn, float $targetKalori): float
+    {
+        if ($targetKalori <= 0) {
+            return 0.0;
+        }
+
+        return round(max(0.0, ($kaloriIn / $targetKalori) * 100), 1);
     }
 
     /**

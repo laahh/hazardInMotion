@@ -598,12 +598,14 @@ class SportEvaluationDashboardController extends Controller
         $weekStart = is_string($request->input('week_start'))
             ? $request->input('week_start')
             : null;
+        $dateFrom = is_string($request->input('date_from')) ? $request->input('date_from') : null;
+        $dateTo = is_string($request->input('date_to')) ? $request->input('date_to') : null;
         $site = trim((string) $request->input('site', ''));
         $company = trim((string) $request->input('company', $request->input('perusahaan', '')));
 
         try {
             return response()->json(
-                $this->wellnessMetricsService->getKpiPayload($this->indexFilters, $weekStart, $site, $company)
+                $this->wellnessMetricsService->getKpiPayload($this->indexFilters, $weekStart, $site, $company, $dateFrom, $dateTo)
             );
         } catch (Throwable $e) {
             report($e);
@@ -623,6 +625,8 @@ class SportEvaluationDashboardController extends Controller
         $weekStart = is_string($request->input('week_start'))
             ? $request->input('week_start')
             : null;
+        $dateFrom = is_string($request->input('date_from')) ? $request->input('date_from') : null;
+        $dateTo = is_string($request->input('date_to')) ? $request->input('date_to') : null;
         $site = trim((string) $request->input('site', ''));
         $company = trim((string) $request->input('company', $request->input('perusahaan', '')));
         $search = trim((string) $request->input('search.value', ''));
@@ -649,6 +653,8 @@ class SportEvaluationDashboardController extends Controller
                 $weekStart,
                 $site,
                 $company,
+                $dateFrom,
+                $dateTo,
             )
         );
     }
@@ -667,6 +673,8 @@ class SportEvaluationDashboardController extends Controller
         $weekStart = is_string($request->input('week_start'))
             ? $request->input('week_start')
             : null;
+        $dateFrom = is_string($request->input('date_from')) ? $request->input('date_from') : null;
+        $dateTo = is_string($request->input('date_to')) ? $request->input('date_to') : null;
         $site = trim((string) $request->input('site', ''));
         $company = trim((string) $request->input('company', $request->input('perusahaan', '')));
         $search = trim((string) $request->query('search', ''));
@@ -678,6 +686,8 @@ class SportEvaluationDashboardController extends Controller
                 $site,
                 $company,
                 $search,
+                $dateFrom,
+                $dateTo,
             );
             $week = $payload['week'];
             $rows = $payload['rows'];
@@ -693,6 +703,8 @@ class SportEvaluationDashboardController extends Controller
                 'Frekuensi',
                 'Kalori Out',
                 'Kalori In',
+                'Target Kalori',
+                'Progress Target (%)',
                 'Protein (g)',
                 'Karbo (g)',
                 'Lemak (g)',
@@ -713,6 +725,8 @@ class SportEvaluationDashboardController extends Controller
                     $row['frekuensi'],
                     $row['kalori_out'],
                     $row['kalori_in'],
+                    $row['target_kalori'] ?? 0,
+                    $row['kalori_progress_pct'] ?? 0,
                     $row['protein_g'],
                     $row['carbs_g'],
                     $row['fats_g'],
