@@ -62,7 +62,9 @@ class SportEvaluationDashboardController extends Controller
 
     public function index(Request $request): View
     {
-        return view('evaluasi-well.dashboard', $this->buildIndexData());
+        return view('evaluasi-well.dashboard', $this->buildIndexData(
+            $this->dashboardFiltersFromRequest($request)
+        ));
     }
 
     /**
@@ -73,7 +75,17 @@ class SportEvaluationDashboardController extends Controller
      */
     public function buildIndexData(array $filters = []): array
     {
-        $this->indexFilters = $this->mitraAssignmentService->normalizeScope($filters);
+        $divisionGroup = trim((string) ($filters['division_group'] ?? $filters['division'] ?? $filters['divisi'] ?? ''));
+        $this->indexFilters = array_merge(
+            $this->mitraAssignmentService->normalizeScope($filters),
+            [
+                'division_group' => $divisionGroup,
+                'division' => $divisionGroup,
+                'divisi' => $divisionGroup,
+            ]
+        );
+
+        $filterOptions = $this->dashboardFilterOptions();
 
         // Fail-fast: satu cek koneksi. Saat tunnel down, jangan N× SELECT 1 / query berat.
         if (! $this->connection->isUp()) {
@@ -81,9 +93,11 @@ class SportEvaluationDashboardController extends Controller
                 $this->emptyDashboardPayload(),
                 $this->wellnessMetricsService->getDashboardPayload($this->indexFilters),
                 [
-                    'mitraMode' => $this->hasIndexScope(),
+                    'mitraMode' => false,
                     'mitraScope' => $this->indexFilters,
                     'bewellConnectionUp' => false,
+                    'dashboardFilters' => $this->currentDashboardFilters(),
+                    'dashboardFilterOptions' => $filterOptions,
                 ]
             );
         }
@@ -103,9 +117,11 @@ class SportEvaluationDashboardController extends Controller
             $this->notInstalledFilterData(),
             $this->wellnessMetricsService->getDashboardPayload($this->indexFilters),
             [
-                'mitraMode' => $this->hasIndexScope(),
+                'mitraMode' => false,
                 'mitraScope' => $this->indexFilters,
                 'bewellConnectionUp' => true,
+                'dashboardFilters' => $this->currentDashboardFilters(),
+                'dashboardFilterOptions' => $filterOptions,
             ],
         );
 
@@ -116,6 +132,51 @@ class SportEvaluationDashboardController extends Controller
             : 0.0;
 
         return $data;
+    }
+
+    /**
+     * @return array{site: string, perusahaan: string, division_group: string}
+     */
+    private function currentDashboardFilters(): array
+    {
+        return [
+            'site' => (string) ($this->indexFilters['site'] ?? ''),
+            'perusahaan' => (string) ($this->indexFilters['perusahaan'] ?? ''),
+            'division_group' => (string) ($this->indexFilters['division_group'] ?? ''),
+        ];
+    }
+
+    /**
+     * @return array{sites: list<string>, companies: list<string>, division_groups: list<string>}
+     */
+    private function dashboardFilterOptions(): array
+    {
+        $options = $this->installStatsService->filterOptions();
+
+        return [
+            'sites' => $options['sites'] ?? [],
+            'companies' => $options['companies'] ?? [],
+            'division_groups' => $options['division_groups'] ?? $this->divisiGroupResolver->groupLabels(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function dashboardFiltersFromRequest(Request $request): array
+    {
+        $site = trim((string) $request->input('site', ''));
+        $perusahaan = trim((string) $request->input('perusahaan', $request->input('company', '')));
+        $division = trim((string) $request->input('division_group', $request->input('division', $request->input('divisi', ''))));
+
+        return [
+            'site' => mb_substr($site, 0, 180),
+            'perusahaan' => mb_substr($perusahaan, 0, 180),
+            'company' => mb_substr($perusahaan, 0, 180),
+            'division_group' => mb_substr($division, 0, 180),
+            'division' => mb_substr($division, 0, 180),
+            'divisi' => mb_substr($division, 0, 180),
+        ];
     }
 
     /**
@@ -1391,7 +1452,7 @@ class SportEvaluationDashboardController extends Controller
                 $this->indexFilters,
             );
 
-            $trend = $this->installStatsService->getDailyTrend($this->indexFilters);
+            $trend = $this->installStatsService->getDailyTrend($this->installStatsFiltersFromIndex());
             $adoptionTrendLabels = $trend['labels'] ?? [];
             $adoptionTrendNewInstalls = $trend['new_installs'] ?? [];
             $adoptionTrendActiveUsers = $trend['active_users'] ?? [];
@@ -1407,7 +1468,7 @@ class SportEvaluationDashboardController extends Controller
             $adoptionChartLabels = $adoptionTrendLabels;
             $adoptionChartSeries = $adoptionTrendActiveUsers;
 
-            $activityTrend = $this->installStatsService->getActivityPatternDailyTrend($this->indexFilters);
+            $activityTrend = $this->installStatsService->getActivityPatternDailyTrend($this->installStatsFiltersFromIndex());
             $activityDates = $activityTrend['dates'] ?? [];
             $activityLabels = $activityTrend['labels'] ?? [];
             $activityUsers = $activityTrend['active_users'] ?? [];
@@ -2670,7 +2731,30 @@ class SportEvaluationDashboardController extends Controller
      */
     protected function applyForcedIndexFilters(array $filters): void
     {
-        $this->indexFilters = $this->mitraAssignmentService->normalizeScope($filters);
+        $divisionGroup = trim((string) ($filters['division_group'] ?? $filters['division'] ?? $filters['divisi'] ?? ''));
+        $this->indexFilters = array_merge(
+            $this->mitraAssignmentService->normalizeScope($filters),
+            [
+                'division_group' => $divisionGroup,
+                'division' => $divisionGroup,
+                'divisi' => $divisionGroup,
+            ]
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function installStatsFiltersFromIndex(): array
+    {
+        return $this->installStatsService->normalizeFilters([
+            'site' => $this->indexFilters['site'] ?? '',
+            'company' => $this->indexFilters['perusahaan'] ?? '',
+            'perusahaan' => $this->indexFilters['perusahaan'] ?? '',
+            'division_group' => $this->indexFilters['division_group'] ?? '',
+            'companies' => $this->indexFilters['companies'] ?? [],
+            'pairs' => $this->indexFilters['pairs'] ?? [],
+        ]);
     }
 
     /**

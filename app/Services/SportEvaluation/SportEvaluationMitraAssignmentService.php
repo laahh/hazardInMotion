@@ -22,6 +22,7 @@ final class SportEvaluationMitraAssignmentService
         private readonly BewellConnectionService $connection,
         private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
         private readonly SportEvaluationCompanyAliasResolver $companyAliasResolver,
+        private readonly SportEvaluationDivisiGroupResolver $divisiGroupResolver,
     ) {}
 
     /**
@@ -304,10 +305,12 @@ final class SportEvaluationMitraAssignmentService
     public function hasScope(array $scope): bool
     {
         $normalized = $this->normalizeScope($scope);
+        $division = trim((string) ($scope['division_group'] ?? $scope['division'] ?? $scope['divisi'] ?? ''));
 
         return $normalized['pairs'] !== []
             || $normalized['site'] !== ''
-            || $normalized['perusahaan'] !== '';
+            || $normalized['perusahaan'] !== ''
+            || $division !== '';
     }
 
     /**
@@ -342,52 +345,59 @@ final class SportEvaluationMitraAssignmentService
     public function applyScopeToEmployeeQuery(Builder $query, array $scope): Builder
     {
         $normalized = $this->normalizeScope($scope);
-        if (! $this->hasScope($normalized)) {
-            return $query;
-        }
+        $divisionGroup = trim((string) ($scope['division_group'] ?? $scope['division'] ?? $scope['divisi'] ?? ''));
+        $hasSiteCompany = $normalized['pairs'] !== []
+            || $normalized['site'] !== ''
+            || $normalized['perusahaan'] !== '';
 
-        $companies = $normalized['companies'];
-        if ($companies === []) {
-            return $query;
-        }
-
-        return $query->where(function (Builder $outer) use ($companies): void {
-            foreach ($companies as $index => $company) {
-                $callback = function (Builder $inner) use ($company): void {
-                    if ($company['perusahaan'] !== '') {
-                        $this->applyCompanyFilter($inner, $company['perusahaan']);
-                    }
-                    $sites = $company['sites'];
-                    if ($sites === []) {
-                        return;
-                    }
-                    if (count($sites) === 1) {
-                        $this->siteResolver->applySiteFilter($inner, $sites[0]);
-
-                        return;
-                    }
-
-                    $inner->where(function (Builder $siteOuter) use ($sites): void {
-                        foreach ($sites as $siteIndex => $site) {
-                            if ($siteIndex === 0) {
-                                $this->siteResolver->applySiteFilter($siteOuter, $site);
-
-                                continue;
+        if ($hasSiteCompany) {
+            $companies = $normalized['companies'];
+            if ($companies !== []) {
+                $query->where(function (Builder $outer) use ($companies): void {
+                    foreach ($companies as $index => $company) {
+                        $callback = function (Builder $inner) use ($company): void {
+                            if ($company['perusahaan'] !== '') {
+                                $this->applyCompanyFilter($inner, $company['perusahaan']);
                             }
-                            $siteOuter->orWhere(function (Builder $siteInner) use ($site): void {
-                                $this->siteResolver->applySiteFilter($siteInner, $site);
-                            });
-                        }
-                    });
-                };
+                            $sites = $company['sites'];
+                            if ($sites === []) {
+                                return;
+                            }
+                            if (count($sites) === 1) {
+                                $this->siteResolver->applySiteFilter($inner, $sites[0]);
 
-                if ($index === 0) {
-                    $outer->where($callback);
-                } else {
-                    $outer->orWhere($callback);
-                }
+                                return;
+                            }
+
+                            $inner->where(function (Builder $siteOuter) use ($sites): void {
+                                foreach ($sites as $siteIndex => $site) {
+                                    if ($siteIndex === 0) {
+                                        $this->siteResolver->applySiteFilter($siteOuter, $site);
+
+                                        continue;
+                                    }
+                                    $siteOuter->orWhere(function (Builder $siteInner) use ($site): void {
+                                        $this->siteResolver->applySiteFilter($siteInner, $site);
+                                    });
+                                }
+                            });
+                        };
+
+                        if ($index === 0) {
+                            $outer->where($callback);
+                        } else {
+                            $outer->orWhere($callback);
+                        }
+                    }
+                });
             }
-        });
+        }
+
+        if ($divisionGroup !== '') {
+            $this->applyDivisionGroupFilter($query, $divisionGroup);
+        }
+
+        return $query;
     }
 
     /**
@@ -408,7 +418,8 @@ final class SportEvaluationMitraAssignmentService
         }
 
         $normalized = $this->normalizeScope($scope);
-        $cacheKey = $this->cacheKeySuffix($normalized);
+        $divisionGroup = trim((string) ($scope['division_group'] ?? $scope['division'] ?? $scope['divisi'] ?? ''));
+        $cacheKey = $this->cacheKeySuffix(array_merge($normalized, ['division_group' => $divisionGroup]));
         if (array_key_exists($cacheKey, $this->scopedIdsCache)) {
             return $this->scopedIdsCache[$cacheKey];
         }
@@ -420,51 +431,84 @@ final class SportEvaluationMitraAssignmentService
         }
 
         try {
-            $ids = [];
-            foreach ($normalized['companies'] as $company) {
-                $companyName = $company['perusahaan'];
-                $sites = $company['sites'];
-                $siteSet = [];
-                foreach ($sites as $site) {
-                    $siteSet[$site] = true;
-                }
+            $rememberKey = 'evaluasi_well:scoped_employee_ids:v2:'.$cacheKey;
+            $result = Cache::remember($rememberKey, 180, function () use ($normalized, $divisionGroup): array {
+                $hasSiteCompany = $normalized['pairs'] !== []
+                    || $normalized['site'] !== ''
+                    || $normalized['perusahaan'] !== '';
 
-                $query = DB::connection(BewellConnectionService::CONNECTION)
-                    ->table('employee_profiles as e')
-                    ->select(['e.id', 'e.kode_sid', 'e.site']);
+                $ids = [];
 
-                if ($companyName !== '') {
-                    $this->applyCompanyFilter($query, $companyName);
-
-                    foreach ($query->get() as $row) {
-                        if ($siteSet !== []) {
-                            $resolved = $this->siteResolver->resolve(
-                                isset($row->kode_sid) ? (string) $row->kode_sid : null,
-                                isset($row->site) ? (string) $row->site : null,
-                            );
-                            if (! isset($siteSet[$resolved])) {
-                                continue;
-                            }
+                if ($hasSiteCompany) {
+                    foreach ($normalized['companies'] as $company) {
+                        $companyName = $company['perusahaan'];
+                        $sites = $company['sites'];
+                        $siteSet = [];
+                        foreach ($sites as $site) {
+                            $siteSet[$site] = true;
                         }
 
-                        $ids[(int) $row->id] = (int) $row->id;
+                        $query = DB::connection(BewellConnectionService::CONNECTION)
+                            ->table('employee_profiles as e')
+                            ->select(['e.id', 'e.kode_sid', 'e.site', 'e.divisi']);
+
+                        if ($companyName !== '') {
+                            $this->applyCompanyFilter($query, $companyName);
+
+                            foreach ($query->get() as $row) {
+                                if ($siteSet !== []) {
+                                    $resolved = $this->siteResolver->resolve(
+                                        isset($row->kode_sid) ? (string) $row->kode_sid : null,
+                                        isset($row->site) ? (string) $row->site : null,
+                                    );
+                                    if (! isset($siteSet[$resolved])) {
+                                        continue;
+                                    }
+                                }
+                                if ($divisionGroup !== ''
+                                    && ! $this->divisiGroupResolver->belongsToGroup(
+                                        isset($row->divisi) ? (string) $row->divisi : null,
+                                        $divisionGroup
+                                    )) {
+                                    continue;
+                                }
+
+                                $ids[(int) $row->id] = (int) $row->id;
+                            }
+
+                            continue;
+                        }
+
+                        foreach ($sites as $site) {
+                            $siteQuery = DB::connection(BewellConnectionService::CONNECTION)
+                                ->table('employee_profiles as e')
+                                ->select(['e.id', 'e.divisi']);
+                            $this->siteResolver->applySiteFilter($siteQuery, $site);
+                            foreach ($siteQuery->get() as $row) {
+                                if ($divisionGroup !== ''
+                                    && ! $this->divisiGroupResolver->belongsToGroup(
+                                        isset($row->divisi) ? (string) $row->divisi : null,
+                                        $divisionGroup
+                                    )) {
+                                    continue;
+                                }
+                                $ids[(int) $row->id] = (int) $row->id;
+                            }
+                        }
                     }
-
-                    continue;
-                }
-
-                foreach ($sites as $site) {
-                    $siteQuery = DB::connection(BewellConnectionService::CONNECTION)
+                } elseif ($divisionGroup !== '') {
+                    $query = DB::connection(BewellConnectionService::CONNECTION)
                         ->table('employee_profiles as e')
-                        ->select(['e.id']);
-                    $this->siteResolver->applySiteFilter($siteQuery, $site);
-                    foreach ($siteQuery->pluck('e.id') as $id) {
+                        ->select(['e.id', 'e.divisi']);
+                    $this->applyDivisionGroupFilter($query, $divisionGroup);
+                    foreach ($query->pluck('e.id') as $id) {
                         $ids[(int) $id] = (int) $id;
                     }
                 }
-            }
 
-            $result = array_values($ids);
+                return array_values($ids);
+            });
+
             $this->scopedIdsCache[$cacheKey] = $result;
 
             return $result;
@@ -488,10 +532,40 @@ final class SportEvaluationMitraAssignmentService
         }
 
         $normalized = $this->normalizeScope($scope);
+        $division = trim((string) ($scope['division_group'] ?? $scope['division'] ?? $scope['divisi'] ?? ''));
 
         return md5(json_encode([
             'pairs' => $normalized['pairs'],
+            'division_group' => $division,
         ]) ?: '');
+    }
+
+    /**
+     * Filter divisi lewat alias grup (SQL IN) — cepat & index-friendly.
+     */
+    private function applyDivisionGroupFilter(Builder $query, string $groupLabel): void
+    {
+        $aliases = $this->divisiGroupResolver->aliasesForGroup($groupLabel);
+        $values = array_values(array_unique(array_filter(
+            array_merge($aliases, [$groupLabel]),
+            static fn (string $v): bool => trim($v) !== ''
+        )));
+
+        if ($values === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->where(function (Builder $outer) use ($values): void {
+            foreach ($values as $index => $value) {
+                if ($index === 0) {
+                    $outer->whereRaw('UPPER(TRIM(e.divisi)) = ?', [mb_strtoupper(trim($value))]);
+                } else {
+                    $outer->orWhereRaw('UPPER(TRIM(e.divisi)) = ?', [mb_strtoupper(trim($value))]);
+                }
+            }
+        });
     }
 
     /**
@@ -509,6 +583,7 @@ final class SportEvaluationMitraAssignmentService
     public function toFilterPayload(array $scope): array
     {
         $normalized = $this->normalizeScope($scope);
+        $division = trim((string) ($scope['division_group'] ?? $scope['division'] ?? $scope['divisi'] ?? ''));
 
         return [
             'site' => $normalized['site'],
@@ -516,6 +591,9 @@ final class SportEvaluationMitraAssignmentService
             'company' => $normalized['perusahaan'],
             'pairs' => $normalized['pairs'],
             'companies' => $normalized['companies'],
+            'division_group' => $division,
+            'division' => $division,
+            'divisi' => $division,
         ];
     }
 

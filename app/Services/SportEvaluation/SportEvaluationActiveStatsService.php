@@ -1359,6 +1359,7 @@ final class SportEvaluationActiveStatsService
             'companies' => $this->mitraAssignmentService->decodeScopeCollection($filters['companies'] ?? null),
             'pairs' => $this->mitraAssignmentService->decodeScopeCollection($filters['pairs'] ?? null),
         ]);
+        $division = trim((string) ($filters['division_group'] ?? $filters['division'] ?? $filters['divisi'] ?? ''));
 
         return [
             'site' => $normalized['site'],
@@ -1366,6 +1367,9 @@ final class SportEvaluationActiveStatsService
             'perusahaan' => $normalized['perusahaan'],
             'pairs' => $normalized['pairs'],
             'companies' => $normalized['companies'],
+            'division_group' => $division,
+            'division' => $division,
+            'divisi' => $division,
         ];
     }
 
