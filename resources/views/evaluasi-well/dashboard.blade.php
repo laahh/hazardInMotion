@@ -1089,7 +1089,8 @@
   min-height: 260px;
 }
 .activity-pattern-heatmap .ap-heatmap--calendar {
-  max-width: 520px;
+  max-width: none;
+  width: 100%;
 }
 #barChart.activity-pattern-heatmap {
   overflow: visible;
@@ -1146,8 +1147,7 @@
 .activity-pattern-heatmap .ap-heatmap-cell {
   height: 100%;
   min-height: 28px;
-  aspect-ratio: 1 / 1;
-  max-height: 44px;
+  width: 100%;
   justify-self: stretch;
   border-radius: 6px;
   border: 1px solid rgba(255,255,255,.75);
@@ -1197,7 +1197,8 @@
     max-width: 100%;
   }
   .activity-pattern-heatmap .ap-heatmap--calendar {
-    max-width: 100%;
+    max-width: none;
+    width: 100%;
   }
   .activity-pattern-heatmap .ap-heatmap-cell {
     min-height: 20px;
@@ -4390,9 +4391,8 @@
 
       <!-- Pola Aktivitas Penggunaan Aktif start -->
       <div class="col-xxl-8 d-flex">
-        <div class="card h-100 w-100 wc-card wc-card--has-bg activity-pattern-card">
-          <img class="wc-card__bg" src="{{ asset('evaluasi-well-assets/images/wellness/bg-activity.png') }}" alt="" aria-hidden="true">
-          <div class="card-body p-24 d-flex flex-column h-100 position-relative">
+        <div class="card h-100 w-100 wc-card activity-pattern-card">
+          <div class="card-body p-24 d-flex flex-column h-100">
             <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16 flex-shrink-0">
               <div class="d-flex align-items-start gap-3 min-w-0">
                 <span class="wc-card__head-icon">
