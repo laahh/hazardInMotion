@@ -803,7 +803,7 @@
     var categories = @json($activityPatternCategories ?? []);
 
     function formatNumber(value) {
-        return Number(value || 0).toLocaleString('id-ID');
+        return Number(value || 0).toLocaleString('en-US');
     }
 
     function colorFor(value) {
@@ -828,33 +828,25 @@
         return;
     }
 
-    // Calendar heatmap: Senin di atas → Minggu di bawah; kolom = minggu.
+    // Mock: Minggu di atas → Senin di bawah; label tanggal di bawah grid.
     var ordered = series.slice();
-    var preferred = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    var preferred = ['Minggu', 'Sabtu', 'Jumat', 'Kamis', 'Rabu', 'Selasa', 'Senin'];
     ordered.sort(function (a, b) {
         return preferred.indexOf(a.name) - preferred.indexOf(b.name);
     });
 
     var colCount = categories.length;
     var html = '';
-    html += '<div class="ap-heatmap ap-heatmap--calendar" style="--ap-cols:' + colCount + ';">';
+    html += '<div class="ap-heatmap" style="--ap-cols:' + colCount + ';">';
 
     ordered.forEach(function (row) {
         html += '<div class="ap-heatmap-ylabel">' + escapeHtml(row.name) + '</div>';
         html += '<div class="ap-heatmap-row">';
         (row.data || []).forEach(function (cell) {
-            var isEmpty = !cell || cell.empty === true || cell.y === null || cell.y === undefined;
-            if (isEmpty) {
-                html += '<div class="ap-heatmap-cell is-empty" title=""></div>';
-                return;
-            }
-            var value = Number(cell.y || 0);
-            var dateLabel = cell.date_label || cell.x || '';
-            var tip = escapeHtml(dateLabel) + ' | ' + formatNumber(value) + ' user aktif';
+            var value = cell && typeof cell === 'object' ? Number(cell.y || 0) : Number(cell || 0);
+            var xLabel = cell && typeof cell === 'object' ? (cell.x || '') : '';
             html += '<div class="ap-heatmap-cell" style="background:' + colorFor(value) + ';"'
-                + ' title="' + tip + '"'
-                + ' data-date="' + escapeHtml(cell.date || '') + '"'
-                + ' data-value="' + value + '">'
+                + ' title="' + escapeHtml(row.name) + ' · ' + escapeHtml(xLabel) + ': ' + formatNumber(value) + ' user aktif">'
                 + '</div>';
         });
         html += '</div>';
@@ -862,12 +854,20 @@
 
     html += '<div class="ap-heatmap-corner"></div>';
     html += '<div class="ap-heatmap-xlabels">';
-    categories.forEach(function (label) {
-        html += '<div class="ap-heatmap-xlabel" title="Minggu mulai ' + escapeHtml(label) + '"><span>' + escapeHtml(label) + '</span></div>';
+    categories.forEach(function (label, idx) {
+        var parts = String(label).split(/\s+/);
+        var day = parts[0] || label;
+        var month = parts[1] || '';
+        var showMonth = idx === 0
+            || idx === categories.length - 1
+            || day === '01'
+            || day === '10'
+            || day === '17';
+        var shortLabel = showMonth && month ? (day + ' ' + month) : day;
+        html += '<div class="ap-heatmap-xlabel" title="' + escapeHtml(label) + '"><span>' + escapeHtml(shortLabel) + '</span></div>';
     });
     html += '</div>';
     html += '</div>';
-    html += '<p class="ap-heatmap-hint mb-0 mt-8">Kolom = minggu · baris = hari · hover sel untuk melihat tanggal & jumlah user aktif</p>';
 
     el.innerHTML = html;
 })();
@@ -928,51 +928,50 @@
 }
 .activity-pattern-heatmap .ap-heatmap {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  grid-template-rows: repeat(7, minmax(28px, 1fr)) 36px;
-  gap: 6px 12px;
+  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-rows: repeat(7, minmax(24px, 1fr)) 48px;
+  gap: 5px 10px;
   align-items: stretch;
   overflow: visible;
   height: 100%;
-  min-height: 260px;
-}
-.activity-pattern-heatmap .ap-heatmap--calendar {
-  max-width: 520px;
+  min-height: 240px;
 }
 #barChart.activity-pattern-heatmap {
   overflow: visible;
-  min-height: 260px;
+  min-height: 240px;
   display: flex;
   flex-direction: column;
 }
 #barChart.activity-pattern-heatmap .ap-heatmap {
   flex: 1 1 auto;
 }
-.activity-pattern-heatmap .ap-heatmap-corner { min-height: 28px; }
+.activity-pattern-heatmap .ap-heatmap-corner { min-height: 48px; }
 .activity-pattern-heatmap .ap-heatmap-xlabels {
   display: grid;
   grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
-  gap: 6px;
-  min-height: 28px;
-  align-items: center;
+  gap: 3px;
+  min-height: 48px;
+  align-items: start;
+  padding-top: 6px;
   overflow: visible;
 }
 .activity-pattern-heatmap .ap-heatmap-xlabel {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   min-width: 0;
   overflow: visible;
+  height: 48px;
 }
 .activity-pattern-heatmap .ap-heatmap-xlabel span {
   display: inline-block;
-  font-size: 11px;
-  line-height: 1.2;
-  color: #64748B;
-  font-weight: 500;
+  font-size: 10px;
+  line-height: 1.1;
+  color: #94A3B8;
   white-space: nowrap;
-  transform: none;
-  margin: 0;
+  transform: rotate(-55deg);
+  transform-origin: top left;
+  margin-left: 4px;
 }
 .activity-pattern-heatmap .ap-heatmap-ylabel {
   display: flex;
@@ -987,55 +986,34 @@
 .activity-pattern-heatmap .ap-heatmap-row {
   display: grid;
   grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
-  gap: 6px;
+  gap: 3px;
   height: 100%;
-  min-height: 28px;
+  min-height: 22px;
 }
 .activity-pattern-heatmap .ap-heatmap-cell {
   height: 100%;
-  min-height: 28px;
-  aspect-ratio: 1 / 1;
-  max-height: 44px;
-  justify-self: stretch;
-  border-radius: 6px;
+  min-height: 22px;
+  border-radius: 5px;
   border: 1px solid rgba(255,255,255,.75);
-  cursor: default;
-  transition: transform .12s ease, box-shadow .12s ease;
-}
-.activity-pattern-heatmap .ap-heatmap-cell:not(.is-empty):hover {
-  transform: scale(1.08);
-  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.35);
-  z-index: 1;
-  position: relative;
-}
-.activity-pattern-heatmap .ap-heatmap-cell.is-empty {
-  background: #F1F5F9;
-  border: 1px dashed #E2E8F0;
-  cursor: default;
-}
-.activity-pattern-heatmap .ap-heatmap-hint {
-  font-size: 11px;
-  color: #94A3B8;
 }
 @media (max-width: 768px) {
   .activity-pattern-heatmap .ap-heatmap {
-    grid-template-columns: 52px minmax(0, 1fr);
-    gap: 4px 8px;
-    min-height: 220px;
-    max-width: 100%;
-  }
-  .activity-pattern-heatmap .ap-heatmap--calendar {
-    max-width: 100%;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 4px 6px;
+    min-height: 200px;
   }
   .activity-pattern-heatmap .ap-heatmap-cell {
-    min-height: 20px;
-    border-radius: 4px;
+    min-height: 16px;
+    border-radius: 3px;
   }
   .activity-pattern-heatmap .ap-heatmap-xlabel span {
-    font-size: 10px;
+    font-size: 8px;
   }
   .activity-pattern-heatmap .ap-heatmap-ylabel {
     font-size: 11px;
+  }
+  .activity-pattern-metric__value {
+    font-size: 16px;
   }
 }
 </style>
