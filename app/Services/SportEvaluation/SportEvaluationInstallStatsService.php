@@ -632,15 +632,9 @@ final class SportEvaluationInstallStatsService
 
     /**
      * Tren harian 4 minggu terakhir (minggu berjalan + 3 minggu sebelumnya).
+     * Install baru = first signal user · Penggunaan = distinct user aktif per hari.
      *
-     * @param  array{
-     *     site:string,
-     *     division_group:string,
-     *     jabatan:string,
-     *     company:string,
-     *     departement:string,
-     *     install:string
-     * }  $filters
+     * @param  array<string, mixed>  $filters
      * @return array{
      *     labels:list<string>,
      *     dates:list<string>,
@@ -649,8 +643,9 @@ final class SportEvaluationInstallStatsService
      *     range_label:string
      * }
      */
-    private function getDailyTrend(array $filters): array
+    public function getDailyTrend(array $filters = []): array
     {
+        $filters = $this->normalizeFilters($filters);
         $empty = [
             'labels' => [],
             'dates' => [],
@@ -660,7 +655,7 @@ final class SportEvaluationInstallStatsService
         ];
 
         try {
-            $cacheKey = 'evaluasi_well:install_stats:daily_trend:v4:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
+            $cacheKey = 'evaluasi_well:install_stats:daily_trend:v5:'.sha1(json_encode($filters, JSON_THROW_ON_ERROR));
 
             return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($filters, $empty): array {
                 $end = Carbon::now()->endOfDay();

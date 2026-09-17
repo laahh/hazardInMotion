@@ -88,7 +88,7 @@ class SportEvaluationDashboardController extends Controller
             );
         }
 
-        return array_merge(
+        $data = array_merge(
             $this->newUsersCardData(),
             $this->activeUsersCardData(),
             $this->totalKaryawanCardData(),
@@ -108,6 +108,14 @@ class SportEvaluationDashboardController extends Controller
                 'bewellConnectionUp' => true,
             ],
         );
+
+        $totalKaryawan = (int) ($data['totalKaryawan'] ?? 0);
+        $newUsersTotal = (int) ($data['newUsersTotal'] ?? 0);
+        $data['newUsersInstallPercent'] = $totalKaryawan > 0
+            ? round(($newUsersTotal / $totalKaryawan) * 100, 1)
+            : 0.0;
+
+        return $data;
     }
 
     /**
@@ -119,6 +127,7 @@ class SportEvaluationDashboardController extends Controller
             'newUsersTotal' => 0,
             'newUsersWeekIncrease' => 0,
             'newUsersWeekIncreasePercent' => 0.0,
+            'newUsersInstallPercent' => 0.0,
             'activeUsersTotal' => 0,
             'activeUsersWeekIncrease' => 0,
             'activeUsersWeekIncreasePercent' => 0.0,
@@ -144,8 +153,14 @@ class SportEvaluationDashboardController extends Controller
             'adoptionInstall' => 0,
             'adoptionLoginSuccess' => 0,
             'adoptionAktif' => 0,
-            'adoptionChartLabels' => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-            'adoptionChartSeries' => array_fill(0, 12, 0),
+            'adoptionNewInstallsPeriod' => 0,
+            'adoptionAvgDailyUsage' => 0,
+            'adoptionChartLabels' => [],
+            'adoptionChartSeries' => [],
+            'adoptionTrendLabels' => [],
+            'adoptionTrendNewInstalls' => [],
+            'adoptionTrendActiveUsers' => [],
+            'adoptionTrendRangeLabel' => '',
             'compositionOlahraga' => 0,
             'compositionNutrisi' => 0,
             'compositionSosial' => 0,
@@ -1284,14 +1299,20 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Tren Login & Adopsi: Install / Login sukses / Aktif + chart login bulanan.
+     * Tren Install & Penggunaan Harian: ringkasan KPI + chart area 4 minggu.
      *
      * @return array{
      *     adoptionInstall:int,
      *     adoptionLoginSuccess:int,
      *     adoptionAktif:int,
+     *     adoptionNewInstallsPeriod:int,
+     *     adoptionAvgDailyUsage:int,
      *     adoptionChartLabels:array<int,string>,
-     *     adoptionChartSeries:array<int,int>
+     *     adoptionChartSeries:array<int,int>,
+     *     adoptionTrendLabels:array<int,string>,
+     *     adoptionTrendNewInstalls:array<int,int>,
+     *     adoptionTrendActiveUsers:array<int,int>,
+     *     adoptionTrendRangeLabel:string
      * }
      */
     private function loginAdoptionData(): array
@@ -1299,17 +1320,28 @@ class SportEvaluationDashboardController extends Controller
         $adoptionInstall = 0;
         $adoptionLoginSuccess = 0;
         $adoptionAktif = 0;
-        $months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        $adoptionChartLabels = $months;
-        $adoptionChartSeries = array_fill(0, 12, 0);
+        $adoptionNewInstallsPeriod = 0;
+        $adoptionAvgDailyUsage = 0;
+        $adoptionChartLabels = [];
+        $adoptionChartSeries = [];
+        $adoptionTrendLabels = [];
+        $adoptionTrendNewInstalls = [];
+        $adoptionTrendActiveUsers = [];
+        $adoptionTrendRangeLabel = '';
 
         if (! $this->connection->isUp()) {
             return compact(
                 'adoptionInstall',
                 'adoptionLoginSuccess',
                 'adoptionAktif',
+                'adoptionNewInstallsPeriod',
+                'adoptionAvgDailyUsage',
                 'adoptionChartLabels',
                 'adoptionChartSeries',
+                'adoptionTrendLabels',
+                'adoptionTrendNewInstalls',
+                'adoptionTrendActiveUsers',
+                'adoptionTrendRangeLabel',
             );
         }
 
@@ -1340,19 +1372,21 @@ class SportEvaluationDashboardController extends Controller
                 $this->indexFilters,
             );
 
-            $rowsQuery = $db->table('login_audit')
-                ->selectRaw('MONTH(created_at) as m, COUNT(*) as total')
-                ->where('event', 'login_success')
-                ->whereBetween('created_at', [$yearStart, $yearEnd]);
-            $this->applyScopedUserIds($rowsQuery, 'user_id');
-            $rows = $rowsQuery->groupByRaw('MONTH(created_at)')->get();
+            $trend = $this->installStatsService->getDailyTrend($this->indexFilters);
+            $adoptionTrendLabels = $trend['labels'] ?? [];
+            $adoptionTrendNewInstalls = $trend['new_installs'] ?? [];
+            $adoptionTrendActiveUsers = $trend['active_users'] ?? [];
+            $adoptionTrendRangeLabel = (string) ($trend['range_label'] ?? '');
 
-            foreach ($rows as $row) {
-                $idx = ((int) $row->m) - 1;
-                if ($idx >= 0 && $idx < 12) {
-                    $adoptionChartSeries[$idx] = (int) $row->total;
-                }
-            }
+            $adoptionNewInstallsPeriod = array_sum($adoptionTrendNewInstalls);
+            $days = count($adoptionTrendActiveUsers);
+            $adoptionAvgDailyUsage = $days > 0
+                ? (int) round(array_sum($adoptionTrendActiveUsers) / $days)
+                : 0;
+
+            // Compat lama (jika partial lain masih baca series bulanan).
+            $adoptionChartLabels = $adoptionTrendLabels;
+            $adoptionChartSeries = $adoptionTrendActiveUsers;
         } catch (Throwable $e) {
             report($e);
         }
@@ -1361,8 +1395,14 @@ class SportEvaluationDashboardController extends Controller
             'adoptionInstall',
             'adoptionLoginSuccess',
             'adoptionAktif',
+            'adoptionNewInstallsPeriod',
+            'adoptionAvgDailyUsage',
             'adoptionChartLabels',
             'adoptionChartSeries',
+            'adoptionTrendLabels',
+            'adoptionTrendNewInstalls',
+            'adoptionTrendActiveUsers',
+            'adoptionTrendRangeLabel',
         );
     }
 

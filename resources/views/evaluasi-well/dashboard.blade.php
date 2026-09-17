@@ -549,68 +549,92 @@
         return;
     }
 
-    var labels = @json($adoptionChartLabels ?? []);
-    var series = @json($adoptionChartSeries ?? []);
+    var labels = @json($adoptionTrendLabels ?? $adoptionChartLabels ?? []);
+    var newInstalls = @json($adoptionTrendNewInstalls ?? []);
+    var activeUsers = @json($adoptionTrendActiveUsers ?? []);
+
+    function formatNumber(value) {
+        var n = Number(value) || 0;
+        return n.toLocaleString('id-ID');
+    }
+
+    if (!labels.length) {
+        el.innerHTML = '<p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data tren untuk rentang ini.</p>';
+        return;
+    }
 
     new ApexCharts(el, {
-        series: [{
-            name: 'Login Sukses',
-            data: labels.map(function (label, i) {
-                return { x: label, y: series[i] || 0 };
-            })
-        }],
+        series: [
+            { name: 'Install Baru', data: newInstalls },
+            { name: 'Penggunaan (User Aktif)', data: activeUsers }
+        ],
         chart: {
-            type: 'bar',
+            type: 'area',
             height: 310,
-            toolbar: { show: false }
+            toolbar: { show: false },
+            parentHeightOffset: 0,
+            zoom: { enabled: false },
+            fontFamily: 'inherit'
         },
-        plotOptions: {
-            bar: {
-                borderRadius: 4,
-                horizontal: false,
-                columnWidth: '23%',
-                endingShape: 'rounded'
-            }
+        stroke: {
+            curve: 'smooth',
+            width: [3, 3]
         },
-        dataLabels: { enabled: false },
+        colors: ['#487FFF', '#45b369'],
         fill: {
             type: 'gradient',
-            colors: ['#487FFF'],
             gradient: {
-                shade: 'light',
-                type: 'vertical',
-                shadeIntensity: 0.5,
-                gradientToColors: ['#487FFF'],
-                inverseColors: false,
-                opacityFrom: 1,
-                opacityTo: 1,
-                stops: [0, 100]
+                shadeIntensity: 1,
+                opacityFrom: 0.32,
+                opacityTo: 0.05,
+                stops: [0, 85, 100]
             }
         },
+        markers: {
+            size: 0,
+            hover: { size: 5 }
+        },
+        dataLabels: { enabled: false },
         grid: {
             show: true,
-            borderColor: '#D1D5DB',
+            borderColor: '#E5E7EB',
             strokeDashArray: 4,
-            position: 'back'
+            padding: { left: 8, right: 12, top: 0, bottom: 0 }
         },
         xaxis: {
-            type: 'category',
-            categories: labels
+            categories: labels,
+            tickAmount: Math.min(9, Math.max(4, Math.ceil(labels.length / 3))),
+            labels: {
+                style: { colors: '#6B7280', fontSize: '11px' },
+                rotate: -30,
+                hideOverlappingLabels: true
+            },
+            axisBorder: { show: false },
+            axisTicks: { show: false }
         },
         yaxis: {
+            min: 0,
             labels: {
+                style: { colors: '#6B7280', fontSize: '11px' },
                 formatter: function (value) {
-                    if (value >= 1000) {
-                        return (value / 1000).toFixed(0) + 'k';
-                    }
-                    return value;
+                    return formatNumber(value);
                 }
             }
         },
+        legend: {
+            position: 'top',
+            horizontalAlign: 'left',
+            fontSize: '12px',
+            fontWeight: 500,
+            markers: { width: 10, height: 10, radius: 12 },
+            itemMargin: { horizontal: 12, vertical: 0 }
+        },
         tooltip: {
+            shared: true,
+            intersect: false,
             y: {
                 formatter: function (value) {
-                    return value + ' login';
+                    return formatNumber(value) + ' user';
                 }
             }
         }
@@ -3386,7 +3410,7 @@
                   
                     <div id="new-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($newUsersWeekIncrease ?? 0) }} ({{ number_format($newUsersWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
+                <p class="text-sm mb-0">Sudah install <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">{{ number_format($newUsersInstallPercent ?? 0, 1) }}%</span> dari seluruh karyawan</p>
               </div>
             </div>
           </div>
@@ -3510,58 +3534,62 @@
       </div>
       <!-- Pertumbuhan User Aktif End -->
 
-      <!-- Tren Login & Adopsi start -->
+      <!-- Tren Install & Penggunaan Harian start -->
       <div class="col-xxl-8">
         <div class="card h-100 radius-8 border-0">
           <div class="card-body p-24">
             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
               <div>
-                <h6 class="mb-2 fw-bold text-lg">Tren Login &amp; Adopsi</h6>
-                <span class="text-sm fw-medium text-secondary-light">Ringkasan login sukses per bulan</span>
+                <h6 class="mb-2 fw-bold text-lg">Tren Install &amp; Penggunaan Harian</h6>
+                <span class="text-sm fw-medium text-secondary-light">
+                  @if(!empty($adoptionTrendRangeLabel))
+                    4 minggu terakhir · {{ $adoptionTrendRangeLabel }}
+                  @else
+                    4 minggu terakhir (termasuk minggu berjalan)
+                  @endif
+                </span>
               </div>
-              <div class="">
-                <span class="form-select form-select-sm w-auto bg-base border text-secondary-light d-inline-block pe-none">{{ date('Y') }}</span>
-              </div>
+              <span class="text-xs text-secondary-light text-end">Install baru = first signal · Penggunaan = user aktif harian</span>
             </div>
 
             <div class="mt-20 d-flex justify-content-center flex-wrap gap-3">
 
               <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
-                <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
+                <span class="bg-primary-50 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-primary-600 group-hover:bg-primary-600 group-hover:text-white">
                   <iconify-icon icon="solar:download-minimalistic-bold" class="icon"></iconify-icon>
                 </span>
                 <div>
-                  <span class="text-secondary-light text-sm fw-medium">Install</span>
+                  <span class="text-secondary-light text-sm fw-medium">Total Install</span>
                   <h6 class="text-md fw-semibold mb-0">{{ number_format($adoptionInstall ?? 0) }}</h6>
                 </div>
               </div>
 
               <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
-                <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
-                  <iconify-icon icon="solar:login-3-bold" class="icon"></iconify-icon>
+                <span class="bg-info-50 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-info-main group-hover:bg-primary-600 group-hover:text-white">
+                  <iconify-icon icon="solar:user-plus-bold" class="icon"></iconify-icon>
                 </span>
                 <div>
-                  <span class="text-secondary-light text-sm fw-medium">Login Sukses</span>
-                  <h6 class="text-md fw-semibold mb-0">{{ number_format($adoptionLoginSuccess ?? 0) }}</h6>
+                  <span class="text-secondary-light text-sm fw-medium">Install Baru (4 mg)</span>
+                  <h6 class="text-md fw-semibold mb-0">{{ number_format($adoptionNewInstallsPeriod ?? 0) }}</h6>
                 </div>
               </div>
 
               <div class="d-inline-flex align-items-center gap-2 p-2 radius-8 border pe-36 br-hover-primary group-item">
-                <span class="bg-neutral-100 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-secondary-light group-hover:bg-primary-600 group-hover:text-white">
+                <span class="bg-success-50 w-44-px h-44-px text-xxl radius-8 d-flex justify-content-center align-items-center text-success-main group-hover:bg-primary-600 group-hover:text-white">
                   <iconify-icon icon="solar:user-check-bold" class="icon"></iconify-icon>
                 </span>
                 <div>
-                  <span class="text-secondary-light text-sm fw-medium">Aktif</span>
-                  <h6 class="text-md fw-semibold mb-0">{{ number_format($adoptionAktif ?? 0) }}</h6>
+                  <span class="text-secondary-light text-sm fw-medium">Rata-rata Penggunaan</span>
+                  <h6 class="text-md fw-semibold mb-0">{{ number_format($adoptionAvgDailyUsage ?? 0) }}<span class="text-xs text-secondary-light fw-medium"> /hari</span></h6>
                 </div>
               </div>
             </div>
             
-            <div id="barChart" class="barChart"></div>
+            <div id="barChart" class="barChart mt-12"></div>
           </div>
         </div>
       </div>
-      <!-- Tren Login & Adopsi End -->
+      <!-- Tren Install & Penggunaan Harian End -->
 
       <!-- Campaign Static start -->
       <div class="col-xxl-4">
