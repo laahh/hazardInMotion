@@ -846,29 +846,10 @@ final class SportEvaluationInstallStatsService
                 $db = DB::connection(BewellConnectionService::CONNECTION);
                 $end = Carbon::now()->endOfDay();
 
-                $firstRow = $db->selectOne("
-                    SELECT MIN(first_at) AS first_at
-                    FROM (
-                        SELECT MIN(created_at) AS first_at FROM login_audit
-                            WHERE event = ? AND user_id IS NOT NULL
-                        UNION ALL
-                        SELECT MIN(created_at) AS first_at FROM food_analyses
-                            WHERE user_id IS NOT NULL
-                        UNION ALL
-                        SELECT MIN(created_at) AS first_at FROM workout_analyses
-                            WHERE user_id IS NOT NULL
-                    ) AS sources
-                ", ['login_success']);
-
-                $firstAt = (string) ($firstRow->first_at ?? '');
-                if ($firstAt === '') {
+                // Fixed start (bukan tanggal data pertama): 20 Mei tahun berjalan s.d. sekarang.
+                $start = Carbon::create($end->year, 5, 20)->startOfDay();
+                if ($start->gt($end)) {
                     return $empty;
-                }
-
-                $start = Carbon::parse($firstAt)->startOfDay();
-                $earliestAllowed = $end->copy()->subYear()->startOfDay();
-                if ($start->lt($earliestAllowed)) {
-                    $start = $earliestAllowed;
                 }
 
                 $buckets = [];
