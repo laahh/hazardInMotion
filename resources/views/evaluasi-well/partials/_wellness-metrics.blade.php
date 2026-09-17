@@ -111,8 +111,8 @@
     {{-- Top 5 Olahraga --}}
     <div class="col-xxl-6 col-xl-6">
       <div class="card h-100 wc-card wc-card--has-bg">
-        <img class="wc-card__bg" src="{{ asset('evaluasi-well-assets/images/wellness/bg-sports.png') }}" alt="" aria-hidden="true">
-        <div class="card-body p-24 d-flex flex-column position-relative">
+        <img class="wc-card__bg wc-card__bg--sports" src="{{ asset('evaluasi-well-assets/images/wellness/bg-sports.png') }}" alt="" aria-hidden="true">
+        <div class="card-body p-24 d-flex flex-column">
           <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-20">
             <div class="d-flex align-items-start gap-3 min-w-0">
               <span class="wc-card__head-icon">
@@ -175,7 +175,7 @@
     <div class="col-xxl-6 col-xl-6">
       <div class="card h-100 wc-card wc-card--has-bg wc-card--bg-br">
         <img class="wc-card__bg wc-card__bg--br" src="{{ asset('evaluasi-well-assets/images/wellness/bg-frequency.png') }}" alt="" aria-hidden="true">
-        <div class="card-body p-24 d-flex flex-column position-relative">
+        <div class="card-body p-24 d-flex flex-column">
           <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
             <div class="d-flex align-items-start gap-3 min-w-0">
               <span class="wc-card__head-icon">
@@ -209,9 +209,9 @@
 
     {{-- Kalori Makanan --}}
     <div class="col-xxl-6 col-xl-6">
-      <div class="card h-100 wc-card wc-card--has-bg wc-card--bg-br">
-        <img class="wc-card__bg wc-card__bg--br" src="{{ asset('evaluasi-well-assets/images/wellness/bg-calorie.png') }}" alt="" aria-hidden="true">
-        <div class="card-body p-24 d-flex flex-column position-relative">
+      <div class="card h-100 wc-card wc-card--has-bg">
+        <img class="wc-card__bg wc-card__bg--calorie" src="{{ asset('evaluasi-well-assets/images/wellness/bg-calorie.png') }}" alt="" aria-hidden="true">
+        <div class="card-body p-24 d-flex flex-column">
           <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
             <div class="d-flex align-items-start gap-3 min-w-0">
               <span class="wc-card__head-icon wc-card__head-icon--fire">

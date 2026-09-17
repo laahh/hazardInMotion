@@ -401,29 +401,47 @@
   }
   .wc-card__bg {
     position: absolute;
-    right: -10px;
-    top: 40%;
-    width: min(46%, 240px);
+    right: 0;
+    top: 28%;
+    width: min(48%, 280px);
     height: auto;
-    max-height: 70%;
-    object-fit: cover;
-    opacity: 0.22;
+    max-height: 72%;
+    object-fit: contain;
+    object-position: right bottom;
+    opacity: 0.38;
     pointer-events: none;
     z-index: 0;
-    mask-image: linear-gradient(90deg, transparent 0%, #000 35%, #000 100%);
-    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 35%, #000 100%);
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.35) 28%, #000 55%, #000 100%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.35) 28%, #000 55%, #000 100%);
+  }
+  .wc-card__bg--sports {
+    top: 18%;
+    width: min(52%, 300px);
+    max-height: 78%;
+    opacity: 0.42;
   }
   .wc-card__bg--br {
     top: auto;
-    bottom: 8px;
-    right: 8px;
-    width: min(42%, 200px);
-    max-height: 46%;
-    opacity: 0.28;
-    mask-image: linear-gradient(180deg, transparent 0%, #000 40%, #000 100%);
-    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 40%, #000 100%);
+    bottom: 0;
+    right: 0;
+    width: min(46%, 240px);
+    max-height: 58%;
+    opacity: 0.55;
+    object-fit: contain;
+    object-position: right bottom;
+    mask-image: linear-gradient(135deg, transparent 0%, transparent 18%, rgba(0,0,0,.55) 42%, #000 70%);
+    -webkit-mask-image: linear-gradient(135deg, transparent 0%, transparent 18%, rgba(0,0,0,.55) 42%, #000 70%);
   }
-  .wc-card .card-body { z-index: 1; }
+  .wc-card__bg--calorie {
+    top: 22%;
+    bottom: auto;
+    width: min(44%, 230px);
+    max-height: 62%;
+    opacity: 0.48;
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 30%, #000 58%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 30%, #000 58%);
+  }
+  .wc-card .card-body { z-index: 1; position: relative; }
   .wc-card__head-icon {
     width: 44px;
     height: 44px;
@@ -477,9 +495,19 @@
   }
   .wc-tip iconify-icon { font-size: 18px; margin-top: 1px; }
   .wc-tip--green { background: #ECFDF5; color: #166534; border: 1px solid #BBF7D0; }
-  .wc-tip--quote { background: transparent; color: #334155; border: 0; padding-left: 0; padding-right: 0; }
+  .wc-tip--quote {
+    background: #ECFDF5;
+    color: #166534;
+    border: 1px solid #BBF7D0;
+    padding-right: min(42%, 220px);
+  }
   .wc-tip--quote iconify-icon { color: #16A34A; font-size: 22px; }
-  .wc-tip--rose { background: #FFF1F2; color: #9F1239; border: 1px solid #FECDD3; }
+  .wc-tip--rose {
+    background: #FFF1F2;
+    color: #9F1239;
+    border: 1px solid #FECDD3;
+    padding-right: min(40%, 200px);
+  }
   .wc-donut { min-height: 210px; }
   .wc-axis {
     display: grid;
@@ -740,15 +768,26 @@
   }
   .wc-macro-visual__caption {
     position: absolute;
-    left: 14px;
-    bottom: 12px;
+    left: 16px;
+    right: 16px;
+    bottom: 14px;
     margin: 0;
-    font-family: Georgia, 'Times New Roman', serif;
+    z-index: 1;
+    font-family: 'Segoe Script', 'Brush Script MT', 'Apple Chancery', cursive;
     font-style: italic;
-    font-size: 18px;
+    font-size: 20px;
     line-height: 1.25;
-    color: #14532D;
-    text-shadow: 0 1px 8px rgba(255,255,255,.85);
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 2px 10px rgba(15, 23, 42, 0.45);
+    pointer-events: none;
+  }
+  .wc-macro-visual::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 45%, rgba(15, 23, 42, 0.45) 100%);
+    pointer-events: none;
   }
   @media (max-width: 991px) {
     .wc-card__bg { opacity: 0.12; }
