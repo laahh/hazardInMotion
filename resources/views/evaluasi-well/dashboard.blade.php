@@ -668,7 +668,10 @@
     background: #FFF1F2;
     color: #9F1239;
     border: 1px solid #FECDD3;
-    padding-right: min(40%, 200px);
+    padding-right: min(20%, 90px);
+  }
+  .wc-tip--rose span {
+    white-space: nowrap;
   }
   .wc-donut { min-height: 210px; }
   .wc-axis {
