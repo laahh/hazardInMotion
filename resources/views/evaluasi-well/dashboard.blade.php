@@ -3410,7 +3410,7 @@
                   
                     <div id="new-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Sudah install <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">{{ number_format($newUsersInstallPercent ?? 0, 1) }}%</span> dari seluruh karyawan</p>
+                <p class="text-sm mb-0">Sudah install <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">{{ number_format($newUsersInstallPercent ?? 0, 1) }}%</span>karyawan</p>
               </div>
             </div>
           </div>
