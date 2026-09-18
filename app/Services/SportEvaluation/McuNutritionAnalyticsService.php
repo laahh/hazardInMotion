@@ -61,11 +61,24 @@ final class McuNutritionAnalyticsService
      */
     private function coverageSummary(array $coverage): array
     {
+        $matchedPct = round($coverage['matched_total'] / max(1, $coverage['total_mcu']) * 100, 1);
+
+        // Ambang kualitas data ditentukan di sini (bukan di Blade) supaya
+        // pesan yang tampil konsisten dengan angka coverage yang sama.
+        $isGoodQuality = $matchedPct >= 80.0;
+
         return [
             'total_mcu' => $coverage['total_mcu'],
             'total_nutrition' => $coverage['total_nutrition'],
             'matched_total' => $coverage['matched_total'],
-            'matched_pct_of_mcu' => round($coverage['matched_total'] / max(1, $coverage['total_mcu']) * 100, 1),
+            'matched_pct_of_mcu' => $matchedPct,
+            'quality_level' => $isGoodQuality ? 'good' : 'warning',
+            'quality_title' => $isGoodQuality
+                ? 'Data lengkap, analisis lebih akurat'
+                : 'Data nutrisi belum lengkap',
+            'quality_message' => $isGoodQuality
+                ? 'Dengan lebih banyak data nutrisi, rekomendasi lebih tepat sasaran.'
+                : 'Lengkapi pencatatan nutrisi karyawan agar hasil analisis lebih akurat.',
         ];
     }
 
@@ -84,6 +97,7 @@ final class McuNutritionAnalyticsService
                 'sub_label' => 'dari periode sebelumnya',
                 'delta_pct' => 5.2,
                 'sparkline' => [18400, 18600, 18750, 18900, 19050, 19180, $coverage['total_mcu']],
+                'caption' => 'Seluruh karyawan yang mengikuti MCU',
             ],
             'karyawan_berisiko' => [
                 'label' => 'Karyawan Berisiko',
@@ -94,6 +108,7 @@ final class McuNutritionAnalyticsService
                 'sub_pct' => round(3482 / $coverage['total_mcu'] * 100, 1),
                 'delta_pct' => 2.1,
                 'sparkline' => [3120, 3210, 3260, 3300, 3350, 3410, 3482],
+                'caption' => 'Memiliki ≥1 parameter risiko',
             ],
             'target_kalori' => [
                 'label' => 'Memenuhi Target Kalori',
@@ -104,6 +119,7 @@ final class McuNutritionAnalyticsService
                 'sub_pct' => round(14216 / $coverage['matched_total'] * 100, 1),
                 'delta_pct' => 4.5,
                 'sparkline' => [12800, 13100, 13400, 13650, 13900, 14050, 14216],
+                'caption' => 'Sesuai dengan target kalori harian',
             ],
             'data_nutrisi' => [
                 'label' => 'Data Nutrisi Tercatat',
@@ -114,6 +130,7 @@ final class McuNutritionAnalyticsService
                 'sub_pct' => round($coverage['total_nutrition'] / $coverage['total_mcu'] * 100, 1),
                 'delta_pct' => 3.8,
                 'sparkline' => [15900, 16200, 16500, 16750, 16950, 17100, $coverage['total_nutrition']],
+                'caption' => 'Memiliki minimal 1 hari pencatatan nutrisi',
             ],
         ];
     }
@@ -124,12 +141,12 @@ final class McuNutritionAnalyticsService
     private function kpiConditions(): array
     {
         return [
-            ['key' => 'obesitas', 'label' => 'Obesitas', 'sub_label' => 'BMI ≥30', 'icon' => 'solar:scale-bold', 'color' => '#F86624', 'value' => 1482, 'pct' => 7.6, 'delta_pct' => 1.4],
-            ['key' => 'dislipidemia', 'label' => 'Dislipidemia', 'sub_label' => 'Kol/LDL/TG tinggi', 'icon' => 'solar:test-tube-bold', 'color' => '#2563EB', 'value' => 1126, 'pct' => 5.8, 'delta_pct' => 0.9],
-            ['key' => 'hipertensi', 'label' => 'Hipertensi', 'sub_label' => 'Tekanan Darah', 'icon' => 'solar:heart-pulse-bold', 'color' => '#DC2626', 'value' => 1904, 'pct' => 9.8, 'delta_pct' => 2.6],
-            ['key' => 'gula_darah', 'label' => 'Gula Darah Tinggi', 'sub_label' => 'GDP', 'icon' => 'solar:test-tube-minimalistic-bold', 'color' => '#F4941E', 'value' => 962, 'pct' => 5.0, 'delta_pct' => 1.1],
-            ['key' => 'sindrom_metabolik', 'label' => 'Sindrom Metabolik', 'sub_label' => '≥3 komponen', 'icon' => 'solar:pulse-bold', 'color' => '#8252E9', 'value' => 684, 'pct' => 3.5, 'delta_pct' => 0.8],
-            ['key' => 'framingham', 'label' => 'Framingham High Risk', 'sub_label' => 'Skor risiko 10 tahun', 'icon' => 'solar:danger-triangle-bold', 'color' => '#7F27FF', 'value' => 421, 'pct' => 2.2, 'delta_pct' => 0.6],
+            ['key' => 'obesitas', 'label' => 'Obesitas', 'sub_label' => 'BMI ≥30', 'icon' => 'solar:scale-bold', 'color' => '#F86624', 'bg' => '#FFF7ED', 'value' => 1482, 'pct' => 7.6, 'delta_pct' => 1.4, 'sparkline' => [1290, 1330, 1360, 1390, 1420, 1455, 1482]],
+            ['key' => 'dislipidemia', 'label' => 'Dislipidemia', 'sub_label' => 'Kol/LDL/TG tinggi', 'icon' => 'solar:test-tube-bold', 'color' => '#2563EB', 'bg' => '#EFF6FF', 'value' => 1126, 'pct' => 5.8, 'delta_pct' => 0.9, 'sparkline' => [1030, 1055, 1075, 1090, 1105, 1116, 1126]],
+            ['key' => 'hipertensi', 'label' => 'Hipertensi', 'sub_label' => 'Tekanan Darah', 'icon' => 'solar:heart-pulse-bold', 'color' => '#DC2626', 'bg' => '#FEF2F2', 'value' => 1904, 'pct' => 9.8, 'delta_pct' => 2.6, 'sparkline' => [1690, 1740, 1790, 1830, 1860, 1885, 1904]],
+            ['key' => 'gula_darah', 'label' => 'Gula Darah Tinggi', 'sub_label' => 'GDP', 'icon' => 'solar:test-tube-minimalistic-bold', 'color' => '#F4941E', 'bg' => '#FFFBEB', 'value' => 962, 'pct' => 5.0, 'delta_pct' => 1.1, 'sparkline' => [850, 875, 895, 915, 935, 950, 962]],
+            ['key' => 'sindrom_metabolik', 'label' => 'Sindrom Metabolik', 'sub_label' => '≥3 komponen', 'icon' => 'solar:pulse-bold', 'color' => '#8252E9', 'bg' => '#FAF5FF', 'value' => 684, 'pct' => 3.5, 'delta_pct' => 0.8, 'sparkline' => [615, 630, 645, 658, 668, 677, 684]],
+            ['key' => 'framingham', 'label' => 'Framingham High Risk', 'sub_label' => 'Skor risiko 10 tahun', 'icon' => 'solar:danger-triangle-bold', 'color' => '#DB2777', 'bg' => '#FDF2F8', 'value' => 421, 'pct' => 2.2, 'delta_pct' => 0.6, 'sparkline' => [368, 380, 392, 402, 410, 416, 421]],
         ];
     }
 

@@ -7,24 +7,25 @@
   /* ===== MCU x Nutrisi — dashboard baru (data dummy, arsitektur real) ===== */
   .hn-tabs {
     display: inline-flex;
-    background: #F1F5F9;
-    border-radius: 10px;
-    padding: 4px;
-    gap: 4px;
+    gap: 8px;
   }
   .hn-tabs .nav-link {
-    border: none;
-    border-radius: 8px;
-    padding: 7px 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #E2E8F0;
+    border-radius: 999px;
+    padding: 8px 18px;
     font-size: 13px;
     font-weight: 600;
     color: #64748B;
-    background: transparent;
-  }
-  .hn-tabs .nav-link.active {
     background: #fff;
-    color: #0F172A;
-    box-shadow: 0 1px 4px rgba(15,23,42,.12);
+  }
+  .hn-tabs .nav-link iconify-icon { font-size: 15px; }
+  .hn-tabs .nav-link.active {
+    background: #ECFDF5;
+    color: #16A34A;
+    border-color: #16A34A;
   }
 
   /* ---- Header toolbar: date chip + filter selects + export ---- */
@@ -79,12 +80,25 @@
     min-width: 156px;
     padding-top: 0;
     padding-bottom: 0;
+    padding-left: 34px;
+  }
+
+  .hn-select-wrap { position: relative; }
+  .hn-select-wrap__icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 15px;
+    color: #64748B;
+    pointer-events: none;
+    z-index: 1;
   }
 
   .hn-toolbar .hn-export-btn {
     height: 38px;
     border-radius: 10px;
-    padding: 0 16px;
+    padding: 0 14px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -162,14 +176,88 @@
   @media (max-width: 991px) { .wc-card__bg { opacity: 0.12; } }
   @media (max-width: 768px) { .wc-card__bg { display: none; } }
 
-  .hn-coverage-strip {
-    background: #F8FAFC;
-    border: 1px solid #E8EDF3;
-    border-radius: 10px;
+  .hn-coverage-card {
+    background: #fff;
+    border: 1px solid #E2E8F0;
+    border-radius: 14px;
+    padding: 16px 20px;
   }
-  .hn-coverage-strip .hn-coverage-item { padding: 10px 16px; }
-  .hn-coverage-strip .hn-coverage-value { font-size: 15px; font-weight: 700; color: #0F172A; }
-  .hn-coverage-strip .hn-coverage-label { font-size: 11.5px; color: #64748B; }
+  .hn-coverage-value { font-size: 17px; font-weight: 700; color: #0F172A; line-height: 1.2; }
+  .hn-coverage-label { font-size: 12px; color: #64748B; }
+  .hn-coverage-label iconify-icon { font-size: 13px; cursor: help; }
+  .hn-coverage-icon {
+    width: 38px; height: 38px; border-radius: 999px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .hn-coverage-icon--green { background: #ECFDF5; color: #16A34A; }
+  .hn-coverage-icon--blue { background: #EFF6FF; color: #2563EB; }
+  .hn-coverage-divider { width: 1px; align-self: stretch; background: #E2E8F0; }
+  .hn-coverage-desc { font-size: 12px; color: #64748B; line-height: 1.4; }
+
+  .hn-quality-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-radius: 12px;
+    padding: 10px 16px;
+    max-width: 380px;
+  }
+  .hn-quality-box--good { background: #ECFDF5; border: 1px solid #BBF7D0; }
+  .hn-quality-box--warning { background: #FFFBEB; border: 1px solid #FDE68A; }
+  .hn-quality-box__icon {
+    width: 32px; height: 32px; border-radius: 999px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 16px; color: #fff;
+  }
+  .hn-quality-box--good .hn-quality-box__icon { background: #16A34A; }
+  .hn-quality-box--warning .hn-quality-box__icon { background: #F4941E; }
+  .hn-quality-box__title { font-size: 13px; font-weight: 700; color: #0F172A; }
+  .hn-quality-box--good .hn-quality-box__title { color: #14532D; }
+  .hn-quality-box--warning .hn-quality-box__title { color: #92400E; }
+  .hn-quality-box__desc { font-size: 11.5px; color: #64748B; line-height: 1.3; }
+  .hn-quality-box__chevron { font-size: 16px; color: #94A3B8; flex-shrink: 0; }
+
+  .hn-hero__bg {
+    top: 8%;
+    max-height: 84%;
+    width: min(30%, 210px);
+    opacity: 0.95;
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.5) 12%, #000 30%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.5) 12%, #000 30%);
+  }
+  .hn-hero__quote {
+    align-items: center;
+    gap: 10px;
+    background: #ECFDF5;
+    border: 1px solid #BBF7D0;
+    border-radius: 12px;
+    padding: 10px 16px;
+    max-width: 320px;
+    font-size: 13px;
+    font-style: italic;
+    color: #334155;
+  }
+  .hn-hero__quote iconify-icon { font-size: 22px; color: #16A34A; flex-shrink: 0; }
+  .hn-hero__next {
+    width: 38px; height: 38px; border-radius: 999px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: #16A34A; color: #fff; border: none; font-size: 16px;
+    transition: background .15s ease;
+  }
+  .hn-hero__next:hover { background: #14532D; }
+
+  .hn-kpi-card__spark { height: 44px; width: 96px; flex-shrink: 0; }
+  .hn-kpi-card__footer { border-top: 1px solid #F1F5F9; }
+
+  .hn-section-bar { width: 4px; height: 20px; border-radius: 999px; background: #16A34A; display: inline-block; }
+  .hn-detail-analysis-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #ECFDF5; color: #16A34A; border: 1px solid #BBF7D0;
+    border-radius: 999px; padding: 7px 16px; font-size: 12.5px; font-weight: 600;
+  }
+  .hn-detail-analysis-btn:hover { background: #DCFCE7; }
+
+  .hn-cond-card { border: 1px solid rgba(15,23,42,.05) !important; }
+  .hn-cond-card__spark { height: 28px; width: 64px; flex-shrink: 0; }
 
   #hnHeatmap .apexcharts-tooltip { font-size: 12px; }
 
@@ -240,6 +328,7 @@
     }
 
     var kpiTop = @json($kpiTop ?? []);
+    var kpiConditions = @json($kpiConditions ?? []);
     var heatmap = @json($heatmap ?? ['categories' => [], 'series' => []]);
     var compliance = @json($compliance ?? ['center_value' => 0, 'center_label' => '', 'legend' => []]);
     var macro = @json($macroChart ?? ['tabs' => [], 'data' => []]);
@@ -247,22 +336,62 @@
     var trend = @json($trendChart ?? ['categories' => [], 'series' => []]);
     var comparison = @json($comparisonChart ?? ['calories' => null, 'macros' => null]);
 
+    var kpiSparkColors = { success: '#16A34A', danger: '#DC2626', info: '#2563EB', warning: '#F4941E' };
+
     function formatNum(value) {
         return Number(value || 0).toLocaleString('id-ID');
     }
 
-    // ---- 4 mini sparklines (KPI atas) ----
+    // ---- 4 sparkline area (KPI atas) ----
     Object.keys(kpiTop).forEach(function (key) {
         var el = document.getElementById('hn-spark-' + key);
         if (!el) return;
+        var color = kpiSparkColors[kpiTop[key].color] || '#16A34A';
         new ApexCharts(el, {
             series: [{ data: kpiTop[key].sparkline || [] }],
-            chart: { type: 'line', height: 32, width: 84, sparkline: { enabled: true } },
+            chart: { type: 'area', height: 44, width: 96, sparkline: { enabled: true } },
             stroke: { curve: 'smooth', width: 2 },
-            colors: ['#16A34A'],
+            fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0, stops: [0, 90, 100] } },
+            colors: [color],
             tooltip: { enabled: false }
         }).render();
     });
+
+    // ---- 6 sparkline mini (kartu kondisi) ----
+    kpiConditions.forEach(function (cond) {
+        var el = document.getElementById('hn-cond-spark-' + cond.key);
+        if (!el) return;
+        new ApexCharts(el, {
+            series: [{ data: cond.sparkline || [] }],
+            chart: { type: 'line', height: 28, width: 64, sparkline: { enabled: true } },
+            stroke: { curve: 'smooth', width: 2 },
+            colors: [cond.color],
+            tooltip: { enabled: false }
+        }).render();
+    });
+
+    // ---- Tooltip Bootstrap (info coverage + tabel keterkaitan) ----
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        if (window.bootstrap && window.bootstrap.Tooltip) {
+            new bootstrap.Tooltip(el);
+        }
+    });
+
+    // ---- Banner: kutipan bergilir ----
+    var heroQuotes = [
+        'Karyawan yang sehat adalah investasi terbaik untuk perusahaan yang kuat.',
+        'Pola makan yang baik hari ini, produktivitas yang lebih baik esok hari.',
+        'Kecil tapi konsisten: catat asupan nutrisi setiap hari.'
+    ];
+    var heroQuoteIndex = 0;
+    var heroQuoteEl = document.getElementById('hn-hero-quote-text');
+    var heroQuoteBtn = document.getElementById('hn-hero-quote-next');
+    if (heroQuoteEl && heroQuoteBtn) {
+        heroQuoteBtn.addEventListener('click', function () {
+            heroQuoteIndex = (heroQuoteIndex + 1) % heroQuotes.length;
+            heroQuoteEl.textContent = heroQuotes[heroQuoteIndex];
+        });
+    }
 
     // ---- Heatmap: Pola Pencatatan Nutrisi ----
     var heatmapEl = document.getElementById('hnHeatmap');
@@ -760,56 +889,86 @@
       <iconify-icon icon="solar:calendar-outline"></iconify-icon>
       {{ $dateRangeLabel ?? '-' }}
     </button>
-    <select class="form-select hn-filter-select">
-      <option>Semua Site</option>
-      @foreach ($filterOptions['sites'] as $site)
-        <option>{{ $site }}</option>
-      @endforeach
-    </select>
-    <select class="form-select hn-filter-select">
-      <option>Semua Perusahaan</option>
-      @foreach ($filterOptions['companies'] as $company)
-        <option>{{ $company }}</option>
-      @endforeach
-    </select>
+    <div class="hn-select-wrap">
+      <iconify-icon icon="solar:map-point-linear" class="hn-select-wrap__icon"></iconify-icon>
+      <select class="form-select hn-filter-select">
+        <option>Semua Site</option>
+        @foreach ($filterOptions['sites'] as $site)
+          <option>{{ $site }}</option>
+        @endforeach
+      </select>
+    </div>
+    <div class="hn-select-wrap">
+      <iconify-icon icon="solar:buildings-2-linear" class="hn-select-wrap__icon"></iconify-icon>
+      <select class="form-select hn-filter-select">
+        <option>Semua Perusahaan</option>
+        @foreach ($filterOptions['companies'] as $company)
+          <option>{{ $company }}</option>
+        @endforeach
+      </select>
+    </div>
     <a href="{{ route('evaluasi-well.health-nutrition.export') }}" class="btn btn-success-600 hn-export-btn">
       <iconify-icon icon="solar:export-bold"></iconify-icon>
       Export
+      <iconify-icon icon="solar:alt-arrow-down-linear" class="text-sm"></iconify-icon>
     </a>
   </div>
 </div>
 
 {{-- Data quality: cakupan & matched records — jangan anggap kosong = 0 --}}
-<div class="hn-coverage-strip d-flex flex-wrap align-items-center gap-16 mb-16">
-  <div class="hn-coverage-item d-flex align-items-center gap-8">
-    <iconify-icon icon="solar:document-medicine-bold" class="text-secondary-light"></iconify-icon>
+<div class="hn-coverage-card d-flex flex-wrap align-items-center gap-16 mb-16">
+  <div class="hn-coverage-item d-flex align-items-center gap-10">
+    <span class="hn-coverage-icon hn-coverage-icon--green"><iconify-icon icon="solar:users-group-rounded-bold"></iconify-icon></span>
     <div>
       <div class="hn-coverage-value">{{ $fmt($coverage['total_mcu']) }}</div>
       <div class="hn-coverage-label">MCU records</div>
     </div>
   </div>
-  <div class="hn-coverage-item d-flex align-items-center gap-8">
-    <iconify-icon icon="solar:notebook-bold" class="text-secondary-light"></iconify-icon>
+  <span class="hn-coverage-divider"></span>
+  <div class="hn-coverage-item d-flex align-items-center gap-10">
+    <span class="hn-coverage-icon hn-coverage-icon--blue"><iconify-icon icon="solar:notebook-bold"></iconify-icon></span>
     <div>
       <div class="hn-coverage-value">{{ $fmt($coverage['total_nutrition']) }}</div>
       <div class="hn-coverage-label">Nutrition records</div>
     </div>
   </div>
-  <div class="hn-coverage-item d-flex align-items-center gap-8">
-    <iconify-icon icon="solar:link-bold" class="text-success-main"></iconify-icon>
+  <span class="hn-coverage-divider"></span>
+  <div class="hn-coverage-item d-flex align-items-center gap-10">
+    <span class="hn-coverage-icon hn-coverage-icon--green"><iconify-icon icon="solar:link-bold"></iconify-icon></span>
     <div>
-      <div class="hn-coverage-value">{{ $fmt($coverage['matched_total']) }} <span class="text-xs fw-medium text-secondary-light">({{ $fmt($coverage['matched_pct_of_mcu'], 1) }}%)</span></div>
-      <div class="hn-coverage-label">Successfully matched — dipakai untuk semua analisis MCU × Nutrisi di bawah</div>
+      <div class="hn-coverage-value d-flex align-items-center gap-6">
+        {{ $fmt($coverage['matched_total']) }} <span class="text-xs fw-medium text-secondary-light">({{ $fmt($coverage['matched_pct_of_mcu'], 1) }}%)</span>
+      </div>
+      <div class="hn-coverage-label d-flex align-items-center gap-4">
+        Successfully matched
+        <iconify-icon icon="solar:info-circle-linear" data-bs-toggle="tooltip" title="Dipakai sebagai denominator untuk semua analisis MCU × Nutrisi di bawah."></iconify-icon>
+      </div>
     </div>
+  </div>
+  <span class="hn-coverage-divider d-none d-xl-block"></span>
+  <div class="hn-coverage-desc d-none d-xl-block">
+    Data ini digunakan untuk semua analisis<br>MCU × Nutrisi di bawah.
+  </div>
+  <div class="hn-quality-box hn-quality-box--{{ $coverage['quality_level'] }} ms-auto">
+    <span class="hn-quality-box__icon"><iconify-icon icon="{{ $coverage['quality_level'] === 'good' ? 'solar:shield-check-bold' : 'solar:danger-triangle-bold' }}"></iconify-icon></span>
+    <div class="min-w-0">
+      <div class="hn-quality-box__title">{{ $coverage['quality_title'] }}</div>
+      <div class="hn-quality-box__desc">{{ $coverage['quality_message'] }}</div>
+    </div>
+    <iconify-icon icon="solar:alt-arrow-right-linear" class="hn-quality-box__chevron"></iconify-icon>
   </div>
 </div>
 
 <ul class="nav hn-tabs mb-16" role="tablist">
   <li class="nav-item" role="presentation">
-    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#hnTabDashboard" type="button" role="tab">Dashboard</button>
+    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#hnTabDashboard" type="button" role="tab">
+      <iconify-icon icon="solar:widget-5-bold"></iconify-icon> Dashboard
+    </button>
   </li>
   <li class="nav-item" role="presentation">
-    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#hnTabRingkasan" type="button" role="tab">Ringkasan</button>
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#hnTabRingkasan" type="button" role="tab">
+      <iconify-icon icon="solar:chart-square-linear"></iconify-icon> Ringkasan
+    </button>
   </li>
 </ul>
 
@@ -817,10 +976,10 @@
 <div class="tab-pane fade show active" id="hnTabDashboard" role="tabpanel">
 
   {{-- Banner --}}
-  <div class="card wc-card mb-20">
-    <img class="wc-card__bg" src="{{ asset('evaluasi-well-assets/images/wellness/bg-calorie.png') }}" alt="" aria-hidden="true">
+  <div class="card wc-card hn-hero mb-20">
+    <img class="wc-card__bg hn-hero__bg" src="{{ asset('evaluasi-well-assets/images/wellness/bg-calorie.png') }}" alt="" aria-hidden="true">
     <div class="card-body p-24">
-      <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
         <div class="d-flex align-items-start gap-3 min-w-0">
           <span class="wc-card__head-icon">
             <iconify-icon icon="mdi:food-apple"></iconify-icon>
@@ -830,9 +989,18 @@
             <span class="wc-card__subtitle">Pantau pola makan karyawan dan keterkaitannya dengan hasil MCU secara berkala.</span>
           </div>
         </div>
-        <div class="wc-card__badge">
-          <iconify-icon icon="solar:link-bold"></iconify-icon>
-          <span>{{ $fmt($coverage['matched_total']) }} matched ({{ $fmt($coverage['matched_pct_of_mcu'], 1) }}%)</span>
+        <div class="hn-hero__quote d-none d-xl-flex">
+          <iconify-icon icon="mdi:format-quote-close"></iconify-icon>
+          <span id="hn-hero-quote-text">Karyawan yang sehat adalah investasi terbaik untuk perusahaan yang kuat.</span>
+        </div>
+        <div class="d-flex align-items-center gap-8">
+          <div class="wc-card__badge">
+            <iconify-icon icon="solar:link-bold"></iconify-icon>
+            <span>{{ $fmt($coverage['matched_total']) }} matched ({{ $fmt($coverage['matched_pct_of_mcu'], 1) }}%)</span>
+          </div>
+          <button type="button" id="hn-hero-quote-next" class="hn-hero__next" aria-label="Tips berikutnya">
+            <iconify-icon icon="solar:arrow-right-linear"></iconify-icon>
+          </button>
         </div>
       </div>
     </div>
@@ -841,26 +1009,31 @@
   {{-- 4 KPI utama --}}
   <div class="row g-3 mb-20">
     @foreach ($kpiTop as $key => $kpi)
+    @php $kpiPillClass = $kpi['color'] === 'danger' ? 'bg-danger-focus text-danger-main' : 'bg-success-focus text-success-main'; @endphp
     <div class="col-xxl-3 col-sm-6">
-      <div class="card radius-8 border-0 shadow-sm h-100">
-        <div class="card-body p-20">
-          <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-            <div>
-              <p class="fw-medium text-secondary-light mb-4">{{ $kpi['label'] }}</p>
-              <h6 class="mb-0">{{ $fmt($kpi['value']) }}</h6>
-            </div>
-            <div class="w-50-px h-50-px rounded-circle d-flex justify-content-center align-items-center flex-shrink-0 bg-{{ $kpi['color'] }}-600">
-              <iconify-icon icon="{{ $kpi['icon'] }}" class="text-white text-2xl mb-0"></iconify-icon>
-            </div>
+      <div class="card radius-8 border-0 shadow-sm h-100 hn-kpi-card">
+        <div class="card-body p-20 d-flex flex-column">
+          <div class="d-flex align-items-center gap-8 mb-10">
+            <span class="w-32-px h-32-px rounded-circle d-flex justify-content-center align-items-center flex-shrink-0 bg-{{ $kpi['color'] }}-600">
+              <iconify-icon icon="{{ $kpi['icon'] }}" class="text-white text-md mb-0"></iconify-icon>
+            </span>
+            <span class="fw-medium text-secondary-light text-sm text-truncate">{{ $kpi['label'] }}</span>
           </div>
-          <div class="d-flex align-items-center justify-content-between mt-16">
-            <p class="fw-medium mb-0 text-sm">
-              <span class="bg-success-focus text-success-main px-8 py-2 rounded-pill fw-semibold text-sm d-inline-flex align-items-center gap-1">
-                <iconify-icon icon="solar:arrow-up-bold"></iconify-icon> {{ $fmt($kpi['delta_pct'], 1) }}%
-              </span>
-              <span class="text-secondary-light">{{ isset($kpi['sub_pct']) ? $fmt($kpi['sub_pct'], 1).'% ' : '' }}{{ $kpi['sub_label'] }}</span>
-            </p>
-            <div id="hn-spark-{{ $key }}" style="height:32px;width:72px;"></div>
+          <div class="d-flex align-items-end justify-content-between gap-2 flex-grow-1">
+            <div>
+              <h6 class="mb-8">{{ $fmt($kpi['value']) }}</h6>
+              <div class="d-flex align-items-center gap-6 flex-wrap">
+                <span class="{{ $kpiPillClass }} px-8 py-2 rounded-pill fw-semibold text-xs d-inline-flex align-items-center gap-1">
+                  <iconify-icon icon="solar:arrow-up-bold"></iconify-icon> {{ $fmt($kpi['delta_pct'], 1) }}%
+                </span>
+                <span class="text-secondary-light text-xs">{{ isset($kpi['sub_pct']) ? $fmt($kpi['sub_pct'], 1).'% ' : '' }}{{ $kpi['sub_label'] }}</span>
+              </div>
+            </div>
+            <div id="hn-spark-{{ $key }}" class="hn-kpi-card__spark"></div>
+          </div>
+          <div class="hn-kpi-card__footer d-flex align-items-center gap-8 mt-16 pt-12">
+            <iconify-icon icon="{{ $kpi['icon'] }}" class="text-secondary-light text-sm"></iconify-icon>
+            <span class="text-secondary-light text-xs text-truncate">{{ $kpi['caption'] }}</span>
           </div>
         </div>
       </div>
@@ -868,25 +1041,42 @@
     @endforeach
   </div>
 
+  {{-- Header seksi kondisi kesehatan --}}
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-12">
+    <div class="d-flex align-items-center gap-8">
+      <span class="hn-section-bar"></span>
+      <iconify-icon icon="solar:heart-pulse-bold" class="text-success-main text-lg"></iconify-icon>
+      <h6 class="fw-bold text-lg mb-0">Kondisi Kesehatan Karyawan (Hasil MCU)</h6>
+    </div>
+    <button type="button" class="hn-detail-analysis-btn" title="Analisis per kondisi — segera hadir">
+      <iconify-icon icon="solar:chart-2-bold"></iconify-icon>
+      Lihat Detail Analisis
+      <iconify-icon icon="solar:alt-arrow-right-linear"></iconify-icon>
+    </button>
+  </div>
+
   {{-- 6 KPI kondisi --}}
   <div class="row g-3 mb-20">
     @foreach ($kpiConditions as $cond)
     <div class="col-xxl-2 col-md-4 col-sm-6">
-      <div class="card radius-8 border-0 shadow-sm h-100">
-        <div class="card-body p-16 d-flex align-items-center gap-12">
-          <div class="w-40-px h-40-px rounded-circle d-flex justify-content-center align-items-center flex-shrink-0" style="background: {{ $cond['color'] }}">
-            <iconify-icon icon="{{ $cond['icon'] }}" class="text-white text-lg mb-0"></iconify-icon>
-          </div>
-          <div class="min-w-0">
-            <span class="text-secondary-light text-xs fw-medium d-block text-truncate">{{ $cond['label'] }}</span>
-            <span class="text-secondary-light text-xs d-block text-truncate">{{ $cond['sub_label'] }}</span>
-            <div class="d-flex align-items-center gap-2 mt-2">
-              <h6 class="mb-0 text-md">{{ $fmt($cond['value']) }}</h6>
-              <span class="text-secondary-light text-xs">{{ $fmt($cond['pct'], 1) }}%</span>
+      <div class="card radius-8 border-0 shadow-sm h-100 hn-cond-card" style="background: {{ $cond['bg'] }}">
+        <div class="card-body p-16 d-flex flex-column">
+          <div class="d-flex align-items-center gap-10 mb-10">
+            <span class="w-40-px h-40-px rounded-circle d-flex justify-content-center align-items-center flex-shrink-0" style="background: {{ $cond['color'] }}">
+              <iconify-icon icon="{{ $cond['icon'] }}" class="text-white text-lg mb-0"></iconify-icon>
+            </span>
+            <div class="min-w-0">
+              <span class="fw-semibold text-sm d-block text-truncate" style="color: {{ $cond['color'] }}">{{ $cond['label'] }}</span>
+              <span class="text-secondary-light text-xs d-block text-truncate">{{ $cond['sub_label'] }}</span>
             </div>
-            <span class="text-success-main text-xs fw-semibold d-inline-flex align-items-center gap-1">
+          </div>
+          <h6 class="mb-2 text-xl" style="color: {{ $cond['color'] }}">{{ $fmt($cond['value']) }}</h6>
+          <span class="text-secondary-light text-xs mb-8">{{ $fmt($cond['pct'], 1) }}% dari total MCU</span>
+          <div class="d-flex align-items-end justify-content-between gap-2 mt-auto">
+            <span class="text-xs fw-semibold d-inline-flex align-items-center gap-1" style="color: {{ $cond['color'] }}">
               <iconify-icon icon="solar:arrow-up-bold"></iconify-icon> {{ $fmt($cond['delta_pct'], 1) }}%
             </span>
+            <div id="hn-cond-spark-{{ $cond['key'] }}" class="hn-cond-card__spark"></div>
           </div>
         </div>
       </div>
