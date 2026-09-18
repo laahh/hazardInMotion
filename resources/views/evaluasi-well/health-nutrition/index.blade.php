@@ -123,59 +123,6 @@
   .hn-banner__text h6 { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
   .hn-banner__text span { font-size: 13px; opacity: .9; }
 
-  .hn-kpi-card {
-    border: 1px solid #E2E8F0;
-    border-radius: 14px;
-    padding: 18px 20px;
-    background: #fff;
-    height: 100%;
-  }
-  .hn-kpi-card__icon {
-    width: 42px; height: 42px; border-radius: 12px;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 20px; color: #fff; flex-shrink: 0;
-  }
-  .hn-kpi-card__value { font-size: 24px; font-weight: 700; color: #0F172A; line-height: 1.2; }
-  .hn-kpi-card__sub { font-size: 12px; color: #64748B; }
-  .hn-kpi-card__delta { font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
-  .hn-kpi-card__delta--up { color: #16A34A; }
-  .hn-kpi-card__spark { height: 32px; width: 84px; }
-  .bg-primary-soft { background: #487FFF; }
-  .bg-danger-soft { background: #EF4444; }
-  .bg-success-soft { background: #16A34A; }
-  .bg-info-soft { background: #0EA5E9; }
-
-  .hn-condition-card {
-    border: 1px solid #E2E8F0;
-    border-radius: 14px;
-    padding: 14px 16px;
-    background: #fff;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .hn-condition-card__icon {
-    width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
-    display: inline-flex; align-items: center; justify-content: center;
-    color: #fff; font-size: 18px;
-  }
-  .hn-condition-card__value { font-size: 19px; font-weight: 700; color: #0F172A; line-height: 1.2; }
-  .hn-condition-card__label { font-size: 12.5px; font-weight: 600; color: #334155; }
-  .hn-condition-card__sub { font-size: 11px; color: #94A3B8; }
-  .hn-condition-card__delta { font-size: 11.5px; font-weight: 600; color: #16A34A; }
-
-  .hn-card {
-    border: 1px solid #E2E8F0;
-    border-radius: 14px;
-    background: #fff;
-    height: 100%;
-  }
-  .hn-card__head { padding: 18px 20px 0; }
-  .hn-card__title { font-size: 15px; font-weight: 700; color: #0F172A; margin: 0; }
-  .hn-card__subtitle { font-size: 12.5px; color: #64748B; }
-  .hn-card__body { padding: 16px 20px 20px; }
-
   #hnHeatmap .apexcharts-tooltip { font-size: 12px; }
 
   .hn-corr-table { width: 100%; border-collapse: separate; border-spacing: 4px; font-size: 12px; }
@@ -194,18 +141,6 @@
     border-radius: 999px;
   }
   .hn-macro-tab.active { background: #16A34A; border-color: #16A34A; color: #fff; }
-
-  .hn-analysis-card {
-    border: 1px solid #E2E8F0;
-    border-radius: 14px;
-    background: #fff;
-    padding: 18px 20px;
-    height: 100%;
-  }
-  .hn-analysis-card__title { font-size: 14px; font-weight: 700; color: #0F172A; }
-  .hn-analysis-card__legend-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #334155; }
-  .hn-analysis-card__dot { width: 22px; height: 22px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; flex-shrink: 0; }
-  .hn-analysis-card__insight { background: #F0FDF4; border: 1px solid #BBF7D0; color: #166534; font-size: 12px; border-radius: 8px; padding: 8px 10px; }
 
   .hn-bottom-banner {
     border-radius: 16px;
@@ -226,7 +161,7 @@
     border: 1px solid #E2E8F0; background: #fff; color: #475569;
     font-size: 12.5px; font-weight: 600; padding: 6px 14px; border-radius: 999px;
   }
-  .hn-emp-tab.active { background: #0F172A; border-color: #0F172A; color: #fff; }
+  .hn-emp-tab.active { background: #16A34A; border-color: #16A34A; color: #fff; }
 
   .dt-container:has(#healthNutritionTable) .dt-layout-row,
   #healthNutritionTable_wrapper .dt-layout-row {
@@ -684,21 +619,26 @@
   <div class="row g-3 mb-20">
     @foreach ($kpiTop as $key => $kpi)
     <div class="col-xxl-3 col-sm-6">
-      <div class="hn-kpi-card">
-        <div class="d-flex align-items-start justify-content-between mb-12">
-          <span class="hn-kpi-card__icon bg-{{ $kpi['color'] }}-600" style="background:{{ ['primary'=>'#487FFF','danger'=>'#EF4444','success'=>'#16A34A','info'=>'#0EA5E9'][$kpi['color']] ?? '#487FFF' }}">
-            <iconify-icon icon="{{ $kpi['icon'] }}"></iconify-icon>
-          </span>
-          <div id="hn-spark-{{ $key }}" class="hn-kpi-card__spark"></div>
-        </div>
-        <div class="hn-kpi-card__value">{{ $fmt($kpi['value']) }}</div>
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-          <span class="hn-kpi-card__delta hn-kpi-card__delta--up">
-            <iconify-icon icon="solar:arrow-up-bold"></iconify-icon> {{ $fmt($kpi['delta_pct'], 1) }}%
-          </span>
-          <span class="hn-kpi-card__sub">
-            {{ isset($kpi['sub_pct']) ? $fmt($kpi['sub_pct'], 1).'% ' : '' }}{{ $kpi['sub_label'] }}
-          </span>
+      <div class="card radius-8 border-0 shadow-sm h-100">
+        <div class="card-body p-20">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+              <p class="fw-medium text-secondary-light mb-4">{{ $kpi['label'] }}</p>
+              <h6 class="mb-0">{{ $fmt($kpi['value']) }}</h6>
+            </div>
+            <div class="w-50-px h-50-px rounded-circle d-flex justify-content-center align-items-center flex-shrink-0" style="background: {{ ['primary'=>'#487FFF','danger'=>'#EF4444','success'=>'#16A34A','info'=>'#0EA5E9'][$kpi['color']] ?? '#487FFF' }}">
+              <iconify-icon icon="{{ $kpi['icon'] }}" class="text-white text-2xl mb-0"></iconify-icon>
+            </div>
+          </div>
+          <div class="d-flex align-items-center justify-content-between mt-16">
+            <p class="fw-medium mb-0 text-sm">
+              <span class="bg-success-focus text-success-main px-8 py-2 rounded-pill fw-semibold text-sm d-inline-flex align-items-center gap-1">
+                <iconify-icon icon="solar:arrow-up-bold"></iconify-icon> {{ $fmt($kpi['delta_pct'], 1) }}%
+              </span>
+              <span class="text-secondary-light">{{ isset($kpi['sub_pct']) ? $fmt($kpi['sub_pct'], 1).'% ' : '' }}{{ $kpi['sub_label'] }}</span>
+            </p>
+            <div id="hn-spark-{{ $key }}" style="height:32px;width:72px;"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -709,18 +649,22 @@
   <div class="row g-3 mb-20">
     @foreach ($kpiConditions as $cond)
     <div class="col-xxl-2 col-md-4 col-sm-6">
-      <div class="hn-condition-card">
-        <span class="hn-condition-card__icon" style="background: {{ $cond['color'] }}">
-          <iconify-icon icon="{{ $cond['icon'] }}"></iconify-icon>
-        </span>
-        <div class="min-w-0">
-          <div class="hn-condition-card__label text-truncate">{{ $cond['label'] }}</div>
-          <div class="hn-condition-card__sub text-truncate">{{ $cond['sub_label'] }}</div>
-          <div class="d-flex align-items-center gap-2 mt-2">
-            <span class="hn-condition-card__value">{{ $fmt($cond['value']) }}</span>
-            <span class="hn-condition-card__sub">{{ $fmt($cond['pct'], 1) }}%</span>
+      <div class="card radius-8 border-0 shadow-sm h-100">
+        <div class="card-body p-16 d-flex align-items-center gap-12">
+          <div class="w-40-px h-40-px rounded-circle d-flex justify-content-center align-items-center flex-shrink-0" style="background: {{ $cond['color'] }}">
+            <iconify-icon icon="{{ $cond['icon'] }}" class="text-white text-lg mb-0"></iconify-icon>
           </div>
-          <span class="hn-condition-card__delta"><iconify-icon icon="solar:arrow-up-bold"></iconify-icon> {{ $fmt($cond['delta_pct'], 1) }}%</span>
+          <div class="min-w-0">
+            <span class="text-secondary-light text-xs fw-medium d-block text-truncate">{{ $cond['label'] }}</span>
+            <span class="text-secondary-light text-xs d-block text-truncate">{{ $cond['sub_label'] }}</span>
+            <div class="d-flex align-items-center gap-2 mt-2">
+              <h6 class="mb-0 text-md">{{ $fmt($cond['value']) }}</h6>
+              <span class="text-secondary-light text-xs">{{ $fmt($cond['pct'], 1) }}%</span>
+            </div>
+            <span class="text-success-main text-xs fw-semibold d-inline-flex align-items-center gap-1">
+              <iconify-icon icon="solar:arrow-up-bold"></iconify-icon> {{ $fmt($cond['delta_pct'], 1) }}%
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -730,17 +674,17 @@
   {{-- Heatmap + Donut kepatuhan --}}
   <div class="row g-3 mb-20 align-items-stretch">
     <div class="col-xxl-8">
-      <div class="hn-card">
-        <div class="hn-card__head d-flex align-items-start justify-content-between flex-wrap gap-2">
-          <div>
-            <h6 class="hn-card__title"><span class="text-success-main">|</span> Pola Pencatatan Nutrisi Karyawan</h6>
-            <span class="hn-card__subtitle">Jumlah karyawan yang mencatat asupan kalori</span>
+      <div class="card radius-8 border-0 shadow-sm h-100">
+        <div class="card-body p-24">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-16">
+            <div>
+              <h6 class="fw-bold text-lg mb-2">Pola Pencatatan Nutrisi Karyawan</h6>
+              <span class="text-sm text-secondary-light">Jumlah karyawan yang mencatat asupan kalori</span>
+            </div>
+            <select class="form-select form-select-sm" style="width:auto">
+              <option>Jumlah user aktif</option>
+            </select>
           </div>
-          <select class="form-select form-select-sm" style="width:auto">
-            <option>Jumlah user aktif</option>
-          </select>
-        </div>
-        <div class="hn-card__body">
           <div id="hnHeatmap"></div>
           <div class="d-flex flex-wrap align-items-center gap-3 mt-8">
             <span class="text-xs fw-medium text-secondary-light">Jumlah user aktif</span>
@@ -754,11 +698,9 @@
       </div>
     </div>
     <div class="col-xxl-4">
-      <div class="hn-card">
-        <div class="hn-card__head">
-          <h6 class="hn-card__title"><span class="text-success-main">|</span> Kepatuhan Pencatatan Nutrisi</h6>
-        </div>
-        <div class="hn-card__body">
+      <div class="card radius-8 border-0 shadow-sm h-100">
+        <div class="card-body p-24">
+          <h6 class="fw-bold text-lg mb-16">Kepatuhan Pencatatan Nutrisi</h6>
           <div id="hnComplianceDonut"></div>
           <div class="d-flex flex-column gap-10 mt-8">
             @foreach ($compliance['legend'] as $item)
@@ -779,12 +721,10 @@
   {{-- Korelasi + Makronutrien --}}
   <div class="row g-3 mb-20 align-items-stretch">
     <div class="col-xxl-6">
-      <div class="hn-card">
-        <div class="hn-card__head">
-          <h6 class="hn-card__title"><span class="text-success-main">|</span> Korelasi Hasil MCU dengan Pola Nutrisi</h6>
-          <span class="hn-card__subtitle">Semakin gelap menunjukkan korelasi semakin tinggi</span>
-        </div>
-        <div class="hn-card__body">
+      <div class="card radius-8 border-0 shadow-sm h-100">
+        <div class="card-body p-24">
+          <h6 class="fw-bold text-lg mb-2">Korelasi Hasil MCU dengan Pola Nutrisi</h6>
+          <span class="text-sm text-secondary-light d-block mb-16">Semakin gelap menunjukkan korelasi semakin tinggi</span>
           <div class="table-responsive">
             <table class="hn-corr-table">
               <thead>
@@ -820,11 +760,9 @@
       </div>
     </div>
     <div class="col-xxl-6">
-      <div class="hn-card">
-        <div class="hn-card__head d-flex align-items-start justify-content-between flex-wrap gap-2">
-          <h6 class="hn-card__title"><span class="text-success-main">|</span> Makronutrien Karyawan Berisiko</h6>
-        </div>
-        <div class="hn-card__body">
+      <div class="card radius-8 border-0 shadow-sm h-100">
+        <div class="card-body p-24">
+          <h6 class="fw-bold text-lg mb-16">Makronutrien Karyawan Berisiko</h6>
           <div class="d-flex flex-wrap gap-2 mb-16">
             @foreach ($macroChart['tabs'] as $tabKey => $tabLabel)
               <button type="button" class="hn-macro-tab {{ $loop->first ? 'active' : '' }}" data-tab="{{ $tabKey }}">{{ $tabLabel }}</button>
@@ -841,25 +779,27 @@
   <div class="row g-3 mb-20">
     @foreach ($analysisCards as $card)
     <div class="col-xxl-4 col-md-6">
-      <div class="hn-analysis-card d-flex flex-column gap-12">
-        <h6 class="hn-analysis-card__title mb-0">{{ $card['title'] }}</h6>
-        <div class="d-flex align-items-center gap-12">
-          <div id="hn-analysis-donut-{{ $card['key'] }}" style="width:150px;height:150px;flex-shrink:0;"></div>
-          <div class="d-flex flex-column gap-8 min-w-0">
-            @foreach ($card['legend'] as $item)
-            <div class="hn-analysis-card__legend-item">
-              <span class="hn-analysis-card__dot" style="background: {{ $item['color'] }}">
-                <iconify-icon icon="{{ $item['icon'] }}"></iconify-icon>
-              </span>
-              <span class="text-truncate">{{ $item['label'] }} <strong>{{ $fmt($item['pct'], 1) }}%</strong>{{ isset($item['count']) ? ' ('.$fmt($item['count']).')' : '' }}</span>
+      <div class="card radius-8 border-0 shadow-sm h-100">
+        <div class="card-body p-24 d-flex flex-column gap-12">
+          <h6 class="fw-bold text-md mb-0">{{ $card['title'] }}</h6>
+          <div class="d-flex align-items-center gap-12">
+            <div id="hn-analysis-donut-{{ $card['key'] }}" style="width:150px;height:150px;flex-shrink:0;"></div>
+            <div class="d-flex flex-column gap-8 min-w-0">
+              @foreach ($card['legend'] as $item)
+              <div class="d-flex align-items-center gap-8 text-sm">
+                <span class="w-24-px h-24-px rounded-circle d-inline-flex justify-content-center align-items-center flex-shrink-0" style="background: {{ $item['color'] }}">
+                  <iconify-icon icon="{{ $item['icon'] }}" class="text-white text-sm mb-0"></iconify-icon>
+                </span>
+                <span class="text-truncate">{{ $item['label'] }} <strong>{{ $fmt($item['pct'], 1) }}%</strong>{{ isset($item['count']) ? ' ('.$fmt($item['count']).')' : '' }}</span>
+              </div>
+              @endforeach
             </div>
-            @endforeach
           </div>
+          <div class="bg-success-focus text-success-main border border-success-100 text-sm radius-8 px-12 py-8">{{ $card['insight'] }}</div>
+          <a href="#" class="text-primary-600 hover-text-primary text-sm fw-medium d-inline-flex align-items-center gap-1">
+            Lihat Detail <iconify-icon icon="solar:alt-arrow-right-linear"></iconify-icon>
+          </a>
         </div>
-        <div class="hn-analysis-card__insight">{{ $card['insight'] }}</div>
-        <a href="#" class="text-primary-600 hover-text-primary text-sm fw-medium d-inline-flex align-items-center gap-1">
-          Lihat Detail <iconify-icon icon="solar:alt-arrow-right-linear"></iconify-icon>
-        </a>
       </div>
     </div>
     @endforeach
@@ -868,23 +808,23 @@
   {{-- Tren + Perbandingan --}}
   <div class="row g-3 mb-20 align-items-stretch">
     <div class="col-xxl-6">
-      <div class="hn-card">
-        <div class="hn-card__head d-flex align-items-start justify-content-between flex-wrap gap-2">
-          <h6 class="hn-card__title"><span class="text-success-main">|</span> Tren Karyawan Berisiko</h6>
-          <select class="form-select form-select-sm" style="width:auto"><option>Bulanan</option></select>
-        </div>
-        <div class="hn-card__body">
+      <div class="card radius-8 border-0 shadow-sm h-100">
+        <div class="card-body p-24">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-16">
+            <h6 class="fw-bold text-lg mb-0">Tren Karyawan Berisiko</h6>
+            <select class="form-select form-select-sm" style="width:auto"><option>Bulanan</option></select>
+          </div>
           <div id="hnTrendChart"></div>
         </div>
       </div>
     </div>
     <div class="col-xxl-6">
-      <div class="hn-card">
-        <div class="hn-card__head d-flex align-items-start justify-content-between flex-wrap gap-2">
-          <h6 class="hn-card__title"><span class="text-success-main">|</span> Perbandingan Rata-rata Asupan Nutrisi</h6>
-          <select class="form-select form-select-sm" style="width:auto"><option>Berisiko vs Tidak Berisiko</option></select>
-        </div>
-        <div class="hn-card__body">
+      <div class="card radius-8 border-0 shadow-sm h-100">
+        <div class="card-body p-24">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-16">
+            <h6 class="fw-bold text-lg mb-0">Perbandingan Rata-rata Asupan Nutrisi</h6>
+            <select class="form-select form-select-sm" style="width:auto"><option>Berisiko vs Tidak Berisiko</option></select>
+          </div>
           <div id="hnComparisonChart"></div>
         </div>
       </div>
@@ -892,51 +832,57 @@
   </div>
 
   {{-- Tabel Daftar Karyawan Risiko Tinggi --}}
-  <div class="hn-card mb-20">
-    <div class="hn-card__head">
-      <h6 class="hn-card__title mb-12"><span class="text-success-main">|</span> Daftar Karyawan dengan Risiko Tinggi</h6>
+  <div class="card radius-8 border-0 shadow-sm mb-20">
+    <div class="card-header border-bottom bg-base py-16 px-24">
+      <h6 class="text-lg fw-semibold mb-0">Daftar Karyawan dengan Risiko Tinggi</h6>
     </div>
-    <div class="hn-card__body pt-0">
+    <div class="card-body p-24">
       <div class="hn-emp-tabs mb-16">
         @foreach ($employeeTable['tabs'] as $tabKey => $tab)
           <button type="button" class="hn-emp-tab {{ $loop->first ? 'active' : '' }}" data-tab="{{ $tabKey }}">{{ $tab['label'] }} ({{ $fmt($tab['total']) }})</button>
         @endforeach
       </div>
-      <div class="row g-2 align-items-center mb-16">
-        <div class="col-lg-4 col-md-6">
-          <div class="position-relative">
-            <iconify-icon icon="solar:magnifer-linear" class="position-absolute top-50 start-0 translate-middle-y ms-12 text-secondary-light"></iconify-icon>
-            <input type="search" id="hn-emp-search" class="form-control form-control-sm ps-32" placeholder="Cari nama / NIK / perusahaan...">
+      <div class="bg-neutral-50 border radius-8 p-16 mb-20">
+        <div class="row g-3 align-items-end">
+          <div class="col-lg-4 col-md-6">
+            <label for="hn-emp-search" class="form-label text-sm fw-medium mb-6">Cari</label>
+            <div class="position-relative">
+              <iconify-icon icon="solar:magnifer-linear" class="position-absolute top-50 start-0 translate-middle-y ms-12 text-secondary-light"></iconify-icon>
+              <input type="search" id="hn-emp-search" class="form-control form-control-sm ps-32" placeholder="Cari nama / NIK / perusahaan...">
+            </div>
           </div>
-        </div>
-        <div class="col-lg-2 col-md-6">
-          <select id="hn-emp-site" class="form-select form-select-sm">
-            <option value="">Semua Site</option>
-            @foreach ($filterOptions['sites'] as $site)
-              <option value="{{ $site }}">{{ $site }}</option>
-            @endforeach
-          </select>
-        </div>
-        <div class="col-lg-2 col-md-6">
-          <select id="hn-emp-company" class="form-select form-select-sm">
-            <option value="">Semua Perusahaan</option>
-            @foreach ($filterOptions['companies'] as $company)
-              <option value="{{ $company }}">{{ $company }}</option>
-            @endforeach
-          </select>
-        </div>
-        <div class="col-lg-2 col-md-6">
-          <select id="hn-emp-status" class="form-select form-select-sm">
-            <option value="">Status Nutrisi</option>
-            <option value="Perlu Intervensi">Perlu Intervensi</option>
-            <option value="Pantau">Pantau</option>
-            <option value="Baik">Baik</option>
-          </select>
-        </div>
-        <div class="col-lg-2 col-md-6">
-          <a id="hn-export-btn" href="{{ route('evaluasi-well.health-nutrition.export') }}" class="btn btn-sm btn-success-600 w-100 d-inline-flex align-items-center justify-content-center gap-1">
-            <iconify-icon icon="solar:file-download-bold"></iconify-icon> Export
-          </a>
+          <div class="col-lg-2 col-md-6">
+            <label for="hn-emp-site" class="form-label text-sm fw-medium mb-6">Site</label>
+            <select id="hn-emp-site" class="form-select form-select-sm">
+              <option value="">Semua Site</option>
+              @foreach ($filterOptions['sites'] as $site)
+                <option value="{{ $site }}">{{ $site }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-lg-2 col-md-6">
+            <label for="hn-emp-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
+            <select id="hn-emp-company" class="form-select form-select-sm">
+              <option value="">Semua Perusahaan</option>
+              @foreach ($filterOptions['companies'] as $company)
+                <option value="{{ $company }}">{{ $company }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-lg-2 col-md-6">
+            <label for="hn-emp-status" class="form-label text-sm fw-medium mb-6">Status Nutrisi</label>
+            <select id="hn-emp-status" class="form-select form-select-sm">
+              <option value="">Semua</option>
+              <option value="Perlu Intervensi">Perlu Intervensi</option>
+              <option value="Pantau">Pantau</option>
+              <option value="Baik">Baik</option>
+            </select>
+          </div>
+          <div class="col-lg-2 col-md-6">
+            <a id="hn-export-btn" href="{{ route('evaluasi-well.health-nutrition.export') }}" class="btn btn-sm btn-success-600 w-100 d-inline-flex align-items-center justify-content-center gap-1">
+              <iconify-icon icon="solar:file-download-bold"></iconify-icon> Export
+            </a>
+          </div>
         </div>
       </div>
       <div class="table-responsive">
@@ -993,8 +939,8 @@
 </div>
 
 <div class="tab-pane fade" id="hnTabRingkasan" role="tabpanel">
-  <div class="hn-card">
-    <div class="hn-card__body">
+  <div class="card radius-8 border-0 shadow-sm">
+    <div class="card-body p-24">
       <h6 class="fw-semibold mb-12">Ringkasan</h6>
       <p class="text-sm text-secondary-light">
         Dari {{ $fmt($kpiTop['total_karyawan']['value'] ?? 0) }} karyawan yang mengikuti MCU,
@@ -1007,7 +953,7 @@
         @foreach ($kpiConditions as $cond)
         <div class="col-md-4 col-sm-6">
           <div class="d-flex align-items-center gap-8">
-            <span class="hn-condition-card__icon" style="background: {{ $cond['color'] }}"><iconify-icon icon="{{ $cond['icon'] }}"></iconify-icon></span>
+            <span class="w-40-px h-40-px rounded-circle d-flex justify-content-center align-items-center flex-shrink-0" style="background: {{ $cond['color'] }}"><iconify-icon icon="{{ $cond['icon'] }}" class="text-white text-lg mb-0"></iconify-icon></span>
             <div>
               <div class="fw-semibold text-sm">{{ $cond['label'] }}</div>
               <div class="text-xs text-secondary-light">{{ $fmt($cond['value']) }} karyawan ({{ $fmt($cond['pct'], 1) }}%)</div>
