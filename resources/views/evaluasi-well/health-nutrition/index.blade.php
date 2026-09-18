@@ -213,8 +213,7 @@
                     radius: 3,
                     colorScale: {
                         ranges: [
-                            { from: 0, to: 0, name: '0', color: '#E2E8F0' },
-                            { from: 1, to: 50, name: '1-50', color: '#DCFCE7' },
+                            { from: 0, to: 50, name: '0-50', color: '#DCFCE7' },
                             { from: 51, to: 100, name: '51-100', color: '#86EFAC' },
                             { from: 101, to: 200, name: '101-200', color: '#4ADE80' },
                             { from: 201, to: 400, name: '201-400', color: '#16A34A' },
@@ -555,6 +554,9 @@
   $corrLevelText = static function (int $level): string {
       return $level >= 3 ? '#fff' : '#334155';
   };
+  // Format Indonesia (titik ribuan, koma desimal) — $fmt() bawaan
+  // Blade default-nya format US (koma ribuan, titik desimal).
+  $fmt = static fn (mixed $value, int $decimals = 0): string => number_format((float) $value, $decimals, ',', '.');
 @endphp
 
 <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-20">
@@ -563,17 +565,17 @@
     <p class="text-sm text-secondary-light mb-0">Analisis kondisi kesehatan karyawan berdasarkan hasil MCU dan pola konsumsi nutrisi</p>
   </div>
   <div class="d-flex flex-wrap align-items-center gap-2">
-    <span class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-2 disabled">
+    <span class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-2">
       <iconify-icon icon="solar:calendar-outline"></iconify-icon>
       {{ $dateRangeLabel ?? '-' }}
     </span>
-    <select class="form-select form-select-sm" style="min-width:140px" disabled>
+    <select class="form-select form-select-sm" style="min-width:140px">
       <option>Semua Site</option>
       @foreach ($filterOptions['sites'] as $site)
         <option>{{ $site }}</option>
       @endforeach
     </select>
-    <select class="form-select form-select-sm" style="min-width:160px" disabled>
+    <select class="form-select form-select-sm" style="min-width:160px">
       <option>Semua Perusahaan</option>
       @foreach ($filterOptions['companies'] as $company)
         <option>{{ $company }}</option>
@@ -618,13 +620,13 @@
           </span>
           <div id="hn-spark-{{ $key }}" class="hn-kpi-card__spark"></div>
         </div>
-        <div class="hn-kpi-card__value">{{ number_format($kpi['value']) }}</div>
+        <div class="hn-kpi-card__value">{{ $fmt($kpi['value']) }}</div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
           <span class="hn-kpi-card__delta hn-kpi-card__delta--up">
-            <iconify-icon icon="solar:arrow-up-bold"></iconify-icon> {{ number_format($kpi['delta_pct'], 1) }}%
+            <iconify-icon icon="solar:arrow-up-bold"></iconify-icon> {{ $fmt($kpi['delta_pct'], 1) }}%
           </span>
           <span class="hn-kpi-card__sub">
-            {{ isset($kpi['sub_pct']) ? number_format($kpi['sub_pct'], 1).'% ' : '' }}{{ $kpi['sub_label'] }}
+            {{ isset($kpi['sub_pct']) ? $fmt($kpi['sub_pct'], 1).'% ' : '' }}{{ $kpi['sub_label'] }}
           </span>
         </div>
       </div>
@@ -644,10 +646,10 @@
           <div class="hn-condition-card__label text-truncate">{{ $cond['label'] }}</div>
           <div class="hn-condition-card__sub text-truncate">{{ $cond['sub_label'] }}</div>
           <div class="d-flex align-items-center gap-2 mt-2">
-            <span class="hn-condition-card__value">{{ number_format($cond['value']) }}</span>
-            <span class="hn-condition-card__sub">{{ number_format($cond['pct'], 1) }}%</span>
+            <span class="hn-condition-card__value">{{ $fmt($cond['value']) }}</span>
+            <span class="hn-condition-card__sub">{{ $fmt($cond['pct'], 1) }}%</span>
           </div>
-          <span class="hn-condition-card__delta"><iconify-icon icon="solar:arrow-up-bold"></iconify-icon> {{ number_format($cond['delta_pct'], 1) }}%</span>
+          <span class="hn-condition-card__delta"><iconify-icon icon="solar:arrow-up-bold"></iconify-icon> {{ $fmt($cond['delta_pct'], 1) }}%</span>
         </div>
       </div>
     </div>
@@ -663,7 +665,7 @@
             <h6 class="hn-card__title"><span class="text-success-main">|</span> Pola Pencatatan Nutrisi Karyawan</h6>
             <span class="hn-card__subtitle">Jumlah karyawan yang mencatat asupan kalori</span>
           </div>
-          <select class="form-select form-select-sm" style="width:auto" disabled>
+          <select class="form-select form-select-sm" style="width:auto">
             <option>Jumlah user aktif</option>
           </select>
         </div>
@@ -671,7 +673,7 @@
           <div id="hnHeatmap"></div>
           <div class="d-flex flex-wrap align-items-center gap-3 mt-8">
             <span class="text-xs fw-medium text-secondary-light">Jumlah user aktif</span>
-            <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#E2E8F0;"></span>0-50</span>
+            <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1 border" style="width:12px;height:12px;background:#DCFCE7;"></span>0-50</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#86EFAC;"></span>51-100</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#4ADE80;"></span>101-200</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#16A34A;"></span>201-400</span>
@@ -693,7 +695,7 @@
               <span class="rounded-circle flex-shrink-0" style="width:10px;height:10px;background:{{ $item['color'] }}"></span>
               <div class="min-w-0">
                 <div class="text-sm fw-semibold" style="color: {{ $item['color'] }}">{{ $item['label'] }}</div>
-                <div class="text-xs text-secondary-light">{{ number_format($item['pct'], 1) }}% ({{ number_format($item['count']) }})</div>
+                <div class="text-xs text-secondary-light">{{ $fmt($item['pct'], 1) }}% ({{ $fmt($item['count']) }})</div>
               </div>
             </div>
             @endforeach
@@ -778,7 +780,7 @@
               <span class="hn-analysis-card__dot" style="background: {{ $item['color'] }}">
                 <iconify-icon icon="{{ $item['icon'] }}"></iconify-icon>
               </span>
-              <span class="text-truncate">{{ $item['label'] }} <strong>{{ number_format($item['pct'], 1) }}%</strong>{{ isset($item['count']) ? ' ('.number_format($item['count']).')' : '' }}</span>
+              <span class="text-truncate">{{ $item['label'] }} <strong>{{ $fmt($item['pct'], 1) }}%</strong>{{ isset($item['count']) ? ' ('.$fmt($item['count']).')' : '' }}</span>
             </div>
             @endforeach
           </div>
@@ -798,7 +800,7 @@
       <div class="hn-card">
         <div class="hn-card__head d-flex align-items-start justify-content-between flex-wrap gap-2">
           <h6 class="hn-card__title"><span class="text-success-main">|</span> Tren Karyawan Berisiko</h6>
-          <select class="form-select form-select-sm" style="width:auto" disabled><option>Bulanan</option></select>
+          <select class="form-select form-select-sm" style="width:auto"><option>Bulanan</option></select>
         </div>
         <div class="hn-card__body">
           <div id="hnTrendChart"></div>
@@ -809,7 +811,7 @@
       <div class="hn-card">
         <div class="hn-card__head d-flex align-items-start justify-content-between flex-wrap gap-2">
           <h6 class="hn-card__title"><span class="text-success-main">|</span> Perbandingan Rata-rata Asupan Nutrisi</h6>
-          <select class="form-select form-select-sm" style="width:auto" disabled><option>Berisiko vs Tidak Berisiko</option></select>
+          <select class="form-select form-select-sm" style="width:auto"><option>Berisiko vs Tidak Berisiko</option></select>
         </div>
         <div class="hn-card__body">
           <div id="hnComparisonChart"></div>
@@ -826,7 +828,7 @@
     <div class="hn-card__body pt-0">
       <div class="hn-emp-tabs mb-16">
         @foreach ($employeeTable['tabs'] as $tabKey => $tab)
-          <button type="button" class="hn-emp-tab {{ $loop->first ? 'active' : '' }}" data-tab="{{ $tabKey }}">{{ $tab['label'] }} ({{ number_format($tab['total']) }})</button>
+          <button type="button" class="hn-emp-tab {{ $loop->first ? 'active' : '' }}" data-tab="{{ $tabKey }}">{{ $tab['label'] }} ({{ $fmt($tab['total']) }})</button>
         @endforeach
       </div>
       <div class="row g-2 align-items-center mb-16">
@@ -924,11 +926,11 @@
     <div class="hn-card__body">
       <h6 class="fw-semibold mb-12">Ringkasan</h6>
       <p class="text-sm text-secondary-light">
-        Dari {{ number_format($kpiTop['total_karyawan']['value'] ?? 0) }} karyawan yang mengikuti MCU,
-        {{ number_format($kpiTop['karyawan_berisiko']['value'] ?? 0) }} ({{ number_format($kpiTop['karyawan_berisiko']['sub_pct'] ?? 0, 1) }}%) terindikasi berisiko metabolik.
-        Kepatuhan pencatatan nutrisi tercatat pada {{ number_format($kpiTop['data_nutrisi']['value'] ?? 0) }} karyawan
-        ({{ number_format($kpiTop['data_nutrisi']['sub_pct'] ?? 0, 1) }}% dari total), dengan
-        {{ number_format($kpiTop['target_kalori']['sub_pct'] ?? 0, 1) }}% karyawan telah memenuhi target kalori harian.
+        Dari {{ $fmt($kpiTop['total_karyawan']['value'] ?? 0) }} karyawan yang mengikuti MCU,
+        {{ $fmt($kpiTop['karyawan_berisiko']['value'] ?? 0) }} ({{ $fmt($kpiTop['karyawan_berisiko']['sub_pct'] ?? 0, 1) }}%) terindikasi berisiko metabolik.
+        Kepatuhan pencatatan nutrisi tercatat pada {{ $fmt($kpiTop['data_nutrisi']['value'] ?? 0) }} karyawan
+        ({{ $fmt($kpiTop['data_nutrisi']['sub_pct'] ?? 0, 1) }}% dari total), dengan
+        {{ $fmt($kpiTop['target_kalori']['sub_pct'] ?? 0, 1) }}% karyawan telah memenuhi target kalori harian.
       </p>
       <div class="row g-3 mt-8">
         @foreach ($kpiConditions as $cond)
@@ -937,7 +939,7 @@
             <span class="hn-condition-card__icon" style="background: {{ $cond['color'] }}"><iconify-icon icon="{{ $cond['icon'] }}"></iconify-icon></span>
             <div>
               <div class="fw-semibold text-sm">{{ $cond['label'] }}</div>
-              <div class="text-xs text-secondary-light">{{ number_format($cond['value']) }} karyawan ({{ number_format($cond['pct'], 1) }}%)</div>
+              <div class="text-xs text-secondary-light">{{ $fmt($cond['value']) }} karyawan ({{ $fmt($cond['pct'], 1) }}%)</div>
             </div>
           </div>
         </div>

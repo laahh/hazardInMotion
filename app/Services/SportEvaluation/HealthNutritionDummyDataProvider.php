@@ -52,7 +52,7 @@ final class HealthNutritionDummyDataProvider
             'total_karyawan' => [
                 'label' => 'Total Karyawan (MCU)',
                 'icon' => 'solar:users-group-rounded-bold',
-                'color' => 'primary',
+                'color' => 'success',
                 'value' => 19401,
                 'sub_label' => 'dari periode sebelumnya',
                 'delta_pct' => 5.2,
