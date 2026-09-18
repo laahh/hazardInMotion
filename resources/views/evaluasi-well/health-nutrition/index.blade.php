@@ -27,6 +27,77 @@
     box-shadow: 0 1px 4px rgba(15,23,42,.12);
   }
 
+  /* ---- Header toolbar: date chip + filter selects + export ---- */
+  .hn-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .hn-header__title h6 { font-size: 20px; font-weight: 700; color: #0F172A; margin-bottom: 4px; }
+
+  .hn-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .hn-toolbar > * { flex: 0 0 auto; }
+
+  .hn-filter-chip,
+  .hn-filter-select {
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    font-size: 13px;
+    font-weight: 500;
+    color: #334155;
+  }
+
+  .hn-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    background: #F8FAFC;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .hn-filter-chip iconify-icon { color: #64748B; font-size: 16px; }
+  .hn-filter-chip:hover { background: #F1F5F9; border-color: #CBD5E1; }
+  .hn-filter-chip:focus-visible,
+  .hn-filter-select:focus {
+    outline: none;
+    border-color: #16A34A;
+    box-shadow: 0 0 0 3px rgba(22,163,74,.12);
+  }
+
+  .hn-filter-select {
+    min-width: 156px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .hn-toolbar .hn-export-btn {
+    height: 38px;
+    border-radius: 10px;
+    padding: 0 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 575.98px) {
+    .hn-toolbar { justify-content: flex-start; width: 100%; }
+    .hn-toolbar > * { flex: 1 1 auto; }
+  }
+
   .hn-banner {
     position: relative;
     border-radius: 16px;
@@ -559,29 +630,29 @@
   $fmt = static fn (mixed $value, int $decimals = 0): string => number_format((float) $value, $decimals, ',', '.');
 @endphp
 
-<div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-20">
-  <div>
-    <h6 class="fw-bold mb-4">MCU x Nutrisi</h6>
+<div class="hn-header mb-20">
+  <div class="hn-header__title">
+    <h6 class="mb-4">MCU x Nutrisi</h6>
     <p class="text-sm text-secondary-light mb-0">Analisis kondisi kesehatan karyawan berdasarkan hasil MCU dan pola konsumsi nutrisi</p>
   </div>
-  <div class="d-flex flex-wrap align-items-center gap-2">
-    <span class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-2">
+  <div class="hn-toolbar">
+    <button type="button" class="hn-filter-chip">
       <iconify-icon icon="solar:calendar-outline"></iconify-icon>
       {{ $dateRangeLabel ?? '-' }}
-    </span>
-    <select class="form-select form-select-sm" style="min-width:140px">
+    </button>
+    <select class="form-select hn-filter-select">
       <option>Semua Site</option>
       @foreach ($filterOptions['sites'] as $site)
         <option>{{ $site }}</option>
       @endforeach
     </select>
-    <select class="form-select form-select-sm" style="min-width:160px">
+    <select class="form-select hn-filter-select">
       <option>Semua Perusahaan</option>
       @foreach ($filterOptions['companies'] as $company)
         <option>{{ $company }}</option>
       @endforeach
     </select>
-    <a href="{{ route('evaluasi-well.health-nutrition.export') }}" class="btn btn-sm btn-success-600 d-inline-flex align-items-center gap-1">
+    <a href="{{ route('evaluasi-well.health-nutrition.export') }}" class="btn btn-success-600 hn-export-btn">
       <iconify-icon icon="solar:export-bold"></iconify-icon>
       Export
     </a>
