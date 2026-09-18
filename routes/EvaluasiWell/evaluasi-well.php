@@ -109,6 +109,9 @@ Route::middleware('evaluasi-well.access')
             ->name('health-nutrition.data');
         Route::get('/health-nutrition/export', [HealthNutritionRiskController::class, 'export'])
             ->name('health-nutrition.export');
+        Route::get('/health-nutrition/employees/{id}', [HealthNutritionRiskController::class, 'employeeDetail'])
+            ->whereNumber('id')
+            ->name('health-nutrition.employee-detail');
 
         Route::get('/pvt', [SportEvaluationPvtDashboardController::class, 'index'])
             ->name('pvt.index');

@@ -4,7 +4,7 @@
 
 @section('css')
 <style>
-  /* ===== MCU x Nutrisi — dashboard baru (data dummy) ===== */
+  /* ===== MCU x Nutrisi — dashboard baru (data dummy, arsitektur real) ===== */
   .hn-tabs {
     display: inline-flex;
     background: #F1F5F9;
@@ -123,13 +123,26 @@
   .hn-banner__text h6 { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
   .hn-banner__text span { font-size: 13px; opacity: .9; }
 
+  .hn-coverage-strip {
+    background: #F8FAFC;
+    border: 1px solid #E8EDF3;
+    border-radius: 10px;
+  }
+  .hn-coverage-strip .hn-coverage-item { padding: 10px 16px; }
+  .hn-coverage-strip .hn-coverage-value { font-size: 15px; font-weight: 700; color: #0F172A; }
+  .hn-coverage-strip .hn-coverage-label { font-size: 11.5px; color: #64748B; }
+
   #hnHeatmap .apexcharts-tooltip { font-size: 12px; }
+
+  .hn-mini-stat { padding: 10px 14px; border: 1px solid #E8EDF3; border-radius: 10px; background: #F8FAFC; }
+  .hn-mini-stat__value { font-size: 15px; font-weight: 700; color: #0F172A; }
+  .hn-mini-stat__label { font-size: 11px; color: #64748B; }
 
   .hn-corr-table { width: 100%; border-collapse: separate; border-spacing: 4px; font-size: 12px; }
   .hn-corr-table th { font-weight: 600; color: #475569; text-align: center; padding: 6px 4px; font-size: 11.5px; }
   .hn-corr-table th:first-child { text-align: left; }
   .hn-corr-table td.hn-corr-row-label { text-align: left; font-weight: 600; color: #334155; white-space: nowrap; padding-right: 10px; font-size: 12px; }
-  .hn-corr-table td.hn-corr-cell { border-radius: 6px; height: 34px; }
+  .hn-corr-table td.hn-corr-cell { border-radius: 6px; height: 34px; cursor: default; }
 
   .hn-macro-tab {
     border: 1px solid #E2E8F0;
@@ -163,6 +176,11 @@
   }
   .hn-emp-tab.active { background: #16A34A; border-color: #16A34A; color: #fff; }
 
+  .hn-pair-row { border: 1px solid #E8EDF3; border-radius: 10px; padding: 10px 14px; }
+  .hn-pair-row .hn-pair-flag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .hn-pair-flag--high, .hn-pair-flag--above { background: #FEF2F2; color: #DC2626; }
+  .hn-pair-flag--normal, .hn-pair-flag--ontarget { background: #ECFDF5; color: #16A34A; }
+
   .dt-container:has(#healthNutritionTable) .dt-layout-row,
   #healthNutritionTable_wrapper .dt-layout-row {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin: .75rem 0;
@@ -186,9 +204,9 @@
     var heatmap = @json($heatmap ?? ['categories' => [], 'series' => []]);
     var compliance = @json($compliance ?? ['center_value' => 0, 'center_label' => '', 'legend' => []]);
     var macro = @json($macroChart ?? ['tabs' => [], 'data' => []]);
-    var analysisCards = @json($analysisCards ?? []);
+    var conditionAnalysis = @json($conditionAnalysis ?? []);
     var trend = @json($trendChart ?? ['categories' => [], 'series' => []]);
-    var comparison = @json($comparisonChart ?? ['categories' => [], 'berisiko' => [], 'tidak_berisiko' => []]);
+    var comparison = @json($comparisonChart ?? ['calories' => null, 'macros' => null]);
 
     function formatNum(value) {
         return Number(value || 0).toLocaleString('id-ID');
@@ -207,7 +225,7 @@
         }).render();
     });
 
-    // ---- Heatmap: Pola Pencatatan Nutrisi Karyawan ----
+    // ---- Heatmap: Pola Pencatatan Nutrisi ----
     var heatmapEl = document.getElementById('hnHeatmap');
     if (heatmapEl && heatmap.series && heatmap.series.length) {
         new ApexCharts(heatmapEl, {
@@ -237,13 +255,13 @@
     // ---- Donut: Kepatuhan Pencatatan Nutrisi ----
     var complianceEl = document.getElementById('hnComplianceDonut');
     if (complianceEl && compliance.legend && compliance.legend.length) {
-        var series = compliance.legend.map(function (i) { return i.count; });
-        var colors = compliance.legend.map(function (i) { return i.color; });
+        var cSeries = compliance.legend.map(function (i) { return i.count; });
+        var cColors = compliance.legend.map(function (i) { return i.color; });
         new ApexCharts(complianceEl, {
-            series: series,
+            series: cSeries,
             labels: compliance.legend.map(function (i) { return i.label; }),
             chart: { type: 'donut', height: 240 },
-            colors: colors,
+            colors: cColors,
             legend: { show: false },
             stroke: { width: 3, colors: ['#fff'] },
             dataLabels: { enabled: false },
@@ -281,7 +299,7 @@
                 { name: 'Berisiko', data: dataset.berisiko },
                 { name: 'Tidak Berisiko', data: dataset.tidak_berisiko }
             ],
-            chart: { type: 'bar', height: 300, toolbar: { show: false } },
+            chart: { type: 'bar', height: 280, toolbar: { show: false } },
             colors: ['#DC2626', '#16A34A'],
             plotOptions: { bar: { borderRadius: 4, columnWidth: '45%' } },
             dataLabels: { enabled: false },
@@ -307,12 +325,14 @@
         });
     });
 
-    // ---- 6 donut kartu analisis ----
-    analysisCards.forEach(function (card) {
+    // ---- 6 donut kartu analisis kondisi ----
+    conditionAnalysis.forEach(function (card) {
         var el = document.getElementById('hn-analysis-donut-' + card.key);
         if (!el) return;
-        var series = card.legend.map(function (i) { return i.pct; });
-        var colors = card.legend.map(function (i) { return i.color; });
+        var available = card.legend.filter(function (i) { return i.available; });
+        if (!available.length) return;
+        var series = available.map(function (i) { return i.pct; });
+        var colors = available.map(function (i) { return i.color; });
         new ApexCharts(el, {
             series: series,
             chart: { type: 'donut', height: 150, width: 150 },
@@ -356,25 +376,48 @@
         }).render();
     }
 
-    // ---- Bar: Perbandingan Rata-rata Asupan Nutrisi ----
-    var comparisonEl = document.getElementById('hnComparisonChart');
-    if (comparisonEl) {
-        new ApexCharts(comparisonEl, {
+    // ---- Bar: Perbandingan Rata-rata Asupan Nutrisi — dipisah kkal vs gram ----
+    // (unit beda jauh skalanya, digabung 1 axis akan menyesatkan)
+    var caloriesEl = document.getElementById('hnComparisonCalories');
+    if (caloriesEl && comparison.calories) {
+        new ApexCharts(caloriesEl, {
             series: [
-                { name: 'Berisiko', data: comparison.berisiko },
-                { name: 'Tidak Berisiko', data: comparison.tidak_berisiko }
+                { name: 'Berisiko', data: comparison.calories.berisiko },
+                { name: 'Tidak Berisiko', data: comparison.calories.tidak_berisiko }
             ],
-            chart: { type: 'bar', height: 300, toolbar: { show: false } },
+            chart: { type: 'bar', height: 160, toolbar: { show: false } },
+            colors: ['#DC2626', '#16A34A'],
+            plotOptions: { bar: { borderRadius: 4, columnWidth: '35%', horizontal: true, dataLabels: { position: 'top' } } },
+            dataLabels: {
+                enabled: true,
+                offsetX: 20,
+                style: { fontSize: '11px', colors: ['#334155'] },
+                formatter: function (v) { return formatNum(v) + ' kkal'; }
+            },
+            grid: { borderColor: '#E2E8F0', strokeDashArray: 4 },
+            xaxis: { categories: comparison.calories.categories },
+            legend: { show: false },
+            tooltip: { shared: true, intersect: false }
+        }).render();
+    }
+    var macrosCompEl = document.getElementById('hnComparisonMacros');
+    if (macrosCompEl && comparison.macros) {
+        new ApexCharts(macrosCompEl, {
+            series: [
+                { name: 'Berisiko', data: comparison.macros.berisiko },
+                { name: 'Tidak Berisiko', data: comparison.macros.tidak_berisiko }
+            ],
+            chart: { type: 'bar', height: 220, toolbar: { show: false } },
             colors: ['#DC2626', '#16A34A'],
             plotOptions: { bar: { borderRadius: 4, columnWidth: '55%', dataLabels: { position: 'top' } } },
             dataLabels: {
                 enabled: true,
                 offsetY: -18,
                 style: { fontSize: '10px', colors: ['#334155'] },
-                formatter: function (v) { return formatNum(v); }
+                formatter: function (v) { return formatNum(v) + 'g'; }
             },
             grid: { borderColor: '#E2E8F0', strokeDashArray: 4 },
-            xaxis: { categories: comparison.categories },
+            xaxis: { categories: comparison.macros.categories },
             legend: { position: 'top' },
             tooltip: { shared: true, intersect: false }
         }).render();
@@ -388,14 +431,13 @@
         return;
     }
 
-    var allRows = @json($employeeTable['rows'] ?? []);
-    var exportUrl = @json(route('evaluasi-well.health-nutrition.export'));
+    var dataUrl = @json(route('evaluasi-well.health-nutrition.data'));
+    var exportBaseUrl = @json(route('evaluasi-well.health-nutrition.export'));
+    var employeeDetailBase = @json(url('/evaluasi-well/health-nutrition/employees'));
     var currentTab = 'semua';
-    var searchTerm = '';
     var siteEl = document.querySelector('#hn-emp-site');
     var companyEl = document.querySelector('#hn-emp-company');
     var statusEl = document.querySelector('#hn-emp-status');
-    var searchEl = document.querySelector('#hn-emp-search');
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -418,38 +460,47 @@
         return map[condition] || 'bg-neutral-200 text-secondary-light';
     }
 
+    var conditionLabels = {
+        obesitas: 'Obesitas', dislipidemia: 'Dislipidemia', hipertensi: 'Hipertensi',
+        gula_darah: 'Gula Darah Tinggi', sindrom_metabolik: 'Sindrom Metabolik', framingham: 'Framingham High Risk'
+    };
+
     function statusBadgeClass(status) {
         if (status === 'Baik') return 'bg-success-focus text-success-main';
         if (status === 'Pantau') return 'bg-warning-focus text-warning-main';
-        return 'bg-danger-focus text-danger-main';
+        if (status === 'Perlu Intervensi') return 'bg-danger-focus text-danger-main';
+        return 'bg-neutral-200 text-secondary-light';
     }
 
-    function filteredRows() {
-        var site = siteEl ? siteEl.value : '';
-        var company = companyEl ? companyEl.value : '';
-        var status = statusEl ? statusEl.value : '';
-
-        return allRows.filter(function (row) {
-            if (currentTab !== 'semua' && row.conditions.indexOf(currentTab) === -1) return false;
-            if (site && row.site !== site) return false;
-            if (company && row.perusahaan !== company) return false;
-            if (status && row.status_nutrisi !== status) return false;
-            if (searchTerm) {
-                var haystack = (row.nama + ' ' + row.nik + ' ' + row.perusahaan).toLowerCase();
-                if (haystack.indexOf(searchTerm.toLowerCase()) === -1) return false;
-            }
-            return true;
-        });
+    function updateExportHref() {
+        var btn = document.querySelector('#hn-export-btn');
+        if (!btn) return;
+        var params = new URLSearchParams();
+        if (currentTab && currentTab !== 'semua') params.set('tab', currentTab);
+        var query = params.toString();
+        btn.href = exportBaseUrl + (query ? '?' + query : '');
     }
 
     var table = new DataTable(tableEl, {
-        data: filteredRows(),
+        processing: true,
+        serverSide: true,
+        searching: true,
+        ordering: true,
         pageLength: 10,
         lengthMenu: [10, 25, 50],
-        order: [[0, 'asc']],
+        order: [[1, 'asc']],
         autoWidth: false,
+        ajax: {
+            url: dataUrl,
+            data: function (d) {
+                d.tab = currentTab;
+                d.site = siteEl ? siteEl.value : '';
+                d.company = companyEl ? companyEl.value : '';
+                d.status = statusEl ? statusEl.value : '';
+            }
+        },
         columns: [
-            { data: 'no' },
+            { data: 'no', orderable: false },
             {
                 data: 'nama',
                 render: function (data, type, row) {
@@ -458,14 +509,15 @@
                         + '<span class="text-xs text-secondary-light">' + escapeHtml(row.nik) + '</span>';
                 }
             },
-            { data: 'perusahaan' },
-            { data: 'site' },
-            { data: 'bmi' },
-            { data: 'kolesterol' },
-            { data: 'ldl' },
-            { data: 'trigliserida' },
-            { data: 'tensi' },
-            { data: 'gds' },
+            { data: 'perusahaan', orderable: false },
+            { data: 'site', orderable: false },
+            { data: 'departemen', orderable: false },
+            { data: 'bmi', render: function (d) { return d === null ? '-' : d; } },
+            { data: 'kolesterol', render: function (d) { return d === null ? '-' : d; } },
+            { data: 'ldl', render: function (d) { return d === null ? '-' : d; } },
+            { data: 'trigliserida', render: function (d) { return d === null ? '-' : d; } },
+            { data: 'tensi', orderable: false, render: function (d) { return d === null ? '-' : d; } },
+            { data: 'gdp', render: function (d) { return d === null ? '-' : d; } },
             {
                 data: 'conditions',
                 orderable: false,
@@ -473,22 +525,23 @@
                     if (type !== 'display') return row.risiko_label;
                     return data.map(function (c) {
                         return '<span class="' + riskBadgeClass(c) + ' px-10 py-2 rounded-pill text-xs fw-medium d-inline-block mb-2 me-2">'
-                            + escapeHtml(row.risiko_label.split(', ')[data.indexOf(c)] || c) + '</span>';
+                            + escapeHtml(conditionLabels[c] || c) + '</span>';
                     }).join('');
                 }
             },
             {
                 data: 'status_nutrisi',
+                orderable: false,
                 render: function (data, type) {
                     if (type !== 'display') return data;
                     return '<span class="' + statusBadgeClass(data) + ' px-10 py-2 rounded-pill text-xs fw-medium">' + escapeHtml(data) + '</span>';
                 }
             },
             {
-                data: null,
+                data: 'id',
                 orderable: false,
-                render: function () {
-                    return '<button type="button" class="btn btn-sm btn-outline-primary-600 py-2 px-10 hn-detail-btn">Detail</button>';
+                render: function (data) {
+                    return '<button type="button" class="btn btn-sm btn-outline-primary-600 py-2 px-10 hn-detail-btn" data-id="' + data + '">Detail</button>';
                 }
             }
         ],
@@ -504,36 +557,130 @@
         }
     });
 
-    function reload() {
-        table.clear();
-        table.rows.add(filteredRows());
-        table.draw();
-    }
-
     document.querySelectorAll('.hn-emp-tab').forEach(function (btn) {
         btn.addEventListener('click', function () {
             document.querySelectorAll('.hn-emp-tab').forEach(function (b) { b.classList.remove('active'); });
             btn.classList.add('active');
             currentTab = btn.getAttribute('data-tab');
-            reload();
+            updateExportHref();
+            table.ajax.reload();
         });
     });
 
     [siteEl, companyEl, statusEl].forEach(function (el) {
-        if (el) el.addEventListener('change', reload);
+        if (el) el.addEventListener('change', function () { table.ajax.reload(); });
     });
 
-    if (searchEl) {
-        searchEl.addEventListener('input', function () {
-            searchTerm = searchEl.value.trim();
-            reload();
-        });
+    updateExportHref();
+
+    // ---- Modal detail karyawan: MCU x Nutrition Profile ----
+    var detailModalEl = document.getElementById('hnEmployeeDetailModal');
+    var detailModal = (detailModalEl && window.bootstrap) ? new bootstrap.Modal(detailModalEl) : null;
+    var detailBody = document.getElementById('hn-detail-body');
+    var detailLoading = document.getElementById('hn-detail-loading');
+
+    function flagClass(flag) {
+        if (flag === 'HIGH' || flag === 'ABOVE TARGET') return 'hn-pair-flag--high';
+        return 'hn-pair-flag--normal';
     }
 
-    var exportBtn = document.querySelector('#hn-export-btn');
-    if (exportBtn) {
-        exportBtn.href = exportUrl;
+    function renderDetail(detail) {
+        var p = detail.profile;
+        var mcu = detail.mcu;
+        var nutrition = detail.nutrition;
+        var completeness = detail.data_completeness;
+
+        var html = '<div class="row g-3">';
+        html += '<div class="col-md-4"><h6 class="text-sm fw-bold mb-8">Profil</h6>'
+            + '<p class="mb-2 text-sm"><strong>' + escapeHtml(p.nama) + '</strong><br>' + escapeHtml(p.nik) + '</p>'
+            + '<p class="mb-0 text-sm text-secondary-light">' + escapeHtml(p.perusahaan) + ' · ' + escapeHtml(p.site) + '<br>'
+            + escapeHtml(p.departemen) + ' · ' + escapeHtml(p.jabatan) + '</p></div>';
+
+        html += '<div class="col-md-4"><h6 class="text-sm fw-bold mb-8">MCU</h6>';
+        if (mcu) {
+            html += '<ul class="list-unstyled text-sm mb-0">'
+                + '<li>BMI: <strong>' + mcu.bmi + '</strong></li>'
+                + '<li>Tensi: <strong>' + mcu.tensi + '</strong></li>'
+                + '<li>GDP: <strong>' + mcu.gdp + '</strong></li>'
+                + '<li>Kolesterol / LDL / HDL: <strong>' + mcu.kolesterol + ' / ' + mcu.ldl + ' / ' + mcu.hdl + '</strong></li>'
+                + '<li>Trigliserida: <strong>' + mcu.trigliserida + '</strong></li>'
+                + '<li>Framingham Score: <strong>' + (mcu.framingham_score ?? '-') + '</strong></li>'
+                + '</ul>';
+        } else {
+            html += '<p class="text-sm text-secondary-light mb-0">Data MCU belum tersedia.</p>';
+        }
+        html += '</div>';
+
+        html += '<div class="col-md-4"><h6 class="text-sm fw-bold mb-8">Nutrisi</h6>';
+        if (nutrition) {
+            html += '<ul class="list-unstyled text-sm mb-0">'
+                + '<li>Rata-rata Kalori: <strong>' + formatNumJs(nutrition.avg_calories) + ' kkal</strong></li>'
+                + '<li>Target Kalori: <strong>' + formatNumJs(nutrition.target_calories) + ' kkal</strong> (' + (nutrition.calories_vs_target_pct >= 0 ? '+' : '') + nutrition.calories_vs_target_pct + '%)</li>'
+                + '<li>Karbohidrat: <strong>' + formatNumJs(nutrition.avg_carbs_g) + ' g</strong></li>'
+                + '<li>Lemak: <strong>' + formatNumJs(nutrition.avg_fat_g) + ' g</strong></li>'
+                + '<li>Protein: <strong>' + formatNumJs(nutrition.avg_protein_g) + ' g</strong></li>'
+                + '<li>Serat: <strong>' + formatNumJs(nutrition.avg_fiber_g) + ' g</strong></li>'
+                + '<li>Natrium: <strong>' + (nutrition.avg_sodium_mg === null ? 'Data belum tersedia' : nutrition.avg_sodium_mg + ' mg') + '</strong></li>'
+                + '<li>Hari log (30 hari): <strong>' + nutrition.logging_days_30d + '</strong></li>'
+                + '</ul>';
+        } else {
+            html += '<p class="text-sm text-secondary-light mb-0">Data nutrisi belum tersedia.</p>';
+        }
+        html += '</div></div>';
+
+        if (!completeness.matched) {
+            html += '<div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 radius-8 mt-16 mb-0 py-10 px-16 text-sm">'
+                + 'Data belum lengkap (MCU dan nutrisi belum ter-matched) — profil perbandingan di bawah tidak dapat dihitung.</div>';
+        }
+
+        if (detail.profile_pairs && detail.profile_pairs.length) {
+            html += '<h6 class="text-sm fw-bold mt-20 mb-8">MCU × Nutrition Profile</h6>';
+            html += '<div class="d-flex flex-column gap-8">';
+            detail.profile_pairs.forEach(function (pair) {
+                html += '<div class="hn-pair-row d-flex align-items-center justify-content-between flex-wrap gap-2">'
+                    + '<div class="d-flex align-items-center gap-8">'
+                    + '<span class="text-xs text-secondary-light" style="min-width:70px;">' + escapeHtml(pair.mcu_label) + '</span>'
+                    + '<strong class="text-sm">' + escapeHtml(pair.mcu_value) + '</strong>'
+                    + '<span class="hn-pair-flag ' + flagClass(pair.mcu_flag) + '">' + pair.mcu_flag + '</span>'
+                    + '</div>'
+                    + '<iconify-icon icon="solar:arrow-right-linear" class="text-secondary-light"></iconify-icon>'
+                    + '<div class="d-flex align-items-center gap-8">'
+                    + '<span class="text-xs text-secondary-light" style="min-width:110px;">' + escapeHtml(pair.nutrition_label) + '</span>'
+                    + '<strong class="text-sm">' + escapeHtml(pair.nutrition_value) + '</strong>'
+                    + '<span class="hn-pair-flag ' + flagClass(pair.nutrition_flag) + '">' + pair.nutrition_flag + '</span>'
+                    + '</div></div>';
+            });
+            html += '</div>';
+        }
+
+        return html;
     }
+
+    function formatNumJs(value) {
+        return value === null || value === undefined ? '-' : Number(value).toLocaleString('id-ID');
+    }
+
+    tableEl.addEventListener('click', function (event) {
+        var btn = event.target.closest('.hn-detail-btn');
+        if (!btn || !detailModal) return;
+        var id = btn.getAttribute('data-id');
+
+        detailBody.innerHTML = '';
+        detailLoading.classList.remove('d-none');
+        detailModal.show();
+
+        fetch(employeeDetailBase + '/' + id, {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (res) {
+            return res.ok ? res.json() : Promise.reject();
+        }).then(function (detail) {
+            detailBody.innerHTML = renderDetail(detail);
+        }).catch(function () {
+            detailBody.innerHTML = '<p class="text-danger-main text-sm mb-0">Gagal memuat detail karyawan.</p>';
+        }).finally(function () {
+            detailLoading.classList.add('d-none');
+        });
+    });
 })();
 </script>
 @endsection
@@ -542,11 +689,13 @@
 @php
   $kpiTop = $kpiTop ?? [];
   $kpiConditions = $kpiConditions ?? [];
-  $analysisCards = $analysisCards ?? [];
-  $correlationMatrix = $correlationMatrix ?? ['rows' => [], 'cols' => [], 'levels' => []];
+  $conditionAnalysis = $conditionAnalysis ?? [];
+  $associationMatrix = $associationMatrix ?? ['rows' => [], 'cols' => [], 'cells' => []];
   $macroChart = $macroChart ?? ['tabs' => []];
-  $employeeTable = $employeeTable ?? ['tabs' => [], 'rows' => []];
+  $employeeTable = $employeeTable ?? ['tabs' => []];
   $filterOptions = $filterOptions ?? ['sites' => [], 'companies' => []];
+  $coverage = $coverage ?? ['total_mcu' => 0, 'total_nutrition' => 0, 'matched_total' => 0, 'matched_pct_of_mcu' => 0];
+  $heatmapStats = $heatmap['stats'] ?? [];
 
   $corrLevelColor = static function (int $level): string {
       return match ($level) {
@@ -557,15 +706,12 @@
           default => '#E2E8F0',
       };
   };
-  $corrLevelText = static function (int $level): string {
-      return $level >= 3 ? '#fff' : '#334155';
-  };
-  // Format Indonesia (titik ribuan, koma desimal) — $fmt() bawaan
+  // Format Indonesia (titik ribuan, koma desimal) — number_format() bawaan
   // Blade default-nya format US (koma ribuan, titik desimal).
   $fmt = static fn (mixed $value, int $decimals = 0): string => number_format((float) $value, $decimals, ',', '.');
 @endphp
 
-<div class="hn-header mb-20">
+<div class="hn-header mb-16">
   <div class="hn-header__title">
     <h6 class="mb-4">MCU x Nutrisi</h6>
     <p class="text-sm text-secondary-light mb-0">Analisis kondisi kesehatan karyawan berdasarkan hasil MCU dan pola konsumsi nutrisi</p>
@@ -594,7 +740,32 @@
   </div>
 </div>
 
-<ul class="nav hn-tabs mb-20" role="tablist">
+{{-- Data quality: cakupan & matched records — jangan anggap kosong = 0 --}}
+<div class="hn-coverage-strip d-flex flex-wrap align-items-center gap-16 mb-16">
+  <div class="hn-coverage-item d-flex align-items-center gap-8">
+    <iconify-icon icon="solar:document-medicine-bold" class="text-secondary-light"></iconify-icon>
+    <div>
+      <div class="hn-coverage-value">{{ $fmt($coverage['total_mcu']) }}</div>
+      <div class="hn-coverage-label">MCU records</div>
+    </div>
+  </div>
+  <div class="hn-coverage-item d-flex align-items-center gap-8">
+    <iconify-icon icon="solar:notebook-bold" class="text-secondary-light"></iconify-icon>
+    <div>
+      <div class="hn-coverage-value">{{ $fmt($coverage['total_nutrition']) }}</div>
+      <div class="hn-coverage-label">Nutrition records</div>
+    </div>
+  </div>
+  <div class="hn-coverage-item d-flex align-items-center gap-8">
+    <iconify-icon icon="solar:link-bold" class="text-success-main"></iconify-icon>
+    <div>
+      <div class="hn-coverage-value">{{ $fmt($coverage['matched_total']) }} <span class="text-xs fw-medium text-secondary-light">({{ $fmt($coverage['matched_pct_of_mcu'], 1) }}%)</span></div>
+      <div class="hn-coverage-label">Successfully matched — dipakai untuk semua analisis MCU × Nutrisi di bawah</div>
+    </div>
+  </div>
+</div>
+
+<ul class="nav hn-tabs mb-16" role="tablist">
   <li class="nav-item" role="presentation">
     <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#hnTabDashboard" type="button" role="tab">Dashboard</button>
   </li>
@@ -678,21 +849,47 @@
         <div class="card-body p-24">
           <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-16">
             <div>
-              <h6 class="fw-bold text-lg mb-2">Pola Pencatatan Nutrisi Karyawan</h6>
-              <span class="text-sm text-secondary-light">Jumlah karyawan yang mencatat asupan kalori</span>
+              <h6 class="fw-bold text-lg mb-2">Pola Pencatatan Nutrisi</h6>
+              <span class="text-sm text-secondary-light">Jumlah karyawan yang mencatat asupan nutrisi per hari</span>
             </div>
             <select class="form-select form-select-sm" style="width:auto">
               <option>Jumlah user aktif</option>
             </select>
           </div>
           <div id="hnHeatmap"></div>
-          <div class="d-flex flex-wrap align-items-center gap-3 mt-8">
+          <div class="d-flex flex-wrap align-items-center gap-3 mt-8 mb-16">
             <span class="text-xs fw-medium text-secondary-light">Jumlah user aktif</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1 border" style="width:12px;height:12px;background:#DCFCE7;"></span>0-50</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#86EFAC;"></span>51-100</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#4ADE80;"></span>101-200</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#16A34A;"></span>201-400</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#14532D;"></span>&gt;400</span>
+          </div>
+          <div class="row g-2">
+            <div class="col-6 col-md-3">
+              <div class="hn-mini-stat">
+                <div class="hn-mini-stat__value">{{ $heatmapStats['peak_day_label'] ?? '-' }}</div>
+                <div class="hn-mini-stat__label">Hari pencatatan tertinggi ({{ $fmt($heatmapStats['peak_day_count'] ?? 0) }})</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="hn-mini-stat">
+                <div class="hn-mini-stat__value">{{ $fmt($heatmapStats['avg_daily'] ?? 0) }}</div>
+                <div class="hn-mini-stat__label">Rata-rata user mencatat/hari</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="hn-mini-stat">
+                <div class="hn-mini-stat__value">{{ $fmt($heatmapStats['weekday_ratio'] ?? 0, 1) }}x</div>
+                <div class="hn-mini-stat__label">Hari kerja vs akhir pekan</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="hn-mini-stat">
+                <div class="hn-mini-stat__value">{{ $heatmapStats['peak_hour_label'] ?? '-' }}</div>
+                <div class="hn-mini-stat__label">Jam pencatatan tertinggi</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -708,7 +905,7 @@
               <span class="rounded-circle flex-shrink-0" style="width:10px;height:10px;background:{{ $item['color'] }}"></span>
               <div class="min-w-0">
                 <div class="text-sm fw-semibold" style="color: {{ $item['color'] }}">{{ $item['label'] }}</div>
-                <div class="text-xs text-secondary-light">{{ $fmt($item['pct'], 1) }}% ({{ $fmt($item['count']) }})</div>
+                <div class="text-xs text-secondary-light">{{ $fmt($item['pct'], 1) }}% ({{ $fmt($item['count']) }} karyawan)</div>
               </div>
             </div>
             @endforeach
@@ -718,30 +915,37 @@
     </div>
   </div>
 
-  {{-- Korelasi + Makronutrien --}}
+  {{-- Association matrix + Makronutrien --}}
   <div class="row g-3 mb-20 align-items-stretch">
     <div class="col-xxl-6">
       <div class="card radius-8 border-0 shadow-sm h-100">
         <div class="card-body p-24">
-          <h6 class="fw-bold text-lg mb-2">Korelasi Hasil MCU dengan Pola Nutrisi</h6>
-          <span class="text-sm text-secondary-light d-block mb-16">Semakin gelap menunjukkan korelasi semakin tinggi</span>
+          <h6 class="fw-bold text-lg mb-2">Keterkaitan Deskriptif: Hasil MCU dengan Pola Nutrisi</h6>
+          <span class="text-sm text-secondary-light d-block mb-16">
+            Proporsi overlap antar kelompok (bukan hasil uji statistik) — semakin gelap semakin tinggi proporsinya.
+          </span>
           <div class="table-responsive">
             <table class="hn-corr-table">
               <thead>
                 <tr>
                   <th></th>
-                  @foreach ($correlationMatrix['cols'] as $col)
+                  @foreach ($associationMatrix['cols'] as $col)
                     <th>{{ $col }}</th>
                   @endforeach
                 </tr>
               </thead>
               <tbody>
-                @foreach ($correlationMatrix['rows'] as $ri => $rowLabel)
+                @foreach ($associationMatrix['rows'] as $ri => $rowLabel)
                 <tr>
                   <td class="hn-corr-row-label">{{ $rowLabel }}</td>
-                  @foreach ($correlationMatrix['cols'] as $ci => $col)
-                    @php $lvl = $correlationMatrix['levels'][$ri][$ci] ?? 0; @endphp
-                    <td class="hn-corr-cell" style="background: {{ $corrLevelColor($lvl) }}"></td>
+                  @foreach ($associationMatrix['cols'] as $ci => $col)
+                    @php $cell = $associationMatrix['cells'][$ri][$ci] ?? ['level' => 0, 'pct' => 0, 'count' => 0, 'denominator' => 0]; @endphp
+                    <td class="hn-corr-cell"
+                        style="background: {{ $corrLevelColor($cell['level']) }}"
+                        data-bs-toggle="tooltip"
+                        data-bs-html="true"
+                        title="<strong>{{ $rowLabel }}</strong> × {{ $col }}<br>{{ $fmt($cell['count']) }} dari {{ $fmt($cell['denominator']) }} karyawan ({{ $fmt($cell['pct'], 1) }}%)"
+                    ></td>
                   @endforeach
                 </tr>
                 @endforeach
@@ -749,7 +953,7 @@
             </table>
           </div>
           <div class="d-flex flex-wrap align-items-center gap-3 mt-12">
-            <span class="text-xs fw-medium text-secondary-light">Korelasi:</span>
+            <span class="text-xs fw-medium text-secondary-light">Proporsi:</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#DC2626;"></span>Sangat Tinggi</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#F86624;"></span>Tinggi</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#FCD34D;"></span>Sedang</span>
@@ -775,9 +979,9 @@
     </div>
   </div>
 
-  {{-- 6 kartu analisis --}}
+  {{-- 6 kartu analisis kondisi --}}
   <div class="row g-3 mb-20">
-    @foreach ($analysisCards as $card)
+    @foreach ($conditionAnalysis as $card)
     <div class="col-xxl-4 col-md-6">
       <div class="card radius-8 border-0 shadow-sm h-100">
         <div class="card-body p-24 d-flex flex-column gap-12">
@@ -790,15 +994,16 @@
                 <span class="w-24-px h-24-px rounded-circle d-inline-flex justify-content-center align-items-center flex-shrink-0" style="background: {{ $item['color'] }}">
                   <iconify-icon icon="{{ $item['icon'] }}" class="text-white text-sm mb-0"></iconify-icon>
                 </span>
-                <span class="text-truncate">{{ $item['label'] }} <strong>{{ $fmt($item['pct'], 1) }}%</strong>{{ isset($item['count']) ? ' ('.$fmt($item['count']).')' : '' }}</span>
+                @if ($item['available'])
+                  <span class="text-truncate">{{ $item['label'] }} <strong>{{ $fmt($item['pct'], 1) }}%</strong>{{ isset($item['count']) ? ' ('.$fmt($item['count']).')' : '' }}</span>
+                @else
+                  <span class="text-truncate text-secondary-light fst-italic">{{ $item['label'] }}: Data belum tersedia</span>
+                @endif
               </div>
               @endforeach
             </div>
           </div>
           <div class="bg-success-focus text-success-main border border-success-100 text-sm radius-8 px-12 py-8">{{ $card['insight'] }}</div>
-          <a href="#" class="text-primary-600 hover-text-primary text-sm fw-medium d-inline-flex align-items-center gap-1">
-            Lihat Detail <iconify-icon icon="solar:alt-arrow-right-linear"></iconify-icon>
-          </a>
         </div>
       </div>
     </div>
@@ -821,11 +1026,12 @@
     <div class="col-xxl-6">
       <div class="card radius-8 border-0 shadow-sm h-100">
         <div class="card-body p-24">
-          <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-16">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-12">
             <h6 class="fw-bold text-lg mb-0">Perbandingan Rata-rata Asupan Nutrisi</h6>
             <select class="form-select form-select-sm" style="width:auto"><option>Berisiko vs Tidak Berisiko</option></select>
           </div>
-          <div id="hnComparisonChart"></div>
+          <div id="hnComparisonCalories" class="mb-8"></div>
+          <div id="hnComparisonMacros"></div>
         </div>
       </div>
     </div>
@@ -844,13 +1050,6 @@
       </div>
       <div class="bg-neutral-50 border radius-8 p-16 mb-20">
         <div class="row g-3 align-items-end">
-          <div class="col-lg-4 col-md-6">
-            <label for="hn-emp-search" class="form-label text-sm fw-medium mb-6">Cari</label>
-            <div class="position-relative">
-              <iconify-icon icon="solar:magnifer-linear" class="position-absolute top-50 start-0 translate-middle-y ms-12 text-secondary-light"></iconify-icon>
-              <input type="search" id="hn-emp-search" class="form-control form-control-sm ps-32" placeholder="Cari nama / NIK / perusahaan...">
-            </div>
-          </div>
           <div class="col-lg-2 col-md-6">
             <label for="hn-emp-site" class="form-label text-sm fw-medium mb-6">Site</label>
             <select id="hn-emp-site" class="form-select form-select-sm">
@@ -876,6 +1075,7 @@
               <option value="Perlu Intervensi">Perlu Intervensi</option>
               <option value="Pantau">Pantau</option>
               <option value="Baik">Baik</option>
+              <option value="Data belum tersedia">Data belum tersedia</option>
             </select>
           </div>
           <div class="col-lg-2 col-md-6">
@@ -884,6 +1084,7 @@
             </a>
           </div>
         </div>
+        <span class="text-xs text-secondary-light d-block mt-8">Pencarian nama/NIK/perusahaan tersedia lewat kotak "Cari" di atas tabel.</span>
       </div>
       <div class="table-responsive">
         <table id="healthNutritionTable" class="table bordered-table mb-0 w-100" style="width:100%">
@@ -893,12 +1094,13 @@
               <th>Nama Karyawan</th>
               <th>Perusahaan</th>
               <th>Site</th>
+              <th>Departemen</th>
               <th>BMI</th>
               <th>Kolesterol</th>
               <th>LDL</th>
               <th>Trigliserida</th>
               <th>Tensi</th>
-              <th>GDS</th>
+              <th>GDP</th>
               <th>Risiko</th>
               <th>Status Nutrisi</th>
               <th>Aksi</th>
@@ -943,11 +1145,10 @@
     <div class="card-body p-24">
       <h6 class="fw-semibold mb-12">Ringkasan</h6>
       <p class="text-sm text-secondary-light">
-        Dari {{ $fmt($kpiTop['total_karyawan']['value'] ?? 0) }} karyawan yang mengikuti MCU,
-        {{ $fmt($kpiTop['karyawan_berisiko']['value'] ?? 0) }} ({{ $fmt($kpiTop['karyawan_berisiko']['sub_pct'] ?? 0, 1) }}%) terindikasi berisiko metabolik.
-        Kepatuhan pencatatan nutrisi tercatat pada {{ $fmt($kpiTop['data_nutrisi']['value'] ?? 0) }} karyawan
-        ({{ $fmt($kpiTop['data_nutrisi']['sub_pct'] ?? 0, 1) }}% dari total), dengan
-        {{ $fmt($kpiTop['target_kalori']['sub_pct'] ?? 0, 1) }}% karyawan telah memenuhi target kalori harian.
+        Dari {{ $fmt($kpiTop['total_karyawan']['value'] ?? 0) }} karyawan yang mengikuti MCU dan
+        {{ $fmt($coverage['matched_total']) }} yang datanya berhasil di-matched dengan log nutrisi ({{ $fmt($coverage['matched_pct_of_mcu'], 1) }}%),
+        {{ $fmt($kpiTop['karyawan_berisiko']['value'] ?? 0) }} ({{ $fmt($kpiTop['karyawan_berisiko']['sub_pct'] ?? 0, 1) }}%) ditemukan berisiko metabolik.
+        {{ $fmt($kpiTop['target_kalori']['sub_pct'] ?? 0, 1) }}% dari matched records telah memenuhi target kalori harian.
       </p>
       <div class="row g-3 mt-8">
         @foreach ($kpiConditions as $cond)
@@ -965,5 +1166,27 @@
     </div>
   </div>
 </div>
+</div>
+
+{{-- Modal Detail Karyawan --}}
+<div class="modal fade" id="hnEmployeeDetailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content radius-8 border-0 shadow-lg">
+      <div class="modal-header border-bottom py-16 px-24">
+        <h5 class="modal-title fw-bold text-lg mb-0">Detail Karyawan</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body p-24 position-relative">
+        <div id="hn-detail-loading" class="text-center py-40 d-none">
+          <div class="spinner-border text-primary-600" role="status" aria-hidden="true"></div>
+          <p class="text-sm text-secondary-light mt-12 mb-0">Memuat detail…</p>
+        </div>
+        <div id="hn-detail-body"></div>
+      </div>
+      <div class="modal-footer border-top py-16 px-24">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
 </div>
 @endsection
