@@ -1355,7 +1355,7 @@
   </div>
 
   {{-- Banner bawah --}}
-  <div class="hn-bottom-banner d-flex flex-wrap align-items-center justify-content-between gap-4 mb-4">
+  {{-- <div class="hn-bottom-banner d-flex flex-wrap align-items-center justify-content-between gap-4 mb-4">
     <div>
       <h6>Karyawan Sehat, Operasi Kuat,</h6>
       <span class="text-sm" style="opacity:.9">Masa Depan Berkelanjutan</span>
@@ -1378,7 +1378,7 @@
         <div class="hn-bb-label">Cek Kesehatan<br>Berkala</div>
       </div>
     </div>
-  </div>
+  </div> --}}
 
 </div>
 
