@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\SportEvaluation;
 
 use App\Http\Controllers\Controller;
+use App\Services\SportEvaluation\HealthNutritionDummyDataProvider;
 use App\Services\SportEvaluation\HealthNutritionRiskService;
 use App\Support\SpreadsheetExporter;
 use Illuminate\Http\JsonResponse;
@@ -14,77 +15,78 @@ use Throwable;
 
 /**
  * Dashboard Risiko MCU metabolik × pola makan.
+ *
+ * Desain baru (2026-09-18) sedang tampil dengan data dummy dari
+ * HealthNutritionDummyDataProvider sambil menunggu HealthNutritionRiskService
+ * dipetakan ulang ke struktur data yang sama. $service tetap di-inject supaya
+ * logAccess() (audit log, tanpa query berat) tetap jalan.
  */
 final class HealthNutritionRiskController extends Controller
 {
     public function __construct(
         private readonly HealthNutritionRiskService $service,
+        private readonly HealthNutritionDummyDataProvider $dummy,
     ) {}
 
     public function index(Request $request): View
     {
-        $filters = $this->service->readFilters($request);
-        $this->service->logAccess('evaluasi-well.health-nutrition.index', $filters);
+        $this->service->logAccess('evaluasi-well.health-nutrition.index', $request->query());
 
-        $data = $this->service->dashboard($filters);
-
-        return view('evaluasi-well.health-nutrition.index', $data);
+        return view('evaluasi-well.health-nutrition.index', $this->dummy->dashboard());
     }
 
     public function data(Request $request): JsonResponse
     {
-        return response()->json($this->service->datatable($request));
+        return response()->json(['data' => $this->dummy->dashboard()['employeeTable']['rows']]);
     }
 
     public function export(Request $request): JsonResponse
     {
-        $filters = $this->service->readFilters($request);
-        $this->service->logAccess('evaluasi-well.health-nutrition.export', $filters);
+        $this->service->logAccess('evaluasi-well.health-nutrition.export', $request->query());
 
         try {
-            $rows = $this->service->exportRows($request);
+            $rows = $this->dummy->dashboard()['employeeTable']['rows'];
 
             $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
                 'No',
                 'Nama',
-                'Kode SID',
+                'NIK',
                 'Perusahaan',
-                'Divisi',
-                'Temuan MCU',
-                'Alert Nutrisi',
-                'Hari Log 7h',
-                'Rata Kkal',
-                'Evidence',
-                'Skor Risiko',
+                'Site',
+                'BMI',
+                'Kolesterol',
+                'LDL',
+                'Trigliserida',
+                'Tensi',
+                'GDS',
+                'Risiko',
+                'Status Nutrisi',
             ]);
             $sheet = $spreadsheet->getActiveSheet();
 
             $rowNum = 2;
-            foreach ($rows as $index => $row) {
-                $mcuLabels = [];
-                foreach ($row['mcu_badges'] as $badge) {
-                    $mcuLabels[] = $badge['label'];
-                }
-
+            foreach ($rows as $row) {
                 $sheet->fromArray([
-                    $index + 1,
+                    $row['no'],
                     $row['nama'],
-                    $row['kode_sid'],
-                    $row['company'],
-                    $row['divisi'],
-                    implode('; ', $mcuLabels),
-                    implode(', ', $row['alert_codes']),
-                    $row['days_logged'],
-                    $row['avg_calories'],
-                    $row['evidence'],
-                    $row['risk_score'],
+                    $row['nik'],
+                    $row['perusahaan'],
+                    $row['site'],
+                    $row['bmi'],
+                    $row['kolesterol'],
+                    $row['ldl'],
+                    $row['trigliserida'],
+                    $row['tensi'],
+                    $row['gds'],
+                    $row['risiko_label'],
+                    $row['status_nutrisi'],
                 ], null, 'A'.$rowNum);
                 $rowNum++;
             }
 
             SpreadsheetExporter::download(
                 $spreadsheet,
-                'evaluasi_well_mcu_nutrisi_p1_'.date('Y-m-d_His').'.xlsx'
+                'evaluasi_well_mcu_nutrisi_'.date('Y-m-d_His').'.xlsx'
             );
         } catch (Throwable $e) {
             report($e);
