@@ -98,30 +98,69 @@
     .hn-toolbar > * { flex: 1 1 auto; }
   }
 
-  .hn-banner {
-    position: relative;
-    border-radius: 16px;
+  /* Kartu banner — dibuat identik dengan konvensi .wc-card di /evaluasi-well
+     (lihat "Top 5 Olahraga"/"Kalori Makanan"): kartu putih + foto masked di
+     kanan, bukan panel gradient solid. */
+  .wc-card {
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 16px !important;
+    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06) !important;
+    background: #fff;
     overflow: hidden;
-    background: linear-gradient(120deg, #14532D 0%, #16A34A 55%, #22C55E 100%);
-    padding: 22px 28px;
-    color: #fff;
-    min-height: 96px;
-    display: flex;
-    align-items: center;
+    position: relative;
   }
-  .hn-banner__bg {
+  .wc-card .card-body { z-index: 1; position: relative; }
+  .wc-card__bg {
     position: absolute;
-    right: -10px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: min(42%, 260px);
-    border-radius: 14px;
-    opacity: 0.92;
-    box-shadow: 0 12px 30px rgba(0,0,0,.25);
+    right: 0;
+    top: 22%;
+    width: min(44%, 230px);
+    height: auto;
+    max-height: 62%;
+    object-fit: contain;
+    object-position: right bottom;
+    opacity: 0.48;
+    pointer-events: none;
+    z-index: 0;
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 30%, #000 58%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 30%, #000 58%);
   }
-  .hn-banner__text { position: relative; z-index: 1; max-width: 62%; }
-  .hn-banner__text h6 { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
-  .hn-banner__text span { font-size: 13px; opacity: .9; }
+  .wc-card__head-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 22px;
+    background: #16A34A;
+    color: #fff;
+  }
+  .wc-card__title { color: #0F172A; }
+  .wc-card__subtitle {
+    display: block;
+    font-size: 13px;
+    color: #64748B;
+    line-height: 1.35;
+  }
+  .wc-card__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #ECFDF5;
+    color: #166534;
+    border: 1px solid #BBF7D0;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
+    max-width: 100%;
+  }
+  .wc-card__badge iconify-icon { font-size: 16px; color: #16A34A; flex-shrink: 0; }
+  @media (max-width: 991px) { .wc-card__bg { opacity: 0.12; } }
+  @media (max-width: 768px) { .wc-card__bg { display: none; } }
 
   .hn-coverage-strip {
     background: #F8FAFC;
@@ -778,11 +817,24 @@
 <div class="tab-pane fade show active" id="hnTabDashboard" role="tabpanel">
 
   {{-- Banner --}}
-  <div class="hn-banner mb-20">
-    <img src="{{ asset('evaluasi-well-assets/images/wellness/bg-calorie.png') }}" alt="" class="hn-banner__bg d-none d-md-block">
-    <div class="hn-banner__text">
-      <h6>Nutrisi seimbang,</h6>
-      <span>energi untuk hari yang lebih baik</span>
+  <div class="card wc-card mb-20">
+    <img class="wc-card__bg" src="{{ asset('evaluasi-well-assets/images/wellness/bg-calorie.png') }}" alt="" aria-hidden="true">
+    <div class="card-body p-24">
+      <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+        <div class="d-flex align-items-start gap-3 min-w-0">
+          <span class="wc-card__head-icon">
+            <iconify-icon icon="mdi:food-apple"></iconify-icon>
+          </span>
+          <div class="min-w-0">
+            <h6 class="mb-1 fw-bold text-lg wc-card__title">Nutrisi Seimbang, Energi untuk Hari yang Lebih Baik</h6>
+            <span class="wc-card__subtitle">Pantau pola makan karyawan dan keterkaitannya dengan hasil MCU secara berkala.</span>
+          </div>
+        </div>
+        <div class="wc-card__badge">
+          <iconify-icon icon="solar:link-bold"></iconify-icon>
+          <span>{{ $fmt($coverage['matched_total']) }} matched ({{ $fmt($coverage['matched_pct_of_mcu'], 1) }}%)</span>
+        </div>
+      </div>
     </div>
   </div>
 
