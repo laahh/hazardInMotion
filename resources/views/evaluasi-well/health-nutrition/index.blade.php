@@ -282,7 +282,7 @@
                 { name: 'Tidak Berisiko', data: dataset.tidak_berisiko }
             ],
             chart: { type: 'bar', height: 300, toolbar: { show: false } },
-            colors: ['#EF4444', '#16A34A'],
+            colors: ['#DC2626', '#16A34A'],
             plotOptions: { bar: { borderRadius: 4, columnWidth: '45%' } },
             dataLabels: { enabled: false },
             grid: { borderColor: '#E2E8F0', strokeDashArray: 4 },
@@ -346,7 +346,7 @@
         new ApexCharts(trendEl, {
             series: trend.series,
             chart: { type: 'line', height: 300, toolbar: { show: false } },
-            colors: ['#3B82F6', '#F97316', '#EF4444', '#EAB308', '#16A34A', '#EC4899'],
+            colors: ['#F86624', '#2563EB', '#DC2626', '#F4941E', '#8252E9', '#7F27FF'],
             stroke: { curve: 'smooth', width: 2.5 },
             markers: { size: 4 },
             grid: { borderColor: '#E2E8F0', strokeDashArray: 4 },
@@ -365,7 +365,7 @@
                 { name: 'Tidak Berisiko', data: comparison.tidak_berisiko }
             ],
             chart: { type: 'bar', height: 300, toolbar: { show: false } },
-            colors: ['#EF4444', '#16A34A'],
+            colors: ['#DC2626', '#16A34A'],
             plotOptions: { bar: { borderRadius: 4, columnWidth: '55%', dataLabels: { position: 'top' } } },
             dataLabels: {
                 enabled: true,
@@ -550,8 +550,8 @@
 
   $corrLevelColor = static function (int $level): string {
       return match ($level) {
-          4 => '#EF4444',
-          3 => '#F97316',
+          4 => '#DC2626',
+          3 => '#F86624',
           2 => '#FCD34D',
           1 => '#FDE68A',
           default => '#E2E8F0',
@@ -626,7 +626,7 @@
               <p class="fw-medium text-secondary-light mb-4">{{ $kpi['label'] }}</p>
               <h6 class="mb-0">{{ $fmt($kpi['value']) }}</h6>
             </div>
-            <div class="w-50-px h-50-px rounded-circle d-flex justify-content-center align-items-center flex-shrink-0" style="background: {{ ['primary'=>'#487FFF','danger'=>'#EF4444','success'=>'#16A34A','info'=>'#0EA5E9'][$kpi['color']] ?? '#487FFF' }}">
+            <div class="w-50-px h-50-px rounded-circle d-flex justify-content-center align-items-center flex-shrink-0 bg-{{ $kpi['color'] }}-600">
               <iconify-icon icon="{{ $kpi['icon'] }}" class="text-white text-2xl mb-0"></iconify-icon>
             </div>
           </div>
@@ -750,8 +750,8 @@
           </div>
           <div class="d-flex flex-wrap align-items-center gap-3 mt-12">
             <span class="text-xs fw-medium text-secondary-light">Korelasi:</span>
-            <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#EF4444;"></span>Sangat Tinggi</span>
-            <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#F97316;"></span>Tinggi</span>
+            <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#DC2626;"></span>Sangat Tinggi</span>
+            <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#F86624;"></span>Tinggi</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#FCD34D;"></span>Sedang</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#FDE68A;"></span>Rendah</span>
             <span class="d-inline-flex align-items-center gap-1 text-xs"><span class="rounded-1" style="width:12px;height:12px;background:#E2E8F0;"></span>Tidak Signifikan</span>
