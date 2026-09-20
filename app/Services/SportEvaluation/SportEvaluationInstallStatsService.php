@@ -530,7 +530,8 @@ final class SportEvaluationInstallStatsService
             if (! $this->mitraAssignmentService->rowMatchesScope($filters, $resolvedSite, $row['company'])) {
                 continue;
             }
-            if ($filters['division_group'] !== '' && $divisiGroup !== $filters['division_group']) {
+            if ($filters['division_group'] !== ''
+                && ! $this->mitraAssignmentService->matchesDivisionGroup($row['kode_sid'], $row['divisi'], $filters['division_group'])) {
                 continue;
             }
             if ($filters['departement'] !== '' && ! str_contains(mb_strtolower($row['departement']), mb_strtolower($filters['departement']))) {
@@ -693,11 +694,11 @@ final class SportEvaluationInstallStatsService
                         ]) || $this->exclusionRules->isExcludedSite($resolvedSite)) {
                             continue;
                         }
-                        $divisiGroup = $this->divisiGroupResolver->resolve($row['divisi']);
                         if (! $this->mitraAssignmentService->rowMatchesScope($filters, $resolvedSite, $row['company'])) {
                             continue;
                         }
-                        if ($filters['division_group'] !== '' && $divisiGroup !== $filters['division_group']) {
+                        if ($filters['division_group'] !== ''
+                            && ! $this->mitraAssignmentService->matchesDivisionGroup($row['kode_sid'], $row['divisi'], $filters['division_group'])) {
                             continue;
                         }
                         if ($filters['departement'] !== '' && ! str_contains(mb_strtolower($row['departement']), mb_strtolower($filters['departement']))) {
@@ -885,11 +886,11 @@ final class SportEvaluationInstallStatsService
                         ]) || $this->exclusionRules->isExcludedSite($resolvedSite)) {
                             continue;
                         }
-                        $divisiGroup = $this->divisiGroupResolver->resolve($row['divisi']);
                         if (! $this->mitraAssignmentService->rowMatchesScope($filters, $resolvedSite, $row['company'])) {
                             continue;
                         }
-                        if ($filters['division_group'] !== '' && $divisiGroup !== $filters['division_group']) {
+                        if ($filters['division_group'] !== ''
+                            && ! $this->mitraAssignmentService->matchesDivisionGroup($row['kode_sid'], $row['divisi'], $filters['division_group'])) {
                             continue;
                         }
                         if ($filters['departement'] !== '' && ! str_contains(mb_strtolower($row['departement']), mb_strtolower($filters['departement']))) {

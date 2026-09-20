@@ -152,11 +152,15 @@ class SportEvaluationDashboardController extends Controller
     private function dashboardFilterOptions(): array
     {
         $options = $this->installStatsService->filterOptions();
+        $divisionGroups = $options['division_groups'] ?? $this->divisiGroupResolver->groupLabels();
+        if (! in_array(SportEvaluationMitraAssignmentService::OHS_BC_ROSTER_LABEL, $divisionGroups, true)) {
+            $divisionGroups[] = SportEvaluationMitraAssignmentService::OHS_BC_ROSTER_LABEL;
+        }
 
         return [
             'sites' => $options['sites'] ?? [],
             'companies' => $options['companies'] ?? [],
-            'division_groups' => $options['division_groups'] ?? $this->divisiGroupResolver->groupLabels(),
+            'division_groups' => $divisionGroups,
         ];
     }
 

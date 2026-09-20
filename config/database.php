@@ -58,8 +58,12 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            // Fail-fast: jangan biarkan PHP menunggu default TCP timeout OS saat
+            // 10.10.10.38 lambat/tidak terjangkau (penyebab "Maximum execution
+            // time exceeded" — lihat pola yang sama di koneksi bewell_db/pgsql).
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                PDO::ATTR_TIMEOUT => (int) env('DB_CONNECT_TIMEOUT', 5),
             ]) : [],
         ],
 

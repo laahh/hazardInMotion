@@ -18,12 +18,73 @@ use Throwable;
  */
 final class SportEvaluationMitraAssignmentService
 {
+    /**
+     * Sentinel "divisi" value untuk filter roster tetap Divisi OHS BC (bukan grup divisi biasa,
+     * dicocokkan lewat daftar kode_sid di public/ohskaryawan.json, bukan kolom employee_profiles.divisi).
+     */
+    public const OHS_BC_ROSTER_LABEL = 'Divisi OHS BC';
+
+    /**
+     * @var list<string>|null
+     */
+    private ?array $ohsBcRosterSids = null;
+
     public function __construct(
         private readonly BewellConnectionService $connection,
         private readonly SportEvaluationKaryawanWellSiteResolver $siteResolver,
         private readonly SportEvaluationCompanyAliasResolver $companyAliasResolver,
         private readonly SportEvaluationDivisiGroupResolver $divisiGroupResolver,
     ) {}
+
+    /**
+     * Daftar kode_sid roster Divisi OHS BC, dibaca dari public/ohskaryawan.json (UPPER+TRIM, unik).
+     *
+     * @return list<string>
+     */
+    public function ohsBcRosterSids(): array
+    {
+        if ($this->ohsBcRosterSids !== null) {
+            return $this->ohsBcRosterSids;
+        }
+
+        $sids = [];
+
+        try {
+            $path = public_path('ohskaryawan.json');
+            if (is_file($path)) {
+                $raw = json_decode((string) file_get_contents($path), true);
+                if (is_array($raw)) {
+                    foreach ($raw as $entry) {
+                        $sid = trim((string) ($entry['sid'] ?? ''));
+                        if ($sid === '' || $sid === 'SID') {
+                            continue;
+                        }
+                        $sids[mb_strtoupper($sid)] = true;
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        return $this->ohsBcRosterSids = array_keys($sids);
+    }
+
+    /**
+     * Cocokkan satu baris karyawan terhadap grup divisi, termasuk sentinel roster
+     * Divisi OHS BC (dicocokkan via kode_sid, bukan kolom divisi). Dipakai oleh
+     * service lain (mis. InstallStatsService) yang menerapkan filter divisi sendiri.
+     */
+    public function matchesDivisionGroup(?string $kodeSid, ?string $divisi, string $divisionGroup): bool
+    {
+        if ($divisionGroup === self::OHS_BC_ROSTER_LABEL) {
+            $sid = trim((string) ($kodeSid ?? ''));
+
+            return $sid !== '' && in_array(mb_strtoupper($sid), $this->ohsBcRosterSids(), true);
+        }
+
+        return $this->divisiGroupResolver->belongsToGroup($divisi, $divisionGroup);
+    }
 
     /**
      * @return Collection<int, EvaluasiWellMitraAssignment>
@@ -466,7 +527,8 @@ final class SportEvaluationMitraAssignmentService
                                     }
                                 }
                                 if ($divisionGroup !== ''
-                                    && ! $this->divisiGroupResolver->belongsToGroup(
+                                    && ! $this->matchesDivisionGroup(
+                                        isset($row->kode_sid) ? (string) $row->kode_sid : null,
                                         isset($row->divisi) ? (string) $row->divisi : null,
                                         $divisionGroup
                                     )) {
@@ -482,11 +544,12 @@ final class SportEvaluationMitraAssignmentService
                         foreach ($sites as $site) {
                             $siteQuery = DB::connection(BewellConnectionService::CONNECTION)
                                 ->table('employee_profiles as e')
-                                ->select(['e.id', 'e.divisi']);
+                                ->select(['e.id', 'e.kode_sid', 'e.divisi']);
                             $this->siteResolver->applySiteFilter($siteQuery, $site);
                             foreach ($siteQuery->get() as $row) {
                                 if ($divisionGroup !== ''
-                                    && ! $this->divisiGroupResolver->belongsToGroup(
+                                    && ! $this->matchesDivisionGroup(
+                                        isset($row->kode_sid) ? (string) $row->kode_sid : null,
                                         isset($row->divisi) ? (string) $row->divisi : null,
                                         $divisionGroup
                                     )) {
@@ -545,6 +608,20 @@ final class SportEvaluationMitraAssignmentService
      */
     private function applyDivisionGroupFilter(Builder $query, string $groupLabel): void
     {
+        if ($groupLabel === self::OHS_BC_ROSTER_LABEL) {
+            $sids = $this->ohsBcRosterSids();
+            if ($sids === []) {
+                $query->whereRaw('1 = 0');
+
+                return;
+            }
+
+            $placeholders = implode(',', array_fill(0, count($sids), '?'));
+            $query->whereRaw("UPPER(TRIM(e.kode_sid)) IN ({$placeholders})", $sids);
+
+            return;
+        }
+
         $aliases = $this->divisiGroupResolver->aliasesForGroup($groupLabel);
         $values = array_values(array_unique(array_filter(
             array_merge($aliases, [$groupLabel]),
