@@ -129,7 +129,8 @@ require __DIR__ . '/Isc/isc-public.php';
 Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     // Define a GET route for the root URL ('/')
     Route::get('/', [HomeController::class, 'index'])->name('index');
-    
+    Route::get('/dept/{dept}', [HomeController::class, 'deptModules'])->name('home.dept');
+
     // Dashboard Routes
     Route::prefix('dashboard')->name('dashboard.')->group(function () {
         Route::get('/', [DashboardController::class, 'index'])->name('index');

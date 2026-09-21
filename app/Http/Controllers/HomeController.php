@@ -15,8 +15,59 @@ class HomeController extends Controller
      */
     public function index()
     {
-        
-        return view('index');
+        return view('index', [
+            'divisions' => $this->getDivisions(),
+        ]);
+    }
+
+    /**
+     * Display the module list for a single department within a division
+     */
+    public function deptModules(string $dept)
+    {
+        $deptInfo = null;
+
+        foreach ($this->getDivisions() as $division) {
+            foreach ($division['depts'] as $item) {
+                if ($item['key'] === $dept) {
+                    $deptInfo = $item + ['division' => $division['name']];
+                    break 2;
+                }
+            }
+        }
+
+        if (!$deptInfo) {
+            abort(404);
+        }
+
+        return view('modules', [
+            'dept' => $deptInfo,
+        ]);
+    }
+
+    /**
+     * Divisions shown on the homepage portal, each with its own departments.
+     * Department-to-module mapping is added later once the org structure is finalized.
+     */
+    private function getDivisions(): array
+    {
+        return [
+            [
+                'key' => 'ohs',
+                'name' => 'OHS',
+                'tagline' => 'Safe People, Sustainable Tomorrow',
+                'strip' => ['Safer Mines', 'Stronger People', 'Brighter Tomorrow'],
+                'badgeSide' => "A CLEANER, SAFER,\nSTRONGER INDONESIA",
+                'background' => 'build/images/login-background.png',
+                'depts' => [
+                    ['key' => 'hspa', 'name' => 'HSPA', 'subtitle' => 'Health, Safety, and Physical Asset', 'icon' => 'health_and_safety'],
+                    ['key' => 'erg', 'name' => 'ERG', 'subtitle' => 'Emergency Response Group', 'icon' => 'emergency'],
+                    ['key' => 'operation-compliance', 'name' => 'Operation Compliance', 'subtitle' => 'Integrity in Every Operation', 'icon' => 'fact_check'],
+                    ['key' => 'sod', 'name' => 'SOD', 'subtitle' => 'Site Operation Discipline', 'icon' => 'engineering'],
+                    ['key' => 'investigasi', 'name' => 'Investigasi', 'subtitle' => 'Find Facts, Drive Improvement', 'icon' => 'travel_explore'],
+                ],
+            ],
+        ];
     }
 
     /**
