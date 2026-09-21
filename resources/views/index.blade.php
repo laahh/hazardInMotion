@@ -323,8 +323,17 @@
     bottom: 0;
     width: 52%;
     background-size: cover;
+    background-position: center;
     -webkit-mask-image: linear-gradient(115deg, transparent 0%, transparent 10%, rgba(0,0,0,.18) 26%, rgba(0,0,0,.55) 40%, rgba(0,0,0,.85) 52%, #000 64%);
     mask-image: linear-gradient(115deg, transparent 0%, transparent 10%, rgba(0,0,0,.18) 26%, rgba(0,0,0,.55) 40%, rgba(0,0,0,.85) 52%, #000 64%);
+  }
+  .dept-photo.dept-photo-contain {
+    width: 56%;
+    background-size: 62% auto;
+    background-repeat: no-repeat;
+    background-position: center right 8%;
+    -webkit-mask-image: linear-gradient(115deg, transparent 0%, transparent 22%, rgba(0,0,0,.5) 42%, #000 58%);
+    mask-image: linear-gradient(115deg, transparent 0%, transparent 22%, rgba(0,0,0,.5) 42%, #000 58%);
   }
   .dept-photo::after {
     content: '';
@@ -462,7 +471,7 @@
       <div class="swiper-wrapper">
         @foreach ($divisions as $division)
         <div class="swiper-slide">
-          <div class="divisi-banner-slide" style="background-image: url('{{ URL::asset($division['background']) }}');">
+          <div class="divisi-banner-slide" style="background-image: url('{{ URL::asset($division['background']) }}'); background-position: center 25%;">
             @if (!empty($division['badgeSide']))
               <div class="divisi-badge-side">{{ $division['badgeSide'] }}</div>
             @endif
@@ -512,7 +521,7 @@
               <h6 class="mb-1 text-dark fw-bold">{{ $dept['name'] }}</h6>
               <p class="mb-0 f-13 text-secondary text-truncate">{{ $dept['subtitle'] }}</p>
             </div>
-            <div class="dept-photo" style="background-image: url('{{ URL::asset($division['background']) }}'); background-position: {{ 20 + ($i * 17) }}% {{ 30 + ($i * 9) }}%;"></div>
+            <div class="dept-photo {{ ($dept['imageFit'] ?? 'cover') === 'contain' ? 'dept-photo-contain' : '' }}" style="background-image: url('{{ URL::asset($dept['image'] ?? $division['background']) }}');"></div>
             <div class="dept-arrow-btn">
               <span class="material-icons-outlined">chevron_right</span>
             </div>
