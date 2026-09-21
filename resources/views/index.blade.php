@@ -38,32 +38,42 @@
   .portal-shell::before {
     content: '';
     position: absolute;
-    top: -40px;
-    left: 2.5rem;
-    width: 220px;
-    height: 120px;
-    background:
-      repeating-radial-gradient(circle at 0 0, transparent 0, transparent 10px, rgba(47,158,68,.16) 11px, transparent 12px);
-    opacity: .5;
+    top: -30px;
+    left: 0;
+    width: 320px;
+    height: 160px;
+    background-image:
+      repeating-linear-gradient(35deg, rgba(47,158,68,.16) 0 1.5px, transparent 1.5px 14px),
+      radial-gradient(circle at 100% 0%, rgba(47,158,68,.12), transparent 60%);
+    background-position: 0 0, 0 0;
+    background-repeat: no-repeat, no-repeat;
+    background-size: 280px 150px, 420px 260px;
     pointer-events: none;
     z-index: 0;
   }
   .portal-shell::after {
     content: '';
     position: absolute;
-    right: 2.5rem;
-    bottom: 34px;
-    width: 130px;
-    height: 90px;
-    background-image: radial-gradient(rgba(47,158,68,.35) 1.4px, transparent 1.6px);
-    background-size: 14px 14px;
-    opacity: .35;
+    right: 0;
+    bottom: 0;
+    width: 260px;
+    height: 170px;
+    background-image:
+      radial-gradient(rgba(47,158,68,.4) 1.3px, transparent 1.6px),
+      radial-gradient(circle at 100% 100%, rgba(47,158,68,.14), transparent 60%);
+    background-position: right 10px bottom 30px, 0 0;
+    background-size: 14px 14px, 100% 100%;
+    background-repeat: repeat, no-repeat;
+    opacity: .6;
     pointer-events: none;
     z-index: 0;
   }
   .portal-shell > * {
     position: relative;
     z-index: 1;
+  }
+  .portal-card-shadow {
+    box-shadow: 0 10px 30px rgba(20, 50, 20, .07);
   }
 
   /* Search + ESG pillar tabs */
@@ -74,22 +84,22 @@
     padding: 10px 20px;
   }
   .portal-tabs {
-    gap: 4px;
+    gap: 2px;
   }
   .portal-tabs .tab-item {
     font-size: 12px;
     font-weight: 700;
-    letter-spacing: .08em;
+    letter-spacing: .1em;
     color: #8a938c;
     text-transform: uppercase;
-    padding: 6px 4px;
+    padding: 6px 2px;
     cursor: pointer;
     user-select: none;
   }
-  .portal-tabs .tab-item + .tab-item {
-    border-left: 1px solid #d9dfda;
-    padding-left: 12px;
-    margin-left: 8px;
+  .portal-tabs .tab-sep {
+    color: #c7cfc8;
+    font-weight: 600;
+    padding: 0 8px;
   }
   .portal-tabs .tab-item.active {
     color: #16330f;
@@ -183,8 +193,8 @@
   }
   .divisi-badge-mid {
     position: absolute;
-    top: 40%;
-    left: 52%;
+    top: 46%;
+    left: 53%;
     transform: translateY(-50%);
     text-align: left;
     font-size: 11px;
@@ -195,6 +205,41 @@
     line-height: 1.6;
     z-index: 2;
   }
+  .divisi-hud {
+    position: absolute;
+    top: 14%;
+    left: 51%;
+    z-index: 2;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    pointer-events: none;
+  }
+  .divisi-hud svg {
+    display: block;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,.35));
+  }
+  .divisi-hud-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    background: rgba(255,255,255,.16);
+    border: 1px solid rgba(255,255,255,.45);
+    border-radius: 8px;
+    padding: 7px 8px 6px;
+    margin-bottom: 8px;
+    backdrop-filter: blur(2px);
+  }
+  .divisi-hud-bars span {
+    display: block;
+    width: 4px;
+    background: #ffffff;
+    border-radius: 2px;
+    opacity: .9;
+  }
+  .divisi-hud-bars span:nth-child(1) { height: 7px; }
+  .divisi-hud-bars span:nth-child(2) { height: 13px; }
+  .divisi-hud-bars span:nth-child(3) { height: 19px; }
   .divisi-badge-corner {
     position: absolute;
     right: clamp(18px, 3vw, 40px);
@@ -358,7 +403,7 @@
       overflow: visible;
       padding: 16px 1rem 24px;
     }
-    .divisi-badge-side, .divisi-badge-mid, .divisi-badge-corner {
+    .divisi-badge-side, .divisi-badge-mid, .divisi-badge-corner, .divisi-hud {
       display: none;
     }
     .dept-photo {
@@ -398,16 +443,14 @@
 
   <!-- Search + ESG pillar tabs -->
   <div class="portal-search-row">
-    <div class="card rounded-4 shadow-none border mb-0">
+    <div class="card rounded-4 border-0 portal-card-shadow mb-0">
       <div class="card-body d-flex align-items-center gap-3 flex-wrap">
         <div class="position-relative flex-grow-1" style="min-width: 240px;">
           <input type="text" id="deptSearch" class="form-control form-control-lg rounded-5 px-5" placeholder="Cari departemen..." autocomplete="off">
           <span class="material-icons-outlined position-absolute ms-3 translate-middle-y start-0 top-50" style="color: #6c757d;">search</span>
         </div>
         <div class="d-flex align-items-center portal-tabs flex-shrink-0">
-          <span class="tab-item active">People</span>
-          <span class="tab-item">Planet</span>
-          <span class="tab-item">Progress</span>
+          <span class="tab-item active">People</span><span class="tab-sep">|</span><span class="tab-item">Planet</span><span class="tab-sep">|</span><span class="tab-item">Progress</span>
         </div>
       </div>
     </div>
@@ -423,6 +466,15 @@
             @if (!empty($division['badgeSide']))
               <div class="divisi-badge-side">{{ $division['badgeSide'] }}</div>
             @endif
+            <div class="divisi-hud">
+              <svg width="76" height="76" viewBox="0 0 76 76" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="38" cy="38" r="26" stroke="rgba(255,255,255,.55)" stroke-width="1"/>
+                <circle cx="38" cy="38" r="17" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+                <circle cx="38" cy="38" r="3" fill="#ffffff"/>
+                <path d="M38 12V3M38 64V73M12 38H3M64 38H73" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+              </svg>
+              <div class="divisi-hud-bars"><span></span><span></span><span></span></div>
+            </div>
             <div class="divisi-badge-mid">PEOPLE<br>SAFETY<br>SUSTAINABILITY</div>
             <div>
               <div class="divisi-accent-bar"></div>
