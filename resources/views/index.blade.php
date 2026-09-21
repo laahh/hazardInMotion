@@ -225,15 +225,16 @@
   }
   .dept-card {
     border-radius: 1.1rem;
-    border: 1px solid #eef1ee;
+    border: 1px solid rgba(47, 158, 68, .18);
+    background: linear-gradient(135deg, #e8f6ea 0%, #f4fbf3 42%, #ffffff 100%);
     transition: all .25s ease;
     height: 100%;
     overflow: hidden;
   }
   .dept-card:hover {
-    box-shadow: 0 10px 22px rgba(20, 50, 20, .1);
+    box-shadow: 0 10px 24px rgba(20, 50, 20, .14);
     transform: translateY(-2px);
-    border-color: #d7ebd7;
+    border-color: #9fd6a8;
   }
   .dept-card .card-body {
     position: relative;
@@ -244,11 +245,12 @@
   .dept-icon-wrap {
     position: relative;
     z-index: 2;
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
-    background: #eaf6ec;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: #ffffff;
     color: #2f9e44;
+    box-shadow: 0 3px 8px rgba(20, 50, 20, .12);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -260,25 +262,35 @@
   .dept-text {
     position: relative;
     z-index: 2;
-    padding-right: 34%;
+    padding-right: 36%;
     min-width: 0;
   }
   .dept-text h6 {
     font-size: .95rem;
+  }
+  .dept-text p {
+    color: #5f7062;
   }
   .dept-photo {
     position: absolute;
     top: 0;
     right: 0;
     bottom: 0;
-    width: 48%;
+    width: 52%;
     background-size: cover;
-    -webkit-mask-image: linear-gradient(100deg, transparent 0%, transparent 12%, rgba(0,0,0,.5) 36%, #000 58%);
-    mask-image: linear-gradient(100deg, transparent 0%, transparent 12%, rgba(0,0,0,.5) 36%, #000 58%);
+    -webkit-mask-image: linear-gradient(115deg, transparent 0%, transparent 10%, rgba(0,0,0,.18) 26%, rgba(0,0,0,.55) 40%, rgba(0,0,0,.85) 52%, #000 64%);
+    mask-image: linear-gradient(115deg, transparent 0%, transparent 10%, rgba(0,0,0,.18) 26%, rgba(0,0,0,.55) 40%, rgba(0,0,0,.85) 52%, #000 64%);
+  }
+  .dept-photo::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, rgba(216, 240, 219, .75) 0%, rgba(216, 240, 219, .15) 45%, transparent 70%);
+    mix-blend-mode: soft-light;
   }
   .dept-arrow-btn {
     position: absolute;
-    right: 14px;
+    right: 12px;
     top: 50%;
     transform: translateY(-50%);
     z-index: 3;
@@ -287,7 +299,7 @@
     border-radius: 50%;
     background: #ffffff;
     color: #16330f;
-    box-shadow: 0 3px 10px rgba(0,0,0,.18);
+    box-shadow: 0 3px 10px rgba(0,0,0,.2);
     display: flex;
     align-items: center;
     justify-content: center;
