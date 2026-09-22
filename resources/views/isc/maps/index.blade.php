@@ -347,12 +347,13 @@
           <div class="gm-hud-sites" id="hud-iv-filters" role="group" aria-label="Filter task">
             <button type="button" class="gm-hud-site is-on" data-iv-entity="">Semua <b id="hud-iv-all">0</b></button>
             <button type="button" class="gm-hud-site" data-iv-entity="person">Orang <b id="hud-iv-people">0</b></button>
-            <button type="button" class="gm-hud-site" data-iv-entity="unit">Unit <b id="hud-iv-units">0</b></button>
+            {{-- Unit di-hide dulu — lihat dokumentasi di JS loadInterventions() yang memfilter entity "unit" dari daftar. --}}
+            {{-- <button type="button" class="gm-hud-site" data-iv-entity="unit">Unit <b id="hud-iv-units">0</b></button> --}}
           </div>
           <div class="gm-hud-sites" id="hud-iv-kinds" role="group" aria-label="Jenis pelanggaran">
             <button type="button" class="gm-hud-site" data-iv-kind="employee_danger">Bahaya <b id="hud-iv-kind-employee_danger">0</b></button>
             <button type="button" class="gm-hud-site" data-iv-kind="employee_competence">Kompetensi <b id="hud-iv-kind-employee_competence">0</b></button>
-            <button type="button" class="gm-hud-site" data-iv-kind="unit_danger">Unit <b id="hud-iv-kind-unit_danger">0</b></button>
+            {{-- <button type="button" class="gm-hud-site" data-iv-kind="unit_danger">Unit <b id="hud-iv-kind-unit_danger">0</b></button> --}}
           </div>
           <div class="gm-hud-sites" id="hud-iv-sites" role="group" aria-label="Filter site">
             <button type="button" class="gm-hud-site is-on" data-iv-site="">Semua site</button>

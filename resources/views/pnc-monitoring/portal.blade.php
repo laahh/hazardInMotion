@@ -10,6 +10,17 @@
 
 <div class="row gy-4">
   <div class="col-xxl-3 col-sm-6">
+    <a href="{{ route('pnc-monitoring.dashboard.main') }}" class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-5 text-decoration-none">
+      <div class="card-body p-0">
+        <span class="mb-12 w-48-px h-48-px bg-info flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle">
+          <iconify-icon icon="solar:pie-chart-2-bold" class="icon"></iconify-icon>
+        </span>
+        <h6 class="fw-semibold mb-4 text-primary-light">Dashboard Utama</h6>
+        <p class="text-sm text-secondary-light mb-0">Ringkasan &amp; monitoring gabungan IKK dan Commissioning.</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-xxl-3 col-sm-6">
     <a href="{{ route('pnc-monitoring.dashboard.ikk') }}" class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-1 text-decoration-none">
       <div class="card-body p-0">
         <span class="mb-12 w-48-px h-48-px bg-primary-600 flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle">

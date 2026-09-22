@@ -3775,6 +3775,37 @@
       });
   }
 
+  // Unit di-hide dulu dari menu Intervensi (permintaan user) — task dengan
+  // entity "unit" difilter di sini dan summary dihitung ulang dari task yang
+  // tersisa, supaya angka HUD (total/open/on progress/site) tetap konsisten
+  // dengan kartu yang benar-benar tampil. Tinggal hapus filter ini untuk
+  // menampilkan unit lagi.
+  function ivSummaryFromTasks(tasks) {
+    var open = 0;
+    var inProgress = 0;
+    var kinds = { employee_danger: 0, employee_competence: 0, unit_danger: 0 };
+    var siteCounts = { BMO: 0, LMO: 0, GMO: 0, SMO: 0, PUNAN: 0 };
+    tasks.forEach(function (row) {
+      if ((row.status || "") === "in_progress") {
+        inProgress++;
+      } else {
+        open++;
+      }
+      var kind = row.hazard_kind || "";
+      if (Object.prototype.hasOwnProperty.call(kinds, kind)) {
+        kinds[kind]++;
+      }
+      var code = row.site_code || "";
+      if (code && Object.prototype.hasOwnProperty.call(siteCounts, code)) {
+        siteCounts[code]++;
+      }
+    });
+    var sites = Object.keys(siteCounts).map(function (code) {
+      return { code: code, total: siteCounts[code] };
+    });
+    return { total: tasks.length, open: open, in_progress: inProgress, kinds: kinds, sites: sites };
+  }
+
   function loadInterventions(paint) {
     if (!mapsInterventionsUrl) {
       return;
@@ -3789,8 +3820,9 @@
     fetch(mapsInterventionsUrl, { headers: { Accept: "application/json" } })
       .then(function (res) { return res.json(); })
       .then(function (payload) {
-        ivTasks = (payload && payload.tasks) || [];
-        ivSummary = (payload && payload.summary) || null;
+        var rawTasks = (payload && payload.tasks) || [];
+        ivTasks = rawTasks.filter(function (row) { return (row.entity || "person") !== "unit"; });
+        ivSummary = ivSummaryFromTasks(ivTasks);
         ivTypes = (payload && payload.types) || [];
         ivTypeLabels = (payload && payload.type_labels) || {};
         ivCanCreate = !!(payload && payload.can_create);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\PncMonitoring\PncMonitoringCommissioningController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringIkkDashboardController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringIkkRecordController;
+use App\Http\Controllers\PncMonitoring\PncMonitoringMainDashboardController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringPengawasDashboardController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringPortalController;
 use Illuminate\Support\Facades\Route;
@@ -22,6 +23,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->group(function (): void {
     Route::get('/', [PncMonitoringPortalController::class, 'index'])->name('index');
+
+    Route::get('/dashboard', [PncMonitoringMainDashboardController::class, 'index'])->name('dashboard.main');
+    Route::get('/dashboard/data', [PncMonitoringMainDashboardController::class, 'data'])->name('dashboard.main.data');
 
     Route::get('/dashboard/ikk', [PncMonitoringIkkDashboardController::class, 'index'])->name('dashboard.ikk');
     Route::get('/dashboard/ikk/data', [PncMonitoringIkkDashboardController::class, 'data'])->name('dashboard.ikk.data');
