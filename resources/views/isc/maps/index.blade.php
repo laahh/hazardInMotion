@@ -164,11 +164,11 @@
             <strong id="hud-kind-employee_competence">–</strong>
             <small>Batas kompetensi</small>
           </button>
-          <button type="button" class="gm-hud-violation is-unit" data-roster="kind" data-kind="unit_danger">
+          {{-- <button type="button" class="gm-hud-violation is-unit" data-roster="kind" data-kind="unit_danger">
             <span>Bahaya unit</span>
             <strong id="hud-kind-unit_danger">–</strong>
             <small>Unit di zona bahaya</small>
-          </button>
+          </button> --}}
         </div>
         <p class="gm-hud-foot">Tidak diketahui <b id="hud-pob-unknown">–</b> <button type="button" class="gm-hud-link" data-roster="unknown">Lihat daftar</button> · <button type="button" class="gm-hud-link" data-roster="in">Lihat di boundary</button></p>
       </article>
@@ -190,7 +190,7 @@
           <button type="button" class="gm-hud-metric is-ever" data-roster="current">
             <span>GPS aktif</span>
             <strong id="hud-current">–</strong>
-            <small>Besigma hari ini</small>
+            <small>GPS aktif hari ini</small>
           </button>
           <button type="button" class="gm-hud-metric is-tag" data-roster="checkin">
             <span>Check-in RFID</span>
