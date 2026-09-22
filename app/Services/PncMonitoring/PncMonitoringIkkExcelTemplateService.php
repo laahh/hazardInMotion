@@ -51,6 +51,22 @@ final class PncMonitoringIkkExcelTemplateService
         $sheet->getColumnDimension('B')->setWidth(18);
         $sheet->getColumnDimension('C')->setWidth(28);
 
+        // Kolom "OKK Performance" & "Performance Layer 2 Up" dihitung otomatis oleh sistem —
+        // ditandai abu-abu supaya user tahu tidak perlu diisi manual.
+        foreach (PncMonitoringIkkExcelParser::FIELD_KEYS as $index => $key) {
+            if ($key !== null) {
+                continue;
+            }
+            $col = Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->getStyle($col.'1')->applyFromArray([
+                'font' => ['bold' => true, 'italic' => true, 'color' => ['rgb' => '6B7280']],
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => 'E5E7EB'],
+                ],
+            ]);
+        }
+
         return $spreadsheet;
     }
 }

@@ -37,13 +37,19 @@ final class PncMonitoringIkkExcelParser
         'OKK 1',
         'OKK 2',
         'OKK 3',
+        'OKK Performance',
         'OKK Layer 2',
         'OKK Layer 3',
         'OKK Layer 4',
+        'Performance Layer 2 Up',
     ];
 
     /**
-     * @var list<string>
+     * Kolom "OKK Performance" & "Performance Layer 2 Up" bersifat informasional saja
+     * (dihitung otomatis dari OKK 1-3 / OKK Layer 2-4 terhadap PLAN OKK) — ditandai null
+     * agar dilewati saat parsing, isinya diabaikan meski diisi user.
+     *
+     * @var list<string|null>
      */
     public const FIELD_KEYS = [
         'jenis',
@@ -63,9 +69,11 @@ final class PncMonitoringIkkExcelParser
         'okk_1',
         'okk_2',
         'okk_3',
+        null,
         'okk_layer_2',
         'okk_layer_3',
         'okk_layer_4',
+        null,
     ];
 
     public function parse(string $absolutePath): PncMonitoringExcelParseResult
@@ -157,6 +165,9 @@ final class PncMonitoringIkkExcelParser
     {
         $attrs = [];
         foreach (self::FIELD_KEYS as $index => $key) {
+            if ($key === null) {
+                continue;
+            }
             $raw = $this->cell($cells, $index);
             $attrs[$key] = match ($key) {
                 'tanggal' => $this->parseDate($raw),
