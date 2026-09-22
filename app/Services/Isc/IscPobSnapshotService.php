@@ -111,6 +111,7 @@ final class IscPobSnapshotService
         $checkins = $this->normalizeCheckins($rfid);
         $reconcile = $this->reconcile->execute($ever, $current, $rfid);
         unset($reconcile['ever'], $reconcile['current'], $reconcile['rfid']);
+        $reconcile = $this->applyGapRfidTanpaGps($reconcile, $checkins, $classified);
 
         return [
             'source' => 'demo',
@@ -126,6 +127,52 @@ final class IscPobSnapshotService
             'people' => $classified,
             'hazard_features' => $hazards,
         ];
+    }
+
+    /**
+     * "RFID tanpa GPS" = check-in RFID hari itu yang SID-nya BUKAN sedang
+     * berada di dalam boundary IUPK (bukan lagi diturunkan dari "pernah
+     * terlihat Besigma di mana saja", yang sebelumnya salah selalu 0 karena
+     * SID check-in RFID ikut dimasukkan ke set "ever" itu sendiri).
+     *
+     * @param  array<string, mixed>  $reconcile
+     * @param  list<array<string, mixed>>  $checkins
+     * @param  list<array<string, mixed>>  $classified
+     * @return array<string, mixed>
+     */
+    private function applyGapRfidTanpaGps(array $reconcile, array $checkins, array $classified): array
+    {
+        $inSids = [];
+        foreach ($classified as $person) {
+            $isHudPerson = ($person['entity'] ?? 'person') === 'person' && ! ($person['roster_only'] ?? false);
+            if (! $isHudPerson || ($person['presence'] ?? null) !== IscPobClassifyAction::PRESENCE_IN) {
+                continue;
+            }
+            $sid = trim((string) ($person['sid'] ?? ''));
+            if ($sid !== '') {
+                $inSids[mb_strtoupper($sid)] = true;
+            }
+        }
+
+        $withoutGps = [];
+        foreach ($checkins as $row) {
+            $sid = trim((string) ($row['sid'] ?? ''));
+            if ($sid === '' || isset($inSids[mb_strtoupper($sid)])) {
+                continue;
+            }
+            $withoutGps[] = [
+                'sid' => $sid,
+                'name' => $row['name'] ?? $sid,
+                'company' => $row['company'] ?? null,
+                'site_code' => $row['site_code'] ?? null,
+                'checked_in_at' => $row['checked_in_at'] ?? null,
+            ];
+        }
+
+        $reconcile['gap_rfid_minus_besigma_count'] = count($withoutGps);
+        $reconcile['gap_rfid_minus_besigma'] = array_slice($withoutGps, 0, IscRfidReconcileAction::LIST_LIMIT);
+
+        return $reconcile;
     }
 
     /**
@@ -171,6 +218,7 @@ final class IscPobSnapshotService
         ));
         $reconcile = $this->reconcile->execute($ever, $current, $rfidPack['people']);
         unset($reconcile['ever'], $reconcile['current'], $reconcile['rfid']);
+        $reconcile = $this->applyGapRfidTanpaGps($reconcile, $checkins, $classified);
 
         $kindCounts = [
             IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER => 0,

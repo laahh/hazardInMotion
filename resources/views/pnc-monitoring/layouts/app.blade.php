@@ -13,6 +13,17 @@
     <link rel="stylesheet" href="{{ asset('evaluasi-well-assets/css/lib/dataTables.min.css') }}">
     <link rel="stylesheet" href="{{ asset('evaluasi-well-assets/css/lib/flatpickr.min.css') }}">
     <link rel="stylesheet" href="{{ asset('evaluasi-well-assets/css/style.css') }}">
+    <style>
+        /* A submenu opened just to preview it (click) should not look the same as the
+           group that actually contains the current page (server-rendered `.open`). */
+        .sidebar-menu li.dropdown.dropdown-open:not(.open) > a {
+            background-color: transparent;
+            color: var(--text-secondary-light);
+        }
+        .sidebar-menu li.dropdown.dropdown-open:not(.open) > a:hover {
+            color: var(--brand);
+        }
+    </style>
 
     @yield('css')
 </head>
