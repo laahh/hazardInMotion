@@ -150,6 +150,17 @@ final class IscPobSnapshotService
      */
     private function applyGapRfidTanpaGps(array $reconcile, array $checkins, array $classified): array
     {
+        // Angka headline = pengurangan langsung: total check-in RFID hari itu
+        // dikurangi "GPS aktif" (current_count, sudah disamakan dengan
+        // "Dalam konsesi") — sengaja arithmetic sederhana (bukan irisan SID
+        // presisi) supaya konsisten kelihatan di mata dengan dua angka lain
+        // yang ditampilkan berdampingan di kartu yang sama.
+        $reconcile['gap_rfid_minus_besigma_count'] = max(0, count($checkins) - (int) ($reconcile['current_count'] ?? 0));
+
+        // Daftar drill-down tetap dari irisan SID asli (checkin yang SID-nya
+        // BUKAN sedang di dalam boundary) — panjangnya bisa sedikit beda dari
+        // angka headline di atas (selisih maksimal sebesar GPS aktif), tapi
+        // tetap daftar nama yang paling masuk akal untuk "Lihat daftar".
         $inSids = [];
         foreach ($classified as $person) {
             $isHudPerson = ($person['entity'] ?? 'person') === 'person' && ! ($person['roster_only'] ?? false);
@@ -177,7 +188,6 @@ final class IscPobSnapshotService
             ];
         }
 
-        $reconcile['gap_rfid_minus_besigma_count'] = count($withoutGps);
         $reconcile['gap_rfid_minus_besigma'] = array_slice($withoutGps, 0, IscRfidReconcileAction::LIST_LIMIT);
 
         return $reconcile;
