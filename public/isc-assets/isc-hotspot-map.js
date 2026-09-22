@@ -95,6 +95,13 @@
   var ivQuery = "";
   var ivTimer = 0;
   var ivFocusId = 0;
+  var ivKnownTaskIds = null;
+  var ivSoundMuted = false;
+  try {
+    ivSoundMuted = window.localStorage.getItem("isc_maps_iv_sound_muted") === "1";
+  } catch (err) {
+    ivSoundMuted = false;
+  }
   var hrReports = [];
   var hrSummary = null;
   var histReports = [];
@@ -3787,6 +3794,89 @@
       });
   }
 
+  // Alarm suara "beep beep" untuk pelanggaran baru di menu Intervensi.
+  // Dibangkitkan lewat Web Audio API (osilator) supaya tidak perlu file
+  // audio tambahan. AudioContext baru boleh dibuat/di-resume setelah ada
+  // interaksi user (kebijakan autoplay browser) — lihat unlockIvAudioOnce().
+  var ivAudioCtx = null;
+
+  function ivEnsureAudioCtx() {
+    if (ivAudioCtx) {
+      return ivAudioCtx;
+    }
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      ivAudioCtx = Ctx ? new Ctx() : null;
+    } catch (err) {
+      ivAudioCtx = null;
+    }
+    return ivAudioCtx;
+  }
+
+  function unlockIvAudioOnce() {
+    ivEnsureAudioCtx();
+    if (ivAudioCtx && ivAudioCtx.state === "suspended") {
+      ivAudioCtx.resume().catch(function () {});
+    }
+  }
+
+  function playIvViolationBeep() {
+    if (ivSoundMuted) {
+      return;
+    }
+    var ctx = ivEnsureAudioCtx();
+    if (!ctx) {
+      return;
+    }
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(function () {});
+    }
+    var beepDuration = 0.15;
+    var gap = 0.12;
+    for (var i = 0; i < 2; i++) {
+      var start = ctx.currentTime + i * (beepDuration + gap);
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.35, start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + beepDuration);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + beepDuration);
+    }
+  }
+
+  // Bandingkan task terbuka sekarang dengan snapshot sebelumnya; task ID yang
+  // baru muncul = pelanggaran baru. ivKnownTaskIds null berarti belum ada
+  // baseline (load pertama) — sengaja TIDAK bunyi supaya task yang sudah
+  // ada sebelum halaman dibuka tidak dianggap "baru".
+  function detectNewIvViolations(tasks) {
+    var currentIds = {};
+    var isFirstLoad = ivKnownTaskIds === null;
+    var newOnes = [];
+    tasks.forEach(function (row) {
+      var id = Number(row.id);
+      if (!id) {
+        return;
+      }
+      currentIds[id] = true;
+      if (!isFirstLoad && !ivKnownTaskIds[id]) {
+        newOnes.push(row);
+      }
+    });
+    ivKnownTaskIds = currentIds;
+    if (isFirstLoad || !newOnes.length) {
+      return;
+    }
+    playIvViolationBeep();
+    var label = newOnes.length === 1
+      ? "Pelanggaran baru: " + (newOnes[0].name || newOnes[0].sid || "seseorang") + " — " + (newOnes[0].hazard_kind_label || newOnes[0].hazard_name || "masuk zona bahaya")
+      : newOnes.length + " pelanggaran baru terdeteksi.";
+    toast(label);
+  }
+
   // Unit di-hide dulu dari menu Intervensi (permintaan user) — task dengan
   // entity "unit" difilter di sini dan summary dihitung ulang dari task yang
   // tersisa, supaya angka HUD (total/open/on progress/site) tetap konsisten
@@ -3838,6 +3928,7 @@
         ivTypes = (payload && payload.types) || [];
         ivTypeLabels = (payload && payload.type_labels) || {};
         ivCanCreate = !!(payload && payload.can_create);
+        detectNewIvViolations(ivTasks);
         if (paint || railView === "interventions") {
           paintInterventionHud();
           renderInterventionCards();
@@ -4483,6 +4574,38 @@
   });
   bindHazardReportCardEvents("gm-hr-cards", function () { return hrReports; });
   bindHazardReportCardEvents("gm-hist-cards", function () { return histReports; });
+
+  document.addEventListener("click", unlockIvAudioOnce, { once: true });
+  document.addEventListener("keydown", unlockIvAudioOnce, { once: true });
+
+  var ivSoundToggle = document.getElementById("gm-iv-sound-toggle");
+  function syncIvSoundToggle() {
+    if (!ivSoundToggle) {
+      return;
+    }
+    ivSoundToggle.classList.toggle("is-muted", ivSoundMuted);
+    ivSoundToggle.setAttribute("aria-pressed", ivSoundMuted ? "false" : "true");
+    ivSoundToggle.title = ivSoundMuted
+      ? "Bunyi alarm pelanggaran baru: mati (klik untuk aktifkan)"
+      : "Bunyi alarm pelanggaran baru: aktif (klik untuk matikan)";
+  }
+  if (ivSoundToggle) {
+    syncIvSoundToggle();
+    ivSoundToggle.addEventListener("click", function () {
+      ivSoundMuted = !ivSoundMuted;
+      try {
+        window.localStorage.setItem("isc_maps_iv_sound_muted", ivSoundMuted ? "1" : "0");
+      } catch (err) {}
+      syncIvSoundToggle();
+      if (!ivSoundMuted) {
+        unlockIvAudioOnce();
+        toast("Alarm pelanggaran baru diaktifkan.");
+      } else {
+        toast("Alarm pelanggaran baru dimatikan.");
+      }
+    });
+  }
+
   document.querySelectorAll("[data-hazard-close]").forEach(function (el) {
     el.addEventListener("click", closeHazardReport);
   });

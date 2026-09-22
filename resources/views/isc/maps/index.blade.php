@@ -335,6 +335,9 @@
             <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
               <path d="M2 18 C12 22 18 8 28 12 C38 16 44 24 54 14 C64 6 74 16 86 10" />
             </svg>
+            <button type="button" class="gm-hud-sound-toggle" id="gm-iv-sound-toggle" aria-pressed="true" title="Bunyi alarm pelanggaran baru: aktif">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8 8 0 0 1 0 12"/></svg>
+            </button>
           </div>
           <div class="gm-hud-split">
             <button type="button" class="gm-hud-metric is-unsafe" data-iv-status="open">

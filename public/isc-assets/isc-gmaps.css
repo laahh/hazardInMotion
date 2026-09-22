@@ -376,6 +376,34 @@ button, input { font-family: inherit; }
 .gm-hud-ico.cctv { background: #137333; }
 .gm-hud-ico.interventions { background: #c2410c; }
 .gm-hud-ico.historical { background: #0f766e; }
+.gm-hud-sound-toggle {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(226, 232, 240, .9);
+  background: #f8fafc;
+  color: #64748b;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.gm-hud-sound-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.gm-hud-sound-toggle:hover { background: #e2e8f0; }
+.gm-hud-sound-toggle.is-muted {
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, .3);
+  background: rgba(239, 68, 68, .08);
+}
 .gm-hud-spark {
   width: 72px;
   height: 28px;
