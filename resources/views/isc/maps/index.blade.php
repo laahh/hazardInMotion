@@ -397,7 +397,7 @@
           </div>
           <div class="gm-hud-sites" id="hud-hist-status" role="group" aria-label="Filter status laporan">
             <button type="button" class="gm-hud-site is-on" data-hist-status="">Semua <b id="hud-hist-all">0</b></button>
-            <button type="button" class="gm-hud-site" data-hist-status="submitted">Terkirim <b id="hud-hist-submitted">0</b></button>
+            <button type="button" class="gm-hud-site" data-hist-status="submitted">Submit <b id="hud-hist-submitted">0</b></button>
             <button type="button" class="gm-hud-site" data-hist-status="open">Open <b id="hud-hist-open">0</b></button>
             <button type="button" class="gm-hud-site" data-hist-status="in_progress">On progress <b id="hud-hist-in_progress">0</b></button>
             <button type="button" class="gm-hud-site" data-hist-status="closed">Selesai <b id="hud-hist-closed">0</b></button>

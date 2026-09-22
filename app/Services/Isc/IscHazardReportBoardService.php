@@ -12,8 +12,10 @@ use Illuminate\Database\Eloquent\Builder;
  * - "ter-intervensi": laporan yang sudah punya intervention_id.
  * - "historical": seluruh laporan yang pernah masuk, status terkini.
  *
- * Status ditampilkan diturunkan dari status event/intervensi terkait
- * (bukan kolom isc_hazard_reports.status yang selalu 'submitted').
+ * Status yang ditampilkan = kolom isc_hazard_reports.status apa adanya
+ * (saat ini selalu 'submitted' / "Submit"). Status event/intervensi terkait
+ * tetap disertakan sebagai info tambahan (event_status/intervention_status),
+ * tapi tidak dipakai sebagai status utama/badge.
  */
 final class IscHazardReportBoardService
 {
@@ -23,7 +25,7 @@ final class IscHazardReportBoardService
      * @var array<string, string>
      */
     private const STATUS_LABELS = [
-        'submitted' => 'Terkirim',
+        'submitted' => 'Submit',
         'open' => 'Open',
         'in_progress' => 'On progress',
         'closed' => 'Selesai',
@@ -88,7 +90,7 @@ final class IscHazardReportBoardService
     {
         $eventStatus = $report->event?->status;
         $interventionStatus = $report->intervention?->status;
-        $primary = $eventStatus ?: ($interventionStatus ?: ($report->status ?: 'submitted'));
+        $primary = $report->status ?: 'submitted';
 
         return [
             'status' => $primary,
