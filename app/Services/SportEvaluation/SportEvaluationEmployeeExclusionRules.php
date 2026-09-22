@@ -59,11 +59,16 @@ final class SportEvaluationEmployeeExclusionRules
      * Terapkan exclude jabatan (Presiden Direktur, Direktur tanpa site/HO),
      * site Jakarta/Poltek, perusahaan Performance yang dikecualikan,
      * PT Berau Coal + departemen internship, dan nama dummy ke builder ber-alias 'e'.
+     *
+     * $excludeJakartaSite = false mempertahankan karyawan site Jakarta di
+     * populasi (dipakai tabel "Data karyawan & log mentah" di Tren Aktivitas
+     * WELL, yang sengaja tidak ikut aturan exclude site Jakarta ini).
      */
-    public function applyToQuery(Builder $query): Builder
+    public function applyToQuery(Builder $query, bool $excludeJakartaSite = true): Builder
     {
         [$companySql, $companyBindings] = $this->companyNotExcludedPredicate('e');
         [$berauSql, $berauBindings] = $this->berauInternDepartmentNotExcludedPredicate('e');
+        $excludedSites = $excludeJakartaSite ? self::EXCLUDED_SITES : ['POLTEK'];
 
         return $query
             ->whereRaw("UPPER(TRIM(COALESCE(e.jabatan_fungsional, ''))) NOT IN ('VISITOR', 'PRESIDEN DIREKTUR')")
@@ -71,7 +76,10 @@ final class SportEvaluationEmployeeExclusionRules
                 UPPER(TRIM(COALESCE(e.jabatan_fungsional, ''))) = 'DIREKTUR'
                 AND (TRIM(COALESCE(e.site, '')) = '' OR UPPER(TRIM(e.site)) = 'HO')
             )")
-            ->whereRaw("UPPER(TRIM(COALESCE(e.site, ''))) NOT IN ('JAKARTA', 'POLTEK')")
+            ->whereRaw(
+                'UPPER(TRIM(COALESCE(e.site, \'\'))) NOT IN ('.implode(', ', array_fill(0, count($excludedSites), '?')).')',
+                $excludedSites
+            )
             ->whereRaw($companySql, $companyBindings)
             ->whereRaw($berauSql, $berauBindings)
             ->where(function (Builder $q): void {

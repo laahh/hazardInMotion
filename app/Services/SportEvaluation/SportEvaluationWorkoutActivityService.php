@@ -205,14 +205,14 @@ final class SportEvaluationWorkoutActivityService
             ];
             $orderColumn = $orderable[$orderColumnIndex] ?? 'w.created_at';
 
-            $recordsTotal = (int) $this->workoutBaseQuery($filters)->count('w.id');
+            $recordsTotal = (int) $this->workoutBaseQuery($filters, false)->count('w.id');
             $recordsFiltered = (int) $this->applyWorkoutSearch(
-                $this->workoutBaseQuery($filters),
+                $this->workoutBaseQuery($filters, false),
                 $search
             )->count('w.id');
 
             $rows = $this->applyWorkoutSearch(
-                $this->workoutBaseQuery($filters)->select($this->workoutSelectColumns()),
+                $this->workoutBaseQuery($filters, false)->select($this->workoutSelectColumns()),
                 $search
             )
                 ->orderBy($orderColumn, $orderDir)
@@ -267,8 +267,8 @@ final class SportEvaluationWorkoutActivityService
             ];
         }
 
-        $parsed = $this->fetchParsedWorkouts($filters);
-        [$foodByUser, $foodByDate] = $this->fetchFoodCalories($filters);
+        $parsed = $this->fetchParsedWorkouts($filters, false);
+        [$foodByUser, $foodByDate] = $this->fetchFoodCalories($filters, false);
         $periodDays = $this->periodDayCount($filters);
         $aggregated = $this->aggregator->aggregate(
             $parsed,
@@ -282,7 +282,7 @@ final class SportEvaluationWorkoutActivityService
         return [
             'users' => $aggregated['users'] ?? [],
             'rawWorkouts' => $aggregated['rawWorkouts'] ?? $parsed,
-            'rawFoods' => $this->fetchRawFoods($filters),
+            'rawFoods' => $this->fetchRawFoods($filters, false),
             'trendDaily' => $aggregated['trendDaily'] ?? $this->emptyTrend(),
             'filters' => $filters,
         ];
@@ -683,7 +683,7 @@ final class SportEvaluationWorkoutActivityService
     private function periodGroupedQuery(array $filters, string $search, bool $withJenis): Builder
     {
         $periodSql = SportEvaluationWorkoutActivityPeriodFormatter::periodStartSql($filters['report_mode']);
-        $query = $this->workoutBaseQuery($filters)
+        $query = $this->workoutBaseQuery($filters, false)
             ->select([
                 'e.id',
                 'e.nama',
@@ -814,7 +814,7 @@ final class SportEvaluationWorkoutActivityService
             ->whereBetween('created_at', [$range['from'], $range['to']])
             ->groupBy('user_id');
 
-        $query = $this->workoutBaseQuery($filters)
+        $query = $this->workoutBaseQuery($filters, false)
             ->leftJoinSub($foodSub, 'food', 'food.user_id', '=', 'e.id')
             ->select([
                 'e.id',
@@ -861,7 +861,7 @@ final class SportEvaluationWorkoutActivityService
             return $metrics;
         }
 
-        $rows = $this->workoutBaseQuery($filters)
+        $rows = $this->workoutBaseQuery($filters, false)
             ->whereIn('w.user_id', $userIds)
             ->get([
                 'w.user_id',
@@ -894,13 +894,13 @@ final class SportEvaluationWorkoutActivityService
      * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string}  $filters
      * @return list<array<string, mixed>>
      */
-    private function fetchParsedWorkouts(array $filters): array
+    private function fetchParsedWorkouts(array $filters, bool $excludeJakartaSite = true): array
     {
         $parsed = [];
         $lastId = 0;
 
         do {
-            $rows = $this->workoutBaseQuery($filters)
+            $rows = $this->workoutBaseQuery($filters, $excludeJakartaSite)
                 ->select($this->workoutSelectColumns())
                 ->where('w.id', '>', $lastId)
                 ->orderBy('w.id')
@@ -965,10 +965,10 @@ final class SportEvaluationWorkoutActivityService
      * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string}  $filters
      * @return array{0: array<int, float>, 1: array<string, float>}
      */
-    private function fetchFoodCalories(array $filters): array
+    private function fetchFoodCalories(array $filters, bool $excludeJakartaSite = true): array
     {
         $byUser = [];
-        foreach ($this->foodBaseQuery($filters)
+        foreach ($this->foodBaseQuery($filters, $excludeJakartaSite)
             ->selectRaw('f.user_id, SUM(f.total_calories) as kcal')
             ->groupBy('f.user_id')
             ->get() as $row) {
@@ -976,7 +976,7 @@ final class SportEvaluationWorkoutActivityService
         }
 
         $byDate = [];
-        foreach ($this->foodBaseQuery($filters)
+        foreach ($this->foodBaseQuery($filters, $excludeJakartaSite)
             ->selectRaw('DATE(f.created_at) as d, SUM(f.total_calories) as kcal')
             ->groupBy('d')
             ->get() as $row) {
@@ -993,13 +993,13 @@ final class SportEvaluationWorkoutActivityService
      * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string}  $filters
      * @return list<array<string, mixed>>
      */
-    private function fetchRawFoods(array $filters): array
+    private function fetchRawFoods(array $filters, bool $excludeJakartaSite = true): array
     {
         $rows = [];
         $lastId = 0;
 
         do {
-            $chunk = $this->foodBaseQuery($filters)
+            $chunk = $this->foodBaseQuery($filters, $excludeJakartaSite)
                 ->select([
                     'f.id as id',
                     'f.user_id',
@@ -1047,10 +1047,10 @@ final class SportEvaluationWorkoutActivityService
     /**
      * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string}  $filters
      */
-    private function workoutBaseQuery(array $filters): Builder
+    private function workoutBaseQuery(array $filters, bool $excludeJakartaSite = true): Builder
     {
         $range = $this->datetimeRange($filters);
-        $query = $this->activeEmployeesBaseQuery()
+        $query = $this->activeEmployeesBaseQuery($excludeJakartaSite)
             ->join('workout_analyses as w', 'w.user_id', '=', 'e.id')
             ->whereBetween('w.created_at', [$range['from'], $range['to']]);
 
@@ -1066,12 +1066,12 @@ final class SportEvaluationWorkoutActivityService
     /**
      * @param  array{from:string,to:string,site:string,company:string,division:string,activity_type:string}  $filters
      */
-    private function foodBaseQuery(array $filters): Builder
+    private function foodBaseQuery(array $filters, bool $excludeJakartaSite = true): Builder
     {
         $range = $this->datetimeRange($filters);
 
         return $this->applyEmployeeFilters(
-            $this->activeEmployeesBaseQuery()
+            $this->activeEmployeesBaseQuery($excludeJakartaSite)
                 ->join('food_analyses as f', 'f.user_id', '=', 'e.id')
                 ->whereBetween('f.created_at', [$range['from'], $range['to']]),
             $filters
@@ -1157,13 +1157,13 @@ final class SportEvaluationWorkoutActivityService
         return $query;
     }
 
-    private function activeEmployeesBaseQuery(): Builder
+    private function activeEmployeesBaseQuery(bool $excludeJakartaSite = true): Builder
     {
         $query = DB::connection(BewellConnectionService::CONNECTION)
             ->table('employee_profiles as e')
             ->where('e.status_karyawan', 'AKTIF');
 
-        return $this->exclusionRules->applyToQuery($query);
+        return $this->exclusionRules->applyToQuery($query, $excludeJakartaSite);
     }
 
     /**
