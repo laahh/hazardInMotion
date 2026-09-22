@@ -114,7 +114,7 @@
                                 </div>
                             </div>
                             <div class="col-6 p-0 m-0">
-                                <div class="card-body p-24 h-100 d-flex flex-column justify-content-center border border-top-0">
+                                <div class="card-body p-24 h-100 d-flex flex-column justify-content-center border border-top-0 border-start-0 border-end-0 border-bottom-0">
                                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
                                         <div>
                                             <span class="mb-12 w-44-px h-44-px text-primary-600 bg-primary-light border border-primary-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
