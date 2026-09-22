@@ -83,7 +83,7 @@
                                             <span class="mb-12 w-44-px h-44-px text-yellow bg-yellow-light border border-yellow-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
                                                 <iconify-icon icon="solar:eye-bold" class="icon"></iconify-icon>  
                                             </span>
-                                            <span class="mb-1 fw-medium text-secondary-light text-md">OKK IKK Aktif</span>
+                                            <span class="mb-1 fw-bold text-secondary-light text-md">OKK IKK Aktif</span>
                                             <h6 class="fw-semibold text-primary-light mb-1">90%</h6>
                                         </div>
                                     </div>
@@ -97,7 +97,7 @@
                                             <span class="mb-12 w-44-px h-44-px text-lilac bg-lilac-light border border-lilac-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
                                                 <iconify-icon icon="solar:eye-scan-bold" class="icon"></iconify-icon>  
                                             </span>
-                                            <span class="mb-1 fw-medium text-secondary-light text-md">OKK Layer 1</span>
+                                            <span class="mb-1 fw-bold text-secondary-light text-md">OKK Layer 1</span>
                                             <h6 class="fw-semibold text-primary-light mb-1">80%</h6>
                                         </div>
                                     </div>
@@ -111,7 +111,7 @@
                                             <span class="mb-12 w-44-px h-44-px text-pink bg-pink-light border border-pink-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
                                                 <iconify-icon icon="solar:shield-check-bold" class="icon"></iconify-icon>  
                                             </span>
-                                            <span class="mb-1 fw-medium text-secondary-light text-md">OKK Layer 2</span>
+                                            <span class="mb-1 fw-bold text-secondary-light text-md">OKK Layer 2</span>
                                             <h6 class="fw-semibold text-primary-light mb-1">20%</h6>
                                         </div>
                                     </div>
