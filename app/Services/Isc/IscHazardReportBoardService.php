@@ -106,6 +106,10 @@ final class IscHazardReportBoardService
      */
     private function toArray(IscHazardReport $report, array $status): array
     {
+        $lat = $report->event?->lat;
+        $lng = $report->event?->lng;
+        $hasPoint = $lat !== null && $lng !== null && (float) $lat != 0.0 && (float) $lng != 0.0;
+
         return [
             'id' => $report->id,
             'event_id' => $report->event_id,
@@ -115,6 +119,10 @@ final class IscHazardReportBoardService
             'event_status' => $status['event_status'],
             'intervention_status' => $status['intervention_status'],
             'intervention_type' => $report->intervention?->type,
+            'lat' => $hasPoint ? (float) $lat : null,
+            'lng' => $hasPoint ? (float) $lng : null,
+            'has_point' => $hasPoint,
+            'show_url' => $report->event_id ? route('isc.interventions.show', $report->event_id) : null,
             'perusahaan' => $report->perusahaan,
             'site' => $report->site,
             'lokasi' => $report->lokasi,

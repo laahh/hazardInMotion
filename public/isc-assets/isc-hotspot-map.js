@@ -3821,20 +3821,91 @@
     return "<span class=\"" + tagClass + "\">" + esc(label) + "</span>";
   }
 
+  function hazardReportDetailHtml(row) {
+    var rows = [];
+    if (row.perusahaan) {
+      rows.push(["Perusahaan", row.perusahaan]);
+    }
+    if (row.pic_nama) {
+      rows.push(["PIC", row.pic_nama + (row.pic_jabatan ? " · " + row.pic_jabatan : "")]);
+    }
+    if (row.detail_lokasi) {
+      rows.push(["Detail lokasi", row.detail_lokasi]);
+    }
+    if (row.sub_ketidaksesuaian) {
+      rows.push(["Sub ketidaksesuaian", row.sub_ketidaksesuaian]);
+    }
+    if (row.quick_action) {
+      rows.push(["Quick action", row.quick_action]);
+    }
+    if (row.deskripsi_temuan) {
+      rows.push(["Deskripsi temuan", row.deskripsi_temuan]);
+    }
+    if (row.event_status) {
+      rows.push(["Status event", row.event_status]);
+    }
+    if (row.intervention_status) {
+      rows.push(["Status intervensi", row.intervention_status]);
+    }
+    var body = rows.map(function (pair) {
+      return "<p class=\"gm-hud-hint\" style=\"margin:4px 0\"><b>" + esc(pair[0]) + ":</b> " + esc(pair[1]) + "</p>";
+    }).join("");
+    var actions = "";
+    if (row.has_point || row.show_url) {
+      actions = "<div class=\"gm-task-actions\">" +
+        (row.has_point ? "<button type=\"button\" class=\"gm-hr-map\">Lihat di peta</button>" : "") +
+        (row.show_url ? "<a href=\"" + esc(row.show_url) + "\">Form bukti</a>" : "") +
+        "</div>";
+    }
+    return "<div class=\"gm-task-form\">" + body + actions + "</div>";
+  }
+
   function hazardReportCardHtml(row, i) {
     var meta = [row.sid_pelapor, row.site, row.lokasi, row.ketidaksesuaian]
       .filter(Boolean)
       .join(" · ");
     var when = formatWhen(row.created_at) || "";
     return (
-      "<article class=\"gm-hud-card gm-task\" style=\"animation-delay:" + (0.06 + i * 0.03) + "s\">" +
-      "<button type=\"button\" class=\"gm-task-head\" style=\"cursor:default\">" +
+      "<article class=\"gm-hud-card gm-task\" data-hr-id=\"" + row.id + "\" style=\"animation-delay:" + (0.06 + i * 0.03) + "s\">" +
+      "<button type=\"button\" class=\"gm-task-head\">" +
       "<span class=\"gm-pin people\">" + pinSvg() + "</span>" +
       "<span class=\"copy\"><b>" + esc(row.nama_pelapor || row.sid_pelapor || "Laporan #" + row.id) + "</b>" +
       "<span class=\"meta\">" + esc(meta) + (when ? " · " + esc(when) : "") + "</span></span>" +
       hazardReportStatusTag(row) +
-      "</button></article>"
+      "</button>" +
+      hazardReportDetailHtml(row) +
+      "</article>"
     );
+  }
+
+  function bindHazardReportCardEvents(containerId, rowsGetter) {
+    var el = document.getElementById(containerId);
+    if (!el || el.getAttribute("data-hr-bound") === "1") {
+      return;
+    }
+    el.setAttribute("data-hr-bound", "1");
+    el.addEventListener("click", function (event) {
+      var card = event.target.closest("[data-hr-id]");
+      if (!card) {
+        return;
+      }
+      var id = Number(card.getAttribute("data-hr-id"));
+      var row = rowsGetter().find(function (r) { return Number(r.id) === id; });
+      if (event.target.closest(".gm-hr-map")) {
+        event.preventDefault();
+        if (row && row.has_point && row.lat != null && row.lng != null) {
+          map.setView([Number(row.lat), Number(row.lng)], Math.max(map.getZoom(), 15));
+        } else {
+          toast("Laporan ini tidak punya koordinat GPS.");
+        }
+        return;
+      }
+      if (event.target.closest(".gm-task-head")) {
+        el.querySelectorAll(".gm-task").forEach(function (c) {
+          c.classList.toggle("is-open", c === card && !c.classList.contains("is-open"));
+        });
+      }
+    });
   }
 
   function renderHazardReportCards() {
@@ -4366,6 +4437,8 @@
       renderHistoricalCards();
     });
   });
+  bindHazardReportCardEvents("gm-hr-cards", function () { return hrReports; });
+  bindHazardReportCardEvents("gm-hist-cards", function () { return histReports; });
   document.querySelectorAll("[data-hazard-close]").forEach(function (el) {
     el.addEventListener("click", closeHazardReport);
   });
