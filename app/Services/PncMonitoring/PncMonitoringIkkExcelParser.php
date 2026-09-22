@@ -76,6 +76,24 @@ final class PncMonitoringIkkExcelParser
         null,
     ];
 
+    /**
+     * Batas wajar untuk kolom hitungan (bukan tanggal/flag) — mencegah nilai korup
+     * (mis. angka jutaan akibat kolom Excel salah map) tersimpan ke database.
+     *
+     * @var array<string, int>
+     */
+    private const COUNT_FIELD_MAX = [
+        'finding_ia' => 999,
+        'finding_verlap' => 999,
+        'plan_okk' => 999,
+        'okk_1' => 999,
+        'okk_2' => 999,
+        'okk_3' => 999,
+        'okk_layer_2' => 999,
+        'okk_layer_3' => 999,
+        'okk_layer_4' => 999,
+    ];
+
     public function parse(string $absolutePath): PncMonitoringExcelParseResult
     {
         if (! is_readable($absolutePath)) {
@@ -119,6 +137,14 @@ final class PncMonitoringIkkExcelParser
             $attrs = $this->attributesFromRow($cells);
             if ($this->isAttributesAllEmpty($attrs)) {
                 continue;
+            }
+
+            foreach (self::COUNT_FIELD_MAX as $field => $max) {
+                $value = $attrs[$field] ?? null;
+                if (is_int($value) && $value > $max) {
+                    $warnings[] = "Baris {$excelRow}: nilai {$field} ({$value}) tidak wajar (maks {$max}) — diset ke 0, mohon periksa ulang sumber datanya.";
+                    $attrs[$field] = 0;
+                }
             }
 
             $nomor = trim((string) ($attrs['nomor'] ?? ''));
