@@ -209,18 +209,22 @@ final class IscPobSnapshotService
 
         $rfidPack = $this->rfid->onsiteTodayAll();
         $checkins = $this->normalizeCheckins($rfidPack['people']);
-        // "ever" HARUS cuma SID yang genuinely terlihat Besigma (GPS + data
-        // pelanggaran), TANPA ikut SID check-in RFID sendiri — kalau dulu
-        // ikut disatukan, "Keduanya cocok" (both_count) jadi selalu = total
-        // check-in RFID (matched 100% palsu), padahal harusnya irisan asli.
-        $everSids = $this->collectSids($classified, $peopleViolations);
-        $ever = $this->gps->identifiersBySids($everSids);
-        if ($ever === []) {
-            $ever = array_values(array_filter(
-                $classified,
-                static fn (array $p): bool => trim((string) ($p['sid'] ?? '')) !== '' && ($p['entity'] ?? 'person') === 'person',
-            ));
-        }
+        // "ever" = SID yang genuinely terlihat Besigma hari ini (GPS +
+        // pelanggaran — $classified sudah menggabungkan keduanya lewat
+        // applyViolations() di atas). Diambil LANGSUNG dari $classified,
+        // BUKAN lagi re-lookup ke besigma_db.users.sid_code lewat
+        // identifiersBySids(): re-lookup itu mencocokkan HANYA kolom
+        // sid_code, padahal $person['sid'] bisa fallback ke NIK/NPK kalau
+        // sid_code kosong (lihat IscPersonnelGpsReader::sidFromUser()) —
+        // jadi orang yang SID-nya dari NIK/NPK diam-diam hilang dari "ever",
+        // dan "Keduanya cocok" (both_count) jadi under-count walau orang itu
+        // benar-benar terlacak Besigma hari itu. Juga TANPA ikut SID
+        // check-in RFID sendiri (lihat catatan lama: kalau ikut disatukan,
+        // both_count selalu = total check-in RFID, matched 100% palsu).
+        $ever = array_values(array_filter(
+            $classified,
+            static fn (array $p): bool => trim((string) ($p['sid'] ?? '')) !== '' && ($p['entity'] ?? 'person') === 'person',
+        ));
         // "GPS aktif" (current_count) disamakan dengan "Dalam konsesi"
         // (summary.in): orang, bukan roster-only, dan presence "in" — bukan
         // lagi soal stale/tidaknya GPS (itu konsep terpisah dari "di dalam
@@ -604,25 +608,6 @@ final class IscPobSnapshotService
         } catch (Throwable) {
             return null;
         }
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  ...$groups
-     * @return list<string>
-     */
-    private function collectSids(array ...$groups): array
-    {
-        $sids = [];
-        foreach ($groups as $group) {
-            foreach ($group as $person) {
-                $sid = trim((string) ($person['sid'] ?? ''));
-                if ($sid !== '') {
-                    $sids[mb_strtoupper($sid)] = $sid;
-                }
-            }
-        }
-
-        return array_values($sids);
     }
 
     /**
