@@ -41,14 +41,8 @@
                             <ul class="d-flex flex-wrap align-items-center mt-3 gap-3">
                                 <li class="d-flex align-items-center gap-2">
                                     <span class="w-12-px h-12-px radius-2 bg-primary-600"></span>
-                                    <span class="text-secondary-light text-sm fw-semibold">Earning: 
-                                        <span class="text-primary-light fw-bold">$500,00,000.00</span>
-                                    </span>
-                                </li>
-                                <li class="d-flex align-items-center gap-2">
-                                    <span class="w-12-px h-12-px radius-2 bg-yellow"></span>
-                                    <span class="text-secondary-light text-sm fw-semibold">Expense: 
-                                        <span class="text-primary-light fw-bold">$20,000.00</span>
+                                    <span class="text-secondary-light text-lg fw-semibold">Total IKK:
+                                        <span class="text-primary-light fw-bold text-2xl">{{ number_format($payload['ikk']['kpis']['ikkCount'] ?? 0, 0, ',', '.') }}</span>
                                     </span>
                                 </li>
                             </ul>
