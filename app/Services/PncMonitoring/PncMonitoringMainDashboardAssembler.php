@@ -22,6 +22,7 @@ final class PncMonitoringMainDashboardAssembler
         $site = $this->allOrValue($filters['site'] ?? 'ALL');
 
         $ikk = $this->ikkAssembler->assemble(['year' => $year, 'site' => $site]);
+        $ikkHeatmap = $this->ikkAssembler->complianceHeatmap(['year' => $year, 'site' => $site]);
         $commissioning = $this->commissioningAssembler->assemble(['year' => $year, 'site' => $site]);
         $inventory = $this->inventoryAssembler->assemble(['site' => $site]);
 
@@ -41,6 +42,7 @@ final class PncMonitoringMainDashboardAssembler
                 'kpis' => $ikk['kpis'],
                 'bySite' => $ikk['bySite'],
                 'trend' => $ikk['trend'],
+                'heatmap' => $ikkHeatmap,
             ],
             'commissioning' => [
                 'kpis' => $commissioning['kpis'],

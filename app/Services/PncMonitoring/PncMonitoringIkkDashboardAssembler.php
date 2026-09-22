@@ -6,6 +6,7 @@ namespace App\Services\PncMonitoring;
 
 use App\Models\PncMonitoring\PncMonitoringIkkRecord;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
@@ -45,6 +46,169 @@ final class PncMonitoringIkkDashboardAssembler
                 ],
             ];
         });
+    }
+
+    /**
+     * @param  array{year?:string,month?:string,week?:string,site?:string,company?:string,type?:string}  $filters
+     * @return array<string, mixed>
+     */
+    public function complianceHeatmap(array $filters): array
+    {
+        $normalized = $this->normalizeFilters($filters);
+        $cacheKey = 'pnc_monitoring_ikk_heatmap_'.md5((string) json_encode($normalized));
+
+        return Cache::remember($cacheKey, 45, function () use ($normalized): array {
+            $rows = $this->baseQuery($normalized)->whereNotNull('tanggal')->get(['tanggal', 'ipk']);
+
+            return $this->buildComplianceHeatmap($rows);
+        });
+    }
+
+    /**
+     * @param  Collection<int, PncMonitoringIkkRecord>  $rows
+     * @return array<string, mixed>
+     */
+    private function buildComplianceHeatmap(Collection $rows): array
+    {
+        $dailyTotal = [];
+        $dailyCompliant = [];
+        foreach ($rows as $row) {
+            if ($row->tanggal === null) {
+                continue;
+            }
+            $key = $row->tanggal->format('Y-m-d');
+            $dailyTotal[$key] = ($dailyTotal[$key] ?? 0) + 1;
+            if ((int) $row->ipk === 1) {
+                $dailyCompliant[$key] = ($dailyCompliant[$key] ?? 0) + 1;
+            }
+        }
+
+        if ($dailyTotal === []) {
+            return [
+                'series' => [],
+                'categories' => [],
+                'peakDayLabel' => '-',
+                'peakDayCount' => 0,
+                'avgDaily' => 0,
+                'overallComplianceRate' => null,
+                'insight' => 'Belum ada data IKK untuk ditampilkan.',
+            ];
+        }
+
+        ksort($dailyTotal);
+        $dateKeys = array_keys($dailyTotal);
+        $start = Carbon::parse($dateKeys[0])->startOfDay();
+        $end = Carbon::parse($dateKeys[array_key_last($dateKeys)])->startOfDay();
+
+        $weekdayNames = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+        $dowToName = [
+            Carbon::MONDAY => 'Senin',
+            Carbon::TUESDAY => 'Selasa',
+            Carbon::WEDNESDAY => 'Rabu',
+            Carbon::THURSDAY => 'Kamis',
+            Carbon::FRIDAY => 'Jumat',
+            Carbon::SATURDAY => 'Sabtu',
+            Carbon::SUNDAY => 'Minggu',
+        ];
+
+        $gridStart = $start->copy()->startOfWeek(Carbon::MONDAY);
+        $gridEnd = $end->copy()->endOfWeek(Carbon::SUNDAY);
+
+        $weekLabels = [];
+        $seriesData = [];
+        foreach ($weekdayNames as $name) {
+            $seriesData[$name] = [];
+        }
+
+        $peakCount = -1;
+        $peakLabel = '-';
+        $totalSum = 0;
+        $compliantSum = 0;
+        $daysWithData = 0;
+
+        $cursor = $gridStart->copy();
+        $weekIndex = -1;
+        while ($cursor->lte($gridEnd)) {
+            if ((int) $cursor->dayOfWeek === Carbon::MONDAY) {
+                $weekIndex++;
+                $weekLabels[] = $cursor->translatedFormat('d M');
+                foreach ($weekdayNames as $name) {
+                    $seriesData[$name][$weekIndex] = [
+                        'x' => $weekLabels[$weekIndex],
+                        'y' => null,
+                        'date' => null,
+                        'date_label' => null,
+                        'total' => 0,
+                        'compliant' => 0,
+                        'empty' => true,
+                    ];
+                }
+            }
+
+            $rowName = $dowToName[(int) $cursor->dayOfWeek] ?? 'Senin';
+            $key = $cursor->format('Y-m-d');
+            $inRange = $cursor->betweenIncluded($start, $end);
+
+            if ($inRange) {
+                $total = $dailyTotal[$key] ?? 0;
+                $compliant = $dailyCompliant[$key] ?? 0;
+                $rate = $total > 0 ? round($compliant / $total * 100, 1) : null;
+
+                $seriesData[$rowName][$weekIndex] = [
+                    'x' => $weekLabels[$weekIndex],
+                    'y' => $rate,
+                    'date' => $key,
+                    'date_label' => $cursor->translatedFormat('d M Y'),
+                    'total' => $total,
+                    'compliant' => $compliant,
+                    'empty' => $total === 0,
+                ];
+
+                if ($total > 0) {
+                    $totalSum += $total;
+                    $compliantSum += $compliant;
+                    $daysWithData++;
+                    if ($total > $peakCount) {
+                        $peakCount = $total;
+                        $peakLabel = $cursor->translatedFormat('d M Y');
+                    }
+                }
+            }
+
+            $cursor->addDay();
+        }
+
+        $series = [];
+        foreach ($weekdayNames as $name) {
+            $series[] = [
+                'name' => $name,
+                'data' => array_values($seriesData[$name]),
+            ];
+        }
+
+        $avgDaily = $daysWithData > 0 ? (int) round($totalSum / $daysWithData) : 0;
+        $overallRate = $totalSum > 0 ? round($compliantSum / $totalSum * 100, 1) : null;
+
+        $insight = 'Belum ada cukup data untuk insight kepatuhan IKK.';
+        if ($overallRate !== null) {
+            if ($overallRate >= 90) {
+                $insight = "Kepatuhan IKK secara umum sangat baik ({$overallRate}%), hari terbanyak di {$peakLabel} dengan {$peakCount} IKK.";
+            } elseif ($overallRate >= 70) {
+                $insight = "Kepatuhan IKK cukup baik ({$overallRate}%), namun masih ada ruang perbaikan pada hari-hari tertentu.";
+            } else {
+                $insight = "Kepatuhan IKK masih rendah ({$overallRate}%) — perlu perhatian pada hari dengan warna merah/kuning.";
+            }
+        }
+
+        return [
+            'series' => $series,
+            'categories' => $weekLabels,
+            'peakDayLabel' => $peakLabel,
+            'peakDayCount' => max(0, $peakCount),
+            'avgDaily' => $avgDaily,
+            'overallComplianceRate' => $overallRate,
+            'insight' => $insight,
+        ];
     }
 
     /**

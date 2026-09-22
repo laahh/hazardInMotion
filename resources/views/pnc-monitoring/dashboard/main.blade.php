@@ -170,102 +170,128 @@
             </div>
         </div>
         <div class="col-xxl-9 col-lg-6">
-            <div class="card h-100">
-                <div class="card-body p-24">
-                    <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between mb-20">
-                        <h6 class="mb-2 fw-bold text-lg mb-0">Recent Orders</h6>
-                        <a href="javascript:void(0)" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
-                            View All
-                            <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
-                        </a>
+            <div class="card h-100 wc-card">
+                <div class="card-body p-24 d-flex flex-column h-100">
+                    @php
+                        $ikkHeatmap = $payload['ikk']['heatmap'] ?? [];
+                        $heatmapOverallRate = $ikkHeatmap['overallComplianceRate'] ?? null;
+                    @endphp
+                    <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16 flex-shrink-0">
+                        <div class="d-flex align-items-start gap-3 min-w-0">
+                            <span class="wc-card__head-icon">
+                                <iconify-icon icon="mdi:calendar-month-outline"></iconify-icon>
+                            </span>
+                            <div class="min-w-0">
+                                <h6 class="mb-1 fw-bold text-lg wc-card__title">Pola IKK Harian &amp; Kepatuhan</h6>
+                                <span class="wc-card__subtitle">Kapan IKK dibuat, dan seberapa patuh (IPK) setiap harinya?</span>
+                            </div>
+                        </div>
+                        <div class="wc-card__badge">
+                            <iconify-icon icon="mdi:file-document-multiple"></iconify-icon>
+                            <span>Terbanyak {{ number_format($ikkHeatmap['peakDayCount'] ?? 0) }} IKK · {{ $ikkHeatmap['peakDayLabel'] ?? '-' }}</span>
+                        </div>
                     </div>
-                    <div class="table-responsive scroll-sm">
-                        <table class="table bordered-table mb-0">
-                        <thead>
-                            <tr>
-                            <th scope="col">Users</th>
-                            <th scope="col">Invoice</th>
-                            <th scope="col">Items</th>
-                            <th scope="col">Qty</th>
-                            <th scope="col">Amount</th>
-                            <th scope="col" class="text-center">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <img src="{{ asset('wowdash-admin/assets/images/users/user1.png') }}" alt="" class="flex-shrink-0 me-12 radius-8">
-                                    <span class="text-lg text-secondary-light fw-semibold flex-grow-1">Dianne Russell</span>
+
+                    <div id="ikkHeatmapChart" class="activity-pattern-heatmap flex-grow-1 mb-8" aria-label="Heatmap kepatuhan IKK harian"></div>
+
+                    <div class="d-flex align-items-center flex-wrap gap-3 mb-16 flex-shrink-0">
+                        <span class="text-xs fw-medium" style="color:#64748B;">Tingkat kepatuhan (IPK)</span>
+                        <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#E2E8F0;"></span>Tidak ada IKK</span>
+                        <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#FCA5A5;"></span>&lt;50%</span>
+                        <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#FDE68A;"></span>50–74%</span>
+                        <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#A7F3D0;"></span>75–89%</span>
+                        <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#34D399;"></span>90–99%</span>
+                        <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#059669;"></span>100%</span>
+                    </div>
+
+                    <div class="wc-tip wc-tip--green mb-16 flex-shrink-0">
+                        <iconify-icon icon="solar:calendar-bold" class="flex-shrink-0"></iconify-icon>
+                        <span>{{ $ikkHeatmap['insight'] ?? 'Belum ada data IKK untuk ditampilkan.' }}</span>
+                    </div>
+
+                    <div class="row g-3 flex-shrink-0 activity-pattern-metrics">
+                        <div class="col-sm-6 col-xl-4">
+                            <div class="activity-pattern-metric h-100">
+                                <span class="activity-pattern-metric__icon"><iconify-icon icon="solar:calendar-mark-bold"></iconify-icon></span>
+                                <div class="activity-pattern-metric__body">
+                                    <div class="activity-pattern-metric__label">Hari Terbanyak</div>
+                                    <div class="activity-pattern-metric__value">{{ $ikkHeatmap['peakDayLabel'] ?? '-' }}</div>
+                                    <div class="activity-pattern-metric__sub">{{ number_format($ikkHeatmap['peakDayCount'] ?? 0) }} IKK</div>
                                 </div>
-                            </td>
-                            <td>#6352148</td>
-                            <td>iPhone 14 max</td>
-                            <td>2</td>
-                            <td>$5,000.00</td>
-                            <td class="text-center"> <span class="bg-success-focus text-success-main px-24 py-4 rounded-pill fw-medium text-sm">Paid</span> </td>
-                            </tr>
-                            <tr>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <img src="{{ asset('wowdash-admin/assets/images/users/user2.png') }}" alt="" class="flex-shrink-0 me-12 radius-8">
-                                    <span class="text-lg text-secondary-light fw-semibold flex-grow-1">Wade Warren</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-xl-4">
+                            <div class="activity-pattern-metric h-100">
+                                <span class="activity-pattern-metric__icon"><iconify-icon icon="solar:chart-2-bold"></iconify-icon></span>
+                                <div class="activity-pattern-metric__body">
+                                    <div class="activity-pattern-metric__label">Rata-rata Harian</div>
+                                    <div class="activity-pattern-metric__value">{{ number_format($ikkHeatmap['avgDaily'] ?? 0) }}</div>
+                                    <div class="activity-pattern-metric__sub">IKK / hari (hari dengan data)</div>
                                 </div>
-                            </td>
-                            <td>#6352148</td>
-                            <td>Laptop HPH </td>
-                            <td>3</td>
-                            <td>$1,000.00</td>
-                            <td class="text-center"> <span class="bg-warning-focus text-warning-main px-24 py-4 rounded-pill fw-medium text-sm">Pending</span> </td>
-                            </tr>
-                            <tr>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <img src="{{ asset('wowdash-admin/assets/images/users/user3.png') }}" alt="" class="flex-shrink-0 me-12 radius-8">
-                                    <span class="text-lg text-secondary-light fw-semibold flex-grow-1">Albert Flores</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-xl-4">
+                            <div class="activity-pattern-metric h-100">
+                                <span class="activity-pattern-metric__icon"><iconify-icon icon="solar:shield-check-bold"></iconify-icon></span>
+                                <div class="activity-pattern-metric__body">
+                                    <div class="activity-pattern-metric__label">Kepatuhan Keseluruhan</div>
+                                    <div class="activity-pattern-metric__value">{{ $heatmapOverallRate === null ? 'N/A' : number_format($heatmapOverallRate, 1) . '%' }}</div>
+                                    <div class="activity-pattern-metric__sub">IPK comply / total IKK</div>
                                 </div>
-                            </td>
-                            <td>#6352148</td>
-                            <td>Smart Watch </td>
-                            <td>7</td>
-                            <td>$1,000.00</td>
-                            <td class="text-center"> <span class="bg-info-focus text-info-main px-24 py-4 rounded-pill fw-medium text-sm">Shipped</span> </td>
-                            </tr>
-                            <tr>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <img src="{{ asset('wowdash-admin/assets/images/users/user4.png') }}" alt="" class="flex-shrink-0 me-12 radius-8">
-                                    <span class="text-lg text-secondary-light fw-semibold flex-grow-1">Bessie Cooper</span>
-                                </div>
-                            </td>
-                            <td>#6352148</td>
-                            <td>Nike Air Shoe</td>
-                            <td>1</td>
-                            <td>$3,000.00</td>
-                            <td class="text-center"> <span class="bg-danger-focus text-danger-main px-24 py-4 rounded-pill fw-medium text-sm">Canceled</span> </td>
-                            </tr>
-                            <tr>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <img src="{{ asset('wowdash-admin/assets/images/users/user5.png') }}" alt="" class="flex-shrink-0 me-12 radius-8">
-                                    <span class="text-lg text-secondary-light fw-semibold flex-grow-1">Arlene McCoy</span>
-                                </div>
-                            </td>
-                            <td>#6352148</td>
-                            <td>New Headphone </td>
-                            <td>5</td>
-                            <td>$4,000.00</td>
-                            <td class="text-center"> <span class="bg-danger-focus text-danger-main px-24 py-4 rounded-pill fw-medium text-sm">Canceled</span> </td>
-                            </tr>
-                        </tbody>
-                        </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
+        <style>
+        .wc-card { border: 1px solid #E2E8F0 !important; border-radius: 16px !important; box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06) !important; background: #fff; overflow: hidden; position: relative; }
+        .wc-card .card-body { z-index: 1; position: relative; }
+        .wc-card__head-icon { width: 44px; height: 44px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 22px; background: #16A34A; color: #fff; }
+        .wc-card__title { color: #0F172A; }
+        .wc-card__subtitle { display: block; font-size: 13px; color: #64748B; line-height: 1.35; }
+        .wc-card__badge { display: inline-flex; align-items: center; gap: 8px; background: #ECFDF5; color: #166534; border: 1px solid #BBF7D0; border-radius: 999px; padding: 8px 14px; font-size: 12px; font-weight: 600; line-height: 1.35; max-width: 100%; }
+        .wc-card__badge iconify-icon { font-size: 16px; color: #16A34A; flex-shrink: 0; }
+        .wc-tip { display: flex; align-items: flex-start; gap: 10px; border-radius: 12px; padding: 12px 14px; font-size: 13px; font-weight: 500; line-height: 1.45; }
+        .wc-tip iconify-icon { font-size: 18px; margin-top: 1px; }
+        .wc-tip--green { background: #ECFDF5; color: #166534; border: 1px solid #BBF7D0; }
+        .activity-pattern-card { min-height: 100%; }
+        .activity-pattern-metric { border: 1px solid #E2E8F0; background: #F8FFFC; border-radius: 12px; padding: 16px 14px; display: flex; flex-direction: row; align-items: center; gap: 12px; }
+        .activity-pattern-metric__icon { width: 44px; height: 44px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 20px; background: #ECFDF5; color: #10B981; }
+        .activity-pattern-metric__body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .activity-pattern-metric__label { font-size: 12px; font-weight: 500; color: #64748B; line-height: 1.25; }
+        .activity-pattern-metric__value { font-size: 18px; font-weight: 700; color: #0F172A; line-height: 1.25; letter-spacing: -0.01em; }
+        .activity-pattern-metric__sub { margin-top: 0; font-size: 12px; color: #64748B; line-height: 1.3; }
+        .activity-pattern-heatmap { position: relative; }
+        .activity-pattern-heatmap .ap-heatmap-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }
+        .activity-pattern-heatmap .ap-heatmap { display: grid; grid-template-columns: 58px minmax(0, 1fr); grid-template-rows: repeat(7, minmax(18px, 1fr)) 28px; gap: 3px 8px; align-items: stretch; overflow: visible; height: 100%; min-height: 240px; min-width: max(100%, calc(58px + var(--ap-cols) * 14px)); }
+        .activity-pattern-heatmap .ap-heatmap--calendar { max-width: none; width: 100%; }
+        #ikkHeatmapChart.activity-pattern-heatmap { overflow: visible; min-height: 240px; display: flex; flex-direction: column; }
+        #ikkHeatmapChart.activity-pattern-heatmap .ap-heatmap { flex: 1 1 auto; }
+        .activity-pattern-heatmap .ap-heatmap-corner { min-height: 24px; }
+        .activity-pattern-heatmap .ap-heatmap-xlabels { display: grid; grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr)); gap: 3px; min-height: 24px; align-items: center; overflow: visible; }
+        .activity-pattern-heatmap .ap-heatmap-xlabel { display: flex; align-items: center; justify-content: flex-start; min-width: 0; overflow: visible; }
+        .activity-pattern-heatmap .ap-heatmap-xlabel span { display: inline-block; font-size: 10px; line-height: 1.2; color: #64748B; font-weight: 500; white-space: nowrap; transform: none; margin: 0; }
+        .activity-pattern-heatmap .ap-heatmap-xlabel.is-muted span { opacity: 0; }
+        .activity-pattern-heatmap .ap-heatmap-ylabel { display: flex; align-items: center; justify-content: flex-end; padding-right: 2px; font-size: 11px; font-weight: 500; color: #64748B; white-space: nowrap; }
+        .activity-pattern-heatmap .ap-heatmap-row { display: grid; grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr)); gap: 3px; height: 100%; min-height: 16px; }
+        .activity-pattern-heatmap .ap-heatmap-cell { height: 100%; min-height: 16px; width: 100%; justify-self: stretch; border-radius: 3px; border: 1px solid rgba(255,255,255,.75); cursor: default; transition: transform .12s ease, box-shadow .12s ease; }
+        .activity-pattern-heatmap .ap-heatmap-cell:not(.is-empty):hover { transform: scale(1.08); box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.35); z-index: 1; position: relative; }
+        .activity-pattern-heatmap .ap-heatmap-cell.is-empty { background: #E2E8F0 !important; border: 1px solid rgba(255,255,255,.75); box-shadow: none; cursor: default; }
+        .activity-pattern-heatmap .ap-heatmap-cell.is-empty:hover { transform: none; box-shadow: none; }
+        .activity-pattern-heatmap .ap-heatmap-tooltip { position: absolute; z-index: 20; transform: translate(-50%, -100%); background: #0F172A; color: #F8FAFC; font-size: 12px; font-weight: 500; line-height: 1.35; padding: 8px 12px; border-radius: 8px; white-space: nowrap; pointer-events: none; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18); }
+        .activity-pattern-heatmap .ap-heatmap-tooltip::after { content: ''; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #0F172A; }
+        @media (max-width: 768px) {
+          .activity-pattern-heatmap .ap-heatmap { grid-template-columns: 52px minmax(0, 1fr); gap: 4px 8px; min-height: 220px; max-width: 100%; }
+          .activity-pattern-heatmap .ap-heatmap-cell { min-height: 20px; border-radius: 4px; }
+          .activity-pattern-heatmap .ap-heatmap-xlabel span { font-size: 10px; }
+          .activity-pattern-heatmap .ap-heatmap-ylabel { font-size: 11px; }
+          .activity-pattern-metric__value { font-size: 16px; }
+        }
+        </style>
         <div class="col-xxl-3">
             <div class="card h-100">
-          
+
                 <div class="card-body">
                   <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
                     <h6 class="mb-2 fw-bold text-lg">Transactions</h6>
@@ -794,6 +820,115 @@
     });
     chart.render();
   }
+})();
+</script>
+<script>
+(function () {
+  var el = document.querySelector('#ikkHeatmapChart');
+  if (!el) {
+    return;
+  }
+
+  var series = @json($ikkHeatmap['series'] ?? []);
+  var categories = @json($ikkHeatmap['categories'] ?? []);
+
+  function formatNumber(value) {
+    return Number(value || 0).toLocaleString('id-ID');
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // Warna berdasarkan persentase kepatuhan (IPK), bukan volume — merah = rendah, hijau = tinggi.
+  function colorFor(rate) {
+    if (rate === null || rate === undefined) return '#E2E8F0';
+    var n = Number(rate);
+    if (n < 50) return '#FCA5A5';
+    if (n < 75) return '#FDE68A';
+    if (n < 90) return '#A7F3D0';
+    if (n < 100) return '#34D399';
+    return '#059669';
+  }
+
+  if (!series.length || !categories.length) {
+    el.innerHTML = '<p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data IKK untuk ditampilkan.</p>';
+    return;
+  }
+
+  // Calendar heatmap: Senin di atas → Minggu di bawah; kolom = minggu.
+  var ordered = series.slice();
+  var preferred = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+  ordered.sort(function (a, b) {
+    return preferred.indexOf(a.name) - preferred.indexOf(b.name);
+  });
+
+  var colCount = categories.length;
+  var html = '';
+  html += '<div class="ap-heatmap-scroll">';
+  html += '<div class="ap-heatmap ap-heatmap--calendar" style="--ap-cols:' + colCount + ';">';
+
+  ordered.forEach(function (row) {
+    html += '<div class="ap-heatmap-ylabel">' + escapeHtml(row.name) + '</div>';
+    html += '<div class="ap-heatmap-row">';
+    (row.data || []).forEach(function (cell) {
+      var isEmpty = !cell || cell.empty === true;
+      if (isEmpty) {
+        html += '<div class="ap-heatmap-cell is-empty" aria-hidden="true"></div>';
+        return;
+      }
+      var rate = cell.y;
+      var total = cell.total || 0;
+      var compliant = cell.compliant || 0;
+      var dateLabel = cell.date_label || cell.x || '';
+      var rateLabel = rate === null || rate === undefined ? '-' : rate + '%';
+      var tip = escapeHtml(dateLabel) + ' | ' + formatNumber(total) + ' IKK · ' + formatNumber(compliant) + ' comply (' + rateLabel + ')';
+      html += '<div class="ap-heatmap-cell" style="background:' + colorFor(rate) + ';"'
+        + ' data-tip="' + tip + '"'
+        + ' role="img"'
+        + ' aria-label="' + tip + '">'
+        + '</div>';
+    });
+    html += '</div>';
+  });
+
+  html += '<div class="ap-heatmap-corner"></div>';
+  html += '<div class="ap-heatmap-xlabels">';
+  var prevMonth = '';
+  categories.forEach(function (label, idx) {
+    var parts = String(label).split(/\s+/);
+    var month = parts[1] || '';
+    var show = idx === 0 || month !== prevMonth;
+    prevMonth = month || prevMonth;
+    var text = show ? escapeHtml(label) : '';
+    html += '<div class="ap-heatmap-xlabel' + (show ? '' : ' is-muted') + '" title="Minggu mulai ' + escapeHtml(label) + '"><span>' + text + '</span></div>';
+  });
+  html += '</div>';
+  html += '</div>';
+  html += '</div>';
+  html += '<div class="ap-heatmap-tooltip" id="ikk-heatmap-tooltip" hidden></div>';
+
+  el.innerHTML = html;
+
+  var tipEl = el.querySelector('#ikk-heatmap-tooltip');
+  el.querySelectorAll('.ap-heatmap-cell:not(.is-empty)').forEach(function (cell) {
+    cell.addEventListener('mouseenter', function () {
+      if (!tipEl) return;
+      tipEl.textContent = cell.getAttribute('data-tip') || '';
+      tipEl.hidden = false;
+      var rect = cell.getBoundingClientRect();
+      var host = el.getBoundingClientRect();
+      tipEl.style.left = (rect.left - host.left + rect.width / 2) + 'px';
+      tipEl.style.top = (rect.top - host.top - 8) + 'px';
+    });
+    cell.addEventListener('mouseleave', function () {
+      if (tipEl) tipEl.hidden = true;
+    });
+  });
 })();
 </script>
 @endsection
