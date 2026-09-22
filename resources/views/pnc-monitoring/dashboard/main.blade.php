@@ -309,8 +309,8 @@
         <div class="col-xxl-3">
             <div class="card h-100">
 
-                <div class="card-body d-flex flex-column h-100">
-                  <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between flex-shrink-0">
+                <div class="card-body">
+                  <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
                     <h6 class="mb-2 fw-bold text-lg">IKK Tidak Comply</h6>
                     <a href="{{ route('pnc-monitoring.ikk-records.index') }}" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
                         Lihat Semua
@@ -318,7 +318,7 @@
                     </a>
                 </div>
 
-                  <div class="mt-32 flex-grow-1 overflow-y-auto scroll-sm" style="min-height: 0;">
+                  <div class="mt-32 overflow-y-auto scroll-sm" style="max-height: 380px;">
                     @php $nonCompliant = $payload['ikk']['nonCompliant'] ?? []; @endphp
                     @forelse ($nonCompliant as $i => $nc)
                       <div class="d-flex align-items-center justify-content-between gap-3 {{ $i === count($nonCompliant) - 1 ? '' : 'mb-32' }}">
