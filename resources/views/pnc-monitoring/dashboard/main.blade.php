@@ -69,7 +69,7 @@
                                             <span class="mb-12 w-44-px h-44-px text-primary-600 bg-primary-light border border-primary-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
                                                 <iconify-icon icon="solar:clipboard-check-bold" class="icon"></iconify-icon>
                                             </span>
-                                            <span class="mb-1 fw-medium text-secondary-light text-md">IPK IKK Aktif</span>
+                                            <span class="mb-1 fw-bold text-secondary-light text-md">IPK IKK Aktif</span>
                                             <h6 class="fw-semibold text-primary-light mb-1">90%</h6>
                                         </div>
                                     </div>
@@ -126,8 +126,15 @@
         <div class="col-xxl-3 col-lg-6">
             <div class="card h-100 radius-8 border-0">
                 <div class="card-body p-24">
+                    @php
+                        $cancelCount = (int) ($ikkKpis['cancelCount'] ?? 0);
+                        $totalIkkForCancel = (int) ($ikkKpis['ikkCount'] ?? 0);
+                        $activeCount = max($totalIkkForCancel - $cancelCount, 0);
+                        $cancelPct = $totalIkkForCancel > 0 ? ($cancelCount / $totalIkkForCancel * 100) : 0;
+                        $activePct = $totalIkkForCancel > 0 ? ($activeCount / $totalIkkForCancel * 100) : 0;
+                    @endphp
                     <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-                        <h6 class="mb-2 fw-bold text-lg">Customers Statistics</h6>
+                        <h6 class="mb-2 fw-bold text-lg">Persentase Cancel IKK</h6>
                         <div class="">
                         <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
                             <option>Yearly</option>
@@ -139,26 +146,26 @@
                     </div>
 
                     <div class="position-relative">
-                        <span class="w-80-px h-80-px bg-base shadow text-primary-light fw-semibold text-xl d-flex justify-content-center align-items-center rounded-circle position-absolute end-0 top-0 z-1">+30%</span>
+                        <span class="w-80-px h-80-px bg-base shadow text-danger-main fw-semibold text-xl d-flex justify-content-center align-items-center rounded-circle position-absolute end-0 top-0 z-1">{{ number_format($cancelPct, 1) }}%</span>
                         <div id="statisticsDonutChart" class="mt-36 flex-grow-1 apexcharts-tooltip-z-none title-style circle-none"></div>
-                        <span class="w-80-px h-80-px bg-base shadow text-primary-light fw-semibold text-xl d-flex justify-content-center align-items-center rounded-circle position-absolute start-0 bottom-0 z-1">+25%</span>
+                        <span class="w-80-px h-80-px bg-base shadow text-primary-light fw-semibold text-xl d-flex justify-content-center align-items-center rounded-circle position-absolute start-0 bottom-0 z-1">{{ number_format($activePct, 1) }}%</span>
                     </div>
-                    
+
                     <ul class="d-flex flex-wrap align-items-center justify-content-between mt-3 gap-3">
                         <li class="d-flex align-items-center gap-2">
-                            <span class="w-12-px h-12-px radius-2 bg-primary-600"></span>
-                            <span class="text-secondary-light text-sm fw-normal">Male: 
-                                <span class="text-primary-light fw-bold">20,000</span>
+                            <span class="w-12-px h-12-px radius-2 bg-danger-main"></span>
+                            <span class="text-secondary-light text-sm fw-normal">Cancel:
+                                <span class="text-primary-light fw-bold">{{ number_format($cancelCount, 0, ',', '.') }}</span>
                             </span>
                         </li>
                         <li class="d-flex align-items-center gap-2">
-                            <span class="w-12-px h-12-px radius-2 bg-yellow"></span>
-                            <span class="text-secondary-light text-sm fw-normal">Female:  
-                                <span class="text-primary-light fw-bold">25,000</span>
+                            <span class="w-12-px h-12-px radius-2 bg-primary-600"></span>
+                            <span class="text-secondary-light text-sm fw-normal">Aktif:
+                                <span class="text-primary-light fw-bold">{{ number_format($activeCount, 0, ',', '.') }}</span>
                             </span>
                         </li>
                     </ul>
-               
+
                 </div>
             </div>
         </div>
@@ -762,4 +769,31 @@
 <script src="{{ asset('evaluasi-well-assets/js/lib/jquery-jvectormap-2.0.5.min.js') }}"></script>
 <script src="{{ asset('evaluasi-well-assets/js/lib/jquery-jvectormap-world-mill-en.js') }}"></script>
 <script src="{{ asset('evaluasi-well-assets/js/homeThreeChart.js') }}"></script>
+@endsection
+
+@section('scripts')
+<script>
+(() => {
+  // homeThreeChart.js already rendered a dummy Male/Female donut into #statisticsDonutChart
+  // on page load — replace it with the real IKK cancel-vs-active breakdown.
+  const cancelCount = {{ $cancelCount }};
+  const activeCount = {{ $activeCount }};
+  const totalIkk = cancelCount + activeCount;
+  const el = document.querySelector('#statisticsDonutChart');
+  if (el) {
+    el.innerHTML = '';
+    const chart = new ApexCharts(el, {
+      series: totalIkk > 0 ? [cancelCount, activeCount] : [1],
+      colors: totalIkk > 0 ? ['#F8285A', '#487FFF'] : ['#E4E7EC'],
+      labels: totalIkk > 0 ? ['Cancel', 'Aktif'] : ['Belum ada data'],
+      legend: { show: false },
+      chart: { type: 'donut', height: 230, sparkline: { enabled: true } },
+      stroke: { width: 0 },
+      dataLabels: { enabled: false },
+      tooltip: { y: { formatter: (v) => v.toLocaleString('id-ID') } },
+    });
+    chart.render();
+  }
+})();
+</script>
 @endsection
