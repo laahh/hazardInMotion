@@ -103,9 +103,15 @@ final class IscPobSnapshotService
         $classified = $this->decoratePeople($classified, $hazards);
 
         $ever = $this->demo->everIdentifiers();
+        // "GPS aktif" (current_count) disamakan dengan "Dalam konsesi"
+        // (summary.in): sama-sama orang, bukan roster-only, presence "in" —
+        // lihat catatan yang sama di buildLive().
         $current = array_values(array_filter(
             $classified,
-            static fn (array $p): bool => ! ($p['stale'] ?? true) && trim((string) ($p['sid'] ?? '')) !== '',
+            static fn (array $p): bool => trim((string) ($p['sid'] ?? '')) !== ''
+                && ($p['entity'] ?? 'person') === 'person'
+                && ! ($p['roster_only'] ?? false)
+                && ($p['presence'] ?? null) === IscPobClassifyAction::PRESENCE_IN,
         ));
         $rfid = $this->demo->rfidOnsite();
         $checkins = $this->normalizeCheckins($rfid);
@@ -209,12 +215,16 @@ final class IscPobSnapshotService
                 static fn (array $p): bool => trim((string) ($p['sid'] ?? '')) !== '' && ($p['entity'] ?? 'person') === 'person',
             ));
         }
+        // "GPS aktif" (current_count) disamakan dengan "Dalam konsesi"
+        // (summary.in): orang, bukan roster-only, dan presence "in" — bukan
+        // lagi soal stale/tidaknya GPS (itu konsep terpisah dari "di dalam
+        // boundary sekarang").
         $current = array_values(array_filter(
             $classified,
-            static fn (array $p): bool => ! ($p['stale'] ?? true)
-                && trim((string) ($p['sid'] ?? '')) !== ''
+            static fn (array $p): bool => trim((string) ($p['sid'] ?? '')) !== ''
                 && ($p['entity'] ?? 'person') === 'person'
-                && ! ($p['roster_only'] ?? false),
+                && ! ($p['roster_only'] ?? false)
+                && ($p['presence'] ?? null) === IscPobClassifyAction::PRESENCE_IN,
         ));
         $reconcile = $this->reconcile->execute($ever, $current, $rfidPack['people']);
         unset($reconcile['ever'], $reconcile['current'], $reconcile['rfid']);
