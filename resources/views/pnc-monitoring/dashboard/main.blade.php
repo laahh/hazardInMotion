@@ -70,7 +70,20 @@
                     </div>
                     <div class="col-xxl-6">
                         <div class="row h-100 g-0">
-                            
+                            <div class="col-6 p-0 m-0">
+                                <div class="card-body p-24 h-100 d-flex flex-column justify-content-center border border-top-0">
+                                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+                                        <div>
+                                            <span class="mb-12 w-44-px h-44-px text-primary-600 bg-primary-light border border-primary-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
+                                                <iconify-icon icon="fa-solid:box-open" class="icon"></iconify-icon>  
+                                            </span>
+                                            <span class="mb-1 fw-medium text-secondary-light text-md">IPK IKK Aktif</span>
+                                            <h6 class="fw-semibold text-primary-light mb-1">90%</h6>
+                                        </div>
+                                    </div>
+                                    <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+200</span> this week</p>
+                                </div>
+                            </div>
                             <div class="col-6 p-0 m-0">
                                 <div class="card-body p-24 h-100 d-flex flex-column justify-content-center border border-top-0 border-start-0 border-end-0">
                                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
@@ -78,7 +91,7 @@
                                             <span class="mb-12 w-44-px h-44-px text-yellow bg-yellow-light border border-yellow-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
                                                 <iconify-icon icon="flowbite:users-group-solid" class="icon"></iconify-icon>  
                                             </span>
-                                            <span class="mb-1 fw-medium text-secondary-light text-md">IPK IKK Aktif</span>
+                                            <span class="mb-1 fw-medium text-secondary-light text-md">OKK IKK Aktif</span>
                                             <h6 class="fw-semibold text-primary-light mb-1">90%</h6>
                                         </div>
                                     </div>
@@ -92,7 +105,7 @@
                                             <span class="mb-12 w-44-px h-44-px text-lilac bg-lilac-light border border-lilac-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
                                                 <iconify-icon icon="majesticons:shopping-cart" class="icon"></iconify-icon>  
                                             </span>
-                                            <span class="mb-1 fw-medium text-secondary-light text-md">OKK IKK Aktif</span>
+                                            <span class="mb-1 fw-medium text-secondary-light text-md">OKK Layer 1</span>
                                             <h6 class="fw-semibold text-primary-light mb-1">80%</h6>
                                         </div>
                                     </div>
@@ -106,25 +119,11 @@
                                             <span class="mb-12 w-44-px h-44-px text-pink bg-pink-light border border-pink-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
                                                 <iconify-icon icon="ri:discount-percent-fill" class="icon"></iconify-icon>  
                                             </span>
-                                            <span class="mb-1 fw-medium text-secondary-light text-md">Cancel IKK/IPK</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">12</h6>
+                                            <span class="mb-1 fw-medium text-secondary-light text-md">OKK Layer 2</span>
+                                            <h6 class="fw-semibold text-primary-light mb-1">20%</h6>
                                         </div>
                                     </div>
                                     <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+$10k</span> this week</p>
-                                </div>
-                            </div>
-                            <div class="col-6 p-0 m-0">
-                                <div class="card-body p-24 h-100 d-flex flex-column justify-content-center border border-top-0 border-start-0 border-end-0 border-bottom-0">
-                                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
-                                        <div>
-                                            <span class="mb-12 w-44-px h-44-px text-primary-600 bg-primary-light border border-primary-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
-                                                <iconify-icon icon="fa-solid:box-open" class="icon"></iconify-icon>  
-                                            </span>
-                                            <span class="mb-1 fw-medium text-secondary-light text-md">Total Products</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">300</h6>
-                                        </div>
-                                    </div>
-                                    <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+200</span> this week</p>
                                 </div>
                             </div>
                         </div>
