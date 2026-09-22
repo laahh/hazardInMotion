@@ -248,12 +248,14 @@ button, input { font-family: inherit; }
 }
 .gm-shell.is-postevent .gm-panel,
 .gm-shell.is-cctv .gm-panel,
-.gm-shell.is-interventions .gm-panel {
+.gm-shell.is-interventions .gm-panel,
+.gm-shell.is-historical .gm-panel {
   display: none !important;
 }
 .gm-shell.is-postevent .gm-hud,
 .gm-shell.is-cctv .gm-hud,
-.gm-shell.is-interventions .gm-hud {
+.gm-shell.is-interventions .gm-hud,
+.gm-shell.is-historical .gm-hud {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none !important;
@@ -261,7 +263,8 @@ button, input { font-family: inherit; }
 }
 .gm-shell.is-postevent #gm-view-postevent,
 .gm-shell.is-cctv #gm-view-cctv,
-.gm-shell.is-interventions #gm-view-interventions {
+.gm-shell.is-interventions #gm-view-interventions,
+.gm-shell.is-historical #gm-view-historical {
   align-content: start;
 }
 .gm-hud-card {
@@ -328,6 +331,11 @@ button, input { font-family: inherit; }
     radial-gradient(120% 90% at 100% -10%, rgba(194, 65, 12, .16), transparent 52%),
     #fff;
 }
+.gm-hud-card.is-historical {
+  background:
+    radial-gradient(120% 90% at 100% -10%, rgba(15, 118, 110, .16), transparent 52%),
+    #fff;
+}
 .gm-hud-card.is-empty {
   background: #fff;
 }
@@ -367,6 +375,7 @@ button, input { font-family: inherit; }
 .gm-hud-ico.postevent { background: #0284c7; }
 .gm-hud-ico.cctv { background: #137333; }
 .gm-hud-ico.interventions { background: #c2410c; }
+.gm-hud-ico.historical { background: #0f766e; }
 .gm-hud-spark {
   width: 72px;
   height: 28px;
@@ -390,6 +399,7 @@ button, input { font-family: inherit; }
 .is-postevent .gm-hud-spark { stroke: #0284c7; }
 .is-cctv .gm-hud-spark { stroke: #137333; }
 .is-interventions .gm-hud-spark { stroke: #c2410c; }
+.is-historical .gm-hud-spark { stroke: #0f766e; }
 .gm-hud-kicker {
   margin: 0;
   font-size: 13px;

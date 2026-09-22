@@ -12,6 +12,7 @@ use App\Http\Requests\Isc\IscInterventionStoreRequest;
 use App\Services\Isc\IscHazardEmployeeLookupService;
 use App\Services\Isc\IscHazardLocationLookupService;
 use App\Services\Isc\IscHazardPjaLookupService;
+use App\Services\Isc\IscHazardReportBoardService;
 use App\Services\Isc\IscHazardSysUserLookupService;
 use App\Services\Isc\IscMapsInterventionService;
 use Illuminate\Http\JsonResponse;
@@ -24,6 +25,7 @@ final class IscMapsInterventionController extends Controller
         private readonly IscMapsInterventionService $tasks,
         private readonly IscInterventionStoreAction $storeAction,
         private readonly IscHazardReportStoreAction $hazardStoreAction,
+        private readonly IscHazardReportBoardService $hazardReportBoard,
         private readonly IscHazardEmployeeLookupService $employees,
         private readonly IscHazardSysUserLookupService $sysUsers,
         private readonly IscHazardLocationLookupService $locations,
@@ -37,6 +39,29 @@ final class IscMapsInterventionController extends Controller
         return response()->json([
             'success' => true,
             ...$this->tasks->payload($request->user(), $demo),
+        ]);
+    }
+
+    /**
+     * Laporan hazard yang sudah submit dan sudah ter-intervensi (intervention_id terisi),
+     * beserta status intervensi/event terkait. Ditampilkan di menu "Intervensi".
+     */
+    public function hazardReportsList(): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            ...$this->hazardReportBoard->intervenedPayload(),
+        ]);
+    }
+
+    /**
+     * Riwayat (historical) seluruh laporan hazard yang pernah masuk, beserta status terkini.
+     */
+    public function hazardReportsHistorical(): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            ...$this->hazardReportBoard->historicalPayload(),
         ]);
     }
 

@@ -17,6 +17,8 @@
     data-cctv-url="{{ $cctvUrl }}"
     data-maps-interventions-url="{{ $mapsInterventionsUrl }}"
     data-maps-hazard-reports-url="{{ $mapsHazardReportsUrl }}"
+    data-maps-hazard-reports-list-url="{{ $mapsHazardReportsListUrl }}"
+    data-maps-hazard-reports-historical-url="{{ $mapsHazardReportsHistoricalUrl }}"
     data-maps-hazard-employees-url="{{ $mapsHazardEmployeesUrl }}"
     data-maps-hazard-sysuser-url="{{ $mapsHazardSysUserUrl }}"
     data-maps-hazard-lokasi-url="{{ $mapsHazardLokasiUrl }}"
@@ -52,6 +54,10 @@
     <button type="button" class="gm-rail-btn" id="gm-interventions-btn" data-rail="interventions">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M4 8h16M7 21h10"/></svg>
       <span>Intervensi</span>
+    </button>
+    <button type="button" class="gm-rail-btn" id="gm-historical-btn" data-rail="historical">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l4 2"/></svg>
+      <span>Historical</span>
     </button>
     <span class="gm-rail-gap"></span>
     <button type="button" class="gm-rail-thumb bmo" data-jump="BMO" title="Binungan">BMO</button>
@@ -359,6 +365,47 @@
           <p class="gm-hud-foot">Detail &amp; bukti menampilkan jejak GPS di peta (seperti Post-event). Laporan Hazard untuk kirim form.</p>
         </article>
         <div id="gm-iv-cards" class="gm-hud-place-stack"></div>
+
+        <article class="gm-hud-card is-interventions">
+          <div class="gm-hud-card-top">
+            <span class="gm-hud-ico interventions" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+            </span>
+            <div class="gm-hud-head">
+              <p class="gm-hud-kicker">Laporan Hazard Ter-intervensi</p>
+              <p class="gm-hud-value"><b id="hud-hr-total">–</b> <small>laporan submit</small></p>
+            </div>
+          </div>
+          <p class="gm-hud-foot">Laporan hazard yang sudah dikirim dan sudah punya intervensi, beserta status terkini.</p>
+        </article>
+        <div id="gm-hr-cards" class="gm-hud-place-stack"></div>
+      </div>
+
+      <div class="gm-hud-view" data-view="historical" id="gm-view-historical" hidden>
+        <article class="gm-hud-card is-historical">
+          <div class="gm-hud-card-top">
+            <span class="gm-hud-ico historical" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l4 2"/></svg>
+            </span>
+            <div class="gm-hud-head">
+              <p class="gm-hud-kicker">Historical</p>
+              <p class="gm-hud-value"><b id="hud-hist-total">–</b> <small>laporan hazard</small></p>
+            </div>
+            <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
+              <path d="M2 18 C12 22 18 8 28 12 C38 16 44 24 54 14 C64 6 74 16 86 10" />
+            </svg>
+          </div>
+          <div class="gm-hud-sites" id="hud-hist-status" role="group" aria-label="Filter status laporan">
+            <button type="button" class="gm-hud-site is-on" data-hist-status="">Semua <b id="hud-hist-all">0</b></button>
+            <button type="button" class="gm-hud-site" data-hist-status="submitted">Terkirim <b id="hud-hist-submitted">0</b></button>
+            <button type="button" class="gm-hud-site" data-hist-status="open">Open <b id="hud-hist-open">0</b></button>
+            <button type="button" class="gm-hud-site" data-hist-status="in_progress">On progress <b id="hud-hist-in_progress">0</b></button>
+            <button type="button" class="gm-hud-site" data-hist-status="closed">Selesai <b id="hud-hist-closed">0</b></button>
+            <button type="button" class="gm-hud-site" data-hist-status="verified">Terverifikasi <b id="hud-hist-verified">0</b></button>
+          </div>
+          <p class="gm-hud-foot">Riwayat seluruh laporan hazard yang pernah masuk, beserta status intervensi/event terkini.</p>
+        </article>
+        <div id="gm-hist-cards" class="gm-hud-place-stack"></div>
       </div>
     </div>
 

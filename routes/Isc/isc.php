@@ -58,6 +58,12 @@ Route::prefix('isc')
         Route::post('/maps/hazard-reports', [IscMapsInterventionController::class, 'storeHazardReport'])
             ->middleware('auth')
             ->name('maps.hazard-reports.store');
+        Route::get('/maps/hazard-reports/list', [IscMapsInterventionController::class, 'hazardReportsList'])
+            ->middleware('auth')
+            ->name('maps.hazard-reports.list');
+        Route::get('/maps/hazard-reports/historical', [IscMapsInterventionController::class, 'hazardReportsHistorical'])
+            ->middleware('auth')
+            ->name('maps.hazard-reports.historical');
 
         Route::middleware('isc.role:isc-pic,isc-verifier,admin')->group(function (): void {
             Route::get('/interventions', [IscInterventionsController::class, 'index'])->name('interventions.index');

@@ -41,6 +41,8 @@ final class IscMapsController extends Controller
             'cctvUrl' => route('isc.maps.cctv'),
             'mapsInterventionsUrl' => route('isc.maps.interventions', ['source' => $status['connected'] ? 'live' : 'demo']),
             'mapsHazardReportsUrl' => route('isc.maps.hazard-reports.store'),
+            'mapsHazardReportsListUrl' => route('isc.maps.hazard-reports.list'),
+            'mapsHazardReportsHistoricalUrl' => route('isc.maps.hazard-reports.historical'),
             'mapsHazardEmployeesUrl' => route('isc.maps.hazard-employees'),
             'mapsHazardSysUserUrl' => route('isc.maps.hazard-sysuser'),
             'mapsHazardLokasiUrl' => route('isc.maps.hazard-lokasi'),

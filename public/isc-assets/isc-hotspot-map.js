@@ -13,6 +13,8 @@
   var cctvUrl = mapEl.getAttribute("data-cctv-url") || "";
   var mapsInterventionsUrl = mapEl.getAttribute("data-maps-interventions-url") || "";
   var mapsHazardReportsUrl = mapEl.getAttribute("data-maps-hazard-reports-url") || "";
+  var mapsHazardReportsListUrl = mapEl.getAttribute("data-maps-hazard-reports-list-url") || "";
+  var mapsHazardReportsHistoricalUrl = mapEl.getAttribute("data-maps-hazard-reports-historical-url") || "";
   var mapsHazardEmployeesUrl = mapEl.getAttribute("data-maps-hazard-employees-url") || "";
   var mapsHazardSysUserUrl = mapEl.getAttribute("data-maps-hazard-sysuser-url") || "";
   var mapsHazardLokasiUrl = mapEl.getAttribute("data-maps-hazard-lokasi-url") || "";
@@ -93,6 +95,14 @@
   var ivQuery = "";
   var ivTimer = 0;
   var ivFocusId = 0;
+  var hrReports = [];
+  var hrSummary = null;
+  var histReports = [];
+  var histSummary = null;
+  var histStatusLabels = {};
+  var histStatus = "";
+  var histQuery = "";
+  var histTimer = 0;
   var trailLayer = L.layerGroup();
 
   var sgiAttribution = mapEl.getAttribute("data-wmts-attribution") || "Drone Imagery © SGI";
@@ -878,7 +888,7 @@
   }
 
   function openPlace(item) {
-    if (railView === "postevent" || railView === "interventions") {
+    if (railView === "postevent" || railView === "interventions" || railView === "historical") {
       return;
     }
     if (item && item.kind === "cctv") {
@@ -1109,7 +1119,7 @@
   }
 
   function openPanel() {
-    if (railView === "postevent" || railView === "cctv" || railView === "interventions") {
+    if (railView === "postevent" || railView === "cctv" || railView === "interventions" || railView === "historical") {
       return;
     }
     if (panel) {
@@ -1178,6 +1188,7 @@
       shell.classList.toggle("is-postevent", railView === "postevent");
       shell.classList.toggle("is-cctv", railView === "cctv");
       shell.classList.toggle("is-interventions", railView === "interventions");
+      shell.classList.toggle("is-historical", railView === "historical");
     }
     closePanel();
     closePlace();
@@ -1213,6 +1224,15 @@
         query = ivQuery;
       }
       loadInterventions(true);
+      loadHazardReports(true);
+    } else if (railView === "historical") {
+      listMode = "all";
+      if (searchInput) {
+        searchInput.placeholder = "Cari pelapor, site, atau ketidaksesuaian";
+        histQuery = searchInput.value || "";
+        query = histQuery;
+      }
+      loadHistorical(true);
     } else {
       listMode = "all";
       showCctv = false;
@@ -1224,7 +1244,7 @@
         map.removeLayer(cctvLayer);
       }
     }
-    if (railView !== "postevent" && railView !== "cctv" && railView !== "interventions") {
+    if (railView !== "postevent" && railView !== "cctv" && railView !== "interventions" && railView !== "historical") {
       clearTrail();
       if (searchInput) {
         searchInput.placeholder = "Cari zona, site, atau boundary";
@@ -3625,6 +3645,10 @@
         clearHazardAutoFoto();
         closeHazardReport();
         loadInterventions(true);
+        loadHazardReports(railView === "interventions");
+        if (railView === "historical") {
+          loadHistorical(true);
+        }
       })
       .catch(function () {
         setHazardMsg("Gagal mengirim laporan hazard.", true);
@@ -3785,6 +3809,153 @@
       });
   }
 
+  function hazardReportStatusTag(row) {
+    var status = (row && row.status) || "submitted";
+    var label = (row && row.status_label) || status;
+    var tagClass = "tag";
+    if (status === "verified" || status === "closed") {
+      tagClass = "tag is-in";
+    } else if (status === "rejected") {
+      tagClass = "tag is-unit";
+    }
+    return "<span class=\"" + tagClass + "\">" + esc(label) + "</span>";
+  }
+
+  function hazardReportCardHtml(row, i) {
+    var meta = [row.sid_pelapor, row.site, row.lokasi, row.ketidaksesuaian]
+      .filter(Boolean)
+      .join(" · ");
+    var when = formatWhen(row.created_at) || "";
+    return (
+      "<article class=\"gm-hud-card gm-task\" style=\"animation-delay:" + (0.06 + i * 0.03) + "s\">" +
+      "<button type=\"button\" class=\"gm-task-head\" style=\"cursor:default\">" +
+      "<span class=\"gm-pin people\">" + pinSvg() + "</span>" +
+      "<span class=\"copy\"><b>" + esc(row.nama_pelapor || row.sid_pelapor || "Laporan #" + row.id) + "</b>" +
+      "<span class=\"meta\">" + esc(meta) + (when ? " · " + esc(when) : "") + "</span></span>" +
+      hazardReportStatusTag(row) +
+      "</button></article>"
+    );
+  }
+
+  function renderHazardReportCards() {
+    var target = document.getElementById("gm-hr-cards");
+    if (!target) {
+      return;
+    }
+    target.innerHTML = "";
+    if (!hrReports.length) {
+      target.innerHTML = "<article class=\"gm-hud-card is-empty\"><p class=\"gm-hud-kicker\">Belum ada laporan</p><p class=\"gm-hud-hint\" style=\"margin:0\">Belum ada laporan hazard yang ter-intervensi.</p></article>";
+      return;
+    }
+    target.innerHTML = hrReports.slice(0, 80).map(hazardReportCardHtml).join("");
+  }
+
+  function paintHazardReportsHud() {
+    var summary = hrSummary || {};
+    setText("hud-hr-total", summary.total != null ? summary.total : hrReports.length);
+  }
+
+  function loadHazardReports(paint) {
+    if (!mapsHazardReportsListUrl) {
+      return;
+    }
+    fetch(mapsHazardReportsListUrl, { headers: { Accept: "application/json" } })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        hrReports = (payload && payload.reports) || [];
+        hrSummary = (payload && payload.summary) || null;
+        if (paint || railView === "interventions") {
+          paintHazardReportsHud();
+          renderHazardReportCards();
+        }
+      })
+      .catch(function () {
+        if (paint || railView === "interventions") {
+          hrReports = [];
+          hrSummary = { total: 0, by_status: {} };
+          paintHazardReportsHud();
+          renderHazardReportCards();
+        }
+      });
+  }
+
+  function visibleHistoricalReports() {
+    var needle = (histQuery || "").trim().toLowerCase();
+    return histReports.filter(function (row) {
+      if (histStatus && (row.status || "") !== histStatus) {
+        return false;
+      }
+      if (!needle) {
+        return true;
+      }
+      var hay = [row.nama_pelapor, row.sid_pelapor, row.site, row.lokasi, row.perusahaan, row.ketidaksesuaian, row.deskripsi_temuan]
+        .join(" ")
+        .toLowerCase();
+      return hay.indexOf(needle) !== -1;
+    });
+  }
+
+  function paintHistoricalHud() {
+    var summary = histSummary || {};
+    var byStatus = summary.by_status || {};
+    setText("hud-hist-total", summary.total != null ? summary.total : histReports.length);
+    setText("hud-hist-all", summary.total != null ? summary.total : histReports.length);
+    setText("hud-hist-submitted", byStatus.submitted || 0);
+    setText("hud-hist-open", byStatus.open || 0);
+    setText("hud-hist-in_progress", byStatus.in_progress || 0);
+    setText("hud-hist-closed", byStatus.closed || 0);
+    setText("hud-hist-verified", byStatus.verified || 0);
+    document.querySelectorAll("[data-hist-status]").forEach(function (el) {
+      var value = el.getAttribute("data-hist-status") || "";
+      el.classList.toggle("is-on", value === "" ? histStatus === "" : value === histStatus);
+    });
+  }
+
+  function renderHistoricalCards() {
+    var target = document.getElementById("gm-hist-cards");
+    if (!target) {
+      return;
+    }
+    var rows = visibleHistoricalReports();
+    if (!rows.length) {
+      target.innerHTML = "<article class=\"gm-hud-card is-empty\"><p class=\"gm-hud-kicker\">Tidak ada laporan</p><p class=\"gm-hud-hint\" style=\"margin:0\">Tidak ada laporan hazard untuk filter ini.</p></article>";
+      return;
+    }
+    target.innerHTML = rows.slice(0, 150).map(hazardReportCardHtml).join("");
+  }
+
+  function loadHistorical(paint) {
+    if (!mapsHazardReportsHistoricalUrl) {
+      return;
+    }
+    if (paint) {
+      setText("hud-hist-total", "…");
+      var stack = document.getElementById("gm-hist-cards");
+      if (stack && !histReports.length) {
+        stack.innerHTML = "<article class=\"gm-hud-card is-empty\"><p class=\"gm-hud-kicker\">Memuat riwayat</p><p class=\"gm-hud-hint\" style=\"margin:0\">Mengambil riwayat laporan hazard…</p></article>";
+      }
+    }
+    fetch(mapsHazardReportsHistoricalUrl, { headers: { Accept: "application/json" } })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        histReports = (payload && payload.reports) || [];
+        histSummary = (payload && payload.summary) || null;
+        histStatusLabels = (payload && payload.status_labels) || {};
+        if (paint || railView === "historical") {
+          paintHistoricalHud();
+          renderHistoricalCards();
+        }
+      })
+      .catch(function () {
+        if (paint || railView === "historical") {
+          histReports = [];
+          histSummary = { total: 0, by_status: {} };
+          paintHistoricalHud();
+          renderHistoricalCards();
+        }
+      });
+  }
+
   function pobFetchUrl(fresh) {
     if (!fresh) {
       return pobUrl;
@@ -3916,6 +4087,11 @@
       renderInterventionCards();
       return;
     }
+    if (railView === "historical") {
+      histQuery = query;
+      renderHistoricalCards();
+      return;
+    }
     listMode = "all";
     openPanel();
     closePlace();
@@ -3927,7 +4103,7 @@
   });
 
   searchInput.addEventListener("focus", function () {
-    if (railView === "postevent" || railView === "cctv" || railView === "interventions") {
+    if (railView === "postevent" || railView === "cctv" || railView === "interventions" || railView === "historical") {
       return;
     }
     if (!selected) {
@@ -3961,6 +4137,12 @@
       ivTimer = window.setTimeout(renderInterventionCards, 200);
       return;
     }
+    if (railView === "historical") {
+      histQuery = query;
+      window.clearTimeout(histTimer);
+      histTimer = window.setTimeout(renderHistoricalCards, 200);
+      return;
+    }
     listMode = "all";
     openPanel();
     if (placeEl && !placeEl.hidden && query === "") {
@@ -3988,6 +4170,11 @@
       if (railView === "interventions") {
         ivQuery = "";
         renderInterventionCards();
+        return;
+      }
+      if (railView === "historical") {
+        histQuery = "";
+        renderHistoricalCards();
         return;
       }
       closePlace();
@@ -4166,6 +4353,19 @@
       setRailView("interventions");
     });
   }
+  var histBtn = document.getElementById("gm-historical-btn");
+  if (histBtn) {
+    histBtn.addEventListener("click", function () {
+      setRailView("historical");
+    });
+  }
+  document.querySelectorAll("[data-hist-status]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      histStatus = btn.getAttribute("data-hist-status") || "";
+      paintHistoricalHud();
+      renderHistoricalCards();
+    });
+  });
   document.querySelectorAll("[data-hazard-close]").forEach(function (el) {
     el.addEventListener("click", closeHazardReport);
   });
