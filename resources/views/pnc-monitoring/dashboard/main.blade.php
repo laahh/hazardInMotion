@@ -28,7 +28,7 @@
                     <div class="col-xxl-6 pe-xxl-0">
                         <div class="card-body p-24">
                             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-                                <h6 class="mb-2 fw-bold text-lg">Revenue Report</h6>
+                                <h6 class="mb-2 fw-bold text-lg">Total IKK: {{ number_format($payload['ikk']['kpis']['ikkCount'] ?? 0, 0, ',', '.') }}</h6>
                                 <div class="">
                                 <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
                                     <option>Yearly</option>
