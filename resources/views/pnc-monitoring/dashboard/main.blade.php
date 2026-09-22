@@ -28,6 +28,7 @@
                     <div class="col-xxl-6 pe-xxl-0">
                         <div class="card-body p-24">
                             @php
+                                $pct = fn (?float $v) => $v === null ? 'N/A' : number_format($v * 100, 1) . '%';
                                 $ikkKpis = $payload['ikk']['kpis'] ?? [];
                                 $ipkPerf = $ikkKpis['ipkPerformance'] ?? null;
                                 $ipkLabel = $ipkPerf === null ? 'N/A' : number_format($ipkPerf * 100, 1) . '%';
@@ -63,6 +64,20 @@
                         </div>
                     </div>
                     <div class="col-xxl-6">
+                        @php
+                            $perfBadge = function (?float $rate): array {
+                                if ($rate === null) {
+                                    return ['bg-neutral-200 text-secondary-light', 'N/A'];
+                                }
+                                $cls = $rate >= 0.9995 ? 'bg-success-focus text-success-main' : ($rate >= 0.9 ? 'bg-warning-focus text-warning-main' : 'bg-danger-focus text-danger-main');
+
+                                return [$cls, number_format($rate * 100, 1).'%'];
+                            };
+                            [$ipkBadgeCls] = $perfBadge($ikkKpis['ipkPerformance'] ?? null);
+                            [$iaBadgeCls] = $perfBadge($ikkKpis['iaPerformance'] ?? null);
+                            [$okkL1BadgeCls] = $perfBadge($ikkKpis['okkL1Performance'] ?? null);
+                            [$okkL2BadgeCls] = $perfBadge($ikkKpis['okkL2UpPerformance'] ?? null);
+                        @endphp
                         <div class="row h-100 g-0">
                             <div class="col-6 p-0 m-0">
                                 <div class="card-body p-24 h-100 d-flex flex-column justify-content-center border border-top-0">
@@ -72,10 +87,10 @@
                                                 <iconify-icon icon="solar:clipboard-check-bold" class="icon"></iconify-icon>
                                             </span>
                                             <span class="mb-1 fw-bold text-secondary-light text-md">IPK IKK Aktif</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">90%</h6>
+                                            <h6 class="fw-semibold text-primary-light mb-1">{{ $pct($ikkKpis['ipkPerformance'] ?? null) }}</h6>
                                         </div>
                                     </div>
-                                    <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+200</span> this week</p>
+                                    <p class="text-sm mb-0"><span class="{{ $ipkBadgeCls }} px-1 rounded-2 fw-medium text-sm">{{ number_format($ikkKpis['ipkActual'] ?? 0) }} / {{ number_format($ikkKpis['ipkDenominator'] ?? 0) }}</span> IKK comply</p>
                                 </div>
                             </div>
                             <div class="col-6 p-0 m-0">
@@ -83,13 +98,13 @@
                                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
                                         <div>
                                             <span class="mb-12 w-44-px h-44-px text-yellow bg-yellow-light border border-yellow-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
-                                                <iconify-icon icon="solar:eye-bold" class="icon"></iconify-icon>  
+                                                <iconify-icon icon="solar:eye-bold" class="icon"></iconify-icon>
                                             </span>
                                             <span class="mb-1 fw-bold text-secondary-light text-md">OKK IKK Aktif</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">90%</h6>
+                                            <h6 class="fw-semibold text-primary-light mb-1">{{ $pct($ikkKpis['iaPerformance'] ?? null) }}</h6>
                                         </div>
                                     </div>
-                                    <p class="text-sm mb-0">Increase by  <span class="bg-danger-focus px-1 rounded-2 fw-medium text-danger-main text-sm">-5k</span> this week</p>
+                                    <p class="text-sm mb-0"><span class="{{ $iaBadgeCls }} px-1 rounded-2 fw-medium text-sm">{{ number_format($ikkKpis['iaEffective'] ?? 0) }} / {{ number_format($ikkKpis['iaRequired'] ?? 0) }}</span> IA efektif</p>
                                 </div>
                             </div>
                             <div class="col-6 p-0 m-0">
@@ -97,13 +112,13 @@
                                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
                                         <div>
                                             <span class="mb-12 w-44-px h-44-px text-lilac bg-lilac-light border border-lilac-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
-                                                <iconify-icon icon="solar:eye-scan-bold" class="icon"></iconify-icon>  
+                                                <iconify-icon icon="solar:eye-scan-bold" class="icon"></iconify-icon>
                                             </span>
                                             <span class="mb-1 fw-bold text-secondary-light text-md">OKK Layer 1</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">80%</h6>
+                                            <h6 class="fw-semibold text-primary-light mb-1">{{ $pct($ikkKpis['okkL1Performance'] ?? null) }}</h6>
                                         </div>
                                     </div>
-                                    <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+1k</span> this week</p>
+                                    <p class="text-sm mb-0"><span class="{{ $okkL1BadgeCls }} px-1 rounded-2 fw-medium text-sm">{{ number_format($ikkKpis['okkAchieved'] ?? 0) }} / {{ number_format($ikkKpis['okkPlan'] ?? 0) }}</span> OKK L1</p>
                                 </div>
                             </div>
                             <div class="col-6 p-0 m-0">
@@ -111,13 +126,13 @@
                                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
                                         <div>
                                             <span class="mb-12 w-44-px h-44-px text-pink bg-pink-light border border-pink-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
-                                                <iconify-icon icon="solar:shield-check-bold" class="icon"></iconify-icon>  
+                                                <iconify-icon icon="solar:shield-check-bold" class="icon"></iconify-icon>
                                             </span>
                                             <span class="mb-1 fw-bold text-secondary-light text-md">OKK Layer 2</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">20%</h6>
+                                            <h6 class="fw-semibold text-primary-light mb-1">{{ $pct($ikkKpis['okkL2UpPerformance'] ?? null) }}</h6>
                                         </div>
                                     </div>
-                                    <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+$10k</span> this week</p>
+                                    <p class="text-sm mb-0"><span class="{{ $okkL2BadgeCls }} px-1 rounded-2 fw-medium text-sm">{{ number_format($ikkKpis['layer2Achieved'] ?? 0) }} / {{ number_format($ikkKpis['layer2Required'] ?? 0) }}</span> OKK L2 Up</p>
                                 </div>
                             </div>
                         </div>
