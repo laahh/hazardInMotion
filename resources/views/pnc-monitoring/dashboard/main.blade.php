@@ -27,8 +27,25 @@
                 <div class="row">
                     <div class="col-xxl-6 pe-xxl-0">
                         <div class="card-body p-24">
+                            @php
+                                $ikkKpis = $payload['ikk']['kpis'] ?? [];
+                                $ipkPerf = $ikkKpis['ipkPerformance'] ?? null;
+                                $ipkLabel = $ipkPerf === null ? 'N/A' : number_format($ipkPerf * 100, 1) . '%';
+                                $ipkBadgeClass = $ipkPerf === null
+                                    ? 'bg-neutral-200 text-secondary-light'
+                                    : ($ipkPerf >= 0.9995 ? 'bg-success-focus text-success-main' : ($ipkPerf >= 0.9 ? 'bg-warning-focus text-warning-main' : 'bg-danger-focus text-danger-main'));
+                            @endphp
                             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-                                <h6 class="mb-2 fw-bold text-lg">Total IKK: {{ number_format($payload['ikk']['kpis']['ikkCount'] ?? 0, 0, ',', '.') }}</h6>
+                                <div class="d-flex align-items-center gap-12">
+                                    <span class="w-44-px h-44-px text-primary-600 bg-primary-light border border-primary-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-0">
+                                        <iconify-icon icon="solar:document-text-bold" class="icon"></iconify-icon>
+                                    </span>
+                                    <div>
+                                        <span class="text-secondary-light fw-medium text-sm d-block mb-2">Total IKK</span>
+                                        <h5 class="fw-bold mb-0 text-primary-light">{{ number_format($ikkKpis['ikkCount'] ?? 0, 0, ',', '.') }}</h5>
+                                    </div>
+                                    <span class="px-12 py-4 rounded-pill fw-semibold text-sm {{ $ipkBadgeClass }}">IPK {{ $ipkLabel }}</span>
+                                </div>
                                 <div class="">
                                 <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
                                     <option>Yearly</option>
