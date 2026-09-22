@@ -6,7 +6,7 @@
 <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-24">
   <div>
     <h4 class="mb-4">Dashboard Utama PNC Monitoring</h4>
-    <p class="text-secondary-light mb-0">Ringkasan gabungan performa IKK &amp; Commissioning (SPIP) lintas site</p>
+    <p class="text-secondary-light mb-0">Ringkasan gabungan performa IKK, Commissioning (SPIP), dan Inventory Tools lintas site</p>
   </div>
   <div class="text-end text-sm">
     <div><span class="text-success-main">●</span> LIVE / auto-refresh 60 detik</div>
@@ -46,6 +46,11 @@
 <div class="mb-24 mt-24">
   <h6 class="text-uppercase text-secondary-light text-sm mb-12">Modul Commissioning</h6>
   <div class="row gy-4" id="main-kpi-commissioning"></div>
+</div>
+
+<div class="mb-24 mt-24">
+  <h6 class="text-uppercase text-secondary-light text-sm mb-12">Modul Inventory Tools</h6>
+  <div class="row gy-4" id="main-kpi-inventory"></div>
 </div>
 
 <div class="row gy-4 mb-24">
@@ -121,6 +126,14 @@
       kpiCard('Performance', pct(c.performance), num(c.status1) + ' / ' + num(c.status1 + c.status0), 'bg-success-main'),
       kpiCard('SKO Release', num(c.releaseCount), 'Status release', 'bg-primary-600'),
       kpiCard('SKO Reject', num(c.rejectCount), 'Status reject', 'bg-danger-main'),
+    ].join('');
+
+    const inv = d.inventory?.kpis || {};
+    document.getElementById('main-kpi-inventory').innerHTML = [
+      kpiCard('Total Alat', num(inv.totalTools), num(inv.totalQty) + ' total qty', 'bg-primary-600'),
+      kpiCard('Available', num(inv.available), 'Siap dipakai', 'bg-success-main'),
+      kpiCard('Kalibrasi Overdue', num(inv.calibrationOverdue), num(inv.calibrationDueSoon) + ' due 30 hari', 'bg-danger-main'),
+      kpiCard('Inspeksi &amp; PM Overdue', num(inv.inspectionOverdue) + ' / ' + num(inv.pmOverdue), 'Butuh tindak lanjut', 'bg-warning-main'),
     ].join('');
   }
 

@@ -64,5 +64,27 @@
       </div>
     </a>
   </div>
+  <div class="col-xxl-3 col-sm-6">
+    <a href="{{ route('pnc-monitoring.dashboard.inventory') }}" class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-1 text-decoration-none">
+      <div class="card-body p-0">
+        <span class="mb-12 w-48-px h-48-px bg-info flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle">
+          <iconify-icon icon="solar:box-bold" class="icon"></iconify-icon>
+        </span>
+        <h6 class="fw-semibold mb-4 text-primary-light">Dashboard Inventory Tools</h6>
+        <p class="text-sm text-secondary-light mb-0">Stok, status ketersediaan, kondisi &amp; jadwal kalibrasi/inspeksi/PM.</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-xxl-3 col-sm-6">
+    <a href="{{ route('pnc-monitoring.inventory-tools.index') }}" class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-2 text-decoration-none">
+      <div class="card-body p-0">
+        <span class="mb-12 w-48-px h-48-px bg-success-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle">
+          <iconify-icon icon="solar:box-minimalistic-bold" class="icon"></iconify-icon>
+        </span>
+        <h6 class="fw-semibold mb-4 text-primary-light">Data Inventory Tools</h6>
+        <p class="text-sm text-secondary-light mb-0">CRUD &amp; import Excel Master Data Inventory Tools.</p>
+      </div>
+    </a>
+  </div>
 </div>
 @endsection

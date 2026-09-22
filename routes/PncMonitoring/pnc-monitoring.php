@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Http\Controllers\PncMonitoring\PncMonitoringCommissioningController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringIkkDashboardController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringIkkRecordController;
+use App\Http\Controllers\PncMonitoring\PncMonitoringInventoryDashboardController;
+use App\Http\Controllers\PncMonitoring\PncMonitoringInventoryToolController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringMainDashboardController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringPengawasDashboardController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringPortalController;
@@ -33,6 +35,9 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard/pengawas', [PncMonitoringPengawasDashboardController::class, 'index'])->name('dashboard.pengawas');
     Route::get('/dashboard/pengawas/data', [PncMonitoringPengawasDashboardController::class, 'data'])->name('dashboard.pengawas.data');
 
+    Route::get('/dashboard/inventory', [PncMonitoringInventoryDashboardController::class, 'index'])->name('dashboard.inventory');
+    Route::get('/dashboard/inventory/data', [PncMonitoringInventoryDashboardController::class, 'data'])->name('dashboard.inventory.data');
+
     Route::prefix('ikk-records')->name('ikk-records.')->group(function (): void {
         Route::get('/excel-template', [PncMonitoringIkkRecordController::class, 'excelTemplate'])->name('excel-template');
         Route::post('/excel-import', [PncMonitoringIkkRecordController::class, 'excelImport'])->name('excel-import');
@@ -53,5 +58,16 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/{commissioning}/edit', [PncMonitoringCommissioningController::class, 'edit'])->whereNumber('commissioning')->name('edit');
         Route::put('/{commissioning}', [PncMonitoringCommissioningController::class, 'update'])->whereNumber('commissioning')->name('update');
         Route::delete('/{commissioning}', [PncMonitoringCommissioningController::class, 'destroy'])->whereNumber('commissioning')->name('destroy');
+    });
+
+    Route::prefix('inventory-tools')->name('inventory-tools.')->group(function (): void {
+        Route::get('/excel-template', [PncMonitoringInventoryToolController::class, 'excelTemplate'])->name('excel-template');
+        Route::post('/excel-import', [PncMonitoringInventoryToolController::class, 'excelImport'])->name('excel-import');
+        Route::get('/', [PncMonitoringInventoryToolController::class, 'index'])->name('index');
+        Route::get('/create', [PncMonitoringInventoryToolController::class, 'create'])->name('create');
+        Route::post('/', [PncMonitoringInventoryToolController::class, 'store'])->name('store');
+        Route::get('/{inventoryTool}/edit', [PncMonitoringInventoryToolController::class, 'edit'])->whereNumber('inventoryTool')->name('edit');
+        Route::put('/{inventoryTool}', [PncMonitoringInventoryToolController::class, 'update'])->whereNumber('inventoryTool')->name('update');
+        Route::delete('/{inventoryTool}', [PncMonitoringInventoryToolController::class, 'destroy'])->whereNumber('inventoryTool')->name('destroy');
     });
 });

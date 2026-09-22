@@ -9,6 +9,7 @@ final class PncMonitoringMainDashboardAssembler
     public function __construct(
         private readonly PncMonitoringIkkDashboardAssembler $ikkAssembler,
         private readonly PncMonitoringPengawasDashboardAssembler $commissioningAssembler,
+        private readonly PncMonitoringInventoryDashboardAssembler $inventoryAssembler,
     ) {}
 
     /**
@@ -22,6 +23,7 @@ final class PncMonitoringMainDashboardAssembler
 
         $ikk = $this->ikkAssembler->assemble(['year' => $year, 'site' => $site]);
         $commissioning = $this->commissioningAssembler->assemble(['year' => $year, 'site' => $site]);
+        $inventory = $this->inventoryAssembler->assemble(['site' => $site]);
 
         return [
             'meta' => [
@@ -30,7 +32,10 @@ final class PncMonitoringMainDashboardAssembler
             'filters' => ['year' => $year, 'site' => $site],
             'options' => [
                 'years' => $this->mergeOptions($ikk['options']['years'] ?? [], $commissioning['options']['years'] ?? []),
-                'sites' => $this->mergeOptions($ikk['options']['sites'] ?? [], $commissioning['options']['sites'] ?? []),
+                'sites' => $this->mergeOptions(
+                    $this->mergeOptions($ikk['options']['sites'] ?? [], $commissioning['options']['sites'] ?? []),
+                    $inventory['options']['sites'] ?? [],
+                ),
             ],
             'ikk' => [
                 'kpis' => $ikk['kpis'],
@@ -44,6 +49,12 @@ final class PncMonitoringMainDashboardAssembler
                 'top10' => $commissioning['top10'],
                 'bottom10' => $commissioning['bottom10'],
                 'rejectReasons' => $commissioning['rejectReasons'],
+            ],
+            'inventory' => [
+                'kpis' => $inventory['kpis'],
+                'byCategory' => $inventory['byCategory'],
+                'byStatus' => $inventory['byStatus'],
+                'dueSoon' => $inventory['dueSoon'],
             ],
             'combinedBySite' => $this->combineBySite($ikk['bySite'], $commissioning['bySite']),
             'combinedTrend' => $this->combineTrend($ikk['trend'], $commissioning['weeklyTrend']),

@@ -27,6 +27,7 @@
       @php
         $ikkActive = request()->routeIs('pnc-monitoring.dashboard.ikk*') || request()->routeIs('pnc-monitoring.ikk-records.*');
         $commissioningActive = request()->routeIs('pnc-monitoring.dashboard.pengawas*') || request()->routeIs('pnc-monitoring.commissionings.*');
+        $inventoryActive = request()->routeIs('pnc-monitoring.dashboard.inventory*') || request()->routeIs('pnc-monitoring.inventory-tools.*');
       @endphp
 
       <li class="dropdown {{ $ikkActive ? 'open' : '' }}">
@@ -62,6 +63,25 @@
           <li>
             <a href="{{ route('pnc-monitoring.commissionings.index') }}" class="{{ request()->routeIs('pnc-monitoring.commissionings.*') ? 'active-page' : '' }}">
               <i class="ri-circle-fill circle-icon text-purple w-auto"></i> Master Data
+            </a>
+          </li>
+        </ul>
+      </li>
+
+      <li class="dropdown {{ $inventoryActive ? 'open' : '' }}">
+        <a href="javascript:void(0)" class="{{ $inventoryActive ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:box-outline" class="menu-icon"></iconify-icon>
+          <span>Inventory Tools</span>
+        </a>
+        <ul class="sidebar-submenu" @style(['display: block' => $inventoryActive])>
+          <li>
+            <a href="{{ route('pnc-monitoring.dashboard.inventory') }}" class="{{ request()->routeIs('pnc-monitoring.dashboard.inventory*') ? 'active-page' : '' }}">
+              <i class="ri-circle-fill circle-icon text-info w-auto"></i> Dashboard
+            </a>
+          </li>
+          <li>
+            <a href="{{ route('pnc-monitoring.inventory-tools.index') }}" class="{{ request()->routeIs('pnc-monitoring.inventory-tools.*') ? 'active-page' : '' }}">
+              <i class="ri-circle-fill circle-icon text-yellow w-auto"></i> Master Data
             </a>
           </li>
         </ul>
