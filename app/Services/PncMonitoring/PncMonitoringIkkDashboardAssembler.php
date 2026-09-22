@@ -65,6 +65,37 @@ final class PncMonitoringIkkDashboardAssembler
     }
 
     /**
+     * Data mentah per hari (total IKK & jumlah comply/IPK=1) untuk chart filter
+     * Mingguan/Bulanan/Tahunan di sisi client. Minggu dihitung Minggu→Sabtu di JS.
+     *
+     * @param  array{year?:string,site?:string}  $filters
+     * @return list<array{date:string,total:int,compliant:int}>
+     */
+    public function dailySeries(array $filters): array
+    {
+        $normalized = $this->normalizeFilters($filters);
+        $cacheKey = 'pnc_monitoring_ikk_daily_series_'.md5((string) json_encode($normalized));
+
+        return Cache::remember($cacheKey, 45, function () use ($normalized): array {
+            $rows = $this->baseQuery($normalized)->whereNotNull('tanggal')->get(['tanggal', 'ipk']);
+
+            $daily = [];
+            foreach ($rows as $row) {
+                $key = $row->tanggal->format('Y-m-d');
+                $daily[$key] ??= ['date' => $key, 'total' => 0, 'compliant' => 0];
+                $daily[$key]['total']++;
+                if ((int) $row->ipk === 1) {
+                    $daily[$key]['compliant']++;
+                }
+            }
+
+            ksort($daily);
+
+            return array_values($daily);
+        });
+    }
+
+    /**
      * @param  Collection<int, PncMonitoringIkkRecord>  $rows
      * @return array<string, mixed>
      */

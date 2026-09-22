@@ -42,17 +42,19 @@
                                     </span>
                                     <div>
                                         <span class="text-secondary-light fw-medium text-sm d-block mb-2">Total IKK</span>
-                                        <h5 class="fw-bold mb-0 text-primary-light">{{ number_format($ikkKpis['ikkCount'] ?? 0, 0, ',', '.') }}</h5>
+                                        <h5 class="fw-bold mb-0 text-primary-light" id="ikk-period-total">{{ number_format($ikkKpis['ikkCount'] ?? 0, 0, ',', '.') }}</h5>
                                     </div>
-                                    <span class="px-12 py-4 rounded-pill fw-semibold text-sm {{ $ipkBadgeClass }}">IPK {{ $ipkLabel }}</span>
+                                    <span class="px-12 py-4 rounded-pill fw-semibold text-sm {{ $ipkBadgeClass }}" id="ikk-period-badge">IPK {{ $ipkLabel }}</span>
                                 </div>
-                                <div class="">
-                                <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
-                                    <option>Yearly</option>
-                                    <option>Monthly</option>
-                                    <option>Weekly</option>
-                                    <option>Today</option>
-                                </select>
+                                <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                                    <select id="ikk-chart-mode" class="form-select form-select-sm w-auto bg-base border text-secondary-light">
+                                        <option value="year">Tahunan</option>
+                                        <option value="month">Bulanan</option>
+                                        <option value="week">Mingguan</option>
+                                    </select>
+                                    <select id="ikk-chart-year" class="form-select form-select-sm w-auto bg-base border text-secondary-light"></select>
+                                    <select id="ikk-chart-month" class="form-select form-select-sm w-auto bg-base border text-secondary-light d-none"></select>
+                                    <select id="ikk-chart-week" class="form-select form-select-sm w-auto bg-base border text-secondary-light d-none"></select>
                                 </div>
                             </div>
                             <div class="mt-40">
@@ -820,6 +822,213 @@
     });
     chart.render();
   }
+})();
+</script>
+<script>
+(function () {
+  // homeThreeChart.js already rendered a dummy Revenue Report bar chart into
+  // #paymentStatusChart on page load — replace it with a real, filterable IKK chart
+  // (Tahunan/Bulanan/Mingguan, minggu dihitung Minggu → Sabtu).
+  var chartEl = document.querySelector('#paymentStatusChart');
+  var modeEl = document.querySelector('#ikk-chart-mode');
+  var yearEl = document.querySelector('#ikk-chart-year');
+  var monthEl = document.querySelector('#ikk-chart-month');
+  var weekEl = document.querySelector('#ikk-chart-week');
+  var totalEl = document.querySelector('#ikk-period-total');
+  var badgeEl = document.querySelector('#ikk-period-badge');
+  if (!chartEl || !modeEl || !yearEl || !monthEl || !weekEl) {
+    return;
+  }
+
+  var dailySeries = @json($payload['ikk']['dailySeries'] ?? []);
+  var dailyMap = {};
+  dailySeries.forEach(function (row) {
+    dailyMap[row.date] = row;
+  });
+
+  var monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  var dayNamesSundayFirst = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  var monthShort = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function toIso(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function shortLabel(d) { return d.getDate() + ' ' + monthShort[d.getMonth()]; }
+  function addDays(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  // Cut-off minggu: Minggu (Sunday) s/d Sabtu (Saturday).
+  function startOfWeekSunday(d) { var r = new Date(d); r.setHours(0, 0, 0, 0); r.setDate(r.getDate() - r.getDay()); return r; }
+
+  function dayCell(dateObj) {
+    return dailyMap[toIso(dateObj)] || { total: 0, compliant: 0 };
+  }
+
+  function sumRange(startDate, endDate) {
+    var total = 0, compliant = 0;
+    var cursor = new Date(startDate);
+    while (cursor <= endDate) {
+      var cell = dayCell(cursor);
+      total += cell.total;
+      compliant += cell.compliant;
+      cursor = addDays(cursor, 1);
+    }
+    return { total: total, compliant: compliant };
+  }
+
+  function weekStartsInMonth(year, month) {
+    var lastDay = new Date(year, month, 0).getDate();
+    var starts = [];
+    var seen = {};
+    for (var d = 1; d <= lastDay; d++) {
+      var ws = startOfWeekSunday(new Date(year, month - 1, d));
+      var key = toIso(ws);
+      if (!seen[key]) {
+        seen[key] = true;
+        starts.push(ws);
+      }
+    }
+    return starts;
+  }
+
+  var availableYears = Array.from(new Set(dailySeries.map(function (r) { return Number(r.date.slice(0, 4)); }))).sort(function (a, b) { return b - a; });
+  if (!availableYears.length) {
+    availableYears = [new Date().getFullYear()];
+  }
+
+  yearEl.innerHTML = availableYears.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
+  monthEl.innerHTML = monthNames.map(function (name, idx) { return '<option value="' + (idx + 1) + '">' + name + '</option>'; }).join('');
+
+  // Default: tahun & bulan yang benar-benar punya data terbaru (kalau ada), fallback ke hari ini.
+  var latest = dailySeries.length ? dailySeries[dailySeries.length - 1].date : toIso(new Date());
+  yearEl.value = String(Number(latest.slice(0, 4)));
+  monthEl.value = String(Number(latest.slice(5, 7)));
+
+  function refreshWeekOptions() {
+    var year = Number(yearEl.value);
+    var month = Number(monthEl.value);
+    var starts = weekStartsInMonth(year, month);
+    weekEl.innerHTML = starts.map(function (ws) {
+      var we = addDays(ws, 6);
+      return '<option value="' + toIso(ws) + '">' + shortLabel(ws) + ' – ' + shortLabel(we) + '</option>';
+    }).join('');
+    if (starts.length) {
+      weekEl.value = toIso(starts[starts.length - 1]);
+    }
+  }
+
+  function toggleControls() {
+    var mode = modeEl.value;
+    monthEl.classList.toggle('d-none', mode === 'year');
+    weekEl.classList.toggle('d-none', mode !== 'week');
+  }
+
+  var chart = null;
+  function drawChart(categories, totals, compliants) {
+    var opts = {
+      series: [
+        { name: 'Total IKK', data: totals },
+        { name: 'Comply IKK', data: compliants },
+      ],
+      colors: ['#487FFF', '#45B369'],
+      legend: { show: false },
+      chart: { type: 'bar', height: 250, toolbar: { show: false } },
+      grid: { show: true, borderColor: '#D1D5DB', strokeDashArray: 4, position: 'back' },
+      plotOptions: { bar: { borderRadius: 4, columnWidth: totals.length > 8 ? '55%' : '35%' } },
+      dataLabels: { enabled: false },
+      stroke: { show: true, width: 2, colors: ['transparent'] },
+      xaxis: { categories: categories },
+      fill: { opacity: 1 },
+    };
+    if (chart) {
+      chart.destroy();
+    }
+    chart = new ApexCharts(chartEl, opts);
+    chart.render();
+  }
+
+  function updateHeader(total, compliant) {
+    if (totalEl) {
+      totalEl.textContent = total.toLocaleString('id-ID');
+    }
+    if (badgeEl) {
+      var rate = total > 0 ? (compliant / total * 100) : null;
+      var label = rate === null ? 'N/A' : rate.toFixed(1) + '%';
+      badgeEl.textContent = 'IPK ' + label;
+      badgeEl.className = 'px-12 py-4 rounded-pill fw-semibold text-sm '
+        + (rate === null ? 'bg-neutral-200 text-secondary-light'
+          : rate >= 99.95 ? 'bg-success-focus text-success-main'
+          : rate >= 90 ? 'bg-warning-focus text-warning-main'
+          : 'bg-danger-focus text-danger-main');
+    }
+  }
+
+  function render() {
+    var mode = modeEl.value;
+    var year = Number(yearEl.value);
+    var month = Number(monthEl.value);
+    var categories = [];
+    var totals = [];
+    var compliants = [];
+    var periodTotal = 0;
+    var periodCompliant = 0;
+
+    if (mode === 'year') {
+      for (var m = 1; m <= 12; m++) {
+        var start = new Date(year, m - 1, 1);
+        var end = new Date(year, m, 0);
+        var sum = sumRange(start, end);
+        categories.push(monthNames[m - 1]);
+        totals.push(sum.total);
+        compliants.push(sum.compliant);
+        periodTotal += sum.total;
+        periodCompliant += sum.compliant;
+      }
+    } else if (mode === 'month') {
+      weekStartsInMonth(year, month).forEach(function (ws) {
+        var we = addDays(ws, 6);
+        var sum = sumRange(ws, we);
+        categories.push(shortLabel(ws) + '–' + shortLabel(we));
+        totals.push(sum.total);
+        compliants.push(sum.compliant);
+        periodTotal += sum.total;
+        periodCompliant += sum.compliant;
+      });
+    } else {
+      var weekStartVal = weekEl.value;
+      var weekStart = weekStartVal ? new Date(weekStartVal + 'T00:00:00') : startOfWeekSunday(new Date());
+      for (var i = 0; i < 7; i++) {
+        var day = addDays(weekStart, i);
+        var cell = dayCell(day);
+        categories.push(dayNamesSundayFirst[i]);
+        totals.push(cell.total);
+        compliants.push(cell.compliant);
+        periodTotal += cell.total;
+        periodCompliant += cell.compliant;
+      }
+    }
+
+    drawChart(categories, totals, compliants);
+    updateHeader(periodTotal, periodCompliant);
+  }
+
+  modeEl.addEventListener('change', function () {
+    toggleControls();
+    if (modeEl.value === 'week') {
+      refreshWeekOptions();
+    }
+    render();
+  });
+  yearEl.addEventListener('change', function () {
+    refreshWeekOptions();
+    render();
+  });
+  monthEl.addEventListener('change', function () {
+    refreshWeekOptions();
+    render();
+  });
+  weekEl.addEventListener('change', render);
+
+  refreshWeekOptions();
+  toggleControls();
+  render();
 })();
 </script>
 <script>
