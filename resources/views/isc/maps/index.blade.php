@@ -204,10 +204,10 @@
           </button>
         </div>
         <div class="gm-hud-split">
-          <button type="button" class="gm-hud-metric is-gap" data-roster="gap_br">
-            <span>Belum RFID</span>
-            <strong id="hud-gap-br">–</strong>
-            <small>Ada di Besigma, belum check-in</small>
+          <button type="button" class="gm-hud-metric is-gap" data-roster="both">
+            <span>Aktif dari Install</span>
+            <strong id="hud-install-ratio">–</strong>
+            <small>Pakai Besigma &amp; check-in, dari total install</small>
           </button>
           <button type="button" class="gm-hud-metric is-miss" data-roster="gap_rb">
             <span>RFID tanpa GPS</span>

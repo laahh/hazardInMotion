@@ -1809,10 +1809,22 @@
     setText("hud-ever", recon.ever_count);
     setText("hud-current", recon.current_count);
     setText("hud-rfid", recon.rfid_count);
-    setText("hud-gap-br", recon.gap_besigma_minus_rfid_count);
+    setText("hud-install-ratio", formatInstallRatio(recon.both_count, recon.installed_total));
     setText("hud-gap-rb", recon.gap_rfid_minus_besigma_count);
     setText("hud-both", recon.both_count);
     setText("hud-both-metric", recon.both_count);
+  }
+
+  // "Aktif dari Install": orang yang sudah pakai Besigma DAN check-in RFID
+  // hari itu (recon.both_count, sudah diperbaiki di backend supaya irisan
+  // asli, bukan selalu = total check-in), dibagi total user yang sudah
+  // install Besigma (recon.installed_total, dari besigma_db, bisa null kalau
+  // besigma_db sedang tidak terjangkau).
+  function formatInstallRatio(both, installedTotal) {
+    var num = both == null ? "–" : String(both);
+    var den = installedTotal == null ? "–" : String(installedTotal);
+
+    return num + " / " + den;
   }
 
   function paintHudCounts() {

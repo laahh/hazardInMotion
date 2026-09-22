@@ -27,6 +27,7 @@ final class IscPobSnapshotService
         private readonly IscPobDemoDataset $demo,
         private readonly IscSiteNormalizer $sites,
         private readonly IscBesigmaViolationReader $violations,
+        private readonly IscBesigmaInstalledUsersService $installedUsers,
     ) {}
 
     /**
@@ -118,6 +119,7 @@ final class IscPobSnapshotService
         $reconcile = $this->reconcile->execute($ever, $current, $rfid);
         unset($reconcile['ever'], $reconcile['current'], $reconcile['rfid']);
         $reconcile = $this->applyGapRfidTanpaGps($reconcile, $checkins, $classified);
+        $reconcile['installed_total'] = $this->installedUsers->total();
 
         return [
             'source' => 'demo',
@@ -207,7 +209,11 @@ final class IscPobSnapshotService
 
         $rfidPack = $this->rfid->onsiteTodayAll();
         $checkins = $this->normalizeCheckins($rfidPack['people']);
-        $everSids = $this->collectSids($classified, $checkins, $peopleViolations);
+        // "ever" HARUS cuma SID yang genuinely terlihat Besigma (GPS + data
+        // pelanggaran), TANPA ikut SID check-in RFID sendiri — kalau dulu
+        // ikut disatukan, "Keduanya cocok" (both_count) jadi selalu = total
+        // check-in RFID (matched 100% palsu), padahal harusnya irisan asli.
+        $everSids = $this->collectSids($classified, $peopleViolations);
         $ever = $this->gps->identifiersBySids($everSids);
         if ($ever === []) {
             $ever = array_values(array_filter(
@@ -229,6 +235,7 @@ final class IscPobSnapshotService
         $reconcile = $this->reconcile->execute($ever, $current, $rfidPack['people']);
         unset($reconcile['ever'], $reconcile['current'], $reconcile['rfid']);
         $reconcile = $this->applyGapRfidTanpaGps($reconcile, $checkins, $classified);
+        $reconcile['installed_total'] = $this->installedUsers->total();
 
         $kindCounts = [
             IscHazardBoundaryClassifier::KIND_EMPLOYEE_DANGER => 0,
