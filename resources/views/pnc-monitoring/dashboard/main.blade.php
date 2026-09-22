@@ -87,10 +87,10 @@
                                                 <iconify-icon icon="solar:clipboard-check-bold" class="icon"></iconify-icon>
                                             </span>
                                             <span class="mb-1 fw-bold text-secondary-light text-md">IPK IKK Aktif</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">{{ $pct($ikkKpis['ipkPerformance'] ?? null) }}</h6>
+                                            <h6 class="fw-semibold text-primary-light mb-1" id="ikk-metric-ipk-value">{{ $pct($ikkKpis['ipkPerformance'] ?? null) }}</h6>
                                         </div>
                                     </div>
-                                    <p class="text-sm mb-0"><span class="{{ $ipkBadgeCls }} px-1 rounded-2 fw-medium text-sm">{{ number_format($ikkKpis['ipkActual'] ?? 0) }} / {{ number_format($ikkKpis['ipkDenominator'] ?? 0) }}</span> IKK comply</p>
+                                    <p class="text-sm mb-0"><span class="{{ $ipkBadgeCls }} px-1 rounded-2 fw-medium text-sm" id="ikk-metric-ipk-sub">{{ number_format($ikkKpis['ipkActual'] ?? 0) }} / {{ number_format($ikkKpis['ipkDenominator'] ?? 0) }}</span> IKK comply</p>
                                 </div>
                             </div>
                             <div class="col-6 p-0 m-0">
@@ -101,10 +101,10 @@
                                                 <iconify-icon icon="solar:eye-bold" class="icon"></iconify-icon>
                                             </span>
                                             <span class="mb-1 fw-bold text-secondary-light text-md">OKK IKK Aktif</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">{{ $pct($ikkKpis['iaPerformance'] ?? null) }}</h6>
+                                            <h6 class="fw-semibold text-primary-light mb-1" id="ikk-metric-ia-value">{{ $pct($ikkKpis['iaPerformance'] ?? null) }}</h6>
                                         </div>
                                     </div>
-                                    <p class="text-sm mb-0"><span class="{{ $iaBadgeCls }} px-1 rounded-2 fw-medium text-sm">{{ number_format($ikkKpis['iaEffective'] ?? 0) }} / {{ number_format($ikkKpis['iaRequired'] ?? 0) }}</span> IA efektif</p>
+                                    <p class="text-sm mb-0"><span class="{{ $iaBadgeCls }} px-1 rounded-2 fw-medium text-sm" id="ikk-metric-ia-sub">{{ number_format($ikkKpis['iaEffective'] ?? 0) }} / {{ number_format($ikkKpis['iaRequired'] ?? 0) }}</span> IA efektif</p>
                                 </div>
                             </div>
                             <div class="col-6 p-0 m-0">
@@ -115,10 +115,10 @@
                                                 <iconify-icon icon="solar:eye-scan-bold" class="icon"></iconify-icon>
                                             </span>
                                             <span class="mb-1 fw-bold text-secondary-light text-md">OKK Layer 1</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">{{ $pct($ikkKpis['okkL1Performance'] ?? null) }}</h6>
+                                            <h6 class="fw-semibold text-primary-light mb-1" id="ikk-metric-okkl1-value">{{ $pct($ikkKpis['okkL1Performance'] ?? null) }}</h6>
                                         </div>
                                     </div>
-                                    <p class="text-sm mb-0"><span class="{{ $okkL1BadgeCls }} px-1 rounded-2 fw-medium text-sm">{{ number_format($ikkKpis['okkAchieved'] ?? 0) }} / {{ number_format($ikkKpis['okkPlan'] ?? 0) }}</span> OKK L1</p>
+                                    <p class="text-sm mb-0"><span class="{{ $okkL1BadgeCls }} px-1 rounded-2 fw-medium text-sm" id="ikk-metric-okkl1-sub">{{ number_format($ikkKpis['okkAchieved'] ?? 0) }} / {{ number_format($ikkKpis['okkPlan'] ?? 0) }}</span> OKK L1</p>
                                 </div>
                             </div>
                             <div class="col-6 p-0 m-0">
@@ -129,10 +129,10 @@
                                                 <iconify-icon icon="solar:shield-check-bold" class="icon"></iconify-icon>
                                             </span>
                                             <span class="mb-1 fw-bold text-secondary-light text-md">OKK Layer 2</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">{{ $pct($ikkKpis['okkL2UpPerformance'] ?? null) }}</h6>
+                                            <h6 class="fw-semibold text-primary-light mb-1" id="ikk-metric-okkl2-value">{{ $pct($ikkKpis['okkL2UpPerformance'] ?? null) }}</h6>
                                         </div>
                                     </div>
-                                    <p class="text-sm mb-0"><span class="{{ $okkL2BadgeCls }} px-1 rounded-2 fw-medium text-sm">{{ number_format($ikkKpis['layer2Achieved'] ?? 0) }} / {{ number_format($ikkKpis['layer2Required'] ?? 0) }}</span> OKK L2 Up</p>
+                                    <p class="text-sm mb-0"><span class="{{ $okkL2BadgeCls }} px-1 rounded-2 fw-medium text-sm" id="ikk-metric-okkl2-sub">{{ number_format($ikkKpis['layer2Achieved'] ?? 0) }} / {{ number_format($ikkKpis['layer2Required'] ?? 0) }}</span> OKK L2 Up</p>
                                 </div>
                             </div>
                         </div>
@@ -821,20 +821,35 @@
   // Cut-off minggu: Minggu (Sunday) s/d Sabtu (Saturday).
   function startOfWeekSunday(d) { var r = new Date(d); r.setHours(0, 0, 0, 0); r.setDate(r.getDate() - r.getDay()); return r; }
 
+  var emptyCell = { total: 0, compliant: 0, ipkActual: 0, ipkDenominator: 0, iaEffective: 0, planOkk: 0, okkAchieved: 0, layer2Achieved: 0 };
+
   function dayCell(dateObj) {
-    return dailyMap[toIso(dateObj)] || { total: 0, compliant: 0 };
+    return dailyMap[toIso(dateObj)] || emptyCell;
+  }
+
+  function newAccumulator() {
+    return { total: 0, compliant: 0, ipkActual: 0, ipkDenominator: 0, iaEffective: 0, planOkk: 0, okkAchieved: 0, layer2Achieved: 0 };
+  }
+
+  function addCellInto(acc, cell) {
+    acc.total += cell.total;
+    acc.compliant += cell.compliant;
+    acc.ipkActual += cell.ipkActual;
+    acc.ipkDenominator += cell.ipkDenominator;
+    acc.iaEffective += cell.iaEffective;
+    acc.planOkk += cell.planOkk;
+    acc.okkAchieved += cell.okkAchieved;
+    acc.layer2Achieved += cell.layer2Achieved;
   }
 
   function sumRange(startDate, endDate) {
-    var total = 0, compliant = 0;
+    var acc = newAccumulator();
     var cursor = new Date(startDate);
     while (cursor <= endDate) {
-      var cell = dayCell(cursor);
-      total += cell.total;
-      compliant += cell.compliant;
+      addCellInto(acc, dayCell(cursor));
       cursor = addDays(cursor, 1);
     }
-    return { total: total, compliant: compliant };
+    return acc;
   }
 
   function weekStartsInMonth(year, month) {
@@ -924,6 +939,34 @@
     }
   }
 
+  function badgeClassFor(rate) {
+    return rate === null ? 'bg-neutral-200 text-secondary-light'
+      : rate >= 99.95 ? 'bg-success-focus text-success-main'
+      : rate >= 90 ? 'bg-warning-focus text-warning-main'
+      : 'bg-danger-focus text-danger-main';
+  }
+
+  function updateMetric(prefix, actual, denominator) {
+    var valueEl = document.querySelector('#ikk-metric-' + prefix + '-value');
+    var subEl = document.querySelector('#ikk-metric-' + prefix + '-sub');
+    var rate = denominator > 0 ? (actual / denominator * 100) : null;
+    if (valueEl) {
+      valueEl.textContent = rate === null ? 'N/A' : rate.toFixed(1) + '%';
+    }
+    if (subEl) {
+      subEl.textContent = actual.toLocaleString('id-ID') + ' / ' + denominator.toLocaleString('id-ID');
+      subEl.className = 'px-1 rounded-2 fw-medium text-sm ' + badgeClassFor(rate);
+    }
+  }
+
+  // Kartu IPK/OKK IKK Aktif/OKK Layer 1/OKK Layer 2 mengikuti filter Total IKK yang sama.
+  function updateSideMetrics(acc) {
+    updateMetric('ipk', acc.ipkActual, acc.ipkDenominator);
+    updateMetric('ia', acc.iaEffective, acc.total);
+    updateMetric('okkl1', acc.okkAchieved, acc.planOkk);
+    updateMetric('okkl2', acc.layer2Achieved, acc.planOkk);
+  }
+
   function render() {
     var mode = modeEl.value;
     var year = Number(yearEl.value);
@@ -931,8 +974,7 @@
     var categories = [];
     var totals = [];
     var compliants = [];
-    var periodTotal = 0;
-    var periodCompliant = 0;
+    var period = newAccumulator();
 
     if (mode === 'year') {
       for (var m = 1; m <= 12; m++) {
@@ -942,8 +984,7 @@
         categories.push(monthNames[m - 1]);
         totals.push(sum.total);
         compliants.push(sum.compliant);
-        periodTotal += sum.total;
-        periodCompliant += sum.compliant;
+        addCellInto(period, sum);
       }
     } else if (mode === 'month') {
       weekStartsInMonth(year, month).forEach(function (ws) {
@@ -952,8 +993,7 @@
         categories.push(shortLabel(ws) + '–' + shortLabel(we));
         totals.push(sum.total);
         compliants.push(sum.compliant);
-        periodTotal += sum.total;
-        periodCompliant += sum.compliant;
+        addCellInto(period, sum);
       });
     } else {
       var weekStartVal = weekEl.value;
@@ -964,13 +1004,13 @@
         categories.push(dayNamesSundayFirst[i]);
         totals.push(cell.total);
         compliants.push(cell.compliant);
-        periodTotal += cell.total;
-        periodCompliant += cell.compliant;
+        addCellInto(period, cell);
       }
     }
 
     drawChart(categories, totals, compliants);
-    updateHeader(periodTotal, periodCompliant);
+    updateHeader(period.total, period.compliant);
+    updateSideMetrics(period);
   }
 
   modeEl.addEventListener('change', function () {

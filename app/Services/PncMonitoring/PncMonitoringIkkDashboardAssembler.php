@@ -97,11 +97,12 @@ final class PncMonitoringIkkDashboardAssembler
     }
 
     /**
-     * Data mentah per hari (total IKK & jumlah comply/IPK=1) untuk chart filter
-     * Mingguan/Bulanan/Tahunan di sisi client. Minggu dihitung Minggu→Sabtu di JS.
+     * Data mentah per hari untuk chart & KPI filter Mingguan/Bulanan/Tahunan di sisi
+     * client (Total IKK, IPK, OKK IKK Aktif/IA, OKK Layer 1, OKK Layer 2 Up).
+     * Minggu dihitung Minggu→Sabtu di JS.
      *
      * @param  array{year?:string,site?:string}  $filters
-     * @return list<array{date:string,total:int,compliant:int}>
+     * @return list<array{date:string,total:int,compliant:int,ipkActual:int,ipkDenominator:int,iaEffective:int,planOkk:int,okkAchieved:int,layer2Achieved:int}>
      */
     public function dailySeries(array $filters): array
     {
@@ -109,16 +110,42 @@ final class PncMonitoringIkkDashboardAssembler
         $cacheKey = 'pnc_monitoring_ikk_daily_series_'.md5((string) json_encode($normalized));
 
         return Cache::remember($cacheKey, 45, function () use ($normalized): array {
-            $rows = $this->baseQuery($normalized)->whereNotNull('tanggal')->get(['tanggal', 'ipk']);
+            $rows = $this->baseQuery($normalized)->whereNotNull('tanggal')->get([
+                'tanggal', 'ipk', 'ia', 'finding_verlap', 'plan_okk',
+                'okk_1', 'okk_2', 'okk_3', 'okk_layer_2', 'okk_layer_3', 'okk_layer_4',
+            ]);
 
             $daily = [];
             foreach ($rows as $row) {
                 $key = $row->tanggal->format('Y-m-d');
-                $daily[$key] ??= ['date' => $key, 'total' => 0, 'compliant' => 0];
+                $daily[$key] ??= [
+                    'date' => $key,
+                    'total' => 0,
+                    'compliant' => 0,
+                    'ipkActual' => 0,
+                    'ipkDenominator' => 0,
+                    'iaEffective' => 0,
+                    'planOkk' => 0,
+                    'okkAchieved' => 0,
+                    'layer2Achieved' => 0,
+                ];
                 $daily[$key]['total']++;
+
                 if ((int) $row->ipk === 1) {
                     $daily[$key]['compliant']++;
+                    $daily[$key]['ipkActual']++;
                 }
+                if ($row->ipk !== null && in_array((int) $row->ipk, [0, 1], true)) {
+                    $daily[$key]['ipkDenominator']++;
+                }
+
+                if ((int) $row->ia === 1 && (int) $row->finding_verlap <= 0) {
+                    $daily[$key]['iaEffective']++;
+                }
+
+                $daily[$key]['planOkk'] += (int) $row->plan_okk;
+                $daily[$key]['okkAchieved'] += (int) $row->okk_1 + (int) $row->okk_2 + (int) $row->okk_3;
+                $daily[$key]['layer2Achieved'] += (int) $row->okk_layer_2 + (int) $row->okk_layer_3 + (int) $row->okk_layer_4;
             }
 
             ksort($daily);
