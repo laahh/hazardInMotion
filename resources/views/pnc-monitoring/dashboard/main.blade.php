@@ -38,14 +38,14 @@
                                 </select>
                                 </div>
                             </div>
-                            <ul class="d-flex flex-wrap align-items-center mt-3 gap-3">
+                            {{-- <ul class="d-flex flex-wrap align-items-center mt-3 gap-3">
                                 <li class="d-flex align-items-center gap-2">
                                     <span class="w-12-px h-12-px radius-2 bg-primary-600"></span>
                                     <span class="text-secondary-light text-lg fw-semibold">Total IKK:
                                         <span class="text-primary-light fw-bold text-2xl">{{ number_format($payload['ikk']['kpis']['ikkCount'] ?? 0, 0, ',', '.') }}</span>
                                     </span>
                                 </li>
-                            </ul>
+                            </ul> --}}
                             <div class="mt-40">
                                 <div id="paymentStatusChart" class="margin-16-minus"></div>
                             </div>
