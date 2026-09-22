@@ -42,30 +42,63 @@
       </div>
     </form>
 
+    @php
+      $pct = fn (?float $v) => $v === null ? '-' : number_format($v * 100, 1) . '%';
+    @endphp
     <div class="table-responsive">
       <table class="table bordered-table mb-0">
         <thead>
           <tr>
-            <th>Nomor</th>
             <th>Jenis</th>
-            <th>Site</th>
-            <th>Perusahaan</th>
+            <th>Nomor</th>
+            <th>Pekerjaan</th>
+            <th>Tanggal</th>
             <th>Minggu</th>
-            <th>IPK</th>
+            <th>Bulan</th>
+            <th>Site</th>
+            <th>Mine Contractor</th>
+            <th>Perusahaan</th>
+            <th>Finding IA</th>
+            <th>Finding Verlap</th>
             <th>IA</th>
+            <th>IPK</th>
+            <th>PLAN OKK</th>
+            <th>OKK 1</th>
+            <th>OKK 2</th>
+            <th>OKK 3</th>
+            <th>OKK Performance</th>
+            <th>OKK Layer 2</th>
+            <th>OKK Layer 3</th>
+            <th>OKK Layer 4</th>
+            <th>Performance Layer 2 Up</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           @forelse ($rows as $row)
             <tr>
-              <td><strong>{{ $row->nomor }}</strong></td>
               <td>{{ $row->jenis ?? '-' }}</td>
+              <td><strong>{{ $row->nomor }}</strong></td>
+              <td>{{ $row->pekerjaan ?? '-' }}</td>
+              <td>{{ $row->tanggal?->format('d M Y') ?? '-' }}</td>
+              <td>{{ $row->minggu ?? '-' }}</td>
+              <td>{{ $row->bulan ?? '-' }}</td>
               <td>{{ $row->site ?? '-' }}</td>
+              <td>{{ $row->mine_contractor ?? '-' }}</td>
               <td>{{ $row->perusahaan ?? '-' }}</td>
-              <td>{{ $row->tahun ? 'Y'.$row->tahun.' W'.($row->minggu ?? '-') : '-' }}</td>
-              <td>{{ $row->ipk === null ? 'blank' : $row->ipk }}</td>
+              <td>{{ $row->finding_ia }}</td>
+              <td>{{ $row->finding_verlap }}</td>
               <td>{{ $row->ia === null ? '-' : $row->ia }}</td>
+              <td>{{ $row->ipk === null ? 'blank' : $row->ipk }}</td>
+              <td>{{ $row->plan_okk }}</td>
+              <td>{{ $row->okk_1 }}</td>
+              <td>{{ $row->okk_2 }}</td>
+              <td>{{ $row->okk_3 }}</td>
+              <td>{{ $pct($row->okkPerformance()) }}</td>
+              <td>{{ $row->okk_layer_2 }}</td>
+              <td>{{ $row->okk_layer_3 }}</td>
+              <td>{{ $row->okk_layer_4 }}</td>
+              <td>{{ $pct($row->layer2UpPerformance()) }}</td>
               <td class="text-end">
                 <a href="{{ route('pnc-monitoring.ikk-records.edit', $row) }}" class="btn btn-outline-primary-600 btn-sm">Edit</a>
                 <form action="{{ route('pnc-monitoring.ikk-records.destroy', $row) }}" method="POST" class="d-inline" onsubmit="return confirm('Hapus data ini?')">
@@ -77,7 +110,7 @@
             </tr>
           @empty
             <tr>
-              <td colspan="8" class="text-center text-secondary-light py-24">Belum ada data IKK.</td>
+              <td colspan="23" class="text-center text-secondary-light py-24">Belum ada data IKK.</td>
             </tr>
           @endforelse
         </tbody>

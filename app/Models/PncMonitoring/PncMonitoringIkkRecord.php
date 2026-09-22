@@ -80,6 +80,26 @@ final class PncMonitoringIkkRecord extends Model
         return $nomor.'|W'.(string) ($minggu ?? 0).'|Y'.(string) ($tahun ?? 0);
     }
 
+    public function okkPerformance(): ?float
+    {
+        $plan = (int) $this->plan_okk;
+        if ($plan <= 0) {
+            return null;
+        }
+
+        return ((int) $this->okk_1 + (int) $this->okk_2 + (int) $this->okk_3) / $plan;
+    }
+
+    public function layer2UpPerformance(): ?float
+    {
+        $plan = (int) $this->plan_okk;
+        if ($plan <= 0) {
+            return null;
+        }
+
+        return ((int) $this->okk_layer_2 + (int) $this->okk_layer_3 + (int) $this->okk_layer_4) / $plan;
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
