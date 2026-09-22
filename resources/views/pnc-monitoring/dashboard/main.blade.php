@@ -91,8 +91,8 @@
                                             <span class="mb-12 w-44-px h-44-px text-yellow bg-yellow-light border border-yellow-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
                                                 <iconify-icon icon="flowbite:users-group-solid" class="icon"></iconify-icon>  
                                             </span>
-                                            <span class="mb-1 fw-medium text-secondary-light text-md">Total Customer</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">50,000</h6>
+                                            <span class="mb-1 fw-medium text-secondary-light text-md">IPK IKK Aktif</span>
+                                            <h6 class="fw-semibold text-primary-light mb-1">90%</h6>
                                         </div>
                                     </div>
                                     <p class="text-sm mb-0">Increase by  <span class="bg-danger-focus px-1 rounded-2 fw-medium text-danger-main text-sm">-5k</span> this week</p>
@@ -105,8 +105,8 @@
                                             <span class="mb-12 w-44-px h-44-px text-lilac bg-lilac-light border border-lilac-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
                                                 <iconify-icon icon="majesticons:shopping-cart" class="icon"></iconify-icon>  
                                             </span>
-                                            <span class="mb-1 fw-medium text-secondary-light text-md">Total Orders</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">1500</h6>
+                                            <span class="mb-1 fw-medium text-secondary-light text-md">OKK IKK Aktif</span>
+                                            <h6 class="fw-semibold text-primary-light mb-1">80%</h6>
                                         </div>
                                     </div>
                                     <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+1k</span> this week</p>
@@ -119,8 +119,8 @@
                                             <span class="mb-12 w-44-px h-44-px text-pink bg-pink-light border border-pink-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
                                                 <iconify-icon icon="ri:discount-percent-fill" class="icon"></iconify-icon>  
                                             </span>
-                                            <span class="mb-1 fw-medium text-secondary-light text-md">Total Sales</span>
-                                            <h6 class="fw-semibold text-primary-light mb-1">$25,00,000.00</h6>
+                                            <span class="mb-1 fw-medium text-secondary-light text-md">Cancel IKK/IPK</span>
+                                            <h6 class="fw-semibold text-primary-light mb-1">12</h6>
                                         </div>
                                     </div>
                                     <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+$10k</span> this week</p>
