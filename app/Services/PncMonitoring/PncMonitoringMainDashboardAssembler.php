@@ -24,6 +24,7 @@ final class PncMonitoringMainDashboardAssembler
         $ikk = $this->ikkAssembler->assemble(['year' => $year, 'site' => $site]);
         $ikkHeatmap = $this->ikkAssembler->complianceHeatmap(['year' => $year, 'site' => $site]);
         $ikkDailySeries = $this->ikkAssembler->dailySeries(['site' => $site]);
+        $ikkNonCompliant = $this->ikkAssembler->nonCompliantRecords(['year' => $year, 'site' => $site]);
         $commissioning = $this->commissioningAssembler->assemble(['year' => $year, 'site' => $site]);
         $inventory = $this->inventoryAssembler->assemble(['site' => $site]);
 
@@ -45,6 +46,7 @@ final class PncMonitoringMainDashboardAssembler
                 'trend' => $ikk['trend'],
                 'heatmap' => $ikkHeatmap,
                 'dailySeries' => $ikkDailySeries,
+                'nonCompliant' => $ikkNonCompliant,
             ],
             'commissioning' => [
                 'kpis' => $commissioning['kpis'],

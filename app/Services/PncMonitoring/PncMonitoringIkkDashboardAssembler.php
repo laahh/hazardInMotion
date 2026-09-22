@@ -65,6 +65,38 @@ final class PncMonitoringIkkDashboardAssembler
     }
 
     /**
+     * Daftar IKK yang tidak comply (IPK = 0 atau blank), terbaru lebih dulu.
+     *
+     * @param  array{year?:string,site?:string}  $filters
+     * @return list<array{nomor:string,jenis:?string,pekerjaan:?string,site:?string,perusahaan:?string,tanggal:?string}>
+     */
+    public function nonCompliantRecords(array $filters, int $limit = 8): array
+    {
+        $normalized = $this->normalizeFilters($filters);
+        $cacheKey = 'pnc_monitoring_ikk_noncompliant_'.md5((string) json_encode($normalized).$limit);
+
+        return Cache::remember($cacheKey, 45, function () use ($normalized, $limit): array {
+            $rows = $this->baseQuery($normalized)
+                ->where(function (Builder $q): void {
+                    $q->whereNull('ipk')->orWhere('ipk', 0);
+                })
+                ->orderByDesc('tanggal')
+                ->orderByDesc('id')
+                ->limit($limit)
+                ->get(['nomor', 'jenis', 'pekerjaan', 'site', 'perusahaan', 'tanggal']);
+
+            return $rows->map(fn (PncMonitoringIkkRecord $r): array => [
+                'nomor' => $r->nomor,
+                'jenis' => $r->jenis,
+                'pekerjaan' => $r->pekerjaan,
+                'site' => $r->site,
+                'perusahaan' => $r->perusahaan,
+                'tanggal' => $r->tanggal?->format('d M Y'),
+            ])->all();
+        });
+    }
+
+    /**
      * Data mentah per hari (total IKK & jumlah comply/IPK=1) untuk chart filter
      * Mingguan/Bulanan/Tahunan di sisi client. Minggu dihitung Minggu→Sabtu di JS.
      *

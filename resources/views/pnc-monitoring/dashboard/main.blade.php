@@ -311,82 +311,31 @@
 
                 <div class="card-body">
                   <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-                    <h6 class="mb-2 fw-bold text-lg">Transactions</h6>
-                    <div class="">
-                    <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
-                        <option>This Month</option>
-                        <option>Last Month</option>
-                    </select>
-                    </div>
+                    <h6 class="mb-2 fw-bold text-lg">IKK Tidak Comply</h6>
+                    <a href="{{ route('pnc-monitoring.ikk-records.index') }}" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
+                        Lihat Semua
+                        <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
+                    </a>
                 </div>
-      
+
                   <div class="mt-32">
-                    <div class="d-flex align-items-center justify-content-between gap-3 mb-32">
-                      <div class="d-flex align-items-center gap-2">
-                        <img src="{{ asset('wowdash-admin/assets/images/payment/payment1.png') }}" alt="" class="w-40-px h-40-px radius-8 flex-shrink-0">
-                        <div class="flex-grow-1">
-                          <h6 class="text-md mb-0 fw-normal">Paytm</h6>
-                          <span class="text-sm text-secondary-light fw-normal">Starbucks</span>
+                    @php $nonCompliant = $payload['ikk']['nonCompliant'] ?? []; @endphp
+                    @forelse ($nonCompliant as $i => $nc)
+                      <div class="d-flex align-items-center justify-content-between gap-3 {{ $i === count($nonCompliant) - 1 ? '' : 'mb-32' }}">
+                        <div class="d-flex align-items-center gap-2">
+                          <span class="w-40-px h-40-px radius-8 flex-shrink-0 bg-danger-focus text-danger-main d-flex justify-content-center align-items-center">
+                            <iconify-icon icon="solar:close-circle-bold"></iconify-icon>
+                          </span>
+                          <div class="flex-grow-1">
+                            <h6 class="text-md mb-0 fw-normal">{{ $nc['nomor'] }}</h6>
+                            <span class="text-sm text-secondary-light fw-normal">{{ $nc['site'] ?? '-' }} · {{ $nc['perusahaan'] ?? '-' }}</span>
+                          </div>
                         </div>
+                        <span class="text-danger-main text-sm fw-medium text-end">{{ $nc['tanggal'] ?? '-' }}</span>
                       </div>
-                      <span class="text-danger text-md fw-medium">-$20</span>
-                    </div>
-
-                    <div class="d-flex align-items-center justify-content-between gap-3 mb-32">
-                      <div class="d-flex align-items-center gap-2">
-                        <img src="{{ asset('wowdash-admin/assets/images/payment/payment2.png') }}" alt="" class="w-40-px h-40-px radius-8 flex-shrink-0">
-                        <div class="flex-grow-1">
-                          <h6 class="text-md mb-0 fw-normal">PayPal</h6>
-                          <span class="text-sm text-secondary-light fw-normal">Client Payment</span>
-                        </div>
-                      </div>
-                      <span class="text-success-main text-md fw-medium">+$800</span>
-                    </div>
-
-                    <div class="d-flex align-items-center justify-content-between gap-3 mb-32">
-                      <div class="d-flex align-items-center gap-2">
-                        <img src="{{ asset('wowdash-admin/assets/images/payment/payment3.png') }}" alt="" class="w-40-px h-40-px radius-8 flex-shrink-0">
-                        <div class="flex-grow-1">
-                          <h6 class="text-md mb-0 fw-normal">Stripe</h6>
-                          <span class="text-sm text-secondary-light fw-normal">Ordered iPhone 14</span>
-                        </div>
-                      </div>
-                      <span class="text-danger-main text-md fw-medium">-$300</span>
-                    </div>
-
-                    <div class="d-flex align-items-center justify-content-between gap-3 mb-32">
-                      <div class="d-flex align-items-center gap-2">
-                        <img src="{{ asset('wowdash-admin/assets/images/payment/payment4.png') }}" alt="" class="w-40-px h-40-px radius-8 flex-shrink-0">
-                        <div class="flex-grow-1">
-                          <h6 class="text-md mb-0 fw-normal">Razorpay</h6>
-                          <span class="text-sm text-secondary-light fw-normal">Refund</span>
-                        </div>
-                      </div>
-                      <span class="text-success-main text-md fw-medium">+$500</span>
-                    </div>
-
-                    <div class="d-flex align-items-center justify-content-between gap-3 mb-32">
-                      <div class="d-flex align-items-center gap-2">
-                        <img src="{{ asset('wowdash-admin/assets/images/payment/payment1.png') }}" alt="" class="w-40-px h-40-px radius-8 flex-shrink-0">
-                        <div class="flex-grow-1">
-                          <h6 class="text-md mb-0 fw-normal">Paytm</h6>
-                          <span class="text-sm text-secondary-light fw-normal">Starbucks</span>
-                        </div>
-                      </div>
-                      <span class="text-danger-main text-md fw-medium">-$1500</span>
-                    </div>
-
-                    <div class="d-flex align-items-center justify-content-between gap-3">
-                      <div class="d-flex align-items-center gap-2">
-                        <img src="{{ asset('wowdash-admin/assets/images/payment/payment3.png') }}" alt="" class="w-40-px h-40-px radius-8 flex-shrink-0">
-                        <div class="flex-grow-1">
-                          <h6 class="text-md mb-0 fw-normal">Stripe</h6>
-                          <span class="text-sm text-secondary-light fw-normal">Ordered iPhone 14</span>
-                        </div>
-                      </div>
-                      <span class="text-success-main text-md fw-medium">+$800</span>
-                    </div>
-
+                    @empty
+                      <p class="text-secondary-light text-sm mb-0 text-center py-24">Tidak ada IKK yang cancel/tidak comply. 🎉</p>
+                    @endforelse
                   </div>
                 </div>
             </div>
