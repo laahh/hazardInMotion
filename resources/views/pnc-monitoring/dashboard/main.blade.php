@@ -55,14 +55,6 @@
                                 </select>
                                 </div>
                             </div>
-                            {{-- <ul class="d-flex flex-wrap align-items-center mt-3 gap-3">
-                                <li class="d-flex align-items-center gap-2">
-                                    <span class="w-12-px h-12-px radius-2 bg-primary-600"></span>
-                                    <span class="text-secondary-light text-lg fw-semibold">Total IKK:
-                                        <span class="text-primary-light fw-bold text-2xl">{{ number_format($payload['ikk']['kpis']['ikkCount'] ?? 0, 0, ',', '.') }}</span>
-                                    </span>
-                                </li>
-                            </ul> --}}
                             <div class="mt-40">
                                 <div id="paymentStatusChart" class="margin-16-minus"></div>
                             </div>
@@ -75,7 +67,7 @@
                                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
                                         <div>
                                             <span class="mb-12 w-44-px h-44-px text-primary-600 bg-primary-light border border-primary-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
-                                                <iconify-icon icon="fa-solid:box-open" class="icon"></iconify-icon>  
+                                                <iconify-icon icon="solar:clipboard-check-bold" class="icon"></iconify-icon>
                                             </span>
                                             <span class="mb-1 fw-medium text-secondary-light text-md">IPK IKK Aktif</span>
                                             <h6 class="fw-semibold text-primary-light mb-1">90%</h6>
@@ -89,7 +81,7 @@
                                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
                                         <div>
                                             <span class="mb-12 w-44-px h-44-px text-yellow bg-yellow-light border border-yellow-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
-                                                <iconify-icon icon="flowbite:users-group-solid" class="icon"></iconify-icon>  
+                                                <iconify-icon icon="solar:eye-bold" class="icon"></iconify-icon>  
                                             </span>
                                             <span class="mb-1 fw-medium text-secondary-light text-md">OKK IKK Aktif</span>
                                             <h6 class="fw-semibold text-primary-light mb-1">90%</h6>
@@ -103,7 +95,7 @@
                                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
                                         <div>
                                             <span class="mb-12 w-44-px h-44-px text-lilac bg-lilac-light border border-lilac-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
-                                                <iconify-icon icon="majesticons:shopping-cart" class="icon"></iconify-icon>  
+                                                <iconify-icon icon="solar:eye-scan-bold" class="icon"></iconify-icon>  
                                             </span>
                                             <span class="mb-1 fw-medium text-secondary-light text-md">OKK Layer 1</span>
                                             <h6 class="fw-semibold text-primary-light mb-1">80%</h6>
@@ -117,7 +109,7 @@
                                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
                                         <div>
                                             <span class="mb-12 w-44-px h-44-px text-pink bg-pink-light border border-pink-light-white flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-12">
-                                                <iconify-icon icon="ri:discount-percent-fill" class="icon"></iconify-icon>  
+                                                <iconify-icon icon="solar:shield-check-bold" class="icon"></iconify-icon>  
                                             </span>
                                             <span class="mb-1 fw-medium text-secondary-light text-md">OKK Layer 2</span>
                                             <h6 class="fw-semibold text-primary-light mb-1">20%</h6>
