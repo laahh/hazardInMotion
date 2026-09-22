@@ -10,7 +10,11 @@ use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * Pembaca read-only check-IN lolos dari bcsid.mv_checkinout_rfid.
+ * Pembaca read-only check-IN lolos dari bcsid.aaj_vw_checkinout_rfid.
+ * View biasa (bukan materialized view) sehingga datanya real-time — dipakai
+ * menggantikan bcsid.mv_checkinout_rfid yang ternyata refresh-nya bisa
+ * tertinggal berjam-jam (lihat riwayat: HUD "Check-in RFID" di /isc/maps
+ * pernah macet di angka lama karena materialized view itu tidak ter-refresh).
  * Koneksi: LANGSUNG ke RDS (PG_HOST:PG_PORT) dengan kredensial
  * PG_SSH_DATABASE / PG_SSH_USER / PG_SSH_PASSWORD — tunnel SSH/jump host
  * (pgsql_ssh) sengaja TIDAK dipakai lagi atas permintaan eksplisit (tunnel
@@ -18,7 +22,7 @@ use Throwable;
  */
 final class SportEvaluationPvtRfidCheckinReader
 {
-    public const TABLE = 'bcsid.mv_checkinout_rfid';
+    public const TABLE = 'bcsid.aaj_vw_checkinout_rfid';
 
     public const CONNECTION_TUNNEL = 'pgsql_ssh';
 
@@ -398,36 +402,39 @@ final class SportEvaluationPvtRfidCheckinReader
             // Rentang multi-hari (mis. chart 7 hari terakhir): dedup ke SATU
             // baris per (tanggal, SID) langsung di database, bukan ambil semua
             // baris mentah lalu dibuang di PHP — lihat catatan pemanggil.
-            $selectHead = 'SELECT DISTINCT ON (date(tanggal_checkinout), UPPER(TRIM(kode_sid)))';
-            $orderBy = 'ORDER BY date(tanggal_checkinout), UPPER(TRIM(kode_sid)), tanggal_checkinout '.$direction;
+            $selectHead = 'SELECT DISTINCT ON ("date"::date, UPPER(TRIM(kode_sid)))';
+            $orderBy = 'ORDER BY "date"::date, UPPER(TRIM(kode_sid)), "date" '.$direction;
         } elseif ($firstPerSidOnly) {
             $selectHead = 'SELECT DISTINCT ON (UPPER(TRIM(kode_sid)))';
-            $orderBy = 'ORDER BY UPPER(TRIM(kode_sid)), tanggal_checkinout '.$direction;
+            $orderBy = 'ORDER BY UPPER(TRIM(kode_sid)), "date" '.$direction;
         } else {
             $selectHead = 'SELECT';
-            $orderBy = 'ORDER BY tanggal_checkinout '.$direction;
+            $orderBy = 'ORDER BY "date" '.$direction;
         }
 
+        // Alias kolom ke nama lama (tanggal_checkinout/perusahaan/gate/
+        // jenis_checkinout/status_lolos) supaya mapCheckinRow() dan semua
+        // pemanggil di bawahnya tidak perlu berubah sama sekali.
         $sql = '
             '.$selectHead.'
                 TRIM(kode_sid) AS kode_sid,
-                tanggal_checkinout,
+                "date" AS tanggal_checkinout,
                 TRIM(COALESCE(nama_karyawan::text, \'\')) AS nama_karyawan,
-                TRIM(COALESCE(perusahaan::text, \'\')) AS perusahaan,
-                TRIM(COALESCE(gate::text, \'\')) AS gate,
-                TRIM(COALESCE(jenis_checkinout::text, \'\')) AS jenis_checkinout,
-                TRIM(COALESCE(status_lolos::text, \'\')) AS status_lolos
+                TRIM(COALESCE(nama_perusahaan::text, \'\')) AS perusahaan,
+                TRIM(COALESCE(pintu_gate::text, \'\')) AS gate,
+                TRIM(COALESCE(status_checkin_out::text, \'\')) AS jenis_checkinout,
+                TRIM(COALESCE(status_passed::text, \'\')) AS status_lolos
             FROM '.self::TABLE.'
-            WHERE tanggal_checkinout >= ?
-              AND tanggal_checkinout < ?
+            WHERE "date" >= ?
+              AND "date" < ?
               AND kode_sid IS NOT NULL
               AND TRIM(kode_sid) <> \'\'
               '.$sidClause.'
               AND (
-                    UPPER(TRIM(jenis_checkinout::text)) IN ('.$typePlaceholders.')
-                 OR REPLACE(REPLACE(UPPER(TRIM(jenis_checkinout::text)), \' \', \'\'), \'-\', \'\') IN ('.$compactPlaceholders.')
+                    UPPER(TRIM(status_checkin_out::text)) IN ('.$typePlaceholders.')
+                 OR REPLACE(REPLACE(UPPER(TRIM(status_checkin_out::text)), \' \', \'\'), \'-\', \'\') IN ('.$compactPlaceholders.')
               )
-              AND REPLACE(REPLACE(UPPER(TRIM(status_lolos::text)), \' \', \'\'), \'-\', \'\') IN ('.$statusPlaceholders.')
+              AND REPLACE(REPLACE(UPPER(TRIM(status_passed::text)), \' \', \'\'), \'-\', \'\') IN ('.$statusPlaceholders.')
             '.$orderBy.'
         ';
 
