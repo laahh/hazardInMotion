@@ -35,13 +35,19 @@
         <form method="POST" action="{{ route('pnc-monitoring.inventory-tool-master.excel-import') }}" enctype="multipart/form-data" class="row g-2 align-items-end">
           @csrf
           <div class="col-8">
-            <label class="form-label text-sm mb-1" for="tm-file">Unggah .xlsx (bulk daftar jenis alat)</label>
+            <label class="form-label text-sm mb-1" for="tm-file">Unggah .xlsx</label>
             <input type="file" name="file" id="tm-file" class="form-control form-control-sm" accept=".xlsx,.xls" required>
           </div>
           <div class="col-4">
             <button type="submit" class="btn btn-primary-600 btn-sm w-100">Unggah</button>
           </div>
         </form>
+      </div>
+      <div class="col-12">
+        <p class="text-secondary-light text-xs mb-0">
+          Template berisi 8 sheet: <strong>KatalogAlat</strong> (data inti jenis alat) + <strong>FungsiDetail, MetodeInspeksi, FiturKeselamatan, StandarAcuan, ChecklistPemeriksaan, AturanPenggunaan, AtributTeknis</strong>
+          (isi kolom "Nama Alat (Standard Name)" di tiap sheet detail sama persis dengan yang di sheet KatalogAlat). Satu kali unggah sudah langsung membuat jenis alat sekaligus seluruh detailnya.
+        </p>
       </div>
     </div>
 

@@ -90,6 +90,14 @@ final class PncMonitoringInventoryToolMasterDetailExcelService
         return array_keys(self::SECTIONS);
     }
 
+    /**
+     * @return array<string, array{relation:string, model:class-string, fields:list<string>, headers:list<string>, hasSequence:bool, label:string}>
+     */
+    public static function sectionsConfig(): array
+    {
+        return self::SECTIONS;
+    }
+
     public function download(string $section, PncMonitoringInventoryToolMaster $toolMaster): StreamedResponse
     {
         $config = self::SECTIONS[$section];

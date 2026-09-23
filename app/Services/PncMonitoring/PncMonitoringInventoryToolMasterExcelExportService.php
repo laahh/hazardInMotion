@@ -52,6 +52,8 @@ final class PncMonitoringInventoryToolMasterExcelExportService
             $rowIndex++;
         }
 
+        $this->appendDetailSheets($spreadsheet, $rows);
+
         $filename = 'export-pnc-monitoring-katalog-alat.xlsx';
 
         return response()->streamDownload(function () use ($spreadsheet): void {
@@ -61,5 +63,38 @@ final class PncMonitoringInventoryToolMasterExcelExportService
         }, $filename, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
+    }
+
+    /**
+     * @param  Collection<int, PncMonitoringInventoryToolMaster>  $rows
+     */
+    private function appendDetailSheets(Spreadsheet $spreadsheet, Collection $rows): void
+    {
+        foreach (PncMonitoringInventoryToolMasterExcelParser::DETAIL_SECTIONS as $config) {
+            $sheet = $spreadsheet->createSheet();
+            $sheet->setTitle($config['sheetTitle']);
+            $sheet->freezePane('A2');
+
+            $headers = ['Nama Alat (Standard Name)', ...$config['headers']];
+            $lastCol = Coordinate::stringFromColumnIndex(count($headers));
+            $sheet->fromArray($headers, null, 'A1');
+            $sheet->getStyle('A1:'.$lastCol.'1')->applyFromArray([
+                'font' => ['bold' => true, 'color' => ['rgb' => '1E3A8A']],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DBEAFE']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'wrapText' => true],
+            ]);
+            foreach (range(1, count($headers)) as $index) {
+                $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($index))->setWidth(30);
+            }
+
+            $detailRowIndex = 2;
+            foreach ($rows as $toolMaster) {
+                foreach ($toolMaster->{$config['relation']} as $item) {
+                    $values = array_map(static fn (string $field) => $item->{$field}, $config['fields']);
+                    $sheet->fromArray([$toolMaster->standard_name, ...$values], null, 'A'.$detailRowIndex);
+                    $detailRowIndex++;
+                }
+            }
+        }
     }
 }

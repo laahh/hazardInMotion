@@ -127,7 +127,9 @@ final class PncMonitoringInventoryToolMasterController extends Controller
         $q = trim((string) $request->string('q')->toString());
         $categoryId = $request->integer('category_id') ?: null;
 
-        $query = PncMonitoringInventoryToolMaster::query()->with('category')->orderBy('standard_name');
+        $query = PncMonitoringInventoryToolMaster::query()
+            ->with(['category', 'functions', 'inspectionMethods', 'safetyFeatures', 'standards', 'checklistItems', 'usageRules', 'attributes'])
+            ->orderBy('standard_name');
         if ($q !== '') {
             $query->where('standard_name', 'like', '%'.$q.'%');
         }
@@ -152,15 +154,24 @@ final class PncMonitoringInventoryToolMasterController extends Controller
         if ($parsed->hasErrors()) {
             return back()->withErrors(['file' => $parsed->errors])->withInput();
         }
-        if ($parsed->rows === []) {
+        if ($parsed->coreRows === [] && $parsed->detailRows === []) {
             return back()->withErrors(['file' => 'Tidak ada baris yang bisa diimpor.'])->withInput();
         }
 
-        $result = $upsert->upsert($parsed->rows);
+        $result = $upsert->upsert($parsed);
+
+        $detailSummary = collect($result->detailCounts)
+            ->map(fn (int $count, string $section) => PncMonitoringInventoryToolMasterExcelParser::DETAIL_SECTIONS[$section]['sheetTitle'].": {$count}")
+            ->implode(', ');
+
+        $message = "Excel Katalog Alat: {$result->coreCreated} baru, {$result->coreUpdated} diperbarui.";
+        if ($detailSummary !== '') {
+            $message .= " Detail — {$detailSummary}.";
+        }
 
         return redirect()
             ->route('pnc-monitoring.inventory-tool-master.index')
-            ->with('success', "Excel Katalog Alat: {$result->created} baru, {$result->updated} diperbarui.")
+            ->with('success', $message)
             ->with('warnings', [...$parsed->warnings, ...$result->warnings]);
     }
 

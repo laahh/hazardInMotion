@@ -60,6 +60,35 @@ final class PncMonitoringInventoryToolMasterExcelTemplateService
             $sheet->getStyle('K1')->applyFromArray(['font' => ['italic' => true, 'color' => ['rgb' => '6B7280']]]);
         }
 
+        $this->appendDetailSheets($spreadsheet);
+
         return $spreadsheet;
+    }
+
+    /**
+     * Tambahkan sheet-sheet detail (Fungsi, Metode Inspeksi, Checklist, dst) ke workbook
+     * yang sama — jadi satu kali unggah file ini sudah membuat jenis alat SEKALIGUS
+     * seluruh detailnya, tidak perlu upload terpisah per bagian.
+     */
+    private function appendDetailSheets(Spreadsheet $spreadsheet): void
+    {
+        foreach (PncMonitoringInventoryToolMasterExcelParser::DETAIL_SECTIONS as $config) {
+            $sheet = $spreadsheet->createSheet();
+            $sheet->setTitle($config['sheetTitle']);
+            $sheet->freezePane('A2');
+
+            $headers = ['Nama Alat (Standard Name)', ...$config['headers']];
+            $lastCol = Coordinate::stringFromColumnIndex(count($headers));
+            $sheet->fromArray($headers, null, 'A1');
+            $sheet->getStyle('A1:'.$lastCol.'1')->applyFromArray([
+                'font' => ['bold' => true, 'color' => ['rgb' => '1E3A8A']],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DBEAFE']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'wrapText' => true],
+            ]);
+            $sheet->getRowDimension(1)->setRowHeight(32);
+            foreach (range(1, count($headers)) as $index) {
+                $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($index))->setWidth(30);
+            }
+        }
     }
 }
