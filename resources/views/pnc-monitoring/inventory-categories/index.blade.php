@@ -18,11 +18,11 @@
       <table class="table bordered-table mb-0">
         <thead>
           <tr>
-            <th>Kode</th>
-            <th>Nama</th>
+            <th style="width:70px">Kode</th>
+            <th style="width:160px">Nama</th>
             <th>Deskripsi</th>
-            <th>Jumlah Jenis Alat</th>
-            <th></th>
+            <th style="width:120px">Jumlah Jenis Alat</th>
+            <th style="width:160px"></th>
           </tr>
         </thead>
         <tbody>
@@ -30,9 +30,13 @@
             <tr>
               <td><strong>{{ $row->code }}</strong></td>
               <td>{{ $row->name }}</td>
-              <td>{{ $row->description ?? '-' }}</td>
+              <td>
+                <span class="d-inline-block text-truncate" style="max-width: 420px;" title="{{ $row->description }}">
+                  {{ $row->description ?? '-' }}
+                </span>
+              </td>
               <td>{{ number_format($row->tool_masters_count) }}</td>
-              <td class="text-end">
+              <td class="text-end text-nowrap">
                 <a href="{{ route('pnc-monitoring.inventory-categories.edit', $row) }}" class="btn btn-outline-primary-600 btn-sm">Edit</a>
                 <form action="{{ route('pnc-monitoring.inventory-categories.destroy', $row) }}" method="POST" class="d-inline" onsubmit="return confirm('Hapus kategori ini?')">
                   @csrf
