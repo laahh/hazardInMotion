@@ -41,6 +41,7 @@ Route::middleware('auth')->group(function (): void {
     Route::prefix('ikk-records')->name('ikk-records.')->group(function (): void {
         Route::get('/excel-template', [PncMonitoringIkkRecordController::class, 'excelTemplate'])->name('excel-template');
         Route::post('/excel-import', [PncMonitoringIkkRecordController::class, 'excelImport'])->name('excel-import');
+        Route::get('/export', [PncMonitoringIkkRecordController::class, 'export'])->name('export');
         Route::get('/', [PncMonitoringIkkRecordController::class, 'index'])->name('index');
         Route::get('/create', [PncMonitoringIkkRecordController::class, 'create'])->name('create');
         Route::post('/', [PncMonitoringIkkRecordController::class, 'store'])->name('store');

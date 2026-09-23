@@ -8,9 +8,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\PncMonitoring\PncMonitoringExcelImportRequest;
 use App\Http\Requests\PncMonitoring\PncMonitoringIkkRecordRequest;
 use App\Models\PncMonitoring\PncMonitoringIkkRecord;
+use App\Services\PncMonitoring\PncMonitoringIkkExcelExportService;
 use App\Services\PncMonitoring\PncMonitoringIkkExcelParser;
 use App\Services\PncMonitoring\PncMonitoringIkkExcelTemplateService;
 use App\Services\PncMonitoring\PncMonitoringIkkUpsertService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -21,7 +23,24 @@ final class PncMonitoringIkkRecordController extends Controller
     public function index(Request $request): View
     {
         $q = trim((string) $request->string('q')->toString());
-        $query = PncMonitoringIkkRecord::query()->orderByDesc('id');
+
+        return view('pnc-monitoring.ikk-records.index', [
+            'rows' => $this->filteredQuery($q)->paginate(20)->withQueryString(),
+            'q' => $q,
+        ]);
+    }
+
+    public function export(Request $request, PncMonitoringIkkExcelExportService $exporter): StreamedResponse
+    {
+        $q = trim((string) $request->string('q')->toString());
+        $rows = $this->filteredQuery($q)->get();
+
+        return $exporter->download($rows);
+    }
+
+    private function filteredQuery(string $q): Builder
+    {
+        $query = PncMonitoringIkkRecord::query()->orderByDesc('tanggal')->orderByDesc('id');
         if ($q !== '') {
             $like = '%'.$q.'%';
             $query->where(function ($sub) use ($like): void {
@@ -33,10 +52,7 @@ final class PncMonitoringIkkRecordController extends Controller
             });
         }
 
-        return view('pnc-monitoring.ikk-records.index', [
-            'rows' => $query->paginate(20)->withQueryString(),
-            'q' => $q,
-        ]);
+        return $query;
     }
 
     public function create(): View

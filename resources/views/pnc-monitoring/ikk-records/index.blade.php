@@ -15,13 +15,22 @@
   </div>
   <div class="card-body">
     <div class="row g-3 mb-16">
-      <div class="col-lg-4">
+      <div class="col-lg-3">
+        <label class="form-label text-sm mb-1">Template Excel</label>
         <form method="GET" action="{{ route('pnc-monitoring.ikk-records.excel-template') }}">
-          <label class="form-label text-sm mb-1">Template Excel</label>
           <button type="submit" class="btn btn-outline-secondary btn-sm w-100">Unduh Template</button>
         </form>
       </div>
-      <div class="col-lg-8">
+      <div class="col-lg-3">
+        <label class="form-label text-sm mb-1">Export Data ({{ number_format($rows->total()) }} baris{{ $q !== '' ? ' — sesuai pencarian' : '' }})</label>
+        <form method="GET" action="{{ route('pnc-monitoring.ikk-records.export') }}">
+          <input type="hidden" name="q" value="{{ $q }}">
+          <button type="submit" class="btn btn-outline-success-600 btn-sm w-100">
+            <i class="ri-file-excel-2-line"></i> Export Excel
+          </button>
+        </form>
+      </div>
+      <div class="col-lg-6">
         <form method="POST" action="{{ route('pnc-monitoring.ikk-records.excel-import') }}" enctype="multipart/form-data" class="row g-2 align-items-end">
           @csrf
           <div class="col-8">
