@@ -47,6 +47,7 @@ final class PncMonitoringMainDashboardAssembler
                 'heatmap' => $ikkHeatmap,
                 'dailySeries' => $ikkDailySeries,
                 'nonCompliant' => $ikkNonCompliant,
+                'rankings' => $ikk['rankings'],
             ],
             'commissioning' => [
                 'kpis' => $commissioning['kpis'],

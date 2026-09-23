@@ -340,206 +340,42 @@
                 </div>
             </div>
         </div>
-        <div class="col-xxl-4">
-            <div class="card h-100 radius-8 border">
-                <div class="card-body p-24">
-                    <h6 class="mb-12 fw-bold text-lg mb-0">Recent Orders</h6>
-                    <div class="d-flex align-items-center gap-2">
-                        <h6 class="fw-semibold mb-0">$27,200</h6>
-                        <p class="text-sm mb-0">
-                            <span class="bg-success-focus border border-success px-8 py-2 rounded-pill fw-semibold text-success-main text-sm d-inline-flex align-items-center gap-1">
-                                10%
-                                <iconify-icon icon="iconamoon:arrow-up-2-fill" class="icon"></iconify-icon>  
-                            </span> 
-                            Increases 
-                        </p>
-                    </div>
-                  <div id="recent-orders" class="mt-28"></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xxl-4 col-lg-6">
-            <div class="card radius-8 border-0">
-    
-              <div class="card-body">
-                <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
-                  <h6 class="mb-2 fw-bold text-lg">Distribution Maps</h6>
-                  <div class="">
-                    <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
-                      <option>Yearly</option>
-                      <option>Monthly</option>
-                      <option>Weekly</option>
-                      <option>Today</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-    
-              <div id="world-map"></div>
-    
-              <div class="card-body p-24 max-h-266-px scroll-sm overflow-y-auto">
-                <div class="">
-    
-                  <div class="d-flex align-items-center justify-content-between gap-3 mb-12 pb-2">
-                    <div class="d-flex align-items-center w-100">
-                        <img src="{{ asset('wowdash-admin/assets/images/flags/flag1.png') }}" alt="" class="w-40-px h-40-px rounded-circle flex-shrink-0 me-12">
-                      <div class="flex-grow-1">
-                        <h6 class="text-sm mb-0">USA</h6>
-                        <span class="text-xs text-secondary-light fw-medium">1,240 Users</span>
-                      </div>
-                    </div>
-                    <div class="d-flex align-items-center gap-2 w-100">
-                      <div class="w-100 max-w-66 ms-auto">
-                        <div class="progress progress-sm rounded-pill" role="progressbar" aria-label="Success example" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
-                          <div class="progress-bar bg-primary-600 rounded-pill" style="width: 80%;"></div>
-                        </div>
-                      </div>
-                      <span class="text-secondary-light font-xs fw-semibold">80%</span>
-                    </div>
-                  </div>
-    
-                  <div class="d-flex align-items-center justify-content-between gap-3 mb-12 pb-2">
-                    <div class="d-flex align-items-center w-100">
-                        <img src="{{ asset('wowdash-admin/assets/images/flags/flag2.png') }}" alt="" class="w-40-px h-40-px rounded-circle flex-shrink-0 me-12">
-                      <div class="flex-grow-1">
-                        <h6 class="text-sm mb-0">Japan</h6>
-                        <span class="text-xs text-secondary-light fw-medium">1,240 Users</span>
-                      </div>
-                    </div>
-                    <div class="d-flex align-items-center gap-2 w-100">
-                      <div class="w-100 max-w-66 ms-auto">
-                        <div class="progress progress-sm rounded-pill" role="progressbar" aria-label="Success example" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
-                          <div class="progress-bar bg-orange rounded-pill" style="width: 60%;"></div>
-                        </div>
-                      </div>
-                      <span class="text-secondary-light font-xs fw-semibold">60%</span>
-                    </div>
-                  </div>
-    
-                  <div class="d-flex align-items-center justify-content-between gap-3 mb-12 pb-2">
-                    <div class="d-flex align-items-center w-100">
-                        <img src="{{ asset('wowdash-admin/assets/images/flags/flag3.png') }}" alt="" class="w-40-px h-40-px rounded-circle flex-shrink-0 me-12">
-                      <div class="flex-grow-1">
-                        <h6 class="text-sm mb-0">France</h6>
-                        <span class="text-xs text-secondary-light fw-medium">1,240 Users</span>
-                      </div>
-                    </div>
-                    <div class="d-flex align-items-center gap-2 w-100">
-                      <div class="w-100 max-w-66 ms-auto">
-                        <div class="progress progress-sm rounded-pill" role="progressbar" aria-label="Success example" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
-                          <div class="progress-bar bg-yellow rounded-pill" style="width: 49%;"></div>
-                        </div>
-                      </div>
-                      <span class="text-secondary-light font-xs fw-semibold">49%</span>
-                    </div>
-                  </div>
-    
-                  <div class="d-flex align-items-center justify-content-between gap-3">
-                    <div class="d-flex align-items-center w-100">
-                        <img src="{{ asset('wowdash-admin/assets/images/flags/flag4.png') }}" alt="" class="w-40-px h-40-px rounded-circle flex-shrink-0 me-12">
-                      <div class="flex-grow-1">
-                        <h6 class="text-sm mb-0">Germany</h6>
-                        <span class="text-xs text-secondary-light fw-medium">1,240 Users</span>
-                      </div>
-                    </div>
-                    <div class="d-flex align-items-center gap-2 w-100">
-                      <div class="w-100 max-w-66 ms-auto">
-                        <div class="progress progress-sm rounded-pill" role="progressbar" aria-label="Success example" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
-                          <div class="progress-bar bg-success-main rounded-pill" style="width: 100%;"></div>
-                        </div>
-                      </div>
-                      <span class="text-secondary-light font-xs fw-semibold">100%</span>
-                    </div>
-                  </div>
-    
-                </div>
-                
-              </div>
-            </div>
-        </div>
-        <div class="col-xxl-4 col-lg-6">
+        <!-- homeThreeChart.js still targets #recent-orders on load; keep a hidden placeholder
+             so it renders into it harmlessly instead of throwing on a null selector. -->
+        <div id="recent-orders" class="d-none"></div>
+        <div class="col-xxl-6">
             <div class="card h-100">
-          
-              <div class="card-body">
-                <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between mb-20">
-                  <h6 class="mb-2 fw-bold text-lg mb-0">Top Customers</h6>
-                  <a href="javascript:void(0)" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
-                      View All
-                      <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
-                  </a>
+                <div class="card-body p-24">
+                    <h6 class="mb-2 fw-bold text-lg">Finding IA &amp; Verlap per Site</h6>
+                    <p class="text-sm text-secondary-light mb-12">Nilai finding dijumlahkan dari kolom Finding IA / Finding Verlap.</p>
+                    <div id="chart-finding-site"></div>
                 </div>
-    
-                <div class="mt-32">
-                  
-                  <div class="d-flex align-items-center justify-content-between gap-3 mb-32">
-                    <div class="d-flex align-items-center gap-2">
-                      <img src="{{ asset('wowdash-admin/assets/images/users/user6.png') }}" alt="" class="w-40-px h-40-px radius-8 flex-shrink-0">
-                      <div class="flex-grow-1">
-                        <h6 class="text-md mb-0 fw-normal">Dianne Russell</h6>
-                        <span class="text-sm text-secondary-light fw-normal">017******58</span>
-                      </div>
-                    </div>
-                    <span class="text-primary-light text-md fw-medium">Orders: 30</span>
-                  </div>
-                  
-                  <div class="d-flex align-items-center justify-content-between gap-3 mb-32">
-                    <div class="d-flex align-items-center gap-2">
-                      <img src="{{ asset('wowdash-admin/assets/images/users/user1.png') }}" alt="" class="w-40-px h-40-px radius-8 flex-shrink-0">
-                      <div class="flex-grow-1">
-                        <h6 class="text-md mb-0 fw-normal">Wade Warren</h6>
-                        <span class="text-sm text-secondary-light fw-normal">017******58</span>
-                      </div>
-                    </div>
-                    <span class="text-primary-light text-md fw-medium">Orders: 30</span>
-                  </div>
-                  
-                  <div class="d-flex align-items-center justify-content-between gap-3 mb-32">
-                    <div class="d-flex align-items-center gap-2">
-                      <img src="{{ asset('wowdash-admin/assets/images/users/user2.png') }}" alt="" class="w-40-px h-40-px radius-8 flex-shrink-0">
-                      <div class="flex-grow-1">
-                        <h6 class="text-md mb-0 fw-normal">Albert Flores</h6>
-                        <span class="text-sm text-secondary-light fw-normal">017******58</span>
-                      </div>
-                    </div>
-                    <span class="text-primary-light text-md fw-medium">Orders: 35</span>
-                  </div>
-                  
-                  <div class="d-flex align-items-center justify-content-between gap-3 mb-32">
-                    <div class="d-flex align-items-center gap-2">
-                      <img src="{{ asset('wowdash-admin/assets/images/users/user3.png') }}" alt="" class="w-40-px h-40-px radius-8 flex-shrink-0">
-                      <div class="flex-grow-1">
-                        <h6 class="text-md mb-0 fw-normal">Bessie Cooper</h6>
-                        <span class="text-sm text-secondary-light fw-normal">017******58</span>
-                      </div>
-                    </div>
-                    <span class="text-primary-light text-md fw-medium">Orders: 20</span>
-                  </div>
-                  
-                  <div class="d-flex align-items-center justify-content-between gap-3 mb-32">
-                    <div class="d-flex align-items-center gap-2">
-                      <img src="{{ asset('wowdash-admin/assets/images/users/user4.png') }}" alt="" class="w-40-px h-40-px radius-8 flex-shrink-0">
-                      <div class="flex-grow-1">
-                        <h6 class="text-md mb-0 fw-normal">Arlene McCoy</h6>
-                        <span class="text-sm text-secondary-light fw-normal">017******58</span>
-                      </div>
-                    </div>
-                    <span class="text-primary-light text-md fw-medium">Orders: 25</span>
-                  </div>
-                  
-                  <div class="d-flex align-items-center justify-content-between gap-3">
-                    <div class="d-flex align-items-center gap-2">
-                      <img src="{{ asset('wowdash-admin/assets/images/users/user6.png') }}" alt="" class="w-40-px h-40-px radius-8 flex-shrink-0">
-                      <div class="flex-grow-1">
-                        <h6 class="text-md mb-0 fw-normal">John Doe</h6>
-                        <span class="text-sm text-secondary-light fw-normal">017******58</span>
-                      </div>
-                    </div>
-                    <span class="text-primary-light text-md fw-medium">Orders: 32</span>
-                  </div>
-                  
+            </div>
+        </div>
+        <div class="col-xxl-6">
+            <div class="card h-100">
+                <div class="card-body p-24">
+                    <h6 class="mb-2 fw-bold text-lg">Cancel IKK/IPK per Site</h6>
+                    <p class="text-sm text-secondary-light mb-12">Seluruh IPK = 0 maupun IPK blank dihitung sebagai satu kategori Cancel.</p>
+                    <div id="chart-cancel-site"></div>
                 </div>
-              </div>
-          </div>
+            </div>
+        </div>
+        <div class="col-xxl-6">
+            <div class="card h-100">
+                <div class="card-body p-24">
+                    <h6 class="mb-2 fw-bold text-lg">Top Perusahaan — Cancel IKK/IPK</h6>
+                    <div id="chart-cancel-company" class="mt-12"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xxl-6">
+            <div class="card h-100">
+                <div class="card-body p-24">
+                    <h6 class="mb-2 fw-bold text-lg">Top Perusahaan — Finding IA</h6>
+                    <div id="chart-findingia-company" class="mt-12"></div>
+                </div>
+            </div>
         </div>
         <div class="col-xxl-6">
           <div class="card h-100">
@@ -1142,6 +978,48 @@
       if (tipEl) tipEl.hidden = true;
     });
   });
+})();
+</script>
+<script>
+(function () {
+  var bySite = @json($payload['ikk']['bySite'] ?? []);
+  var rankings = @json($payload['ikk']['rankings'] ?? ['cancelSite' => [], 'cancelCompany' => [], 'findingIACompany' => []]);
+
+  function drawBar(id, categories, series, horizontal, colors) {
+    var el = document.querySelector(id);
+    if (!el) return;
+    var chart = new ApexCharts(el, {
+      chart: { type: 'bar', height: 320, toolbar: { show: false } },
+      series: series,
+      xaxis: { categories: categories },
+      plotOptions: { bar: { horizontal: !!horizontal, borderRadius: 4, columnWidth: '55%', dataLabels: { position: horizontal ? 'top' : 'center' } } },
+      dataLabels: {
+        enabled: true,
+        offsetX: horizontal ? 16 : 0,
+        style: { colors: ['#334155'] },
+        formatter: function (v) { return Number(v || 0).toLocaleString('id-ID'); },
+      },
+      colors: colors,
+    });
+    chart.render();
+  }
+
+  drawBar('#chart-finding-site', bySite.map(function (x) { return x.name; }), [
+    { name: 'Finding IA', data: bySite.map(function (x) { return x.findingIA || 0; }) },
+    { name: 'Finding Verlap', data: bySite.map(function (x) { return x.findingVerlap || 0; }) },
+  ], false, ['#F9A825', '#F8285A']);
+
+  drawBar('#chart-cancel-site', (rankings.cancelSite || []).map(function (x) { return x.name; }), [
+    { name: 'Cancel', data: (rankings.cancelSite || []).map(function (x) { return x.value || 0; }) },
+  ], true, ['#487FFF']);
+
+  drawBar('#chart-cancel-company', (rankings.cancelCompany || []).map(function (x) { return x.name; }), [
+    { name: 'Cancel', data: (rankings.cancelCompany || []).map(function (x) { return x.value || 0; }) },
+  ], true, ['#487FFF']);
+
+  drawBar('#chart-findingia-company', (rankings.findingIACompany || []).map(function (x) { return x.name; }), [
+    { name: 'Finding IA', data: (rankings.findingIACompany || []).map(function (x) { return x.value || 0; }) },
+  ], true, ['#487FFF']);
 })();
 </script>
 @endsection
