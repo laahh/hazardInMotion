@@ -27,7 +27,11 @@
       @php
         $ikkActive = request()->routeIs('pnc-monitoring.dashboard.ikk*') || request()->routeIs('pnc-monitoring.ikk-records.*');
         $commissioningActive = request()->routeIs('pnc-monitoring.dashboard.pengawas*') || request()->routeIs('pnc-monitoring.commissionings.*');
-        $inventoryActive = request()->routeIs('pnc-monitoring.dashboard.inventory*') || request()->routeIs('pnc-monitoring.inventory-tools.*');
+        $inventoryActive = request()->routeIs('pnc-monitoring.dashboard.inventory*')
+            || request()->routeIs('pnc-monitoring.inventory-tool-master.*')
+            || request()->routeIs('pnc-monitoring.inventory-tool-assets.*')
+            || request()->routeIs('pnc-monitoring.inventory-categories.*')
+            || request()->routeIs('pnc-monitoring.inventory-companies.*');
       @endphp
 
       <li class="dropdown {{ $ikkActive ? 'open' : '' }}">
@@ -80,8 +84,23 @@
             </a>
           </li>
           <li>
-            <a href="{{ route('pnc-monitoring.inventory-tools.index') }}" class="{{ request()->routeIs('pnc-monitoring.inventory-tools.*') ? 'active-page' : '' }}">
-              <i class="ri-circle-fill circle-icon text-yellow w-auto"></i> Master Data
+            <a href="{{ route('pnc-monitoring.inventory-tool-assets.index') }}" class="{{ request()->routeIs('pnc-monitoring.inventory-tool-assets.*') ? 'active-page' : '' }}">
+              <i class="ri-circle-fill circle-icon text-yellow w-auto"></i> Unit Aset
+            </a>
+          </li>
+          <li>
+            <a href="{{ route('pnc-monitoring.inventory-tool-master.index') }}" class="{{ request()->routeIs('pnc-monitoring.inventory-tool-master.*') ? 'active-page' : '' }}">
+              <i class="ri-circle-fill circle-icon text-purple w-auto"></i> Katalog Jenis Alat
+            </a>
+          </li>
+          <li>
+            <a href="{{ route('pnc-monitoring.inventory-categories.index') }}" class="{{ request()->routeIs('pnc-monitoring.inventory-categories.*') ? 'active-page' : '' }}">
+              <i class="ri-circle-fill circle-icon text-info w-auto"></i> Kategori
+            </a>
+          </li>
+          <li>
+            <a href="{{ route('pnc-monitoring.inventory-companies.index') }}" class="{{ request()->routeIs('pnc-monitoring.inventory-companies.*') ? 'active-page' : '' }}">
+              <i class="ri-circle-fill circle-icon text-success-main w-auto"></i> Perusahaan
             </a>
           </li>
         </ul>

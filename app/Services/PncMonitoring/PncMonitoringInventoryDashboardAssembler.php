@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\PncMonitoring;
 
-use App\Models\PncMonitoring\PncMonitoringInventoryTool;
+use App\Models\PncMonitoring\PncMonitoringInventoryCategory;
+use App\Models\PncMonitoring\PncMonitoringInventoryToolAsset;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -22,12 +23,9 @@ final class PncMonitoringInventoryDashboardAssembler
         $cacheKey = 'pnc_monitoring_inventory_dash_'.md5((string) json_encode($normalized));
 
         return Cache::remember($cacheKey, 45, function () use ($normalized): array {
-            $rows = $this->baseQuery($normalized)->get([
-                'id', 'category', 'site', 'status_ketersediaan', 'condition', 'qty_on_hand',
-                'calibration_required', 'calibration_due_date',
-                'inspection_required', 'next_inspection_due',
-                'pm_required', 'next_pm_due',
-            ]);
+            $rows = $this->baseQuery($normalized)
+                ->with(['toolMaster.category', 'latestCalibration', 'latestInspection'])
+                ->get();
 
             return [
                 'meta' => [
@@ -37,11 +35,11 @@ final class PncMonitoringInventoryDashboardAssembler
                 'filters' => $normalized,
                 'options' => $this->options(),
                 'kpis' => $this->kpis($rows),
-                'byCategory' => $this->countBy($rows, 'category'),
-                'byStatus' => $this->countBy($rows, 'status_ketersediaan'),
-                'byCondition' => $this->countBy($rows, 'condition'),
-                'bySite' => $this->countBy($rows, 'site'),
-                'dueSoon' => $this->dueSoon($normalized),
+                'byCategory' => $this->countBy($rows, fn (PncMonitoringInventoryToolAsset $r) => $r->toolMaster?->category?->name),
+                'byStatus' => $this->countBy($rows, fn (PncMonitoringInventoryToolAsset $r) => $r->status_availability),
+                'byCondition' => $this->countBy($rows, fn (PncMonitoringInventoryToolAsset $r) => $r->condition),
+                'bySite' => $this->countBy($rows, fn (PncMonitoringInventoryToolAsset $r) => $r->location_detail),
+                'dueSoon' => $this->dueSoon($rows),
             ];
         });
     }
@@ -71,15 +69,15 @@ final class PncMonitoringInventoryDashboardAssembler
      */
     private function baseQuery(array $filters): Builder
     {
-        $query = PncMonitoringInventoryTool::query();
+        $query = PncMonitoringInventoryToolAsset::query();
         if ($filters['category'] !== 'ALL') {
-            $query->where('category', $filters['category']);
+            $query->whereHas('toolMaster.category', fn ($q) => $q->where('name', $filters['category']));
         }
         if ($filters['site'] !== 'ALL') {
-            $query->where('site', $filters['site']);
+            $query->where('location_detail', $filters['site']);
         }
         if ($filters['status'] !== 'ALL') {
-            $query->where('status_ketersediaan', $filters['status']);
+            $query->where('status_availability', $filters['status']);
         }
 
         return $query;
@@ -91,44 +89,48 @@ final class PncMonitoringInventoryDashboardAssembler
     private function options(): array
     {
         return [
-            'categories' => PncMonitoringInventoryTool::CATEGORIES,
-            'statuses' => PncMonitoringInventoryTool::STATUSES,
-            'sites' => PncMonitoringInventoryTool::query()->whereNotNull('site')->where('site', '!=', '')->distinct()->orderBy('site')->pluck('site')->all(),
+            'categories' => PncMonitoringInventoryCategory::query()->orderBy('name')->pluck('name')->all(),
+            'statuses' => PncMonitoringInventoryToolAsset::STATUSES,
+            'sites' => PncMonitoringInventoryToolAsset::query()
+                ->whereNotNull('location_detail')->where('location_detail', '!=', '')
+                ->distinct()->orderBy('location_detail')->pluck('location_detail')->all(),
         ];
     }
 
     /**
-     * @param  Collection<int, PncMonitoringInventoryTool>  $rows
+     * @param  Collection<int, PncMonitoringInventoryToolAsset>  $rows
      * @return array<string, mixed>
      */
-    public function kpis(Collection $rows): array
+    private function kpis(Collection $rows): array
     {
         $today = Carbon::today();
+        $horizon = $today->copy()->addDays(30);
+
+        $calibDue = fn (PncMonitoringInventoryToolAsset $r) => $r->latestCalibration?->next_due_date;
+        $inspDue = fn (PncMonitoringInventoryToolAsset $r) => $r->latestInspection?->next_due_date;
 
         return [
             'totalTools' => $rows->count(),
-            'totalQty' => (int) $rows->sum('qty_on_hand'),
-            'available' => $rows->filter(fn ($r) => $r->status_ketersediaan === 'Available')->count(),
-            'checkedOut' => $rows->filter(fn ($r) => $r->status_ketersediaan === 'Checked-out')->count(),
-            'inRepair' => $rows->filter(fn ($r) => $r->status_ketersediaan === 'In Repair')->count(),
-            'scrapped' => $rows->filter(fn ($r) => $r->status_ketersediaan === 'Scrapped')->count(),
+            'totalQty' => $rows->count(),
+            'available' => $rows->filter(fn ($r) => $r->status_availability === 'Available')->count(),
+            'checkedOut' => $rows->filter(fn ($r) => $r->status_availability === 'Checked-out')->count(),
+            'inRepair' => $rows->filter(fn ($r) => $r->status_availability === 'In Repair')->count(),
+            'scrapped' => $rows->filter(fn ($r) => $r->status_availability === 'Scrapped')->count(),
             'damaged' => $rows->filter(fn ($r) => $r->condition === 'Damaged')->count(),
-            'calibrationOverdue' => $rows->filter(fn ($r) => $r->calibration_required && $r->calibration_due_date !== null && $r->calibration_due_date->lt($today))->count(),
-            'calibrationDueSoon' => $rows->filter(fn ($r) => $r->calibration_required && $r->calibration_due_date !== null && $r->calibration_due_date->between($today, $today->copy()->addDays(30)))->count(),
-            'inspectionOverdue' => $rows->filter(fn ($r) => $r->inspection_required && $r->next_inspection_due !== null && $r->next_inspection_due->lt($today))->count(),
-            'inspectionDueSoon' => $rows->filter(fn ($r) => $r->inspection_required && $r->next_inspection_due !== null && $r->next_inspection_due->between($today, $today->copy()->addDays(30)))->count(),
-            'pmOverdue' => $rows->filter(fn ($r) => $r->pm_required && $r->next_pm_due !== null && $r->next_pm_due->lt($today))->count(),
-            'pmDueSoon' => $rows->filter(fn ($r) => $r->pm_required && $r->next_pm_due !== null && $r->next_pm_due->between($today, $today->copy()->addDays(30)))->count(),
+            'calibrationOverdue' => $rows->filter(fn ($r) => $calibDue($r) !== null && $calibDue($r)->lt($today))->count(),
+            'calibrationDueSoon' => $rows->filter(fn ($r) => $calibDue($r) !== null && $calibDue($r)->between($today, $horizon))->count(),
+            'inspectionOverdue' => $rows->filter(fn ($r) => $inspDue($r) !== null && $inspDue($r)->lt($today))->count(),
+            'inspectionDueSoon' => $rows->filter(fn ($r) => $inspDue($r) !== null && $inspDue($r)->between($today, $horizon))->count(),
         ];
     }
 
     /**
-     * @param  Collection<int, PncMonitoringInventoryTool>  $rows
+     * @param  Collection<int, PncMonitoringInventoryToolAsset>  $rows
      * @return list<array{name:string,value:int}>
      */
-    private function countBy(Collection $rows, string $field): array
+    private function countBy(Collection $rows, \Closure $resolver): array
     {
-        return $rows->groupBy(fn ($r) => $r->{$field} ?: 'Tidak diisi')
+        return $rows->groupBy(fn ($r) => $resolver($r) ?: 'Tidak diisi')
             ->map(fn (Collection $group, string $name): array => ['name' => $name, 'value' => $group->count()])
             ->sortByDesc('value')
             ->values()
@@ -136,42 +138,37 @@ final class PncMonitoringInventoryDashboardAssembler
     }
 
     /**
-     * @param  array<string, string>  $filters
+     * @param  Collection<int, PncMonitoringInventoryToolAsset>  $rows
      * @return list<array<string, mixed>>
      */
-    private function dueSoon(array $filters): array
+    private function dueSoon(Collection $rows): array
     {
         $today = Carbon::today();
         $horizon = $today->copy()->addDays(30);
 
-        $rows = $this->baseQuery($filters)
-            ->where(function (Builder $q) use ($horizon): void {
-                $q->where(function (Builder $qq) use ($horizon): void {
-                    $qq->where('calibration_required', true)->whereNotNull('calibration_due_date')->where('calibration_due_date', '<=', $horizon);
-                })->orWhere(function (Builder $qq) use ($horizon): void {
-                    $qq->where('inspection_required', true)->whereNotNull('next_inspection_due')->where('next_inspection_due', '<=', $horizon);
-                })->orWhere(function (Builder $qq) use ($horizon): void {
-                    $qq->where('pm_required', true)->whereNotNull('next_pm_due')->where('next_pm_due', '<=', $horizon);
-                });
+        return $rows
+            ->map(function (PncMonitoringInventoryToolAsset $r) {
+                $dueDates = array_filter([
+                    $r->latestCalibration?->next_due_date,
+                    $r->latestInspection?->next_due_date,
+                ]);
+                $earliest = collect($dueDates)->sort()->first();
+
+                return $earliest === null ? null : [
+                    'name' => $r->toolMaster?->standard_name,
+                    'assetId' => $r->inventory_id,
+                    'category' => $r->toolMaster?->category?->name,
+                    'site' => $r->location_detail,
+                    'dueDateRaw' => $earliest,
+                    'dueDate' => $earliest->format('d M Y'),
+                    'isOverdue' => $earliest->lt($today),
+                ];
             })
-            ->get(['id', 'nama_alat', 'asset_id', 'category', 'site', 'calibration_due_date', 'next_inspection_due', 'next_pm_due']);
-
-        return $rows->map(function (PncMonitoringInventoryTool $row) use ($today): array {
-            $dueDates = array_filter([
-                $row->calibration_due_date,
-                $row->next_inspection_due,
-                $row->next_pm_due,
-            ]);
-            $earliest = collect($dueDates)->sort()->first();
-
-            return [
-                'name' => $row->nama_alat,
-                'assetId' => $row->asset_id,
-                'category' => $row->category,
-                'site' => $row->site,
-                'dueDate' => $earliest?->format('d M Y'),
-                'isOverdue' => $earliest !== null && $earliest->lt($today),
-            ];
-        })->sortBy('dueDate')->take(20)->values()->all();
+            ->filter(fn ($r) => $r !== null && $r['dueDateRaw']->lte($horizon))
+            ->sortBy('dueDateRaw')
+            ->take(20)
+            ->map(fn ($r) => collect($r)->except('dueDateRaw')->all())
+            ->values()
+            ->all();
     }
 }

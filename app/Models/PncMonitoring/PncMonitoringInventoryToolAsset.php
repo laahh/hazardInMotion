@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 final class PncMonitoringInventoryToolAsset extends Model
 {
@@ -92,5 +93,17 @@ final class PncMonitoringInventoryToolAsset extends Model
     public function checkoutRecords(): HasMany
     {
         return $this->hasMany(PncMonitoringInventoryToolCheckoutRecord::class, 'asset_id', 'asset_id');
+    }
+
+    public function latestCalibration(): HasOne
+    {
+        return $this->hasOne(PncMonitoringInventoryToolCalibrationRecord::class, 'asset_id', 'asset_id')
+            ->latestOfMany('calibration_date');
+    }
+
+    public function latestInspection(): HasOne
+    {
+        return $this->hasOne(PncMonitoringInventoryToolInspectionRecord::class, 'asset_id', 'asset_id')
+            ->latestOfMany('inspection_date');
     }
 }

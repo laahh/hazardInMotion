@@ -6,7 +6,7 @@
 <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-24">
   <div>
     <h4 class="mb-4">Dashboard Inventory Tools</h4>
-    <p class="text-secondary-light mb-0">Monitoring stok, status ketersediaan, kondisi &amp; jadwal kalibrasi/inspeksi/PM</p>
+    <p class="text-secondary-light mb-0">Monitoring unit aset, status ketersediaan, kondisi &amp; jadwal kalibrasi/inspeksi</p>
   </div>
   <div class="text-end text-sm">
     <div><span class="text-success-main">●</span> LIVE / auto-refresh 60 detik</div>
@@ -50,7 +50,7 @@
 
 <div class="card border shadow-none">
   <div class="card-body">
-    <h6 class="mb-12">Jatuh Tempo Kalibrasi / Inspeksi / PM (30 hari ke depan)</h6>
+    <h6 class="mb-12">Jatuh Tempo Kalibrasi / Inspeksi (30 hari ke depan)</h6>
     <div class="table-responsive">
       <table class="table bordered-table mb-0" id="inv-due-table">
         <thead>
@@ -98,14 +98,12 @@
 
   function renderKpis(k) {
     document.getElementById('inv-kpi-grid').innerHTML = [
-      kpiCard('Total Alat', num(k.totalTools), num(k.totalQty) + ' total qty', 'bg-primary-600'),
+      kpiCard('Total Unit Aset', num(k.totalTools), 'Seluruh unit terdaftar', 'bg-primary-600'),
       kpiCard('Available', num(k.available), 'Siap dipakai', 'bg-success-main'),
       kpiCard('Checked-out / In Repair', num(k.checkedOut) + ' / ' + num(k.inRepair), 'Sedang dipakai / diperbaiki', 'bg-warning-main'),
       kpiCard('Damaged / Scrapped', num(k.damaged) + ' / ' + num(k.scrapped), 'Kondisi rusak / afkir', 'bg-danger-main'),
       kpiCard('Kalibrasi Overdue', num(k.calibrationOverdue), num(k.calibrationDueSoon) + ' due 30 hari', 'bg-danger-main'),
       kpiCard('Inspeksi Overdue', num(k.inspectionOverdue), num(k.inspectionDueSoon) + ' due 30 hari', 'bg-warning-main'),
-      kpiCard('PM Overdue', num(k.pmOverdue), num(k.pmDueSoon) + ' due 30 hari', 'bg-info'),
-      kpiCard('Total Qty On Hand', num(k.totalQty), 'Akumulasi stok', 'bg-purple'),
     ].join('');
   }
 
