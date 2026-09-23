@@ -911,15 +911,15 @@
 
   drawBar('#chart-cancel-site', (rankings.cancelSite || []).map(function (x) { return x.name; }), [
     { name: 'Cancel', data: (rankings.cancelSite || []).map(function (x) { return x.value || 0; }) },
-  ], { horizontal: true, distributed: true });
+  ], { horizontal: true, colors: ['#487FFF'] });
 
   drawBar('#chart-cancel-company', (rankings.cancelCompany || []).map(function (x) { return x.name; }), [
     { name: 'Cancel', data: (rankings.cancelCompany || []).map(function (x) { return x.value || 0; }) },
-  ], { horizontal: true, distributed: true });
+  ], { horizontal: true, colors: ['#F8285A'] });
 
   drawBar('#chart-findingia-company', (rankings.findingIACompany || []).map(function (x) { return x.name; }), [
     { name: 'Finding IA', data: (rankings.findingIACompany || []).map(function (x) { return x.value || 0; }) },
-  ], { horizontal: true, distributed: true });
+  ], { horizontal: true, colors: ['#F9A825'] });
 })();
 </script>
 @endsection
