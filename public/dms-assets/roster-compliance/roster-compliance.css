@@ -1,0 +1,66 @@
+/* Kepatuhan Roster Karyawan — /dms/roster-compliance-static
+   Desain kartu/tabel WowDash (selaras dengan Fatigue Baseline), bukan salinan
+   tampilan sumber aslinya. Lihat roster-compliance.js untuk mesin aturan. */
+
+.rk-co-pill {
+  border: 1px solid var(--neutral-300, #d1d5db);
+  background: #fff;
+  color: var(--text-secondary-light);
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+  white-space: nowrap;
+}
+.rk-co-pill:hover { border-color: var(--primary-600, #487FFF); color: var(--primary-600, #487FFF); }
+.rk-co-pill.is-active { background: var(--primary-600, #487FFF); border-color: var(--primary-600, #487FFF); color: #fff; }
+.rk-co-pill .n { opacity: .75; font-weight: 500; margin-left: 4px; }
+
+.rk-stat-mini { background: var(--neutral-50, #f8fafc); border-radius: 8px; padding: 10px 12px; }
+.rk-stat-mini .k { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary-light); font-weight: 600; }
+.rk-stat-mini .v { font-size: 15.5px; font-weight: 700; margin-top: 3px; color: var(--text-primary-light); }
+.rk-stat-mini.is-bad { background: var(--danger-100, #fee2e2); }
+.rk-stat-mini.is-bad .v { color: var(--danger-600, #b91c1c); }
+
+.rk-table tbody tr { cursor: pointer; transition: background .15s ease; }
+.rk-table tbody tr:hover { background: var(--neutral-50, #f8fafc); }
+.rk-table tbody tr.is-selected { background: var(--primary-50, #eef4ff); box-shadow: inset 3px 0 0 var(--primary-600, #487FFF); }
+.rk-name { font-weight: 600; display: block; color: var(--text-primary-light); }
+.rk-sub { font-size: 11px; color: var(--text-secondary-light); }
+
+.rk-flag-red { color: var(--danger-600, #b91c1c); font-weight: 600; }
+.rk-flag-yel { color: var(--warning-600, #b45309); font-weight: 600; }
+.rk-flag-none { color: var(--text-secondary-light); }
+
+.rk-heat-strip {
+  display: flex;
+  gap: 1px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+.rk-heat-strip .d {
+  flex: none;
+  width: 6px;
+  height: 22px;
+  border-radius: 1.5px;
+  cursor: default;
+}
+.rk-heat-strip .d.mstart { margin-left: 4px; }
+.rk-d-P { background: #60a5fa; }
+.rk-d-M { background: #1e3a8a; }
+.rk-d-o { background: #e2e6ea; }
+.rk-d-c { background: #12a150; }
+.rk-d-red { outline: 2px solid var(--danger-main, #ef4a00); outline-offset: -1px; }
+.rk-d-yel { outline: 2px solid var(--warning-main, #ff9f29); outline-offset: -1px; }
+
+.rk-heat-mini { display: inline-flex; gap: 1px; vertical-align: middle; }
+.rk-heat-mini .d { flex: none; width: 3px; height: 14px; border-radius: 1px; }
+
+.rk-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+.rk-detail-empty { color: var(--text-secondary-light); text-align: center; padding: 64px 16px; }
+
+.rk-param-table td, .rk-param-table th { font-size: 12px; padding: 6px 10px; }

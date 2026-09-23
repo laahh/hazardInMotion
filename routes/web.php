@@ -792,6 +792,9 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         })->name('dashboard-static');
         Route::get('/fatigue-baseline-static', [\App\Http\Controllers\DMS\FatigueBaselineController::class, 'index'])->name('fatigue-baseline-static');
         Route::get('/fatigue-baseline-static/operator/{sid}', [\App\Http\Controllers\DMS\FatigueBaselineController::class, 'operatorDetail'])->name('fatigue-baseline-static.operator-detail');
+        Route::get('/roster-compliance-static', function () {
+            return view('dms.roster-compliance-static');
+        })->name('roster-compliance-static');
     });
 
     // Pra Operasi — checkin RFID Operator x Fatigue Test (Fit to Work) x PVT x Alert DMS

@@ -43,6 +43,12 @@
         </a>
       </li>
       <li>
+        <a href="{{ route('dms.roster-compliance-static') }}" class="{{ request()->routeIs('dms.roster-compliance-static') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:calendar-mark-outline" class="menu-icon"></iconify-icon>
+          <span>Kepatuhan Roster</span>
+        </a>
+      </li>
+      <li>
         <a href="{{ route('pra-operasi.dashboard') }}" class="{{ request()->routeIs('pra-operasi.dashboard') || request()->routeIs('pra-operasi.operator-profile') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:clipboard-check-outline" class="menu-icon"></iconify-icon>
           <span>Pra Operasi</span>
