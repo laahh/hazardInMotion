@@ -821,21 +821,85 @@
   var bySite = @json($payload['ikk']['bySite'] ?? []);
   var rankings = @json($payload['ikk']['rankings'] ?? ['cancelSite' => [], 'cancelCompany' => [], 'findingIACompany' => []]);
 
-  function drawBar(id, categories, series, horizontal, colors) {
+  var palette = ['#487FFF', '#45B369', '#F9A825', '#8C62FF', '#F8285A', '#14B8A6', '#FB923C', '#0EA5E9', '#EC4899', '#84CC16'];
+
+  function drawBar(id, categories, series, opts) {
+    opts = opts || {};
     var el = document.querySelector(id);
     if (!el) return;
+    var horizontal = !!opts.horizontal;
+    var distributed = !!opts.distributed;
+    var colors = opts.colors || palette;
+    var hideZeroLabels = !!opts.hideZeroLabels;
+    var maxValue = 0;
+    series.forEach(function (s) { (s.data || []).forEach(function (v) { maxValue = Math.max(maxValue, Number(v) || 0); }); });
+
     var chart = new ApexCharts(el, {
-      chart: { type: 'bar', height: 320, toolbar: { show: false } },
+      chart: {
+        type: 'bar',
+        height: opts.height || 320,
+        toolbar: { show: false },
+        fontFamily: 'inherit',
+        animations: { speed: 350 },
+      },
       series: series,
-      xaxis: { categories: categories },
-      plotOptions: { bar: { horizontal: !!horizontal, borderRadius: 4, columnWidth: '55%', dataLabels: { position: horizontal ? 'top' : 'center' } } },
+      xaxis: {
+        categories: categories,
+        max: horizontal ? Math.ceil((maxValue || 1) * 1.2) : undefined,
+        labels: { style: { colors: '#64748B', fontSize: '12px' }, trim: true },
+        axisBorder: { show: false },
+        axisTicks: { show: false },
+      },
+      yaxis: {
+        labels: { style: { colors: '#64748B', fontSize: '12px' } },
+      },
+      grid: {
+        borderColor: '#EEF2F6',
+        strokeDashArray: 4,
+        yaxis: { lines: { show: !horizontal } },
+        xaxis: { lines: { show: horizontal } },
+        padding: { right: horizontal ? 24 : 8 },
+      },
+      plotOptions: {
+        bar: {
+          horizontal: horizontal,
+          distributed: distributed,
+          borderRadius: 6,
+          borderRadiusApplication: 'end',
+          columnWidth: series.length > 1 ? '46%' : '55%',
+          barHeight: '58%',
+          dataLabels: { position: horizontal ? 'top' : 'top' },
+        },
+      },
       dataLabels: {
         enabled: true,
-        offsetX: horizontal ? 16 : 0,
-        style: { colors: ['#334155'] },
-        formatter: function (v) { return Number(v || 0).toLocaleString('id-ID'); },
+        offsetX: horizontal ? 10 : 0,
+        offsetY: horizontal ? 0 : -6,
+        style: { fontSize: '12px', fontWeight: 600, colors: ['#334155'] },
+        background: { enabled: false },
+        formatter: function (v) {
+          var n = Number(v || 0);
+          if (hideZeroLabels && n === 0) return '';
+          return n.toLocaleString('id-ID');
+        },
+      },
+      legend: distributed || series.length < 2
+        ? { show: false }
+        : { show: true, position: 'top', horizontalAlign: 'left', fontSize: '13px', markers: { radius: 4 }, itemMargin: { horizontal: 12 } },
+      fill: {
+        type: 'gradient',
+        gradient: {
+          shade: 'light',
+          type: horizontal ? 'horizontal' : 'vertical',
+          shadeIntensity: 0.4,
+          opacityFrom: 0.95,
+          opacityTo: 0.65,
+          stops: [0, 100],
+        },
       },
       colors: colors,
+      states: { hover: { filter: { type: 'darken', value: 0.92 } } },
+      tooltip: { y: { formatter: function (v) { return Number(v || 0).toLocaleString('id-ID'); } } },
     });
     chart.render();
   }
@@ -843,19 +907,19 @@
   drawBar('#chart-finding-site', bySite.map(function (x) { return x.name; }), [
     { name: 'Finding IA', data: bySite.map(function (x) { return x.findingIA || 0; }) },
     { name: 'Finding Verlap', data: bySite.map(function (x) { return x.findingVerlap || 0; }) },
-  ], false, ['#F9A825', '#F8285A']);
+  ], { colors: ['#F9A825', '#F8285A'], height: 340, hideZeroLabels: true });
 
   drawBar('#chart-cancel-site', (rankings.cancelSite || []).map(function (x) { return x.name; }), [
     { name: 'Cancel', data: (rankings.cancelSite || []).map(function (x) { return x.value || 0; }) },
-  ], true, ['#487FFF']);
+  ], { horizontal: true, distributed: true });
 
   drawBar('#chart-cancel-company', (rankings.cancelCompany || []).map(function (x) { return x.name; }), [
     { name: 'Cancel', data: (rankings.cancelCompany || []).map(function (x) { return x.value || 0; }) },
-  ], true, ['#487FFF']);
+  ], { horizontal: true, distributed: true });
 
   drawBar('#chart-findingia-company', (rankings.findingIACompany || []).map(function (x) { return x.name; }), [
     { name: 'Finding IA', data: (rankings.findingIACompany || []).map(function (x) { return x.value || 0; }) },
-  ], true, ['#487FFF']);
+  ], { horizontal: true, distributed: true });
 })();
 </script>
 @endsection
