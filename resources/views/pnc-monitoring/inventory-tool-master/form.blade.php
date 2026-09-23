@@ -132,11 +132,30 @@
                 <p class="text-secondary-light text-xs mb-0">{{ $rep['hint'] }}</p>
               </div>
             </div>
-            <button type="button" class="btn btn-outline-primary-600 btn-sm" data-repeat-add="{{ $rep['key'] }}">
-              <i class="ri-add-line"></i> Tambah Baris
-            </button>
+            <div class="d-flex gap-2">
+              @if ($mode === 'edit')
+                <a href="{{ route('pnc-monitoring.inventory-tool-master.detail-export', [$row, $rep['key']]) }}" class="btn btn-outline-success-600 btn-sm">
+                  <i class="ri-file-excel-2-line"></i> Export Excel
+                </a>
+              @endif
+              <button type="button" class="btn btn-outline-primary-600 btn-sm" data-repeat-add="{{ $rep['key'] }}">
+                <i class="ri-add-line"></i> Tambah Baris
+              </button>
+            </div>
           </div>
           <div class="card-body">
+            @if ($mode === 'edit')
+              <form method="POST" action="{{ route('pnc-monitoring.inventory-tool-master.detail-import', [$row, $rep['key']]) }}" enctype="multipart/form-data" class="row g-2 align-items-end mb-16 pb-16 border-bottom">
+                @csrf
+                <div class="col-md-8">
+                  <label class="form-label text-xs mb-1">Import Excel ({{ collect($rep['fields'])->pluck(1)->implode(', ') }}) — menggantikan seluruh isi bagian ini</label>
+                  <input type="file" name="file" class="form-control form-control-sm" accept=".xlsx,.xls" required>
+                </div>
+                <div class="col-md-2">
+                  <button type="submit" class="btn btn-primary-600 btn-sm w-100">Unggah</button>
+                </div>
+              </form>
+            @endif
             <div id="rows-{{ $rep['key'] }}">
               @foreach ($rep['rows'] as $item)
                 <div class="row g-2 align-items-center repeat-row-box repeat-row">
@@ -256,11 +275,30 @@
               <p class="text-secondary-light text-xs mb-0">Panduan singkat yang boleh dan tidak boleh dilakukan saat memakai alat ini.</p>
             </div>
           </div>
-          <button type="button" class="btn btn-outline-primary-600 btn-sm" data-repeat-add="usage_rules">
-            <i class="ri-add-line"></i> Tambah Baris
-          </button>
+          <div class="d-flex gap-2">
+            @if ($mode === 'edit')
+              <a href="{{ route('pnc-monitoring.inventory-tool-master.detail-export', [$row, 'usage_rules']) }}" class="btn btn-outline-success-600 btn-sm">
+                <i class="ri-file-excel-2-line"></i> Export Excel
+              </a>
+            @endif
+            <button type="button" class="btn btn-outline-primary-600 btn-sm" data-repeat-add="usage_rules">
+              <i class="ri-add-line"></i> Tambah Baris
+            </button>
+          </div>
         </div>
         <div class="card-body">
+          @if ($mode === 'edit')
+            <form method="POST" action="{{ route('pnc-monitoring.inventory-tool-master.detail-import', [$row, 'usage_rules']) }}" enctype="multipart/form-data" class="row g-2 align-items-end mb-16 pb-16 border-bottom">
+              @csrf
+              <div class="col-md-8">
+                <label class="form-label text-xs mb-1">Import Excel (Tipe do/dont, Deskripsi) — menggantikan seluruh aturan saat ini</label>
+                <input type="file" name="file" class="form-control form-control-sm" accept=".xlsx,.xls" required>
+              </div>
+              <div class="col-md-2">
+                <button type="submit" class="btn btn-primary-600 btn-sm w-100">Unggah</button>
+              </div>
+            </form>
+          @endif
           <div id="rows-usage_rules">
             @foreach ($usageRules as $item)
               <div class="row g-2 align-items-center repeat-row-box repeat-row">
@@ -315,11 +353,30 @@
               <p class="text-secondary-light text-xs mb-0">Spesifikasi bebas per jenis alat, mis. WLL, Kapasitas, Hazard Class.</p>
             </div>
           </div>
-          <button type="button" class="btn btn-outline-primary-600 btn-sm" data-repeat-add="attributes">
-            <i class="ri-add-line"></i> Tambah Baris
-          </button>
+          <div class="d-flex gap-2">
+            @if ($mode === 'edit')
+              <a href="{{ route('pnc-monitoring.inventory-tool-master.detail-export', [$row, 'attributes']) }}" class="btn btn-outline-success-600 btn-sm">
+                <i class="ri-file-excel-2-line"></i> Export Excel
+              </a>
+            @endif
+            <button type="button" class="btn btn-outline-primary-600 btn-sm" data-repeat-add="attributes">
+              <i class="ri-add-line"></i> Tambah Baris
+            </button>
+          </div>
         </div>
         <div class="card-body">
+          @if ($mode === 'edit')
+            <form method="POST" action="{{ route('pnc-monitoring.inventory-tool-master.detail-import', [$row, 'attributes']) }}" enctype="multipart/form-data" class="row g-2 align-items-end mb-16 pb-16 border-bottom">
+              @csrf
+              <div class="col-md-8">
+                <label class="form-label text-xs mb-1">Import Excel (Nama Atribut, Nilai) — menggantikan seluruh atribut saat ini</label>
+                <input type="file" name="file" class="form-control form-control-sm" accept=".xlsx,.xls" required>
+              </div>
+              <div class="col-md-2">
+                <button type="submit" class="btn btn-primary-600 btn-sm w-100">Unggah</button>
+              </div>
+            </form>
+          @endif
           <div id="rows-attributes">
             @foreach ($attributes as $item)
               <div class="row g-2 align-items-center repeat-row-box repeat-row">

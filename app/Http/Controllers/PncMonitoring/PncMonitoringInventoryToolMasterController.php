@@ -17,6 +17,7 @@ use App\Models\PncMonitoring\PncMonitoringInventoryToolSafetyFeature;
 use App\Models\PncMonitoring\PncMonitoringInventoryToolStandard;
 use App\Models\PncMonitoring\PncMonitoringInventoryToolUsageRule;
 use App\Services\PncMonitoring\PncMonitoringInventoryChecklistExcelService;
+use App\Services\PncMonitoring\PncMonitoringInventoryToolMasterDetailExcelService;
 use App\Services\PncMonitoring\PncMonitoringInventoryToolMasterExcelExportService;
 use App\Services\PncMonitoring\PncMonitoringInventoryToolMasterExcelParser;
 use App\Services\PncMonitoring\PncMonitoringInventoryToolMasterExcelTemplateService;
@@ -189,6 +190,41 @@ final class PncMonitoringInventoryToolMasterController extends Controller
         return redirect()
             ->route('pnc-monitoring.inventory-tool-master.edit', $inventoryToolMaster)
             ->with('success', "Checklist diimpor: {$result->created} baris (menggantikan checklist sebelumnya).");
+    }
+
+    public function detailExport(
+        PncMonitoringInventoryToolMaster $inventoryToolMaster,
+        string $section,
+        PncMonitoringInventoryToolMasterDetailExcelService $service,
+    ): StreamedResponse {
+        abort_unless(in_array($section, PncMonitoringInventoryToolMasterDetailExcelService::sectionKeys(), true), 404);
+
+        return $service->download($section, $inventoryToolMaster);
+    }
+
+    public function detailImport(
+        PncMonitoringExcelImportRequest $request,
+        PncMonitoringInventoryToolMaster $inventoryToolMaster,
+        string $section,
+        PncMonitoringInventoryToolMasterDetailExcelService $service,
+    ): RedirectResponse {
+        abort_unless(in_array($section, PncMonitoringInventoryToolMasterDetailExcelService::sectionKeys(), true), 404);
+
+        $file = $request->file('file');
+        $path = $file?->getRealPath();
+        if (! is_string($path) || $path === '') {
+            return back()->withErrors(['file' => 'File tidak dapat dibaca.']);
+        }
+
+        $result = $service->importReplace($section, $inventoryToolMaster, $path);
+        if ($result->hasErrors()) {
+            return back()->withErrors(['file' => $result->errors]);
+        }
+
+        return redirect()
+            ->route('pnc-monitoring.inventory-tool-master.edit', $inventoryToolMaster)
+            ->with('success', "Data diimpor: {$result->created} baris (menggantikan data sebelumnya).")
+            ->with('warnings', $result->warnings);
     }
 
     private function syncChildren(PncMonitoringInventoryToolMaster $toolMaster, PncMonitoringInventoryToolMasterRequest $request): void

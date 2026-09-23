@@ -94,6 +94,8 @@ Route::middleware('auth')->group(function (): void {
         Route::delete('/{inventoryToolMaster}', [PncMonitoringInventoryToolMasterController::class, 'destroy'])->whereNumber('inventoryToolMaster')->name('destroy');
         Route::get('/{inventoryToolMaster}/checklist-export', [PncMonitoringInventoryToolMasterController::class, 'checklistExport'])->whereNumber('inventoryToolMaster')->name('checklist-export');
         Route::post('/{inventoryToolMaster}/checklist-import', [PncMonitoringInventoryToolMasterController::class, 'checklistImport'])->whereNumber('inventoryToolMaster')->name('checklist-import');
+        Route::get('/{inventoryToolMaster}/detail-export/{section}', [PncMonitoringInventoryToolMasterController::class, 'detailExport'])->whereNumber('inventoryToolMaster')->name('detail-export');
+        Route::post('/{inventoryToolMaster}/detail-import/{section}', [PncMonitoringInventoryToolMasterController::class, 'detailImport'])->whereNumber('inventoryToolMaster')->name('detail-import');
     });
 
     Route::prefix('inventory-tool-assets')->name('inventory-tool-assets.')->group(function (): void {
