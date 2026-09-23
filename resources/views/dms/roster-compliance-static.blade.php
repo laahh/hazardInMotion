@@ -51,7 +51,7 @@
   <div class="card radius-8 border mb-24">
     <div class="card-body py-12">
       <div class="row g-2 align-items-center">
-        <div class="col-lg-3">
+        <div class="col-lg-2">
           <input type="search" id="rkSearch" class="form-control" placeholder="Cari nama / SID&hellip;">
         </div>
         <div class="col-lg-2">
@@ -73,7 +73,7 @@
             <option value="Cuti">Cuti</option>
           </select>
         </div>
-        <div class="col-lg-1">
+        <div class="col-lg-2">
           <select id="rkNoteSelect" class="form-select">
             <option value="">Semua Catatan</option>
             <option value="pel">Pelanggaran</option>
@@ -134,26 +134,23 @@
   </div>
 
   <div class="row gy-4">
-    <div class="col-xxl-7">
-      <div class="card h-100 radius-8 border">
+    <div class="col-xxl-8">
+      <div class="card h-100 radius-8 border rk-master-card">
         <div class="card-header border-bottom bg-transparent d-flex align-items-center justify-content-between">
           <h6 class="text-lg mb-0">Daftar Karyawan</h6>
           <span class="text-secondary-light text-sm" id="rkTableNote"></span>
         </div>
-        <div class="card-body p-0">
-          <div class="table-responsive scroll-sm" style="max-height:600px;overflow-y:auto">
+        <div class="card-body p-0 d-flex flex-column">
+          <div class="table-responsive rk-table-scroll">
             <table class="table bordered-table mb-0 rk-table">
               <thead>
                 <tr>
                   <th scope="col">SID</th>
                   <th scope="col" data-k="nama" style="cursor:pointer">Karyawan</th>
-                  <th scope="col" data-k="jab" style="cursor:pointer">Jabatan</th>
                   <th scope="col" class="text-center" data-k="roster" style="cursor:pointer">Roster</th>
                   <th scope="col" class="text-center" data-k="onAll" style="cursor:pointer">On-site&nbsp;Maks&nbsp;YTD</th>
                   <th scope="col" class="text-center" data-k="cutiMin" style="cursor:pointer">Cuti&nbsp;Min&nbsp;YTD</th>
                   <th scope="col" data-k="status" style="cursor:pointer">Status Kini</th>
-                  <th scope="col">Catatan</th>
-                  <th scope="col">Pola (ringkas)</th>
                 </tr>
               </thead>
               <tbody id="rkTableBody"></tbody>
@@ -170,7 +167,7 @@
       </div>
     </div>
 
-    <div class="col-xxl-5">
+    <div class="col-xxl-4">
       <div class="card h-100 radius-8 border">
         <div class="card-body" id="rkDetailWrap"></div>
       </div>

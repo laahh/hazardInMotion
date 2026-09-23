@@ -24,6 +24,10 @@
 .rk-stat-mini.is-bad { background: var(--danger-100, #fee2e2); }
 .rk-stat-mini.is-bad .v { color: var(--danger-600, #b91c1c); }
 
+.rk-master-card { display: flex; flex-direction: column; }
+.rk-table-scroll { flex: 1 1 auto; min-height: 360px; overflow-y: auto; }
+.rk-flaglist-scroll { max-height: 280px; overflow-y: auto; padding-right: 2px; }
+
 .rk-table tbody tr { cursor: pointer; transition: background .15s ease; }
 .rk-table tbody tr:hover { background: var(--neutral-50, #f8fafc); }
 .rk-table tbody tr.is-selected { background: var(--primary-50, #eef4ff); box-shadow: inset 3px 0 0 var(--primary-600, #487FFF); }
@@ -32,15 +36,14 @@
 
 .rk-flag-red { color: var(--danger-600, #b91c1c); font-weight: 600; }
 .rk-flag-yel { color: var(--warning-600, #b45309); font-weight: 600; }
-.rk-flag-none { color: var(--text-secondary-light); }
 
-.rk-heat-strip {
-  display: flex;
-  gap: 1px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-  scrollbar-width: thin;
-}
+.rk-heat-outer { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.rk-heat-inner { display: flex; flex-direction: column; width: max-content; }
+.rk-heat-ruler, .rk-heat-strip { display: flex; gap: 1px; }
+.rk-heat-ruler { height: 14px; margin-bottom: 3px; }
+.rk-heat-ruler span { flex: none; width: 6px; position: relative; }
+.rk-heat-ruler span.mstart { margin-left: 4px; }
+.rk-heat-ruler b { position: absolute; left: 0; top: 0; font-size: 9px; font-weight: 700; color: var(--text-secondary-light); white-space: nowrap; }
 .rk-heat-strip .d {
   flex: none;
   width: 6px;
@@ -55,9 +58,6 @@
 .rk-d-c { background: #12a150; }
 .rk-d-red { outline: 2px solid var(--danger-main, #ef4a00); outline-offset: -1px; }
 .rk-d-yel { outline: 2px solid var(--warning-main, #ff9f29); outline-offset: -1px; }
-
-.rk-heat-mini { display: inline-flex; gap: 1px; vertical-align: middle; }
-.rk-heat-mini .d { flex: none; width: 3px; height: 14px; border-radius: 1px; }
 
 .rk-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
 

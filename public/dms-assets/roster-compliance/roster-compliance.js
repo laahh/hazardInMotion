@@ -547,21 +547,12 @@
     renderDetail();
   }
 
-  function noteHtml(r) {
-    var a = [];
-    if (r.cats.red) a.push('<span class="rk-flag-red">⚠ Pelanggaran</span>');
-    if (r.cats.map) a.push('<span class="rk-flag-yel">Mapping</span>');
-    return a.join(' · ') || '<span class="rk-flag-none">—</span>';
-  }
-
-  function miniHeat(r) {
-    var step = Math.max(1, Math.floor((state.r1 - state.r0 + 1) / 80));
-    var html = '';
-    for (var i = state.r0; i <= state.r1; i += step) {
-      var cls = 'd rk-d-' + r.p[i] + (r.red[i] ? ' rk-d-red' : (r.yel[i] ? ' rk-d-yel' : ''));
-      html += '<span class="' + cls + '"></span>';
-    }
-    return '<span class="rk-heat-mini">' + html + '</span>';
+  function statusBadge(r) {
+    var badgeStyle = r.status === 'Shift Malam' ? ' style="background:#1e3a8a"' : '';
+    var flag = r.cats.red
+      ? '<iconify-icon icon="solar:danger-triangle-bold" class="rk-flag-red ms-4" title="Pelanggaran regulasi"></iconify-icon>'
+      : (r.cats.map ? '<iconify-icon icon="solar:shield-warning-bold" class="rk-flag-yel ms-4" title="Tidak sesuai mapping shift"></iconify-icon>' : '');
+    return '<span class="' + (STATUS_BADGE[r.status] || '') + ' px-10 py-4 rounded-pill fw-medium text-xs d-inline-flex align-items-center"' + badgeStyle + '>' + r.status + flag + '</span>';
   }
 
   function renderTable() {
@@ -569,19 +560,15 @@
     var pg = VIEW.slice(st, st + state.pageSize);
     els.tableNote.textContent = VIEW.length.toLocaleString('id') + ' karyawan pada kombinasi filter ini';
     els.tableBody.innerHTML = pg.map(function (r) {
-      var badgeStyle = r.status === 'Shift Malam' ? ' style="background:#1e3a8a"' : '';
       return '<tr class="' + (r.id === state.selectedId ? 'is-selected' : '') + '" data-id="' + escapeHtml(r.id) + '">' +
         '<td class="fw-medium">' + escapeHtml(r.sid) + '</td>' +
-        '<td><span class="rk-name">' + escapeHtml(r.nama) + '</span><span class="rk-sub">' + escapeHtml(r.co) + ' · ' + escapeHtml(r.site) + '</span></td>' +
-        '<td class="text-sm">' + escapeHtml(r.jab) + '</td>' +
+        '<td><span class="rk-name">' + escapeHtml(r.nama) + '</span><span class="rk-sub">' + escapeHtml(r.jab) + ' &middot; ' + escapeHtml(r.co) + ' ' + escapeHtml(r.site) + '</span></td>' +
         '<td class="text-center">' + r.roster + '</td>' +
         '<td class="text-center">' + r.onAll + (r.onAll > 71 && !r.longgar ? ' <span class="rk-flag-red">⚠</span>' : '') + '</td>' +
         '<td class="text-center">' + r.cutiMin + (r.cutiMin && r.cutiMin < 12 && !r.longgar ? ' <span class="rk-flag-red">⚠</span>' : '') + '</td>' +
-        '<td><span class="' + (STATUS_BADGE[r.status] || '') + ' px-10 py-4 rounded-pill fw-medium text-xs"' + badgeStyle + '>' + r.status + '</span></td>' +
-        '<td class="text-sm">' + noteHtml(r) + '</td>' +
-        '<td>' + miniHeat(r) + '</td>' +
+        '<td>' + statusBadge(r) + '</td>' +
         '</tr>';
-    }).join('') || '<tr><td colspan="9" class="text-center text-secondary-light py-5">Tidak ada karyawan pada kombinasi filter ini.</td></tr>';
+    }).join('') || '<tr><td colspan="6" class="text-center text-secondary-light py-5">Tidak ada karyawan pada kombinasi filter ini.</td></tr>';
 
     els.tableBody.querySelectorAll('tr[data-id]').forEach(function (tr) {
       tr.addEventListener('click', function () { state.selectedId = tr.getAttribute('data-id'); renderTable(); renderDetail(); });
@@ -597,17 +584,21 @@
    * Detail panel
    * ------------------------------------------------------------------- */
   function heatStrip(r) {
-    var html = '', prevMonth = '';
+    var ruler = '', days = '', prevMonth = '';
     for (var i = state.r0; i <= state.r1; i++) {
       var iso = D.dISO[i];
       var isMonthStart = iso.slice(0, 7) !== prevMonth;
       prevMonth = iso.slice(0, 7);
+      ruler += '<span class="' + (isMonthStart ? 'mstart' : '') + '">' + (isMonthStart ? '<b>' + MON[+iso.slice(5, 7) - 1] + '</b>' : '') + '</span>';
       var cls = 'd rk-d-' + r.p[i] + (r.red[i] ? ' rk-d-red' : (r.yel[i] ? ' rk-d-yel' : '')) + (isMonthStart ? ' mstart' : '');
       var dt = new Date(iso + 'T00:00:00Z');
       var title = HARI[dt.getUTCDay()] + ', ' + dt.getUTCDate() + ' ' + MON_LONG[dt.getUTCMonth()] + ' — ' + SHIFT_LABEL[r.p[i]] + ' (hari ke-' + r.dayno[i] + ')' + (r.red[i] ? ' — ' + r.red[i] : (r.yel[i] ? ' — ' + r.yel[i] : ''));
-      html += '<span class="' + cls + '" title="' + escapeHtml(title) + '"></span>';
+      days += '<span class="' + cls + '" title="' + escapeHtml(title) + '"></span>';
     }
-    return html;
+    return '<div class="rk-heat-outer"><div class="rk-heat-inner">' +
+      '<div class="rk-heat-ruler">' + ruler + '</div>' +
+      '<div class="rk-heat-strip">' + days + '</div>' +
+      '</div></div>';
   }
 
   function flagList(r) {
@@ -617,7 +608,7 @@
       else if (r.yel[i] && !r.red[i] && (i === state.r0 || (r.yel[i] !== r.yel[i - 1] || !!r.red[i - 1]))) items.push({ i: i, sev: 'yel', text: r.yel[i] });
     }
     if (!items.length) return '<div class="text-secondary-light text-sm text-center py-16">Tidak ada flag pada rentang ini.</div>';
-    return '<div class="d-flex flex-column gap-2">' + items.slice(0, 30).map(function (it) {
+    return '<div class="d-flex flex-column gap-2 rk-flaglist-scroll">' + items.slice(0, 30).map(function (it) {
       var cls = it.sev === 'red' ? 'border-danger-100 bg-danger-100 text-danger-600' : 'border-warning-100 bg-warning-100 text-warning-600';
       return '<div class="border rounded-8 px-12 py-8 text-sm ' + cls + '"><b>' + fmtD(it.i) + '</b> — ' + escapeHtml(it.text) + '</div>';
     }).join('') + '</div>' + (items.length > 30 ? '<div class="text-secondary-light text-xs mt-8">+' + (items.length - 30) + ' kejadian lain pada rentang ini.</div>' : '');
@@ -661,7 +652,7 @@
         return '<div class="col-6"><div class="rk-stat-mini' + (bad ? ' is-bad' : '') + '"><div class="k">' + s[0] + '</div><div class="v">' + s[1] + '</div></div></div>';
       }).join('') + '</div>' +
       '<h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Timeline Pola Kerja</h6>' +
-      '<div class="rk-heat-strip mb-8">' + heatStrip(r) + '</div>' +
+      '<div class="mb-8">' + heatStrip(r) + '</div>' +
       '<div class="d-flex flex-wrap gap-3 text-xs text-secondary-light mb-24">' +
       '<span><i class="rk-legend-dot" style="background:#60a5fa"></i>Pagi</span>' +
       '<span><i class="rk-legend-dot" style="background:#1e3a8a"></i>Malam</span>' +
