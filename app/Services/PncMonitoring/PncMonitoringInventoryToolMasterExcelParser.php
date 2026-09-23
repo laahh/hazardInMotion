@@ -51,12 +51,12 @@ final class PncMonitoringInventoryToolMasterExcelParser
 
         $sheet = $spreadsheet->getActiveSheet();
         $highestRow = $sheet->getHighestDataRow();
-        $categories = PncMonitoringInventoryCategory::query()->pluck('category_id', 'code');
+        $categoryLookup = $this->buildCategoryLookup();
 
         for ($rowIndex = 2; $rowIndex <= $highestRow; $rowIndex++) {
             $cells = [];
             foreach (self::FIELD_KEYS as $colIndex => $key) {
-                $cells[$key] = trim((string) $sheet->getCellByColumnAndRow($colIndex + 1, $rowIndex)->getValue());
+                $cells[$key] = trim((string) $sheet->getCell([$colIndex + 1, $rowIndex])->getValue());
             }
             if (implode('', $cells) === '') {
                 continue;
@@ -68,13 +68,16 @@ final class PncMonitoringInventoryToolMasterExcelParser
                 $warnings[] = "Baris {$rowIndex}: Kode Kategori dan Nama Alat wajib diisi, dilewati.";
                 continue;
             }
-            if (! $categories->has($code)) {
+            // Excel sering menghilangkan angka nol di depan (mis. "001" jadi "1")
+            // kalau kolomnya tidak diformat Teks — cocokkan juga bentuk tanpa nol depan.
+            $categoryId = $categoryLookup[$code] ?? $categoryLookup[ltrim($code, '0') ?: '0'] ?? null;
+            if ($categoryId === null) {
                 $warnings[] = "Baris {$rowIndex}: Kode Kategori '{$code}' tidak ditemukan, dilewati.";
                 continue;
             }
 
             $rows[] = [
-                'category_id' => (int) $categories->get($code),
+                'category_id' => $categoryId,
                 'standard_name' => $standardName,
                 'sub_category' => $cells['sub_category'] !== '' ? $cells['sub_category'] : null,
                 'main_function' => $cells['main_function'] !== '' ? $cells['main_function'] : null,
@@ -86,5 +89,20 @@ final class PncMonitoringInventoryToolMasterExcelParser
         }
 
         return new PncMonitoringExcelParseResult($rows, $errors, $warnings);
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function buildCategoryLookup(): array
+    {
+        $lookup = [];
+        foreach (PncMonitoringInventoryCategory::query()->pluck('category_id', 'code') as $code => $id) {
+            $code = strtoupper((string) $code);
+            $lookup[$code] = (int) $id;
+            $lookup[ltrim($code, '0') ?: '0'] = (int) $id;
+        }
+
+        return $lookup;
     }
 }

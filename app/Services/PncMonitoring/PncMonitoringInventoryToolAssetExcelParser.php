@@ -51,7 +51,7 @@ final class PncMonitoringInventoryToolAssetExcelParser
         $warnings = [];
 
         for ($rowIndex = 2; $rowIndex <= $highestRow; $rowIndex++) {
-            $cell = fn (int $col) => trim((string) $sheet->getCellByColumnAndRow($col, $rowIndex)->getValue());
+            $cell = fn (int $col) => trim((string) $sheet->getCell([$col, $rowIndex])->getValue());
             $standardName = $cell(1);
             if ($standardName === '' && $cell(2) === '' && $cell(5) === '') {
                 continue;

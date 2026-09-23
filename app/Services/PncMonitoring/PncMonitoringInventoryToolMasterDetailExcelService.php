@@ -147,7 +147,7 @@ final class PncMonitoringInventoryToolMasterDetailExcelService
         for ($rowIndex = 2; $rowIndex <= $highestRow; $rowIndex++) {
             $values = [];
             foreach ($config['fields'] as $colIndex => $field) {
-                $values[$field] = trim((string) $sheet->getCellByColumnAndRow($colIndex + 1, $rowIndex)->getValue());
+                $values[$field] = trim((string) $sheet->getCell([$colIndex + 1, $rowIndex])->getValue());
             }
             if ($values[$primaryField] === '') {
                 continue;

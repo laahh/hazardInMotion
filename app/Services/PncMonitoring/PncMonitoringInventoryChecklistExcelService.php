@@ -73,8 +73,8 @@ final class PncMonitoringInventoryChecklistExcelService
         $warnings = [];
 
         for ($rowIndex = 2; $rowIndex <= $highestRow; $rowIndex++) {
-            $komponen = trim((string) $sheet->getCellByColumnAndRow(2, $rowIndex)->getValue());
-            $kriteria = trim((string) $sheet->getCellByColumnAndRow(3, $rowIndex)->getValue());
+            $komponen = trim((string) $sheet->getCell([2, $rowIndex])->getValue());
+            $kriteria = trim((string) $sheet->getCell([3, $rowIndex])->getValue());
             if ($komponen === '') {
                 continue;
             }

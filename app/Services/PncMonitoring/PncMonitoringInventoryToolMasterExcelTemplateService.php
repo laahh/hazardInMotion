@@ -9,6 +9,7 @@ use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -48,6 +49,10 @@ final class PncMonitoringInventoryToolMasterExcelTemplateService
         }
         $sheet->getColumnDimension('B')->setWidth(30);
         $sheet->getColumnDimension('D')->setWidth(35);
+
+        // Format kolom Kode Kategori sebagai Teks — kalau tidak, Excel akan menghilangkan
+        // angka nol di depan (mis. "001" tersimpan jadi angka 1) saat diisi manual.
+        $sheet->getStyle('A2:A1000')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
 
         $codes = PncMonitoringInventoryCategory::query()->orderBy('code')->pluck('code')->all();
         if ($codes !== []) {
