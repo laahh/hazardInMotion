@@ -97,6 +97,35 @@ final class PncMonitoringIkkDashboardAssembler
     }
 
     /**
+     * Daftar IKK terbaru (campuran comply & tidak comply), untuk tabel ringkasan.
+     *
+     * @param  array{year?:string,site?:string}  $filters
+     * @return list<array{nomor:string,jenis:?string,site:?string,perusahaan:?string,tanggal:?string,comply:bool}>
+     */
+    public function recentRecords(array $filters, int $limit = 10): array
+    {
+        $normalized = $this->normalizeFilters($filters);
+        $cacheKey = 'pnc_monitoring_ikk_recent_'.md5((string) json_encode($normalized).$limit);
+
+        return Cache::remember($cacheKey, 45, function () use ($normalized, $limit): array {
+            $rows = $this->baseQuery($normalized)
+                ->orderByDesc('tanggal')
+                ->orderByDesc('id')
+                ->limit($limit)
+                ->get(['nomor', 'jenis', 'site', 'perusahaan', 'tanggal', 'ipk']);
+
+            return $rows->map(fn (PncMonitoringIkkRecord $r): array => [
+                'nomor' => $r->nomor,
+                'jenis' => $r->jenis,
+                'site' => $r->site,
+                'perusahaan' => $r->perusahaan,
+                'tanggal' => $r->tanggal?->format('d M Y'),
+                'comply' => (int) $r->ipk === 1,
+            ])->all();
+        });
+    }
+
+    /**
      * Data mentah per hari untuk chart & KPI filter Mingguan/Bulanan/Tahunan di sisi
      * client (Total IKK, IPK, OKK IKK Aktif/IA, OKK Layer 1, OKK Layer 2 Up).
      * Minggu dihitung Minggu→Sabtu di JS.

@@ -377,13 +377,13 @@
                 </div>
             </div>
         </div>
-        <div class="col-xxl-6">
+        <div class="col-xxl-12">
           <div class="card h-100">
               <div class="card-body p-24">
                   <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between mb-20">
-                      <h6 class="mb-2 fw-bold text-lg mb-0">Top Selling Product</h6>
-                      <a href="javascript:void(0)" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
-                          View All
+                      <h6 class="mb-2 fw-bold text-lg mb-0">Data IKK Terbaru</h6>
+                      <a href="{{ route('pnc-monitoring.ikk-records.index') }}" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
+                          Lihat Semua
                           <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
                       </a>
                   </div>
@@ -391,199 +391,35 @@
                       <table class="table bordered-table mb-0">
                         <thead>
                             <tr>
-                              <th scope="col">Items</th>
-                              <th scope="col">Price</th>
-                              <th scope="col">Discount </th>
-                              <th scope="col">Sold</th>
-                              <th scope="col" class="text-center">Total Orders</th>
+                              <th scope="col">Nomor IKK</th>
+                              <th scope="col">Jenis</th>
+                              <th scope="col">Site</th>
+                              <th scope="col">Perusahaan</th>
+                              <th scope="col">Tanggal</th>
+                              <th scope="col" class="text-center">Status</th>
                             </tr>
                         </thead>
                         <tbody>
+                            @forelse ($payload['ikk']['recent'] ?? [] as $rec)
                             <tr>
-                              <td>
-                                  <div class="d-flex align-items-center">
-                                      <img src="{{ asset('wowdash-admin/assets/images/product/product-img1.png') }}" alt="" class="flex-shrink-0 me-12 radius-8 me-12">
-                                      <div class="flex-grow-1">
-                                        <h6 class="text-md mb-0 fw-normal">Blue t-shirt</h6>
-                                        <span class="text-sm text-secondary-light fw-normal">Fashion</span>
-                                      </div>
-                                  </div>
-                              </td>
-                              <td>$500.00</td>
-                              <td>15%</td> 
-                              <td>300</td>
-                              <td class="text-center"> 
-                                <span class="bg-success-focus text-success-main px-32 py-4 rounded-pill fw-medium text-sm">70</span> 
+                              <td><span class="text-secondary-light fw-semibold">{{ $rec['nomor'] }}</span></td>
+                              <td>{{ $rec['jenis'] ?? '-' }}</td>
+                              <td>{{ $rec['site'] ?? '-' }}</td>
+                              <td>{{ $rec['perusahaan'] ?? '-' }}</td>
+                              <td>{{ $rec['tanggal'] ?? '-' }}</td>
+                              <td class="text-center">
+                                @if ($rec['comply'])
+                                  <span class="bg-success-focus text-success-main px-32 py-4 rounded-pill fw-medium text-sm">Comply</span>
+                                @else
+                                  <span class="bg-danger-focus text-danger-main px-24 py-4 rounded-pill fw-medium text-sm">Tidak Comply</span>
+                                @endif
                               </td>
                             </tr>
+                            @empty
                             <tr>
-                              <td>
-                                  <div class="d-flex align-items-center">
-                                      <img src="{{ asset('wowdash-admin/assets/images/product/product-img2.png') }}" alt="" class="flex-shrink-0 me-12 radius-8 me-12">
-                                      <div class="flex-grow-1">
-                                        <h6 class="text-md mb-0 fw-normal">Nike Air Shoe</h6>
-                                        <span class="text-sm text-secondary-light fw-normal">Fashion</span>
-                                      </div>
-                                  </div>
-                              </td>
-                              <td>$150.00</td>
-                              <td>N/A</td> 
-                              <td>200</td>
-                              <td class="text-center"> 
-                                <span class="bg-success-focus text-success-main px-32 py-4 rounded-pill fw-medium text-sm">70</span> 
-                              </td>
+                              <td colspan="6" class="text-center text-secondary-light py-24">Belum ada data IKK.</td>
                             </tr>
-                            <tr>
-                              <td>
-                                  <div class="d-flex align-items-center">
-                                      <img src="{{ asset('wowdash-admin/assets/images/product/product-img3.png') }}" alt="" class="flex-shrink-0 me-12 radius-8 me-12">
-                                      <div class="flex-grow-1">
-                                        <h6 class="text-md mb-0 fw-normal">Woman Dresses</h6>
-                                        <span class="text-sm text-secondary-light fw-normal">Fashion</span>
-                                      </div>
-                                  </div>
-                              </td>
-                              <td>$300.00</td>
-                              <td>$50.00</td> 
-                              <td>1500</td>
-                              <td class="text-center"> 
-                                <span class="bg-success-focus text-success-main px-32 py-4 rounded-pill fw-medium text-sm">70</span> 
-                              </td>
-                            </tr>
-                            <tr>
-                              <td>
-                                  <div class="d-flex align-items-center">
-                                      <img src="{{ asset('wowdash-admin/assets/images/product/product-img4.png') }}" alt="" class="flex-shrink-0 me-12 radius-8 me-12">
-                                      <div class="flex-grow-1">
-                                        <h6 class="text-md mb-0 fw-normal">Smart Watch</h6>
-                                        <span class="text-sm text-secondary-light fw-normal">Fashion</span>
-                                      </div>
-                                  </div>
-                              </td>
-                              <td>$400.00</td>
-                              <td>$50.00</td> 
-                              <td>700</td>
-                              <td class="text-center"> 
-                                <span class="bg-success-focus text-success-main px-32 py-4 rounded-pill fw-medium text-sm">70</span> 
-                              </td>
-                            </tr>
-                            <tr>
-                              <td>
-                                  <div class="d-flex align-items-center">
-                                      <img src="{{ asset('wowdash-admin/assets/images/product/product-img5.png') }}" alt="" class="flex-shrink-0 me-12 radius-8 me-12">
-                                      <div class="flex-grow-1">
-                                        <h6 class="text-md mb-0 fw-normal">Hoodie Rose</h6>
-                                        <span class="text-sm text-secondary-light fw-normal">Fashion</span>
-                                      </div>
-                                  </div>
-                              </td>
-                              <td>$300.00</td>
-                              <td>25%</td> 
-                              <td>500</td>
-                              <td class="text-center"> 
-                                <span class="bg-success-focus text-success-main px-32 py-4 rounded-pill fw-medium text-sm">70</span> 
-                              </td>
-                            </tr>
-                        </tbody>
-                      </table>
-                  </div>
-              </div>
-          </div>
-        </div>
-        <div class="col-xxl-6">
-          <div class="card h-100">
-              <div class="card-body p-24">
-                  <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between mb-20">
-                      <h6 class="mb-2 fw-bold text-lg mb-0">Stock Report</h6>
-                      <a href="javascript:void(0)" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1">
-                          View All
-                          <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
-                      </a>
-                  </div>
-                  <div class="table-responsive scroll-sm">
-                      <table class="table bordered-table mb-0">
-                        <thead>
-                            <tr>
-                              <th scope="col">Items</th>
-                              <th scope="col">Price</th>
-                              <th scope="col">
-                                <div class="max-w-112 mx-auto">
-                                  <span>Stock</span>
-                                </div>
-                              </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                              <td>Nike Air Shoes</td>
-                              <td>$500.00</td>
-                              <td> 
-                                <div class="max-w-112 mx-auto">
-                                  <div class="w-100">
-                                    <div class="progress progress-sm rounded-pill" role="progressbar" aria-label="Success example" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
-                                      <div class="progress-bar bg-primary-600 rounded-pill" style="width: 0%;"></div>
-                                    </div>
-                                  </div>
-                                  <span class="mt-12 text-secondary-light text-sm fw-medium">Out of Stock</span>                                
-                                </div>
-                              </td>
-                            </tr>
-                            <tr>
-                              <td>Nike Air Shoes</td>
-                              <td>$300.00</td>
-                              <td> 
-                                <div class="max-w-112 mx-auto">
-                                  <div class="w-100">
-                                    <div class="progress progress-sm rounded-pill" role="progressbar" aria-label="Success example" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
-                                      <div class="progress-bar bg-danger-main rounded-pill" style="width: 40%;"></div>
-                                    </div>
-                                  </div>
-                                  <span class="mt-12 text-secondary-light text-sm fw-medium">18 Low Stock</span>                                
-                                </div>
-                              </td>
-                            </tr>
-                            <tr>
-                              <td>Nike Air Shoes</td>
-                              <td>$500.00</td>
-                              <td> 
-                                <div class="max-w-112 mx-auto">
-                                  <div class="w-100">
-                                    <div class="progress progress-sm rounded-pill" role="progressbar" aria-label="Success example" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
-                                      <div class="progress-bar bg-success-main rounded-pill" style="width: 80%;"></div>
-                                    </div>
-                                  </div>
-                                  <span class="mt-12 text-secondary-light text-sm fw-medium">80 High Stock</span>                                
-                                </div>
-                              </td>
-                            </tr>
-                            <tr>
-                              <td>Nike Air Shoes</td>
-                              <td>$300.00</td>
-                              <td> 
-                                <div class="max-w-112 mx-auto">
-                                  <div class="w-100">
-                                    <div class="progress progress-sm rounded-pill" role="progressbar" aria-label="Success example" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
-                                      <div class="progress-bar bg-success-main rounded-pill" style="width: 50%;"></div>
-                                    </div>
-                                  </div>
-                                  <span class="mt-12 text-secondary-light text-sm fw-medium">50 High Stock</span>                                
-                                </div>
-                              </td>
-                            </tr>
-                            <tr>
-                              <td>Nike Air Shoes</td>
-                              <td>$150.00</td>
-                              <td> 
-                                <div class="max-w-112 mx-auto">
-                                  <div class="w-100">
-                                    <div class="progress progress-sm rounded-pill" role="progressbar" aria-label="Success example" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
-                                      <div class="progress-bar bg-success-main rounded-pill" style="width: 70%;"></div>
-                                    </div>
-                                  </div>
-                                  <span class="mt-12 text-secondary-light text-sm fw-medium">70 High Stock</span>                                
-                                </div>
-                              </td>
-                            </tr>
+                            @endforelse
                         </tbody>
                       </table>
                   </div>
