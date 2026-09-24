@@ -633,8 +633,8 @@
         '</tr>';
     }).join('') || '<tr><td colspan="7" class="text-center text-secondary-light py-5">Tidak ada karyawan pada kombinasi filter ini.</td></tr>';
 
-    els.tableBody.querySelectorAll('tr[data-id]').forEach(function (tr) {
-      tr.addEventListener('click', function () { state.selectedId = tr.getAttribute('data-id'); renderTable(); renderDetail(); });
+    els.tableBody.querySelectorAll('tr[data-id]').forEach(function (tr, idx) {
+      tr.addEventListener('click', function () { state.selectedId = pg[idx].id; renderTable(); renderDetail(); });
     });
 
     var pages = Math.max(1, Math.ceil(VIEW.length / state.pageSize));
