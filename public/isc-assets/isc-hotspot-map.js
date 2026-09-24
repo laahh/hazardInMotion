@@ -3983,6 +3983,9 @@
 
   function hazardReportDetailHtml(row) {
     var rows = [];
+    if (row.nama_pelapor || row.sid_pelapor) {
+      rows.push(["Pelapor", [row.nama_pelapor, row.sid_pelapor, row.jabatan_pelapor].filter(Boolean).join(" · ")]);
+    }
     if (row.perusahaan) {
       rows.push(["Perusahaan", row.perusahaan]);
     }
@@ -4021,7 +4024,10 @@
   }
 
   function hazardReportCardHtml(row, i) {
-    var meta = [row.sid_pelapor, row.site, row.lokasi, row.ketidaksesuaian]
+    // Nama di kartu = orang yang MELANGGAR (row.violator_name, dari event
+    // Besigma terkait), BUKAN nama pelapor — sengaja tidak fallback ke
+    // nama/SID pelapor supaya tidak tertukar.
+    var meta = [row.violator_sid, row.site, row.lokasi, row.ketidaksesuaian]
       .filter(Boolean)
       .join(" · ");
     var when = formatWhen(row.created_at) || "";
@@ -4029,7 +4035,7 @@
       "<article class=\"gm-hud-card gm-task\" data-hr-id=\"" + row.id + "\" style=\"animation-delay:" + (0.06 + i * 0.03) + "s\">" +
       "<button type=\"button\" class=\"gm-task-head\">" +
       "<span class=\"gm-pin people\">" + pinSvg() + "</span>" +
-      "<span class=\"copy\"><b>" + esc(row.nama_pelapor || row.sid_pelapor || "Laporan #" + row.id) + "</b>" +
+      "<span class=\"copy\"><b>" + esc(row.violator_name || "Laporan #" + row.id) + "</b>" +
       "<span class=\"meta\">" + esc(meta) + (when ? " · " + esc(when) : "") + "</span></span>" +
       hazardReportStatusTag(row) +
       "</button>" +

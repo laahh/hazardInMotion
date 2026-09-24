@@ -663,7 +663,20 @@
             <label>Ketidaksesuaian<input type="text" name="ketidaksesuaian" id="gm-hazard-ketidaksesuaian" maxlength="255"></label>
             <label>Sub Ketidaksesuaian<input type="text" name="sub_ketidaksesuaian" id="gm-hazard-sub-ketidaksesuaian" maxlength="255"></label>
           </div>
-          <label>Quick Action<input type="text" name="quick_action" maxlength="255"></label>
+          <label>Quick Action
+            <select name="quick_action" id="gm-hazard-quick-action">
+              <option value="">Pilih quick action</option>
+              <option value="Atur kecepatan dan jarak">Atur kecepatan dan jarak</option>
+              <option value="Coaching">Coaching</option>
+              <option value="Fatigue Test">Fatigue Test</option>
+              <option value="Komunikasi 2 arah">Komunikasi 2 arah</option>
+              <option value="Parkir Fatigue">Parkir Fatigue</option>
+              <option value="Pekerjaan dilanjutkan setelah perbaikan langsung.">Pekerjaan dilanjutkan setelah perbaikan langsung.</option>
+              <option value="STOP Pekerjaan">STOP Pekerjaan</option>
+              <option value="STOP pekerjaan sampai temuan diperbaiki">STOP pekerjaan sampai temuan diperbaiki</option>
+              <option value="Tidak diperlukan intervensi">Tidak diperlukan intervensi</option>
+            </select>
+          </label>
           <label>Deskripsi Temuan<textarea name="deskripsi_temuan" id="gm-hazard-deskripsi" rows="5" maxlength="5000" placeholder="Terisi otomatis dari pelanggaran BeSigma"></textarea></label>
         </section>
 

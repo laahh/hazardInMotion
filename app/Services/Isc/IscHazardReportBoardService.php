@@ -123,6 +123,11 @@ final class IscHazardReportBoardService
             'lng' => $hasPoint ? (float) $lng : null,
             'has_point' => $hasPoint,
             'show_url' => $report->event_id ? route('isc.interventions.show', $report->event_id) : null,
+            // Orang yang MELANGGAR (dari event Besigma terkait) — ini yang
+            // dipakai sebagai nama utama di kartu, BUKAN nama_pelapor.
+            'violator_name' => $report->event?->name,
+            'violator_sid' => $report->event?->sid,
+            'violator_company' => $report->event?->company,
             'perusahaan' => $report->perusahaan,
             'site' => $report->site,
             'lokasi' => $report->lokasi,
