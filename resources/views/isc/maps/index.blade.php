@@ -655,10 +655,10 @@
             <span class="gm-hazard-hint" id="gm-hazard-foto-status"></span>
             <img id="gm-hazard-foto-preview" class="gm-hazard-foto-preview" alt="Preview foto jejak GPS" hidden>
           </label>
-          <label class="gm-hazard-check">
+          {{-- <label class="gm-hazard-check">
             <input type="checkbox" name="is_observasi_area_kritis" value="1">
             Apakah laporan berkaitan dengan Observasi Area Kritis?
-          </label>
+          </label> --}}
           <div class="gm-hazard-grid">
             <label>Ketidaksesuaian<input type="text" name="ketidaksesuaian" id="gm-hazard-ketidaksesuaian" maxlength="255"></label>
             <label>Sub Ketidaksesuaian<input type="text" name="sub_ketidaksesuaian" id="gm-hazard-sub-ketidaksesuaian" maxlength="255"></label>
