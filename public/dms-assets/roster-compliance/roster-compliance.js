@@ -301,19 +301,52 @@
   /* ---------------------------------------------------------------------
    * Boot
    * ------------------------------------------------------------------- */
+  var INCIDENTS = [];
+  var INCIDENTS_BY_SID = {};
+  var INCIDENTS_UNMATCHED = [];
+
   Promise.all([
     fetch(ASSET_BASE + '/data.json').then(function (r) { if (!r.ok) throw new Error('data.json ' + r.status); return r.json(); }),
     fetch(ASSET_BASE + '/jabcat.json').then(function (r) { if (!r.ok) throw new Error('jabcat.json ' + r.status); return r.json(); }),
+    fetch(ASSET_BASE + '/incidents.json').then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; }),
   ]).then(function (res) {
     D = res[0]; JABCAT = res[1]; NDAY = D.dISO.length;
     state.r0 = 0; state.r1 = NDAY - 1;
     ALERT_UNTIL = D.dISO[NDAY - 1];
+    indexIncidents(res[2] || []);
     boot();
   }).catch(function (e) {
     console.error(e);
     if (els.loading) els.loading.classList.add('d-none');
     if (els.error) els.error.classList.remove('d-none');
   });
+
+  /**
+   * Cocokkan insiden ke karyawan roster lewat NPK == kode SID (satu-satunya
+   * kunci yang bisa dipertemukan di snapshot ini). NPK ("Nomor Pokok
+   * Karyawan") pada sistem asal BISA berbeda dari kode SID (kartu akses
+   * gate) — jadi sebagian insiden wajar tidak ketemu (lihat kartu "Insiden
+   * Belum Terhubung"), bukan berarti insidennya hilang / dibuang diam-diam.
+   */
+  function indexIncidents(list) {
+    var sidSet = {};
+    D.order.forEach(function (co) {
+      var c = D.companies[co];
+      for (var site in c.sites) c.sites[site].forEach(function (r) { sidSet[String(r[0]).toUpperCase().trim()] = true; });
+    });
+
+    INCIDENTS = list;
+    INCIDENTS_BY_SID = {};
+    INCIDENTS_UNMATCHED = [];
+    list.forEach(function (inc) {
+      var key = String(inc.npk || '').toUpperCase().trim();
+      if (key && sidSet[key]) {
+        (INCIDENTS_BY_SID[key] = INCIDENTS_BY_SID[key] || []).push(inc);
+      } else {
+        INCIDENTS_UNMATCHED.push(inc);
+      }
+    });
+  }
 
   function boot() {
     els.loading.classList.add('d-none');
@@ -322,6 +355,7 @@
 
     renderCoPills();
     fillPeriodSelect();
+    renderUnmatchedIncidents();
     wireEvents();
     recompute();
   }
@@ -369,6 +403,7 @@
           c.sites[site].forEach(function (r) {
             var o = compute(r[0], r[1], r[2], r[3], c, state.r0, state.r1);
             o.co = co; o.site = site; o.id = r[4];
+            o.incidents = INCIDENTS_BY_SID[String(r[0]).toUpperCase().trim()] || [];
             out.push(o);
           });
         }
@@ -381,6 +416,7 @@
         c2.sites[site2].forEach(function (r) {
           var o = compute(r[0], r[1], r[2], r[3], c2, state.r0, state.r1);
           o.co = state.co; o.site = site2; o.id = r[4];
+          o.incidents = INCIDENTS_BY_SID[String(r[0]).toUpperCase().trim()] || [];
           out.push(o);
         });
       }
@@ -624,7 +660,7 @@
       var upperSid = (r.sid || '').toUpperCase();
       return '<tr class="' + (r.id === state.selectedId ? 'is-selected' : '') + '" data-id="' + escapeHtml(r.id) + '">' +
         '<td class="fw-medium">' + escapeHtml(r.sid) + '</td>' +
-        '<td class="rk-col-name" title="' + escapeHtml(r.nama + ' — ' + r.jab + ' · ' + r.co + ' ' + r.site) + '"><span class="rk-name">' + escapeHtml(r.nama) + '</span><span class="rk-sub">' + escapeHtml(r.jab) + ' &middot; ' + escapeHtml(r.co) + ' ' + escapeHtml(r.site) + '</span></td>' +
+        '<td class="rk-col-name" title="' + escapeHtml(r.nama + ' — ' + r.jab + ' · ' + r.co + ' ' + r.site) + '"><span class="rk-name">' + escapeHtml(r.nama) + (r.incidents.length ? ' <iconify-icon icon="solar:siren-bold" class="text-danger-600" title="Pernah tercatat insiden"></iconify-icon>' : '') + '</span><span class="rk-sub">' + escapeHtml(r.jab) + ' &middot; ' + escapeHtml(r.co) + ' ' + escapeHtml(r.site) + '</span></td>' +
         '<td class="text-center">' + r.roster + '</td>' +
         '<td class="text-center">' + r.onAll + (r.onAll > 71 && !r.longgar ? ' <span class="rk-flag-red">⚠</span>' : '') + '</td>' +
         '<td class="text-center">' + r.cutiMin + (r.cutiMin && r.cutiMin < 12 && !r.longgar ? ' <span class="rk-flag-red">⚠</span>' : '') + '</td>' +
@@ -664,6 +700,53 @@
       '<div class="rk-heat-ruler">' + ruler + '</div>' +
       '<div class="rk-heat-strip">' + days + '</div>' +
       '</div></div>';
+  }
+
+  var INCIDENT_KATEGORI_META = {
+    'Nearmiss': 'bg-warning-100 text-warning-600',
+    'Property Damage': 'bg-neutral-200 text-neutral-600',
+    'Medical Treatment Injury': 'bg-danger-100 text-danger-600',
+  };
+  function fmtIncidentDate(iso) {
+    var dt = new Date(iso + 'T00:00:00Z');
+    return dt.getUTCDate() + ' ' + MON_LONG[dt.getUTCMonth()] + ' ' + dt.getUTCFullYear();
+  }
+  function incidentHtml(r) {
+    if (!r.incidents.length) return '';
+    return '<div class="mb-16"><h6 class="text-sm fw-semibold text-danger-600 text-uppercase mb-8"><iconify-icon icon="solar:siren-bold" class="align-middle me-1"></iconify-icon>Riwayat Insiden (' + r.incidents.length + ')</h6>' +
+      '<div class="d-flex flex-column gap-2">' + r.incidents.map(function (inc) {
+        var kcls = INCIDENT_KATEGORI_META[inc.kategori] || 'bg-neutral-200 text-neutral-600';
+        return '<div class="border border-danger-100 rounded-8 px-12 py-10 text-sm">' +
+          '<div class="d-flex align-items-center justify-content-between gap-2 mb-4">' +
+          '<span class="fw-semibold">' + escapeHtml(inc.no) + ' &middot; ' + fmtIncidentDate(inc.tanggalIso) + '</span>' +
+          '<span class="' + kcls + ' px-8 py-2 rounded-pill text-xs fw-medium">' + escapeHtml(inc.kategori) + '</span>' +
+          '</div>' +
+          '<div class="text-secondary-light text-xs mb-4">' + escapeHtml(inc.lokasi) + (inc.sublokasi ? ' · ' + escapeHtml(inc.sublokasi) : '') + ' &middot; ' + escapeHtml(inc.alat) + ' &middot; ' + escapeHtml(inc.shift) + ' (' + escapeHtml(inc.jam) + ')</div>' +
+          '<div>' + escapeHtml(inc.kronologis) + '</div>' +
+          '</div>';
+      }).join('') + '</div></div>';
+  }
+
+  /** Insiden yang NPK-nya tidak cocok dengan kode SID mana pun di snapshot roster ini. */
+  function renderUnmatchedIncidents() {
+    var wrap = document.getElementById('rkUnmatchedIncidentsWrap');
+    var body = document.getElementById('rkUnmatchedIncidents');
+    if (!wrap || !body) return;
+    if (!INCIDENTS_UNMATCHED.length) { wrap.classList.add('d-none'); return; }
+    wrap.classList.remove('d-none');
+    document.getElementById('rkUnmatchedCount').textContent = INCIDENTS_UNMATCHED.length;
+    body.innerHTML = INCIDENTS_UNMATCHED.map(function (inc) {
+      var kcls = INCIDENT_KATEGORI_META[inc.kategori] || 'bg-neutral-200 text-neutral-600';
+      return '<div class="border rounded-8 px-14 py-12 text-sm">' +
+        '<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-6">' +
+        '<span class="fw-semibold">' + escapeHtml(inc.no) + ' &middot; ' + fmtIncidentDate(inc.tanggalIso) + '</span>' +
+        '<span class="' + kcls + ' px-8 py-2 rounded-pill text-xs fw-medium">' + escapeHtml(inc.kategori) + '</span>' +
+        '</div>' +
+        '<div class="mb-4"><b>' + escapeHtml(inc.nama) + '</b> <span class="text-secondary-light">&middot; ' + escapeHtml(inc.jabatan) + ' &middot; ' + escapeHtml(inc.perusahaan) + ' ' + escapeHtml(inc.site) + ' &middot; NPK ' + escapeHtml(inc.npk) + '</span></div>' +
+        '<div class="text-secondary-light text-xs mb-4">' + escapeHtml(inc.lokasi) + (inc.sublokasi ? ' · ' + escapeHtml(inc.sublokasi) : '') + ' &middot; ' + escapeHtml(inc.alat) + '</div>' +
+        '<div class="text-sm">' + escapeHtml(inc.kronologis) + '</div>' +
+        '</div>';
+    }).join('');
   }
 
   function flagList(r) {
@@ -712,6 +795,7 @@
       (r.cats.red ? '<div class="alert-danger bg-danger-100 text-danger-600 border-danger-100 border px-14 py-10 rounded-8 mb-16 text-sm"><iconify-icon icon="solar:danger-triangle-bold" class="icon me-1 align-middle"></iconify-icon><b>Ada pelanggaran regulasi</b> pada rentang yang ditampilkan — lihat daftar flag di bawah.</div>' :
         (r.cats.map ? '<div class="alert-warning bg-warning-100 text-warning-600 border-warning-100 border px-14 py-10 rounded-8 mb-16 text-sm"><iconify-icon icon="solar:shield-warning-bold" class="icon me-1 align-middle"></iconify-icon>Ada pola tidak sesuai mapping shift pada rentang ini (peringatan).</div>' :
           '<div class="alert-success bg-success-100 text-success-600 border-success-100 border px-14 py-10 rounded-8 mb-16 text-sm"><iconify-icon icon="solar:check-circle-bold" class="icon me-1 align-middle"></iconify-icon>Tidak ada flag pada rentang ini.</div>')) +
+      incidentHtml(r) +
       '<div class="row g-2 mb-16">' + stats.map(function (s) {
         var bad = /rk-flag-red/.test(s[1]);
         return '<div class="col-6"><div class="rk-stat-mini' + (bad ? ' is-bad' : '') + '"><div class="k">' + s[0] + '</div><div class="v">' + s[1] + '</div></div></div>';

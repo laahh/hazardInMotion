@@ -175,6 +175,14 @@
     </div>
   </div>
 
+  <div class="card radius-8 border mt-24 d-none" id="rkUnmatchedIncidentsWrap">
+    <div class="card-header border-bottom bg-transparent">
+      <h6 class="text-lg mb-0">Insiden Belum Terhubung ke Data Roster (<span id="rkUnmatchedCount">0</span>)</h6>
+      <span class="text-secondary-light text-sm">NPK pada catatan insiden ini tidak cocok dengan kode SID mana pun di snapshot roster &mdash; kemungkinan NPK (nomor pokok karyawan) berbeda dari kode SID (kartu akses gate), atau jabatannya di luar populasi roster (Operator/Driver/Mekanik lapangan). Ditampilkan tetap di sini supaya datanya tidak hilang.</span>
+    </div>
+    <div class="card-body d-flex flex-column gap-2" id="rkUnmatchedIncidents"></div>
+  </div>
+
   <div class="card radius-8 border mt-24">
     <div class="card-header border-bottom bg-transparent">
       <h6 class="text-lg mb-0">Parameter per Kontraktor</h6>
