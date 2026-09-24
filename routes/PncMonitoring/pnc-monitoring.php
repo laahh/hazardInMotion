@@ -8,6 +8,7 @@ use App\Http\Controllers\PncMonitoring\PncMonitoringIkkRecordController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringInventoryCategoryController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringInventoryCompanyController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringInventoryDashboardController;
+use App\Http\Controllers\PncMonitoring\PncMonitoringInventoryInspectionAppController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringInventoryToolAssetController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringInventoryToolMasterController;
 use App\Http\Controllers\PncMonitoring\PncMonitoringMainDashboardController;
@@ -98,6 +99,14 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/{inventoryToolMaster}/detail-import/{section}', [PncMonitoringInventoryToolMasterController::class, 'detailImport'])->whereNumber('inventoryToolMaster')->name('detail-import');
         Route::post('/{inventoryToolMaster}/image', [PncMonitoringInventoryToolMasterController::class, 'updateImage'])->whereNumber('inventoryToolMaster')->name('image.update');
         Route::delete('/{inventoryToolMaster}/image', [PncMonitoringInventoryToolMasterController::class, 'destroyImage'])->whereNumber('inventoryToolMaster')->name('image.destroy');
+    });
+
+    Route::prefix('inventory-inspection')->name('inventory-inspection.')->group(function (): void {
+        Route::get('/', [PncMonitoringInventoryInspectionAppController::class, 'home'])->name('home');
+        Route::get('/scan', [PncMonitoringInventoryInspectionAppController::class, 'scan'])->name('scan');
+        Route::get('/history', [PncMonitoringInventoryInspectionAppController::class, 'history'])->name('history');
+        Route::get('/tools/{toolMaster}', [PncMonitoringInventoryInspectionAppController::class, 'showTool'])->whereNumber('toolMaster')->name('tools.show');
+        Route::get('/tools/{toolMaster}/inspect', [PncMonitoringInventoryInspectionAppController::class, 'inspect'])->whereNumber('toolMaster')->name('tools.inspect');
     });
 
     Route::prefix('inventory-tool-assets')->name('inventory-tool-assets.')->group(function (): void {

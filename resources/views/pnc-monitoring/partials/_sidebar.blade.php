@@ -84,6 +84,11 @@
             </a>
           </li>
           <li>
+            <a href="{{ route('pnc-monitoring.inventory-inspection.home') }}" target="_blank" class="{{ request()->routeIs('pnc-monitoring.inventory-inspection.*') ? 'active-page' : '' }}">
+              <i class="ri-circle-fill circle-icon text-success-main w-auto"></i> App Inspeksi <i class="ri-external-link-line text-xs ms-4"></i>
+            </a>
+          </li>
+          <li>
             <a href="{{ route('pnc-monitoring.inventory-tool-assets.index') }}" class="{{ request()->routeIs('pnc-monitoring.inventory-tool-assets.*') ? 'active-page' : '' }}">
               <i class="ri-circle-fill circle-icon text-yellow w-auto"></i> Unit Aset
             </a>
