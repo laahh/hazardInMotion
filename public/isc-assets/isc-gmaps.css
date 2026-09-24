@@ -619,7 +619,7 @@ div.gm-hud-metric { cursor: default; }
 div.gm-hud-metric:hover { transform: none; }
 .gm-hud-violations {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 .gm-hud-violation {

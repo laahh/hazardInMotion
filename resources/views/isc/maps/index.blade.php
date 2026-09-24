@@ -159,11 +159,7 @@
             <strong id="hud-kind-employee_danger">–</strong>
             <small>Masuk batas bahaya</small>
           </button>
-          <button type="button" class="gm-hud-violation is-competence" data-roster="kind" data-kind="employee_competence">
-            <span>Kompetensi</span>
-            <strong id="hud-kind-employee_competence">–</strong>
-            <small>Batas kompetensi</small>
-          </button>
+          {{-- Card Kompetensi dihapus per permintaan user. --}}
           {{-- <button type="button" class="gm-hud-violation is-unit" data-roster="kind" data-kind="unit_danger">
             <span>Bahaya unit</span>
             <strong id="hud-kind-unit_danger">–</strong>
@@ -268,7 +264,7 @@
             </span>
             <div class="gm-hud-head">
               <p class="gm-hud-kicker">Post-event</p>
-              <p class="gm-hud-value"><b id="hud-postevent-headline">–</b> <small>orang &amp; unit</small></p>
+              <p class="gm-hud-value"><b id="hud-postevent-headline">–</b> <small>orang</small></p>
             </div>
             <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
               <path d="M2 22 C12 22 16 10 26 14 C36 18 40 8 50 12 C60 16 68 24 86 12" />
@@ -280,9 +276,10 @@
           <div class="gm-hud-sites" id="hud-postevent-kinds" role="group" aria-label="Filter jejak">
             <button type="button" class="gm-hud-site is-on" data-postevent-kind="">Semua <b id="hud-postevent-count">0</b></button>
             <button type="button" class="gm-hud-site" data-postevent-kind="person">Orang <b id="hud-postevent-people">0</b></button>
-            <button type="button" class="gm-hud-site" data-postevent-kind="unit">Unit <b id="hud-postevent-units">0</b></button>
+            {{-- Unit di-hide dulu — lihat dokumentasi di JS paintPostEventRoster() yang memfilter entity "unit" dari daftar. --}}
+            {{-- <button type="button" class="gm-hud-site" data-postevent-kind="unit">Unit <b id="hud-postevent-units">0</b></button> --}}
           </div>
-          <p class="gm-hud-foot">Cari nama, SID, atau nopol, lalu klik kartu untuk melihat jalur GPS.</p>
+          <p class="gm-hud-foot">Cari nama atau SID, lalu klik kartu untuk melihat jalur GPS.</p>
         </article>
         <div id="gm-postevent-cards" class="gm-hud-place-stack"></div>
       </div>
@@ -561,6 +558,16 @@
         </section>
 
         <section class="gm-hazard-sec">
+          <h3>Pelapor</h3>
+          <p class="gm-hazard-hint">Terisi otomatis dari SID pada bagian Akses.</p>
+          <input type="hidden" name="npk_pelapor" id="gm-hazard-pelapor-npk" value="">
+          <div class="gm-hazard-grid">
+            <label>Nama<input type="text" name="nama_pelapor" id="gm-hazard-pelapor-nama" maxlength="255" readonly></label>
+            <label>Jabatan<input type="text" name="jabatan_pelapor" id="gm-hazard-pelapor-jabatan" maxlength="255" readonly></label>
+          </div>
+        </section>
+
+        <section class="gm-hazard-sec">
           <h3>Penanggung Jawab</h3>
           <label>Perusahaan
             <select name="perusahaan" id="gm-hazard-perusahaan">
@@ -620,16 +627,6 @@
             </div>
           </label>
           <label>Keterangan Lokasi<textarea name="keterangan_lokasi" rows="2" maxlength="2000"></textarea></label>
-        </section>
-
-        <section class="gm-hazard-sec">
-          <h3>Pelapor</h3>
-          <p class="gm-hazard-hint">Terisi otomatis dari SID pada bagian Akses.</p>
-          <input type="hidden" name="npk_pelapor" id="gm-hazard-pelapor-npk" value="">
-          <div class="gm-hazard-grid">
-            <label>Nama<input type="text" name="nama_pelapor" id="gm-hazard-pelapor-nama" maxlength="255" readonly></label>
-            <label>Jabatan<input type="text" name="jabatan_pelapor" id="gm-hazard-pelapor-jabatan" maxlength="255" readonly></label>
-          </div>
         </section>
 
         <section class="gm-hazard-sec">

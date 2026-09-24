@@ -1205,7 +1205,7 @@
     } else if (railView === "postevent") {
       listMode = "all";
       if (searchInput) {
-        searchInput.placeholder = "Cari nama, SID, atau unit";
+        searchInput.placeholder = "Cari nama atau SID";
         postEventQuery = searchInput.value || "";
         query = postEventQuery;
       }
@@ -1347,14 +1347,14 @@
   }
 
   function paintPostEventRoster(payload) {
-    var entries = payload.entries || [];
-    var peopleCount = payload.people_count != null ? payload.people_count : entries.filter(function (row) { return row.entity !== "unit"; }).length;
-    var unitCount = payload.unit_count != null ? payload.unit_count : entries.filter(function (row) { return row.entity === "unit"; }).length;
-    var total = payload.count != null ? payload.count : entries.length;
+    // Unit di-hide dulu dari Post-event (permintaan user) — cuma tampilkan
+    // orang. Difilter di sini supaya postEventEntries tidak pernah berisi
+    // unit sama sekali (headline, filter pill, dan kartu ikut konsisten).
+    var entries = (payload.entries || []).filter(function (row) { return row.entity !== "unit"; });
+    var total = entries.length;
     setText("hud-postevent-headline", payload.loading ? "…" : total);
     setText("hud-postevent-count", payload.loading ? "…" : total);
-    setText("hud-postevent-people", payload.loading ? "…" : peopleCount);
-    setText("hud-postevent-units", payload.loading ? "…" : unitCount);
+    setText("hud-postevent-people", payload.loading ? "…" : total);
     var target = document.getElementById("gm-postevent-cards");
     if (!target) {
       return;
@@ -1847,10 +1847,10 @@
     setText("hud-unsafe", summary.unsafe);
     var kinds = violationKindCounts();
     setText("hud-kind-employee_danger", kinds.employee_danger);
-    setText("hud-kind-employee_competence", kinds.employee_competence);
     setText("hud-kind-unit_danger", kinds.unit_danger);
-    var violationTotal = kinds.employee_danger + kinds.employee_competence + kinds.unit_danger;
-    setText("hud-violation-total", violationTotal);
+    // "Pelanggaran aktif" = total Bahaya karyawan saja (card Kompetensi
+    // sudah dihapus dari HUD Beranda per permintaan user).
+    setText("hud-violation-total", kinds.employee_danger);
     document.querySelectorAll(".gm-hud-violation[data-kind]").forEach(function (el) {
       var kind = el.getAttribute("data-kind") || "";
       el.classList.toggle("is-hot", Number(kinds[kind] || 0) > 0);
@@ -3317,9 +3317,11 @@
         var mk = document.getElementById("gm-hazard-pja-mitra");
         if (bc && suggest.area_pja_bc && !String(bc.value || "").trim()) {
           bc.value = suggest.area_pja_bc;
+          bc.dataset.gmComboConfirmed = "1";
         }
         if (mk && suggest.area_pja_mitra && !String(mk.value || "").trim()) {
           mk.value = suggest.area_pja_mitra;
+          mk.dataset.gmComboConfirmed = "1";
         }
       })
       .catch(function () {});
@@ -3408,10 +3410,15 @@
 
       input.addEventListener("focus", fetchOptions);
       input.addEventListener("input", function () {
+        // Ketikan manual membatalkan status "sudah dipilih dari dropdown" —
+        // lihat validateHazardCombos(), yang menolak submit kalau field ini
+        // terisi tapi tidak dipilih dari daftar saran.
+        delete input.dataset.gmComboConfirmed;
         clearTargets.forEach(function (sel) {
           var target = form.querySelector(sel);
           if (target) {
             target.value = "";
+            delete target.dataset.gmComboConfirmed;
           }
         });
         fetchOptions();
@@ -3430,12 +3437,14 @@
           return;
         }
         input.value = item.label || item.value || "";
+        input.dataset.gmComboConfirmed = "1";
         hideList();
         if (input.id === "gm-hazard-lokasi") {
           clearTargets.forEach(function (sel) {
             var target = form.querySelector(sel);
             if (target) {
               target.value = "";
+              delete target.dataset.gmComboConfirmed;
             }
           });
           suggestPjaFromLokasi();
@@ -3610,9 +3619,39 @@
       });
   }
 
+  function validateHazardCombos(form) {
+    var invalid = [];
+    form.querySelectorAll("[data-gm-hazard-combo]").forEach(function (wrap) {
+      var input = wrap.querySelector("input");
+      if (!input) {
+        return;
+      }
+      var value = String(input.value || "").trim();
+      if (value === "" || input.dataset.gmComboConfirmed === "1") {
+        return;
+      }
+      var labelEl = wrap.closest("label");
+      var labelText = labelEl && labelEl.firstChild
+        ? String(labelEl.firstChild.textContent || "").trim()
+        : (input.name || "field");
+      invalid.push(labelText || (input.name || "field"));
+    });
+    return invalid;
+  }
+
   function submitHazardReport(form) {
     if (!mapsHazardReportsUrl) {
       setHazardMsg("Endpoint laporan hazard belum tersedia.", true);
+      return;
+    }
+    // Lokasi/Detail Lokasi/Area PJA harus dipilih dari dropdown saran, bukan
+    // ketikan bebas — kalau isinya belum pernah dipilih dari daftar, tolak
+    // submit di sini (client-side), sebelum sempat kirim ke server.
+    var invalidCombos = validateHazardCombos(form);
+    if (invalidCombos.length) {
+      var message = "Pilih dari daftar saran dulu untuk: " + invalidCombos.join(", ") + ".";
+      setHazardMsg(message, true);
+      toast(message);
       return;
     }
     var data = new FormData(form);
@@ -3709,14 +3748,8 @@
         ? "<div class=\"gm-task-form\">" +
           "<div class=\"gm-task-actions\">" +
           "<button type=\"button\" class=\"gm-task-hazard\">Laporan Hazard</button>" +
-          "<button type=\"button\" class=\"gm-task-trail\">Detail &amp; bukti</button>" +
-          (row.show_url ? "<a href=\"" + esc(row.show_url) + "\">Form bukti</a>" : "") +
           "</div></div>"
-        : "<div class=\"gm-task-form\">" +
-          "<div class=\"gm-task-actions\">" +
-          "<button type=\"button\" class=\"gm-task-trail\">Detail &amp; bukti</button>" +
-          (row.show_url ? "<a href=\"" + esc(row.show_url) + "\">Form bukti</a>" : "") +
-          "</div></div>";
+        : "";
       card.innerHTML =
         "<button type=\"button\" class=\"gm-task-head\">" +
         "<span class=\"gm-pin " + ((row.entity || "person") === "unit" ? "unit" : "people") + "\">" + pinSvg() + "</span>" +
@@ -3733,14 +3766,6 @@
           event.preventDefault();
           openInterventionForm(card, row);
           openHazardReport(row);
-        });
-      }
-      var trailBtn = card.querySelector(".gm-task-trail");
-      if (trailBtn) {
-        trailBtn.addEventListener("click", function (event) {
-          event.preventDefault();
-          openInterventionForm(card, row);
-          loadInterventionTrail(row);
         });
       }
       target.appendChild(card);

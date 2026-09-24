@@ -118,6 +118,7 @@ final class IscPobSnapshotService
         $checkins = $this->normalizeCheckins($rfid);
         $reconcile = $this->reconcile->execute($ever, $current, $rfid);
         unset($reconcile['ever'], $reconcile['current'], $reconcile['rfid']);
+        $reconcile = $this->applySameAsGpsAktif($reconcile);
         $reconcile = $this->applyGapRfidTanpaGps($reconcile, $checkins, $classified);
         $reconcile['installed_total'] = $this->installedUsers->total();
 
@@ -135,6 +136,25 @@ final class IscPobSnapshotService
             'people' => $classified,
             'hazard_features' => $hazards,
         ];
+    }
+
+    /**
+     * "Keduanya cocok" (both_count/both) dan "Aktif dari Install" disamakan
+     * saja dengan "GPS aktif" (current_count/current_list) — permintaan user
+     * karena irisan SID asli antara RFID & Besigma (intersect ever/rfid)
+     * dianggap membingungkan (angkanya bisa lebih kecil dari total
+     * dalam+luar boundary yang sudah tampil di kartu lain). Sekarang
+     * "Keduanya cocok" dan "Aktif dari Install" cuma cermin dari "GPS aktif".
+     *
+     * @param  array<string, mixed>  $reconcile
+     * @return array<string, mixed>
+     */
+    private function applySameAsGpsAktif(array $reconcile): array
+    {
+        $reconcile['both_count'] = $reconcile['current_count'] ?? 0;
+        $reconcile['both'] = $reconcile['current_list'] ?? [];
+
+        return $reconcile;
     }
 
     /**
@@ -248,6 +268,7 @@ final class IscPobSnapshotService
         ));
         $reconcile = $this->reconcile->execute($ever, $current, $rfidPack['people']);
         unset($reconcile['ever'], $reconcile['current'], $reconcile['rfid']);
+        $reconcile = $this->applySameAsGpsAktif($reconcile);
         $reconcile = $this->applyGapRfidTanpaGps($reconcile, $checkins, $classified);
         $reconcile['installed_total'] = $this->installedUsers->total();
 
