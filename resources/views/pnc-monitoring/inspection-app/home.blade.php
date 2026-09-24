@@ -11,6 +11,19 @@
     <p class="text-sm text-on-surface-variant mt-1.5 leading-relaxed">{{ number_format($totalTools) }} jenis alat terdaftar di katalog. Pilih alat untuk lihat panduan, checklist, dan mulai inspeksi.</p>
   </section>
 
+  <section>
+    <div class="relative w-full h-28 rounded-3xl overflow-hidden bg-gradient-to-br from-primary to-primary-dark flex items-center px-5">
+      <svg class="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 400 112" preserveAspectRatio="xMidYMax slice">
+        <path d="M0 112 L60 50 L100 85 L160 25 L210 80 L260 45 L400 112 Z" fill="white"/>
+      </svg>
+      <span class="material-symbols-outlined text-white/15 text-[110px] absolute -right-3 -bottom-5">engineering</span>
+      <div class="relative">
+        <p class="text-white font-extrabold text-base leading-tight">Kerja Aman,<br>Inspeksi Terjamin</p>
+        <p class="text-white/80 text-xs mt-1">Selalu cek alat sebelum digunakan di lapangan.</p>
+      </div>
+    </div>
+  </section>
+
   <section class="flex items-center gap-3">
     <form method="GET" class="relative flex-1">
       <span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[20px]">search</span>
@@ -28,9 +41,6 @@
   </section>
 
   <section class="overflow-x-auto no-scrollbar -mx-5">
-    @php
-      $catIcons = ['001' => 'handyman', '002' => 'precision_manufacturing', '003' => 'construction', '004' => 'conveyor_belt', '005' => 'engineering'];
-    @endphp
     <div class="flex gap-2.5 px-5">
       <a href="{{ route('pnc-monitoring.inventory-inspection.home', ['q' => $q]) }}"
          class="whitespace-nowrap flex items-center gap-1.5 px-4 py-2.5 rounded-full font-bold text-sm transition-colors {{ $categoryId === null ? 'bg-primary text-white shadow-sm' : 'bg-surface-container-lowest text-on-surface-variant border border-outline-variant/60' }}">
@@ -39,7 +49,7 @@
       @foreach ($categories as $cat)
         <a href="{{ route('pnc-monitoring.inventory-inspection.home', ['q' => $q, 'category_id' => $cat->category_id]) }}"
            class="whitespace-nowrap flex items-center gap-1.5 px-4 py-2.5 rounded-full font-semibold text-sm transition-colors {{ (int) $categoryId === $cat->category_id ? 'bg-primary text-white shadow-sm' : 'bg-surface-container-lowest text-on-surface-variant border border-outline-variant/60' }}">
-          <span class="material-symbols-outlined text-[16px]">{{ $catIcons[$cat->code] ?? 'category' }}</span>{{ $cat->name }}
+          <span class="material-symbols-outlined text-[16px]">build</span>{{ $cat->name }}
         </a>
       @endforeach
     </div>
@@ -50,7 +60,9 @@
       <h2 class="text-base font-extrabold tracking-tight flex items-center gap-1.5">
         <span class="w-1.5 h-4 bg-primary rounded-full inline-block"></span>Daftar Alat
       </h2>
-      <span class="text-xs font-bold text-primary">{{ $tools->count() }} alat</span>
+      <a href="{{ route('pnc-monitoring.inventory-inspection.home', ['q' => $q]) }}" class="text-xs font-bold text-primary flex items-center gap-0.5">
+        Lihat Semua <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+      </a>
     </div>
 
     @if ($tools->isNotEmpty())

@@ -31,9 +31,9 @@
   <section class="grid grid-cols-3 gap-2.5">
     @php
       $badges = [
-        ['icon' => 'shield', 'label' => $tool->criticality ?? 'Standar'],
-        ['icon' => 'speed', 'label' => $tool->risk_class ?? 'Normal'],
-        ['icon' => $tool->is_regulated ? 'verified' : 'eco', 'label' => $tool->is_regulated ? 'Regulasi' : 'Umum'],
+        ['icon' => 'shield', 'label' => 'Aman'],
+        ['icon' => 'settings', 'label' => 'Efisien'],
+        ['icon' => 'eco', 'label' => 'Andal'],
       ];
     @endphp
     @foreach ($badges as $badge)
@@ -45,6 +45,17 @@
   </section>
 
   <section class="bg-surface-container-lowest rounded-[2rem] p-4 shadow-sm border border-outline-variant/40">
+
+    <div class="flex items-start justify-between gap-2 pb-4 mb-4 border-b border-outline-variant/50">
+      <div class="min-w-0">
+        <h2 class="font-extrabold text-on-surface truncate">{{ $tool->standard_name }}</h2>
+        <p class="text-xs text-on-surface-variant mt-0.5">{{ $tool->category?->name ?? 'Umum' }}</p>
+        @if ($tool->main_function)
+          <p class="text-sm text-on-surface-variant mt-2 leading-relaxed">{{ $tool->main_function }}</p>
+        @endif
+      </div>
+      <span class="material-symbols-outlined text-on-surface-variant shrink-0">chevron_right</span>
+    </div>
 
     <div class="flex items-center gap-2 mb-4">
       <span class="inline-flex items-center gap-1.5 text-xs font-bold text-on-surface-variant bg-surface-container px-3 py-1.5 rounded-full">
@@ -87,13 +98,22 @@
             <span class="w-7 h-7 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center shrink-0">{{ $step }}</span>
             <h3 class="font-bold text-on-surface text-sm">Fungsi Detail</h3>
           </div>
-          <div class="bg-surface-container-low rounded-2xl p-3 space-y-2.5">
-            @foreach ($tool->functions as $fn)
-              <div class="flex items-start gap-2">
-                <span class="material-symbols-outlined text-primary text-[16px] mt-0.5">task_alt</span>
-                <p class="text-sm text-on-surface leading-snug">{{ $fn->description }}</p>
-              </div>
-            @endforeach
+          <div class="bg-surface-container-low rounded-2xl p-3 space-y-3">
+            <div class="h-32 w-full rounded-xl overflow-hidden bg-gradient-to-br from-primary-light to-surface-container-high flex items-center justify-center">
+              @if ($tool->image_url)
+                <img src="{{ $tool->imageDisplayUrl() }}" alt="{{ $tool->standard_name }}" class="w-full h-full object-cover">
+              @else
+                <span class="material-symbols-outlined text-primary/40 text-5xl">construction</span>
+              @endif
+            </div>
+            <div class="space-y-2">
+              @foreach ($tool->functions as $fn)
+                <div class="flex items-start gap-2">
+                  <span class="material-symbols-outlined text-primary text-[16px] mt-0.5">task_alt</span>
+                  <p class="text-sm text-on-surface leading-snug">{{ $fn->description }}</p>
+                </div>
+              @endforeach
+            </div>
           </div>
         </div>
       @endif
@@ -145,21 +165,6 @@
         </div>
       @endif
 
-      @if ($tool->standards->isNotEmpty())
-        @php $step++; @endphp
-        <div>
-          <div class="flex items-center gap-2 mb-2.5">
-            <span class="w-7 h-7 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center shrink-0">{{ $step }}</span>
-            <h3 class="font-bold text-on-surface text-sm">Standar Acuan</h3>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            @foreach ($tool->standards as $standard)
-              <span class="text-xs font-semibold px-3 py-1.5 rounded-full bg-surface-container-low text-on-surface-variant border border-outline-variant/60">{{ $standard->standard_name }}</span>
-            @endforeach
-          </div>
-        </div>
-      @endif
-
       @if ($tool->usageRules->isNotEmpty())
         @php $step++; @endphp
         <div>
@@ -169,29 +174,12 @@
           </div>
           <div class="space-y-2">
             @foreach ($tool->usageRules as $rule)
-              <div class="flex items-start gap-2.5 p-3 rounded-2xl {{ $rule->rule_type === 'do' ? 'bg-primary-light' : 'bg-tertiary-light' }}">
-                <span class="material-symbols-outlined text-[18px] {{ $rule->rule_type === 'do' ? 'text-primary' : 'text-tertiary' }}">
-                  {{ $rule->rule_type === 'do' ? 'check_circle' : 'cancel' }}
+              <div class="flex items-center gap-3 bg-surface-container-low rounded-2xl p-3">
+                <span class="w-9 h-9 rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-center shrink-0 {{ $rule->rule_type === 'do' ? 'text-primary' : 'text-tertiary' }}">
+                  <span class="material-symbols-outlined text-[18px]">{{ $rule->rule_type === 'do' ? 'check_circle' : 'cancel' }}</span>
                 </span>
-                <span class="text-sm text-on-surface leading-snug">{{ $rule->description }}</span>
-              </div>
-            @endforeach
-          </div>
-        </div>
-      @endif
-
-      @if ($tool->attributes->isNotEmpty())
-        @php $step++; @endphp
-        <div>
-          <div class="flex items-center gap-2 mb-2.5">
-            <span class="w-7 h-7 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center shrink-0">{{ $step }}</span>
-            <h3 class="font-bold text-on-surface text-sm">Atribut Teknis</h3>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            @foreach ($tool->attributes as $attr)
-              <div class="p-3 rounded-2xl bg-surface-container-low">
-                <p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide truncate">{{ $attr->attribute_name }}</p>
-                <p class="text-sm font-bold text-on-surface truncate">{{ $attr->attribute_value ?? '-' }}</p>
+                <span class="text-sm font-semibold text-on-surface flex-1 leading-snug">{{ $rule->description }}</span>
+                <span class="material-symbols-outlined text-on-surface-variant text-[18px] shrink-0">chevron_right</span>
               </div>
             @endforeach
           </div>
@@ -202,6 +190,37 @@
         <div class="text-center py-12 text-on-surface-variant">
           <span class="material-symbols-outlined text-5xl opacity-30">menu_book</span>
           <p class="mt-2 text-sm">Panduan lengkap untuk alat ini belum diisi.</p>
+        </div>
+      @endif
+
+      @if ($tool->standards->isNotEmpty() || $tool->attributes->isNotEmpty())
+        <div class="pt-4 border-t border-outline-variant/50 space-y-4">
+          <p class="text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">Informasi Tambahan</p>
+
+          @if ($tool->standards->isNotEmpty())
+            <div>
+              <h4 class="text-sm font-bold text-on-surface mb-2">Standar Acuan</h4>
+              <div class="flex flex-wrap gap-2">
+                @foreach ($tool->standards as $standard)
+                  <span class="text-xs font-semibold px-3 py-1.5 rounded-full bg-surface-container-low text-on-surface-variant border border-outline-variant/60">{{ $standard->standard_name }}</span>
+                @endforeach
+              </div>
+            </div>
+          @endif
+
+          @if ($tool->attributes->isNotEmpty())
+            <div>
+              <h4 class="text-sm font-bold text-on-surface mb-2">Atribut Teknis</h4>
+              <div class="grid grid-cols-2 gap-2">
+                @foreach ($tool->attributes as $attr)
+                  <div class="p-3 rounded-2xl bg-surface-container-low">
+                    <p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide truncate">{{ $attr->attribute_name }}</p>
+                    <p class="text-sm font-bold text-on-surface truncate">{{ $attr->attribute_value ?? '-' }}</p>
+                  </div>
+                @endforeach
+              </div>
+            </div>
+          @endif
         </div>
       @endif
     </div>

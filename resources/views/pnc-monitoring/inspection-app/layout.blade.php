@@ -54,7 +54,7 @@
           <span class="material-symbols-outlined text-on-surface">arrow_back</span>
         </a>
       @else
-        <img src="https://besentry-dev.beraucoal.co.id/build/images/logo-removebg.png" alt="Logo" class="w-9 h-9 object-contain">
+        @include('pnc-monitoring.inspection-app.partials._logo-mark')
       @endif
       <div class="flex flex-col leading-tight">
         <span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">PNC Monitoring</span>
