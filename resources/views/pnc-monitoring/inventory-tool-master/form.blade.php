@@ -29,7 +29,7 @@
     <p class="text-secondary-light text-xs mb-0">Dokumentasi jenis alat (fungsi, metode inspeksi, fitur keselamatan, standar, checklist, aturan pakai, atribut teknis) — dipakai bersama oleh semua unit fisik jenis ini.</p>
   </div>
   <div class="card-body">
-    <form method="POST" action="{{ $mode === 'create' ? route('pnc-monitoring.inventory-tool-master.store') : route('pnc-monitoring.inventory-tool-master.update', $row) }}">
+    <form method="POST" action="{{ $mode === 'create' ? route('pnc-monitoring.inventory-tool-master.store') : route('pnc-monitoring.inventory-tool-master.update', $row) }}" enctype="multipart/form-data">
       @csrf
       @if ($mode === 'edit')
         @method('PUT')
@@ -82,11 +82,34 @@
               <textarea name="main_function" id="main_function" class="form-control" rows="2">{{ old('main_function', $row->main_function) }}</textarea>
             </div>
             <div class="col-md-4">
-              <label class="form-label" for="image_url">URL Gambar</label>
-              <input type="text" name="image_url" id="image_url" class="form-control" value="{{ old('image_url', $row->image_url) }}">
-              <div class="form-check mt-8">
+              <div class="form-check mt-32">
                 <input type="checkbox" name="is_regulated" id="is_regulated" class="form-check-input" value="1" @checked(old('is_regulated', $row->is_regulated))>
                 <label class="form-check-label" for="is_regulated">Wajib regulasi (mis. PUBT/PUIL)</label>
+              </div>
+            </div>
+
+            <div class="col-md-12">
+              <hr class="my-8">
+              <label class="form-label mb-8">Gambar Alat</label>
+              <div class="d-flex flex-wrap align-items-start gap-16">
+                @if ($row->image_url)
+                  <div id="current-image-wrap">
+                    <img src="{{ $row->imageDisplayUrl() }}" alt="Gambar {{ $row->standard_name }}" class="rounded border" style="max-height: 120px; max-width: 160px; object-fit: cover;">
+                    <div class="form-check mt-4">
+                      <input type="checkbox" name="remove_image" id="remove_image" class="form-check-input" value="1">
+                      <label class="form-check-label text-danger-600 text-sm" for="remove_image">Hapus gambar ini</label>
+                    </div>
+                  </div>
+                @endif
+                <div class="flex-grow-1" style="min-width: 240px;">
+                  <input type="file" name="image" id="image" class="form-control form-control-sm" accept="image/png,image/jpeg,image/webp">
+                  <p class="text-secondary-light text-xs mb-0 mt-4">Unggah file gambar (JPG/PNG/WEBP, maks 4 MB) — akan menggantikan gambar saat ini. Bisa juga isi URL manual di bawah.</p>
+                  <img id="image-preview" class="rounded border mt-8 d-none" style="max-height: 120px; max-width: 160px; object-fit: cover;">
+                </div>
+                <div class="flex-grow-1" style="min-width: 240px;">
+                  <label class="form-label text-xs mb-1" for="image_url">atau URL Gambar (link eksternal)</label>
+                  <input type="text" name="image_url" id="image_url" class="form-control form-control-sm" value="{{ old('image_url', $row->image_url) }}">
+                </div>
               </div>
             </div>
           </div>
@@ -427,6 +450,21 @@
 @section('scripts')
 <script>
 (() => {
+  const imageInput = document.getElementById('image');
+  const imagePreview = document.getElementById('image-preview');
+  if (imageInput && imagePreview) {
+    imageInput.addEventListener('change', () => {
+      const file = imageInput.files[0];
+      if (!file) {
+        imagePreview.classList.add('d-none');
+        imagePreview.removeAttribute('src');
+        return;
+      }
+      imagePreview.src = URL.createObjectURL(file);
+      imagePreview.classList.remove('d-none');
+    });
+  }
+
   function refreshEmptyHint(key) {
     const container = document.getElementById('rows-' + key);
     const hint = document.querySelector('[data-empty-for="' + key + '"]');

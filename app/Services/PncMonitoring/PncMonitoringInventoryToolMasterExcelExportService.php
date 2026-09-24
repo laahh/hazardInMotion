@@ -47,7 +47,7 @@ final class PncMonitoringInventoryToolMasterExcelExportService
                 $row->criticality,
                 $row->risk_class,
                 $row->is_regulated ? 'Ya' : 'Tidak',
-                $row->image_url,
+                $row->imageDisplayUrl(),
             ], null, 'A'.$rowIndex);
             $rowIndex++;
         }

@@ -7,6 +7,7 @@ namespace App\Models\PncMonitoring;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 final class PncMonitoringInventoryToolMaster extends Model
 {
@@ -75,5 +76,28 @@ final class PncMonitoringInventoryToolMaster extends Model
     public function assets(): HasMany
     {
         return $this->hasMany(PncMonitoringInventoryToolAsset::class, 'tool_master_id', 'tool_master_id');
+    }
+
+    /**
+     * image_url bisa berisi URL eksternal (mis. dari data lama) atau path hasil
+     * upload ke disk 'public' — helper ini menampilkan keduanya secara konsisten.
+     */
+    public function imageDisplayUrl(): ?string
+    {
+        if (blank($this->image_url)) {
+            return null;
+        }
+        if (str_starts_with($this->image_url, 'http://') || str_starts_with($this->image_url, 'https://')) {
+            return $this->image_url;
+        }
+
+        return Storage::disk('public')->url($this->image_url);
+    }
+
+    public function isUploadedImage(): bool
+    {
+        return filled($this->image_url)
+            && ! str_starts_with($this->image_url, 'http://')
+            && ! str_starts_with($this->image_url, 'https://');
     }
 }

@@ -27,6 +27,8 @@ final class PncMonitoringInventoryToolMasterRequest extends FormRequest
             'risk_class' => ['nullable', 'string', 'max:20'],
             'is_regulated' => ['nullable', 'boolean'],
             'image_url' => ['nullable', 'string', 'max:2048'],
+            'image' => ['nullable', 'image', 'max:4096'],
+            'remove_image' => ['nullable', 'boolean'],
 
             'functions' => ['nullable', 'array'],
             'functions.*.description' => ['nullable', 'string'],

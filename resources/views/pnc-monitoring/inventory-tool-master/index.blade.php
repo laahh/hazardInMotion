@@ -72,6 +72,7 @@
       <table class="table bordered-table mb-0">
         <thead>
           <tr>
+            <th style="width:56px"></th>
             <th>Kategori</th>
             <th>Nama Alat</th>
             <th>Sub Kategori</th>
@@ -86,6 +87,15 @@
         <tbody>
           @forelse ($rows as $row)
             <tr>
+              <td>
+                @if ($row->image_url)
+                  <img src="{{ $row->imageDisplayUrl() }}" alt="{{ $row->standard_name }}" class="rounded border" style="width: 40px; height: 40px; object-fit: cover;">
+                @else
+                  <span class="w-40-px h-40-px d-flex align-items-center justify-content-center bg-neutral-100 rounded text-secondary-light">
+                    <i class="ri-image-line"></i>
+                  </span>
+                @endif
+              </td>
               <td>{{ $row->category?->code }}</td>
               <td><strong>{{ $row->standard_name }}</strong></td>
               <td>{{ $row->sub_category ?? '-' }}</td>
@@ -105,7 +115,7 @@
             </tr>
           @empty
             <tr>
-              <td colspan="9" class="text-center text-secondary-light py-24">Belum ada jenis alat.</td>
+              <td colspan="10" class="text-center text-secondary-light py-24">Belum ada jenis alat.</td>
             </tr>
           @endforelse
         </tbody>

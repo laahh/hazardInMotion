@@ -25,6 +25,7 @@ use App\Services\PncMonitoring\PncMonitoringInventoryToolMasterUpsertService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -66,8 +67,10 @@ final class PncMonitoringInventoryToolMasterController extends Controller
 
     public function store(PncMonitoringInventoryToolMasterRequest $request): RedirectResponse
     {
-        $toolMaster = DB::transaction(function () use ($request): PncMonitoringInventoryToolMaster {
-            $toolMaster = PncMonitoringInventoryToolMaster::query()->create($request->corePayload());
+        $payload = $this->applyImageUpload($request, $request->corePayload(), null);
+
+        $toolMaster = DB::transaction(function () use ($request, $payload): PncMonitoringInventoryToolMaster {
+            $toolMaster = PncMonitoringInventoryToolMaster::query()->create($payload);
             $this->syncChildren($toolMaster, $request);
 
             return $toolMaster;
@@ -94,8 +97,10 @@ final class PncMonitoringInventoryToolMasterController extends Controller
 
     public function update(PncMonitoringInventoryToolMasterRequest $request, PncMonitoringInventoryToolMaster $inventoryToolMaster): RedirectResponse
     {
-        DB::transaction(function () use ($request, $inventoryToolMaster): void {
-            $inventoryToolMaster->update($request->corePayload());
+        $payload = $this->applyImageUpload($request, $request->corePayload(), $inventoryToolMaster);
+
+        DB::transaction(function () use ($request, $inventoryToolMaster, $payload): void {
+            $inventoryToolMaster->update($payload);
             $this->syncChildren($inventoryToolMaster, $request);
         });
 
@@ -108,6 +113,10 @@ final class PncMonitoringInventoryToolMasterController extends Controller
     {
         if ($inventoryToolMaster->assets()->exists()) {
             return back()->withErrors(['tool_master' => 'Jenis alat tidak bisa dihapus karena masih punya unit aset terdaftar.']);
+        }
+
+        if ($inventoryToolMaster->isUploadedImage()) {
+            Storage::disk('public')->delete($inventoryToolMaster->image_url);
         }
 
         $inventoryToolMaster->delete();
@@ -236,6 +245,34 @@ final class PncMonitoringInventoryToolMasterController extends Controller
             ->route('pnc-monitoring.inventory-tool-master.edit', $inventoryToolMaster)
             ->with('success', "Data diimpor: {$result->created} baris (menggantikan data sebelumnya).")
             ->with('warnings', $result->warnings);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyImageUpload(
+        PncMonitoringInventoryToolMasterRequest $request,
+        array $payload,
+        ?PncMonitoringInventoryToolMaster $existing,
+    ): array {
+        if ($request->hasFile('image')) {
+            if ($existing?->isUploadedImage()) {
+                Storage::disk('public')->delete($existing->image_url);
+            }
+            $payload['image_url'] = $request->file('image')->store('pnc-monitoring/inventory-tool-master', 'public');
+
+            return $payload;
+        }
+
+        if ($request->boolean('remove_image')) {
+            if ($existing?->isUploadedImage()) {
+                Storage::disk('public')->delete($existing->image_url);
+            }
+            $payload['image_url'] = null;
+        }
+
+        return $payload;
     }
 
     private function syncChildren(PncMonitoringInventoryToolMaster $toolMaster, PncMonitoringInventoryToolMasterRequest $request): void
