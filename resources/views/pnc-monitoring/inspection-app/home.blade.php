@@ -11,16 +11,6 @@
     <p class="text-sm text-on-surface-variant mt-1.5 leading-relaxed">{{ number_format($totalTools) }} jenis alat terdaftar di katalog. Pilih alat untuk lihat panduan, checklist, dan mulai inspeksi.</p>
   </section>
 
-  <section>
-    <div class="relative w-full h-32 rounded-3xl overflow-hidden flex items-center px-5 bg-primary-light">
-      <img src="{{ asset('images/inspection-app/tools.png') }}" alt="" class="absolute inset-0 w-full h-full object-cover">
-      <div class="relative max-w-[60%]">
-        <p class="text-on-surface font-extrabold text-base leading-tight">Kerja Aman,<br>Inspeksi Terjamin</p>
-        <p class="text-on-surface-variant text-xs mt-1">Selalu cek alat sebelum digunakan di lapangan.</p>
-      </div>
-    </div>
-  </section>
-
   <section class="flex items-center gap-3">
     <form method="GET" class="relative flex-1">
       <span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[20px]">search</span>
