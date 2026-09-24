@@ -12,14 +12,11 @@
   </section>
 
   <section>
-    <div class="relative w-full h-28 rounded-3xl overflow-hidden bg-gradient-to-br from-primary to-primary-dark flex items-center px-5">
-      <svg class="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 400 112" preserveAspectRatio="xMidYMax slice">
-        <path d="M0 112 L60 50 L100 85 L160 25 L210 80 L260 45 L400 112 Z" fill="white"/>
-      </svg>
-      <span class="material-symbols-outlined text-white/15 text-[110px] absolute -right-3 -bottom-5">engineering</span>
-      <div class="relative">
-        <p class="text-white font-extrabold text-base leading-tight">Kerja Aman,<br>Inspeksi Terjamin</p>
-        <p class="text-white/80 text-xs mt-1">Selalu cek alat sebelum digunakan di lapangan.</p>
+    <div class="relative w-full h-32 rounded-3xl overflow-hidden flex items-center px-5 bg-primary-light">
+      <img src="{{ asset('images/inspection-app/tools.png') }}" alt="" class="absolute inset-0 w-full h-full object-cover">
+      <div class="relative max-w-[60%]">
+        <p class="text-on-surface font-extrabold text-base leading-tight">Kerja Aman,<br>Inspeksi Terjamin</p>
+        <p class="text-on-surface-variant text-xs mt-1">Selalu cek alat sebelum digunakan di lapangan.</p>
       </div>
     </div>
   </section>
