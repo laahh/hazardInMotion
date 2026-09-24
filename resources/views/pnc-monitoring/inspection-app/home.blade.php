@@ -4,79 +4,81 @@
 @section('header-title', 'Inspeksi Alat')
 
 @section('content')
-<div class="px-5 space-y-6">
+<div class="px-5 pt-5 space-y-6">
 
   <section>
-    <h1 class="text-2xl font-extrabold tracking-tight text-on-surface leading-tight">Halo, Teknisi 👋</h1>
-    <p class="text-sm text-on-surface-variant mt-1">{{ number_format($totalTools) }} jenis alat terdaftar di Katalog Alat. Pilih alat untuk lihat panduan, checklist, dan mulai inspeksi.</p>
+    <h1 class="text-2xl font-extrabold tracking-tight text-on-surface leading-tight">Halo, Teknisi! 👋</h1>
+    <p class="text-sm text-on-surface-variant mt-1.5 leading-relaxed">{{ number_format($totalTools) }} jenis alat terdaftar di katalog. Pilih alat untuk lihat panduan, checklist, dan mulai inspeksi.</p>
   </section>
 
-  <section>
-    <form method="GET" class="relative flex items-center">
-      <span class="absolute left-4 material-symbols-outlined text-on-surface-variant">search</span>
+  <section class="flex items-center gap-3">
+    <form method="GET" class="relative flex-1">
+      <span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[20px]">search</span>
       <input
         type="text" name="q" value="{{ $q }}"
-        class="w-full pl-12 pr-4 py-4 bg-surface-container-highest border-none rounded-2xl focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-all text-on-surface placeholder:text-on-surface-variant/60"
+        class="w-full pl-11 pr-4 py-3.5 bg-surface-container-lowest border border-outline-variant/60 rounded-2xl shadow-sm focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all text-sm text-on-surface placeholder:text-on-surface-variant/60"
         placeholder="Cari nama alat...">
+      @if ($categoryId)
+        <input type="hidden" name="category_id" value="{{ $categoryId }}">
+      @endif
     </form>
+    <button type="button" class="w-12 h-12 shrink-0 flex items-center justify-center rounded-2xl bg-primary text-white shadow-sm active:scale-95 transition-transform">
+      <span class="material-symbols-outlined text-[20px]">tune</span>
+    </button>
   </section>
 
   <section class="overflow-x-auto no-scrollbar -mx-5">
-    <div class="flex gap-3 px-5">
+    @php
+      $catIcons = ['001' => 'handyman', '002' => 'precision_manufacturing', '003' => 'construction', '004' => 'conveyor_belt', '005' => 'engineering'];
+    @endphp
+    <div class="flex gap-2.5 px-5">
       <a href="{{ route('pnc-monitoring.inventory-inspection.home', ['q' => $q]) }}"
-         class="whitespace-nowrap px-6 py-2.5 rounded-full font-semibold text-sm transition-colors {{ $categoryId === null ? 'bg-primary-container text-on-primary-container shadow-lg shadow-primary/10' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest' }}">
-        Semua
+         class="whitespace-nowrap flex items-center gap-1.5 px-4 py-2.5 rounded-full font-bold text-sm transition-colors {{ $categoryId === null ? 'bg-primary text-white shadow-sm' : 'bg-surface-container-lowest text-on-surface-variant border border-outline-variant/60' }}">
+        <span class="material-symbols-outlined text-[16px]">grid_view</span>Semua
       </a>
       @foreach ($categories as $cat)
         <a href="{{ route('pnc-monitoring.inventory-inspection.home', ['q' => $q, 'category_id' => $cat->category_id]) }}"
-           class="whitespace-nowrap px-6 py-2.5 rounded-full font-semibold text-sm transition-colors {{ (int) $categoryId === $cat->category_id ? 'bg-primary-container text-on-primary-container shadow-lg shadow-primary/10' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest' }}">
-          {{ $cat->name }}
+           class="whitespace-nowrap flex items-center gap-1.5 px-4 py-2.5 rounded-full font-semibold text-sm transition-colors {{ (int) $categoryId === $cat->category_id ? 'bg-primary text-white shadow-sm' : 'bg-surface-container-lowest text-on-surface-variant border border-outline-variant/60' }}">
+          <span class="material-symbols-outlined text-[16px]">{{ $catIcons[$cat->code] ?? 'category' }}</span>{{ $cat->name }}
         </a>
       @endforeach
     </div>
   </section>
 
-  <section class="space-y-4 pb-4">
-    <div class="flex justify-between items-end">
-      <h2 class="text-lg font-extrabold tracking-tight">Daftar Alat</h2>
-      <span class="text-xs font-semibold text-on-surface-variant">{{ $tools->count() }} ditampilkan</span>
+  <section class="space-y-3 pb-6">
+    <div class="flex justify-between items-center">
+      <h2 class="text-base font-extrabold tracking-tight flex items-center gap-1.5">
+        <span class="w-1.5 h-4 bg-primary rounded-full inline-block"></span>Daftar Alat
+      </h2>
+      <span class="text-xs font-bold text-primary">{{ $tools->count() }} alat</span>
     </div>
 
-    @forelse ($tools as $tool)
-      <a href="{{ route('pnc-monitoring.inventory-inspection.tools.show', $tool) }}"
-         class="flex items-center gap-4 p-3 rounded-3xl bg-surface-container-lowest shadow-sm hover:shadow-lg border border-outline-variant/10 transition-all">
-        <div class="w-16 h-16 rounded-2xl overflow-hidden bg-surface-container-high flex items-center justify-center shrink-0">
-          @if ($tool->image_url)
-            <img src="{{ $tool->imageDisplayUrl() }}" alt="{{ $tool->standard_name }}" class="w-full h-full object-cover">
-          @else
-            <span class="material-symbols-outlined text-on-surface-variant text-3xl">construction</span>
-          @endif
-        </div>
-        <div class="flex-1 min-w-0">
-          <h3 class="font-bold text-on-surface truncate">{{ $tool->standard_name }}</h3>
-          <p class="text-xs text-on-surface-variant truncate">{{ $tool->category?->name }} @if($tool->sub_category) &middot; {{ $tool->sub_category }} @endif</p>
-          <div class="flex items-center gap-2 mt-1.5">
-            <span class="inline-flex items-center gap-1 text-[11px] font-bold text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-full">
-              <span class="material-symbols-outlined text-[13px]">checklist</span>{{ $tool->checklist_items_count }} poin
-            </span>
-            <span class="inline-flex items-center gap-1 text-[11px] font-bold text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-full">
-              <span class="material-symbols-outlined text-[13px]">inventory_2</span>{{ $tool->assets_count }} unit
-            </span>
-            @if ($tool->is_regulated)
-              <span class="inline-flex items-center gap-1 text-[11px] font-bold text-tertiary bg-tertiary-container/10 px-2 py-0.5 rounded-full">
-                <span class="material-symbols-outlined text-[13px]">verified</span>Regulasi
-              </span>
-            @endif
-          </div>
-        </div>
-        <span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
-      </a>
-    @empty
+    @if ($tools->isNotEmpty())
+      <div class="grid grid-cols-2 gap-3">
+        @foreach ($tools as $tool)
+          <a href="{{ route('pnc-monitoring.inventory-inspection.tools.show', $tool) }}"
+             class="bg-surface-container-lowest rounded-3xl p-2.5 shadow-sm border border-outline-variant/40 hover:shadow-md transition-shadow">
+            <div class="h-24 w-full rounded-2xl overflow-hidden bg-gradient-to-br from-primary-light to-surface-container-high flex items-center justify-center mb-2.5">
+              @if ($tool->image_url)
+                <img src="{{ $tool->imageDisplayUrl() }}" alt="{{ $tool->standard_name }}" class="w-full h-full object-cover">
+              @else
+                <span class="material-symbols-outlined text-primary/40 text-4xl">construction</span>
+              @endif
+            </div>
+            <div class="flex items-start justify-between gap-1">
+              <h3 class="font-bold text-on-surface text-sm leading-tight line-clamp-2">{{ $tool->standard_name }}</h3>
+              <span class="material-symbols-outlined text-on-surface-variant text-[18px] shrink-0 mt-0.5">chevron_right</span>
+            </div>
+            <p class="text-[11px] text-on-surface-variant mt-1 truncate">{{ $tool->category?->name }}</p>
+          </a>
+        @endforeach
+      </div>
+    @else
       <div class="text-center py-16 text-on-surface-variant">
         <span class="material-symbols-outlined text-5xl opacity-40">search_off</span>
         <p class="mt-2 text-sm">Tidak ada alat yang cocok.</p>
       </div>
-    @endforelse
+    @endif
   </section>
 </div>
 @endsection

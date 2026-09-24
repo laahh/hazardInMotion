@@ -12,40 +12,20 @@
       theme: {
         extend: {
           colors: {
-            "surface-container": "#eaefe8",
-            "error-container": "#ffdad6",
-            "on-secondary": "#ffffff",
-            "surface-bright": "#f5fbf3",
-            "outline": "#6e7a70",
-            "error": "#ba1a1a",
-            "surface": "#f5fbf3",
-            "on-primary-container": "#f6fff5",
-            "primary-container": "#058651",
-            "inverse-on-surface": "#edf2eb",
-            "outline-variant": "#bdcabe",
-            "secondary-container": "#e1e3e4",
-            "on-surface": "#171d19",
-            "surface-container-lowest": "#ffffff",
-            "on-error": "#ffffff",
-            "tertiary-container": "#ba545f",
-            "surface-container-high": "#e4eae2",
-            "surface-container-highest": "#dee4dd",
-            "on-error-container": "#93000a",
-            "on-tertiary": "#ffffff",
-            "surface-dim": "#d6dcd4",
-            "on-surface-variant": "#3e4941",
-            "secondary": "#5c5f60",
-            "tertiary": "#9b3c47",
-            "primary": "#006a3f",
-            "inverse-primary": "#72db9e",
-            "on-tertiary-container": "#fffbff",
-            "on-primary": "#ffffff",
-            "on-background": "#171d19",
-            "secondary-fixed": "#e1e3e4",
-            "surface-variant": "#dee4dd",
-            "background": "#f5fbf3",
-            "surface-container-low": "#f0f5ee",
-            "on-secondary-container": "#626566",
+            primary: "#0E8A4F",
+            "primary-dark": "#0A6B3E",
+            "primary-light": "#E3F5EA",
+            surface: "#EFFAF4",
+            "surface-container-lowest": "#FFFFFF",
+            "surface-container-low": "#F4FBF7",
+            "surface-container": "#EAF6EF",
+            "surface-container-high": "#DFF0E6",
+            "surface-container-highest": "#D2E8DA",
+            "on-surface": "#132A1D",
+            "on-surface-variant": "#5C6F63",
+            "outline-variant": "#D3E8DA",
+            tertiary: "#B3441F",
+            "tertiary-light": "#FDECE6",
           },
           fontFamily: {
             headline: ["Plus Jakarta Sans"],
@@ -56,7 +36,7 @@
     }
   </script>
   <style>
-    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
     body { font-family: 'Inter', sans-serif; }
     h1, h2, h3 { font-family: 'Plus Jakarta Sans', sans-serif; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -65,44 +45,52 @@
   </style>
   @yield('head')
 </head>
-<body class="bg-surface text-on-surface antialiased max-w-[480px] mx-auto min-h-screen relative pb-32">
+<body class="bg-surface text-on-surface antialiased max-w-[480px] mx-auto min-h-screen relative pb-28">
 
-  <header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-5 py-4 bg-emerald-50/80 backdrop-blur-xl max-w-[480px] mx-auto">
-    <div class="flex items-center gap-2">
+  <header class="sticky top-0 left-0 w-full z-50 flex justify-between items-center px-5 py-4 bg-surface max-w-[480px] mx-auto border-b border-outline-variant/60">
+    <div class="flex items-center gap-3">
       @hasSection('back-url')
-        <a href="@yield('back-url')" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-emerald-100/50 transition-colors active:scale-95 duration-150 -ml-2">
-          <span class="material-symbols-outlined text-emerald-700">arrow_back</span>
+        <a href="@yield('back-url')" class="flex items-center justify-center w-10 h-10 rounded-full bg-surface-container-lowest shadow-sm hover:bg-surface-container transition-colors active:scale-95 duration-150">
+          <span class="material-symbols-outlined text-on-surface">arrow_back</span>
         </a>
       @else
-        <span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">construction</span>
+        <img src="https://besentry-dev.beraucoal.co.id/build/images/logo-removebg.png" alt="Logo" class="w-9 h-9 object-contain">
       @endif
       <div class="flex flex-col leading-tight">
         <span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">PNC Monitoring</span>
-        <span class="text-base font-extrabold text-on-surface">@yield('header-title', 'Inspeksi Alat')</span>
+        <span class="text-lg font-extrabold text-on-surface -mt-0.5">@yield('header-title', 'Inspeksi Alat')</span>
       </div>
     </div>
-    <a href="{{ route('pnc-monitoring.dashboard.inventory') }}" class="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container-highest/50 hover:bg-emerald-100/50 transition-colors" title="Kembali ke Admin">
-      <span class="material-symbols-outlined text-emerald-700">dashboard</span>
-    </a>
+
+    @hasSection('back-url')
+      <a href="{{ route('pnc-monitoring.dashboard.inventory') }}" class="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-container-lowest shadow-sm hover:bg-surface-container transition-colors" title="Menu Admin">
+        <span class="material-symbols-outlined text-on-surface text-[20px]">apps</span>
+      </a>
+    @else
+      <button type="button" class="relative w-10 h-10 flex items-center justify-center rounded-full bg-surface-container-lowest shadow-sm hover:bg-surface-container transition-colors">
+        <span class="material-symbols-outlined text-on-surface">notifications</span>
+        <span class="absolute top-2 right-2 w-2 h-2 bg-tertiary rounded-full ring-2 ring-surface-container-lowest"></span>
+      </button>
+    @endif
   </header>
 
-  <main class="pt-24">
+  <main>
     @yield('content')
   </main>
 
-  <nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-white/80 backdrop-blur-xl rounded-t-3xl shadow-[0_-8px_24px_rgba(23,29,25,0.06)] max-w-[480px] mx-auto">
+  <nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-5 pt-3 bg-white border-t border-outline-variant/60 max-w-[480px] mx-auto">
     @php
       $navItems = [
-        ['route' => 'pnc-monitoring.inventory-inspection.home', 'icon' => 'home_max', 'label' => 'Beranda'],
+        ['route' => 'pnc-monitoring.inventory-inspection.home', 'icon' => 'home', 'label' => 'Beranda'],
         ['route' => 'pnc-monitoring.inventory-inspection.scan', 'icon' => 'qr_code_scanner', 'label' => 'Scan'],
         ['route' => 'pnc-monitoring.inventory-inspection.history', 'icon' => 'history', 'label' => 'Riwayat'],
       ];
     @endphp
     @foreach ($navItems as $item)
       @php $isActive = request()->routeIs($item['route']); @endphp
-      <a href="{{ route($item['route']) }}" class="flex flex-col items-center justify-center rounded-2xl px-5 py-2.5 transition-all active:scale-90 duration-200 ease-out {{ $isActive ? 'bg-emerald-100/60 text-emerald-800' : 'text-zinc-400 hover:text-emerald-500' }}">
-        <span class="material-symbols-outlined" @if($isActive) style="font-variation-settings: 'FILL' 1;" @endif>{{ $item['icon'] }}</span>
-        <span class="font-medium text-[11px] tracking-wide mt-1">{{ $item['label'] }}</span>
+      <a href="{{ route($item['route']) }}" class="flex flex-col items-center justify-center gap-0.5 rounded-2xl px-6 py-2 transition-all active:scale-90 duration-200 ease-out {{ $isActive ? 'bg-primary-light text-primary' : 'text-on-surface-variant/70' }}">
+        <span class="material-symbols-outlined text-[22px]" @if($isActive) style="font-variation-settings: 'FILL' 1;" @endif>{{ $item['icon'] }}</span>
+        <span class="font-semibold text-[11px] tracking-wide">{{ $item['label'] }}</span>
       </a>
     @endforeach
   </nav>

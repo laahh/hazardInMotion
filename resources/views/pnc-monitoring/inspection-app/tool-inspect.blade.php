@@ -5,9 +5,9 @@
 @section('back-url', route('pnc-monitoring.inventory-inspection.tools.show', $tool))
 
 @section('content')
-<div class="px-5 space-y-6 pb-8">
+<div class="px-5 pt-5 space-y-6 pb-8">
 
-  <section class="p-4 rounded-3xl bg-surface-container-lowest border border-outline-variant/10 flex items-center gap-3">
+  <section class="p-4 rounded-3xl bg-surface-container-lowest shadow-sm border border-outline-variant/40 flex items-center gap-3">
     <div class="w-12 h-12 rounded-2xl overflow-hidden bg-surface-container-high flex items-center justify-center shrink-0">
       @if ($tool->image_url)
         <img src="{{ $tool->imageDisplayUrl() }}" alt="{{ $tool->standard_name }}" class="w-full h-full object-cover">
@@ -28,7 +28,7 @@
         @foreach ($tool->assets as $index => $asset)
           <label class="relative">
             <input type="radio" name="asset_id" value="{{ $asset->asset_id }}" class="sr-only peer" @checked($index === 0)>
-            <span class="block px-4 py-2.5 rounded-2xl border-2 border-outline-variant/30 text-sm font-semibold text-on-surface-variant cursor-pointer peer-checked:border-primary peer-checked:bg-primary-container peer-checked:text-on-primary-container transition-all">
+            <span class="block px-4 py-2.5 rounded-2xl border-2 border-outline-variant/60 text-sm font-semibold text-on-surface-variant cursor-pointer peer-checked:border-primary peer-checked:bg-primary-light peer-checked:text-primary transition-all">
               {{ $asset->inventory_id ?? ('Unit #'.$asset->asset_id) }}
             </span>
           </label>
@@ -54,7 +54,7 @@
     </div>
 
     @forelse ($tool->checklistItems as $item)
-      <div class="p-4 rounded-2xl bg-surface-container-lowest border border-outline-variant/10 mb-3">
+      <div class="p-4 rounded-2xl bg-surface-container-lowest shadow-sm border border-outline-variant/40 mb-3">
         <div class="flex gap-3 mb-3">
           <span class="w-7 h-7 rounded-full bg-surface-container-high text-on-surface-variant text-xs font-bold flex items-center justify-center shrink-0">{{ $item->sequence }}</span>
           <div class="min-w-0">
@@ -94,7 +94,7 @@
         </label>
       @endforeach
     </div>
-    <textarea rows="3" placeholder="Catatan tambahan (opsional)..." class="w-full p-4 bg-surface-container-highest border-none rounded-2xl focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-all text-sm text-on-surface placeholder:text-on-surface-variant/60"></textarea>
+    <textarea rows="3" placeholder="Catatan tambahan (opsional)..." class="w-full p-4 bg-surface-container-low border border-outline-variant/60 rounded-2xl focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all text-sm text-on-surface placeholder:text-on-surface-variant/60"></textarea>
   </section>
 
   <section>
@@ -107,7 +107,7 @@
 <div class="fixed bottom-24 left-0 w-full px-5 max-w-[480px] mx-auto z-40">
   <button type="button"
     onclick="alert('Ini masih tahap UI/UX — penyimpanan inspeksi akan disambungkan ke backend setelah desain disetujui.')"
-    class="flex items-center justify-center gap-2 w-full h-14 rounded-full bg-gradient-to-br from-primary-container to-primary text-white font-bold text-base shadow-[0_8px_24px_rgba(0,106,63,0.3)] active:scale-95 transition-transform">
+    class="flex items-center justify-center gap-2 w-full h-14 rounded-2xl bg-gradient-to-r from-primary to-primary-dark text-white font-bold text-base shadow-[0_10px_24px_rgba(14,138,79,0.35)] active:scale-95 transition-transform">
     <span class="material-symbols-outlined">save</span>Simpan Inspeksi
   </button>
 </div>

@@ -4,7 +4,7 @@
 @section('header-title', 'Scan Alat')
 
 @section('content')
-<div class="px-5 space-y-6">
+<div class="px-5 pt-5 space-y-6 pb-4">
 
   <section>
     <div class="relative w-full aspect-square rounded-[2rem] bg-zinc-900 overflow-hidden flex items-center justify-center">
@@ -39,9 +39,9 @@
       <span class="absolute left-4 material-symbols-outlined text-on-surface-variant">search</span>
       <input
         type="text" name="q"
-        class="w-full pl-12 pr-24 py-4 bg-surface-container-highest border-none rounded-2xl focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-all text-on-surface placeholder:text-on-surface-variant/60"
+        class="w-full pl-12 pr-24 py-4 bg-surface-container-lowest border border-outline-variant/60 rounded-2xl shadow-sm focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all text-on-surface placeholder:text-on-surface-variant/60"
         placeholder="Cari manual nama alat...">
-      <button type="submit" class="absolute right-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-sm active:scale-95 transition-transform">Cari</button>
+      <button type="submit" class="absolute right-2 px-4 py-2.5 rounded-xl bg-primary text-white font-bold text-sm active:scale-95 transition-transform">Cari</button>
     </form>
   </section>
 
