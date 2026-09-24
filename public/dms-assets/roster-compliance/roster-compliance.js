@@ -13,7 +13,10 @@
 (function () {
   "use strict";
 
-  var ASSET_BASE = (document.currentScript && document.currentScript.dataset.base) || '/dms-assets/roster-compliance';
+  var scriptEl = document.currentScript;
+  var ASSET_BASE = (scriptEl && scriptEl.dataset.base) || '/dms-assets/roster-compliance';
+  var ALERT_COUNTS_URL = scriptEl && scriptEl.dataset.alertCountsUrl;
+  var ALERT_TIMELINE_BASE = scriptEl && scriptEl.dataset.alertTimelineBase;
 
   var els = {
     loading: document.getElementById('rkLoading'),
@@ -67,6 +70,11 @@
     KDC: ['7:6:1', '7 Siang - 6 Malam - 1 Off'],
     FAD: ['3:3:1', '3 Siang - 3 Malam - 1 Off'],
     BAR: ['3:3:1', '3 Siang - 3 Malam - 1 Off'],
+  };
+  var ALERT_STATUS_META = {
+    nyata: { label: 'True Alert', cls: 'bg-danger-100 text-danger-600' },
+    palsu: { label: 'False Alert', cls: 'bg-neutral-200 text-neutral-600' },
+    belum: { label: 'Belum Diperiksa', cls: 'bg-warning-100 text-warning-600' },
   };
 
   function escapeHtml(s) {
@@ -274,6 +282,10 @@
   };
   var ROWS = [], VIEW = [], AGG = null;
   var donutChart = null;
+  var ALERT_UNTIL = null;
+  var alertCounts = {}; // UPPER(sid) -> jumlah alert 30 hari (atau 'x' kalau gagal dimuat)
+  var alertCountsInFlight = {};
+  var alertTimelineCache = {};
 
   function monthsPresent() {
     var set = {};
@@ -295,6 +307,7 @@
   ]).then(function (res) {
     D = res[0]; JABCAT = res[1]; NDAY = D.dISO.length;
     state.r0 = 0; state.r1 = NDAY - 1;
+    ALERT_UNTIL = D.dISO[NDAY - 1];
     boot();
   }).catch(function (e) {
     console.error(e);
@@ -555,20 +568,70 @@
     return '<span class="' + (STATUS_BADGE[r.status] || '') + ' px-10 py-4 rounded-pill fw-medium text-xs d-inline-flex align-items-center"' + badgeStyle + '>' + r.status + flag + '</span>';
   }
 
+  function alertCountCellHtml(upperSid) {
+    var v = alertCounts[upperSid];
+    if (v === undefined) return '<span class="spinner-border spinner-border-sm text-secondary-light" style="width:12px;height:12px" role="status"></span>';
+    if (v === 'x') return '<span class="text-secondary-light" title="Data alert DMS tidak tersedia saat ini">&mdash;</span>';
+    if (v === 0) return '<span class="text-secondary-light">0</span>';
+    return '<span class="bg-danger-100 text-danger-600 px-8 py-2 rounded-pill fw-medium text-xs">' + v + '</span>';
+  }
+
+  /** Ambil jumlah alert DMS 30 hari untuk SID di halaman tabel yang sedang tampil (batch, di-cache per SID). */
+  function fetchAlertCountsForPage(rows) {
+    if (!ALERT_COUNTS_URL || !ALERT_UNTIL) return;
+    var need = [];
+    rows.forEach(function (r) {
+      var upper = (r.sid || '').toUpperCase();
+      if (upper && alertCounts[upper] === undefined && !alertCountsInFlight[upper]) need.push(upper);
+    });
+    if (!need.length) return;
+    need.forEach(function (s) { alertCountsInFlight[s] = true; });
+
+    var qs = new URLSearchParams();
+    need.forEach(function (s) { qs.append('sids[]', s); });
+    qs.set('until', ALERT_UNTIL);
+
+    fetch(ALERT_COUNTS_URL + '?' + qs.toString())
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+      .then(function (data) {
+        var counts = data.counts || {};
+        var available = data.available !== false;
+        need.forEach(function (s) {
+          alertCounts[s] = !available ? 'x' : (counts.hasOwnProperty(s) ? counts[s] : 0);
+          delete alertCountsInFlight[s];
+        });
+        need.forEach(function (s) {
+          els.tableBody.querySelectorAll('[data-alert-sid="' + s + '"]').forEach(function (cell) {
+            cell.innerHTML = alertCountCellHtml(s);
+          });
+        });
+      })
+      .catch(function () {
+        need.forEach(function (s) { alertCounts[s] = 'x'; delete alertCountsInFlight[s]; });
+        need.forEach(function (s) {
+          els.tableBody.querySelectorAll('[data-alert-sid="' + s + '"]').forEach(function (cell) {
+            cell.innerHTML = alertCountCellHtml(s);
+          });
+        });
+      });
+  }
+
   function renderTable() {
     var st = state.page * state.pageSize;
     var pg = VIEW.slice(st, st + state.pageSize);
     els.tableNote.textContent = VIEW.length.toLocaleString('id') + ' karyawan pada kombinasi filter ini';
     els.tableBody.innerHTML = pg.map(function (r) {
+      var upperSid = (r.sid || '').toUpperCase();
       return '<tr class="' + (r.id === state.selectedId ? 'is-selected' : '') + '" data-id="' + escapeHtml(r.id) + '">' +
         '<td class="fw-medium">' + escapeHtml(r.sid) + '</td>' +
-        '<td><span class="rk-name">' + escapeHtml(r.nama) + '</span><span class="rk-sub">' + escapeHtml(r.jab) + ' &middot; ' + escapeHtml(r.co) + ' ' + escapeHtml(r.site) + '</span></td>' +
+        '<td class="rk-col-name" title="' + escapeHtml(r.nama + ' — ' + r.jab + ' · ' + r.co + ' ' + r.site) + '"><span class="rk-name">' + escapeHtml(r.nama) + '</span><span class="rk-sub">' + escapeHtml(r.jab) + ' &middot; ' + escapeHtml(r.co) + ' ' + escapeHtml(r.site) + '</span></td>' +
         '<td class="text-center">' + r.roster + '</td>' +
         '<td class="text-center">' + r.onAll + (r.onAll > 71 && !r.longgar ? ' <span class="rk-flag-red">⚠</span>' : '') + '</td>' +
         '<td class="text-center">' + r.cutiMin + (r.cutiMin && r.cutiMin < 12 && !r.longgar ? ' <span class="rk-flag-red">⚠</span>' : '') + '</td>' +
         '<td>' + statusBadge(r) + '</td>' +
+        '<td class="text-center" data-alert-sid="' + escapeHtml(upperSid) + '">' + alertCountCellHtml(upperSid) + '</td>' +
         '</tr>';
-    }).join('') || '<tr><td colspan="6" class="text-center text-secondary-light py-5">Tidak ada karyawan pada kombinasi filter ini.</td></tr>';
+    }).join('') || '<tr><td colspan="7" class="text-center text-secondary-light py-5">Tidak ada karyawan pada kombinasi filter ini.</td></tr>';
 
     els.tableBody.querySelectorAll('tr[data-id]').forEach(function (tr) {
       tr.addEventListener('click', function () { state.selectedId = tr.getAttribute('data-id'); renderTable(); renderDetail(); });
@@ -578,6 +641,8 @@
     els.pageInfo.textContent = 'Hal ' + (state.page + 1) + '/' + pages;
     els.prev.disabled = state.page === 0;
     els.next.disabled = state.page >= pages - 1;
+
+    fetchAlertCountsForPage(pg);
   }
 
   /* ---------------------------------------------------------------------
@@ -661,7 +726,60 @@
       '<span>Kotak bertepi <b class="rk-flag-red">merah</b>/<b class="rk-flag-yel">kuning</b> = ada flag hari itu</span>' +
       '</div>' +
       '<h6 class="text-sm fw-semibold text-secondary-light text-uppercase mb-8">Riwayat Flag (rentang aktif)</h6>' +
-      flagList(r);
+      flagList(r) +
+      '<h6 class="text-sm fw-semibold text-secondary-light text-uppercase mt-24 mb-8">Alert DMS (30 Hari Terakhir)</h6>' +
+      '<div id="rkAlertTimeline">' + alertTimelineLoadingHtml() + '</div>';
+
+    loadAlertTimeline(r.sid);
+  }
+
+  /* ---------------------------------------------------------------------
+   * Alert DMS per orang (live, bukan bagian dari snapshot roster) — lihat
+   * RosterComplianceAlertController / PraOperasiDmsAlertReader.
+   * ------------------------------------------------------------------- */
+  function alertTimelineLoadingHtml() {
+    return '<div class="text-center text-secondary-light py-16"><div class="spinner-border spinner-border-sm text-primary-600" role="status"></div></div>';
+  }
+
+  function renderAlertTimeline(list, available) {
+    if (available === false) return '<div class="text-secondary-light text-sm text-center py-16">Data alert DMS tidak tersedia saat ini.</div>';
+    if (!list.length) return '<div class="text-secondary-light text-sm text-center py-16">Tidak ada alert DMS pada 30 hari terakhir.</div>';
+    return '<div class="d-flex flex-column gap-2 rk-flaglist-scroll">' + list.map(function (a) {
+      var meta = ALERT_STATUS_META[a.status] || ALERT_STATUS_META.belum;
+      return '<div class="d-flex align-items-center justify-content-between border rounded-8 px-12 py-8">' +
+        '<div><div class="text-sm fw-medium">' + escapeHtml(a.name) + '</div><div class="text-xs text-secondary-light">' + escapeHtml(a.date) + '</div></div>' +
+        '<span class="' + meta.cls + ' px-10 py-4 rounded-pill fw-medium text-xs">' + meta.label + '</span>' +
+        '</div>';
+    }).join('') + '</div>';
+  }
+
+  function loadAlertTimeline(sid) {
+    var container = document.getElementById('rkAlertTimeline');
+    if (!container) return;
+    if (!ALERT_TIMELINE_BASE || !ALERT_UNTIL) {
+      container.innerHTML = '<div class="text-secondary-light text-sm text-center py-16">Alert DMS tidak tersedia.</div>';
+      return;
+    }
+    var upper = (sid || '').toUpperCase();
+    if (alertTimelineCache[upper]) {
+      var cached = alertTimelineCache[upper];
+      container.innerHTML = renderAlertTimeline(cached.list, cached.available);
+      return;
+    }
+    var url = ALERT_TIMELINE_BASE + '/' + encodeURIComponent(sid) + '?until=' + encodeURIComponent(ALERT_UNTIL);
+    fetch(url)
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+      .then(function (data) {
+        if (state.selectedId == null || (VIEW.find(function (x) { return x.id === state.selectedId; }) || {}).sid !== sid) return;
+        var entry = { list: data.timeline || [], available: data.available !== false };
+        alertTimelineCache[upper] = entry;
+        var stillThere = document.getElementById('rkAlertTimeline');
+        if (stillThere) stillThere.innerHTML = renderAlertTimeline(entry.list, entry.available);
+      })
+      .catch(function () {
+        var stillThere = document.getElementById('rkAlertTimeline');
+        if (stillThere) stillThere.innerHTML = '<div class="text-danger-600 text-sm text-center py-8">Gagal memuat alert DMS.</div>';
+      });
   }
 
   /* ---------------------------------------------------------------------

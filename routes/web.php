@@ -795,6 +795,8 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         Route::get('/roster-compliance-static', function () {
             return view('dms.roster-compliance-static');
         })->name('roster-compliance-static');
+        Route::get('/roster-compliance-static/alert-counts', [\App\Http\Controllers\DMS\RosterComplianceAlertController::class, 'counts'])->name('roster-compliance-static.alert-counts');
+        Route::get('/roster-compliance-static/alerts/{sid}', [\App\Http\Controllers\DMS\RosterComplianceAlertController::class, 'timeline'])->name('roster-compliance-static.alerts');
     });
 
     // Pra Operasi — checkin RFID Operator x Fatigue Test (Fit to Work) x PVT x Alert DMS

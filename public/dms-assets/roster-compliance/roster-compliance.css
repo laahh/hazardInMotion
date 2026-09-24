@@ -31,8 +31,11 @@
 .rk-table tbody tr { cursor: pointer; transition: background .15s ease; }
 .rk-table tbody tr:hover { background: var(--neutral-50, #f8fafc); }
 .rk-table tbody tr.is-selected { background: var(--primary-50, #eef4ff); box-shadow: inset 3px 0 0 var(--primary-600, #487FFF); }
-.rk-name { font-weight: 600; display: block; color: var(--text-primary-light); }
+.rk-col-name { max-width: 190px; }
+.rk-name, .rk-sub { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
+.rk-name { font-weight: 600; color: var(--text-primary-light); }
 .rk-sub { font-size: 11px; color: var(--text-secondary-light); }
+.rk-table td, .rk-table th { padding: 7px 10px; }
 
 .rk-flag-red { color: var(--danger-600, #b91c1c); font-weight: 600; }
 .rk-flag-yel { color: var(--warning-600, #b45309); font-weight: 600; }

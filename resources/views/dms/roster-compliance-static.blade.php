@@ -146,11 +146,12 @@
               <thead>
                 <tr>
                   <th scope="col">SID</th>
-                  <th scope="col" data-k="nama" style="cursor:pointer">Karyawan</th>
+                  <th scope="col" class="rk-col-name" data-k="nama" style="cursor:pointer">Karyawan</th>
                   <th scope="col" class="text-center" data-k="roster" style="cursor:pointer">Roster</th>
-                  <th scope="col" class="text-center" data-k="onAll" style="cursor:pointer">On-site&nbsp;Maks&nbsp;YTD</th>
-                  <th scope="col" class="text-center" data-k="cutiMin" style="cursor:pointer">Cuti&nbsp;Min&nbsp;YTD</th>
+                  <th scope="col" class="text-center" data-k="onAll" style="cursor:pointer">On-site&nbsp;YTD</th>
+                  <th scope="col" class="text-center" data-k="cutiMin" style="cursor:pointer">Cuti&nbsp;Min</th>
                   <th scope="col" data-k="status" style="cursor:pointer">Status Kini</th>
+                  <th scope="col" class="text-center">Alert&nbsp;DMS</th>
                 </tr>
               </thead>
               <tbody id="rkTableBody"></tbody>
@@ -212,5 +213,9 @@
 @endsection
 
 @section('page-scripts')
-<script data-base="{{ asset('dms-assets/roster-compliance') }}" src="{{ asset('dms-assets/roster-compliance/roster-compliance.js') }}"></script>
+<script
+  data-base="{{ asset('dms-assets/roster-compliance') }}"
+  data-alert-counts-url="{{ route('dms.roster-compliance-static.alert-counts') }}"
+  data-alert-timeline-base="{{ url('dms/roster-compliance-static/alerts') }}"
+  src="{{ asset('dms-assets/roster-compliance/roster-compliance.js') }}"></script>
 @endsection
