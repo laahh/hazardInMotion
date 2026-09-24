@@ -88,13 +88,15 @@
           @forelse ($rows as $row)
             <tr>
               <td>
-                @if ($row->image_url)
-                  <img src="{{ $row->imageDisplayUrl() }}" alt="{{ $row->standard_name }}" class="rounded border" style="width: 40px; height: 40px; object-fit: cover;">
-                @else
-                  <span class="w-40-px h-40-px d-flex align-items-center justify-content-center bg-neutral-100 rounded text-secondary-light">
-                    <i class="ri-image-line"></i>
-                  </span>
-                @endif
+                <button type="button" class="btn p-0 border-0 bg-transparent" data-bs-toggle="modal" data-bs-target="#img-modal-{{ $row->tool_master_id }}" title="Kelola gambar {{ $row->standard_name }}">
+                  @if ($row->image_url)
+                    <img src="{{ $row->imageDisplayUrl() }}" alt="{{ $row->standard_name }}" class="rounded border" style="width: 40px; height: 40px; object-fit: cover;">
+                  @else
+                    <span class="btn btn-outline-primary-600 btn-sm py-4 px-8 text-xs">
+                      <i class="ri-upload-2-line"></i> Upload
+                    </span>
+                  @endif
+                </button>
               </td>
               <td>{{ $row->category?->code }}</td>
               <td><strong>{{ $row->standard_name }}</strong></td>
@@ -121,6 +123,44 @@
         </tbody>
       </table>
     </div>
+
+    @foreach ($rows as $row)
+      <div class="modal fade" id="img-modal-{{ $row->tool_master_id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h6 class="modal-title mb-0">Gambar: {{ $row->standard_name }}</h6>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              @if ($row->image_url)
+                <div class="text-center mb-16">
+                  <img src="{{ $row->imageDisplayUrl() }}" alt="{{ $row->standard_name }}" class="rounded border" style="max-height: 220px; max-width: 100%; object-fit: contain;">
+                </div>
+              @endif
+              <form method="POST" action="{{ route('pnc-monitoring.inventory-tool-master.image.update', $row) }}" enctype="multipart/form-data">
+                @csrf
+                <label class="form-label text-sm mb-1">{{ $row->image_url ? 'Ganti gambar' : 'Upload gambar' }} (JPG/PNG/WEBP, maks 4 MB)</label>
+                <input type="file" name="image" class="form-control form-control-sm" accept="image/png,image/jpeg,image/webp" required>
+                <button type="submit" class="btn btn-primary-600 btn-sm w-100 mt-12">
+                  <i class="ri-upload-2-line"></i> {{ $row->image_url ? 'Ganti Gambar' : 'Upload Gambar' }}
+                </button>
+              </form>
+              @if ($row->image_url)
+                <form method="POST" action="{{ route('pnc-monitoring.inventory-tool-master.image.destroy', $row) }}" class="mt-8" onsubmit="return confirm('Hapus gambar {{ $row->standard_name }}?')">
+                  @csrf
+                  @method('DELETE')
+                  <button type="submit" class="btn btn-outline-danger-600 btn-sm w-100">
+                    <i class="ri-delete-bin-6-line"></i> Hapus Gambar
+                  </button>
+                </form>
+              @endif
+            </div>
+          </div>
+        </div>
+      </div>
+    @endforeach
+
     <div class="mt-16">{{ $rows->links() }}</div>
   </div>
 </div>

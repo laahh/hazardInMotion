@@ -115,15 +115,45 @@ final class PncMonitoringInventoryToolMasterController extends Controller
             return back()->withErrors(['tool_master' => 'Jenis alat tidak bisa dihapus karena masih punya unit aset terdaftar.']);
         }
 
-        if ($inventoryToolMaster->isUploadedImage()) {
-            Storage::disk('public')->delete($inventoryToolMaster->image_url);
-        }
+        $this->deleteStoredImageIfAny($inventoryToolMaster);
 
         $inventoryToolMaster->delete();
 
         return redirect()
             ->route('pnc-monitoring.inventory-tool-master.index')
             ->with('success', 'Jenis alat dihapus.');
+    }
+
+    /**
+     * Upload/ganti gambar langsung dari daftar (index), tanpa perlu masuk ke form edit.
+     */
+    public function updateImage(Request $request, PncMonitoringInventoryToolMaster $inventoryToolMaster): RedirectResponse
+    {
+        $request->validate([
+            'image' => ['required', 'image', 'max:4096'],
+        ]);
+
+        $this->deleteStoredImageIfAny($inventoryToolMaster);
+        $inventoryToolMaster->update([
+            'image_url' => $request->file('image')->store('pnc-monitoring/inventory-tool-master', 'public'),
+        ]);
+
+        return back()->with('success', "Gambar {$inventoryToolMaster->standard_name} diperbarui.");
+    }
+
+    public function destroyImage(PncMonitoringInventoryToolMaster $inventoryToolMaster): RedirectResponse
+    {
+        $this->deleteStoredImageIfAny($inventoryToolMaster);
+        $inventoryToolMaster->update(['image_url' => null]);
+
+        return back()->with('success', "Gambar {$inventoryToolMaster->standard_name} dihapus.");
+    }
+
+    private function deleteStoredImageIfAny(PncMonitoringInventoryToolMaster $toolMaster): void
+    {
+        if ($toolMaster->isUploadedImage()) {
+            Storage::disk('public')->delete($toolMaster->image_url);
+        }
     }
 
     public function excelTemplate(PncMonitoringInventoryToolMasterExcelTemplateService $templates): StreamedResponse
@@ -257,8 +287,8 @@ final class PncMonitoringInventoryToolMasterController extends Controller
         ?PncMonitoringInventoryToolMaster $existing,
     ): array {
         if ($request->hasFile('image')) {
-            if ($existing?->isUploadedImage()) {
-                Storage::disk('public')->delete($existing->image_url);
+            if ($existing !== null) {
+                $this->deleteStoredImageIfAny($existing);
             }
             $payload['image_url'] = $request->file('image')->store('pnc-monitoring/inventory-tool-master', 'public');
 
@@ -266,8 +296,8 @@ final class PncMonitoringInventoryToolMasterController extends Controller
         }
 
         if ($request->boolean('remove_image')) {
-            if ($existing?->isUploadedImage()) {
-                Storage::disk('public')->delete($existing->image_url);
+            if ($existing !== null) {
+                $this->deleteStoredImageIfAny($existing);
             }
             $payload['image_url'] = null;
         }
