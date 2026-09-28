@@ -105,7 +105,7 @@
             <h6 class="fw-semibold mb-0">{{ number_format($stats['masih_banned']) }}</h6>
           </div>
         </div>
-        <p class="text-sm mb-0">Log automation SUCCESS (sid_roster_banned_log)</p>
+        <p class="text-sm mb-0">Log automation SUCCESS</p>
       </div>
     </div>
   </div>
