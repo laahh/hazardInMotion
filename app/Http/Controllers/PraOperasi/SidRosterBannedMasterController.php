@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\PraOperasi;
 
 use App\Http\Controllers\Controller;
+use App\Models\SidRosterBannedLog;
 use App\Models\SidRosterBannedMaster;
 use App\Models\SidRosterTreatmentEvidence;
 use Exception;
@@ -35,9 +36,10 @@ class SidRosterBannedMasterController extends Controller
     }
 
     /**
-     * Ringkasan overview: total banned, yang masih aktif banned vs sudah
-     * unbanned (punya bukti treatment yang APPROVED), dan rekap pengajuan
-     * treatment per status.
+     * Ringkasan overview: total banned (master), yang benar-benar sudah
+     * ke-eksekusi banned-nya (log automation SUCCESS) vs sudah unbanned
+     * (punya bukti treatment yang APPROVED), dan rekap pengajuan treatment
+     * per status.
      *
      * @return array{
      *     total_banned:int,
@@ -51,12 +53,15 @@ class SidRosterBannedMasterController extends Controller
      */
     private function overviewStats(): array
     {
-        // "Masih Banned" murni dari log sid_roster_banned_master (tidak
-        // dikurangi status unban) — tabel ini tidak punya kolom status
-        // sendiri, jadi total record di sini = total yang masih tercatat
-        // banned.
         $totalBanned = SidRosterBannedMaster::count();
-        $masihBanned = $totalBanned;
+
+        // "Masih Banned" = distinct master_id di sid_roster_banned_log yang
+        // automation_status-nya SUCCESS (benar-benar sudah ke-eksekusi
+        // banned di sistem, bukan cuma tercatat di master).
+        $masihBanned = SidRosterBannedLog::query()
+            ->where('automation_status', SidRosterBannedLog::STATUS_SUCCESS)
+            ->distinct('master_id')
+            ->count('master_id');
 
         $sudahUnbanned = SidRosterTreatmentEvidence::query()
             ->where('approval_status', SidRosterTreatmentEvidence::STATUS_APPROVED)
