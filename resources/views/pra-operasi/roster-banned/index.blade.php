@@ -105,7 +105,7 @@
             <h6 class="fw-semibold mb-0">{{ number_format($stats['masih_banned']) }}</h6>
           </div>
         </div>
-        <p class="text-sm mb-0">Belum ada bukti treatment yang di-approve</p>
+        <p class="text-sm mb-0">Berdasarkan log tabel sid_roster_banned_master</p>
       </div>
     </div>
   </div>

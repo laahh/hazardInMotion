@@ -51,14 +51,17 @@ class SidRosterBannedMasterController extends Controller
      */
     private function overviewStats(): array
     {
+        // "Masih Banned" murni dari log sid_roster_banned_master (tidak
+        // dikurangi status unban) — tabel ini tidak punya kolom status
+        // sendiri, jadi total record di sini = total yang masih tercatat
+        // banned.
         $totalBanned = SidRosterBannedMaster::count();
+        $masihBanned = $totalBanned;
 
         $sudahUnbanned = SidRosterTreatmentEvidence::query()
             ->where('approval_status', SidRosterTreatmentEvidence::STATUS_APPROVED)
             ->distinct('master_id')
             ->count('master_id');
-
-        $masihBanned = max(0, $totalBanned - $sudahUnbanned);
 
         $totalPengajuan = SidRosterTreatmentEvidence::count();
         $pengajuanPending = SidRosterTreatmentEvidence::where('approval_status', SidRosterTreatmentEvidence::STATUS_PENDING)->count();
