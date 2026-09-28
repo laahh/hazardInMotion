@@ -832,6 +832,20 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
             ->name('dms-monitoring.kpi-detail');
         Route::post('/dashboard/qa-sample/generate', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'generateQaSample'])->name('dms-monitoring.qa-sample.generate');
         Route::post('/dashboard/qa-sample/verdict', [\App\Http\Controllers\PraOperasi\DmsAlertMonitoringController::class, 'submitQaVerdict'])->name('dms-monitoring.qa-sample.verdict');
+
+        // Master roster karyawan banned (sid_roster_banned_master) — CRUD + import Excel.
+        Route::prefix('roster-banned')->name('roster-banned.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'index'])->name('index');
+            Route::get('/data', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'data'])->name('data');
+            Route::get('/create', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'create'])->name('create');
+            Route::post('/', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'store'])->name('store');
+            Route::get('/import/form', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'importForm'])->name('import-form');
+            Route::post('/import', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'import'])->name('import');
+            Route::get('/import/template', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'downloadTemplate'])->name('download-template');
+            Route::get('/{id}/edit', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'edit'])->whereNumber('id')->name('edit');
+            Route::put('/{id}', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'update'])->whereNumber('id')->name('update');
+            Route::delete('/{id}', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'destroy'])->whereNumber('id')->name('destroy');
+        });
     });
 
     // Route modul VALIDASI TBC & Score Card

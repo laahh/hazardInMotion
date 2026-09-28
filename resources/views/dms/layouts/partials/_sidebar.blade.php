@@ -66,7 +66,13 @@
           <span>Evaluasi Harian</span>
         </a>
       </li>
-     
+      <li>
+        <a href="{{ route('pra-operasi.roster-banned.index') }}" class="{{ request()->routeIs('pra-operasi.roster-banned.*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:forbidden-circle-outline" class="menu-icon"></iconify-icon>
+          <span>Master Roster Banned</span>
+        </a>
+      </li>
+
       <li class="sidebar-menu-group-title">Navigasi</li>
       <li>
         <a href="{{ url('/') }}">
