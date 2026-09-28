@@ -85,7 +85,7 @@
             <iconify-icon icon="solar:forbidden-circle-bold" class="icon"></iconify-icon>
           </span>
           <div>
-            <span class="mb-2 fw-medium text-secondary-light text-sm">Total Karyawan Banned</span>
+            <span class="mb-2 fw-medium text-secondary-light text-sm">Total Karyawan Harus di Banned</span>
             <h6 class="fw-semibold mb-0">{{ number_format($stats['total_banned']) }}</h6>
           </div>
         </div>
