@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SidRosterBannedMaster extends Model
 {
@@ -24,4 +25,9 @@ class SidRosterBannedMaster extends Model
     protected $casts = [
         'tanggal_pelanggaran' => 'date',
     ];
+
+    public function treatmentEvidences(): HasMany
+    {
+        return $this->hasMany(SidRosterTreatmentEvidence::class, 'master_id');
+    }
 }

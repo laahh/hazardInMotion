@@ -77,6 +77,10 @@
         <p class="text-sm text-secondary-light mb-0">NIK, SID, nama, perusahaan, site, dan alasan pelanggaran.</p>
       </div>
       <div class="d-flex flex-wrap gap-2">
+        <a href="{{ route('pra-operasi.roster-banned.treatment.index') }}" class="btn btn-sm btn-outline-warning-600 d-inline-flex align-items-center gap-1">
+          <iconify-icon icon="solar:clipboard-check-outline" class="icon"></iconify-icon>
+          Review Bukti Treatment
+        </a>
         <a href="{{ route('pra-operasi.roster-banned.import-form') }}" class="btn btn-sm btn-outline-success-600 d-inline-flex align-items-center gap-1">
           <iconify-icon icon="solar:upload-bold" class="icon"></iconify-icon>
           Upload Excel

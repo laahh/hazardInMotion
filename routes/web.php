@@ -103,6 +103,9 @@ Route::get('/login/{path}', static function (string $path) {
 // Form publik Auto Banned — tanpa login
 require __DIR__.'/AutoBanned/auto_banned_public.php';
 
+// Form publik pengajuan bukti treatment roster banned — tanpa login
+require __DIR__.'/PraOperasi/roster_treatment_public.php';
+
 // Route khusus screenshot dashboard (tanpa middleware auth, pakai token)
 // URL: /dopmikk/dopm/dashboard/screenshot?token=SECRET
 Route::get('/dopmikk/dopm/dashboard/screenshot', function (\Illuminate\Http\Request $request) {
@@ -842,6 +845,15 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
             Route::get('/import/form', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'importForm'])->name('import-form');
             Route::post('/import', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'import'])->name('import');
             Route::get('/import/template', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'downloadTemplate'])->name('download-template');
+
+            // Review bukti treatment (sid_roster_treatment_evidence) yang masuk dari form publik.
+            Route::prefix('treatment')->name('treatment.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\PraOperasi\SidRosterTreatmentEvidenceController::class, 'index'])->name('index');
+                Route::get('/data', [\App\Http\Controllers\PraOperasi\SidRosterTreatmentEvidenceController::class, 'data'])->name('data');
+                Route::post('/{evidence}/review', [\App\Http\Controllers\PraOperasi\SidRosterTreatmentEvidenceController::class, 'review'])->whereNumber('evidence')->name('review');
+                Route::get('/{evidence}/file', [\App\Http\Controllers\PraOperasi\SidRosterTreatmentEvidenceController::class, 'downloadEvidence'])->whereNumber('evidence')->name('evidence');
+            });
+
             Route::get('/{id}/edit', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'edit'])->whereNumber('id')->name('edit');
             Route::put('/{id}', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'update'])->whereNumber('id')->name('update');
             Route::delete('/{id}', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'destroy'])->whereNumber('id')->name('destroy');
