@@ -45,7 +45,7 @@
   </style>
   @yield('head')
 </head>
-<body class="bg-surface text-on-surface antialiased max-w-[480px] mx-auto min-h-screen relative pb-28">
+<body class="bg-surface text-on-surface antialiased max-w-[480px] mx-auto min-h-screen relative pb-24">
 
   <header class="sticky top-0 left-0 w-full z-50 flex justify-between items-center px-5 py-4 bg-surface max-w-[480px] mx-auto border-b border-outline-variant/60">
     <div class="flex items-center gap-3">
@@ -78,7 +78,7 @@
     @yield('content')
   </main>
 
-  <nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-5 pt-3 bg-white border-t border-outline-variant/60 max-w-[480px] mx-auto">
+  <nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-3 pt-2 bg-white border-t border-outline-variant/60 max-w-[480px] mx-auto">
     @php
       $navItems = [
         ['route' => 'pnc-monitoring.inventory-inspection.home', 'icon' => 'home', 'label' => 'Beranda'],
@@ -88,9 +88,9 @@
     @endphp
     @foreach ($navItems as $item)
       @php $isActive = request()->routeIs($item['route']); @endphp
-      <a href="{{ route($item['route']) }}" class="flex flex-col items-center justify-center gap-0.5 rounded-2xl px-6 py-2 transition-all active:scale-90 duration-200 ease-out {{ $isActive ? 'bg-primary-light text-primary' : 'text-on-surface-variant/70' }}">
-        <span class="material-symbols-outlined text-[22px]" @if($isActive) style="font-variation-settings: 'FILL' 1;" @endif>{{ $item['icon'] }}</span>
-        <span class="font-semibold text-[11px] tracking-wide">{{ $item['label'] }}</span>
+      <a href="{{ route($item['route']) }}" class="flex flex-col items-center justify-center gap-0.5 rounded-xl px-4 py-1.5 transition-all active:scale-90 duration-200 ease-out {{ $isActive ? 'bg-primary-light text-primary' : 'text-on-surface-variant/70' }}">
+        <span class="material-symbols-outlined text-[18px]" @if($isActive) style="font-variation-settings: 'FILL' 1;" @endif>{{ $item['icon'] }}</span>
+        <span class="font-semibold text-[10px] tracking-wide">{{ $item['label'] }}</span>
       </a>
     @endforeach
   </nav>

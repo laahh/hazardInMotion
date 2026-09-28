@@ -1002,29 +1002,39 @@ final class SportEvaluationInstallStatsService
         ];
     }
 
+    /**
+     * Sengaja di-scope ke populasi "Status Install Karyawan" (AKTIF + 6
+     * aturan exclude) — bukan hitungan mentah lintas seluruh user_id di
+     * database — supaya angka ini konsisten dengan KPI card "Total User
+     * Install" di dashboard utama (lihat
+     * SportEvaluationDashboardController::installedEmployeesQuery()).
+     */
     private function kpiCardTotal(): int
     {
         try {
-            return (int) Cache::remember('evaluasi_well:install_stats:kpi_card_total:v2', self::CACHE_TTL, function (): int {
+            return (int) Cache::remember('evaluasi_well:install_stats:kpi_card_total:v3', self::CACHE_TTL, function (): int {
                 $db = DB::connection(BewellConnectionService::CONNECTION);
 
-                $installSignalsSql = '
-                    SELECT user_id FROM login_audit
-                        WHERE event = ? AND user_id IS NOT NULL
-                    UNION ALL
-                    SELECT user_id FROM food_analyses
-                        WHERE user_id IS NOT NULL
-                    UNION ALL
-                    SELECT user_id FROM workout_analyses
-                        WHERE user_id IS NOT NULL
-                ';
+                $query = $this->exclusionRules->applyToQuery(
+                    $db->table('employee_profiles as e')->where('e.status_karyawan', 'AKTIF')
+                )->where(function ($q): void {
+                    $q->whereExists(function ($sub): void {
+                        $sub->selectRaw('1')
+                            ->from('login_audit as a')
+                            ->whereColumn('a.user_id', 'e.id')
+                            ->where('a.event', 'login_success');
+                    })->orWhereExists(function ($sub): void {
+                        $sub->selectRaw('1')
+                            ->from('food_analyses as f')
+                            ->whereColumn('f.user_id', 'e.id');
+                    })->orWhereExists(function ($sub): void {
+                        $sub->selectRaw('1')
+                            ->from('workout_analyses as w')
+                            ->whereColumn('w.user_id', 'e.id');
+                    });
+                });
 
-                $row = $db->selectOne(
-                    'SELECT COUNT(DISTINCT user_id) AS c FROM ('.$installSignalsSql.') AS install_signals',
-                    ['login_success']
-                );
-
-                return (int) ($row->c ?? 0);
+                return (int) $query->count('e.id');
             });
         } catch (Throwable $e) {
             report($e);

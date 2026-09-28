@@ -953,8 +953,14 @@ class SportEvaluationDashboardController extends Controller
     }
 
     /**
-     * Total user install = distinct user yang pernah login_success
-     * ATAU punya aktivitas (food/workout) di tanggal berapa pun.
+     * Total user install = karyawan (populasi sama dengan "Total Karyawan" /
+     * "Status Install Karyawan": AKTIF + 6 aturan exclude) yang pernah
+     * login_success ATAU punya aktivitas (food/workout) di tanggal berapa pun.
+     *
+     * Sengaja di-scope ke populasi yang sama dengan card "Status Install
+     * Karyawan" (bukan hitungan mentah lintas seluruh user_id di database)
+     * supaya Total Karyawan = Total User Install + Belum Install selalu
+     * konsisten satu sama lain.
      *
      * @return array{newUsersTotal:int, newUsersWeekIncrease:int, newUsersWeekIncreasePercent:float}
      */
@@ -970,44 +976,51 @@ class SportEvaluationDashboardController extends Controller
 
         try {
             $cached = Cache::remember(
-                'evaluasi_well:new_users_card_v2:'.$this->scopeCacheKey(),
+                'evaluasi_well:new_users_card_v3:'.$this->scopeCacheKey(),
                 300,
                 function (): array {
-                    $db = DB::connection(BewellConnectionService::CONNECTION);
-                    [$inSql, $inBindings] = $this->scopedUserIdSql('install_signals.user_id');
-
-                    $installSignalsSql = '
-                        SELECT user_id, created_at FROM login_audit
-                            WHERE event = ? AND user_id IS NOT NULL
-                        UNION ALL
-                        SELECT user_id, created_at FROM food_analyses
-                            WHERE user_id IS NOT NULL
-                        UNION ALL
-                        SELECT user_id, created_at FROM workout_analyses
-                            WHERE user_id IS NOT NULL
-                    ';
-
-                    $row = $db->selectOne(
-                        'SELECT COUNT(DISTINCT user_id) AS c FROM ('.$installSignalsSql.') AS install_signals WHERE 1 = 1'.$inSql,
-                        array_merge(['login_success'], $inBindings)
-                    );
-                    $total = (int) ($row->c ?? 0);
+                    $total = (int) $this->installedEmployeesQuery()->count('e.id');
 
                     $week = $this->activeStatsService->resolveWeekRange(null);
                     $weekStart = $week['start'].' 00:00:00';
 
-                    $row = $db->selectOne(
-                        'SELECT COUNT(*) AS c FROM (
-                            SELECT user_id
-                            FROM ('.$installSignalsSql.') AS install_signals
-                            WHERE 1 = 1'.$inSql.'
-                            GROUP BY user_id
-                            HAVING MIN(created_at) >= ?
-                        ) AS first_install_week',
-                        array_merge(['login_success'], $inBindings, [$weekStart])
-                    );
-
-                    $increase = (int) ($row->c ?? 0);
+                    // "Install baru minggu ini" = punya sinyal (login/food/workout) di
+                    // minggu berjalan, DAN tidak punya sinyal apa pun sebelum minggu ini
+                    // (setara MIN(created_at) >= weekStart, tanpa perlu GROUP BY/MIN).
+                    $increase = (int) $this->installedEmployeesQuery()
+                        ->where(function (Builder $q) use ($weekStart): void {
+                            $q->whereExists(function ($sub) use ($weekStart): void {
+                                $sub->selectRaw('1')->from('login_audit as a_new')
+                                    ->whereColumn('a_new.user_id', 'e.id')
+                                    ->where('a_new.event', 'login_success')
+                                    ->where('a_new.created_at', '>=', $weekStart);
+                            })->orWhereExists(function ($sub) use ($weekStart): void {
+                                $sub->selectRaw('1')->from('food_analyses as f_new')
+                                    ->whereColumn('f_new.user_id', 'e.id')
+                                    ->where('f_new.created_at', '>=', $weekStart);
+                            })->orWhereExists(function ($sub) use ($weekStart): void {
+                                $sub->selectRaw('1')->from('workout_analyses as w_new')
+                                    ->whereColumn('w_new.user_id', 'e.id')
+                                    ->where('w_new.created_at', '>=', $weekStart);
+                            });
+                        })
+                        ->whereNotExists(function ($sub) use ($weekStart): void {
+                            $sub->selectRaw('1')->from('login_audit as a_old')
+                                ->whereColumn('a_old.user_id', 'e.id')
+                                ->where('a_old.event', 'login_success')
+                                ->where('a_old.created_at', '<', $weekStart);
+                        })
+                        ->whereNotExists(function ($sub) use ($weekStart): void {
+                            $sub->selectRaw('1')->from('food_analyses as f_old')
+                                ->whereColumn('f_old.user_id', 'e.id')
+                                ->where('f_old.created_at', '<', $weekStart);
+                        })
+                        ->whereNotExists(function ($sub) use ($weekStart): void {
+                            $sub->selectRaw('1')->from('workout_analyses as w_old')
+                                ->whereColumn('w_old.user_id', 'e.id')
+                                ->where('w_old.created_at', '<', $weekStart);
+                        })
+                        ->count('e.id');
 
                     return [
                         'newUsersTotal' => $total,
@@ -1025,6 +1038,33 @@ class SportEvaluationDashboardController extends Controller
         }
 
         return compact('newUsersTotal', 'newUsersWeekIncrease', 'newUsersWeekIncreasePercent');
+    }
+
+    /**
+     * Populasi "Status Install Karyawan" (AKTIF + 6 aturan exclude) yang
+     * dipersempit ke yang SUDAH install — kebalikan dari $belumInstall di
+     * notInstalledFilterData(). Dipakai supaya "Total User Install" di KPI
+     * card konsisten dengan badge "Status Install Karyawan".
+     */
+    private function installedEmployeesQuery(): Builder
+    {
+        return $this->activeEmployeesBaseQuery()
+            ->where(function (Builder $q): void {
+                $q->whereExists(function ($sub): void {
+                    $sub->selectRaw('1')
+                        ->from('login_audit as a')
+                        ->whereColumn('a.user_id', 'e.id')
+                        ->where('a.event', 'login_success');
+                })->orWhereExists(function ($sub): void {
+                    $sub->selectRaw('1')
+                        ->from('food_analyses as f')
+                        ->whereColumn('f.user_id', 'e.id');
+                })->orWhereExists(function ($sub): void {
+                    $sub->selectRaw('1')
+                        ->from('workout_analyses as w')
+                        ->whereColumn('w.user_id', 'e.id');
+                });
+            });
     }
 
     /**
