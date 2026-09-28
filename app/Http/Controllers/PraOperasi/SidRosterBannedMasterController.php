@@ -6,6 +6,7 @@ namespace App\Http\Controllers\PraOperasi;
 
 use App\Http\Controllers\Controller;
 use App\Models\SidRosterBannedMaster;
+use App\Models\SidRosterTreatmentEvidence;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -28,7 +29,51 @@ class SidRosterBannedMasterController extends Controller
 {
     public function index(): View
     {
-        return view('pra-operasi.roster-banned.index');
+        return view('pra-operasi.roster-banned.index', [
+            'stats' => $this->overviewStats(),
+        ]);
+    }
+
+    /**
+     * Ringkasan overview: total banned, yang masih aktif banned vs sudah
+     * unbanned (punya bukti treatment yang APPROVED), dan rekap pengajuan
+     * treatment per status.
+     *
+     * @return array{
+     *     total_banned:int,
+     *     sudah_unbanned:int,
+     *     masih_banned:int,
+     *     total_pengajuan:int,
+     *     pengajuan_pending:int,
+     *     pengajuan_approved:int,
+     *     pengajuan_rejected:int
+     * }
+     */
+    private function overviewStats(): array
+    {
+        $totalBanned = SidRosterBannedMaster::count();
+
+        $sudahUnbanned = SidRosterTreatmentEvidence::query()
+            ->where('approval_status', SidRosterTreatmentEvidence::STATUS_APPROVED)
+            ->distinct('master_id')
+            ->count('master_id');
+
+        $masihBanned = max(0, $totalBanned - $sudahUnbanned);
+
+        $totalPengajuan = SidRosterTreatmentEvidence::count();
+        $pengajuanPending = SidRosterTreatmentEvidence::where('approval_status', SidRosterTreatmentEvidence::STATUS_PENDING)->count();
+        $pengajuanApproved = SidRosterTreatmentEvidence::where('approval_status', SidRosterTreatmentEvidence::STATUS_APPROVED)->count();
+        $pengajuanRejected = SidRosterTreatmentEvidence::where('approval_status', SidRosterTreatmentEvidence::STATUS_REJECTED)->count();
+
+        return [
+            'total_banned' => $totalBanned,
+            'sudah_unbanned' => $sudahUnbanned,
+            'masih_banned' => $masihBanned,
+            'total_pengajuan' => $totalPengajuan,
+            'pengajuan_pending' => $pengajuanPending,
+            'pengajuan_approved' => $pengajuanApproved,
+            'pengajuan_rejected' => $pengajuanRejected,
+        ];
     }
 
     /**

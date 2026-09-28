@@ -69,6 +69,84 @@
 </div>
 @endif
 
+@php
+  $stats = $stats ?? [
+      'total_banned' => 0, 'sudah_unbanned' => 0, 'masih_banned' => 0,
+      'total_pengajuan' => 0, 'pengajuan_pending' => 0, 'pengajuan_approved' => 0, 'pengajuan_rejected' => 0,
+  ];
+@endphp
+
+<div class="row gy-4 mb-24">
+  <div class="col-xxl-3 col-sm-6">
+    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-1">
+      <div class="card-body p-0">
+        <div class="d-flex align-items-center gap-2 mb-8">
+          <span class="mb-0 w-48-px h-48-px bg-primary-600 flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+            <iconify-icon icon="solar:forbidden-circle-bold" class="icon"></iconify-icon>
+          </span>
+          <div>
+            <span class="mb-2 fw-medium text-secondary-light text-sm">Total Karyawan Banned</span>
+            <h6 class="fw-semibold mb-0">{{ number_format($stats['total_banned']) }}</h6>
+          </div>
+        </div>
+        <p class="text-sm mb-0">Seluruh record di master roster banned</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-xxl-3 col-sm-6">
+    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-3">
+      <div class="card-body p-0">
+        <div class="d-flex align-items-center gap-2 mb-8">
+          <span class="mb-0 w-48-px h-48-px bg-warning-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+            <iconify-icon icon="solar:shield-warning-bold" class="icon"></iconify-icon>
+          </span>
+          <div>
+            <span class="mb-2 fw-medium text-secondary-light text-sm">Masih Banned</span>
+            <h6 class="fw-semibold mb-0">{{ number_format($stats['masih_banned']) }}</h6>
+          </div>
+        </div>
+        <p class="text-sm mb-0">Belum ada bukti treatment yang di-approve</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-xxl-3 col-sm-6">
+    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-2">
+      <div class="card-body p-0">
+        <div class="d-flex align-items-center gap-2 mb-8">
+          <span class="mb-0 w-48-px h-48-px bg-success-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+            <iconify-icon icon="solar:shield-check-bold" class="icon"></iconify-icon>
+          </span>
+          <div>
+            <span class="mb-2 fw-medium text-secondary-light text-sm">Sudah Unbanned</span>
+            <h6 class="fw-semibold mb-0">{{ number_format($stats['sudah_unbanned']) }}</h6>
+          </div>
+        </div>
+        <p class="text-sm mb-0">Bukti treatment sudah di-approve admin</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-xxl-3 col-sm-6">
+    <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-4">
+      <div class="card-body p-0">
+        <div class="d-flex align-items-center gap-2 mb-8">
+          <span class="mb-0 w-48-px h-48-px bg-info-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+            <iconify-icon icon="solar:clipboard-check-bold" class="icon"></iconify-icon>
+          </span>
+          <div>
+            <span class="mb-2 fw-medium text-secondary-light text-sm">Total Pengajuan Treatment</span>
+            <h6 class="fw-semibold mb-0">{{ number_format($stats['total_pengajuan']) }}</h6>
+          </div>
+        </div>
+        <p class="text-sm mb-0">
+          <span class="text-warning-main fw-medium">{{ number_format($stats['pengajuan_pending']) }} pending</span> &middot;
+          <span class="text-success-main fw-medium">{{ number_format($stats['pengajuan_approved']) }} approved</span> &middot;
+          <span class="text-danger-main fw-medium">{{ number_format($stats['pengajuan_rejected']) }} rejected</span>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="card radius-8 border-0 shadow-sm">
   <div class="card-header border-bottom bg-base py-16 px-24">
     <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
