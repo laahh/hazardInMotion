@@ -67,9 +67,15 @@
         </a>
       </li>
       <li>
-        <a href="{{ route('pra-operasi.roster-banned.index') }}" class="{{ request()->routeIs('pra-operasi.roster-banned.*') ? 'active-page' : '' }}">
+        <a href="{{ route('pra-operasi.roster-banned.index') }}" class="{{ request()->routeIs('pra-operasi.roster-banned.*') && ! request()->routeIs('pra-operasi.roster-banned.treatment.*') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:forbidden-circle-outline" class="menu-icon"></iconify-icon>
           <span>Master Roster Banned</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('pra-operasi.roster-banned.treatment.index') }}" class="{{ request()->routeIs('pra-operasi.roster-banned.treatment.*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:shield-check-outline" class="menu-icon"></iconify-icon>
+          <span>Review Bukti Treatment</span>
         </a>
       </li>
 
