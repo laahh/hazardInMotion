@@ -73,6 +73,7 @@
             <th>Nama</th>
             <th>Perusahaan</th>
             <th>Tgl Treatment</th>
+            <th>Periode Cuti</th>
             <th>Status</th>
             <th>Pengaju</th>
             <th>Catatan</th>
@@ -120,6 +121,7 @@
             { data: 'nama' },
             { data: 'perusahaan' },
             { data: 'tanggal_treatment' },
+            { data: 'periode_cuti' },
             { data: 'approval_status' },
             { data: 'submitted_by' },
             { data: 'catatan', className: 'rte-col-catatan' },

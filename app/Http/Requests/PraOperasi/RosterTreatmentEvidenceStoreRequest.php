@@ -31,6 +31,7 @@ class RosterTreatmentEvidenceStoreRequest extends FormRequest
             'master_id' => ['required', 'integer', 'exists:sid_roster_banned_master,id'],
             'submitted_by' => ['required', 'string', 'max:100'],
             'tanggal_treatment' => ['nullable', 'date'],
+            'periode_cuti_mulai' => ['nullable', 'date'],
             'catatan' => ['nullable', 'string', 'max:500'],
             'evidence_file' => [
                 'required',

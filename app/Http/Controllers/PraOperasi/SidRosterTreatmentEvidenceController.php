@@ -48,7 +48,8 @@ class SidRosterTreatmentEvidenceController extends Controller
             2 => 'nik',
             3 => 'sid',
             6 => 'tanggal_treatment',
-            7 => 'approval_status',
+            7 => 'periode_cuti',
+            8 => 'approval_status',
         ];
         $orderBy = $orderColumns[$orderColIndex] ?? 'submitted_at';
 
@@ -110,6 +111,7 @@ class SidRosterTreatmentEvidenceController extends Controller
                 'nama' => $item->master?->nama ?? '-',
                 'perusahaan' => $item->master?->perusahaan ?? '-',
                 'tanggal_treatment' => $item->tanggal_treatment ? $item->tanggal_treatment->format('d/m/Y') : '-',
+                'periode_cuti' => $item->periode_cuti ?: '-',
                 'approval_status' => $statusBadge[$item->approval_status] ?? e((string) $item->approval_status),
                 'submitted_by' => $item->submitted_by ?: '-',
                 'catatan' => $item->catatan ?: '-',

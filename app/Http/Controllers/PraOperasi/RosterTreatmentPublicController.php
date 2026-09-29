@@ -11,6 +11,7 @@ use App\Models\SidRosterTreatmentEvidence;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
@@ -21,6 +22,9 @@ use Illuminate\View\View;
  */
 class RosterTreatmentPublicController extends Controller
 {
+    /** Lama periode cuti (hari) dihitung dari tanggal mulai yang diinput karyawan. */
+    private const CUTI_DAYS = 14;
+
     public function show(Request $request): View
     {
         $week = strtoupper(trim((string) $request->query('week', '')));
@@ -115,6 +119,7 @@ class RosterTreatmentPublicController extends Controller
             'sid' => $master->sid,
             'evidence_file_path' => $storedPath,
             'tanggal_treatment' => $validated['tanggal_treatment'] ?? null,
+            'periode_cuti' => $this->formatPeriodeCuti($validated['periode_cuti_mulai'] ?? null),
             'catatan' => $validated['catatan'] ?? null,
             'submitted_by' => $submittedBy,
             'approval_status' => SidRosterTreatmentEvidence::STATUS_PENDING,
@@ -124,5 +129,17 @@ class RosterTreatmentPublicController extends Controller
             'nama' => $submittedBy,
             'at' => now()->format('d M Y, H:i'),
         ]);
+    }
+
+    private function formatPeriodeCuti(?string $mulai): ?string
+    {
+        if ($mulai === null || $mulai === '') {
+            return null;
+        }
+
+        $start = Carbon::parse($mulai, config('app.timezone'));
+        $end = $start->copy()->addDays(self::CUTI_DAYS);
+
+        return $start->format('d/m/Y').' s.d. '.$end->format('d/m/Y').' ('.self::CUTI_DAYS.' hari)';
     }
 }

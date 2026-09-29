@@ -133,6 +133,12 @@
             </div>
 
             <div class="field">
+               <label for="periode_cuti_mulai">Tanggal Mulai Cuti</label>
+               <input type="date" class="input" id="periode_cuti_mulai" name="periode_cuti_mulai" value="{{ old('periode_cuti_mulai') }}">
+               <div class="hint" id="periode-cuti-preview">Pilih tanggal mulai — periode cuti 14 hari akan otomatis dihitung.</div>
+            </div>
+
+            <div class="field">
                <label for="catatan">Catatan</label>
                <textarea class="textarea" id="catatan" name="catatan" maxlength="500" placeholder="Jelaskan singkat tindakan perbaikan yang sudah dilakukan...">{{ old('catatan') }}</textarea>
             </div>
@@ -165,6 +171,29 @@
     var masterIdInput = document.getElementById('rt-master-id');
     var formSection = document.getElementById('rt-form-section');
     var lookupUrl = @json(route('roster-treatment.public.lookup'));
+
+    var CUTI_DAYS = 14;
+    var MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    var periodeMulaiInput = document.getElementById('periode_cuti_mulai');
+    var periodePreview = document.getElementById('periode-cuti-preview');
+
+    function formatTanggalId(date) {
+        return date.getDate() + ' ' + MONTHS_ID[date.getMonth()] + ' ' + date.getFullYear();
+    }
+
+    function updatePeriodePreview() {
+        if (!periodeMulaiInput.value) {
+            periodePreview.textContent = 'Pilih tanggal mulai — periode cuti 14 hari akan otomatis dihitung.';
+            return;
+        }
+        var start = new Date(periodeMulaiInput.value + 'T00:00:00');
+        var end = new Date(start);
+        end.setDate(end.getDate() + CUTI_DAYS);
+        periodePreview.textContent = 'Periode cuti: ' + formatTanggalId(start) + ' s.d. ' + formatTanggalId(end) + ' (' + CUTI_DAYS + ' hari).';
+    }
+
+    periodeMulaiInput.addEventListener('change', updatePeriodePreview);
+    updatePeriodePreview();
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)

@@ -25,6 +25,7 @@ class SidRosterTreatmentEvidence extends Model
         'sid',
         'evidence_file_path',
         'tanggal_treatment',
+        'periode_cuti',
         'catatan',
         'submitted_by',
         'submitted_at',
