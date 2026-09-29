@@ -852,6 +852,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
                 Route::get('/data', [\App\Http\Controllers\PraOperasi\SidRosterTreatmentEvidenceController::class, 'data'])->name('data');
                 Route::post('/{evidence}/review', [\App\Http\Controllers\PraOperasi\SidRosterTreatmentEvidenceController::class, 'review'])->whereNumber('evidence')->name('review');
                 Route::get('/{evidence}/file', [\App\Http\Controllers\PraOperasi\SidRosterTreatmentEvidenceController::class, 'downloadEvidence'])->whereNumber('evidence')->name('evidence');
+                Route::get('/{evidence}/rfid', [\App\Http\Controllers\PraOperasi\SidRosterTreatmentEvidenceController::class, 'rfidDetail'])->whereNumber('evidence')->name('rfid');
             });
 
             Route::get('/{id}/edit', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'edit'])->whereNumber('id')->name('edit');

@@ -7,9 +7,11 @@ namespace App\Http\Controllers\PraOperasi;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PraOperasi\RosterTreatmentEvidenceReviewRequest;
 use App\Models\SidRosterTreatmentEvidence;
+use App\Services\SportEvaluation\SportEvaluationPvtRfidCheckinReader;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
@@ -22,6 +24,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class SidRosterTreatmentEvidenceController extends Controller
 {
+    public function __construct(
+        private readonly SportEvaluationPvtRfidCheckinReader $rfidReader,
+    ) {}
+
     public function index(): View
     {
         return view('pra-operasi.roster-banned.treatment-evidence.index');
@@ -92,6 +98,11 @@ class SidRosterTreatmentEvidenceController extends Controller
             $evidenceUrl = route('pra-operasi.roster-banned.treatment.evidence', $item->id);
 
             $aksi = '<a href="'.e($evidenceUrl).'" target="_blank" class="btn btn-sm btn-outline-secondary" title="Lihat file"><iconify-icon icon="solar:file-outline"></iconify-icon></a> ';
+
+            if ($item->sid && $item->periode_cuti) {
+                $rfidUrl = route('pra-operasi.roster-banned.treatment.rfid', $item->id);
+                $aksi .= '<button type="button" class="btn btn-sm btn-outline-primary rte-rfid-btn" title="Cek RFID selama periode cuti" data-rfid-url="'.e($rfidUrl).'"><iconify-icon icon="solar:card-search-outline"></iconify-icon></button> ';
+            }
 
             if ($item->isPending()) {
                 $approveUrl = route('pra-operasi.roster-banned.treatment.review', $item->id);
@@ -170,5 +181,101 @@ class SidRosterTreatmentEvidenceController extends Controller
         }
 
         return Storage::disk('local')->response($path);
+    }
+
+    /**
+     * Cek aktivitas RFID (scan gate) SID ini dari tanggal mulai periode cuti
+     * s/d hari ini — dipakai admin untuk verifikasi apakah karyawan yang
+     * mengajukan treatment benar-benar tidak beraktivitas di site selama
+     * cuti (kalau ada RFID di rentang itu, patut dicurigai/ditindaklanjuti).
+     */
+    public function rfidDetail(SidRosterTreatmentEvidence $evidence): JsonResponse
+    {
+        $sid = trim((string) $evidence->sid);
+        if ($sid === '') {
+            return response()->json(['available' => false, 'message' => 'Data ini tidak punya kode SID, tidak bisa dicek RFID-nya.']);
+        }
+
+        $start = $this->parsePeriodeCutiStart($evidence->periode_cuti);
+        if ($start === null) {
+            return response()->json(['available' => false, 'message' => 'Belum ada periode cuti yang diajukan untuk data ini.']);
+        }
+
+        if (! $this->rfidReader->isUp()) {
+            return response()->json(['available' => false, 'message' => 'Koneksi ke data RFID sedang tidak tersedia. Coba lagi nanti.']);
+        }
+
+        $tz = config('app.timezone');
+        $today = Carbon::now($tz)->startOfDay();
+
+        if ($start->greaterThan($today)) {
+            return response()->json([
+                'available' => true,
+                'sid' => $sid,
+                'nama' => $evidence->master?->nama,
+                'periode_cuti' => $evidence->periode_cuti,
+                'range' => ['from' => $start->toDateString(), 'to' => $start->toDateString()],
+                'summary' => ['total_days' => 0, 'days_with_rfid' => 0, 'days_without_rfid' => 0],
+                'days' => [],
+                'note' => 'Periode cuti belum dimulai.',
+            ]);
+        }
+
+        // Pengaman: jangan pernah query rentang yang tidak wajar panjang (data salah format dsb).
+        $to = $start->diffInDays($today) > 120 ? $start->copy()->addDays(120) : $today;
+
+        $byDay = $this->rfidReader->firstPassedCheckinsByDayForSids($start->toDateString(), $to->toDateString(), [$sid]);
+        $upper = mb_strtoupper($sid);
+
+        $days = [];
+        $cursor = $start->copy();
+        while ($cursor->lessThanOrEqualTo($to)) {
+            $key = $cursor->toDateString();
+            $row = $byDay[$key][$upper] ?? null;
+            $days[] = [
+                'date' => $key,
+                'has_rfid' => $row !== null,
+                'checked_in_at' => $row['checked_in_at'] ?? null,
+                'gate' => $row['gate'] ?? null,
+            ];
+            $cursor->addDay();
+        }
+
+        $daysWithRfid = count(array_filter($days, static fn (array $d): bool => $d['has_rfid']));
+
+        return response()->json([
+            'available' => true,
+            'sid' => $sid,
+            'nama' => $evidence->master?->nama,
+            'periode_cuti' => $evidence->periode_cuti,
+            'range' => ['from' => $start->toDateString(), 'to' => $to->toDateString()],
+            'summary' => [
+                'total_days' => count($days),
+                'days_with_rfid' => $daysWithRfid,
+                'days_without_rfid' => count($days) - $daysWithRfid,
+            ],
+            'days' => $days,
+        ]);
+    }
+
+    /**
+     * periode_cuti disimpan sebagai satu string siap-tampil, mis.
+     * "29/09/2026 s.d. 13/10/2026 (14 hari)" — ambil tanggal mulainya saja.
+     */
+    private function parsePeriodeCutiStart(?string $periodeCuti): ?Carbon
+    {
+        if ($periodeCuti === null || $periodeCuti === '') {
+            return null;
+        }
+
+        if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})/', trim($periodeCuti), $m) !== 1) {
+            return null;
+        }
+
+        try {
+            return Carbon::createFromFormat('d/m/Y', $m[1].'/'.$m[2].'/'.$m[3], config('app.timezone'))?->startOfDay();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }
