@@ -133,7 +133,7 @@
             </div>
 
             <div class="field">
-               <label for="periode_cuti_mulai">Tanggal Mulai Cuti</label>
+               <label for="periode_cuti_mulai">Tanggal Periode Cuti</label>
                <input type="date" class="input" id="periode_cuti_mulai" name="periode_cuti_mulai" value="{{ old('periode_cuti_mulai') }}">
                <div class="hint" id="periode-cuti-preview">Pilih tanggal mulai — periode cuti 14 hari akan otomatis dihitung.</div>
             </div>
