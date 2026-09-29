@@ -128,6 +128,12 @@
             </div>
 
             <div class="field">
+               <label for="whatsapp">Nomor WhatsApp <span class="req">*</span></label>
+               <input type="tel" class="input" id="whatsapp" name="whatsapp" value="{{ old('whatsapp') }}" placeholder="08xxxxxxxxxx" maxlength="20" inputmode="numeric" required>
+               <div class="hint">Dipakai untuk mengirim notifikasi kalau pengajuan Anda ditolak.</div>
+            </div>
+
+            <div class="field">
                <label for="tanggal_treatment">Tanggal Treatment</label>
                <input type="date" class="input" id="tanggal_treatment" name="tanggal_treatment" value="{{ old('tanggal_treatment') }}">
             </div>

@@ -28,6 +28,7 @@ class SidRosterTreatmentEvidence extends Model
         'periode_cuti',
         'catatan',
         'submitted_by',
+        'whatsapp',
         'submitted_at',
         'approval_status',
         'approved_by',

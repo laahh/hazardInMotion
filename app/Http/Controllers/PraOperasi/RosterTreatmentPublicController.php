@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\PraOperasi\RosterTreatmentEvidenceStoreRequest;
 use App\Models\SidRosterBannedMaster;
 use App\Models\SidRosterTreatmentEvidence;
+use App\Services\FonnteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,6 +25,10 @@ class RosterTreatmentPublicController extends Controller
 {
     /** Lama periode cuti (hari) dihitung dari tanggal mulai yang diinput karyawan. */
     private const CUTI_DAYS = 14;
+
+    public function __construct(
+        private readonly FonnteService $fonnteService,
+    ) {}
 
     public function show(Request $request): View
     {
@@ -122,6 +127,7 @@ class RosterTreatmentPublicController extends Controller
             'periode_cuti' => $this->formatPeriodeCuti($validated['periode_cuti_mulai'] ?? null),
             'catatan' => $validated['catatan'] ?? null,
             'submitted_by' => $submittedBy,
+            'whatsapp' => $this->fonnteService->normalizePhoneNumber((string) $validated['whatsapp']),
             'approval_status' => SidRosterTreatmentEvidence::STATUS_PENDING,
         ]);
 

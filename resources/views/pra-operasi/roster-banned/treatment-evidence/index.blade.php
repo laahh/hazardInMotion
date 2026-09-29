@@ -76,6 +76,7 @@
             <th>Periode Cuti</th>
             <th>Status</th>
             <th>Pengaju</th>
+            <th>No. WA</th>
             <th>Catatan</th>
             <th>Alasan Ditolak</th>
             <th>Aksi</th>
@@ -187,6 +188,7 @@
             { data: 'periode_cuti' },
             { data: 'approval_status' },
             { data: 'submitted_by' },
+            { data: 'whatsapp' },
             { data: 'catatan', className: 'rte-col-catatan' },
             { data: 'rejection_reason', className: 'rte-col-catatan' },
             { data: 'aksi', orderable: false, searchable: false },

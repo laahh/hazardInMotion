@@ -30,6 +30,7 @@ class RosterTreatmentEvidenceStoreRequest extends FormRequest
         return [
             'master_id' => ['required', 'integer', 'exists:sid_roster_banned_master,id'],
             'submitted_by' => ['required', 'string', 'max:100'],
+            'whatsapp' => ['required', 'string', 'regex:/^(\+62|62|0)8[0-9]{7,13}$/'],
             'tanggal_treatment' => ['nullable', 'date'],
             'periode_cuti_mulai' => ['nullable', 'date'],
             'catatan' => ['nullable', 'string', 'max:500'],
@@ -52,6 +53,8 @@ class RosterTreatmentEvidenceStoreRequest extends FormRequest
             'master_id.required' => 'Cari NIK/SID Anda terlebih dahulu untuk memilih data pelanggaran.',
             'master_id.exists' => 'Data pelanggaran tidak ditemukan. Cari ulang NIK/SID Anda.',
             'submitted_by.required' => 'Nama pengaju wajib diisi.',
+            'whatsapp.required' => 'Nomor WhatsApp wajib diisi (untuk notifikasi jika pengajuan ditolak).',
+            'whatsapp.regex' => 'Format nomor WhatsApp tidak valid. Contoh: 08123456789.',
             'evidence_file.required' => 'Lampirkan file bukti treatment (foto/dokumen).',
             'evidence_file.mimes' => 'Format file tidak didukung. Gunakan PDF, foto (JPG/PNG), Word, atau Excel.',
             'evidence_file.max' => 'Ukuran file maksimal 10 MB.',

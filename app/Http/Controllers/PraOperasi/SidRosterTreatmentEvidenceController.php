@@ -7,12 +7,14 @@ namespace App\Http\Controllers\PraOperasi;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PraOperasi\RosterTreatmentEvidenceReviewRequest;
 use App\Models\SidRosterTreatmentEvidence;
+use App\Services\FonnteService;
 use App\Services\SportEvaluation\SportEvaluationPvtRfidCheckinReader;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -26,6 +28,7 @@ class SidRosterTreatmentEvidenceController extends Controller
 {
     public function __construct(
         private readonly SportEvaluationPvtRfidCheckinReader $rfidReader,
+        private readonly FonnteService $fonnteService,
     ) {}
 
     public function index(): View
@@ -74,6 +77,7 @@ class SidRosterTreatmentEvidenceController extends Controller
                 $q->where('nik', 'like', '%'.$search.'%')
                     ->orWhere('sid', 'like', '%'.$search.'%')
                     ->orWhere('submitted_by', 'like', '%'.$search.'%')
+                    ->orWhere('whatsapp', 'like', '%'.$search.'%')
                     ->orWhere('catatan', 'like', '%'.$search.'%')
                     ->orWhereHas('master', function ($mq) use ($search): void {
                         $mq->where('nama', 'like', '%'.$search.'%')
@@ -125,6 +129,7 @@ class SidRosterTreatmentEvidenceController extends Controller
                 'periode_cuti' => $item->periode_cuti ?: '-',
                 'approval_status' => $statusBadge[$item->approval_status] ?? e((string) $item->approval_status),
                 'submitted_by' => $item->submitted_by ?: '-',
+                'whatsapp' => $item->whatsapp ?: '-',
                 'catatan' => $item->catatan ?: '-',
                 'rejection_reason' => $item->rejection_reason ?: '-',
                 'aksi' => $aksi,
@@ -158,18 +163,57 @@ class SidRosterTreatmentEvidenceController extends Controller
             ]);
             $message = 'Bukti treatment disetujui.';
         } else {
+            $rejectionReason = (string) $request->input('rejection_reason');
+
             $evidence->update([
                 'approval_status' => SidRosterTreatmentEvidence::STATUS_REJECTED,
                 'approved_by' => $reviewer,
                 'approved_at' => now(),
-                'rejection_reason' => (string) $request->input('rejection_reason'),
+                'rejection_reason' => $rejectionReason,
             ]);
-            $message = 'Bukti treatment ditolak.';
+            $message = 'Bukti treatment ditolak. '.$this->notifyRejectionByWhatsapp($evidence, $rejectionReason);
         }
 
         return redirect()
             ->route('pra-operasi.roster-banned.treatment.index')
             ->with('success', $message);
+    }
+
+    /**
+     * Kirim notifikasi WA ke nomor yang diinput karyawan di form publik saat
+     * pengajuan bukti treatment ditolak. Gagal kirim tidak boleh menggagalkan
+     * aksi reject itu sendiri — cuma dicatat & dikabarkan ke admin lewat flash message.
+     */
+    private function notifyRejectionByWhatsapp(SidRosterTreatmentEvidence $evidence, string $rejectionReason): string
+    {
+        $phone = trim((string) $evidence->whatsapp);
+        if ($phone === '') {
+            return 'Tidak ada nomor WhatsApp tercatat, notifikasi tidak dikirim.';
+        }
+
+        $nama = $evidence->master?->nama ?? $evidence->submitted_by ?: 'Bapak/Ibu';
+        $formUrl = route('roster-treatment.public.form');
+
+        $message = "Halo {$nama},\n\n"
+            ."Pengajuan bukti treatment Anda (SID: {$evidence->sid}) *DITOLAK*.\n\n"
+            ."Alasan: {$rejectionReason}\n\n"
+            ."Silakan lengkapi/ajukan ulang bukti treatment melalui link berikut:\n{$formUrl}\n\n"
+            .'— PT Berau Coal, Modul Roster Banned';
+
+        try {
+            $result = $this->fonnteService->sendMessage($phone, $message);
+        } catch (\Throwable $e) {
+            Log::error('SidRosterTreatmentEvidenceController: gagal kirim notifikasi WA reject', [
+                'evidence_id' => $evidence->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return 'Notifikasi WhatsApp gagal dikirim (error internal).';
+        }
+
+        return $result['success']
+            ? 'Notifikasi WhatsApp berhasil dikirim ke '.$phone.'.'
+            : 'Notifikasi WhatsApp gagal dikirim ke '.$phone.'.';
     }
 
     public function downloadEvidence(SidRosterTreatmentEvidence $evidence): StreamedResponse
