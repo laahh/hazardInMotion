@@ -4,23 +4,37 @@ declare(strict_types=1);
 
 namespace App\Services\MonitoringSafetyEngineering;
 
+use App\Models\MonitoringSafetyEngineeringPicAssignment;
 use App\Models\MonitoringSafetyEngineeringRecord;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
+/**
+ * Resolusi scope akses (perusahaan + site) seorang user pada Monitoring Safety Engineering.
+ *
+ * Sumber utama: tabel assignment `monitoring_safety_engineering_pic_assignments` yang dikelola
+ * lewat menu Role Akses. Bila tabel belum ada atau user belum punya assignment, service jatuh
+ * kembali ke file legacy NAMA_PIC.json supaya perilaku lama tetap jalan.
+ */
 final class MonitoringSafetyEngineeringPicScopeService
 {
     /** @var list<array{site: string, perusahaan: string, nama: string, sid: string}>|null */
-    private ?array $entries = null;
+    private ?array $legacyEntries = null;
+
+    /** @var array<string, array<string, mixed>> */
+    private array $resolved = [];
 
     /**
      * @return array{
      *     scoped: bool,
+     *     source: string,
      *     nama: ?string,
      *     sid: ?string,
      *     pairs: list<array{site: string, perusahaan: string}>,
      *     sites: list<string>,
      *     companies: list<string>,
+     *     all_site_companies: list<string>,
      *     lock_site: bool,
      *     lock_perusahaan: bool,
      *     all_sites: bool
@@ -36,11 +50,13 @@ final class MonitoringSafetyEngineeringPicScopeService
     /**
      * @return array{
      *     scoped: bool,
+     *     source: string,
      *     nama: ?string,
      *     sid: ?string,
      *     pairs: list<array{site: string, perusahaan: string}>,
      *     sites: list<string>,
      *     companies: list<string>,
+     *     all_site_companies: list<string>,
      *     lock_site: bool,
      *     lock_perusahaan: bool,
      *     all_sites: bool
@@ -48,71 +64,22 @@ final class MonitoringSafetyEngineeringPicScopeService
      */
     public function forUser(?User $user): array
     {
-        $empty = [
-            'scoped' => false,
-            'nama' => null,
-            'sid' => null,
-            'pairs' => [],
-            'sites' => [],
-            'companies' => [],
-            'lock_site' => false,
-            'lock_perusahaan' => false,
-            'all_sites' => false,
-        ];
+        $cacheKey = $user === null ? 'guest' : 'user:' . $user->getKey();
 
-        if ($user === null || $user->isAdmin()) {
-            return $empty;
+        if (array_key_exists($cacheKey, $this->resolved)) {
+            /** @var array{scoped: bool, source: string, nama: ?string, sid: ?string, pairs: list<array{site: string, perusahaan: string}>, sites: list<string>, companies: list<string>, all_site_companies: list<string>, lock_site: bool, lock_perusahaan: bool, all_sites: bool} */
+            return $this->resolved[$cacheKey];
         }
 
-        $matches = [];
-        foreach ($this->entries() as $row) {
-            if ($this->rowMatchesUser($row, $user)) {
-                $matches[] = $row;
-            }
-        }
+        return $this->resolved[$cacheKey] = $this->resolveFor($user);
+    }
 
-        if ($matches === []) {
-            return $empty;
-        }
-
-        $pairs = [];
-        $sites = [];
-        $companies = [];
-        $allSites = false;
-
-        foreach ($matches as $row) {
-            $site = trim($row['site']);
-            $perusahaan = trim($row['perusahaan']);
-            if ($this->isAllSitesLabel($site)) {
-                $allSites = true;
-            } elseif ($site !== '') {
-                $sites[$site] = $site;
-            }
-            if ($perusahaan !== '') {
-                $companies[$perusahaan] = $perusahaan;
-            }
-            if (! $this->isAllSitesLabel($site) && $site !== '' && $perusahaan !== '') {
-                $pairs[$site . '|' . $perusahaan] = [
-                    'site' => $site,
-                    'perusahaan' => $perusahaan,
-                ];
-            }
-        }
-
-        $siteList = array_values($sites);
-        $companyList = array_values($companies);
-
-        return [
-            'scoped' => true,
-            'nama' => $matches[0]['nama'] !== '' ? $matches[0]['nama'] : $user->name,
-            'sid' => $matches[0]['sid'] !== '' ? $matches[0]['sid'] : null,
-            'pairs' => array_values($pairs),
-            'sites' => $siteList,
-            'companies' => $companyList,
-            'lock_site' => ! $allSites && count($siteList) === 1,
-            'lock_perusahaan' => count($companyList) === 1,
-            'all_sites' => $allSites,
-        ];
+    /**
+     * Buang memo scope (dipanggil setelah assignment diubah).
+     */
+    public function flushCache(): void
+    {
+        $this->resolved = [];
     }
 
     /**
@@ -125,33 +92,23 @@ final class MonitoringSafetyEngineeringPicScopeService
             return;
         }
 
-        $companies = $scope['companies'] ?? [];
         $pairs = $scope['pairs'] ?? [];
-        $allSites = (bool) ($scope['all_sites'] ?? false);
+        $allSiteCompanies = $scope['all_site_companies'] ?? [];
 
-        if ($allSites) {
-            if ($companies !== []) {
-                $query->whereIn('perusahaan', $companies);
-            }
-
-            return;
-        }
-
-        if ($pairs === []) {
-            if ($companies !== []) {
-                $query->whereIn('perusahaan', $companies);
-            }
-            if (($scope['sites'] ?? []) !== []) {
-                $query->whereIn('site', $scope['sites']);
-            }
+        if ($pairs === [] && $allSiteCompanies === []) {
+            // Sudah discope tapi tidak memegang apa pun: jangan bocorkan data.
+            $query->whereRaw('1 = 0');
 
             return;
         }
 
-        $query->where(function (object $inner) use ($pairs): void {
-            foreach ($pairs as $index => $pair) {
-                $method = $index === 0 ? 'where' : 'orWhere';
-                $inner->{$method}(function (object $pairQuery) use ($pair): void {
+        $query->where(function (object $inner) use ($pairs, $allSiteCompanies): void {
+            if ($allSiteCompanies !== []) {
+                $inner->whereIn('perusahaan', $allSiteCompanies);
+            }
+
+            foreach ($pairs as $pair) {
+                $inner->orWhere(function (object $pairQuery) use ($pair): void {
                     $pairQuery->where('site', $pair['site'])->where('perusahaan', $pair['perusahaan']);
                 });
             }
@@ -181,25 +138,18 @@ final class MonitoringSafetyEngineeringPicScopeService
 
         $site = trim($site);
         $perusahaan = trim($perusahaan);
-        $companies = $scope['companies'] ?? [];
-        $pairs = $scope['pairs'] ?? [];
 
-        if ((bool) ($scope['all_sites'] ?? false)) {
-            return $companies === [] || in_array($perusahaan, $companies, true);
+        if (in_array($perusahaan, $scope['all_site_companies'] ?? [], true)) {
+            return true;
         }
 
-        foreach ($pairs as $pair) {
+        foreach ($scope['pairs'] ?? [] as $pair) {
             if ($pair['site'] === $site && $pair['perusahaan'] === $perusahaan) {
                 return true;
             }
         }
 
-        $sites = $scope['sites'] ?? [];
-
-        $siteOk = $sites === [] || in_array($site, $sites, true);
-        $companyOk = $companies === [] || in_array($perusahaan, $companies, true);
-
-        return $siteOk && $companyOk;
+        return false;
     }
 
     /**
@@ -225,12 +175,76 @@ final class MonitoringSafetyEngineeringPicScopeService
     }
 
     /**
+     * Saring daftar opsi dropdown ([nilai => label]) agar hanya memuat site/perusahaan
+     * yang boleh diakses. Entri kosong ("Semua …") selalu dipertahankan.
+     *
+     * @param  array<string, string>  $options
+     * @param  list<string>  $allowed
+     * @return array<string, string>
+     */
+    public function narrowOptions(array $options, array $allowed): array
+    {
+        if ($allowed === []) {
+            return $options;
+        }
+
+        $narrowed = [];
+        foreach ($options as $key => $label) {
+            if ((string) $key === '' || in_array((string) $key, $allowed, true)) {
+                $narrowed[$key] = $label;
+            }
+        }
+
+        return $narrowed;
+    }
+
+    /**
+     * Ringkasan scope satu baris untuk banner di dashboard.
+     *
+     * @param  array<string, mixed>  $scope
+     */
+    public function describe(array $scope): string
+    {
+        if (! ($scope['scoped'] ?? false)) {
+            return 'Semua site & perusahaan';
+        }
+
+        $allSiteCompanies = $scope['all_site_companies'] ?? [];
+        $byCompany = [];
+
+        foreach ($allSiteCompanies as $company) {
+            $byCompany[$company] = ['semua site'];
+        }
+
+        foreach ($scope['pairs'] ?? [] as $pair) {
+            if (isset($byCompany[$pair['perusahaan']]) && $byCompany[$pair['perusahaan']] === ['semua site']) {
+                continue;
+            }
+
+            $byCompany[$pair['perusahaan']][] = $pair['site'];
+        }
+
+        if ($byCompany === []) {
+            return 'Belum ada perusahaan/site yang di-assign';
+        }
+
+        $parts = [];
+        foreach ($byCompany as $company => $sites) {
+            $parts[] = $company . ' (' . implode(', ', array_unique($sites)) . ')';
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    /**
+     * Entri mentah NAMA_PIC.json, dipakai juga oleh fitur impor assignment.
+     *
      * @return list<array{site: string, perusahaan: string, nama: string, sid: string}>
      */
-    private function entries(): array
+    public function legacyEntries(): array
     {
-        if ($this->entries !== null) {
-            return $this->entries;
+        if ($this->legacyEntries !== null) {
+            return $this->legacyEntries;
         }
 
         $paths = [
@@ -269,23 +283,181 @@ final class MonitoringSafetyEngineeringPicScopeService
             ];
         }
 
-        $this->entries = $entries;
+        $this->legacyEntries = $entries;
 
-        return $this->entries;
+        return $this->legacyEntries;
     }
 
     /**
-     * @param  array{site: string, perusahaan: string, nama: string, sid: string}  $row
+     * @return array<string, mixed>
      */
-    private function rowMatchesUser(array $row, User $user): bool
+    private function resolveFor(?User $user): array
+    {
+        $empty = $this->emptyScope();
+
+        if ($user === null || $user->isAdmin()) {
+            return $empty;
+        }
+
+        $fromDb = $this->assignmentRowsFor($user);
+        if ($fromDb !== null) {
+            return $this->buildScope($fromDb['rows'], $fromDb['nama'], $fromDb['sid'], 'assignment');
+        }
+
+        $matches = [];
+        foreach ($this->legacyEntries() as $row) {
+            if ($this->rowMatchesUser($row['nama'], $row['sid'], $user)) {
+                $matches[] = ['site' => $row['site'], 'perusahaan' => $row['perusahaan']];
+            }
+        }
+
+        if ($matches === []) {
+            return $empty;
+        }
+
+        return $this->buildScope($matches, $user->name, null, 'legacy_json');
+    }
+
+    /**
+     * Baris scope dari tabel assignment, atau null bila tabel belum ada / user belum punya assignment.
+     *
+     * @return array{rows: list<array{site: string, perusahaan: string}>, nama: string, sid: ?string}|null
+     */
+    private function assignmentRowsFor(User $user): ?array
+    {
+        if (! Schema::hasTable('monitoring_safety_engineering_pic_assignments')
+            || ! Schema::hasTable('monitoring_safety_engineering_pic_assignment_scopes')) {
+            return null;
+        }
+
+        $identities = $this->userIdentities($user);
+
+        $assignments = MonitoringSafetyEngineeringPicAssignment::query()
+            ->with('scopeRows')
+            ->active()
+            ->where(function ($query) use ($user, $identities): void {
+                $query->where('user_id', $user->getKey());
+
+                foreach ($identities as $identity) {
+                    $query->orWhereRaw('LOWER(TRIM(nama)) = ?', [$identity]);
+                    $query->orWhereRaw('LOWER(TRIM(sid)) = ?', [$identity]);
+                }
+            })
+            ->get();
+
+        if ($assignments->isEmpty()) {
+            return null;
+        }
+
+        $rows = [];
+        foreach ($assignments as $assignment) {
+            foreach ($assignment->scopeRows as $scopeRow) {
+                $rows[] = [
+                    'site' => (string) $scopeRow->site,
+                    'perusahaan' => (string) $scopeRow->perusahaan,
+                ];
+            }
+        }
+
+        /** @var MonitoringSafetyEngineeringPicAssignment $first */
+        $first = $assignments->first();
+
+        return [
+            'rows' => $rows,
+            'nama' => trim($first->nama) !== '' ? trim($first->nama) : (string) $user->name,
+            'sid' => trim((string) $first->sid) !== '' ? trim((string) $first->sid) : null,
+        ];
+    }
+
+    /**
+     * @param  list<array{site: string, perusahaan: string}>  $rows
+     * @return array<string, mixed>
+     */
+    private function buildScope(array $rows, ?string $nama, ?string $sid, string $source): array
+    {
+        $pairs = [];
+        $sites = [];
+        $companies = [];
+        $allSiteCompanies = [];
+
+        foreach ($rows as $row) {
+            $site = trim($row['site']);
+            $perusahaan = trim($row['perusahaan']);
+
+            if ($perusahaan === '') {
+                continue;
+            }
+
+            $companies[$perusahaan] = $perusahaan;
+
+            if (MonitoringSafetyEngineeringPicAssignment::isAllSitesLabel($site)) {
+                $allSiteCompanies[$perusahaan] = $perusahaan;
+
+                continue;
+            }
+
+            if ($site === '') {
+                continue;
+            }
+
+            $sites[$site] = $site;
+            $pairs[$site . '|' . $perusahaan] = [
+                'site' => $site,
+                'perusahaan' => $perusahaan,
+            ];
+        }
+
+        $siteList = array_values($sites);
+        $companyList = array_values($companies);
+        $allSiteCompanyList = array_values($allSiteCompanies);
+        sort($siteList, SORT_NATURAL | SORT_FLAG_CASE);
+        sort($companyList, SORT_NATURAL | SORT_FLAG_CASE);
+        sort($allSiteCompanyList, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return [
+            'scoped' => true,
+            'source' => $source,
+            'nama' => $nama !== null && $nama !== '' ? $nama : null,
+            'sid' => $sid,
+            'pairs' => array_values($pairs),
+            'sites' => $siteList,
+            'companies' => $companyList,
+            'all_site_companies' => $allSiteCompanyList,
+            'lock_site' => $allSiteCompanyList === [] && count($siteList) === 1,
+            'lock_perusahaan' => count($companyList) === 1,
+            'all_sites' => $allSiteCompanyList !== [],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptyScope(): array
+    {
+        return [
+            'scoped' => false,
+            'source' => 'none',
+            'nama' => null,
+            'sid' => null,
+            'pairs' => [],
+            'sites' => [],
+            'companies' => [],
+            'all_site_companies' => [],
+            'lock_site' => false,
+            'lock_perusahaan' => false,
+            'all_sites' => false,
+        ];
+    }
+
+    private function rowMatchesUser(string $nama, string $sid, User $user): bool
     {
         $identities = $this->userIdentities($user);
 
-        if ($row['sid'] !== '' && in_array($this->normalizeKey($row['sid']), $identities, true)) {
+        if ($sid !== '' && in_array($this->normalizeKey($sid), $identities, true)) {
             return true;
         }
 
-        return $row['nama'] !== '' && in_array($this->normalizeKey($row['nama']), $identities, true);
+        return $nama !== '' && in_array($this->normalizeKey($nama), $identities, true);
     }
 
     /**
@@ -318,12 +490,5 @@ final class MonitoringSafetyEngineeringPicScopeService
         $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
 
         return $normalized;
-    }
-
-    private function isAllSitesLabel(string $site): bool
-    {
-        $key = $this->normalizeKey($site);
-
-        return $key === 'all site' || $key === 'allsite' || $key === 'semua site' || $key === 'all';
     }
 }

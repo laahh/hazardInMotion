@@ -6,6 +6,7 @@ use App\Http\Controllers\MonitoringSafetyEngineering\MonitoringSafetyEngineering
 use App\Http\Controllers\MonitoringSafetyEngineering\MonitoringSafetyEngineeringDashboardController;
 use App\Http\Controllers\MonitoringSafetyEngineering\MonitoringSafetyEngineeringEffectivenessController;
 use App\Http\Controllers\MonitoringSafetyEngineering\MonitoringSafetyEngineeringOutsideCommitmentController;
+use App\Http\Controllers\MonitoringSafetyEngineering\MonitoringSafetyEngineeringPicAssignmentController;
 use App\Http\Controllers\MonitoringSafetyEngineering\MonitoringSafetyEngineeringPmrEvaluationController;
 use App\Http\Controllers\MonitoringSafetyEngineering\MonitoringSafetyEngineeringRecordUpdateController;
 use App\Http\Controllers\MonitoringSafetyEngineering\MonitoringSafetyEngineeringUploadController;
@@ -27,6 +28,23 @@ Route::middleware(['auth'])
             Route::get('/', [MonitoringSafetyEngineeringUploadController::class, 'index'])->name('index');
             Route::get('/template', [MonitoringSafetyEngineeringUploadController::class, 'downloadTemplate'])->name('template');
             Route::post('/import', [MonitoringSafetyEngineeringUploadController::class, 'import'])->name('import');
+        });
+
+        Route::prefix('role-access')->name('role-access.')->group(function (): void {
+            Route::get('/', [MonitoringSafetyEngineeringPicAssignmentController::class, 'index'])->name('index');
+            Route::get('/create', [MonitoringSafetyEngineeringPicAssignmentController::class, 'create'])->name('create');
+            Route::post('/', [MonitoringSafetyEngineeringPicAssignmentController::class, 'store'])->name('store');
+            Route::post('/import-legacy', [MonitoringSafetyEngineeringPicAssignmentController::class, 'importLegacy'])
+                ->name('import-legacy');
+            Route::get('/{id}/edit', [MonitoringSafetyEngineeringPicAssignmentController::class, 'edit'])
+                ->name('edit')
+                ->whereNumber('id');
+            Route::put('/{id}', [MonitoringSafetyEngineeringPicAssignmentController::class, 'update'])
+                ->name('update')
+                ->whereNumber('id');
+            Route::delete('/{id}', [MonitoringSafetyEngineeringPicAssignmentController::class, 'destroy'])
+                ->name('destroy')
+                ->whereNumber('id');
         });
 
         Route::prefix('data-update')->name('data-update.')->group(function (): void {

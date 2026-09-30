@@ -3133,4 +3133,20 @@
    .crm-history-empty {
       text-align: center; color: #848488; font-size: 0.8125rem; padding: 2rem 1rem;
    }
+
+   /* ---- Banner scope akses PIC ---- */
+   .crm-scope-banner {
+      display: flex; align-items: flex-start; gap: 0.6rem;
+      background: #ECE9FF; border: 1px solid #D6CFFF; border-radius: 0.75rem;
+      padding: 0.7rem 0.95rem; margin-bottom: 1rem; color: #4B3FBE;
+   }
+   .crm-scope-banner-title { font-size: 0.8125rem; font-weight: 600; line-height: 1.35; }
+   .crm-scope-banner-sid {
+      display: inline-block; margin-left: 0.25rem; padding: 0.05rem 0.35rem;
+      background: #fff; border-radius: 0.35rem; font-size: 0.6875rem; font-weight: 700;
+      letter-spacing: 0.03em;
+   }
+   .crm-scope-banner-text {
+      font-size: 0.75rem; font-weight: 500; color: #6B5FD1; margin-top: 0.15rem; line-height: 1.4;
+   }
 </style>

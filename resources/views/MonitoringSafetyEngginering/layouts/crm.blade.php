@@ -81,6 +81,7 @@
                   'effectiveness' => 'verified',
                   'upload' => 'cloud_upload',
                   'data-update' => 'table_edit',
+                  'role-access' => 'admin_panel_settings',
                ];
                $icon = $icons[$item['key'] ?? ''] ?? 'circle';
             @endphp

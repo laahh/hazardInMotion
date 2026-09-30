@@ -37,6 +37,8 @@ class MonitoringSafetyEngineeringDashboardController extends Controller
             'dashboard' => $dashboard,
             'filters' => $dashboard['filters'],
             'filterOptions' => $dashboard['filter_options'],
+            'picScope' => $dashboard['pic_scope'] ?? ['scoped' => false],
+            'picScopeLabel' => $dashboard['pic_scope_label'] ?? '',
             'summary' => $dashboard['summary'],
             'overdueSummary' => $dashboard['overdue_summary'],
             'activeCategory' => $dashboard['active_category'],

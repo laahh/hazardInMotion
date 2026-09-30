@@ -90,6 +90,18 @@
    $safetyEngineeringDetailById = $safetyEngineeringDetailById ?? [];
 @endphp
 
+@if(! empty($picScope['scoped']))
+<div class="crm-scope-banner" role="status">
+   <span class="material-symbols-outlined text-[18px]">admin_panel_settings</span>
+   <div>
+      <p class="crm-scope-banner-title">
+         Akses PIC: <strong>{{ $picScope['nama'] ?? auth()->user()->name }}</strong>@if(! empty($picScope['sid'])) <span class="crm-scope-banner-sid">{{ $picScope['sid'] }}</span>@endif
+      </p>
+      <p class="crm-scope-banner-text">{{ $picScopeLabel ?? '' }}</p>
+   </div>
+</div>
+@endif
+
 {{-- Filter Bar --}}
 <form method="GET" action="{{ route('monitoring-safety-engineering.dashboard') }}" class="crm-filter-bar">
    <input type="hidden" name="category" value="{{ $filters['category'] }}">

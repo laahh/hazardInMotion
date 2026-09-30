@@ -18,6 +18,7 @@ class MonitoringSafetyEngineeringDashboardService
 
     public function __construct(
         private readonly MonitoringSafetyEngineeringRiskReductionCalculator $riskReductionCalculator,
+        private readonly MonitoringSafetyEngineeringPicScopeService $picScope,
     ) {}
 
     /**
@@ -25,13 +26,14 @@ class MonitoringSafetyEngineeringDashboardService
      */
     public function buildDashboard(Request $request): array
     {
-        $filters = $this->resolveFilters($request);
+        $scope = $this->picScope->forCurrentUser();
+        $filters = $this->resolveFilters($request, $scope);
 
         if (! $this->tablesReady()) {
-            return $this->emptyDashboard($filters);
+            return $this->emptyDashboard($filters, $scope);
         }
 
-        $records = $this->fetchFilteredRecords($filters);
+        $records = $this->fetchFilteredRecords($filters, $scope);
         $itemsByCategory = $this->groupItemsByCategory($records, $filters);
 
         $replikasiItems = $itemsByCategory['replikasi'];
@@ -43,7 +45,9 @@ class MonitoringSafetyEngineeringDashboardService
 
         return [
             'filters' => $filters,
-            'filter_options' => $this->filterOptions(),
+            'filter_options' => $this->filterOptions($scope),
+            'pic_scope' => $scope,
+            'pic_scope_label' => $this->picScope->describe($scope),
             'summary' => $this->buildSummary($records, $replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
             'overdue_summary' => $this->buildOverdueSummary($replikasiItems, $safetyEngineeringItems, $additionalSafetyItems),
             'active_category' => $activeCategory,
@@ -66,13 +70,15 @@ class MonitoringSafetyEngineeringDashboardService
     /**
      * @return array<string, mixed>
      */
-    private function emptyDashboard(array $filters): array
+    private function emptyDashboard(array $filters, array $scope = []): array
     {
         $emptyItems = [];
 
         return [
             'filters' => $filters,
-            'filter_options' => $this->filterOptions(),
+            'filter_options' => $this->filterOptions($scope),
+            'pic_scope' => $scope,
+            'pic_scope_label' => $this->picScope->describe($scope),
             'summary' => $this->buildSummary(collect(), $emptyItems, $emptyItems, $emptyItems),
             'overdue_summary' => $this->buildOverdueSummary($emptyItems, $emptyItems, $emptyItems),
             'active_category' => $filters['category'],
@@ -95,7 +101,7 @@ class MonitoringSafetyEngineeringDashboardService
     /**
      * @return Collection<int, MonitoringSafetyEngineeringRecord>
      */
-    private function fetchFilteredRecords(array $filters): Collection
+    private function fetchFilteredRecords(array $filters, array $scope = []): Collection
     {
         $query = MonitoringSafetyEngineeringRecord::query()
             ->select([
@@ -143,6 +149,7 @@ class MonitoringSafetyEngineeringDashboardService
             ->orderBy('row_no')
             ->orderBy('id');
 
+        $this->picScope->applyToQuery($query, $scope);
         $this->applyFilters($query, $filters);
 
         return $query->get();
@@ -1103,7 +1110,7 @@ class MonitoringSafetyEngineeringDashboardService
     /**
      * @return array<string, mixed>
      */
-    private function resolveFilters(Request $request): array
+    private function resolveFilters(Request $request, array $scope = []): array
     {
         $category = (string) $request->get('category', 'replikasi');
         $allowedCategories = array_keys(config('monitoring_safety_engineering.categories', []));
@@ -1115,9 +1122,26 @@ class MonitoringSafetyEngineeringDashboardService
         $dateFrom = (string) $request->get('date_from', now()->startOfYear()->format('Y-m-d'));
         $periodYear = (int) date('Y', strtotime($dateFrom) ?: time());
 
+        $bar = (string) $request->get('bar', '');
+        $company = (string) $request->get('company', '');
+
+        // Filter di luar scope PIC dibuang, bukan dipaksa jadi kosong,
+        // supaya hasilnya tetap seluruh scope yang dia pegang.
+        if ($scope['scoped'] ?? false) {
+            $allowedSites = $scope['sites'] ?? [];
+            $allowedCompanies = $scope['companies'] ?? [];
+
+            if ($bar !== '' && ! in_array($bar, $allowedSites, true) && ($scope['all_site_companies'] ?? []) === []) {
+                $bar = '';
+            }
+            if ($company !== '' && ! in_array($company, $allowedCompanies, true)) {
+                $company = '';
+            }
+        }
+
         return [
-            'bar' => (string) $request->get('bar', ''),
-            'company' => (string) $request->get('company', ''),
+            'bar' => $bar,
+            'company' => $company,
             'review_week' => (string) $request->get('review_week', 'W' . now()->isoWeek()),
             'date_from' => $dateFrom,
             'date_to' => (string) $request->get('date_to', now()->format('Y-m-d')),
@@ -1129,7 +1153,7 @@ class MonitoringSafetyEngineeringDashboardService
     /**
      * @return array<string, mixed>
      */
-    private function filterOptions(): array
+    private function filterOptions(array $scope = []): array
     {
         $sites = config('monitoring_safety_engineering.sites', []);
         $companies = config('monitoring_safety_engineering.perusahaan', []);
@@ -1160,12 +1184,20 @@ class MonitoringSafetyEngineeringDashboardService
 
         sort($sites);
 
+        $barOptions = array_merge(['' => 'Semua Site'], array_combine($sites, $sites) ?: []);
+        $companyOptions = array_merge(['' => 'Semua Perusahaan'], array_combine($companies, $companies) ?: []);
+
+        if ($scope['scoped'] ?? false) {
+            // Perusahaan dengan scope "ALL SITE" tidak membatasi daftar site.
+            if (($scope['all_site_companies'] ?? []) === []) {
+                $barOptions = $this->picScope->narrowOptions($barOptions, $scope['sites'] ?? []);
+            }
+            $companyOptions = $this->picScope->narrowOptions($companyOptions, $scope['companies'] ?? []);
+        }
+
         return [
-            'bars' => array_merge(['' => 'Semua Site'], array_combine($sites, $sites) ?: []),
-            'companies' => array_merge(
-                ['' => 'Semua Perusahaan'],
-                array_combine($companies, $companies) ?: [],
-            ),
+            'bars' => $barOptions,
+            'companies' => $companyOptions,
             'review_weeks' => collect(range(1, 53))->map(fn (int $w): string => 'W' . $w)->all(),
             'categories' => config('monitoring_safety_engineering.categories', []),
         ];
