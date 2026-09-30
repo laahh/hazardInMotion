@@ -483,9 +483,17 @@
 
   function pct(x) { return AGG.total ? ((x / AGG.total) * 100).toFixed(1) + '%' : '0%'; }
 
-  function kpiCard(label, value, sub, iconBg, icon, extraHtml) {
+  /**
+   * Kartu KPI bergaya dashboard /evaluasi-well: gradien tipis di sisi kanan,
+   * ikon bulat 48px, label kecil di atas angka.
+   *
+   * iconBg tetap berupa nilai CSS bebas (bukan kelas utilitas) supaya warna
+   * khusus "wajib cuti" (#be123c) tetap sama dengan yang dipakai sel tabel —
+   * kaitan visual antara kartu dan barisnya jangan dilepas.
+   */
+  function kpiCard(label, value, sub, iconBg, icon, gradient, extraHtml) {
     return '<div class="col-xxl-3 col-sm-6">' +
-      '<div class="card p-3 shadow-2 radius-8 border input-form-light h-100">' +
+      '<div class="card p-3 shadow-2 radius-8 border input-form-light h-100 ' + (gradient || '') + '">' +
       '<div class="card-body p-0">' +
       '<div class="d-flex align-items-center gap-2 mb-8">' +
       '<span class="w-48-px h-48-px flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle" style="background:' + iconBg + '">' +
@@ -499,14 +507,27 @@
   function renderKpi() {
     var A = AGG;
     els.kpiRow.innerHTML =
-      kpiCard('Total Karyawan Terpantau', A.total.toLocaleString('id'), (state.co === '__ALL__' ? 'Semua perusahaan' : state.co) + (state.site ? ' · ' + state.site : ''), 'var(--primary-600)', 'solar:users-group-rounded-bold') +
-      kpiCard('Pelanggaran Regulasi (YTD)', A.npel.toLocaleString('id'), pct(A.npel) + ' dari populasi', 'var(--danger-main)', 'solar:danger-triangle-bold',
-        '<div class="mt-8 text-xs" style="line-height:1.7">' +
-        '<div>On-site &gt;71 hr tanpa cuti: <b class="text-danger-600">' + A.npel2.toLocaleString('id') + '</b></div>' +
-        '<div>Cuti &lt;12 hari: <b class="text-danger-600">' + A.npel3.toLocaleString('id') + '</b></div>' +
-        '<div>Kerja &gt;13 hari beruntun: <b class="text-danger-600">' + A.npel1.toLocaleString('id') + '</b></div></div>') +
-      kpiCard('Tidak Sesuai Mapping Shift', A.nmap.toLocaleString('id'), pct(A.nmap) + ' · peringatan, bukan pelanggaran', 'var(--warning-main)', 'solar:shield-warning-bold') +
-      kpiCard('Wajib Cuti Sekarang', A.nwajib.toLocaleString('id'), 'Sedang on-site &gt;71 hari berjalan, belum cuti', 'var(--wajib-color, #be123c)', 'solar:calendar-mark-bold');
+      kpiCard('Total Karyawan Terpantau', A.total.toLocaleString('id'),
+        (state.co === '__ALL__' ? 'Semua perusahaan' : state.co) + (state.site ? ' · ' + state.site : ''),
+        'var(--primary-600)', 'solar:users-group-rounded-bold', 'bg-gradient-end-1') +
+      kpiCard('Pelanggaran Regulasi (YTD)', A.npel.toLocaleString('id'),
+        '<span class="bg-danger-focus px-1 rounded-2 fw-medium text-danger-main text-sm">' + pct(A.npel) + '</span> dari populasi',
+        'var(--danger-main)', 'solar:danger-triangle-bold', 'bg-gradient-end-5',
+        '<div class="mt-8 d-flex flex-column gap-1 text-xs">' +
+        '<div class="d-flex align-items-center justify-content-between gap-2"><span class="text-secondary-light">On-site &gt;71 hr tanpa cuti</span>' +
+        '<span class="bg-danger-focus text-danger-main px-8 py-0 rounded-pill fw-semibold">' + A.npel2.toLocaleString('id') + '</span></div>' +
+        '<div class="d-flex align-items-center justify-content-between gap-2"><span class="text-secondary-light">Cuti &lt;12 hari</span>' +
+        '<span class="bg-danger-focus text-danger-main px-8 py-0 rounded-pill fw-semibold">' + A.npel3.toLocaleString('id') + '</span></div>' +
+        '<div class="d-flex align-items-center justify-content-between gap-2"><span class="text-secondary-light">Kerja &gt;13 hari beruntun</span>' +
+        '<span class="bg-danger-focus text-danger-main px-8 py-0 rounded-pill fw-semibold">' + A.npel1.toLocaleString('id') + '</span></div></div>') +
+      kpiCard('Tidak Sesuai Mapping Shift', A.nmap.toLocaleString('id'),
+        'Peringatan, bukan pelanggaran', 'var(--warning-main)', 'solar:shield-warning-bold', 'bg-gradient-end-3',
+        '<p class="text-sm mb-0 mt-8"><span class="bg-warning-focus px-1 rounded-2 fw-medium text-warning-main text-sm">' +
+        pct(A.nmap) + '</span> dari populasi</p>') +
+      kpiCard('Wajib Cuti Sekarang', A.nwajib.toLocaleString('id'),
+        'Sedang on-site &gt;71 hari berjalan, belum cuti', 'var(--wajib-color, #be123c)', 'solar:calendar-mark-bold', 'bg-gradient-end-4',
+        '<p class="text-sm mb-0 mt-8"><span class="bg-danger-focus px-1 rounded-2 fw-medium text-danger-main text-sm">' +
+        pct(A.nwajib) + '</span> dari populasi</p>');
   }
 
   function renderDonut() {
