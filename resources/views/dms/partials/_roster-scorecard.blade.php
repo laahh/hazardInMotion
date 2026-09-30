@@ -37,24 +37,23 @@
                 $kolom++;
             }
 
-            // Hari bermasalah dikelompokkan per blok 6 hari supaya terbaca
+            // Hari ter-flag dikelompokkan per blok 6 hari supaya terbaca
             // sebagai rentetan, bukan titik acak.
-            $blokBuruk = $adaPelanggaran
+            $merah = $adaPelanggaran
                 && hexdec(substr(md5($benih . ':blok:' . intdiv($i, 6)), 0, 2)) % 5 === 0;
 
             $h = hexdec(substr(md5($benih . ':' . $i), 0, 3)) % 100;
-            $lvl = $blokBuruk
-                ? ($h < 55 ? 1 : 2)              // hari melanggar → merah / kuning
-                : match (true) {
-                    $h < 4 => 0,                  // tidak ada data
-                    $h < 16 => 3,                 // 75–89%
-                    $h < 52 => 4,                 // 90–99%
-                    default => 5,                 // 100%
-                };
+            $kode = match (true) {
+                $h < 8 => 'c',
+                $h < 22 => 'o',
+                $h < 58 => 'P',
+                default => 'M',
+            };
 
             $baris = ($t->dayOfWeek + 6) % 7; // 0 = Senin
             $grid[$baris][$kolom] = [
-                'lvl' => $lvl,
+                'kode' => $kode,
+                'merah' => $merah,
                 'label' => $t->translatedFormat('D, d M Y'),
             ];
         }
@@ -62,15 +61,7 @@
         return ['grid' => $grid, 'kolom' => $kolom + 1];
     };
 
-    // Sama persis dengan legenda kartu "Pola Kepatuhan Roster Harian".
-    $lvlLabel = [
-        0 => 'tidak ada data',
-        1 => 'kepatuhan <50%',
-        2 => 'kepatuhan 50–74%',
-        3 => 'kepatuhan 75–89%',
-        4 => 'kepatuhan 90–99%',
-        5 => 'kepatuhan 100%',
-    ];
+    $kodeLabel = ['P' => 'Shift Pagi', 'M' => 'Shift Malam', 'o' => 'Off', 'c' => 'Cuti'];
 
     /**
      * Render satu baris sel heatmap sekaligus. Dikerjakan di PHP, bukan lewat
@@ -79,18 +70,19 @@
      *
      * @param  array<int, array{kode:string,merah:bool,label:string}|null>  $baris
      */
-    $selBaris = function (array $baris, int $kolom) use ($lvlLabel): string {
+    $selBaris = function (array $baris, int $kolom) use ($kodeLabel): string {
         $out = '';
         for ($c = 0; $c < $kolom; $c++) {
             $sel = $baris[$c] ?? null;
             if ($sel === null) {
-                $out .= '<span class="ro-hm-cell lvl-0 is-empty"></span>';
+                $out .= '<span class="ro-hm-cell is-empty"></span>';
 
                 continue;
             }
 
-            $judul = $sel['label'].' — '.$lvlLabel[$sel['lvl']];
-            $out .= '<span class="ro-hm-cell lvl-'.$sel['lvl'].'" title="'.e($judul).'"></span>';
+            $judul = $sel['label'].' — '.$kodeLabel[$sel['kode']].($sel['merah'] ? ' · ⚠ pelanggaran' : '');
+            $out .= '<span class="ro-hm-cell sh-'.$sel['kode'].($sel['merah'] ? ' is-flag' : '')
+                .'" title="'.e($judul).'"></span>';
         }
 
         return $out;
@@ -183,13 +175,11 @@
           <span class="ro-card__subtitle">Ringkasan roster tiap karyawan beserta pola kerja hariannya sepanjang periode</span>
         </div>
         <div class="ro-sc-legend">
-          <span class="fw-medium">Tingkat kepatuhan</span>
-          <span><i class="ro-sw sw-0"></i>Tidak ada data</span>
-          <span><i class="ro-sw sw-1"></i>&lt;50%</span>
-          <span><i class="ro-sw sw-2"></i>50–74%</span>
-          <span><i class="ro-sw sw-3"></i>75–89%</span>
-          <span><i class="ro-sw sw-4"></i>90–99%</span>
-          <span><i class="ro-sw sw-5"></i>100%</span>
+          <span><i class="ro-sw ro-sw-pagi"></i>Pagi</span>
+          <span><i class="ro-sw ro-sw-malam"></i>Malam</span>
+          <span><i class="ro-sw ro-sw-off"></i>Off</span>
+          <span><i class="ro-sw ro-sw-cuti"></i>Cuti</span>
+          <span><i class="ro-sw ro-sw-flag"></i>Hari ter-flag</span>
         </div>
       </div>
 
@@ -307,13 +297,11 @@
                           <div class="ro-sc-detail__sub">{{ $r['sid'] }} &middot; {{ $r['pt'] }} &middot; {{ $r['site'] }} &middot; 1 Jan – 30 Sep 2026</div>
                         </div>
                         <div class="ro-sc-legend">
-                          <span class="fw-medium">Tingkat kepatuhan</span>
-                          <span><i class="ro-sw sw-0"></i>Tidak ada data</span>
-                          <span><i class="ro-sw sw-1"></i>&lt;50%</span>
-                          <span><i class="ro-sw sw-2"></i>50–74%</span>
-                          <span><i class="ro-sw sw-3"></i>75–89%</span>
-                          <span><i class="ro-sw sw-4"></i>90–99%</span>
-                          <span><i class="ro-sw sw-5"></i>100%</span>
+                          <span><i class="ro-sw ro-sw-pagi"></i>Pagi</span>
+                          <span><i class="ro-sw ro-sw-malam"></i>Malam</span>
+                          <span><i class="ro-sw ro-sw-off"></i>Off</span>
+                          <span><i class="ro-sw ro-sw-cuti"></i>Cuti</span>
+                          <span><i class="ro-sw ro-sw-flag"></i>Hari ter-flag</span>
                         </div>
                       </div>
 
