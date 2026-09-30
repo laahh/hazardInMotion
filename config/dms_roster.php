@@ -183,6 +183,11 @@ return [
         // terlambat tanpa perlu menarik ulang rentang panjang.
         'hari_incremental' => 3,
 
+        // Berapa hari terakhir TIDAK ikut dikompilasi ke pola. Hari berjalan
+        // scan-nya baru terkumpul sebagian, jadi kalau ikut dihitung seisi
+        // populasi akan terbaca "Off". 1 = pola berhenti di kemarin.
+        'lag_hari' => 1,
+
         'timeout_master_ms' => 30000,
         'timeout_incremental_ms' => 20000,
         'timeout_backfill_ms' => 20000,

@@ -360,6 +360,17 @@ final class DmsRosterSyncService
         return $total;
     }
 
+    /**
+     * Hari terakhir yang BOLEH masuk pola.
+     *
+     * Hari berjalan sengaja dibuang. Scan hari ini baru terkumpul sebagian —
+     * pukul 07:30 baru ada segelintir baris, sementara hari penuh ±4.000 —
+     * sehingga hampir semua orang akan terbaca 'o' dan kolom "Status kini"
+     * menampilkan Off untuk seisi populasi. Jeda ini juga yang dipakai
+     * aplikasi referensi (datanya selalu tertinggal 1–2 hari).
+     *
+     * Besar jeda diatur lewat config dms_roster.sync.lag_hari.
+     */
     public function akhirDataTersedia(int $tahun): CarbonImmutable
     {
         $max = DB::table('dms_roster_scan_harian')
@@ -369,7 +380,16 @@ final class DmsRosterSyncService
             ])
             ->max('tanggal');
 
-        return is_string($max) && $max !== '' ? CarbonImmutable::parse($max) : $this->awalTahun($tahun);
+        $akhir = is_string($max) && $max !== '' ? CarbonImmutable::parse($max) : $this->awalTahun($tahun);
+
+        $lag = max(0, (int) config('dms_roster.sync.lag_hari', 1));
+        $batas = CarbonImmutable::now()->startOfDay()->subDays($lag);
+
+        if ($akhir->gt($batas)) {
+            $akhir = $batas;
+        }
+
+        return $akhir->lt($this->awalTahun($tahun)) ? $this->awalTahun($tahun) : $akhir;
     }
 
     /**

@@ -132,6 +132,9 @@ final class DmsRosterOverviewKaryawanReader
             'tahun' => $tahun,
             'hari_terakhir' => $hariTerakhir->toDateString(),
             'panjang' => $panjang,
+            // Jumlah seluruh karyawan wajib dicek — dipakai footer tabel agar
+            // jelas bahwa yang tampil hanya cuplikan.
+            'total' => (int) $meta->jumlah,
             'baris' => $baris,
         ];
     }

@@ -371,12 +371,28 @@
 
       <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-16">
         <span class="text-secondary-light text-sm">
-          Menampilkan {{ count($scorecard) }} baris contoh &middot; geser tabel ke kanan untuk melihat timeline harian
+          @if ($live)
+            Menampilkan <b>{{ count($scorecard) }}</b> dari
+            <b>{{ number_format($live['total'], 0, ',', '.') }}</b> karyawan wajib dicek
+            &middot; data s/d {{ \Carbon\Carbon::parse($live['hari_terakhir'])->translatedFormat('d M Y') }}
+          @else
+            Menampilkan {{ count($scorecard) }} baris contoh &middot; geser tabel ke kanan untuk melihat timeline harian
+          @endif
         </span>
-        <div class="d-flex gap-2">
-          <button type="button" class="btn btn-sm btn-outline-primary-600 radius-8" disabled>&laquo; Sebelumnya</button>
-          <button type="button" class="btn btn-sm btn-outline-primary-600 radius-8" disabled>Berikutnya &raquo;</button>
-        </div>
+        @if ($live)
+          {{-- Tabel lengkap dengan filter, pengurutan, dan paginasi ada di
+               halaman Kepatuhan Roster (Live) — di sini hanya cuplikan. --}}
+          <a href="{{ route('dms.roster-compliance') }}"
+             class="btn btn-sm btn-outline-primary-600 radius-8 d-inline-flex align-items-center gap-1">
+            Lihat semua karyawan
+            <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
+          </a>
+        @else
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-primary-600 radius-8" disabled>&laquo; Sebelumnya</button>
+            <button type="button" class="btn btn-sm btn-outline-primary-600 radius-8" disabled>Berikutnya &raquo;</button>
+          </div>
+        @endif
       </div>
 
     </div>
