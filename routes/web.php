@@ -801,14 +801,15 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         Route::get('/roster-compliance/wajib-cuti.csv', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'unduhWajibCuti'])->name('roster-compliance.wajib-cuti');
         Route::get('/roster-compliance/karyawan/{sid}', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'detail'])->name('roster-compliance.detail');
 
-        // Halaman ringkasan bergaya dashboard PnC — MURNI STATIS (mockup),
-        // tidak menyentuh database/service mana pun.
-        Route::get('/roster-compliance/overview', function () {
-            return view('dms.roster-overview-live');
+        // Halaman ringkasan bergaya dashboard PnC — isinya mockup statis,
+        // KECUALI kartu "Total Karyawan" yang diambil live dari OLAP lewat
+        // DmsRosterTotalKaryawanReader (lihat config dms_roster.total_karyawan).
+        Route::get('/roster-compliance/overview', function (\App\Services\Dms\Roster\DmsRosterTotalKaryawanReader $reader) {
+            return view('dms.roster-overview-live', ['totalKaryawanLive' => $reader->ambil()]);
         })->name('roster-compliance.overview');
 
-        Route::get('/roster-compliance-static/overview', function () {
-            return view('dms.roster-overview-static');
+        Route::get('/roster-compliance-static/overview', function (\App\Services\Dms\Roster\DmsRosterTotalKaryawanReader $reader) {
+            return view('dms.roster-overview-static', ['totalKaryawanLive' => $reader->ambil()]);
         })->name('roster-compliance-static.overview');
 
         Route::get('/roster-compliance-static', function () {

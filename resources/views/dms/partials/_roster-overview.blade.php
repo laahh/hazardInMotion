@@ -12,12 +12,22 @@
     $subjudul = $subjudul ?? 'Safety & Roster · Kepatuhan Jam Kerja Karyawan';
     $lencana = $lencana ?? ['teks' => 'DATA CONTOH', 'kelas' => 'bg-warning-focus text-warning-main'];
 
-    // ── Angka ringkasan (dummy) ───────────────────────────────────────────
-    $totalKaryawan = 5588;
+    // ── Donat: angka contoh, penyebutnya dirinya sendiri ─────────────────
+    // Sengaja TIDAK memakai $totalKaryawan sebagai penyebut: begitu total
+    // diambil live, persentase donat akan mencampur angka nyata dengan angka
+    // contoh dan menghasilkan nilai yang menyesatkan.
     $patuh = 4605;
     $pelanggaran = 983;
-    $persenPatuh = $totalKaryawan > 0 ? $patuh / $totalKaryawan * 100 : 0;
+    $basisDonat = $patuh + $pelanggaran;
+    $persenPatuh = $basisDonat > 0 ? $patuh / $basisDonat * 100 : 0;
     $persenPelanggaran = 100 - $persenPatuh;
+
+    // ── Total karyawan: LIVE bila tersedia, jika tidak pakai angka contoh ──
+    $live = $totalKaryawanLive ?? null;
+    $totalKaryawan = $live['total'] ?? 5588;
+    $persenSimper = ($live && $live['total'] > 0)
+        ? $live['punya_simper_aktif'] / $live['total'] * 100
+        : null;
 
     $tiles = [
         [
@@ -120,9 +130,15 @@
 <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-24 radius-8 d-flex gap-2 align-items-start" role="alert">
   <iconify-icon icon="solar:info-circle-bold" class="icon text-lg flex-shrink-0 mt-2"></iconify-icon>
   <div class="text-sm">
-    <b>Halaman contoh (mockup).</b> Seluruh angka, grafik, dan daftar di halaman ini ditulis langsung di dalam
-    berkas tampilan &mdash; tidak terhubung ke database, service, maupun API mana pun. Dipakai untuk menyepakati
-    tata letak sebelum data sungguhan disambungkan.
+    <b>Halaman contoh (mockup).</b> Grafik, heatmap, dan daftar di halaman ini ditulis langsung di dalam berkas
+    tampilan &mdash; belum terhubung ke data sungguhan.
+    @if ($live)
+      <b>Pengecualian: kartu Total Karyawan sudah live</b>, diambil dari <code>bcsid.bep_vw_wp_karyawan</code>
+      dan dicocokkan ke SIMPER aktif pada <code>bcsid.bep_vw_sid_dokumen_aktif_nonaktif</code>.
+    @else
+      Kartu Total Karyawan seharusnya live, tapi koneksi ke database OLAP sedang tidak tersedia &mdash;
+      angka yang tampil adalah contoh.
+    @endif
   </div>
 </div>
 
@@ -139,12 +155,24 @@
                   <iconify-icon icon="solar:users-group-rounded-bold" class="icon"></iconify-icon>
                 </span>
                 <div>
-                  <span class="text-secondary-light fw-medium text-sm d-block mb-2">Total Karyawan</span>
+                  <span class="text-secondary-light fw-medium text-sm d-block mb-2">
+                    Total Karyawan
+                    @if ($live)
+                      <span class="text-success-600 fw-semibold" title="Diambil langsung dari database">&middot; live</span>
+                    @endif
+                  </span>
                   <h5 class="fw-bold mb-0 text-primary-light">{{ number_format($totalKaryawan, 0, ',', '.') }}</h5>
                 </div>
-                <span class="px-12 py-4 rounded-pill fw-semibold text-sm bg-success-focus text-success-main">
-                  Patuh {{ number_format($persenPatuh, 1, ',', '.') }}%
-                </span>
+                @if ($live)
+                  <span class="px-12 py-4 rounded-pill fw-semibold text-sm bg-success-focus text-success-main"
+                        title="{{ number_format($live['punya_simper_aktif'], 0, ',', '.') }} dari {{ number_format($live['total'], 0, ',', '.') }} karyawan punya SIMPER aktif">
+                    SIMPER {{ number_format($persenSimper, 1, ',', '.') }}%
+                  </span>
+                @else
+                  <span class="px-12 py-4 rounded-pill fw-semibold text-sm bg-success-focus text-success-main">
+                    Patuh {{ number_format($persenPatuh, 1, ',', '.') }}%
+                  </span>
+                @endif
               </div>
               <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
                 <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
@@ -160,6 +188,23 @@
                 </select>
               </div>
             </div>
+            @if ($live)
+              <div class="d-flex flex-wrap gap-2 mt-12">
+                @foreach ($live['kelompok'] as $g)
+                  <span class="bg-neutral-100 text-secondary-light px-10 py-2 radius-8 text-xs fw-medium"
+                        title="{{ number_format($g['punya_simper_aktif'], 0, ',', '.') }} punya SIMPER aktif">
+                    {{ $g['kelompok'] }}: <b class="text-primary-light">{{ number_format($g['total'], 0, ',', '.') }}</b>
+                  </span>
+                @endforeach
+              </div>
+              <div class="text-secondary-light text-xs mt-8">
+                Karyawan AKTIF berjabatan operator/driver &amp; mekanik (daftar jabatan di
+                <code>config/dms_roster.php</code>) &middot; WP unit lolos:
+                {{ number_format($live['wp_unit_passed'], 0, ',', '.') }} &middot; tanpa SIMPER:
+                {{ number_format($live['tanpa_simper'], 0, ',', '.') }}
+              </div>
+            @endif
+
             <div class="mt-40">
               {{-- Data chart dioper lewat atribut data-* supaya berkas skrip
                    (dimuat setelah ApexCharts) tidak perlu variabel PHP. --}}
