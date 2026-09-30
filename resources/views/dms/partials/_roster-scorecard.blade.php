@@ -169,11 +169,11 @@
           <span class="ro-card__subtitle">Ringkasan roster tiap karyawan beserta pola kerja hariannya sepanjang periode</span>
         </div>
         <div class="ro-sc-legend">
-          <span><i style="background:#60A5FA"></i>Pagi</span>
-          <span><i style="background:#1E3A8A"></i>Malam</span>
-          <span><i style="background:#CBD5E1"></i>Off</span>
-          <span><i style="background:#16A34A"></i>Cuti</span>
-          <span><i style="background:#EF4444"></i>Merah = pelanggaran</span>
+          <span><i class="ro-sw ro-sw-pagi"></i>Pagi</span>
+          <span><i class="ro-sw ro-sw-malam"></i>Malam</span>
+          <span><i class="ro-sw ro-sw-off"></i>Off</span>
+          <span><i class="ro-sw ro-sw-cuti"></i>Cuti</span>
+          <span><i class="ro-sw ro-sw-flag"></i>Hari ter-flag</span>
         </div>
       </div>
 
@@ -284,17 +284,18 @@
                 <td colspan="18" style="padding:0;border-bottom:0">
                   <div class="collapse" id="tl-{{ $r['sid'] }}">
                     <div class="ro-sc-detail">
-                      <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-12">
+                     <div class="ro-sc-detail__panel">
+                      <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
                         <div>
                           <div class="ro-sc-detail__title">Pola Harian &mdash; {{ $r['nama'] }}</div>
                           <div class="ro-sc-detail__sub">{{ $r['sid'] }} &middot; {{ $r['pt'] }} &middot; {{ $r['site'] }} &middot; 1 Jan – 30 Sep 2026</div>
                         </div>
                         <div class="ro-sc-legend">
-                          <span><i style="background:#60A5FA"></i>Pagi</span>
-                          <span><i style="background:#1E3A8A"></i>Malam</span>
-                          <span><i style="background:#CBD5E1"></i>Off</span>
-                          <span><i style="background:#16A34A"></i>Cuti</span>
-                          <span><i style="box-shadow:inset 0 0 0 2px #EF4444;background:#fff"></i>Hari ter-flag</span>
+                          <span><i class="ro-sw ro-sw-pagi"></i>Pagi</span>
+                          <span><i class="ro-sw ro-sw-malam"></i>Malam</span>
+                          <span><i class="ro-sw ro-sw-off"></i>Off</span>
+                          <span><i class="ro-sw ro-sw-cuti"></i>Cuti</span>
+                          <span><i class="ro-sw ro-sw-flag"></i>Hari ter-flag</span>
                         </div>
                       </div>
 
@@ -311,6 +312,7 @@
                           </div>
                         </div>
                       </div>
+                     </div>
                     </div>
                   </div>
                 </td>

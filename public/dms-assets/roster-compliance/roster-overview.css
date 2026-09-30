@@ -149,29 +149,86 @@
 .ro-sc-pill.is-over { background: #FEF3C7; color: #B45309; }
 
 /* ── Pola harian per karyawan (baris collapse di tabel scorecard) ──────
-   Memakai kerangka grid yang sama dengan kartu "Pola Kepatuhan Roster
-   Harian", tapi warnanya mengikuti kode shift (Pagi/Malam/Off/Cuti)
-   sesuai legenda di atas tabel, bukan skala kepatuhan. */
+   Kerangka grid sama dengan kartu "Pola Kepatuhan Roster Harian", warna
+   mengikuti kode shift. Palet sengaja diturunkan saturasinya: versi
+   sebelumnya memakai navy pekat + cincin merah penuh yang membuat grid
+   terlihat ramai dan berat. */
+
+:root {
+  --ro-pagi: #93C5FD;
+  --ro-malam: #6366F1;
+  --ro-off: #E5E9F0;
+  --ro-cuti: #5EEAD4;
+  --ro-flag: #F43F5E;
+}
+
+/* Contoh warna dipakai bersama legenda tabel & legenda panel. */
+.ro-sw { display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 6px; vertical-align: -2px; }
+.ro-sw-pagi { background: var(--ro-pagi); }
+.ro-sw-malam { background: var(--ro-malam); }
+.ro-sw-off { background: var(--ro-off); }
+.ro-sw-cuti { background: var(--ro-cuti); }
+.ro-sw-flag { background: #fff; border: 1.5px solid var(--ro-flag); position: relative; }
+.ro-sw-flag::after {
+  content: ''; position: absolute; inset: 2px; border-radius: 2px; background: var(--ro-flag); opacity: .55;
+}
 
 .ro-sc-toggle {
   display: inline-flex; align-items: center; gap: 6px;
-  border: 1px solid #CBD5E1; background: #fff; color: #475569;
-  border-radius: 999px; padding: 5px 12px;
+  border: 1px solid #E2E8F0; background: #fff; color: #64748B;
+  border-radius: 999px; padding: 6px 13px;
   font-size: 11.5px; font-weight: 600; white-space: nowrap;
-  cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease;
 }
-.ro-sc-toggle:hover { border-color: #487FFF; color: #487FFF; }
-.ro-sc-toggle iconify-icon { font-size: 14px; transition: transform .18s ease; }
-.ro-sc-toggle[aria-expanded="true"] { background: #EEF4FF; border-color: #487FFF; color: #1D4ED8; }
+.ro-sc-toggle:hover { border-color: #C7D2FE; color: #4F46E5; box-shadow: 0 2px 8px rgba(79, 70, 229, .10); }
+.ro-sc-toggle iconify-icon { font-size: 14px; transition: transform .22s ease; }
+.ro-sc-toggle[aria-expanded="true"] {
+  background: #EEF2FF; border-color: #C7D2FE; color: #4338CA;
+  box-shadow: 0 2px 10px rgba(79, 70, 229, .12);
+}
 .ro-sc-toggle[aria-expanded="true"] iconify-icon { transform: rotate(180deg); }
 
-.ro-sc-detail { background: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 18px 20px; }
-.ro-sc-detail__title { font-size: 12.5px; font-weight: 700; color: #0F172A; margin-bottom: 2px; }
-.ro-sc-detail__sub { font-size: 11.5px; color: #64748B; }
+.ro-sc-detail { background: #F8FAFC; border-top: 1px solid #EEF2F6; padding: 20px 22px 22px; }
+.ro-sc-detail__panel {
+  background: #fff; border: 1px solid #EEF2F6; border-radius: 14px;
+  padding: 18px 18px 14px; box-shadow: 0 2px 10px rgba(15, 23, 42, .04);
+}
+.ro-sc-detail__title { font-size: 13px; font-weight: 700; color: #0F172A; letter-spacing: -.01em; }
+.ro-sc-detail__sub { font-size: 11.5px; color: #94A3B8; margin-top: 2px; }
 
-/* Warna sel mengikuti kode shift. */
-.ro-hm-cell.sh-P { background: #60A5FA; }
-.ro-hm-cell.sh-M { background: #1E3A8A; }
-.ro-hm-cell.sh-o { background: #CBD5E1; }
-.ro-hm-cell.sh-c { background: #16A34A; }
-.ro-hm-cell.is-flag { box-shadow: inset 0 0 0 2px #EF4444; }
+/* Grid dibuat lebih rapat & membulat supaya tidak terlihat seperti blok besar. */
+.ro-sc-detail .ro-hm {
+  grid-template-columns: 62px minmax(0, 1fr);
+  grid-template-rows: repeat(7, 20px) 22px;
+  gap: 4px 10px;
+  min-height: 0;
+}
+.ro-sc-detail .ro-hm-row { gap: 4px; min-height: 0; }
+.ro-sc-detail .ro-hm-cell {
+  min-height: 0; border: 0; border-radius: 5px;
+  transition: transform .14s ease, box-shadow .14s ease;
+}
+.ro-sc-detail .ro-hm-cell:hover {
+  transform: translateY(-1px) scale(1.12);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, .18);
+  z-index: 2; position: relative;
+}
+.ro-sc-detail .ro-hm-ylabel { font-size: 11px; color: #94A3B8; font-weight: 500; }
+.ro-sc-detail .ro-hm-xlabel span { font-size: 9.5px; color: #CBD5E1; font-weight: 600; }
+
+.ro-hm-cell.sh-P { background: var(--ro-pagi); }
+.ro-hm-cell.sh-M { background: var(--ro-malam); }
+.ro-hm-cell.sh-o { background: var(--ro-off); }
+.ro-hm-cell.sh-c { background: var(--ro-cuti); }
+
+/* Penanda pelanggaran: titik kecil di sudut, bukan cincin penuh — cincin
+   membuat grid terlihat berisik saat hari ter-flag banyak. */
+.ro-hm-cell.is-flag { position: relative; }
+.ro-hm-cell.is-flag::after {
+  content: '';
+  position: absolute; top: 2px; right: 2px;
+  width: 5px; height: 5px; border-radius: 999px;
+  background: var(--ro-flag);
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .9);
+}
