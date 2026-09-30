@@ -230,12 +230,12 @@
                   </span>
                 @endforeach
               </div>
-              <div class="text-secondary-light text-xs mt-8">
+              {{-- <div class="text-secondary-light text-xs mt-8">
                 Karyawan AKTIF berjabatan operator/driver &amp; mekanik (daftar jabatan di
                 <code>config/dms_roster.php</code>) yang <b>punya SIMPER aktif</b> &middot;
                 tanpa SIMPER: {{ number_format($live['tanpa_simper'], 0, ',', '.') }} &middot;
                 WP unit lolos: {{ number_format($live['wp_unit_passed'], 0, ',', '.') }}
-              </div>
+              </div> --}}
             @endif
 
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-24">
