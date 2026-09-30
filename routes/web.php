@@ -801,6 +801,16 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         Route::get('/roster-compliance/wajib-cuti.csv', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'unduhWajibCuti'])->name('roster-compliance.wajib-cuti');
         Route::get('/roster-compliance/karyawan/{sid}', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'detail'])->name('roster-compliance.detail');
 
+        // Halaman ringkasan bergaya dashboard PnC — MURNI STATIS (mockup),
+        // tidak menyentuh database/service mana pun.
+        Route::get('/roster-compliance/overview', function () {
+            return view('dms.roster-overview-live');
+        })->name('roster-compliance.overview');
+
+        Route::get('/roster-compliance-static/overview', function () {
+            return view('dms.roster-overview-static');
+        })->name('roster-compliance-static.overview');
+
         Route::get('/roster-compliance-static', function () {
             return view('dms.roster-compliance-static');
         })->name('roster-compliance-static');
