@@ -222,6 +222,3 @@
 }
 .ro-sc-detail .ro-hm-ylabel { font-size: 11px; color: #94A3B8; font-weight: 500; }
 .ro-sc-detail .ro-hm-xlabel span { font-size: 9.5px; color: #CBD5E1; font-weight: 600; }
-
-/* Penanda bulan pada penggaris timeline per karyawan. */
-.ro-sc-detail .ro-hm-xlabel.is-month span { color: #64748B; font-weight: 700; font-style: italic; }

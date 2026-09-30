@@ -13,11 +13,6 @@
     $tlAwal = \Carbon\Carbon::create(2026, 1, 1);
     // Didefinisikan lokal supaya partial ini tidak bergantung pada scope pemanggil.
     $hariLabel = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-    // Ditulis eksplisit, bukan translatedFormat(): locale aplikasi berbahasa
-    // Inggris sehingga akan muncul "May"/"Aug", tidak konsisten dengan
-    // "Mei"/"Agu" yang dipakai kolom lain di tabel ini.
-    $bulanSingkat = [1=>'Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-    $hariSingkat = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
     /**
      * Pola harian satu karyawan dalam bentuk grid kalender (baris Senin–Minggu
@@ -30,23 +25,16 @@
      * warna kode shift — supaya kedua heatmap di halaman ini berbicara dalam
      * bahasa visual yang sama.
      *
-     * @return array{grid: array<int, array<int, array{lvl:int,label:string}|null>>, kolom: int, labelKolom: array<int, string>}
+     * @return array{grid: array<int, array<int, array{lvl:int,label:string}|null>>, kolom: int}
      */
-    $tlGrid = function (string $benih, bool $adaPelanggaran) use ($tlHari, $tlAwal, $bulanSingkat, $hariSingkat): array {
+    $tlGrid = function (string $benih, bool $adaPelanggaran) use ($tlHari, $tlAwal): array {
         $grid = array_fill(0, 7, []);
         $kolom = 0;
-        // Label sumbu-X memakai NAMA BULAN (bukan nomor minggu), sama seperti
-        // penggaris kartu "Pola Kepatuhan Roster Harian": kolom minggu yang
-        // memuat tanggal 1 diberi nama bulannya.
-        $labelKolom = [];
 
         for ($i = 0; $i < $tlHari; $i++) {
             $t = $tlAwal->copy()->addDays($i);
             if ($i > 0 && $t->dayOfWeek === \Carbon\Carbon::MONDAY) {
                 $kolom++;
-            }
-            if ($i === 0 || $t->day === 1) {
-                $labelKolom[$kolom] ??= $bulanSingkat[$t->month];
             }
 
             // Hari bermasalah dikelompokkan per blok 6 hari supaya terbaca
@@ -67,11 +55,11 @@
             $baris = ($t->dayOfWeek + 6) % 7; // 0 = Senin
             $grid[$baris][$kolom] = [
                 'lvl' => $lvl,
-                'label' => $hariSingkat[$t->dayOfWeek].', '.$t->day.' '.$bulanSingkat[$t->month].' '.$t->year,
+                'label' => $t->translatedFormat('D, d M Y'),
             ];
         }
 
-        return ['grid' => $grid, 'kolom' => $kolom + 1, 'labelKolom' => $labelKolom];
+        return ['grid' => $grid, 'kolom' => $kolom + 1];
     };
 
     // Sama persis dengan legenda kartu "Pola Kepatuhan Roster Harian".
@@ -338,7 +326,7 @@
                             @endforeach
 
                             <div class="ro-hm-corner"></div>
-                            <div class="ro-hm-xlabels">@for ($c = 0; $c < $pola['kolom']; $c++)<div class="ro-hm-xlabel {{ isset($pola['labelKolom'][$c]) ? 'is-month' : '' }}"><span>{{ $pola['labelKolom'][$c] ?? '' }}</span></div>@endfor</div>
+                            <div class="ro-hm-xlabels">@for ($c = 0; $c < $pola['kolom']; $c++)<div class="ro-hm-xlabel"><span>{{ $c % 4 === 0 ? 'W' . ($c + 1) : '' }}</span></div>@endfor</div>
                           </div>
                         </div>
                       </div>
