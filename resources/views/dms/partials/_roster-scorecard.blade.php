@@ -11,45 +11,72 @@
     // 1 Jan – 30 Sep 2026 = 273 hari
     $tlHari = 273;
     $tlAwal = \Carbon\Carbon::create(2026, 1, 1);
-
-    // Penanda awal bulan untuk penggaris timeline.
-    $tlBulan = [];
-    for ($m = 1; $m <= 9; $m++) {
-        $t = \Carbon\Carbon::create(2026, $m, 1);
-        $tlBulan[] = [
-            'idx' => $tlAwal->diffInDays($t),
-            'label' => $t->translatedFormat('M') . ($m % 3 === 1 && $m > 1 ? ' · Q' . (intdiv($m - 1, 3) + 1) : ''),
-        ];
-    }
-
-    // Penanda minggu (tiap Senin).
-    $tlMinggu = [];
-    $w = 0;
-    for ($i = 0; $i < $tlHari; $i++) {
-        $t = $tlAwal->copy()->addDays($i);
-        if ($i === 0 || $t->dayOfWeek === \Carbon\Carbon::MONDAY) {
-            $w++;
-            $tlMinggu[] = ['idx' => $i, 'label' => 'W' . $w];
-        }
-    }
+    // Didefinisikan lokal supaya partial ini tidak bergantung pada scope pemanggil.
+    $hariLabel = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
     /**
-     * Bentuk batang timeline satu karyawan — deterministik dari $benih supaya
-     * tampilannya tidak berubah tiap kali halaman dimuat.
+     * Pola harian satu karyawan dalam bentuk grid kalender (baris Senin–Minggu
+     * x kolom minggu), format yang sama dengan kartu "Pola Kepatuhan Roster
+     * Harian". Deterministik dari $benih supaya tampilannya tetap sama tiap
+     * kali halaman dimuat.
+     *
+     * @return array{grid: array<int, array<int, array{kode:string,merah:bool,label:string}|null>>, kolom: int}
      */
-    $tlStrip = function (string $benih, bool $adaPelanggaran) use ($tlHari): string {
-        $out = '';
+    $tlGrid = function (string $benih, bool $adaPelanggaran) use ($tlHari, $tlAwal): array {
+        $grid = array_fill(0, 7, []);
+        $kolom = 0;
+
         for ($i = 0; $i < $tlHari; $i++) {
-            $h = hexdec(substr(md5($benih . ':' . $i), 0, 3));
+            $t = $tlAwal->copy()->addDays($i);
+            if ($i > 0 && $t->dayOfWeek === \Carbon\Carbon::MONDAY) {
+                $kolom++;
+            }
+
+            $h = hexdec(substr(md5($benih . ':' . $i), 0, 3)) % 100;
             $kode = match (true) {
-                $h % 100 < 8 => 'c',
-                $h % 100 < 22 => 'o',
-                $h % 100 < 58 => 'P',
+                $h < 8 => 'c',
+                $h < 22 => 'o',
+                $h < 58 => 'P',
                 default => 'M',
             };
-            // Garis merah dikelompokkan supaya terlihat seperti rentetan hari.
-            $merah = $adaPelanggaran && (hexdec(substr(md5($benih . ':blok:' . intdiv($i, 6)), 0, 2)) % 5 === 0);
-            $out .= '<i class="d-' . $kode . ($merah ? ' is-red' : '') . '"></i>';
+            // Flag dikelompokkan per blok 6 hari supaya terlihat sebagai
+            // rentetan hari bermasalah, bukan titik acak.
+            $merah = $adaPelanggaran
+                && hexdec(substr(md5($benih . ':blok:' . intdiv($i, 6)), 0, 2)) % 5 === 0;
+
+            $baris = ($t->dayOfWeek + 6) % 7; // 0 = Senin
+            $grid[$baris][$kolom] = [
+                'kode' => $kode,
+                'merah' => $merah,
+                'label' => $t->translatedFormat('D, d M Y'),
+            ];
+        }
+
+        return ['grid' => $grid, 'kolom' => $kolom + 1];
+    };
+
+    $kodeLabel = ['P' => 'Shift Pagi', 'M' => 'Shift Malam', 'o' => 'Off', 'c' => 'Cuti'];
+
+    /**
+     * Render satu baris sel heatmap sekaligus. Dikerjakan di PHP, bukan lewat
+     * perulangan Blade, karena 8 karyawan x 280 sel membuat indentasi template
+     * saja menambah ratusan KB ke HTML hasil render.
+     *
+     * @param  array<int, array{kode:string,merah:bool,label:string}|null>  $baris
+     */
+    $selBaris = function (array $baris, int $kolom) use ($kodeLabel): string {
+        $out = '';
+        for ($c = 0; $c < $kolom; $c++) {
+            $sel = $baris[$c] ?? null;
+            if ($sel === null) {
+                $out .= '<span class="ro-hm-cell is-empty"></span>';
+
+                continue;
+            }
+
+            $judul = $sel['label'].' — '.$kodeLabel[$sel['kode']].($sel['merah'] ? ' · ⚠ pelanggaran' : '');
+            $out .= '<span class="ro-hm-cell sh-'.$sel['kode'].($sel['merah'] ? ' is-flag' : '')
+                .'" title="'.e($judul).'"></span>';
         }
 
         return $out;
@@ -203,23 +230,7 @@
               <th>Cuti min (all roster)</th>
               <th>Status</th>
               <th>Notes</th>
-              <th>
-                <div class="ro-tl ro-tl-head">
-                  <div class="mb-2" style="font-weight:600;color:#475569">Timeline harian</div>
-                  <div class="ro-tl-months">
-                    @foreach ($tlBulan as $b)
-                      <b style="left: calc({{ $b['idx'] }} * var(--ro-tl-day))">{{ $b['label'] }}</b>
-                    @endforeach
-                  </div>
-                  <div class="ro-tl-weeks">
-                    @foreach ($tlMinggu as $i => $mg)
-                      @if ($i % 2 === 0)
-                        <span style="left: calc({{ $mg['idx'] }} * var(--ro-tl-day))">{{ $mg['label'] }}</span>
-                      @endif
-                    @endforeach
-                  </div>
-                </div>
-              </th>
+              <th>Timeline harian</th>
             </tr>
           </thead>
           <tbody>
@@ -257,8 +268,50 @@
                   @endif
                 </td>
                 <td>
-                  <div class="ro-tl">
-                    <div class="ro-tl-strip">{!! $tlStrip($r['sid'], $r['pelanggaran']) !!}</div>
+                  <button class="ro-sc-toggle" type="button" data-bs-toggle="collapse"
+                          data-bs-target="#tl-{{ $r['sid'] }}" aria-expanded="false"
+                          aria-controls="tl-{{ $r['sid'] }}">
+                    <iconify-icon icon="solar:alt-arrow-down-linear"></iconify-icon>
+                    Lihat pola harian
+                  </button>
+                </td>
+              </tr>
+
+              {{-- Baris collapse: pola harian karyawan ini, format kalender
+                   sama dengan kartu "Pola Kepatuhan Roster Harian". --}}
+              @php $pola = $tlGrid($r['sid'], $r['pelanggaran']); @endphp
+              <tr>
+                <td colspan="18" style="padding:0;border-bottom:0">
+                  <div class="collapse" id="tl-{{ $r['sid'] }}">
+                    <div class="ro-sc-detail">
+                      <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-12">
+                        <div>
+                          <div class="ro-sc-detail__title">Pola Harian &mdash; {{ $r['nama'] }}</div>
+                          <div class="ro-sc-detail__sub">{{ $r['sid'] }} &middot; {{ $r['pt'] }} &middot; {{ $r['site'] }} &middot; 1 Jan – 30 Sep 2026</div>
+                        </div>
+                        <div class="ro-sc-legend">
+                          <span><i style="background:#60A5FA"></i>Pagi</span>
+                          <span><i style="background:#1E3A8A"></i>Malam</span>
+                          <span><i style="background:#CBD5E1"></i>Off</span>
+                          <span><i style="background:#16A34A"></i>Cuti</span>
+                          <span><i style="box-shadow:inset 0 0 0 2px #EF4444;background:#fff"></i>Hari ter-flag</span>
+                        </div>
+                      </div>
+
+                      <div class="ro-heatmap">
+                        <div class="ro-hm-scroll">
+                          <div class="ro-hm" style="--ro-cols: {{ $pola['kolom'] }}">
+                            @foreach ($hariLabel as $baris => $namaHari)
+                              <div class="ro-hm-ylabel">{{ $namaHari }}</div>
+                              <div class="ro-hm-row">{!! $selBaris($pola['grid'][$baris], $pola['kolom']) !!}</div>
+                            @endforeach
+
+                            <div class="ro-hm-corner"></div>
+                            <div class="ro-hm-xlabels">@for ($c = 0; $c < $pola['kolom']; $c++)<div class="ro-hm-xlabel"><span>{{ $c % 4 === 0 ? 'W' . ($c + 1) : '' }}</span></div>@endfor</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </td>
               </tr>
