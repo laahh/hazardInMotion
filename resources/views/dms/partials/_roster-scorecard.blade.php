@@ -13,6 +13,11 @@
     $tlAwal = \Carbon\Carbon::create(2026, 1, 1);
     // Didefinisikan lokal supaya partial ini tidak bergantung pada scope pemanggil.
     $hariLabel = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    // Ditulis eksplisit, bukan translatedFormat(): locale aplikasi berbahasa
+    // Inggris sehingga akan muncul "May"/"Aug", tidak konsisten dengan
+    // "Mei"/"Agu" yang dipakai kolom lain di tabel ini.
+    $bulanSingkat = [1=>'Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    $hariSingkat = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
     /**
      * Pola harian satu karyawan dalam bentuk grid kalender (baris Senin–Minggu
@@ -20,42 +25,64 @@
      * Harian". Deterministik dari $benih supaya tampilannya tetap sama tiap
      * kali halaman dimuat.
      *
-     * @return array{grid: array<int, array<int, array{kode:string,merah:bool,label:string}|null>>, kolom: int}
+     * Selnya memakai SKALA KEPATUHAN yang sama dengan kartu "Pola Kepatuhan
+     * Roster Harian" (0 = tidak ada data, 1 = <50%, sampai 5 = 100%), bukan
+     * warna kode shift — supaya kedua heatmap di halaman ini berbicara dalam
+     * bahasa visual yang sama.
+     *
+     * @return array{grid: array<int, array<int, array{lvl:int,label:string}|null>>, kolom: int, labelKolom: array<int, string>}
      */
-    $tlGrid = function (string $benih, bool $adaPelanggaran) use ($tlHari, $tlAwal): array {
+    $tlGrid = function (string $benih, bool $adaPelanggaran) use ($tlHari, $tlAwal, $bulanSingkat, $hariSingkat): array {
         $grid = array_fill(0, 7, []);
         $kolom = 0;
+        // Label sumbu-X memakai NAMA BULAN (bukan nomor minggu), sama seperti
+        // penggaris kartu "Pola Kepatuhan Roster Harian": kolom minggu yang
+        // memuat tanggal 1 diberi nama bulannya.
+        $labelKolom = [];
 
         for ($i = 0; $i < $tlHari; $i++) {
             $t = $tlAwal->copy()->addDays($i);
             if ($i > 0 && $t->dayOfWeek === \Carbon\Carbon::MONDAY) {
                 $kolom++;
             }
+            if ($i === 0 || $t->day === 1) {
+                $labelKolom[$kolom] ??= $bulanSingkat[$t->month];
+            }
+
+            // Hari bermasalah dikelompokkan per blok 6 hari supaya terbaca
+            // sebagai rentetan, bukan titik acak.
+            $blokBuruk = $adaPelanggaran
+                && hexdec(substr(md5($benih . ':blok:' . intdiv($i, 6)), 0, 2)) % 5 === 0;
 
             $h = hexdec(substr(md5($benih . ':' . $i), 0, 3)) % 100;
-            $kode = match (true) {
-                $h < 8 => 'c',
-                $h < 22 => 'o',
-                $h < 58 => 'P',
-                default => 'M',
-            };
-            // Flag dikelompokkan per blok 6 hari supaya terlihat sebagai
-            // rentetan hari bermasalah, bukan titik acak.
-            $merah = $adaPelanggaran
-                && hexdec(substr(md5($benih . ':blok:' . intdiv($i, 6)), 0, 2)) % 5 === 0;
+            $lvl = $blokBuruk
+                ? ($h < 55 ? 1 : 2)              // hari melanggar → merah / kuning
+                : match (true) {
+                    $h < 4 => 0,                  // tidak ada data
+                    $h < 16 => 3,                 // 75–89%
+                    $h < 52 => 4,                 // 90–99%
+                    default => 5,                 // 100%
+                };
 
             $baris = ($t->dayOfWeek + 6) % 7; // 0 = Senin
             $grid[$baris][$kolom] = [
-                'kode' => $kode,
-                'merah' => $merah,
-                'label' => $t->translatedFormat('D, d M Y'),
+                'lvl' => $lvl,
+                'label' => $hariSingkat[$t->dayOfWeek].', '.$t->day.' '.$bulanSingkat[$t->month].' '.$t->year,
             ];
         }
 
-        return ['grid' => $grid, 'kolom' => $kolom + 1];
+        return ['grid' => $grid, 'kolom' => $kolom + 1, 'labelKolom' => $labelKolom];
     };
 
-    $kodeLabel = ['P' => 'Shift Pagi', 'M' => 'Shift Malam', 'o' => 'Off', 'c' => 'Cuti'];
+    // Sama persis dengan legenda kartu "Pola Kepatuhan Roster Harian".
+    $lvlLabel = [
+        0 => 'tidak ada data',
+        1 => 'kepatuhan <50%',
+        2 => 'kepatuhan 50–74%',
+        3 => 'kepatuhan 75–89%',
+        4 => 'kepatuhan 90–99%',
+        5 => 'kepatuhan 100%',
+    ];
 
     /**
      * Render satu baris sel heatmap sekaligus. Dikerjakan di PHP, bukan lewat
@@ -64,19 +91,18 @@
      *
      * @param  array<int, array{kode:string,merah:bool,label:string}|null>  $baris
      */
-    $selBaris = function (array $baris, int $kolom) use ($kodeLabel): string {
+    $selBaris = function (array $baris, int $kolom) use ($lvlLabel): string {
         $out = '';
         for ($c = 0; $c < $kolom; $c++) {
             $sel = $baris[$c] ?? null;
             if ($sel === null) {
-                $out .= '<span class="ro-hm-cell is-empty"></span>';
+                $out .= '<span class="ro-hm-cell lvl-0 is-empty"></span>';
 
                 continue;
             }
 
-            $judul = $sel['label'].' — '.$kodeLabel[$sel['kode']].($sel['merah'] ? ' · ⚠ pelanggaran' : '');
-            $out .= '<span class="ro-hm-cell sh-'.$sel['kode'].($sel['merah'] ? ' is-flag' : '')
-                .'" title="'.e($judul).'"></span>';
+            $judul = $sel['label'].' — '.$lvlLabel[$sel['lvl']];
+            $out .= '<span class="ro-hm-cell lvl-'.$sel['lvl'].'" title="'.e($judul).'"></span>';
         }
 
         return $out;
@@ -169,11 +195,13 @@
           <span class="ro-card__subtitle">Ringkasan roster tiap karyawan beserta pola kerja hariannya sepanjang periode</span>
         </div>
         <div class="ro-sc-legend">
-          <span><i class="ro-sw ro-sw-pagi"></i>Pagi</span>
-          <span><i class="ro-sw ro-sw-malam"></i>Malam</span>
-          <span><i class="ro-sw ro-sw-off"></i>Off</span>
-          <span><i class="ro-sw ro-sw-cuti"></i>Cuti</span>
-          <span><i class="ro-sw ro-sw-flag"></i>Hari ter-flag</span>
+          <span class="fw-medium">Tingkat kepatuhan</span>
+          <span><i class="ro-sw sw-0"></i>Tidak ada data</span>
+          <span><i class="ro-sw sw-1"></i>&lt;50%</span>
+          <span><i class="ro-sw sw-2"></i>50–74%</span>
+          <span><i class="ro-sw sw-3"></i>75–89%</span>
+          <span><i class="ro-sw sw-4"></i>90–99%</span>
+          <span><i class="ro-sw sw-5"></i>100%</span>
         </div>
       </div>
 
@@ -291,11 +319,13 @@
                           <div class="ro-sc-detail__sub">{{ $r['sid'] }} &middot; {{ $r['pt'] }} &middot; {{ $r['site'] }} &middot; 1 Jan – 30 Sep 2026</div>
                         </div>
                         <div class="ro-sc-legend">
-                          <span><i class="ro-sw ro-sw-pagi"></i>Pagi</span>
-                          <span><i class="ro-sw ro-sw-malam"></i>Malam</span>
-                          <span><i class="ro-sw ro-sw-off"></i>Off</span>
-                          <span><i class="ro-sw ro-sw-cuti"></i>Cuti</span>
-                          <span><i class="ro-sw ro-sw-flag"></i>Hari ter-flag</span>
+                          <span class="fw-medium">Tingkat kepatuhan</span>
+                          <span><i class="ro-sw sw-0"></i>Tidak ada data</span>
+                          <span><i class="ro-sw sw-1"></i>&lt;50%</span>
+                          <span><i class="ro-sw sw-2"></i>50–74%</span>
+                          <span><i class="ro-sw sw-3"></i>75–89%</span>
+                          <span><i class="ro-sw sw-4"></i>90–99%</span>
+                          <span><i class="ro-sw sw-5"></i>100%</span>
                         </div>
                       </div>
 
@@ -308,7 +338,7 @@
                             @endforeach
 
                             <div class="ro-hm-corner"></div>
-                            <div class="ro-hm-xlabels">@for ($c = 0; $c < $pola['kolom']; $c++)<div class="ro-hm-xlabel"><span>{{ $c % 4 === 0 ? 'W' . ($c + 1) : '' }}</span></div>@endfor</div>
+                            <div class="ro-hm-xlabels">@for ($c = 0; $c < $pola['kolom']; $c++)<div class="ro-hm-xlabel {{ isset($pola['labelKolom'][$c]) ? 'is-month' : '' }}"><span>{{ $pola['labelKolom'][$c] ?? '' }}</span></div>@endfor</div>
                           </div>
                         </div>
                       </div>
