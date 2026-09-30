@@ -350,4 +350,7 @@
       </div>
     </div>
   </div>
+
+  {{-- Tabel scorecard: di bawah kartu heatmap & daftar perlu tindakan --}}
+  @include('dms.partials._roster-scorecard')
 </div>
