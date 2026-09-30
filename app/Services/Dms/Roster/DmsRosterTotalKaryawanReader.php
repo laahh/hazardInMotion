@@ -68,7 +68,11 @@ final class DmsRosterTotalKaryawanReader
      * Sebaran karyawan per site, dipecah menurut kelompok jabatan struktural
      * yang sama dengan ambil(). Dipakai bar chart di kartu Total Karyawan.
      *
-     * @return list<array{site:string,operator_driver:int,mekanik:int,trainer:int,total:int}>|null
+     * HANYA menghitung yang punya SIMPER aktif, sama dengan angka headline
+     * kartu — kalau tidak, jumlah batang chart tidak akan sama dengan angka
+     * di atasnya. 'total_aktif' dibawa sebagai konteks untuk tooltip.
+     *
+     * @return list<array{site:string,total:int,total_aktif:int}>|null  plus satu kunci per kelompok WP (a2b, hauler, massal, tanpa)
      */
     public function perSite(): ?array
     {
@@ -96,11 +100,26 @@ final class DmsRosterTotalKaryawanReader
 
         /** @var list<string> $jabatan */
         $jabatan = config('dms_roster.total_karyawan.jabatan', []);
-        if ($jabatan === []) {
+        /** @var list<int> $tipeIds */
+        $tipeIds = config('dms_roster.total_karyawan.simper_tipe_ids', []);
+        $statusAktif = (int) config('dms_roster.total_karyawan.simper_status_aktif', 1);
+
+        if ($jabatan === [] || $tipeIds === []) {
             return null;
         }
 
         $phJabatan = implode(',', array_fill(0, count($jabatan), '?'));
+        $tipeList = $this->intList($tipeIds);
+        $kolomGrup = $this->kolomGrup();
+        $caseGrup = $this->caseGrup();
+
+        // Satu kolom hitung per kelompok + 'tanpa', supaya penjumlahannya
+        // selalu sama dengan kolom total.
+        $kunci = [...$this->urutanGrup(), 'tanpa'];
+        $selectGrup = '';
+        foreach ($kunci as $g) {
+            $selectGrup .= "count(*) FILTER (WHERE simper AND grp = '{$g}') AS grp_{$g},\n                   ";
+        }
 
         $sql = <<<SQL
             WITH lst(j) AS (
@@ -108,26 +127,32 @@ final class DmsRosterTotalKaryawanReader
             ),
             k AS (
               SELECT id,
+                     max(nik) AS nik,
+                     max(nama_perusahaan) AS nama_perusahaan,
                      max(upper(trim(jabatan_struktural))) AS j,
-                     max(coalesce(nullif(trim(site), ''), '(tanpa site)')) AS site
+                     max(coalesce(nullif(trim(site), ''), '(tanpa site)')) AS site{$kolomGrup}
               FROM bcsid.bep_vw_wp_karyawan
               WHERE status_karyawan = 'AKTIF'
               GROUP BY id
             ),
+            s AS (
+              SELECT DISTINCT nik, nama_perusahaan
+              FROM bcsid.bep_vw_sid_dokumen_aktif_nonaktif
+              WHERE id_status_sid_dokumen = ?
+                AND id_jenis_tipe IN ({$tipeList})
+            ),
             m AS (
               SELECT k.site,
-                     CASE
-                       WHEN k.j ~ '(MECHANIC|MEKANIK|TYRE|FITTER|WELDER)' THEN 'mekanik'
-                       WHEN k.j ~ '(TRAINER|TRAINING|SISWA)'              THEN 'trainer'
-                       ELSE 'operator_driver'
-                     END AS grp
-              FROM k JOIN lst USING (j)
+                     (s.nik IS NOT NULL) AS simper,
+                     {$caseGrup} AS grp
+              FROM k
+              JOIN lst USING (j)
+              LEFT JOIN s ON s.nik = k.nik AND s.nama_perusahaan = k.nama_perusahaan
             )
             SELECT site,
-                   count(*) FILTER (WHERE grp = 'operator_driver') AS operator_driver,
-                   count(*) FILTER (WHERE grp = 'mekanik')          AS mekanik,
-                   count(*) FILTER (WHERE grp = 'trainer')          AS trainer,
-                   count(*) AS total
+                   {$selectGrup}
+                   count(*) FILTER (WHERE simper) AS total,
+                   count(*)                       AS total_aktif
             FROM m
             GROUP BY site
             ORDER BY total DESC
@@ -136,7 +161,7 @@ final class DmsRosterTotalKaryawanReader
         try {
             $rows = $this->olap->select(
                 $sql,
-                array_values($jabatan),
+                [...array_values($jabatan), $statusAktif],
                 (int) config('dms_roster.total_karyawan.timeout_ms', 20000),
             );
         } catch (Throwable $e) {
@@ -149,13 +174,20 @@ final class DmsRosterTotalKaryawanReader
             return null;
         }
 
-        return array_map(static fn (object $r): array => [
-            'site' => (string) $r->site,
-            'operator_driver' => (int) $r->operator_driver,
-            'mekanik' => (int) $r->mekanik,
-            'trainer' => (int) $r->trainer,
-            'total' => (int) $r->total,
-        ], $rows);
+        return array_map(static function (object $r) use ($kunci): array {
+            $baris = [
+                'site' => (string) $r->site,
+                'total' => (int) $r->total,
+                'total_aktif' => (int) $r->total_aktif,
+            ];
+
+            foreach ($kunci as $g) {
+                $kolom = 'grp_'.$g;
+                $baris[$g] = (int) ($r->{$kolom} ?? 0);
+            }
+
+            return $baris;
+        }, $rows);
     }
 
     /**
@@ -184,6 +216,8 @@ final class DmsRosterTotalKaryawanReader
         $phJabatan = implode(',', array_fill(0, count($jabatan), '?'));
         $wpList = $this->intList($wpIds);
         $tipeList = $this->intList($tipeIds);
+        $kolomGrup = $this->kolomGrup();
+        $caseGrup = $this->caseGrup();
 
         $sql = <<<SQL
             WITH lst(j) AS (
@@ -195,7 +229,7 @@ final class DmsRosterTotalKaryawanReader
                      max(nama_perusahaan) AS nama_perusahaan,
                      max(upper(trim(jabatan_struktural))) AS j,
                      bool_or(id_work_permit IN ({$wpList})) AS wp_unit,
-                     bool_or(id_work_permit IN ({$wpList}) AND status_permit = 'PASSED') AS wp_unit_passed
+                     bool_or(id_work_permit IN ({$wpList}) AND status_permit = 'PASSED') AS wp_unit_passed{$kolomGrup}
               FROM bcsid.bep_vw_wp_karyawan
               WHERE status_karyawan = 'AKTIF'
               GROUP BY id
@@ -209,11 +243,7 @@ final class DmsRosterTotalKaryawanReader
             m AS (
               SELECT k.*,
                      (s.nik IS NOT NULL) AS simper,
-                     CASE
-                       WHEN k.j ~ '(MECHANIC|MEKANIK|TYRE|FITTER|WELDER)' THEN 'B. Mekanik / Tyre / Welder'
-                       WHEN k.j ~ '(TRAINER|TRAINING|SISWA)'              THEN 'C. Trainer / Siswa Operator'
-                       ELSE 'A. Operator / Driver'
-                     END AS grp
+                     {$caseGrup} AS grp
               FROM k
               JOIN lst USING (j)
               LEFT JOIN s ON s.nik = k.nik AND s.nama_perusahaan = k.nama_perusahaan
@@ -260,6 +290,8 @@ final class DmsRosterTotalKaryawanReader
                 'wp_unit_tanpa_simper' => (int) $row->wp_unit_tanpa_simper,
             ];
 
+            $baris['kelompok'] = $this->labelGrup($baris['kelompok']);
+
             if ($baris['kelompok'] === 'TOTAL') {
                 $total = $baris;
             } else {
@@ -288,6 +320,82 @@ final class DmsRosterTotalKaryawanReader
      *
      * @param  list<int>  $ids
      */
+    /**
+     * Ekspresi CASE untuk menetapkan SATU kelompok WP per karyawan, urut
+     * menurut config 'wp_prioritas'. Dipakai bersama oleh ambil() dan
+     * perSite() supaya keduanya tidak mungkin memakai aturan berbeda.
+     *
+     * Butuh CTE `k` yang sudah punya kolom boolean per kelompok.
+     */
+    private function caseGrup(): string
+    {
+        $case = 'CASE';
+        foreach ($this->urutanGrup() as $kunci) {
+            $case .= " WHEN k.{$kunci} THEN '{$kunci}'";
+        }
+
+        return $case." ELSE 'tanpa' END";
+    }
+
+    /**
+     * Kolom boolean per kelompok WP untuk CTE `k`.
+     */
+    private function kolomGrup(): string
+    {
+        $out = '';
+        /** @var array<string, array{label:string,ids:list<int>}> $grup */
+        $grup = config('dms_roster.total_karyawan.wp_grup', []);
+
+        foreach ($this->urutanGrup() as $kunci) {
+            $ids = $this->intList($grup[$kunci]['ids'] ?? []);
+            $out .= ",\n                     bool_or(id_work_permit IN ({$ids})) AS {$kunci}";
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<string> kunci kelompok, sudah tersaring ke yang ada di config
+     */
+    private function urutanGrup(): array
+    {
+        /** @var array<string, array<string, mixed>> $grup */
+        $grup = config('dms_roster.total_karyawan.wp_grup', []);
+        /** @var list<string> $prioritas */
+        $prioritas = config('dms_roster.total_karyawan.wp_prioritas', []);
+
+        $urut = array_values(array_filter($prioritas, static fn (string $k): bool => isset($grup[$k])));
+
+        // Kelompok yang ada di config tapi lupa dicantumkan di prioritas tetap
+        // ikut, ditaruh di belakang, supaya tidak diam-diam hilang.
+        foreach (array_keys($grup) as $k) {
+            if (! in_array($k, $urut, true)) {
+                $urut[] = $k;
+            }
+        }
+
+        return $urut;
+    }
+
+    /**
+     * Terjemahkan kunci kelompok jadi label yang dibaca manusia.
+     */
+    private function labelGrup(string $kunci): string
+    {
+        if ($kunci === 'TOTAL') {
+            return 'TOTAL';
+        }
+
+        if ($kunci === 'tanpa') {
+            return (string) config('dms_roster.total_karyawan.wp_grup_tanpa_label', 'Tanpa WP unit');
+        }
+
+        /** @var array<string, array{label:string}> $grup */
+        $grup = config('dms_roster.total_karyawan.wp_grup', []);
+
+        return (string) ($grup[$kunci]['label'] ?? $kunci);
+    }
+
     private function intList(array $ids): string
     {
         return implode(',', array_map(static fn (mixed $v): int => (int) $v, $ids));

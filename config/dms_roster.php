@@ -212,6 +212,34 @@ return [
         // (35, 648, 2522), Angkutan Massal (161, 2520).
         'wp_unit_ids' => [34, 638, 35, 648, 2522, 161, 2520],
 
+        /*
+        | Pengelompokan karyawan memakai Working Permit unit, bukan tebakan
+        | dari nama jabatan. Label diambil apa adanya dari kolom work_permit:
+        |   34   TENAGA TEKNIS - OPERATOR / DRIVER - A2B
+        |   638  TENAGA TEKNIS - OPERATOR / DRIVER - A2B - CPP to PORT
+        |   35   TENAGA TEKNIS - OPERATOR / DRIVER - HAULER
+        |   648  TENAGA TEKNIS - OPERATOR / DRIVER - HAULER - CPP to PORT
+        |   2522 TENAGA TEKNIS - OPERATOR ELECTRICAL HEAVY EQUIPMENT - HAULER
+        |   161  TENAGA TEKNIS - OPERATOR / DRIVER - SARANA ANGKUTAN MASSAL
+        |   2520 TENAGA TEKNIS - DRIVER ELECTRICAL VEHICLE - SARANA ANGKUTAN MASSAL
+        |
+        | PENTING: 442 orang memegang A2B DAN Hauler sekaligus, dan 1.086 orang
+        | ber-SIMPER aktif tidak punya WP unit sama sekali. Karena itu tiap
+        | orang dimasukkan ke SATU kelompok mengikuti 'wp_prioritas' di bawah,
+        | dan kelompok 'tanpa' tetap ditampilkan supaya jumlah batang chart
+        | selalu sama dengan angka kartu Total Karyawan.
+        */
+        'wp_grup' => [
+            'a2b' => ['label' => 'A2B', 'ids' => [34, 638]],
+            'hauler' => ['label' => 'Hauler', 'ids' => [35, 648, 2522]],
+            'massal' => ['label' => 'Angkutan Massal', 'ids' => [161, 2520]],
+        ],
+
+        // Urutan menang saat satu orang memegang lebih dari satu WP unit.
+        'wp_prioritas' => ['a2b', 'hauler', 'massal'],
+
+        'wp_grup_tanpa_label' => 'Tanpa WP unit',
+
         // SIMPER aktif = id_status_sid_dokumen 1; tipe F, P, T, L1, L2.
         'simper_status_aktif' => 1,
         'simper_tipe_ids' => [370, 415, 1795, 1809, 75933],

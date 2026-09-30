@@ -23,8 +23,11 @@
     $persenPelanggaran = 100 - $persenPatuh;
 
     // ── Total karyawan: LIVE bila tersedia, jika tidak pakai angka contoh ──
+    // Angka utama = yang PUNYA SIMPER AKTIF, bukan seluruh karyawan aktif.
+    // Populasi aktif ($aktifSemua) tetap dibawa sebagai konteks cakupan.
     $live = $totalKaryawanLive ?? null;
-    $totalKaryawan = $live['total'] ?? 5588;
+    $totalKaryawan = $live['punya_simper_aktif'] ?? 5588;
+    $aktifSemua = $live['total'] ?? null;
     $persenSimper = ($live && $live['total'] > 0)
         ? $live['punya_simper_aktif'] / $live['total'] * 100
         : null;
@@ -103,18 +106,37 @@
 
     // ── Bar chart per site, dipecah kelompok jabatan struktural ───────────
     // Pakai data asli bila tersedia; kalau tidak, contoh dengan bentuk sama.
+    // Dikelompokkan menurut Working Permit unit, tersaring SIMPER aktif.
+    // Angka contoh memakai bentuk & makna yang sama dengan data aslinya.
     $site = $perSiteLive ?? [
-        ['site' => 'BMO 2', 'operator_driver' => 1445, 'mekanik' => 667, 'trainer' => 0],
-        ['site' => 'GMO', 'operator_driver' => 1147, 'mekanik' => 410, 'trainer' => 0],
-        ['site' => 'LMO', 'operator_driver' => 963, 'mekanik' => 296, 'trainer' => 3],
-        ['site' => 'SMO', 'operator_driver' => 741, 'mekanik' => 416, 'trainer' => 12],
-        ['site' => 'BMO 1', 'operator_driver' => 408, 'mekanik' => 108, 'trainer' => 0],
-        ['site' => 'BMO 3', 'operator_driver' => 183, 'mekanik' => 23, 'trainer' => 0],
+        ['site' => 'BMO 2', 'a2b' => 502, 'hauler' => 687, 'massal' => 74, 'tanpa' => 348],
+        ['site' => 'GMO', 'a2b' => 410, 'hauler' => 558, 'massal' => 47, 'tanpa' => 255],
+        ['site' => 'LMO', 'a2b' => 325, 'hauler' => 470, 'massal' => 92, 'tanpa' => 141],
+        ['site' => 'SMO', 'a2b' => 253, 'hauler' => 400, 'massal' => 12, 'tanpa' => 242],
+        ['site' => 'BMO 1', 'a2b' => 137, 'hauler' => 208, 'massal' => 13, 'tanpa' => 58],
+        ['site' => 'BMO 3', 'a2b' => 61, 'hauler' => 106, 'massal' => 6, 'tanpa' => 14],
     ];
+
+    $grupWp = config('dms_roster.total_karyawan.wp_grup', []);
+    $seriWp = [];
+    foreach (config('dms_roster.total_karyawan.wp_prioritas', []) as $kunci) {
+        if (isset($grupWp[$kunci])) {
+            $seriWp[] = ['kunci' => $kunci, 'label' => $grupWp[$kunci]['label']];
+        }
+    }
+    $seriWp[] = ['kunci' => 'tanpa', 'label' => config('dms_roster.total_karyawan.wp_grup_tanpa_label', 'Tanpa WP unit')];
+
+    // Warna urut: A2B, Hauler, Angkutan Massal, lalu abu untuk "tanpa".
+    $warnaWp = ['#487FFF', '#16A34A', '#F59E0B', '#CBD5E1'];
+    foreach ($seriWp as $i => $s) {
+        $seriWp[$i]['warna'] = $warnaWp[$i] ?? '#94A3B8';
+        $seriWp[$i]['data'] = array_map(
+            static fn (array $r): int => (int) ($r[$s['kunci']] ?? 0),
+            $site,
+        );
+    }
+
     $siteLabel = array_column($site, 'site');
-    $seriOperator = array_map('intval', array_column($site, 'operator_driver'));
-    $seriMekanik = array_map('intval', array_column($site, 'mekanik'));
-    $seriTrainer = array_map('intval', array_column($site, 'trainer'));
 @endphp
 
 <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-24">
@@ -169,14 +191,15 @@
                     Total Karyawan
                     @if ($live)
                       <span class="text-success-600 fw-semibold" title="Diambil langsung dari database">&middot; live</span>
+                      <span class="d-block" style="font-size:10.5px">punya SIMPER aktif</span>
                     @endif
                   </span>
                   <h5 class="fw-bold mb-0 text-primary-light">{{ number_format($totalKaryawan, 0, ',', '.') }}</h5>
                 </div>
                 @if ($live)
                   <span class="px-12 py-4 rounded-pill fw-semibold text-sm bg-success-focus text-success-main"
-                        title="{{ number_format($live['punya_simper_aktif'], 0, ',', '.') }} dari {{ number_format($live['total'], 0, ',', '.') }} karyawan punya SIMPER aktif">
-                    SIMPER {{ number_format($persenSimper, 1, ',', '.') }}%
+                        title="{{ number_format($live['punya_simper_aktif'], 0, ',', '.') }} dari {{ number_format($aktifSemua, 0, ',', '.') }} karyawan aktif berjabatan operator/driver &amp; mekanik">
+                    {{ number_format($persenSimper, 1, ',', '.') }}% dari {{ number_format($aktifSemua, 0, ',', '.') }}
                   </span>
                 @else
                   <span class="px-12 py-4 rounded-pill fw-semibold text-sm bg-success-focus text-success-main">
@@ -202,25 +225,28 @@
               <div class="d-flex flex-wrap gap-2 mt-12">
                 @foreach ($live['kelompok'] as $g)
                   <span class="bg-neutral-100 text-secondary-light px-10 py-2 radius-8 text-xs fw-medium"
-                        title="{{ number_format($g['punya_simper_aktif'], 0, ',', '.') }} punya SIMPER aktif">
-                    {{ $g['kelompok'] }}: <b class="text-primary-light">{{ number_format($g['total'], 0, ',', '.') }}</b>
+                        title="{{ number_format($g['punya_simper_aktif'], 0, ',', '.') }} punya SIMPER aktif dari {{ number_format($g['total'], 0, ',', '.') }} karyawan aktif">
+                    {{ $g['kelompok'] }}: <b class="text-primary-light">{{ number_format($g['punya_simper_aktif'], 0, ',', '.') }}</b>
                   </span>
                 @endforeach
               </div>
               <div class="text-secondary-light text-xs mt-8">
                 Karyawan AKTIF berjabatan operator/driver &amp; mekanik (daftar jabatan di
-                <code>config/dms_roster.php</code>) &middot; WP unit lolos:
-                {{ number_format($live['wp_unit_passed'], 0, ',', '.') }} &middot; tanpa SIMPER:
-                {{ number_format($live['tanpa_simper'], 0, ',', '.') }}
+                <code>config/dms_roster.php</code>) yang <b>punya SIMPER aktif</b> &middot;
+                tanpa SIMPER: {{ number_format($live['tanpa_simper'], 0, ',', '.') }} &middot;
+                WP unit lolos: {{ number_format($live['wp_unit_passed'], 0, ',', '.') }}
               </div>
             @endif
 
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-24">
-              <span class="text-sm fw-semibold text-primary-light">Sebaran per Site</span>
-              <div class="d-flex align-items-center gap-3 text-xs text-secondary-light">
-                <span><i class="ro-sw" style="background:#487FFF"></i>Operator / Driver</span>
-                <span><i class="ro-sw" style="background:#16A34A"></i>Mekanik / Tyre / Welder</span>
-                <span><i class="ro-sw" style="background:#F59E0B"></i>Trainer / Siswa</span>
+              <span class="text-sm fw-semibold text-primary-light">
+                Sebaran per Site
+                <span class="text-secondary-light fw-normal">&middot; punya SIMPER aktif</span>
+              </span>
+              <div class="d-flex align-items-center gap-3 text-xs text-secondary-light flex-wrap">
+                @foreach ($seriWp as $s)
+                  <span><i class="ro-sw" style="background:{{ $s['warna'] }}"></i>{{ $s['label'] }}</span>
+                @endforeach
               </div>
             </div>
             <div class="mt-8">
@@ -228,9 +254,11 @@
                    (dimuat setelah ApexCharts) tidak perlu variabel PHP. --}}
               <div id="roBarChart" class="margin-16-minus"
                    data-kategori="{{ json_encode($siteLabel) }}"
-                   data-operator="{{ json_encode($seriOperator) }}"
-                   data-mekanik="{{ json_encode($seriMekanik) }}"
-                   data-trainer="{{ json_encode($seriTrainer) }}"></div>
+                   data-seri="{{ json_encode(array_map(
+                       static fn (array $s): array => ['name' => $s['label'], 'data' => $s['data']],
+                       $seriWp,
+                   )) }}"
+                   data-warna="{{ json_encode(array_column($seriWp, 'warna')) }}"></div>
             </div>
           </div>
         </div>

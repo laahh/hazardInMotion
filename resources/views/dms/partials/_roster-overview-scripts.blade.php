@@ -21,12 +21,9 @@
         type: 'bar', height: 264, stacked: true,
         toolbar: { show: false }, animations: { enabled: false },
       },
-      series: [
-        { name: 'Operator / Driver', data: baca(bar, 'operator', []) },
-        { name: 'Mekanik / Tyre / Welder', data: baca(bar, 'mekanik', []) },
-        { name: 'Trainer / Siswa', data: baca(bar, 'trainer', []) },
-      ],
-      colors: ['#487FFF', '#16A34A', '#F59E0B'],
+      // Seri & warnanya ikut config kelompok Working Permit, bukan dipatok di sini.
+      series: baca(bar, 'seri', []),
+      colors: baca(bar, 'warna', ['#487FFF', '#16A34A', '#F59E0B', '#CBD5E1']),
       plotOptions: { bar: { borderRadius: 4, borderRadiusApplication: 'end', columnWidth: '46%' } },
       dataLabels: { enabled: false },
       legend: { show: false },
