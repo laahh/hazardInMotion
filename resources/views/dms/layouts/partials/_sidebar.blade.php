@@ -43,6 +43,14 @@
         </a>
       </li>
       <li>
+        {{-- Pola eksplisit, bukan wildcard: 'dms.roster-compliance*' akan ikut
+             cocok dengan route snapshot statis di bawahnya. --}}
+        <a href="{{ route('dms.roster-compliance') }}" class="{{ request()->routeIs('dms.roster-compliance', 'dms.roster-compliance.*') ? 'active-page' : '' }}">
+          <iconify-icon icon="solar:calendar-date-outline" class="menu-icon"></iconify-icon>
+          <span>Kepatuhan Roster (Live)</span>
+        </a>
+      </li>
+      <li>
         <a href="{{ route('dms.roster-compliance-static') }}" class="{{ request()->routeIs('dms.roster-compliance-static') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:calendar-mark-outline" class="menu-icon"></iconify-icon>
           <span>Kepatuhan Roster</span>

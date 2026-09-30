@@ -95,6 +95,16 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/auto-banned-verify.log'));
 
+        // Kepatuhan Roster (/dms/roster-compliance): tarik scan RFID beberapa
+        // hari terakhir lalu rakit ulang pola. Mode inkremental memakai indeks
+        // tanggal pada bcsid.mv_checkinout_rfid, jadi ringan — backfill satu
+        // tahun penuh dijalankan manual sekali dengan --full.
+        $schedule->command('dms:sync-roster-rfid')
+            ->timezone('Asia/Makassar')
+            ->everyThirtyMinutes()
+            ->withoutOverlapping(25)
+            ->appendOutputTo(storage_path('logs/dms-sync-roster-rfid.log'));
+
         // Generate planning roster dari DOP & IKK setiap 10 menit (hari ini). Skip jika job periode yang sama masih pending/processing.
         $schedule->command('roster:generate-planning')
             ->everyMinute()
