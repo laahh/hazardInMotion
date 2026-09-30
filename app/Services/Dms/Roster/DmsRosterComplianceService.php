@@ -39,7 +39,8 @@ final class DmsRosterComplianceService
 
         $panjang = $meta['panjang'];
         $periode = $this->resolvePeriode($filters, $tahun, $panjang, $meta['hari_terakhir']);
-        $baris = $this->evaluasiRingkas($tahun, $periode['r0'], $periode['r1'], $meta['disinkron']);
+        $ringkas = $this->evaluasiRingkas($tahun, $periode['r0'], $periode['r1'], $meta['disinkron'], $panjang);
+        $baris = $ringkas['baris'];
 
         $agregat = $this->agregat($baris);
         $perSite = $this->agregatPerSite($baris);
@@ -63,6 +64,8 @@ final class DmsRosterComplianceService
             'ambang' => $this->engine->ambang(),
             'perSite' => $perSite,
             'perPt' => $perPt,
+            'seri' => $this->lengkapiSeri($ringkas['seri'], $agregat['total'], $tahun, $periode['r0'], $periode['r1']),
+            'topPelanggaran' => $this->topPelanggaran($perPt, $perSite, (string) $filters['pt']),
             'kategoriTersedia' => $this->nilaiUnik($baris, 'kategori'),
             'rosterTersedia' => $this->rosterUnik($baris),
             'siteTersedia' => $this->siteTerurut($this->nilaiUnik($baris, 'site')),
@@ -169,7 +172,7 @@ final class DmsRosterComplianceService
         }
 
         $periode = $this->resolvePeriode($filters, $tahun, $meta['panjang'], $meta['hari_terakhir']);
-        $baris = $this->evaluasiRingkas($tahun, $periode['r0'], $periode['r1'], $meta['disinkron']);
+        $baris = $this->evaluasiRingkas($tahun, $periode['r0'], $periode['r1'], $meta['disinkron'], $meta['panjang'])['baris'];
 
         $wajib = array_values(array_filter($baris, static fn (array $r): bool => $r['wajib']));
         usort($wajib, static fn (array $a, array $b): int => $b['onCur'] <=> $a['onCur']);
@@ -240,24 +243,39 @@ final class DmsRosterComplianceService
      *
      * @return list<array<string, mixed>>
      */
-    private function evaluasiRingkas(int $tahun, int $r0, int $r1, string $disinkron): array
+    private function evaluasiRingkas(int $tahun, int $r0, int $r1, string $disinkron, int $panjangData): array
     {
-        $key = sprintf('dms_roster:ringkas:v1:%d:%d:%d:%s', $tahun, $r0, $r1, md5($disinkron));
+        $key = sprintf('dms_roster:ringkas:v3:%d:%d:%d:%d:%s', $tahun, $r0, $r1, $panjangData, md5($disinkron));
         $ttl = (int) config('dms_roster.cache.evaluasi_ttl', 300);
 
-        /** @var list<array<string, mixed>> */
-        return Cache::remember($key, $ttl, function () use ($tahun, $r0, $r1): array {
+        /** @var array{baris: list<array<string, mixed>>, seri: array<string, mixed>} */
+        return Cache::remember($key, $ttl, function () use ($tahun, $r0, $r1, $panjangData): array {
             $out = [];
+            $window = $r1 - $r0 + 1;
+            $weekOf = $this->petaMinggu($tahun, $r0, $r1);
+            $nWeek = $window > 0 ? $weekOf[$window - 1] + 1 : 0;
+
+            $pelWeek = array_fill(0, max(1, $nWeek), 0);
+            $mapWeek = array_fill(0, max(1, $nWeek), 0);
+            $wajibWeek = array_fill(0, max(1, $nWeek), 0);
+            $harian = array_fill(0, max(1, $window), 0);
+            $batasWajib = (int) ($this->engine->ambang()['wajib_cuti'] ?? 71);
 
             DB::table('dms_roster_patterns')
                 ->where('tahun', $tahun)
                 ->select('kode_sid', 'nama', 'jabatan', 'kategori', 'perusahaan', 'kode_pt', 'site', 'pola')
                 ->orderBy('id')
-                ->chunk(2000, function ($rows) use (&$out, $r0, $r1): void {
+                ->chunk(2000, function ($rows) use (
+                    &$out, &$pelWeek, &$mapWeek, &$wajibWeek, &$harian,
+                    $r0, $r1, $weekOf, $nWeek, $window, $batasWajib, $panjangData
+                ): void {
                     foreach ($rows as $row) {
                         $param = $this->paramPt((string) $row->perusahaan);
+                        // Pola placeholder bisa lebih panjang dari data yang
+                        // benar-benar ada; sisanya harus dibuang supaya tidak
+                        // terbaca sebagai blok cuti palsu oleh rule engine.
                         $eval = $this->engine->evaluasi(
-                            (string) $row->pola,
+                            substr((string) $row->pola, 0, $panjangData),
                             (string) $row->kategori,
                             $param['thr'],
                             $param['map'],
@@ -302,11 +320,187 @@ final class DmsRosterComplianceService
                             'longgar' => $eval->longgar,
                             'wajib' => $this->engine->wajibCuti($eval),
                         ];
+
+                        $this->akumulasiSeri(
+                            $eval, $r0, $r1, $window, $weekOf, $nWeek, $batasWajib,
+                            $pelWeek, $mapWeek, $wajibWeek, $harian,
+                        );
                     }
                 });
 
-            return $out;
+            return [
+                'baris' => $out,
+                'seri' => [
+                    'pel' => array_values($pelWeek),
+                    'map' => array_values($mapWeek),
+                    'wajib' => array_values($wajibWeek),
+                    'harian' => array_values($harian),
+                    'max_harian' => $harian === [] ? 0 : max($harian),
+                ],
+            ];
         });
+    }
+
+    /**
+     * Akumulasi seri mingguan & harian untuk sparkline, chart tren, dan
+     * heatmap — dikerjakan di lintasan yang sama dengan evaluasi rule supaya
+     * tidak perlu memindai ulang pola seluruh populasi.
+     *
+     * @param  list<int>  $weekOf
+     * @param  list<int>  $pelWeek
+     * @param  list<int>  $mapWeek
+     * @param  list<int>  $wajibWeek
+     * @param  list<int>  $harian
+     */
+    private function akumulasiSeri(
+        DmsRosterEvaluation $eval,
+        int $r0,
+        int $r1,
+        int $window,
+        array $weekOf,
+        int $nWeek,
+        int $batasWajib,
+        array &$pelWeek,
+        array &$mapWeek,
+        array &$wajibWeek,
+        array &$harian,
+    ): void {
+        if ($window <= 0 || $nWeek <= 0) {
+            return;
+        }
+
+        $pola = $eval->pola;
+        $n = strlen($pola);
+        if ($n === 0) {
+            return;
+        }
+
+        $kenaPel = array_fill(0, $nWeek, false);
+        $kenaMap = array_fill(0, $nWeek, false);
+
+        // On-site berjalan dihitung dari 1 Januari, bukan dari awal periode,
+        // supaya status "wajib cuti" di minggu-minggu awal tidak ikut ter-reset.
+        $run = 0;
+        for ($i = 0; $i <= $r1 && $i < $n; $i++) {
+            $run = $pola[$i] === 'c' ? 0 : $run + 1;
+            if ($i < $r0) {
+                continue;
+            }
+
+            $k = $i - $r0;
+            $wk = $weekOf[$k];
+
+            if ($eval->red[$i] !== '') {
+                $kenaPel[$wk] = true;
+                $harian[$k]++;
+            } elseif ($eval->yel[$i] !== '') {
+                $kenaMap[$wk] = true;
+            }
+
+            $akhirMinggu = $k === $window - 1 || $weekOf[$k + 1] !== $wk;
+            if ($akhirMinggu && $run > $batasWajib && ! $eval->longgar) {
+                $wajibWeek[$wk]++;
+            }
+        }
+
+        for ($w = 0; $w < $nWeek; $w++) {
+            if ($kenaPel[$w]) {
+                $pelWeek[$w]++;
+            }
+            if ($kenaMap[$w]) {
+                $mapWeek[$w]++;
+            }
+        }
+    }
+
+    /**
+     * Lengkapi seri mentah dengan label minggu, seri total, dan persentase
+     * tren — bentuknya langsung siap dipakai ApexCharts di view.
+     *
+     * @param  array<string, mixed>  $seri
+     * @return array<string, mixed>
+     */
+    private function lengkapiSeri(array $seri, int $total, int $tahun, int $r0, int $r1): array
+    {
+        $awal = $this->awalTahun($tahun);
+        $weekOf = $this->petaMinggu($tahun, $r0, $r1);
+        $label = [];
+        $sebelum = -1;
+
+        foreach ($weekOf as $k => $w) {
+            if ($w !== $sebelum) {
+                $label[] = $this->labelTanggalSingkat($awal->addDays($r0 + $k));
+                $sebelum = $w;
+            }
+        }
+
+        /** @var list<int> $pel */
+        $pel = $seri['pel'] ?? [];
+        $persen = array_map(
+            static fn (int $v): float => $total > 0 ? round($v / $total * 100, 1) : 0.0,
+            $pel,
+        );
+
+        return [
+            'minggu' => $label,
+            'pel' => $pel,
+            'map' => $seri['map'] ?? [],
+            'wajib' => $seri['wajib'] ?? [],
+            'total' => array_fill(0, count($label), $total),
+            'persen' => $persen,
+            'harian' => $seri['harian'] ?? [],
+            'max_harian' => (int) ($seri['max_harian'] ?? 0),
+        ];
+    }
+
+    /**
+     * Peringkat penyumbang pelanggaran: per kontraktor saat semua PT
+     * ditampilkan, per site saat satu PT sudah dipilih.
+     *
+     * @param  list<array<string, mixed>>  $perPt
+     * @param  list<array<string, mixed>>  $perSite
+     * @return list<array{label: string, value: int}>
+     */
+    private function topPelanggaran(array $perPt, array $perSite, string $ptTerpilih): array
+    {
+        $sumber = $ptTerpilih !== '' ? $perSite : $perPt;
+
+        $out = [];
+        foreach ($sumber as $x) {
+            $nilai = (int) $x['pelanggaran'];
+            if ($nilai > 0) {
+                $out[] = [
+                    'label' => (string) ($x['kode'] ?? $x['site'] ?? '—'),
+                    'value' => $nilai,
+                ];
+            }
+        }
+
+        usort($out, static fn (array $a, array $b): int => $b['value'] <=> $a['value']);
+
+        return array_slice($out, 0, 6);
+    }
+
+    /**
+     * Indeks kolom minggu per hari dalam window — kolom baru setiap Senin.
+     *
+     * @return list<int>
+     */
+    private function petaMinggu(int $tahun, int $r0, int $r1): array
+    {
+        $awal = $this->awalTahun($tahun);
+        $out = [];
+        $w = -1;
+
+        for ($i = $r0; $i <= $r1; $i++) {
+            $t = $awal->addDays($i);
+            if ($i === $r0 || $t->dayOfWeek === CarbonImmutable::MONDAY) {
+                $w++;
+            }
+            $out[] = $w;
+        }
+
+        return $out;
     }
 
     /**
@@ -857,6 +1051,11 @@ final class DmsRosterComplianceService
             'ambang' => $this->engine->ambang(),
             'perSite' => [],
             'perPt' => [],
+            'seri' => [
+                'minggu' => [], 'pel' => [], 'map' => [], 'wajib' => [],
+                'total' => [], 'persen' => [], 'harian' => [], 'max_harian' => 0,
+            ],
+            'topPelanggaran' => [],
             'kategoriTersedia' => [],
             'rosterTersedia' => [],
             'siteTersedia' => [],

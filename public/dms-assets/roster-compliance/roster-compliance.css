@@ -67,3 +67,55 @@
 .rk-detail-empty { color: var(--text-secondary-light); text-align: center; padding: 64px 16px; }
 
 .rk-param-table td, .rk-param-table th { font-size: 12px; padding: 6px 10px; }
+
+/* ── Heatmap harian & daftar peringkat ──────────────────────────────────
+   Mengikuti konsep kartu "Pola Aktivitas" dan "Top Komunitas" di dashboard
+   /evaluasi-well. Skala warnanya sengaja merah, bukan hijau seperti di sana:
+   metrik yang dipetakan adalah jumlah karyawan ter-flag pelanggaran, jadi
+   warna pekat harus terbaca sebagai buruk, bukan bagus. */
+
+.rk-hm-scroll { overflow-x: auto; padding-bottom: 4px; }
+.rk-hm-grid { display: inline-flex; flex-direction: column; gap: 4px; min-width: 100%; }
+.rk-hm-row { display: flex; align-items: center; gap: 4px; }
+.rk-hm-label {
+  flex: none;
+  width: 54px;
+  font-size: 11px;
+  color: var(--text-secondary-light);
+  text-align: right;
+  padding-right: 4px;
+}
+.rk-hm-cell { flex: 1 1 0; min-width: 14px; height: 22px; border-radius: 4px; background: #eef1f6; }
+.rk-hm-cell.is-empty { background: transparent; }
+.rk-hm-cell.lvl-0 { background: #eef1f6; }
+.rk-hm-cell.lvl-1 { background: #ffe2d6; }
+.rk-hm-cell.lvl-2 { background: #ffb59a; }
+.rk-hm-cell.lvl-3 { background: #f97350; }
+.rk-hm-cell.lvl-4 { background: #c2350f; }
+
+.rk-hm-axis { margin-top: 2px; }
+.rk-hm-tick { height: 14px; background: transparent; position: relative; }
+.rk-hm-tick b {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary-light);
+  white-space: nowrap;
+}
+
+.rk-hm-key { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
+.rk-hm-key.lvl-0 { background: #eef1f6; }
+.rk-hm-key.lvl-1 { background: #ffe2d6; }
+.rk-hm-key.lvl-2 { background: #ffb59a; }
+.rk-hm-key.lvl-3 { background: #f97350; }
+.rk-hm-key.lvl-4 { background: #c2350f; }
+
+.rk-top-track { height: 8px; border-radius: 999px; background: var(--neutral-200, #e5e7eb); overflow: hidden; }
+.rk-top-fill { display: block; height: 100%; border-radius: 999px; }
+
+@media (max-width: 767.98px) {
+  .rk-hm-label { width: 40px; font-size: 10px; }
+  .rk-hm-cell { min-width: 10px; height: 18px; }
+}

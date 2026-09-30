@@ -139,23 +139,79 @@
     </div>
   </div>
 
-  {{-- ===================== KARTU RINGKASAN ===================== --}}
-  <div class="row gy-4 mb-24" id="rkKpiRow"></div>
-
-  {{-- ===================== DISTRIBUSI + REKAP SITE ===================== --}}
+  {{-- ============ KARTU RINGKASAN (sparkline) + TREN MINGGUAN ============ --}}
   <div class="row gy-4 mb-24">
-    <div class="col-xxl-5 d-flex">
-      <div class="card h-100 w-100 radius-8 border-0 shadow-sm">
-        <div class="card-header border-bottom bg-base py-16 px-24">
-          <h6 class="text-lg fw-semibold mb-4">Distribusi Status Kini</h6>
-          <p class="text-sm text-secondary-light mb-0">Kondisi pada hari terakhir periode terpilih</p>
-        </div>
-        <div class="card-body p-24">
-          <div id="rkDonutChart"></div>
+    <div class="col-xxl-8">
+      <div class="row gy-4 h-100" id="rkKpiRow"></div>
+    </div>
+
+    <div class="col-xxl-4 d-flex">
+      <div class="card h-100 w-100 radius-8 border-0 shadow-sm d-flex flex-column overflow-hidden">
+        <div class="card-body p-24 d-flex flex-column flex-grow-1" style="min-height:0">
+          <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between flex-shrink-0">
+            <div>
+              <h6 class="mb-1 fw-bold text-lg">Tren Pelanggaran (%)</h6>
+              <span class="text-sm fw-medium text-secondary-light">Per minggu (Senin&ndash;Minggu)</span>
+            </div>
+            <div class="text-end" id="rkTrendHead"></div>
+          </div>
+          <div id="rkTrendChart" class="mt-12 flex-grow-1" style="min-height:0"></div>
         </div>
       </div>
     </div>
-    <div class="col-xxl-7 d-flex" id="rkSiteAggWrap">
+  </div>
+
+  {{-- ============ HEATMAP HARIAN + PERINGKAT + DISTRIBUSI ============ --}}
+  <div class="row gy-4 mb-24">
+    <div class="col-xxl-8 d-flex">
+      <div class="card h-100 w-100 radius-8 border-0 shadow-sm">
+        <div class="card-body p-24 d-flex flex-column h-100">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
+            <div class="d-flex align-items-start gap-3" style="min-width:0">
+              <span class="w-48-px h-48-px bg-danger-main text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle">
+                <iconify-icon icon="mdi:calendar-month-outline" class="icon text-xl"></iconify-icon>
+              </span>
+              <div style="min-width:0">
+                <h6 class="text-lg fw-semibold mb-4">Pola Pelanggaran Harian</h6>
+                <p class="text-sm text-secondary-light mb-0">Hari apa pelanggaran roster paling sering terjadi?</p>
+              </div>
+            </div>
+          </div>
+          <div id="rkDayHeatmap" class="flex-grow-1"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xxl-4">
+      <div class="row gy-4">
+        <div class="col-12">
+          <div class="card radius-8 border-0 shadow-sm">
+            <div class="card-header border-bottom bg-base py-16 px-24 d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <h6 class="text-lg fw-semibold mb-0">Peringkat Pelanggaran</h6>
+              <span class="text-sm text-secondary-light">Terbanyak di atas</span>
+            </div>
+            <div class="card-body p-24" id="rkTopList"></div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="card radius-8 border-0 shadow-sm">
+            <div class="card-header border-bottom bg-base py-16 px-24 d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <h6 class="text-lg fw-semibold mb-0">Distribusi Status Kini</h6>
+              <span class="text-sm text-secondary-light">Hari terakhir periode</span>
+            </div>
+            <div class="card-body p-24">
+              <div id="rkDonutChart"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {{-- ===================== REKAP PER SITE ===================== --}}
+  <div class="row gy-4 mb-24">
+    <div class="col-12 d-flex" id="rkSiteAggWrap">
       <div class="card h-100 w-100 radius-8 border-0 shadow-sm">
         <div class="card-header border-bottom bg-base py-16 px-24">
           <h6 class="text-lg fw-semibold mb-4">Rekap per Site</h6>

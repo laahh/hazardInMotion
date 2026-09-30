@@ -280,7 +280,8 @@
     r0: 0, r1: 0, page: 0, pageSize: 25, sortKey: 'nama', sortDir: 1,
     selectedId: null,
   };
-  var ROWS = [], VIEW = [], AGG = null;
+  var ROWS = [], VIEW = [], AGG = null, SERIES = null;
+  var sparkCharts = {}, trendChart = null;
   var donutChart = null;
   var ALERT_UNTIL = null;
   var alertCounts = {}; // UPPER(sid) -> jumlah alert 30 hari (atau 'x' kalau gagal dimuat)
@@ -473,12 +474,107 @@
       if (r.onCur > 71 && !r.longgar) nwajib++;
     });
     AGG = { total: total, cur: cur, npel: npel, npel1: npel1, npel2: npel2, npel3: npel3, nmap: nmap, nwajib: nwajib };
+    SERIES = buildSeries();
 
     renderKpi();
+    renderTrend();
+    renderDayHeatmap();
+    renderTopList();
     renderDonut();
     renderSiteAgg();
     renderParams();
     applyFilters();
+  }
+
+  /* ---------------------------------------------------------------------
+   * Seri mingguan & harian untuk sparkline, chart tren, dan heatmap.
+   *
+   * Semua dihitung dalam SATU lintasan per karyawan (O(hari)) supaya tetap
+   * ringan walau populasi ribuan orang: array red/yel sudah tersedia dari
+   * compute(), dan on-site berjalan dihitung sebagai counter berjalan.
+   * ------------------------------------------------------------------- */
+  function buildSeries() {
+    var n = state.r1 - state.r0 + 1;
+    if (n <= 0 || !ROWS.length) {
+      return { weeks: [], spark: { total: [], pel: [], map: [], wajib: [] }, heat: null, top: [] };
+    }
+
+    // Kolom minggu: kolom baru setiap hari Senin, sama seperti penggaris timeline.
+    var weekOf = new Array(n), weekStart = [], w = -1;
+    for (var i = 0; i < n; i++) {
+      var dt = new Date(D.dISO[state.r0 + i] + 'T00:00:00Z');
+      if (i === 0 || dt.getUTCDay() === 1) { w++; weekStart.push(state.r0 + i); }
+      weekOf[i] = w;
+    }
+    var nWeek = w + 1;
+
+    var pelWeek = zeros(nWeek), mapWeek = zeros(nWeek), wajibWeek = zeros(nWeek);
+    var dayFlag = zeros(n);
+    var topAgg = {};
+
+    ROWS.forEach(function (r) {
+      var hitPel = zeros(nWeek), hitMap = zeros(nWeek);
+
+      // On-site berjalan harus dihitung dari awal tahun, bukan dari r0, supaya
+      // status "wajib cuti" di awal periode tidak ikut ter-reset.
+      var run = 0;
+      for (var i = 0; i <= state.r1; i++) {
+        run = r.p[i] === 'c' ? 0 : run + 1;
+        if (i < state.r0) continue;
+
+        var k = i - state.r0, wk = weekOf[k];
+        if (r.red[i]) { hitPel[wk] = 1; dayFlag[k]++; }
+        else if (r.yel[i]) { hitMap[wk] = 1; }
+        // Hari terakhir tiap minggu menentukan status wajib cuti minggu itu.
+        if ((k === n - 1 || weekOf[k + 1] !== wk) && run > 71 && !r.longgar) wajibWeek[wk]++;
+      }
+
+      for (var j = 0; j < nWeek; j++) {
+        if (hitPel[j]) pelWeek[j]++;
+        if (hitMap[j]) mapWeek[j]++;
+      }
+
+      if (r.everRed) {
+        var key = state.co === '__ALL__' ? r.co : (r.site || '—');
+        topAgg[key] = (topAgg[key] || 0) + 1;
+      }
+    });
+
+    var top = Object.keys(topAgg).map(function (k) { return { label: k, value: topAgg[k] }; });
+    top.sort(function (a, b) { return b.value - a.value; });
+
+    return {
+      weeks: weekStart.map(function (idx) { return fmtD(idx); }),
+      spark: {
+        total: weekStart.map(function () { return ROWS.length; }),
+        pel: pelWeek,
+        map: mapWeek,
+        wajib: wajibWeek,
+      },
+      heat: buildHeat(n, weekOf, nWeek, dayFlag),
+      top: top.slice(0, 6),
+    };
+  }
+
+  function zeros(k) { var a = new Array(k); for (var i = 0; i < k; i++) a[i] = 0; return a; }
+
+  /** Matriks hari-kerja x minggu untuk heatmap (baris Senin..Minggu). */
+  function buildHeat(n, weekOf, nWeek, dayFlag) {
+    var grid = [];
+    for (var d = 0; d < 7; d++) { grid.push(new Array(nWeek)); for (var c = 0; c < nWeek; c++) grid[d][c] = null; }
+
+    var maxVal = 0, colLabel = new Array(nWeek);
+    for (var i = 0; i < n; i++) {
+      var iso = D.dISO[state.r0 + i];
+      var dt = new Date(iso + 'T00:00:00Z');
+      var row = (dt.getUTCDay() + 6) % 7; // 0 = Senin
+      var col = weekOf[i];
+      grid[row][col] = { iso: iso, v: dayFlag[i] };
+      if (dayFlag[i] > maxVal) maxVal = dayFlag[i];
+      if (colLabel[col] === undefined) colLabel[col] = dt.getUTCDate() + ' ' + MON[dt.getUTCMonth()];
+    }
+
+    return { grid: grid, max: maxVal, cols: nWeek, colLabel: colLabel };
   }
 
   function pct(x) { return AGG.total ? ((x / AGG.total) * 100).toFixed(1) + '%' : '0%'; }
@@ -491,17 +587,42 @@
    * khusus "wajib cuti" (#be123c) tetap sama dengan yang dipakai sel tabel —
    * kaitan visual antara kartu dan barisnya jangan dilepas.
    */
-  function kpiCard(label, value, sub, iconBg, icon, gradient, extraHtml) {
-    return '<div class="col-xxl-3 col-sm-6">' +
+  function kpiCard(label, value, sub, iconBg, icon, gradient, sparkId, extraHtml) {
+    return '<div class="col-xxl-6 col-sm-6">' +
       '<div class="card p-3 shadow-2 radius-8 border input-form-light h-100 ' + (gradient || '') + '">' +
       '<div class="card-body p-0">' +
-      '<div class="d-flex align-items-center gap-2 mb-8">' +
+      '<div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">' +
+      '<div class="d-flex align-items-center gap-2">' +
       '<span class="w-48-px h-48-px flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle" style="background:' + iconBg + '">' +
       '<iconify-icon icon="' + icon + '" class="icon text-xl"></iconify-icon></span>' +
       '<div><span class="mb-2 fw-medium text-secondary-light text-sm d-block">' + label + '</span>' +
       '<h6 class="fw-semibold mb-0">' + value + '</h6></div></div>' +
+      '<div id="' + sparkId + '" class="remove-tooltip-title rounded-tooltip-value"></div>' +
+      '</div>' +
       '<p class="text-sm mb-0 text-secondary-light">' + sub + '</p>' + (extraHtml || '') +
       '</div></div></div>';
+  }
+
+  /** Sparkline mini di pojok kanan kartu KPI — mengikuti gaya kartu /evaluasi-well. */
+  function renderSpark(id, data, color) {
+    if (!window.ApexCharts) return;
+    var el = document.getElementById(id);
+    if (!el) return;
+    if (sparkCharts[id]) { sparkCharts[id].destroy(); delete sparkCharts[id]; }
+    if (!data || data.length < 2) return;
+
+    sparkCharts[id] = new ApexCharts(el, {
+      chart: { type: 'area', height: 52, width: 92, sparkline: { enabled: true }, animations: { enabled: false } },
+      series: [{ name: 'Minggu', data: data }],
+      stroke: { curve: 'smooth', width: 2 },
+      colors: [color],
+      fill: { type: 'gradient', gradient: { shadeIntensity: 0.4, opacityFrom: 0.45, opacityTo: 0.05, stops: [0, 100] } },
+      tooltip: {
+        x: { formatter: function (_v, o) { return 'Minggu ' + (o.dataPointIndex + 1) + ' · ' + (SERIES.weeks[o.dataPointIndex] || ''); } },
+        y: { formatter: function (v) { return v.toLocaleString('id') + ' orang'; } },
+      },
+    });
+    sparkCharts[id].render();
   }
 
   function renderKpi() {
@@ -509,10 +630,10 @@
     els.kpiRow.innerHTML =
       kpiCard('Total Karyawan Terpantau', A.total.toLocaleString('id'),
         (state.co === '__ALL__' ? 'Semua perusahaan' : state.co) + (state.site ? ' · ' + state.site : ''),
-        'var(--primary-600)', 'solar:users-group-rounded-bold', 'bg-gradient-end-1') +
+        'var(--primary-600)', 'solar:users-group-rounded-bold', 'bg-gradient-end-1', 'rkSparkTotal') +
       kpiCard('Pelanggaran Regulasi (YTD)', A.npel.toLocaleString('id'),
         '<span class="bg-danger-focus px-1 rounded-2 fw-medium text-danger-main text-sm">' + pct(A.npel) + '</span> dari populasi',
-        'var(--danger-main)', 'solar:danger-triangle-bold', 'bg-gradient-end-5',
+        'var(--danger-main)', 'solar:danger-triangle-bold', 'bg-gradient-end-5', 'rkSparkPel',
         '<div class="mt-8 d-flex flex-column gap-1 text-xs">' +
         '<div class="d-flex align-items-center justify-content-between gap-2"><span class="text-secondary-light">On-site &gt;71 hr tanpa cuti</span>' +
         '<span class="bg-danger-focus text-danger-main px-8 py-0 rounded-pill fw-semibold">' + A.npel2.toLocaleString('id') + '</span></div>' +
@@ -521,13 +642,135 @@
         '<div class="d-flex align-items-center justify-content-between gap-2"><span class="text-secondary-light">Kerja &gt;13 hari beruntun</span>' +
         '<span class="bg-danger-focus text-danger-main px-8 py-0 rounded-pill fw-semibold">' + A.npel1.toLocaleString('id') + '</span></div></div>') +
       kpiCard('Tidak Sesuai Mapping Shift', A.nmap.toLocaleString('id'),
-        'Peringatan, bukan pelanggaran', 'var(--warning-main)', 'solar:shield-warning-bold', 'bg-gradient-end-3',
+        'Peringatan, bukan pelanggaran', 'var(--warning-main)', 'solar:shield-warning-bold', 'bg-gradient-end-3', 'rkSparkMap',
         '<p class="text-sm mb-0 mt-8"><span class="bg-warning-focus px-1 rounded-2 fw-medium text-warning-main text-sm">' +
         pct(A.nmap) + '</span> dari populasi</p>') +
       kpiCard('Wajib Cuti Sekarang', A.nwajib.toLocaleString('id'),
-        'Sedang on-site &gt;71 hari berjalan, belum cuti', 'var(--wajib-color, #be123c)', 'solar:calendar-mark-bold', 'bg-gradient-end-4',
+        'Sedang on-site &gt;71 hari berjalan, belum cuti', 'var(--wajib-color, #be123c)', 'solar:calendar-mark-bold', 'bg-gradient-end-4', 'rkSparkWajib',
         '<p class="text-sm mb-0 mt-8"><span class="bg-danger-focus px-1 rounded-2 fw-medium text-danger-main text-sm">' +
         pct(A.nwajib) + '</span> dari populasi</p>');
+
+    renderSpark('rkSparkTotal', SERIES.spark.total, '#487FFF');
+    renderSpark('rkSparkPel', SERIES.spark.pel, '#ef4a00');
+    renderSpark('rkSparkMap', SERIES.spark.map, '#ff9f29');
+    renderSpark('rkSparkWajib', SERIES.spark.wajib, '#be123c');
+  }
+
+  /** Chart tren mingguan: % populasi yang ter-flag pelanggaran. */
+  function renderTrend() {
+    var el = document.getElementById('rkTrendChart');
+    if (!el || !window.ApexCharts) return;
+
+    var total = ROWS.length || 1;
+    var data = SERIES.spark.pel.map(function (v) { return +((v / total) * 100).toFixed(1); });
+    var last = data.length ? data[data.length - 1] : 0;
+    var prev = data.length > 1 ? data[data.length - 2] : last;
+    var delta = +(last - prev).toFixed(1);
+
+    var head = document.getElementById('rkTrendHead');
+    if (head) {
+      var up = delta > 0;
+      head.innerHTML = '<h6 class="mb-1 fw-bold text-lg">' + last.toFixed(1).replace('.', ',') + '%</h6>' +
+        '<span class="' + (up ? 'bg-danger-focus text-danger-main' : 'bg-success-focus text-success-main') +
+        ' ps-12 pe-12 pt-2 pb-2 rounded-2 fw-medium text-sm">' +
+        (up ? '+' : '') + delta.toFixed(1).replace('.', ',') + ' pp</span>';
+    }
+
+    if (trendChart) { trendChart.destroy(); trendChart = null; }
+    trendChart = new ApexCharts(el, {
+      chart: { type: 'area', height: 240, toolbar: { show: false }, animations: { enabled: false } },
+      series: [{ name: 'Pelanggaran', data: data }],
+      xaxis: {
+        categories: SERIES.weeks,
+        labels: { rotate: -45, style: { fontSize: '10px', colors: '#9ca3af' }, hideOverlappingLabels: true },
+        axisBorder: { show: false }, axisTicks: { show: false },
+      },
+      yaxis: { labels: { formatter: function (v) { return v.toFixed(0) + '%'; }, style: { fontSize: '11px', colors: '#9ca3af' } } },
+      stroke: { curve: 'smooth', width: 2 },
+      colors: ['#487FFF'],
+      fill: { type: 'gradient', gradient: { shadeIntensity: 0.4, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] } },
+      dataLabels: { enabled: false },
+      grid: { borderColor: '#eef1f6', strokeDashArray: 4 },
+      tooltip: { y: { formatter: function (v) { return v.toFixed(1).replace('.', ',') + '% populasi'; } } },
+    });
+    trendChart.render();
+  }
+
+  /**
+   * Heatmap hari-kerja x minggu: berapa karyawan ter-flag merah tiap hari.
+   * Baris Senin..Minggu, kolom satu minggu — pola yang sama dengan kartu
+   * "Pola Aktivitas" di dashboard /evaluasi-well.
+   */
+  function renderDayHeatmap() {
+    var el = document.getElementById('rkDayHeatmap');
+    if (!el) return;
+    var H = SERIES.heat;
+    if (!H || !H.cols) { el.innerHTML = '<div class="text-secondary-light text-sm py-24 text-center">Tidak ada data pada rentang ini.</div>'; return; }
+
+    var labels = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    var rows = '';
+    for (var d = 0; d < 7; d++) {
+      var cells = '';
+      for (var c = 0; c < H.cols; c++) {
+        var cell = H.grid[d][c];
+        if (!cell) { cells += '<span class="rk-hm-cell is-empty"></span>'; continue; }
+        var lvl = heatLevel(cell.v, H.max);
+        var dt = new Date(cell.iso + 'T00:00:00Z');
+        var title = HARI[dt.getUTCDay()] + ', ' + dt.getUTCDate() + ' ' + MON_LONG[dt.getUTCMonth()] +
+          ' — ' + cell.v.toLocaleString('id') + ' karyawan ter-flag';
+        cells += '<span class="rk-hm-cell lvl-' + lvl + '" title="' + escapeHtml(title) + '"></span>';
+      }
+      rows += '<div class="rk-hm-row"><span class="rk-hm-label">' + labels[d] + '</span>' + cells + '</div>';
+    }
+
+    var axis = '<div class="rk-hm-row rk-hm-axis"><span class="rk-hm-label"></span>';
+    for (var c2 = 0; c2 < H.cols; c2++) {
+      axis += '<span class="rk-hm-cell rk-hm-tick">' + (c2 % 4 === 0 ? '<b>' + escapeHtml(H.colLabel[c2] || '') + '</b>' : '') + '</span>';
+    }
+    axis += '</div>';
+
+    el.innerHTML = '<div class="rk-hm-scroll"><div class="rk-hm-grid">' + rows + axis + '</div></div>' +
+      '<div class="d-flex align-items-center gap-2 mt-16 flex-wrap text-xs text-secondary-light">' +
+      '<span>Jumlah karyawan ter-flag</span>' +
+      '<span class="d-inline-flex align-items-center gap-1"><i class="rk-hm-key lvl-0"></i>0</span>' +
+      '<span class="d-inline-flex align-items-center gap-1"><i class="rk-hm-key lvl-1"></i>rendah</span>' +
+      '<span class="d-inline-flex align-items-center gap-1"><i class="rk-hm-key lvl-2"></i></span>' +
+      '<span class="d-inline-flex align-items-center gap-1"><i class="rk-hm-key lvl-3"></i></span>' +
+      '<span class="d-inline-flex align-items-center gap-1"><i class="rk-hm-key lvl-4"></i>tinggi (maks ' +
+      H.max.toLocaleString('id') + ')</span></div>';
+  }
+
+  function heatLevel(v, max) {
+    if (!v) return 0;
+    if (!max) return 0;
+    var r = v / max;
+    if (r <= 0.25) return 1;
+    if (r <= 0.5) return 2;
+    if (r <= 0.75) return 3;
+    return 4;
+  }
+
+  /** Daftar peringkat berbar — pola kartu "Top Komunitas" di /evaluasi-well. */
+  function renderTopList() {
+    var el = document.getElementById('rkTopList');
+    if (!el) return;
+    var top = SERIES.top || [];
+    if (!top.length) { el.innerHTML = '<div class="text-secondary-light text-sm py-24 text-center">Tidak ada pelanggaran pada filter ini.</div>'; return; }
+
+    var maxV = top[0].value || 1;
+    var palette = ['#ef4a00', '#487FFF', '#12a150', '#9333ea', '#d97706', '#0ea5e9'];
+    el.innerHTML = top.map(function (t, i) {
+      var color = palette[i % palette.length];
+      return '<div class="d-flex align-items-center gap-3 mb-16">' +
+        '<span class="w-40-px h-40-px rounded-circle text-white d-flex align-items-center justify-content-center flex-shrink-0 fw-semibold text-sm" style="background:' + color + '">' +
+        escapeHtml(String(t.label).slice(0, 2).toUpperCase()) + '</span>' +
+        '<div class="flex-grow-1" style="min-width:0">' +
+        '<div class="text-sm fw-medium text-truncate mb-4" title="' + escapeHtml(t.label) + '">' + escapeHtml(t.label) + '</div>' +
+        '<div class="rk-top-track"><span class="rk-top-fill" style="width:' + Math.max(4, (t.value / maxV) * 100) + '%;background:' + color + '"></span></div>' +
+        '</div>' +
+        '<span class="fw-semibold text-md flex-shrink-0">' + t.value.toLocaleString('id') + '</span>' +
+        '</div>';
+    }).join('');
   }
 
   function renderDonut() {
@@ -737,7 +980,7 @@
     return '<div class="mb-16"><h6 class="text-sm fw-semibold text-danger-600 text-uppercase mb-8"><iconify-icon icon="solar:siren-bold" class="align-middle me-1"></iconify-icon>Riwayat Insiden (' + r.incidents.length + ')</h6>' +
       '<div class="d-flex flex-column gap-2">' + r.incidents.map(function (inc) {
         var kcls = INCIDENT_KATEGORI_META[inc.kategori] || 'bg-neutral-200 text-neutral-600';
-        return '<div class="border border-danger-100 rounded-8 px-12 py-10 text-sm">' +
+        return '<div class="border border-danger-100 radius-8 px-12 py-10 text-sm">' +
           '<div class="d-flex align-items-center justify-content-between gap-2 mb-4">' +
           '<span class="fw-semibold">' + escapeHtml(inc.no) + ' &middot; ' + fmtIncidentDate(inc.tanggalIso) + '</span>' +
           '<span class="' + kcls + ' px-8 py-2 rounded-pill text-xs fw-medium">' + escapeHtml(inc.kategori) + '</span>' +
@@ -758,7 +1001,7 @@
     document.getElementById('rkUnmatchedCount').textContent = INCIDENTS_UNMATCHED.length;
     body.innerHTML = INCIDENTS_UNMATCHED.map(function (inc) {
       var kcls = INCIDENT_KATEGORI_META[inc.kategori] || 'bg-neutral-200 text-neutral-600';
-      return '<div class="border rounded-8 px-14 py-12 text-sm">' +
+      return '<div class="border radius-8 px-16 py-12 text-sm">' +
         '<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-6">' +
         '<span class="fw-semibold">' + escapeHtml(inc.no) + ' &middot; ' + fmtIncidentDate(inc.tanggalIso) + '</span>' +
         '<span class="' + kcls + ' px-8 py-2 rounded-pill text-xs fw-medium">' + escapeHtml(inc.kategori) + '</span>' +
@@ -779,14 +1022,14 @@
     if (!items.length) return '<div class="text-secondary-light text-sm text-center py-16">Tidak ada flag pada rentang ini.</div>';
     return '<div class="d-flex flex-column gap-2 rk-flaglist-scroll">' + items.slice(0, 30).map(function (it) {
       var cls = it.sev === 'red' ? 'border-danger-100 bg-danger-100 text-danger-600' : 'border-warning-100 bg-warning-100 text-warning-600';
-      return '<div class="border rounded-8 px-12 py-8 text-sm ' + cls + '"><b>' + fmtD(it.i) + '</b> — ' + escapeHtml(it.text) + '</div>';
+      return '<div class="border radius-8 px-12 py-8 text-sm ' + cls + '"><b>' + fmtD(it.i) + '</b> — ' + escapeHtml(it.text) + '</div>';
     }).join('') + '</div>' + (items.length > 30 ? '<div class="text-secondary-light text-xs mt-8">+' + (items.length - 30) + ' kejadian lain pada rentang ini.</div>' : '');
   }
 
   function renderDetail() {
     var r = VIEW.find(function (x) { return x.id === state.selectedId; }) || VIEW[0];
     if (!r) {
-      els.detail.innerHTML = '<div class="rk-detail-empty"><iconify-icon icon="solar:user-cross-outline" class="text-4xl mb-8 d-block"></iconify-icon>Tidak ada karyawan terpilih pada filter ini.</div>';
+      els.detail.innerHTML = '<div class="rk-detail-empty"><iconify-icon icon="solar:user-cross-outline" class="text-2xl mb-8 d-block"></iconify-icon>Tidak ada karyawan terpilih pada filter ini.</div>';
       return;
     }
     state.selectedId = r.id;
@@ -805,17 +1048,17 @@
       '<div><span class="text-secondary-light text-sm">' + escapeHtml(r.sid) + '</span>' +
       '<h6 class="mb-0 mt-4">' + escapeHtml(r.nama) + '</h6>' +
       '<div class="d-flex flex-wrap gap-2 mt-8">' +
-      '<span class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-8 text-xs fw-medium">' + escapeHtml(r.co) + '</span>' +
-      '<span class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-8 text-xs fw-medium">' + escapeHtml(r.site) + '</span>' +
-      '<span class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-8 text-xs fw-medium">' + escapeHtml(r.jab) + '</span>' +
-      '<span class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-8 text-xs fw-medium">Roster ke-' + r.roster + '</span>' +
-      (r.longgar ? '<span class="bg-info-100 text-info-600 px-10 py-2 rounded-8 text-xs fw-medium">Kategori longgar (' + escapeHtml(r.kat) + ')</span>' : '') +
+      '<span class="bg-neutral-100 text-secondary-light px-10 py-2 radius-8 text-xs fw-medium">' + escapeHtml(r.co) + '</span>' +
+      '<span class="bg-neutral-100 text-secondary-light px-10 py-2 radius-8 text-xs fw-medium">' + escapeHtml(r.site) + '</span>' +
+      '<span class="bg-neutral-100 text-secondary-light px-10 py-2 radius-8 text-xs fw-medium">' + escapeHtml(r.jab) + '</span>' +
+      '<span class="bg-neutral-100 text-secondary-light px-10 py-2 radius-8 text-xs fw-medium">Roster ke-' + r.roster + '</span>' +
+      (r.longgar ? '<span class="bg-info-100 text-info-600 px-10 py-2 radius-8 text-xs fw-medium">Kategori longgar (' + escapeHtml(r.kat) + ')</span>' : '') +
       '</div></div>' +
-      '<span class="' + (STATUS_BADGE[r.status] || '') + ' px-14 py-6 rounded-8 fw-semibold text-sm"' + badgeStyle + '>' + r.status + '</span>' +
+      '<span class="' + (STATUS_BADGE[r.status] || '') + ' px-16 py-6 radius-8 fw-semibold text-sm"' + badgeStyle + '>' + r.status + '</span>' +
       '</div>' +
-      (r.cats.red ? '<div class="alert-danger bg-danger-100 text-danger-600 border-danger-100 border px-14 py-10 rounded-8 mb-16 text-sm"><iconify-icon icon="solar:danger-triangle-bold" class="icon me-1 align-middle"></iconify-icon><b>Ada pelanggaran regulasi</b> pada rentang yang ditampilkan — lihat daftar flag di bawah.</div>' :
-        (r.cats.map ? '<div class="alert-warning bg-warning-100 text-warning-600 border-warning-100 border px-14 py-10 rounded-8 mb-16 text-sm"><iconify-icon icon="solar:shield-warning-bold" class="icon me-1 align-middle"></iconify-icon>Ada pola tidak sesuai mapping shift pada rentang ini (peringatan).</div>' :
-          '<div class="alert-success bg-success-100 text-success-600 border-success-100 border px-14 py-10 rounded-8 mb-16 text-sm"><iconify-icon icon="solar:check-circle-bold" class="icon me-1 align-middle"></iconify-icon>Tidak ada flag pada rentang ini.</div>')) +
+      (r.cats.red ? '<div class="alert-danger bg-danger-100 text-danger-600 border-danger-100 border px-16 py-10 radius-8 mb-16 text-sm"><iconify-icon icon="solar:danger-triangle-bold" class="icon me-1 align-middle"></iconify-icon><b>Ada pelanggaran regulasi</b> pada rentang yang ditampilkan — lihat daftar flag di bawah.</div>' :
+        (r.cats.map ? '<div class="alert-warning bg-warning-100 text-warning-600 border-warning-100 border px-16 py-10 radius-8 mb-16 text-sm"><iconify-icon icon="solar:shield-warning-bold" class="icon me-1 align-middle"></iconify-icon>Ada pola tidak sesuai mapping shift pada rentang ini (peringatan).</div>' :
+          '<div class="alert-success bg-success-100 text-success-600 border-success-100 border px-16 py-10 radius-8 mb-16 text-sm"><iconify-icon icon="solar:check-circle-bold" class="icon me-1 align-middle"></iconify-icon>Tidak ada flag pada rentang ini.</div>')) +
       incidentHtml(r) +
       '<div class="row g-2 mb-16">' + stats.map(function (s) {
         var bad = /rk-flag-red/.test(s[1]);
@@ -851,7 +1094,7 @@
     if (!list.length) return '<div class="text-secondary-light text-sm text-center py-16">Tidak ada alert DMS pada 30 hari terakhir.</div>';
     return '<div class="d-flex flex-column gap-2 rk-flaglist-scroll">' + list.map(function (a) {
       var meta = ALERT_STATUS_META[a.status] || ALERT_STATUS_META.belum;
-      return '<div class="d-flex align-items-center justify-content-between border rounded-8 px-12 py-8">' +
+      return '<div class="d-flex align-items-center justify-content-between border radius-8 px-12 py-8">' +
         '<div><div class="text-sm fw-medium">' + escapeHtml(a.name) + '</div><div class="text-xs text-secondary-light">' + escapeHtml(a.date) + '</div></div>' +
         '<span class="' + meta.cls + ' px-10 py-4 rounded-pill fw-medium text-xs">' + meta.label + '</span>' +
         '</div>';

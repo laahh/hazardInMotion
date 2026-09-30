@@ -103,14 +103,33 @@ class DmsRosterPopulasiTest extends TestCase
         $this->assertCount(2, $this->petakan($baris), 'Ambang kosong berarti filter WP tidak diterapkan.');
     }
 
-    public function test_pola_awal_sepanjang_tahun_dan_tahun_kabisat_dihitung_benar(): void
+    /**
+     * Regresi: pola placeholder pernah dibuat sepanjang SATU TAHUN PENUH
+     * sementara hari_terakhir mengikuti data nyata. Sisa hari di ekornya lalu
+     * terbaca rule engine sebagai satu blok cuti raksasa, sehingga seluruh
+     * karyawan yang belum terkompilasi tampil berstatus "Cuti" di dashboard.
+     */
+    public function test_panjang_pola_awal_mengikuti_hari_terakhir_bukan_satu_tahun(): void
     {
-        $biasa = $this->petakan([['kode_sid' => 'FF01', 'jabatan_struktural' => 'OPERATOR DT']], 2026);
-        $kabisat = $this->petakan([['kode_sid' => 'FF01', 'jabatan_struktural' => 'OPERATOR DT']], 2024);
+        $rows = [(object) [
+            'kode_sid' => 'FF01', 'nama' => 'UJI', 'jabatan_struktural' => 'OPERATOR DT',
+            'jabatan_fungsional' => '', 'nama_perusahaan' => 'PT Pamapersada Nusantara',
+            'site_dedicated' => 'BMO 1', 'status_karyawan' => 'AKTIF', 'status_permit' => 'PASSED',
+        ]];
 
-        $this->assertSame(365, strlen($biasa[0]['pola']));
+        // 1 Jan s/d 30 Sep 2026 = 273 hari
+        $sebagian = $this->sync->petakanPopulasi($rows, 2026, '2026-09-30');
+        $this->assertSame(273, strlen($sebagian[0]['pola']));
+        $this->assertSame('2026-09-30', $sebagian[0]['hari_terakhir']);
+        $this->assertSame(str_repeat('o', 273), $sebagian[0]['pola'], 'Pola awal semuanya off sebelum kompilasi.');
+
+        // Hari pertama tahun berjalan → panjang 1, bukan 365.
+        $awalTahun = $this->sync->petakanPopulasi($rows, 2026, '2026-01-01');
+        $this->assertSame(1, strlen($awalTahun[0]['pola']));
+
+        // Tahun kabisat tetap benar saat datanya sudah setahun penuh.
+        $kabisat = $this->sync->petakanPopulasi($rows, 2024, '2024-12-31');
         $this->assertSame(366, strlen($kabisat[0]['pola']));
-        $this->assertSame(str_repeat('o', 365), $biasa[0]['pola'], 'Pola awal semuanya off sebelum kompilasi.');
     }
 
     public function test_nama_dan_jabatan_dipotong_sesuai_lebar_kolom(): void

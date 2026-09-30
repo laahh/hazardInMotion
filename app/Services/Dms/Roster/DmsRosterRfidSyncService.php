@@ -98,7 +98,13 @@ final class DmsRosterRfidSyncService
      */
     public function petakanPopulasi(array $rows, int $tahun, string $hariTerakhir): array
     {
-        $panjang = $this->panjangTahun($tahun);
+        // Panjang placeholder HARUS sepadan dengan hari_terakhir, bukan satu
+        // tahun penuh: pola yang lebih panjang dari data yang ada membuat
+        // sisa harinya terbaca sebagai blok cuti raksasa oleh rule engine.
+        $panjang = max(1, $this->selisihHari(
+            $this->awalTahun($tahun),
+            CarbonImmutable::parse($hariTerakhir),
+        ) + 1);
         $sekarang = CarbonImmutable::now();
         $polaJabatan = '/'.((string) config('dms_roster.populasi.regex_jabatan')).'/';
         $statusKaryawan = strtoupper(trim((string) config('dms_roster.populasi.status_karyawan', 'AKTIF')));
@@ -293,23 +299,56 @@ final class DmsRosterRfidSyncService
         $akhirStr = $akhir->toDateString();
         $diperbarui = 0;
 
+        // Satu UPDATE ... CASE per chunk, BUKAN satu UPDATE per karyawan:
+        // populasi ±8 ribu orang berarti 8 ribu query terpisah, dan itu
+        // terbukti tidak selesai dalam satu siklus penjadwalan (hanya chunk
+        // pertama yang tertulis, sisanya tetap memakai pola placeholder).
         foreach (array_chunk($pola, 500, true) as $chunk) {
-            DB::transaction(function () use ($chunk, $tahun, $akhirStr, $sekarang, &$diperbarui): void {
-                foreach ($chunk as $sid => $isi) {
-                    $diperbarui += DB::table('dms_roster_patterns')
-                        ->where('kode_sid', $sid)
-                        ->where('tahun', $tahun)
-                        ->update([
-                            'pola' => $isi,
-                            'hari_terakhir' => $akhirStr,
-                            'disinkron_pada' => $sekarang,
-                            'updated_at' => $sekarang,
-                        ]);
-                }
-            });
+            $diperbarui += $this->tulisPolaChunk($chunk, $tahun, $akhirStr, $sekarang);
         }
 
         return $diperbarui;
+    }
+
+    /**
+     * @param  array<string, string>  $chunk  kode_sid => pola
+     */
+    private function tulisPolaChunk(array $chunk, int $tahun, string $hariTerakhir, CarbonImmutable $sekarang): int
+    {
+        if ($chunk === []) {
+            return 0;
+        }
+
+        // (string) WAJIB: kode_sid yang seluruhnya angka otomatis menjadi key
+        // integer di PHP, lalu ter-bind sebagai angka sehingga MySQL memaksa
+        // kolom varchar menjadi DOUBLE ("Truncated incorrect DOUBLE value").
+        $case = '';
+        $bindings = [];
+        foreach ($chunk as $sid => $isi) {
+            $case .= ' WHEN ? THEN ?';
+            $bindings[] = (string) $sid;
+            $bindings[] = (string) $isi;
+        }
+
+        $sids = array_map(static fn (mixed $s): string => (string) $s, array_keys($chunk));
+        $placeholders = implode(',', array_fill(0, count($sids), '?'));
+
+        $sql = "UPDATE dms_roster_patterns
+                SET pola = CASE kode_sid{$case} END,
+                    hari_terakhir = ?,
+                    disinkron_pada = ?,
+                    updated_at = ?
+                WHERE tahun = ? AND kode_sid IN ({$placeholders})";
+
+        $bindings[] = $hariTerakhir;
+        $bindings[] = $sekarang->toDateTimeString();
+        $bindings[] = $sekarang->toDateTimeString();
+        $bindings[] = $tahun;
+        foreach ($sids as $sid) {
+            $bindings[] = (string) $sid;
+        }
+
+        return DB::update($sql, $bindings);
     }
 
     /**
