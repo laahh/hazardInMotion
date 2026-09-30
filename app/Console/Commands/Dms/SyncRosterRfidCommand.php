@@ -4,35 +4,37 @@ declare(strict_types=1);
 
 namespace App\Console\Commands\Dms;
 
-use App\Services\Dms\Roster\DmsRosterComplianceService;
-use App\Services\Dms\Roster\DmsRosterRfidSyncService;
+use App\Services\Dms\Roster\DmsRosterSyncService;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Throwable;
 
 /**
- * Sinkronisasi data Kepatuhan Roster dari scan RFID (bcsid.mv_checkinout_rfid).
+ * Sinkronisasi Kepatuhan Roster dari scan RFID ke skema ternormalisasi.
  *
- *   php artisan dms:sync-roster-rfid --full     # backfill 1 Jan s/d hari ini
- *   php artisan dms:sync-roster-rfid            # inkremental beberapa hari terakhir
+ *   php artisan dms:sync-roster-rfid --master          # tahap 1 saja (harian)
+ *   php artisan dms:sync-roster-rfid --full            # backfill 1 Jan s/d hari ini
+ *   php artisan dms:sync-roster-rfid                   # inkremental (tiap 30 menit)
  *   php artisan dms:sync-roster-rfid --from=2026-09-01 --to=2026-09-30
  *
- * Jalankan --full sekali saat pertama kali dipasang; setelah itu jadwal rutin
- * (lihat app/Console/Kernel.php) cukup memakai mode inkremental.
+ * Master karyawan tidak ikut ditarik pada mode inkremental: jabatan dan SIMPER
+ * tidak berubah menit-ke-menit, sementara view-nya lambat. Jadwalkan --master
+ * sekali sehari.
  */
 final class SyncRosterRfidCommand extends Command
 {
     protected $signature = 'dms:sync-roster-rfid
         {--tahun= : Tahun yang disinkronkan (default: tahun berjalan)}
-        {--from= : Tanggal awal YYYY-MM-DD (default: hari_incremental hari ke belakang)}
+        {--from= : Tanggal awal YYYY-MM-DD}
         {--to= : Tanggal akhir YYYY-MM-DD (default: hari ini)}
         {--full : Backfill dari 1 Januari tahun tersebut}
-        {--skip-populasi : Lewati penyegaran daftar karyawan}
-        {--no-compile : Jangan rakit ulang string pola setelah menarik scan}';
+        {--master : Segarkan master karyawan + SIMPER + flag wajib_cek}
+        {--only-master : Hanya master, lewati penarikan scan & kompilasi}
+        {--no-compile : Jangan rakit ulang pola setelah menarik scan}';
 
-    protected $description = 'Tarik scan RFID PASSED ke tabel lokal dan rakit pola roster untuk /dms/roster-compliance';
+    protected $description = 'Tarik scan RFID ke dms_roster_scan_harian dan rakit pola roster';
 
-    public function handle(DmsRosterRfidSyncService $sync, DmsRosterComplianceService $dashboard): int
+    public function handle(DmsRosterSyncService $sync): int
     {
         if (! $sync->isUp()) {
             $this->error('Postgres OLAP tidak terjangkau (pgsql_direct / pgsql_ssh). Sinkronisasi dibatalkan.');
@@ -44,43 +46,37 @@ final class SyncRosterRfidCommand extends Command
         $mulai = microtime(true);
 
         try {
-            if (! $this->option('skip-populasi')) {
-                $this->info("Menyegarkan populasi roster {$tahun} ...");
-                $jumlah = $sync->sinkronPopulasi($tahun);
-                $this->line("  {$this->angka($jumlah)} karyawan dalam populasi (operator/driver & mekanik, WP PASSED).");
+            if ($this->option('master') || $this->option('only-master') || $this->option('full')) {
+                $this->info('Tahap 1 — master karyawan ...');
+                $hasil = $sync->sinkronKaryawan();
+                $this->line("  {$this->angka($hasil['total'])} karyawan aktif tersimpan.");
+                $this->line("  {$this->angka($hasil['wajib_cek'])} di antaranya masuk base WAJIB DICEK.");
 
-                if ($jumlah === 0) {
-                    $this->warn('  Populasi kosong — cek filter jabatan di config/dms_roster.php.');
+                if ($hasil['total'] === 0) {
+                    $this->warn('  Master kosong — cek koneksi OLAP atau filter di config/dms_roster.php.');
 
                     return self::FAILURE;
                 }
             }
 
-            [$dari, $sampai] = $this->rentang($tahun);
-            $this->info("Menarik scan RFID {$dari->toDateString()} s/d {$sampai->toDateString()} ...");
+            if ($this->option('only-master')) {
+                $this->info('Selesai dalam '.round(microtime(true) - $mulai, 1).' detik.');
 
-            $ditulis = $sync->backfill($tahun, $dari, $sampai, function (string $a, string $b, int $n): void {
+                return self::SUCCESS;
+            }
+
+            [$dari, $sampai] = $this->rentang($tahun);
+            $this->info("Tahap 3 — scan RFID {$dari->toDateString()} s/d {$sampai->toDateString()} ...");
+
+            $ditulis = $sync->backfill($dari, $sampai, function (string $a, string $b, int $n): void {
                 $this->line("  {$a} … {$b} → {$this->angka($n)} baris hari");
             });
-            $this->line("  Total {$this->angka($ditulis)} baris hari tersimpan.");
+            $this->line("  Total {$this->angka($ditulis)} baris fakta tersimpan.");
 
             if (! $this->option('no-compile')) {
-                $this->info('Merakit ulang pola roster ...');
-                $diperbarui = $sync->kompilasiPola($tahun);
-                $this->line("  {$this->angka($diperbarui)} pola karyawan diperbarui.");
-
-                // Evaluasi seluruh populasi ±3 detik; dihangatkan di sini agar
-                // pengunjung pertama setelah sinkronisasi tidak menanggungnya.
-                $this->info('Menghangatkan cache dashboard ...');
-                $mulaiWarm = microtime(true);
-                $payload = $dashboard->dashboard(['tahun' => $tahun]);
-                $this->line(sprintf(
-                    '  %s karyawan dievaluasi dalam %.1f detik (%s pelanggaran, %s wajib cuti).',
-                    $this->angka((int) $payload['agregat']['total']),
-                    microtime(true) - $mulaiWarm,
-                    $this->angka((int) $payload['agregat']['pelanggaran']),
-                    $this->angka((int) $payload['agregat']['wajib_cuti']),
-                ));
+                $this->info('Tahap 4 — kompilasi pola ...');
+                $jml = $sync->kompilasiPola($tahun);
+                $this->line("  {$this->angka($jml)} pola karyawan ditulis.");
             }
         } catch (Throwable $e) {
             $this->error('Sinkronisasi gagal: '.$e->getMessage());

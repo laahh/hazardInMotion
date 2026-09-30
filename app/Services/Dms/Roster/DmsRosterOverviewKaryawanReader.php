@@ -13,7 +13,8 @@ use Throwable;
  * Baris karyawan asli untuk tabel "Scorecard per Karyawan & Timeline" di
  * halaman Ringkasan Roster.
  *
- * Sumbernya tabel lokal dms_roster_patterns (hasil sinkronisasi RFID), lalu
+ * Sumbernya dms_roster_pola x dms_roster_karyawan (hasil sinkronisasi RFID),
+ * disaring ke base wajib_cek, lalu
  * tiap pola dijalankan lewat DmsRosterRuleEngine untuk mendapat metrik roster
  * dan array merah/kuning per hari.
  *
@@ -39,9 +40,11 @@ final class DmsRosterOverviewKaryawanReader
         $tahun ??= CarbonImmutable::now()->year;
 
         try {
-            $meta = DB::table('dms_roster_patterns')
-                ->where('tahun', $tahun)
-                ->selectRaw('COUNT(*) AS jumlah, MAX(hari_terakhir) AS hari_terakhir')
+            $meta = DB::table('dms_roster_pola as p')
+                ->join('dms_roster_karyawan as k', 'k.id', '=', 'p.karyawan_id')
+                ->where('p.tahun', $tahun)
+                ->where('k.wajib_cek', true)
+                ->selectRaw('COUNT(*) AS jumlah, MAX(p.hari_terakhir) AS hari_terakhir')
                 ->first();
 
             if ($meta === null || (int) $meta->jumlah === 0) {
@@ -50,10 +53,13 @@ final class DmsRosterOverviewKaryawanReader
 
             // Prioritaskan yang metriknya paling menarik dilihat: on-site
             // terpanjang lebih dulu, lalu nama supaya urutannya stabil.
-            $rows = DB::table('dms_roster_patterns')
-                ->where('tahun', $tahun)
-                ->select('kode_sid', 'nama', 'jabatan', 'kategori', 'perusahaan', 'kode_pt', 'site', 'pola')
-                ->orderBy('nama')
+            $rows = DB::table('dms_roster_pola as p')
+                ->join('dms_roster_karyawan as k', 'k.id', '=', 'p.karyawan_id')
+                ->where('p.tahun', $tahun)
+                ->where('k.wajib_cek', true)
+                ->select('k.kode_sid', 'k.nama', 'k.jabatan_struktural as jabatan', 'k.kategori',
+                    'k.perusahaan', 'k.kode_pt', 'k.site', 'p.pola')
+                ->orderBy('k.nama')
                 ->limit(max(1, $limit))
                 ->get();
         } catch (Throwable $e) {

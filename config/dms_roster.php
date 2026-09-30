@@ -175,9 +175,19 @@ return [
     | terpakai, ±18 ribu baris/hari).
     */
     'sync' => [
+        // Master karyawan: satu baris per id, sudah diringkas di SQL.
+        'view_karyawan' => 'bcsid.bep_vw_wp_karyawan',
+        'status_karyawan' => 'AKTIF',
+
+        // Jendela 3 hari, bukan 1 — sekaligus menambal scan yang datang
+        // terlambat tanpa perlu menarik ulang rentang panjang.
         'hari_incremental' => 3,
+
+        'timeout_master_ms' => 30000,
         'timeout_incremental_ms' => 20000,
         'timeout_backfill_ms' => 20000,
+
+        // Backfill dipecah 14 hari per query supaya indeks tanggal terpakai.
         'chunk_hari_backfill' => 14,
         'chunk_upsert' => 1000,
     ],

@@ -7,11 +7,14 @@ namespace App\Services\Dms\Roster;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Penyusun payload dashboard /dms/roster-compliance.
  *
- * Alur: baca pola terkompilasi dari dms_roster_patterns → jalankan
+ * Alur: baca pola terkompilasi dari dms_roster_pola (join dms_roster_karyawan,
+ * disaring ke base wajib_cek) → jalankan
  * DmsRosterRuleEngine untuk seluruh populasi (hasil ringkas di-cache per
  * periode) → agregasi kartu & per-site → filter, urut, paginasi. Array
  * per-hari (merah/kuning) hanya dihitung ulang untuk baris yang benar-benar
@@ -91,9 +94,15 @@ final class DmsRosterComplianceService
      */
     public function detailKaryawan(string $sid, int $tahun): array
     {
-        $row = DB::table('dms_roster_patterns')
-            ->where('kode_sid', $sid)
-            ->where('tahun', $tahun)
+        $row = DB::table('dms_roster_pola as p')
+            ->join('dms_roster_karyawan as k', 'k.id', '=', 'p.karyawan_id')
+            ->where('k.kode_sid', $sid)
+            ->where('p.tahun', $tahun)
+            ->select(
+                'p.karyawan_id', 'p.pola', 'p.hari_terakhir',
+                'k.kode_sid', 'k.nama', 'k.jabatan_struktural as jabatan',
+                'k.kategori', 'k.perusahaan', 'k.site',
+            )
             ->first();
 
         if ($row === null) {
@@ -104,10 +113,14 @@ final class DmsRosterComplianceService
         $eval = $this->engine->evaluasi((string) $row->pola, (string) $row->kategori, $param['thr'], $param['map']);
         $awal = $this->awalTahun($tahun);
 
-        $scan = DB::table('dms_roster_rfid_days')
-            ->where('kode_sid', $sid)
-            ->whereBetween('tanggal', [$awal->toDateString(), (string) $row->hari_terakhir])
-            ->orderBy('tanggal')
+        // Nama gate di-join dari tabel lookup; tabel fakta hanya simpan id.
+        $scan = DB::table('dms_roster_scan_harian as d')
+            ->leftJoin('dms_roster_gate as gi', 'gi.id', '=', 'd.gate_masuk_id')
+            ->leftJoin('dms_roster_gate as go', 'go.id', '=', 'd.gate_keluar_id')
+            ->where('d.karyawan_id', (int) $row->karyawan_id)
+            ->whereBetween('d.tanggal', [$awal->toDateString(), (string) $row->hari_terakhir])
+            ->orderBy('d.tanggal')
+            ->select('d.tanggal', 'd.menit_masuk', 'd.menit_keluar', 'gi.nama as gate_in', 'go.nama as gate_out')
             ->get()
             ->keyBy(fn (object $r): string => CarbonImmutable::parse((string) $r->tanggal)->toDateString());
 
@@ -125,10 +138,10 @@ final class DmsRosterComplianceService
                 'hari_ke' => $eval->dayno[$i],
                 'gate_in' => $s->gate_in ?? null,
                 'gate_out' => $s->gate_out ?? null,
-                'jam_in' => isset($s->menit_checkin) && $s->menit_checkin !== null ? $this->jam((int) $s->menit_checkin) : null,
-                'jam_out' => isset($s->menit_checkout) && $s->menit_checkout !== null ? $this->jam((int) $s->menit_checkout) : null,
-                'durasi' => isset($s->menit_checkin, $s->menit_checkout) && $s->menit_checkin !== null && $s->menit_checkout !== null
-                    ? $this->durasi((int) $s->menit_checkin, (int) $s->menit_checkout)
+                'jam_in' => isset($s->menit_masuk) && $s->menit_masuk !== null ? $this->jam((int) $s->menit_masuk) : null,
+                'jam_out' => isset($s->menit_keluar) && $s->menit_keluar !== null ? $this->jam((int) $s->menit_keluar) : null,
+                'durasi' => isset($s->menit_masuk, $s->menit_keluar) && $s->menit_masuk !== null && $s->menit_keluar !== null
+                    ? $this->durasi((int) $s->menit_masuk, (int) $s->menit_keluar)
                     : null,
                 'merah' => $eval->red[$i],
                 'kuning' => $eval->yel[$i],
@@ -216,10 +229,20 @@ final class DmsRosterComplianceService
      */
     public function meta(int $tahun): array
     {
-        $row = DB::table('dms_roster_patterns')
-            ->where('tahun', $tahun)
-            ->selectRaw('COUNT(*) AS jumlah, MAX(hari_terakhir) AS hari_terakhir, MAX(disinkron_pada) AS disinkron')
-            ->first();
+        // Ditangkap supaya halaman menampilkan state "data belum tersedia"
+        // (lengkap dengan perintah sinkronisasinya) alih-alih 500, saat tabel
+        // belum dimigrasikan atau sinkronisasi pertama belum dijalankan.
+        try {
+            $row = DB::table('dms_roster_pola as p')
+                ->join('dms_roster_karyawan as k', 'k.id', '=', 'p.karyawan_id')
+                ->where('p.tahun', $tahun)
+                ->where('k.wajib_cek', true)
+                ->selectRaw('COUNT(*) AS jumlah, MAX(p.hari_terakhir) AS hari_terakhir, MAX(p.dikompilasi_pada) AS disinkron')
+                ->first();
+        } catch (Throwable $e) {
+            Log::warning('DmsRoster meta gagal (tabel belum ada / belum sinkron): '.$e->getMessage());
+            $row = null;
+        }
 
         $jumlah = (int) ($row->jumlah ?? 0);
         $hariTerakhir = is_string($row->hari_terakhir ?? null) && $row->hari_terakhir !== ''
@@ -261,10 +284,13 @@ final class DmsRosterComplianceService
             $harian = array_fill(0, max(1, $window), 0);
             $batasWajib = (int) ($this->engine->ambang()['wajib_cuti'] ?? 71);
 
-            DB::table('dms_roster_patterns')
-                ->where('tahun', $tahun)
-                ->select('kode_sid', 'nama', 'jabatan', 'kategori', 'perusahaan', 'kode_pt', 'site', 'pola')
-                ->orderBy('id')
+            DB::table('dms_roster_pola as p')
+                ->join('dms_roster_karyawan as k', 'k.id', '=', 'p.karyawan_id')
+                ->where('p.tahun', $tahun)
+                ->where('k.wajib_cek', true)
+                ->select('k.kode_sid', 'k.nama', 'k.jabatan_struktural as jabatan', 'k.kategori',
+                    'k.perusahaan', 'k.kode_pt', 'k.site', 'p.pola')
+                ->orderBy('p.id')
                 ->chunk(2000, function ($rows) use (
                     &$out, &$pelWeek, &$mapWeek, &$wajibWeek, &$harian,
                     $r0, $r1, $weekOf, $nWeek, $window, $batasWajib, $panjangData
