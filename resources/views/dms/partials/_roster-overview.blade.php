@@ -191,23 +191,14 @@
                     Total Karyawan
                     @if ($live)
                       <span class="text-success-600 fw-semibold" title="Diambil langsung dari database">&middot; live</span>
-                      <span class="d-block" style="font-size:10.5px">punya SIMPER aktif</span>
+                      {{-- <span class="d-block" style="font-size:10.5px">punya SIMPER aktif</span> --}}
                     @endif
                   </span>
                   <h5 class="fw-bold mb-0 text-primary-light">{{ number_format($totalKaryawan, 0, ',', '.') }}</h5>
                 </div>
-                @if ($live)
-                  <span class="px-12 py-4 rounded-pill fw-semibold text-sm bg-success-focus text-success-main"
-                        title="{{ number_format($live['punya_simper_aktif'], 0, ',', '.') }} dari {{ number_format($aktifSemua, 0, ',', '.') }} karyawan aktif berjabatan operator/driver &amp; mekanik">
-                    {{ number_format($persenSimper, 1, ',', '.') }}% dari {{ number_format($aktifSemua, 0, ',', '.') }}
-                  </span>
-                @else
-                  <span class="px-12 py-4 rounded-pill fw-semibold text-sm bg-success-focus text-success-main">
-                    Patuh {{ number_format($persenPatuh, 1, ',', '.') }}%
-                  </span>
-                @endif
+               
               </div>
-              <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+              {{-- <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
                 <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
                   <option>Bulanan</option>
                   <option>Tahunan</option>
@@ -219,7 +210,7 @@
                 <select class="form-select form-select-sm w-auto bg-base border text-secondary-light">
                   <option>Sep</option>
                 </select>
-              </div>
+              </div> --}}
             </div>
             @if ($live)
               <div class="d-flex flex-wrap gap-2 mt-12">
