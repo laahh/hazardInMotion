@@ -8,52 +8,39 @@
 --}}
 
 @php
-    // 1 Jan – 30 Sep 2026 = 273 hari
-    $tlHari = 273;
-    $tlAwal = \Carbon\Carbon::create(2026, 1, 1);
+    // ── Sumber data ───────────────────────────────────────────────────────
+    // $karyawanLive datang dari DmsRosterOverviewKaryawanReader (tabel lokal
+    // hasil sinkronisasi RFID). Bila tidak ada, jatuh ke baris contoh.
+    $live = $karyawanLive ?? null;
+
+    $tlAwal = \Carbon\Carbon::create($live['tahun'] ?? 2026, 1, 1);
+    $tlHari = $live['panjang'] ?? 273;
     // Didefinisikan lokal supaya partial ini tidak bergantung pada scope pemanggil.
     $hariLabel = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    $kodeLabel = ['P' => 'Shift Pagi', 'M' => 'Shift Malam', 'o' => 'Off', 'c' => 'Cuti'];
 
     /**
-     * Pola harian satu karyawan dalam bentuk grid kalender (baris Senin–Minggu
-     * x kolom minggu), format yang sama dengan kartu "Pola Kepatuhan Roster
-     * Harian". Deterministik dari $benih supaya tampilannya tetap sama tiap
-     * kali halaman dimuat.
+     * Susun pola harian jadi grid kalender (baris Senin–Minggu x kolom minggu),
+     * format yang sama dengan kartu "Pola Kepatuhan Roster Harian".
      *
-     * Selnya memakai SKALA KEPATUHAN yang sama dengan kartu "Pola Kepatuhan
-     * Roster Harian" (0 = tidak ada data, 1 = <50%, sampai 5 = 100%), bukan
-     * warna kode shift — supaya kedua heatmap di halaman ini berbicara dalam
-     * bahasa visual yang sama.
-     *
-     * @return array{grid: array<int, array<int, array{lvl:int,label:string}|null>>, kolom: int}
+     * @param  string  $pola   satu karakter per hari (P/M/o/c)
+     * @param  list<bool>  $merah  hari ter-flag pelanggaran
+     * @return array{grid: array<int, array<int, array{kode:string,merah:bool,label:string}|null>>, kolom: int}
      */
-    $tlGrid = function (string $benih, bool $adaPelanggaran) use ($tlHari, $tlAwal): array {
+    $gridDari = function (string $pola, array $merah) use ($tlAwal): array {
         $grid = array_fill(0, 7, []);
         $kolom = 0;
+        $n = strlen($pola);
 
-        for ($i = 0; $i < $tlHari; $i++) {
+        for ($i = 0; $i < $n; $i++) {
             $t = $tlAwal->copy()->addDays($i);
             if ($i > 0 && $t->dayOfWeek === \Carbon\Carbon::MONDAY) {
                 $kolom++;
             }
 
-            // Hari ter-flag dikelompokkan per blok 6 hari supaya terbaca
-            // sebagai rentetan, bukan titik acak.
-            $merah = $adaPelanggaran
-                && hexdec(substr(md5($benih . ':blok:' . intdiv($i, 6)), 0, 2)) % 5 === 0;
-
-            $h = hexdec(substr(md5($benih . ':' . $i), 0, 3)) % 100;
-            $kode = match (true) {
-                $h < 8 => 'c',
-                $h < 22 => 'o',
-                $h < 58 => 'P',
-                default => 'M',
-            };
-
-            $baris = ($t->dayOfWeek + 6) % 7; // 0 = Senin
-            $grid[$baris][$kolom] = [
-                'kode' => $kode,
-                'merah' => $merah,
+            $grid[($t->dayOfWeek + 6) % 7][$kolom] = [
+                'kode' => $pola[$i],
+                'merah' => (bool) ($merah[$i] ?? false),
                 'label' => $t->translatedFormat('D, d M Y'),
             ];
         }
@@ -61,12 +48,36 @@
         return ['grid' => $grid, 'kolom' => $kolom + 1];
     };
 
-    $kodeLabel = ['P' => 'Shift Pagi', 'M' => 'Shift Malam', 'o' => 'Off', 'c' => 'Cuti'];
+    /**
+     * Pola contoh saat data asli belum ada — deterministik dari $benih supaya
+     * tampilannya tidak berubah tiap kali halaman dimuat.
+     *
+     * @return array{0: string, 1: list<bool>}
+     */
+    $polaContoh = function (string $benih, bool $adaPelanggaran) use ($tlHari): array {
+        $pola = '';
+        $merah = [];
+
+        for ($i = 0; $i < $tlHari; $i++) {
+            $h = hexdec(substr(md5($benih . ':' . $i), 0, 3)) % 100;
+            $pola .= match (true) {
+                $h < 8 => 'c',
+                $h < 22 => 'o',
+                $h < 58 => 'P',
+                default => 'M',
+            };
+            // Dikelompokkan per blok 6 hari supaya terbaca sebagai rentetan.
+            $merah[] = $adaPelanggaran
+                && hexdec(substr(md5($benih . ':blok:' . intdiv($i, 6)), 0, 2)) % 5 === 0;
+        }
+
+        return [$pola, $merah];
+    };
 
     /**
      * Render satu baris sel heatmap sekaligus. Dikerjakan di PHP, bukan lewat
-     * perulangan Blade, karena 8 karyawan x 280 sel membuat indentasi template
-     * saja menambah ratusan KB ke HTML hasil render.
+     * perulangan Blade, karena ribuan sel membuat indentasi template saja
+     * menambah ratusan KB ke HTML hasil render.
      *
      * @param  array<int, array{kode:string,merah:bool,label:string}|null>  $baris
      */
@@ -87,7 +98,6 @@
 
         return $out;
     };
-
     $statusPill = [
         'Off' => 'is-off',
         'Shift Pagi' => 'is-pagi',
@@ -163,6 +173,30 @@
             'status' => 'Cuti', 'pelanggaran' => false,
         ],
     ];
+
+    // ── Data asli menang atas baris contoh ────────────────────────────────
+    if ($live) {
+        $scorecard = array_map(static fn (array $r): array => [
+            'sid' => $r['sid'],
+            'pt' => $r['pt'],
+            'nama' => $r['nama'],
+            'jabatan' => $r['jabatan'],
+            'site' => $r['site'],
+            'roster' => $r['roster'],
+            'onsite' => $r['onsite'],
+            'pagi' => $r['pagi'],
+            'malam' => $r['malam'],
+            'off' => $r['off'],
+            'cuti' => $r['cuti'],
+            'shiftMaks' => $r['shiftMaks'],
+            'onsiteMaks' => $r['onsiteMaks'],
+            'cutiMin' => $r['cutiMin'],
+            'status' => $r['status'],
+            'pelanggaran' => $r['pelanggaran'],
+            'pola' => $r['pola'],
+            'merah' => $r['merah'],
+        ], $live['baris']);
+    }
 @endphp
 
 <div class="col-12">
@@ -285,7 +319,14 @@
 
               {{-- Baris collapse: pola harian karyawan ini, format kalender
                    sama dengan kartu "Pola Kepatuhan Roster Harian". --}}
-              @php $pola = $tlGrid($r['sid'], $r['pelanggaran']); @endphp
+              @php
+                // Data asli sudah membawa pola & penanda merahnya sendiri;
+                // baris contoh perlu dibangkitkan lebih dulu.
+                [$polaStr, $merahArr] = isset($r['pola'])
+                    ? [$r['pola'], $r['merah']]
+                    : $polaContoh($r['sid'], $r['pelanggaran']);
+                $pola = $gridDari($polaStr, $merahArr);
+              @endphp
               <tr>
                 <td colspan="18" style="padding:0;border-bottom:0">
                   <div class="collapse" id="tl-{{ $r['sid'] }}">

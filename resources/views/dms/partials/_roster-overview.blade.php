@@ -101,10 +101,20 @@
         ['sid' => 'C-1-00013788', 'site' => 'BMO 1', 'pt' => 'PT KALTIM DIAMOND COAL', 'tanggal' => '16 Sep 2026'],
     ];
 
-    // ── Seri chart batang mingguan (dummy) ────────────────────────────────
-    $mingguLabel = ['30 Agu–5 Sep', '6 Sep–12 Sep', '13 Sep–19 Sep', '20 Sep–26 Sep', '27 Sep–3 Okt'];
-    $seriPelanggaran = [55, 59, 72, 0, 0];
-    $seriWajibCuti = [43, 46, 57, 0, 0];
+    // ── Bar chart per site, dipecah kelompok jabatan struktural ───────────
+    // Pakai data asli bila tersedia; kalau tidak, contoh dengan bentuk sama.
+    $site = $perSiteLive ?? [
+        ['site' => 'BMO 2', 'operator_driver' => 1445, 'mekanik' => 667, 'trainer' => 0],
+        ['site' => 'GMO', 'operator_driver' => 1147, 'mekanik' => 410, 'trainer' => 0],
+        ['site' => 'LMO', 'operator_driver' => 963, 'mekanik' => 296, 'trainer' => 3],
+        ['site' => 'SMO', 'operator_driver' => 741, 'mekanik' => 416, 'trainer' => 12],
+        ['site' => 'BMO 1', 'operator_driver' => 408, 'mekanik' => 108, 'trainer' => 0],
+        ['site' => 'BMO 3', 'operator_driver' => 183, 'mekanik' => 23, 'trainer' => 0],
+    ];
+    $siteLabel = array_column($site, 'site');
+    $seriOperator = array_map('intval', array_column($site, 'operator_driver'));
+    $seriMekanik = array_map('intval', array_column($site, 'mekanik'));
+    $seriTrainer = array_map('intval', array_column($site, 'trainer'));
 @endphp
 
 <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-24">
@@ -205,13 +215,22 @@
               </div>
             @endif
 
-            <div class="mt-40">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-24">
+              <span class="text-sm fw-semibold text-primary-light">Sebaran per Site</span>
+              <div class="d-flex align-items-center gap-3 text-xs text-secondary-light">
+                <span><i class="ro-sw" style="background:#487FFF"></i>Operator / Driver</span>
+                <span><i class="ro-sw" style="background:#16A34A"></i>Mekanik / Tyre / Welder</span>
+                <span><i class="ro-sw" style="background:#F59E0B"></i>Trainer / Siswa</span>
+              </div>
+            </div>
+            <div class="mt-8">
               {{-- Data chart dioper lewat atribut data-* supaya berkas skrip
                    (dimuat setelah ApexCharts) tidak perlu variabel PHP. --}}
               <div id="roBarChart" class="margin-16-minus"
-                   data-kategori="{{ json_encode($mingguLabel) }}"
-                   data-pelanggaran="{{ json_encode($seriPelanggaran) }}"
-                   data-wajib="{{ json_encode($seriWajibCuti) }}"></div>
+                   data-kategori="{{ json_encode($siteLabel) }}"
+                   data-operator="{{ json_encode($seriOperator) }}"
+                   data-mekanik="{{ json_encode($seriMekanik) }}"
+                   data-trainer="{{ json_encode($seriTrainer) }}"></div>
             </div>
           </div>
         </div>

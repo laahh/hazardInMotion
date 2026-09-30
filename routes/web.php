@@ -804,12 +804,30 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         // Halaman ringkasan bergaya dashboard PnC — isinya mockup statis,
         // KECUALI kartu "Total Karyawan" yang diambil live dari OLAP lewat
         // DmsRosterTotalKaryawanReader (lihat config dms_roster.total_karyawan).
-        Route::get('/roster-compliance/overview', function (\App\Services\Dms\Roster\DmsRosterTotalKaryawanReader $reader) {
-            return view('dms.roster-overview-live', ['totalKaryawanLive' => $reader->ambil()]);
+        $ringkasanRoster = function (
+            string $view,
+            \App\Services\Dms\Roster\DmsRosterTotalKaryawanReader $total,
+            \App\Services\Dms\Roster\DmsRosterOverviewKaryawanReader $karyawan,
+        ) {
+            return view($view, [
+                'totalKaryawanLive' => $total->ambil(),
+                'perSiteLive' => $total->perSite(),
+                'karyawanLive' => $karyawan->ambil(10),
+            ]);
+        };
+
+        Route::get('/roster-compliance/overview', function (
+            \App\Services\Dms\Roster\DmsRosterTotalKaryawanReader $total,
+            \App\Services\Dms\Roster\DmsRosterOverviewKaryawanReader $karyawan,
+        ) use ($ringkasanRoster) {
+            return $ringkasanRoster('dms.roster-overview-live', $total, $karyawan);
         })->name('roster-compliance.overview');
 
-        Route::get('/roster-compliance-static/overview', function (\App\Services\Dms\Roster\DmsRosterTotalKaryawanReader $reader) {
-            return view('dms.roster-overview-static', ['totalKaryawanLive' => $reader->ambil()]);
+        Route::get('/roster-compliance-static/overview', function (
+            \App\Services\Dms\Roster\DmsRosterTotalKaryawanReader $total,
+            \App\Services\Dms\Roster\DmsRosterOverviewKaryawanReader $karyawan,
+        ) use ($ringkasanRoster) {
+            return $ringkasanRoster('dms.roster-overview-static', $total, $karyawan);
         })->name('roster-compliance-static.overview');
 
         Route::get('/roster-compliance-static', function () {

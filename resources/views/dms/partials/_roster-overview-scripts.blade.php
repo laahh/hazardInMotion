@@ -13,16 +13,21 @@
     try { return JSON.parse(el.dataset[nama]); } catch (e) { return bawaan; }
   };
 
+  // Batang bertumpuk: jumlah karyawan per site, dipecah kelompok jabatan.
   var bar = document.getElementById('roBarChart');
   if (bar) {
     new ApexCharts(bar, {
-      chart: { type: 'bar', height: 264, toolbar: { show: false }, animations: { enabled: false } },
+      chart: {
+        type: 'bar', height: 264, stacked: true,
+        toolbar: { show: false }, animations: { enabled: false },
+      },
       series: [
-        { name: 'Pelanggaran', data: baca(bar, 'pelanggaran', []) },
-        { name: 'Wajib cuti', data: baca(bar, 'wajib', []) },
+        { name: 'Operator / Driver', data: baca(bar, 'operator', []) },
+        { name: 'Mekanik / Tyre / Welder', data: baca(bar, 'mekanik', []) },
+        { name: 'Trainer / Siswa', data: baca(bar, 'trainer', []) },
       ],
-      colors: ['#487FFF', '#16A34A'],
-      plotOptions: { bar: { borderRadius: 4, columnWidth: '32%' } },
+      colors: ['#487FFF', '#16A34A', '#F59E0B'],
+      plotOptions: { bar: { borderRadius: 4, borderRadiusApplication: 'end', columnWidth: '46%' } },
       dataLabels: { enabled: false },
       legend: { show: false },
       xaxis: {
@@ -33,7 +38,10 @@
       },
       yaxis: { labels: { style: { fontSize: '11px', colors: '#9ca3af' } } },
       grid: { borderColor: '#eef1f6', strokeDashArray: 4 },
-      tooltip: { y: { formatter: function (v) { return v.toLocaleString('id') + ' orang'; } } },
+      tooltip: {
+        shared: true, intersect: false,
+        y: { formatter: function (v) { return v.toLocaleString('id') + ' orang'; } },
+      },
     }).render();
   }
 

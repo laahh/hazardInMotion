@@ -30,6 +30,8 @@ final class DmsRosterTotalKaryawanReader
 {
     private const CACHE_KEY = 'dms_roster:total_karyawan:v1';
 
+    private const CACHE_KEY_SITE = 'dms_roster:total_karyawan_site:v1';
+
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
     ) {}
@@ -60,6 +62,100 @@ final class DmsRosterTotalKaryawanReader
 
         /** @var array{total:int,punya_simper_aktif:int,tanpa_simper:int,punya_wp_unit:int,wp_unit_passed:int,wp_unit_tanpa_simper:int,kelompok:list<array<string,mixed>>}|null */
         return $hasil;
+    }
+
+    /**
+     * Sebaran karyawan per site, dipecah menurut kelompok jabatan struktural
+     * yang sama dengan ambil(). Dipakai bar chart di kartu Total Karyawan.
+     *
+     * @return list<array{site:string,operator_driver:int,mekanik:int,trainer:int,total:int}>|null
+     */
+    public function perSite(): ?array
+    {
+        $ttl = (int) config('dms_roster.total_karyawan.cache_ttl', 600);
+
+        /** @var list<array<string, mixed>>|null $hasil */
+        $hasil = Cache::remember(self::CACHE_KEY_SITE, $ttl, fn (): ?array => $this->querySite());
+
+        if ($hasil === null) {
+            Cache::forget(self::CACHE_KEY_SITE);
+        }
+
+        /** @var list<array{site:string,operator_driver:int,mekanik:int,trainer:int,total:int}>|null */
+        return $hasil;
+    }
+
+    /**
+     * @return list<array<string, mixed>>|null
+     */
+    private function querySite(): ?array
+    {
+        if (! $this->olap->isReachable()) {
+            return null;
+        }
+
+        /** @var list<string> $jabatan */
+        $jabatan = config('dms_roster.total_karyawan.jabatan', []);
+        if ($jabatan === []) {
+            return null;
+        }
+
+        $phJabatan = implode(',', array_fill(0, count($jabatan), '?'));
+
+        $sql = <<<SQL
+            WITH lst(j) AS (
+              SELECT DISTINCT upper(trim(x)) FROM unnest(ARRAY[{$phJabatan}]::text[]) AS x
+            ),
+            k AS (
+              SELECT id,
+                     max(upper(trim(jabatan_struktural))) AS j,
+                     max(coalesce(nullif(trim(site), ''), '(tanpa site)')) AS site
+              FROM bcsid.bep_vw_wp_karyawan
+              WHERE status_karyawan = 'AKTIF'
+              GROUP BY id
+            ),
+            m AS (
+              SELECT k.site,
+                     CASE
+                       WHEN k.j ~ '(MECHANIC|MEKANIK|TYRE|FITTER|WELDER)' THEN 'mekanik'
+                       WHEN k.j ~ '(TRAINER|TRAINING|SISWA)'              THEN 'trainer'
+                       ELSE 'operator_driver'
+                     END AS grp
+              FROM k JOIN lst USING (j)
+            )
+            SELECT site,
+                   count(*) FILTER (WHERE grp = 'operator_driver') AS operator_driver,
+                   count(*) FILTER (WHERE grp = 'mekanik')          AS mekanik,
+                   count(*) FILTER (WHERE grp = 'trainer')          AS trainer,
+                   count(*) AS total
+            FROM m
+            GROUP BY site
+            ORDER BY total DESC
+            SQL;
+
+        try {
+            $rows = $this->olap->select(
+                $sql,
+                array_values($jabatan),
+                (int) config('dms_roster.total_karyawan.timeout_ms', 20000),
+            );
+        } catch (Throwable $e) {
+            Log::warning('DmsRoster total karyawan per site gagal: '.$e->getMessage());
+
+            return null;
+        }
+
+        if ($rows === []) {
+            return null;
+        }
+
+        return array_map(static fn (object $r): array => [
+            'site' => (string) $r->site,
+            'operator_driver' => (int) $r->operator_driver,
+            'mekanik' => (int) $r->mekanik,
+            'trainer' => (int) $r->trainer,
+            'total' => (int) $r->total,
+        ], $rows);
     }
 
     /**
