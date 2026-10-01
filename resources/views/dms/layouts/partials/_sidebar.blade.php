@@ -42,9 +42,8 @@
           <span>Fatigue Baseline</span>
         </a>
       </li>
-      <li>
-        {{-- Pola eksplisit, bukan wildcard: 'dms.roster-compliance*' akan ikut
-             cocok dengan route snapshot statis di bawahnya. --}}
+      {{-- <li>
+      
         <a href="{{ route('dms.roster-compliance') }}" class="{{ request()->routeIs('dms.roster-compliance', 'dms.roster-compliance.*') && ! request()->routeIs('dms.roster-compliance.overview') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:calendar-date-outline" class="menu-icon"></iconify-icon>
           <span>Kepatuhan Roster (Live)</span>
@@ -55,19 +54,19 @@
           <iconify-icon icon="solar:calendar-mark-outline" class="menu-icon"></iconify-icon>
           <span>Kepatuhan Roster</span>
         </a>
-      </li>
+      </li> --}}
       <li>
         <a href="{{ route('dms.roster-compliance-static.overview') }}" class="{{ request()->routeIs('dms.roster-compliance-static.overview') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:chart-square-outline" class="menu-icon"></iconify-icon>
-          <span>Ringkasan Roster <small class="text-warning-600">(contoh)</small></span>
+          <span>Ringkasan Roster</span>
         </a>
       </li>
-      <li>
+      {{-- <li>
         <a href="{{ route('dms.roster-compliance.overview') }}" class="{{ request()->routeIs('dms.roster-compliance.overview') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:chart-square-outline" class="menu-icon"></iconify-icon>
           <span>Ringkasan Roster Live <small class="text-warning-600">(contoh)</small></span>
         </a>
-      </li>
+      </li> --}}
       <li>
         <a href="{{ route('pra-operasi.dashboard') }}" class="{{ request()->routeIs('pra-operasi.dashboard') || request()->routeIs('pra-operasi.operator-profile') ? 'active-page' : '' }}">
           <iconify-icon icon="solar:clipboard-check-outline" class="menu-icon"></iconify-icon>
