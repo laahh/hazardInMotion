@@ -801,33 +801,67 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         Route::get('/roster-compliance/wajib-cuti.csv', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'unduhWajibCuti'])->name('roster-compliance.wajib-cuti');
         Route::get('/roster-compliance/karyawan/{sid}', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'detail'])->name('roster-compliance.detail');
 
-        // Halaman ringkasan bergaya dashboard PnC — isinya mockup statis,
-        // KECUALI kartu "Total Karyawan" yang diambil live dari OLAP lewat
-        // DmsRosterTotalKaryawanReader (lihat config dms_roster.total_karyawan).
+        // Halaman ringkasan bergaya dashboard PnC. Kartu Total Karyawan,
+        // keempat tile, heatmap harian, daftar perlu tindakan, dan tabel
+        // scorecard semuanya sudah live; sisanya (donat, kalimat sorotan)
+        // masih contoh.
         $ringkasanRoster = function (
             string $view,
+            \Illuminate\Http\Request $req,
             \App\Services\Dms\Roster\DmsRosterTotalKaryawanReader $total,
             \App\Services\Dms\Roster\DmsRosterOverviewKaryawanReader $karyawan,
+            \App\Services\Dms\Roster\DmsRosterHeatmapBuilder $heatmap,
         ) {
+            $tahun = (int) now()->year;
+
+            // Agregat & seri harian diambil dari service yang sama dengan
+            // halaman Kepatuhan Roster Live — hasilnya di-cache, jadi dua
+            // halaman tidak mungkin beda angka.
+            $agregat = null;
+            $peta = null;
+            try {
+                $svc = app(\App\Services\Dms\Roster\DmsRosterComplianceService::class);
+                $payload = $svc->dashboard(['tahun' => $tahun]);
+                if ($payload['up'] ?? false) {
+                    $agregat = $payload['agregat'];
+                    $peta = $heatmap->bangun(
+                        $payload['seri']['harian'] ?? [],
+                        (int) $agregat['total'],
+                        (string) $payload['periode']['dari'],
+                    );
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Ringkasan roster: agregat gagal — '.$e->getMessage());
+            }
+
+            $perPage = (int) config('dms_roster.overview_per_page', 10);
+
             return view($view, [
                 'totalKaryawanLive' => $total->ambil(),
                 'perSiteLive' => $total->perSite(),
-                'karyawanLive' => $karyawan->ambil(10),
+                'karyawanLive' => $karyawan->ambil((int) $req->query('hal', '1'), $perPage, $tahun),
+                'perluTindakanLive' => $karyawan->perluTindakan(12, $tahun),
+                'agregatLive' => $agregat,
+                'heatmapLive' => $peta,
             ]);
         };
 
         Route::get('/roster-compliance/overview', function (
+            \Illuminate\Http\Request $req,
             \App\Services\Dms\Roster\DmsRosterTotalKaryawanReader $total,
             \App\Services\Dms\Roster\DmsRosterOverviewKaryawanReader $karyawan,
+            \App\Services\Dms\Roster\DmsRosterHeatmapBuilder $heatmap,
         ) use ($ringkasanRoster) {
-            return $ringkasanRoster('dms.roster-overview-live', $total, $karyawan);
+            return $ringkasanRoster('dms.roster-overview-live', $req, $total, $karyawan, $heatmap);
         })->name('roster-compliance.overview');
 
         Route::get('/roster-compliance-static/overview', function (
+            \Illuminate\Http\Request $req,
             \App\Services\Dms\Roster\DmsRosterTotalKaryawanReader $total,
             \App\Services\Dms\Roster\DmsRosterOverviewKaryawanReader $karyawan,
+            \App\Services\Dms\Roster\DmsRosterHeatmapBuilder $heatmap,
         ) use ($ringkasanRoster) {
-            return $ringkasanRoster('dms.roster-overview-static', $total, $karyawan);
+            return $ringkasanRoster('dms.roster-overview-static', $req, $total, $karyawan, $heatmap);
         })->name('roster-compliance-static.overview');
 
         Route::get('/roster-compliance-static', function () {

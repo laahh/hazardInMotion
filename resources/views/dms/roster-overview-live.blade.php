@@ -16,8 +16,8 @@
 @section('content')
   @include('dms.partials._roster-overview', [
     'judul' => 'Ringkasan Kepatuhan Roster — Live',
-    'subjudul' => 'Safety & Roster · Rancangan tampilan untuk data RFID berjalan',
-    'lencana' => ['teks' => 'DATA CONTOH · LIVE', 'kelas' => 'bg-info-focus text-info-main'],
+    'subjudul' => 'Safety & Roster · Kepatuhan jam kerja dari scan RFID berjalan',
+    'lencana' => ['teks' => 'LIVE', 'kelas' => 'bg-info-focus text-info-main'],
   ])
 @endsection
 

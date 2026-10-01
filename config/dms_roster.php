@@ -209,6 +209,11 @@ return [
 
     'per_page' => 30,
 
+    // Halaman Ringkasan Roster memakai angka lebih kecil: tiap baris
+    // scorecard membawa panel collapse berisi heatmap setahun (±280 sel),
+    // jadi 30 baris sekaligus akan menggelembungkan HTML hasil render.
+    'overview_per_page' => 10,
+
     /*
     |--------------------------------------------------------------------------
     | Total karyawan untuk kartu ringkasan di halaman Ringkasan Roster

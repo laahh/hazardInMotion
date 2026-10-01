@@ -1,8 +1,9 @@
 {{--
   /dms/roster-compliance-static/overview
 
-  Halaman contoh bergaya dashboard /pnc-monitoring/dashboard untuk sisi
-  SNAPSHOT. Murni statis — lihat catatan di partial _roster-overview.
+  Halaman bergaya dashboard /pnc-monitoring/dashboard untuk sisi SNAPSHOT.
+  Angkanya live dari tabel sinkronisasi RFID — lihat catatan di partial
+  _roster-overview untuk daftar variabel dan cabang contohnya.
 --}}
 @extends('dms.layouts.app')
 
@@ -14,9 +15,9 @@
 
 @section('content')
   @include('dms.partials._roster-overview', [
-    'judul' => 'Ringkasan Kepatuhan Roster — Snapshot',
-    'subjudul' => 'Safety & Roster · Potret periode 1 Jan – 28 Sep 2026',
-    'lencana' => ['teks' => 'DATA CONTOH · SNAPSHOT', 'kelas' => 'bg-warning-focus text-warning-main'],
+    'judul' => 'Ringkasan Kepatuhan Roster',
+    'subjudul' => 'Safety & Roster · Potret kepatuhan jam kerja karyawan',
+    'lencana' => ['teks' => 'SNAPSHOT', 'kelas' => 'bg-warning-focus text-warning-main'],
   ])
 @endsection
 

@@ -2,9 +2,11 @@
   Scorecard per Karyawan & Timeline — kolom dan tata letaknya mengikuti tabel
   scorecard aplikasi referensi, temanya disesuaikan dengan halaman ini (terang).
 
-  SEPENUHNYA STATIS: seluruh baris, angka, dan batang timeline ditulis/dihitung
-  di dalam berkas ini. Tidak ada query, service, maupun fetch. Kontrol filter
-  sengaja tidak difungsikan karena tidak ada data untuk disaring.
+  Barisnya LIVE: $karyawanLive berisi satu halaman hasil evaluasi rule engine
+  atas pola roster nyata, lengkap dengan metadata paginasi. Nomor halaman
+  dibawa lewat query ?hal=N. Baris contoh di bawah hanya dipakai bila tabel
+  sinkronisasi belum terisi. Kontrol filter masih belum difungsikan — filter,
+  pengurutan, dan ekspor lengkap ada di halaman Kepatuhan Roster (Live).
 --}}
 
 @php
@@ -15,6 +17,10 @@
 
     $tlAwal = \Carbon\Carbon::create($live['tahun'] ?? 2026, 1, 1);
     $tlHari = $live['panjang'] ?? 273;
+    // Label rentang di kepala panel collapse — ikut panjang data sebenarnya,
+    // jangan ditulis tetap supaya tidak berbohong setelah sinkronisasi maju.
+    $tlRentang = $tlAwal->translatedFormat('j M').' – '
+        .$tlAwal->copy()->addDays(max(0, $tlHari - 1))->translatedFormat('j M Y');
     // Didefinisikan lokal supaya partial ini tidak bergantung pada scope pemanggil.
     $hariLabel = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
     $kodeLabel = ['P' => 'Shift Pagi', 'M' => 'Shift Malam', 'o' => 'Off', 'c' => 'Cuti'];
@@ -174,9 +180,16 @@
         ],
     ];
 
+    // Baris contoh dinomori sendiri; data asli membawa nomornya dari pembaca
+    // supaya urutannya lanjut antar halaman, bukan mulai 1 lagi tiap halaman.
+    foreach ($scorecard as $i => $_) {
+        $scorecard[$i]['no'] = $i + 1;
+    }
+
     // ── Data asli menang atas baris contoh ────────────────────────────────
     if ($live) {
         $scorecard = array_map(static fn (array $r): array => [
+            'no' => $r['no'],
             'sid' => $r['sid'],
             'pt' => $r['pt'],
             'nama' => $r['nama'],
@@ -197,9 +210,30 @@
             'merah' => $r['merah'],
         ], $live['baris']);
     }
+
+    // ── Paginasi ──────────────────────────────────────────────────────────
+    $halKini = (int) ($live['halaman'] ?? 1);
+    $halTotal = max(1, (int) ($live['total_halaman'] ?? 1));
+
+    // Nomor halaman dibawa di query ?hal= (bukan ?page=) supaya tidak bentrok
+    // dengan paginator lain bila nanti ada tabel kedua di halaman yang sama.
+    // Anchor #ro-scorecard menjaga posisi baca: tanpa itu setiap klik
+    // melempar pengguna kembali ke puncak halaman.
+    $tautanHal = static fn (int $n): string =>
+        request()->fullUrlWithQuery(['hal' => $n]).'#ro-scorecard';
+
+    // Jendela nomor: halaman pertama, terakhir, dan dua tetangga halaman kini.
+    $nomorHal = [1, $halTotal];
+    for ($n = $halKini - 2; $n <= $halKini + 2; $n++) {
+        if ($n >= 1 && $n <= $halTotal) {
+            $nomorHal[] = $n;
+        }
+    }
+    $nomorHal = array_values(array_unique($nomorHal));
+    sort($nomorHal);
 @endphp
 
-<div class="col-12">
+<div class="col-12" id="ro-scorecard">
   <div class="card ro-card">
     <div class="card-body p-24">
 
@@ -274,9 +308,9 @@
             </tr>
           </thead>
           <tbody>
-            @foreach ($scorecard as $i => $r)
+            @foreach ($scorecard as $r)
               <tr>
-                <td class="num ro-sc-muted">{{ $i + 1 }}</td>
+                <td class="num ro-sc-muted">{{ $r['no'] }}</td>
                 <td class="fw-semibold">{{ $r['sid'] }}</td>
                 <td>{{ $r['pt'] }}</td>
                 <td class="fw-medium">{{ $r['nama'] }}</td>
@@ -335,7 +369,7 @@
                       <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
                         <div>
                           <div class="ro-sc-detail__title">Pola Harian &mdash; {{ $r['nama'] }}</div>
-                          <div class="ro-sc-detail__sub">{{ $r['sid'] }} &middot; {{ $r['pt'] }} &middot; {{ $r['site'] }} &middot; 1 Jan – 30 Sep 2026</div>
+                          <div class="ro-sc-detail__sub">{{ $r['sid'] }} &middot; {{ $r['pt'] }} &middot; {{ $r['site'] }} &middot; {{ $tlRentang }}</div>
                         </div>
                         <div class="ro-sc-legend">
                           <span><i class="ro-sw ro-sw-pagi"></i>Pagi</span>
@@ -369,25 +403,45 @@
         </table>
       </div>
 
-      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-16">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mt-16">
         <span class="text-secondary-light text-sm">
           @if ($live)
-            Menampilkan <b>{{ count($scorecard) }}</b> dari
-            <b>{{ number_format($live['total'], 0, ',', '.') }}</b> karyawan wajib dicek
+            Menampilkan <b>{{ number_format($live['dari'], 0, ',', '.') }}&ndash;{{ number_format($live['sampai'], 0, ',', '.') }}</b>
+            dari <b>{{ number_format($live['total'], 0, ',', '.') }}</b> karyawan wajib dicek
+            &middot; hal {{ $halKini }}/{{ number_format($halTotal, 0, ',', '.') }}
             &middot; data s/d {{ \Carbon\Carbon::parse($live['hari_terakhir'])->translatedFormat('d M Y') }}
           @else
             Menampilkan {{ count($scorecard) }} baris contoh &middot; geser tabel ke kanan untuk melihat timeline harian
           @endif
         </span>
-        @if ($live)
-          {{-- Tabel lengkap dengan filter, pengurutan, dan paginasi ada di
-               halaman Kepatuhan Roster (Live) — di sini hanya cuplikan. --}}
-          <a href="{{ route('dms.roster-compliance') }}"
-             class="btn btn-sm btn-outline-primary-600 radius-8 d-inline-flex align-items-center gap-1">
-            Lihat semua karyawan
-            <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
-          </a>
-        @else
+
+        @if ($live && $halTotal > 1)
+          <nav aria-label="Navigasi halaman scorecard">
+            <ul class="pagination pagination-sm mb-0 flex-wrap gap-1">
+              <li class="page-item {{ $halKini <= 1 ? 'disabled' : '' }}">
+                <a class="page-link radius-8" href="{{ $halKini <= 1 ? '#' : $tautanHal($halKini - 1) }}"
+                   @if ($halKini <= 1) tabindex="-1" aria-disabled="true" @endif>&laquo; Sebelumnya</a>
+              </li>
+
+              @php $sebelum = 0; @endphp
+              @foreach ($nomorHal as $n)
+                @if ($sebelum > 0 && $n - $sebelum > 1)
+                  <li class="page-item disabled"><span class="page-link radius-8 border-0 bg-transparent">&hellip;</span></li>
+                @endif
+                <li class="page-item {{ $n === $halKini ? 'active' : '' }}">
+                  <a class="page-link radius-8" href="{{ $tautanHal($n) }}"
+                     @if ($n === $halKini) aria-current="page" @endif>{{ number_format($n, 0, ',', '.') }}</a>
+                </li>
+                @php $sebelum = $n; @endphp
+              @endforeach
+
+              <li class="page-item {{ $halKini >= $halTotal ? 'disabled' : '' }}">
+                <a class="page-link radius-8" href="{{ $halKini >= $halTotal ? '#' : $tautanHal($halKini + 1) }}"
+                   @if ($halKini >= $halTotal) tabindex="-1" aria-disabled="true" @endif>Berikutnya &raquo;</a>
+              </li>
+            </ul>
+          </nav>
+        @elseif (! $live)
           <div class="d-flex gap-2">
             <button type="button" class="btn btn-sm btn-outline-primary-600 radius-8" disabled>&laquo; Sebelumnya</button>
             <button type="button" class="btn btn-sm btn-outline-primary-600 radius-8" disabled>Berikutnya &raquo;</button>
