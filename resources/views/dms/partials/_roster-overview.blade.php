@@ -276,7 +276,7 @@
     </div>
   </div>
 @else
-  <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-24 radius-8 d-flex gap-2 align-items-start" role="alert">
+  {{-- <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-24 radius-8 d-flex gap-2 align-items-start" role="alert">
     <iconify-icon icon="solar:info-circle-bold" class="icon text-lg flex-shrink-0 mt-2"></iconify-icon>
     <div class="text-sm">
       <b>Sebagian angka masih contoh.</b>
@@ -288,7 +288,7 @@
         Jalankan <code>php artisan dms:sync-roster-rfid --master --full</code> lebih dulu.
       @endif
     </div>
-  </div>
+  </div> --}}
 @endif
 
 <div class="row gy-4">
