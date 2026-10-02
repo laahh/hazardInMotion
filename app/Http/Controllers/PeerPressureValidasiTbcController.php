@@ -30,20 +30,9 @@ class PeerPressureValidasiTbcController extends Controller
         $q = trim((string) $request->get('q', ''));
         if ($q !== '') {
             $query->where(function ($sub) use ($q) {
-                $sub->where('validator', 'like', '%' . $q . '%')
-                    ->orWhere('tasklist', 'like', '%' . $q . '%')
-                    ->orWhere('to_be_concerned_hazard', 'like', '%' . $q . '%')
-                    ->orWhere('gr_pspp', 'like', '%' . $q . '%')
-                    ->orWhere('catatan', 'like', '%' . $q . '%')
-                    ->orWhere('no_item_pspp', 'like', '%' . $q . '%')
-                    ->orWhere('kategori_gr', 'like', '%' . $q . '%')
-                    ->orWhere('kategori_gr_valid_kpi', 'like', '%' . $q . '%')
-                    ->orWhere('blindspot_terlapor_bc', 'like', '%' . $q . '%')
-                    ->orWhere('pic_aktual', 'like', '%' . $q . '%')
-                    ->orWhere('kronologi_singkat', 'like', '%' . $q . '%')
-                    ->orWhere('rootcause_aktual', 'like', '%' . $q . '%')
-                    ->orWhere('detail_rootcause_aktual', 'like', '%' . $q . '%')
-                    ->orWhere('tindakan_perbaikan_aktual', 'like', '%' . $q . '%');
+                foreach (ValidasiTbcImportService::COLUMN_IMPORT as $column) {
+                    $sub->orWhere($column, 'like', '%' . $q . '%');
+                }
             });
         }
 
@@ -129,20 +118,15 @@ class PeerPressureValidasiTbcController extends Controller
         $sheet->getStyle('A1:' . $lastColLetter . '1')->getFont()->setBold(true);
 
         $sample = [
-            'Contoh Validator',
             'TL-001',
             'Hazard contoh',
             'GR',
             'Catatan singkat',
+            'Blindspot contoh',
             'PSPP-1',
             'Kategori A',
-            'Ya',
-            'Blindspot contoh',
-            'PIC001',
-            'Ringkasan kronologi',
-            'Root cause',
-            'Detail penyebab',
-            'Tindakan perbaikan',
+            'SID001',
+            'Nama pelaku/pelanggar',
         ];
         $col = 1;
         foreach ($sample as $v) {

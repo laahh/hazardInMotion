@@ -1,0 +1,5507 @@
+﻿@extends('evaluasi-well.layouts.app')
+
+@php
+  // Dihitung di sini (bukan di section('content')) supaya tersedia untuk
+  // section('page-scripts') juga — Blade mengeksekusi section berdasarkan urutan
+  // di file, bukan urutan @yield di layout, dan page-scripts ada sebelum content.
+  $mitraMode = (bool) ($mitraMode ?? false);
+  $mitraNeedsPicker = (bool) ($mitraNeedsPicker ?? false);
+  $mitraIsManager = (bool) ($mitraIsManager ?? false);
+  $mitraScopeLabel = $mitraScopeLabel ?? null;
+  $mitraScope = $mitraScope ?? ['site' => '', 'perusahaan' => '', 'pairs' => [], 'companies' => []];
+  $siteOptions = $siteOptions ?? [];
+  $companyOptions = $companyOptions ?? [];
+  $dashboardFilters = $dashboardFilters ?? ['site' => '', 'perusahaan' => '', 'division_group' => ''];
+  $dashboardFilterOptions = $dashboardFilterOptions ?? ['sites' => [], 'companies' => [], 'division_groups' => []];
+  $dashboardFilterActiveCount = collect($dashboardFilters)->filter(fn ($value) => trim((string) $value) !== '')->count();
+  // Dikirim ke tiap endpoint AJAX lewat parameter khusus (scope_*) supaya tidak
+  // bentrok dengan filter lokal tiap modal/tabel (site/company/division_group).
+  $dashboardScopeQuery = array_filter([
+    'scope_site' => $dashboardFilters['site'] ?? '',
+    'scope_perusahaan' => $dashboardFilters['perusahaan'] ?? '',
+    'scope_division' => $dashboardFilters['division_group'] ?? '',
+  ], fn ($value) => trim((string) $value) !== '');
+  $ajaxRoutes = $ajaxRoutes ?? [
+    'notInstalledData' => route('evaluasi-well.not-installed.data', $dashboardScopeQuery),
+    'notInstalledExport' => route('evaluasi-well.not-installed.export', $dashboardScopeQuery),
+    'installStats' => route('evaluasi-well.install-stats', $dashboardScopeQuery),
+    'installStatsExport' => route('evaluasi-well.install-stats.export', $dashboardScopeQuery),
+    'activeStats' => route('evaluasi-well.active-stats', $dashboardScopeQuery),
+    'activeStatsExport' => route('evaluasi-well.active-stats.export', $dashboardScopeQuery),
+    'wellnessMetricsKpi' => route('evaluasi-well.wellness-metrics.kpi', $dashboardScopeQuery),
+    'wellnessMetricsData' => route('evaluasi-well.wellness-metrics.data', $dashboardScopeQuery),
+    'wellnessMetricsExport' => route('evaluasi-well.wellness-metrics.export', $dashboardScopeQuery),
+    'topUsersLeaderboard' => route('evaluasi-well.top-users.leaderboard', $dashboardScopeQuery),
+    'index' => route('evaluasi-well.index'),
+  ];
+@endphp
+
+@section('title', ($mitraMode ?? false) ? 'Mitra Kerja' : 'Dashboard')
+
+@section('css')
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  #site-boundary-map {
+    height: 180px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #eef2f7;
+  }
+  #site-boundary-map .leaflet-tile-pane { filter: saturate(1.05); }
+  #site-boundary-map .site-boundary-tooltip {
+    background: rgba(15, 23, 42, 0.92);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+  }
+  #site-boundary-map .site-boundary-tooltip::before { display: none; }
+  #site-boundary-map .leaflet-control-zoom a {
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    font-size: 14px;
+  }
+</style>
+@if ($mitraMode ?? false)
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+<style>
+  .select2-container .select2-selection--single {
+    height: 38px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 4px 8px;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 28px;
+    color: #111827;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 36px;
+  }
+</style>
+@endif
+<style>
+  .not-installed-datatable + .dt-layout-row,
+  .dt-container:has(#notInstalledTable) .dt-layout-row,
+  #notInstalledTable_wrapper .dt-layout-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-paging,
+  #notInstalledTable_wrapper .dt-paging {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.375rem;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-paging .dt-paging-button,
+  #notInstalledTable_wrapper .dt-paging .dt-paging-button {
+    width: auto !important;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.625rem !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    line-height: 1 !important;
+    border-radius: 6px !important;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-paging .dt-paging-button.first,
+  .dt-container:has(#notInstalledTable) .dt-paging .dt-paging-button.previous,
+  .dt-container:has(#notInstalledTable) .dt-paging .dt-paging-button.next,
+  .dt-container:has(#notInstalledTable) .dt-paging .dt-paging-button.last,
+  #notInstalledTable_wrapper .dt-paging .dt-paging-button.first,
+  #notInstalledTable_wrapper .dt-paging .dt-paging-button.previous,
+  #notInstalledTable_wrapper .dt-paging .dt-paging-button.next,
+  #notInstalledTable_wrapper .dt-paging .dt-paging-button.last {
+    min-width: 2.25rem;
+    font-weight: 600;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-search input,
+  #notInstalledTable_wrapper .dt-search input {
+    margin-left: 0.5rem;
+    min-width: 240px;
+    display: inline-block;
+    width: auto;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-length select,
+  #notInstalledTable_wrapper .dt-length select {
+    margin: 0 0.375rem;
+    width: auto;
+    display: inline-block;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-length label,
+  .dt-container:has(#notInstalledTable) .dt-search label,
+  #notInstalledTable_wrapper .dt-length label,
+  #notInstalledTable_wrapper .dt-search label {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary-light);
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-info,
+  #notInstalledTable_wrapper .dt-info {
+    font-size: 0.875rem;
+    color: var(--text-secondary-light);
+    padding-top: 0;
+  }
+
+  .dt-container:has(#notInstalledTable),
+  #notInstalledTable_wrapper,
+  .not-installed-datatable,
+  .dt-container:has(#notInstalledTable) .dt-layout-table,
+  #notInstalledTable_wrapper .dt-layout-table,
+  .dt-container:has(#notInstalledTable) table.dataTable,
+  #notInstalledTable {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .dt-container:has(#notInstalledTable) .dt-layout-table,
+  #notInstalledTable_wrapper .dt-layout-table {
+    display: block !important;
+  }
+
+  #notInstalledTable {
+    table-layout: fixed !important;
+    width: 100% !important;
+  }
+
+  #notInstalledTable colgroup,
+  #notInstalledTable col {
+    width: auto !important;
+  }
+
+  #notInstalledTable th,
+  #notInstalledTable td {
+    vertical-align: middle;
+  }
+
+  #notInstalledTable thead th {
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  #notInstalledTable th:nth-child(1),
+  #notInstalledTable td:nth-child(1) {
+    width: 26% !important;
+  }
+
+  #notInstalledTable th:nth-child(2),
+  #notInstalledTable td:nth-child(2) {
+    width: 26% !important;
+    word-break: break-word;
+  }
+
+  #notInstalledTable th:nth-child(3),
+  #notInstalledTable td:nth-child(3) {
+    width: 28% !important;
+    word-break: break-word;
+  }
+
+  #notInstalledTable th:nth-child(4),
+  #notInstalledTable td:nth-child(4),
+  #notInstalledTable th:nth-child(5),
+  #notInstalledTable td:nth-child(5) {
+    width: 10% !important;
+    text-align: center;
+  }
+
+  #install-stats-loading.is-visible {
+    display: flex !important;
+  }
+
+  .install-stats-modal-dialog {
+    max-width: min(96vw, 1680px);
+    width: 96vw;
+    margin: 0.75rem auto;
+    height: calc(100vh - 1.5rem);
+  }
+
+  .install-stats-modal-dialog .modal-content {
+    max-height: 100%;
+  }
+
+  #install-stats-trend {
+    width: 100%;
+    min-height: 220px;
+  }
+
+  .install-stats-kpi-card {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .install-stats-dim-card {
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    border: 1px solid var(--input-form-light, #e5e7eb);
+    background: var(--white, #fff);
+  }
+
+  .install-stats-dim-card:hover {
+    border-color: #487fff;
+    box-shadow: 0 6px 18px rgba(72, 127, 255, 0.08);
+  }
+
+  .install-stats-dim-card.is-active {
+    border-color: #487fff;
+    box-shadow: 0 0 0 1px #487fff;
+    background: rgba(72, 127, 255, 0.04);
+  }
+
+  .install-stats-dim-card .dim-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .install-stats-dim-card .dim-meta-item {
+    background: var(--neutral-50, #f8fafc);
+    border-radius: 8px;
+    padding: 0.5rem 0.625rem;
+  }
+
+  .install-stats-table-wrap {
+    height: 300px;
+    min-height: 300px;
+    max-height: 300px;
+    overflow: auto;
+  }
+
+  #install-stats-bar {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  #install-stats-detail-row > [class*='col-'] {
+    min-height: 0;
+  }
+
+  #install-stats-table thead th,
+  #install-stats-table tfoot td {
+    position: sticky;
+    background: var(--white, #fff);
+    z-index: 1;
+  }
+
+  #install-stats-table thead th {
+    top: 0;
+  }
+
+  #install-stats-table tfoot td {
+    bottom: 0;
+    border-top: 1px solid var(--input-form-light, #e5e7eb);
+  }
+
+  #install-stats-table tbody tr.install-stats-row {
+    cursor: pointer;
+  }
+
+  #install-stats-table tbody tr.install-stats-row:hover {
+    background: rgba(72, 127, 255, 0.06);
+  }
+
+  #install-stats-table tbody tr.install-stats-row.is-selected {
+    background: rgba(72, 127, 255, 0.1);
+  }
+
+  #active-stats-loading.is-visible {
+    display: flex !important;
+  }
+
+  .active-stats-kpi-card {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .active-stats-dim-card {
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    border: 1px solid var(--input-form-light, #e5e7eb);
+    background: var(--white, #fff);
+  }
+
+  .active-stats-dim-card:hover {
+    border-color: #45b369;
+    box-shadow: 0 6px 18px rgba(69, 179, 105, 0.08);
+  }
+
+  .active-stats-dim-card.is-active {
+    border-color: #45b369;
+    box-shadow: 0 0 0 1px #45b369;
+    background: rgba(69, 179, 105, 0.04);
+  }
+
+  .active-stats-dim-card .dim-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .active-stats-dim-card .dim-meta-item {
+    background: var(--neutral-50, #f8fafc);
+    border-radius: 8px;
+    padding: 0.5rem 0.625rem;
+  }
+
+  .active-stats-table-wrap {
+    height: 300px;
+    min-height: 300px;
+    max-height: 300px;
+    overflow: auto;
+  }
+
+  #active-stats-bar,
+  #active-stats-trend {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  #active-stats-detail-row > [class*='col-'] {
+    min-height: 0;
+  }
+
+  #active-stats-table thead th,
+  #active-stats-table tfoot td {
+    position: sticky;
+    background: var(--white, #fff);
+    z-index: 1;
+  }
+
+  #active-stats-table thead th {
+    top: 0;
+  }
+
+  #active-stats-table tfoot td {
+    bottom: 0;
+    border-top: 1px solid var(--input-form-light, #e5e7eb);
+  }
+
+  #installPeopleTable_wrapper .dt-layout-row,
+  .dt-container:has(#installPeopleTable) .dt-layout-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+  }
+
+  #installPeopleTable th,
+  #installPeopleTable td {
+    vertical-align: middle;
+  }
+
+  .dt-container:has(#wellnessMetricsTable) .dt-layout-row,
+  #wellnessMetricsTable_wrapper .dt-layout-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+  }
+
+  .dt-container:has(#wellnessMetricsTable) .dt-paging,
+  #wellnessMetricsTable_wrapper .dt-paging {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.375rem;
+  }
+
+  .dt-container:has(#wellnessMetricsTable) .dt-paging .dt-paging-button,
+  #wellnessMetricsTable_wrapper .dt-paging .dt-paging-button {
+    width: auto !important;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.625rem !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    line-height: 1 !important;
+    border-radius: 6px !important;
+  }
+
+  #wellnessMetricsTable th,
+  #wellnessMetricsTable td {
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  #wellnessMetricsTable thead th {
+    font-weight: 600;
+  }
+
+  /* Wellness distribution cards — mock fidelity */
+  .wc-card {
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 16px !important;
+    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06) !important;
+    background: #fff;
+    overflow: hidden;
+    position: relative;
+  }
+  .wc-card__bg {
+    position: absolute;
+    right: 0;
+    top: 28%;
+    width: min(48%, 280px);
+    height: auto;
+    max-height: 72%;
+    object-fit: contain;
+    object-position: right bottom;
+    opacity: 0.38;
+    pointer-events: none;
+    z-index: 0;
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.35) 28%, #000 55%, #000 100%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.35) 28%, #000 55%, #000 100%);
+  }
+  .wc-card__bg--sports {
+    top: auto;
+    bottom: 0;
+    right: 0;
+    width: min(55%, 320px);
+    height: 88%;
+    max-height: none;
+    object-fit: cover;
+    object-position: 70% bottom;
+    opacity: 0.45;
+    mask-image:
+      linear-gradient(90deg, transparent 0%, rgba(0,0,0,.25) 22%, #000 52%, #000 100%),
+      linear-gradient(180deg, transparent 0%, #000 22%, #000 100%);
+    -webkit-mask-image:
+      linear-gradient(90deg, transparent 0%, rgba(0,0,0,.25) 22%, #000 52%, #000 100%),
+      linear-gradient(180deg, transparent 0%, #000 22%, #000 100%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+  .wc-card__bg--br {
+    top: auto;
+    bottom: 0;
+    right: 0;
+    width: min(46%, 240px);
+    max-height: 58%;
+    opacity: 0.55;
+    object-fit: contain;
+    object-position: right bottom;
+    mask-image: linear-gradient(135deg, transparent 0%, transparent 18%, rgba(0,0,0,.55) 42%, #000 70%);
+    -webkit-mask-image: linear-gradient(135deg, transparent 0%, transparent 18%, rgba(0,0,0,.55) 42%, #000 70%);
+  }
+  .wc-card__bg--calorie {
+    top: 22%;
+    bottom: auto;
+    width: min(44%, 230px);
+    max-height: 62%;
+    opacity: 0.48;
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 30%, #000 58%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 30%, #000 58%);
+  }
+  .wc-card__bg--duration {
+    top: auto;
+    bottom: 0;
+    right: 0;
+    width: min(46%, 250px);
+    height: 78%;
+    max-height: none;
+    object-fit: cover;
+    object-position: center 30%;
+    opacity: 0.42;
+    mask-image:
+      linear-gradient(120deg, transparent 0%, transparent 14%, rgba(0,0,0,.35) 38%, #000 66%),
+      linear-gradient(180deg, transparent 0%, #000 26%, #000 100%);
+    -webkit-mask-image:
+      linear-gradient(120deg, transparent 0%, transparent 14%, rgba(0,0,0,.35) 38%, #000 66%),
+      linear-gradient(180deg, transparent 0%, #000 26%, #000 100%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+  .wc-card--duration .wc-duration-body {
+    position: relative;
+    z-index: 1;
+  }
+  .wc-card .card-body { z-index: 1; position: relative; }
+  .wc-card__head-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 22px;
+    background: #16A34A;
+    color: #fff;
+  }
+  .wc-card__head-icon--fire {
+    background: #EA580C;
+  }
+  .wc-card__title { color: #0F172A; }
+  .wc-card__subtitle {
+    display: block;
+    font-size: 13px;
+    color: #64748B;
+    line-height: 1.35;
+  }
+  .wc-card__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #ECFDF5;
+    color: #166534;
+    border: 1px solid #BBF7D0;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
+    max-width: 100%;
+  }
+  .wc-card__badge iconify-icon {
+    font-size: 16px;
+    color: #16A34A;
+    flex-shrink: 0;
+  }
+  .wc-card__badge--stack {
+    border-radius: 14px;
+    padding: 10px 14px;
+    align-items: center;
+  }
+  .wc-card__badge-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .wc-card__badge-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: #64748B;
+    line-height: 1.2;
+  }
+  .wc-card__badge-value {
+    display: block;
+    font-size: 16px;
+    font-weight: 700;
+    color: #0F172A;
+    line-height: 1.2;
+  }
+  .wc-card__bg--frequency {
+    top: 22%;
+    bottom: auto;
+    right: 0;
+    width: min(44%, 230px);
+    max-height: 62%;
+    opacity: 0.48;
+    object-fit: contain;
+    object-position: right bottom;
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 30%, #000 58%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 30%, #000 58%);
+  }
+  .wc-card--frequency .wc-frequency-body {
+    position: relative;
+    z-index: 1;
+  }
+  .wc-donut--frequency { min-height: 230px; }
+  .wc-legend--frequency .wc-legend__item {
+    align-items: center;
+    gap: 12px;
+  }
+  .wc-legend--frequency .wc-legend__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+  .wc-legend--frequency .wc-legend__icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+  .wc-legend--frequency .wc-legend__title {
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .wc-tip {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.45;
+  }
+  .wc-tip iconify-icon { font-size: 18px; margin-top: 1px; }
+  .wc-tip--green { background: #ECFDF5; color: #166534; border: 1px solid #BBF7D0; }
+  .wc-tip--quote {
+    background: #ECFDF5;
+    color: #334155;
+    border: 1px solid #BBF7D0;
+    padding-right: min(46%, 240px);
+    position: relative;
+    z-index: 1;
+  }
+  .wc-tip--quote iconify-icon { color: #16A34A; font-size: 26px; }
+  .wc-tip--quote strong { color: #15803D; font-weight: 700; }
+  .wc-tip--rose {
+    background: #FFF1F2;
+    color: #9F1239;
+    border: 1px solid #FECDD3;
+    padding-right: min(20%, 90px);
+  }
+  .wc-tip--rose span {
+    white-space: nowrap;
+  }
+  .wc-donut { min-height: 210px; }
+  .wc-axis {
+    display: grid;
+    grid-template-columns: repeat(var(--wc-ticks, 6), minmax(0, 1fr));
+    gap: 0;
+    margin-top: 10px;
+    padding-left: 196px;
+    padding-right: 92px;
+    position: relative;
+  }
+  .wc-axis::before {
+    content: '';
+    position: absolute;
+    left: 196px;
+    right: 92px;
+    top: -8px;
+    border-top: 1px dashed #E2E8F0;
+  }
+  .wc-axis--macro {
+    padding-left: 162px;
+    padding-right: 120px;
+  }
+  .wc-axis--macro::before {
+    left: 162px;
+    right: 120px;
+  }
+  .wc-axis__tick {
+    font-size: 11px;
+    color: #94A3B8;
+    text-align: center;
+  }
+  .wc-axis__tick:first-child { text-align: left; }
+  .wc-axis__tick:last-child { text-align: right; }
+  .wc-axis-label {
+    text-align: center;
+    font-size: 11px;
+    color: #94A3B8;
+    font-weight: 500;
+    margin-top: 4px;
+  }
+  .wc-legend .wc-legend__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .wc-legend .wc-legend__icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: #fff;
+    font-size: 15px;
+  }
+  .wc-legend .wc-legend__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0F172A;
+    margin: 0;
+    line-height: 1.3;
+  }
+  .wc-legend .wc-legend__meta {
+    font-size: 12px;
+    color: #64748B;
+    margin: 2px 0 0;
+  }
+  .wc-top-sports {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 220px;
+    justify-content: center;
+  }
+  .wc-top-sports__row {
+    display: grid;
+    grid-template-columns: 28px 28px 110px minmax(0, 1fr) 92px;
+    align-items: center;
+    gap: 10px;
+  }
+  .wc-top-sports__rank {
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    background: #16A34A;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .wc-top-sports__rank.is-muted {
+    background: #CBD5E1;
+    color: #fff;
+  }
+  .wc-top-sports__sport-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: #F0FDF4;
+    color: #16A34A;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+  .wc-top-sports__name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0F172A;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .wc-top-sports__track {
+    height: 16px;
+    background: transparent;
+    border-radius: 4px;
+    overflow: visible;
+    position: relative;
+  }
+  .wc-top-sports__track::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+      to right,
+      transparent,
+      transparent calc(16.66% - 1px),
+      #F1F5F9 calc(16.66% - 1px),
+      #F1F5F9 16.66%
+    );
+    border-radius: 4px;
+    z-index: 0;
+  }
+  .wc-top-sports__bar {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    background: #16A34A;
+    border-radius: 4px;
+    min-width: 4px;
+  }
+  .wc-top-sports__bar.is-soft {
+    background: #BBF7D0;
+  }
+  .wc-top-sports__meta {
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    white-space: nowrap;
+    text-align: right;
+  }
+  .wc-macro-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-height: 200px;
+    justify-content: center;
+  }
+  .wc-macro__row {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr) 140px;
+    gap: 12px;
+    align-items: center;
+  }
+  .wc-macro__label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0F172A;
+  }
+  .wc-macro__icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .wc-macro__track {
+    height: 18px;
+    background: #F1F5F9;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .wc-macro__track::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+      to right,
+      transparent,
+      transparent calc(20% - 1px),
+      #E2E8F0 calc(20% - 1px),
+      #E2E8F0 20%
+    );
+  }
+  .wc-macro__fill {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    border-radius: 4px;
+    min-width: 0;
+  }
+  .wc-macro__meta {
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    white-space: nowrap;
+    text-align: right;
+  }
+  .wc-macro-side {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    height: 100%;
+  }
+  .wc-card--macro {
+    overflow: hidden;
+  }
+  .wc-card--macro > .card-body {
+    padding: 0 !important;
+  }
+  .wc-macro-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.95fr);
+    align-items: stretch;
+    min-height: 340px;
+  }
+  .wc-macro-main {
+    padding: 24px 20px 24px 24px;
+    min-width: 0;
+  }
+  .wc-macro-panel {
+    position: relative;
+    min-height: 320px;
+    overflow: hidden;
+    background: #F1F5F9;
+  }
+  .wc-macro-panel__bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center center;
+    display: block;
+    z-index: 0;
+  }
+  .wc-macro-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(90deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.35) 18%, transparent 38%);
+    pointer-events: none;
+  }
+  .wc-macro-panel::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 42%;
+    z-index: 1;
+    background: linear-gradient(180deg, transparent 0%, rgba(15, 23, 42, 0.28) 100%);
+    pointer-events: none;
+  }
+  .wc-insight {
+    position: relative;
+    z-index: 2;
+    margin: 22px 20px 0;
+    background: #fff;
+    border: 1px solid #E2E8F0;
+    border-radius: 14px;
+    padding: 16px 18px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  }
+  .wc-insight__icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: #ECFDF5;
+    color: #16A34A;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+  .wc-macro-panel__caption {
+    position: absolute;
+    left: 22px;
+    right: 22px;
+    bottom: 22px;
+    z-index: 2;
+    margin: 0;
+    font-family: 'Segoe Script', 'Brush Script MT', 'Apple Chancery', cursive;
+    font-style: italic;
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 2px 12px rgba(15, 23, 42, 0.45);
+    pointer-events: none;
+  }
+  .wc-macro-panel__caption::after {
+    content: '';
+    display: block;
+    width: 88px;
+    height: 4px;
+    margin-top: 8px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #22C55E, #86EFAC);
+  }
+  .wc-macro-visual {
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    min-height: 180px;
+    background: #F8FAFC;
+    flex: 1 1 auto;
+  }
+  .wc-macro-visual__img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    min-height: 180px;
+    display: block;
+  }
+  .wc-macro-visual__caption {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 14px;
+    margin: 0;
+    z-index: 1;
+    font-family: 'Segoe Script', 'Brush Script MT', 'Apple Chancery', cursive;
+    font-style: italic;
+    font-size: 20px;
+    line-height: 1.25;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 2px 10px rgba(15, 23, 42, 0.45);
+    pointer-events: none;
+  }
+  .wc-macro-visual::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 45%, rgba(15, 23, 42, 0.45) 100%);
+    pointer-events: none;
+  }
+  @media (max-width: 991px) {
+    .wc-macro-layout {
+      grid-template-columns: 1fr;
+    }
+    .wc-macro-panel {
+      min-height: 280px;
+    }
+    .wc-card__bg { opacity: 0.12; }
+  }
+  @media (max-width: 768px) {
+    .wc-card__bg { display: none; }
+    .wc-top-sports__row {
+      grid-template-columns: 24px 24px minmax(70px, 90px) minmax(0, 1fr);
+      grid-template-rows: auto auto;
+    }
+    .wc-top-sports__meta {
+      grid-column: 4;
+      text-align: left;
+    }
+    .wc-macro__row {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .wc-macro__meta { text-align: left; }
+    .wc-axis { padding-left: 0; padding-right: 0; }
+  }
+</style>
+@endsection
+
+@section('page-scripts')
+<script src="{{ asset('evaluasi-well-assets/js/homeTwoChart.js') }}"></script>
+<script>
+(function () {
+    var el = document.querySelector('#revenue-chart');
+    if (!el || typeof ApexCharts === 'undefined') {
+        return;
+    }
+
+    var labels = @json($activeTrendLabels ?? []);
+    var series = @json($activeTrendSeries ?? []);
+    var userCounts = @json($activeTrendUserCounts ?? []);
+    var chartColor = '#487fff';
+
+    if (!labels.length) {
+        labels = ['W1','W2','W3','W4','W5','W6','W7','W8','W9','W10','W11','W12'];
+        series = [0,0,0,0,0,0,0,0,0,0,0,0];
+        userCounts = [0,0,0,0,0,0,0,0,0,0,0,0];
+    }
+
+    function formatUsers(value) {
+        return Number(value || 0).toLocaleString('id-ID');
+    }
+
+    function formatPct(value) {
+        return Number(value || 0).toLocaleString('id-ID', {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1
+        });
+    }
+
+    function resolveChartHeight() {
+        return Math.max(el.clientHeight || 0, 110);
+    }
+
+    var chartOptions = {
+        series: [{ name: 'Partisipasi / minggu', data: series }],
+        chart: {
+            type: 'area',
+            width: '100%',
+            height: 110,
+            toolbar: { show: false },
+            zoom: { enabled: false },
+            parentHeightOffset: 0,
+            padding: { left: 0, right: 0, top: 0, bottom: 0 }
+        },
+        dataLabels: { enabled: false },
+        stroke: {
+            curve: 'smooth',
+            width: 2,
+            colors: [chartColor],
+            lineCap: 'round'
+        },
+        grid: {
+            show: true,
+            borderColor: '#EEF2F7',
+            strokeDashArray: 4,
+            position: 'back',
+            xaxis: { lines: { show: false } },
+            yaxis: { lines: { show: false } },
+            padding: { top: -10, right: 4, bottom: -6, left: 4 }
+        },
+        fill: {
+            type: 'gradient',
+            colors: [chartColor],
+            gradient: {
+                shade: 'light',
+                type: 'vertical',
+                shadeIntensity: 0.5,
+                gradientToColors: [chartColor + '00'],
+                inverseColors: false,
+                opacityFrom: 0.55,
+                opacityTo: 0.15,
+                stops: [0, 100]
+            }
+        },
+        markers: {
+            colors: [chartColor],
+            strokeColors: '#ffffff',
+            strokeWidth: 2,
+            size: 3,
+            hover: { size: 7 }
+        },
+        xaxis: {
+            categories: labels,
+            tickPlacement: 'on',
+            labels: {
+                show: true,
+                style: { fontSize: '10px' },
+                rotate: -35,
+                hideOverlappingLabels: true,
+                trim: true
+            },
+            tooltip: { enabled: false },
+            axisBorder: { show: false },
+            axisTicks: { show: false }
+        },
+        yaxis: {
+            labels: { show: false },
+            min: 0,
+            forceNiceScale: true
+        },
+        tooltip: {
+            enabled: true,
+            shared: false,
+            intersect: false,
+            followCursor: true,
+            custom: function (opts) {
+                var idx = opts.dataPointIndex;
+                var weekLabel = labels[idx] || '-';
+                var users = userCounts[idx] !== undefined ? userCounts[idx] : 0;
+                var pct = (opts.series[opts.seriesIndex] && opts.series[opts.seriesIndex][idx] !== undefined)
+                    ? opts.series[opts.seriesIndex][idx]
+                    : 0;
+
+                return ''
+                    + '<div style="padding:10px 12px;min-width:150px;">'
+                    +   '<div style="font-size:11px;color:#6b7280;margin-bottom:4px;">Minggu ' + weekLabel + '</div>'
+                    +   '<div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:2px;">'
+                    +     formatUsers(users) + ' user aktif'
+                    +   '</div>'
+                    +   '<div style="font-size:12px;color:#487fff;font-weight:600;">'
+                    +     formatPct(pct) + '% partisipasi'
+                    +   '</div>'
+                    + '</div>';
+            }
+        }
+    };
+
+    var chart = null;
+
+    function syncChartHeight() {
+        if (!chart) {
+            return;
+        }
+        var nextHeight = resolveChartHeight();
+        if (nextHeight > 0) {
+            chart.updateOptions({ chart: { height: nextHeight } }, false, true);
+        }
+    }
+
+    requestAnimationFrame(function () {
+        chartOptions.chart.height = resolveChartHeight();
+        chart = new ApexCharts(el, chartOptions);
+        chart.render().then(syncChartHeight);
+    });
+
+    window.addEventListener('resize', syncChartHeight);
+})();
+</script>
+<script>
+(function () {
+    var el = document.querySelector('#barChart');
+    if (!el) {
+        return;
+    }
+
+    var series = @json($activityPatternSeries ?? []);
+    var categories = @json($activityPatternCategories ?? []);
+
+    function formatNumber(value) {
+        return Number(value || 0).toLocaleString('id-ID');
+    }
+
+    function collectValues(rows) {
+        var values = [];
+        rows.forEach(function (row) {
+            (row.data || []).forEach(function (cell) {
+                if (!cell || cell.empty === true || cell.y === null || cell.y === undefined) {
+                    return;
+                }
+                values.push(Number(cell.y) || 0);
+            });
+        });
+        return values;
+    }
+
+    function buildThresholds(values) {
+        var positive = values.filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; });
+        if (!positive.length) {
+            return [0, 1, 2, 3, 4];
+        }
+        var max = positive[positive.length - 1];
+        if (max <= 4) {
+            return [0, 1, 2, 3, max];
+        }
+        return [
+            0,
+            Math.max(1, Math.round(max * 0.2)),
+            Math.max(2, Math.round(max * 0.4)),
+            Math.max(3, Math.round(max * 0.6)),
+            Math.max(4, Math.round(max * 0.8))
+        ];
+    }
+
+    var thresholds = buildThresholds(collectValues(series));
+
+    function colorFor(value) {
+        var n = Number(value) || 0;
+        if (n <= 0) return '#E2E8F0';
+        if (n <= thresholds[1]) return '#ECFDF5';
+        if (n <= thresholds[2]) return '#A7F3D0';
+        if (n <= thresholds[3]) return '#6EE7B7';
+        if (n <= thresholds[4]) return '#34D399';
+        return '#059669';
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function updateLegend() {
+        var legend = document.querySelector('#activity-pattern-legend');
+        if (!legend) {
+            return;
+        }
+        var bands = [
+            { color: '#E2E8F0', border: '0', label: '0' },
+            { color: '#ECFDF5', border: '1px solid #D1FAE5', label: '1–' + formatNumber(thresholds[1]) },
+            { color: '#A7F3D0', border: '0', label: formatNumber(thresholds[1] + 1) + '–' + formatNumber(thresholds[2]) },
+            { color: '#6EE7B7', border: '0', label: formatNumber(thresholds[2] + 1) + '–' + formatNumber(thresholds[3]) },
+            { color: '#34D399', border: '0', label: formatNumber(thresholds[3] + 1) + '–' + formatNumber(thresholds[4]) },
+            { color: '#059669', border: '0', label: '>' + formatNumber(thresholds[4]) }
+        ];
+        var html = '<span class="text-xs fw-medium" style="color:#64748B;">Jumlah user aktif</span>';
+        bands.forEach(function (band) {
+            html += '<span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;">'
+                + '<span class="rounded-1" style="width:14px;height:14px;background:' + band.color + ';border:' + band.border + ';"></span>'
+                + band.label
+                + '</span>';
+        });
+        legend.innerHTML = html;
+    }
+
+    if (!series.length || !categories.length) {
+        el.innerHTML = '<p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data pola aktivitas untuk rentang ini.</p>';
+        return;
+    }
+
+    updateLegend();
+
+    // Calendar heatmap: Senin di atas → Minggu di bawah; kolom = minggu.
+    var ordered = series.slice();
+    var preferred = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    ordered.sort(function (a, b) {
+        return preferred.indexOf(a.name) - preferred.indexOf(b.name);
+    });
+
+    var colCount = categories.length;
+    var html = '';
+    html += '<div class="ap-heatmap-scroll">';
+    html += '<div class="ap-heatmap ap-heatmap--calendar" style="--ap-cols:' + colCount + ';">';
+
+    ordered.forEach(function (row) {
+        html += '<div class="ap-heatmap-ylabel">' + escapeHtml(row.name) + '</div>';
+        html += '<div class="ap-heatmap-row">';
+        (row.data || []).forEach(function (cell) {
+            var isEmpty = !cell || cell.empty === true || cell.y === null || cell.y === undefined;
+            if (isEmpty) {
+                html += '<div class="ap-heatmap-cell is-empty" aria-hidden="true"></div>';
+                return;
+            }
+            var value = Number(cell.y || 0);
+            var dateLabel = cell.date_label || cell.x || '';
+            var tip = escapeHtml(dateLabel) + ' | ' + formatNumber(value) + ' user aktif';
+            var zeroClass = value <= 0 ? ' is-zero' : '';
+            html += '<div class="ap-heatmap-cell' + zeroClass + '" style="background:' + colorFor(value) + ';"'
+                + ' data-tip="' + tip + '"'
+                + ' data-date="' + escapeHtml(cell.date || '') + '"'
+                + ' data-value="' + value + '"'
+                + ' role="img"'
+                + ' aria-label="' + tip + '">'
+                + '</div>';
+        });
+        html += '</div>';
+    });
+
+    html += '<div class="ap-heatmap-corner"></div>';
+    html += '<div class="ap-heatmap-xlabels">';
+    var prevMonth = '';
+    categories.forEach(function (label, idx) {
+        var parts = String(label).split(/\s+/);
+        var month = parts[1] || '';
+        var show = idx === 0 || month !== prevMonth;
+        prevMonth = month || prevMonth;
+        var text = show ? escapeHtml(label) : '';
+        html += '<div class="ap-heatmap-xlabel' + (show ? '' : ' is-muted') + '" title="Minggu mulai ' + escapeHtml(label) + '"><span>' + text + '</span></div>';
+    });
+    html += '</div>';
+    html += '</div>';
+    html += '</div>';
+    html += '<div class="ap-heatmap-tooltip" id="ap-heatmap-tooltip" hidden></div>';
+
+    el.innerHTML = html;
+
+    var tipEl = el.querySelector('#ap-heatmap-tooltip');
+    el.querySelectorAll('.ap-heatmap-cell:not(.is-empty)').forEach(function (cell) {
+        cell.addEventListener('mouseenter', function () {
+            if (!tipEl) return;
+            tipEl.textContent = cell.getAttribute('data-tip') || '';
+            tipEl.hidden = false;
+            var rect = cell.getBoundingClientRect();
+            var host = el.getBoundingClientRect();
+            tipEl.style.left = (rect.left - host.left + rect.width / 2) + 'px';
+            tipEl.style.top = (rect.top - host.top - 8) + 'px';
+        });
+        cell.addEventListener('mouseleave', function () {
+            if (tipEl) tipEl.hidden = true;
+        });
+    });
+})();
+</script>
+<style>
+.activity-pattern-card {
+  min-height: 100%;
+}
+.activity-pattern-side {
+  min-height: 100%;
+}
+.activity-pattern-metric {
+  border: 1px solid #E2E8F0;
+  background: #F8FFFC;
+  border-radius: 12px;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.activity-pattern-metric__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 20px;
+  background: #ECFDF5;
+  color: #10B981;
+}
+.activity-pattern-metric__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.activity-pattern-metric__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748B;
+  line-height: 1.25;
+}
+.activity-pattern-metric__value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0F172A;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.activity-pattern-metric__sub {
+  margin-top: 0;
+  font-size: 12px;
+  color: #64748B;
+  line-height: 1.3;
+}
+.activity-pattern-heatmap {
+  position: relative;
+}
+.activity-pattern-heatmap .ap-heatmap-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+}
+.activity-pattern-heatmap .ap-heatmap {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-rows: repeat(7, minmax(18px, 1fr)) 28px;
+  gap: 3px 8px;
+  align-items: stretch;
+  overflow: visible;
+  height: 100%;
+  min-height: 240px;
+  min-width: max(100%, calc(58px + var(--ap-cols) * 14px));
+}
+.activity-pattern-heatmap .ap-heatmap--calendar {
+  max-width: none;
+  width: 100%;
+}
+#barChart.activity-pattern-heatmap {
+  overflow: visible;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+}
+#barChart.activity-pattern-heatmap .ap-heatmap {
+  flex: 1 1 auto;
+}
+.activity-pattern-heatmap .ap-heatmap-corner { min-height: 24px; }
+.activity-pattern-heatmap .ap-heatmap-xlabels {
+  display: grid;
+  grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
+  gap: 3px;
+  min-height: 24px;
+  align-items: center;
+  overflow: visible;
+}
+.activity-pattern-heatmap .ap-heatmap-xlabel {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  overflow: visible;
+}
+.activity-pattern-heatmap .ap-heatmap-xlabel span {
+  display: inline-block;
+  font-size: 10px;
+  line-height: 1.2;
+  color: #64748B;
+  font-weight: 500;
+  white-space: nowrap;
+  transform: none;
+  margin: 0;
+}
+.activity-pattern-heatmap .ap-heatmap-xlabel.is-muted span {
+  opacity: 0;
+}
+.activity-pattern-heatmap .ap-heatmap-ylabel {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748B;
+  white-space: nowrap;
+}
+.activity-pattern-heatmap .ap-heatmap-row {
+  display: grid;
+  grid-template-columns: repeat(var(--ap-cols), minmax(0, 1fr));
+  gap: 3px;
+  height: 100%;
+  min-height: 16px;
+}
+.activity-pattern-heatmap .ap-heatmap-cell {
+  height: 100%;
+  min-height: 16px;
+  width: 100%;
+  justify-self: stretch;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,.75);
+  cursor: default;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.activity-pattern-heatmap .ap-heatmap-cell:not(.is-empty):hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.35);
+  z-index: 1;
+  position: relative;
+}
+.activity-pattern-heatmap .ap-heatmap-cell.is-empty,
+.activity-pattern-heatmap .ap-heatmap-cell.is-zero {
+  background: #E2E8F0 !important;
+  border: 1px solid rgba(255,255,255,.75);
+  box-shadow: none;
+  cursor: default;
+}
+.activity-pattern-heatmap .ap-heatmap-cell.is-empty:hover,
+.activity-pattern-heatmap .ap-heatmap-cell.is-zero:hover {
+  transform: none;
+  box-shadow: none;
+}
+.activity-pattern-heatmap .ap-heatmap-tooltip {
+  position: absolute;
+  z-index: 20;
+  transform: translate(-50%, -100%);
+  background: #0F172A;
+  color: #F8FAFC;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  padding: 8px 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
+}
+.activity-pattern-heatmap .ap-heatmap-tooltip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #0F172A;
+}
+@media (max-width: 768px) {
+  .activity-pattern-heatmap .ap-heatmap {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 4px 8px;
+    min-height: 220px;
+    max-width: 100%;
+  }
+  .activity-pattern-heatmap .ap-heatmap--calendar {
+    max-width: none;
+    width: 100%;
+  }
+  .activity-pattern-heatmap .ap-heatmap-cell {
+    min-height: 20px;
+    border-radius: 4px;
+  }
+  .activity-pattern-heatmap .ap-heatmap-xlabel span {
+    font-size: 10px;
+  }
+  .activity-pattern-heatmap .ap-heatmap-ylabel {
+    font-size: 11px;
+  }
+  .activity-pattern-metric__value {
+    font-size: 16px;
+  }
+}
+</style>
+<script>
+(function () {
+    var el = document.querySelector('#donutChart');
+    if (!el || typeof ApexCharts === 'undefined') {
+        return;
+    }
+
+    var series = @json($compositionSeries ?? []);
+    var labels = @json($compositionLabels ?? []);
+
+    if (!series.length) {
+        series = [0, 0, 0];
+    }
+    if (!labels.length) {
+        labels = ['Olahraga', 'Nutrisi', 'Sosial'];
+    }
+
+    new ApexCharts(el, {
+        series: series,
+        colors: ['#45B369', '#FF9F29', '#487FFF'],
+        labels: labels,
+        legend: { show: false },
+        chart: {
+            type: 'donut',
+            height: 300,
+            sparkline: { enabled: true },
+            margin: { top: -100, right: -100, bottom: -100, left: -100 },
+            padding: { top: -100, right: -100, bottom: -100, left: -100 }
+        },
+        stroke: { width: 0 },
+        dataLabels: { enabled: false },
+        responsive: [{
+            breakpoint: 480,
+            options: {
+                chart: { width: 200 },
+                legend: { position: 'bottom' }
+            }
+        }],
+        plotOptions: {
+            pie: {
+                startAngle: -90,
+                endAngle: 90,
+                offsetY: 10,
+                customScale: 0.8,
+                donut: {
+                    size: '70%',
+                    labels: {
+                        show: true,
+                        total: {
+                            showAlways: true,
+                            show: true,
+                            label: 'Laporan Aktivitas',
+                            formatter: function () {
+                                return '';
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        tooltip: {
+            y: {
+                formatter: function (value) {
+                    return value + ' user';
+                }
+            }
+        }
+    }).render();
+})();
+</script>
+<script>
+(function () {
+    var el = document.querySelector('#paymentStatusChart');
+    if (!el || typeof ApexCharts === 'undefined') {
+        return;
+    }
+
+    var labels = @json($weeklyActivityLabels ?? []);
+    var makanan = @json($weeklyMakananSeries ?? []);
+    var olahraga = @json($weeklyOlahragaSeries ?? []);
+    var sosial = @json($weeklySosialSeries ?? []);
+
+    if (!labels.length) {
+        labels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+    }
+    if (!makanan.length) {
+        makanan = [0, 0, 0, 0, 0, 0, 0];
+    }
+    if (!olahraga.length) {
+        olahraga = [0, 0, 0, 0, 0, 0, 0];
+    }
+    if (!sosial.length) {
+        sosial = [0, 0, 0, 0, 0, 0, 0];
+    }
+
+    new ApexCharts(el, {
+        series: [
+            { name: 'Makanan', data: makanan },
+            { name: 'Olahraga', data: olahraga },
+            { name: 'Sosial', data: sosial }
+        ],
+        colors: ['#45B369', '#144bd6', '#FF9F29'],
+        legend: { show: false },
+        chart: {
+            type: 'bar',
+            height: 350,
+            toolbar: { show: false }
+        },
+        grid: {
+            show: true,
+            borderColor: '#D1D5DB',
+            strokeDashArray: 4,
+            position: 'back'
+        },
+        plotOptions: {
+            bar: {
+                borderRadius: 4,
+                columnWidth: 8
+            }
+        },
+        dataLabels: { enabled: false },
+        states: {
+            hover: {
+                filter: { type: 'none' }
+            }
+        },
+        stroke: {
+            show: true,
+            width: 0,
+            colors: ['transparent']
+        },
+        xaxis: {
+            categories: labels
+        },
+        yaxis: {
+            labels: {
+                formatter: function (value) {
+                    return Math.round(value);
+                }
+            }
+        },
+        fill: {
+            opacity: 1
+        },
+        tooltip: {
+            y: {
+                formatter: function (value) {
+                    return value + ' aktivitas';
+                }
+            }
+        }
+    }).render();
+})();
+</script>
+<script>
+(function () {
+    var mitraMode = @json((bool) ($mitraMode ?? false));
+    var mitraScope = @json($mitraScope) || {site: '', perusahaan: '', companies: [], pairs: []};
+    window.evaluasiWellAppendMitraScope = function (target, mode, scope) {
+        target = target || {};
+        if (!mode || !scope) {
+            return target;
+        }
+        if (Array.isArray(scope.companies) && scope.companies.length) {
+            target.companies = JSON.stringify(scope.companies);
+            if (Array.isArray(scope.pairs) && scope.pairs.length) {
+                target.pairs = JSON.stringify(scope.pairs);
+            }
+            return target;
+        }
+        if (scope.site) {
+            target.site = scope.site;
+        }
+        if (scope.perusahaan) {
+            target.perusahaan = scope.perusahaan;
+            target.company = scope.perusahaan;
+        }
+        return target;
+    };
+    window.evaluasiWellMitraHasMultiScope = function (scope) {
+        if (!scope) {
+            return false;
+        }
+        if (Array.isArray(scope.pairs) && scope.pairs.length > 1) {
+            return true;
+        }
+        var companies = Array.isArray(scope.companies) ? scope.companies : [];
+        if (companies.length > 1) {
+            return true;
+        }
+        return companies.length === 1 && Array.isArray(companies[0].sites) && companies[0].sites.length > 1;
+    };
+
+    var tableEl = document.querySelector('#notInstalledTable');
+    if (!tableEl || typeof DataTable === 'undefined') {
+        return;
+    }
+
+    if (DataTable.ext) {
+        DataTable.ext.errMode = 'none';
+    }
+
+    var employeeShowBase = @json(url('/evaluasi-well/employees'));
+    var dataUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.not-installed.data')
+            : ($ajaxRoutes['notInstalledData'] ?? route('evaluasi-well.not-installed.data'))
+    );
+    var exportUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.not-installed.export')
+            : ($ajaxRoutes['notInstalledExport'] ?? route('evaluasi-well.not-installed.export'))
+    );
+
+    var siteEl = document.querySelector('#not-installed-site');
+    var companyEl = document.querySelector('#not-installed-company');
+    var divisionEl = document.querySelector('#not-installed-division');
+    var departementEl = document.querySelector('#not-installed-departement');
+    var jabatanFungsionalEl = document.querySelector('#not-installed-jabatan-fungsional');
+    var installEl = document.querySelector('#not-installed-install');
+    var userAktifEl = document.querySelector('#not-installed-user-aktif');
+    var applyBtn = document.querySelector('#not-installed-apply-btn');
+    var resetBtn = document.querySelector('#not-installed-reset-btn');
+    var exportBtn = document.querySelector('#not-installed-export-btn');
+    var totalBadge = document.querySelector('#not-installed-total-badge');
+
+    if (mitraMode) {
+        var hasMultiScope = window.evaluasiWellMitraHasMultiScope(mitraScope);
+        if (siteEl) {
+            if (!hasMultiScope && mitraScope.site && !Array.from(siteEl.options).some(function (opt) { return opt.value === mitraScope.site; })) {
+                siteEl.appendChild(new Option(mitraScope.site, mitraScope.site, true, true));
+            }
+            siteEl.value = hasMultiScope ? '' : (mitraScope.site || '');
+            siteEl.disabled = true;
+        }
+        if (companyEl) {
+            if (!hasMultiScope && mitraScope.perusahaan && !Array.from(companyEl.options).some(function (opt) { return opt.value === mitraScope.perusahaan; })) {
+                companyEl.appendChild(new Option(mitraScope.perusahaan, mitraScope.perusahaan, true, true));
+            }
+            companyEl.value = hasMultiScope ? '' : (mitraScope.perusahaan || '');
+            companyEl.disabled = true;
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function currentFilters() {
+        var filters = {
+            site: mitraMode ? '' : (siteEl ? siteEl.value : ''),
+            company: mitraMode ? '' : (companyEl ? companyEl.value : ''),
+            division: divisionEl ? divisionEl.value.trim() : '',
+            departement: departementEl ? departementEl.value.trim() : '',
+            jabatan_fungsional: jabatanFungsionalEl ? jabatanFungsionalEl.value : '',
+            install: installEl ? installEl.value : 'belum',
+            user_aktif: userAktifEl ? userAktifEl.value : ''
+        };
+        return window.evaluasiWellAppendMitraScope(filters, mitraMode, mitraScope);
+    }
+
+    function updateExportHref() {
+        if (!exportBtn) {
+            return;
+        }
+        var filters = currentFilters();
+        var params = new URLSearchParams();
+        Object.keys(filters).forEach(function (key) {
+            if (filters[key]) {
+                params.set(key, filters[key]);
+            }
+        });
+        if (mitraMode && mitraScope.perusahaan && !filters.companies) {
+            params.set('perusahaan', mitraScope.perusahaan);
+        }
+
+        var search = table.search();
+        if (search) {
+            params.set('search', search);
+        }
+
+        var query = params.toString();
+        if (!query) {
+            exportBtn.href = exportUrl;
+            return;
+        }
+        exportBtn.href = exportUrl + (exportUrl.indexOf('?') >= 0 ? '&' : '?') + query;
+    }
+
+    function badgeHtml(label, className) {
+        return '<span class="' + className + ' px-16 py-4 rounded-pill fw-medium text-sm">'
+            + escapeHtml(label)
+            + '</span>';
+    }
+
+    var table = new DataTable(tableEl, {
+        processing: true,
+        serverSide: true,
+        searching: true,
+        ordering: true,
+        pageLength: 10,
+        lengthMenu: [10, 25, 50, 100],
+        order: [[0, 'asc']],
+        autoWidth: false,
+        scrollX: false,
+        layout: {
+            topStart: 'pageLength',
+            topEnd: 'search',
+            bottomStart: 'info',
+            bottomEnd: 'paging'
+        },
+        columnDefs: [
+            { targets: 0, width: '20%' },
+            { targets: 1, width: '18%' },
+            { targets: 2, width: '18%' },
+            { targets: 3, width: '18%' },
+            { targets: 4, width: '13%', className: 'text-center' },
+            { targets: 5, width: '13%', className: 'text-center' }
+        ],
+        ajax: {
+            url: dataUrl,
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            data: function (d) {
+                var filters = currentFilters();
+                d.site = filters.site;
+                d.company = filters.company;
+                if (mitraMode && filters.company) {
+                    d.perusahaan = filters.company;
+                }
+                d.division = filters.division;
+                d.departement = filters.departement;
+                d.jabatan_fungsional = filters.jabatan_fungsional;
+                d.install = filters.install;
+                d.user_aktif = filters.user_aktif;
+            },
+            error: function (xhr, error) {
+                if (typeof console !== 'undefined' && console.error) {
+                    console.error('Status Install Karyawan: gagal memuat data', error, xhr && xhr.status);
+                }
+            }
+        },
+        columns: [
+            {
+                data: 'nama',
+                render: function (data, type, row) {
+                    if (type !== 'display') {
+                        return data;
+                    }
+                    return '<a href="' + employeeShowBase + '/' + row.id + '" class="text-primary-light hover-text-primary fw-medium">'
+                        + escapeHtml(data)
+                        + '</a>'
+                        + '<span class="text-sm d-block fw-normal text-secondary-light">'
+                        + escapeHtml(row.kode_sid)
+                        + '</span>';
+                }
+            },
+            { data: 'company' },
+            { data: 'departement' },
+            { data: 'divisi' },
+            {
+                data: 'install',
+                render: function (data, type, row) {
+                    if (type !== 'display') {
+                        return data;
+                    }
+                    return badgeHtml(data, row.install_class);
+                }
+            },
+            {
+                data: 'user_aktif',
+                render: function (data, type, row) {
+                    if (type !== 'display') {
+                        return data;
+                    }
+                    return badgeHtml(data, row.user_aktif_class);
+                }
+            }
+        ],
+        language: {
+            processing: 'Memuat...',
+            search: 'Cari:',
+            lengthMenu: 'Tampilkan _MENU_ data',
+            info: 'Menampilkan _START_–_END_ dari _TOTAL_ data',
+            infoEmpty: 'Tidak ada data',
+            infoFiltered: '(difilter dari _MAX_ total data)',
+            zeroRecords: 'Tidak ada data untuk filter ini.',
+            paginate: {
+                first: '«',
+                last: '»',
+                next: '›',
+                previous: '‹'
+            }
+        }
+    });
+
+    function forceFullWidthTable() {
+        tableEl.style.setProperty('width', '100%', 'important');
+        tableEl.removeAttribute('width');
+
+        var colgroup = tableEl.querySelector('colgroup');
+        if (colgroup) {
+            colgroup.remove();
+        }
+
+        var container = tableEl.closest('.dt-container');
+        if (container) {
+            container.style.setProperty('width', '100%', 'important');
+            var layoutTable = container.querySelector('.dt-layout-table');
+            if (layoutTable) {
+                layoutTable.style.setProperty('width', '100%', 'important');
+            }
+        }
+    }
+
+    table.on('init', function () {
+        forceFullWidthTable();
+
+        var container = tableEl.closest('.dt-container');
+        var searchInput = container ? container.querySelector('.dt-search input') : null;
+        if (searchInput) {
+            searchInput.setAttribute('placeholder', 'Cari nama / SID / departemen / divisi...');
+            searchInput.classList.add('form-control', 'form-control-sm');
+        }
+    });
+
+    table.on('draw', function () {
+        forceFullWidthTable();
+        if (totalBadge) {
+            totalBadge.textContent = Number(table.page.info().recordsDisplay || 0).toLocaleString('id-ID');
+        }
+        updateExportHref();
+    });
+
+    table.on('search.dt', function () {
+        updateExportHref();
+    });
+
+    if (applyBtn) {
+        applyBtn.addEventListener('click', function () {
+            table.ajax.reload();
+            updateExportHref();
+        });
+    }
+
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+            if (siteEl) siteEl.value = mitraMode ? (window.evaluasiWellMitraHasMultiScope(mitraScope) ? '' : (mitraScope.site || '')) : '';
+            if (companyEl) companyEl.value = mitraMode ? (window.evaluasiWellMitraHasMultiScope(mitraScope) ? '' : (mitraScope.perusahaan || '')) : '';
+            if (divisionEl) divisionEl.value = '';
+            if (departementEl) departementEl.value = '';
+            if (jabatanFungsionalEl) jabatanFungsionalEl.value = '';
+            if (installEl) installEl.value = 'belum';
+            if (userAktifEl) userAktifEl.value = '';
+            table.search('');
+            table.ajax.reload();
+            updateExportHref();
+        });
+    }
+
+    if (divisionEl) {
+        divisionEl.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                table.ajax.reload();
+                updateExportHref();
+            }
+        });
+    }
+
+    if (departementEl) {
+        departementEl.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                table.ajax.reload();
+                updateExportHref();
+            }
+        });
+    }
+
+    updateExportHref();
+})();
+</script>
+<script>
+(function () {
+    var tableEl = document.querySelector('#wellnessMetricsTable');
+    if (!tableEl || typeof DataTable === 'undefined') {
+        return;
+    }
+
+    if (DataTable.ext) {
+        DataTable.ext.errMode = 'none';
+    }
+
+    var mitraMode = @json((bool) ($mitraMode ?? false));
+    var mitraScope = @json($mitraScope) || {site: '', perusahaan: '', companies: [], pairs: []};
+    var employeeShowBase = @json(url('/evaluasi-well/employees'));
+    var kpiUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.wellness-metrics.kpi')
+            : ($ajaxRoutes['wellnessMetricsKpi'] ?? route('evaluasi-well.wellness-metrics.kpi'))
+    );
+    var dataUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.wellness-metrics.data')
+            : ($ajaxRoutes['wellnessMetricsData'] ?? route('evaluasi-well.wellness-metrics.data'))
+    );
+    var exportUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.wellness-metrics.export')
+            : ($ajaxRoutes['wellnessMetricsExport'] ?? route('evaluasi-well.wellness-metrics.export'))
+    );
+
+    var dateFromEl = document.querySelector('#wellness-date-from');
+    var dateToEl = document.querySelector('#wellness-date-to');
+    var defaultWellnessDateFrom = @json($wellnessWeek['start'] ?? '');
+    var defaultWellnessDateTo = @json($wellnessWeek['end'] ?? '');
+    var siteEl = document.querySelector('#wellness-site');
+    var companyEl = document.querySelector('#wellness-company');
+    var applyBtn = document.querySelector('#wellness-apply-btn');
+    var resetBtn = document.querySelector('#wellness-reset-btn');
+    var exportBtn = document.querySelector('#wellness-export-btn');
+    var totalBadge = document.querySelector('#wellness-total-badge');
+    var weekLabelEl = document.querySelector('#wellness-week-label');
+
+    var wellnessChartsInitial = @json($wellnessCharts ?? null);
+    var wellnessChartInstances = {
+        topSports: null,
+        duration: null,
+        frequency: null,
+        calorie: null,
+        macro: null
+    };
+    var durationLegendMeta = [
+        { icon: 'mdi:timer-outline', color: '#3B82F6' },
+        { icon: 'mdi:timer-outline', color: '#16A34A' },
+        { icon: 'mdi:close-circle', color: '#F97316' }
+    ];
+    var frequencyLegendMeta = [
+        { icon: 'mdi:calendar-check', color: '#3B82F6' },
+        { icon: 'mdi:calendar-check', color: '#16A34A' },
+        { icon: 'mdi:close', color: '#F97316' }
+    ];
+    var calorieLegendMeta = [
+        { icon: 'mdi:arrow-up-bold', color: '#3B82F6' },
+        { icon: 'mdi:check-bold', color: '#16A34A' },
+        { icon: 'mdi:arrow-down-bold', color: '#F97316' },
+        { icon: 'mdi:close-circle', color: '#DC2626' }
+    ];
+    var macroIconMap = {
+        Protein: { icon: 'mdi:food-steak', color: '#16A34A' },
+        Karbohidrat: { icon: 'mdi:rice', color: '#94A3B8' },
+        Lemak: { icon: 'mdi:oil', color: '#F97316' },
+        Serat: { icon: 'mdi:leaf', color: '#94A3B8' }
+    };
+
+    function destroyChart(key) {
+        if (wellnessChartInstances[key]) {
+            wellnessChartInstances[key].destroy();
+            wellnessChartInstances[key] = null;
+        }
+    }
+
+    function setBadgeHtml(elId, text) {
+        var el = document.getElementById(elId);
+        if (!el) return;
+        var valueEl = el.querySelector('.wc-card__badge-value');
+        if (valueEl) {
+            var match = String(text || '').match(/([\d.,]+)\s*$/);
+            valueEl.textContent = match ? match[1] : text;
+            return;
+        }
+        var span = el.querySelector('span:not(.wc-card__badge-copy):not(.wc-card__badge-label):not(.wc-card__badge-value)');
+        if (span) {
+            span.textContent = text;
+            return;
+        }
+        el.appendChild(document.createTextNode(text));
+    }
+
+    function setStackedBadgeValue(elId, total) {
+        var valueEl = document.querySelector('#' + elId + ' .wc-card__badge-value')
+            || document.getElementById(elId + '-value');
+        if (valueEl) {
+            valueEl.textContent = formatNum(total, 0);
+        }
+    }
+
+    function sportIconFor(label) {
+        var l = String(label || '').toLowerCase();
+        if (l.indexOf('jalan') !== -1) return 'mdi:shoe-sneaker';
+        if (l.indexOf('lari') !== -1 || l.indexOf('run') !== -1) return 'mdi:run';
+        if (l.indexOf('workout') !== -1) return 'mdi:dumbbell';
+        if (l.indexOf('gym') !== -1 || l.indexOf('strength') !== -1 || l.indexOf('angkat') !== -1) return 'mdi:arm-flex';
+        if (l.indexOf('sepeda') !== -1 || l.indexOf('bike') !== -1) return 'mdi:bike';
+        if (l.indexOf('renang') !== -1 || l.indexOf('swim') !== -1) return 'mdi:swim';
+        if (l.indexOf('badminton') !== -1) return 'mdi:badminton';
+        if (l.indexOf('futsal') !== -1 || l.indexOf('sepak') !== -1) return 'mdi:soccer';
+        if (l.indexOf('yoga') !== -1) return 'mdi:yoga';
+        return 'mdi:walk';
+    }
+
+    function renderAxisTicks(elId, maxValue, isPercent, tickCount) {
+        var el = document.getElementById(elId);
+        if (!el) return;
+        var ticks = tickCount || 6;
+        var max = Math.max(Number(maxValue) || 1, 1);
+        el.style.setProperty('--wc-ticks', String(ticks));
+        var html = '';
+        for (var i = 0; i < ticks; i++) {
+            var val = (max / (ticks - 1)) * i;
+            var label = isPercent
+                ? formatNum(val, val >= 10 ? 0 : 1) + '%'
+                : formatNum(Math.round(val), 0);
+            html += '<span class="wc-axis__tick">' + label + '</span>';
+        }
+        el.innerHTML = html;
+    }
+
+    function renderBucketLegend(elId, items, meta) {
+        var el = document.getElementById(elId);
+        if (!el) return;
+        var withDot = el.classList.contains('wc-legend--frequency') || el.classList.contains('wc-legend--dot');
+        el.innerHTML = (items || []).map(function (item, i) {
+            var m = (meta && meta[i]) ? meta[i] : { icon: 'mdi:circle', color: '#94A3B8' };
+            var color = m.color || '#94A3B8';
+            var count = Number(item.count) || 0;
+            if (count <= 0) {
+                color = '#94A3B8';
+            }
+            var dot = withDot
+                ? '<span class="wc-legend__dot" style="background:' + color + ';"></span>'
+                : '';
+            return '<li class="wc-legend__item ' + (i < items.length - 1 ? 'mb-16' : '') + '">'
+                + dot
+                + '<span class="wc-legend__icon" style="background:' + color + '"><iconify-icon icon="' + (m.icon || 'mdi:circle') + '"></iconify-icon></span>'
+                + '<div class="min-w-0">'
+                + '<p class="wc-legend__title">' + escapeHtml(item.label) + '</p>'
+                + '<p class="wc-legend__meta">' + formatNum(item.pct, 1) + '% (' + formatNum(count, 0) + ' karyawan)</p>'
+                + '</div></li>';
+        }).join('');
+    }
+
+    function renderDonutChart(key, elId, legendId, items, legendMeta, badgeId, totalEmployees) {
+        var el = document.getElementById(elId);
+        if (!el || typeof ApexCharts === 'undefined') return;
+        destroyChart(key);
+        var series = (items || []).map(function (item) { return Number(item.count) || 0; });
+        var labels = (items || []).map(function (item) { return item.label; });
+        var colors = (legendMeta || []).map(function (m, i) {
+            var count = Number((items || [])[i] && (items || [])[i].count) || 0;
+            if (count <= 0) return '#CBD5E1';
+            return m.color;
+        });
+        var total = Number(totalEmployees) || series.reduce(function (a, b) { return a + b; }, 0);
+        if (badgeId) {
+            var badgeEl = document.getElementById(badgeId);
+            if (badgeEl && badgeEl.classList.contains('wc-card__badge--stack')) {
+                setStackedBadgeValue(badgeId, total);
+            } else {
+                setBadgeHtml(badgeId, 'Total Karyawan ' + formatNum(total, 0));
+            }
+        }
+
+        var hasData = series.some(function (v) { return v > 0; });
+        if (!hasData) {
+            el.innerHTML = '<p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data.</p>';
+            renderBucketLegend(legendId, items || [], legendMeta);
+            return;
+        }
+        el.innerHTML = '';
+        var isFrequency = key === 'frequency';
+        wellnessChartInstances[key] = new ApexCharts(el, {
+            series: series,
+            labels: labels,
+            chart: { type: 'donut', height: isFrequency ? 230 : 210, toolbar: { show: false } },
+            colors: colors,
+            legend: { show: false },
+            stroke: { width: 3, colors: ['#fff'] },
+            dataLabels: { enabled: false },
+            plotOptions: {
+                pie: {
+                    donut: {
+                        size: isFrequency ? '72%' : '70%',
+                        labels: {
+                            show: true,
+                            name: { show: true, fontSize: '13px', color: '#64748B', offsetY: -6 },
+                            value: {
+                                show: true,
+                                fontSize: isFrequency ? '24px' : '22px',
+                                fontWeight: 700,
+                                color: '#0F172A',
+                                offsetY: 8,
+                                formatter: function () { return formatNum(total, 0); }
+                            },
+                            total: {
+                                show: true,
+                                label: 'Karyawan',
+                                fontSize: '13px',
+                                fontWeight: 500,
+                                color: '#64748B',
+                                formatter: function () { return formatNum(total, 0); }
+                            }
+                        }
+                    }
+                }
+            },
+            tooltip: {
+                y: {
+                    formatter: function (value, opts) {
+                        var item = (items || [])[opts.seriesIndex] || {};
+                        return formatNum(value, 0) + ' karyawan (' + formatNum(item.pct || 0, 1) + '%)';
+                    }
+                }
+            }
+        });
+        wellnessChartInstances[key].render();
+        renderBucketLegend(legendId, items || [], legendMeta);
+    }
+
+    function renderTopSportsChart(items, totalEmployees, sportParticipants) {
+        var el = document.getElementById('wellness-chart-top-sports');
+        var emptyEl = document.getElementById('wellness-chart-top-sports-empty');
+        var countEl = document.getElementById('wellness-chart-top-sports-badge-text');
+        var deltaEl = null;
+        if (!el) return;
+        destroyChart('topSports');
+
+        var rows = items || [];
+        var totalAktif = Number(totalEmployees) || 0;
+        var totalPartisipasi = Number(sportParticipants);
+        if (!Number.isFinite(totalPartisipasi) || totalPartisipasi < 0) {
+            totalPartisipasi = rows.reduce(function (sum, item) { return sum + (Number(item.count) || 0); }, 0);
+        }
+        var partisipasiPct = totalAktif > 0 ? (totalPartisipasi / totalAktif) * 100 : 0;
+        if (countEl) {
+            countEl.textContent = 'Total partisipasi olahraga ' + formatNum(totalPartisipasi, 0) + ' karyawan (' + formatNum(partisipasiPct, 1) + '%)';
+        }
+
+        if (!rows.length) {
+            el.innerHTML = '';
+            el.classList.add('d-none');
+            if (emptyEl) emptyEl.classList.remove('d-none');
+            renderAxisTicks('wellness-chart-top-sports-axis', 150, false, 6);
+            return;
+        }
+        el.classList.remove('d-none');
+        if (emptyEl) emptyEl.classList.add('d-none');
+
+        var maxCount = Math.max.apply(null, rows.map(function (item) { return Number(item.count) || 0; }).concat([1]));
+        var axisMax = Math.max(30, Math.ceil(maxCount / 30) * 30);
+
+        el.innerHTML = rows.map(function (item, idx) {
+            var count = Number(item.count) || 0;
+            var width = Math.max(3, Math.round((count / axisMax) * 100));
+            var soft = idx >= 3;
+            return '<div class="wc-top-sports__row">'
+                + '<span class="wc-top-sports__rank' + (soft ? ' is-muted' : '') + '">' + (idx + 1) + '</span>'
+                + '<span class="wc-top-sports__sport-icon"><iconify-icon icon="' + sportIconFor(item.label) + '"></iconify-icon></span>'
+                + '<span class="wc-top-sports__name" title="' + escapeHtml(item.label) + '">' + escapeHtml(item.label) + '</span>'
+                + '<div class="wc-top-sports__track"><div class="wc-top-sports__bar' + (soft ? ' is-soft' : '') + '" style="width:' + width + '%"></div></div>'
+                + '<span class="wc-top-sports__meta">' + formatNum(item.pct || 0, 1) + '% (' + formatNum(count, 0) + ')</span>'
+                + '</div>';
+        }).join('');
+        renderAxisTicks('wellness-chart-top-sports-axis', axisMax, false, 6);
+    }
+
+    function renderMacroChart(items, totalEmployees) {
+        var el = document.getElementById('wellness-chart-macro');
+        var insightEl = document.getElementById('wellness-chart-macro-insight');
+        if (!el) return;
+        destroyChart('macro');
+
+        var rows = (items || []).map(function (item) {
+            return {
+                label: item.label,
+                count: Number(item.count) || 0,
+                pct: Number(item.pct) || 0,
+                available: item.available !== false
+            };
+        });
+
+        if (!rows.length) {
+            el.innerHTML = '<p class="text-secondary-light text-sm mb-0 text-center py-40">Belum ada data makronutrien.</p>';
+            renderAxisTicks('wellness-chart-macro-axis', 1, true, 6);
+            return;
+        }
+
+        var maxPct = 0;
+        rows.forEach(function (item) {
+            if (item.pct > maxPct) maxPct = item.pct;
+        });
+        var scaleMax = maxPct <= 0 ? 1 : Math.max(1, Math.ceil(maxPct * 1.25 * 10) / 10);
+
+        el.innerHTML = rows.map(function (item) {
+            var meta = macroIconMap[item.label] || { icon: 'mdi:circle', color: '#16A34A' };
+            var fillPct = item.available === false ? 0 : Math.min(100, (item.pct / scaleMax) * 100);
+            var barColor = item.pct <= 0 || item.available === false ? '#E2E8F0' : meta.color;
+            var metaText = item.available === false
+                ? 'belum tersedia'
+                : (formatNum(item.pct, 1) + '% (' + formatNum(item.count, 0) + ' karyawan)');
+            return '<div class="wc-macro__row">'
+                + '<div class="wc-macro__label">'
+                +   '<span class="wc-macro__icon" style="background:' + meta.color + '"><iconify-icon icon="' + meta.icon + '"></iconify-icon></span>'
+                +   '<span>' + escapeHtml(item.label) + '</span>'
+                + '</div>'
+                + '<div class="wc-macro__track">'
+                +   '<div class="wc-macro__fill" style="width:' + Math.max(fillPct, item.pct > 0 ? 2 : 0) + '%;background:' + barColor + ';"></div>'
+                + '</div>'
+                + '<div class="wc-macro__meta">' + escapeHtml(metaText) + '</div>'
+                + '</div>';
+        }).join('');
+        renderAxisTicks('wellness-chart-macro-axis', scaleMax, true, 6);
+
+        if (insightEl) {
+            insightEl.textContent = 'Masih banyak karyawan yang belum memenuhi target makronutrien harian. Mari tingkatkan kesadaran akan pentingnya pola makan seimbang untuk mendukung kesehatan dan produktivitas.';
+        }
+    }
+
+    function renderWellnessCharts(charts) {
+        if (!charts) return;
+        var totalEmployees = Number(charts.total_employees) || 0;
+        var noSportBucket = (charts.duration_buckets || []).find(function (item) {
+            return /tidak ada/i.test(String(item.label || ''));
+        });
+        var sportParticipants = Math.max(
+            0,
+            totalEmployees - (noSportBucket ? (Number(noSportBucket.count) || 0) : 0)
+        );
+        renderTopSportsChart(charts.top_sports || [], totalEmployees, sportParticipants);
+        renderDonutChart('duration', 'wellness-chart-duration', 'wellness-chart-duration-legend', charts.duration_buckets || [], durationLegendMeta, 'wellness-chart-duration-badge', totalEmployees);
+        renderDonutChart('frequency', 'wellness-chart-frequency', 'wellness-chart-frequency-legend', charts.frequency_buckets || [], frequencyLegendMeta, 'wellness-chart-frequency-badge', totalEmployees);
+        renderDonutChart('calorie', 'wellness-chart-calorie', 'wellness-chart-calorie-legend', charts.calorie_buckets || [], calorieLegendMeta, 'wellness-chart-calorie-badge', totalEmployees);
+        renderMacroChart(charts.macro_attainment || [], totalEmployees);
+    }
+
+    if (mitraMode) {
+        var hasMultiScope = window.evaluasiWellMitraHasMultiScope(mitraScope);
+        if (siteEl) {
+            if (!hasMultiScope && mitraScope.site && !Array.from(siteEl.options).some(function (opt) { return opt.value === mitraScope.site; })) {
+                siteEl.appendChild(new Option(mitraScope.site, mitraScope.site, true, true));
+            }
+            siteEl.value = hasMultiScope ? '' : (mitraScope.site || '');
+            siteEl.disabled = true;
+        }
+        if (companyEl) {
+            if (!hasMultiScope && mitraScope.perusahaan && !Array.from(companyEl.options).some(function (opt) { return opt.value === mitraScope.perusahaan; })) {
+                companyEl.appendChild(new Option(mitraScope.perusahaan, mitraScope.perusahaan, true, true));
+            }
+            companyEl.value = hasMultiScope ? '' : (mitraScope.perusahaan || '');
+            companyEl.disabled = true;
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function formatNum(value, digits) {
+        return Number(value || 0).toLocaleString('id-ID', {
+            minimumFractionDigits: digits,
+            maximumFractionDigits: digits
+        });
+    }
+
+    function renderCalorieTargetBar(kaloriIn, targetKalori, pct) {
+        var target = Number(targetKalori) || 0;
+        var actual = Number(kaloriIn) || 0;
+        var percent = Number(pct) || 0;
+        var barWidth = Math.max(0, Math.min(100, percent));
+        var barColor = percent >= 100
+            ? 'rgba(22, 163, 74, 0.32)'
+            : (percent >= 50 ? 'rgba(59, 130, 246, 0.28)' : 'rgba(249, 115, 22, 0.28)');
+        return '<div class="wellness-databar-cell" style="position:relative; min-width:150px; height:22px; background:#F1F5F9; border-radius:4px; overflow:hidden;">'
+            + '<div style="position:absolute; inset:0 auto 0 0; height:100%; width:' + barWidth + '%; background:' + barColor + ';"></div>'
+            + '<span style="position:relative; z-index:1; display:flex; align-items:center; height:100%; padding:0 8px; font-size:12px; font-weight:500; color:#0F172A; white-space:nowrap;">'
+            + formatNum(actual, 0) + ' / ' + formatNum(target, 0) + ' kkal (' + formatNum(percent, 0) + '%)'
+            + '</span>'
+            + '</div>';
+    }
+
+    function currentFilters() {
+        var filters = {
+            date_from: dateFromEl ? dateFromEl.value : '',
+            date_to: dateToEl ? dateToEl.value : '',
+            site: mitraMode ? '' : (siteEl ? siteEl.value : ''),
+            company: mitraMode ? '' : (companyEl ? companyEl.value : '')
+        };
+        return window.evaluasiWellAppendMitraScope(filters, mitraMode, mitraScope);
+    }
+
+    function updateExportHref() {
+        if (!exportBtn) {
+            return;
+        }
+        var filters = currentFilters();
+        var params = new URLSearchParams();
+        Object.keys(filters).forEach(function (key) {
+            if (filters[key] !== undefined && filters[key] !== null && String(filters[key]) !== '') {
+                params.set(key, filters[key]);
+            }
+        });
+        var searchApi = table.search();
+        if (searchApi) {
+            params.set('search', searchApi);
+        }
+        exportBtn.href = exportUrl + (exportUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
+    }
+
+    function applyKpiPayload(payload) {
+        if (!payload) {
+            return;
+        }
+        var durasiEl = document.querySelector('#wellness-kpi-durasi');
+        var durasiInc = document.querySelector('#wellness-kpi-durasi-inc');
+        var intensitasEl = document.querySelector('#wellness-kpi-intensitas');
+        var intensitasDist = document.querySelector('#wellness-kpi-intensitas-dist');
+        var intensitasInc = document.querySelector('#wellness-kpi-intensitas-inc');
+        var frekuensiEl = document.querySelector('#wellness-kpi-frekuensi');
+        var frekuensiInc = document.querySelector('#wellness-kpi-frekuensi-inc');
+        var kaloriOut = document.querySelector('#wellness-kpi-kalori-out');
+        var kaloriIn = document.querySelector('#wellness-kpi-kalori-in');
+        var kaloriInc = document.querySelector('#wellness-kpi-kalori-inc');
+        var makroProtein = document.querySelector('#wellness-kpi-makro-protein');
+        var makroPcf = document.querySelector('#wellness-kpi-makro-pcf');
+        var makroInc = document.querySelector('#wellness-kpi-makro-inc');
+
+        if (durasiEl) {
+            durasiEl.innerHTML = formatNum(payload.durasi_total_minutes, 1) + ' <span class="text-sm fw-medium text-secondary-light">menit</span>';
+        }
+        if (durasiInc) {
+            durasiInc.textContent = '+' + formatNum(payload.durasi_increase, 1) + ' (' + formatNum(payload.durasi_increase_percent, 1) + '%)';
+        }
+        if (intensitasEl) {
+            intensitasEl.innerHTML = formatNum(payload.intensitas_avg_hr, 1) + ' <span class="text-sm fw-medium text-secondary-light">bpm</span>';
+        }
+        if (intensitasDist) {
+            intensitasDist.textContent = 'Low ' + formatNum(payload.intensitas_low, 0)
+                + ' · Med ' + formatNum(payload.intensitas_med, 0)
+                + ' · High ' + formatNum(payload.intensitas_high, 0);
+        }
+        if (intensitasInc) {
+            intensitasInc.textContent = '+' + formatNum(payload.intensitas_increase, 1) + ' (' + formatNum(payload.intensitas_increase_percent, 1) + '%)';
+        }
+        if (frekuensiEl) {
+            frekuensiEl.innerHTML = formatNum(payload.frekuensi_total, 0) + ' <span class="text-sm fw-medium text-secondary-light">sesi</span>';
+        }
+        if (frekuensiInc) {
+            frekuensiInc.textContent = '+' + formatNum(payload.frekuensi_increase, 0) + ' (' + formatNum(payload.frekuensi_increase_percent, 1) + '%)';
+        }
+        if (kaloriOut) {
+            kaloriOut.innerHTML = formatNum(payload.kalori_out, 1) + ' <span class="text-sm fw-medium text-secondary-light">kkal out</span>';
+        }
+        if (kaloriIn) {
+            kaloriIn.textContent = 'In ' + formatNum(payload.kalori_in, 1) + ' kkal';
+        }
+        if (kaloriInc) {
+            kaloriInc.textContent = '+' + formatNum(payload.kalori_increase, 1) + ' (' + formatNum(payload.kalori_increase_percent, 1) + '%)';
+        }
+        if (makroProtein) {
+            makroProtein.innerHTML = formatNum(payload.makro_protein, 1) + ' <span class="text-sm fw-medium text-secondary-light">g protein</span>';
+        }
+        if (makroPcf) {
+            makroPcf.textContent = 'Karbo ' + formatNum(payload.makro_carbs, 1) + ' g · Lemak ' + formatNum(payload.makro_fats, 1) + ' g';
+        }
+        if (makroInc) {
+            makroInc.textContent = '+' + formatNum(payload.makro_increase, 1) + ' (' + formatNum(payload.makro_increase_percent, 1) + '%)';
+        }
+        if (totalBadge && payload.user_count !== undefined) {
+            totalBadge.textContent = formatNum(payload.user_count, 0);
+        }
+        if (weekLabelEl && payload.week && payload.week.label) {
+            weekLabelEl.textContent = payload.week.label;
+        }
+        if (payload.charts) {
+            renderWellnessCharts(payload.charts);
+        }
+    }
+
+    function refreshKpi() {
+        var filters = currentFilters();
+        var params = new URLSearchParams();
+        Object.keys(filters).forEach(function (key) {
+            if (filters[key] !== undefined && filters[key] !== null && String(filters[key]) !== '') {
+                params.set(key, filters[key]);
+            }
+        });
+        fetch(kpiUrl + (kpiUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString(), {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        }).then(function (res) {
+            return res.ok ? res.json() : null;
+        }).then(function (payload) {
+            if (payload) {
+                applyKpiPayload(payload);
+            }
+        }).catch(function () {});
+    }
+
+    var table = new DataTable(tableEl, {
+        processing: true,
+        serverSide: true,
+        searching: true,
+        pageLength: 10,
+        lengthMenu: [10, 25, 50, 100],
+        order: [[0, 'asc']],
+        columnDefs: [
+            { orderable: false, targets: [4, 5, 6, 10] }
+        ],
+        ajax: {
+            url: dataUrl,
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            data: function (d) {
+                var filters = currentFilters();
+                d.date_from = filters.date_from;
+                d.date_to = filters.date_to;
+                d.site = filters.site;
+                d.company = filters.company;
+                if (mitraMode && filters.company) {
+                    d.perusahaan = filters.company;
+                }
+                if (filters.companies) {
+                    d.companies = filters.companies;
+                }
+                if (filters.pairs) {
+                    d.pairs = filters.pairs;
+                }
+            },
+            error: function (xhr, error) {
+                if (typeof console !== 'undefined' && console.error) {
+                    console.error('Metrik Wellness: gagal memuat data', error, xhr && xhr.status);
+                }
+            }
+        },
+        columns: [
+            {
+                data: 'nama',
+                render: function (data, type, row) {
+                    if (type !== 'display') {
+                        return data;
+                    }
+                    return '<a href="' + employeeShowBase + '/' + row.id + '" class="text-primary-light hover-text-primary fw-medium">'
+                        + escapeHtml(data)
+                        + '</a>';
+                }
+            },
+            { data: 'site' },
+            { data: 'perusahaan' },
+            { data: 'jabatan' },
+            {
+                data: 'durasi_minutes',
+                render: function (data) {
+                    return formatNum(data, 1);
+                }
+            },
+            {
+                data: 'avg_hr',
+                render: function (data) {
+                    return data === null || data === undefined ? '-' : formatNum(data, 1);
+                }
+            },
+            { data: 'intensitas' },
+            {
+                data: 'frekuensi',
+                render: function (data) {
+                    return formatNum(data, 0);
+                }
+            },
+            {
+                data: 'kalori_out',
+                render: function (data) {
+                    return formatNum(data, 1);
+                }
+            },
+            {
+                data: 'kalori_in',
+                render: function (data) {
+                    return formatNum(data, 1);
+                }
+            },
+            {
+                data: null,
+                render: function (data, type, row) {
+                    if (type !== 'display') {
+                        return Number(row.kalori_progress_pct) || 0;
+                    }
+                    return renderCalorieTargetBar(row.kalori_in, row.target_kalori, row.kalori_progress_pct);
+                }
+            },
+            {
+                data: 'protein_g',
+                render: function (data) {
+                    return formatNum(data, 1);
+                }
+            },
+            {
+                data: 'carbs_g',
+                render: function (data) {
+                    return formatNum(data, 1);
+                }
+            },
+            {
+                data: 'fats_g',
+                render: function (data) {
+                    return formatNum(data, 1);
+                }
+            }
+        ],
+        language: {
+            processing: 'Memuat...',
+            search: 'Cari:',
+            lengthMenu: 'Tampilkan _MENU_ data',
+            info: 'Menampilkan _START_–_END_ dari _TOTAL_ data',
+            infoEmpty: 'Tidak ada data',
+            infoFiltered: '(difilter dari _MAX_ total data)',
+            zeroRecords: 'Tidak ada data untuk filter ini.',
+            paginate: {
+                first: '«',
+                last: '»',
+                next: '›',
+                previous: '‹'
+            }
+        }
+    });
+
+    table.on('draw', function () {
+        if (totalBadge) {
+            totalBadge.textContent = Number(table.page.info().recordsDisplay || 0).toLocaleString('id-ID');
+        }
+        updateExportHref();
+    });
+
+    table.on('search.dt', function () {
+        updateExportHref();
+    });
+
+    function reloadAll() {
+        refreshKpi();
+        table.ajax.reload();
+        updateExportHref();
+    }
+
+    if (applyBtn) {
+        applyBtn.addEventListener('click', reloadAll);
+    }
+
+    if (dateFromEl) {
+        dateFromEl.addEventListener('change', reloadAll);
+    }
+    if (dateToEl) {
+        dateToEl.addEventListener('change', reloadAll);
+    }
+
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+            if (dateFromEl) {
+                dateFromEl.value = defaultWellnessDateFrom;
+            }
+            if (dateToEl) {
+                dateToEl.value = defaultWellnessDateTo;
+            }
+            if (siteEl) {
+                siteEl.value = mitraMode ? (window.evaluasiWellMitraHasMultiScope(mitraScope) ? '' : (mitraScope.site || '')) : '';
+            }
+            if (companyEl) {
+                companyEl.value = mitraMode ? (window.evaluasiWellMitraHasMultiScope(mitraScope) ? '' : (mitraScope.perusahaan || '')) : '';
+            }
+            table.search('');
+            reloadAll();
+        });
+    }
+
+    updateExportHref();
+    renderWellnessCharts(wellnessChartsInitial);
+})();
+</script>
+<script>
+(function () {
+    var modalEl = document.getElementById('installStatsModal');
+    if (!modalEl) {
+        return;
+    }
+
+    var dataUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.install-stats')
+            : ($ajaxRoutes['installStats'] ?? route('evaluasi-well.install-stats'))
+    );
+    var peopleDataUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.not-installed.data')
+            : ($ajaxRoutes['notInstalledData'] ?? route('evaluasi-well.not-installed.data'))
+    );
+    var exportUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.install-stats.export')
+            : ($ajaxRoutes['installStatsExport'] ?? route('evaluasi-well.install-stats.export'))
+    );
+    var employeeShowBase = @json(url('/evaluasi-well/employees'));
+    var mitraMode = @json((bool) ($mitraMode ?? false));
+    var mitraScope = @json($mitraScope) || {site: '', perusahaan: '', companies: [], pairs: []};
+    var cache = {};
+    var currentDimension = 'site';
+    var barChart = null;
+    var trendChart = null;
+    var overviewRendered = false;
+    var peopleTable = null;
+    var latestRows = [];
+    var filterOptionsReady = false;
+
+    function appendQuery(baseUrl, params) {
+        var url = new URL(baseUrl, window.location.origin);
+        Object.keys(params || {}).forEach(function (key) {
+            var value = params[key];
+            if (value === null || value === undefined || value === '') {
+                return;
+            }
+            url.searchParams.set(key, value);
+        });
+        return url.pathname + url.search + url.hash;
+    }
+
+    var loadingEl = document.getElementById('install-stats-loading');
+    var unavailableEl = document.getElementById('install-stats-unavailable');
+    var contentEl = document.getElementById('install-stats-content');
+    var messageEl = document.getElementById('install-stats-message');
+    var footnoteEl = document.getElementById('install-stats-footnote');
+    var overviewEl = document.getElementById('install-stats-overview');
+    var tableBody = document.querySelector('#install-stats-table tbody');
+    var tableEmptyEl = document.getElementById('install-stats-table-empty');
+    var chartEmptyEl = document.getElementById('install-stats-chart-empty');
+    var chartEl = document.getElementById('install-stats-bar');
+    var trendEl = document.getElementById('install-stats-trend');
+    var trendEmptyEl = document.getElementById('install-stats-trend-empty');
+    var trendSubtitleEl = document.getElementById('install-stats-trend-subtitle');
+    var tableWrapEl = document.querySelector('.install-stats-table-wrap');
+    var tableDimLabelEl = document.getElementById('install-stats-table-dim-label');
+    var detailTitleEl = document.getElementById('install-stats-detail-title');
+    var detailSubtitleEl = document.getElementById('install-stats-detail-subtitle');
+    var groupsHintEl = document.getElementById('install-stats-kpi-groups-hint');
+    var openStatusBtn = document.getElementById('install-stats-open-status-btn');
+    var cardEl = document.getElementById('total-user-install-card');
+    var peopleSubtitleEl = document.getElementById('install-people-subtitle');
+    var peopleTotalBadge = document.getElementById('install-people-total-badge');
+    var peopleTableEl = document.getElementById('installPeopleTable');
+
+    var globalSiteEl = document.getElementById('install-global-site');
+    var globalDivisionEl = document.getElementById('install-global-division');
+    var globalJabatanEl = document.getElementById('install-global-jabatan');
+    var globalCompanyEl = document.getElementById('install-global-company');
+    var globalDepartementEl = document.getElementById('install-global-departement');
+    var globalDepartementListEl = document.getElementById('install-global-departement-options');
+    var globalInstallEl = document.getElementById('install-global-install');
+    var globalApplyBtn = document.getElementById('install-global-apply-btn');
+    var globalResetBtn = document.getElementById('install-global-reset-btn');
+    var exportBtnEl = document.getElementById('install-stats-export-btn');
+    var peopleExportBtnEl = document.getElementById('install-people-export-btn');
+
+    var dimensionUnit = {
+        site: 'site',
+        divisi: 'grup divisi',
+        company: 'perusahaan',
+        departement: 'departemen',
+        jabatan: 'jabatan'
+    };
+
+    var dimensionLabels = {
+        site: 'Site',
+        divisi: 'Divisi',
+        company: 'Perusahaan (Minecon)',
+        departement: 'Departemen',
+        jabatan: 'Jabatan'
+    };
+
+    var dimensionToGlobalFilter = {
+        site: 'site',
+        divisi: 'division_group',
+        company: 'company',
+        departement: 'departement',
+        jabatan: 'jabatan'
+    };
+
+    function formatNumber(value) {
+        return Number(value || 0).toLocaleString('id-ID');
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function badgeHtml(label, className) {
+        return '<span class="' + className + ' px-12 py-4 rounded-pill fw-medium text-sm">'
+            + escapeHtml(label)
+            + '</span>';
+    }
+
+    function setLoading(isLoading) {
+        if (!loadingEl) {
+            return;
+        }
+        loadingEl.classList.toggle('d-none', !isLoading);
+        loadingEl.classList.toggle('is-visible', isLoading);
+    }
+
+    function adoptionBadgeClass(pct) {
+        if (pct >= 50) {
+            return { cls: ['bg-success-focus', 'text-success-main'], text: 'Baik' };
+        }
+        if (pct >= 25) {
+            return { cls: ['bg-warning-focus', 'text-warning-main'], text: 'Perlu dorongan' };
+        }
+        return { cls: ['bg-danger-focus', 'text-danger-main'], text: 'Rendah' };
+    }
+
+    function renderSummary(payload) {
+        var summary = payload.summary || {};
+        var installedEl = document.getElementById('install-stats-kpi-installed');
+        var notInstalledEl = document.getElementById('install-stats-kpi-not-installed');
+        var totalEl = document.getElementById('install-stats-kpi-total');
+        var adoptionEl = document.getElementById('install-stats-kpi-adoption');
+        var adoptionBadge = document.getElementById('install-stats-kpi-adoption-badge');
+        var kpiCardEl = document.getElementById('install-stats-kpi-card-total');
+
+        if (installedEl) installedEl.textContent = formatNumber(summary.installed);
+        if (notInstalledEl) notInstalledEl.textContent = formatNumber(summary.not_installed);
+        if (totalEl) totalEl.textContent = formatNumber(summary.total);
+        if (adoptionEl) adoptionEl.textContent = (summary.adoption_pct || 0) + '%';
+        if (kpiCardEl) kpiCardEl.textContent = formatNumber(summary.kpi_card_total);
+
+        if (adoptionBadge) {
+            var badge = adoptionBadgeClass(Number(summary.adoption_pct || 0));
+            adoptionBadge.className = 'text-xs fw-medium px-8 py-2 rounded-pill';
+            badge.cls.forEach(function (c) { adoptionBadge.classList.add(c); });
+            adoptionBadge.textContent = badge.text;
+        }
+
+        if (footnoteEl && payload.footnote) {
+            footnoteEl.textContent = payload.footnote;
+        }
+        if (tableDimLabelEl) {
+            tableDimLabelEl.textContent = payload.dimension_label || 'Site';
+        }
+        if (detailTitleEl) {
+            detailTitleEl.textContent = payload.dimension_label || 'Site';
+        }
+        if (detailSubtitleEl) {
+            detailSubtitleEl.textContent = formatNumber(summary.groups || 0) + ' ' +
+                (dimensionUnit[payload.dimension] || 'grup') +
+                ' · ' + formatNumber(summary.installed) + ' sudah install · ' +
+                formatNumber(summary.not_installed) + ' belum';
+        }
+        if (groupsHintEl) {
+            groupsHintEl.textContent = formatNumber(summary.groups || 0) + ' ' +
+                (dimensionUnit[payload.dimension] || 'grup') + ' pada dimensi aktif';
+        }
+
+        var tfootTotal = document.getElementById('install-stats-tfoot-total');
+        var tfootInstalled = document.getElementById('install-stats-tfoot-installed');
+        var tfootNotInstalled = document.getElementById('install-stats-tfoot-not-installed');
+        var tfootPct = document.getElementById('install-stats-tfoot-pct');
+        if (tfootTotal) tfootTotal.textContent = formatNumber(summary.total);
+        if (tfootInstalled) tfootInstalled.textContent = formatNumber(summary.installed);
+        if (tfootNotInstalled) tfootNotInstalled.textContent = formatNumber(summary.not_installed);
+        if (tfootPct) tfootPct.textContent = (summary.adoption_pct || 0) + '%';
+    }
+
+    function renderOverview(overview, activeDimension) {
+        if (!overviewEl) {
+            return;
+        }
+
+        overviewEl.innerHTML = '';
+        (overview || []).forEach(function (item) {
+            var col = document.createElement('div');
+            col.className = 'col-12 col-md-6 col-xl-3';
+
+            var card = document.createElement('div');
+            card.className = 'install-stats-dim-card radius-8 p-16 h-100' +
+                (item.dimension === activeDimension ? ' is-active' : '');
+            card.setAttribute('role', 'button');
+            card.setAttribute('tabindex', '0');
+            card.setAttribute('data-dimension', item.dimension);
+
+            var unit = dimensionUnit[item.dimension] || 'grup';
+            var badge = adoptionBadgeClass(Number(item.adoption_pct || 0));
+
+            card.innerHTML =
+                '<div class="d-flex align-items-start justify-content-between gap-2 mb-12">' +
+                    '<div class="d-flex align-items-center gap-2 min-w-0">' +
+                        '<span class="w-40-px h-40-px bg-primary-50 text-primary-600 radius-8 d-inline-flex align-items-center justify-content-center flex-shrink-0">' +
+                            '<iconify-icon icon="' + (item.icon || 'solar:chart-bold') + '" class="text-xl"></iconify-icon>' +
+                        '</span>' +
+                        '<div class="min-w-0">' +
+                            '<h6 class="mb-0 fw-semibold text-md text-truncate"></h6>' +
+                            '<span class="text-xs text-secondary-light"></span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<span class="text-xs fw-medium px-8 py-2 rounded-pill flex-shrink-0 ' + badge.cls.join(' ') + '"></span>' +
+                '</div>' +
+                '<div class="dim-meta mb-12">' +
+                    '<div class="dim-meta-item">' +
+                        '<div class="text-xs text-secondary-light mb-2">Total</div>' +
+                        '<div class="fw-semibold text-sm meta-total">0</div>' +
+                    '</div>' +
+                    '<div class="dim-meta-item">' +
+                        '<div class="text-xs text-secondary-light mb-2">Sudah</div>' +
+                        '<div class="fw-semibold text-sm text-primary-600 meta-installed">0</div>' +
+                    '</div>' +
+                    '<div class="dim-meta-item">' +
+                        '<div class="text-xs text-secondary-light mb-2">Belum</div>' +
+                        '<div class="fw-semibold text-sm text-warning-main meta-not-installed">0</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="d-flex align-items-center justify-content-between gap-2">' +
+                    '<span class="text-xs text-secondary-light text-truncate meta-top" title=""></span>' +
+                    '<span class="fw-bold text-md meta-pct flex-shrink-0">0%</span>' +
+                '</div>';
+
+            card.querySelector('h6').textContent = item.label || item.dimension;
+            card.querySelector('.text-xs.text-secondary-light').textContent =
+                formatNumber(item.groups) + ' ' + unit;
+            card.querySelector('.rounded-pill').textContent = badge.text;
+            card.querySelector('.meta-total').textContent = formatNumber(item.total);
+            card.querySelector('.meta-installed').textContent = formatNumber(item.installed);
+            card.querySelector('.meta-not-installed').textContent = formatNumber(item.not_installed);
+            card.querySelector('.meta-pct').textContent = (item.adoption_pct || 0) + '%';
+
+            var topText = 'Teratas: ' + (item.top_name || '-') +
+                ' (' + formatNumber(item.top_installed) + ')';
+            var topEl = card.querySelector('.meta-top');
+            topEl.textContent = topText;
+            topEl.setAttribute('title', topText);
+
+            card.addEventListener('click', function () {
+                loadDimension(item.dimension);
+            });
+            card.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    loadDimension(item.dimension);
+                }
+            });
+
+            col.appendChild(card);
+            overviewEl.appendChild(col);
+        });
+
+        overviewRendered = true;
+    }
+
+    function highlightOverview(dimension) {
+        if (!overviewEl) {
+            return;
+        }
+        overviewEl.querySelectorAll('.install-stats-dim-card').forEach(function (card) {
+            card.classList.toggle('is-active', card.getAttribute('data-dimension') === dimension);
+        });
+    }
+
+    function applyDetailHeight(height) {
+        var px = Math.max(300, Math.ceil(Number(height) || 300));
+        if (chartEl) {
+            chartEl.style.height = px + 'px';
+            chartEl.style.minHeight = px + 'px';
+            chartEl.style.maxHeight = px + 'px';
+        }
+        if (tableWrapEl) {
+            tableWrapEl.style.height = px + 'px';
+            tableWrapEl.style.minHeight = px + 'px';
+            tableWrapEl.style.maxHeight = px + 'px';
+        }
+    }
+
+    function renderDailyTrend(trend) {
+        if (!trendEl || typeof ApexCharts === 'undefined') {
+            return;
+        }
+
+        var labels = (trend && trend.labels) ? trend.labels : [];
+        var newInstalls = (trend && trend.new_installs) ? trend.new_installs : [];
+        var activeUsers = (trend && trend.active_users) ? trend.active_users : [];
+
+        if (trendSubtitleEl) {
+            trendSubtitleEl.textContent = (trend && trend.range_label)
+                ? ('4 minggu terakhir · ' + trend.range_label)
+                : '4 minggu terakhir (termasuk minggu berjalan)';
+        }
+
+        if (trendChart) {
+            trendChart.destroy();
+            trendChart = null;
+        }
+
+        if (!labels.length) {
+            if (trendEmptyEl) trendEmptyEl.classList.remove('d-none');
+            trendEl.classList.add('d-none');
+            return;
+        }
+        if (trendEmptyEl) trendEmptyEl.classList.add('d-none');
+        trendEl.classList.remove('d-none');
+
+        trendChart = new ApexCharts(trendEl, {
+            series: [
+                { name: 'Install Baru', data: newInstalls },
+                { name: 'Penggunaan (User Aktif)', data: activeUsers }
+            ],
+            chart: {
+                type: 'area',
+                height: 240,
+                toolbar: { show: false },
+                parentHeightOffset: 0,
+                zoom: { enabled: false }
+            },
+            stroke: { curve: 'smooth', width: 2 },
+            colors: ['#487FFF', '#45b369'],
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    shadeIntensity: 1,
+                    opacityFrom: 0.28,
+                    opacityTo: 0.04,
+                    stops: [0, 90, 100]
+                }
+            },
+            dataLabels: { enabled: false },
+            grid: {
+                borderColor: '#E5E7EB',
+                strokeDashArray: 4,
+                padding: { left: 8, right: 8 }
+            },
+            xaxis: {
+                categories: labels,
+                tickAmount: 8,
+                labels: {
+                    style: { fontSize: '10px' },
+                    rotate: -35,
+                    hideOverlappingLabels: true
+                }
+            },
+            yaxis: {
+                labels: {
+                    style: { fontSize: '10px' },
+                    formatter: function (value) {
+                        return formatNumber(value);
+                    }
+                }
+            },
+            legend: {
+                position: 'top',
+                horizontalAlign: 'left',
+                fontSize: '12px'
+            },
+            tooltip: {
+                shared: true,
+                y: {
+                    formatter: function (value) {
+                        return formatNumber(value) + ' user';
+                    }
+                }
+            }
+        });
+        trendChart.render();
+    }
+
+    function renderChart(payload) {
+        if (!chartEl || typeof ApexCharts === 'undefined') {
+            return;
+        }
+
+        var chart = payload.chart || {};
+        var categories = chart.categories || [];
+        var installed = chart.installed || [];
+        var notInstalled = chart.not_installed || [];
+        var hasData = categories.length > 0;
+
+        if (chartEmptyEl) {
+            chartEmptyEl.classList.toggle('d-none', hasData);
+        }
+        chartEl.classList.toggle('d-none', !hasData);
+
+        if (barChart) {
+            barChart.destroy();
+            barChart = null;
+        }
+
+        if (!hasData) {
+            applyDetailHeight(300);
+            return;
+        }
+
+        // Tinggi chart = tinggi tabel (kotak merah).
+        var height = Math.max(300, Math.min(520, categories.length * 34));
+        applyDetailHeight(height);
+
+        barChart = new ApexCharts(chartEl, {
+            series: [
+                { name: 'Sudah Install', data: installed },
+                { name: 'Belum Install', data: notInstalled }
+            ],
+            chart: {
+                type: 'bar',
+                height: height,
+                width: '100%',
+                stacked: true,
+                toolbar: { show: false },
+                parentHeightOffset: 0,
+                events: {
+                    dataPointSelection: function (event, chartContext, config) {
+                        var cats = (payload.chart && payload.chart.categories) ? payload.chart.categories : [];
+                        var name = cats[config.dataPointIndex] || '';
+                        if (name) {
+                            applyDimensionFilter(currentDimension, name);
+                        }
+                    }
+                }
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: true,
+                    borderRadius: 4,
+                    barHeight: '64%'
+                }
+            },
+            colors: ['#487FFF', '#FF9F29'],
+            dataLabels: { enabled: false },
+            grid: {
+                show: true,
+                borderColor: '#D1D5DB',
+                strokeDashArray: 4,
+                position: 'back',
+                padding: { left: 8, right: 8 }
+            },
+            xaxis: {
+                categories: categories,
+                labels: {
+                    formatter: function (value) {
+                        var n = Number(value);
+                        if (n >= 1000) {
+                            return (n / 1000).toFixed(0) + 'k';
+                        }
+                        return value;
+                    }
+                }
+            },
+            yaxis: {
+                labels: {
+                    style: { fontSize: '11px' },
+                    maxWidth: 120
+                }
+            },
+            legend: {
+                position: 'top',
+                horizontalAlign: 'left',
+                fontSize: '12px'
+            },
+            tooltip: {
+                y: {
+                    formatter: function (value) {
+                        return formatNumber(value) + ' orang';
+                    }
+                }
+            }
+        });
+        barChart.render().then(function () {
+            applyDetailHeight(height);
+        });
+    }
+
+    function readGlobalFilters() {
+        var filters = {
+            site: mitraMode ? '' : (globalSiteEl ? globalSiteEl.value : ''),
+            division_group: globalDivisionEl ? globalDivisionEl.value : '',
+            jabatan: globalJabatanEl ? globalJabatanEl.value : '',
+            company: mitraMode ? '' : (globalCompanyEl ? globalCompanyEl.value : ''),
+            departement: globalDepartementEl ? globalDepartementEl.value.trim() : '',
+            install: globalInstallEl ? globalInstallEl.value : ''
+        };
+        if (typeof window.evaluasiWellAppendMitraScope === 'function') {
+            return window.evaluasiWellAppendMitraScope(filters, mitraMode, mitraScope);
+        }
+        return filters;
+    }
+
+    function updateInstallStatsExportHref() {
+        var filters = readGlobalFilters();
+        var params = {
+            dimension: currentDimension || 'site'
+        };
+        if (filters.site) params.site = filters.site;
+        if (filters.division_group) params.division_group = filters.division_group;
+        if (filters.jabatan) params.jabatan = filters.jabatan;
+        if (filters.company) {
+            params.company = filters.company;
+            params.perusahaan = filters.company;
+        }
+        if (filters.companies) params.companies = filters.companies;
+        if (filters.pairs) params.pairs = filters.pairs;
+        if (filters.departement) params.departement = filters.departement;
+        if (filters.install) params.install = filters.install;
+        if (peopleTable && typeof peopleTable.search === 'function') {
+            var search = peopleTable.search();
+            if (search) {
+                params.search = search;
+            }
+        }
+
+        var href = appendQuery(exportUrl, params);
+        if (exportBtnEl) {
+            exportBtnEl.setAttribute('href', href);
+        }
+        if (peopleExportBtnEl) {
+            peopleExportBtnEl.setAttribute('href', href);
+        }
+    }
+
+    function filtersCacheKey(filters) {
+        return [
+            filters.site || '',
+            filters.division_group || '',
+            filters.jabatan || '',
+            filters.company || '',
+            filters.companies || '',
+            filters.pairs || '',
+            filters.departement || '',
+            filters.install || ''
+        ].join('|');
+    }
+
+    function fillSelectOptions(selectEl, values, allLabel, selectedValue) {
+        if (!selectEl) {
+            return;
+        }
+        var previous = selectedValue !== undefined ? selectedValue : selectEl.value;
+        selectEl.innerHTML = '';
+        var allOpt = document.createElement('option');
+        allOpt.value = '';
+        allOpt.textContent = allLabel;
+        selectEl.appendChild(allOpt);
+        (values || []).forEach(function (value) {
+            if (!value) {
+                return;
+            }
+            var opt = document.createElement('option');
+            opt.value = value;
+            opt.textContent = value;
+            selectEl.appendChild(opt);
+        });
+        if (previous && Array.prototype.some.call(selectEl.options, function (o) { return o.value === previous; })) {
+            selectEl.value = previous;
+        } else {
+            selectEl.value = '';
+        }
+    }
+
+    function populateGlobalFilterOptions(options) {
+        if (!options) {
+            return;
+        }
+        fillSelectOptions(globalSiteEl, options.sites || [], 'Semua Site');
+        fillSelectOptions(globalDivisionEl, options.division_groups || [], 'Semua Divisi');
+        fillSelectOptions(globalJabatanEl, options.jabatans || [], 'Semua Jabatan');
+        fillSelectOptions(globalCompanyEl, options.companies || [], 'Semua Minecon');
+
+        if (globalDepartementListEl) {
+            globalDepartementListEl.innerHTML = '';
+            (options.departements || []).forEach(function (value) {
+                var opt = document.createElement('option');
+                opt.value = value;
+                globalDepartementListEl.appendChild(opt);
+            });
+        }
+
+        if (mitraMode) {
+            var hasMultiScope = typeof window.evaluasiWellMitraHasMultiScope === 'function' && window.evaluasiWellMitraHasMultiScope(mitraScope);
+            if (globalSiteEl) {
+                if (!hasMultiScope && mitraScope.site && !Array.from(globalSiteEl.options).some(function (opt) { return opt.value === mitraScope.site; })) {
+                    globalSiteEl.appendChild(new Option(mitraScope.site, mitraScope.site, true, true));
+                }
+                globalSiteEl.value = hasMultiScope ? '' : (mitraScope.site || '');
+                globalSiteEl.disabled = true;
+            }
+            if (globalCompanyEl) {
+                if (!hasMultiScope && mitraScope.perusahaan && !Array.from(globalCompanyEl.options).some(function (opt) { return opt.value === mitraScope.perusahaan; })) {
+                    globalCompanyEl.appendChild(new Option(mitraScope.perusahaan, mitraScope.perusahaan, true, true));
+                }
+                globalCompanyEl.value = hasMultiScope ? '' : (mitraScope.perusahaan || '');
+                globalCompanyEl.disabled = true;
+            }
+        }
+
+        filterOptionsReady = true;
+    }
+
+    function updatePeopleSubtitle() {
+        if (!peopleSubtitleEl) {
+            return;
+        }
+        var filters = readGlobalFilters();
+        var parts = [];
+        if (filters.site) parts.push('Site: ' + filters.site);
+        if (filters.division_group) parts.push('Divisi: ' + filters.division_group);
+        if (filters.jabatan) parts.push('Jabatan: ' + filters.jabatan);
+        if (filters.company) parts.push('Perusahaan: ' + filters.company);
+        if (filters.departement) parts.push('Departemen: ' + filters.departement);
+        if (filters.install === 'sudah') parts.push('sudah install');
+        else if (filters.install === 'belum') parts.push('belum install');
+        peopleSubtitleEl.textContent = parts.length
+            ? parts.join(' · ')
+            : (mitraMode ? 'Sesuai assignment mitra' : 'Mengikuti filter global di atas (semua data)');
+    }
+
+    function highlightSummaryRow(name) {
+        if (!tableBody) {
+            return;
+        }
+        tableBody.querySelectorAll('tr.install-stats-row').forEach(function (tr) {
+            tr.classList.toggle('is-selected', !!name && tr.getAttribute('data-name') === name);
+        });
+    }
+
+    function ensurePeopleTable() {
+        if (peopleTable || !peopleTableEl || typeof DataTable === 'undefined') {
+            return peopleTable;
+        }
+
+        peopleTable = new DataTable(peopleTableEl, {
+            processing: true,
+            serverSide: true,
+            searching: true,
+            ordering: true,
+            pageLength: 10,
+            lengthMenu: [10, 25, 50],
+            order: [[0, 'asc']],
+            autoWidth: false,
+            layout: {
+                topStart: 'pageLength',
+                topEnd: 'search',
+                bottomStart: 'info',
+                bottomEnd: 'paging'
+            },
+            ajax: {
+                url: peopleDataUrl,
+                data: function (d) {
+                    var filters = readGlobalFilters();
+                    d.site = filters.site;
+                    d.company = filters.company;
+                    if (mitraMode && filters.company) {
+                        d.perusahaan = filters.company;
+                    }
+                    if (filters.companies) {
+                        d.companies = filters.companies;
+                    }
+                    if (filters.pairs) {
+                        d.pairs = filters.pairs;
+                    }
+                    d.division_group = filters.division_group;
+                    d.division = '';
+                    d.departement = filters.departement;
+                    d.jabatan_fungsional = filters.jabatan;
+                    d.install = filters.install;
+                    d.user_aktif = '';
+                }
+            },
+            columns: [
+                {
+                    data: 'nama',
+                    render: function (data, type, row) {
+                        var name = escapeHtml(data || '-');
+                        var sid = escapeHtml(row.kode_sid || '-');
+                        var href = employeeShowBase + '/' + encodeURIComponent(row.id);
+                        return '<div class="fw-medium"><a href="' + href + '" class="text-primary-light hover-text-primary">' + name + '</a></div>'
+                            + '<div class="text-xs text-secondary-light">' + sid + '</div>';
+                    }
+                },
+                { data: 'site' },
+                { data: 'company' },
+                { data: 'departement' },
+                { data: 'jabatan', defaultContent: '-' },
+                {
+                    data: 'install',
+                    orderable: true,
+                    render: function (data, type, row) {
+                        return badgeHtml(data, row.install_class || 'bg-neutral-200 text-secondary-light');
+                    }
+                }
+            ],
+            language: {
+                processing: 'Memuat…',
+                search: 'Cari:',
+                lengthMenu: 'Tampil _MENU_',
+                info: 'Menampilkan _START_–_END_ dari _TOTAL_',
+                infoEmpty: 'Tidak ada data',
+                zeroRecords: 'Tidak ada karyawan ditemukan',
+                paginate: {
+                    previous: '‹',
+                    next: '›'
+                }
+            }
+        });
+
+        peopleTable.on('draw', function () {
+            if (peopleTotalBadge) {
+                peopleTotalBadge.textContent = formatNumber(peopleTable.page.info().recordsDisplay || 0);
+            }
+            updateInstallStatsExportHref();
+        });
+        peopleTable.on('search.dt', function () {
+            updateInstallStatsExportHref();
+        });
+
+        return peopleTable;
+    }
+
+    function reloadPeopleTable() {
+        updatePeopleSubtitle();
+        var table = ensurePeopleTable();
+        if (table) {
+            table.ajax.reload();
+        }
+    }
+
+    function applyDimensionFilter(dimension, name) {
+        if (!name || name === 'Lainnya' || name === 'Tidak diketahui') {
+            if (dimension !== currentDimension) {
+                loadDimension(dimension);
+            }
+            return;
+        }
+
+        var filterKey = dimensionToGlobalFilter[dimension];
+        if (filterKey === 'site' && globalSiteEl) {
+            globalSiteEl.value = name;
+        } else if (filterKey === 'division_group' && globalDivisionEl) {
+            if (!Array.prototype.some.call(globalDivisionEl.options, function (o) { return o.value === name; })) {
+                var opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                globalDivisionEl.appendChild(opt);
+            }
+            globalDivisionEl.value = name;
+        } else if (filterKey === 'company' && globalCompanyEl) {
+            if (!Array.prototype.some.call(globalCompanyEl.options, function (o) { return o.value === name; })) {
+                var cOpt = document.createElement('option');
+                cOpt.value = name;
+                cOpt.textContent = name;
+                globalCompanyEl.appendChild(cOpt);
+            }
+            globalCompanyEl.value = name;
+        } else if (filterKey === 'departement' && globalDepartementEl) {
+            globalDepartementEl.value = name;
+        } else if (filterKey === 'jabatan' && globalJabatanEl) {
+            if (!Array.prototype.some.call(globalJabatanEl.options, function (o) { return o.value === name; })) {
+                var jOpt = document.createElement('option');
+                jOpt.value = name;
+                jOpt.textContent = name;
+                globalJabatanEl.appendChild(jOpt);
+            }
+            globalJabatanEl.value = name;
+        }
+
+        cache = {};
+        overviewRendered = false;
+        loadDimension(dimension);
+    }
+
+    function scrollToStatusInstall() {
+        var section = document.getElementById('notInstalledTable');
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    function syncPeopleFilterToDashboard() {
+        var siteEl = document.getElementById('not-installed-site');
+        var companyEl = document.getElementById('not-installed-company');
+        var divisionEl = document.getElementById('not-installed-division');
+        var departementEl = document.getElementById('not-installed-departement');
+        var jabatanEl = document.getElementById('not-installed-jabatan-fungsional');
+        var installEl = document.getElementById('not-installed-install');
+        var userAktifEl = document.getElementById('not-installed-user-aktif');
+        var applyBtn = document.getElementById('not-installed-apply-btn');
+        var filters = readGlobalFilters();
+
+        if (siteEl) siteEl.value = filters.site || '';
+        if (companyEl) companyEl.value = filters.company || '';
+        if (divisionEl) divisionEl.value = filters.division_group || '';
+        if (departementEl) departementEl.value = filters.departement || '';
+        if (jabatanEl) jabatanEl.value = filters.jabatan || '';
+        if (userAktifEl) userAktifEl.value = '';
+        if (installEl) installEl.value = filters.install || '';
+
+        if (applyBtn) {
+            applyBtn.click();
+        }
+    }
+
+    function renderTable(payload) {
+        var rows = payload.rows || [];
+        latestRows = rows;
+        if (!tableBody) {
+            return;
+        }
+
+        tableBody.innerHTML = '';
+        if (tableEmptyEl) {
+            tableEmptyEl.classList.toggle('d-none', rows.length > 0);
+        }
+
+        rows.forEach(function (row) {
+            var tr = document.createElement('tr');
+            tr.className = 'install-stats-row';
+            tr.setAttribute('data-name', row.name);
+            tr.setAttribute('role', 'button');
+            tr.setAttribute('tabindex', '0');
+            tr.title = 'Klik untuk filter daftar karyawan: ' + row.name;
+
+            tr.innerHTML =
+                '<td><div class="text-truncate fw-medium" style="max-width: 160px;"></div>' +
+                    '<div class="progress progress-sm rounded-pill mt-6" style="height: 4px;">' +
+                        '<div class="progress-bar rounded-pill"></div>' +
+                    '</div>' +
+                '</td>' +
+                '<td class="text-end"></td>' +
+                '<td class="text-end text-primary-600 fw-medium"></td>' +
+                '<td class="text-end text-warning-main"></td>' +
+                '<td class="text-end fw-semibold"></td>';
+
+            var nameEl = tr.querySelector('.text-truncate');
+            nameEl.textContent = row.name;
+            nameEl.setAttribute('title', row.name);
+
+            var bar = tr.querySelector('.progress-bar');
+            bar.classList.add(row.bar_class || 'bg-primary-600');
+            bar.style.width = Math.min(100, Number(row.pct || 0)) + '%';
+
+            var cells = tr.querySelectorAll('td');
+            cells[1].textContent = formatNumber(row.total);
+            cells[2].textContent = formatNumber(row.installed);
+            cells[3].textContent = formatNumber(row.not_installed);
+            cells[4].textContent = (row.pct || 0) + '%';
+
+            tr.addEventListener('click', function () {
+                applyDimensionFilter(payload.dimension, row.name);
+            });
+            tr.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    applyDimensionFilter(payload.dimension, row.name);
+                }
+            });
+
+            tableBody.appendChild(tr);
+        });
+
+        highlightSummaryRow('');
+    }
+
+    function renderPayload(payload) {
+        var available = !!payload.available;
+        if (unavailableEl) {
+            unavailableEl.classList.toggle('d-none', available);
+        }
+        if (contentEl) {
+            contentEl.classList.toggle('d-none', !available && !(payload.rows && payload.rows.length));
+        }
+        if (!available) {
+            if (messageEl) {
+                messageEl.textContent = payload.message || 'Koneksi BeWell belum tersedia.';
+            }
+            if (contentEl && (!payload.rows || !payload.rows.length)) {
+                contentEl.classList.add('d-none');
+                return;
+            }
+        } else if (contentEl) {
+            contentEl.classList.remove('d-none');
+        }
+
+        if (payload.filter_options) {
+            populateGlobalFilterOptions(payload.filter_options);
+        }
+
+        if (payload.overview && payload.overview.length) {
+            if (!overviewRendered) {
+                renderOverview(payload.overview, payload.dimension);
+            } else {
+                highlightOverview(payload.dimension);
+            }
+        }
+
+        renderSummary(payload);
+        renderDailyTrend(payload.daily_trend || {});
+        renderChart(payload);
+        renderTable(payload);
+        ensurePeopleTable();
+        reloadPeopleTable();
+        updateInstallStatsExportHref();
+    }
+
+    function loadDimension(dimension) {
+        currentDimension = dimension;
+        highlightOverview(dimension);
+        updateInstallStatsExportHref();
+
+        var filters = readGlobalFilters();
+        var key = dimension + '::' + filtersCacheKey(filters);
+
+        if (cache[key]) {
+            renderPayload(cache[key]);
+            return;
+        }
+
+        setLoading(true);
+        var params = {
+            dimension: dimension
+        };
+        if (filters.site) params.site = filters.site;
+        if (filters.division_group) params.division_group = filters.division_group;
+        if (filters.jabatan) params.jabatan = filters.jabatan;
+        if (filters.company) {
+            params.company = filters.company;
+            params.perusahaan = filters.company;
+        }
+        if (filters.companies) params.companies = filters.companies;
+        if (filters.pairs) params.pairs = filters.pairs;
+        if (filters.departement) params.departement = filters.departement;
+        if (filters.install) params.install = filters.install;
+
+        fetch(appendQuery(dataUrl, params), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.json();
+            })
+            .then(function (payload) {
+                cache[key] = payload;
+                if (payload.overview && payload.overview.length) {
+                    overviewRendered = false;
+                }
+                renderPayload(payload);
+            })
+            .catch(function () {
+                renderPayload({
+                    available: false,
+                    dimension: dimension,
+                    dimension_label: dimensionLabels[dimension] || 'Site',
+                    footnote: 'Filter global mempengaruhi seluruh ringkasan. Divisi digabung per grup sejenis.',
+                    message: 'Gagal memuat statistik install.',
+                    summary: { total: 0, installed: 0, not_installed: 0, adoption_pct: 0, kpi_card_total: 0, groups: 0 },
+                    overview: [],
+                    rows: [],
+                    chart: { categories: [], installed: [], not_installed: [] }
+                });
+            })
+            .finally(function () {
+                setLoading(false);
+            });
+    }
+
+    function resetGlobalFilters() {
+        if (globalSiteEl) globalSiteEl.value = mitraMode ? ((typeof window.evaluasiWellMitraHasMultiScope === 'function' && window.evaluasiWellMitraHasMultiScope(mitraScope)) ? '' : (mitraScope.site || '')) : '';
+        if (globalDivisionEl) globalDivisionEl.value = '';
+        if (globalJabatanEl) globalJabatanEl.value = '';
+        if (globalCompanyEl) globalCompanyEl.value = mitraMode ? ((typeof window.evaluasiWellMitraHasMultiScope === 'function' && window.evaluasiWellMitraHasMultiScope(mitraScope)) ? '' : (mitraScope.perusahaan || '')) : '';
+        if (globalDepartementEl) globalDepartementEl.value = '';
+        if (globalInstallEl) globalInstallEl.value = '';
+    }
+
+    function applyGlobalFilters() {
+        cache = {};
+        overviewRendered = false;
+        loadDimension(currentDimension || 'site');
+    }
+
+    modalEl.addEventListener('shown.bs.modal', function () {
+        overviewRendered = false;
+        filterOptionsReady = false;
+        resetGlobalFilters();
+        cache = {};
+        loadDimension(currentDimension || 'site');
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', function () {
+        if (barChart) {
+            barChart.destroy();
+            barChart = null;
+        }
+        if (trendChart) {
+            trendChart.destroy();
+            trendChart = null;
+        }
+    });
+
+    if (globalApplyBtn) {
+        globalApplyBtn.addEventListener('click', function () {
+            applyGlobalFilters();
+        });
+    }
+
+    if (globalResetBtn) {
+        globalResetBtn.addEventListener('click', function () {
+            resetGlobalFilters();
+            applyGlobalFilters();
+        });
+    }
+
+    if (globalDepartementEl) {
+        globalDepartementEl.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                applyGlobalFilters();
+            }
+        });
+    }
+
+    if (openStatusBtn) {
+        openStatusBtn.addEventListener('click', function () {
+            syncPeopleFilterToDashboard();
+            var modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+            window.setTimeout(scrollToStatusInstall, 250);
+        });
+    }
+
+    if (cardEl) {
+        cardEl.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+            }
+        });
+    }
+})();
+</script>
+<script>
+(function () {
+    var modalEl = document.getElementById('activeStatsModal');
+    if (!modalEl) {
+        return;
+    }
+
+    var dataUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.active-stats')
+            : ($ajaxRoutes['activeStats'] ?? route('evaluasi-well.active-stats'))
+    );
+    var exportUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.active-stats.export')
+            : ($ajaxRoutes['activeStatsExport'] ?? route('evaluasi-well.active-stats.export'))
+    );
+    var employeeShowBase = @json(url('/evaluasi-well/employees'));
+    var mitraMode = @json((bool) ($mitraMode ?? false));
+    var mitraScope = @json($mitraScope) || {site: '', perusahaan: '', companies: [], pairs: []};
+    var cache = {};
+    var currentDimension = 'site';
+    var currentWeekStart = '';
+    var barChart = null;
+    var trendChart = null;
+    var overviewRendered = false;
+    var weekOptionsFilled = false;
+
+    function appendQuery(baseUrl, params) {
+        var url = new URL(baseUrl, window.location.origin);
+        Object.keys(params || {}).forEach(function (key) {
+            var value = params[key];
+            if (value === null || value === undefined || value === '') {
+                return;
+            }
+            url.searchParams.set(key, value);
+        });
+        return url.pathname + url.search + url.hash;
+    }
+
+    var loadingEl = document.getElementById('active-stats-loading');
+    var unavailableEl = document.getElementById('active-stats-unavailable');
+    var contentEl = document.getElementById('active-stats-content');
+    var messageEl = document.getElementById('active-stats-message');
+    var footnoteEl = document.getElementById('active-stats-footnote');
+    var overviewEl = document.getElementById('active-stats-overview');
+    var tableBody = document.querySelector('#active-stats-table tbody');
+    var tableEmptyEl = document.getElementById('active-stats-table-empty');
+    var chartEmptyEl = document.getElementById('active-stats-chart-empty');
+    var chartEl = document.getElementById('active-stats-bar');
+    var trendEl = document.getElementById('active-stats-trend');
+    var trendEmptyEl = document.getElementById('active-stats-trend-empty');
+    var tableWrapEl = document.querySelector('.active-stats-table-wrap');
+    var tableDimLabelEl = document.getElementById('active-stats-table-dim-label');
+    var detailTitleEl = document.getElementById('active-stats-detail-title');
+    var detailSubtitleEl = document.getElementById('active-stats-detail-subtitle');
+    var groupsHintEl = document.getElementById('active-stats-kpi-groups-hint');
+    var weekSelectEl = document.getElementById('active-stats-week');
+    var weekLabelEl = document.getElementById('active-stats-week-label');
+    var leaderboardBody = document.querySelector('#active-stats-leaderboard tbody');
+    var leaderboardEmptyEl = document.getElementById('active-stats-leaderboard-empty');
+    var leaderboardBadge = document.getElementById('active-leaderboard-total-badge');
+    var openStatusBtn = document.getElementById('active-stats-open-status-btn');
+    var exportBtn = document.getElementById('active-stats-export-btn');
+    var cardEl = document.getElementById('total-user-aktif-card');
+
+    var dimensionUnit = {
+        site: 'site',
+        company: 'perusahaan',
+        jabatan: 'jabatan'
+    };
+
+    function formatNumber(value) {
+        return Number(value || 0).toLocaleString('id-ID');
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function cacheKey(dimension, weekStart) {
+        return dimension + '|' + (weekStart || '');
+    }
+
+    function updateExportHref(weekStart) {
+        if (!exportBtn) {
+            return;
+        }
+        var params = {};
+        if (weekStart) {
+            params.week_start = weekStart;
+        }
+        if (mitraMode) {
+            if (typeof window.evaluasiWellAppendMitraScope === 'function') {
+                window.evaluasiWellAppendMitraScope(params, true, mitraScope);
+            } else {
+                if (mitraScope.site) params.site = mitraScope.site;
+                if (mitraScope.perusahaan) {
+                    params.perusahaan = mitraScope.perusahaan;
+                    params.company = mitraScope.perusahaan;
+                }
+            }
+        }
+        exportBtn.setAttribute('href', appendQuery(exportUrl, params));
+    }
+
+    function setLoading(isLoading) {
+        if (!loadingEl) {
+            return;
+        }
+        loadingEl.classList.toggle('d-none', !isLoading);
+        loadingEl.classList.toggle('is-visible', isLoading);
+    }
+
+    function applyDetailHeight(height) {
+        if (chartEl) {
+            chartEl.style.height = height + 'px';
+        }
+        if (tableWrapEl) {
+            tableWrapEl.style.height = height + 'px';
+            tableWrapEl.style.minHeight = height + 'px';
+            tableWrapEl.style.maxHeight = height + 'px';
+        }
+    }
+
+    function fillWeekOptions(options, selected) {
+        if (!weekSelectEl || weekOptionsFilled) {
+            return;
+        }
+        weekSelectEl.innerHTML = '';
+        (options || []).forEach(function (opt) {
+            var option = document.createElement('option');
+            option.value = opt.start;
+            option.textContent = opt.label;
+            if (opt.start === selected) {
+                option.selected = true;
+            }
+            weekSelectEl.appendChild(option);
+        });
+        weekOptionsFilled = true;
+    }
+
+    function renderSummary(payload) {
+        var summary = payload.summary || {};
+        var week = payload.week || {};
+
+        var activeEl = document.getElementById('active-stats-kpi-active');
+        var foodEl = document.getElementById('active-stats-kpi-food');
+        var workoutEl = document.getElementById('active-stats-kpi-workout');
+        var totalEvalsEl = document.getElementById('active-stats-kpi-total-evals');
+        var kpiCardEl = document.getElementById('active-stats-kpi-card-total');
+        var increaseBadge = document.getElementById('active-stats-kpi-increase-badge');
+
+        if (activeEl) activeEl.textContent = formatNumber(summary.active_users);
+        if (foodEl) foodEl.textContent = formatNumber(summary.food_evals);
+        if (workoutEl) workoutEl.textContent = formatNumber(summary.workout_evals);
+        if (totalEvalsEl) totalEvalsEl.textContent = formatNumber(summary.total_evals);
+        if (kpiCardEl) kpiCardEl.textContent = formatNumber(summary.kpi_card_total);
+        if (increaseBadge) {
+            increaseBadge.textContent = '+' + formatNumber(summary.week_increase);
+        }
+
+        if (footnoteEl && payload.footnote) {
+            footnoteEl.textContent = payload.footnote;
+        }
+        if (weekLabelEl) {
+            weekLabelEl.textContent = week.label || '—';
+        }
+        if (tableDimLabelEl) {
+            tableDimLabelEl.textContent = payload.dimension_label || 'Site';
+        }
+        if (detailTitleEl) {
+            detailTitleEl.textContent = payload.dimension_label || 'Site';
+        }
+        if (detailSubtitleEl) {
+            detailSubtitleEl.textContent = formatNumber(summary.groups || 0) + ' ' +
+                (dimensionUnit[payload.dimension] || 'grup') +
+                ' · ' + formatNumber(summary.active_users) + ' user aktif · ' +
+                formatNumber(summary.total_evals) + ' evaluasi';
+        }
+        if (groupsHintEl) {
+            groupsHintEl.textContent = formatNumber(summary.groups || 0) + ' ' +
+                (dimensionUnit[payload.dimension] || 'grup') + ' · +' +
+                formatNumber(summary.week_increase) + ' vs minggu lalu';
+        }
+
+        var tfootActive = document.getElementById('active-stats-tfoot-active');
+        var tfootFood = document.getElementById('active-stats-tfoot-food');
+        var tfootWorkout = document.getElementById('active-stats-tfoot-workout');
+        var tfootEvals = document.getElementById('active-stats-tfoot-evals');
+        if (tfootActive) tfootActive.textContent = formatNumber(summary.active_users);
+        if (tfootFood) tfootFood.textContent = formatNumber(summary.food_evals);
+        if (tfootWorkout) tfootWorkout.textContent = formatNumber(summary.workout_evals);
+        if (tfootEvals) tfootEvals.textContent = formatNumber(summary.total_evals);
+    }
+
+    function renderOverview(overview, activeDimension) {
+        if (!overviewEl) {
+            return;
+        }
+
+        overviewEl.innerHTML = '';
+        (overview || []).forEach(function (item) {
+            var col = document.createElement('div');
+            col.className = 'col-12 col-md-4';
+
+            var card = document.createElement('div');
+            card.className = 'active-stats-dim-card radius-8 p-16 h-100' +
+                (item.dimension === activeDimension ? ' is-active' : '');
+            card.setAttribute('role', 'button');
+            card.setAttribute('tabindex', '0');
+            card.setAttribute('data-dimension', item.dimension);
+
+            var unit = dimensionUnit[item.dimension] || 'grup';
+
+            card.innerHTML =
+                '<div class="d-flex align-items-start justify-content-between gap-2 mb-12">' +
+                    '<div class="d-flex align-items-center gap-2 min-w-0">' +
+                        '<span class="w-40-px h-40-px bg-success-focus text-success-main radius-8 d-inline-flex align-items-center justify-content-center flex-shrink-0">' +
+                            '<iconify-icon icon="' + (item.icon || 'solar:chart-bold') + '" class="text-xl"></iconify-icon>' +
+                        '</span>' +
+                        '<div class="min-w-0">' +
+                            '<h6 class="mb-0 fw-semibold text-md text-truncate"></h6>' +
+                            '<span class="text-xs text-secondary-light"></span>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="dim-meta mb-12">' +
+                    '<div class="dim-meta-item">' +
+                        '<div class="text-xs text-secondary-light mb-2">Aktif</div>' +
+                        '<div class="fw-semibold text-sm meta-active">0</div>' +
+                    '</div>' +
+                    '<div class="dim-meta-item">' +
+                        '<div class="text-xs text-secondary-light mb-2">Food</div>' +
+                        '<div class="fw-semibold text-sm text-primary-600 meta-food">0</div>' +
+                    '</div>' +
+                    '<div class="dim-meta-item">' +
+                        '<div class="text-xs text-secondary-light mb-2">Workout</div>' +
+                        '<div class="fw-semibold text-sm text-warning-main meta-workout">0</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="d-flex align-items-center justify-content-between gap-2">' +
+                    '<span class="text-xs text-secondary-light text-truncate top-label">Top: -</span>' +
+                    '<span class="text-xs fw-medium text-success-main flex-shrink-0 top-evals">0 eval</span>' +
+                '</div>';
+
+            card.querySelector('h6').textContent = item.label || item.dimension;
+            card.querySelector('.text-xs.text-secondary-light').textContent =
+                formatNumber(item.groups || 0) + ' ' + unit;
+            card.querySelector('.meta-active').textContent = formatNumber(item.active_users);
+            card.querySelector('.meta-food').textContent = formatNumber(item.food_evals);
+            card.querySelector('.meta-workout').textContent = formatNumber(item.workout_evals);
+            card.querySelector('.top-label').textContent = 'Top: ' + (item.top_name || '-');
+            card.querySelector('.top-evals').textContent = formatNumber(item.top_evals) + ' eval';
+
+            card.addEventListener('click', function () {
+                loadDimension(item.dimension, currentWeekStart);
+            });
+            card.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    loadDimension(item.dimension, currentWeekStart);
+                }
+            });
+
+            col.appendChild(card);
+            overviewEl.appendChild(col);
+        });
+
+        overviewRendered = true;
+    }
+
+    function highlightOverview(activeDimension) {
+        if (!overviewEl) {
+            return;
+        }
+        overviewEl.querySelectorAll('.active-stats-dim-card').forEach(function (card) {
+            card.classList.toggle('is-active', card.getAttribute('data-dimension') === activeDimension);
+        });
+    }
+
+    function renderTable(rows) {
+        if (!tableBody) {
+            return;
+        }
+        tableBody.innerHTML = '';
+        if (!rows || !rows.length) {
+            if (tableEmptyEl) tableEmptyEl.classList.remove('d-none');
+            return;
+        }
+        if (tableEmptyEl) tableEmptyEl.classList.add('d-none');
+
+        rows.forEach(function (row) {
+            var tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td class="fw-medium">' + escapeHtml(row.name) + '</td>' +
+                '<td class="text-end">' + formatNumber(row.active_users) + '</td>' +
+                '<td class="text-end">' + formatNumber(row.food_evals) + '</td>' +
+                '<td class="text-end">' + formatNumber(row.workout_evals) + '</td>' +
+                '<td class="text-end fw-semibold">' + formatNumber(row.total_evals) + '</td>' +
+                '<td class="text-end">' + (row.pct || 0) + '%</td>';
+            tableBody.appendChild(tr);
+        });
+    }
+
+    function renderLeaderboard(rows) {
+        if (!leaderboardBody) {
+            return;
+        }
+        leaderboardBody.innerHTML = '';
+        if (leaderboardBadge) {
+            leaderboardBadge.textContent = formatNumber((rows || []).length);
+        }
+        if (!rows || !rows.length) {
+            if (leaderboardEmptyEl) leaderboardEmptyEl.classList.remove('d-none');
+            return;
+        }
+        if (leaderboardEmptyEl) leaderboardEmptyEl.classList.add('d-none');
+
+        rows.forEach(function (row) {
+            var tr = document.createElement('tr');
+            var nameHtml = escapeHtml(row.nama);
+            if (row.user_id) {
+                nameHtml = '<a href="' + employeeShowBase + '/' + row.user_id + '" class="text-primary-600 hover-text-primary fw-medium">' +
+                    escapeHtml(row.nama) + '</a>';
+            }
+            var activeBadge = row.is_active
+                ? '<span class="bg-success-focus text-success-main px-10 py-2 rounded-pill text-xs fw-medium">Ya</span>'
+                : '<span class="bg-neutral-100 text-secondary-light px-10 py-2 rounded-pill text-xs fw-medium">Tidak</span>';
+
+            tr.innerHTML =
+                '<td class="fw-semibold">' + formatNumber(row.rank) + '</td>' +
+                '<td>' + nameHtml + '</td>' +
+                '<td>' + escapeHtml(row.site) + '</td>' +
+                '<td>' + escapeHtml(row.perusahaan) + '</td>' +
+                '<td>' + escapeHtml(row.jabatan) + '</td>' +
+                '<td class="text-end">' + formatNumber(row.food_evals) + '</td>' +
+                '<td class="text-end">' + formatNumber(row.workout_evals) + '</td>' +
+                '<td class="text-end fw-semibold">' + formatNumber(row.total_evals) + '</td>' +
+                '<td class="text-center">' + activeBadge + '</td>';
+            leaderboardBody.appendChild(tr);
+        });
+    }
+
+    function renderTrend(trend) {
+        if (!trendEl || typeof ApexCharts === 'undefined') {
+            return;
+        }
+        var labels = (trend && trend.labels) ? trend.labels : [];
+        var series = (trend && trend.active_users) ? trend.active_users : [];
+
+        if (trendChart) {
+            trendChart.destroy();
+            trendChart = null;
+        }
+
+        if (!labels.length) {
+            if (trendEmptyEl) trendEmptyEl.classList.remove('d-none');
+            trendEl.classList.add('d-none');
+            return;
+        }
+        if (trendEmptyEl) trendEmptyEl.classList.add('d-none');
+        trendEl.classList.remove('d-none');
+
+        trendChart = new ApexCharts(trendEl, {
+            series: [{ name: 'User Aktif', data: series }],
+            chart: {
+                type: 'area',
+                height: 140,
+                toolbar: { show: false },
+                sparkline: { enabled: false },
+                parentHeightOffset: 0
+            },
+            stroke: { curve: 'smooth', width: 2 },
+            colors: ['#45b369'],
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    shadeIntensity: 1,
+                    opacityFrom: 0.35,
+                    opacityTo: 0.05,
+                    stops: [0, 90, 100]
+                }
+            },
+            dataLabels: { enabled: false },
+            grid: {
+                borderColor: '#E5E7EB',
+                strokeDashArray: 4,
+                padding: { left: 8, right: 8 }
+            },
+            xaxis: {
+                categories: labels,
+                labels: { style: { fontSize: '10px' } }
+            },
+            yaxis: {
+                labels: {
+                    style: { fontSize: '10px' },
+                    formatter: function (value) {
+                        return formatNumber(value);
+                    }
+                }
+            },
+            tooltip: {
+                y: {
+                    formatter: function (value) {
+                        return formatNumber(value) + ' user';
+                    }
+                }
+            }
+        });
+        trendChart.render();
+    }
+
+    function renderChart(payload) {
+        if (!chartEl || typeof ApexCharts === 'undefined') {
+            return;
+        }
+
+        var categories = (payload.chart && payload.chart.categories) ? payload.chart.categories : [];
+        var activeUsers = (payload.chart && payload.chart.active_users) ? payload.chart.active_users : [];
+        var foodEvals = (payload.chart && payload.chart.food_evals) ? payload.chart.food_evals : [];
+        var workoutEvals = (payload.chart && payload.chart.workout_evals) ? payload.chart.workout_evals : [];
+
+        if (barChart) {
+            barChart.destroy();
+            barChart = null;
+        }
+
+        if (!categories.length) {
+            if (chartEmptyEl) chartEmptyEl.classList.remove('d-none');
+            chartEl.classList.add('d-none');
+            return;
+        }
+        if (chartEmptyEl) chartEmptyEl.classList.add('d-none');
+        chartEl.classList.remove('d-none');
+
+        var height = Math.max(300, categories.length * 28 + 80);
+        applyDetailHeight(height);
+
+        barChart = new ApexCharts(chartEl, {
+            series: [
+                { name: 'User Aktif', data: activeUsers },
+                { name: 'Eval. Makanan', data: foodEvals },
+                { name: 'Eval. Olahraga', data: workoutEvals }
+            ],
+            chart: {
+                type: 'bar',
+                height: height,
+                width: '100%',
+                stacked: false,
+                toolbar: { show: false },
+                parentHeightOffset: 0
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: true,
+                    borderRadius: 4,
+                    barHeight: '68%',
+                    dataLabels: { position: 'top' }
+                }
+            },
+            colors: ['#45b369', '#487FFF', '#FF9F29'],
+            dataLabels: { enabled: false },
+            grid: {
+                show: true,
+                borderColor: '#D1D5DB',
+                strokeDashArray: 4,
+                position: 'back',
+                padding: { left: 8, right: 8 }
+            },
+            xaxis: {
+                categories: categories,
+                labels: {
+                    formatter: function (value) {
+                        var n = Number(value);
+                        if (n >= 1000) {
+                            return (n / 1000).toFixed(0) + 'k';
+                        }
+                        return value;
+                    }
+                }
+            },
+            yaxis: {
+                labels: {
+                    style: { fontSize: '11px' },
+                    maxWidth: 120
+                }
+            },
+            legend: {
+                position: 'top',
+                horizontalAlign: 'left',
+                fontSize: '12px'
+            },
+            tooltip: {
+                y: {
+                    formatter: function (value) {
+                        return formatNumber(value);
+                    }
+                }
+            }
+        });
+        barChart.render().then(function () {
+            applyDetailHeight(height);
+        });
+    }
+
+    function renderPayload(payload) {
+        if (footnoteEl && payload.footnote) {
+            footnoteEl.textContent = payload.footnote;
+        }
+
+        if (!payload.available) {
+            if (unavailableEl) unavailableEl.classList.remove('d-none');
+            if (contentEl) contentEl.classList.add('d-none');
+            if (messageEl) messageEl.textContent = payload.message || 'Koneksi BeWell belum tersedia.';
+            return;
+        }
+
+        if (unavailableEl) unavailableEl.classList.add('d-none');
+        if (contentEl) contentEl.classList.remove('d-none');
+
+        currentDimension = payload.dimension || 'site';
+        if (payload.week && payload.week.start) {
+            currentWeekStart = payload.week.start;
+        }
+
+        fillWeekOptions(payload.week_options || [], currentWeekStart);
+        if (weekSelectEl && currentWeekStart) {
+            weekSelectEl.value = currentWeekStart;
+        }
+        updateExportHref(currentWeekStart);
+
+        renderSummary(payload);
+        if (!overviewRendered || !(payload.overview && payload.overview.length)) {
+            renderOverview(payload.overview || [], currentDimension);
+        } else {
+            highlightOverview(currentDimension);
+        }
+        renderTable(payload.rows || []);
+        renderChart(payload);
+        renderTrend(payload.weekly_trend || {});
+        renderLeaderboard(payload.leaderboard || []);
+    }
+
+    function loadDimension(dimension, weekStart) {
+        dimension = dimension || 'site';
+        weekStart = weekStart || currentWeekStart || '';
+        var key = cacheKey(dimension, weekStart);
+
+        if (cache[key]) {
+            renderPayload(cache[key]);
+            return;
+        }
+
+        setLoading(true);
+        var params = {
+            dimension: dimension
+        };
+        if (weekStart) {
+            params.week_start = weekStart;
+        }
+        if (mitraMode) {
+            if (typeof window.evaluasiWellAppendMitraScope === 'function') {
+                window.evaluasiWellAppendMitraScope(params, true, mitraScope);
+            } else {
+                if (mitraScope.site) params.site = mitraScope.site;
+                if (mitraScope.perusahaan) {
+                    params.perusahaan = mitraScope.perusahaan;
+                    params.company = mitraScope.perusahaan;
+                }
+            }
+        }
+
+        fetch(appendQuery(dataUrl, params), {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin'
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.json();
+            })
+            .then(function (payload) {
+                cache[key] = payload;
+                if (payload.overview && payload.overview.length) {
+                    overviewRendered = false;
+                }
+                renderPayload(payload);
+            })
+            .catch(function () {
+                renderPayload({
+                    available: false,
+                    dimension: dimension,
+                    dimension_label: 'Site',
+                    footnote: 'User aktif (luas) = food photo / workout / komunitas / Main Bareng. Evaluasi = food + workout.',
+                    message: 'Gagal memuat statistik user aktif.',
+                    week: { start: weekStart, end: '', label: '—', prev_start: '' },
+                    week_options: [],
+                    weekly_trend: { labels: [], active_users: [], week_starts: [] },
+                    summary: {
+                        active_users: 0,
+                        food_evals: 0,
+                        workout_evals: 0,
+                        total_evals: 0,
+                        week_increase: 0,
+                        kpi_card_total: 0,
+                        groups: 0
+                    },
+                    overview: [],
+                    rows: [],
+                    chart: { categories: [], active_users: [], food_evals: [], workout_evals: [] },
+                    leaderboard: []
+                });
+            })
+            .finally(function () {
+                setLoading(false);
+            });
+    }
+
+    function scrollToStatusInstall() {
+        var section = document.getElementById('notInstalledTable');
+        var userAktifEl = document.getElementById('not-installed-user-aktif');
+        var installEl = document.getElementById('not-installed-install');
+        if (userAktifEl) {
+            userAktifEl.value = 'ya';
+        }
+        if (installEl) {
+            installEl.value = '';
+        }
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        var applyBtn = document.getElementById('not-installed-apply-btn');
+        if (applyBtn) {
+            applyBtn.click();
+        }
+    }
+
+    modalEl.addEventListener('shown.bs.modal', function () {
+        overviewRendered = false;
+        weekOptionsFilled = false;
+        loadDimension(currentDimension || 'site', currentWeekStart || '');
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', function () {
+        if (barChart) {
+            barChart.destroy();
+            barChart = null;
+        }
+        if (trendChart) {
+            trendChart.destroy();
+            trendChart = null;
+        }
+    });
+
+    if (weekSelectEl) {
+        weekSelectEl.addEventListener('change', function () {
+            currentWeekStart = weekSelectEl.value || '';
+            overviewRendered = false;
+            updateExportHref(currentWeekStart);
+            loadDimension(currentDimension || 'site', currentWeekStart);
+        });
+    }
+
+    if (exportBtn) {
+        updateExportHref(currentWeekStart);
+    }
+
+    if (openStatusBtn) {
+        openStatusBtn.addEventListener('click', function () {
+            var modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+            window.setTimeout(scrollToStatusInstall, 250);
+        });
+    }
+
+    if (cardEl) {
+        cardEl.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+            }
+        });
+    }
+})();
+</script>
+<script>
+(function () {
+    var modalEl = document.getElementById('topUsersModal');
+    if (!modalEl) {
+        return;
+    }
+
+    var dataUrl = @json(
+        ($mitraMode ?? false)
+            ? route('evaluasi-well.mitra.top-users.leaderboard')
+            : ($ajaxRoutes['topUsersLeaderboard'] ?? route('evaluasi-well.top-users.leaderboard'))
+    );
+    var employeeShowBase = @json(url('/evaluasi-well/employees'));
+    var table = null;
+    var loaded = false;
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function formatNum(value) {
+        return Number(value || 0).toLocaleString('id-ID');
+    }
+
+    function ensureTable(rows) {
+        var tableEl = document.getElementById('topUsersTable');
+        if (!tableEl || typeof DataTable === 'undefined') {
+            return;
+        }
+
+        if (table) {
+            table.clear();
+            table.rows.add(rows);
+            table.draw();
+            return;
+        }
+
+        table = new DataTable(tableEl, {
+            data: rows,
+            pageLength: 10,
+            lengthMenu: [10, 25, 50],
+            order: [[7, 'desc']],
+            columns: [
+                { data: 'rank', className: 'text-secondary-light' },
+                {
+                    data: 'nama',
+                    render: function (data, type, row) {
+                        if (type !== 'display') {
+                            return data;
+                        }
+                        return '<div class="d-flex align-items-center gap-2 min-w-0">'
+                            + '<img src="' + escapeHtml(row.avatar) + '" alt="" class="w-32-px h-32-px rounded-circle flex-shrink-0" style="object-fit:cover;" onerror="this.style.visibility=\'hidden\'">'
+                            + '<a href="' + row.employee_url + '" class="text-primary-light hover-text-primary fw-medium text-truncate">' + escapeHtml(data) + '</a>'
+                            + '</div>';
+                    }
+                },
+                { data: 'site' },
+                { data: 'perusahaan' },
+                { data: 'food_cnt', className: 'text-end', render: function (d) { return formatNum(d); } },
+                { data: 'workout_cnt', className: 'text-end', render: function (d) { return formatNum(d); } },
+                {
+                    data: null,
+                    className: 'text-end',
+                    render: function (data, type, row) {
+                        var social = (Number(row.community_cnt) || 0) + (Number(row.open_play_cnt) || 0);
+                        return type === 'display' ? formatNum(social) : social;
+                    }
+                },
+                { data: 'total_cnt', className: 'text-end fw-semibold', render: function (d) { return formatNum(d); } }
+            ],
+            language: {
+                processing: 'Memuat...',
+                search: 'Cari:',
+                lengthMenu: 'Tampilkan _MENU_ data',
+                info: 'Menampilkan _START_–_END_ dari _TOTAL_ data',
+                infoEmpty: 'Tidak ada data',
+                infoFiltered: '(difilter dari _MAX_ total data)',
+                zeroRecords: 'Tidak ada data ditemukan.',
+                paginate: { first: '«', last: '»', next: '›', previous: '‹' }
+            }
+        });
+    }
+
+    function loadLeaderboard() {
+        var loadingEl = document.getElementById('top-users-loading');
+        var emptyEl = document.getElementById('top-users-empty');
+        var tableWrap = document.querySelector('#topUsersModal .table-responsive');
+        if (loadingEl) loadingEl.classList.remove('d-none');
+
+        fetch(dataUrl, {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (res) {
+            return res.ok ? res.json() : { data: [] };
+        }).then(function (payload) {
+            var rows = (payload && payload.data) || [];
+            if (rows.length === 0) {
+                if (tableWrap) tableWrap.classList.add('d-none');
+                if (emptyEl) emptyEl.classList.remove('d-none');
+            } else {
+                if (tableWrap) tableWrap.classList.remove('d-none');
+                if (emptyEl) emptyEl.classList.add('d-none');
+                ensureTable(rows);
+            }
+            loaded = true;
+        }).catch(function () {
+            if (emptyEl) emptyEl.classList.remove('d-none');
+        }).finally(function () {
+            if (loadingEl) loadingEl.classList.add('d-none');
+        });
+    }
+
+    modalEl.addEventListener('show.bs.modal', function () {
+        if (!loaded) {
+            loadLeaderboard();
+        }
+    });
+})();
+</script>
+@endsection
+
+@section('content')
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
+  <div>
+    <h6 class="fw-semibold mb-0">{{ $mitraMode ? 'Mitra Kerja' : 'Dashboard' }}</h6>
+    @if ($mitraMode && $mitraScopeLabel)
+      <div class="text-secondary-light text-sm mt-4">{{ $mitraScopeLabel }}</div>
+    @endif
+  </div>
+  @if ($mitraMode)
+  <ul class="d-flex align-items-center gap-2">
+    <li class="fw-medium">
+      <a href="{{ $ajaxRoutes['index'] ?? route('evaluasi-well.index') }}" class="d-flex align-items-center gap-1 hover-text-primary">
+        <iconify-icon icon="solar:home-smile-angle-outline" class="icon text-lg"></iconify-icon>
+        Mitra Kerja
+      </a>
+    </li>
+    <li>-</li>
+    <li class="fw-medium">Evaluasi Olahraga</li>
+  </ul>
+  @else
+  <button type="button" class="btn btn-outline-primary-600 radius-8 px-16 py-8 d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#dashboardFilterModal">
+    <iconify-icon icon="solar:tuning-2-outline" class="icon text-lg"></iconify-icon>
+    Filter
+    @if ($dashboardFilterActiveCount > 0)
+      <span class="bg-primary-600 text-white text-xs fw-semibold w-20-px h-20-px d-inline-flex align-items-center justify-content-center rounded-circle">{{ $dashboardFilterActiveCount }}</span>
+    @endif
+  </button>
+  @endif
+</div>
+@if (! $mitraMode && $dashboardFilterActiveCount > 0)
+<div class="d-flex flex-wrap align-items-center gap-2 mb-24 mt-n16">
+  <span class="text-sm text-secondary-light">Filter aktif:</span>
+  @if (($dashboardFilters['site'] ?? '') !== '')
+    <span class="bg-primary-50 text-primary-600 text-xs fw-medium px-10 py-4 rounded-pill">Site: {{ $dashboardFilters['site'] }}</span>
+  @endif
+  @if (($dashboardFilters['perusahaan'] ?? '') !== '')
+    <span class="bg-primary-50 text-primary-600 text-xs fw-medium px-10 py-4 rounded-pill">Perusahaan: {{ $dashboardFilters['perusahaan'] }}</span>
+  @endif
+  @if (($dashboardFilters['division_group'] ?? '') !== '')
+    <span class="bg-primary-50 text-primary-600 text-xs fw-medium px-10 py-4 rounded-pill">Divisi: {{ $dashboardFilters['division_group'] }}</span>
+  @endif
+  <a href="{{ route('evaluasi-well.index') }}" class="text-danger-600 text-xs fw-medium hover-text-primary">Hapus semua filter</a>
+</div>
+@endif
+
+@if ($mitraMode && $mitraNeedsPicker)
+<div class="card radius-8 border-0 shadow-sm mb-24">
+  <div class="card-body p-24">
+    @if ($mitraIsManager)
+      <h6 class="fw-semibold mb-12">Pilih Mitra Kerja</h6>
+      <p class="text-secondary-light text-sm mb-16">Pilih site dan perusahaan untuk menampilkan dashboard scoped.</p>
+      <form method="GET" action="{{ route('evaluasi-well.mitra.index') }}" class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label for="mitra-site" class="form-label text-sm fw-medium mb-6">Site</label>
+          <select id="mitra-site" name="site" class="form-select js-mitra-searchable" required data-placeholder="Cari site…">
+            <option value="">— Pilih site —</option>
+            @foreach ($siteOptions as $site)
+              <option value="{{ $site }}" @selected(($mitraScope['site'] ?? '') === $site)>{{ $site }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label for="mitra-perusahaan" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
+          <select id="mitra-perusahaan" name="perusahaan" class="form-select js-mitra-searchable" required data-placeholder="Cari perusahaan…">
+            <option value="">— Pilih perusahaan —</option>
+            @foreach ($companyOptions as $company)
+              <option value="{{ $company }}" @selected(($mitraScope['perusahaan'] ?? '') === $company)>{{ $company }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-md-4">
+          <button type="submit" class="btn btn-primary-600 radius-8 px-20 py-11">Tampilkan Dashboard</button>
+        </div>
+      </form>
+    @else
+      <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-0 radius-8" role="alert">
+        Anda belum di-assign ke site + perusahaan. Hubungi Admin/HR Pusat untuk menambahkan assignment Mitra Kerja.
+      </div>
+    @endif
+  </div>
+</div>
+@elseif ($mitraMode && $mitraIsManager)
+<div class="card radius-8 border-0 shadow-sm mb-24">
+  <div class="card-body p-16 px-24">
+    <form method="GET" action="{{ route('evaluasi-well.mitra.index') }}" class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label for="mitra-site-switch" class="form-label text-sm fw-medium mb-6">Site</label>
+        <select id="mitra-site-switch" name="site" class="form-select form-select-sm js-mitra-searchable" required data-placeholder="Cari site…">
+          @foreach ($siteOptions as $site)
+            <option value="{{ $site }}" @selected(($mitraScope['site'] ?? '') === $site)>{{ $site }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label for="mitra-perusahaan-switch" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
+        <select id="mitra-perusahaan-switch" name="perusahaan" class="form-select form-select-sm js-mitra-searchable" required data-placeholder="Cari perusahaan…">
+          @foreach ($companyOptions as $company)
+            <option value="{{ $company }}" @selected(($mitraScope['perusahaan'] ?? '') === $company)>{{ $company }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="col-md-4">
+        <button type="submit" class="btn btn-sm btn-outline-primary-600 radius-8">Ganti Mitra</button>
+      </div>
+    </form>
+  </div>
+</div>
+@endif
+
+@unless ($mitraNeedsPicker)
+    <div class="row gy-4 align-items-stretch">
+      <div class="col-xxl-8">
+        <div class="row gy-4 h-100">
+          
+          <div class="col-xxl-4 col-sm-6">
+            <div
+              class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-3"
+              id="total-karyawan-card"
+            >
+              <div class="card-body p-0">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+                  
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="mb-0 w-48-px h-48-px bg-yellow text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
+                        <iconify-icon icon="mingcute:user-3-fill" class="icon"></iconify-icon>  
+                      </span>
+                      <div>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total Karyawan</span>
+                        <h6 class="fw-semibold">{{ number_format($totalKaryawan ?? $siteTotalEmployees ?? 0) }}</h6>
+                      </div>
+                    </div>
+                  
+                    <div id="total-sales-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+                </div>
+                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalKaryawanWeekIncrease ?? 0) }} ({{ number_format($totalKaryawanWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-xxl-4 col-sm-6">
+            <div
+              class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-1 cursor-pointer"
+              role="button"
+              tabindex="0"
+              data-bs-toggle="modal"
+              data-bs-target="#installStatsModal"
+              aria-label="Lihat detail statistik install"
+              title="Lihat detail statistik install"
+              id="total-user-install-card"
+            >
+              <div class="card-body p-0">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+                  
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="mb-0 w-48-px h-48-px bg-primary-600 flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+                        <iconify-icon icon="mingcute:user-follow-fill" class="icon"></iconify-icon>  
+                      </span>
+                      <div>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total User Install</span>
+                        <h6 class="fw-semibold">{{ number_format($newUsersTotal ?? 0) }}</h6>
+                      </div>
+                    </div>
+                  
+                    <div id="new-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+                </div>
+                <p class="text-sm mb-0">Sudah install <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">{{ number_format($newUsersInstallPercent ?? 0, 1) }}%</span>karyawan</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-xxl-4 col-sm-6">
+            <div
+              class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-2 cursor-pointer"
+              role="button"
+              tabindex="0"
+              data-bs-toggle="modal"
+              data-bs-target="#activeStatsModal"
+              aria-label="Lihat detail statistik user aktif"
+              title="Lihat detail statistik user aktif"
+              id="total-user-aktif-card"
+            >
+              <div class="card-body p-0">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+                  
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="mb-0 w-48-px h-48-px bg-success-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6">
+                        <iconify-icon icon="mingcute:user-follow-fill" class="icon"></iconify-icon>  
+                      </span>
+                      <div>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total User Aktif</span>
+                        <h6 class="fw-semibold">{{ number_format($activeUsersTotal ?? 0) }}</h6>
+                      </div>
+                    </div>
+                  
+                    <div id="active-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+                </div>
+                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($activeUsersWeekIncrease ?? 0) }} ({{ number_format($activeUsersWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-xxl-4 col-sm-6">
+            <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-4">
+              <div class="card-body p-0">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+                  
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="mb-0 w-48-px h-48-px bg-purple text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
+                        <iconify-icon icon="mdi:message-text" class="icon"></iconify-icon>  
+                      </span>
+                      <div>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total Komunitas</span>
+                        <h6 class="fw-semibold">{{ number_format($totalKomunitas ?? 0) }}</h6>
+                      </div>
+                    </div>
+                  
+                    <div id="conversion-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+                </div>
+                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalKomunitasWeekIncrease ?? 0) }} ({{ number_format($totalKomunitasWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-xxl-4 col-sm-6">
+            <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-5">
+              <div class="card-body p-0">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+                  
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="mb-0 w-48-px h-48-px bg-pink text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
+                        <iconify-icon icon="mdi:leads" class="icon"></iconify-icon>  
+                      </span>
+                      <div>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total Main Bareng</span>
+                        <h6 class="fw-semibold">{{ number_format($totalMainBareng ?? 0) }}</h6>
+                      </div>
+                    </div>
+                  
+                    <div id="leads-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+                </div>
+                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalMainBarengWeekIncrease ?? 0) }} ({{ number_format($totalMainBarengWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-xxl-4 col-sm-6">
+            <div class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-6">
+              <div class="card-body p-0">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
+                  
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="mb-0 w-48-px h-48-px bg-cyan text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
+                        <iconify-icon icon="streamline:bag-dollar-solid" class="icon"></iconify-icon>  
+                      </span>
+                      <div>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total Goal Aktif</span>
+                        <h6 class="fw-semibold">{{ number_format($totalGoalAktif ?? 0) }}</h6>
+                      </div>
+                    </div>
+                  
+                    <div id="total-profit-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
+                </div>
+                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalGoalAktifWeekIncrease ?? 0) }} ({{ number_format($totalGoalAktifWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <!-- Pertumbuhan User Aktif start -->
+      <div class="col-xxl-4 d-flex">
+        <div class="card h-100 w-100 radius-8 border d-flex flex-column overflow-hidden">
+          <div class="card-body p-3 d-flex flex-column flex-grow-1" style="min-height: 0;">
+            <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between flex-shrink-0">
+              <div>
+                <h6 class="mb-1 fw-bold text-lg">Tren Partisipasi Aktif (%)</h6>
+                <span class="text-sm fw-medium text-secondary-light">Per minggu (Minggu–Sabtu)</span>
+              </div>
+              <div class="text-end">
+                <h6 class="mb-1 fw-bold text-lg">{{ number_format($activeTrendThisWeekPercent ?? 0, 1) }}%</h6>
+                <span class="bg-success-focus ps-12 pe-12 pt-2 pb-2 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($activeTrendWeekIncrease ?? 0) }} user</span>
+              </div>
+            </div>
+            <div id="revenue-chart" class="mt-12 flex-grow-1" style="min-height: 0; height: 100%;"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Pertumbuhan User Aktif End -->
+
+      <!-- Pola Aktivitas Penggunaan Aktif start -->
+      <div class="col-xxl-8 d-flex">
+        <div class="card h-100 w-100 wc-card activity-pattern-card">
+          <div class="card-body p-24 d-flex flex-column h-100">
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16 flex-shrink-0">
+              <div class="d-flex align-items-start gap-3 min-w-0">
+                <span class="wc-card__head-icon">
+                  <iconify-icon icon="mdi:calendar-month-outline"></iconify-icon>
+                </span>
+                <div class="min-w-0">
+                  <h6 class="mb-1 fw-bold text-lg wc-card__title">Pola Aktivitas Penggunaan Aktif</h6>
+                  <span class="wc-card__subtitle">Kapan karyawan paling aktif menggunakan BeWELL?</span>
+                  <span class="text-xs d-block mt-4" style="color:#94A3B8;" id="activity-pattern-range">
+                    @if(!empty($adoptionTrendRangeLabel))
+                      {{ $adoptionTrendRangeLabel }}
+                    @else
+                      {{ now()->startOfYear()->translatedFormat('d M Y') }} – {{ now()->translatedFormat('d M Y') }}
+                    @endif
+                  </span>
+                </div>
+              </div>
+              <div class="wc-card__badge" id="activity-pattern-badge">
+                <iconify-icon icon="mdi:account-group"></iconify-icon>
+                <span>Puncak {{ number_format($activityPatternPeakDayCount ?? 2041, 0, ',', '.') }} user · {{ $activityPatternPeakDayLabel ?? '02 Sep 2026' }}</span>
+              </div>
+            </div>
+
+            <div id="barChart" class="activity-pattern-heatmap flex-grow-1 mb-8" aria-label="Heatmap pola aktivitas"></div>
+
+            <div class="d-flex align-items-center flex-wrap gap-3 mb-16 flex-shrink-0" id="activity-pattern-legend">
+              <span class="text-xs fw-medium" style="color:#64748B;">Jumlah user aktif</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#ECFDF5;border:1px solid #D1FAE5;"></span>≤400</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#A7F3D0;"></span>401–800</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#6EE7B7;"></span>801–1.200</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#34D399;"></span>1.201–1.600</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#059669;"></span>&gt;1.600</span>
+            </div>
+
+            <div class="wc-tip wc-tip--green mb-16 flex-shrink-0">
+              <iconify-icon icon="solar:calendar-bold" class="flex-shrink-0"></iconify-icon>
+              <span id="activity-pattern-insight">{{ $activityPatternInsight ?? 'Aktivitas tertinggi biasanya terjadi pada hari kerja, dengan puncak di awal September. Manfaatkan momentum ini untuk program engagement.' }}</span>
+            </div>
+
+            <div class="row g-3 flex-shrink-0 activity-pattern-metrics">
+              <div class="col-sm-6 col-xl-3">
+                <div class="activity-pattern-metric h-100">
+                  <span class="activity-pattern-metric__icon">
+                    <iconify-icon icon="solar:calendar-mark-bold"></iconify-icon>
+                  </span>
+                  <div class="activity-pattern-metric__body">
+                    <div class="activity-pattern-metric__label">Hari Tertinggi</div>
+                    <div class="activity-pattern-metric__value" id="activity-pattern-peak-day">{{ $activityPatternPeakDayLabel ?? '02 Sep 2026' }}</div>
+                    <div class="activity-pattern-metric__sub" id="activity-pattern-peak-count">{{ number_format($activityPatternPeakDayCount ?? 2041) }} user aktif</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-sm-6 col-xl-3">
+                <div class="activity-pattern-metric h-100">
+                  <span class="activity-pattern-metric__icon">
+                    <iconify-icon icon="solar:chart-2-bold"></iconify-icon>
+                  </span>
+                  <div class="activity-pattern-metric__body">
+                    <div class="activity-pattern-metric__label">Rata-rata Harian</div>
+                    <div class="activity-pattern-metric__value" id="activity-pattern-avg">1.130</div>
+                    <div class="activity-pattern-metric__sub">user aktif</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-sm-6 col-xl-3">
+                <div class="activity-pattern-metric h-100">
+                  <span class="activity-pattern-metric__icon">
+                    <iconify-icon icon="solar:graph-up-bold"></iconify-icon>
+                  </span>
+                  <div class="activity-pattern-metric__body">
+                    <div class="activity-pattern-metric__label">Hari Kerja vs Akhir Pekan</div>
+                    <div class="activity-pattern-metric__value" id="activity-pattern-ratio">{{ number_format((float) ($activityPatternWeekdayRatio ?? 1.8), 1) }}x</div>
+                    <div class="activity-pattern-metric__sub">lebih tinggi di hari kerja</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-sm-6 col-xl-3">
+                <div class="activity-pattern-metric h-100">
+                  <span class="activity-pattern-metric__icon">
+                    <iconify-icon icon="solar:clock-circle-bold"></iconify-icon>
+                  </span>
+                  <div class="activity-pattern-metric__body">
+                    <div class="activity-pattern-metric__label">Waktu Puncak</div>
+                    <div class="activity-pattern-metric__value" id="activity-pattern-peak-hour">{{ $activityPatternPeakHourLabel ?? '08:00 – 10:00' }}</div>
+                    <div class="activity-pattern-metric__sub">WITA</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Pola Aktivitas Penggunaan Aktif End -->
+
+      <!-- Campaign Static start -->
+      <div class="col-xxl-4 d-flex">
+        <div class="d-flex flex-column gap-4 w-100 h-100 activity-pattern-side">
+          <div class="card flex-grow-1 radius-8 border-0">
+              <div class="card-body p-24">
+                <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between mb-20">
+                  <h6 class="mb-0 fw-bold text-lg">Top Komunitas</h6>
+                  <span class="text-sm text-secondary-light">Berdasarkan member</span>
+                </div>
+                
+                <div class="mt-3">
+                  @forelse(($topKomunitas ?? []) as $i => $komunitas)
+                  <div class="d-flex align-items-center gap-3 {{ $i < count($topKomunitas) - 1 ? 'mb-16' : '' }}">
+                    <div class="d-flex align-items-center gap-2 flex-shrink-0" style="width: 148px;">
+                      <span class="w-32-px h-32-px rounded-circle d-inline-flex align-items-center justify-content-center flex-shrink-0 {{ $komunitas['barClass'] }} text-white">
+                        <iconify-icon icon="{{ $komunitas['icon'] }}" class="text-md"></iconify-icon>
+                      </span>
+                      <span class="text-primary-light fw-medium text-sm text-truncate min-w-0" style="max-width: 104px;" title="{{ $komunitas['name'] }}">{{ $komunitas['name'] }}</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-grow-1 min-w-0">
+                      <div class="progress progress-sm rounded-pill w-100" role="progressbar" aria-label="Top komunitas" aria-valuenow="{{ $komunitas['pct'] }}" aria-valuemin="0" aria-valuemax="100">
+                        <div class="progress-bar {{ $komunitas['barClass'] }} rounded-pill" style="width: {{ $komunitas['pct'] }}%;"></div>
+                      </div>
+                      <span class="text-secondary-light font-xs fw-semibold flex-shrink-0 text-end" style="min-width: 52px;">{{ number_format($komunitas['members']) }}</span>
+                    </div>
+                  </div>
+                  @empty
+                  <p class="text-secondary-light text-sm mb-0">Belum ada data komunitas.</p>
+                  @endforelse
+
+                </div>
+
+              </div>
+            </div>
+          <div class="card flex-grow-1 radius-8 border-0 overflow-hidden">
+              <div class="card-body p-24">
+                <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+                  <h6 class="mb-2 fw-bold text-lg">Komposisi Aktivitas</h6>
+                  <span class="text-sm fw-medium text-secondary-light">Tahun {{ date('Y') }}</span>
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center mt-3">
+                  <ul class="flex-shrink-0">
+                    <li class="d-flex align-items-center gap-2 mb-28">
+                      <span class="w-12-px h-12-px rounded-circle bg-success-main"></span>
+                      <span class="text-secondary-light text-sm fw-medium">Olahraga: {{ number_format($compositionOlahraga ?? 0) }}</span>
+                    </li>
+                    <li class="d-flex align-items-center gap-2 mb-28">
+                      <span class="w-12-px h-12-px rounded-circle bg-warning-main"></span>
+                      <span class="text-secondary-light text-sm fw-medium">Nutrisi: {{ number_format($compositionNutrisi ?? 0) }}</span>
+                    </li>
+                    <li class="d-flex align-items-center gap-2">
+                      <span class="w-12-px h-12-px rounded-circle bg-primary-600"></span>
+                      <span class="text-secondary-light text-sm fw-medium">Sosial: {{ number_format($compositionSosial ?? 0) }}</span>
+                    </li>
+                  </ul>
+                  <div id="donutChart" class="flex-grow-1 apexcharts-tooltip-z-none title-style circle-none"></div>
+                </div>
+
+              </div>
+            </div>
+        </div>
+      </div>  
+      <!-- Campaign Static End -->
+
+      <!-- Aktivitas Harian Start -->
+      <div class="col-xxl-4 col-sm-6">
+        <div class="card h-100 radius-8 border-0">
+          <div class="card-body p-24">
+              <h6 class="mb-2 fw-bold text-lg">Aktivitas Harian</h6>
+              <span class="text-sm fw-medium text-secondary-light">Minggu ini (Sen–Min)</span>
+
+              <ul class="d-flex flex-wrap align-items-center justify-content-center mt-32">
+                <li class="d-flex align-items-center gap-2 me-28">
+                  <span class="w-12-px h-12-px rounded-circle bg-success-main"></span>
+                  <span class="text-secondary-light text-sm fw-medium">Makanan: {{ number_format($weeklyMakananTotal ?? 0) }}</span>
+                </li>
+                <li class="d-flex align-items-center gap-2 me-28">
+                  <span class="w-12-px h-12-px rounded-circle bg-info-main"></span>
+                  <span class="text-secondary-light text-sm fw-medium">Olahraga: {{ number_format($weeklyOlahragaTotal ?? 0) }}</span>
+                </li>
+                <li class="d-flex align-items-center gap-2">
+                  <span class="w-12-px h-12-px rounded-circle bg-warning-main"></span>
+                  <span class="text-secondary-light text-sm fw-medium">Sosial: {{ number_format($weeklySosialTotal ?? 0) }}</span>
+                </li>
+              </ul>
+              <div class="mt-40">
+                <div id="paymentStatusChart" class="margin-16-minus"></div>
+              </div>
+          </div>
+        </div>
+      </div>
+      <!-- Aktivitas Harian End -->
+
+      <!-- Site Status Start -->
+      <div class="col-xxl-4 col-sm-6">
+        <div class="card radius-8 border-0 h-100">
+
+          <div class="card-body">
+            <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between mb-16">
+              <h6 class="mb-2 fw-bold text-lg mb-0">Tren Partisipasi Aktif Per Site</h6>
+              <span class="text-sm fw-medium text-secondary-light">{{ number_format($siteTotalEmployees ?? 0) }} karyawan</span>
+            </div>
+            <div id="site-boundary-map"></div>
+          </div>
+
+          <div class="card-body p-24 pt-0 max-h-350-px scroll-sm overflow-y-auto">
+            <div class="">
+              @forelse (($siteRows ?? []) as $site)
+              <div class="d-flex align-items-center justify-content-between gap-3 {{ !$loop->last ? 'mb-3 pb-2' : '' }}">
+                <div class="d-flex align-items-center w-100 min-w-0">
+                  <div class="flex-grow-1 min-w-0">
+                    <h6 class="text-sm mb-0 text-truncate">{{ $site['name'] }}</h6>
+                    <span class="text-xs text-secondary-light fw-medium">{{ number_format($site['total']) }} karyawan</span>
+                  </div>
+                </div>
+                <div class="d-flex align-items-center gap-2 w-100">
+                  <div class="w-100 max-w-66 ms-auto">
+                    <div class="progress progress-sm rounded-pill" role="progressbar" aria-valuenow="{{ $site['percent'] }}" aria-valuemin="0" aria-valuemax="100">
+                      <div class="progress-bar {{ $site['barClass'] }} rounded-pill" style="width: {{ min(100, $site['percent']) }}%;"></div>
+                    </div>
+                  </div>
+                  <span class="text-secondary-light font-xs fw-semibold flex-shrink-0" style="min-width: 42px; text-align: right;">{{ $site['percent'] }}%</span>
+                </div>
+              </div>
+              @empty
+              <p class="text-secondary-light text-sm mb-0">Belum ada data site karyawan.</p>
+              @endforelse
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Site Status End -->
+
+      <!-- Top User Start -->
+      <div class="col-xxl-4">
+        <div class="card h-100">
+
+          <div class="card-body">
+            <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
+              <h6 class="mb-2 fw-bold text-lg mb-0">Top User Aktif</h6>
+              <button type="button" class="text-primary-600 hover-text-primary d-flex align-items-center gap-1 btn btn-link p-0 border-0" data-bs-toggle="modal" data-bs-target="#topUsersModal">
+                Lihat Semua
+                <iconify-icon icon="solar:alt-arrow-right-linear" class="icon"></iconify-icon>
+              </button>
+            </div>
+
+            <div class="mt-32">
+              @forelse (($topUsers ?? []) as $i => $user)
+              <div class="d-flex align-items-center justify-content-between gap-3 {{ !$loop->last ? 'mb-32' : '' }}">
+                <div class="d-flex align-items-center min-w-0">
+                  <img src="{{ $user['avatar'] }}" alt="" class="w-40-px h-40-px rounded-circle flex-shrink-0 me-12 overflow-hidden" style="object-fit: cover;" onerror="this.src='{{ asset('evaluasi-well-assets/images/users/user1.png') }}'">
+                  <div class="flex-grow-1 min-w-0">
+                    <h6 class="text-md mb-0 text-truncate">
+                      <a href="{{ route('evaluasi-well.employees.show', $user['id']) }}" class="text-primary-light hover-text-primary">
+                        {{ $user['nama'] }}
+                      </a>
+                    </h6>
+                    <span class="text-sm text-secondary-light fw-medium text-truncate d-block" title="Makanan {{ $user['food_cnt'] }} · Olahraga {{ $user['workout_cnt'] }} · Komunitas {{ $user['community_cnt'] }} · Main Bareng {{ $user['open_play_cnt'] }}">
+                      {{ $user['food_cnt'] }} makan · {{ $user['workout_cnt'] }} olahraga · {{ $user['community_cnt'] + $user['open_play_cnt'] }} sosial
+                    </span>
+                  </div>
+                </div>
+                <span class="text-primary-light text-md fw-medium flex-shrink-0">{{ number_format($user['total_cnt']) }}</span>
+              </div>
+              @empty
+              <p class="text-secondary-light text-sm mb-0">Belum ada data aktivitas user.</p>
+              @endforelse
+            </div>
+
+          </div>
+        </div>
+      </div>
+      <!-- Top User End -->
+
+      @include('evaluasi-well.partials._wellness-metrics')
+
+      <!-- Belum Install Start -->
+      <div class="col-12">
+        <div class="card radius-8 border-0 shadow-sm">
+          <div class="card-header border-bottom bg-base py-16 px-24">
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+              <div>
+                <div class="d-flex align-items-center gap-2 mb-4">
+                  <h6 class="text-lg fw-semibold mb-0">Status Install Karyawan</h6>
+                  <span id="not-installed-total-badge" class="bg-warning-focus text-warning-main text-sm fw-medium px-12 py-2 rounded-pill">{{ number_format($notInstalledTotal ?? 0) }}</span>
+                </div>
+                <p class="text-sm text-secondary-light mb-0">
+                  Karyawan status AKTIF (exclude VISITOR) · User aktif = upload makanan/olahraga minggu ini ({{ $notInstalledWeekLabel ?? 'Sen–Min' }})
+                </p>
+              </div>
+              <a id="not-installed-export-btn" href="{{ ($ajaxRoutes['notInstalledExport'] ?? route('evaluasi-well.not-installed.export')) . (str_contains(($ajaxRoutes['notInstalledExport'] ?? ''), '?') ? '&' : '?') . 'install=belum' }}" class="btn btn-sm btn-success-600 d-inline-flex align-items-center gap-1">
+                <iconify-icon icon="solar:file-download-bold" class="icon"></iconify-icon>
+                Download Excel
+              </a>
+            </div>
+          </div>
+          <div class="card-body p-24">
+            <div class="bg-neutral-50 border radius-8 p-16 mb-20">
+              <div class="row g-3 align-items-end">
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-1">
+                  <label for="not-installed-site" class="form-label text-sm fw-medium mb-6">Site</label>
+                  <select id="not-installed-site" class="form-select form-select-sm">
+                    <option value="">Semua Site</option>
+                    @foreach (($notInstalledSites ?? []) as $site)
+                      <option value="{{ $site }}">{{ $site }}</option>
+                    @endforeach
+                  </select>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-2">
+                  <label for="not-installed-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
+                  <select id="not-installed-company" class="form-select form-select-sm">
+                    <option value="">Semua Perusahaan</option>
+                    @foreach (($notInstalledCompanies ?? []) as $company)
+                      <option value="{{ $company }}">{{ $company }}</option>
+                    @endforeach
+                  </select>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-1">
+                  <label for="not-installed-division" class="form-label text-sm fw-medium mb-6">Divisi</label>
+                  <input
+                    id="not-installed-division"
+                    type="search"
+                    list="not-installed-division-options"
+                    class="form-control form-control-sm"
+                    placeholder="Cari divisi..."
+                    autocomplete="off"
+                  >
+                  <datalist id="not-installed-division-options">
+                    @foreach (($notInstalledDivisions ?? []) as $division)
+                      <option value="{{ $division }}"></option>
+                    @endforeach
+                  </datalist>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-2">
+                  <label for="not-installed-departement" class="form-label text-sm fw-medium mb-6">Departemen</label>
+                  <input
+                    id="not-installed-departement"
+                    type="search"
+                    list="not-installed-departement-options"
+                    class="form-control form-control-sm"
+                    placeholder="Cari departemen..."
+                    autocomplete="off"
+                  >
+                  <datalist id="not-installed-departement-options">
+                    @foreach (($notInstalledDepartements ?? []) as $departement)
+                      <option value="{{ $departement }}"></option>
+                    @endforeach
+                  </datalist>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-2">
+                  <label for="not-installed-jabatan-fungsional" class="form-label text-sm fw-medium mb-6">Jabatan Fungsional</label>
+                  <select id="not-installed-jabatan-fungsional" class="form-select form-select-sm">
+                    <option value="">Semua Jabatan</option>
+                    @foreach (($notInstalledJabatanFungsionals ?? []) as $jabatan)
+                      <option value="{{ $jabatan }}">{{ $jabatan }}</option>
+                    @endforeach
+                  </select>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-1">
+                  <label for="not-installed-install" class="form-label text-sm fw-medium mb-6">Install</label>
+                  <select id="not-installed-install" class="form-select form-select-sm">
+                    <option value="">Semua</option>
+                    <option value="belum" selected>Belum</option>
+                    <option value="sudah">Sudah</option>
+                  </select>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-1">
+                  <label for="not-installed-user-aktif" class="form-label text-sm fw-medium mb-6">User Aktif</label>
+                  <select id="not-installed-user-aktif" class="form-select form-select-sm">
+                    <option value="">Semua</option>
+                    <option value="ya">Ya</option>
+                    <option value="tidak">Tidak</option>
+                  </select>
+                </div>
+                <div class="col-xl-2 col-md-4 col-sm-6 col-xxl-2">
+                  <div class="d-flex flex-nowrap gap-2">
+                    <button type="button" id="not-installed-reset-btn" class="btn btn-sm btn-outline-secondary w-100 text-nowrap">Reset</button>
+                    <button type="button" id="not-installed-apply-btn" class="btn btn-sm btn-primary-600 w-100 text-nowrap">Filter</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="not-installed-datatable w-100">
+              <table id="notInstalledTable" class="table bordered-table mb-0 w-100" style="width:100%">
+                <thead>
+                  <tr>
+                    <th scope="col" style="width:20%">Karyawan</th>
+                    <th scope="col" style="width:18%">Perusahaan</th>
+                    <th scope="col" style="width:18%">Departemen</th>
+                    <th scope="col" style="width:18%">Divisi</th>
+                    <th scope="col" style="width:13%">Install</th>
+                    <th scope="col" style="width:13%">User Aktif</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Belum Install End -->
+    </div>
+
+@include('evaluasi-well.partials._install-stats-modal')
+@include('evaluasi-well.partials._active-stats-modal')
+@include('evaluasi-well.partials._top-users-modal')
+@unless ($mitraMode)
+@include('evaluasi-well.partials._dashboard-filter-modal')
+@endunless
+@endunless
+@endsection
+
+@section('scripts')
+@if ($mitraMode ?? false)
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+(function ($) {
+  $('.js-mitra-searchable').each(function () {
+    var $el = $(this);
+    $el.select2({
+      width: '100%',
+      placeholder: $el.data('placeholder') || 'Cari…',
+      allowClear: ! $el.prop('required'),
+      language: {
+        noResults: function () { return 'Tidak ditemukan'; },
+        searching: function () { return 'Mencari…'; }
+      }
+    });
+  });
+})(jQuery);
+</script>
+@endif
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ asset('isc-assets/BounderyBC.js') }}"></script>
+<script>
+(function () {
+    var mapEl = document.getElementById('site-boundary-map');
+    if (!mapEl || typeof L === 'undefined') {
+        return;
+    }
+
+    var siteRows = @json($siteRows ?? []);
+    var siteByName = {};
+    siteRows.forEach(function (site) {
+        siteByName[String(site.name || '').trim().toUpperCase()] = site;
+    });
+
+    // Gradasi hijau muda (partisipasi rendah) -> hijau tua (partisipasi tinggi),
+    // dibatasi di rentang wajar untuk kartu "Tren Partisipasi Aktif Per Site" (0-25%).
+    function colorForPercent(pct) {
+        var stops = [
+            { p: 0, c: [220, 237, 224] },
+            { p: 12, c: [134, 208, 154] },
+            { p: 25, c: [22, 163, 74] }
+        ];
+        var p = Math.max(0, Math.min(25, Number(pct) || 0));
+        var lo = stops[0], hi = stops[stops.length - 1];
+        for (var i = 0; i < stops.length - 1; i++) {
+            if (p >= stops[i].p && p <= stops[i + 1].p) {
+                lo = stops[i];
+                hi = stops[i + 1];
+                break;
+            }
+        }
+        var span = (hi.p - lo.p) || 1;
+        var t = Math.max(0, Math.min(1, (p - lo.p) / span));
+        var rgb = [0, 1, 2].map(function (i) {
+            return Math.round(lo.c[i] + (hi.c[i] - lo.c[i]) * t);
+        });
+        return 'rgb(' + rgb.join(',') + ')';
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    var boundaryData = window.IUPK_BOUNDARY || { type: 'FeatureCollection', features: [] };
+
+    var map = L.map(mapEl, {
+        zoomControl: true,
+        attributionControl: false,
+        scrollWheelZoom: false,
+        dragging: true,
+        doubleClickZoom: true,
+        boxZoom: true,
+        keyboard: true,
+        touchZoom: true,
+        tap: true
+    });
+    map.zoomControl.setPosition('topright');
+
+    // Scroll-zoom hanya aktif saat peta di-klik/hover, supaya scroll wheel
+    // di kartu kecil ini tidak "menyandera" scroll halaman dashboard.
+    mapEl.addEventListener('mouseenter', function () { map.scrollWheelZoom.enable(); });
+    mapEl.addEventListener('mouseleave', function () { map.scrollWheelZoom.disable(); });
+    map.on('click', function () { map.scrollWheelZoom.enable(); });
+
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 18,
+        minZoom: 8
+    }).addTo(map);
+
+    var boundaryLayer = L.geoJSON(boundaryData, {
+        style: function (feature) {
+            var props = (feature && feature.properties) || {};
+            var siteName = String(props.Layer || '').trim().toUpperCase();
+            var site = siteByName[siteName];
+
+            return {
+                color: '#ffffff',
+                weight: 1,
+                fillColor: site ? colorForPercent(site.percent) : '#94A3B8',
+                fillOpacity: site ? 0.78 : 0.32
+            };
+        },
+        onEachFeature: function (feature, featureLayer) {
+            var props = (feature && feature.properties) || {};
+            var siteName = String(props.Layer || '').trim().toUpperCase();
+            var site = siteByName[siteName];
+            var label = site
+                ? '<strong>' + escapeHtml(site.name) + '</strong><br>'
+                    + Number(site.total).toLocaleString('id-ID') + ' karyawan &middot; ' + site.percent + '%'
+                : '<strong>' + escapeHtml(props.Layer || props.Site || 'Area') + '</strong><br>Belum ada data partisipasi';
+            featureLayer.bindTooltip(label, { className: 'site-boundary-tooltip', sticky: true });
+        }
+    }).addTo(map);
+
+    if (boundaryLayer.getBounds().isValid()) {
+        map.fitBounds(boundaryLayer.getBounds(), { padding: [8, 8] });
+    } else {
+        map.setView([2.08, 117.42], 10);
+    }
+
+    setTimeout(function () { map.invalidateSize(); }, 200);
+})();
+</script>
+@endsection

@@ -5,21 +5,18 @@
 @section('content')
 @php
    $fields = [
-      'validator' => 'Validator',
       'tasklist' => 'Tasklist',
       'to_be_concerned_hazard' => 'TobeConcernedHazard',
-      'gr_pspp' => 'GR/PSPP',
+      'gr' => 'GR',
       'catatan' => 'Catatan',
+      'blindspot_terlapor_bc' => 'Blindspot terlapor BC',
       'no_item_pspp' => 'No Item PSPP',
       'kategori_gr' => 'Kategori GR',
-      'kategori_gr_valid_kpi' => 'Kategori GR valid KPI',
-      'blindspot_terlapor_bc' => 'Blindspot terlapor BC',
-      'pic_aktual' => 'PIC Aktual (pelaku/pelanggar)',
-      'kronologi_singkat' => 'Kronologi Singkat (summary dari Deskripsi)',
-      'rootcause_aktual' => 'Rootcause Aktual',
-      'detail_rootcause_aktual' => 'Detail Rootcause Aktual',
-      'tindakan_perbaikan_aktual' => 'Tindakan Perbaikan Aktual',
+      'sid_pekerja_terlibat' => 'SID Pekerja Terlibat (pelaku/pelanggar)',
+      'nama_pekerja_terlibat' => 'Nama (pelaku/pelanggar)',
    ];
+   $wideFields = ['to_be_concerned_hazard', 'catatan', 'blindspot_terlapor_bc'];
+   $shortFields = ['tasklist', 'gr', 'no_item_pspp', 'kategori_gr', 'sid_pekerja_terlibat', 'nama_pekerja_terlibat'];
 @endphp
 
 <div class="">
@@ -53,9 +50,9 @@
       <div class="p-6 space-y-4 border-b border-outline-variant/15">
          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             @foreach ($fields as $name => $label)
-               <div class="{{ in_array($name, ['catatan', 'to_be_concerned_hazard', 'blindspot_terlapor_bc', 'kronologi_singkat', 'rootcause_aktual', 'detail_rootcause_aktual', 'tindakan_perbaikan_aktual'], true) ? 'md:col-span-2' : '' }}">
+               <div class="{{ in_array($name, $wideFields, true) ? 'md:col-span-2' : '' }}">
                   <label class="block text-xs font-bold text-on-surface-variant mb-1">{{ $label }}</label>
-                  <textarea name="{{ $name }}" rows="{{ in_array($name, ['validator', 'tasklist', 'gr_pspp', 'no_item_pspp', 'kategori_gr', 'kategori_gr_valid_kpi', 'pic_aktual'], true) ? 2 : 3 }}" class="w-full rounded-xl border border-outline-variant/30 bg-[#f8fafc] px-3 py-2 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15">{{ old($name, $row->{$name} ?? '') }}</textarea>
+                  <textarea name="{{ $name }}" rows="{{ in_array($name, $shortFields, true) ? 2 : 3 }}" class="w-full rounded-xl border border-outline-variant/30 bg-[#f8fafc] px-3 py-2 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15">{{ old($name, $row->{$name} ?? '') }}</textarea>
                </div>
             @endforeach
          </div>

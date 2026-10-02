@@ -112,8 +112,9 @@ final class ListPeerPressureDeviationModalDetailAction
             $tl = (string) ($r->tasklist ?? '');
             $rows[] = [
                 'id' => $r->id,
-                'validator' => $r->validator,
-                'gr_pspp' => $r->gr_pspp,
+                'gr' => $r->gr,
+                'sid_pekerja_terlibat' => $r->sid_pekerja_terlibat,
+                'nama_pekerja_terlibat' => $r->nama_pekerja_terlibat,
                 'tasklist' => $tl,
                 'tasklist_short' => mb_strlen($tl) > 160 ? mb_substr($tl, 0, 160).'…' : $tl,
                 'created_at' => $r->created_at?->format('Y-m-d H:i'),

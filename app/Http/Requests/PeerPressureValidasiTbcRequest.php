@@ -19,20 +19,15 @@ class PeerPressureValidasiTbcRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'validator' => ['nullable', 'string', 'max:255'],
             'tasklist' => ['nullable', 'string'],
             'to_be_concerned_hazard' => ['nullable', 'string'],
-            'gr_pspp' => ['nullable', 'string', 'max:255'],
+            'gr' => ['nullable', 'string', 'max:255'],
             'catatan' => ['nullable', 'string'],
+            'blindspot_terlapor_bc' => ['nullable', 'string'],
             'no_item_pspp' => ['nullable', 'string', 'max:255'],
             'kategori_gr' => ['nullable', 'string', 'max:255'],
-            'kategori_gr_valid_kpi' => ['nullable', 'string', 'max:255'],
-            'blindspot_terlapor_bc' => ['nullable', 'string'],
-            'pic_aktual' => ['nullable', 'string', 'max:500'],
-            'kronologi_singkat' => ['nullable', 'string'],
-            'rootcause_aktual' => ['nullable', 'string'],
-            'detail_rootcause_aktual' => ['nullable', 'string'],
-            'tindakan_perbaikan_aktual' => ['nullable', 'string'],
+            'sid_pekerja_terlibat' => ['nullable', 'string', 'max:255'],
+            'nama_pekerja_terlibat' => ['nullable', 'string', 'max:255'],
         ];
     }
 
@@ -43,7 +38,7 @@ class PeerPressureValidasiTbcRequest extends FormRequest
     {
         $v = $this->validated();
         $out = [];
-        foreach ($this->fillableKeys() as $key) {
+        foreach (self::FIELD_KEYS as $key) {
             $val = $v[$key] ?? null;
             if (is_string($val)) {
                 $val = trim($val);
@@ -54,26 +49,16 @@ class PeerPressureValidasiTbcRequest extends FormRequest
         return $out;
     }
 
-    /**
-     * @return list<string>
-     */
-    private function fillableKeys(): array
-    {
-        return [
-            'validator',
-            'tasklist',
-            'to_be_concerned_hazard',
-            'gr_pspp',
-            'catatan',
-            'no_item_pspp',
-            'kategori_gr',
-            'kategori_gr_valid_kpi',
-            'blindspot_terlapor_bc',
-            'pic_aktual',
-            'kronologi_singkat',
-            'rootcause_aktual',
-            'detail_rootcause_aktual',
-            'tindakan_perbaikan_aktual',
-        ];
-    }
+    /** Urutan kolom mengikuti header sumber Validasi TBC. */
+    public const FIELD_KEYS = [
+        'tasklist',
+        'to_be_concerned_hazard',
+        'gr',
+        'catatan',
+        'blindspot_terlapor_bc',
+        'no_item_pspp',
+        'kategori_gr',
+        'sid_pekerja_terlibat',
+        'nama_pekerja_terlibat',
+    ];
 }

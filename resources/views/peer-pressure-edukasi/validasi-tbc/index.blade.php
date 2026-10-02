@@ -39,7 +39,7 @@
          @endif
          <div class="rounded-xl border border-outline-variant/20 bg-[#f8fafc] p-3 text-[11px] text-on-surface-variant leading-relaxed max-h-40 overflow-y-auto">
             <p class="font-bold text-on-surface mb-1">Kolom (urutan tetap)</p>
-            <p class="text-[10px]">Validator, Tasklist, TobeConcernedHazard, GR/PSPP, Catatan, No Item PSPP, Kategori GR, Kategori GR valid KPI, Blindspot terlapor BC, PIC Aktual, Kronologi Singkat, Rootcause Aktual, Detail Rootcause Aktual, Tindakan Perbaikan Aktual.</p>
+            <p class="text-[10px]">Tasklist, TobeConcernedHazard, GR, Catatan, Blindspot terlapor BC, No Item PSPP, Kategori GR, SID Pekerja Terlibat (pelaku/pelanggar), Nama (pelaku/pelanggar).</p>
          </div>
          <div class="flex flex-wrap gap-2">
             <a href="{{ route('peer-pressure-edukasi.validasi-tbc.template') }}" class="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant/30 bg-white px-3 py-2 text-[11px] font-bold shadow-sm hover:bg-surface-container-high">
@@ -119,7 +119,7 @@
    <div class="p-6 border-b border-outline-variant/20 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div>
          <h2 class="font-headline font-bold text-xl text-on-surface">Validasi TBC</h2>
-         <p class="text-xs text-on-surface-variant font-medium">Validator, tasklist, hazard, GR/PSPP, tindak lanjut &amp; root cause.</p>
+         <p class="text-xs text-on-surface-variant font-medium">Tasklist, hazard, GR, blindspot terlapor BC &amp; pekerja terlibat (pelaku/pelanggar).</p>
       </div>
       <div class="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
          <form method="get" action="{{ route('peer-pressure-edukasi.validasi-tbc.index') }}" class="flex w-full min-w-0 flex-1 flex-col gap-2 sm:max-w-md sm:flex-row sm:items-center">
@@ -148,25 +148,33 @@
       </div>
    </div>
    <div class="overflow-x-auto">
-      <table class="w-full text-sm text-left min-w-[900px]">
+      <table class="w-full text-sm text-left min-w-[1400px]">
          <thead class="bg-[#f8fafc] text-on-surface-variant font-bold text-[10px] uppercase tracking-[0.12em] border-b border-outline-variant/20">
             <tr>
-               <th class="px-5 py-4 whitespace-nowrap">Validator</th>
                <th class="px-5 py-4 whitespace-nowrap">Tasklist</th>
-               <th class="px-5 py-4">GR/PSPP</th>
-               <th class="px-5 py-4">PIC aktual</th>
-               <th class="px-5 py-4 min-w-[200px]">Kronologi singkat</th>
+               <th class="px-5 py-4 min-w-[180px]">TobeConcernedHazard</th>
+               <th class="px-5 py-4">GR</th>
+               <th class="px-5 py-4 min-w-[180px]">Catatan</th>
+               <th class="px-5 py-4 min-w-[180px]">Blindspot terlapor BC</th>
+               <th class="px-5 py-4 whitespace-nowrap">No Item PSPP</th>
+               <th class="px-5 py-4 whitespace-nowrap">Kategori GR</th>
+               <th class="px-5 py-4 whitespace-nowrap">SID pekerja terlibat</th>
+               <th class="px-5 py-4 whitespace-nowrap">Nama (pelaku/pelanggar)</th>
                <th class="px-5 py-4 w-32">Aksi</th>
             </tr>
          </thead>
          <tbody class="divide-y divide-outline-variant/10">
             @forelse ($rows as $r)
                <tr class="hover:bg-[#f8fafc] transition-colors align-top">
-                  <td class="px-5 py-4 text-xs font-bold text-on-surface max-w-[140px]">{{ filled($r->validator) ? \Illuminate\Support\Str::limit($r->validator, 40) : '—' }}</td>
-                  <td class="px-5 py-4 text-xs max-w-[120px]">{{ filled($r->tasklist) ? \Illuminate\Support\Str::limit($r->tasklist, 32) : '—' }}</td>
-                  <td class="px-5 py-4 text-xs">{{ filled($r->gr_pspp) ? \Illuminate\Support\Str::limit($r->gr_pspp, 24) : '—' }}</td>
-                  <td class="px-5 py-4 text-xs">{{ filled($r->pic_aktual) ? \Illuminate\Support\Str::limit($r->pic_aktual, 28) : '—' }}</td>
-                  <td class="px-5 py-4 text-[11px] text-on-surface-variant">{{ filled($r->kronologi_singkat) ? \Illuminate\Support\Str::limit($r->kronologi_singkat, 100) : '—' }}</td>
+                  <td class="px-5 py-4 text-xs font-bold text-on-surface max-w-[120px]">{{ filled($r->tasklist) ? \Illuminate\Support\Str::limit($r->tasklist, 32) : '—' }}</td>
+                  <td class="px-5 py-4 text-[11px] text-on-surface-variant max-w-[220px]">{{ filled($r->to_be_concerned_hazard) ? \Illuminate\Support\Str::limit($r->to_be_concerned_hazard, 90) : '—' }}</td>
+                  <td class="px-5 py-4 text-xs">{{ filled($r->gr) ? \Illuminate\Support\Str::limit($r->gr, 24) : '—' }}</td>
+                  <td class="px-5 py-4 text-[11px] text-on-surface-variant max-w-[220px]">{{ filled($r->catatan) ? \Illuminate\Support\Str::limit($r->catatan, 90) : '—' }}</td>
+                  <td class="px-5 py-4 text-[11px] text-on-surface-variant max-w-[220px]">{{ filled($r->blindspot_terlapor_bc) ? \Illuminate\Support\Str::limit($r->blindspot_terlapor_bc, 90) : '—' }}</td>
+                  <td class="px-5 py-4 text-xs">{{ filled($r->no_item_pspp) ? \Illuminate\Support\Str::limit($r->no_item_pspp, 24) : '—' }}</td>
+                  <td class="px-5 py-4 text-xs">{{ filled($r->kategori_gr) ? \Illuminate\Support\Str::limit($r->kategori_gr, 24) : '—' }}</td>
+                  <td class="px-5 py-4 text-xs tabular-nums">{{ filled($r->sid_pekerja_terlibat) ? \Illuminate\Support\Str::limit($r->sid_pekerja_terlibat, 24) : '—' }}</td>
+                  <td class="px-5 py-4 text-xs">{{ filled($r->nama_pekerja_terlibat) ? \Illuminate\Support\Str::limit($r->nama_pekerja_terlibat, 36) : '—' }}</td>
                   <td class="px-5 py-4">
                      <div class="flex flex-col gap-2">
                         <a href="{{ route('peer-pressure-edukasi.validasi-tbc.edit', $r->id) }}" class="inline-flex items-center justify-center gap-1 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-[11px] font-bold text-primary hover:bg-primary/10">Edit</a>
@@ -180,7 +188,7 @@
                </tr>
             @empty
                <tr>
-                  <td colspan="6" class="px-8 py-10 text-center text-sm text-on-surface-variant font-medium">
+                  <td colspan="10" class="px-8 py-10 text-center text-sm text-on-surface-variant font-medium">
                      @if(filled($q ?? null))Tidak ada hasil untuk pencarian ini.@else Belum ada data validasi TBC.@endif
                   </td>
                </tr>

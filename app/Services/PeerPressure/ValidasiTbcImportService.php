@@ -19,20 +19,28 @@ final class ValidasiTbcImportService
 
     /** Header baris 1 template — urutan harus sama persis. */
     public const HEADER_IMPORT = [
-        'Validator',
         'Tasklist',
         'TobeConcernedHazard',
-        'GR/PSPP',
+        'GR',
         'Catatan',
+        'Blindspot terlapor BC',
         'No Item PSPP',
         'Kategori GR',
-        'Kategori GR valid KPI',
-        'Blindspot terlapor BC',
-        'PIC Aktual (pelaku/pelanggar)',
-        'Kronologi Singkat (summary dari Deskripsi)',
-        'Rootcause Aktual',
-        'Detail Rootcause Aktual',
-        'Tindakan Perbaikan Aktual',
+        'SID Pekerja Terlibat (pelaku/pelanggar)',
+        'Nama (pelaku/pelanggar)',
+    ];
+
+    /** Kolom DB sejajar urutan {@see self::HEADER_IMPORT}. */
+    public const COLUMN_IMPORT = [
+        'tasklist',
+        'to_be_concerned_hazard',
+        'gr',
+        'catatan',
+        'blindspot_terlapor_bc',
+        'no_item_pspp',
+        'kategori_gr',
+        'sid_pekerja_terlibat',
+        'nama_pekerja_terlibat',
     ];
 
     private const BATCH_INSERT_SIZE = 250;
@@ -141,25 +149,8 @@ final class ValidasiTbcImportService
      */
     private function attributesFromImportRow(array $row): array
     {
-        $keys = [
-            'validator',
-            'tasklist',
-            'to_be_concerned_hazard',
-            'gr_pspp',
-            'catatan',
-            'no_item_pspp',
-            'kategori_gr',
-            'kategori_gr_valid_kpi',
-            'blindspot_terlapor_bc',
-            'pic_aktual',
-            'kronologi_singkat',
-            'rootcause_aktual',
-            'detail_rootcause_aktual',
-            'tindakan_perbaikan_aktual',
-        ];
-
         $out = [];
-        foreach ($keys as $i => $key) {
+        foreach (self::COLUMN_IMPORT as $i => $key) {
             $s = $this->cellStr($row, $i);
             $out[$key] = $s !== '' ? $s : null;
         }

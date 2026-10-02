@@ -959,9 +959,10 @@
                      <table class="min-w-full border-collapse text-left text-[11px] text-on-surface">
                         <thead class="bg-[#f1f5f9] text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
                            <tr>
-                              <th class="px-3 py-2">Validator</th>
-                              <th class="px-3 py-2">GR / PSPP</th>
+                              <th class="px-3 py-2">GR</th>
                               <th class="px-3 py-2">Tasklist</th>
+                              <th class="px-3 py-2 whitespace-nowrap">SID pekerja terlibat</th>
+                              <th class="px-3 py-2">Nama (pelaku/pelanggar)</th>
                               <th class="px-3 py-2 whitespace-nowrap">Dibuat</th>
                            </tr>
                         </thead>
@@ -2752,14 +2753,17 @@
               var tl = row.tasklist_short != null ? String(row.tasklist_short) : row.tasklist != null ? String(row.tasklist) : '—';
               return (
                 '<tr>' +
-                '<td class="px-3 py-2">' +
-                escHtml(row.validator != null ? String(row.validator) : '—') +
-                '</td>' +
                 '<td class="px-3 py-2 max-w-[160px]">' +
-                escHtml(row.gr_pspp != null ? String(row.gr_pspp) : '—') +
+                escHtml(row.gr != null ? String(row.gr) : '—') +
                 '</td>' +
                 '<td class="px-3 py-2 max-w-md whitespace-pre-wrap break-words">' +
                 escHtml(tl) +
+                '</td>' +
+                '<td class="px-3 py-2 tabular-nums">' +
+                escHtml(row.sid_pekerja_terlibat != null ? String(row.sid_pekerja_terlibat) : '—') +
+                '</td>' +
+                '<td class="px-3 py-2 max-w-[180px]">' +
+                escHtml(row.nama_pekerja_terlibat != null ? String(row.nama_pekerja_terlibat) : '—') +
                 '</td>' +
                 '<td class="px-3 py-2 whitespace-nowrap tabular-nums">' +
                 escHtml(row.created_at != null ? String(row.created_at) : '—') +
