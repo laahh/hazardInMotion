@@ -148,14 +148,19 @@ final class BerecordController extends Controller
                 ->orderByRaw($this->orderExpression($request))
                 ->orderBy('b.id_berecord') // tie-breaker: paging stabil saat nilai sort kembar
                 ->forPage($this->page($request), $this->pageLength($request))
-                ->selectRaw(self::SITE_SQL . ' AS site')
-                ->get([
+                // Kolom HARUS dipasang lewat select(), bukan lewat argumen get():
+                // get($columns) hanya berlaku kalau select masih kosong, dan
+                // selectRaw() di bawah sudah mengisinya — argumen get() akan
+                // diabaikan diam-diam sehingga query cuma menyeleksi "site".
+                ->select([
                     'b.id_berecord', 'b.kode_sid', 'b.nama_karyawan', 'b.perusahaan',
                     'b.jabatan_fungsional', 'b.jabatan_struktural',
                     'b.kategori_berecord', 'b.tipe_berecord', 'b.golden_rules',
                     'b.kategori_kecelakaan', 'b.tanggal_mulai_berecord', 'b.tanggal_selesai_berecord',
                     'b.status_berecord', 'b.status_proses_berecord', 'b.status_permit', 'b.diskripsi',
-                ]);
+                ])
+                ->selectRaw(self::SITE_SQL . ' AS site')
+                ->get();
 
             return response()->json([
                 'draw' => $draw,
