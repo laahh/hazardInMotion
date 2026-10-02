@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\OhsScoreCard\BerecordController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
 use App\Http\Controllers\OhsScoreCard\RoadSummaryController;
 use Illuminate\Support\Facades\Route;
@@ -28,4 +29,10 @@ Route::middleware('evaluasi-well.access')
             ->name('jalan-sesuai-standar.data');
         Route::get('/jalan-sesuai-standar/export', [RoadSummaryController::class, 'export'])
             ->name('jalan-sesuai-standar.export');
+
+        // Parameter HSECT — "Peer Pressure" (hse_automation: bcsid.mv_berecord)
+        Route::get('/peer-pressure', [BerecordController::class, 'index'])
+            ->name('peer-pressure.index');
+        Route::get('/peer-pressure/data', [BerecordController::class, 'data'])
+            ->name('peer-pressure.data');
     });

@@ -39,7 +39,7 @@
             ['label' => '% Blindspot TBC dengan PIC Subcontractor',                     'icon' => 'solar:users-group-rounded-outline'],
         ],
         'HSECT' => [
-            ['label' => 'Peer Pressure',                                                'icon' => 'solar:users-group-two-rounded-outline'],
+            ['label' => 'Peer Pressure',                                                'icon' => 'solar:users-group-two-rounded-outline', 'url' => route('ohs-score-card.peer-pressure.index')],
             ['label' => 'Pemenuhan Sertifikasi Pengawas Teknis',                        'icon' => 'solar:diploma-outline'],
             ['label' => 'Pemenuhan Sertifikasi Tenaga Teknis',                          'icon' => 'solar:diploma-verified-outline'],
         ],
