@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 use App\Http\Controllers\OhsScoreCard\BerecordController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
+use App\Http\Controllers\OhsScoreCard\PelaksanaanEdukasiController;
 use App\Http\Controllers\OhsScoreCard\RoadSummaryController;
+use App\Http\Controllers\OhsScoreCard\SpeakUpFatigueController;
+use App\Http\Controllers\OhsScoreCard\ValidasiTbcTabController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -35,4 +38,24 @@ Route::middleware('evaluasi-well.access')
             ->name('peer-pressure.index');
         Route::get('/peer-pressure/data', [BerecordController::class, 'data'])
             ->name('peer-pressure.data');
+        Route::get('/peer-pressure/export', [BerecordController::class, 'export'])
+            ->name('peer-pressure.export');
+
+        // Tab Speak Up (app_mixer.speak_up_fatigue)
+        Route::get('/peer-pressure/speak-up/data', [SpeakUpFatigueController::class, 'data'])
+            ->name('peer-pressure.speak-up.data');
+        Route::get('/peer-pressure/speak-up/export', [SpeakUpFatigueController::class, 'export'])
+            ->name('peer-pressure.speak-up.export');
+
+        // Tab Blindspot TBC (app_mixer.validasi_tbc)
+        Route::get('/peer-pressure/blindspot-tbc/data', [ValidasiTbcTabController::class, 'data'])
+            ->name('peer-pressure.blindspot-tbc.data');
+        Route::get('/peer-pressure/blindspot-tbc/export', [ValidasiTbcTabController::class, 'export'])
+            ->name('peer-pressure.blindspot-tbc.export');
+
+        // Tab Pelaksanaan Peer Pressure (kejadian + peserta edukasi)
+        Route::get('/peer-pressure/pelaksanaan/data', [PelaksanaanEdukasiController::class, 'data'])
+            ->name('peer-pressure.pelaksanaan.data');
+        Route::get('/peer-pressure/pelaksanaan/export', [PelaksanaanEdukasiController::class, 'export'])
+            ->name('peer-pressure.pelaksanaan.export');
     });

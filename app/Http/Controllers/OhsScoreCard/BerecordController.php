@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\OhsScoreCard;
 
+use App\Http\Controllers\Concerns\ServesDataTable;
 use App\Http\Controllers\Controller;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Query\Builder;
@@ -11,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 /**
@@ -22,6 +24,8 @@ use Throwable;
  */
 final class BerecordController extends Controller
 {
+    use ServesDataTable;
+
     /**
      * Koneksi langsung ke RDS, bukan lewat tunnel SSH (pgsql_ssh).
      * Mengikuti preseden SportEvaluationPvtRfidCheckinReader: tunnel di server
@@ -181,6 +185,51 @@ final class BerecordController extends Controller
                 'error' => 'Koneksi ke database hse_automation tidak tersedia.',
             ], 503);
         }
+    }
+
+    public function export(Request $request): StreamedResponse
+    {
+        $query = $this->buildFilteredQuery($request)
+            ->select([
+                'b.kode_sid', 'b.nama_karyawan', 'b.perusahaan',
+                'b.jabatan_fungsional', 'b.jabatan_struktural',
+                'b.kategori_berecord', 'b.tipe_berecord', 'b.golden_rules',
+                'b.tanggal_mulai_berecord', 'b.tanggal_selesai_berecord',
+                'b.status_berecord', 'b.status_proses_berecord',
+                'b.status_permit', 'b.diskripsi',
+            ])
+            ->selectRaw(self::SITE_SQL . ' AS site')
+            ->orderByRaw('b.tanggal_mulai_berecord desc NULLS LAST')
+            ->orderBy('b.id_berecord');
+
+        return $this->dtExport(
+            $request,
+            $query,
+            [
+                'Kode SID', 'Nama Karyawan', 'Perusahaan', 'Site', 'Jabatan Fungsional',
+                'Jabatan Struktural', 'Kategori', 'Tipe', 'Golden Rules',
+                'Tanggal Mulai', 'Tanggal Selesai', 'Status beRecord',
+                'Status Proses', 'Status Permit', 'Deskripsi',
+            ],
+            static fn (object $row): array => [
+                (string) $row->kode_sid,
+                (string) $row->nama_karyawan,
+                (string) $row->perusahaan,
+                (string) $row->site,
+                (string) $row->jabatan_fungsional,
+                (string) $row->jabatan_struktural,
+                (string) $row->kategori_berecord,
+                (string) $row->tipe_berecord,
+                (string) $row->golden_rules,
+                (string) $row->tanggal_mulai_berecord,
+                (string) $row->tanggal_selesai_berecord,
+                (string) $row->status_berecord,
+                (string) $row->status_proses_berecord,
+                (string) $row->status_permit,
+                (string) $row->diskripsi,
+            ],
+            'berecord'
+        );
     }
 
     private function baseQuery(): Builder
