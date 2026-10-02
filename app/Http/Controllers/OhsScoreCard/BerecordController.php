@@ -31,51 +31,76 @@ final class BerecordController extends Controller
 
     private const TABLE = 'bcsid.mv_berecord';
 
+    /**
+     * mv_berecord TIDAK punya kolom site, jadi site diambil dengan join
+     * ke master karyawan lewat kode_sid. Dua sumber dipakai berurutan:
+     *
+     *   crontable_bep_vw_m_karyawan_aktif  -> 2.088 baris terisi
+     *   bep_vw_safety_all_karyawan         -> +308 baris yang tidak
+     *                                         tertutup sumber pertama
+     *
+     * Hasilnya 2.396 dari 2.731 baris (87,7%) punya site; sisanya memang
+     * tidak ada datanya di master, ditampilkan sebagai '-'.
+     *
+     * Keduanya sudah diperiksa unik per kode_sid (24.750 dan 63.900 baris,
+     * nol duplikat), jadi LEFT JOIN ini tidak menggandakan baris beRecord:
+     * jumlahnya tetap 2.731 sesudah join.
+     */
+    private const SITE_KARYAWAN_TABLE = 'bcsid.crontable_bep_vw_m_karyawan_aktif';
+
+    private const SITE_SAFETY_TABLE = 'bcsid.bep_vw_safety_all_karyawan';
+
+    private const SITE_SQL = "COALESCE(NULLIF(TRIM(k.site_dedicated), ''), NULLIF(TRIM(s.site_dedicated), ''))";
+
     private const DEFAULT_PAGE_LENGTH = 25;
     private const MAX_PAGE_LENGTH = 200;
 
     /** Opsi dropdown jarang berubah; DISTINCT-nya tak perlu diulang tiap request. */
     private const FILTER_CACHE_TTL = 600;
 
-    /** Kolom yang difilter persis dari query string. */
+    /**
+     * Kolom yang difilter persis dari query string: nama parameter => kolom SQL.
+     * Kolom WAJIB berprefix alias sejak ada join, kalau tidak ambigu.
+     */
     private const FILTERABLE = [
-        'perusahaan',
-        'kategori_berecord',
-        'tipe_berecord',
-        'golden_rules',
-        'status_berecord',
-        'status_proses_berecord',
-        'status_permit',
-        'jabatan_fungsional',
+        'perusahaan' => 'b.perusahaan',
+        'kategori_berecord' => 'b.kategori_berecord',
+        'tipe_berecord' => 'b.tipe_berecord',
+        'golden_rules' => 'b.golden_rules',
+        'status_berecord' => 'b.status_berecord',
+        'status_proses_berecord' => 'b.status_proses_berecord',
+        'status_permit' => 'b.status_permit',
+        'jabatan_fungsional' => 'b.jabatan_fungsional',
     ];
 
     /** Index kolom DataTable -> kolom SQL. Whitelist, supaya order tak bisa diinjeksi. */
     private const ORDERABLE = [
-        0 => 'kode_sid',
-        1 => 'nama_karyawan',
-        2 => 'perusahaan',
-        3 => 'jabatan_fungsional',
-        4 => 'kategori_berecord',
-        5 => 'tipe_berecord',
-        6 => 'golden_rules',
-        7 => 'tanggal_mulai_berecord',
-        8 => 'tanggal_selesai_berecord',
-        9 => 'status_berecord',
-        10 => 'status_proses_berecord',
-        11 => 'status_permit',
+        0 => 'b.kode_sid',
+        1 => 'b.nama_karyawan',
+        2 => 'b.perusahaan',
+        3 => self::SITE_SQL,
+        4 => 'b.jabatan_fungsional',
+        5 => 'b.kategori_berecord',
+        6 => 'b.tipe_berecord',
+        7 => 'b.golden_rules',
+        8 => 'b.tanggal_mulai_berecord',
+        9 => 'b.tanggal_selesai_berecord',
+        10 => 'b.status_berecord',
+        11 => 'b.status_proses_berecord',
+        12 => 'b.status_permit',
     ];
 
     /** Kolom yang ikut kena kotak search bebas. */
     private const SEARCHABLE = [
-        'kode_sid',
-        'nama_karyawan',
-        'perusahaan',
-        'jabatan_fungsional',
-        'jabatan_struktural',
-        'kategori_berecord',
-        'tipe_berecord',
-        'golden_rules',
-        'diskripsi',
+        'b.kode_sid',
+        'b.nama_karyawan',
+        'b.perusahaan',
+        'b.jabatan_fungsional',
+        'b.jabatan_struktural',
+        'b.kategori_berecord',
+        'b.tipe_berecord',
+        'b.golden_rules',
+        'b.diskripsi',
     ];
 
     /**
@@ -88,17 +113,15 @@ final class BerecordController extends Controller
      * Sudah diperiksa ke data: 1.106 banned + 1.385 not banned + 240 tanpa
      * label = 2.731 total, jadi ekspresi ini membagi habis tanpa tumpang tindih.
      */
-    private const BANNED_SQL = "(tipe_berecord ILIKE '%banned%' AND tipe_berecord NOT ILIKE '%not banned%')";
+    private const BANNED_SQL = "(b.tipe_berecord ILIKE '%banned%' AND b.tipe_berecord NOT ILIKE '%not banned%')";
 
     public function index(): View
     {
         $connectionUp = true;
-        $filterOptions = [];
-        $total = 0;
 
         try {
-            $filterOptions = $this->filterOptions();
-            $total = $this->totalCount();
+            // Sekaligus jadi probe koneksi: hasilnya di-cache, jadi murah.
+            $this->totalCount();
         } catch (Throwable $e) {
             // RDS tidak selalu terjangkau (mis. dari jaringan lokal tanpa tunnel).
             // Halaman tetap tampil dengan peringatan, bukan error 500.
@@ -107,8 +130,6 @@ final class BerecordController extends Controller
         }
 
         return view('ohs-score-card.peer-pressure.index', [
-            'filterOptions' => $filterOptions,
-            'totalRecords' => $total,
             'connectionUp' => $connectionUp,
         ]);
     }
@@ -125,14 +146,15 @@ final class BerecordController extends Controller
 
             $rows = $filtered
                 ->orderByRaw($this->orderExpression($request))
-                ->orderBy('id_berecord') // tie-breaker: paging stabil saat nilai sort kembar
+                ->orderBy('b.id_berecord') // tie-breaker: paging stabil saat nilai sort kembar
                 ->forPage($this->page($request), $this->pageLength($request))
+                ->selectRaw(self::SITE_SQL . ' AS site')
                 ->get([
-                    'id_berecord', 'kode_sid', 'nama_karyawan', 'perusahaan',
-                    'jabatan_fungsional', 'jabatan_struktural',
-                    'kategori_berecord', 'tipe_berecord', 'golden_rules',
-                    'kategori_kecelakaan', 'tanggal_mulai_berecord', 'tanggal_selesai_berecord',
-                    'status_berecord', 'status_proses_berecord', 'status_permit', 'diskripsi',
+                    'b.id_berecord', 'b.kode_sid', 'b.nama_karyawan', 'b.perusahaan',
+                    'b.jabatan_fungsional', 'b.jabatan_struktural',
+                    'b.kategori_berecord', 'b.tipe_berecord', 'b.golden_rules',
+                    'b.kategori_kecelakaan', 'b.tanggal_mulai_berecord', 'b.tanggal_selesai_berecord',
+                    'b.status_berecord', 'b.status_proses_berecord', 'b.status_permit', 'b.diskripsi',
                 ]);
 
             return response()->json([
@@ -158,7 +180,10 @@ final class BerecordController extends Controller
 
     private function baseQuery(): Builder
     {
-        return DB::connection(self::CONNECTION)->table(self::TABLE);
+        return DB::connection(self::CONNECTION)
+            ->table(self::TABLE . ' as b')
+            ->leftJoin(self::SITE_KARYAWAN_TABLE . ' as k', 'k.kode_sid', '=', 'b.kode_sid')
+            ->leftJoin(self::SITE_SAFETY_TABLE . ' as s', 's.kode_sid', '=', 'b.kode_sid');
     }
 
     private function totalCount(): int
@@ -178,12 +203,18 @@ final class BerecordController extends Controller
     {
         $query = $this->baseQuery();
 
-        foreach (self::FILTERABLE as $column) {
-            $value = trim((string) $request->input($column, ''));
+        foreach (self::FILTERABLE as $parameter => $column) {
+            $value = trim((string) $request->input($parameter, ''));
 
             if ($value !== '') {
                 $query->where($column, $value);
             }
+        }
+
+        $site = trim((string) $request->input('site', ''));
+
+        if ($site !== '') {
+            $query->whereRaw(self::SITE_SQL . ' = ?', [$site]);
         }
 
         $this->applyBannedFilter($query, $request);
@@ -214,11 +245,11 @@ final class BerecordController extends Controller
         $to = trim((string) $request->input('tanggal_sampai', ''));
 
         if ($from !== '') {
-            $query->whereDate('tanggal_mulai_berecord', '>=', $from);
+            $query->whereDate('b.tanggal_mulai_berecord', '>=', $from);
         }
 
         if ($to !== '') {
-            $query->whereDate('tanggal_mulai_berecord', '<=', $to);
+            $query->whereDate('b.tanggal_mulai_berecord', '<=', $to);
         }
     }
 
@@ -250,9 +281,9 @@ final class BerecordController extends Controller
     {
         $row = $query->selectRaw(
             'COUNT(*) AS total,'
-            . " COUNT(*) FILTER (WHERE status_berecord = 'Masih Berlaku') AS masih_berlaku,"
+            . " COUNT(*) FILTER (WHERE b.status_berecord = 'Masih Berlaku') AS masih_berlaku,"
             . ' COUNT(*) FILTER (WHERE ' . self::BANNED_SQL . ') AS banned,'
-            . " COUNT(*) FILTER (WHERE status_permit = 'NOT PASSED') AS permit_gagal"
+            . " COUNT(*) FILTER (WHERE b.status_permit = 'NOT PASSED') AS permit_gagal"
         )->first();
 
         $total = (int) ($row->total ?? 0);
@@ -287,40 +318,14 @@ final class BerecordController extends Controller
         ];
     }
 
-    /**
-     * Nilai unik tiap kolom filter, untuk mengisi dropdown.
-     *
-     * @return array<string, array<int, string>>
-     */
-    private function filterOptions(): array
-    {
-        return Cache::remember('ohs-score-card.berecord.filters', self::FILTER_CACHE_TTL, function (): array {
-            $options = [];
-
-            foreach (self::FILTERABLE as $column) {
-                $options[$column] = $this->baseQuery()
-                    ->select($column)
-                    ->whereNotNull($column)
-                    ->where($column, '!=', '')
-                    ->distinct()
-                    ->orderBy($column)
-                    ->pluck($column)
-                    ->map(static fn ($value): string => trim((string) $value))
-                    ->filter(static fn (string $value): bool => $value !== '')
-                    ->unique()
-                    ->values()
-                    ->all();
-            }
-
-            return $options;
-        });
-    }
-
     private function orderColumn(Request $request): string
     {
-        $index = (int) data_get($request->input('order'), '0.column', 7);
+        // Default index 8 = tanggal_mulai_berecord (lihat ORDERABLE).
+        // Angka ini bergeser kalau ada kolom disisipkan — kolom Site di index 3
+        // sudah menggesernya sekali dari 7 ke 8.
+        $index = (int) data_get($request->input('order'), '0.column', 8);
 
-        return self::ORDERABLE[$index] ?? 'tanggal_mulai_berecord';
+        return self::ORDERABLE[$index] ?? 'b.tanggal_mulai_berecord';
     }
 
     /**

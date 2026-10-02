@@ -2,38 +2,8 @@
 
 @section('title', 'Peer Pressure — beRecord')
 
-@php
-  /** Label dropdown filter: key = nama kolom di bcsid.mv_berecord. */
-  $filterLabels = [
-      'perusahaan' => 'Perusahaan',
-      'kategori_berecord' => 'Kategori',
-      'tipe_berecord' => 'Tipe',
-      'golden_rules' => 'Golden Rules',
-      'jabatan_fungsional' => 'Jabatan Fungsional',
-      'status_berecord' => 'Status beRecord',
-      'status_proses_berecord' => 'Status Proses',
-      'status_permit' => 'Status Permit',
-  ];
-@endphp
-
 @section('css')
 <style>
-  .bp-stat {
-    border: 1px solid #E2E8F0;
-    border-radius: 14px;
-    background: #fff;
-    padding: 16px 18px;
-    height: 100%;
-  }
-  .bp-stat__label { font-size: 12px; font-weight: 500; color: #64748B; line-height: 1.25; }
-  .bp-stat__value { font-size: 24px; font-weight: 800; color: #0F172A; line-height: 1.2; letter-spacing: -0.01em; }
-  .bp-stat__meta  { font-size: 12px; color: #64748B; }
-  .bp-stat__icon {
-    width: 42px; height: 42px; border-radius: 999px;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 20px; flex-shrink: 0;
-  }
-
   .bp-badge {
     display: inline-block;
     padding: 3px 10px;
@@ -131,99 +101,8 @@
   </div>
 @endunless
 
-<div class="row gy-3 mb-24">
-  <div class="col-xxl-3 col-sm-6">
-    <div class="bp-stat d-flex align-items-center gap-3">
-      <span class="bp-stat__icon" style="background:#EFF6FF;color:#2563EB;">
-        <iconify-icon icon="solar:clipboard-list-outline"></iconify-icon>
-      </span>
-      <div class="min-w-0">
-        <div class="bp-stat__label">Total beRecord</div>
-        <div class="bp-stat__value" id="bp-total">{{ number_format($totalRecords) }}</div>
-        <div class="bp-stat__meta" id="bp-total-meta">seluruh data</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-xxl-3 col-sm-6">
-    <div class="bp-stat d-flex align-items-center gap-3">
-      <span class="bp-stat__icon" style="background:#FEFCE8;color:#CA8A04;">
-        <iconify-icon icon="solar:clock-circle-outline"></iconify-icon>
-      </span>
-      <div class="min-w-0">
-        <div class="bp-stat__label">Masih Berlaku</div>
-        <div class="bp-stat__value" id="bp-berlaku">–</div>
-        <div class="bp-stat__meta" id="bp-berlaku-meta">&nbsp;</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-xxl-3 col-sm-6">
-    <div class="bp-stat d-flex align-items-center gap-3">
-      <span class="bp-stat__icon" style="background:#FEF2F2;color:#DC2626;">
-        <iconify-icon icon="solar:forbidden-circle-outline"></iconify-icon>
-      </span>
-      <div class="min-w-0">
-        <div class="bp-stat__label">Banned</div>
-        <div class="bp-stat__value" id="bp-banned">–</div>
-        <div class="bp-stat__meta" id="bp-banned-meta">&nbsp;</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-xxl-3 col-sm-6">
-    <div class="bp-stat d-flex align-items-center gap-3">
-      <span class="bp-stat__icon" style="background:#FFF7ED;color:#EA580C;">
-        <iconify-icon icon="solar:shield-cross-outline"></iconify-icon>
-      </span>
-      <div class="min-w-0">
-        <div class="bp-stat__label">Permit NOT PASSED</div>
-        <div class="bp-stat__value" id="bp-permit">–</div>
-        <div class="bp-stat__meta" id="bp-permit-meta">&nbsp;</div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <div class="card radius-8 border">
   <div class="card-body p-24">
-
-    <div class="row gy-3 gx-3 align-items-end mb-20">
-      @foreach ($filterLabels as $column => $label)
-        <div class="col-xxl-3 col-md-4 col-sm-6">
-          <label class="form-label text-sm fw-medium mb-4" for="bp-filter-{{ $column }}">{{ $label }}</label>
-          <select class="form-select form-select-sm radius-8 bp-filter" id="bp-filter-{{ $column }}" data-column="{{ $column }}">
-            <option value="">Semua</option>
-            @foreach ($filterOptions[$column] ?? [] as $option)
-              <option value="{{ $option }}">{{ $option }}</option>
-            @endforeach
-          </select>
-        </div>
-      @endforeach
-
-      <div class="col-xxl-3 col-md-4 col-sm-6">
-        <label class="form-label text-sm fw-medium mb-4" for="bp-filter-banned">Banned</label>
-        <select class="form-select form-select-sm radius-8 bp-filter" id="bp-filter-banned" data-column="banned">
-          <option value="">Semua</option>
-          <option value="banned">Banned</option>
-          <option value="not-banned">Tidak Banned</option>
-        </select>
-      </div>
-
-      <div class="col-xxl-3 col-md-4 col-sm-6">
-        <label class="form-label text-sm fw-medium mb-4" for="bp-filter-tanggal_dari">Mulai dari</label>
-        <input type="date" class="form-control form-control-sm radius-8 bp-filter" id="bp-filter-tanggal_dari" data-column="tanggal_dari">
-      </div>
-
-      <div class="col-xxl-3 col-md-4 col-sm-6">
-        <label class="form-label text-sm fw-medium mb-4" for="bp-filter-tanggal_sampai">Sampai</label>
-        <input type="date" class="form-control form-control-sm radius-8 bp-filter" id="bp-filter-tanggal_sampai" data-column="tanggal_sampai">
-      </div>
-
-      <div class="col-12 d-flex align-items-center gap-2">
-        <button type="button" class="btn btn-sm btn-primary-600 radius-8" id="bp-apply">
-          <iconify-icon icon="solar:filter-outline" class="icon"></iconify-icon> Terapkan
-        </button>
-        <button type="button" class="btn btn-sm btn-outline-secondary radius-8" id="bp-reset">Reset</button>
-      </div>
-    </div>
 
     <div class="table-responsive">
       <table class="table bordered-table mb-0" id="berecordTable">
@@ -232,6 +111,7 @@
             <th>Kode SID</th>
             <th>Nama Karyawan</th>
             <th>Perusahaan</th>
+            <th>Site</th>
             <th>Jabatan</th>
             <th>Kategori</th>
             <th>Tipe</th>
@@ -265,7 +145,6 @@
     }
 
     var dataUrl = @json(route('ohs-score-card.peer-pressure.data'));
-    var filterEls = Array.prototype.slice.call(document.querySelectorAll('.bp-filter'));
 
     function escapeHtml(value) {
         return String(value === null || value === undefined ? '' : value)
@@ -310,35 +189,6 @@
         return t.indexOf('banned') !== -1 && t.indexOf('not banned') === -1;
     }
 
-    function currentFilters() {
-        var out = {};
-        filterEls.forEach(function (el) {
-            if (el.value) {
-                out[el.dataset.column] = el.value;
-            }
-        });
-        return out;
-    }
-
-    function updateSummary(summary) {
-        if (!summary) {
-            return;
-        }
-        document.querySelector('#bp-total').textContent = formatNumber(summary.total);
-        document.querySelector('#bp-total-meta').textContent =
-            Object.keys(currentFilters()).length ? 'sesuai filter' : 'seluruh data';
-
-        [['berlaku', 'masih_berlaku', 'masih_berlaku_pct'],
-         ['banned', 'banned', 'banned_pct'],
-         ['permit', 'permit_gagal', 'permit_gagal_pct']].forEach(function (item) {
-            document.querySelector('#bp-' + item[0]).textContent = formatNumber(summary[item[1]]);
-            document.querySelector('#bp-' + item[0] + '-meta').textContent =
-                Number(summary[item[2]] || 0).toLocaleString('id-ID', {
-                    minimumFractionDigits: 2, maximumFractionDigits: 2
-                }) + '% dari ' + formatNumber(summary.total);
-        });
-    }
-
     var table = new DataTable(tableEl, {
         processing: true,
         serverSide: true,
@@ -346,7 +196,7 @@
         ordering: true,
         pageLength: 25,
         lengthMenu: [25, 50, 100, 200],
-        order: [[7, 'desc']],
+        order: [[8, 'desc']],
         autoWidth: false,
         layout: {
             topStart: 'pageLength',
@@ -360,14 +210,7 @@
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
             },
-            data: function (d) {
-                var filters = currentFilters();
-                Object.keys(filters).forEach(function (key) {
-                    d[key] = filters[key];
-                });
-            },
             dataSrc: function (json) {
-                updateSummary(json.summary);
                 return json.data || [];
             },
             error: function (xhr, error) {
@@ -387,6 +230,7 @@
                 }
             },
             { data: 'perusahaan', render: function (d) { return plain(d); } },
+            { data: 'site', render: function (d) { return plain(d); } },
             { data: 'jabatan_fungsional', render: function (d) { return plain(d); } },
             { data: 'kategori_berecord', render: function (d) { return plain(d); } },
             {
@@ -434,20 +278,6 @@
             zeroRecords: 'Tidak ada beRecord untuk filter ini.',
             paginate: { first: '«', last: '»', next: '›', previous: '‹' }
         }
-    });
-
-    document.querySelector('#bp-apply').addEventListener('click', function () {
-        table.ajax.reload();
-    });
-
-    document.querySelector('#bp-reset').addEventListener('click', function () {
-        filterEls.forEach(function (el) { el.value = ''; });
-        table.search('');
-        table.ajax.reload();
-    });
-
-    filterEls.forEach(function (el) {
-        el.addEventListener('change', function () { table.ajax.reload(); });
     });
 })();
 </script>
