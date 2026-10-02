@@ -4723,10 +4723,10 @@
                   
                     <div class="d-flex align-items-center gap-2">
                       <span class="mb-0 w-48-px h-48-px bg-yellow text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
-                        <iconify-icon icon="mingcute:user-3-fill" class="icon"></iconify-icon>  
+                        <iconify-icon icon="solar:map-point-wave-outline" class="icon"></iconify-icon>  
                       </span>
                       <div>
-                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total Karyawan</span>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Site BMO 1</span>
                         <h6 class="fw-semibold">{{ number_format($totalKaryawan ?? $siteTotalEmployees ?? 0) }}</h6>
                       </div>
                     </div>
