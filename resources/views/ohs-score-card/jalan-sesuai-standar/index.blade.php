@@ -283,6 +283,16 @@
         <button type="button" class="btn btn-sm btn-outline-secondary radius-8" id="rs-reset">
           Reset
         </button>
+
+        <div class="ms-auto d-flex align-items-center gap-2">
+          <span class="text-sm text-secondary-light" id="rs-export-hint"></span>
+          <button type="button" class="btn btn-sm btn-success-600 radius-8" id="rs-export-xlsx">
+            <iconify-icon icon="mdi:microsoft-excel" class="icon"></iconify-icon> Excel
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-success radius-8" id="rs-export-csv">
+            <iconify-icon icon="mdi:file-delimited-outline" class="icon"></iconify-icon> CSV
+          </button>
+        </div>
       </div>
     </div>
 
@@ -474,6 +484,8 @@
             },
             dataSrc: function (json) {
                 updateSummary(json.summary);
+                lastFilteredCount = json.recordsFiltered;
+                refreshExportHint();
                 return json.data || [];
             },
             error: function (xhr, error) {
@@ -518,6 +530,56 @@
             paginate: { first: '«', last: '»', next: '›', previous: '‹' }
         }
     });
+
+    // ---- Unduhan -----------------------------------------------------------
+    var exportUrl = @json(route('ohs-score-card.jalan-sesuai-standar.export'));
+    var maxXlsxRows = @json($maxXlsxRows);
+    var lastFilteredCount = null;
+
+    function exportHref(format) {
+        var params = new URLSearchParams(currentFilters());
+        params.set('format', format);
+
+        var search = table.search();
+        if (search) {
+            params.set('search', search);
+        }
+        return exportUrl + '?' + params.toString();
+    }
+
+    // Beri tahu lebih dulu kalau hasil filter terlalu besar untuk .xlsx,
+    // supaya pengguna tidak menunggu lalu baru ditolak.
+    function refreshExportHint() {
+        var hint = document.querySelector('#rs-export-hint');
+        var xlsxBtn = document.querySelector('#rs-export-xlsx');
+
+        if (lastFilteredCount === null) {
+            hint.textContent = '';
+            return;
+        }
+
+        var tooBig = lastFilteredCount > maxXlsxRows;
+        xlsxBtn.classList.toggle('disabled', tooBig);
+        xlsxBtn.setAttribute('aria-disabled', tooBig ? 'true' : 'false');
+        hint.textContent = tooBig
+            ? formatNumber(lastFilteredCount) + ' baris — terlalu besar untuk Excel, pakai CSV'
+            : 'unduh ' + formatNumber(lastFilteredCount) + ' baris';
+    }
+
+    function startDownload(format) {
+        if (format === 'xlsx' && lastFilteredCount !== null && lastFilteredCount > maxXlsxRows) {
+            window.alert(
+                'Hasil filter ' + formatNumber(lastFilteredCount) + ' baris, melebihi batas '
+                + formatNumber(maxXlsxRows) + ' baris untuk Excel (.xlsx).\n\n'
+                + 'Persempit filter (misalnya pilih satu bulan atau satu site), atau unduh sebagai CSV.'
+            );
+            return;
+        }
+        window.location.href = exportHref(format);
+    }
+
+    document.querySelector('#rs-export-xlsx').addEventListener('click', function () { startDownload('xlsx'); });
+    document.querySelector('#rs-export-csv').addEventListener('click', function () { startDownload('csv'); });
 
     document.querySelector('#rs-apply').addEventListener('click', function () {
         table.ajax.reload();

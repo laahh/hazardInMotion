@@ -26,4 +26,6 @@ Route::middleware('evaluasi-well.access')
             ->name('jalan-sesuai-standar.index');
         Route::get('/jalan-sesuai-standar/data', [RoadSummaryController::class, 'data'])
             ->name('jalan-sesuai-standar.data');
+        Route::get('/jalan-sesuai-standar/export', [RoadSummaryController::class, 'export'])
+            ->name('jalan-sesuai-standar.export');
     });

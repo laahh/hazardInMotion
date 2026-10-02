@@ -11,6 +11,12 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Parameter "Jalan sesuai standar" — tabel app_mixer.road_summary.
@@ -25,6 +31,13 @@ final class RoadSummaryController extends Controller
 
     private const DEFAULT_PAGE_LENGTH = 25;
     private const MAX_PAGE_LENGTH = 200;
+
+    /**
+     * Batas baris untuk format .xlsx. Diturunkan dari pengukuran nyata di
+     * mesin ini (memory_limit 512 MB): 10 rb baris ~130 MB, 50 rb ~480 MB.
+     * 30 rb memberi ruang aman; di atas itu arahkan pengguna ke CSV.
+     */
+    private const MAX_XLSX_ROWS = 30000;
 
     /** Opsi dropdown filter di-cache, query DISTINCT-nya mahal di tabel sebesar ini. */
     private const FILTER_CACHE_TTL = 600;
@@ -127,6 +140,7 @@ final class RoadSummaryController extends Controller
             'filterOptions' => $this->filterOptions(),
             'monthOptions' => $this->monthOptions(),
             'totalSegments' => $this->totalCount(),
+            'maxXlsxRows' => self::MAX_XLSX_ROWS,
         ]);
     }
 
@@ -137,10 +151,7 @@ final class RoadSummaryController extends Controller
 
         $recordsTotal = $this->totalCount();
 
-        $filtered = $this->applyFilters($this->baseQuery(), $request);
-        $this->applyMonthFilter($filtered, $request);
-        $this->applyConclusionFilter($filtered, $request);
-        $this->applySearch($filtered, $search);
+        $filtered = $this->buildFilteredQuery($request);
 
         // Tanpa filter & search, hasilnya pasti sama dengan seluruh tabel —
         // hindari dua full scan (count + agregat ringkasan) di tiap request.
@@ -187,6 +198,252 @@ final class RoadSummaryController extends Controller
             'data' => $rows,
             'summary' => $summary,
         ]);
+    }
+
+    /**
+     * Unduh hasil filter saat ini.
+     *
+     * Dua format, karena keduanya punya batasan berbeda:
+     *  - xlsx : rapi & langsung jadi file Excel, tapi PhpSpreadsheet menahan
+     *           seluruh sheet di memori. Diukur di mesin ini: 10 rb baris
+     *           ~13 dtk / 130 MB, 50 rb baris ~115 dtk / 480 MB — padahal
+     *           memory_limit 512 MB. Karena itu dibatasi MAX_XLSX_ROWS.
+     *  - csv  : ditulis mengalir per potongan, memori nyaris tetap, sanggup
+     *           seluruh tabel. Dibuka langsung oleh Excel (pakai BOM UTF-8).
+     */
+    public function export(Request $request): StreamedResponse|JsonResponse
+    {
+        $format = strtolower(trim((string) $request->input('format', 'xlsx')));
+        $format = $format === 'csv' ? 'csv' : 'xlsx';
+
+        $query = $this->buildFilteredQuery($request);
+        $total = (clone $query)->count();
+
+        if ($format === 'xlsx' && $total > self::MAX_XLSX_ROWS) {
+            return response()->json([
+                'message' => sprintf(
+                    'Hasil filter %s baris, melebihi batas %s baris untuk format Excel (.xlsx). '
+                    . 'Persempit filter — misalnya pilih satu bulan atau satu site — atau unduh sebagai CSV.',
+                    number_format($total, 0, ',', '.'),
+                    number_format(self::MAX_XLSX_ROWS, 0, ',', '.')
+                ),
+                'total' => $total,
+                'max' => self::MAX_XLSX_ROWS,
+            ], 422);
+        }
+
+        $query
+            ->select([
+                'site', 'pit', 'mitra', 'year', 'week', 'nama_jalan',
+                'segment', 'grade_stat', 'road_width', 'supereleva',
+                'junction_1', 'junction_s',
+            ])
+            ->selectRaw(self::STANDARD_SQL . ' AS is_standar')
+            ->orderBy('site')
+            ->orderBy('year')
+            ->orderBy('week')
+            ->orderBy('nama_jalan')
+            ->orderBy('segment')
+            ->orderBy('id');
+
+        $filename = 'jalan-sesuai-standar-' . now()->format('Ymd-His') . '.' . $format;
+
+        return $format === 'csv'
+            ? $this->streamCsv($query, $filename)
+            : $this->streamXlsx($query, $filename);
+    }
+
+    /** @return array<int, string> */
+    private function exportHeaders(): array
+    {
+        return [
+            'Site', 'Pit', 'Mitra', 'Tahun', 'Minggu', 'Bulan', 'Nama Jalan', 'Segmen',
+            'Grade', 'Lebar Jalan', 'Superelevasi', 'Junction 1', 'Junction S', 'Kesimpulan',
+        ];
+    }
+
+    /**
+     * Satu baris database -> satu baris file.
+     *
+     * @return array<int, string|int>
+     */
+    private function exportRow(object $row): array
+    {
+        $month = $this->monthOfIsoWeek((int) $row->year, (int) $row->week);
+
+        return [
+            (string) $row->site,
+            (string) $row->pit,
+            (string) $row->mitra,
+            (int) $row->year,
+            (int) $row->week,
+            self::MONTH_LABELS[$month] ?? '-',
+            (string) $row->nama_jalan,
+            (int) $row->segment,
+            (string) $row->grade_stat,
+            (string) $row->road_width,
+            (string) $row->supereleva,
+            (string) $row->junction_1,
+            (string) $row->junction_s,
+            $row->is_standar ? 'STANDAR' : 'TIDAK STANDAR',
+        ];
+    }
+
+    /**
+     * Sheet kosong berisi header bergaya.
+     *
+     * Sengaja TIDAK memakai SpreadsheetExporter::createSheetWithHeaders(),
+     * karena helper itu menyalakan setAutoSize(true) untuk tiap kolom.
+     * Auto-size memaksa PhpSpreadsheet mengukur lebar teks tiap sel, dan pada
+     * ekspor sebesar ini biayanya sekitar 3x lipat (12 rb baris: 41 dtk dengan
+     * auto-size vs ~13 dtk tanpa). Lebar kolom di sini dipatok manual.
+     */
+    /**
+     * Naikkan memory_limit ke $megabytes bila saat ini lebih rendah.
+     * Tidak pernah menurunkan, dan membiarkan konfigurasi tak terbatas (-1).
+     */
+    private function raiseMemoryLimitTo(int $megabytes): void
+    {
+        $current = trim((string) ini_get('memory_limit'));
+
+        if ($current === '-1') {
+            return;
+        }
+
+        $unit = strtolower(substr($current, -1));
+        $value = (int) $current;
+        $currentMb = match ($unit) {
+            'g' => $value * 1024,
+            'm' => $value,
+            'k' => intdiv($value, 1024),
+            default => intdiv($value, 1048576),
+        };
+
+        if ($currentMb < $megabytes) {
+            ini_set('memory_limit', $megabytes . 'M');
+        }
+    }
+
+    private function newExportSpreadsheet(): Spreadsheet
+    {
+        $widths = [10, 14, 10, 8, 9, 12, 26, 9, 13, 13, 14, 12, 12, 16];
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Jalan Sesuai Standar');
+        $sheet->fromArray($this->exportHeaders(), null, 'A1');
+
+        $lastColumn = Coordinate::stringFromColumnIndex(count($this->exportHeaders()));
+
+        $sheet->getStyle('A1:' . $lastColumn . '1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4472C4']],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER,
+            ],
+        ]);
+
+        foreach ($widths as $index => $width) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($index + 1))->setWidth($width);
+        }
+
+        $sheet->freezePane('A2');
+
+        return $spreadsheet;
+    }
+
+    private function streamCsv(Builder $query, string $filename): StreamedResponse
+    {
+        return response()->stream(
+            function () use ($query): void {
+                // Seluruh tabel (±140 rb baris) butuh lebih dari 30 dtk default,
+                // walau memorinya datar karena ditulis per potongan.
+                set_time_limit(0);
+
+                $out = fopen('php://output', 'wb');
+
+                // BOM UTF-8: tanpa ini Excel di Windows merusak karakter non-ASCII.
+                fwrite($out, "\xEF\xBB\xBF");
+                fputcsv($out, $this->exportHeaders(), ';');
+
+                // cursor(), BUKAN chunk(). chunk() memakai LIMIT/OFFSET sehingga
+                // MySQL mengulang ORDER BY atas seluruh hasil di setiap potongan
+                // — pada 140 rb baris itu puluhan kali filesort dan praktis
+                // menggantung. cursor() menjalankan satu query lalu menarik baris
+                // satu per satu.
+                $written = 0;
+                foreach ($query->cursor() as $row) {
+                    fputcsv($out, $this->exportRow($row), ';');
+
+                    if ((++$written % 5000) === 0) {
+                        flush();
+                    }
+                }
+
+                fclose($out);
+            },
+            200,
+            [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                'Cache-Control' => 'no-store, no-cache',
+                'X-Accel-Buffering' => 'no',
+            ]
+        );
+    }
+
+    private function streamXlsx(Builder $query, string $filename): StreamedResponse
+    {
+        return response()->stream(
+            function () use ($query): void {
+                // Membangun .xlsx itu mahal: diukur di data ini, ~24 dtk/176 MB
+                // untuk 12 rb baris dan ~58 dtk/258 MB untuk 20 rb baris
+                // (satu bulan penuh). Header respons sudah terkirim duluan,
+                // jadi yang perlu dilonggarkan tinggal batas waktu & memori
+                // proses — bukan menurunkan batas baris sampai sebulan penuh
+                // tidak bisa diunduh.
+                set_time_limit(0);
+                $this->raiseMemoryLimitTo(768);
+
+                $spreadsheet = $this->newExportSpreadsheet();
+                $sheet = $spreadsheet->getActiveSheet();
+
+                // cursor() dengan alasan yang sama seperti di streamCsv():
+                // chunk() akan memaksa MySQL mengulang ORDER BY tiap potongan.
+                // Penulisan tetap dikumpulkan per 2000 baris, karena fromArray()
+                // sekali-banyak jauh lebih murah daripada setCellValue() per sel.
+                $rowNumber = 2;
+                $buffer = [];
+
+                foreach ($query->cursor() as $row) {
+                    $buffer[] = $this->exportRow($row);
+
+                    if (count($buffer) === 2000) {
+                        $sheet->fromArray($buffer, null, 'A' . $rowNumber);
+                        $rowNumber += count($buffer);
+                        $buffer = [];
+                    }
+                }
+
+                if ($buffer !== []) {
+                    $sheet->fromArray($buffer, null, 'A' . $rowNumber);
+                }
+
+                $writer = new Xlsx($spreadsheet);
+                $writer->setPreCalculateFormulas(false);
+                $writer->save('php://output');
+
+                $spreadsheet->disconnectWorksheets();
+            },
+            200,
+            [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                'Cache-Control' => 'no-store, no-cache',
+                'X-Accel-Buffering' => 'no',
+            ]
+        );
     }
 
     private function baseQuery(): Builder
@@ -248,6 +505,21 @@ final class RoadSummaryController extends Controller
         }
 
         return $count;
+    }
+
+    /**
+     * Query dengan seluruh filter terpasang. Dipakai bersama oleh data() dan
+     * export(), supaya isi file unduhan dijamin sama persis dengan yang
+     * sedang tampil di tabel.
+     */
+    private function buildFilteredQuery(Request $request): Builder
+    {
+        $query = $this->applyFilters($this->baseQuery(), $request);
+        $this->applyMonthFilter($query, $request);
+        $this->applyConclusionFilter($query, $request);
+        $this->applySearch($query, (string) $request->input('search.value', $request->input('search', '')));
+
+        return $query;
     }
 
     private function applyFilters(Builder $query, Request $request): Builder
