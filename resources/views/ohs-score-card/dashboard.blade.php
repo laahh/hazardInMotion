@@ -4727,7 +4727,7 @@
                       </span>
                       <div>
                         <span class="mb-2 fw-medium text-secondary-light text-sm">Site BMO 1</span>
-                        <h6 class="fw-semibold">{{ number_format($totalKaryawan ?? $siteTotalEmployees ?? 0) }}</h6>
+                        <h6 class="fw-semibold">80%</h6>
                       </div>
                     </div>
                   
@@ -4741,24 +4741,18 @@
           <div class="col-xxl-4 col-sm-6">
             <div
               class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-1 cursor-pointer"
-              role="button"
-              tabindex="0"
-              data-bs-toggle="modal"
-              data-bs-target="#installStatsModal"
-              aria-label="Lihat detail statistik install"
-              title="Lihat detail statistik install"
-              id="total-user-install-card"
+              
             >
               <div class="card-body p-0">
                 <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
                   
                     <div class="d-flex align-items-center gap-2">
                       <span class="mb-0 w-48-px h-48-px bg-primary-600 flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
-                        <iconify-icon icon="mingcute:user-follow-fill" class="icon"></iconify-icon>  
+                        <iconify-icon icon="solar:map-point-wave-outline" class="icon"></iconify-icon>  
                       </span>
                       <div>
-                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total User Install</span>
-                        <h6 class="fw-semibold">{{ number_format($newUsersTotal ?? 0) }}</h6>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Site BMO 2</span>
+                        <h6 class="fw-semibold">90%</h6>
                       </div>
                     </div>
                   
@@ -4772,24 +4766,18 @@
           <div class="col-xxl-4 col-sm-6">
             <div
               class="card p-3 shadow-2 radius-8 border input-form-light h-100 bg-gradient-end-2 cursor-pointer"
-              role="button"
-              tabindex="0"
-              data-bs-toggle="modal"
-              data-bs-target="#activeStatsModal"
-              aria-label="Lihat detail statistik user aktif"
-              title="Lihat detail statistik user aktif"
-              id="total-user-aktif-card"
+              
             >
               <div class="card-body p-0">
                 <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
                   
                     <div class="d-flex align-items-center gap-2">
                       <span class="mb-0 w-48-px h-48-px bg-success-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6">
-                        <iconify-icon icon="mingcute:user-follow-fill" class="icon"></iconify-icon>  
+                        <iconify-icon icon="solar:map-point-wave-outline" class="icon"></iconify-icon>  
                       </span>
                       <div>
-                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total User Aktif</span>
-                        <h6 class="fw-semibold">{{ number_format($activeUsersTotal ?? 0) }}</h6>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Site BMO 3</span>
+                        <h6 class="fw-semibold">90%</h6>
                       </div>
                     </div>
                   
@@ -4807,11 +4795,11 @@
                   
                     <div class="d-flex align-items-center gap-2">
                       <span class="mb-0 w-48-px h-48-px bg-purple text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
-                        <iconify-icon icon="mdi:message-text" class="icon"></iconify-icon>  
+                        <iconify-icon icon="solar:map-point-wave-outline" class="icon"></iconify-icon>  
                       </span>
                       <div>
-                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total Komunitas</span>
-                        <h6 class="fw-semibold">{{ number_format($totalKomunitas ?? 0) }}</h6>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Site SMO</span>
+                        <h6 class="fw-semibold">100%</h6>
                       </div>
                     </div>
                   
@@ -4829,11 +4817,11 @@
                   
                     <div class="d-flex align-items-center gap-2">
                       <span class="mb-0 w-48-px h-48-px bg-pink text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
-                        <iconify-icon icon="mdi:leads" class="icon"></iconify-icon>  
+                        <iconify-icon icon=solar:map-point-wave-outline" class="icon"></iconify-icon>  
                       </span>
                       <div>
-                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total Main Bareng</span>
-                        <h6 class="fw-semibold">{{ number_format($totalMainBareng ?? 0) }}</h6>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Site GMO</span>
+                        <h6 class="fw-semibold">100%</h6>
                       </div>
                     </div>
                   
@@ -4851,11 +4839,11 @@
                   
                     <div class="d-flex align-items-center gap-2">
                       <span class="mb-0 w-48-px h-48-px bg-cyan text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
-                        <iconify-icon icon="streamline:bag-dollar-solid" class="icon"></iconify-icon>  
+                        <iconify-icon icon="solar:map-point-wave-outline" class="icon"></iconify-icon>  
                       </span>
                       <div>
-                        <span class="mb-2 fw-medium text-secondary-light text-sm">Total Goal Aktif</span>
-                        <h6 class="fw-semibold">{{ number_format($totalGoalAktif ?? 0) }}</h6>
+                        <span class="mb-2 fw-medium text-secondary-light text-sm">Site LMO</span>
+                        <h6 class="fw-semibold">100%</h6>
                       </div>
                     </div>
                   
@@ -4888,11 +4876,11 @@
 
                 <div class="d-flex align-items-center gap-2">
                   <span class="mb-0 w-48-px h-48-px bg-primary-600 text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">
-                    <iconify-icon icon="mdi:trending-up" class="icon"></iconify-icon>
+                    <iconify-icon icon="solar:map-point-wave-outline" class="icon"></iconify-icon>
                   </span>
                   <div>
-                    <span class="mb-2 fw-medium text-secondary-light text-sm">Tren Partisipasi Aktif (%)</span>
-                    <h6 class="fw-semibold">{{ number_format($activeTrendThisWeekPercent ?? 0, 1) }}%</h6>
+                    <span class="mb-2 fw-medium text-secondary-light text-sm">Marine</span>
+                    <h6 class="fw-semibold">90%</h6>
                   </div>
                 </div>
 
@@ -4916,8 +4904,8 @@
                     <iconify-icon icon="mdi:account-check" class="icon"></iconify-icon>
                   </span>
                   <div>
-                    <span class="mb-2 fw-medium text-secondary-light text-sm">Tren User Aktif</span>
-                    <h6 class="fw-semibold">{{ number_format($activeTrendThisWeekUsers) }}</h6>
+                    <span class="mb-2 fw-medium text-secondary-light text-sm">Site HO/Explorasi</span>
+                    <h6 class="fw-semibold">90%</h6>
                   </div>
                 </div>
 
