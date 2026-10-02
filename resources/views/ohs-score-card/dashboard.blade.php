@@ -1214,6 +1214,143 @@
 })();
 </script>
 <script>
+// Kartu "Tren User Aktif" — dataset yang sama dengan #revenue-chart,
+// tapi memakai jumlah user absolut, bukan persentase.
+(function () {
+    var el = document.querySelector('#active-users-trend-chart');
+    if (!el || typeof ApexCharts === 'undefined') {
+        return;
+    }
+
+    var labels = @json($activeTrendLabels ?? []);
+    var userCounts = @json($activeTrendUserCounts ?? []);
+    var chartColor = '#45B369';
+
+    if (!labels.length) {
+        labels = ['W1','W2','W3','W4','W5','W6','W7','W8','W9','W10','W11','W12'];
+        userCounts = [0,0,0,0,0,0,0,0,0,0,0,0];
+    }
+
+    function formatUsers(value) {
+        return Number(value || 0).toLocaleString('id-ID');
+    }
+
+    function resolveChartHeight() {
+        return Math.max(el.clientHeight || 0, 110);
+    }
+
+    var chartOptions = {
+        series: [{ name: 'User aktif / minggu', data: userCounts }],
+        chart: {
+            type: 'area',
+            width: '100%',
+            height: 110,
+            toolbar: { show: false },
+            zoom: { enabled: false },
+            parentHeightOffset: 0,
+            padding: { left: 0, right: 0, top: 0, bottom: 0 }
+        },
+        dataLabels: { enabled: false },
+        stroke: {
+            curve: 'smooth',
+            width: 2,
+            colors: [chartColor],
+            lineCap: 'round'
+        },
+        grid: {
+            show: true,
+            borderColor: '#EEF2F7',
+            strokeDashArray: 4,
+            position: 'back',
+            xaxis: { lines: { show: false } },
+            yaxis: { lines: { show: false } },
+            padding: { top: -10, right: 4, bottom: -6, left: 4 }
+        },
+        fill: {
+            type: 'gradient',
+            colors: [chartColor],
+            gradient: {
+                shade: 'light',
+                type: 'vertical',
+                shadeIntensity: 0.5,
+                gradientToColors: [chartColor + '00'],
+                inverseColors: false,
+                opacityFrom: 0.55,
+                opacityTo: 0.15,
+                stops: [0, 100]
+            }
+        },
+        markers: {
+            colors: [chartColor],
+            strokeColors: '#ffffff',
+            strokeWidth: 2,
+            size: 3,
+            hover: { size: 7 }
+        },
+        xaxis: {
+            categories: labels,
+            tickPlacement: 'on',
+            labels: {
+                show: true,
+                style: { fontSize: '10px' },
+                rotate: -35,
+                hideOverlappingLabels: true,
+                trim: true
+            },
+            tooltip: { enabled: false },
+            axisBorder: { show: false },
+            axisTicks: { show: false }
+        },
+        yaxis: {
+            labels: { show: false },
+            min: 0,
+            forceNiceScale: true
+        },
+        tooltip: {
+            enabled: true,
+            shared: false,
+            intersect: false,
+            followCursor: true,
+            custom: function (opts) {
+                var idx = opts.dataPointIndex;
+                var weekLabel = labels[idx] || '-';
+                var users = (opts.series[opts.seriesIndex] && opts.series[opts.seriesIndex][idx] !== undefined)
+                    ? opts.series[opts.seriesIndex][idx]
+                    : 0;
+
+                return ''
+                    + '<div style="padding:10px 12px;min-width:150px;">'
+                    +   '<div style="font-size:11px;color:#6b7280;margin-bottom:4px;">Minggu ' + weekLabel + '</div>'
+                    +   '<div style="font-size:14px;font-weight:700;color:#111827;">'
+                    +     formatUsers(users) + ' user aktif'
+                    +   '</div>'
+                    + '</div>';
+            }
+        }
+    };
+
+    var chart = null;
+
+    function syncChartHeight() {
+        if (!chart) {
+            return;
+        }
+        var nextHeight = resolveChartHeight();
+        if (nextHeight > 0) {
+            chart.updateOptions({ chart: { height: nextHeight } }, false, true);
+        }
+    }
+
+    requestAnimationFrame(function () {
+        chartOptions.chart.height = resolveChartHeight();
+        chart = new ApexCharts(el, chartOptions);
+        chart.render().then(syncChartHeight);
+    });
+
+    window.addEventListener('resize', syncChartHeight);
+})();
+</script>
+<script>
 (function () {
     var el = document.querySelector('#barChart');
     if (!el) {
@@ -4945,8 +5082,16 @@
         </div>
       </div>
       <!-- Pertumbuhan User Aktif start -->
-      <div class="col-xxl-4 d-flex">
-        <div class="card h-100 w-100 radius-8 border d-flex flex-column overflow-hidden">
+      @php
+        // Dua kartu di kolom ini dibangun dari dataset tren yang sama:
+        // $activeTrendSeries = persentase/minggu, $activeTrendUserCounts = jumlah user/minggu.
+        $activeTrendCounts = array_values($activeTrendUserCounts ?? []);
+        $activeTrendThisWeekUsers = $activeTrendCounts === [] ? 0 : (int) end($activeTrendCounts);
+      @endphp
+      <div class="col-xxl-4 d-flex flex-column gap-4">
+
+        {{-- Kartu 1 (atas): partisipasi relatif --}}
+        <div class="card w-100 radius-8 border d-flex flex-column overflow-hidden flex-grow-1" style="flex-basis: 0; min-height: 0;">
           <div class="card-body p-3 d-flex flex-column flex-grow-1" style="min-height: 0;">
             <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between flex-shrink-0">
               <div>
@@ -4961,6 +5106,24 @@
             <div id="revenue-chart" class="mt-12 flex-grow-1" style="min-height: 0; height: 100%;"></div>
           </div>
         </div>
+
+        {{-- Kartu 2 (bawah): angka absolut dari dataset yang sama --}}
+        <div class="card w-100 radius-8 border d-flex flex-column overflow-hidden flex-grow-1" style="flex-basis: 0; min-height: 0;">
+          <div class="card-body p-3 d-flex flex-column flex-grow-1" style="min-height: 0;">
+            <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between flex-shrink-0">
+              <div>
+                <h6 class="mb-1 fw-bold text-lg">Tren User Aktif</h6>
+                <span class="text-sm fw-medium text-secondary-light">Jumlah user per minggu</span>
+              </div>
+              <div class="text-end">
+                <h6 class="mb-1 fw-bold text-lg">{{ number_format($activeTrendThisWeekUsers) }}</h6>
+                <span class="bg-success-focus ps-12 pe-12 pt-2 pb-2 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($activeTrendWeekIncrease ?? 0) }} user</span>
+              </div>
+            </div>
+            <div id="active-users-trend-chart" class="mt-12 flex-grow-1" style="min-height: 0; height: 100%;"></div>
+          </div>
+        </div>
+
       </div>
       <!-- Pertumbuhan User Aktif End -->
 

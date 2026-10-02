@@ -1,14 +1,57 @@
 {{--
   Sidebar OHS Score Card.
 
-  Struktur menu mengikuti template WowDash (grup Application & UI Elements).
-  Selain Dashboard, item-item di bawah belum punya halaman di aplikasi ini,
-  jadi href-nya sengaja javascript:void(0) supaya tidak menghasilkan 404 —
-  ganti ke route(...) begitu halaman tujuannya dibuat.
+  Setiap section = departemen, isinya menu milik dept tersebut.
+  Struktur menu didefinisikan sekali di $deptMenus lalu di-render lewat loop,
+  karena beberapa menu dipakai di lebih dari satu dept (mis. "PJA Performance"
+  di SOD & SIRC, "Traffic Management" di SOD, SGI, & SIRM).
 
-  Dropdown (.dropdown > .sidebar-submenu) digerakkan oleh
-  public/evaluasi-well-assets/js/app.js yang sudah dimuat di layout.
+  Menambah/menghapus menu cukup ubah array di bawah — markup-nya ikut.
+  Begitu halaman tujuan dibuat, isi key 'url' (mis. 'url' => route('...'));
+  selama kosong, link-nya javascript:void(0) supaya tidak menghasilkan 404.
 --}}
+@php
+    $deptMenus = [
+        'SOD' => [
+            ['label' => 'PJA Performance',                     'icon' => 'solar:chart-square-outline'],
+            ['label' => 'Supervisory Layering System',         'icon' => 'solar:users-group-two-rounded-outline'],
+            ['label' => 'Speak up',                            'icon' => 'solar:user-speak-outline'],
+            ['label' => 'Traffic Management',                  'icon' => 'solar:traffic-outline'],
+            ['label' => 'Utilisasi Tools Pengawasan Teknologi', 'icon' => 'solar:videocamera-outline'],
+            ['label' => 'Pengawasan Control Room',             'icon' => 'solar:monitor-outline'],
+        ],
+        'SIRC' => [
+            ['label' => 'PJA Performance',                     'icon' => 'solar:chart-square-outline'],
+        ],
+        'OC' => [
+            ['label' => 'Supervisory Layering System',         'icon' => 'solar:users-group-two-rounded-outline'],
+            ['label' => 'SPIP management',                     'icon' => 'solar:clipboard-check-outline'],
+            ['label' => 'CSMS',                                'icon' => 'solar:documents-outline'],
+        ],
+        'HSECT' => [
+            ['label' => 'Safety Behavior Treatment',           'icon' => 'solar:shield-user-outline'],
+            ['label' => 'Competency',                          'icon' => 'solar:medal-star-outline'],
+        ],
+        'SGI' => [
+            ['label' => 'Traffic Management',                  'icon' => 'solar:traffic-outline'],
+        ],
+        'SIRM' => [
+            ['label' => 'Traffic Management',                  'icon' => 'solar:traffic-outline'],
+            ['label' => 'K3L Compliance',                      'icon' => 'solar:clipboard-list-outline'],
+            ['label' => 'Risk Management',                     'icon' => 'solar:danger-triangle-outline'],
+        ],
+        'G&H' => [
+            ['label' => 'Geotechnical Management',             'icon' => 'material-symbols:terrain'],
+        ],
+        'OH & IH' => [
+            ['label' => 'Health Management',                   'icon' => 'solar:heart-pulse-outline'],
+            ['label' => 'Fatigue Management',                  'icon' => 'solar:bed-outline'],
+        ],
+        'ER & SS' => [
+            ['label' => 'Emergency Response',                  'icon' => 'solar:siren-outline'],
+        ],
+    ];
+@endphp
 <aside class="sidebar">
   <button type="button" class="sidebar-close-btn">
     <iconify-icon icon="radix-icons:cross-2"></iconify-icon>
@@ -30,118 +73,17 @@
         </a>
       </li>
 
-      <li class="sidebar-menu-group-title">SOD</li>
-
+      @foreach ($deptMenus as $dept => $menus)
+      <li class="sidebar-menu-group-title">{{ $dept }}</li>
+        @foreach ($menus as $menu)
       <li>
-        <a href="javascript:void(0)">
-          <iconify-icon icon="mage:email" class="menu-icon"></iconify-icon>
-          <span>PJA Performance</span>
+        <a href="{{ $menu['url'] ?? 'javascript:void(0)' }}">
+          <iconify-icon icon="{{ $menu['icon'] }}" class="menu-icon"></iconify-icon>
+          <span>{{ $menu['label'] }}</span>
         </a>
       </li>
-      <li>
-        <a href="javascript:void(0)">
-          <iconify-icon icon="bi:chat-dots" class="menu-icon"></iconify-icon>
-          <span>Supervisory Layering System</span>
-        </a>
-      </li>
-      <li>
-        <a href="javascript:void(0)">
-          <iconify-icon icon="solar:calendar-outline" class="menu-icon"></iconify-icon>
-          <span>Speak up</span>
-        </a>
-      </li>
-      <li>
-        <a href="javascript:void(0)">
-          <iconify-icon icon="material-symbols:map-outline" class="menu-icon"></iconify-icon>
-          <span>Traffic Management</span>
-        </a>
-      </li>
-      <li>
-        <a href="">
-          <iconify-icon icon="material-symbols:map-outline" class="menu-icon"></iconify-icon>
-          <span>Utilisasi Tools Pengawasan Teknologi</span>
-        </a>
-      </li>
-
-       <li>
-        <a href="">
-          <iconify-icon icon="material-symbols:map-outline" class="menu-icon"></iconify-icon>
-          <span>Pengawasan Control Room</span>
-        </a>
-      </li>
-
-      <li>
-        <a href="">
-          <iconify-icon icon="material-symbols:map-outline" class="menu-icon"></iconify-icon>
-          <span>Pengawasan Control Room</span>
-        </a>
-      </li>
-     
-    
-
-      <li class="sidebar-menu-group-title">HSECT</li>
-
-      <li class="dropdown">
-        <a href="javascript:void(0)">
-          <iconify-icon icon="heroicons:document" class="menu-icon"></iconify-icon>
-          <span>Safety Behavior Treatment</span>
-        </a>
-        <ul class="sidebar-submenu">
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-primary-600 w-auto"></i> Input Forms</a></li>
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-warning-main w-auto"></i> Input Layout</a></li>
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-success-main w-auto"></i> Form Validation</a></li>
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-danger-main w-auto"></i> Form Wizard</a></li>
-        </ul>
-      </li>
-      <li class="dropdown">
-        <a href="javascript:void(0)">
-          <iconify-icon icon="mingcute:storage-line" class="menu-icon"></iconify-icon>
-          <span>Table</span>
-        </a>
-        <ul class="sidebar-submenu">
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-primary-600 w-auto"></i> Basic Table</a></li>
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-warning-main w-auto"></i> Data Table</a></li>
-        </ul>
-      </li>
-      <li class="dropdown">
-        <a href="javascript:void(0)">
-          <iconify-icon icon="solar:pie-chart-outline" class="menu-icon"></iconify-icon>
-          <span>Chart</span>
-        </a>
-        <ul class="sidebar-submenu">
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-danger-main w-auto"></i> Line Chart</a></li>
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-warning-main w-auto"></i> Column Chart</a></li>
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-success-main w-auto"></i> Pie Chart</a></li>
-        </ul>
-      </li>
-      <li>
-        <a href="javascript:void(0)">
-          <iconify-icon icon="fe:vector" class="menu-icon"></iconify-icon>
-          <span>Widgets</span>
-        </a>
-      </li>
-      <li class="dropdown">
-        <a href="javascript:void(0)">
-          <iconify-icon icon="flowbite:users-group-outline" class="menu-icon"></iconify-icon>
-          <span>Users</span>
-        </a>
-        <ul class="sidebar-submenu">
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-primary-600 w-auto"></i> Users List</a></li>
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-warning-main w-auto"></i> Users Grid</a></li>
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-info-main w-auto"></i> Add User</a></li>
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-danger-main w-auto"></i> View Profile</a></li>
-        </ul>
-      </li>
-      <li class="dropdown">
-        <a href="javascript:void(0)">
-          <i class="ri-user-settings-line text-xl me-14 d-flex w-auto"></i>
-          <span>Role &amp; Access</span>
-        </a>
-        <ul class="sidebar-submenu">
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-primary-600 w-auto"></i> Role &amp; Access</a></li>
-          <li><a href="javascript:void(0)"><i class="ri-circle-fill circle-icon text-warning-main w-auto"></i> Assign Role</a></li>
-        </ul>
-      </li>
+        @endforeach
+      @endforeach
 
     </ul>
   </div>
