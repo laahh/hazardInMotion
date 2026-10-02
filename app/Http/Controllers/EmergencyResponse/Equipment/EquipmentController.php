@@ -8,12 +8,14 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\EmergencyResponse\Shared\Concerns\ManagesEquipmentDocuments;
 use App\Http\Requests\EmergencyResponse\Equipment\EquipmentRequest;
 use App\Jobs\EmergencyResponse\ImportEquipmentJob;
+use App\Models\Company;
 use App\Models\EmergencyResponse\Equipment\EmergencyEquipment;
 use App\Models\EmergencyResponse\MasterData\Department;
 use App\Models\EmergencyResponse\MasterData\EmergencyUnit;
 use App\Models\EmergencyResponse\MasterData\EquipmentCategory;
 use App\Models\EmergencyResponse\MasterData\Site;
 use App\Models\EmergencyResponse\Shared\EquipmentDocument;
+use App\Support\EmergencyResponse\EquipmentImportTemplate;
 use App\Support\EmergencyResponse\QrCodeService;
 use App\Support\SpreadsheetExporter;
 use Illuminate\Http\RedirectResponse;
@@ -25,31 +27,65 @@ class EquipmentController extends Controller
 {
     use ManagesEquipmentDocuments;
 
+    private const PER_PAGE = 15;
+
+    /** Kolom export, sesuai urutan register BA. */
+    private const EXPORT_HEADERS = [
+        'No', 'UUID', 'Kategori Peralatan', 'Nama Peralatan', 'No Registrasi', 'Detail Peralatan',
+        'Klasifikasi Alat', 'Kondisi Peralatan', 'Keterangan Alat', 'Keterangan Kerusakan',
+        'Status Posisi Barang', 'SITE', 'Perusahaan', 'Progress BA', 'Keterangan BA',
+        'Status Barang', 'Tanggal Close BA',
+    ];
+
     public function index(Request $request): View
     {
-        $q = trim((string) $request->query('q', ''));
-
-        $equipment = EmergencyEquipment::query()
-            ->with(['category', 'site', 'location'])
-            ->when($q !== '', fn ($query) => $query
-                ->where('code', 'like', "%{$q}%")
-                ->orWhere('name', 'like', "%{$q}%"))
-            ->when($request->filled('equipment_category_id'), fn ($query) => $query->where('equipment_category_id', $request->query('equipment_category_id')))
-            ->when($request->filled('site_id'), fn ($query) => $query->where('site_id', $request->query('site_id')))
-            ->when($request->filled('condition'), fn ($query) => $query->where('condition', $request->query('condition')))
-            ->when($request->filled('operational_status'), fn ($query) => $query->where('operational_status', $request->query('operational_status')))
+        $equipment = $this->filtered($request)
+            ->with(['category', 'site', 'company'])
             ->orderBy('name')
-            ->paginate(15)
+            ->orderBy('sequence_number')
+            ->paginate(self::PER_PAGE)
             ->withQueryString();
 
         return view('EmergencyResponse.equipment.index', [
             'equipment' => $equipment,
-            'q' => $q,
+            'q' => trim((string) $request->query('q', '')),
+        ] + $this->filterOptions());
+    }
+
+    /**
+     * Filter dipakai bersama oleh index dan export supaya hasil unduhan sama
+     * dengan yang terlihat di layar.
+     */
+    private function filtered(Request $request)
+    {
+        $q = trim((string) $request->query('q', ''));
+
+        return EmergencyEquipment::query()
+            ->when($q !== '', fn ($query) => $query->where(fn ($inner) => $inner
+                ->where('code', 'like', "%{$q}%")
+                ->orWhere('name', 'like', "%{$q}%")
+                ->orWhere('registration_number', 'like', "%{$q}%")))
+            ->when($request->filled('equipment_category_id'), fn ($query) => $query->where('equipment_category_id', $request->query('equipment_category_id')))
+            ->when($request->filled('site_id'), fn ($query) => $query->where('site_id', $request->query('site_id')))
+            ->when($request->filled('company_id'), fn ($query) => $query->where('company_id', $request->query('company_id')))
+            ->when($request->filled('condition'), fn ($query) => $query->where('condition', $request->query('condition')))
+            ->when($request->filled('position_status'), fn ($query) => $query->where('position_status', $request->query('position_status')))
+            ->when($request->filled('ba_progress'), fn ($query) => $query->where('ba_progress', $request->query('ba_progress')))
+            ->when($request->filled('item_status'), fn ($query) => $query->where('item_status', $request->query('item_status')));
+    }
+
+    /** @return array<string, mixed> */
+    private function filterOptions(): array
+    {
+        return [
             'categories' => EquipmentCategory::query()->where('is_active', true)->orderBy('name')->get(),
             'sites' => Site::query()->where('is_active', true)->orderBy('name')->get(),
+            'companies' => Company::query()->where('is_active', true)->orderBy('name')->get(),
             'conditions' => EmergencyEquipment::CONDITIONS,
-            'operationalStatuses' => EmergencyEquipment::OPERATIONAL_STATUSES,
-        ]);
+            'positionStatuses' => EmergencyEquipment::POSITION_STATUSES,
+            'baProgresses' => EmergencyEquipment::BA_PROGRESSES,
+            'itemStatuses' => EmergencyEquipment::ITEM_STATUSES,
+        ];
     }
 
     public function create(): View
@@ -66,18 +102,33 @@ class EquipmentController extends Controller
     {
         return view('EmergencyResponse.equipment.form', [
             'equipment' => $equipment,
-            'categories' => EquipmentCategory::query()->where('is_active', true)->orderBy('name')->get(),
-            'sites' => Site::query()->where('is_active', true)->orderBy('name')->get(),
             'departments' => Department::query()->where('is_active', true)->orderBy('name')->get(),
             'emergencyUnits' => EmergencyUnit::query()->where('is_active', true)->orderBy('name')->get(),
-            'conditions' => EmergencyEquipment::CONDITIONS,
             'operationalStatuses' => EmergencyEquipment::OPERATIONAL_STATUSES,
-        ]);
+            'classificationSuggestions' => $this->classificationSuggestions(),
+        ] + $this->filterOptions());
+    }
+
+    /**
+     * Klasifikasi alat sengaja berupa teks bebas; nilai yang sudah pernah
+     * dipakai ditawarkan sebagai datalist agar tetap konsisten.
+     *
+     * @return array<int, string>
+     */
+    private function classificationSuggestions(): array
+    {
+        return EmergencyEquipment::query()
+            ->whereNotNull('classification')
+            ->where('classification', '!=', '')
+            ->distinct()
+            ->orderBy('classification')
+            ->pluck('classification')
+            ->all();
     }
 
     public function show(EmergencyEquipment $equipment): View
     {
-        $equipment->load(['category', 'site', 'location', 'area', 'department', 'emergencyUnit', 'documents', 'statusHistories.changedBy']);
+        $equipment->load(['category', 'site', 'company', 'location', 'area', 'department', 'emergencyUnit', 'documents', 'statusHistories.changedBy']);
 
         return view('EmergencyResponse.equipment.show', [
             'equipment' => $equipment,
@@ -87,32 +138,35 @@ class EquipmentController extends Controller
 
     public function store(EquipmentRequest $request): RedirectResponse
     {
-        $data = $request->validated();
-        unset($data['photo']);
+        $data = $this->payload($request);
         $data['created_by'] = $request->user()->id;
-
-        if ($request->hasFile('photo')) {
-            $data['photo_path'] = $request->file('photo')->store('emergency-response/equipment-photos', 'public');
-        }
 
         $equipment = EmergencyEquipment::create($data);
 
-        return redirect()->route('emergency-response.equipment.show', $equipment)->with('success', 'Emergency equipment berhasil ditambahkan.');
+        return redirect()->route('emergency-response.equipment.show', $equipment)->with('success', "Peralatan berhasil ditambahkan dengan UUID {$equipment->code}.");
     }
 
     public function update(EquipmentRequest $request, EmergencyEquipment $equipment): RedirectResponse
     {
+        $data = $this->payload($request);
+        $data['updated_by'] = $request->user()->id;
+
+        $equipment->update($data);
+
+        return redirect()->route('emergency-response.equipment.show', $equipment)->with('success', 'Peralatan berhasil diperbarui.');
+    }
+
+    /** @return array<string, mixed> */
+    private function payload(EquipmentRequest $request): array
+    {
         $data = $request->validated();
         unset($data['photo']);
-        $data['updated_by'] = $request->user()->id;
 
         if ($request->hasFile('photo')) {
             $data['photo_path'] = $request->file('photo')->store('emergency-response/equipment-photos', 'public');
         }
 
-        $equipment->update($data);
-
-        return redirect()->route('emergency-response.equipment.show', $equipment)->with('success', 'Emergency equipment berhasil diperbarui.');
+        return $data;
     }
 
     public function destroy(Request $request, EmergencyEquipment $equipment): RedirectResponse
@@ -120,7 +174,7 @@ class EquipmentController extends Controller
         $equipment->update(['updated_by' => $request->user()->id]);
         $equipment->delete();
 
-        return redirect()->route('emergency-response.equipment.index')->with('success', 'Emergency equipment berhasil dihapus.');
+        return redirect()->route('emergency-response.equipment.index')->with('success', 'Peralatan berhasil dihapus.');
     }
 
     public function storeDocument(Request $request, EmergencyEquipment $equipment): RedirectResponse
@@ -151,45 +205,45 @@ class EquipmentController extends Controller
         return view('EmergencyResponse.equipment.print', ['equipment' => $equipment]);
     }
 
-    public function export(): Response
+    public function export(Request $request): Response
     {
-        $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
-            'Kode', 'Nama', 'Kategori', 'Tipe/Model', 'Merek', 'No. Seri', 'Site', 'Lokasi', 'Kondisi', 'Status Operasional', 'Jadwal Inspeksi Berikutnya',
-        ]);
+        $spreadsheet = SpreadsheetExporter::createSheetWithHeaders(self::EXPORT_HEADERS);
         $sheet = $spreadsheet->getActiveSheet();
 
-        $equipment = EmergencyEquipment::query()->with(['category', 'site', 'location'])->orderBy('name')->get();
+        $equipment = $this->filtered($request)
+            ->with(['category', 'site', 'company'])
+            ->orderBy('name')
+            ->orderBy('sequence_number')
+            ->get();
 
         foreach ($equipment as $i => $item) {
-            $row = $i + 2;
             $sheet->fromArray([
+                $i + 1,
                 $item->code,
-                $item->name,
                 $item->category->name ?? '-',
-                $item->type_model,
-                $item->brand,
-                $item->serial_number,
-                $item->site->name ?? '-',
-                $item->locationLabel() ?? '-',
+                $item->name,
+                $item->registration_number ?: '-',
+                $item->equipment_detail ?: '-',
+                $item->classification ?: '-',
                 $item->conditionLabel(),
-                $item->operationalStatusLabel(),
-                optional($item->next_inspection_at)->format('Y-m-d'),
-            ], null, "A{$row}");
+                $item->equipment_remarks ?: '-',
+                $item->damage_remarks ?: '-',
+                $item->positionStatusLabel() ?: '-',
+                $item->site->name ?? '-',
+                $item->company->name ?? '-',
+                $item->baProgressLabel() ?: '-',
+                $item->ba_remarks ?: '-',
+                $item->itemStatusLabel() ?: '-',
+                optional($item->ba_closed_at)->format('Y-m-d'),
+            ], null, 'A'.($i + 2));
         }
 
         SpreadsheetExporter::download($spreadsheet, 'emergency-equipment-'.now()->format('Ymd-His').'.xlsx');
     }
 
-    public function importTemplate(): Response
+    public function importTemplate(EquipmentImportTemplate $template): Response
     {
-        $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
-            'Kode', 'Nama', 'Kategori (kode)', 'Tipe/Model', 'Merek', 'No. Seri', 'Site (kode)', 'Kondisi', 'Status Operasional',
-        ]);
-        $spreadsheet->getActiveSheet()->fromArray([
-            'CONTOH-001', 'Contoh: APAR 6kg Ruang Genset (hapus baris ini)', 'APAR', 'ABC Dry Powder', 'Chubb', 'SN-12345', 'SITE-A', 'baik', 'available',
-        ], null, 'A2');
-
-        SpreadsheetExporter::download($spreadsheet, 'template-import-emergency-equipment.xlsx');
+        SpreadsheetExporter::download($template->build(), 'template-import-database-equipment.xlsx');
     }
 
     public function import(Request $request): RedirectResponse

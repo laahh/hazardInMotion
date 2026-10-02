@@ -35,7 +35,7 @@
             </form>
             <div class="table-responsive">
                 <table class="table bordered-table mb-0">
-                    <thead><tr><th>Kode</th><th>Nama</th><th>Kategori</th><th>Site</th><th>Kondisi</th><th>Kedaluwarsa</th></tr></thead>
+                    <thead><tr><th>UUID</th><th>Nama</th><th>Kategori</th><th>Site</th><th>Perusahaan</th><th>Kondisi</th><th>Kedaluwarsa</th></tr></thead>
                     <tbody>
                         @forelse ($equipment as $item)
                             <tr>
@@ -43,11 +43,12 @@
                                 <td><a href="{{ route('emergency-response.equipment.show', $item) }}">{{ $item->name }}</a></td>
                                 <td>{{ $item->category->name ?? '-' }}</td>
                                 <td>{{ $item->site->name ?? '-' }}</td>
+                                <td>{{ $item->company->name ?? '-' }}</td>
                                 <td>{{ $item->conditionLabel() }}</td>
                                 <td>{{ optional($item->expires_at)->format('d M Y') ?? '-' }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="text-center text-secondary-light py-24">Tidak ada data.</td></tr>
+                            <tr><td colspan="7" class="text-center text-secondary-light py-24">Tidak ada data.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

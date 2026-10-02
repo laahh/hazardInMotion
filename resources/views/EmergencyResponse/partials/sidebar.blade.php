@@ -24,7 +24,7 @@
             <li>
                 <a href="{{ $rr('emergency-response.equipment.index') }}">
                     <i class="ri-fire-line menu-icon"></i>
-                    <span>Emergency Equipment</span>
+                    <span>Database Equipment</span>
                 </a>
             </li>
             <li>

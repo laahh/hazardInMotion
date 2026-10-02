@@ -14,35 +14,31 @@
     <div class="row gy-4">
         <div class="col-lg-8">
             <div class="card shadow-none border mb-24">
-                <div class="card-header"><h6 class="mb-0">Informasi Equipment</h6></div>
+                <div class="card-header"><h6 class="mb-0">Informasi Peralatan</h6></div>
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-8">
                             <table class="table table-borderless mb-0">
-                                <tr><th width="180">Kode Aset</th><td>{{ $equipment->code }}</td></tr>
-                                <tr><th>Nama</th><td>{{ $equipment->name }}</td></tr>
-                                <tr><th>Kategori</th><td>{{ $equipment->category->name ?? '-' }}</td></tr>
+                                <tr><th width="200">UUID</th><td><code>{{ $equipment->code }}</code></td></tr>
+                                <tr><th>Kategori Peralatan</th><td>{{ $equipment->category->name ?? '-' }}</td></tr>
+                                <tr><th>Nama Peralatan</th><td>{{ $equipment->name }}</td></tr>
+                                <tr><th>No Registrasi</th><td>{{ $equipment->registration_number ?: '-' }}</td></tr>
+                                <tr><th>Detail Peralatan</th><td>{{ $equipment->equipment_detail ?: '-' }}</td></tr>
+                                <tr><th>Klasifikasi Alat</th><td>{{ $equipment->classification ?: '-' }}</td></tr>
                                 <tr><th>Tipe/Model</th><td>{{ $equipment->type_model ?: '-' }}</td></tr>
                                 <tr><th>Merek</th><td>{{ $equipment->brand ?: '-' }}</td></tr>
                                 <tr><th>No. Seri</th><td>{{ $equipment->serial_number ?: '-' }}</td></tr>
-                                <tr><th>Lokasi</th><td>{{ $equipment->site->name ?? '-' }} / {{ $equipment->locationLabel() ?? '-' }} / {{ $equipment->areaLabel() ?? '-' }}</td></tr>
+                                <tr><th>SITE</th><td>{{ $equipment->site->name ?? '-' }}</td></tr>
+                                <tr><th>Perusahaan</th><td>{{ $equipment->company->name ?? '-' }}</td></tr>
+                                <tr><th>Lokasi / Area</th><td>{{ $equipment->locationLabel() ?? '-' }} / {{ $equipment->areaLabel() ?? '-' }}</td></tr>
                                 <tr><th>Detail Posisi</th><td>{{ $equipment->position_detail ?: '-' }}</td></tr>
                                 <tr><th>Departemen</th><td>{{ $equipment->department->name ?? '-' }}</td></tr>
                                 <tr><th>Unit Emergency</th><td>{{ $equipment->emergencyUnit->name ?? '-' }}</td></tr>
-                                <tr><th>Kondisi</th><td><span class="badge bg-info-focus text-info-600 px-16 py-4 radius-4">{{ $equipment->conditionLabel() }}</span></td></tr>
-                                <tr><th>Status Operasional</th><td><span class="badge bg-success-focus text-success-600 px-16 py-4 radius-4">{{ $equipment->operationalStatusLabel() }}</span></td></tr>
-                                <tr><th>Inspeksi Terakhir</th><td>{{ optional($equipment->last_inspection_at)->format('d M Y') ?? '-' }}</td></tr>
-                                <tr><th>Inspeksi Berikutnya</th><td>{{ optional($equipment->next_inspection_at)->format('d M Y') ?? '-' }}</td></tr>
-                                <tr><th>Kalibrasi Terakhir</th><td>{{ optional($equipment->last_calibration_at)->format('d M Y') ?? '-' }}</td></tr>
-                                <tr><th>Kedaluwarsa</th><td>{{ optional($equipment->expires_at)->format('d M Y') ?? '-' }}</td></tr>
-                                <tr><th>No. Sertifikat/SKO</th><td>{{ $equipment->certificate_number ?: '-' }}</td></tr>
-                                <tr><th>Masa Berlaku Sertifikat</th><td>{{ optional($equipment->certificate_expires_at)->format('d M Y') ?? '-' }}</td></tr>
-                                <tr><th>Catatan</th><td>{{ $equipment->notes ?: '-' }}</td></tr>
                             </table>
                         </div>
                         <div class="col-md-4 text-center">
                             @if ($equipment->photo_path)
-                                <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($equipment->photo_path) }}" class="img-fluid rounded mb-16" alt="Foto equipment">
+                                <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($equipment->photo_path) }}" class="img-fluid rounded mb-16" alt="Foto peralatan">
                             @endif
                             <img src="{{ route('emergency-response.equipment.qr', $equipment) }}" alt="QR Code" style="width: 160px; height: 160px;">
                             <p class="text-secondary-light text-sm mt-8 mb-0">Scan untuk buka halaman ini</p>
@@ -52,8 +48,50 @@
             </div>
 
             <div class="card shadow-none border mb-24">
+                <div class="card-header"><h6 class="mb-0">Kondisi &amp; Status Barang</h6></div>
+                <div class="card-body">
+                    <table class="table table-borderless mb-0">
+                        <tr><th width="200">Kondisi Peralatan</th><td><span class="badge bg-info-focus text-info-600 px-16 py-4 radius-4">{{ $equipment->conditionLabel() }}</span></td></tr>
+                        <tr><th>Status Operasional</th><td><span class="badge bg-success-focus text-success-600 px-16 py-4 radius-4">{{ $equipment->operationalStatusLabel() }}</span></td></tr>
+                        <tr><th>Keterangan Alat</th><td>{{ $equipment->equipment_remarks ?: '-' }}</td></tr>
+                        <tr><th>Keterangan Kerusakan</th><td>{{ $equipment->damage_remarks ?: '-' }}</td></tr>
+                        <tr><th>Status Posisi Barang</th><td>{{ $equipment->positionStatusLabel() ?: '-' }}</td></tr>
+                        <tr><th>Status Barang</th><td>{{ $equipment->itemStatusLabel() ?: '-' }}</td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card shadow-none border mb-24">
+                <div class="card-header"><h6 class="mb-0">Berita Acara (BA)</h6></div>
+                <div class="card-body">
+                    <table class="table table-borderless mb-0">
+                        <tr><th width="200">Progress BA</th><td>{{ $equipment->baProgressLabel() ?: '-' }}</td></tr>
+                        <tr><th>Keterangan BA</th><td>{{ $equipment->ba_remarks ?: '-' }}</td></tr>
+                        <tr><th>Tanggal Close BA</th><td>{{ optional($equipment->ba_closed_at)->format('d M Y') ?? '-' }}</td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card shadow-none border mb-24">
+                <div class="card-header"><h6 class="mb-0">Inspeksi, Kalibrasi &amp; Sertifikasi</h6></div>
+                <div class="card-body">
+                    <table class="table table-borderless mb-0">
+                        <tr><th width="200">Tanggal Pembelian</th><td>{{ optional($equipment->purchased_at)->format('d M Y') ?? '-' }}</td></tr>
+                        <tr><th>Mulai Digunakan</th><td>{{ optional($equipment->commissioned_at)->format('d M Y') ?? '-' }}</td></tr>
+                        <tr><th>Inspeksi Terakhir</th><td>{{ optional($equipment->last_inspection_at)->format('d M Y') ?? '-' }}</td></tr>
+                        <tr><th>Inspeksi Berikutnya</th><td>{{ optional($equipment->next_inspection_at)->format('d M Y') ?? '-' }}</td></tr>
+                        <tr><th>Kalibrasi Terakhir</th><td>{{ optional($equipment->last_calibration_at)->format('d M Y') ?? '-' }}</td></tr>
+                        <tr><th>Kedaluwarsa</th><td>{{ optional($equipment->expires_at)->format('d M Y') ?? '-' }}</td></tr>
+                        <tr><th>No. Sertifikat/SKO</th><td>{{ $equipment->certificate_number ?: '-' }}</td></tr>
+                        <tr><th>Masa Berlaku Sertifikat</th><td>{{ optional($equipment->certificate_expires_at)->format('d M Y') ?? '-' }}</td></tr>
+                        <tr><th>Catatan</th><td>{{ $equipment->notes ?: '-' }}</td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card shadow-none border mb-24">
                 <div class="card-header d-flex align-items-center justify-content-between">
-                    <h6 class="mb-0">Dokumen & Foto</h6>
+                    <h6 class="mb-0">Dokumen &amp; Foto</h6>
                     <button type="button" class="btn btn-sm btn-outline-primary-600" data-bs-toggle="modal" data-bs-target="#uploadDocModal"><i class="ri-upload-2-line"></i> Unggah</button>
                 </div>
                 <div class="card-body p-0">
@@ -77,7 +115,7 @@
             </div>
 
             <div class="card shadow-none border">
-                <div class="card-header"><h6 class="mb-0">Riwayat Kondisi & Status</h6></div>
+                <div class="card-header"><h6 class="mb-0">Riwayat Kondisi &amp; Status</h6></div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table bordered-table mb-0">

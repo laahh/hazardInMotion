@@ -32,7 +32,7 @@ class ReportController extends Controller
     public function equipment(Request $request): View
     {
         $equipment = EmergencyEquipment::query()
-            ->with(['category', 'site'])
+            ->with(['category', 'site', 'company'])
             ->when($request->filled('site_id'), fn ($q) => $q->where('site_id', $request->query('site_id')))
             ->when($request->filled('condition'), fn ($q) => $q->where('condition', $request->query('condition')))
             ->when($request->boolean('only_expired'), fn ($q) => $q->whereNotNull('expires_at')->where('expires_at', '<', today()))
@@ -49,18 +49,18 @@ class ReportController extends Controller
 
     public function equipmentExport(Request $request): Response
     {
-        $spreadsheet = SpreadsheetExporter::createSheetWithHeaders(['Kode', 'Nama', 'Kategori', 'Site', 'Kondisi', 'Kedaluwarsa']);
+        $spreadsheet = SpreadsheetExporter::createSheetWithHeaders(['UUID', 'Nama', 'Kategori', 'Site', 'Perusahaan', 'Kondisi', 'Kedaluwarsa']);
         $sheet = $spreadsheet->getActiveSheet();
 
         $equipment = EmergencyEquipment::query()
-            ->with(['category', 'site'])
+            ->with(['category', 'site', 'company'])
             ->when($request->filled('site_id'), fn ($q) => $q->where('site_id', $request->query('site_id')))
             ->when($request->filled('condition'), fn ($q) => $q->where('condition', $request->query('condition')))
             ->when($request->boolean('only_expired'), fn ($q) => $q->whereNotNull('expires_at')->where('expires_at', '<', today()))
             ->orderBy('name')->get();
 
         foreach ($equipment as $i => $item) {
-            $sheet->fromArray([$item->code, $item->name, $item->category->name ?? '-', $item->site->name ?? '-', $item->conditionLabel(), optional($item->expires_at)->format('Y-m-d')], null, 'A'.($i + 2));
+            $sheet->fromArray([$item->code, $item->name, $item->category->name ?? '-', $item->site->name ?? '-', $item->company->name ?? '-', $item->conditionLabel(), optional($item->expires_at)->format('Y-m-d')], null, 'A'.($i + 2));
         }
 
         SpreadsheetExporter::download($spreadsheet, 'laporan-equipment-'.now()->format('Ymd-His').'.xlsx');
