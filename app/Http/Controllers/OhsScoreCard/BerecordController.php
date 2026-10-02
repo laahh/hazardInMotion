@@ -124,7 +124,7 @@ final class BerecordController extends Controller
             $summary = $this->summarise(clone $filtered);
 
             $rows = $filtered
-                ->orderBy($this->orderColumn($request), $this->orderDirection($request))
+                ->orderByRaw($this->orderExpression($request))
                 ->orderBy('id_berecord') // tie-breaker: paging stabil saat nilai sort kembar
                 ->forPage($this->page($request), $this->pageLength($request))
                 ->get([
@@ -321,6 +321,27 @@ final class BerecordController extends Controller
         $index = (int) data_get($request->input('order'), '0.column', 7);
 
         return self::ORDERABLE[$index] ?? 'tanggal_mulai_berecord';
+    }
+
+    /**
+     * Ekspresi ORDER BY, selalu dengan NULLS LAST.
+     *
+     * Postgres menaruh NULL di DEPAN untuk DESC (dan di belakang untuk ASC).
+     * Tanpa NULLS LAST, urutan bawaan halaman ini (tanggal_mulai_berecord DESC)
+     * menaruh baris tanpa tanggal di paling atas — pengguna membuka halaman dan
+     * melihat kolom tanggal kosong. Sama untuk golden_rules yang 1.087 barisnya
+     * NULL. Baris tanpa nilai sekarang selalu jatuh ke belakang.
+     *
+     * Nama kolom berasal dari whitelist ORDERABLE, bukan input mentah, jadi
+     * aman disisipkan langsung ke SQL.
+     */
+    private function orderExpression(Request $request): string
+    {
+        return sprintf(
+            '%s %s NULLS LAST',
+            $this->orderColumn($request),
+            $this->orderDirection($request)
+        );
     }
 
     private function orderDirection(Request $request): string
