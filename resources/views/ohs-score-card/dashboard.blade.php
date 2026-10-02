@@ -5224,7 +5224,7 @@
       <!-- Score Card Parameter End -->
 
       <!-- Pola Aktivitas Penggunaan Aktif start -->
-      <div class="col-xxl-8 d-flex">
+      {{-- <div class="col-xxl-8 d-flex">
         <div class="card h-100 w-100 wc-card activity-pattern-card">
           <div class="card-body p-24 d-flex flex-column h-100">
             <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16 flex-shrink-0">
@@ -5318,11 +5318,11 @@
             </div>
           </div>
         </div>
-      </div>
+      </div> --}}
       <!-- Pola Aktivitas Penggunaan Aktif End -->
 
       <!-- Campaign Static start -->
-      <div class="col-xxl-4 d-flex">
+      {{-- <div class="col-xxl-4 d-flex">
         <div class="d-flex flex-column gap-4 w-100 h-100 activity-pattern-side">
           <div class="card flex-grow-1 radius-8 border-0">
               <div class="card-body p-24">
@@ -5383,11 +5383,11 @@
               </div>
             </div>
         </div>
-      </div>  
+      </div>   --}}
       <!-- Campaign Static End -->
 
       <!-- Aktivitas Harian Start -->
-      <div class="col-xxl-4 col-sm-6">
+      {{-- <div class="col-xxl-4 col-sm-6">
         <div class="card h-100 radius-8 border-0">
           <div class="card-body p-24">
               <h6 class="mb-2 fw-bold text-lg">Aktivitas Harian</h6>
@@ -5412,11 +5412,11 @@
               </div>
           </div>
         </div>
-      </div>
+      </div> --}}
       <!-- Aktivitas Harian End -->
 
       <!-- Site Status Start -->
-      <div class="col-xxl-4 col-sm-6">
+      {{-- <div class="col-xxl-4 col-sm-6">
         <div class="card radius-8 border-0 h-100">
 
           <div class="card-body">
@@ -5452,11 +5452,11 @@
             </div>
           </div>
         </div>
-      </div>
+      </div> --}}
       <!-- Site Status End -->
 
       <!-- Top User Start -->
-      <div class="col-xxl-4">
+      {{-- <div class="col-xxl-4">
         <div class="card h-100">
 
           <div class="card-body">
@@ -5493,13 +5493,13 @@
 
           </div>
         </div>
-      </div>
+      </div> --}}
       <!-- Top User End -->
 
-      @include('evaluasi-well.partials._wellness-metrics')
+      {{-- @include('evaluasi-well.partials._wellness-metrics') --}}
 
       <!-- Belum Install Start -->
-      <div class="col-12">
+      {{-- <div class="col-12">
         <div class="card radius-8 border-0 shadow-sm">
           <div class="card-header border-bottom bg-base py-16 px-24">
             <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
@@ -5622,7 +5622,7 @@
             </div>
           </div>
         </div>
-      </div>
+      </div> --}}
       <!-- Belum Install End -->
     </div>
 

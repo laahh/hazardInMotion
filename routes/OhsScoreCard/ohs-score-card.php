@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
+use App\Http\Controllers\OhsScoreCard\RoadSummaryController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -19,4 +20,10 @@ Route::middleware('evaluasi-well.access')
     ->name('ohs-score-card.')
     ->group(function (): void {
         Route::get('/', [OhsScoreCardDashboardController::class, 'index'])->name('index');
+
+        // Parameter SGI — "Jalan sesuai standar" (app_mixer.road_summary)
+        Route::get('/jalan-sesuai-standar', [RoadSummaryController::class, 'index'])
+            ->name('jalan-sesuai-standar.index');
+        Route::get('/jalan-sesuai-standar/data', [RoadSummaryController::class, 'data'])
+            ->name('jalan-sesuai-standar.data');
     });

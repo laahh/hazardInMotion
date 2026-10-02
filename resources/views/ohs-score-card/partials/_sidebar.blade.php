@@ -44,7 +44,7 @@
             ['label' => 'Pemenuhan Sertifikasi Tenaga Teknis',                          'icon' => 'solar:diploma-verified-outline'],
         ],
         'SGI' => [
-            ['label' => 'Jalan sesuai standar',                                         'icon' => 'solar:routing-outline'],
+            ['label' => 'Jalan sesuai standar',                                         'icon' => 'solar:routing-outline', 'url' => route('ohs-score-card.jalan-sesuai-standar.index')],
         ],
         'SIRM' => [
             ['label' => 'Deviasi Rekayasa Engineering Seatbelt',                        'icon' => 'mdi:seatbelt'],
