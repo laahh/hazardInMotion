@@ -35,7 +35,7 @@
 </head>
 <body>
 
-@include('evaluasi-well.partials._sidebar')
+@include('ohs-score-card.partials._sidebar')
 
 <main class="dashboard-main">
     @include('evaluasi-well.partials._navbar')

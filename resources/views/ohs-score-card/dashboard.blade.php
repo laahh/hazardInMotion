@@ -1,4 +1,4 @@
-﻿@extends('evaluasi-well.layouts.app')
+﻿@extends('ohs-score-card.layouts.app')
 
 @php
   // Dihitung di sini (bukan di section('content')) supaya tersedia untuk
