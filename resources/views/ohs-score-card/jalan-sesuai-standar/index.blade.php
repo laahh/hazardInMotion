@@ -69,6 +69,21 @@
   .rs-badge--bad    { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
   .rs-badge--muted  { background: #F1F5F9; color: #64748B; border: 1px solid #E2E8F0; }
 
+  /* Kesimpulan dibuat lebih tegas daripada badge status per-parameter. */
+  .rs-verdict {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+  .rs-verdict--ok  { background: #16A34A; color: #fff; }
+  .rs-verdict--bad { background: #E0484A; color: #fff; }
+
   #roadSummaryTable { width: 100% !important; }
   #roadSummaryTable th,
   #roadSummaryTable td { vertical-align: middle; white-space: nowrap; }
@@ -152,7 +167,7 @@
 
 {{-- Ringkasan kepatuhan; ikut filter yang sedang aktif (di-update dari respons AJAX). --}}
 <div class="row gy-3 mb-24">
-  <div class="col-xxl-3 col-sm-6">
+  <div class="col-xxl col-lg-4 col-sm-6">
     <div class="rs-stat d-flex align-items-center gap-3">
       <span class="rs-stat__icon" style="background:#EFF6FF;color:#2563EB;">
         <iconify-icon icon="solar:ruler-outline"></iconify-icon>
@@ -164,7 +179,19 @@
       </div>
     </div>
   </div>
-  <div class="col-xxl-3 col-sm-6">
+  <div class="col-xxl col-lg-4 col-sm-6">
+    <div class="rs-stat d-flex align-items-center gap-3" style="border-color:#BBF7D0;background:#F7FEF9;">
+      <span class="rs-stat__icon" style="background:#16A34A;color:#fff;">
+        <iconify-icon icon="solar:check-circle-outline"></iconify-icon>
+      </span>
+      <div class="min-w-0">
+        <div class="rs-stat__label">Standar</div>
+        <div class="rs-stat__value" id="rs-standar">–</div>
+        <div class="rs-stat__meta" id="rs-standar-meta">&nbsp;</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xxl col-lg-4 col-sm-6">
     <div class="rs-stat d-flex align-items-center gap-3">
       <span class="rs-stat__icon" style="background:#ECFDF5;color:#16A34A;">
         <iconify-icon icon="solar:graph-up-outline"></iconify-icon>
@@ -176,7 +203,7 @@
       </div>
     </div>
   </div>
-  <div class="col-xxl-3 col-sm-6">
+  <div class="col-xxl col-lg-4 col-sm-6">
     <div class="rs-stat d-flex align-items-center gap-3">
       <span class="rs-stat__icon" style="background:#ECFDF5;color:#16A34A;">
         <iconify-icon icon="solar:arrows-horizontal-outline"></iconify-icon>
@@ -188,7 +215,7 @@
       </div>
     </div>
   </div>
-  <div class="col-xxl-3 col-sm-6">
+  <div class="col-xxl col-lg-4 col-sm-6">
     <div class="rs-stat d-flex align-items-center gap-3">
       <span class="rs-stat__icon" style="background:#ECFDF5;color:#16A34A;">
         <iconify-icon icon="solar:slider-horizontal-outline"></iconify-icon>
@@ -218,6 +245,15 @@
         </div>
       @endforeach
 
+      <div class="col-xxl-3 col-md-4 col-sm-6">
+        <label class="form-label text-sm fw-medium mb-4" for="rs-filter-kesimpulan">Kesimpulan</label>
+        <select class="form-select form-select-sm radius-8 rs-filter" id="rs-filter-kesimpulan" data-column="kesimpulan">
+          <option value="">Semua</option>
+          <option value="standar">Standar</option>
+          <option value="tidak-standar">Tidak Standar</option>
+        </select>
+      </div>
+
       <div class="col-xxl-12 d-flex align-items-center gap-2">
         <button type="button" class="btn btn-sm btn-primary-600 radius-8" id="rs-apply">
           <iconify-icon icon="solar:filter-outline" class="icon"></iconify-icon> Terapkan
@@ -244,6 +280,7 @@
             <th>Superelevasi</th>
             <th>Junction 1</th>
             <th>Junction S</th>
+            <th>Kesimpulan</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -301,6 +338,30 @@
         return escapeHtml(value === null || value === undefined || value === '' ? '–' : value);
     }
 
+    // Junction hanya ikut dinilai bila segmen itu memang titik pertemuan;
+    // '-' / kosong berarti tidak berlaku, jadi tidak dihitung.
+    function junctionApplies(value) {
+        return value !== null && value !== undefined && value !== '' && value !== '-';
+    }
+
+    function renderVerdict(isStandar, row) {
+        var checked = ['grade_stat', 'road_width', 'supereleva'];
+        if (junctionApplies(row.junction_1)) { checked.push('junction_1'); }
+        if (junctionApplies(row.junction_s)) { checked.push('junction_s'); }
+
+        var failed = checked.filter(function (key) { return row[key] !== 'ACCEPT'; });
+
+        var tip = isStandar
+            ? checked.length + ' parameter dinilai, semuanya ACCEPT'
+            : checked.length + ' parameter dinilai, tidak ACCEPT: ' + failed.join(', ');
+
+        return '<span class="rs-verdict ' + (isStandar ? 'rs-verdict--ok' : 'rs-verdict--bad') + '"'
+            + ' title="' + escapeHtml(tip) + '">'
+            + '<iconify-icon icon="' + (isStandar ? 'mdi:check-circle' : 'mdi:close-circle') + '"></iconify-icon>'
+            + (isStandar ? 'STANDAR' : 'TIDAK STANDAR')
+            + '</span>';
+    }
+
     function currentFilters() {
         var out = {};
         filterEls.forEach(function (el) {
@@ -320,7 +381,8 @@
         document.querySelector('#rs-total-meta').textContent =
             Object.keys(currentFilters()).length ? 'sesuai filter' : 'seluruh data';
 
-        [['grade', 'grade_pct', 'grade_ok'],
+        [['standar', 'standar_pct', 'standar_ok'],
+         ['grade', 'grade_pct', 'grade_ok'],
          ['width', 'width_pct', 'width_ok'],
          ['super', 'super_pct', 'super_ok']].forEach(function (item) {
             var pct = Number(summary[item[1]] || 0);
@@ -380,7 +442,17 @@
             { data: 'road_width', className: 'text-center', render: function (d) { return renderBadge(d); } },
             { data: 'supereleva', className: 'text-center', render: function (d) { return renderBadge(d); } },
             { data: 'junction_1', render: function (d) { return plain(d); } },
-            { data: 'junction_s', render: function (d) { return plain(d); } }
+            { data: 'junction_s', render: function (d) { return plain(d); } },
+            {
+                data: 'is_standar',
+                className: 'text-center',
+                render: function (d, type, row) {
+                    if (type !== 'display') {
+                        return d ? 1 : 0;
+                    }
+                    return renderVerdict(d, row);
+                }
+            }
         ],
         language: {
             processing: 'Memuat...',
