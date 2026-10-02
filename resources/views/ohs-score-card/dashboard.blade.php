@@ -4930,7 +4930,7 @@
          | kontraktor) — stabil tiap refresh, bukan acak tiap muat ulang.
          |
          | Untuk memakai data asli nanti: isi $scoreCardMatrix dengan bentuk
-         | [parameter][site][kontraktor] => float. Sisa kode (score per dept,
+         | [parameter][site][kontraktor] => float. Sisa kode (baris Score,
          | pewarnaan, header) tidak perlu diubah.
          */
 
@@ -4944,114 +4944,105 @@
             'SMO'   => ['PT MTN'],
         ];
 
-        // Parameter dikelompokkan per departemen pemilik.
-        $scoreCardGroups = [
-            'SOD' => [
-                'Ratio Pelaporan TBC & GR',
-                'Coverage Area Daily',
-                'Blindspot TBC yang dilaporkan BC',
-                'Blindspot GR yang dilaporkan BC',
-                'Coverage Area Kritis Pengawas Suptend up',
-                '% Pengawasan Berjarak',
-                '% Blindspot temuan Real Time',
-                'Coverage Daily Area Kritis Pengawas Safety',
-                'Speak up fatigue',
-                'Tidak ada temuan penggunaan HP',
-                'Incident dengan Gap Coverage CCTV & Gap pada DMS',
-                'Leadtime Alert DMS masuk ke Server',
-                'Kinerja Pengawasan Control Room DMS',
-            ],
-            'SIRC' => [
-                'Perulangan rekomendasi hasil investigasi',
-            ],
-            'OC' => [
-                'Kesesuaian Implementasi IKK',
-                '% SPIP yang dilakukan Commissioning',
-                'Laporan Perizinan Usaha Jasa',
-                '% Blindspot TBC dengan PIC Subcontractor',
-            ],
-            'HSECT' => [
-                'Peer Pressure',
-                'Pemenuhan Sertifikasi Pengawas Teknis',
-                'Pemenuhan Sertifikasi Tenaga Teknis',
-            ],
-            'SGI' => [
-                'Jalan sesuai standar',
-            ],
-            'SIRM' => [
-                'Deviasi Rekayasa Engineering Seatbelt',
-                'Deviasi Rekayasa Engineering Overspeed',
-                'Pemenuhan Regulasi',
-                'Penuntasan pengendalian rekayasa',
-            ],
-            'G&H' => [
-                'Utilisasi BeSigma',
-            ],
-            'OH & IH' => [
-                'Rasio kelayakan kerja (wellbeing)',
-                'Pemeriksaan Fit to Work awal shift pekerja',
-                'Pelaksanaan Sobriety Test Jam Kritis dan Pengecekan Sobriety Test',
-            ],
-            'ER & SS' => [
-                'Tidak ada pelaporan melewati batas golden time',
-                'Kesiapan alat Emergency',
-            ],
+        $scoreCardParameters = [
+            'Ratio Pelaporan TBC & GR',
+            'Coverage Area Daily',
+            'Blindspot TBC yang dilaporkan BC',
+            'Blindspot GR yang dilaporkan BC',
+            'Coverage Area Kritis Pengawas Suptend up',
+            '% Pengawasan Berjarak',
+            '% Blindspot temuan Real Time',
+            'Coverage Daily Area Kritis Pengawas Safety',
+            'Speak up fatigue',
+            'Tidak ada temuan penggunaan HP',
+            'Incident dengan Gap Coverage CCTV & Gap pada DMS',
+            'Leadtime Alert DMS masuk ke Server',
+            'Kinerja Pengawasan Control Room DMS',
+            'Perulangan rekomendasi hasil investigasi',
+            'Kesesuaian Implementasi IKK',
+            '% SPIP yang dilakukan Commissioning',
+            'Laporan Perizinan Usaha Jasa',
+            '% Blindspot TBC dengan PIC Subcontractor',
+            'Peer Pressure',
+            'Pemenuhan Sertifikasi Pengawas Teknis',
+            'Pemenuhan Sertifikasi Tenaga Teknis',
+            'Jalan sesuai standar',
+            'Deviasi Rekayasa Engineering Seatbelt',
+            'Deviasi Rekayasa Engineering Overspeed',
+            'Pemenuhan Regulasi',
+            'Penuntasan pengendalian rekayasa',
+            'Utilisasi BeSigma',
+            'Rasio kelayakan kerja (wellbeing)',
+            'Pemeriksaan Fit to Work awal shift pekerja',
+            'Pelaksanaan Sobriety Test Jam Kritis dan Pengecekan Sobriety Test',
+            'Tidak ada pelaporan melewati batas golden time',
+            'Kesiapan alat Emergency',
         ];
 
         $scoreCardColumnCount = array_sum(array_map('count', $scoreCardSites));
 
         // ---- Data dummy deterministik, condong ke capaian tinggi ----------
         $scoreCardMatrix = [];
-        foreach ($scoreCardGroups as $groupParameters) {
-            foreach ($groupParameters as $param) {
-                foreach ($scoreCardSites as $site => $contractors) {
-                    foreach ($contractors as $contractor) {
-                        $hash = crc32($param . '|' . $site . '|' . $contractor);
-                        $spread = $hash >> 4;
-                        $scoreCardMatrix[$param][$site][$contractor] = match (true) {
-                            $hash % 100 < 46 => 100.0,                        // tuntas
-                            $hash % 100 < 70 => 90 + ($spread % 1000) / 100,  // 90.00–99.99
-                            $hash % 100 < 86 => 78 + ($spread % 1200) / 100,  // 78.00–89.99
-                            $hash % 100 < 95 => 62 + ($spread % 1600) / 100,  // 62.00–77.99
-                            default          => 20 + ($spread % 4200) / 100,  // 20.00–61.99
-                        };
-                    }
+        foreach ($scoreCardParameters as $param) {
+            foreach ($scoreCardSites as $site => $contractors) {
+                foreach ($contractors as $contractor) {
+                    $hash = crc32($param . '|' . $site . '|' . $contractor);
+                    $spread = $hash >> 4;
+                    $scoreCardMatrix[$param][$site][$contractor] = match (true) {
+                        $hash % 100 < 46 => 100.0,
+                        $hash % 100 < 70 => 90 + ($spread % 1000) / 100,
+                        $hash % 100 < 86 => 78 + ($spread % 1200) / 100,
+                        $hash % 100 < 95 => 62 + ($spread % 1600) / 100,
+                        default          => 20 + ($spread % 4200) / 100,
+                    };
                 }
             }
         }
 
+        // Rata-rata seluruh parameter per kolom, dipakai di baris Score (tfoot).
+        $scoreCardColumnScore = [];
+        foreach ($scoreCardSites as $site => $contractors) {
+            foreach ($contractors as $contractor) {
+                $sum = 0.0;
+                foreach ($scoreCardParameters as $param) {
+                    $sum += (float) $scoreCardMatrix[$param][$site][$contractor];
+                }
+                $scoreCardColumnScore[$site . '|' . $contractor] = $sum / max(count($scoreCardParameters), 1);
+            }
+        }
+        $scoreCardOverall = array_sum($scoreCardColumnScore) / max(count($scoreCardColumnScore), 1);
+
         $scoreCardCellClass = static function (float $value): string {
-            if ($value >= 100.0) return 'osc-sc--green';
-            if ($value >= 90.0)  return 'osc-sc--green-soft';
-            if ($value >= 78.0)  return 'osc-sc--yellow';
-            if ($value >= 62.0)  return 'osc-sc--orange';
-            return 'osc-sc--red';
+            if ($value >= 100.0) return 'osc-sc--t5';
+            if ($value >= 90.0)  return 'osc-sc--t4';
+            if ($value >= 78.0)  return 'osc-sc--t3';
+            if ($value >= 62.0)  return 'osc-sc--t2';
+            return 'osc-sc--t1';
         };
       @endphp
       <div class="col-12">
         <style>
-          .osc-sc-card .osc-sc-wrap {
+          /* Mengikuti bahasa visual kartu "Pola Aktivitas Penggunaan Aktif":
+             shell .wc-card, tile membulat berjarak, hover halus, legenda swatch. */
+          .osc-sc-wrap {
             width: 100%;
-            max-height: 640px;
+            max-height: 620px;
             overflow: auto;
-            border: 1px solid #E2E8F0;
-            border-radius: 12px;
-            background: #fff;
+            padding: 2px;
           }
           .osc-sc-table {
             width: 100%;
-            min-width: 1120px;
+            min-width: 1040px;
             border-collapse: separate;
-            border-spacing: 0;
+            border-spacing: 4px;
             font-size: 12px;
           }
           .osc-sc-table th,
           .osc-sc-table td {
-            padding: 7px 10px;
+            padding: 8px 10px;
             text-align: center;
             vertical-align: middle;
             white-space: nowrap;
-            border-bottom: 1px solid #EEF2F7;
           }
 
           /* ---- Header dua tingkat, sticky ---- */
@@ -5059,138 +5050,113 @@
             position: sticky;
             z-index: 4;
             background: #F8FAFC;
-            color: #475569;
-            font-weight: 700;
+            color: #64748B;
+            font-weight: 600;
             font-size: 11px;
-            letter-spacing: 0.02em;
+            border-radius: 8px;
           }
           .osc-sc-table thead tr:first-child th { top: 0; }
-          .osc-sc-table thead tr:last-child th { top: 31px; }
+          .osc-sc-table thead tr:last-child th { top: 40px; }
           .osc-sc-th-site {
-            color: #1D4ED8 !important;
-            background: #EFF6FF !important;
-            border-left: 2px solid #CBD5E1;
-          }
-          .osc-sc-th-contractor {
-            font-weight: 600 !important;
-            color: #64748B !important;
-            font-size: 10.5px !important;
+            background: #ECFDF5 !important;
+            color: #166534 !important;
+            font-weight: 700 !important;
+            font-size: 12px !important;
           }
 
-          /* ---- Dua kolom kiri: sticky horizontal ---- */
-          .osc-sc-col-group,
+          /* ---- Kolom parameter: sticky kiri ---- */
           .osc-sc-col-param {
             position: sticky;
+            left: 0;
             z-index: 2;
             text-align: left !important;
             white-space: normal !important;
-            line-height: 1.3;
-          }
-          .osc-sc-col-group {
-            left: 0;
-            width: 108px;
-            min-width: 108px;
-            background: #EEF1E2;
-            font-weight: 800;
-            color: #3F4A2E !important;
-            font-size: 12px;
-            border-right: 1px solid #DDE2CB;
-            vertical-align: middle !important;
-          }
-          .osc-sc-col-param {
-            left: 108px;
-            width: 250px;
-            min-width: 250px;
-            max-width: 250px;
-            background: #FFFFFF;
-            color: #334155 !important;
+            width: 272px;
+            min-width: 272px;
+            max-width: 272px;
+            background: #fff;
+            color: #0F172A !important;
             font-weight: 600;
-            border-right: 1px solid #E2E8F0;
+            line-height: 1.35;
+            border-radius: 8px;
+            box-shadow: 1px 0 0 #EEF2F7;
           }
-          .osc-sc-table thead .osc-sc-col-group,
-          .osc-sc-table thead .osc-sc-col-param { z-index: 5; }
+          .osc-sc-table thead .osc-sc-col-param {
+            z-index: 5;
+            background: #F8FAFC;
+            color: #64748B !important;
+          }
 
-          /* ---- Sel nilai ---- */
+          /* ---- Tile nilai ---- */
           .osc-sc-cell {
             font-weight: 700;
             color: #fff;
-            min-width: 68px;
-            border-bottom: 2px solid #fff;
-            border-right: 1px solid rgba(255, 255, 255, 0.55);
+            min-width: 70px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.75);
+            transition: transform .12s ease, box-shadow .12s ease;
           }
-          .osc-sc--green      { background: #16A34A; }
-          .osc-sc--green-soft { background: #86C96B; }
-          .osc-sc--yellow     { background: #F2C230; color: #1F2937; }
-          .osc-sc--orange     { background: #F08C2E; }
-          .osc-sc--red        { background: #E0484A; }
+          .osc-sc-cell:hover {
+            transform: scale(1.06);
+            box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.35);
+            position: relative;
+            z-index: 1;
+          }
+          .osc-sc--t5 { background: #059669; }
+          .osc-sc--t4 { background: #34D399; }
+          .osc-sc--t3 { background: #FCD34D; color: #1F2937; }
+          .osc-sc--t2 { background: #FB923C; }
+          .osc-sc--t1 { background: #F87171; }
 
-          /* ---- Baris Score per departemen ---- */
-          .osc-sc-score-row .osc-sc-col-param {
+          /* ---- Baris Score: sticky di bawah ---- */
+          .osc-sc-table tfoot td {
+            position: sticky;
+            bottom: 0;
+            z-index: 3;
+            background: #fff;
+          }
+          .osc-sc-table tfoot .osc-sc-col-param {
+            z-index: 6;
             background: #F1F5F9;
             font-weight: 800;
-            color: #0F172A !important;
           }
-          .osc-sc-score-row td { border-bottom: 6px solid #fff; }
+          .osc-sc-table tfoot .osc-sc-cell {
+            box-shadow: 0 -1px 0 #EEF2F7;
+          }
 
-          /* ---- Legenda ---- */
-          .osc-sc-legend {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 14px;
-          }
-          .osc-sc-legend span.dot {
-            width: 13px;
-            height: 13px;
-            border-radius: 3px;
-            display: inline-block;
-          }
           @media (max-width: 768px) {
-            .osc-sc-col-group { width: 84px; min-width: 84px; }
-            .osc-sc-col-param { left: 84px; width: 170px; min-width: 170px; }
+            .osc-sc-col-param { width: 184px; min-width: 184px; max-width: 184px; }
           }
         </style>
 
-        <div class="card h-100 w-100 radius-8 border osc-sc-card">
+        <div class="card h-100 w-100 wc-card">
           <div class="card-body p-24">
             <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
-              <div class="min-w-0">
-                <h6 class="mb-1 fw-bold text-lg">Score Card Parameter</h6>
-                <span class="text-sm fw-medium text-secondary-light">
-                  {{ array_sum(array_map('count', $scoreCardGroups)) }} parameter ·
-                  {{ count($scoreCardSites) }} site ·
-                  {{ $scoreCardColumnCount }} kolom kontraktor
+              <div class="d-flex align-items-start gap-3 min-w-0">
+                <span class="wc-card__head-icon">
+                  <iconify-icon icon="mdi:table-check"></iconify-icon>
                 </span>
+                <div class="min-w-0">
+                  <h6 class="mb-1 fw-bold text-lg wc-card__title">Score Card Parameter</h6>
+                  <span class="wc-card__subtitle">Capaian tiap parameter per site &amp; kontraktor</span>
+                  <span class="text-xs d-block mt-4" style="color:#94A3B8;">
+                    {{ count($scoreCardParameters) }} parameter ·
+                    {{ count($scoreCardSites) }} site ·
+                    {{ $scoreCardColumnCount }} kolom kontraktor
+                  </span>
+                </div>
               </div>
-              <span class="bg-warning-focus text-warning-main px-12 py-4 rounded-pill fw-medium text-sm flex-shrink-0">
-                Data dummy
-              </span>
+              <div class="wc-card__badge">
+                <iconify-icon icon="mdi:chart-box-outline"></iconify-icon>
+                <span>Rata-rata {{ number_format($scoreCardOverall, 2, ',', '.') }}% · data dummy</span>
+              </div>
             </div>
 
-            <div class="osc-sc-legend mb-16">
-              <span class="d-inline-flex align-items-center gap-2 text-xs" style="color:#64748B;">
-                <span class="dot" style="background:#16A34A;"></span> 100%
-              </span>
-              <span class="d-inline-flex align-items-center gap-2 text-xs" style="color:#64748B;">
-                <span class="dot" style="background:#86C96B;"></span> 90–99,99%
-              </span>
-              <span class="d-inline-flex align-items-center gap-2 text-xs" style="color:#64748B;">
-                <span class="dot" style="background:#F2C230;"></span> 78–89,99%
-              </span>
-              <span class="d-inline-flex align-items-center gap-2 text-xs" style="color:#64748B;">
-                <span class="dot" style="background:#F08C2E;"></span> 62–77,99%
-              </span>
-              <span class="d-inline-flex align-items-center gap-2 text-xs" style="color:#64748B;">
-                <span class="dot" style="background:#E0484A;"></span> &lt; 62%
-              </span>
-            </div>
-
-            <div class="osc-sc-wrap">
+            <div class="osc-sc-wrap mb-8">
               <table class="osc-sc-table">
                 <thead>
                   <tr>
-                    <th rowspan="2" class="osc-sc-col-group">DEPT</th>
-                    <th rowspan="2" class="osc-sc-col-param">NAMA PARAMETER</th>
+                    <th rowspan="2" class="osc-sc-col-param">Nama Parameter</th>
                     @foreach ($scoreCardSites as $site => $contractors)
                       <th colspan="{{ count($contractors) }}" class="osc-sc-th-site">{{ $site }}</th>
                     @endforeach
@@ -5198,57 +5164,59 @@
                   <tr>
                     @foreach ($scoreCardSites as $site => $contractors)
                       @foreach ($contractors as $contractor)
-                        <th class="osc-sc-th-contractor {{ $loop->first ? 'osc-sc-th-sitestart' : '' }}">{{ $contractor }}</th>
+                        <th>{{ $contractor }}</th>
                       @endforeach
                     @endforeach
                   </tr>
                 </thead>
                 <tbody>
-                  @foreach ($scoreCardGroups as $dept => $parameters)
-                    @php
-                      // +1 baris untuk baris "Score" milik departemen ini.
-                      $deptRowspan = count($parameters) + 1;
-                      $deptCellTotals = [];
-                    @endphp
-
-                    @foreach ($parameters as $param)
-                      <tr>
-                        @if ($loop->first)
-                          <td class="osc-sc-col-group" rowspan="{{ $deptRowspan }}">{{ $dept }}</td>
-                        @endif
-                        <td class="osc-sc-col-param" title="{{ $param }}">{{ $param }}</td>
-                        @foreach ($scoreCardSites as $site => $contractors)
-                          @foreach ($contractors as $contractor)
-                            @php
-                              $value = (float) $scoreCardMatrix[$param][$site][$contractor];
-                              $key = $site . '|' . $contractor;
-                              $deptCellTotals[$key] = ($deptCellTotals[$key] ?? 0) + $value;
-                            @endphp
-                            <td class="osc-sc-cell {{ $scoreCardCellClass($value) }}">
-                              {{ number_format($value, 2) }}%
-                            </td>
-                          @endforeach
-                        @endforeach
-                      </tr>
-                    @endforeach
-
-                    {{-- Baris Score: rata-rata seluruh parameter departemen ini per kolom --}}
-                    <tr class="osc-sc-score-row">
-                      <td class="osc-sc-col-param">Score</td>
+                  @foreach ($scoreCardParameters as $param)
+                    <tr>
+                      <td class="osc-sc-col-param" title="{{ $param }}">{{ $param }}</td>
                       @foreach ($scoreCardSites as $site => $contractors)
                         @foreach ($contractors as $contractor)
-                          @php
-                            $score = $deptCellTotals[$site . '|' . $contractor] / max(count($parameters), 1);
-                          @endphp
-                          <td class="osc-sc-cell {{ $scoreCardCellClass($score) }}">
-                            {{ number_format($score, 2) }}%
+                          @php $value = (float) $scoreCardMatrix[$param][$site][$contractor]; @endphp
+                          <td class="osc-sc-cell {{ $scoreCardCellClass($value) }}"
+                              title="{{ $param }} — {{ $site }} / {{ $contractor }}: {{ number_format($value, 2, ',', '.') }}%">
+                            {{ number_format($value, 2, ',', '.') }}%
                           </td>
                         @endforeach
                       @endforeach
                     </tr>
                   @endforeach
                 </tbody>
+                <tfoot>
+                  <tr>
+                    <td class="osc-sc-col-param">Score</td>
+                    @foreach ($scoreCardSites as $site => $contractors)
+                      @foreach ($contractors as $contractor)
+                        @php $score = $scoreCardColumnScore[$site . '|' . $contractor]; @endphp
+                        <td class="osc-sc-cell {{ $scoreCardCellClass($score) }}"
+                            title="Rata-rata {{ count($scoreCardParameters) }} parameter — {{ $site }} / {{ $contractor }}">
+                          {{ number_format($score, 2, ',', '.') }}%
+                        </td>
+                      @endforeach
+                    @endforeach
+                  </tr>
+                </tfoot>
               </table>
+            </div>
+
+            <div class="d-flex align-items-center flex-wrap gap-3 mb-16">
+              <span class="text-xs fw-medium" style="color:#64748B;">Capaian</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#F87171;"></span>&lt;62%</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#FB923C;"></span>62–77,99%</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#FCD34D;"></span>78–89,99%</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#34D399;"></span>90–99,99%</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#059669;"></span>100%</span>
+            </div>
+
+            <div class="wc-tip wc-tip--green">
+              <iconify-icon icon="solar:clipboard-check-bold" class="flex-shrink-0"></iconify-icon>
+              <span>
+                Baris <strong>Score</strong> menempel di dasar tabel — rata-rata {{ count($scoreCardParameters) }} parameter
+                untuk tiap kombinasi site &amp; kontraktor. Arahkan kursor ke sel untuk melihat rinciannya.
+              </span>
             </div>
           </div>
         </div>
