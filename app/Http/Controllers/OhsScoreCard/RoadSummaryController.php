@@ -57,6 +57,43 @@ final class RoadSummaryController extends Controller
     private const CONCLUSION_STANDARD = 'standar';
     private const CONCLUSION_NOT_STANDARD = 'tidak-standar';
 
+    /**
+     * Tabel ini tidak punya kolom bulan/tanggal — hanya `year` + `week`
+     * (kolom tanggal di road_datasets adalah waktu ingest, bukan periode
+     * yang diukur, jadi tidak dipakai). Bulan karena itu diturunkan dari
+     * nomor minggu memakai aturan ISO 8601: satu minggu dimiliki oleh bulan
+     * tempat hari KAMIS-nya jatuh.
+     *
+     * Dipakai aturan Kamis, bukan Senin, karena minggu bisa membelah dua
+     * bulan — mis. 2026 minggu 1 mulai Senin 29 Des 2025; dengan aturan
+     * Kamis (1 Jan 2026) minggu itu benar masuk Januari 2026, bukan
+     * Desember 2025. Pemetaan ini sudah dicocokkan dengan MySQL
+     * MONTH(STR_TO_DATE(... '%x%v %W') + 3 hari) untuk seluruh data.
+     */
+    /**
+     * Konversi persentase segmen standar menjadi Nilai 1–4.
+     *
+     * Bentuk: [ambang bawah, nilai, label]. Dibaca dari atas; band pertama
+     * yang ambangnya <= persentase dipakai.
+     *
+     * CATATAN: ambang yang diberikan berhenti di "98% <= X < 100%", sehingga
+     * X = 100% tepat tidak tercakup. Di sini 100% ikut Nilai 4 karena itu
+     * capaian terbaik. Kalau ternyata 100% seharusnya punya nilai sendiri
+     * (mis. Nilai 5), cukup tambahkan band baru di paling atas.
+     */
+    private const SCORE_BANDS = [
+        [98.0, 4, '98% – 100%'],
+        [90.0, 3, '90% – <98%'],
+        [80.0, 2, '80% – <90%'],
+        [0.0,  1, '<80%'],
+    ];
+
+    private const MONTH_LABELS = [
+        1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
+        5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
+        9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember',
+    ];
+
     /** Index kolom DataTable -> kolom SQL. Whitelist, supaya order tidak bisa diinjeksi. */
     private const ORDERABLE = [
         0 => 'site',
@@ -64,18 +101,20 @@ final class RoadSummaryController extends Controller
         2 => 'mitra',
         3 => 'year',
         4 => 'week',
-        5 => 'nama_jalan',
-        6 => 'segment',
-        7 => 'grade_stat',
-        8 => 'road_width',
-        9 => 'supereleva',
-        10 => 'junction_1',
-        11 => 'junction_s',
-        // 12 = kolom Kesimpulan, ditangani khusus karena hasil hitungan (lihat applyOrder()).
+        // Kolom Bulan diturunkan dari week, jadi urut minggu = urut bulan.
+        5 => 'week',
+        6 => 'nama_jalan',
+        7 => 'segment',
+        8 => 'grade_stat',
+        9 => 'road_width',
+        10 => 'supereleva',
+        11 => 'junction_1',
+        12 => 'junction_s',
+        // 13 = kolom Kesimpulan, ditangani khusus karena hasil hitungan (lihat applyOrder()).
     ];
 
     /** Index kolom DataTable untuk kolom Kesimpulan. */
-    private const CONCLUSION_COLUMN_INDEX = 12;
+    private const CONCLUSION_COLUMN_INDEX = 13;
 
     /** Kolom yang ikut kena kotak search bebas. */
     private const SEARCHABLE = [
@@ -86,6 +125,7 @@ final class RoadSummaryController extends Controller
     {
         return view('ohs-score-card.jalan-sesuai-standar.index', [
             'filterOptions' => $this->filterOptions(),
+            'monthOptions' => $this->monthOptions(),
             'totalSegments' => $this->totalCount(),
         ]);
     }
@@ -98,6 +138,7 @@ final class RoadSummaryController extends Controller
         $recordsTotal = $this->totalCount();
 
         $filtered = $this->applyFilters($this->baseQuery(), $request);
+        $this->applyMonthFilter($filtered, $request);
         $this->applyConclusionFilter($filtered, $request);
         $this->applySearch($filtered, $search);
 
@@ -128,9 +169,13 @@ final class RoadSummaryController extends Controller
             ->orderBy('id') // tie-breaker: paging stabil saat nilai kolom sort kembar
             ->forPage($this->page($request), $this->pageLength($request))
             ->get()
-            ->map(static function (object $row): object {
+            ->map(function (object $row): object {
                 // Cast eksplisit: MySQL mengembalikan 1/0, pastikan JSON-nya boolean.
                 $row->is_standar = (bool) $row->is_standar;
+
+                // Bulan dihitung di PHP, bukan SQL, supaya query tetap sargable.
+                $month = $this->monthOfIsoWeek((int) $row->year, (int) $row->week);
+                $row->bulan = self::MONTH_LABELS[$month] ?? '–';
 
                 return $row;
             });
@@ -196,6 +241,12 @@ final class RoadSummaryController extends Controller
             $count++;
         }
 
+        $month = (int) $request->input('month', 0);
+
+        if ($month >= 1 && $month <= 12) {
+            $count++;
+        }
+
         return $count;
     }
 
@@ -210,6 +261,124 @@ final class RoadSummaryController extends Controller
         }
 
         return $query;
+    }
+
+    /**
+     * Band Nilai untuk sebuah persentase.
+     *
+     * @return array{0: float, 1: int, 2: string} [ambang, nilai, label]
+     */
+    private function scoreBandFor(float $percent): array
+    {
+        foreach (self::SCORE_BANDS as $band) {
+            if ($percent >= $band[0]) {
+                return $band;
+            }
+        }
+
+        // Tidak tercapai: band terakhir berambang 0. Disediakan agar aman
+        // kalau daftar band diubah dan ambang terbawah tidak lagi 0.
+        return [0.0, 1, '<80%'];
+    }
+
+    /**
+     * Bulan pemilik sebuah minggu ISO: bulan tempat hari Kamis-nya jatuh.
+     * Mengembalikan 0 bila nomor minggu tidak masuk akal.
+     */
+    private function monthOfIsoWeek(int $year, int $week): int
+    {
+        if ($week < 1 || $week > 53 || $year < 1970) {
+            return 0;
+        }
+
+        // Hari ke-4 pada minggu ISO = Kamis.
+        return (int) (new \DateTimeImmutable())->setISODate($year, $week, 4)->format('n');
+    }
+
+    /**
+     * Pasangan (year, week) yang benar-benar ada di data. Dipakai untuk
+     * menyusun opsi dropdown Bulan sekaligus menerjemahkan filter bulan
+     * menjadi daftar minggu.
+     *
+     * @return array<int, array{year: int, week: int}>
+     */
+    private function yearWeekPairs(): array
+    {
+        return Cache::remember(
+            'ohs-score-card.road-summary.year-weeks',
+            self::FILTER_CACHE_TTL,
+            fn (): array => $this->baseQuery()
+                ->select('year', 'week')
+                ->whereNotNull('year')
+                ->whereNotNull('week')
+                ->distinct()
+                ->orderBy('year')
+                ->orderBy('week')
+                ->get()
+                ->map(static fn (object $row): array => [
+                    'year' => (int) $row->year,
+                    'week' => (int) $row->week,
+                ])
+                ->all()
+        );
+    }
+
+    /**
+     * Bulan yang ada datanya, untuk mengisi dropdown.
+     *
+     * @return array<int, string> [nomor bulan => label]
+     */
+    private function monthOptions(): array
+    {
+        $months = [];
+
+        foreach ($this->yearWeekPairs() as $pair) {
+            $month = $this->monthOfIsoWeek($pair['year'], $pair['week']);
+
+            if ($month > 0) {
+                $months[$month] = self::MONTH_LABELS[$month];
+            }
+        }
+
+        ksort($months);
+
+        return $months;
+    }
+
+    /**
+     * Filter bulan. Diterjemahkan jadi daftar minggu per tahun, bukan fungsi
+     * tanggal di WHERE — supaya MySQL tetap bisa memakai index pada year/week
+     * dan tidak memaksa full scan di 140 ribu baris.
+     */
+    private function applyMonthFilter(Builder $query, Request $request): void
+    {
+        $month = (int) $request->input('month', 0);
+
+        if ($month < 1 || $month > 12) {
+            return;
+        }
+
+        $weeksByYear = [];
+
+        foreach ($this->yearWeekPairs() as $pair) {
+            if ($this->monthOfIsoWeek($pair['year'], $pair['week']) === $month) {
+                $weeksByYear[$pair['year']][] = $pair['week'];
+            }
+        }
+
+        if ($weeksByYear === []) {
+            $query->whereRaw('1 = 0'); // bulan dipilih tapi tak ada datanya
+
+            return;
+        }
+
+        $query->where(function (Builder $outer) use ($weeksByYear): void {
+            foreach ($weeksByYear as $year => $weeks) {
+                $outer->orWhere(function (Builder $inner) use ($year, $weeks): void {
+                    $inner->where('year', $year)->whereIn('week', $weeks);
+                });
+            }
+        });
     }
 
     /**
@@ -285,6 +454,16 @@ final class RoadSummaryController extends Controller
         $widthOk = (int) ($row->width_ok ?? 0);
         $superOk = (int) ($row->super_ok ?? 0);
         $standarOk = (int) ($row->standar_ok ?? 0);
+        $standarPct = $percent($standarOk);
+
+        // Tanpa baris sama sekali, persentasenya 0 — tapi itu "tidak ada data",
+        // bukan capaian 0%. Jangan dilaporkan sebagai Nilai 1.
+        if ($total === 0) {
+            $nilai = 0;
+            $nilaiBand = 'tidak ada data';
+        } else {
+            [, $nilai, $nilaiBand] = $this->scoreBandFor($standarPct);
+        }
 
         return [
             'total' => $total,
@@ -295,7 +474,9 @@ final class RoadSummaryController extends Controller
             'grade_pct' => $percent($gradeOk),
             'width_pct' => $percent($widthOk),
             'super_pct' => $percent($superOk),
-            'standar_pct' => $percent($standarOk),
+            'standar_pct' => $standarPct,
+            'nilai' => $nilai,
+            'nilai_band' => $nilaiBand,
         ];
     }
 

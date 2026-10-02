@@ -192,6 +192,18 @@
     </div>
   </div>
   <div class="col-xxl col-lg-4 col-sm-6">
+    <div class="rs-stat d-flex align-items-center gap-3" id="rs-nilai-card">
+      <span class="rs-stat__icon" id="rs-nilai-icon" style="background:#F1F5F9;color:#64748B;">
+        <iconify-icon icon="solar:medal-star-outline"></iconify-icon>
+      </span>
+      <div class="min-w-0">
+        <div class="rs-stat__label">Nilai</div>
+        <div class="rs-stat__value" id="rs-nilai">–</div>
+        <div class="rs-stat__meta" id="rs-nilai-meta">dari % standar</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xxl col-lg-4 col-sm-6">
     <div class="rs-stat d-flex align-items-center gap-3">
       <span class="rs-stat__icon" style="background:#ECFDF5;color:#16A34A;">
         <iconify-icon icon="solar:graph-up-outline"></iconify-icon>
@@ -246,6 +258,16 @@
       @endforeach
 
       <div class="col-xxl-3 col-md-4 col-sm-6">
+        <label class="form-label text-sm fw-medium mb-4" for="rs-filter-month">Bulan</label>
+        <select class="form-select form-select-sm radius-8 rs-filter" id="rs-filter-month" data-column="month">
+          <option value="">Semua</option>
+          @foreach ($monthOptions as $number => $label)
+            <option value="{{ $number }}">{{ $label }}</option>
+          @endforeach
+        </select>
+      </div>
+
+      <div class="col-xxl-3 col-md-4 col-sm-6">
         <label class="form-label text-sm fw-medium mb-4" for="rs-filter-kesimpulan">Kesimpulan</label>
         <select class="form-select form-select-sm radius-8 rs-filter" id="rs-filter-kesimpulan" data-column="kesimpulan">
           <option value="">Semua</option>
@@ -273,6 +295,7 @@
             <th>Mitra</th>
             <th>Tahun</th>
             <th>Minggu</th>
+            <th>Bulan</th>
             <th>Nama Jalan</th>
             <th>Segmen</th>
             <th>Grade</th>
@@ -373,6 +396,33 @@
         return out;
     }
 
+    // Warna kartu Nilai mengikuti bandnya; nilainya sendiri dihitung di server
+    // (satu sumber kebenaran), di sini hanya pewarnaan.
+    var nilaiStyle = {
+        1: { bg: '#FEF2F2', border: '#FECACA', icon: '#E0484A' },
+        2: { bg: '#FFF7ED', border: '#FED7AA', icon: '#F08C2E' },
+        3: { bg: '#FEFCE8', border: '#FDE68A', icon: '#CA8A04' },
+        4: { bg: '#F7FEF9', border: '#BBF7D0', icon: '#16A34A' }
+    };
+
+    function updateNilai(summary) {
+        var nilai = Number(summary.nilai || 0);
+        var style = nilaiStyle[nilai];
+        var card = document.querySelector('#rs-nilai-card');
+        var icon = document.querySelector('#rs-nilai-icon');
+
+        document.querySelector('#rs-nilai').textContent = nilai ? String(nilai) : '–';
+        document.querySelector('#rs-nilai-meta').textContent = summary.nilai_band || 'dari % standar';
+
+        if (!style) {
+            return;
+        }
+        card.style.background = style.bg;
+        card.style.borderColor = style.border;
+        icon.style.background = style.icon;
+        icon.style.color = '#fff';
+    }
+
     function updateSummary(summary) {
         if (!summary) {
             return;
@@ -380,6 +430,8 @@
         document.querySelector('#rs-total').textContent = formatNumber(summary.total);
         document.querySelector('#rs-total-meta').textContent =
             Object.keys(currentFilters()).length ? 'sesuai filter' : 'seluruh data';
+
+        updateNilai(summary);
 
         [['standar', 'standar_pct', 'standar_ok'],
          ['grade', 'grade_pct', 'grade_ok'],
@@ -436,6 +488,7 @@
             { data: 'mitra', render: function (d) { return plain(d); } },
             { data: 'year', render: function (d) { return plain(d); } },
             { data: 'week', render: function (d) { return plain(d); } },
+            { data: 'bulan', render: function (d) { return plain(d); } },
             { data: 'nama_jalan', render: function (d) { return plain(d); } },
             { data: 'segment', className: 'text-center', render: function (d) { return plain(d); } },
             { data: 'grade_stat', className: 'text-center', render: function (d) { return renderBadge(d); } },
