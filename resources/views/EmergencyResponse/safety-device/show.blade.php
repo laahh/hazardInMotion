@@ -102,7 +102,7 @@
             <div class="card shadow-none border mb-24">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <h6 class="mb-0">Riwayat Inspeksi</h6>
-                    <a href="{{ route('emergency-response.inspection.create', ['type' => 'safety_device', 'id' => $device->id]) }}" class="btn btn-sm btn-primary-600">Inspeksi</a>
+                    <a href="{{ route('er-inspection.public.form', ['code' => $device->code]) }}" target="_blank" class="btn btn-sm btn-primary-600">Inspeksi</a>
                 </div>
                 <div class="card-body p-0">
                     <ul class="list-group list-group-flush">

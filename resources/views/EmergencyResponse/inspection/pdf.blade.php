@@ -20,7 +20,7 @@
         <tr><th class="label">Target</th><td>{{ $inspection->target->name ?? '-' }} ({{ $inspection->target->code ?? '-' }})</td></tr>
         <tr><th class="label">Site</th><td>{{ $inspection->site->name ?? '-' }}</td></tr>
         <tr><th class="label">Template Checklist</th><td>{{ $inspection->checklistTemplate->name ?? '-' }}</td></tr>
-        <tr><th class="label">Inspector</th><td>{{ $inspection->inspector->name ?? '-' }}</td></tr>
+        <tr><th class="label">Inspector</th><td>{{ $inspection->inspectorLabel() ?? '-' }}@if ($inspection->inspectorIdentity()) ({{ $inspection->inspectorIdentity() }})@endif</td></tr>
         <tr><th class="label">Waktu Inspeksi</th><td>{{ optional($inspection->inspected_at)->format('d M Y H:i') ?? '-' }}</td></tr>
         <tr><th class="label">Kondisi Hasil Observasi</th><td>{{ $inspection->condition_result ?? '-' }}</td></tr>
         <tr><th class="label">Catatan</th><td>{{ $inspection->notes ?: '-' }}</td></tr>

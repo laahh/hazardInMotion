@@ -111,8 +111,9 @@ Route::middleware('auth')->group(function (): void {
     Route::get('safety-device/{safety_device}', [SafetyDeviceController::class, 'show'])->name('safety-device.show');
 
     Route::prefix('inspection')->name('inspection.')->group(function (): void {
-        Route::get('/pick-target', [InspectionController::class, 'pickTarget'])->name('pick-target');
-        Route::get('/create', [InspectionController::class, 'create'])->name('create');
+        // Pengisian inspeksi ada di form berdiri sendiri /form/inspeksi-emergency;
+        // route ini hanya melempar ke sana supaya tombol & QR lama tetap jalan.
+        Route::get('/start', [InspectionController::class, 'startForm'])->name('start');
         Route::get('/findings', [InspectionFindingController::class, 'index'])->name('findings.index');
         Route::post('/findings/{finding}/assign', [InspectionFindingController::class, 'assign'])->name('findings.assign');
         Route::post('/findings/{finding}/resolve', [InspectionFindingController::class, 'resolve'])->name('findings.resolve');
@@ -121,7 +122,6 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/{inspection}/reject', [InspectionController::class, 'reject'])->name('reject');
     });
     Route::get('inspection', [InspectionController::class, 'index'])->name('inspection.index');
-    Route::post('inspection', [InspectionController::class, 'store'])->name('inspection.store');
     Route::get('inspection/{inspection}', [InspectionController::class, 'show'])->name('inspection.show');
 
     Route::prefix('incident')->name('incident.')->group(function (): void {

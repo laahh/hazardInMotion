@@ -20,7 +20,17 @@
                         <tr><th width="200">Target</th><td>{{ $inspection->target->name ?? '-' }} ({{ $inspection->target->code ?? '-' }})</td></tr>
                         <tr><th>Site</th><td>{{ $inspection->site->name ?? '-' }}</td></tr>
                         <tr><th>Template Checklist</th><td>{{ $inspection->checklistTemplate->name ?? '-' }}</td></tr>
-                        <tr><th>Inspector</th><td>{{ $inspection->inspector->name ?? '-' }}</td></tr>
+                        <tr><th>Inspector</th><td>
+                            {{ $inspection->inspectorLabel() ?? '-' }}
+                            @if ($inspection->isPublicSubmission())
+                                <span class="badge bg-warning-focus text-warning-600 px-8 py-2 radius-4 ms-1">Form publik</span>
+                            @endif
+                        </td></tr>
+                        @if ($inspection->isPublicSubmission())
+                            <tr><th>NIK Inspector</th><td>{{ $inspection->inspector_nik ?: '-' }}</td></tr>
+                            <tr><th>SID Inspector</th><td>{{ $inspection->inspector_sid ?: '-' }}</td></tr>
+                            <tr><th>WhatsApp Inspector</th><td>{{ $inspection->inspector_phone ?: '-' }}</td></tr>
+                        @endif
                         <tr><th>Waktu Inspeksi</th><td>{{ optional($inspection->inspected_at)->format('d M Y H:i') ?? '-' }}</td></tr>
                         <tr><th>Kondisi Hasil Observasi</th><td>{{ $inspection->condition_result ?? '-' }}</td></tr>
                         <tr><th>Koordinat GPS</th><td>{{ $inspection->latitude && $inspection->longitude ? "{$inspection->latitude}, {$inspection->longitude}" : '-' }}</td></tr>

@@ -32,7 +32,8 @@ class Inspection extends Model
 
     protected $fillable = [
         'inspection_number', 'inspection_schedule_id', 'target_type', 'target_id',
-        'checklist_template_id', 'site_id', 'inspector_id', 'status', 'condition_result',
+        'checklist_template_id', 'site_id', 'inspector_id',
+        'inspector_name', 'inspector_nik', 'inspector_sid', 'inspector_phone', 'status', 'condition_result',
         'notes', 'signature_path', 'latitude', 'longitude', 'inspected_at', 'submitted_at',
         'approved_at', 'approved_by', 'rejected_at', 'rejected_by', 'approval_notes',
         'created_by', 'updated_by',
@@ -92,5 +93,34 @@ class Inspection extends Model
     public function statusLabel(): string
     {
         return self::STATUSES[$this->status] ?? $this->status;
+    }
+
+    /**
+     * Inspeksi dari form publik tidak punya akun user, jadi namanya diambil
+     * dari kolom `inspector_name` yang diisi manual di form.
+     */
+    public function inspectorLabel(): ?string
+    {
+        $name = trim((string) ($this->inspector_name ?? ''));
+
+        return $name !== '' ? $name : $this->inspector?->name;
+    }
+
+    /**
+     * NIK dan/atau SID inspector, dirangkai untuk ditampilkan di satu baris.
+     */
+    public function inspectorIdentity(): ?string
+    {
+        $parts = array_filter([
+            trim((string) ($this->inspector_nik ?? '')),
+            trim((string) ($this->inspector_sid ?? '')),
+        ], fn (string $part): bool => $part !== '');
+
+        return $parts === [] ? null : implode(' / ', $parts);
+    }
+
+    public function isPublicSubmission(): bool
+    {
+        return $this->inspector_id === null && trim((string) ($this->inspector_name ?? '')) !== '';
     }
 }

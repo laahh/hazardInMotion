@@ -106,6 +106,9 @@ require __DIR__.'/AutoBanned/auto_banned_public.php';
 // Form publik pengajuan bukti treatment roster banned — tanpa login
 require __DIR__.'/PraOperasi/roster_treatment_public.php';
 
+// Form publik inspeksi emergency equipment / safety device — tanpa login
+require __DIR__.'/EmergencyResponse/inspection_public.php';
+
 // Route khusus screenshot dashboard (tanpa middleware auth, pakai token)
 // URL: /dopmikk/dopm/dashboard/screenshot?token=SECRET
 Route::get('/dopmikk/dopm/dashboard/screenshot', function (\Illuminate\Http\Request $request) {
