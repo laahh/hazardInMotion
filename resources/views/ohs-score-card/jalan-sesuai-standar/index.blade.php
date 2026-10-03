@@ -206,6 +206,29 @@
   .ov-t3 { background: #F2C230; color: #1F2937 !important; }
   .ov-t4 { background: #86C96B; }
   .ov-t5 { background: #059669; }
+  /* Mode Nilai: 4 band resmi, warnanya senada dengan kartu perusahaan. */
+  .ov-n1 { background: #E0484A; }
+  .ov-n2 { background: #F08C2E; }
+  .ov-n3 { background: #F2C230; color: #1F2937 !important; }
+  .ov-n4 { background: #16A34A; }
+  .ov-matrix .ov-cell { font-variant-numeric: tabular-nums; }
+
+  /* ---- Pengalih Persentase / Nilai ---- */
+  .ov-switch {
+    display: inline-flex; padding: 3px; gap: 3px;
+    background: #F1F5F9; border-radius: 10px;
+  }
+  .ov-switch__btn {
+    border: 0; background: transparent; cursor: pointer;
+    padding: 5px 14px; border-radius: 8px;
+    font-size: 12px; font-weight: 700; color: #64748B;
+    transition: background .12s ease, color .12s ease;
+  }
+  .ov-switch__btn:hover { color: #2563EB; }
+  .ov-switch__btn.is-active {
+    background: #fff; color: #0F172A;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  }
 
   /* ---- Kartu ringkasan perusahaan ---- */
   .ov-card {
@@ -315,16 +338,17 @@
         <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
           <div>
             <h6 class="mb-1 fw-bold text-lg">Capaian per Bulan</h6>
-            <span class="text-sm fw-medium text-secondary-light">
+            <span class="text-sm fw-medium text-secondary-light" id="ov-matrix-subtitle">
               Persentase segmen standar tiap perusahaan di tiap site
             </span>
           </div>
           <div class="d-flex align-items-center flex-wrap gap-3">
-            <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#E0484A;"></span>&lt;62%</span>
-            <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#F08C2E;"></span>62–78%</span>
-            <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#F2C230;"></span>78–90%</span>
-            <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#86C96B;"></span>90–98%</span>
-            <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#059669;"></span>&ge;98%</span>
+            {{-- Pengalih tampilan sel: persentase atau Nilai 1–4 --}}
+            <div class="ov-switch" role="group" aria-label="Tampilan sel">
+              <button type="button" class="ov-switch__btn is-active" data-mode="persen">Persentase</button>
+              <button type="button" class="ov-switch__btn" data-mode="nilai">Nilai</button>
+            </div>
+            <div class="d-flex align-items-center flex-wrap gap-3" id="ov-legend"></div>
           </div>
         </div>
         <div class="ov-matrix-wrap">
@@ -537,6 +561,11 @@
     var charts = { monthly: null, weekly: null };
     var loaded = false;
 
+    // 'persen' atau 'nilai'. Payload terakhir disimpan supaya mengganti mode
+    // cukup menggambar ulang matriks, tanpa memanggil server lagi.
+    var matrixMode = 'persen';
+    var lastPayload = null;
+
     function escapeHtml(value) {
         return String(value === null || value === undefined ? '' : value)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -553,13 +582,24 @@
         }) + '%';
     }
 
-    // Ambang warna sama dengan konstanta SCORE_BANDS + pewarnaan di controller.
+    // Gradasi warna untuk mode Persentase — 5 tingkat, lebih halus daripada
+    // band Nilai sehingga perbedaan antar bulan lebih mudah terlihat.
     function tierClass(pct) {
         if (pct >= 98) return 'ov-t5';
         if (pct >= 90) return 'ov-t4';
         if (pct >= 78) return 'ov-t3';
         if (pct >= 62) return 'ov-t2';
         return 'ov-t1';
+    }
+
+    // Mode Nilai memakai 4 band resmi (SCORE_BANDS), bukan gradasi di atas,
+    // supaya warna sel tidak pernah bertentangan dengan angka Nilai-nya.
+    function nilaiClass(nilai) {
+        return { 1: 'ov-n1', 2: 'ov-n2', 3: 'ov-n3', 4: 'ov-n4' }[nilai] || 'ov-empty';
+    }
+
+    function cellClass(cell) {
+        return matrixMode === 'nilai' ? nilaiClass(cell.nilai) : tierClass(cell.pct);
     }
 
     function nilaiColor(nilai) {
@@ -592,6 +632,35 @@
                 +   '<div class="ov-card__meta">' + fmtNum(p.standar) + ' / ' + fmtNum(p.total) + ' segmen</div>'
                 + '</div></div>';
         }).join('');
+    }
+
+    /** Legenda ikut mode: gradasi persentase, atau 4 band Nilai. */
+    function renderLegend() {
+        var host = document.querySelector('#ov-legend');
+        var items = matrixMode === 'nilai'
+            ? [
+                { color: '#E0484A', label: 'Nilai 1 · <80%' },
+                { color: '#F08C2E', label: 'Nilai 2 · 80–90%' },
+                { color: '#F2C230', label: 'Nilai 3 · 90–98%' },
+                { color: '#16A34A', label: 'Nilai 4 · 98–100%' }
+            ]
+            : [
+                { color: '#E0484A', label: '<62%' },
+                { color: '#F08C2E', label: '62–78%' },
+                { color: '#F2C230', label: '78–90%' },
+                { color: '#86C96B', label: '90–98%' },
+                { color: '#059669', label: '≥98%' }
+            ];
+
+        host.innerHTML = items.map(function (it) {
+            return '<span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;">'
+                + '<span class="rounded-1" style="width:14px;height:14px;background:' + it.color + ';"></span>'
+                + escapeHtml(it.label) + '</span>';
+        }).join('');
+
+        document.querySelector('#ov-matrix-subtitle').textContent = matrixMode === 'nilai'
+            ? 'Nilai 1–4 dari persentase segmen standar tiap perusahaan di tiap site'
+            : 'Persentase segmen standar tiap perusahaan di tiap site';
     }
 
     function renderMatrix(months, rows) {
@@ -635,8 +704,9 @@
             }
 
             html += '<td class="ov-mitra">' + escapeHtml(row.mitra) + '</td>'
-                + '<td class="ov-avg" title="' + fmtNum(row.total) + ' segmen · Nilai ' + row.nilai + '">'
-                +   fmtPct(row.average) + '</td>';
+                + '<td class="ov-avg" title="' + fmtNum(row.total) + ' segmen · '
+                +   fmtPct(row.average) + ' · Nilai ' + row.nilai + ' (' + escapeHtml(row.nilai_band) + ')">'
+                +   (matrixMode === 'nilai' ? row.nilai : fmtPct(row.average)) + '</td>';
 
             if (row.trend === 'up') {
                 html += '<td class="ov-trend--up" title="Naik dari bulan sebelumnya">&uarr;</td>';
@@ -653,10 +723,16 @@
                     html += '<td class="ov-empty" title="' + escapeHtml(months[m].label) + ': tidak ada data">–</td>';
                     return;
                 }
-                html += '<td class="ov-cell ' + tierClass(cell.pct) + '"'
-                    + ' title="' + escapeHtml(row.site + ' · ' + row.mitra + ' · ' + months[m].label) + ': '
-                    + fmtNum(cell.standar) + ' / ' + fmtNum(cell.total) + ' segmen standar">'
-                    + Math.round(cell.pct) + '%</td>';
+                // Tooltip selalu memuat kedua angka, apa pun mode tampilannya,
+                // supaya berganti mode tidak menghilangkan informasi.
+                var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
+                    + fmtNum(cell.standar) + ' / ' + fmtNum(cell.total) + ' segmen standar · '
+                    + fmtPct(cell.pct) + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')';
+
+                html += '<td class="ov-cell ' + cellClass(cell) + '"'
+                    + ' title="' + escapeHtml(tip) + '">'
+                    + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
+                    + '</td>';
             });
 
             return html + '</tr>';
@@ -680,17 +756,36 @@
         }
         el.innerHTML = '';
 
+        // "Padat" = banyak titik di sumbu X (mis. 40 minggu). Dipakai untuk
+        // menipiskan garis, menyembunyikan marker, dan menjarangkan label.
+        var dense = payload.labels.length > 15;
+
         charts[key] = new ApexCharts(el, {
             series: payload.series,
             chart: { type: type, height: 320, toolbar: { show: false }, zoom: { enabled: false } },
             colors: ['#487FFF', '#45B369', '#F08C2E', '#E0484A', '#8252E9', '#00B8F2'],
-            stroke: { curve: 'smooth', width: type === 'line' ? 3 : 0 },
-            markers: { size: type === 'line' ? 4 : 0 },
+            stroke: {
+                curve: 'smooth',
+                width: type === 'line' ? (dense ? 2 : 3) : 0
+            },
+            // Titik disembunyikan saat datanya padat (40 minggu x 6 mitra):
+            // 240 marker hanya membuat grafik penuh, bukan lebih terbaca.
+            markers: { size: type === 'line' && !dense ? 4 : 0, hover: { size: 5 } },
             dataLabels: { enabled: false },
-            // connectNulls false: bulan/minggu tanpa data memang harus putus,
+            // connectNulls false (bawaan): bulan/minggu tanpa data harus putus,
             // bukan ditarik lurus seolah ada capaian di antaranya.
             plotOptions: { bar: { borderRadius: 4, columnWidth: '60%' } },
-            xaxis: { categories: payload.labels, labels: { style: { fontSize: '11px' } } },
+            xaxis: {
+                categories: payload.labels,
+                labels: {
+                    style: { fontSize: '11px' },
+                    // Label minggu terlalu rapat kalau semuanya dicetak.
+                    hideOverlappingLabels: true,
+                    rotate: dense ? -45 : 0,
+                    rotateAlways: false
+                },
+                tickAmount: dense ? 12 : undefined
+            },
             yaxis: {
                 min: 0, max: 100,
                 labels: { formatter: function (v) { return Math.round(v) + '%'; } }
@@ -699,10 +794,31 @@
             grid: { borderColor: '#EEF2F7', strokeDashArray: 4 },
             tooltip: {
                 shared: true,
+                // WAJIB eksplisit: untuk tipe 'bar' ApexCharts memasang
+                // intersect: true sebagai bawaan, dan kombinasi
+                // shared + intersect melempar error sehingga grafiknya
+                // gagal dirender sama sekali.
+                intersect: false,
                 y: { formatter: function (v) { return v === null ? 'tidak ada data' : fmtPct(v); } }
             }
         });
         charts[key].render();
+    }
+
+    /** Membungkus renderChart agar kegagalan satu grafik tidak menjatuhkan sisanya. */
+    function safeChart(key, elId, payload, type) {
+        try {
+            renderChart(key, elId, payload, type);
+        } catch (err) {
+            var el = document.querySelector(elId);
+            if (el) {
+                el.innerHTML = '<p class="text-secondary-light text-sm text-center py-40 mb-0">'
+                    + 'Grafik gagal ditampilkan.</p>';
+            }
+            if (typeof console !== 'undefined' && console.error) {
+                console.error('Overview: grafik "' + key + '" gagal dirender', err);
+            }
+        }
     }
 
     function load() {
@@ -717,10 +833,16 @@
                 return res.json();
             })
             .then(function (json) {
+                lastPayload = json;
                 renderPerusahaan(json.perusahaan || []);
+                renderLegend();
                 renderMatrix(json.months || [], json.matrix || []);
-                renderChart('monthly', '#ov-chart-monthly', json.monthly, 'line');
-                renderChart('weekly', '#ov-chart-weekly', json.weekly, 'bar');
+
+                // Tiap grafik dibungkus sendiri: sebelumnya satu grafik yang
+                // gagal membuat seluruh blok .then() berhenti, sehingga status
+                // berbunyi "gagal memuat" padahal matriks & kartu sudah benar.
+                safeChart('monthly', '#ov-chart-monthly', json.monthly, 'line');
+                safeChart('weekly', '#ov-chart-weekly', json.weekly, 'line');
 
                 var total = (json.matrix || []).reduce(function (a, r) { return a + r.total; }, 0);
                 statusEl.textContent = fmtNum(total) + ' segmen · '
@@ -737,6 +859,26 @@
 
     filterEls.forEach(function (el) {
         el.addEventListener('change', load);
+    });
+
+    // Ganti mode hanya menggambar ulang dari payload terakhir — tidak ada
+    // permintaan baru ke server, karena angka Nilai sudah ikut dikirim.
+    document.querySelectorAll('.ov-switch__btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (btn.dataset.mode === matrixMode) { return; }
+
+            matrixMode = btn.dataset.mode;
+
+            document.querySelectorAll('.ov-switch__btn').forEach(function (b) {
+                b.classList.toggle('is-active', b.dataset.mode === matrixMode);
+            });
+
+            renderLegend();
+
+            if (lastPayload) {
+                renderMatrix(lastPayload.months || [], lastPayload.matrix || []);
+            }
+        });
     });
 
     document.querySelector('#ov-reset').addEventListener('click', function () {

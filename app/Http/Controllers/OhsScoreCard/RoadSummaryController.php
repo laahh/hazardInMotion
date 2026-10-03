@@ -331,7 +331,19 @@ final class RoadSummaryController extends Controller
 
                 $standar = $entry['bulan'][$month]['standar'] ?? 0;
                 $pct = round($standar / $total * 100, 2);
-                $cells[] = ['pct' => $pct, 'total' => $total, 'standar' => $standar];
+
+                // Nilai per sel dihitung di sini, bukan di JavaScript, supaya
+                // ambangnya selalu sama dengan SCORE_BANDS — satu sumber
+                // kebenaran untuk kartu Nilai, matriks, dan ringkasan.
+                [, $cellNilai, $cellBand] = $this->scoreBandFor($pct);
+
+                $cells[] = [
+                    'pct' => $pct,
+                    'total' => $total,
+                    'standar' => $standar,
+                    'nilai' => $cellNilai,
+                    'nilai_band' => $cellBand,
+                ];
                 $filled[] = $pct;
                 $grandTotal += $total;
                 $grandStandar += $standar;
@@ -454,8 +466,20 @@ final class RoadSummaryController extends Controller
             $series[] = ['name' => (string) $mitra, 'data' => $data];
         }
 
+        // Label minggu diberi tahun HANYA bila datanya memuat lebih dari satu
+        // tahun. Tanpa ini, baris ber-year 2029 (141 baris, kemungkinan salah
+        // ketik) muncul sebagai "W29" setelah "W39" dan terlihat seperti
+        // sumbu yang kacau, padahal urutannya memang kronologis.
+        $years = array_unique(array_map(static fn (string $w): string => substr($w, 0, 4), $weeks));
+        $withYear = count($years) > 1;
+
         return [
-            'labels' => array_map(static fn (string $w): string => 'W' . (int) substr($w, 5), $weeks),
+            'labels' => array_map(
+                static fn (string $w): string => $withYear
+                    ? 'W' . (int) substr($w, 5) . " '" . substr($w, 2, 2)
+                    : 'W' . (int) substr($w, 5),
+                $weeks
+            ),
             'series' => $series,
         ];
     }
