@@ -170,11 +170,15 @@
     font-weight: 700; font-size: 11px; border-radius: 8px;
   }
   .ov-matrix thead th.ov-th-last { background: #2E90FA !important; color: #fff !important; }
+  /* Sel site di-merge dengan rowspan, jadi diratakan ke tengah secara
+     vertikal supaya label berada di tengah blok site-nya. */
   .ov-matrix .ov-site {
     position: sticky; left: 0; z-index: 2;
     background: #EEF1E2; color: #3F4A2E !important;
-    font-weight: 800; text-align: left !important;
+    font-weight: 800; text-align: center !important;
+    vertical-align: middle !important;
     border-radius: 8px; min-width: 76px;
+    letter-spacing: 0.02em;
   }
   .ov-matrix .ov-mitra {
     position: sticky; left: 79px; z-index: 2;
@@ -607,10 +611,30 @@
             return;
         }
 
-        tbody.innerHTML = rows.map(function (row) {
-            var html = '<tr>'
-                + '<td class="ov-site">' + escapeHtml(row.site) + '</td>'
-                + '<td class="ov-mitra">' + escapeHtml(row.mitra) + '</td>'
+        // Site digabung dengan rowspan: satu sel untuk semua perusahaan di site
+        // yang sama. Baris sudah terurut per site dari server, jadi cukup
+        // menghitung panjang blok berurutan.
+        var siteSpan = {};   // index baris pertama tiap blok -> jumlah baris
+        var siteSkip = {};   // index baris yang tidak menulis sel site
+        rows.forEach(function (row, i) {
+            if (i > 0 && rows[i - 1].site === row.site) {
+                siteSkip[i] = true;
+                return;
+            }
+            var n = 1;
+            while (i + n < rows.length && rows[i + n].site === row.site) { n++; }
+            siteSpan[i] = n;
+        });
+
+        tbody.innerHTML = rows.map(function (row, i) {
+            var html = '<tr>';
+
+            if (!siteSkip[i]) {
+                html += '<td class="ov-site" rowspan="' + siteSpan[i] + '">'
+                     + escapeHtml(row.site) + '</td>';
+            }
+
+            html += '<td class="ov-mitra">' + escapeHtml(row.mitra) + '</td>'
                 + '<td class="ov-avg" title="' + fmtNum(row.total) + ' segmen · Nilai ' + row.nilai + '">'
                 +   fmtPct(row.average) + '</td>';
 
@@ -622,13 +646,15 @@
                 html += '<td class="text-secondary-light">–</td>';
             }
 
-            row.cells.forEach(function (cell, i) {
+            // Variabel sengaja dinamai m, bukan i: i di luar sudah dipakai
+            // sebagai index baris untuk perhitungan rowspan site.
+            row.cells.forEach(function (cell, m) {
                 if (cell === null) {
-                    html += '<td class="ov-empty" title="' + escapeHtml(months[i].label) + ': tidak ada data">–</td>';
+                    html += '<td class="ov-empty" title="' + escapeHtml(months[m].label) + ': tidak ada data">–</td>';
                     return;
                 }
                 html += '<td class="ov-cell ' + tierClass(cell.pct) + '"'
-                    + ' title="' + escapeHtml(row.site + ' · ' + row.mitra + ' · ' + months[i].label) + ': '
+                    + ' title="' + escapeHtml(row.site + ' · ' + row.mitra + ' · ' + months[m].label) + ': '
                     + fmtNum(cell.standar) + ' / ' + fmtNum(cell.total) + ' segmen standar">'
                     + Math.round(cell.pct) + '%</td>';
             });
