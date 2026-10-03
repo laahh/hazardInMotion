@@ -32,6 +32,8 @@ Route::middleware('evaluasi-well.access')
             ->name('jalan-sesuai-standar.data');
         Route::get('/jalan-sesuai-standar/export', [RoadSummaryController::class, 'export'])
             ->name('jalan-sesuai-standar.export');
+        Route::get('/jalan-sesuai-standar/overview', [RoadSummaryController::class, 'overview'])
+            ->name('jalan-sesuai-standar.overview');
 
         // Parameter HSECT — "Peer Pressure" (hse_automation: bcsid.mv_berecord)
         Route::get('/peer-pressure', [BerecordController::class, 'index'])

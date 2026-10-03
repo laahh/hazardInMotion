@@ -211,6 +211,256 @@ final class RoadSummaryController extends Controller
      *  - csv  : ditulis mengalir per potongan, memori nyaris tetap, sanggup
      *           seluruh tabel. Dibuka langsung oleh Excel (pakai BOM UTF-8).
      */
+    /**
+     * Data tab "Overview Dashboard".
+     *
+     * Semua angka berasal dari SATU query agregat: GROUP BY site, mitra,
+     * year, week. Hasilnya kecil (± 9 kombinasi site-mitra x 40 minggu),
+     * jadi rekap bulanan, tren, dan ringkasan per perusahaan dihitung di PHP.
+     *
+     * Sengaja TIDAK mengelompokkan per bulan di SQL: ekspresi bulan harus
+     * diturunkan dari nomor minggu lewat fungsi tanggal, yang membuat MySQL
+     * memindai penuh 140 ribu baris. Mengelompokkan per minggu memakai kolom
+     * apa adanya, lalu minggu dipetakan ke bulan di sini — sekalian memberi
+     * data mingguan untuk grafik tanpa query kedua.
+     */
+    public function overview(Request $request): JsonResponse
+    {
+        $rows = $this->applyOverviewFilters($this->baseQuery(), $request)
+            ->selectRaw(
+                'site, mitra, year, week, COUNT(*) AS total, SUM(' . self::STANDARD_SQL . ') AS standar'
+            )
+            ->groupBy('site', 'mitra', 'year', 'week')
+            ->orderBy('site')
+            ->orderBy('mitra')
+            ->orderBy('year')
+            ->orderBy('week')
+            ->get();
+
+        $matrix = [];       // [site|mitra][bulan] => [total, standar]
+        $weekBuckets = [];  // [mitra][year-week] => [total, standar]
+        $monthSeen = [];
+        $weekSeen = [];
+        $perusahaan = [];
+
+        foreach ($rows as $row) {
+            $site = (string) $row->site;
+            $mitra = (string) $row->mitra;
+            $year = (int) $row->year;
+            $week = (int) $row->week;
+            $total = (int) $row->total;
+            $standar = (int) $row->standar;
+            $month = $this->monthOfIsoWeek($year, $week);
+
+            if ($month > 0) {
+                $monthSeen[$month] = true;
+                $key = $site . '|' . $mitra;
+                $matrix[$key]['site'] = $site;
+                $matrix[$key]['mitra'] = $mitra;
+                $matrix[$key]['bulan'][$month]['total'] = ($matrix[$key]['bulan'][$month]['total'] ?? 0) + $total;
+                $matrix[$key]['bulan'][$month]['standar'] = ($matrix[$key]['bulan'][$month]['standar'] ?? 0) + $standar;
+            }
+
+            $weekKey = sprintf('%04d-%02d', $year, $week);
+            $weekSeen[$weekKey] = true;
+            $weekBuckets[$mitra][$weekKey]['total'] = ($weekBuckets[$mitra][$weekKey]['total'] ?? 0) + $total;
+            $weekBuckets[$mitra][$weekKey]['standar'] = ($weekBuckets[$mitra][$weekKey]['standar'] ?? 0) + $standar;
+
+            $perusahaan[$mitra]['total'] = ($perusahaan[$mitra]['total'] ?? 0) + $total;
+            $perusahaan[$mitra]['standar'] = ($perusahaan[$mitra]['standar'] ?? 0) + $standar;
+        }
+
+        ksort($monthSeen);
+        ksort($weekSeen);
+        $months = array_keys($monthSeen);
+        $weeks = array_keys($weekSeen);
+
+        return response()->json([
+            'months' => array_map(fn (int $m): array => [
+                'number' => $m,
+                'label' => mb_strtoupper(mb_substr(self::MONTH_LABELS[$m] ?? '-', 0, 3)),
+            ], $months),
+            'matrix' => $this->buildOverviewMatrix($matrix, $months),
+            'perusahaan' => $this->buildOverviewPerusahaan($perusahaan),
+            'monthly' => $this->buildMonthlySeries($matrix, $months),
+            'weekly' => $this->buildWeeklySeries($weekBuckets, $weeks),
+        ]);
+    }
+
+    /** Overview hanya memakai filter yang masuk akal untuk rekap. */
+    private function applyOverviewFilters(Builder $query, Request $request): Builder
+    {
+        foreach (['site', 'mitra', 'pit', 'year'] as $column) {
+            $value = trim((string) $request->input($column, ''));
+
+            if ($value !== '') {
+                $query->where($column, $value);
+            }
+        }
+
+        $this->applyMonthFilter($query, $request);
+
+        return $query;
+    }
+
+    /**
+     * Baris matriks: satu baris per site+mitra, berisi persentase tiap bulan,
+     * rata-rata, Nilai, dan arah tren bulan terakhir vs bulan sebelumnya.
+     *
+     * @param  array<string, mixed>  $matrix
+     * @param  array<int, int>  $months
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildOverviewMatrix(array $matrix, array $months): array
+    {
+        $out = [];
+
+        foreach ($matrix as $entry) {
+            $cells = [];
+            $grandTotal = 0;
+            $grandStandar = 0;
+            $filled = [];
+
+            foreach ($months as $month) {
+                $total = $entry['bulan'][$month]['total'] ?? 0;
+
+                if ($total === 0) {
+                    $cells[] = null; // bulan tanpa data: sel dibiarkan kosong
+                    continue;
+                }
+
+                $standar = $entry['bulan'][$month]['standar'] ?? 0;
+                $pct = round($standar / $total * 100, 2);
+                $cells[] = ['pct' => $pct, 'total' => $total, 'standar' => $standar];
+                $filled[] = $pct;
+                $grandTotal += $total;
+                $grandStandar += $standar;
+            }
+
+            $avg = $grandTotal > 0 ? round($grandStandar / $grandTotal * 100, 2) : 0.0;
+            [, $nilai, $band] = $this->scoreBandFor($avg);
+
+            $trend = null;
+            if (count($filled) >= 2) {
+                $last = $filled[count($filled) - 1];
+                $prev = $filled[count($filled) - 2];
+                $trend = $last >= $prev ? 'up' : 'down';
+            }
+
+            $out[] = [
+                'site' => $entry['site'],
+                'mitra' => $entry['mitra'],
+                'cells' => $cells,
+                'average' => $avg,
+                'total' => $grandTotal,
+                'nilai' => $nilai,
+                'nilai_band' => $band,
+                'trend' => $trend,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, array{total: int, standar: int}>  $perusahaan
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildOverviewPerusahaan(array $perusahaan): array
+    {
+        $out = [];
+
+        foreach ($perusahaan as $mitra => $agg) {
+            $pct = $agg['total'] > 0 ? round($agg['standar'] / $agg['total'] * 100, 2) : 0.0;
+            [, $nilai, $band] = $this->scoreBandFor($pct);
+
+            $out[] = [
+                'mitra' => (string) $mitra,
+                'total' => $agg['total'],
+                'standar' => $agg['standar'],
+                'percent' => $pct,
+                'nilai' => $nilai,
+                'nilai_band' => $band,
+            ];
+        }
+
+        usort($out, static fn (array $a, array $b): int => $b['percent'] <=> $a['percent']);
+
+        return $out;
+    }
+
+    /**
+     * Seri bulanan per mitra untuk grafik perbandingan.
+     *
+     * @param  array<string, mixed>  $matrix
+     * @param  array<int, int>  $months
+     * @return array<string, mixed>
+     */
+    private function buildMonthlySeries(array $matrix, array $months): array
+    {
+        $byMitra = [];
+
+        foreach ($matrix as $entry) {
+            foreach ($months as $month) {
+                $total = $entry['bulan'][$month]['total'] ?? 0;
+                $byMitra[$entry['mitra']][$month]['total'] = ($byMitra[$entry['mitra']][$month]['total'] ?? 0) + $total;
+                $byMitra[$entry['mitra']][$month]['standar'] = ($byMitra[$entry['mitra']][$month]['standar'] ?? 0)
+                    + ($entry['bulan'][$month]['standar'] ?? 0);
+            }
+        }
+
+        ksort($byMitra);
+        $series = [];
+
+        foreach ($byMitra as $mitra => $perMonth) {
+            $data = [];
+
+            foreach ($months as $month) {
+                $total = $perMonth[$month]['total'] ?? 0;
+                // null, bukan 0: bulan tanpa data harus putus di grafik,
+                // bukan terbaca sebagai capaian 0%.
+                $data[] = $total > 0 ? round($perMonth[$month]['standar'] / $total * 100, 2) : null;
+            }
+
+            $series[] = ['name' => (string) $mitra, 'data' => $data];
+        }
+
+        return [
+            'labels' => array_map(fn (int $m): string => self::MONTH_LABELS[$m] ?? '-', $months),
+            'series' => $series,
+        ];
+    }
+
+    /**
+     * Seri mingguan per mitra untuk grafik perbandingan.
+     *
+     * @param  array<string, mixed>  $weekBuckets
+     * @param  array<int, string>  $weeks
+     * @return array<string, mixed>
+     */
+    private function buildWeeklySeries(array $weekBuckets, array $weeks): array
+    {
+        ksort($weekBuckets);
+        $series = [];
+
+        foreach ($weekBuckets as $mitra => $perWeek) {
+            $data = [];
+
+            foreach ($weeks as $week) {
+                $total = $perWeek[$week]['total'] ?? 0;
+                $data[] = $total > 0 ? round($perWeek[$week]['standar'] / $total * 100, 2) : null;
+            }
+
+            $series[] = ['name' => (string) $mitra, 'data' => $data];
+        }
+
+        return [
+            'labels' => array_map(static fn (string $w): string => 'W' . (int) substr($w, 5), $weeks),
+            'series' => $series,
+        ];
+    }
+
+
     public function export(Request $request): StreamedResponse|JsonResponse
     {
         $format = strtolower(trim((string) $request->input('format', 'xlsx')));
