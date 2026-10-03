@@ -57,7 +57,7 @@
             ['label' => 'Utilisasi BeSigma',                                            'icon' => 'solar:widget-outline'],
         ],
         'OH & IH' => [
-            ['label' => 'Rasio kelayakan kerja (wellbeing)',                            'icon' => 'solar:heart-pulse-outline'],
+            ['label' => 'Rasio kelayakan kerja (wellbeing)',                            'icon' => 'solar:heart-pulse-outline', 'url' => route('ohs-score-card.rasio-kelayakan-kerja.index')],
             ['label' => 'Pemeriksaan Fit to Work awal shift pekerja',                   'icon' => 'solar:stethoscope-outline'],
             ['label' => 'Pelaksanaan Sobriety Test Jam Kritis dan Pengecekan Sobriety Test', 'icon' => 'solar:test-tube-outline'],
         ],

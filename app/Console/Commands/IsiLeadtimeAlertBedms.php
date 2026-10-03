@@ -158,6 +158,7 @@ final class IsiLeadtimeAlertBedms extends Command
             return self::FAILURE;
         }
 
+        $this->periksaIdJanggal($semua);
         $semua = $this->terjemahkanNama($koneksi, $semua);
 
         if ($this->option('dry-run')) {
@@ -208,14 +209,12 @@ final class IsiLeadtimeAlertBedms extends Command
         }
 
         $this->newLine();
-        $this->info('Tabel rujukan yang mungkin memuat nama site & perusahaan:');
+        $this->info(sprintf('Seluruh tabel di skema %s:', self::SKEMA));
 
         try {
             $tabel = DB::connection($koneksi)->select(
-                "SELECT table_name FROM information_schema.tables
-                 WHERE table_schema = ?
-                   AND (table_name ILIKE '%mine_operation%' OR table_name ILIKE '%contractor%')
-                 ORDER BY table_name",
+                'SELECT table_name FROM information_schema.tables
+                 WHERE table_schema = ? ORDER BY table_name',
                 [self::SKEMA]
             );
         } catch (Throwable $e) {
@@ -224,22 +223,22 @@ final class IsiLeadtimeAlertBedms extends Command
             return self::FAILURE;
         }
 
-        if ($tabel === []) {
-            $this->warn('  tidak ada; id akan dipakai apa adanya sebagai nama');
-        }
+        // Didaftar seluruhnya, bukan yang namanya cocok pola tertentu saja:
+        // percobaan pertama memakai pola 'mine_operation' dan 'contractor'
+        // tidak menemukan apa pun, jadi menebak pola lagi hanya menambah
+        // putaran bolak-balik.
+        $nama = array_map(static fn (object $t): string => $t->table_name, $tabel);
 
-        foreach ($tabel as $t) {
-            $kolom = $this->kolomTabel($koneksi, $t->table_name);
-            $this->line(sprintf(
-                '  %s.%s (%s)',
-                self::SKEMA,
-                $t->table_name,
-                implode(', ', array_map(static fn (object $k): string => $k->column_name, $kolom))
-            ));
+        foreach (array_chunk($nama, 4) as $baris) {
+            $this->line('  ' . implode('   ', array_map(
+                static fn (string $n): string => str_pad($n, 34),
+                $baris
+            )));
         }
 
         $this->newLine();
-        $this->line('Cocokkan dengan konstanta KOLOM dan RUJUKAN di ' . static::class . '.');
+        $this->line(sprintf('%d tabel. Yang dicari: tabel berisi nama site dan nama perusahaan,', count($nama)));
+        $this->line('untuk dipasang di konstanta RUJUKAN pada ' . static::class . '.');
 
         return self::SUCCESS;
     }
@@ -429,6 +428,45 @@ final class IsiLeadtimeAlertBedms extends Command
     }
 
     /**
+     * Memberi tahu bila ada id yang bentuknya tidak seperti UUID.
+     *
+     * Di data Januari 2026 ada beberapa, misalnya
+     * "1007006c-5c39451d-8f6800abcbb29143" yang kehilangan sebagian tanda
+     * hubung dari "1007006c-5c39-451d-8f68-00abcbb29143", dan satu site
+     * bernilai "-". Jumlah alertnya kecil, tetapi tetap memunculkan baris
+     * tersendiri di tabel rekap, jadi lebih baik kelihatan daripada diam-diam
+     * ikut terhitung.
+     *
+     * @param  array<int, array<string, mixed>>  $baris
+     */
+    private function periksaIdJanggal(array $baris): void
+    {
+        $pola = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+        $janggal = [];
+
+        foreach ($baris as $row) {
+            foreach (['site_id' => 'site', 'perusahaan_id' => 'perusahaan'] as $kunci => $peran) {
+                $nilai = (string) $row[$kunci];
+
+                if (preg_match($pola, $nilai) !== 1) {
+                    $janggal[$peran . ' "' . $nilai . '"'] = ($janggal[$peran . ' "' . $nilai . '"'] ?? 0)
+                        + (int) $row['total_alert'];
+                }
+            }
+        }
+
+        if ($janggal === []) {
+            return;
+        }
+
+        $this->warn(sprintf('  %d id berbentuk janggal di sumbernya:', count($janggal)));
+
+        foreach ($janggal as $label => $alert) {
+            $this->line(sprintf('    %s - %s alert', $label, number_format($alert)));
+        }
+    }
+
+    /**
      * Mengganti id site & perusahaan dengan namanya, bila tabel rujukannya ada.
      *
      * @param  array<int, array<string, mixed>>  $baris
@@ -441,10 +479,25 @@ final class IsiLeadtimeAlertBedms extends Command
             $idList = array_values(array_unique(array_column($baris, $kunci)));
             $peta = $this->petaNama($koneksi, $peran, $idList);
 
+            $tanpaNama = [];
+
             foreach ($baris as $i => $row) {
                 // Tanpa rujukan, id dipakai apa adanya: lebih baik tabel rekap
                 // berisi id yang bisa ditelusuri daripada tidak terisi.
                 $baris[$i][$peran] = $peta[$row[$kunci]] ?? $row[$kunci];
+
+                if (! isset($peta[$row[$kunci]])) {
+                    $tanpaNama[$row[$kunci]] = true;
+                }
+            }
+
+            if ($peta !== [] && $tanpaNama !== []) {
+                $this->warn(sprintf(
+                    '  %d id %s tidak punya nama di tabel rujukan: %s',
+                    count($tanpaNama),
+                    $peran,
+                    implode(', ', array_slice(array_keys($tanpaNama), 0, 5))
+                ));
             }
         }
 

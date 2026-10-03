@@ -8,6 +8,7 @@ use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
 use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
 use App\Http\Controllers\OhsScoreCard\PelaksanaanEdukasiController;
+use App\Http\Controllers\OhsScoreCard\RasioKelayakanKerjaController;
 use App\Http\Controllers\OhsScoreCard\RatioTbcGrController;
 use App\Http\Controllers\OhsScoreCard\RoadSummaryController;
 use App\Http\Controllers\OhsScoreCard\SpeakUpFatigueController;
@@ -66,6 +67,16 @@ Route::middleware('evaluasi-well.access')
         Route::get('/blindspot-tbc/{dataset}/export', [BlindspotTbcController::class, 'export'])
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('blindspot-tbc.export');
+
+        // Parameter wellbeing "Rasio Kelayakan Kerja"
+        Route::get('/rasio-kelayakan-kerja', [RasioKelayakanKerjaController::class, 'index'])
+            ->name('rasio-kelayakan-kerja.index');
+        Route::get('/rasio-kelayakan-kerja/overview', [RasioKelayakanKerjaController::class, 'overview'])
+            ->name('rasio-kelayakan-kerja.overview');
+        Route::get('/rasio-kelayakan-kerja/data', [RasioKelayakanKerjaController::class, 'data'])
+            ->name('rasio-kelayakan-kerja.data');
+        Route::get('/rasio-kelayakan-kerja/export', [RasioKelayakanKerjaController::class, 'export'])
+            ->name('rasio-kelayakan-kerja.export');
 
         // Parameter SOD "Leadtime Alert DMS masuk ke Server"
         Route::get('/leadtime-alert-bedms', [LeadtimeAlertBedmsController::class, 'index'])
