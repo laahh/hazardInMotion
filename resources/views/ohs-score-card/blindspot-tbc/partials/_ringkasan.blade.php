@@ -97,8 +97,8 @@
     <div class="col-xxl-4">
       <div class="card h-100 radius-8 border">
         <div class="card-header border-bottom bg-base py-16 px-24">
-          <h6 class="text-lg fw-semibold mb-0">Rata-rata per Site</h6>
-          <span class="text-sm text-secondary-light">Ambang {{ $ds['ambang'] }}%</span>
+          <h6 class="text-lg fw-semibold mb-0" data-bs-el="per-site-judul">Rata-rata per Site</h6>
+          <span class="text-sm text-secondary-light" data-bs-el="per-site-sub">Ambang {{ $ds['ambang'] }}%</span>
         </div>
         <div class="card-body p-24" data-bs-el="per-site"></div>
       </div>
@@ -110,7 +110,7 @@
       <div class="card h-100 radius-8 border">
         <div class="card-header border-bottom bg-base py-16 px-24">
           <h6 class="text-lg fw-semibold mb-0">Peringkat Perusahaan PIC</h6>
-          <span class="text-sm text-secondary-light">Diurutkan dari persentase tertinggi</span>
+          <span class="text-sm text-secondary-light" data-bs-el="per-mitra-sub">Diurutkan dari persentase tertinggi</span>
         </div>
         <div class="card-body p-24">
           <div class="table-responsive">
@@ -118,7 +118,7 @@
               <thead>
                 <tr>
                   <th scope="col">Perusahaan</th>
-                  <th scope="col" class="text-end">Rata-rata</th>
+                  <th scope="col" class="text-end" data-bs-el="per-mitra-kol1">Rata-rata</th>
                   <th scope="col" class="text-end">Tertinggi</th>
                 </tr>
               </thead>
@@ -133,7 +133,7 @@
       <div class="card h-100 radius-8 border">
         <div class="card-header border-bottom bg-base py-16 px-24">
           <h6 class="text-lg fw-semibold mb-0">Tren Bulanan</h6>
-          <span class="text-sm text-secondary-light">
+          <span class="text-sm text-secondary-light" data-bs-el="monthly-sub">
             Persentase blindspot per perusahaan PIC; garis yang menanjak berarti memburuk
           </span>
         </div>

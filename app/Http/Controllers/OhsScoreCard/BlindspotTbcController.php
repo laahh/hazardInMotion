@@ -172,15 +172,23 @@ final class BlindspotTbcController extends Controller
         $persen = $this->buildPersen($request, $dataset);
         $temuan = $this->buildTemuan($request, $dataset);
 
+        // Panel pendamping (per site, peringkat perusahaan, tren) mengikuti
+        // sumber yang ada isinya. Kalau tabel bulanan belum terisi -- seperti
+        // lead_blindspot_tbc_subcont_month sekarang -- panel itu dihitung dari
+        // cacah temuan supaya tabnya tetap berguna, bukan kosong melompong.
+        $ukuran = $persen['tersedia'] ? 'persen' : 'temuan';
+        $sumber = $ukuran === 'persen' ? $persen : $temuan;
+
         return response()->json([
+            'ukuran' => $ukuran,
             'persen' => $persen,
             'temuan' => $temuan,
-            'kpi' => $this->buildKpi($request, $dataset, $persen, $temuan),
-            'per_site' => $this->buildPerSite($persen['rows']),
-            'per_mitra' => $this->buildPerMitra($persen['rows']),
+            'kpi' => $this->buildKpi($request, $dataset, $persen, $temuan, $ukuran),
+            'per_site' => $this->ringkasPer($sumber['rows'], 'site', $ukuran),
+            'per_mitra' => array_slice($this->ringkasPer($sumber['rows'], 'mitra', $ukuran), 0, 12),
             'per_pic' => $this->buildPerPic($request, $dataset),
             'per_pelapor' => $this->buildPerPelapor($request, $dataset),
-            'monthly' => $this->buildMonthlySeries($persen),
+            'monthly' => $this->buildMonthlySeries($sumber, $ukuran),
             'catatan' => $this->catatan($request, $dataset),
         ]);
     }
@@ -437,8 +445,13 @@ final class BlindspotTbcController extends Controller
      * @param  array<string, mixed>  $temuan
      * @return array<string, mixed>
      */
-    private function buildKpi(Request $request, string $dataset, array $persen, array $temuan): array
-    {
+    private function buildKpi(
+        Request $request,
+        string $dataset,
+        array $persen,
+        array $temuan,
+        string $ukuran
+    ): array {
         $nilai = array_values(array_filter(
             array_column($persen['rows'], 'average'),
             static fn (?float $v): bool => $v !== null
@@ -452,7 +465,13 @@ final class BlindspotTbcController extends Controller
             )
             ->first();
 
+        // Cakupan dibaca dari sumber yang sedang dipakai, bukan selalu dari
+        // tabel bulanan: kalau yang terpakai cacah temuan, menghitung site dan
+        // bulan dari tabel bulanan yang kosong akan melaporkan nol.
+        $sumber = $ukuran === 'persen' ? $persen : $temuan;
+
         return [
+            'ukuran' => $ukuran,
             'rata_persen' => $nilai !== [] ? round(array_sum($nilai) / count($nilai), 2) : null,
             'puncak_persen' => $nilai !== [] ? max($nilai) : null,
             'kombinasi' => count($persen['rows']),
@@ -461,70 +480,59 @@ final class BlindspotTbcController extends Controller
                 static fn (array $r): bool => $r['di_atas_ambang']
             )),
             'ambang' => self::AMBANG_PERSEN,
-            'site_count' => count(array_unique(array_column($persen['rows'], 'site'))),
-            'mitra_count' => count(array_unique(array_column($persen['rows'], 'mitra'))),
-            'bulan_count' => count($persen['months']),
+            'site_count' => count(array_unique(array_column($sumber['rows'], 'site'))),
+            'mitra_count' => count(array_unique(array_column($sumber['rows'], 'mitra'))),
+            'bulan_count' => count($sumber['months']),
             'temuan' => (int) ($detail->temuan ?? 0),
             'pic_count' => (int) ($detail->pic ?? 0),
             'pelapor_count' => (int) ($detail->pelapor ?? 0),
             'temuan_kombinasi' => count($temuan['rows']),
+            'temuan_mitra' => count(array_unique(array_column($temuan['rows'], 'mitra'))),
         ];
     }
 
     /**
-     * @param  array<int, array<string, mixed>>  $rows
-     * @return array<int, array<string, mixed>>
-     */
-    private function buildPerSite(array $rows): array
-    {
-        return $this->rataPer($rows, 'site');
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $rows
-     * @return array<int, array<string, mixed>>
-     */
-    private function buildPerMitra(array $rows): array
-    {
-        return array_slice($this->rataPer($rows, 'mitra'), 0, 12);
-    }
-
-    /**
-     * Rata-rata persentase per satu dimensi.
+     * Ringkasan per site atau per perusahaan.
      *
-     * Rata-rata antar baris, bukan antar bulan: tiap pasangan site-perusahaan
-     * dihitung sekali supaya yang datanya lengkap tidak berbobot lebih besar.
+     * Untuk persentase dipakai rata-rata antar baris, bukan antar bulan,
+     * supaya pasangan yang datanya lengkap tidak berbobot lebih besar. Untuk
+     * cacah temuan dipakai jumlahnya, karena di situ volume justru yang
+     * dicari.
      *
      * @param  array<int, array<string, mixed>>  $rows
      * @return array<int, array<string, mixed>>
      */
-    private function rataPer(array $rows, string $key): array
+    private function ringkasPer(array $rows, string $key, string $ukuran): array
     {
         $kelompok = [];
 
         foreach ($rows as $row) {
-            if ($row['average'] === null) {
+            $nilai = $ukuran === 'persen' ? $row['average'] : $row['total'];
+
+            if ($nilai === null) {
                 continue;
             }
 
-            $kelompok[$row[$key]][] = $row['average'];
+            $kelompok[$row[$key]][] = (float) $nilai;
         }
 
         $out = [];
 
         foreach ($kelompok as $label => $nilai) {
-            $rata = round(array_sum($nilai) / count($nilai), 2);
+            $angka = $ukuran === 'persen'
+                ? round(array_sum($nilai) / count($nilai), 2)
+                : array_sum($nilai);
 
             $out[] = [
                 $key => (string) $label,
-                'percent' => $rata,
+                'nilai' => $angka,
                 'jumlah' => count($nilai),
                 'puncak' => max($nilai),
-                'di_atas_ambang' => $rata > self::AMBANG_PERSEN,
+                'di_atas_ambang' => $ukuran === 'persen' && $angka > self::AMBANG_PERSEN,
             ];
         }
 
-        usort($out, static fn (array $a, array $b): int => $b['percent'] <=> $a['percent']);
+        usort($out, static fn (array $a, array $b): int => $b['nilai'] <=> $a['nilai']);
 
         return $out;
     }
@@ -597,17 +605,17 @@ final class BlindspotTbcController extends Controller
     }
 
     /**
-     * Satu garis per perusahaan, dari persentase bulanan.
+     * Satu garis per perusahaan, dari sumber yang sedang dipakai.
      *
-     * @param  array<string, mixed>  $persen
+     * @param  array<string, mixed>  $sumber
      * @return array<string, mixed>
      */
-    private function buildMonthlySeries(array $persen): array
+    private function buildMonthlySeries(array $sumber, string $ukuran): array
     {
-        $months = $persen['month_numbers'];
+        $months = array_column($sumber['months'], 'number');
         $perMitra = [];
 
-        foreach ($persen['rows'] as $row) {
+        foreach ($sumber['rows'] as $row) {
             foreach ($row['cells'] as $i => $value) {
                 if ($value === null) {
                     continue;
@@ -636,8 +644,16 @@ final class BlindspotTbcController extends Controller
 
             foreach (array_keys($months) as $i) {
                 $nilai = $perMitra[$mitra][$i] ?? null;
+
                 // null, bukan 0: bulan tanpa data harus putus di grafik.
-                $data[] = $nilai === null ? null : round(array_sum($nilai) / count($nilai), 2);
+                if ($nilai === null) {
+                    $data[] = null;
+                    continue;
+                }
+
+                $data[] = $ukuran === 'persen'
+                    ? round(array_sum($nilai) / count($nilai), 2)
+                    : array_sum($nilai);
             }
 
             $series[] = ['name' => (string) $mitra, 'data' => $data];
@@ -808,7 +824,7 @@ final class BlindspotTbcController extends Controller
      */
     private function detailQueryFiltered(Request $request, string $dataset, ?array $map = null): Builder
     {
-        $query = DB::table($this->table($dataset, 'detail'));
+        $query = $this->detailTanpaKembar($dataset);
 
         if (self::EXCLUDED_MONTHS !== []) {
             $query->whereNotIn(self::COL_BULAN, self::EXCLUDED_MONTHS);
@@ -908,9 +924,29 @@ final class BlindspotTbcController extends Controller
         return $cache[$table] = $out;
     }
 
+    /**
+     * Tabel detail tanpa baris kembar.
+     *
+     * detail_lead_subcont_blindspot_tbc memuat tiap temuan dua kali: 244 baris
+     * untuk 122 temuan, kembarannya identik di seluruh kolom. Tanpa disaring,
+     * semua cacah di halaman ini jadi dua kali lipat. Yang disimpan adalah
+     * baris ber-id terkecil dari tiap temuan, dan temuan dibedakan lewat
+     * gabungan task + PIC + pelapor + bulan, bukan task saja, supaya dua
+     * baris yang memang berbeda tidak ikut terbuang.
+     */
+    private function detailTanpaKembar(string $dataset): Builder
+    {
+        $table = $this->table($dataset, 'detail');
+        $kunci = [self::COL_TASK, self::COL_PIC_SID, self::COL_PELAPOR_NAMA, self::COL_BULAN];
+
+        return DB::table($table)->whereIn('id', static function ($sub) use ($table, $kunci): void {
+            $sub->from($table)->selectRaw('MIN(id)')->groupBy($kunci);
+        });
+    }
+
     private function detailBaseCount(string $dataset): int
     {
-        $query = DB::table($this->table($dataset, 'detail'));
+        $query = $this->detailTanpaKembar($dataset);
 
         if (self::EXCLUDED_MONTHS !== []) {
             $query->whereNotIn(self::COL_BULAN, self::EXCLUDED_MONTHS);

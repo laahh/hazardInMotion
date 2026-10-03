@@ -193,31 +193,46 @@ window.bsOverview = (function () {
         // ---- Kartu ringkasan utama -----------------------------------------
         function renderKpi(k) {
             var cards = [
-                {
-                    grad: 'bg-gradient-end-5', icon: 'solar:eye-closed-outline', dot: 'bg-danger-main',
-                    label: 'Rata-rata Blindspot',
-                    value: k.rata_persen === null ? '–' : fmtPct(k.rata_persen),
-                    foot: k.puncak_persen === null
-                        ? 'Belum ada data persentase'
-                        : 'Tertinggi ' + fmtPct(k.puncak_persen) + ' di antara ' + fmtNum(k.kombinasi)
+                k.ukuran === 'persen'
+                    ? {
+                        grad: 'bg-gradient-end-5', icon: 'solar:eye-closed-outline', dot: 'bg-danger-main',
+                        label: 'Rata-rata Blindspot', value: fmtPct(k.rata_persen),
+                        foot: 'Tertinggi ' + fmtPct(k.puncak_persen) + ' di antara ' + fmtNum(k.kombinasi)
                             + ' pasangan site &amp; perusahaan'
-                },
-                {
-                    grad: 'bg-gradient-end-3', icon: 'solar:danger-triangle-outline', dot: 'bg-warning-main',
-                    label: 'Di Atas Ambang', value: fmtNum(k.di_atas_ambang),
-                    foot: 'Rata-ratanya lebih dari ' + k.ambang + '%'
-                },
+                    }
+                    : {
+                        grad: 'bg-gradient-end-5', icon: 'solar:eye-closed-outline', dot: 'bg-danger-main',
+                        label: 'Temuan Blindspot', value: fmtNum(k.temuan),
+                        foot: 'Persentase resminya belum tersedia, jadi yang dihitung cacah temuan'
+                    },
+                k.ukuran === 'persen'
+                    ? {
+                        grad: 'bg-gradient-end-3', icon: 'solar:danger-triangle-outline', dot: 'bg-warning-main',
+                        label: 'Di Atas Ambang', value: fmtNum(k.di_atas_ambang),
+                        foot: 'Rata-ratanya lebih dari ' + k.ambang + '%'
+                    }
+                    : {
+                        grad: 'bg-gradient-end-3', icon: 'solar:buildings-outline', dot: 'bg-warning-main',
+                        label: 'Perusahaan PIC', value: fmtNum(k.temuan_mitra),
+                        foot: fmtNum(k.temuan_kombinasi) + ' pasangan site &amp; perusahaan'
+                    },
                 {
                     grad: 'bg-gradient-end-1', icon: 'solar:calendar-outline', dot: 'bg-primary-600',
                     label: 'Cakupan', value: fmtNum(k.bulan_count) + ' bulan',
                     foot: fmtNum(k.site_count) + ' site, ' + fmtNum(k.mitra_count) + ' perusahaan PIC'
                 },
-                {
-                    grad: 'bg-gradient-end-2', icon: 'solar:clipboard-list-outline', dot: 'bg-yellow',
-                    label: 'Temuan Tercatat', value: fmtNum(k.temuan),
-                    foot: fmtNum(k.pic_count) + ' PIC, dari ' + fmtNum(k.temuan_kombinasi)
-                        + ' pasangan yang sudah ada rinciannya'
-                }
+                k.ukuran === 'persen'
+                    ? {
+                        grad: 'bg-gradient-end-2', icon: 'solar:clipboard-list-outline', dot: 'bg-yellow',
+                        label: 'Temuan Tercatat', value: fmtNum(k.temuan),
+                        foot: fmtNum(k.pic_count) + ' PIC, dari ' + fmtNum(k.temuan_kombinasi)
+                            + ' pasangan yang sudah ada rinciannya'
+                    }
+                    : {
+                        grad: 'bg-gradient-end-2', icon: 'solar:user-id-outline', dot: 'bg-yellow',
+                        label: 'PIC Terlibat', value: fmtNum(k.pic_count),
+                        foot: fmtNum(k.pelapor_count) + ' perusahaan pelapor'
+                    }
             ];
 
             el('kpi').innerHTML = cards.map(function (c) {
@@ -242,37 +257,53 @@ window.bsOverview = (function () {
         }
 
         // ---- Rata-rata per site ---------------------------------------------
-        function renderPerSite(list, ambang) {
+        function renderPerSite(list, k) {
             var host = el('per-site');
+            var persen = k.ukuran === 'persen';
+            var angka = function (v) { return persen ? fmtPct(v) : fmtNum(v) + ' temuan'; };
+
+            el('per-site-judul').textContent = persen ? 'Rata-rata per Site' : 'Temuan per Site';
+            el('per-site-sub').textContent = persen
+                ? 'Ambang ' + k.ambang + '%'
+                : 'Dihitung dari cacah temuan';
+
             if (!list.length) {
                 host.innerHTML = '<p class="text-secondary-light text-sm text-center py-24 mb-0">Tidak ada data.</p>';
                 return;
             }
 
-            var puncak = Math.max.apply(null, list.map(function (s) { return s.percent; })) || 1;
+            var puncak = Math.max.apply(null, list.map(function (s) { return s.nilai; })) || 1;
 
             host.innerHTML = list.map(function (s, i) {
                 return '<div class="' + (i ? 'mt-20' : '') + '">'
                     + '<div class="d-flex align-items-center justify-content-between mb-8">'
                     +   '<span class="text-sm fw-semibold">' + escapeHtml(s.site) + '</span>'
-                    +   '<span class="text-sm fw-medium text-secondary-light">' + fmtPct(s.percent) + '</span>'
+                    +   '<span class="text-sm fw-medium text-secondary-light">' + angka(s.nilai) + '</span>'
                     + '</div>'
                     + '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px">'
                     +   '<div class="progress-bar ' + (s.di_atas_ambang ? 'bg-danger-main' : 'bg-success-main')
                     +     ' rounded-pill" role="progressbar"'
-                    +     ' style="width:' + (s.percent / puncak * 100) + '%" aria-valuenow="' + s.percent + '"'
+                    +     ' style="width:' + (s.nilai / puncak * 100) + '%" aria-valuenow="' + s.nilai + '"'
                     +     ' aria-valuemin="0" aria-valuemax="' + puncak + '"></div>'
                     + '</div>'
                     + '<span class="text-xs text-secondary-light">' + fmtNum(s.jumlah)
-                    +   ' perusahaan · tertinggi ' + fmtPct(s.puncak)
-                    +   (s.di_atas_ambang ? ' · di atas ambang ' + ambang + '%' : '') + '</span>'
+                    +   ' perusahaan · tertinggi ' + angka(s.puncak)
+                    +   (s.di_atas_ambang ? ' · di atas ambang ' + k.ambang + '%' : '') + '</span>'
                     + '</div>';
             }).join('');
         }
 
         // ---- Peringkat perusahaan PIC ---------------------------------------
-        function renderPerMitra(list) {
+        function renderPerMitra(list, k) {
             var body = el('per-mitra');
+            var persen = k.ukuran === 'persen';
+            var angka = function (v) { return persen ? fmtPct(v) : fmtNum(v); };
+
+            el('per-mitra-kol1').textContent = persen ? 'Rata-rata' : 'Temuan';
+            el('per-mitra-sub').textContent = persen
+                ? 'Diurutkan dari persentase tertinggi'
+                : 'Diurutkan dari temuan terbanyak';
+
             if (!list.length) {
                 body.innerHTML = '<tr><td colspan="3" class="text-center text-secondary-light py-24">Tidak ada data.</td></tr>';
                 return;
@@ -287,8 +318,8 @@ window.bsOverview = (function () {
                     +   '<span class="d-block text-xs text-secondary-light">' + fmtNum(m.jumlah)
                     +   ' site</span></td>'
                     + '<td class="text-end"><span class="' + kelas
-                    +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + fmtPct(m.percent) + '</span></td>'
-                    + '<td class="text-end text-secondary-light">' + fmtPct(m.puncak) + '</td>'
+                    +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + angka(m.nilai) + '</span></td>'
+                    + '<td class="text-end text-secondary-light">' + angka(m.puncak) + '</td>'
                     + '</tr>';
             }).join('');
         }
@@ -488,9 +519,15 @@ window.bsOverview = (function () {
             charts.pelapor.render();
         }
 
-        function renderMonthlyChart(payload) {
+        function renderMonthlyChart(payload, k) {
             var node = el('chart-monthly');
             if (!node || typeof ApexCharts === 'undefined') { return; }
+
+            var persen = k.ukuran === 'persen';
+
+            el('monthly-sub').textContent = persen
+                ? 'Persentase blindspot per perusahaan PIC; garis yang menanjak berarti memburuk'
+                : 'Jumlah temuan per perusahaan PIC; garis yang menanjak berarti memburuk';
 
             destroyChart('monthly');
 
@@ -513,8 +550,12 @@ window.bsOverview = (function () {
                 },
                 yaxis: {
                     min: 0,
-                    title: { text: 'Blindspot', style: { fontSize: '11px' } },
-                    labels: { formatter: function (v) { return Math.round(v) + '%'; } }
+                    title: { text: persen ? 'Blindspot' : 'Temuan', style: { fontSize: '11px' } },
+                    labels: {
+                        formatter: function (v) {
+                            return persen ? Math.round(v) + '%' : fmtNum(Math.round(v));
+                        }
+                    }
                 },
                 legend: { position: 'top', horizontalAlign: 'left', fontSize: '12px' },
                 grid: { borderColor: '#EEF2F7', strokeDashArray: 4 },
@@ -523,7 +564,12 @@ window.bsOverview = (function () {
                     // WAJIB eksplisit: kombinasi shared + intersect melempar
                     // error sehingga grafiknya gagal dirender sama sekali.
                     intersect: false,
-                    y: { formatter: function (v) { return v === null ? 'tidak ada data' : fmtPct(v); } }
+                    y: {
+                        formatter: function (v) {
+                            if (v === null) { return 'tidak ada data'; }
+                            return persen ? fmtPct(v) : fmtNum(v) + ' temuan';
+                        }
+                    }
                 }
             });
             charts.monthly.render();
@@ -594,17 +640,18 @@ window.bsOverview = (function () {
                             }
                         });
                     });
-                    safe('per-site', function () { renderPerSite(json.per_site || [], json.kpi.ambang); });
-                    safe('per-mitra', function () { renderPerMitra(json.per_mitra || []); });
+                    safe('per-site', function () { renderPerSite(json.per_site || [], json.kpi); });
+                    safe('per-mitra', function () { renderPerMitra(json.per_mitra || [], json.kpi); });
                     safe('pic', function () { renderPicChart(json.per_pic || []); });
                     safe('pelapor', function () { renderPelaporChart(json.per_pelapor || []); });
-                    safe('monthly', function () { renderMonthlyChart(json.monthly); });
+                    safe('monthly', function () { renderMonthlyChart(json.monthly, json.kpi); });
                     safe('catatan', function () { renderCatatan(json.catatan); });
 
                     var k = json.kpi;
-                    statusEl.textContent = (k.rata_persen === null ? 'belum ada persentase' : fmtPct(k.rata_persen))
-                        + ' rata-rata · ' + k.kombinasi + ' kombinasi site/perusahaan · '
-                        + k.bulan_count + ' bulan · ' + fmtNum(k.temuan) + ' temuan tercatat';
+                    statusEl.textContent = (k.ukuran === 'persen'
+                        ? fmtPct(k.rata_persen) + ' rata-rata · ' + k.kombinasi + ' kombinasi site/perusahaan'
+                        : 'persentase resmi belum tersedia · ' + k.temuan_kombinasi + ' kombinasi site/perusahaan')
+                        + ' · ' + k.bulan_count + ' bulan · ' + fmtNum(k.temuan) + ' temuan tercatat';
                     loaded = true;
                 })
                 .catch(function (err) {
