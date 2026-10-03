@@ -342,9 +342,25 @@ window.bsOverview = (function () {
                 return;
             }
 
-            tbody.innerHTML = rows.map(function (row) {
+            // Sel site digabung dengan rowspan: satu sel untuk semua perusahaan
+            // di site yang sama. Baris sudah dikelompokkan per site dari
+            // server, jadi cukup menghitung panjang blok yang berurutan.
+            var span = {};   // index baris pertama tiap blok -> jumlah baris
+            var lewati = {}; // index baris yang tidak menulis sel site
+            rows.forEach(function (row, i) {
+                if (i > 0 && rows[i - 1].site === row.site) {
+                    lewati[i] = true;
+                    return;
+                }
+                var n = 1;
+                while (i + n < rows.length && rows[i + n].site === row.site) { n++; }
+                span[i] = n;
+            });
+
+            tbody.innerHTML = rows.map(function (row, i) {
                 var html = '<tr>'
-                    + '<td class="bs-site">' + escapeHtml(row.site) + '</td>'
+                    + (lewati[i] ? '' : '<td class="bs-site" rowspan="' + span[i] + '">'
+                        + escapeHtml(row.site) + '</td>')
                     + '<td class="bs-mitra">' + escapeHtml(row.mitra) + '</td>'
                     + '<td class="bs-total" title="' + escapeHtml(opsi.ringkasTip(row)) + '">'
                     +   opsi.ringkas(row) + '</td>';

@@ -278,8 +278,7 @@ final class BlindspotTbcController extends Controller
             ];
         }
 
-        // Yang paling buruk di atas: itu yang perlu dibaca lebih dulu.
-        usort($out, static fn (array $a, array $b): int => ($b['average'] ?? -1) <=> ($a['average'] ?? -1));
+        $out = $this->kelompokkanPerSite($out, static fn (array $r): float => $r['average'] ?? -1.0);
 
         return [
             'tersedia' => $out !== [],
@@ -360,7 +359,7 @@ final class BlindspotTbcController extends Controller
             ];
         }
 
-        usort($out, static fn (array $a, array $b): int => $b['total'] <=> $a['total']);
+        $out = $this->kelompokkanPerSite($out, static fn (array $r): float => (float) $r['total']);
 
         return [
             'tersedia' => $out !== [],
@@ -368,6 +367,47 @@ final class BlindspotTbcController extends Controller
             'months' => $this->monthHeadings($months),
             'rows' => $out,
         ];
+    }
+
+    /**
+     * Mengelompokkan baris per site supaya sel site-nya bisa digabung dengan
+     * rowspan di tabel.
+     *
+     * Site diurutkan dari yang paling buruk, dan di dalam tiap site barisnya
+     * juga dari yang paling buruk, sehingga tabelnya tetap terbaca
+     * "yang perlu ditangani lebih dulu ada di atas" meski sudah dikelompokkan.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  callable(array<string, mixed>): float  $nilai
+     * @return array<int, array<string, mixed>>
+     */
+    private function kelompokkanPerSite(array $rows, callable $nilai): array
+    {
+        $perSite = [];
+
+        foreach ($rows as $row) {
+            $perSite[$row['site']][] = $row;
+        }
+
+        // Bobot sebuah site = nilai tertingginya, bukan rata-ratanya: satu
+        // pasangan yang parah tidak boleh tersamarkan oleh pasangan lain yang
+        // bersih di site yang sama.
+        $bobot = [];
+
+        foreach ($perSite as $site => $baris) {
+            $bobot[$site] = max(array_map($nilai, $baris));
+        }
+
+        arsort($bobot);
+        $out = [];
+
+        foreach (array_keys($bobot) as $site) {
+            $baris = $perSite[$site];
+            usort($baris, static fn (array $a, array $b): int => $nilai($b) <=> $nilai($a));
+            $out = array_merge($out, $baris);
+        }
+
+        return $out;
     }
 
     /**
