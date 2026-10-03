@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\OhsScoreCard\BerecordController;
 use App\Http\Controllers\OhsScoreCard\BlindspotTbcController;
 use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
+use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
 use App\Http\Controllers\OhsScoreCard\PelaksanaanEdukasiController;
 use App\Http\Controllers\OhsScoreCard\RatioTbcGrController;
@@ -65,6 +66,16 @@ Route::middleware('evaluasi-well.access')
         Route::get('/blindspot-tbc/{dataset}/export', [BlindspotTbcController::class, 'export'])
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('blindspot-tbc.export');
+
+        // Parameter SOD "Leadtime Alert DMS masuk ke Server"
+        Route::get('/leadtime-alert-bedms', [LeadtimeAlertBedmsController::class, 'index'])
+            ->name('leadtime-alert-bedms.index');
+        Route::get('/leadtime-alert-bedms/overview', [LeadtimeAlertBedmsController::class, 'overview'])
+            ->name('leadtime-alert-bedms.overview');
+        Route::get('/leadtime-alert-bedms/data', [LeadtimeAlertBedmsController::class, 'data'])
+            ->name('leadtime-alert-bedms.data');
+        Route::get('/leadtime-alert-bedms/export', [LeadtimeAlertBedmsController::class, 'export'])
+            ->name('leadtime-alert-bedms.export');
 
         // Parameter SOD "Kinerja Pengawasan Control Room DMS"
         Route::get('/kinerja-control-room-dms', [KinerjaControlRoomDmsController::class, 'index'])

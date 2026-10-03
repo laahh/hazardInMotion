@@ -14,36 +14,38 @@ use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Parameter SOD "Kinerja Pengawasan Control Room DMS".
+ * Parameter SOD "Leadtime Alert DMS masuk ke Server".
  *
- * Sumbernya satu tabel, lead_kinerja_control_room_dms: satu baris per
- * site x perusahaan x bulan, isinya persentase kinerja pengawas control room.
- * Tidak ada tabel rinciannya, jadi halaman ini hanya punya dua tab: Ringkasan
- * dan Data. (Ada lead_kinerja_control_room_dms_month, tetapi masih nol baris
- * dan bentuknya belum jelas, jadi belum dipakai.)
+ * Ukurannya: dari sekian alert DMS, berapa persen yang evidence-nya sudah
+ * masuk ke server BeDMS dalam 5 menit. Makin tinggi makin baik.
  *
- * ARAHNYA KEBALIKAN dari Blindspot TBC: di sini makin tinggi persentase makin
- * baik, jadi hijau dipakai untuk angka besar dan Nilai 4 adalah yang tertinggi.
+ * SUMBERNYA TABEL REKAP, BUKAN TABEL MENTAH. Halaman ini membaca
+ * lead_leadtime_alert_entry_to_bedms_month (satu baris per site x perusahaan
+ * x bulan). Angkanya sendiri dihitung dari bcsid.dms_alert dan
+ * bcsid.dms_alert_evidence di Postgres, tetapi lewat perintah terjadwal
+ * `ohs:isi-leadtime-alert`, bukan saat halaman dibuka: memindai tabel alert
+ * mentah setahun penuh terlalu berat untuk dijalankan tiap kali filter
+ * diganti. Pola ini sama dengan parameter OHS Score Card lainnya.
  *
- * NILAI KOSONG. 43 dari 171 baris ber-pct NULL. Itu dibiarkan sebagai "tidak
- * ada data", bukan diubah jadi nol, karena nol berarti kinerjanya betul-betul
- * nihil dan itu dua hal yang berbeda.
- *
- * AMBANG & BAND mengikuti sistem penilaian OHS Score Card yang sama dengan
- * halaman Ratio TBC & GR (target 90%, band 98/90/80). Belum ada konfirmasi
- * bahwa parameter ini memakai band yang sama; kalau berbeda, ubah SCORE_BANDS
- * dan TARGET_PERCENT di bawah.
+ * SKALA ANGKA. Kolom sumbernya bertipe double tanpa satuan yang pasti:
+ * perintah pengisi menulis persen (0-100), sedangkan hasil scrape Tableau
+ * untuk parameter sejenis menulis pecahan (0-1). Karena itu skalanya
+ * dideteksi sekali per permintaan lewat nilai tertingginya, lihat
+ * skalaPersen(). Kalau seluruh isinya <= 1, angkanya dikalikan 100.
  */
-final class KinerjaControlRoomDmsController extends Controller
+final class LeadtimeAlertBedmsController extends Controller
 {
     use ServesDataTable;
 
-    private const TABLE = 'lead_kinerja_control_room_dms';
+    private const TABLE = 'lead_leadtime_alert_entry_to_bedms_month';
 
     private const COL_SITE = 'site';
-    private const COL_PERUSAHAAN = 'perusahaan';
-    private const COL_BULAN = 'month_of_event_time';
-    private const COL_PERSEN = 'pct_kinerja_pengawas_control_room';
+    private const COL_PERUSAHAAN = 'Perusahaan';
+    private const COL_BULAN = 'Month_of_event_time';
+    private const COL_PERSEN = 'Leadtime_Alert_masuk_ke_Server_Evidence_BeDMS_under_5_min';
+
+    /** Ambang evidence dianggap tepat waktu, ikut definisi parameternya. */
+    private const AMBANG_MENIT = 5;
 
     private const TARGET_PERCENT = 90.0;
 
@@ -63,8 +65,8 @@ final class KinerjaControlRoomDmsController extends Controller
     ];
 
     /**
-     * Bulan yang tidak ikut dihitung, sejalan dengan halaman Ratio TBC & GR
-     * dan Blindspot TBC: Oktober masih berjalan saat data ini diambil.
+     * Bulan yang tidak ikut dihitung, sejalan dengan halaman parameter
+     * lainnya: Oktober masih berjalan saat data ini diambil.
      */
     private const EXCLUDED_MONTHS = ['October'];
 
@@ -83,13 +85,14 @@ final class KinerjaControlRoomDmsController extends Controller
 
     public function index(): View
     {
-        return view('ohs-score-card.kinerja-control-room-dms.index', [
+        return view('ohs-score-card.leadtime-alert-bedms.index', [
             'filterOptions' => [
                 'site' => $this->distinctValues(self::COL_SITE),
                 'mitra' => $this->distinctValues(self::COL_PERUSAHAAN),
             ],
             'monthOptions' => $this->monthOptions(),
             'target' => self::TARGET_PERCENT,
+            'ambang' => self::AMBANG_MENIT,
             'tabel' => self::TABLE,
         ]);
     }
@@ -100,12 +103,14 @@ final class KinerjaControlRoomDmsController extends Controller
 
     public function overview(Request $request): JsonResponse
     {
+        $skala = $this->skalaPersen();
+
         $rows = $this->baseQuery($request)
             ->selectRaw(
                 self::COL_SITE . ' AS site, '
-                . self::COL_PERUSAHAAN . ' AS mitra, '
-                . self::COL_BULAN . ' AS bulan, '
-                . 'AVG(' . self::COL_PERSEN . ') AS persen'
+                . '`' . self::COL_PERUSAHAAN . '` AS mitra, '
+                . '`' . self::COL_BULAN . '` AS bulan, '
+                . 'AVG(`' . self::COL_PERSEN . '`) AS persen'
             )
             ->groupBy('site', 'mitra', 'bulan')
             ->get();
@@ -126,10 +131,10 @@ final class KinerjaControlRoomDmsController extends Controller
 
             $grid[$site . '|' . $mitra]['site'] = $site;
             $grid[$site . '|' . $mitra]['mitra'] = $mitra;
-            // NULL dibiarkan NULL: "belum ada datanya" bukan "kinerjanya nol".
+            // NULL dibiarkan NULL: "belum ada alert" bukan "tidak ada yang tepat waktu".
             $grid[$site . '|' . $mitra]['bulan'][$monthNo] = $row->persen === null
                 ? null
-                : round((float) $row->persen, 2);
+                : round((float) $row->persen * $skala, 2);
         }
 
         ksort($monthSeen);
@@ -198,7 +203,7 @@ final class KinerjaControlRoomDmsController extends Controller
      * Mengelompokkan baris per site supaya sel site-nya bisa digabung dengan
      * rowspan di tabel.
      *
-     * Site diurutkan dari yang paling rendah kinerjanya, dan di dalam tiap
+     * Site diurutkan dari yang paling rendah capaiannya, dan di dalam tiap
      * site barisnya juga dari yang paling rendah, sehingga yang perlu
      * ditangani lebih dulu tetap berada di atas meski sudah dikelompokkan.
      *
@@ -213,8 +218,6 @@ final class KinerjaControlRoomDmsController extends Controller
             $perSite[$row['site']][] = $row;
         }
 
-        // Bobot sebuah site = capaian terendahnya; satu perusahaan yang jeblok
-        // tidak boleh tersamarkan oleh perusahaan lain yang bagus di site sama.
         $bobot = [];
 
         foreach ($perSite as $site => $baris) {
@@ -222,6 +225,7 @@ final class KinerjaControlRoomDmsController extends Controller
                 array_column($baris, 'average'),
                 static fn (?float $v): bool => $v !== null
             );
+            // Baris tanpa angka didorong ke belakang lewat sentinel 101.
             $bobot[$site] = $nilai !== [] ? min($nilai) : 101.0;
         }
 
@@ -286,12 +290,12 @@ final class KinerjaControlRoomDmsController extends Controller
             'nilai' => $rata === null ? null : $band,
             'nilai_band' => $rata === null ? null : $bandLabel,
             'target' => self::TARGET_PERCENT,
+            'ambang_menit' => self::AMBANG_MENIT,
             'memenuhi_target' => $rata !== null && $rata >= self::TARGET_PERCENT,
             'tertinggi' => $nilai !== [] ? max($nilai) : null,
             'terendah' => $nilai !== [] ? min($nilai) : null,
-            // Penyebutnya hanya pasangan yang punya angka. Pasangan yang
-            // seluruh bulannya kosong tidak bisa dibilang gagal memenuhi
-            // target, jadi dilaporkan terpisah.
+            // Penyebutnya hanya pasangan yang punya angka; yang seluruh
+            // bulannya kosong tidak bisa dibilang gagal memenuhi target.
             'kombinasi' => count($nilai),
             'kombinasi_kosong' => count($matrix) - count($nilai),
             'memenuhi' => count(array_filter(
@@ -412,11 +416,17 @@ final class KinerjaControlRoomDmsController extends Controller
     }
 
     /**
-     * Keterangan tentang sel yang kosong, supaya matriks berlubang tidak
-     * dikira kinerjanya nol.
+     * Keterangan ketika sumbernya belum terisi atau masih bolong, supaya
+     * matriks berlubang tidak dikira capaiannya nol.
      */
     private function catatan(Request $request): ?string
     {
+        if (! DB::table(self::TABLE)->exists()) {
+            return 'Tabel ' . self::TABLE . ' masih kosong, jadi belum ada yang bisa ditampilkan. '
+                . 'Jalankan `php artisan ohs:isi-leadtime-alert` untuk menghitungnya dari '
+                . 'bcsid.dms_alert di Postgres, atau tunggu scraper Tableau mengisinya.';
+        }
+
         $kosong = (clone $this->baseQuery($request))->whereNull(self::COL_PERSEN)->count();
 
         if ($kosong === 0) {
@@ -436,6 +446,7 @@ final class KinerjaControlRoomDmsController extends Controller
     public function data(Request $request): JsonResponse
     {
         $query = $this->dataQuery($request);
+        $skala = $this->skalaPersen();
 
         $rows = (clone $query)
             ->select($this->columns())
@@ -446,7 +457,7 @@ final class KinerjaControlRoomDmsController extends Controller
             ->orderBy('id')
             ->forPage($this->dtPage($request), $this->dtPageLength($request))
             ->get()
-            ->map(fn (object $row): array => $this->present($row))
+            ->map(fn (object $row): array => $this->present($row, $skala))
             ->all();
 
         return response()->json([
@@ -459,6 +470,8 @@ final class KinerjaControlRoomDmsController extends Controller
 
     public function export(Request $request): StreamedResponse
     {
+        $skala = $this->skalaPersen();
+
         $query = $this->dataQuery($request)
             ->select($this->columns())
             ->orderBy(self::COL_SITE)
@@ -468,22 +481,25 @@ final class KinerjaControlRoomDmsController extends Controller
         return $this->dtExport(
             $request,
             $query,
-            ['Site', 'Perusahaan', 'Bulan', 'Kinerja (%)', 'Nilai', 'Keterangan'],
-            function (object $row): array {
-                $p = $this->present($row);
+            ['Site', 'Perusahaan', 'Bulan', 'Leadtime <' . self::AMBANG_MENIT . ' Menit (%)', 'Nilai', 'Keterangan'],
+            function (object $row) use ($skala): array {
+                $p = $this->present($row, $skala);
 
                 return [
                     $p['site'], $p['mitra'], $p['bulan'],
                     $p['persen'] ?? '', $p['nilai'] ?? '', $p['keterangan'],
                 ];
             },
-            'kinerja-control-room-dms'
+            'leadtime-alert-bedms'
         );
     }
 
     /** @return array<int, string> */
     private function columns(): array
     {
+        // Tanpa backtick: select() sudah mengutip sendiri, menambahkannya di
+        // sini menghasilkan kutipan ganda yang ditolak MySQL. (selectRaw di
+        // overview() lain soal -- di sana tidak ada pengutipan otomatis.)
         return [
             self::COL_SITE . ' AS site',
             self::COL_PERUSAHAAN . ' AS mitra',
@@ -495,13 +511,14 @@ final class KinerjaControlRoomDmsController extends Controller
     private function dataQuery(Request $request): Builder
     {
         $query = $this->baseQuery($request);
+        $skala = $this->skalaPersen();
 
         $nilai = (int) $request->input('nilai', 0);
 
         if ($nilai >= 1 && $nilai <= 4) {
             [$batas] = self::SCORE_BANDS[4 - $nilai];
             $query->whereNotNull(self::COL_PERSEN)
-                ->where(self::COL_PERSEN, '>=', $batas);
+                ->where(self::COL_PERSEN, '>=', $batas / $skala);
 
             // Band teratas sengaja tanpa batas atas. Sebelumnya dibatasi
             // < 101 dan angka di atas itu -- entah salah hitung di sumber atau
@@ -509,7 +526,7 @@ final class KinerjaControlRoomDmsController extends Controller
             // sehingga jumlah keempat band tidak lagi sama dengan jumlah baris.
             if ($nilai < 4) {
                 $atas = self::SCORE_BANDS[3 - $nilai][0];
-                $query->where(self::COL_PERSEN, '<', $atas);
+                $query->where(self::COL_PERSEN, '<', $atas / $skala);
             }
         } elseif (trim((string) $request->input('nilai', '')) === 'kosong') {
             $query->whereNull(self::COL_PERSEN);
@@ -560,9 +577,9 @@ final class KinerjaControlRoomDmsController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function present(object $row): array
+    private function present(object $row, float $skala): array
     {
-        $persen = $row->persen === null ? null : round((float) $row->persen, 2);
+        $persen = $row->persen === null ? null : round((float) $row->persen * $skala, 2);
         [, $nilai, $band] = $this->scoreBandFor($persen ?? 0.0);
 
         return [
@@ -582,6 +599,28 @@ final class KinerjaControlRoomDmsController extends Controller
     // ======================================================================
     // Utilitas
     // ======================================================================
+
+    /**
+     * Pengali agar nilainya menjadi persen.
+     *
+     * Kolom sumbernya bertipe double tanpa satuan yang pasti. Perintah
+     * ohs:isi-leadtime-alert menulis persen (0-100), tetapi hasil scrape
+     * Tableau untuk parameter sejenis menulis pecahan (0-1). Diperiksa dari
+     * nilai tertinggi seluruh tabel, bukan per baris, supaya satu baris
+     * bernilai 1% tidak salah dikira pecahan.
+     */
+    private function skalaPersen(): float
+    {
+        static $skala = null;
+
+        if ($skala !== null) {
+            return $skala;
+        }
+
+        $max = DB::table(self::TABLE)->max(self::COL_PERSEN);
+
+        return $skala = ($max !== null && (float) $max <= 1.0) ? 100.0 : 1.0;
+    }
 
     private function baseCount(): int
     {

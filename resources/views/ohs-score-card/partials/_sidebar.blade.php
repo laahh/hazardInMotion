@@ -27,7 +27,7 @@
             ['label' => 'Speak up fatigue',                                             'icon' => 'solar:user-speak-outline'],
             ['label' => 'Tidak ada temuan penggunaan HP',                               'icon' => 'solar:smartphone-outline'],
             ['label' => 'Incident dengan Gap Coverage CCTV & Gap pada DMS',             'icon' => 'solar:videocamera-outline'],
-            ['label' => 'Leadtime Alert DMS masuk ke Server',                           'icon' => 'solar:server-outline'],
+            ['label' => 'Leadtime Alert DMS masuk ke Server',                           'icon' => 'solar:server-outline', 'url' => route('ohs-score-card.leadtime-alert-bedms.index')],
             ['label' => 'Kinerja Pengawasan Control Room DMS',                          'icon' => 'solar:monitor-outline', 'url' => route('ohs-score-card.kinerja-control-room-dms.index')],
         ],
         'SIRC' => [
