@@ -101,6 +101,9 @@ final class RoadSummaryController extends Controller
         [0.0,  1, '<80%'],
     ];
 
+    /** Target kepatuhan jalan yang dipakai di dashboard Overview. */
+    private const TARGET_PERCENT = 90.0;
+
     private const MONTH_LABELS = [
         1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
         5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
@@ -275,16 +278,313 @@ final class RoadSummaryController extends Controller
         $months = array_keys($monthSeen);
         $weeks = array_keys($weekSeen);
 
+        $matrixRows = $this->buildOverviewMatrix($matrix, $months);
+        $sites = array_unique(array_column($matrixRows, 'site'));
+        $mitras = array_unique(array_column($matrixRows, 'mitra'));
+        $paretoArea = $this->buildParetoDanArea($request);
+
         return response()->json([
             'months' => array_map(fn (int $m): array => [
                 'number' => $m,
                 'label' => mb_strtoupper(mb_substr(self::MONTH_LABELS[$m] ?? '-', 0, 3)),
             ], $months),
-            'matrix' => $this->buildOverviewMatrix($matrix, $months),
+            'kpi' => $this->buildKpi($matrix, $months, count($sites), count($mitras)),
+            'matrix' => $matrixRows,
             'perusahaan' => $this->buildOverviewPerusahaan($perusahaan),
+            'site_vs_target' => $this->buildSiteVsTarget($matrix, $months),
+            'top_terendah' => $this->buildTopTerendah($matrixRows),
+            'pareto' => $paretoArea['pareto'],
+            'per_area' => $paretoArea['per_area'],
+            'recurrence' => $this->buildRecurrence($request),
             'monthly' => $this->buildMonthlySeries($matrix, $months),
             'weekly' => $this->buildWeeklySeries($weekBuckets, $weeks),
         ]);
+    }
+
+    /**
+     * Ringkasan angka besar di kepala dashboard, termasuk perubahan terhadap
+     * bulan sebelumnya.
+     *
+     * @param  array<string, mixed>  $matrix
+     * @param  array<int, int>  $months
+     * @return array<string, mixed>
+     */
+    private function buildKpi(array $matrix, array $months, int $siteCount, int $mitraCount): array
+    {
+        $total = 0;
+        $standar = 0;
+        $perMonth = [];
+
+        foreach ($matrix as $entry) {
+            foreach ($months as $month) {
+                $t = $entry['bulan'][$month]['total'] ?? 0;
+                $s = $entry['bulan'][$month]['standar'] ?? 0;
+                $total += $t;
+                $standar += $s;
+                $perMonth[$month]['total'] = ($perMonth[$month]['total'] ?? 0) + $t;
+                $perMonth[$month]['standar'] = ($perMonth[$month]['standar'] ?? 0) + $s;
+            }
+        }
+
+        $pct = $total > 0 ? round($standar / $total * 100, 2) : 0.0;
+        [, $nilai, $band] = $this->scoreBandFor($pct);
+
+        // Selisih poin terhadap bulan sebelumnya — hanya bila ada >= 2 bulan.
+        $deltaPts = null;
+        $lastLabel = null;
+
+        if (count($months) >= 1) {
+            $lastMonth = $months[count($months) - 1];
+            $lastLabel = self::MONTH_LABELS[$lastMonth] ?? '-';
+        }
+
+        if (count($months) >= 2) {
+            $last = $perMonth[$months[count($months) - 1]] ?? null;
+            $prev = $perMonth[$months[count($months) - 2]] ?? null;
+
+            if ($last && $prev && $last['total'] > 0 && $prev['total'] > 0) {
+                $deltaPts = round(
+                    ($last['standar'] / $last['total'] * 100) - ($prev['standar'] / $prev['total'] * 100),
+                    1
+                );
+            }
+        }
+
+        return [
+            'total' => $total,
+            'standar' => $standar,
+            'tidak_sesuai' => $total - $standar,
+            'standar_pct' => $pct,
+            'tidak_sesuai_pct' => $total > 0 ? round(($total - $standar) / $total * 100, 2) : 0.0,
+            'nilai' => $nilai,
+            'nilai_band' => $band,
+            'delta_pts' => $deltaPts,
+            'target' => self::TARGET_PERCENT,
+            'gap_pts' => round($pct - self::TARGET_PERCENT, 1),
+            'memenuhi_target' => $pct >= self::TARGET_PERCENT,
+            'site_count' => $siteCount,
+            'mitra_count' => $mitraCount,
+            'bulan_terakhir' => $lastLabel,
+        ];
+    }
+
+    /**
+     * Capaian tiap site dibanding target.
+     *
+     * @param  array<string, mixed>  $matrix
+     * @param  array<int, int>  $months
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildSiteVsTarget(array $matrix, array $months): array
+    {
+        $perSite = [];
+
+        foreach ($matrix as $entry) {
+            foreach ($months as $month) {
+                $perSite[$entry['site']]['total'] = ($perSite[$entry['site']]['total'] ?? 0)
+                    + ($entry['bulan'][$month]['total'] ?? 0);
+                $perSite[$entry['site']]['standar'] = ($perSite[$entry['site']]['standar'] ?? 0)
+                    + ($entry['bulan'][$month]['standar'] ?? 0);
+            }
+        }
+
+        ksort($perSite);
+        $out = [];
+
+        foreach ($perSite as $site => $agg) {
+            $pct = $agg['total'] > 0 ? round($agg['standar'] / $agg['total'] * 100, 2) : 0.0;
+            [, $nilai] = $this->scoreBandFor($pct);
+
+            $out[] = [
+                'site' => (string) $site,
+                'percent' => $pct,
+                'target' => self::TARGET_PERCENT,
+                'gap_pts' => round($pct - self::TARGET_PERCENT, 1),
+                'nilai' => $nilai,
+                'total' => $agg['total'],
+                'tidak_sesuai' => $agg['total'] - $agg['standar'],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Lima kombinasi site/perusahaan dengan capaian terendah.
+     *
+     * @param  array<int, array<string, mixed>>  $matrixRows
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildTopTerendah(array $matrixRows): array
+    {
+        $rows = $matrixRows;
+
+        usort($rows, static fn (array $a, array $b): int => $a['average'] <=> $b['average']);
+
+        return array_map(static fn (array $r): array => [
+            'site' => $r['site'],
+            'mitra' => $r['mitra'],
+            'percent' => $r['average'],
+            'nilai' => $r['nilai'],
+            'total' => $r['total'],
+            'tidak_sesuai' => $r['tidak_sesuai'],
+        ], array_slice($rows, 0, 5));
+    }
+
+    /**
+     * Rincian jenis ketidaksesuaian (Pareto) dan sebaran per area/pit.
+     *
+     * Keduanya diambil dari SATU query: dikelompokkan per pit dengan
+     * penjumlahan bersyarat tiap jenis cek, lalu Pareto adalah totalnya.
+     *
+     * Catatan: satu segmen bisa gagal di lebih dari satu jenis cek, jadi
+     * jumlah seluruh batang Pareto wajar melebihi jumlah segmen tidak sesuai.
+     *
+     * @return array{pareto: array<int, array<string, mixed>>, per_area: array<int, array<string, mixed>>}
+     */
+    private function buildParetoDanArea(Request $request): array
+    {
+        $rows = $this->applyOverviewFilters($this->baseQuery(), $request)
+            ->selectRaw(
+                'pit,'
+                . ' COUNT(*) AS total,'
+                . " SUM(grade_stat <> 'ACCEPT') AS gagal_grade,"
+                . " SUM(road_width <> 'ACCEPT') AS gagal_lebar,"
+                . " SUM(supereleva <> 'ACCEPT') AS gagal_super,"
+                . " SUM(junction_1 = 'REJECT') AS gagal_junction_1,"
+                . " SUM(junction_s = 'REJECT') AS gagal_junction_s,"
+                . ' SUM(NOT ' . self::STANDARD_SQL . ') AS tidak_sesuai'
+            )
+            ->groupBy('pit')
+            ->get();
+
+        $jenis = [
+            'gagal_lebar' => 'Lebar Jalan',
+            'gagal_super' => 'Superelevasi',
+            'gagal_grade' => 'Grade',
+            'gagal_junction_1' => 'Junction 1',
+            'gagal_junction_s' => 'Junction S',
+        ];
+
+        $totalJenis = array_fill_keys(array_keys($jenis), 0);
+        $perArea = [];
+        $totalTidakSesuai = 0;
+
+        foreach ($rows as $row) {
+            foreach (array_keys($jenis) as $key) {
+                $totalJenis[$key] += (int) $row->$key;
+            }
+
+            $tidak = (int) $row->tidak_sesuai;
+            $totalTidakSesuai += $tidak;
+
+            $perArea[] = [
+                'area' => (string) ($row->pit ?? '-'),
+                'total' => (int) $row->total,
+                'tidak_sesuai' => $tidak,
+                'percent' => (int) $row->total > 0 ? round($tidak / (int) $row->total * 100, 2) : 0.0,
+            ];
+        }
+
+        // Pareto: urut terbanyak, lalu persentase kumulatif.
+        arsort($totalJenis);
+        $grandJenis = array_sum($totalJenis);
+        $pareto = [];
+        $kumulatif = 0;
+
+        foreach ($totalJenis as $key => $jumlah) {
+            $kumulatif += $jumlah;
+            $pareto[] = [
+                'label' => $jenis[$key],
+                'jumlah' => $jumlah,
+                'percent' => $grandJenis > 0 ? round($jumlah / $grandJenis * 100, 1) : 0.0,
+                'kumulatif' => $grandJenis > 0 ? round($kumulatif / $grandJenis * 100, 1) : 0.0,
+            ];
+        }
+
+        // Area diurutkan dari yang paling banyak tidak sesuai, ambil 8 teratas
+        // supaya grafiknya tetap terbaca (ada 31 pit).
+        usort($perArea, static fn (array $a, array $b): int => $b['tidak_sesuai'] <=> $a['tidak_sesuai']);
+        $top = array_slice($perArea, 0, 8);
+        $sisa = array_slice($perArea, 8);
+
+        if ($sisa !== []) {
+            $top[] = [
+                'area' => 'Lainnya (' . count($sisa) . ' area)',
+                'total' => array_sum(array_column($sisa, 'total')),
+                'tidak_sesuai' => array_sum(array_column($sisa, 'tidak_sesuai')),
+                'percent' => 0.0,
+            ];
+        }
+
+        return [
+            'pareto' => $pareto,
+            'pareto_total_segmen' => $totalTidakSesuai,
+            'per_area' => $top,
+        ];
+    }
+
+    /**
+     * Seberapa sering sebuah segmen jalan berulang kali dinyatakan tidak sesuai.
+     *
+     * Identitas segmen = site + pit + mitra + nama_jalan + segment, dihitung
+     * atas berapa banyak minggu berbeda ia gagal. Query ini berat (memindai
+     * seluruh baris lalu mengelompokkan), jadi hasilnya di-cache per kombinasi
+     * filter.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildRecurrence(Request $request): array
+    {
+        $signature = md5(json_encode([
+            $request->input('site'), $request->input('mitra'),
+            $request->input('pit'), $request->input('year'), $request->input('month'),
+        ]));
+
+        return Cache::remember(
+            'ohs-score-card.road-summary.recurrence.' . $signature,
+            self::FILTER_CACHE_TTL,
+            function () use ($request): array {
+                $inner = $this->applyOverviewFilters($this->baseQuery(), $request)
+                    ->whereRaw('NOT ' . self::STANDARD_SQL)
+                    ->selectRaw("site, pit, mitra, nama_jalan, segment, COUNT(DISTINCT CONCAT(year,'-',week)) AS n")
+                    ->groupBy('site', 'pit', 'mitra', 'nama_jalan', 'segment');
+
+                $rows = DB::query()
+                    ->fromSub($inner, 't')
+                    ->selectRaw(
+                        "CASE WHEN n = 1 THEN 'baru' WHEN n = 2 THEN 'dua' ELSE 'banyak' END AS kategori,"
+                        . ' COUNT(*) AS segmen, SUM(n) AS temuan'
+                    )
+                    ->groupBy('kategori')
+                    ->get()
+                    ->keyBy('kategori');
+
+                $label = [
+                    'baru' => 'Temuan Baru',
+                    'dua' => 'Berulang (2x)',
+                    'banyak' => 'Berulang >2x',
+                ];
+
+                $totalTemuan = 0;
+                foreach ($label as $key => $_) {
+                    $totalTemuan += (int) ($rows[$key]->temuan ?? 0);
+                }
+
+                $out = [];
+                foreach ($label as $key => $text) {
+                    $temuan = (int) ($rows[$key]->temuan ?? 0);
+                    $out[] = [
+                        'kategori' => $text,
+                        'segmen' => (int) ($rows[$key]->segmen ?? 0),
+                        'temuan' => $temuan,
+                        'percent' => $totalTemuan > 0 ? round($temuan / $totalTemuan * 100, 1) : 0.0,
+                    ];
+                }
+
+                return $out;
+            }
+        );
     }
 
     /** Overview hanya memakai filter yang masuk akal untuk rekap. */
@@ -365,9 +665,12 @@ final class RoadSummaryController extends Controller
                 'cells' => $cells,
                 'average' => $avg,
                 'total' => $grandTotal,
+                'tidak_sesuai' => $grandTotal - $grandStandar,
                 'nilai' => $nilai,
                 'nilai_band' => $band,
                 'trend' => $trend,
+                'target' => self::TARGET_PERCENT,
+                'gap_pts' => round($avg - self::TARGET_PERCENT, 1),
             ];
         }
 

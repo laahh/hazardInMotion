@@ -25,7 +25,7 @@
     <link rel="stylesheet" href="{{ asset('evaluasi-well-assets/css/lib/audioplayer.css') }}">
     <link rel="stylesheet" href="{{ asset('evaluasi-well-assets/css/style.css') }}">
     <style>
-      /* style.css dipakai bersama dms/pnc-monitoring — override di sini biar cuma sidebar EvaluasiWell yang berubah. */
+      /* style.css dipakai bersama dms/pnc-monitoring, jadi override di sini biar cuma sidebar EvaluasiWell yang berubah. */
       .sidebar-logo {
         justify-content: center;
       }

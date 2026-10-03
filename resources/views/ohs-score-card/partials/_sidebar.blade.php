@@ -3,7 +3,7 @@
 
   Setiap section = departemen, isinya indikator score card milik dept tersebut.
   Daftarnya didefinisikan sekali di $deptMenus lalu di-render lewat loop, supaya
-  menambah/menghapus indikator cukup ubah array — markup-nya ikut.
+  menambah/menghapus indikator cukup ubah array; markup-nya ikut.
 
   Begitu halaman tujuan dibuat, isi key 'url' (mis. 'url' => route('...'));
   selama kosong, link-nya javascript:void(0) supaya tidak menghasilkan 404.
@@ -70,7 +70,7 @@
   /* Label indikator panjang dipotong jadi "…" supaya tiap item tetap 1 baris:
      sidebar tidak memanjang dan icon tidak ikut gepeng. Teks penuhnya tetap
      bisa dibaca lewat atribut title (tooltip saat hover).
-     Catatan: `display` sengaja tidak di-set di <span> — rule bawaan
+     Catatan: `display` sengaja tidak di-set di <span>, sebab rule bawaan
      `.sidebar.active .sidebar-menu li a span { display:none }` specificity-nya
      lebih tinggi, jadi mode sidebar collapsed tetap jalan seperti biasa. */
   .osc-sidebar .sidebar-menu li a {

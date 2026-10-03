@@ -154,6 +154,14 @@
     box-shadow: 0 4px 12px rgba(72, 127, 255, 0.25);
   }
 
+  /* Penanda target pada progress bar. Tidak ada padanannya di WowDash,
+     jadi ditulis sendiri: satu garis tipis di posisi persentase target. */
+  .ov-track { position: relative; overflow: visible; }
+  .ov-track__target {
+    position: absolute; top: -3px; bottom: -3px; width: 2px;
+    background: var(--text-primary-light, #0F172A); opacity: .45;
+  }
+
   /* ---- Matriks capaian bulanan ---- */
   .ov-matrix-wrap { width: 100%; overflow: auto; max-height: 560px; }
   .ov-matrix {
@@ -213,35 +221,17 @@
   .ov-n4 { background: #16A34A; }
   .ov-matrix .ov-cell { font-variant-numeric: tabular-nums; }
 
-  /* ---- Pengalih Persentase / Nilai ---- */
-  .ov-switch {
-    display: inline-flex; padding: 3px; gap: 3px;
-    background: #F1F5F9; border-radius: 10px;
+  /* ---- Kolom TARGET / GAP di matriks ---- */
+  .ov-matrix .ov-target {
+    background: #F8FAFC; color: #64748B !important;
+    font-weight: 700; border-radius: 8px;
   }
-  .ov-switch__btn {
-    border: 0; background: transparent; cursor: pointer;
-    padding: 5px 14px; border-radius: 8px;
-    font-size: 12px; font-weight: 700; color: #64748B;
-    transition: background .12s ease, color .12s ease;
+  .ov-matrix .ov-gap {
+    font-weight: 800; border-radius: 8px;
+    font-variant-numeric: tabular-nums;
   }
-  .ov-switch__btn:hover { color: #2563EB; }
-  .ov-switch__btn.is-active {
-    background: #fff; color: #0F172A;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
-  }
-
-  /* ---- Kartu ringkasan perusahaan ---- */
-  .ov-card {
-    border: 1px solid #E2E8F0; border-radius: 14px;
-    background: #fff; padding: 16px 18px; height: 100%;
-  }
-  .ov-card__name { font-size: 13px; font-weight: 700; color: #0F172A; }
-  .ov-card__pct { font-size: 24px; font-weight: 800; line-height: 1.2; letter-spacing: -0.01em; }
-  .ov-card__meta { font-size: 12px; color: #64748B; }
-  .ov-card__nilai {
-    font-size: 11px; font-weight: 800; padding: 2px 10px;
-    border-radius: 999px; color: #fff;
-  }
+  .ov-matrix .ov-gap.is-ok  { background: #ECFDF5; color: #166534 !important; }
+  .ov-matrix .ov-gap.is-bad { background: #FEF2F2; color: #991B1B !important; }
 
 </style>
 @endsection
@@ -251,7 +241,7 @@
   <div>
     <h6 class="fw-semibold mb-0">Jalan Sesuai Standar</h6>
     <div class="text-secondary-light text-sm mt-4">
-      Evaluasi per segmen jalan — grade, lebar, dan superelevasi
+      Evaluasi per segmen jalan: grade, lebar, dan superelevasi
     </div>
   </div>
   <ul class="d-flex align-items-center gap-2">
@@ -267,35 +257,33 @@
 </div>
 
 {{-- Ringkasan kepatuhan; ikut filter yang sedang aktif (di-update dari respons AJAX). --}}
-<div class="card radius-8 border mb-24">
-  <div class="card-body p-24 pb-0">
-    <ul class="nav jss-tabs gap-2" role="tablist">
-      <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="jss-tab-overview" data-bs-toggle="tab"
-                data-bs-target="#jss-pane-overview" data-tab-key="overview" type="button" role="tab">
-          <iconify-icon icon="solar:chart-square-outline"></iconify-icon> Overview Dashboard
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="jss-tab-rawdata" data-bs-toggle="tab"
-                data-bs-target="#jss-pane-rawdata" data-tab-key="rawdata" type="button" role="tab">
-          <iconify-icon icon="solar:list-outline"></iconify-icon> Raw Data
-        </button>
-      </li>
-    </ul>
-  </div>
-</div>
+<ul class="nav nav-pills style-three pill-tab border input-form-light p-0 radius-8 bg-neutral-50 d-inline-flex mb-24"
+    id="jss-tab" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link px-24 py-10 text-md text-center radius-8 active" id="jss-tab-overview"
+            data-bs-toggle="pill" data-bs-target="#jss-pane-overview" data-tab-key="overview"
+            type="button" role="tab" aria-controls="jss-pane-overview" aria-selected="true">
+      Ringkasan
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link px-24 py-10 text-md text-center radius-8" id="jss-tab-rawdata"
+            data-bs-toggle="pill" data-bs-target="#jss-pane-rawdata" data-tab-key="rawdata"
+            type="button" role="tab" aria-controls="jss-pane-rawdata" aria-selected="false">
+      Data Segmen
+    </button>
+  </li>
+</ul>
 
 <div class="tab-content">
   <div class="tab-pane fade show active" id="jss-pane-overview" role="tabpanel">
 
-    {{-- Filter khusus Overview: terpisah dari filter Raw Data supaya keduanya
-         tidak saling mengubah tampilan satu sama lain. --}}
+    {{-- Filter --}}
     <div class="card radius-8 border mb-24">
       <div class="card-body p-24">
         <div class="row gy-3 gx-3 align-items-end">
           <div class="col-xxl-3 col-md-4 col-sm-6">
-            <label class="form-label text-sm fw-medium mb-4" for="ov-site">Site</label>
+            <label class="form-label text-sm fw-medium mb-8" for="ov-site">Site</label>
             <select class="form-select form-select-sm radius-8 ov-filter" id="ov-site" data-column="site">
               <option value="">Semua Site</option>
               @foreach ($filterOptions['site'] ?? [] as $option)
@@ -304,7 +292,7 @@
             </select>
           </div>
           <div class="col-xxl-3 col-md-4 col-sm-6">
-            <label class="form-label text-sm fw-medium mb-4" for="ov-mitra">Perusahaan</label>
+            <label class="form-label text-sm fw-medium mb-8" for="ov-mitra">Perusahaan</label>
             <select class="form-select form-select-sm radius-8 ov-filter" id="ov-mitra" data-column="mitra">
               <option value="">Semua Perusahaan</option>
               @foreach ($filterOptions['mitra'] ?? [] as $option)
@@ -313,7 +301,16 @@
             </select>
           </div>
           <div class="col-xxl-3 col-md-4 col-sm-6">
-            <label class="form-label text-sm fw-medium mb-4" for="ov-month">Bulan</label>
+            <label class="form-label text-sm fw-medium mb-8" for="ov-pit">Area / Pit</label>
+            <select class="form-select form-select-sm radius-8 ov-filter" id="ov-pit" data-column="pit">
+              <option value="">Semua Area</option>
+              @foreach ($filterOptions['pit'] ?? [] as $option)
+                <option value="{{ $option }}">{{ $option }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-xxl-2 col-md-4 col-sm-6">
+            <label class="form-label text-sm fw-medium mb-8" for="ov-month">Bulan</label>
             <select class="form-select form-select-sm radius-8 ov-filter" id="ov-month" data-column="month">
               <option value="">Semua Bulan</option>
               @foreach ($monthOptions as $number => $label)
@@ -321,62 +318,157 @@
               @endforeach
             </select>
           </div>
-          <div class="col-xxl-3 col-md-4 col-sm-6 d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-sm btn-outline-secondary radius-8" id="ov-reset">Reset</button>
-            <span class="text-sm text-secondary-light" id="ov-status"></span>
+          <div class="col-xxl-1 col-md-4 col-sm-6">
+            <button type="button" class="btn btn-sm btn-outline-secondary radius-8 w-100" id="ov-reset">Reset</button>
+          </div>
+          <div class="col-12">
+            <span class="text-sm text-secondary-light" id="ov-status">Memuat ringkasan…</span>
           </div>
         </div>
       </div>
     </div>
 
-    {{-- Ringkasan per perusahaan --}}
-    <div class="row gy-3 mb-24" id="ov-perusahaan"></div>
+    {{-- Kartu ringkasan utama --}}
+    <div class="row gy-4 mb-24" id="ov-kpi"></div>
 
-    {{-- Matriks site x perusahaan x bulan --}}
-    <div class="card radius-8 border mb-24">
-      <div class="card-body p-24">
-        <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
-          <div>
-            <h6 class="mb-1 fw-bold text-lg">Capaian per Bulan</h6>
-            <span class="text-sm fw-medium text-secondary-light" id="ov-matrix-subtitle">
-              Persentase segmen standar tiap perusahaan di tiap site
-            </span>
+    <div class="row gy-4 mb-24">
+      <div class="col-xxl-8">
+        <div class="card h-100 radius-8 border">
+          <div class="card-header border-bottom bg-base py-16 px-24">
+            <h6 class="text-lg fw-semibold mb-0">Capaian per Perusahaan</h6>
           </div>
-          <div class="d-flex align-items-center flex-wrap gap-3">
-            {{-- Pengalih tampilan sel: persentase atau Nilai 1–4 --}}
-            <div class="ov-switch" role="group" aria-label="Tampilan sel">
-              <button type="button" class="ov-switch__btn is-active" data-mode="persen">Persentase</button>
-              <button type="button" class="ov-switch__btn" data-mode="nilai">Nilai</button>
+          <div class="card-body p-24">
+            <div class="row gy-3" id="ov-perusahaan"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xxl-4">
+        <div class="card h-100 radius-8 border">
+          <div class="card-header border-bottom bg-base py-16 px-24">
+            <h6 class="text-lg fw-semibold mb-0">Capaian per Site</h6>
+          </div>
+          <div class="card-body p-24" id="ov-site-target"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row gy-4 mb-24">
+      <div class="col-xxl-8">
+        <div class="card h-100 radius-8 border">
+          <div class="card-header border-bottom bg-base py-16 px-24 d-flex align-items-center flex-wrap gap-3 justify-content-between">
+            <div>
+              <h6 class="text-lg fw-semibold mb-0">Capaian per Bulan</h6>
+              <span class="text-sm text-secondary-light" id="ov-matrix-subtitle">
+                Persentase segmen standar tiap perusahaan di tiap site
+              </span>
             </div>
-            <div class="d-flex align-items-center flex-wrap gap-3" id="ov-legend"></div>
+            <ul class="nav nav-pills style-three pill-tab border input-form-light p-0 radius-8 bg-neutral-50 flex-nowrap"
+                role="tablist">
+              <li class="nav-item" role="presentation">
+                <button type="button" class="nav-link px-16 py-6 text-sm text-center radius-8 active ov-switch__btn"
+                        data-mode="persen">Persentase</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button type="button" class="nav-link px-16 py-6 text-sm text-center radius-8 ov-switch__btn"
+                        data-mode="nilai">Nilai</button>
+              </li>
+            </ul>
+          </div>
+          <div class="card-body p-24">
+            <div class="d-flex align-items-center flex-wrap gap-3 mb-16" id="ov-legend"></div>
+            <div class="ov-matrix-wrap">
+              <table class="ov-matrix" id="ov-matrix">
+                <thead></thead>
+                <tbody></tbody>
+              </table>
+            </div>
           </div>
         </div>
-        <div class="ov-matrix-wrap">
-          <table class="ov-matrix" id="ov-matrix">
-            <thead></thead>
-            <tbody></tbody>
-          </table>
+      </div>
+
+      <div class="col-xxl-4">
+        <div class="card h-100 radius-8 border">
+          <div class="card-header border-bottom bg-base py-16 px-24">
+            <h6 class="text-lg fw-semibold mb-0">Perlu Perhatian</h6>
+          </div>
+          <div class="card-body p-24">
+            <div class="table-responsive">
+              <table class="table bordered-table sm-table mb-0">
+                <thead>
+                  <tr>
+                    <th scope="col">Site &amp; Perusahaan</th>
+                    <th scope="col" class="text-center">Nilai</th>
+                    <th scope="col" class="text-end">Tidak Sesuai</th>
+                  </tr>
+                </thead>
+                <tbody id="ov-top5"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    {{-- Grafik perbandingan --}}
-    <div class="row gy-4">
-      <div class="col-xxl-6">
-        <div class="card radius-8 border h-100">
+    <div class="row gy-4 mb-24">
+      <div class="col-xxl-7">
+        <div class="card h-100 radius-8 border">
+          <div class="card-header border-bottom bg-base py-16 px-24">
+            <h6 class="text-lg fw-semibold mb-0">Jenis Ketidaksesuaian</h6>
+            <span class="text-sm text-secondary-light">Satu segmen bisa gagal di lebih dari satu jenis cek</span>
+          </div>
           <div class="card-body p-24">
-            <h6 class="mb-1 fw-bold text-lg">Perbandingan Bulanan</h6>
-            <span class="text-sm fw-medium text-secondary-light">% segmen standar per perusahaan</span>
-            <div id="ov-chart-monthly" class="mt-16"></div>
+            <div id="ov-chart-pareto"></div>
           </div>
         </div>
       </div>
-      <div class="col-xxl-6">
-        <div class="card radius-8 border h-100">
+
+      <div class="col-xxl-5">
+        <div class="card h-100 radius-8 border">
+          <div class="card-header border-bottom bg-base py-16 px-24">
+            <h6 class="text-lg fw-semibold mb-0">Sebaran per Area</h6>
+            <span class="text-sm text-secondary-light">Delapan area terbanyak, sisanya digabung</span>
+          </div>
           <div class="card-body p-24">
-            <h6 class="mb-1 fw-bold text-lg">Perbandingan Mingguan</h6>
-            <span class="text-sm fw-medium text-secondary-light">% segmen standar per perusahaan</span>
-            <div id="ov-chart-weekly" class="mt-16"></div>
+            <div id="ov-chart-area"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row gy-4">
+      <div class="col-xxl-5">
+        <div class="card h-100 radius-8 border">
+          <div class="card-header border-bottom bg-base py-16 px-24">
+            <h6 class="text-lg fw-semibold mb-0">Tren Bulanan</h6>
+            <span class="text-sm text-secondary-light">Persentase segmen standar per perusahaan</span>
+          </div>
+          <div class="card-body p-24">
+            <div id="ov-chart-monthly"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xxl-4">
+        <div class="card h-100 radius-8 border">
+          <div class="card-header border-bottom bg-base py-16 px-24">
+            <h6 class="text-lg fw-semibold mb-0">Tren Mingguan</h6>
+            <span class="text-sm text-secondary-light">Persentase segmen standar per perusahaan</span>
+          </div>
+          <div class="card-body p-24">
+            <div id="ov-chart-weekly"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xxl-3">
+        <div class="card h-100 radius-8 border">
+          <div class="card-header border-bottom bg-base py-16 px-24">
+            <h6 class="text-lg fw-semibold mb-0">Temuan Berulang</h6>
+            <span class="text-sm text-secondary-light">Dihitung dari jumlah minggu berbeda</span>
+          </div>
+          <div class="card-body p-24">
+            <div id="ov-chart-recurrence"></div>
           </div>
         </div>
       </div>
@@ -558,13 +650,17 @@
 
     var filterEls = Array.prototype.slice.call(document.querySelectorAll('.ov-filter'));
     var statusEl = document.querySelector('#ov-status');
-    var charts = { monthly: null, weekly: null };
+    var charts = { monthly: null, weekly: null, pareto: null, area: null, recurrence: null };
     var loaded = false;
 
     // 'persen' atau 'nilai'. Payload terakhir disimpan supaya mengganti mode
     // cukup menggambar ulang matriks, tanpa memanggil server lagi.
     var matrixMode = 'persen';
     var lastPayload = null;
+
+    // Warna seri grafik diambil dari palet WowDash yang sudah dipakai
+    // dashboard lain di aplikasi ini, bukan palet baru.
+    var PALETTE = ['#487FFF', '#45B369', '#FF9F29', '#EF4A00', '#8252E9', '#00B8F2'];
 
     function escapeHtml(value) {
         return String(value === null || value === undefined ? '' : value)
@@ -582,7 +678,15 @@
         }) + '%';
     }
 
-    // Gradasi warna untuk mode Persentase — 5 tingkat, lebih halus daripada
+    function fmtPts(value) {
+        if (value === null || value === undefined) { return '–'; }
+        var n = Number(value);
+        return (n > 0 ? '+' : '') + n.toLocaleString('id-ID', {
+            minimumFractionDigits: 1, maximumFractionDigits: 1
+        }) + ' pts';
+    }
+
+    // Gradasi warna untuk mode Persentase: 5 tingkat, lebih halus daripada
     // band Nilai sehingga perbedaan antar bulan lebih mudah terlihat.
     function tierClass(pct) {
         if (pct >= 98) return 'ov-t5';
@@ -614,23 +718,145 @@
         return out;
     }
 
+    // Kelas badge mengikuti sistem warna WowDash (bg-*-focus + text-*-main),
+    // bukan warna inline, supaya ikut tema dan konsisten dengan modul lain.
+    function nilaiBadgeClass(nilai) {
+        return {
+            1: 'bg-danger-focus text-danger-main',
+            2: 'bg-warning-focus text-warning-main',
+            3: 'bg-info-focus text-info-main',
+            4: 'bg-success-focus text-success-main'
+        }[nilai] || 'bg-neutral-200 text-secondary-light';
+    }
+
+    function nilaiBarClass(nilai) {
+        return {
+            1: 'bg-danger-main', 2: 'bg-warning-main',
+            3: 'bg-info-main', 4: 'bg-success-main'
+        }[nilai] || 'bg-neutral-400';
+    }
+
+    // ---- Kartu ringkasan utama --------------------------------------------
+    function renderKpi(k) {
+        var deltaText = k.delta_pts === null
+            ? '<span class="text-secondary-light">Belum ada bulan pembanding</span>'
+            : 'Berubah <span class="' + (k.delta_pts >= 0 ? 'bg-success-focus text-success-main' : 'bg-danger-focus text-danger-main')
+                + ' px-1 rounded-2 fw-medium text-sm">' + fmtPts(k.delta_pts) + '</span> dari bulan sebelumnya';
+
+        var cards = [
+            {
+                grad: 'bg-gradient-end-1', icon: 'solar:ruler-outline', dot: 'bg-primary-600',
+                label: 'Total Segmen', value: fmtNum(k.total),
+                foot: k.site_count + ' site, ' + k.mitra_count + ' perusahaan'
+            },
+            {
+                grad: 'bg-gradient-end-2', icon: 'solar:check-circle-outline', dot: 'bg-success-main',
+                label: 'Sesuai Standar', value: fmtNum(k.standar), foot: deltaText
+            },
+            {
+                grad: 'bg-gradient-end-5', icon: 'solar:danger-triangle-outline', dot: 'bg-danger-main',
+                label: 'Tidak Sesuai', value: fmtNum(k.tidak_sesuai),
+                foot: fmtPct(k.tidak_sesuai_pct) + ' dari total segmen'
+            },
+            {
+                grad: 'bg-gradient-end-3', icon: 'solar:medal-star-outline', dot: 'bg-yellow',
+                label: 'Capaian Keseluruhan', value: fmtPct(k.standar_pct),
+                foot: '<span class="' + nilaiBadgeClass(k.nilai) + ' px-1 rounded-2 fw-medium text-sm">Nilai '
+                    + k.nilai + '</span> ' + fmtPts(k.gap_pts) + ' terhadap target ' + k.target + '%'
+            }
+        ];
+
+        document.querySelector('#ov-kpi').innerHTML = cards.map(function (c) {
+            return '<div class="col-xxl-3 col-sm-6">'
+                + '<div class="card p-3 shadow-2 radius-8 border input-form-light h-100 ' + c.grad + '">'
+                +   '<div class="card-body p-0">'
+                +     '<div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">'
+                +       '<div class="d-flex align-items-center gap-2">'
+                +         '<span class="mb-0 w-48-px h-48-px ' + c.dot + ' text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">'
+                +           '<iconify-icon icon="' + c.icon + '" class="icon"></iconify-icon>'
+                +         '</span>'
+                +         '<div>'
+                +           '<span class="mb-2 fw-medium text-secondary-light text-sm">' + escapeHtml(c.label) + '</span>'
+                +           '<h6 class="fw-semibold">' + c.value + '</h6>'
+                +         '</div>'
+                +       '</div>'
+                +     '</div>'
+                +     '<p class="text-sm mb-0">' + c.foot + '</p>'
+                +   '</div>'
+                + '</div></div>';
+        }).join('');
+    }
+
+    // ---- Capaian per perusahaan -------------------------------------------
     function renderPerusahaan(list) {
         var host = document.querySelector('#ov-perusahaan');
         if (!list.length) {
-            host.innerHTML = '<div class="col-12"><div class="ov-card text-center text-secondary-light">'
-                + 'Tidak ada data untuk filter ini.</div></div>';
+            host.innerHTML = '<div class="col-12 text-center text-secondary-light py-24">'
+                + 'Tidak ada data untuk filter ini.</div>';
             return;
         }
         host.innerHTML = list.map(function (p) {
-            return '<div class="col-xxl col-lg-3 col-sm-6">'
-                + '<div class="ov-card">'
-                +   '<div class="d-flex align-items-center justify-content-between gap-2 mb-8">'
-                +     '<span class="ov-card__name">' + escapeHtml(p.mitra) + '</span>'
-                +     '<span class="ov-card__nilai" style="background:' + nilaiColor(p.nilai) + ';">Nilai ' + p.nilai + '</span>'
+            return '<div class="col-xxl-4 col-md-6">'
+                + '<div class="border input-form-light radius-8 p-16 h-100">'
+                +   '<div class="d-flex align-items-center justify-content-between gap-2 mb-12">'
+                +     '<span class="text-md fw-semibold">' + escapeHtml(p.mitra) + '</span>'
+                +     '<span class="' + nilaiBadgeClass(p.nilai) + ' px-8 py-2 rounded-pill fw-medium text-xs">Nilai '
+                +       p.nilai + '</span>'
                 +   '</div>'
-                +   '<div class="ov-card__pct" style="color:' + nilaiColor(p.nilai) + ';">' + fmtPct(p.percent) + '</div>'
-                +   '<div class="ov-card__meta">' + fmtNum(p.standar) + ' / ' + fmtNum(p.total) + ' segmen</div>'
+                +   '<h6 class="mb-8 fw-semibold">' + fmtPct(p.percent) + '</h6>'
+                +   '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px mb-8">'
+                +     '<div class="progress-bar ' + nilaiBarClass(p.nilai) + ' rounded-pill" role="progressbar"'
+                +       ' style="width:' + Math.min(100, p.percent) + '%" aria-valuenow="' + Math.round(p.percent) + '"'
+                +       ' aria-valuemin="0" aria-valuemax="100"></div>'
+                +   '</div>'
+                +   '<span class="text-sm text-secondary-light">' + fmtNum(p.standar) + ' dari ' + fmtNum(p.total) + ' segmen</span>'
                 + '</div></div>';
+        }).join('');
+    }
+
+    // ---- Capaian per site --------------------------------------------------
+    function renderSiteTarget(list) {
+        var host = document.querySelector('#ov-site-target');
+        if (!list.length) {
+            host.innerHTML = '<p class="text-secondary-light text-sm text-center py-24 mb-0">Tidak ada data.</p>';
+            return;
+        }
+        host.innerHTML = list.map(function (s, i) {
+            return '<div class="' + (i ? 'mt-20' : '') + '">'
+                + '<div class="d-flex align-items-center justify-content-between mb-8">'
+                +   '<span class="text-sm fw-semibold">' + escapeHtml(s.site) + '</span>'
+                +   '<span class="text-sm fw-medium text-secondary-light">' + fmtPct(s.percent) + '</span>'
+                + '</div>'
+                + '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px ov-track"'
+                +   ' title="Target ' + s.target + '%">'
+                +   '<div class="progress-bar ' + nilaiBarClass(s.nilai) + ' rounded-pill" role="progressbar"'
+                +     ' style="width:' + Math.min(100, s.percent) + '%" aria-valuenow="' + Math.round(s.percent) + '"'
+                +     ' aria-valuemin="0" aria-valuemax="100"></div>'
+                +   '<span class="ov-track__target" style="left:' + s.target + '%"></span>'
+                + '</div>'
+                + '<span class="text-xs text-secondary-light">' + fmtPts(s.gap_pts) + ' terhadap target, '
+                +   fmtNum(s.tidak_sesuai) + ' segmen tidak sesuai</span>'
+                + '</div>';
+        }).join('');
+    }
+
+    // ---- Perlu perhatian ---------------------------------------------------
+    function renderTop5(list) {
+        var body = document.querySelector('#ov-top5');
+        if (!list.length) {
+            body.innerHTML = '<tr><td colspan="3" class="text-center text-secondary-light py-24">Tidak ada data.</td></tr>';
+            return;
+        }
+        body.innerHTML = list.map(function (t) {
+            return '<tr>'
+                + '<td>'
+                +   '<span class="text-md fw-semibold d-block">' + escapeHtml(t.site) + '</span>'
+                +   '<span class="text-sm text-secondary-light">' + escapeHtml(t.mitra) + ', ' + fmtPct(t.percent) + '</span>'
+                + '</td>'
+                + '<td class="text-center"><span class="' + nilaiBadgeClass(t.nilai)
+                +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + t.nilai + '</span></td>'
+                + '<td class="text-end fw-medium">' + fmtNum(t.tidak_sesuai) + '</td>'
+                + '</tr>';
         }).join('');
     }
 
@@ -672,10 +898,11 @@
         months.forEach(function (m, i) {
             head += '<th class="' + (i === months.length - 1 ? 'ov-th-last' : '') + '">' + escapeHtml(m.label) + '</th>';
         });
+        head += '<th>TARGET</th><th>GAP</th>';
         thead.innerHTML = head + '</tr>';
 
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="' + (months.length + 4) + '" class="text-center py-24 text-secondary-light">'
+            tbody.innerHTML = '<tr><td colspan="' + (months.length + 6) + '" class="text-center py-24 text-secondary-light">'
                 + 'Tidak ada data untuk filter ini.</td></tr>';
             return;
         }
@@ -723,6 +950,7 @@
                     html += '<td class="ov-empty" title="' + escapeHtml(months[m].label) + ': tidak ada data">–</td>';
                     return;
                 }
+
                 // Tooltip selalu memuat kedua angka, apa pun mode tampilannya,
                 // supaya berganti mode tidak menghilangkan informasi.
                 var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
@@ -735,8 +963,24 @@
                     + '</td>';
             });
 
+            html += '<td class="ov-target">' + row.target + '%</td>'
+                + '<td class="ov-gap ' + (row.gap_pts >= 0 ? 'is-ok' : 'is-bad') + '">' + fmtPts(row.gap_pts) + '</td>';
+
             return html + '</tr>';
         }).join('');
+    }
+
+    // ---- Grafik ------------------------------------------------------------
+    function destroyChart(key) {
+        if (charts[key]) {
+            charts[key].destroy();
+            charts[key] = null;
+        }
+    }
+
+    function emptyChart(el, text) {
+        el.innerHTML = '<p class="text-secondary-light text-sm text-center py-40 mb-0">'
+            + escapeHtml(text || 'Tidak ada data.') + '</p>';
     }
 
     function renderChart(key, elId, payload, type) {
@@ -745,15 +989,9 @@
         var el = document.querySelector(elId);
         if (!el) { return; }
 
-        if (charts[key]) {
-            charts[key].destroy();
-            charts[key] = null;
-        }
+        destroyChart(key);
 
-        if (!payload.series.length) {
-            el.innerHTML = '<p class="text-secondary-light text-sm text-center py-40 mb-0">Tidak ada data.</p>';
-            return;
-        }
+        if (!payload.series.length) { emptyChart(el); return; }
         el.innerHTML = '';
 
         // "Padat" = banyak titik di sumbu X (mis. 40 minggu). Dipakai untuk
@@ -762,24 +1000,16 @@
 
         charts[key] = new ApexCharts(el, {
             series: payload.series,
-            chart: { type: type, height: 320, toolbar: { show: false }, zoom: { enabled: false } },
-            colors: ['#487FFF', '#45B369', '#F08C2E', '#E0484A', '#8252E9', '#00B8F2'],
-            stroke: {
-                curve: 'smooth',
-                width: type === 'line' ? (dense ? 2 : 3) : 0
-            },
-            // Titik disembunyikan saat datanya padat (40 minggu x 6 mitra):
-            // 240 marker hanya membuat grafik penuh, bukan lebih terbaca.
+            chart: { type: type, height: 280, toolbar: { show: false }, zoom: { enabled: false } },
+            colors: PALETTE,
+            stroke: { curve: 'smooth', width: type === 'line' ? (dense ? 2 : 3) : 0 },
             markers: { size: type === 'line' && !dense ? 4 : 0, hover: { size: 5 } },
             dataLabels: { enabled: false },
-            // connectNulls false (bawaan): bulan/minggu tanpa data harus putus,
-            // bukan ditarik lurus seolah ada capaian di antaranya.
             plotOptions: { bar: { borderRadius: 4, columnWidth: '60%' } },
             xaxis: {
                 categories: payload.labels,
                 labels: {
                     style: { fontSize: '11px' },
-                    // Label minggu terlalu rapat kalau semuanya dicetak.
                     hideOverlappingLabels: true,
                     rotate: dense ? -45 : 0,
                     rotateAlways: false
@@ -805,18 +1035,100 @@
         charts[key].render();
     }
 
-    /** Membungkus renderChart agar kegagalan satu grafik tidak menjatuhkan sisanya. */
-    function safeChart(key, elId, payload, type) {
-        try {
-            renderChart(key, elId, payload, type);
-        } catch (err) {
-            var el = document.querySelector(elId);
-            if (el) {
-                el.innerHTML = '<p class="text-secondary-light text-sm text-center py-40 mb-0">'
-                    + 'Grafik gagal ditampilkan.</p>';
+    /** Pareto: batang jumlah + garis persentase kumulatif pada sumbu kedua. */
+    function renderPareto(rows) {
+        var el = document.querySelector('#ov-chart-pareto');
+        if (!el || typeof ApexCharts === 'undefined') { return; }
+
+        destroyChart('pareto');
+
+        if (!rows.length) { emptyChart(el); return; }
+        el.innerHTML = '';
+
+        charts.pareto = new ApexCharts(el, {
+            series: [
+                { name: 'Jumlah Segmen', type: 'column', data: rows.map(function (r) { return r.jumlah; }) },
+                { name: 'Kumulatif', type: 'line', data: rows.map(function (r) { return r.kumulatif; }) }
+            ],
+            chart: { type: 'line', height: 300, toolbar: { show: false }, zoom: { enabled: false } },
+            colors: ['#E0484A', '#16A34A'],
+            stroke: { width: [0, 3], curve: 'smooth' },
+            markers: { size: [0, 4] },
+            plotOptions: { bar: { borderRadius: 4, columnWidth: '50%' } },
+            dataLabels: {
+                enabled: true,
+                enabledOnSeries: [0],
+                formatter: function (v) { return fmtNum(v); },
+                style: { fontSize: '10px', colors: ['#334155'] },
+                offsetY: -18
+            },
+            xaxis: { categories: rows.map(function (r) { return r.label; }), labels: { style: { fontSize: '11px' } } },
+            yaxis: [
+                { title: { text: 'Jumlah Segmen', style: { fontSize: '11px' } },
+                  labels: { formatter: function (v) { return fmtNum(Math.round(v)); } } },
+                { opposite: true, min: 0, max: 100,
+                  title: { text: 'Kumulatif', style: { fontSize: '11px' } },
+                  labels: { formatter: function (v) { return Math.round(v) + '%'; } } }
+            ],
+            legend: { position: 'top', horizontalAlign: 'left', fontSize: '12px' },
+            grid: { borderColor: '#EEF2F7', strokeDashArray: 4 },
+            tooltip: {
+                shared: true, intersect: false,
+                y: {
+                    formatter: function (v, opts) {
+                        return opts.seriesIndex === 1 ? Number(v).toFixed(1) + '%' : fmtNum(v) + ' segmen';
+                    }
+                }
             }
+        });
+        charts.pareto.render();
+    }
+
+    /** Donut sederhana dipakai bersama oleh panel Area dan Temuan Berulang. */
+    function renderDonut(key, elId, labels, values, colors, unit) {
+        var el = document.querySelector(elId);
+        if (!el || typeof ApexCharts === 'undefined') { return; }
+
+        destroyChart(key);
+
+        var total = values.reduce(function (a, b) { return a + b; }, 0);
+        if (!values.length || total === 0) { emptyChart(el); return; }
+        el.innerHTML = '';
+
+        charts[key] = new ApexCharts(el, {
+            series: values,
+            labels: labels,
+            colors: colors || PALETTE,
+            chart: { type: 'donut', height: 300 },
+            dataLabels: { enabled: false },
+            stroke: { width: 0 },
+            legend: { position: 'bottom', fontSize: '11px', itemMargin: { vertical: 2 } },
+            plotOptions: {
+                pie: {
+                    donut: {
+                        size: '62%',
+                        labels: {
+                            show: true,
+                            total: {
+                                show: true, showAlways: true, label: unit || 'Total',
+                                formatter: function () { return fmtNum(total); }
+                            }
+                        }
+                    }
+                }
+            },
+            tooltip: { y: { formatter: function (v) { return fmtNum(v) + ' (' + (v / total * 100).toFixed(1) + '%)'; } } }
+        });
+        charts[key].render();
+    }
+
+    /** Membungkus renderer agar kegagalan satu panel tidak menjatuhkan sisanya. */
+    function safe(label, fn) {
+        try {
+            fn();
+        } catch (err) {
             if (typeof console !== 'undefined' && console.error) {
-                console.error('Overview: grafik "' + key + '" gagal dirender', err);
+                console.error('Overview: panel "' + label + '" gagal dirender', err);
             }
         }
     }
@@ -834,18 +1146,34 @@
             })
             .then(function (json) {
                 lastPayload = json;
-                renderPerusahaan(json.perusahaan || []);
-                renderLegend();
-                renderMatrix(json.months || [], json.matrix || []);
 
-                // Tiap grafik dibungkus sendiri: sebelumnya satu grafik yang
-                // gagal membuat seluruh blok .then() berhenti, sehingga status
-                // berbunyi "gagal memuat" padahal matriks & kartu sudah benar.
-                safeChart('monthly', '#ov-chart-monthly', json.monthly, 'line');
-                safeChart('weekly', '#ov-chart-weekly', json.weekly, 'line');
+                // Tiap panel dibungkus sendiri: satu panel yang gagal tidak
+                // boleh membuat seluruh dashboard tampak kosong.
+                safe('kpi', function () { renderKpi(json.kpi); });
+                safe('perusahaan', function () { renderPerusahaan(json.perusahaan || []); });
+                safe('site-target', function () { renderSiteTarget(json.site_vs_target || []); });
+                safe('top5', function () { renderTop5(json.top_terendah || []); });
+                safe('legend', renderLegend);
+                safe('matrix', function () { renderMatrix(json.months || [], json.matrix || []); });
+                safe('pareto', function () { renderPareto(json.pareto || []); });
+                safe('area', function () {
+                    var area = json.per_area || [];
+                    renderDonut('area', '#ov-chart-area',
+                        area.map(function (a) { return a.area; }),
+                        area.map(function (a) { return a.tidak_sesuai; }),
+                        null, 'Segmen');
+                });
+                safe('recurrence', function () {
+                    var rec = json.recurrence || [];
+                    renderDonut('recurrence', '#ov-chart-recurrence',
+                        rec.map(function (r) { return r.kategori; }),
+                        rec.map(function (r) { return r.temuan; }),
+                        ['#487FFF', '#F2C230', '#E0484A'], 'Temuan');
+                });
+                safe('monthly', function () { renderChart('monthly', '#ov-chart-monthly', json.monthly, 'line'); });
+                safe('weekly', function () { renderChart('weekly', '#ov-chart-weekly', json.weekly, 'line'); });
 
-                var total = (json.matrix || []).reduce(function (a, r) { return a + r.total; }, 0);
-                statusEl.textContent = fmtNum(total) + ' segmen · '
+                statusEl.textContent = fmtNum(json.kpi.total) + ' segmen · '
                     + (json.matrix || []).length + ' kombinasi site/perusahaan';
                 loaded = true;
             })
@@ -861,7 +1189,7 @@
         el.addEventListener('change', load);
     });
 
-    // Ganti mode hanya menggambar ulang dari payload terakhir — tidak ada
+    // Ganti mode hanya menggambar ulang dari payload terakhir, tidak ada
     // permintaan baru ke server, karena angka Nilai sudah ikut dikirim.
     document.querySelectorAll('.ov-switch__btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
@@ -870,7 +1198,9 @@
             matrixMode = btn.dataset.mode;
 
             document.querySelectorAll('.ov-switch__btn').forEach(function (b) {
-                b.classList.toggle('is-active', b.dataset.mode === matrixMode);
+                // Kelas aktifnya 'active' (bawaan nav-pills WowDash),
+                // bukan kelas buatan sendiri.
+                b.classList.toggle('active', b.dataset.mode === matrixMode);
             });
 
             renderLegend();
@@ -886,17 +1216,19 @@
         load();
     });
 
-    // Tab Overview aktif sejak awal, jadi langsung dimuat. Grafik dibuat ulang
-    // ukurannya saat tab dibuka lagi: ApexCharts tidak bisa mengukur lebar
-    // elemen yang sedang tersembunyi.
+    // Tab Overview aktif sejak awal, jadi langsung dimuat.
     load();
 
     var overviewTab = document.querySelector('#jss-tab-overview');
     if (overviewTab) {
         overviewTab.addEventListener('shown.bs.tab', function () {
             if (!loaded) { load(); return; }
+            // ApexCharts tidak bisa mengukur elemen yang sedang tersembunyi,
+            // jadi ukurannya dihitung ulang saat tab kembali tampil.
             Object.keys(charts).forEach(function (k) {
-                if (charts[k]) { charts[k].windowResizeHandler ? charts[k].windowResizeHandler() : charts[k].render(); }
+                if (charts[k] && typeof charts[k].windowResizeHandler === 'function') {
+                    charts[k].windowResizeHandler();
+                }
             });
         });
     }
@@ -1139,7 +1471,7 @@
         xlsxBtn.classList.toggle('disabled', tooBig);
         xlsxBtn.setAttribute('aria-disabled', tooBig ? 'true' : 'false');
         hint.textContent = tooBig
-            ? formatNumber(lastFilteredCount) + ' baris — terlalu besar untuk Excel, pakai CSV'
+            ? formatNumber(lastFilteredCount) + ' baris, terlalu besar untuk Excel. Pakai CSV.'
             : 'unduh ' + formatNumber(lastFilteredCount) + ' baris';
     }
 
@@ -1158,6 +1490,16 @@
     document.querySelector('#rs-export-xlsx').addEventListener('click', function () { startDownload('xlsx'); });
     document.querySelector('#rs-export-csv').addEventListener('click', function () { startDownload('csv'); });
 
+    // Tabel ini dibangun saat pane-nya masih tersembunyi (tab Ringkasan yang
+    // aktif lebih dulu), sehingga DataTables tidak bisa mengukur lebar kolom.
+    // Ukurannya dihitung ulang begitu tab Data Segmen pertama kali dibuka.
+    var rawTab = document.querySelector('#jss-tab-rawdata');
+    if (rawTab) {
+        rawTab.addEventListener('shown.bs.tab', function () {
+            table.columns.adjust();
+        });
+    }
+
     document.querySelector('#rs-apply').addEventListener('click', function () {
         table.ajax.reload();
     });
@@ -1168,7 +1510,7 @@
         table.ajax.reload();
     });
 
-    // Ganti dropdown langsung memuat ulang — tombol Terapkan tetap ada
+    // Ganti dropdown langsung memuat ulang; tombol Terapkan tetap ada
     // untuk yang terbiasa menekannya setelah mengubah beberapa filter.
     filterEls.forEach(function (el) {
         el.addEventListener('change', function () { table.ajax.reload(); });
