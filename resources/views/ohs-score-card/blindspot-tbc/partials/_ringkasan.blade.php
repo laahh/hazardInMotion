@@ -1,8 +1,12 @@
 {{--
   Tab Ringkasan Blindspot TBC untuk satu kumpulan data (minecon / subcon).
 
-  Elemen ditandai lewat atribut data-bs, bukan id global, supaya partial ini
+  Elemen ditandai lewat atribut data-bs-el, bukan id global, supaya partial ini
   bisa dipasang dua kali di halaman yang sama tanpa id bentrok.
+
+  Urutan panelnya mengikuti bobot sumbernya: persentase resmi dari tabel
+  bulanan di atas sebagai ukuran utama, cacah temuan dari tabel detail di
+  bawahnya sebagai rincian.
 
   $ds: satu entri dari $datasets pada BlindspotTbcController::index().
 --}}
@@ -67,19 +71,21 @@
   {{-- Kartu ringkasan utama --}}
   <div class="row gy-4 mb-24" data-bs-el="kpi"></div>
 
+  {{-- Ukuran utama: persentase resmi --}}
   <div class="row gy-4 mb-24">
     <div class="col-xxl-8">
       <div class="card h-100 radius-8 border">
         <div class="card-header border-bottom bg-base py-16 px-24">
-          <h6 class="text-lg fw-semibold mb-0">Temuan per Bulan</h6>
+          <h6 class="text-lg fw-semibold mb-0">Persentase Blindspot per Bulan</h6>
           <span class="text-sm text-secondary-light">
-            Jumlah temuan blindspot tiap perusahaan PIC di tiap site, dari {{ $ds['detail_table'] }}
+            Dari {{ $ds['monthly_table'] }}; makin besar angkanya makin banyak yang luput,
+            jadi hijau berarti baik
           </span>
         </div>
         <div class="card-body p-24">
           <div class="d-flex align-items-center flex-wrap gap-3 mb-16" data-bs-el="legend"></div>
           <div class="bs-matrix-wrap">
-            <table class="bs-matrix" data-bs-el="matrix">
+            <table class="bs-matrix" data-bs-el="persen">
               <thead></thead>
               <tbody></tbody>
             </table>
@@ -91,7 +97,8 @@
     <div class="col-xxl-4">
       <div class="card h-100 radius-8 border">
         <div class="card-header border-bottom bg-base py-16 px-24">
-          <h6 class="text-lg fw-semibold mb-0">Temuan per Site</h6>
+          <h6 class="text-lg fw-semibold mb-0">Rata-rata per Site</h6>
+          <span class="text-sm text-secondary-light">Ambang {{ $ds['ambang'] }}%</span>
         </div>
         <div class="card-body p-24" data-bs-el="per-site"></div>
       </div>
@@ -99,12 +106,74 @@
   </div>
 
   <div class="row gy-4 mb-24">
+    <div class="col-xxl-5">
+      <div class="card h-100 radius-8 border">
+        <div class="card-header border-bottom bg-base py-16 px-24">
+          <h6 class="text-lg fw-semibold mb-0">Peringkat Perusahaan PIC</h6>
+          <span class="text-sm text-secondary-light">Diurutkan dari persentase tertinggi</span>
+        </div>
+        <div class="card-body p-24">
+          <div class="table-responsive">
+            <table class="table bordered-table sm-table mb-0">
+              <thead>
+                <tr>
+                  <th scope="col">Perusahaan</th>
+                  <th scope="col" class="text-end">Rata-rata</th>
+                  <th scope="col" class="text-end">Tertinggi</th>
+                </tr>
+              </thead>
+              <tbody data-bs-el="per-mitra"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xxl-7">
+      <div class="card h-100 radius-8 border">
+        <div class="card-header border-bottom bg-base py-16 px-24">
+          <h6 class="text-lg fw-semibold mb-0">Tren Bulanan</h6>
+          <span class="text-sm text-secondary-light">
+            Persentase blindspot per perusahaan PIC; garis yang menanjak berarti memburuk
+          </span>
+        </div>
+        <div class="card-body p-24">
+          <div data-bs-el="chart-monthly"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {{-- Rincian dari tabel detail --}}
+  <div class="row gy-4 mb-24">
+    <div class="col-12">
+      <div class="card h-100 radius-8 border">
+        <div class="card-header border-bottom bg-base py-16 px-24">
+          <h6 class="text-lg fw-semibold mb-0">Jumlah Temuan per Bulan</h6>
+          <span class="text-sm text-secondary-light">
+            Cacah temuan dari {{ $ds['detail_table'] }} — ukuran yang berbeda dari persentase
+            di atas, jadi ditampilkan terpisah
+          </span>
+        </div>
+        <div class="card-body p-24">
+          <div class="bs-matrix-wrap">
+            <table class="bs-matrix" data-bs-el="temuan">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row gy-4">
     <div class="col-xxl-7">
       <div class="card h-100 radius-8 border">
         <div class="card-header border-bottom bg-base py-16 px-24">
           <h6 class="text-lg fw-semibold mb-0">PIC dengan Temuan Terbanyak</h6>
           <span class="text-sm text-secondary-light">
-            Sepuluh teratas; makin tinggi batangnya, makin sering areanya ketahuan pihak lain
+            Sepuluh teratas; makin panjang batangnya, makin sering areanya ketahuan pihak lain
           </span>
         </div>
         <div class="card-body p-24">
@@ -121,67 +190,6 @@
         </div>
         <div class="card-body p-24">
           <div data-bs-el="chart-pelapor"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="row gy-4 mb-24">
-    <div class="col-xxl-5">
-      <div class="card h-100 radius-8 border">
-        <div class="card-header border-bottom bg-base py-16 px-24">
-          <h6 class="text-lg fw-semibold mb-0">Peringkat Perusahaan PIC</h6>
-          <span class="text-sm text-secondary-light">Diurutkan dari temuan terbanyak</span>
-        </div>
-        <div class="card-body p-24">
-          <div class="table-responsive">
-            <table class="table bordered-table sm-table mb-0">
-              <thead>
-                <tr>
-                  <th scope="col">Perusahaan</th>
-                  <th scope="col" class="text-end">Temuan</th>
-                  <th scope="col" class="text-end">Porsi</th>
-                </tr>
-              </thead>
-              <tbody data-bs-el="per-mitra"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-xxl-7">
-      <div class="card h-100 radius-8 border">
-        <div class="card-header border-bottom bg-base py-16 px-24">
-          <h6 class="text-lg fw-semibold mb-0">Tren Bulanan</h6>
-          <span class="text-sm text-secondary-light">
-            Jumlah temuan per perusahaan PIC; garis yang menanjak berarti memburuk
-          </span>
-        </div>
-        <div class="card-body p-24">
-          <div data-bs-el="chart-monthly"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="row gy-4">
-    <div class="col-12">
-      <div class="card h-100 radius-8 border">
-        <div class="card-header border-bottom bg-base py-16 px-24">
-          <h6 class="text-lg fw-semibold mb-0">Persentase Resmi</h6>
-          <span class="text-sm text-secondary-light">
-            Kolom Blindspot_TBC_dari_BC pada {{ $ds['monthly_table'] }} — ukuran yang berbeda
-            dari cacah temuan di atas, jadi ditampilkan terpisah
-          </span>
-        </div>
-        <div class="card-body p-24">
-          <div class="bs-matrix-wrap" data-bs-el="resmi-wrap">
-            <table class="bs-matrix" data-bs-el="resmi">
-              <thead></thead>
-              <tbody></tbody>
-            </table>
-          </div>
         </div>
       </div>
     </div>

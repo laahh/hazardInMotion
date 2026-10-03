@@ -151,9 +151,18 @@ window.bsOverview = (function () {
         }) + '%';
     }
 
-    // Skala warna matriks. Berbeda dari halaman Ratio TBC & GR: di sini
-    // angka kecil yang hijau, karena yang dihitung adalah temuan yang luput.
-    function tierClass(jumlah) {
+    // Skala warna matriks persentase. Berbeda dari halaman Ratio TBC & GR:
+    // di sini angka kecil yang hijau, karena yang diukur adalah yang luput.
+    function tierPersen(pct) {
+        if (pct <= 0) return 'bs-k0';
+        if (pct <= 2) return 'bs-k1';
+        if (pct <= 5) return 'bs-k2';
+        if (pct <= 10) return 'bs-k3';
+        return 'bs-k4';
+    }
+
+    /** Skala untuk cacah temuan; arahnya sama, hanya satuannya berbeda. */
+    function tierTemuan(jumlah) {
         if (jumlah <= 0) return 'bs-k0';
         if (jumlah <= 2) return 'bs-k1';
         if (jumlah <= 5) return 'bs-k2';
@@ -168,7 +177,6 @@ window.bsOverview = (function () {
 
         var filterEls = Array.prototype.slice.call(root.querySelectorAll('.bs-filter'));
         var statusEl = root.querySelector('[data-bs-el="status"]');
-        var matrixEl = root.querySelector('[data-bs-el="matrix"]');
 
         function el(name) {
             return root.querySelector('[data-bs-el="' + name + '"]');
@@ -187,23 +195,28 @@ window.bsOverview = (function () {
             var cards = [
                 {
                     grad: 'bg-gradient-end-5', icon: 'solar:eye-closed-outline', dot: 'bg-danger-main',
-                    label: 'Total Temuan', value: fmtNum(k.temuan),
-                    foot: k.site_count + ' site, ' + k.mitra_count + ' perusahaan PIC'
+                    label: 'Rata-rata Blindspot',
+                    value: k.rata_persen === null ? '–' : fmtPct(k.rata_persen),
+                    foot: k.puncak_persen === null
+                        ? 'Belum ada data persentase'
+                        : 'Tertinggi ' + fmtPct(k.puncak_persen) + ' di antara ' + fmtNum(k.kombinasi)
+                            + ' pasangan site &amp; perusahaan'
+                },
+                {
+                    grad: 'bg-gradient-end-3', icon: 'solar:danger-triangle-outline', dot: 'bg-warning-main',
+                    label: 'Di Atas Ambang', value: fmtNum(k.di_atas_ambang),
+                    foot: 'Rata-ratanya lebih dari ' + k.ambang + '%'
                 },
                 {
                     grad: 'bg-gradient-end-1', icon: 'solar:calendar-outline', dot: 'bg-primary-600',
-                    label: 'Rata-rata per Bulan', value: fmtNum(k.rata_per_bulan),
-                    foot: k.bulan_count + ' bulan tercakup'
+                    label: 'Cakupan', value: fmtNum(k.bulan_count) + ' bulan',
+                    foot: fmtNum(k.site_count) + ' site, ' + fmtNum(k.mitra_count) + ' perusahaan PIC'
                 },
                 {
-                    grad: 'bg-gradient-end-3', icon: 'solar:user-id-outline', dot: 'bg-yellow',
-                    label: 'PIC Terlibat', value: fmtNum(k.pic_count),
-                    foot: fmtNum(k.kombinasi) + ' kombinasi site &amp; perusahaan'
-                },
-                {
-                    grad: 'bg-gradient-end-2', icon: 'solar:danger-triangle-outline', dot: 'bg-warning-main',
-                    label: 'Di Atas Ambang', value: fmtNum(k.di_atas_ambang),
-                    foot: 'Rata-rata lebih dari ' + k.ambang + ' temuan sebulan'
+                    grad: 'bg-gradient-end-2', icon: 'solar:clipboard-list-outline', dot: 'bg-yellow',
+                    label: 'Temuan Tercatat', value: fmtNum(k.temuan),
+                    foot: fmtNum(k.pic_count) + ' PIC, dari ' + fmtNum(k.temuan_kombinasi)
+                        + ' pasangan yang sudah ada rinciannya'
                 }
             ];
 
@@ -228,29 +241,31 @@ window.bsOverview = (function () {
             }).join('');
         }
 
-        // ---- Temuan per site ------------------------------------------------
-        function renderPerSite(list) {
+        // ---- Rata-rata per site ---------------------------------------------
+        function renderPerSite(list, ambang) {
             var host = el('per-site');
             if (!list.length) {
                 host.innerHTML = '<p class="text-secondary-light text-sm text-center py-24 mb-0">Tidak ada data.</p>';
                 return;
             }
 
-            var puncak = Math.max.apply(null, list.map(function (s) { return s.jumlah; })) || 1;
+            var puncak = Math.max.apply(null, list.map(function (s) { return s.percent; })) || 1;
 
             host.innerHTML = list.map(function (s, i) {
                 return '<div class="' + (i ? 'mt-20' : '') + '">'
                     + '<div class="d-flex align-items-center justify-content-between mb-8">'
                     +   '<span class="text-sm fw-semibold">' + escapeHtml(s.site) + '</span>'
-                    +   '<span class="text-sm fw-medium text-secondary-light">' + fmtNum(s.jumlah) + ' temuan</span>'
+                    +   '<span class="text-sm fw-medium text-secondary-light">' + fmtPct(s.percent) + '</span>'
                     + '</div>'
                     + '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px">'
-                    +   '<div class="progress-bar bg-danger-main rounded-pill" role="progressbar"'
-                    +     ' style="width:' + (s.jumlah / puncak * 100) + '%" aria-valuenow="' + s.jumlah + '"'
+                    +   '<div class="progress-bar ' + (s.di_atas_ambang ? 'bg-danger-main' : 'bg-success-main')
+                    +     ' rounded-pill" role="progressbar"'
+                    +     ' style="width:' + (s.percent / puncak * 100) + '%" aria-valuenow="' + s.percent + '"'
                     +     ' aria-valuemin="0" aria-valuemax="' + puncak + '"></div>'
                     + '</div>'
-                    + '<span class="text-xs text-secondary-light">' + fmtPct(s.percent)
-                    +   ' dari seluruh temuan · ' + fmtNum(s.mitra) + ' perusahaan</span>'
+                    + '<span class="text-xs text-secondary-light">' + fmtNum(s.jumlah)
+                    +   ' perusahaan · tertinggi ' + fmtPct(s.puncak)
+                    +   (s.di_atas_ambang ? ' · di atas ambang ' + ambang + '%' : '') + '</span>'
                     + '</div>';
             }).join('');
         }
@@ -263,21 +278,28 @@ window.bsOverview = (function () {
                 return;
             }
             body.innerHTML = list.map(function (m) {
+                var kelas = m.di_atas_ambang
+                    ? 'bg-danger-focus text-danger-main'
+                    : 'bg-success-focus text-success-main';
+
                 return '<tr>'
-                    + '<td><span class="text-md fw-medium">' + escapeHtml(m.mitra) + '</span></td>'
-                    + '<td class="text-end fw-semibold">' + fmtNum(m.jumlah) + '</td>'
-                    + '<td class="text-end text-secondary-light">' + fmtPct(m.percent) + '</td>'
+                    + '<td><span class="text-md fw-medium">' + escapeHtml(m.mitra) + '</span>'
+                    +   '<span class="d-block text-xs text-secondary-light">' + fmtNum(m.jumlah)
+                    +   ' site</span></td>'
+                    + '<td class="text-end"><span class="' + kelas
+                    +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + fmtPct(m.percent) + '</span></td>'
+                    + '<td class="text-end text-secondary-light">' + fmtPct(m.puncak) + '</td>'
                     + '</tr>';
             }).join('');
         }
 
         function renderLegend() {
             var items = [
-                { color: '#16A34A', label: 'tidak ada temuan' },
-                { color: '#86C96B', label: '1–2' },
-                { color: '#F2C230', label: '3–5' },
-                { color: '#F08C2E', label: '6–10' },
-                { color: '#E0484A', label: '>10' }
+                { color: '#16A34A', label: '0%' },
+                { color: '#86C96B', label: 'sampai 2%' },
+                { color: '#F2C230', label: '2–5%' },
+                { color: '#F08C2E', label: '5–10%' },
+                { color: '#E0484A', label: 'lebih dari 10%' }
             ];
 
             el('legend').innerHTML = items.map(function (it) {
@@ -287,63 +309,12 @@ window.bsOverview = (function () {
             }).join('');
         }
 
-        function renderMatrix(months, rows) {
-            var thead = matrixEl.querySelector('thead');
-            var tbody = matrixEl.querySelector('tbody');
-
-            var head = '<tr><th class="bs-site">SITE</th><th class="bs-mitra">PERUSAHAAN PIC</th>'
-                + '<th>TOTAL</th><th>TREND</th>';
-            months.forEach(function (m, i) {
-                head += '<th class="' + (i === months.length - 1 ? 'bs-th-last' : '') + '">'
-                    + escapeHtml(m.label) + '</th>';
-            });
-            thead.innerHTML = head + '</tr>';
-
-            if (!rows.length) {
-                tbody.innerHTML = '<tr><td colspan="' + (months.length + 4) + '" class="text-center py-24 text-secondary-light">'
-                    + 'Tidak ada temuan untuk filter ini.</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = rows.map(function (row) {
-                var html = '<tr>'
-                    + '<td class="bs-site">' + escapeHtml(row.site) + '</td>'
-                    + '<td class="bs-mitra">' + escapeHtml(row.mitra) + '</td>'
-                    + '<td class="bs-total" title="' + escapeHtml('Rata-rata ' + row.rata
-                        + ' temuan per bulan, tertinggi ' + row.puncak) + '">'
-                    +   fmtNum(row.total) + '</td>';
-
-                if (row.trend === 'up') {
-                    html += '<td class="bs-trend--up" title="Bertambah dari bulan sebelumnya">&uarr;</td>';
-                } else if (row.trend === 'down') {
-                    html += '<td class="bs-trend--down" title="Berkurang dari bulan sebelumnya">&darr;</td>';
-                } else if (row.trend === 'flat') {
-                    html += '<td class="bs-trend--flat" title="Sama dengan bulan sebelumnya">=</td>';
-                } else {
-                    html += '<td class="text-secondary-light">–</td>';
-                }
-
-                row.cells.forEach(function (jumlah, m) {
-                    if (jumlah === null) {
-                        html += '<td class="bs-empty" title="' + escapeHtml(months[m].label)
-                            + ': tidak ada data">–</td>';
-                        return;
-                    }
-
-                    var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
-                        + fmtNum(jumlah) + ' temuan';
-
-                    html += '<td class="bs-cell ' + tierClass(jumlah) + '" title="' + escapeHtml(tip) + '">'
-                        + fmtNum(jumlah) + '</td>';
-                });
-
-                return html + '</tr>';
-            }).join('');
-        }
-
-        // ---- Matriks persentase resmi ---------------------------------------
-        function renderResmi(payload) {
-            var table = el('resmi');
+        /**
+         * Satu penggambar untuk dua matriks: persentase dan cacah temuan.
+         * Keduanya sebentuk, yang berbeda hanya cara memformat angkanya.
+         */
+        function renderMatrix(name, payload, opsi) {
+            var table = el(name);
             var thead = table.querySelector('thead');
             var tbody = table.querySelector('tbody');
             var months = payload.months || [];
@@ -357,26 +328,49 @@ window.bsOverview = (function () {
                 return;
             }
 
-            var head = '<tr><th class="bs-site">SITE</th><th class="bs-mitra">PERUSAHAAN PIC</th><th>RATA</th>';
+            var head = '<tr><th class="bs-site">SITE</th><th class="bs-mitra">PERUSAHAAN PIC</th>'
+                + '<th>' + opsi.ringkasLabel + '</th><th>TREND</th>';
             months.forEach(function (m, i) {
                 head += '<th class="' + (i === months.length - 1 ? 'bs-th-last' : '') + '">'
                     + escapeHtml(m.label) + '</th>';
             });
             thead.innerHTML = head + '</tr>';
 
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="' + (months.length + 4) + '" class="text-center py-24 text-secondary-light">'
+                    + 'Tidak ada data untuk filter ini.</td></tr>';
+                return;
+            }
+
             tbody.innerHTML = rows.map(function (row) {
                 var html = '<tr>'
                     + '<td class="bs-site">' + escapeHtml(row.site) + '</td>'
                     + '<td class="bs-mitra">' + escapeHtml(row.mitra) + '</td>'
-                    + '<td class="bs-total">' + (row.average === null ? '–' : fmtPct(row.average)) + '</td>';
+                    + '<td class="bs-total" title="' + escapeHtml(opsi.ringkasTip(row)) + '">'
+                    +   opsi.ringkas(row) + '</td>';
 
-                row.cells.forEach(function (pct, m) {
-                    if (pct === null) {
+                if (row.trend === 'up') {
+                    html += '<td class="bs-trend--up" title="Naik dari bulan sebelumnya, berarti memburuk">&uarr;</td>';
+                } else if (row.trend === 'down') {
+                    html += '<td class="bs-trend--down" title="Turun dari bulan sebelumnya, berarti membaik">&darr;</td>';
+                } else if (row.trend === 'flat') {
+                    html += '<td class="bs-trend--flat" title="Sama dengan bulan sebelumnya">=</td>';
+                } else {
+                    html += '<td class="text-secondary-light">–</td>';
+                }
+
+                row.cells.forEach(function (value, m) {
+                    if (value === null) {
                         html += '<td class="bs-empty" title="' + escapeHtml(months[m].label)
                             + ': tidak ada data">–</td>';
                         return;
                     }
-                    html += '<td class="bs-total">' + fmtPct(pct) + '</td>';
+
+                    var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
+                        + opsi.sel(value) + ' ' + opsi.satuan;
+
+                    html += '<td class="bs-cell ' + opsi.tier(value) + '" title="' + escapeHtml(tip) + '">'
+                        + opsi.sel(value) + '</td>';
                 });
 
                 return html + '</tr>';
@@ -492,6 +486,9 @@ window.bsOverview = (function () {
                 chart: { type: 'line', height: 320, toolbar: { show: false }, zoom: { enabled: false } },
                 colors: PALETTE,
                 stroke: { curve: 'smooth', width: 3 },
+                // Bulan tanpa data dikirim null; dibiarkan putus, bukan
+                // disambung ke nol yang akan terbaca sebagai "tidak ada blindspot".
+                forecastDataPoints: { count: 0 },
                 markers: { size: 4, hover: { size: 5 } },
                 dataLabels: { enabled: false },
                 xaxis: {
@@ -500,8 +497,8 @@ window.bsOverview = (function () {
                 },
                 yaxis: {
                     min: 0,
-                    title: { text: 'Temuan', style: { fontSize: '11px' } },
-                    labels: { formatter: function (v) { return fmtNum(Math.round(v)); } }
+                    title: { text: 'Blindspot', style: { fontSize: '11px' } },
+                    labels: { formatter: function (v) { return Math.round(v) + '%'; } }
                 },
                 legend: { position: 'top', horizontalAlign: 'left', fontSize: '12px' },
                 grid: { borderColor: '#EEF2F7', strokeDashArray: 4 },
@@ -510,7 +507,7 @@ window.bsOverview = (function () {
                     // WAJIB eksplisit: kombinasi shared + intersect melempar
                     // error sehingga grafiknya gagal dirender sama sekali.
                     intersect: false,
-                    y: { formatter: function (v) { return fmtNum(v) + ' temuan'; } }
+                    y: { formatter: function (v) { return v === null ? 'tidak ada data' : fmtPct(v); } }
                 }
             });
             charts.monthly.render();
@@ -551,22 +548,47 @@ window.bsOverview = (function () {
                     return res.json();
                 })
                 .then(function (json) {
+                    var kosong = { tersedia: false, tabel: '-', months: [], rows: [] };
+
                     // Tiap panel dibungkus sendiri: satu panel yang gagal tidak
                     // boleh membuat seluruh dashboard tampak kosong.
                     safe('kpi', function () { renderKpi(json.kpi); });
                     safe('legend', renderLegend);
-                    safe('matrix', function () { renderMatrix(json.months || [], json.matrix || []); });
-                    safe('per-site', function () { renderPerSite(json.per_site || []); });
+                    safe('persen', function () {
+                        renderMatrix('persen', json.persen || kosong, {
+                            ringkasLabel: 'RATA', satuan: 'blindspot', tier: tierPersen,
+                            sel: function (v) { return Number(v).toFixed(1) + '%'; },
+                            ringkas: function (row) {
+                                return row.average === null ? '–' : fmtPct(row.average);
+                            },
+                            ringkasTip: function (row) {
+                                return row.average === null
+                                    ? 'Belum ada data'
+                                    : 'Rata-rata ' + fmtPct(row.average) + ', tertinggi ' + fmtPct(row.puncak);
+                            }
+                        });
+                    });
+                    safe('temuan', function () {
+                        renderMatrix('temuan', json.temuan || kosong, {
+                            ringkasLabel: 'TOTAL', satuan: 'temuan', tier: tierTemuan,
+                            sel: function (v) { return fmtNum(v); },
+                            ringkas: function (row) { return fmtNum(row.total); },
+                            ringkasTip: function (row) {
+                                return 'Rata-rata ' + row.rata + ' temuan per bulan, tertinggi ' + row.puncak;
+                            }
+                        });
+                    });
+                    safe('per-site', function () { renderPerSite(json.per_site || [], json.kpi.ambang); });
                     safe('per-mitra', function () { renderPerMitra(json.per_mitra || []); });
                     safe('pic', function () { renderPicChart(json.per_pic || []); });
                     safe('pelapor', function () { renderPelaporChart(json.per_pelapor || []); });
                     safe('monthly', function () { renderMonthlyChart(json.monthly); });
-                    safe('resmi', function () { renderResmi(json.resmi || { tersedia: false, tabel: '-' }); });
                     safe('catatan', function () { renderCatatan(json.catatan); });
 
-                    statusEl.textContent = fmtNum(json.kpi.temuan) + ' temuan · '
-                        + (json.matrix || []).length + ' kombinasi site/perusahaan · '
-                        + json.kpi.bulan_count + ' bulan';
+                    var k = json.kpi;
+                    statusEl.textContent = (k.rata_persen === null ? 'belum ada persentase' : fmtPct(k.rata_persen))
+                        + ' rata-rata · ' + k.kombinasi + ' kombinasi site/perusahaan · '
+                        + k.bulan_count + ' bulan · ' + fmtNum(k.temuan) + ' temuan tercatat';
                     loaded = true;
                 })
                 .catch(function (err) {

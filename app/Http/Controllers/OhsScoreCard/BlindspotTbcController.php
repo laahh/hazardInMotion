@@ -11,6 +11,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -20,23 +21,30 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  *   subcon  -> lead_blindspot_tbc_subcont_month  + detail_lead_subcont_blindspot_tbc
  *
  * Blindspot = temuan TBC di area sebuah perusahaan yang justru dilaporkan
- * pihak lain, bukan oleh pengawas perusahaan itu sendiri. Makin banyak
- * temuannya, makin banyak bahaya yang luput dari pengawasan si PIC.
+ * pihak lain, bukan oleh pengawas perusahaan itu sendiri. Makin tinggi
+ * persentasenya, makin banyak bahaya yang luput dari pengawasan si PIC.
  *
  * DUA UKURAN YANG BERBEDA, DAN SENGAJA TIDAK DICAMPUR:
- *   - Tabel detail memberi CACAH temuan. Itu yang mengisi matriks, kartu
- *     ringkasan, dan semua peringkat di tab Ringkasan.
- *   - Tabel bulanan memberi PERSENTASE resmi (Blindspot_TBC_dari_BC) per site
- *     x perusahaan x bulan. Itu tampil di panelnya sendiri.
- * Kolom pct_blindspot_tbc_dari_bc yang ikut di tabel detail tidak dipakai:
- * nilainya 100,00 di seluruh 63 baris yang ada, jadi tidak membedakan apa pun.
+ *   - Tabel bulanan memberi PERSENTASE resmi per site x perusahaan x bulan.
+ *     Itu ukuran utamanya, dan mengisi matriks besar di tab Ringkasan.
+ *   - Tabel detail memberi CACAH temuan beserta PIC, pelapor, dan deskripsinya.
+ *     Itu yang menjawab "temuan apa saja", dan mengisi panel di bawahnya.
+ * Kolom pct_blindspot_tbc_dari_bc yang ikut di tabel detail tidak dipakai
+ * sebagai ukuran: nilainya 100,00 di seluruh baris yang ada, jadi tidak
+ * membedakan apa pun.
  *
- * KEADAAN DATA saat halaman ini dibuat (3 Oktober 2026): dari empat tabel di
- * atas hanya detail_lead_blindspot_tbc yang terisi, itu pun baru satu irisan
- * (63 temuan, seluruhnya SMO / PT Madhani Talatah Nusantara, Mei-September
- * 2026). Tiga tabel lain masih nol baris. Halaman ini tetap dibangun penuh dan
- * akan langsung hidup begitu tabelnya diisi; sementara itu tiap panel yang
- * sumbernya kosong menampilkan keterangan, bukan angka nol yang menyesatkan.
+ * NAMA KOLOM TABEL BULANAN TIDAK SERAGAM. Versi lama hasil scrape Tableau
+ * memakai Blindspot_TBC_dari_BC, versi yang sudah dirapikan memakai
+ * pct_blindspot_tbc_dari_bc; saat tulisan ini dibuat tabel minecon sudah
+ * memakai bentuk baru sedangkan subcon masih bentuk lama. Karena itu nama
+ * kolomnya tidak ditulis mati, melainkan dibaca dari skema tabelnya lewat
+ * monthlyColumns() sehingga kedua bentuk sama-sama jalan.
+ *
+ * KEADAAN DATA (3 Oktober 2026): lead_blindspot_tbc_month berisi 145 baris
+ * (6 site, 7 perusahaan, Januari-September 2026) dan detail_lead_blindspot_tbc
+ * 63 temuan, tetapi detailnya baru mencakup satu pasangan SMO / PT Madhani
+ * Talatah Nusantara. Kedua tabel subcon masih kosong. Panel yang sumbernya
+ * belum terisi menampilkan keterangan, bukan angka nol yang menyesatkan.
  */
 final class BlindspotTbcController extends Controller
 {
@@ -70,13 +78,16 @@ final class BlindspotTbcController extends Controller
     private const COL_TAHUN = 'year_of_date_for_join';
 
     /**
-     * Kolom tabel bulanan. Namanya memakai huruf besar karena tabel itu hasil
-     * scrape Tableau dan nama kolomnya mengikuti judul di sana apa adanya.
+     * Calon nama kolom tabel bulanan, diurutkan dari bentuk yang dipakai
+     * sekarang ke bentuk lama. Yang pertama cocok dengan skema tabel itulah
+     * yang dipakai; lihat catatan di docblock kelas.
      */
-    private const MON_SITE = 'site';
-    private const MON_PERUSAHAAN = 'perusahaan_pic';
-    private const MON_BULAN = 'Month_of_Date_for_Join';
-    private const MON_PERSEN = 'Blindspot_TBC_dari_BC';
+    private const MONTHLY_CANDIDATES = [
+        'site' => ['site'],
+        'mitra' => ['perusahaan_pic'],
+        'bulan' => ['month_of_date_for_join', 'Month_of_Date_for_Join'],
+        'persen' => ['pct_blindspot_tbc_dari_bc', 'Blindspot_TBC_dari_BC'],
+    ];
 
     /** Bulan tersimpan sebagai nama Inggris; dipetakan untuk urutan & label. */
     private const MONTH_MAP = [
@@ -92,8 +103,14 @@ final class BlindspotTbcController extends Controller
      */
     private const EXCLUDED_MONTHS = ['October'];
 
-    /** Berapa temuan sebulan sudah pantas disebut banyak. */
-    private const AMBANG_TEMUAN_BULANAN = 5;
+    /**
+     * Berapa persen blindspot sudah pantas disebut tinggi.
+     *
+     * TEBAKAN, bukan angka resmi: sebarannya saat ini 0-50% dengan rata-rata
+     * 1,85%, jadi 5% dipakai sebagai batas "perlu diperhatikan". Ubah di sini
+     * begitu ambang yang sebenarnya diketahui.
+     */
+    private const AMBANG_PERSEN = 5.0;
 
     private const DETAIL_FILTERABLE = [
         'site' => self::COL_SITE,
@@ -121,15 +138,20 @@ final class BlindspotTbcController extends Controller
 
         foreach (array_keys(self::DATASETS) as $slug) {
             $detail = $this->table($slug, 'detail');
+            $monthly = $this->table($slug, 'monthly');
+            $mon = $this->monthlyColumns($monthly);
 
             $datasets[$slug] = [
                 'slug' => $slug,
                 'label' => self::DATASETS[$slug]['label'],
-                'monthly_table' => $this->table($slug, 'monthly'),
+                'monthly_table' => $monthly,
                 'detail_table' => $detail,
+                'ambang' => self::AMBANG_PERSEN,
                 'filterOptions' => [
-                    'site' => $this->distinctValues($detail, self::COL_SITE),
-                    'mitra' => $this->distinctValues($detail, self::COL_PIC_PERUSAHAAN),
+                    // Site & perusahaan diambil dari tabel bulanan karena
+                    // cakupannya jauh lebih luas daripada tabel detail.
+                    'site' => $this->gabungNilai([[$monthly, $mon['site']], [$detail, self::COL_SITE]]),
+                    'mitra' => $this->gabungNilai([[$monthly, $mon['mitra']], [$detail, self::COL_PIC_PERUSAHAAN]]),
                     'pelapor' => $this->distinctValues($detail, self::COL_PELAPOR_PERUSAHAAN),
                 ],
                 'monthOptions' => $this->monthOptions($slug),
@@ -147,80 +169,39 @@ final class BlindspotTbcController extends Controller
     {
         $dataset = $this->dataset($dataset);
 
-        $rows = $this->detailQueryFiltered($request, $dataset)
-            ->selectRaw(
-                self::COL_SITE . ' AS site, '
-                . self::COL_PIC_PERUSAHAAN . ' AS mitra, '
-                . self::COL_BULAN . ' AS bulan, '
-                . 'COUNT(*) AS jumlah'
-            )
-            ->groupBy('site', 'mitra', 'bulan')
-            ->orderBy('site')
-            ->orderBy('mitra')
-            ->get();
-
-        $matrix = [];
-        $monthSeen = [];
-        $perMitra = [];
-
-        foreach ($rows as $row) {
-            $monthNo = self::MONTH_MAP[$row->bulan][0] ?? 0;
-
-            if ($monthNo === 0) {
-                continue; // nama bulan tak dikenal: jangan diam-diam dianggap bulan lain
-            }
-
-            $monthSeen[$monthNo] = true;
-            $site = trim((string) $row->site);
-            $mitra = trim((string) $row->mitra);
-            $key = $site . '|' . $mitra;
-
-            $matrix[$key]['site'] = $site;
-            $matrix[$key]['mitra'] = $mitra;
-            $matrix[$key]['bulan'][$monthNo] = ($matrix[$key]['bulan'][$monthNo] ?? 0) + (int) $row->jumlah;
-
-            $perMitra[$mitra] = ($perMitra[$mitra] ?? 0) + (int) $row->jumlah;
-        }
-
-        ksort($monthSeen);
-        ksort($matrix);
-        $months = array_keys($monthSeen);
-        $matrixRows = $this->buildMatrix($matrix, $months);
+        $persen = $this->buildPersen($request, $dataset);
+        $temuan = $this->buildTemuan($request, $dataset);
 
         return response()->json([
-            'months' => $this->monthHeadings($months),
-            'kpi' => $this->buildKpi($request, $dataset, $matrixRows, $months),
-            'matrix' => $matrixRows,
-            'per_mitra' => $this->buildRanking($perMitra),
-            'per_site' => $this->buildPerSite($matrixRows),
+            'persen' => $persen,
+            'temuan' => $temuan,
+            'kpi' => $this->buildKpi($request, $dataset, $persen, $temuan),
+            'per_site' => $this->buildPerSite($persen['rows']),
+            'per_mitra' => $this->buildPerMitra($persen['rows']),
             'per_pic' => $this->buildPerPic($request, $dataset),
             'per_pelapor' => $this->buildPerPelapor($request, $dataset),
-            'monthly' => $this->buildMonthlySeries($matrix, $months),
-            'resmi' => $this->buildPersenResmi($request, $dataset),
+            'monthly' => $this->buildMonthlySeries($persen),
             'catatan' => $this->catatan($request, $dataset),
         ]);
     }
 
     /**
-     * Persentase resmi dari tabel bulanan hasil scrape Tableau.
-     *
-     * Dipisah dari matriks temuan karena ukurannya lain: yang satu cacah
-     * temuan, yang satu bagian temuan yang datang dari luar. Mencampurnya
-     * dalam satu tabel akan membuat angka di sel tidak jelas artinya.
+     * Ukuran utama: persentase blindspot per site x perusahaan x bulan.
      *
      * @return array<string, mixed>
      */
-    private function buildPersenResmi(Request $request, string $dataset): array
+    private function buildPersen(Request $request, string $dataset): array
     {
         $table = $this->table($dataset, 'monthly');
+        $mon = $this->monthlyColumns($table);
 
         $query = DB::table($table);
 
         if (self::EXCLUDED_MONTHS !== []) {
-            $query->whereNotIn(self::MON_BULAN, self::EXCLUDED_MONTHS);
+            $query->whereNotIn($mon['bulan'], self::EXCLUDED_MONTHS);
         }
 
-        foreach (['site' => self::MON_SITE, 'mitra' => self::MON_PERUSAHAAN] as $parameter => $column) {
+        foreach (['site' => $mon['site'], 'mitra' => $mon['mitra']] as $parameter => $column) {
             $value = trim((string) $request->input($parameter, ''));
 
             if ($value !== '') {
@@ -231,15 +212,15 @@ final class BlindspotTbcController extends Controller
         $month = (int) $request->input('month', 0);
 
         if ($month >= 1 && $month <= 12) {
-            $query->whereIn(self::MON_BULAN, $this->monthNames($month));
+            $query->whereIn($mon['bulan'], $this->monthNames($month));
         }
 
         $rows = $query
             ->selectRaw(
-                self::MON_SITE . ' AS site, '
-                . self::MON_PERUSAHAAN . ' AS mitra, '
-                . self::MON_BULAN . ' AS bulan, '
-                . 'AVG(' . self::MON_PERSEN . ') AS persen'
+                $mon['site'] . ' AS site, '
+                . $mon['mitra'] . ' AS mitra, '
+                . $mon['bulan'] . ' AS bulan, '
+                . 'AVG(' . $mon['persen'] . ') AS persen'
             )
             ->groupBy('site', 'mitra', 'bulan')
             ->orderBy('site')
@@ -253,15 +234,16 @@ final class BlindspotTbcController extends Controller
             $monthNo = self::MONTH_MAP[$row->bulan][0] ?? 0;
 
             if ($monthNo === 0) {
-                continue;
+                continue; // nama bulan tak dikenal: jangan diam-diam dianggap bulan lain
             }
 
             $monthSeen[$monthNo] = true;
-            $key = trim((string) $row->site) . '|' . trim((string) $row->mitra);
+            $site = trim((string) $row->site);
+            $mitra = trim((string) $row->mitra);
 
-            $grid[$key]['site'] = trim((string) $row->site);
-            $grid[$key]['mitra'] = trim((string) $row->mitra);
-            $grid[$key]['bulan'][$monthNo] = round((float) $row->persen, 2);
+            $grid[$site . '|' . $mitra]['site'] = $site;
+            $grid[$site . '|' . $mitra]['mitra'] = $mitra;
+            $grid[$site . '|' . $mitra]['bulan'][$monthNo] = round((float) $row->persen, 2);
         }
 
         ksort($monthSeen);
@@ -283,20 +265,411 @@ final class BlindspotTbcController extends Controller
                 }
             }
 
+            $average = $terisi !== [] ? round(array_sum($terisi) / count($terisi), 2) : null;
+
             $out[] = [
                 'site' => $entry['site'],
                 'mitra' => $entry['mitra'],
                 'cells' => $cells,
-                'average' => $terisi !== [] ? round(array_sum($terisi) / count($terisi), 2) : null,
+                'average' => $average,
+                'puncak' => $terisi !== [] ? max($terisi) : null,
+                'trend' => $this->trendOf($terisi),
+                'di_atas_ambang' => $average !== null && $average > self::AMBANG_PERSEN,
             ];
         }
+
+        // Yang paling buruk di atas: itu yang perlu dibaca lebih dulu.
+        usort($out, static fn (array $a, array $b): int => ($b['average'] ?? -1) <=> ($a['average'] ?? -1));
 
         return [
             'tersedia' => $out !== [],
             'tabel' => $table,
             'months' => $this->monthHeadings($months),
+            'month_numbers' => $months,
             'rows' => $out,
         ];
+    }
+
+    /**
+     * Ukuran pendamping: cacah temuan dari tabel detail.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildTemuan(Request $request, string $dataset): array
+    {
+        $rows = $this->detailQueryFiltered($request, $dataset)
+            ->selectRaw(
+                self::COL_SITE . ' AS site, '
+                . self::COL_PIC_PERUSAHAAN . ' AS mitra, '
+                . self::COL_BULAN . ' AS bulan, '
+                . 'COUNT(*) AS jumlah'
+            )
+            ->groupBy('site', 'mitra', 'bulan')
+            ->orderBy('site')
+            ->orderBy('mitra')
+            ->get();
+
+        $grid = [];
+        $monthSeen = [];
+
+        foreach ($rows as $row) {
+            $monthNo = self::MONTH_MAP[$row->bulan][0] ?? 0;
+
+            if ($monthNo === 0) {
+                continue;
+            }
+
+            $monthSeen[$monthNo] = true;
+            $site = trim((string) $row->site);
+            $mitra = trim((string) $row->mitra);
+
+            $grid[$site . '|' . $mitra]['site'] = $site;
+            $grid[$site . '|' . $mitra]['mitra'] = $mitra;
+            $grid[$site . '|' . $mitra]['bulan'][$monthNo] = (int) $row->jumlah;
+        }
+
+        ksort($monthSeen);
+        ksort($grid);
+        $months = array_keys($monthSeen);
+
+        $out = [];
+
+        foreach ($grid as $entry) {
+            $cells = [];
+            $total = 0;
+            $terisi = [];
+
+            foreach ($months as $monthNo) {
+                $jumlah = $entry['bulan'][$monthNo] ?? null;
+                $cells[] = $jumlah;
+
+                if ($jumlah !== null) {
+                    $total += $jumlah;
+                    $terisi[] = $jumlah;
+                }
+            }
+
+            $out[] = [
+                'site' => $entry['site'],
+                'mitra' => $entry['mitra'],
+                'cells' => $cells,
+                'total' => $total,
+                'rata' => $terisi !== [] ? round(array_sum($terisi) / count($terisi), 1) : 0.0,
+                'puncak' => $terisi !== [] ? max($terisi) : 0,
+                'trend' => $this->trendOf($terisi),
+            ];
+        }
+
+        usort($out, static fn (array $a, array $b): int => $b['total'] <=> $a['total']);
+
+        return [
+            'tersedia' => $out !== [],
+            'tabel' => $this->table($dataset, 'detail'),
+            'months' => $this->monthHeadings($months),
+            'rows' => $out,
+        ];
+    }
+
+    /**
+     * Naik berarti memburuk untuk blindspot; arah itu dibalik saat diwarnai
+     * di sisi tampilan.
+     *
+     * @param  array<int, float|int>  $terisi
+     */
+    private function trendOf(array $terisi): ?string
+    {
+        if (count($terisi) < 2) {
+            return null;
+        }
+
+        $akhir = $terisi[count($terisi) - 1];
+        $sebelum = $terisi[count($terisi) - 2];
+
+        if ($akhir === $sebelum) {
+            return 'flat';
+        }
+
+        return $akhir > $sebelum ? 'up' : 'down';
+    }
+
+    /**
+     * @param  array<string, mixed>  $persen
+     * @param  array<string, mixed>  $temuan
+     * @return array<string, mixed>
+     */
+    private function buildKpi(Request $request, string $dataset, array $persen, array $temuan): array
+    {
+        $nilai = array_values(array_filter(
+            array_column($persen['rows'], 'average'),
+            static fn (?float $v): bool => $v !== null
+        ));
+
+        $detail = $this->detailQueryFiltered($request, $dataset)
+            ->selectRaw(
+                'COUNT(*) AS temuan, '
+                . 'COUNT(DISTINCT ' . self::COL_PIC_SID . ') AS pic, '
+                . 'COUNT(DISTINCT ' . self::COL_PELAPOR_PERUSAHAAN . ') AS pelapor'
+            )
+            ->first();
+
+        return [
+            'rata_persen' => $nilai !== [] ? round(array_sum($nilai) / count($nilai), 2) : null,
+            'puncak_persen' => $nilai !== [] ? max($nilai) : null,
+            'kombinasi' => count($persen['rows']),
+            'di_atas_ambang' => count(array_filter(
+                $persen['rows'],
+                static fn (array $r): bool => $r['di_atas_ambang']
+            )),
+            'ambang' => self::AMBANG_PERSEN,
+            'site_count' => count(array_unique(array_column($persen['rows'], 'site'))),
+            'mitra_count' => count(array_unique(array_column($persen['rows'], 'mitra'))),
+            'bulan_count' => count($persen['months']),
+            'temuan' => (int) ($detail->temuan ?? 0),
+            'pic_count' => (int) ($detail->pic ?? 0),
+            'pelapor_count' => (int) ($detail->pelapor ?? 0),
+            'temuan_kombinasi' => count($temuan['rows']),
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildPerSite(array $rows): array
+    {
+        return $this->rataPer($rows, 'site');
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildPerMitra(array $rows): array
+    {
+        return array_slice($this->rataPer($rows, 'mitra'), 0, 12);
+    }
+
+    /**
+     * Rata-rata persentase per satu dimensi.
+     *
+     * Rata-rata antar baris, bukan antar bulan: tiap pasangan site-perusahaan
+     * dihitung sekali supaya yang datanya lengkap tidak berbobot lebih besar.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function rataPer(array $rows, string $key): array
+    {
+        $kelompok = [];
+
+        foreach ($rows as $row) {
+            if ($row['average'] === null) {
+                continue;
+            }
+
+            $kelompok[$row[$key]][] = $row['average'];
+        }
+
+        $out = [];
+
+        foreach ($kelompok as $label => $nilai) {
+            $rata = round(array_sum($nilai) / count($nilai), 2);
+
+            $out[] = [
+                $key => (string) $label,
+                'percent' => $rata,
+                'jumlah' => count($nilai),
+                'puncak' => max($nilai),
+                'di_atas_ambang' => $rata > self::AMBANG_PERSEN,
+            ];
+        }
+
+        usort($out, static fn (array $a, array $b): int => $b['percent'] <=> $a['percent']);
+
+        return $out;
+    }
+
+    /**
+     * PIC dengan temuan terbanyak: siapa yang areanya paling sering
+     * ketahuan orang lain.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildPerPic(Request $request, string $dataset): array
+    {
+        $rows = $this->detailQueryFiltered($request, $dataset)
+            ->selectRaw(
+                "COALESCE(NULLIF(TRIM(" . self::COL_PIC_NAMA . "), ''), '(Tanpa Nama)') AS nama, "
+                . self::COL_PIC_SID . ' AS sid, '
+                . self::COL_PIC_PERUSAHAAN . ' AS mitra, '
+                . self::COL_SITE . ' AS site, '
+                . 'COUNT(*) AS jumlah'
+            )
+            ->groupBy('nama', 'sid', 'mitra', 'site')
+            ->orderByDesc('jumlah')
+            ->limit(10)
+            ->get();
+
+        return $rows->map(static fn (object $r): array => [
+            'label' => trim((string) $r->nama),
+            'sid' => trim((string) $r->sid),
+            'mitra' => trim((string) $r->mitra),
+            'site' => trim((string) $r->site),
+            'jumlah' => (int) $r->jumlah,
+        ])->all();
+    }
+
+    /**
+     * Dari mana temuannya datang. Inti blindspot: makin besar porsi pelapor
+     * dari luar, makin banyak yang luput dari pengawas perusahaan sendiri.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildPerPelapor(Request $request, string $dataset): array
+    {
+        $rows = $this->detailQueryFiltered($request, $dataset)
+            ->selectRaw(
+                "COALESCE(NULLIF(TRIM(" . self::COL_PELAPOR_PERUSAHAAN . "), ''), '(Tanpa Nama)') AS label, "
+                . 'COUNT(*) AS jumlah'
+            )
+            ->groupBy('label')
+            ->orderByDesc('jumlah')
+            ->get();
+
+        $out = $rows->map(static fn (object $r): array => [
+            'label' => (string) $r->label,
+            'jumlah' => (int) $r->jumlah,
+        ])->all();
+
+        if (count($out) <= 10) {
+            return $out;
+        }
+
+        $kepala = array_slice($out, 0, 9);
+        $ekor = array_slice($out, 9);
+
+        $kepala[] = [
+            'label' => count($ekor) . ' pelapor lainnya',
+            'jumlah' => array_sum(array_column($ekor, 'jumlah')),
+        ];
+
+        return $kepala;
+    }
+
+    /**
+     * Satu garis per perusahaan, dari persentase bulanan.
+     *
+     * @param  array<string, mixed>  $persen
+     * @return array<string, mixed>
+     */
+    private function buildMonthlySeries(array $persen): array
+    {
+        $months = $persen['month_numbers'];
+        $perMitra = [];
+
+        foreach ($persen['rows'] as $row) {
+            foreach ($row['cells'] as $i => $value) {
+                if ($value === null) {
+                    continue;
+                }
+
+                $perMitra[$row['mitra']][$i][] = $value;
+            }
+        }
+
+        // Garis dibatasi agar grafiknya terbaca; yang ditampilkan adalah
+        // perusahaan dengan rata-rata tertinggi.
+        $rata = [];
+
+        foreach ($perMitra as $mitra => $perBulan) {
+            $semua = array_merge(...array_values($perBulan));
+            $rata[$mitra] = array_sum($semua) / count($semua);
+        }
+
+        arsort($rata);
+        $terpilih = array_slice(array_keys($rata), 0, 8);
+
+        $series = [];
+
+        foreach ($terpilih as $mitra) {
+            $data = [];
+
+            foreach (array_keys($months) as $i) {
+                $nilai = $perMitra[$mitra][$i] ?? null;
+                // null, bukan 0: bulan tanpa data harus putus di grafik.
+                $data[] = $nilai === null ? null : round(array_sum($nilai) / count($nilai), 2);
+            }
+
+            $series[] = ['name' => (string) $mitra, 'data' => $data];
+        }
+
+        return [
+            'labels' => array_map(static fn (int $m): string => self::monthLabel($m), $months),
+            'series' => $series,
+        ];
+    }
+
+    /**
+     * Keterangan ketika sumbernya belum terisi, supaya panel kosong tidak
+     * terbaca sebagai "tidak ada blindspot".
+     */
+    private function catatan(Request $request, string $dataset): ?string
+    {
+        $detail = $this->table($dataset, 'detail');
+        $monthly = $this->table($dataset, 'monthly');
+
+        $adaDetail = DB::table($detail)->exists();
+        $adaBulanan = DB::table($monthly)->exists();
+
+        if (! $adaDetail && ! $adaBulanan) {
+            return 'Tabel ' . $monthly . ' dan ' . $detail . ' sama-sama masih kosong, '
+                . 'jadi belum ada yang bisa ditampilkan di tab ini. Panel akan terisi sendiri '
+                . 'begitu datanya masuk.';
+        }
+
+        if (! $adaBulanan) {
+            return 'Tabel ' . $monthly . ' masih kosong, jadi matriks persentase dan kartu di atas '
+                . 'belum terisi. Panel temuan tetap berjalan dari ' . $detail . '.';
+        }
+
+        if (! $adaDetail) {
+            return 'Tabel ' . $detail . ' masih kosong, jadi daftar temuan, PIC, dan asal pelapor '
+                . 'belum terisi. Matriks persentase tetap berjalan dari ' . $monthly . '.';
+        }
+
+        // Keduanya terisi, tapi detailnya bisa jauh lebih sempit daripada
+        // tabel bulanan; itu perlu dikatakan supaya panel temuan yang kurus
+        // tidak dikira berarti tidak ada temuan.
+        $pasanganBulanan = $this->pasanganSiteMitra($monthly, $this->monthlyColumns($monthly));
+        $pasanganDetail = $this->pasanganSiteMitra($detail, [
+            'site' => self::COL_SITE,
+            'mitra' => self::COL_PIC_PERUSAHAAN,
+        ]);
+
+        $kurang = count($pasanganBulanan) - count(array_intersect($pasanganBulanan, $pasanganDetail));
+
+        if ($kurang <= 0) {
+            return null;
+        }
+
+        return 'Tabel ' . $detail . ' baru mencakup ' . count($pasanganDetail) . ' dari '
+            . count($pasanganBulanan) . ' pasangan site-perusahaan yang ada di ' . $monthly . '. '
+            . 'Matriks persentase sudah lengkap, tetapi daftar temuan, PIC, dan asal pelapor '
+            . 'hanya memuat pasangan yang sudah ada rinciannya.';
+    }
+
+    /**
+     * @param  array<string, string>  $kolom
+     * @return array<int, string>
+     */
+    private function pasanganSiteMitra(string $table, array $kolom): array
+    {
+        return DB::table($table)
+            ->distinct()
+            ->selectRaw("CONCAT(TRIM(" . $kolom['site'] . "), '|', TRIM(" . $kolom['mitra'] . ")) AS pasangan")
+            ->pluck('pasangan')
+            ->map(static fn ($v): string => (string) $v)
+            ->all();
     }
 
     // ======================================================================
@@ -442,299 +815,6 @@ final class BlindspotTbcController extends Controller
     }
 
     // ======================================================================
-    // Penyusun panel
-    // ======================================================================
-
-    /**
-     * @param  array<string, mixed>  $matrix
-     * @param  array<int, int>  $months
-     * @return array<int, array<string, mixed>>
-     */
-    private function buildMatrix(array $matrix, array $months): array
-    {
-        $out = [];
-
-        foreach ($matrix as $entry) {
-            $cells = [];
-            $total = 0;
-            $terisi = [];
-
-            foreach ($months as $month) {
-                $jumlah = $entry['bulan'][$month] ?? null;
-                $cells[] = $jumlah;
-
-                if ($jumlah !== null) {
-                    $total += $jumlah;
-                    $terisi[] = $jumlah;
-                }
-            }
-
-            $out[] = [
-                'site' => $entry['site'],
-                'mitra' => $entry['mitra'],
-                'cells' => $cells,
-                'total' => $total,
-                'rata' => $terisi !== [] ? round(array_sum($terisi) / count($terisi), 1) : 0.0,
-                'puncak' => $terisi !== [] ? max($terisi) : 0,
-                // Untuk blindspot, naik berarti memburuk; arah ini dibalik saat
-                // diwarnai di sisi tampilan.
-                'trend' => $this->trendOf($terisi),
-            ];
-        }
-
-        usort($out, static fn (array $a, array $b): int => $b['total'] <=> $a['total']);
-
-        return $out;
-    }
-
-    /** @param  array<int, int>  $terisi */
-    private function trendOf(array $terisi): ?string
-    {
-        if (count($terisi) < 2) {
-            return null;
-        }
-
-        $akhir = $terisi[count($terisi) - 1];
-        $sebelum = $terisi[count($terisi) - 2];
-
-        if ($akhir === $sebelum) {
-            return 'flat';
-        }
-
-        return $akhir > $sebelum ? 'up' : 'down';
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $matrixRows
-     * @param  array<int, int>  $months
-     * @return array<string, mixed>
-     */
-    private function buildKpi(Request $request, string $dataset, array $matrixRows, array $months): array
-    {
-        $row = $this->detailQueryFiltered($request, $dataset)
-            ->selectRaw(
-                'COUNT(*) AS temuan, '
-                . 'COUNT(DISTINCT ' . self::COL_PIC_PERUSAHAAN . ') AS mitra, '
-                . 'COUNT(DISTINCT ' . self::COL_PIC_SID . ') AS pic, '
-                . 'COUNT(DISTINCT ' . self::COL_SITE . ') AS site, '
-                . 'COUNT(DISTINCT ' . self::COL_PELAPOR_PERUSAHAAN . ') AS pelapor'
-            )
-            ->first();
-
-        $temuan = (int) ($row->temuan ?? 0);
-        $jumlahBulan = count($months);
-
-        return [
-            'temuan' => $temuan,
-            'mitra_count' => (int) ($row->mitra ?? 0),
-            'pic_count' => (int) ($row->pic ?? 0),
-            'site_count' => (int) ($row->site ?? 0),
-            'pelapor_count' => (int) ($row->pelapor ?? 0),
-            'bulan_count' => $jumlahBulan,
-            'rata_per_bulan' => $jumlahBulan > 0 ? round($temuan / $jumlahBulan, 1) : 0.0,
-            'ambang' => self::AMBANG_TEMUAN_BULANAN,
-            // Kombinasi site+perusahaan yang rata-rata bulanannya sudah di atas
-            // ambang; itulah yang perlu ditindak lebih dulu.
-            'di_atas_ambang' => count(array_filter(
-                $matrixRows,
-                static fn (array $r): bool => $r['rata'] > self::AMBANG_TEMUAN_BULANAN
-            )),
-            'kombinasi' => count($matrixRows),
-        ];
-    }
-
-    /**
-     * @param  array<string, int>  $perMitra
-     * @return array<int, array<string, mixed>>
-     */
-    private function buildRanking(array $perMitra): array
-    {
-        $grand = array_sum($perMitra);
-        $out = [];
-
-        foreach ($perMitra as $mitra => $jumlah) {
-            $out[] = [
-                'mitra' => (string) $mitra,
-                'jumlah' => $jumlah,
-                'percent' => $grand > 0 ? round($jumlah / $grand * 100, 2) : 0.0,
-            ];
-        }
-
-        usort($out, static fn (array $a, array $b): int => $b['jumlah'] <=> $a['jumlah']);
-
-        return array_slice($out, 0, 12);
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $matrixRows
-     * @return array<int, array<string, mixed>>
-     */
-    private function buildPerSite(array $matrixRows): array
-    {
-        $perSite = [];
-
-        foreach ($matrixRows as $row) {
-            $perSite[$row['site']]['jumlah'] = ($perSite[$row['site']]['jumlah'] ?? 0) + $row['total'];
-            $perSite[$row['site']]['mitra'] = ($perSite[$row['site']]['mitra'] ?? 0) + 1;
-        }
-
-        $grand = array_sum(array_column($perSite, 'jumlah'));
-        ksort($perSite);
-        $out = [];
-
-        foreach ($perSite as $site => $agg) {
-            $out[] = [
-                'site' => (string) $site,
-                'jumlah' => $agg['jumlah'],
-                'mitra' => $agg['mitra'],
-                'percent' => $grand > 0 ? round($agg['jumlah'] / $grand * 100, 2) : 0.0,
-            ];
-        }
-
-        usort($out, static fn (array $a, array $b): int => $b['jumlah'] <=> $a['jumlah']);
-
-        return $out;
-    }
-
-    /**
-     * PIC dengan temuan terbanyak: siapa yang areanya paling sering
-     * ketahuan orang lain.
-     *
-     * @return array<int, array<string, mixed>>
-     */
-    private function buildPerPic(Request $request, string $dataset): array
-    {
-        $rows = $this->detailQueryFiltered($request, $dataset)
-            ->selectRaw(
-                "COALESCE(NULLIF(TRIM(" . self::COL_PIC_NAMA . "), ''), '(Tanpa Nama)') AS nama, "
-                . self::COL_PIC_SID . ' AS sid, '
-                . self::COL_PIC_PERUSAHAAN . ' AS mitra, '
-                . self::COL_SITE . ' AS site, '
-                . 'COUNT(*) AS jumlah'
-            )
-            ->groupBy('nama', 'sid', 'mitra', 'site')
-            ->orderByDesc('jumlah')
-            ->limit(10)
-            ->get();
-
-        return $rows->map(static fn (object $r): array => [
-            'label' => trim((string) $r->nama),
-            'sid' => trim((string) $r->sid),
-            'mitra' => trim((string) $r->mitra),
-            'site' => trim((string) $r->site),
-            'jumlah' => (int) $r->jumlah,
-        ])->all();
-    }
-
-    /**
-     * Dari mana temuannya datang. Inti blindspot: makin besar porsi pelapor
-     * dari luar, makin banyak yang luput dari pengawas perusahaan sendiri.
-     *
-     * @return array<int, array<string, mixed>>
-     */
-    private function buildPerPelapor(Request $request, string $dataset): array
-    {
-        $rows = $this->detailQueryFiltered($request, $dataset)
-            ->selectRaw(
-                "COALESCE(NULLIF(TRIM(" . self::COL_PELAPOR_PERUSAHAAN . "), ''), '(Tanpa Nama)') AS label, "
-                . 'COUNT(*) AS jumlah'
-            )
-            ->groupBy('label')
-            ->orderByDesc('jumlah')
-            ->get();
-
-        $out = $rows->map(static fn (object $r): array => [
-            'label' => (string) $r->label,
-            'jumlah' => (int) $r->jumlah,
-        ])->all();
-
-        if (count($out) <= 10) {
-            return $out;
-        }
-
-        $kepala = array_slice($out, 0, 9);
-        $ekor = array_slice($out, 9);
-
-        $kepala[] = [
-            'label' => count($ekor) . ' pelapor lainnya',
-            'jumlah' => array_sum(array_column($ekor, 'jumlah')),
-        ];
-
-        return $kepala;
-    }
-
-    /**
-     * @param  array<string, mixed>  $matrix
-     * @param  array<int, int>  $months
-     * @return array<string, mixed>
-     */
-    private function buildMonthlySeries(array $matrix, array $months): array
-    {
-        $perMitra = [];
-
-        foreach ($matrix as $entry) {
-            foreach ($months as $month) {
-                $perMitra[$entry['mitra']][$month] = ($perMitra[$entry['mitra']][$month] ?? 0)
-                    + ($entry['bulan'][$month] ?? 0);
-            }
-        }
-
-        // Garis dibatasi agar grafiknya terbaca; yang ditampilkan adalah
-        // perusahaan dengan temuan terbanyak.
-        uasort($perMitra, static fn (array $a, array $b): int => array_sum($b) <=> array_sum($a));
-        $perMitra = array_slice($perMitra, 0, 8, true);
-
-        $series = [];
-
-        foreach ($perMitra as $mitra => $perMonth) {
-            $data = [];
-
-            foreach ($months as $month) {
-                $data[] = $perMonth[$month] ?? 0;
-            }
-
-            $series[] = ['name' => (string) $mitra, 'data' => $data];
-        }
-
-        return [
-            'labels' => array_map(static fn (int $m): string => self::monthLabel($m), $months),
-            'series' => $series,
-        ];
-    }
-
-    /**
-     * Keterangan ketika sumbernya belum terisi, supaya panel kosong tidak
-     * terbaca sebagai "tidak ada blindspot".
-     */
-    private function catatan(Request $request, string $dataset): ?string
-    {
-        $detail = $this->table($dataset, 'detail');
-        $monthly = $this->table($dataset, 'monthly');
-
-        $adaDetail = DB::table($detail)->exists();
-        $adaBulanan = DB::table($monthly)->exists();
-
-        if ($adaDetail && $adaBulanan) {
-            return null;
-        }
-
-        if (! $adaDetail && ! $adaBulanan) {
-            return 'Tabel ' . $detail . ' dan ' . $monthly . ' sama-sama masih kosong, '
-                . 'jadi belum ada yang bisa ditampilkan di tab ini. Panel akan terisi sendiri '
-                . 'begitu datanya masuk.';
-        }
-
-        if (! $adaDetail) {
-            return 'Tabel ' . $detail . ' masih kosong, jadi kartu ringkasan, matriks temuan, '
-                . 'dan tab Data belum berisi apa pun. Yang tersedia baru persentase resmi dari '
-                . $monthly . '.';
-        }
-
-        return 'Tabel ' . $monthly . ' masih kosong, jadi panel persentase resmi belum terisi. '
-            . 'Kartu ringkasan, matriks temuan, dan tab Data tetap berjalan dari ' . $detail . '.';
-    }
-
-    // ======================================================================
     // Utilitas
     // ======================================================================
 
@@ -747,6 +827,45 @@ final class BlindspotTbcController extends Controller
     private function table(string $dataset, string $kind): string
     {
         return self::DATASETS[$this->dataset($dataset)][$kind];
+    }
+
+    /**
+     * Nama kolom tabel bulanan menurut skema tabelnya sendiri.
+     *
+     * Tabel minecon dan subcon sedang berbeda bentuk, lihat catatan di
+     * docblock kelas. Hasilnya di-cache per permintaan karena dipakai
+     * beberapa kali dalam satu respons.
+     *
+     * @return array<string, string>
+     */
+    private function monthlyColumns(string $table): array
+    {
+        static $cache = [];
+
+        if (isset($cache[$table])) {
+            return $cache[$table];
+        }
+
+        $ada = [];
+
+        foreach (Schema::getColumnListing($table) as $column) {
+            $ada[mb_strtolower($column)] = $column;
+        }
+
+        $out = [];
+
+        foreach (self::MONTHLY_CANDIDATES as $peran => $calon) {
+            $out[$peran] = $calon[0];
+
+            foreach ($calon as $nama) {
+                if (isset($ada[mb_strtolower($nama)])) {
+                    $out[$peran] = $ada[mb_strtolower($nama)];
+                    break;
+                }
+            }
+        }
+
+        return $cache[$table] = $out;
     }
 
     private function detailBaseCount(string $dataset): int
@@ -805,6 +924,26 @@ final class BlindspotTbcController extends Controller
     }
 
     /**
+     * Nilai gabungan dari beberapa tabel sekaligus, untuk isi dropdown.
+     *
+     * @param  array<int, array{0: string, 1: string}>  $sumber
+     * @return array<int, string>
+     */
+    private function gabungNilai(array $sumber): array
+    {
+        $out = [];
+
+        foreach ($sumber as [$table, $column]) {
+            $out = array_merge($out, $this->distinctValues($table, $column));
+        }
+
+        $out = array_values(array_unique($out));
+        sort($out);
+
+        return $out;
+    }
+
+    /**
      * Bulan yang benar-benar ada di sumber, diurutkan kalender.
      *
      * Tabel detail dan tabel bulanan bisa berbeda jangkauannya, jadi keduanya
@@ -814,11 +953,12 @@ final class BlindspotTbcController extends Controller
      */
     private function monthOptions(string $dataset): array
     {
+        $monthly = $this->table($dataset, 'monthly');
         $months = [];
 
         $sumber = [
             [$this->table($dataset, 'detail'), self::COL_BULAN],
-            [$this->table($dataset, 'monthly'), self::MON_BULAN],
+            [$monthly, $this->monthlyColumns($monthly)['bulan']],
         ];
 
         foreach ($sumber as [$table, $column]) {
