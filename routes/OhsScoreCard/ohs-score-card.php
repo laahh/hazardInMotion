@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\OhsScoreCard\BerecordController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
 use App\Http\Controllers\OhsScoreCard\PelaksanaanEdukasiController;
+use App\Http\Controllers\OhsScoreCard\RatioTbcGrController;
 use App\Http\Controllers\OhsScoreCard\RoadSummaryController;
 use App\Http\Controllers\OhsScoreCard\SpeakUpFatigueController;
 use App\Http\Controllers\OhsScoreCard\ValidasiTbcTabController;
@@ -34,6 +35,16 @@ Route::middleware('evaluasi-well.access')
             ->name('jalan-sesuai-standar.export');
         Route::get('/jalan-sesuai-standar/overview', [RoadSummaryController::class, 'overview'])
             ->name('jalan-sesuai-standar.overview');
+
+        // Parameter SOD "Ratio TBC & GR" (tabel sumber belum ditentukan)
+        Route::get('/ratio-tbc-gr', [RatioTbcGrController::class, 'index'])
+            ->name('ratio-tbc-gr.index');
+        Route::get('/ratio-tbc-gr/overview', [RatioTbcGrController::class, 'overview'])
+            ->name('ratio-tbc-gr.overview');
+        Route::get('/ratio-tbc-gr/data', [RatioTbcGrController::class, 'data'])
+            ->name('ratio-tbc-gr.data');
+        Route::get('/ratio-tbc-gr/export', [RatioTbcGrController::class, 'export'])
+            ->name('ratio-tbc-gr.export');
 
         // Parameter HSECT — "Peer Pressure" (hse_automation: bcsid.mv_berecord)
         Route::get('/peer-pressure', [BerecordController::class, 'index'])

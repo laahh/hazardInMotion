@@ -15,7 +15,7 @@
 @php
     $deptMenus = [
         'SOD' => [
-            ['label' => 'Ratio TBC & GR',                                     'icon' => 'solar:chart-square-outline'],
+            ['label' => 'Ratio TBC & GR',                                     'icon' => 'solar:chart-square-outline', 'url' => route('ohs-score-card.ratio-tbc-gr.index')],
             ['label' => 'Coverage Daily',                                          'icon' => 'solar:map-outline'],
             ['label' => 'Blindspot TBC',                             'icon' => 'solar:eye-closed-outline'],
             ['label' => 'Blindspot GR',                              'icon' => 'solar:eye-closed-outline'],
