@@ -295,7 +295,6 @@ final class RoadSummaryController extends Controller
             'top_terendah' => $this->buildTopTerendah($matrixRows),
             'pareto' => $paretoArea['pareto'],
             'per_area' => $paretoArea['per_area'],
-            'recurrence' => $this->buildRecurrence($request),
             'monthly' => $this->buildMonthlySeries($matrix, $months),
             'weekly' => $this->buildWeeklySeries($weekBuckets, $weeks),
         ]);
@@ -500,69 +499,6 @@ final class RoadSummaryController extends Controller
             'pareto_total_segmen' => $totalTidakSesuai,
             'per_area' => $top,
         ];
-    }
-
-    /**
-     * Seberapa sering sebuah segmen jalan berulang kali dinyatakan tidak sesuai.
-     *
-     * Identitas segmen = site + pit + mitra + nama_jalan + segment, dihitung
-     * atas berapa banyak minggu berbeda ia gagal. Query ini berat (memindai
-     * seluruh baris lalu mengelompokkan), jadi hasilnya di-cache per kombinasi
-     * filter.
-     *
-     * @return array<int, array<string, mixed>>
-     */
-    private function buildRecurrence(Request $request): array
-    {
-        $signature = md5(json_encode([
-            $request->input('site'), $request->input('mitra'),
-            $request->input('pit'), $request->input('year'), $request->input('month'),
-        ]));
-
-        return Cache::remember(
-            'ohs-score-card.road-summary.recurrence.' . $signature,
-            self::FILTER_CACHE_TTL,
-            function () use ($request): array {
-                $inner = $this->applyOverviewFilters($this->baseQuery(), $request)
-                    ->whereRaw('NOT ' . self::STANDARD_SQL)
-                    ->selectRaw("site, pit, mitra, nama_jalan, segment, COUNT(DISTINCT CONCAT(year,'-',week)) AS n")
-                    ->groupBy('site', 'pit', 'mitra', 'nama_jalan', 'segment');
-
-                $rows = DB::query()
-                    ->fromSub($inner, 't')
-                    ->selectRaw(
-                        "CASE WHEN n = 1 THEN 'baru' WHEN n = 2 THEN 'dua' ELSE 'banyak' END AS kategori,"
-                        . ' COUNT(*) AS segmen, SUM(n) AS temuan'
-                    )
-                    ->groupBy('kategori')
-                    ->get()
-                    ->keyBy('kategori');
-
-                $label = [
-                    'baru' => 'Temuan Baru',
-                    'dua' => 'Berulang (2x)',
-                    'banyak' => 'Berulang >2x',
-                ];
-
-                $totalTemuan = 0;
-                foreach ($label as $key => $_) {
-                    $totalTemuan += (int) ($rows[$key]->temuan ?? 0);
-                }
-
-                $out = [];
-                foreach ($label as $key => $text) {
-                    $temuan = (int) ($rows[$key]->temuan ?? 0);
-                    $out[] = [
-                        'kategori' => $text,
-                        'segmen' => (int) ($rows[$key]->segmen ?? 0),
-                        'temuan' => $temuan,
-                        'percent' => $totalTemuan > 0 ? round($temuan / $totalTemuan * 100, 1) : 0.0,
-                    ];
-                }
-
-                return $out;
-            }
-        );
     }
 
     /** Overview hanya memakai filter yang masuk akal untuk rekap. */

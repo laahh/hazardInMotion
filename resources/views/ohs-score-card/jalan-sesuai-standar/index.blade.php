@@ -425,7 +425,7 @@
     </div>
 
     <div class="row gy-4">
-      <div class="col-xxl-5">
+      <div class="col-xxl-6">
         <div class="card h-100 radius-8 border">
           <div class="card-header border-bottom bg-base py-16 px-24">
             <h6 class="text-lg fw-semibold mb-0">Tren Bulanan</h6>
@@ -437,7 +437,7 @@
         </div>
       </div>
 
-      <div class="col-xxl-4">
+      <div class="col-xxl-6">
         <div class="card h-100 radius-8 border">
           <div class="card-header border-bottom bg-base py-16 px-24">
             <h6 class="text-lg fw-semibold mb-0">Tren Mingguan</h6>
@@ -449,17 +449,6 @@
         </div>
       </div>
 
-      <div class="col-xxl-3">
-        <div class="card h-100 radius-8 border">
-          <div class="card-header border-bottom bg-base py-16 px-24">
-            <h6 class="text-lg fw-semibold mb-0">Temuan Berulang</h6>
-            <span class="text-sm text-secondary-light">Dihitung dari jumlah minggu berbeda</span>
-          </div>
-          <div class="card-body p-24">
-            <div id="ov-chart-recurrence"></div>
-          </div>
-        </div>
-      </div>
     </div>
 
   </div>
@@ -638,7 +627,7 @@
 
     var filterEls = Array.prototype.slice.call(document.querySelectorAll('.ov-filter'));
     var statusEl = document.querySelector('#ov-status');
-    var charts = { monthly: null, weekly: null, pareto: null, area: null, recurrence: null };
+    var charts = { monthly: null, weekly: null, pareto: null, area: null };
     var loaded = false;
 
     // 'persen' atau 'nilai'. Payload terakhir disimpan supaya mengganti mode
@@ -1057,7 +1046,7 @@
         charts.pareto.render();
     }
 
-    /** Donut sederhana dipakai bersama oleh panel Area dan Temuan Berulang. */
+    /** Donut untuk panel Sebaran per Area. */
     function renderDonut(key, elId, labels, values, colors, unit) {
         var el = document.querySelector(elId);
         if (!el || typeof ApexCharts === 'undefined') { return; }
@@ -1135,13 +1124,6 @@
                         area.map(function (a) { return a.area; }),
                         area.map(function (a) { return a.tidak_sesuai; }),
                         null, 'Segmen');
-                });
-                safe('recurrence', function () {
-                    var rec = json.recurrence || [];
-                    renderDonut('recurrence', '#ov-chart-recurrence',
-                        rec.map(function (r) { return r.kategori; }),
-                        rec.map(function (r) { return r.temuan; }),
-                        ['#487FFF', '#F2C230', '#E0484A'], 'Temuan');
                 });
                 safe('monthly', function () { renderChart('monthly', '#ov-chart-monthly', json.monthly, 'line'); });
                 safe('weekly', function () { renderChart('weekly', '#ov-chart-weekly', json.weekly, 'line'); });
