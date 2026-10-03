@@ -97,7 +97,7 @@
   <div>
     <h6 class="fw-semibold mb-0">Ratio TBC &amp; GR</h6>
     <div class="text-secondary-light text-sm mt-4">
-      Pemenuhan pelaporan To Be Concerned Hazard dan Golden Rules
+      Rasio pengawas yang membuat laporan TBC terhadap pengawas yang tercatat RFID
     </div>
   </div>
   <ul class="d-flex align-items-center gap-2">
@@ -134,19 +134,6 @@
 <div class="tab-content">
   <div class="tab-pane fade show active" id="jss-pane-overview" role="tabpanel">
 
-    @if ($isPlaceholder)
-      <div class="alert alert-warning radius-8 d-flex align-items-start gap-2 mb-24" role="status">
-        <iconify-icon icon="solar:danger-triangle-outline" class="text-xl flex-shrink-0 mt-1"></iconify-icon>
-        <div>
-          <strong>Data contoh.</strong>
-          <div class="text-sm mt-1">
-            Tabel sumber untuk parameter ini belum ditentukan, jadi seluruh angka di halaman
-            ini hanya pengisi agar tata letaknya bisa dinilai. Jangan dipakai sebagai capaian.
-          </div>
-        </div>
-      </div>
-    @endif
-
     {{-- Filter --}}
     <div class="card radius-8 border mb-24">
       <div class="card-body p-24">
@@ -170,15 +157,6 @@
             </select>
           </div>
           <div class="col-xxl-3 col-md-4 col-sm-6">
-            <label class="form-label text-sm fw-medium mb-8" for="ov-pit">Area</label>
-            <select class="form-select form-select-sm radius-8 ov-filter" id="ov-pit" data-column="area">
-              <option value="">Semua Area</option>
-              @foreach ($filterOptions['area'] ?? [] as $option)
-                <option value="{{ $option }}">{{ $option }}</option>
-              @endforeach
-            </select>
-          </div>
-          <div class="col-xxl-2 col-md-4 col-sm-6">
             <label class="form-label text-sm fw-medium mb-8" for="ov-month">Bulan</label>
             <select class="form-select form-select-sm radius-8 ov-filter" id="ov-month" data-column="month">
               <option value="">Semua Bulan</option>
@@ -229,7 +207,7 @@
             <div>
               <h6 class="text-lg fw-semibold mb-0">Pemenuhan per Bulan</h6>
               <span class="text-sm text-secondary-light" id="ov-matrix-subtitle">
-                Persentase pelaporan terpenuhi tiap perusahaan di tiap site
+                Persentase pengawas yang melapor TBC, tiap perusahaan di tiap site
               </span>
             </div>
             <ul class="nav nav-pills style-three pill-tab border input-form-light p-0 radius-8 bg-neutral-50 flex-nowrap"
@@ -283,8 +261,8 @@
       <div class="col-xxl-7">
         <div class="card h-100 radius-8 border">
           <div class="card-header border-bottom bg-base py-16 px-24">
-            <h6 class="text-lg fw-semibold mb-0">Komposisi Pelaporan</h6>
-            <span class="text-sm text-secondary-light">TBC, GR, dan kewajiban yang belum dilaporkan</span>
+            <h6 class="text-lg fw-semibold mb-0">Rasio per Jabatan Fungsional</h6>
+            <span class="text-sm text-secondary-light">Jumlah pengawas yang belum melapor, per jenjang jabatan</span>
           </div>
           <div class="card-body p-24">
             <div id="ov-chart-pareto"></div>
@@ -295,7 +273,7 @@
       <div class="col-xxl-5">
         <div class="card h-100 radius-8 border">
           <div class="card-header border-bottom bg-base py-16 px-24">
-            <h6 class="text-lg fw-semibold mb-0">Belum Dilaporkan per Area</h6>
+            <h6 class="text-lg fw-semibold mb-0">Belum Melapor per Perusahaan</h6>
             <span class="text-sm text-secondary-light">Diurutkan dari yang terbanyak</span>
           </div>
           <div class="card-body p-24">
@@ -306,26 +284,14 @@
     </div>
 
     <div class="row gy-4">
-      <div class="col-xxl-6">
+      <div class="col-12">
         <div class="card h-100 radius-8 border">
           <div class="card-header border-bottom bg-base py-16 px-24">
             <h6 class="text-lg fw-semibold mb-0">Tren Bulanan</h6>
-            <span class="text-sm text-secondary-light">Persentase pelaporan terpenuhi per perusahaan</span>
+            <span class="text-sm text-secondary-light">Persentase pengawas yang melapor TBC per perusahaan</span>
           </div>
           <div class="card-body p-24">
             <div id="ov-chart-monthly"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-xxl-6">
-        <div class="card h-100 radius-8 border">
-          <div class="card-header border-bottom bg-base py-16 px-24">
-            <h6 class="text-lg fw-semibold mb-0">Tren Mingguan</h6>
-            <span class="text-sm text-secondary-light">Persentase pelaporan terpenuhi per perusahaan</span>
-          </div>
-          <div class="card-body p-24">
-            <div id="ov-chart-weekly"></div>
           </div>
         </div>
       </div>
@@ -340,12 +306,15 @@
       <div class="card-header border-bottom bg-base py-16 px-24 d-flex align-items-center flex-wrap gap-3 justify-content-between">
         <div>
           <h6 class="text-lg fw-semibold mb-0">Data Pelaporan</h6>
-          <span class="text-sm text-secondary-light">Rekap mingguan per site, perusahaan, dan area</span>
+          <span class="text-sm text-secondary-light">Satu baris per pengawas per bulan, dari detail_lead_ratio_pelapor_tbc</span>
         </div>
         <div class="d-flex align-items-center gap-2">
           <span class="text-sm text-secondary-light" id="rs-hint"></span>
-          <button type="button" class="btn btn-sm btn-success-600 radius-8" id="rs-export-csv">
-            <iconify-icon icon="mdi:file-delimited-outline" class="icon"></iconify-icon> Unduh CSV
+          <button type="button" class="btn btn-sm btn-success-600 radius-8" id="rs-export-xlsx">
+            <iconify-icon icon="mdi:microsoft-excel" class="icon"></iconify-icon> Unduh Excel
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-success radius-8" id="rs-export-csv">
+            <iconify-icon icon="mdi:file-delimited-outline" class="icon"></iconify-icon> CSV
           </button>
         </div>
       </div>
@@ -370,11 +339,11 @@
               @endforeach
             </select>
           </div>
-          <div class="col-xxl-3 col-md-4 col-sm-6">
-            <label class="form-label text-sm fw-medium mb-8" for="rs-area">Area</label>
-            <select class="form-select form-select-sm radius-8 rs-filter" id="rs-area" data-column="area">
-              <option value="">Semua Area</option>
-              @foreach ($filterOptions['area'] ?? [] as $option)
+          <div class="col-xxl-2 col-md-4 col-sm-6">
+            <label class="form-label text-sm fw-medium mb-8" for="rs-jabatan">Jabatan</label>
+            <select class="form-select form-select-sm radius-8 rs-filter" id="rs-jabatan" data-column="jabatan">
+              <option value="">Semua Jabatan</option>
+              @foreach ($filterOptions['jabatan'] ?? [] as $option)
                 <option value="{{ $option }}">{{ $option }}</option>
               @endforeach
             </select>
@@ -389,26 +358,30 @@
             </select>
           </div>
           <div class="col-xxl-1 col-md-4 col-sm-6">
+            <label class="form-label text-sm fw-medium mb-8" for="rs-status">Status</label>
+            <select class="form-select form-select-sm radius-8 rs-filter" id="rs-status" data-column="status">
+              <option value="">Semua</option>
+              <option value="melapor">Melapor</option>
+              <option value="belum">Belum</option>
+            </select>
+          </div>
+          <div class="col-xxl-1 col-md-4 col-sm-6">
             <button type="button" class="btn btn-sm btn-outline-secondary radius-8 w-100" id="rs-reset">Reset</button>
           </div>
         </div>
-
         <div class="table-responsive">
           <table class="table bordered-table sm-table mb-0" id="ratioTable">
             <thead>
               <tr>
                 <th>Site</th>
                 <th>Perusahaan</th>
-                <th>Area</th>
-                <th>Tahun</th>
-                <th>Minggu</th>
+                <th>SID</th>
+                <th>Nama Pelapor</th>
+                <th>Jabatan</th>
                 <th>Bulan</th>
-                <th>Wajib Lapor</th>
-                <th>TBC</th>
-                <th>GR</th>
-                <th>Terpenuhi</th>
-                <th>Persentase</th>
-                <th>Nilai</th>
+                <th>RFID</th>
+                <th>Lapor TBC</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -434,7 +407,7 @@
 
     var filterEls = Array.prototype.slice.call(document.querySelectorAll('.ov-filter'));
     var statusEl = document.querySelector('#ov-status');
-    var charts = { monthly: null, weekly: null, pareto: null, area: null };
+    var charts = { monthly: null, pareto: null, area: null };
     var loaded = false;
 
     // 'persen' atau 'nilai'. Payload terakhir disimpan supaya mengganti mode
@@ -517,22 +490,22 @@
         var cards = [
             {
                 grad: 'bg-gradient-end-1', icon: 'solar:ruler-outline', dot: 'bg-primary-600',
-                label: 'Total Wajib Lapor', value: fmtNum(k.total),
+                label: 'Pengawas (RFID)', value: fmtNum(k.total),
                 foot: k.site_count + ' site, ' + k.mitra_count + ' perusahaan'
             },
             {
                 grad: 'bg-gradient-end-2', icon: 'solar:check-circle-outline', dot: 'bg-success-main',
-                label: 'Terpenuhi', value: fmtNum(k.standar),
-                foot: fmtPct(k.standar_pct) + ' dari total kewajiban'
+                label: 'Melapor TBC', value: fmtNum(k.standar),
+                foot: fmtPct(k.standar_pct) + ' dari total pengawas'
             },
             {
                 grad: 'bg-gradient-end-5', icon: 'solar:danger-triangle-outline', dot: 'bg-danger-main',
-                label: 'Belum Dilaporkan', value: fmtNum(k.tidak_sesuai),
-                foot: fmtPct(k.tidak_sesuai_pct) + ' dari total kewajiban'
+                label: 'Belum Melapor', value: fmtNum(k.tidak_sesuai),
+                foot: fmtPct(k.tidak_sesuai_pct) + ' dari total pengawas'
             },
             {
                 grad: 'bg-gradient-end-3', icon: 'solar:medal-star-outline', dot: 'bg-yellow',
-                label: 'Rasio Pemenuhan', value: fmtPct(k.standar_pct),
+                label: 'Rasio Pelaporan', value: fmtPct(k.standar_pct),
                 foot: '<span class="' + nilaiBadgeClass(k.nilai) + ' px-1 rounded-2 fw-medium text-sm">Nilai '
                     + k.nilai + '</span> '
                     + (k.memenuhi_target ? 'Memenuhi' : 'Belum memenuhi') + ' target ' + k.target + '%'
@@ -608,7 +581,7 @@
                 +   '<span class="ov-track__target" style="left:' + s.target + '%"></span>'
                 + '</div>'
                 + '<span class="text-xs text-secondary-light">' + fmtNum(s.tidak_sesuai)
-                +   ' belum dilaporkan, target ' + s.target + '%</span>'
+                +   ' pengawas belum melapor, target ' + s.target + '%</span>'
                 + '</div>';
         }).join('');
     }
@@ -659,7 +632,7 @@
 
         document.querySelector('#ov-matrix-subtitle').textContent = matrixMode === 'nilai'
             ? 'Nilai 1–4 dari persentase segmen standar tiap perusahaan di tiap site'
-            : 'Persentase pelaporan terpenuhi tiap perusahaan di tiap site';
+            : 'Persentase pengawas yang melapor TBC, tiap perusahaan di tiap site';
     }
 
     function renderMatrix(months, rows) {
@@ -816,8 +789,8 @@
 
         charts.pareto = new ApexCharts(el, {
             series: [
-                { name: 'Jumlah Segmen', type: 'column', data: rows.map(function (r) { return r.jumlah; }) },
-                { name: 'Kumulatif', type: 'line', data: rows.map(function (r) { return r.kumulatif; }) }
+                { name: 'Belum Melapor', type: 'column', data: rows.map(function (r) { return r.jumlah; }) },
+                { name: 'Rasio Pelaporan', type: 'line', data: rows.map(function (r) { return r.rasio; }) }
             ],
             chart: { type: 'line', height: 300, toolbar: { show: false }, zoom: { enabled: false } },
             colors: ['#E0484A', '#16A34A'],
@@ -833,10 +806,10 @@
             },
             xaxis: { categories: rows.map(function (r) { return r.label; }), labels: { style: { fontSize: '11px' } } },
             yaxis: [
-                { title: { text: 'Jumlah Segmen', style: { fontSize: '11px' } },
+                { title: { text: 'Pengawas', style: { fontSize: '11px' } },
                   labels: { formatter: function (v) { return fmtNum(Math.round(v)); } } },
                 { opposite: true, min: 0, max: 100,
-                  title: { text: 'Kumulatif', style: { fontSize: '11px' } },
+                  title: { text: 'Rasio', style: { fontSize: '11px' } },
                   labels: { formatter: function (v) { return Math.round(v) + '%'; } } }
             ],
             legend: { position: 'top', horizontalAlign: 'left', fontSize: '12px' },
@@ -845,7 +818,7 @@
                 shared: true, intersect: false,
                 y: {
                     formatter: function (v, opts) {
-                        return opts.seriesIndex === 1 ? Number(v).toFixed(1) + '%' : fmtNum(v) + ' laporan';
+                        return opts.seriesIndex === 1 ? Number(v).toFixed(2) + '%' : fmtNum(v) + ' pengawas';
                     }
                 }
             }
@@ -933,9 +906,8 @@
                         null, 'Segmen');
                 });
                 safe('monthly', function () { renderChart('monthly', '#ov-chart-monthly', json.monthly, 'line'); });
-                safe('weekly', function () { renderChart('weekly', '#ov-chart-weekly', json.weekly, 'line'); });
 
-                statusEl.textContent = fmtNum(json.kpi.total) + ' kewajiban lapor · '
+                statusEl.textContent = fmtNum(json.kpi.total) + ' pengawas · '
                     + (json.matrix || []).length + ' kombinasi site/perusahaan';
                 loaded = true;
             })
@@ -1024,18 +996,18 @@
         return out;
     }
 
-    var nilaiClass = {
-        1: 'bg-danger-focus text-danger-main',
-        2: 'bg-warning-focus text-warning-main',
-        3: 'bg-info-focus text-info-main',
-        4: 'bg-success-focus text-success-main'
-    };
+    function escapeHtml(value) {
+        return String(value === null || value === undefined ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
 
     var table = new DataTable(tableEl, {
         processing: true,
         serverSide: true,
         searching: true,
-        ordering: false,
+        ordering: true,
+        order: [[0, 'asc']],
         pageLength: 25,
         lengthMenu: [25, 50, 100, 200],
         autoWidth: false,
@@ -1066,29 +1038,35 @@
         columns: [
             { data: 'site' },
             { data: 'mitra' },
-            { data: 'area' },
-            { data: 'year' },
-            { data: 'week', className: 'text-center' },
-            { data: 'bulan' },
-            { data: 'total', className: 'text-center' },
-            { data: 'tbc', className: 'text-center' },
-            { data: 'gr', className: 'text-center' },
-            { data: 'memenuhi', className: 'text-center' },
+            { data: 'sid' },
             {
-                data: 'persen', className: 'text-center',
-                render: function (d, type) {
+                data: 'nama',
+                render: function (d, type, row) {
                     if (type !== 'display') { return d; }
-                    return Number(d).toLocaleString('id-ID', {
-                        minimumFractionDigits: 2, maximumFractionDigits: 2
-                    }) + '%';
+                    var sub = row.jabatan_struktural || '';
+                    var off = row.offsite
+                        ? ' <span class="bg-neutral-200 text-secondary-light px-8 py-2 rounded-pill text-xs">'
+                            + escapeHtml(row.offsite) + '</span>'
+                        : '';
+                    return '<span class="fw-semibold">' + escapeHtml(d || '-') + '</span>' + off
+                        + (sub ? '<span class="d-block text-xs text-secondary-light">'
+                            + escapeHtml(sub) + '</span>' : '');
                 }
             },
+            { data: 'jabatan' },
+            { data: 'bulan', orderable: false },
+            { data: 'rfid', className: 'text-center' },
+            { data: 'tbc', className: 'text-center' },
             {
-                data: 'nilai', className: 'text-center',
+                data: 'status',
+                className: 'text-center',
+                orderable: false,
                 render: function (d, type) {
                     if (type !== 'display') { return d; }
-                    return '<span class="' + (nilaiClass[d] || 'bg-neutral-200 text-secondary-light')
-                        + ' px-8 py-2 rounded-pill fw-medium text-xs">' + d + '</span>';
+                    var cls = d === 'Melapor'
+                        ? 'bg-success-focus text-success-main'
+                        : 'bg-danger-focus text-danger-main';
+                    return '<span class="' + cls + ' px-8 py-2 rounded-pill fw-medium text-xs">' + d + '</span>';
                 }
             }
         ],
@@ -1114,12 +1092,16 @@
         table.ajax.reload();
     });
 
-    document.querySelector('#rs-export-csv').addEventListener('click', function () {
+    function unduh(format) {
         var params = new URLSearchParams(currentFilters());
         var search = table.search();
         if (search) { params.set('search', search); }
-        window.location.href = exportUrl + (params.toString() ? '?' + params.toString() : '');
-    });
+        params.set('format', format);
+        window.location.href = exportUrl + '?' + params.toString();
+    }
+
+    document.querySelector('#rs-export-xlsx').addEventListener('click', function () { unduh('xlsx'); });
+    document.querySelector('#rs-export-csv').addEventListener('click', function () { unduh('csv'); });
 
     // Tabel dibangun saat pane-nya masih tersembunyi, jadi lebar kolom
     // dihitung ulang begitu tab Data pertama kali dibuka.
