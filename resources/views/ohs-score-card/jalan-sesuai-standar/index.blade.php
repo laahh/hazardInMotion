@@ -221,18 +221,6 @@
   .ov-n4 { background: #16A34A; }
   .ov-matrix .ov-cell { font-variant-numeric: tabular-nums; }
 
-  /* ---- Kolom TARGET / GAP di matriks ---- */
-  .ov-matrix .ov-target {
-    background: #F8FAFC; color: #64748B !important;
-    font-weight: 700; border-radius: 8px;
-  }
-  .ov-matrix .ov-gap {
-    font-weight: 800; border-radius: 8px;
-    font-variant-numeric: tabular-nums;
-  }
-  .ov-matrix .ov-gap.is-ok  { background: #ECFDF5; color: #166534 !important; }
-  .ov-matrix .ov-gap.is-bad { background: #FEF2F2; color: #991B1B !important; }
-
 </style>
 @endsection
 
@@ -678,14 +666,6 @@
         }) + '%';
     }
 
-    function fmtPts(value) {
-        if (value === null || value === undefined) { return '–'; }
-        var n = Number(value);
-        return (n > 0 ? '+' : '') + n.toLocaleString('id-ID', {
-            minimumFractionDigits: 1, maximumFractionDigits: 1
-        }) + ' pts';
-    }
-
     // Gradasi warna untuk mode Persentase: 5 tingkat, lebih halus daripada
     // band Nilai sehingga perbedaan antar bulan lebih mudah terlihat.
     function tierClass(pct) {
@@ -738,11 +718,6 @@
 
     // ---- Kartu ringkasan utama --------------------------------------------
     function renderKpi(k) {
-        var deltaText = k.delta_pts === null
-            ? '<span class="text-secondary-light">Belum ada bulan pembanding</span>'
-            : 'Berubah <span class="' + (k.delta_pts >= 0 ? 'bg-success-focus text-success-main' : 'bg-danger-focus text-danger-main')
-                + ' px-1 rounded-2 fw-medium text-sm">' + fmtPts(k.delta_pts) + '</span> dari bulan sebelumnya';
-
         var cards = [
             {
                 grad: 'bg-gradient-end-1', icon: 'solar:ruler-outline', dot: 'bg-primary-600',
@@ -751,7 +726,8 @@
             },
             {
                 grad: 'bg-gradient-end-2', icon: 'solar:check-circle-outline', dot: 'bg-success-main',
-                label: 'Sesuai Standar', value: fmtNum(k.standar), foot: deltaText
+                label: 'Sesuai Standar', value: fmtNum(k.standar),
+                foot: fmtPct(k.standar_pct) + ' dari total segmen'
             },
             {
                 grad: 'bg-gradient-end-5', icon: 'solar:danger-triangle-outline', dot: 'bg-danger-main',
@@ -762,7 +738,8 @@
                 grad: 'bg-gradient-end-3', icon: 'solar:medal-star-outline', dot: 'bg-yellow',
                 label: 'Capaian Keseluruhan', value: fmtPct(k.standar_pct),
                 foot: '<span class="' + nilaiBadgeClass(k.nilai) + ' px-1 rounded-2 fw-medium text-sm">Nilai '
-                    + k.nilai + '</span> ' + fmtPts(k.gap_pts) + ' terhadap target ' + k.target + '%'
+                    + k.nilai + '</span> '
+                    + (k.memenuhi_target ? 'Memenuhi' : 'Belum memenuhi') + ' target ' + k.target + '%'
             }
         ];
 
@@ -834,8 +811,8 @@
                 +     ' aria-valuemin="0" aria-valuemax="100"></div>'
                 +   '<span class="ov-track__target" style="left:' + s.target + '%"></span>'
                 + '</div>'
-                + '<span class="text-xs text-secondary-light">' + fmtPts(s.gap_pts) + ' terhadap target, '
-                +   fmtNum(s.tidak_sesuai) + ' segmen tidak sesuai</span>'
+                + '<span class="text-xs text-secondary-light">' + fmtNum(s.tidak_sesuai)
+                +   ' segmen tidak sesuai, target ' + s.target + '%</span>'
                 + '</div>';
         }).join('');
     }
@@ -898,11 +875,10 @@
         months.forEach(function (m, i) {
             head += '<th class="' + (i === months.length - 1 ? 'ov-th-last' : '') + '">' + escapeHtml(m.label) + '</th>';
         });
-        head += '<th>TARGET</th><th>GAP</th>';
         thead.innerHTML = head + '</tr>';
 
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="' + (months.length + 6) + '" class="text-center py-24 text-secondary-light">'
+            tbody.innerHTML = '<tr><td colspan="' + (months.length + 4) + '" class="text-center py-24 text-secondary-light">'
                 + 'Tidak ada data untuk filter ini.</td></tr>';
             return;
         }
@@ -962,9 +938,6 @@
                     + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
                     + '</td>';
             });
-
-            html += '<td class="ov-target">' + row.target + '%</td>'
-                + '<td class="ov-gap ' + (row.gap_pts >= 0 ? 'is-ok' : 'is-bad') + '">' + fmtPts(row.gap_pts) + '</td>';
 
             return html + '</tr>';
         }).join('');

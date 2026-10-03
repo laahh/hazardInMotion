@@ -313,41 +313,22 @@ final class RoadSummaryController extends Controller
     {
         $total = 0;
         $standar = 0;
-        $perMonth = [];
 
         foreach ($matrix as $entry) {
             foreach ($months as $month) {
-                $t = $entry['bulan'][$month]['total'] ?? 0;
-                $s = $entry['bulan'][$month]['standar'] ?? 0;
-                $total += $t;
-                $standar += $s;
-                $perMonth[$month]['total'] = ($perMonth[$month]['total'] ?? 0) + $t;
-                $perMonth[$month]['standar'] = ($perMonth[$month]['standar'] ?? 0) + $s;
+                $total += $entry['bulan'][$month]['total'] ?? 0;
+                $standar += $entry['bulan'][$month]['standar'] ?? 0;
             }
         }
 
         $pct = $total > 0 ? round($standar / $total * 100, 2) : 0.0;
         [, $nilai, $band] = $this->scoreBandFor($pct);
 
-        // Selisih poin terhadap bulan sebelumnya — hanya bila ada >= 2 bulan.
-        $deltaPts = null;
         $lastLabel = null;
 
         if (count($months) >= 1) {
             $lastMonth = $months[count($months) - 1];
             $lastLabel = self::MONTH_LABELS[$lastMonth] ?? '-';
-        }
-
-        if (count($months) >= 2) {
-            $last = $perMonth[$months[count($months) - 1]] ?? null;
-            $prev = $perMonth[$months[count($months) - 2]] ?? null;
-
-            if ($last && $prev && $last['total'] > 0 && $prev['total'] > 0) {
-                $deltaPts = round(
-                    ($last['standar'] / $last['total'] * 100) - ($prev['standar'] / $prev['total'] * 100),
-                    1
-                );
-            }
         }
 
         return [
@@ -358,9 +339,7 @@ final class RoadSummaryController extends Controller
             'tidak_sesuai_pct' => $total > 0 ? round(($total - $standar) / $total * 100, 2) : 0.0,
             'nilai' => $nilai,
             'nilai_band' => $band,
-            'delta_pts' => $deltaPts,
             'target' => self::TARGET_PERCENT,
-            'gap_pts' => round($pct - self::TARGET_PERCENT, 1),
             'memenuhi_target' => $pct >= self::TARGET_PERCENT,
             'site_count' => $siteCount,
             'mitra_count' => $mitraCount,
@@ -399,7 +378,6 @@ final class RoadSummaryController extends Controller
                 'site' => (string) $site,
                 'percent' => $pct,
                 'target' => self::TARGET_PERCENT,
-                'gap_pts' => round($pct - self::TARGET_PERCENT, 1),
                 'nilai' => $nilai,
                 'total' => $agg['total'],
                 'tidak_sesuai' => $agg['total'] - $agg['standar'],
@@ -669,8 +647,6 @@ final class RoadSummaryController extends Controller
                 'nilai' => $nilai,
                 'nilai_band' => $band,
                 'trend' => $trend,
-                'target' => self::TARGET_PERCENT,
-                'gap_pts' => round($avg - self::TARGET_PERCENT, 1),
             ];
         }
 
