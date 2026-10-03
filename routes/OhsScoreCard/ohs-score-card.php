@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\OhsScoreCard\BerecordController;
+use App\Http\Controllers\OhsScoreCard\BlindspotTbcController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
 use App\Http\Controllers\OhsScoreCard\PelaksanaanEdukasiController;
 use App\Http\Controllers\OhsScoreCard\RatioTbcGrController;
@@ -36,15 +37,33 @@ Route::middleware('evaluasi-well.access')
         Route::get('/jalan-sesuai-standar/overview', [RoadSummaryController::class, 'overview'])
             ->name('jalan-sesuai-standar.overview');
 
-        // Parameter SOD "Ratio TBC & GR" (tabel sumber belum ditentukan)
+        // Parameter SOD "Ratio TBC & GR" — minecon & subcon
         Route::get('/ratio-tbc-gr', [RatioTbcGrController::class, 'index'])
             ->name('ratio-tbc-gr.index');
-        Route::get('/ratio-tbc-gr/overview', [RatioTbcGrController::class, 'overview'])
+        // {dataset}: minecon (lead_ratio_pelapor_tbc) atau subcon
+        // (lead_subcont_ratio_pelapor_tbc); nama lain ditolak di sini.
+        Route::get('/ratio-tbc-gr/{dataset}/overview', [RatioTbcGrController::class, 'overview'])
+            ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('ratio-tbc-gr.overview');
-        Route::get('/ratio-tbc-gr/data', [RatioTbcGrController::class, 'data'])
+        Route::get('/ratio-tbc-gr/{dataset}/data', [RatioTbcGrController::class, 'data'])
+            ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('ratio-tbc-gr.data');
-        Route::get('/ratio-tbc-gr/export', [RatioTbcGrController::class, 'export'])
+        Route::get('/ratio-tbc-gr/{dataset}/export', [RatioTbcGrController::class, 'export'])
+            ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('ratio-tbc-gr.export');
+
+        // Parameter SOD "Blindspot TBC" — minecon & subcon
+        Route::get('/blindspot-tbc', [BlindspotTbcController::class, 'index'])
+            ->name('blindspot-tbc.index');
+        Route::get('/blindspot-tbc/{dataset}/overview', [BlindspotTbcController::class, 'overview'])
+            ->whereIn('dataset', ['minecon', 'subcon'])
+            ->name('blindspot-tbc.overview');
+        Route::get('/blindspot-tbc/{dataset}/data', [BlindspotTbcController::class, 'data'])
+            ->whereIn('dataset', ['minecon', 'subcon'])
+            ->name('blindspot-tbc.data');
+        Route::get('/blindspot-tbc/{dataset}/export', [BlindspotTbcController::class, 'export'])
+            ->whereIn('dataset', ['minecon', 'subcon'])
+            ->name('blindspot-tbc.export');
 
         // Parameter HSECT — "Peer Pressure" (hse_automation: bcsid.mv_berecord)
         Route::get('/peer-pressure', [BerecordController::class, 'index'])

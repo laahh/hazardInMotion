@@ -14,32 +14,55 @@ use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Parameter SOD "Ratio TBC & GR".
+ * Parameter SOD "Ratio TBC & GR", untuk dua populasi pengawas:
  *
- * Dua tabel dipakai sesuai peruntukannya:
- *   - lead_ratio_pelapor_tbc         -> tab Ringkasan (105 baris agregat)
- *   - detail_lead_ratio_pelapor_tbc  -> tab Data (15.767 baris per pengawas)
+ *   minecon -> lead_ratio_pelapor_tbc          + detail_lead_ratio_pelapor_tbc
+ *   subcon  -> lead_subcont_ratio_pelapor_tbc  + detail_lead_subcont_ratio_pelapor_tbc
  *
- * Rasionya = countd_pengawas_tbc / countd_pengawas_rfid: dari sekian pengawas
- * yang tercatat hadir lewat RFID, berapa yang membuat laporan TBC. Kolom
- * pct_ratio_pelapor_tbc di tabel sudah berisi hasil bagi itu dan terbukti
- * cocok, tetapi rekap di sini tetap menjumlahkan pembilang & penyebut lalu
- * membaginya sendiri, karena merata-ratakan persentase antar baris akan
- * memberi bobot sama pada perusahaan berisi 2 pengawas dan 150 pengawas.
+ * Rasionya = pengawas yang membuat laporan TBC dibagi pengawas yang tercatat
+ * hadir lewat RFID. Rekap di sini selalu menjumlahkan pembilang & penyebut
+ * lalu membaginya sendiri, bukan merata-ratakan persentase antar baris, supaya
+ * perusahaan berisi 2 pengawas tidak berbobot sama dengan yang berisi 150.
  *
- * CATATAN DATA: kedua tabel tidak rekonsiliasi persis. Total ringkasan
- * rfid 15.398 / tbc 13.410, sedangkan detail 15.389 / 13.480 (13.412 bila
- * baris OFFSITE dikecualikan; 378 baris OFFSITE semuanya ber-rfid 0). 73 dari
- * 105 kombinasi site-perusahaan-bulan cocok, 32 berbeda tipis. Karena itu
- * angka tab Ringkasan dan tab Data bisa berselisih sedikit, dan itu bukan bug
- * di halaman ini melainkan selisih di sumbernya.
+ * BARIS OFFSITE. Di tabel detail, baris ber-status_offsite punya
+ * countd_pengawas_rfid = 0 tetapi sebagian ber-countd_pengawas_tbc = 1: orang
+ * itu memang melapor, hanya saja tidak masuk basis RFID. Laporannya karena itu
+ * dikeluarkan dari pembilang (lihat SQL_TBC). Tanpa aturan ini rekap detail
+ * meleset dari tabel ringkasan; dengan aturan ini kecocokan minecon naik dari
+ * 73 ke 90 dari 105 kombinasi, dan subcon dari 20 ke 52 dari 54.
+ *
+ * SELISIH YANG TERSISA adalah beda waktu ambil data antar tabel, bukan bug di
+ * halaman ini: bulan Oktober dan site HO hanya ada di ringkasan subcon,
+ * sedangkan tabel detailnya baru sampai September.
  */
 final class RatioTbcGrController extends Controller
 {
     use ServesDataTable;
 
-    private const SUMMARY_TABLE = 'lead_ratio_pelapor_tbc';
-    private const DETAIL_TABLE = 'detail_lead_ratio_pelapor_tbc';
+    /**
+     * Dua populasi dengan bentuk sumber yang berbeda.
+     *
+     * Ringkasan minecon menyimpan site x perusahaan x bulan lengkap dengan
+     * cacah pengawas, sedangkan ringkasan subcon hanya site x bulan dan hanya
+     * berisi persentase. Karena itu matriks subcon dibaca langsung sebagai
+     * persen, dan panel yang butuh cacah pengawas mengambil dari tabel detail.
+     */
+    private const DATASETS = [
+        'minecon' => [
+            'label' => 'Minecon',
+            'summary' => 'lead_ratio_pelapor_tbc',
+            'detail' => 'detail_lead_ratio_pelapor_tbc',
+            'summary_has_counts' => true,
+        ],
+        'subcon' => [
+            'label' => 'Subcon',
+            'summary' => 'lead_subcont_ratio_pelapor_tbc',
+            'detail' => 'detail_lead_subcont_ratio_pelapor_tbc',
+            'summary_has_counts' => false,
+        ],
+    ];
+
+    private const DEFAULT_DATASET = 'minecon';
 
     /** Nama kolom di sumber panjang-panjang; dipendekkan lewat alias. */
     private const COL_SITE = 'site_dedicated_pelapor_all_karyawan';
@@ -47,11 +70,16 @@ final class RatioTbcGrController extends Controller
     private const COL_BULAN = 'month_of_date_time';
     private const COL_RFID = 'countd_pengawas_rfid';
     private const COL_TBC = 'countd_pengawas_tbc';
+    private const COL_PCT = 'pct_ratio_pelapor_tbc';
     private const COL_SID = 'sid_pelapor_all_karyawan';
     private const COL_NAMA = 'pelapor_all_karyawan';
     private const COL_JAB_FUNGSIONAL = 'jabatan_fungsional_pelapor_all_karyawan';
     private const COL_JAB_STRUKTURAL = 'jabatan_struktural_pelapor_all_karyawan';
     private const COL_OFFSITE = 'status_offsite';
+
+    /** Penyebut & pembilang rasio pada tabel detail. Lihat catatan OFFSITE. */
+    private const SQL_RFID = 'SUM(' . self::COL_RFID . ')';
+    private const SQL_TBC = 'SUM(CASE WHEN ' . self::COL_RFID . ' > 0 THEN ' . self::COL_TBC . ' ELSE 0 END)';
 
     private const TARGET_PERCENT = 90.0;
 
@@ -62,6 +90,17 @@ final class RatioTbcGrController extends Controller
         'July' => [7, 'Juli'], 'August' => [8, 'Agustus'], 'September' => [9, 'September'],
         'October' => [10, 'Oktober'], 'November' => [11, 'November'], 'December' => [12, 'Desember'],
     ];
+
+    /**
+     * Bulan yang tidak ikut dihitung di mana pun.
+     *
+     * Oktober masih berjalan saat data ini diambil, jadi angkanya jauh di
+     * bawah bulan penuh (minecon 53,70% berbanding 95,18% di September) dan
+     * akan menyeret turun rata-rata, matriks, serta Nilai. Dikecualikan di
+     * applyDimensionFilters supaya berlaku untuk tabel ringkasan maupun
+     * detail, dan di monthOptions supaya tidak muncul di dropdown.
+     */
+    private const EXCLUDED_MONTHS = ['October'];
 
     private const SCORE_BANDS = [
         [98.0, 4, '98% - 100%'],
@@ -95,23 +134,54 @@ final class RatioTbcGrController extends Controller
 
     public function index(): View
     {
-        return view('ohs-score-card.ratio-tbc-gr.index', [
-            'filterOptions' => [
-                'site' => $this->distinctValues(self::SUMMARY_TABLE, self::COL_SITE),
-                'mitra' => $this->distinctValues(self::SUMMARY_TABLE, self::COL_PERUSAHAAN),
-                'jabatan' => $this->distinctValues(self::DETAIL_TABLE, self::COL_JAB_FUNGSIONAL),
-            ],
-            'monthOptions' => $this->monthOptions(),
-        ]);
+        $datasets = [];
+
+        foreach (array_keys(self::DATASETS) as $slug) {
+            $detail = $this->table($slug, 'detail');
+
+            $datasets[$slug] = [
+                'slug' => $slug,
+                'label' => self::DATASETS[$slug]['label'],
+                'summary_table' => self::DATASETS[$slug]['summary'],
+                'detail_table' => $detail,
+                'summary_has_mitra' => self::DATASETS[$slug]['summary_has_counts'],
+                'filterOptions' => [
+                    'site' => $this->distinctValues($this->table($slug, 'summary'), self::COL_SITE),
+                    'mitra' => $this->distinctValues($detail, self::COL_PERUSAHAAN),
+                    'jabatan' => $this->distinctValues($detail, self::COL_JAB_FUNGSIONAL),
+                ],
+                'monthOptions' => $this->monthOptions($slug),
+            ];
+        }
+
+        return view('ohs-score-card.ratio-tbc-gr.index', ['datasets' => $datasets]);
     }
 
     // ======================================================================
     // Tab Ringkasan
     // ======================================================================
 
-    public function overview(Request $request): JsonResponse
+    public function overview(Request $request, string $dataset = self::DEFAULT_DATASET): JsonResponse
     {
-        $rows = $this->summaryQuery($request)
+        $dataset = $this->dataset($dataset);
+
+        return response()->json(
+            self::DATASETS[$dataset]['summary_has_counts']
+                ? $this->overviewFromCounts($request, $dataset)
+                : $this->overviewFromPercent($request, $dataset)
+        );
+    }
+
+    /**
+     * Ringkasan minecon: tabel ringkasannya menyimpan cacah pengawas per
+     * site x perusahaan x bulan, jadi seluruh panel bisa dihitung dari sana.
+     *
+     * @return array<string, mixed>
+     */
+    private function overviewFromCounts(Request $request, string $dataset): array
+    {
+        $rows = $this->summaryQuery($request, $dataset)
+            ->select([])
             ->selectRaw(
                 self::COL_SITE . ' AS site, '
                 . self::COL_PERUSAHAAN . ' AS mitra, '
@@ -136,15 +206,17 @@ final class RatioTbcGrController extends Controller
             }
 
             $monthSeen[$monthNo] = true;
-            $key = $row->site . '|' . $row->mitra;
+            $site = trim((string) $row->site);
+            $mitra = trim((string) $row->mitra);
+            $key = $site . '|' . $mitra;
 
-            $matrix[$key]['site'] = (string) $row->site;
-            $matrix[$key]['mitra'] = (string) $row->mitra;
+            $matrix[$key]['site'] = $site;
+            $matrix[$key]['mitra'] = $mitra;
             $matrix[$key]['bulan'][$monthNo]['total'] = ($matrix[$key]['bulan'][$monthNo]['total'] ?? 0) + (int) $row->rfid;
             $matrix[$key]['bulan'][$monthNo]['standar'] = ($matrix[$key]['bulan'][$monthNo]['standar'] ?? 0) + (int) $row->tbc;
 
-            $perusahaan[(string) $row->mitra]['total'] = ($perusahaan[(string) $row->mitra]['total'] ?? 0) + (int) $row->rfid;
-            $perusahaan[(string) $row->mitra]['standar'] = ($perusahaan[(string) $row->mitra]['standar'] ?? 0) + (int) $row->tbc;
+            $perusahaan[$mitra]['total'] = ($perusahaan[$mitra]['total'] ?? 0) + (int) $row->rfid;
+            $perusahaan[$mitra]['standar'] = ($perusahaan[$mitra]['standar'] ?? 0) + (int) $row->tbc;
         }
 
         ksort($monthSeen);
@@ -152,31 +224,163 @@ final class RatioTbcGrController extends Controller
         $months = array_keys($monthSeen);
         $matrixRows = $this->buildMatrix($matrix, $months);
 
-        return response()->json([
-            'months' => array_map(static fn (int $m): array => [
-                'number' => $m,
-                'label' => mb_strtoupper(mb_substr(self::monthLabel($m), 0, 3)),
-            ], $months),
+        return [
+            'months' => $this->monthHeadings($months),
             'kpi' => $this->buildKpi($matrixRows),
             'matrix' => $matrixRows,
+            'matrix_has_mitra' => true,
+            'catatan' => null,
             'perusahaan' => $this->buildPerusahaan($perusahaan),
             'site_vs_target' => $this->buildSiteVsTarget($matrixRows),
             'top_terendah' => $this->buildTopTerendah($matrixRows),
-            'pareto' => $this->buildPerJabatan($request),
+            'pareto' => $this->buildPerJabatan($request, $dataset),
             'per_area' => $this->buildBelumPerPerusahaan($perusahaan),
-            'monthly' => $this->buildMonthlySeries($matrix, $months),
-        ]);
+            'monthly' => $this->buildMonthlySeries($matrix, $months, 'mitra'),
+        ];
+    }
+
+    /**
+     * Ringkasan subcon: tabel ringkasannya hanya site x bulan dan hanya
+     * menyimpan persentase, tanpa perusahaan dan tanpa cacah pengawas.
+     *
+     * Matriks, capaian per site, dan tren bulanan karena itu dibaca langsung
+     * dari persentase resmi tersebut, sementara panel yang butuh cacah
+     * pengawas (kartu KPI, peringkat perusahaan, jabatan) dihitung dari tabel
+     * detail. Keduanya cocok untuk 52 dari 54 pasangan site-bulan yang
+     * beririsan, jadi angkanya sejalan walau sumbernya berbeda.
+     *
+     * @return array<string, mixed>
+     */
+    private function overviewFromPercent(Request $request, string $dataset): array
+    {
+        $rows = $this->summaryQuery($request, $dataset)
+            ->select([])
+            ->selectRaw(
+                self::COL_SITE . ' AS site, '
+                . self::COL_BULAN . ' AS bulan, '
+                . 'AVG(' . self::COL_PCT . ') AS pct'
+            )
+            ->groupBy('site', 'bulan')
+            ->orderBy('site')
+            ->get();
+
+        $matrix = [];
+        $monthSeen = [];
+
+        foreach ($rows as $row) {
+            $monthNo = self::MONTH_MAP[$row->bulan][0] ?? 0;
+
+            if ($monthNo === 0) {
+                continue;
+            }
+
+            $monthSeen[$monthNo] = true;
+            $site = trim((string) $row->site);
+
+            $matrix[$site]['site'] = $site;
+            $matrix[$site]['mitra'] = null;
+            $matrix[$site]['bulan'][$monthNo]['pct'] = round((float) $row->pct, 2);
+        }
+
+        ksort($monthSeen);
+        ksort($matrix);
+        $months = array_keys($monthSeen);
+        $matrixRows = $this->buildMatrixFromPercent($matrix, $months);
+
+        $perusahaan = $this->detailAggregate($request, $dataset, self::COL_PERUSAHAAN);
+
+        return [
+            'months' => $this->monthHeadings($months),
+            'kpi' => $this->buildKpiFromDetail($request, $dataset),
+            'matrix' => $matrixRows,
+            'matrix_has_mitra' => false,
+            'catatan' => $this->catatanCakupan($request, $dataset, $matrixRows, $months),
+            'perusahaan' => $this->buildPerusahaan($perusahaan),
+            'site_vs_target' => $this->buildSiteVsTargetFromPercent($matrixRows),
+            'top_terendah' => $this->buildTopTerendahFromDetail($request, $dataset),
+            'pareto' => $this->buildPerJabatan($request, $dataset),
+            'per_area' => $this->buildBelumPerPerusahaan($perusahaan),
+            'monthly' => $this->buildMonthlySeries($matrix, $months, 'site'),
+        ];
+    }
+
+    /**
+     * Peringatan ketika tabel detail belum menjangkau apa yang sudah ada di
+     * tabel ringkasan.
+     *
+     * Tanpa ini, memfilter ke site HO atau bulan Oktober membuat kartu KPI dan
+     * panel per perusahaan menampilkan nol begitu saja, seolah tidak ada yang
+     * melapor, padahal yang terjadi adalah tabel detailnya belum diperbarui.
+     *
+     * @param  array<int, array<string, mixed>>  $matrixRows
+     * @param  array<int, int>  $months
+     */
+    private function catatanCakupan(Request $request, string $dataset, array $matrixRows, array $months): ?string
+    {
+        if ($matrixRows === []) {
+            return null;
+        }
+
+        $ada = $this->detailFilterQuery($request, $dataset)
+            ->distinct()
+            ->select([self::COL_SITE . ' AS site', self::COL_BULAN . ' AS bulan'])
+            ->get();
+
+        $ekor = ' Matriks, capaian per site, dan tren bulanan tetap memakai persentase resmi dari '
+            . $this->table($dataset, 'summary') . ', sedangkan kartu di atas, peringkat perusahaan, '
+            . 'dan tab Data hanya mencakup periode yang sudah ada di tabel detail.';
+
+        // Tidak ada satu baris pun: memerinci bulan dan site yang hilang cuma
+        // mengulang isi filter, jadi cukup dinyatakan sekali.
+        if ($ada->isEmpty()) {
+            return 'Tabel ' . $this->table($dataset, 'detail')
+                . ' belum memuat pilihan ini sama sekali.' . $ekor;
+        }
+
+        $siteAda = $ada->map(static fn (object $r): string => trim((string) $r->site))->unique()->all();
+        $bulanAda = $ada
+            ->map(static fn (object $r): int => self::MONTH_MAP[$r->bulan][0] ?? 0)
+            ->unique()
+            ->all();
+
+        $siteKurang = array_values(array_diff(array_column($matrixRows, 'site'), $siteAda));
+        $bulanKurang = array_values(array_diff($months, $bulanAda));
+
+        if ($siteKurang === [] && $bulanKurang === []) {
+            return null;
+        }
+
+        $bagian = [];
+
+        if ($bulanKurang !== []) {
+            $bagian[] = 'bulan ' . implode(', ', array_map(
+                static fn (int $m): string => self::monthLabel($m),
+                $bulanKurang
+            ));
+        }
+
+        if ($siteKurang !== []) {
+            $bagian[] = 'site ' . implode(', ', $siteKurang);
+        }
+
+        return 'Tabel ' . $this->table($dataset, 'detail') . ' belum memuat '
+            . implode(' dan ', $bagian) . '.' . $ekor;
     }
 
     /** Query ringkasan dengan filter terpasang. */
-    private function summaryQuery(Request $request): Builder
+    private function summaryQuery(Request $request, string $dataset): Builder
     {
-        $query = DB::table(self::SUMMARY_TABLE);
+        $query = DB::table($this->table($dataset, 'summary'));
 
-        $this->applyDimensionFilters($query, $request, [
-            'site' => self::COL_SITE,
-            'mitra' => self::COL_PERUSAHAAN,
-        ]);
+        $map = ['site' => self::COL_SITE];
+
+        // Ringkasan subcon tidak punya kolom perusahaan, jadi filter itu
+        // memang tidak ditawarkan pada tab Ringkasan-nya.
+        if (self::DATASETS[$dataset]['summary_has_counts']) {
+            $map['mitra'] = self::COL_PERUSAHAAN;
+        }
+
+        $this->applyDimensionFilters($query, $request, $map);
 
         return $query;
     }
@@ -189,6 +393,10 @@ final class RatioTbcGrController extends Controller
      */
     private function applyDimensionFilters(Builder $query, Request $request, array $map): void
     {
+        if (self::EXCLUDED_MONTHS !== []) {
+            $query->whereNotIn(self::COL_BULAN, self::EXCLUDED_MONTHS);
+        }
+
         foreach ($map as $parameter => $column) {
             $value = trim((string) $request->input($parameter, ''));
 
@@ -210,6 +418,47 @@ final class RatioTbcGrController extends Controller
     }
 
     /**
+     * Rekap tabel detail per satu dimensi, memakai aturan OFFSITE.
+     *
+     * @return array<string, array{total: int, standar: int}>
+     */
+    private function detailAggregate(Request $request, string $dataset, string $column): array
+    {
+        $rows = $this->detailFilterQuery($request, $dataset)
+            ->selectRaw(
+                "COALESCE(NULLIF(TRIM($column), ''), '(Tanpa Nama)') AS dimensi, "
+                . self::SQL_RFID . ' AS rfid, '
+                . self::SQL_TBC . ' AS tbc'
+            )
+            ->groupBy('dimensi')
+            ->get();
+
+        $out = [];
+
+        foreach ($rows as $row) {
+            $out[(string) $row->dimensi] = [
+                'total' => (int) $row->rfid,
+                'standar' => (int) $row->tbc,
+            ];
+        }
+
+        return $out;
+    }
+
+    /** Tabel detail dengan filter dimensi tab Ringkasan terpasang. */
+    private function detailFilterQuery(Request $request, string $dataset): Builder
+    {
+        $query = DB::table($this->table($dataset, 'detail'));
+
+        $this->applyDimensionFilters($query, $request, [
+            'site' => self::COL_SITE,
+            'mitra' => self::COL_PERUSAHAAN,
+        ]);
+
+        return $query;
+    }
+
+    /**
      * Rasio per jabatan fungsional, dari tabel detail.
      *
      * Menggantikan panel Pareto jenis ketidaksesuaian: sumber ini tidak punya
@@ -218,36 +467,18 @@ final class RatioTbcGrController extends Controller
      *
      * @return array<int, array<string, mixed>>
      */
-    private function buildPerJabatan(Request $request): array
+    private function buildPerJabatan(Request $request, string $dataset): array
     {
-        $query = DB::table(self::DETAIL_TABLE);
-
-        $this->applyDimensionFilters($query, $request, [
-            'site' => self::COL_SITE,
-            'mitra' => self::COL_PERUSAHAAN,
-        ]);
-
-        $rows = $query
-            ->selectRaw(
-                'COALESCE(NULLIF(TRIM(' . self::COL_JAB_FUNGSIONAL . "), ''), '(Tanpa Jabatan)') AS jabatan, "
-                . 'SUM(' . self::COL_RFID . ') AS rfid, '
-                . 'SUM(' . self::COL_TBC . ') AS tbc'
-            )
-            ->groupBy('jabatan')
-            ->get();
-
+        $agg = $this->detailAggregate($request, $dataset, self::COL_JAB_FUNGSIONAL);
         $out = [];
 
-        foreach ($rows as $row) {
-            $rfid = (int) $row->rfid;
-            $belum = max(0, $rfid - (int) $row->tbc);
-
+        foreach ($agg as $jabatan => $row) {
             $out[] = [
-                'label' => (string) $row->jabatan,
-                'jumlah' => $belum,
-                'rfid' => $rfid,
-                'tbc' => (int) $row->tbc,
-                'rasio' => $rfid > 0 ? round((int) $row->tbc / $rfid * 100, 2) : 0.0,
+                'label' => (string) $jabatan,
+                'jumlah' => max(0, $row['total'] - $row['standar']),
+                'rfid' => $row['total'],
+                'tbc' => $row['standar'],
+                'rasio' => $row['total'] > 0 ? round($row['standar'] / $row['total'] * 100, 2) : 0.0,
             ];
         }
 
@@ -292,30 +523,44 @@ final class RatioTbcGrController extends Controller
 
         usort($out, static fn (array $a, array $b): int => $b['tidak_sesuai'] <=> $a['tidak_sesuai']);
 
-        return $out;
+        // Subcon punya 138 perusahaan; donat sebanyak itu tidak terbaca.
+        return $this->capSlices($out, 12);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function capSlices(array $rows, int $max): array
+    {
+        if (count($rows) <= $max) {
+            return $rows;
+        }
+
+        $head = array_slice($rows, 0, $max - 1);
+        $tail = array_slice($rows, $max - 1);
+
+        $head[] = [
+            'area' => count($tail) . ' perusahaan lainnya',
+            'total' => array_sum(array_column($tail, 'total')),
+            'tidak_sesuai' => array_sum(array_column($tail, 'tidak_sesuai')),
+            'percent' => 0.0,
+        ];
+
+        return $head;
     }
 
     // ======================================================================
     // Tab Data (tabel detail)
     // ======================================================================
 
-    public function data(Request $request): JsonResponse
+    public function data(Request $request, string $dataset = self::DEFAULT_DATASET): JsonResponse
     {
-        $query = $this->detailQuery($request);
+        $dataset = $this->dataset($dataset);
+        $query = $this->detailQuery($request, $dataset);
 
         $rows = (clone $query)
-            ->select([
-                self::COL_SITE . ' AS site',
-                self::COL_PERUSAHAAN . ' AS mitra',
-                self::COL_SID . ' AS sid',
-                self::COL_NAMA . ' AS nama',
-                self::COL_JAB_FUNGSIONAL . ' AS jabatan',
-                self::COL_JAB_STRUKTURAL . ' AS jabatan_struktural',
-                self::COL_OFFSITE . ' AS offsite',
-                self::COL_BULAN . ' AS bulan_sumber',
-                self::COL_RFID . ' AS rfid',
-                self::COL_TBC . ' AS tbc',
-            ])
+            ->select($this->detailColumns())
             ->orderBy(
                 $this->dtOrderColumn($request, self::DETAIL_ORDERABLE, self::COL_SITE),
                 $this->dtDirection($request, 'asc')
@@ -328,27 +573,21 @@ final class RatioTbcGrController extends Controller
 
         return response()->json([
             'draw' => (int) $request->input('draw', 1),
-            'recordsTotal' => DB::table(self::DETAIL_TABLE)->count(),
+            // Basisnya tabel tanpa bulan yang dikecualikan, bukan tabel utuh:
+            // kalau tidak, DataTables melaporkan "disaring dari 15.767" padahal
+            // pengguna belum memasang filter apa pun.
+            'recordsTotal' => $this->detailBaseCount($dataset),
             'recordsFiltered' => (clone $query)->count(),
             'data' => $rows,
         ]);
     }
 
-    public function export(Request $request): StreamedResponse
+    public function export(Request $request, string $dataset = self::DEFAULT_DATASET): StreamedResponse
     {
-        $query = $this->detailQuery($request)
-            ->select([
-                self::COL_SITE . ' AS site',
-                self::COL_PERUSAHAAN . ' AS mitra',
-                self::COL_SID . ' AS sid',
-                self::COL_NAMA . ' AS nama',
-                self::COL_JAB_FUNGSIONAL . ' AS jabatan',
-                self::COL_JAB_STRUKTURAL . ' AS jabatan_struktural',
-                self::COL_OFFSITE . ' AS offsite',
-                self::COL_BULAN . ' AS bulan_sumber',
-                self::COL_RFID . ' AS rfid',
-                self::COL_TBC . ' AS tbc',
-            ])
+        $dataset = $this->dataset($dataset);
+
+        $query = $this->detailQuery($request, $dataset)
+            ->select($this->detailColumns())
             ->orderBy(self::COL_SITE)
             ->orderBy(self::COL_PERUSAHAAN)
             ->orderBy('id');
@@ -370,22 +609,52 @@ final class RatioTbcGrController extends Controller
                     $p['rfid'], $p['tbc'], $p['status'],
                 ];
             },
-            'ratio-tbc-gr'
+            'ratio-tbc-gr-' . $dataset
         );
     }
 
-    private function detailQuery(Request $request): Builder
+    private function detailBaseCount(string $dataset): int
     {
-        $query = DB::table(self::DETAIL_TABLE);
+        $query = DB::table($this->table($dataset, 'detail'));
+
+        if (self::EXCLUDED_MONTHS !== []) {
+            $query->whereNotIn(self::COL_BULAN, self::EXCLUDED_MONTHS);
+        }
+
+        return $query->count();
+    }
+
+    /** @return array<int, string> */
+    private function detailColumns(): array
+    {
+        return [
+            self::COL_SITE . ' AS site',
+            self::COL_PERUSAHAAN . ' AS mitra',
+            self::COL_SID . ' AS sid',
+            self::COL_NAMA . ' AS nama',
+            self::COL_JAB_FUNGSIONAL . ' AS jabatan',
+            self::COL_JAB_STRUKTURAL . ' AS jabatan_struktural',
+            self::COL_OFFSITE . ' AS offsite',
+            self::COL_BULAN . ' AS bulan_sumber',
+            self::COL_RFID . ' AS rfid',
+            self::COL_TBC . ' AS tbc',
+        ];
+    }
+
+    private function detailQuery(Request $request, string $dataset): Builder
+    {
+        $query = DB::table($this->table($dataset, 'detail'));
 
         $this->applyDimensionFilters($query, $request, self::DETAIL_FILTERABLE);
 
         $status = trim((string) $request->input('status', ''));
 
         if ($status === 'melapor') {
-            $query->where(self::COL_TBC, '>', 0);
+            $query->where(self::COL_RFID, '>', 0)->where(self::COL_TBC, '>', 0);
         } elseif ($status === 'belum') {
-            $query->where(self::COL_TBC, '<=', 0);
+            $query->where(self::COL_RFID, '>', 0)->where(self::COL_TBC, '<=', 0);
+        } elseif ($status === 'offsite') {
+            $query->where(self::COL_RFID, '<=', 0);
         }
 
         $this->dtApplySearch(
@@ -398,6 +667,8 @@ final class RatioTbcGrController extends Controller
     }
 
     /**
+     * Satu baris tabel detail dalam bentuk siap tampil.
+     *
      * @return array<string, mixed>
      */
     private function presentDetail(object $row): array
@@ -417,15 +688,17 @@ final class RatioTbcGrController extends Controller
             'jabatan' => $teks($row->jabatan),
             'jabatan_struktural' => $teks($row->jabatan_struktural),
             'offsite' => $teks($row->offsite),
-            'bulan' => self::MONTH_MAP[$row->bulan_sumber][1] ?? (string) $row->bulan_sumber,
+            'bulan' => self::MONTH_MAP[$row->bulan_sumber][1] ?? $teks($row->bulan_sumber),
             'rfid' => $rfid,
             'tbc' => $tbc,
-            'status' => $tbc > 0 ? 'Melapor' : 'Belum Melapor',
+            // Di luar basis RFID: orangnya mungkin melapor, tapi tidak ikut
+            // menentukan rasio, jadi tidak boleh dihitung sebagai "Melapor".
+            'status' => $rfid <= 0 ? 'Di Luar RFID' : ($tbc > 0 ? 'Melapor' : 'Belum Melapor'),
         ];
     }
 
     // ======================================================================
-    // Rekap bersama
+    // Penyusun panel
     // ======================================================================
 
     /**
@@ -467,11 +740,6 @@ final class RatioTbcGrController extends Controller
             $avg = $grandTotal > 0 ? round($grandStandar / $grandTotal * 100, 2) : 0.0;
             [, $nilai, $band] = $this->scoreBandFor($avg);
 
-            $trend = null;
-            if (count($filled) >= 2) {
-                $trend = $filled[count($filled) - 1] >= $filled[count($filled) - 2] ? 'up' : 'down';
-            }
-
             $out[] = [
                 'site' => $entry['site'],
                 'mitra' => $entry['mitra'],
@@ -481,11 +749,73 @@ final class RatioTbcGrController extends Controller
                 'tidak_sesuai' => $grandTotal - $grandStandar,
                 'nilai' => $nilai,
                 'nilai_band' => $band,
-                'trend' => $trend,
+                'trend' => $this->trendOf($filled),
             ];
         }
 
         return $out;
+    }
+
+    /**
+     * Matriks subcon: sumbernya hanya persentase, jadi rata-rata barisnya
+     * adalah rata-rata antar bulan tanpa pembobotan cacah pengawas.
+     *
+     * @param  array<string, mixed>  $matrix
+     * @param  array<int, int>  $months
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildMatrixFromPercent(array $matrix, array $months): array
+    {
+        $out = [];
+
+        foreach ($matrix as $entry) {
+            $cells = [];
+            $filled = [];
+
+            foreach ($months as $month) {
+                $pct = $entry['bulan'][$month]['pct'] ?? null;
+
+                if ($pct === null) {
+                    $cells[] = null;
+                    continue;
+                }
+
+                [, $nilai, $band] = $this->scoreBandFor((float) $pct);
+
+                $cells[] = [
+                    'pct' => (float) $pct, 'total' => null, 'standar' => null,
+                    'nilai' => $nilai, 'nilai_band' => $band,
+                ];
+                $filled[] = (float) $pct;
+            }
+
+            $avg = $filled !== [] ? round(array_sum($filled) / count($filled), 2) : 0.0;
+            [, $nilai, $band] = $this->scoreBandFor($avg);
+
+            $out[] = [
+                'site' => $entry['site'],
+                'mitra' => $entry['mitra'],
+                'cells' => $cells,
+                'average' => $avg,
+                'total' => null,
+                'tidak_sesuai' => null,
+                'nilai' => $nilai,
+                'nilai_band' => $band,
+                'trend' => $this->trendOf($filled),
+            ];
+        }
+
+        return $out;
+    }
+
+    /** @param  array<int, float>  $filled */
+    private function trendOf(array $filled): ?string
+    {
+        if (count($filled) < 2) {
+            return null;
+        }
+
+        return $filled[count($filled) - 1] >= $filled[count($filled) - 2] ? 'up' : 'down';
     }
 
     /**
@@ -496,7 +826,43 @@ final class RatioTbcGrController extends Controller
     {
         $total = array_sum(array_column($matrixRows, 'total'));
         $belum = array_sum(array_column($matrixRows, 'tidak_sesuai'));
-        $melapor = $total - $belum;
+
+        return $this->kpiPayload(
+            $total,
+            $total - $belum,
+            count(array_unique(array_column($matrixRows, 'site'))),
+            count(array_unique(array_filter(array_column($matrixRows, 'mitra'))))
+        );
+    }
+
+    /**
+     * KPI subcon: cacah pengawas hanya ada di tabel detail.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildKpiFromDetail(Request $request, string $dataset): array
+    {
+        $row = $this->detailFilterQuery($request, $dataset)
+            ->selectRaw(
+                self::SQL_RFID . ' AS rfid, '
+                . self::SQL_TBC . ' AS tbc, '
+                . 'COUNT(DISTINCT ' . self::COL_SITE . ') AS sites, '
+                . 'COUNT(DISTINCT ' . self::COL_PERUSAHAAN . ') AS mitras'
+            )
+            ->first();
+
+        return $this->kpiPayload(
+            (int) ($row->rfid ?? 0),
+            (int) ($row->tbc ?? 0),
+            (int) ($row->sites ?? 0),
+            (int) ($row->mitras ?? 0)
+        );
+    }
+
+    /** @return array<string, mixed> */
+    private function kpiPayload(int $total, int $melapor, int $siteCount, int $mitraCount): array
+    {
+        $belum = max(0, $total - $melapor);
         $pct = $total > 0 ? round($melapor / $total * 100, 2) : 0.0;
         [, $nilai, $band] = $this->scoreBandFor($pct);
 
@@ -510,17 +876,25 @@ final class RatioTbcGrController extends Controller
             'nilai_band' => $band,
             'target' => self::TARGET_PERCENT,
             'memenuhi_target' => $pct >= self::TARGET_PERCENT,
-            'site_count' => count(array_unique(array_column($matrixRows, 'site'))),
-            'mitra_count' => count(array_unique(array_column($matrixRows, 'mitra'))),
+            'site_count' => $siteCount,
+            'mitra_count' => $mitraCount,
             'bulan_terakhir' => null,
         ];
     }
 
     /**
+     * Peringkat perusahaan.
+     *
+     * Subcon punya 138 perusahaan dan sebagian hanya berisi 4-6 pengawas,
+     * sehingga mengurutkan murni berdasarkan persentase akan menaruh mereka di
+     * puncak dan menenggelamkan yang berisi ratusan orang. Karena itu yang
+     * ditampilkan adalah $max perusahaan dengan pengawas terbanyak, baru
+     * diurutkan persentasenya di antara mereka.
+     *
      * @param  array<string, array{total: int, standar: int}>  $perusahaan
      * @return array<int, array<string, mixed>>
      */
-    private function buildPerusahaan(array $perusahaan): array
+    private function buildPerusahaan(array $perusahaan, int $max = 12): array
     {
         $out = [];
 
@@ -536,6 +910,11 @@ final class RatioTbcGrController extends Controller
                 'nilai' => $nilai,
                 'nilai_band' => $band,
             ];
+        }
+
+        if (count($out) > $max) {
+            usort($out, static fn (array $a, array $b): int => $b['total'] <=> $a['total']);
+            $out = array_slice($out, 0, $max);
         }
 
         usort($out, static fn (array $a, array $b): int => $b['percent'] <=> $a['percent']);
@@ -577,6 +956,25 @@ final class RatioTbcGrController extends Controller
     }
 
     /**
+     * Subcon: matriksnya sudah per site, jadi rata-rata barisnya langsung
+     * dipakai dan tidak perlu dijumlah ulang.
+     *
+     * @param  array<int, array<string, mixed>>  $matrixRows
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildSiteVsTargetFromPercent(array $matrixRows): array
+    {
+        return array_map(static fn (array $row): array => [
+            'site' => $row['site'],
+            'percent' => $row['average'],
+            'target' => self::TARGET_PERCENT,
+            'nilai' => $row['nilai'],
+            'total' => null,
+            'tidak_sesuai' => null,
+        ], $matrixRows);
+    }
+
+    /**
      * @param  array<int, array<string, mixed>>  $matrixRows
      * @return array<int, array<string, mixed>>
      */
@@ -593,36 +991,103 @@ final class RatioTbcGrController extends Controller
     }
 
     /**
+     * Subcon: lima pasangan site-perusahaan dengan pengawas belum melapor
+     * terbanyak. Dasarnya cacah, bukan persentase, supaya perusahaan berisi
+     * 2 orang tidak menutupi yang berisi 200.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildTopTerendahFromDetail(Request $request, string $dataset): array
+    {
+        $rows = $this->detailFilterQuery($request, $dataset)
+            ->selectRaw(
+                self::COL_SITE . ' AS site, '
+                . self::COL_PERUSAHAAN . ' AS mitra, '
+                . self::SQL_RFID . ' AS rfid, '
+                . self::SQL_TBC . ' AS tbc'
+            )
+            ->groupBy('site', 'mitra')
+            ->havingRaw(self::SQL_RFID . ' > ' . self::SQL_TBC)
+            ->orderByRaw('(' . self::SQL_RFID . ' - ' . self::SQL_TBC . ') DESC')
+            ->limit(5)
+            ->get();
+
+        $out = [];
+
+        foreach ($rows as $row) {
+            $total = (int) $row->rfid;
+            $pct = $total > 0 ? round((int) $row->tbc / $total * 100, 2) : 0.0;
+            [, $nilai] = $this->scoreBandFor($pct);
+
+            $out[] = [
+                'site' => trim((string) $row->site),
+                'mitra' => trim((string) $row->mitra),
+                'percent' => $pct,
+                'nilai' => $nilai,
+                'total' => $total,
+                'tidak_sesuai' => $total - (int) $row->tbc,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Satu garis per perusahaan (minecon) atau per site (subcon).
+     *
      * @param  array<string, mixed>  $matrix
      * @param  array<int, int>  $months
      * @return array<string, mixed>
      */
-    private function buildMonthlySeries(array $matrix, array $months): array
+    private function buildMonthlySeries(array $matrix, array $months, string $by): array
     {
-        $byMitra = [];
+        $grouped = [];
 
         foreach ($matrix as $entry) {
+            $name = (string) ($entry[$by] ?? '-');
+
             foreach ($months as $month) {
-                $byMitra[$entry['mitra']][$month]['total'] = ($byMitra[$entry['mitra']][$month]['total'] ?? 0)
-                    + ($entry['bulan'][$month]['total'] ?? 0);
-                $byMitra[$entry['mitra']][$month]['standar'] = ($byMitra[$entry['mitra']][$month]['standar'] ?? 0)
-                    + ($entry['bulan'][$month]['standar'] ?? 0);
+                $cell = $entry['bulan'][$month] ?? null;
+
+                if ($cell === null) {
+                    continue;
+                }
+
+                if (array_key_exists('pct', $cell)) {
+                    // Sumber persentase: satu site hanya punya satu nilai per
+                    // bulan, jadi tidak ada yang perlu dijumlahkan.
+                    $grouped[$name][$month]['pct'] = $cell['pct'];
+                    continue;
+                }
+
+                $grouped[$name][$month]['total'] = ($grouped[$name][$month]['total'] ?? 0) + $cell['total'];
+                $grouped[$name][$month]['standar'] = ($grouped[$name][$month]['standar'] ?? 0) + $cell['standar'];
             }
         }
 
-        ksort($byMitra);
+        ksort($grouped);
         $series = [];
 
-        foreach ($byMitra as $mitra => $perMonth) {
+        foreach ($grouped as $name => $perMonth) {
             $data = [];
 
             foreach ($months as $month) {
-                $total = $perMonth[$month]['total'] ?? 0;
-                // null, bukan 0: bulan tanpa data harus putus di grafik.
-                $data[] = $total > 0 ? round($perMonth[$month]['standar'] / $total * 100, 2) : null;
+                $cell = $perMonth[$month] ?? null;
+
+                if ($cell === null) {
+                    $data[] = null; // null, bukan 0: bulan tanpa data harus putus di grafik
+                    continue;
+                }
+
+                if (array_key_exists('pct', $cell)) {
+                    $data[] = $cell['pct'];
+                    continue;
+                }
+
+                $data[] = $cell['total'] > 0 ? round($cell['standar'] / $cell['total'] * 100, 2) : null;
             }
 
-            $series[] = ['name' => (string) $mitra, 'data' => $data];
+            $series[] = ['name' => (string) $name, 'data' => $data];
         }
 
         return [
@@ -634,6 +1099,29 @@ final class RatioTbcGrController extends Controller
     // ======================================================================
     // Utilitas
     // ======================================================================
+
+    /** Nama dataset yang sah; yang lain jatuh ke bawaan. */
+    private function dataset(string $slug): string
+    {
+        return isset(self::DATASETS[$slug]) ? $slug : self::DEFAULT_DATASET;
+    }
+
+    private function table(string $dataset, string $kind): string
+    {
+        return self::DATASETS[$this->dataset($dataset)][$kind];
+    }
+
+    /**
+     * @param  array<int, int>  $months
+     * @return array<int, array<string, mixed>>
+     */
+    private function monthHeadings(array $months): array
+    {
+        return array_map(static fn (int $m): array => [
+            'number' => $m,
+            'label' => mb_strtoupper(mb_substr(self::monthLabel($m), 0, 3)),
+        ], $months);
+    }
 
     /** @return array<int, string> */
     private function distinctValues(string $table, string $column): array
@@ -655,15 +1143,24 @@ final class RatioTbcGrController extends Controller
     /**
      * Bulan yang benar-benar ada di sumber, diurutkan kalender.
      *
+     * Ringkasan dan detail bisa berbeda jangkauan bulannya, jadi keduanya
+     * digabung supaya dropdown yang sama berlaku untuk kedua tab.
+     *
      * @return array<int, string>
      */
-    private function monthOptions(): array
+    private function monthOptions(string $dataset): array
     {
         $months = [];
 
-        foreach ($this->distinctValues(self::SUMMARY_TABLE, self::COL_BULAN) as $name) {
-            if (isset(self::MONTH_MAP[$name])) {
-                $months[self::MONTH_MAP[$name][0]] = self::MONTH_MAP[$name][1];
+        foreach (['summary', 'detail'] as $kind) {
+            foreach ($this->distinctValues($this->table($dataset, $kind), self::COL_BULAN) as $name) {
+                if (in_array($name, self::EXCLUDED_MONTHS, true)) {
+                    continue;
+                }
+
+                if (isset(self::MONTH_MAP[$name])) {
+                    $months[self::MONTH_MAP[$name][0]] = self::MONTH_MAP[$name][1];
+                }
             }
         }
 
