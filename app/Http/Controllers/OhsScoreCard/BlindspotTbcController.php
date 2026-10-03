@@ -684,8 +684,8 @@ final class BlindspotTbcController extends Controller
         }
 
         if (! $adaBulanan) {
-            return 'Tabel ' . $monthly . ' masih kosong, jadi matriks persentase dan kartu di atas '
-                . 'belum terisi. Panel temuan tetap berjalan dari ' . $detail . '.';
+            return 'Persentase resmi belum tersedia karena ' . $monthly . ' masih kosong, '
+                . 'jadi semua angka di tab ini dihitung dari cacah temuan.';
         }
 
         if (! $adaDetail) {
@@ -702,16 +702,31 @@ final class BlindspotTbcController extends Controller
             'mitra' => self::COL_PIC_PERUSAHAAN,
         ]);
 
-        $kurang = count($pasanganBulanan) - count(array_intersect($pasanganBulanan, $pasanganDetail));
+        // Dihitung sebagai selisih dua arah, bukan sekadar beda cacah: kedua
+        // tabel bisa sama-sama memuat pasangan yang tidak ada di tabel lain,
+        // jadi membandingkan jumlahnya saja bisa menghasilkan kalimat janggal
+        // seperti "14 dari 13".
+        $tanpaRincian = array_diff($pasanganBulanan, $pasanganDetail);
+        $tanpaPersen = array_diff($pasanganDetail, $pasanganBulanan);
 
-        if ($kurang <= 0) {
+        $bagian = [];
+
+        if ($tanpaRincian !== []) {
+            $bagian[] = count($tanpaRincian) . ' dari ' . count($pasanganBulanan)
+                . ' pasangan site-perusahaan di ' . $monthly . ' belum punya rincian temuan di '
+                . $detail;
+        }
+
+        if ($tanpaPersen !== []) {
+            $bagian[] = count($tanpaPersen) . ' pasangan yang ada temuannya belum punya persentase resmi';
+        }
+
+        if ($bagian === []) {
             return null;
         }
 
-        return 'Tabel ' . $detail . ' baru mencakup ' . count($pasanganDetail) . ' dari '
-            . count($pasanganBulanan) . ' pasangan site-perusahaan yang ada di ' . $monthly . '. '
-            . 'Matriks persentase sudah lengkap, tetapi daftar temuan, PIC, dan asal pelapor '
-            . 'hanya memuat pasangan yang sudah ada rinciannya.';
+        return ucfirst(implode(', dan ', $bagian)) . '. Tiap panel hanya memuat pasangan '
+            . 'yang tersedia di sumbernya masing-masing.';
     }
 
     /**

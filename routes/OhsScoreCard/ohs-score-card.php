@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\OhsScoreCard\BerecordController;
 use App\Http\Controllers\OhsScoreCard\BlindspotTbcController;
+use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
 use App\Http\Controllers\OhsScoreCard\PelaksanaanEdukasiController;
 use App\Http\Controllers\OhsScoreCard\RatioTbcGrController;
@@ -64,6 +65,16 @@ Route::middleware('evaluasi-well.access')
         Route::get('/blindspot-tbc/{dataset}/export', [BlindspotTbcController::class, 'export'])
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('blindspot-tbc.export');
+
+        // Parameter SOD "Kinerja Pengawasan Control Room DMS"
+        Route::get('/kinerja-control-room-dms', [KinerjaControlRoomDmsController::class, 'index'])
+            ->name('kinerja-control-room-dms.index');
+        Route::get('/kinerja-control-room-dms/overview', [KinerjaControlRoomDmsController::class, 'overview'])
+            ->name('kinerja-control-room-dms.overview');
+        Route::get('/kinerja-control-room-dms/data', [KinerjaControlRoomDmsController::class, 'data'])
+            ->name('kinerja-control-room-dms.data');
+        Route::get('/kinerja-control-room-dms/export', [KinerjaControlRoomDmsController::class, 'export'])
+            ->name('kinerja-control-room-dms.export');
 
         // Parameter HSECT — "Peer Pressure" (hse_automation: bcsid.mv_berecord)
         Route::get('/peer-pressure', [BerecordController::class, 'index'])

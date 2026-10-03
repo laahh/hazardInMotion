@@ -324,20 +324,59 @@ window.bsOverview = (function () {
             }).join('');
         }
 
-        function renderLegend() {
-            var items = [
+        var LEGENDA = {
+            persen: [
                 { color: '#16A34A', label: '0%' },
                 { color: '#86C96B', label: 'sampai 2%' },
                 { color: '#F2C230', label: '2–5%' },
                 { color: '#F08C2E', label: '5–10%' },
                 { color: '#E0484A', label: 'lebih dari 10%' }
-            ];
+            ],
+            temuan: [
+                { color: '#16A34A', label: 'tidak ada temuan' },
+                { color: '#86C96B', label: '1–2' },
+                { color: '#F2C230', label: '3–5' },
+                { color: '#F08C2E', label: '6–10' },
+                { color: '#E0484A', label: 'lebih dari 10' }
+            ]
+        };
 
-            el('legend').innerHTML = items.map(function (it) {
+        function renderLegend(jenis) {
+            el('legend-' + jenis).innerHTML = LEGENDA[jenis].map(function (it) {
                 return '<span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;">'
                     + '<span class="rounded-1" style="width:14px;height:14px;background:' + it.color + ';"></span>'
                     + escapeHtml(it.label) + '</span>';
             }).join('');
+        }
+
+        /**
+         * Kartu mana yang mendapat tempat utama.
+         *
+         * Kalau tabel bulanannya belum terisi, matriks persentase hanya akan
+         * jadi kotak kosong besar di posisi paling menonjol; dalam keadaan itu
+         * matriks temuan yang naik ke atas, dan kartu persentase disembunyikan
+         * karena keterangannya sudah ada di peringatan di bagian filter.
+         */
+        function aturTataLetak(ukuran) {
+            var persenCard = el('kartu-persen');
+            var temuanCard = el('kartu-temuan');
+            var utama = el('slot-utama');
+            var kedua = el('slot-kedua');
+            var barisKedua = el('baris-kedua');
+
+            if (ukuran === 'persen') {
+                utama.appendChild(persenCard);
+                kedua.appendChild(temuanCard);
+                barisKedua.classList.remove('d-none');
+                el('temuan-sub').textContent =
+                    'Cacah temuan — ukuran yang berbeda dari persentase di atas, jadi ditampilkan terpisah';
+            } else {
+                utama.appendChild(temuanCard);
+                kedua.appendChild(persenCard);
+                barisKedua.classList.add('d-none');
+                el('temuan-sub').textContent =
+                    'Cacah temuan; persentase resmi belum tersedia untuk kumpulan data ini';
+            }
         }
 
         /**
@@ -614,8 +653,12 @@ window.bsOverview = (function () {
 
                     // Tiap panel dibungkus sendiri: satu panel yang gagal tidak
                     // boleh membuat seluruh dashboard tampak kosong.
+                    safe('tata-letak', function () { aturTataLetak(json.ukuran); });
                     safe('kpi', function () { renderKpi(json.kpi); });
-                    safe('legend', renderLegend);
+                    safe('legend', function () {
+                        renderLegend('persen');
+                        renderLegend('temuan');
+                    });
                     safe('persen', function () {
                         renderMatrix('persen', json.persen || kosong, {
                             ringkasLabel: 'RATA', satuan: 'blindspot', tier: tierPersen,

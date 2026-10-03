@@ -73,8 +73,10 @@
 
   {{-- Ukuran utama: persentase resmi --}}
   <div class="row gy-4 mb-24">
-    <div class="col-xxl-8">
-      <div class="card h-100 radius-8 border">
+    {{-- Kartu di slot ini ditentukan JS: persentase kalau tabel bulanannya
+         terisi, cacah temuan kalau belum. Lihat aturTataLetak(). --}}
+    <div class="col-xxl-8" data-bs-el="slot-utama">
+      <div class="card h-100 radius-8 border" data-bs-el="kartu-persen">
         <div class="card-header border-bottom bg-base py-16 px-24">
           <h6 class="text-lg fw-semibold mb-0">Persentase Blindspot per Bulan</h6>
           <span class="text-sm text-secondary-light">
@@ -83,7 +85,7 @@
           </span>
         </div>
         <div class="card-body p-24">
-          <div class="d-flex align-items-center flex-wrap gap-3 mb-16" data-bs-el="legend"></div>
+          <div class="d-flex align-items-center flex-wrap gap-3 mb-16" data-bs-el="legend-persen"></div>
           <div class="bs-matrix-wrap">
             <table class="bs-matrix" data-bs-el="persen">
               <thead></thead>
@@ -145,17 +147,17 @@
   </div>
 
   {{-- Rincian dari tabel detail --}}
-  <div class="row gy-4 mb-24">
-    <div class="col-12">
-      <div class="card h-100 radius-8 border">
+  <div class="row gy-4 mb-24" data-bs-el="baris-kedua">
+    <div class="col-12" data-bs-el="slot-kedua">
+      <div class="card h-100 radius-8 border" data-bs-el="kartu-temuan">
         <div class="card-header border-bottom bg-base py-16 px-24">
           <h6 class="text-lg fw-semibold mb-0">Jumlah Temuan per Bulan</h6>
-          <span class="text-sm text-secondary-light">
-            Cacah temuan dari {{ $ds['detail_table'] }} — ukuran yang berbeda dari persentase
-            di atas, jadi ditampilkan terpisah
+          <span class="text-sm text-secondary-light" data-bs-el="temuan-sub">
+            Cacah temuan dari {{ $ds['detail_table'] }}
           </span>
         </div>
         <div class="card-body p-24">
+          <div class="d-flex align-items-center flex-wrap gap-3 mb-16" data-bs-el="legend-temuan"></div>
           <div class="bs-matrix-wrap">
             <table class="bs-matrix" data-bs-el="temuan">
               <thead></thead>
