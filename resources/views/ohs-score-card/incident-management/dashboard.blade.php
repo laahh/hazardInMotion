@@ -70,9 +70,9 @@
     <div class="card-body p-24">
       <div class="row gy-3 gx-3 align-items-end">
         <div class="col-xxl-6 col-md-6">
-          <label class="form-label text-sm fw-medium mb-8">Tahun</label>
-          <ul class="nav nav-pills style-three pill-tab border input-form-light p-0 radius-8 bg-neutral-50 d-inline-flex flex-wrap"
-              role="tablist" data-imi="seg-tahun"></ul>
+          <span class="form-label text-sm fw-medium mb-8 d-block" id="imd-tahun-lbl">Tahun</span>
+          <ul class="nav nav-pills pill-tab border input-form-light p-0 radius-8 bg-neutral-50 d-inline-flex flex-wrap"
+              role="tablist" aria-labelledby="imd-tahun-lbl" data-imi="seg-tahun"></ul>
         </div>
         <div class="col-xxl-4 col-md-4 col-sm-8">
           <label class="form-label text-sm fw-medium mb-8" for="imd-site">Site</label>
@@ -168,8 +168,16 @@
                 beberapa temuan lintas layer; aktivitas di luar 14 teratas digabung jadi "Lainnya" per layer
               </span>
             </div>
-            <ul class="nav nav-pills style-three pill-tab border input-form-light p-0 radius-8 bg-neutral-50 flex-nowrap"
-                role="tablist" data-imi="seg-status"></ul>
+            {{-- style-three SENGAJA TIDAK DIPAKAI di sini. Kelas itu menyetel
+                 `display:grid; grid-template-columns:1fr 1fr 1fr`, jadi sakelar
+                 berisi empat tombol akan pecah jadi 3 + 1 baris dan kotaknya
+                 melar mengikuti kolom, bukan mengikuti isi. flex-shrink-0
+                 menjaga agar header yang padat tidak memerasnya. --}}
+            <div class="flex-shrink-0">
+              <span class="form-label text-sm fw-medium mb-8 d-block" id="imd-status-lbl">Status layer</span>
+              <ul class="nav nav-pills pill-tab border input-form-light p-0 radius-8 bg-neutral-50 d-inline-flex flex-nowrap"
+                  role="tablist" aria-labelledby="imd-status-lbl" data-imi="seg-status"></ul>
+            </div>
           </div>
           <div class="card-body p-24">
             <div class="d-flex align-items-center flex-wrap gap-3 mb-16" data-imi="lg-layer"></div>
@@ -1084,12 +1092,13 @@
                 return pil(t, t, String(t) === String(state.tahun));
             }).join('');
 
-        el('seg-status').innerHTML = ['Root cause', 'Non-conformity', 'Improvement']
-            .filter(function (s) { return dim.status_layer.indexOf(s) !== -1; })
-            .map(function (s) {
-                var i = dim.status_layer.indexOf(s);
-                return pil(i, s, String(i) === String(state.status));
-            }).join('') + pil('all', 'Semua', state.status === 'all');
+        el('seg-status').innerHTML = pil('all', 'Semua', state.status === 'all')
+            + ['Root cause', 'Non-conformity', 'Improvement']
+                .filter(function (s) { return dim.status_layer.indexOf(s) !== -1; })
+                .map(function (s) {
+                    var i = dim.status_layer.indexOf(s);
+                    return pil(i, s, String(i) === String(state.status));
+                }).join('');
 
         var sel = el('site');
         sel.innerHTML = '<option value="all">Semua site</option>'
