@@ -65,6 +65,27 @@
     </ul>
   </div>
 
+  {{-- Tiga tab. Pemindahannya ditangani JS sendiri, bukan data-bs-toggle,
+       karena tab kedua dan ketiga memuat datanya sendiri saat pertama dibuka
+       dan grafik ECharts perlu diukur ulang setelah panelnya terlihat. --}}
+  <ul class="nav nav-pills pill-tab border input-form-light p-0 radius-8 bg-neutral-50 d-inline-flex flex-wrap mb-24"
+      role="tablist" data-imi="tabbar">
+    <li class="nav-item" role="presentation">
+      <button type="button" class="nav-link px-24 py-10 text-md text-center radius-8 active"
+              data-tab="ringkasan">Ringkasan</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button type="button" class="nav-link px-24 py-10 text-md text-center radius-8"
+              data-tab="deep">Deep Dive Insiden</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button type="button" class="nav-link px-24 py-10 text-md text-center radius-8"
+              data-tab="leading">Leading Indicator</button>
+    </li>
+  </ul>
+
+  <div data-pane="ringkasan">
+
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">
     <div class="card-body p-24">
@@ -322,6 +343,79 @@
         </div>
       </div>
     </div>
+  </div>
+
+  </div>{{-- /pane ringkasan --}}
+
+  {{-- ================= Deep Dive Insiden ================= --}}
+  <div data-pane="deep" class="d-none">
+
+    <div class="card radius-8 border mb-24">
+      <div class="card-body p-24">
+        <div class="row gy-3 gx-3 align-items-end">
+          <div class="col-xxl-2 col-md-3 col-sm-6">
+            <label class="form-label text-sm fw-medium mb-8" for="dd-site">Site</label>
+            <select class="form-select form-select-sm radius-8" id="dd-site" data-imi="dd-site">
+              <option value="all">Semua site</option>
+            </select>
+          </div>
+          <div class="col-xxl-6 col-md-5">
+            <label class="form-label text-sm fw-medium mb-8" for="dd-insiden">
+              Insiden yang diinvestigasi<span data-imi="dd-rentang"></span>
+            </label>
+            <select class="form-select form-select-sm radius-8" id="dd-insiden" data-imi="dd-insiden">
+              <option value="">Memuat daftar insiden…</option>
+            </select>
+          </div>
+          <div class="col-xxl-3 col-md-4 col-sm-6">
+            <label class="form-label text-sm fw-medium mb-8" for="dd-id">Atau ID investigasi</label>
+            <div class="d-flex gap-2">
+              <input type="text" inputmode="numeric" class="form-control form-control-sm radius-8"
+                     id="dd-id" placeholder="mis. 2254" data-imi="dd-id">
+              <button type="button" class="btn btn-sm btn-primary-600 radius-8 flex-shrink-0"
+                      data-imi="dd-buka">Buka</button>
+            </div>
+          </div>
+          <div class="col-12">
+            <span class="text-sm text-secondary-light">
+              Ditarik langsung dari OBDS. Sinyal SAP baru tersedia sejak 1 Januari 2026, jadi jendela
+              90 hari baru penuh untuk insiden sejak April 2026.
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div data-imi="dd-body"></div>
+  </div>
+
+  {{-- ================= Leading Indicator ================= --}}
+  <div data-pane="leading" class="d-none">
+
+    <div class="card radius-8 border mb-24">
+      <div class="card-body p-24">
+        <div class="row gy-3 gx-3 align-items-end">
+          <div class="col-xxl-3 col-md-4 col-sm-6">
+            <label class="form-label text-sm fw-medium mb-8" for="ld-site">Site</label>
+            <select class="form-select form-select-sm radius-8" id="ld-site" data-imi="ld-site">
+              <option value="all">Semua site</option>
+            </select>
+          </div>
+          <div class="col-xxl-4 col-md-5 col-sm-6">
+            <label class="form-label text-sm fw-medium mb-8" for="ld-indikator">Indikator</label>
+            <select class="form-select form-select-sm radius-8" id="ld-indikator" data-imi="ld-indikator"></select>
+          </div>
+          <div class="col-12">
+            <span class="text-sm text-secondary-light">
+              Mingguan, 2026. Indikator leading dibandingkan dengan jumlah insiden di site yang sama;
+              minggu terakhir yang datanya belum lengkap tidak dihitung.
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div data-imi="ld-body"></div>
   </div>
 
 </div>
@@ -1170,6 +1264,991 @@
         .catch(function (err) {
             tampilkanGagal('Permintaan ke server gagal.', err && err.message);
         });
+})();
+</script>
+<script>
+// ---- Tab Deep Dive & Leading Indicator --------------------------------------
+(function () {
+    'use strict';
+
+    var root = document.querySelector('.imd-page');
+    if (!root) { return; }
+
+    var PALETTE = ['#487FFF', '#45B369', '#FF9F29', '#EF4A00', '#8252E9', '#00B8F2', '#E0484A'];
+    var WARNA_LAYER = ['#94A3B8', '#487FFF', '#FF9F29', '#45B369', '#8252E9', '#00B8F2'];
+    var GRID = '#EEF2F7', INK = '#1F2937', INK2 = '#475569', INK3 = '#94A3B8', NETRAL = '#94A3B8';
+
+    var NAMA_LAYER = {
+        1: 'Sistem & Kebijakan', 2: 'Perencanaan & Program', 3: 'Pelaksanaan Lapangan',
+        4: 'Kontrol Teknologi', 5: 'Pengaman Fisik & Darurat'
+    };
+    var SHORT_LAYER = ['Tanpa layer', 'L1 Sistem', 'L2 Perencanaan', 'L3 Pelaksanaan', 'L4 Teknologi', 'L5 Pengaman'];
+    var BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+    var el = function (n) { return root.querySelector('[data-imi="' + n + '"]'); };
+    var fmt = function (n) { return Number(n || 0).toLocaleString('id-ID'); };
+    var pct = function (a, b) { return b ? Math.round(a / b * 100) : 0; };
+    var esc = function (v) {
+        return String(v === null || v === undefined ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    };
+    /** Nomor layer dari teks "Layer 3"; 0 kalau tidak terbaca. */
+    var noLayer = function (v) { var m = String(v || '').match(/(\d)/); return m ? +m[1] : 0; };
+    /** Awalan penomoran sumber ("10. Pengawasan…") dibuang, tidak berurutan di tampilan. */
+    var bersihAkt = function (v) { return String(v || '').replace(/^\s*\d+\.\s*/, '').replace(/\s+/g, ' ').trim(); };
+
+    var charts = {};
+
+    function gambar(id, opsi) {
+        var node = el(id);
+        if (!node || typeof echarts === 'undefined') { return; }
+        if (charts[id]) { charts[id].dispose(); }
+        charts[id] = echarts.init(node, null, { renderer: 'svg' });
+        charts[id].setOption(opsi, true);
+    }
+
+    window.addEventListener('resize', function () {
+        Object.keys(charts).forEach(function (k) { if (charts[k]) { charts[k].resize(); } });
+    });
+
+    function tip(extra) {
+        return Object.assign({
+            backgroundColor: '#fff', borderColor: GRID,
+            textStyle: { color: INK, fontSize: 13 },
+            extraCssText: 'box-shadow:0 4px 14px rgba(15,23,42,.12);border-radius:8px'
+        }, extra || {});
+    }
+
+    function memuat(teks) {
+        return '<div class="card radius-8 border"><div class="card-body p-24 text-center text-secondary-light">'
+            + '<div class="spinner-border spinner-border-sm text-primary-600 me-2" role="status"></div>'
+            + esc(teks) + '</div></div>';
+    }
+
+    function kotakPesan(judul, isi, bahaya) {
+        var warna = bahaya ? 'danger' : 'info';
+        return '<div class="alert alert-' + warna + ' bg-' + warna + '-focus border-' + warna + '-main text-'
+            + warna + '-main radius-8 px-20 py-16 mb-24 d-flex align-items-start gap-3">'
+            + '<iconify-icon icon="solar:info-circle-outline" class="icon text-xxl flex-shrink-0"></iconify-icon>'
+            + '<div><h6 class="text-md fw-semibold mb-4 text-' + warna + '-main">' + esc(judul) + '</h6>'
+            + '<p class="text-sm mb-0">' + isi + '</p></div></div>';
+    }
+
+    function panel(judul, sub, isi, kelas) {
+        return '<div class="card radius-8 border ' + (kelas || 'mb-24') + '">'
+            + '<div class="card-header border-bottom bg-base py-16 px-24">'
+            +   '<h6 class="text-lg fw-semibold mb-0">' + esc(judul) + '</h6>'
+            +   (sub ? '<span class="text-sm text-secondary-light">' + sub + '</span>' : '')
+            + '</div><div class="card-body p-24">' + isi + '</div></div>';
+    }
+
+    function ambil(url) {
+        return fetch(url, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) {
+                if (!r.ok) { throw new Error('HTTP ' + r.status); }
+                return r.json();
+            });
+    }
+
+    // =====================================================================
+    // Perpindahan tab
+    // =====================================================================
+    var tabAktif = 'ringkasan';
+
+    function bukaTab(nama) {
+        tabAktif = nama;
+
+        root.querySelectorAll('[data-imi="tabbar"] button').forEach(function (b) {
+            b.classList.toggle('active', b.dataset.tab === nama);
+        });
+        root.querySelectorAll('[data-pane]').forEach(function (p) {
+            p.classList.toggle('d-none', p.dataset.pane !== nama);
+        });
+
+        try { window.localStorage.setItem('imd-tab', nama); } catch (err) { /* diabaikan */ }
+
+        // ECharts tidak bisa mengukur elemen tersembunyi, jadi ukurannya
+        // dihitung ulang begitu panelnya tampil.
+        window.requestAnimationFrame(function () {
+            Object.keys(charts).forEach(function (k) { if (charts[k]) { charts[k].resize(); } });
+            window.dispatchEvent(new Event('resize'));
+        });
+
+        if (nama === 'deep') { mulaiDeepDive(); }
+        if (nama === 'leading') { mulaiLeading(); }
+    }
+
+    el('tabbar').addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-tab]');
+        if (b) { bukaTab(b.dataset.tab); }
+    });
+
+    // =====================================================================
+    // Deep Dive
+    // =====================================================================
+    var ddSiap = false, ddDaftar = null, ddAktif = null;
+
+    function mulaiDeepDive() {
+        if (ddSiap) { return; }
+        ddSiap = true;
+
+        el('dd-body').innerHTML = memuat('Memuat daftar insiden…');
+
+        ambil(@json(route('ohs-score-card.incident-management.deep-dive.daftar')))
+            .then(function (j) {
+                if (!j.ok) {
+                    el('dd-body').innerHTML = kotakPesan('Daftar insiden tidak bisa dimuat', esc(j.pesan), true);
+                    return;
+                }
+
+                ddDaftar = j.insiden || [];
+
+                var site = [];
+                ddDaftar.forEach(function (r) { if (site.indexOf(r.site) === -1) { site.push(r.site); } });
+                site.sort();
+
+                el('dd-site').innerHTML = '<option value="all">Semua site</option>'
+                    + site.map(function (s) { return '<option value="' + esc(s) + '">' + esc(s) + '</option>'; }).join('');
+
+                // Rentangnya diambil dari data yang kembali, bukan dari tahun
+                // berjalan: daftarnya dibatasi konstanta di controller, dan dua
+                // sumber tanggal yang berbeda pasti melenceng begitu tahun ganti.
+                if (ddDaftar.length) {
+                    var tgl = ddDaftar.map(function (r) { return r.tanggal; }).sort();
+                    el('dd-rentang').textContent = ' · ' + tgl[0] + ' s.d. ' + tgl[tgl.length - 1];
+                }
+
+                isiPilihanInsiden();
+
+                el('dd-body').innerHTML = kotakPesan('Pilih insiden untuk memulai deep dive',
+                    'Halaman ini menyusun rekonstruksi kejadian, status barrier per layer IPLS, sinyal 90 hari '
+                    + 'sebelum kejadian di lokasi yang sama, riwayat orang yang terlibat, serta tindak lanjut '
+                    + 'dan pengulangan root cause.');
+
+                var awal = (ddDaftar.filter(function (r) { return r.temuan >= 6; })[0] || ddDaftar[0]);
+                if (awal) {
+                    el('dd-insiden').value = String(awal.id);
+                    bukaInsiden(awal.id);
+                }
+            })
+            .catch(function (err) {
+                el('dd-body').innerHTML = kotakPesan('Permintaan ke server gagal', esc(err && err.message), true);
+            });
+
+        el('dd-site').addEventListener('change', isiPilihanInsiden);
+        el('dd-insiden').addEventListener('change', function () {
+            if (el('dd-insiden').value) { bukaInsiden(el('dd-insiden').value); }
+        });
+
+        var buka = function () {
+            var v = String(el('dd-id').value || '').replace(/\D/g, '');
+            if (v) { bukaInsiden(v); }
+        };
+        el('dd-buka').addEventListener('click', buka);
+        el('dd-id').addEventListener('keydown', function (e) { if (e.key === 'Enter') { buka(); } });
+    }
+
+    function isiPilihanInsiden() {
+        var s = el('dd-site').value;
+        var sebelum = el('dd-insiden').value;
+        var baris = ddDaftar.filter(function (r) { return s === 'all' || r.site === s; });
+
+        el('dd-insiden').innerHTML = baris.length
+            ? baris.map(function (r) {
+                return '<option value="' + r.id + '">' + esc(r.tanggal) + ' · ' + esc(r.site) + ' · '
+                    + esc(r.lokasi) + ' · ' + esc(r.kategori)
+                    + (r.temuan ? '' : ' · belum ada analisis') + ' (#' + r.id + ')</option>';
+            }).join('')
+            : '<option value="">Tidak ada insiden untuk site ini</option>';
+
+        if (baris.some(function (r) { return String(r.id) === sebelum; })) {
+            el('dd-insiden').value = sebelum;
+        }
+    }
+
+    function bukaInsiden(id) {
+        id = String(id).replace(/\D/g, '');
+        if (!id) { return; }
+        ddAktif = id;
+
+        var pilih = el('dd-insiden');
+        if (Array.prototype.some.call(pilih.options, function (o) { return o.value === id; })) {
+            pilih.value = id;
+        }
+
+        el('dd-body').innerHTML = memuat('Memuat deep dive insiden #' + id + '… '
+            + 'Sinyal 90 hari memindai jutaan baris, jadi bagian ini butuh beberapa detik.');
+
+        ambil(@json(url('/ohs-score-card/incident-management/deep-dive')) + '/' + id)
+            .then(function (j) {
+                if (ddAktif !== id) { return; }
+
+                if (!j.ok) {
+                    el('dd-body').innerHTML = kotakPesan('Deep dive tidak bisa dimuat', esc(j.pesan), true);
+                    return;
+                }
+
+                el('dd-body').innerHTML =
+                    bagianHeader(j) + bagianBarrier(j) + bagianSinyal(j)
+                    + bagianPekerja(j) + bagianTindakLanjut(j);
+
+                gambarSinyal(j.sinyal || {});
+                pasangTautanInsiden();
+            })
+            .catch(function (err) {
+                if (ddAktif !== id) { return; }
+                el('dd-body').innerHTML = kotakPesan('Permintaan ke server gagal', esc(err && err.message), true);
+            });
+    }
+
+    function pasangTautanInsiden() {
+        el('dd-body').querySelectorAll('a[data-insiden]').forEach(function (a) {
+            a.addEventListener('click', function (e) {
+                e.preventDefault();
+                bukaInsiden(a.dataset.insiden);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        });
+    }
+
+    // ---- 0. Header ------------------------------------------------------
+    function bagianHeader(j) {
+        var h = j.header || {};
+        var fakta = [
+            ['Waktu kejadian', (h.waktu || '-') + ' WITA'],
+            ['Site · lokasi', (h.site || '-') + ' · ' + (h.lokasi || '-')],
+            ['Detil lokasi', h.detil || '-'],
+            ['Potensi', h.potensi || '-'],
+            ['PJA BC', h.pja || '-'],
+            ['PJA mitra', h.pja_mitra || '-'],
+            ['Perusahaan', h.perusahaan || '-'],
+            ['Biaya kerugian', j.biaya ? 'Rp ' + fmt(j.biaya) : '-']
+        ];
+
+        var isi = '<div class="row gy-3">'
+            + fakta.map(function (f) {
+                return '<div class="col-xxl-3 col-md-4 col-sm-6">'
+                    + '<span class="text-xs text-secondary-light d-block text-uppercase">' + esc(f[0]) + '</span>'
+                    + '<span class="text-md fw-medium">' + esc(f[1]) + '</span></div>';
+            }).join('')
+            + '</div>'
+            + (h.kronologi
+                ? '<details class="mt-20"><summary class="text-md fw-semibold">Kronologi</summary>'
+                    + '<p class="text-sm text-secondary-light mt-12 mb-0" style="white-space:pre-line">'
+                    + esc(h.kronologi) + '</p></details>'
+                : '');
+
+        var sub = esc(h.kategori || 'Belum dikategorikan') + ' · ' + esc(h.jenis || '-')
+            + ' · status ' + esc(h.status || '-') + (h.lpi ? ' · LPI ' + esc(h.lpi) : '');
+
+        return panel('Insiden #' + esc(h.id), sub, isi);
+    }
+
+    // ---- 1. Barrier IPLS -------------------------------------------------
+    function temuanPerLayer(j) {
+        var per = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+        (j.temuan || []).forEach(function (t) {
+            var n = noLayer(t.layer);
+            if (per[n]) { per[n].push(t); }
+        });
+        return per;
+    }
+
+    function keadaanLayer(items) {
+        if (items.some(function (r) { return r.status === 'ROOT CAUSE'; })) { return 'gagal'; }
+        if (items.some(function (r) { return r.status === 'NON CONFIRMITY'; })) { return 'lemah'; }
+        return 'aman';
+    }
+
+    function bagianBarrier(j) {
+        if (!(j.temuan || []).length) {
+            return panel('Barrier IPLS', 'Layer mana yang jebol',
+                '<div class="text-center text-secondary-light py-24">Belum ada analisis layer untuk insiden ini. '
+                + 'Root cause-nya mungkin masih di MySQL <code>app_mixer.lpi_insiden</code>, '
+                + 'atau investigasinya belum sampai tahap analisis.</div>');
+        }
+
+        var per = temuanPerLayer(j);
+        var urut = { 'ROOT CAUSE': 0, 'NON CONFIRMITY': 1, 'IMPROVEMENT': 2 };
+
+        var isi = '<div class="row gy-3">' + [1, 2, 3, 4, 5].map(function (n) {
+            var items = per[n].slice().sort(function (a, b) {
+                return (urut[a.status] === undefined ? 3 : urut[a.status])
+                     - (urut[b.status] === undefined ? 3 : urut[b.status]);
+            });
+            var st = keadaanLayer(items);
+            var lencana = st === 'gagal'
+                ? '<span class="bg-danger-focus text-danger-main px-8 py-2 rounded-pill fw-medium text-xs">Gagal</span>'
+                : st === 'lemah'
+                    ? '<span class="bg-warning-focus text-warning-main px-8 py-2 rounded-pill fw-medium text-xs">Lemah</span>'
+                    : '<span class="bg-neutral-200 text-secondary-light px-8 py-2 rounded-pill fw-medium text-xs">Tidak ada temuan</span>';
+
+            return '<div class="col-xxl col-md-4 col-sm-6">'
+                + '<div class="border input-form-light radius-8 p-16 h-100" style="border-top:3px solid '
+                +   (st === 'gagal' ? PALETTE[6] : st === 'lemah' ? PALETTE[2] : GRID) + '">'
+                +   '<span class="text-xs text-secondary-light d-block">LAYER ' + n + '</span>'
+                +   '<h6 class="text-md fw-semibold mb-8">' + esc(NAMA_LAYER[n]) + '</h6>'
+                +   lencana
+                +   items.map(function (r) {
+                        var kelas = r.status === 'ROOT CAUSE' ? 'bg-danger-focus text-danger-main'
+                            : r.status === 'NON CONFIRMITY' ? 'bg-warning-focus text-warning-main'
+                            : 'bg-info-focus text-info-main';
+                        var label = r.status === 'ROOT CAUSE' ? 'Root cause'
+                            : r.status === 'NON CONFIRMITY' ? 'Non-conformity' : 'Improvement';
+                        return '<div class="border-top mt-12 pt-12">'
+                            + '<span class="' + kelas + ' px-8 py-2 rounded-pill fw-medium text-xs">' + label + '</span>'
+                            + '<span class="text-sm fw-semibold d-block mt-8">' + esc(bersihAkt(r.aktivitas)) + '</span>'
+                            + '<span class="text-xs text-secondary-light d-block">' + esc(r.klasifikasi || '') + '</span>'
+                            + (r.keterangan ? '<span class="text-xs text-secondary-light d-block mt-4">'
+                                + esc(r.keterangan) + '</span>' : '')
+                            + '</div>';
+                    }).join('')
+                + '</div></div>';
+        }).join('') + '</div>';
+
+        return panel('Barrier IPLS', 'Gagal = ada root cause di layer itu; lemah = ada ketidaksesuaian '
+            + 'tapi bukan root cause', isi);
+    }
+
+    // ---- 2. Sinyal sebelum kejadian -------------------------------------
+    function deretMinggu(arr, kunci) {
+        var out = new Array(13).fill(0);
+        (arr || []).forEach(function (r) {
+            if (r.w >= 0 && r.w < 13) { out[r.w] = r[kunci || 'n'] || 0; }
+        });
+        return out;
+    }
+
+    function bagianSinyal(j) {
+        var s = j.sinyal || {};
+        var h = j.header || {};
+
+        if (!s.lokasi) {
+            return panel('Sinyal 90 Hari Sebelum Kejadian', null,
+                '<div class="text-center text-secondary-light py-24">Data sinyal tidak tersedia.</div>');
+        }
+
+        var hz = deretMinggu(s.hazard, 'lokasi');
+        var oak = deretMinggu(s.oak), co = deretMinggu(s.coaching), ob = deretMinggu(s.observasi);
+        var lok = s.lokasi || {}, site = s.site || {};
+
+        // Empat minggu terakhir dibandingkan sembilan minggu sebelumnya:
+        // yang dicari perubahan irama, bukan angka mutlaknya.
+        var baru = 0, lama = 0;
+        for (var i = 0; i < 4; i++) { baru += hz[i] + oak[i] + co[i] + ob[i]; }
+        for (var k = 4; k < 13; k++) { lama += hz[k] + oak[k] + co[k] + ob[k]; }
+        baru /= 4; lama /= 9;
+        var delta = lama ? Math.round((baru - lama) / lama * 100) : null;
+
+        var umum = /by DMS|^-?$/i.test(String(h.lokasi || ''));
+
+        var ubin = [
+            ['Laporan SAP di lokasi, 4 minggu terakhir', fmt(Math.round(baru)) + '/mgg',
+                delta === null ? 'tidak ada pembanding' : (delta >= 0 ? '+' : '') + delta + '% vs 9 minggu sebelumnya', false],
+            ['Temuan di lokasi terbuka >7 hari saat kejadian', fmt(lok.menggantung || 0),
+                fmt(lok.terbuka || 0) + ' terbuka · ' + fmt(lok.n || 0) + ' temuan dalam 90 hari', (lok.menggantung || 0) > 0],
+            ['Temuan di lokasi sudah lewat target', fmt(lok.lewat_target || 0),
+                'Se-site ' + fmt(site.lewat_target || 0) + ' dari ' + fmt(site.n || 0) + ' temuan', (lok.lewat_target || 0) > 0],
+            ['Temuan di detil lokasi yang sama', fmt(lok.detil || 0), 'dalam 90 hari sebelum kejadian', false]
+        ];
+
+        var isi =
+            (umum ? kotakPesan('Lokasi kejadian tidak spesifik ("' + esc(h.lokasi) + '")',
+                'Sinyal lokasi tidak bisa dibaca dengan andal; angka di bawah memakai label lokasi apa adanya.', true) : '')
+            + (s.terpotong ? kotakPesan('Jendela 90 hari terpotong',
+                'Data SAP baru ada sejak ' + esc(s.awal_sap) + ', sedangkan jendela insiden ini mulai '
+                + esc(s.mulai_jendela) + '. Minggu sebelum itu tercatat nol karena datanya belum ada, '
+                + 'bukan karena sepi.') : '')
+            + '<div class="row gy-3 mb-24">' + ubin.map(function (u) {
+                return '<div class="col-xxl-3 col-md-6">'
+                    + '<div class="border input-form-light radius-8 p-16 h-100'
+                    +   (u[3] ? ' border-danger-main' : '') + '">'
+                    +   '<span class="text-sm text-secondary-light d-block">' + esc(u[0]) + '</span>'
+                    +   '<h6 class="fw-semibold mt-8 mb-4">' + u[1] + '</h6>'
+                    +   '<span class="text-xs text-secondary-light">' + esc(u[2]) + '</span>'
+                    + '</div></div>';
+            }).join('') + '</div>'
+            + '<div class="imd-chart" data-imi="dd-chart" style="height:400px"></div>'
+            + '<div class="row gy-4 mt-8">'
+            +   '<div class="col-xxl-5"><h6 class="text-md fw-semibold mb-12">Tema temuan terbanyak di lokasi</h6>'
+            +     '<div class="table-responsive"><table class="table bordered-table sm-table mb-0"><tbody>'
+            +     ((s.tema || []).map(function (t) {
+                      return '<tr><td class="text-end" style="width:64px">' + fmt(t.n) + '×</td><td>'
+                          + esc(t.k) + '</td></tr>';
+                  }).join('') || '<tr><td class="text-center text-secondary-light py-16">Tidak ada temuan.</td></tr>')
+            +     '</tbody></table></div></div>'
+            +   '<div class="col-xxl-7"><h6 class="text-md fw-semibold mb-12">Masih terbuka >7 hari saat kejadian</h6>'
+            +     '<div class="table-responsive"><table class="table bordered-table sm-table mb-0"><tbody>'
+            +     ((s.menggantung || []).map(function (r) {
+                      return '<tr><td style="width:96px"><span class="text-xs text-secondary-light">'
+                          + esc(r.d) + '</span></td><td><span class="text-sm d-block">' + esc(r.deskripsi || '')
+                          + '</span><span class="text-xs text-secondary-light">' + esc(r.detil || '') + ' · '
+                          + esc(r.k || '') + ' · target ' + esc(r.target || '-')
+                          + (r.lewat ? ' · <span class="text-danger-main fw-medium">lewat target</span>' : '')
+                          + '</span></td></tr>';
+                  }).join('') || '<tr><td class="text-center text-secondary-light py-16">'
+                      + 'Tidak ada. Semua temuan lama sudah ditutup sebelum kejadian.</td></tr>')
+            +     '</tbody></table></div></div>'
+            + '</div>';
+
+        return panel('Sinyal 90 Hari Sebelum Kejadian',
+            'Aktivitas SAP dan temuan hazard di site dan lokasi kejadian; minggu dihitung mundur dari waktu kejadian',
+            isi);
+    }
+
+    function gambarSinyal(s) {
+        if (!el('dd-chart')) { return; }
+
+        var deret = [
+            ['Hazard & inspeksi di lokasi', deretMinggu(s.hazard, 'lokasi'), PALETTE[0]],
+            ['OAK di lokasi', deretMinggu(s.oak), PALETTE[1]],
+            ['Coaching di lokasi', deretMinggu(s.coaching), PALETTE[2]],
+            ['Observasi di lokasi', deretMinggu(s.observasi), PALETTE[4]]
+        ];
+
+        var label = [];
+        for (var w = 12; w >= 0; w--) { label.push(w === 0 ? '0–7 hr' : w + '–' + (w + 1) + ' mgg'); }
+        var balik = function (a) { return a.slice().reverse(); };
+        var n = deret.length;
+
+        gambar('dd-chart', {
+            animation: false,
+            tooltip: tip({ trigger: 'axis', axisPointer: { type: 'line', lineStyle: { color: INK3 } } }),
+            axisPointer: { link: [{ xAxisIndex: 'all' }] },
+            title: deret.map(function (d, i) {
+                return { text: d[0], left: 0, top: i * 95, textStyle: { fontSize: 12, fontWeight: 500, color: INK2 } };
+            }),
+            grid: deret.map(function (d, i) { return { left: 46, right: 12, top: i * 95 + 24, height: 58 }; }),
+            xAxis: deret.map(function (d, i) {
+                return {
+                    type: 'category', gridIndex: i, data: label, axisTick: { show: false },
+                    axisLine: { lineStyle: { color: GRID } },
+                    axisLabel: { show: i === n - 1, color: INK3, fontSize: 10.5, interval: 1 }
+                };
+            }),
+            yAxis: deret.map(function (d, i) {
+                return {
+                    type: 'value', gridIndex: i, splitNumber: 2, minInterval: 1,
+                    splitLine: { lineStyle: { color: GRID, type: 'dashed' } },
+                    axisLabel: { color: INK3, fontSize: 10 }
+                };
+            }),
+            series: deret.map(function (d, i) {
+                return {
+                    name: d[0], type: 'bar', xAxisIndex: i, yAxisIndex: i, data: balik(d[1]),
+                    barMaxWidth: 22, itemStyle: { color: d[2], borderRadius: [3, 3, 0, 0] }
+                };
+            })
+        });
+    }
+
+    // ---- 3. Orang terlibat ----------------------------------------------
+    function bagianPekerja(j) {
+        var P = j.pekerja || [];
+
+        if (!P.length) {
+            return panel('Riwayat Orang Terlibat', null,
+                '<div class="text-center text-secondary-light py-24">'
+                + 'Belum ada pekerja terlibat yang tercatat di beInvestigasi untuk insiden ini.</div>');
+        }
+
+        var baris = P.map(function (p) {
+            var pelaku = p.peran === 'Korban/Pelaku';
+            var br = p.berecord || [], dms = p.dms || [], inc = p.insiden || [];
+            var sorot = function (ada) { return ada ? ' class="bg-danger-focus"' : ''; };
+
+            return '<tr>'
+                + '<td><span class="text-sm fw-semibold d-block">' + esc(p.nama || '-') + '</span>'
+                +   '<span class="text-xs text-secondary-light">' + esc(p.jabatan || '') + ' · '
+                +   esc(p.perusahaan || '') + '</span></td>'
+                + '<td>' + (pelaku
+                    ? '<span class="bg-danger-focus text-danger-main px-8 py-2 rounded-pill fw-medium text-xs">'
+                        + esc(p.peran) + '</span>'
+                    : '<span class="bg-neutral-200 text-secondary-light px-8 py-2 rounded-pill fw-medium text-xs">'
+                        + esc(p.peran || '-') + '</span>') + '</td>'
+                + '<td class="text-end"' + (pelaku && !p.coaching ? ' style="background:#FEF2F2"' : '') + '>'
+                +   fmt(p.coaching) + '</td>'
+                + '<td class="text-end">' + fmt(p.observasi) + '</td>'
+                + '<td class="text-end">' + fmt(p.sap) + '</td>'
+                + '<td' + sorot(br.length) + '>' + (br.length
+                    ? br.slice(0, 3).map(function (b) {
+                        return '<span class="text-xs d-block">' + esc(b.tanggal) + ' · ' + esc(b.kategori || '') + '</span>';
+                      }).join('') + (br.length > 3
+                        ? '<span class="text-xs text-secondary-light">+' + (br.length - 3) + ' lainnya</span>' : '')
+                    : '<span class="text-xs text-secondary-light">tidak ada</span>') + '</td>'
+                + '<td' + sorot(dms.length) + '>' + (dms.length
+                    ? dms.map(function (d) {
+                        return '<span class="text-xs d-block">' + fmt(d.n) + '× ' + esc(d.pelanggaran) + '</span>';
+                      }).join('')
+                    : '<span class="text-xs text-secondary-light">tidak ada</span>') + '</td>'
+                + '<td' + sorot(inc.length) + '>' + (inc.length
+                    ? inc.slice(0, 3).map(function (x) {
+                        return '<span class="text-xs d-block"><a href="javascript:void(0)" data-insiden="' + x.id
+                            + '" class="text-primary-600">#' + x.id + '</a> ' + esc(x.tanggal) + '</span>';
+                      }).join('')
+                    : '<span class="text-xs text-secondary-light">tidak ada</span>') + '</td>'
+                + '<td>' + (p.mcu === 'berlaku'
+                    ? '<span class="bg-success-focus text-success-main px-8 py-2 rounded-pill fw-medium text-xs">Berlaku</span>'
+                    : p.mcu === 'kadaluarsa'
+                        ? '<span class="bg-danger-focus text-danger-main px-8 py-2 rounded-pill fw-medium text-xs">Kadaluarsa</span>'
+                        : '<span class="bg-neutral-200 text-secondary-light px-8 py-2 rounded-pill fw-medium text-xs">Tidak ada data</span>')
+                + '</td></tr>';
+        }).join('');
+
+        var isi = '<div class="table-responsive"><table class="table bordered-table sm-table mb-0">'
+            + '<thead><tr><th>Pekerja</th><th>Peran</th><th class="text-end">Coaching</th>'
+            + '<th class="text-end">Diobservasi</th><th class="text-end">Laporan SAP</th>'
+            + '<th>beRecord</th><th>Pelanggaran DMS</th><th>Insiden sebelumnya</th><th>MCU</th></tr></thead>'
+            + '<tbody>' + baris + '</tbody></table></div>'
+            + '<p class="text-xs text-secondary-light mt-12 mb-0">Coaching, observasi, SAP dan DMS dihitung pada '
+            + '90 hari sebelum kejadian; beRecord dan insiden sebelumnya dihitung seluruh riwayat. '
+            + 'Sel bertanda warna menandai riwayat yang layak ditelusuri. Status MCU hanya menunjukkan masa '
+            + 'berlaku, bukan hasil pemeriksaan.</p>';
+
+        return panel('Riwayat Orang Terlibat', 'Jendela 90 hari sebelum kejadian', isi);
+    }
+
+    // ---- 4. Tindak lanjut & pengulangan ----------------------------------
+    function bagianTindakLanjut(j) {
+        var per = temuanPerLayer(j);
+        var car = j.car || [];
+        var hariIni = new Date().toISOString().slice(0, 10);
+
+        var baris = [1, 2, 3, 4, 5].map(function (n) {
+            var items = per[n];
+            var cs = car.filter(function (x) { return noLayer(x.layer) === n; });
+            var jalan = cs.filter(function (x) { return x.status === 'OPEN' || x.status === 'PENDING APPROVAL'; });
+
+            return {
+                n: n,
+                rc: items.filter(function (r) { return r.status === 'ROOT CAUSE'; }).length,
+                nc: items.filter(function (r) { return r.status === 'NON CONFIRMITY'; }).length,
+                car: cs.length,
+                selesai: cs.filter(function (x) { return x.status === 'CLOSED' || x.status === 'CLOSED OVERDUE'; }).length,
+                jalan: jalan.length,
+                lewat: jalan.filter(function (x) { return x.target && x.target < hariIni; }).length,
+                telat: cs.filter(function (x) { return x.status === 'CLOSED OVERDUE'; }).length
+            };
+        });
+
+        var nilai = function (r) {
+            var perlu = r.rc + r.nc > 0;
+            if (!perlu && !r.car) { return ['bg-neutral-200 text-secondary-light', '–']; }
+            if (perlu && !r.car) { return ['bg-danger-focus text-danger-main', 'Tidak ada CAR']; }
+            if (r.lewat) { return ['bg-danger-focus text-danger-main', 'CAR lewat target']; }
+            if (r.telat) { return ['bg-warning-focus text-warning-main', 'Selesai terlambat']; }
+            if (r.jalan) { return ['bg-warning-focus text-warning-main', 'Berjalan']; }
+            if (perlu) { return ['bg-success-focus text-success-main', 'Tertangani']; }
+            return ['bg-info-focus text-info-main', 'CAR tambahan'];
+        };
+
+        var tabelCar = '<div class="table-responsive"><table class="table bordered-table sm-table mb-0">'
+            + '<thead><tr><th>Layer</th><th class="text-end">Root cause</th><th class="text-end">Non-conformity</th>'
+            + '<th class="text-end">CAR</th><th class="text-end">Selesai</th><th class="text-end">Berjalan</th>'
+            + '<th class="text-end">Lewat target</th><th>Penilaian</th></tr></thead><tbody>'
+            + baris.map(function (r) {
+                var v = nilai(r);
+                return '<tr><td><span class="imd-chip" style="background:' + WARNA_LAYER[r.n] + '">L' + r.n
+                    + '</span><span class="text-sm">' + esc(NAMA_LAYER[r.n]) + '</span></td>'
+                    + '<td class="text-end">' + r.rc + '</td><td class="text-end">' + r.nc + '</td>'
+                    + '<td class="text-end">' + r.car + '</td><td class="text-end">' + r.selesai + '</td>'
+                    + '<td class="text-end">' + r.jalan + '</td><td class="text-end">' + r.lewat + '</td>'
+                    + '<td><span class="' + v[0] + ' px-8 py-2 rounded-pill fw-medium text-xs">' + v[1] + '</span></td></tr>';
+            }).join('')
+            + '</tbody></table></div>';
+
+        var rek = j.rekurensi || [];
+        var tabelRek = rek.length
+            ? '<div class="table-responsive"><table class="table bordered-table sm-table mb-0">'
+                + '<thead><tr><th>Root cause</th><th class="text-end">PJA sama, sebelum</th>'
+                + '<th class="text-end">PJA sama, sesudah</th><th class="text-end">Site sama, sebelum</th>'
+                + '<th>Insiden terkait di PJA yang sama</th></tr></thead><tbody>'
+                + rek.map(function (r) {
+                    var n = noLayer(r.layer);
+                    return '<tr><td><span class="imd-chip" style="background:' + WARNA_LAYER[n] + '">L' + n
+                        + '</span><span class="text-sm">' + esc(bersihAkt(r.aktivitas)) + '</span></td>'
+                        + '<td class="text-end' + (r.pja_sebelum ? ' fw-semibold text-danger-main' : '') + '">'
+                        +   fmt(r.pja_sebelum) + '</td>'
+                        + '<td class="text-end' + (r.pja_sesudah ? ' fw-semibold text-danger-main' : '') + '">'
+                        +   fmt(r.pja_sesudah) + '</td>'
+                        + '<td class="text-end">' + fmt(r.site_sebelum) + '</td>'
+                        + '<td class="text-xs">' + ((r.daftar || []).map(function (x) {
+                              return '<a href="javascript:void(0)" data-insiden="' + x.id
+                                  + '" class="text-primary-600">#' + x.id + '</a> ' + esc(x.d);
+                          }).join(' · ') || '-') + '</td></tr>';
+                }).join('')
+                + '</tbody></table></div>'
+                + '<p class="text-xs text-secondary-light mt-12 mb-0">"Sebelum" berarti root cause yang sama sudah '
+                + 'pernah muncul, jadi perbaikan sebelumnya belum efektif. "Sesudah" berarti muncul lagi setelah '
+                + 'insiden ini.</p>'
+            : '<div class="text-center text-secondary-light py-24">Belum ada temuan ber-status Root cause '
+                + 'untuk dibandingkan.</div>';
+
+        return panel('Tindak Lanjut per Layer',
+            'Apakah CAR menyasar layer yang gagal, dan selesai tepat waktu', tabelCar)
+            + panel('Pengulangan Root Cause',
+                'Apakah penyebab yang sama pernah muncul di PJA atau site yang sama', tabelRek);
+    }
+
+    // =====================================================================
+    // Leading Indicator
+    // =====================================================================
+    var INDIKATOR = [
+        { k: 'hazard', label: 'Laporan hazard & inspeksi', f: function (r) { return r.hazard; }, aktivitas: true },
+        { k: 'pelapor', label: 'Pelapor hazard aktif', f: function (r) { return r.pelapor; }, aktivitas: true },
+        { k: 'per_pelapor', label: 'Laporan per pelapor', aktivitas: true, desimal: 1,
+          f: function (r) { return r.pelapor ? r.hazard / r.pelapor : null; } },
+        { k: 'tepat', label: '% temuan selesai tepat waktu', persen: true, desimal: 1,
+          f: function (r) { return r.jatuh_tempo ? r.tepat_waktu / r.jatuh_tempo * 100 : null; } },
+        { k: 'lewat', label: 'Temuan minggu itu yang kini lewat target', f: function (r) { return r.lewat_target; } },
+        { k: 'oak', label: 'OAK', f: function (r) { return r.oak; }, aktivitas: true },
+        { k: 'coaching', label: 'Coaching', f: function (r) { return r.coaching; }, aktivitas: true },
+        { k: 'observasi', label: 'Observasi lapangan', f: function (r) { return r.observasi; }, aktivitas: true },
+        { k: 'dms', label: 'Pelanggaran DMS dilaporkan', f: function (r) { return r.dms; } }
+    ];
+
+    var ldSiap = false, ldData = null;
+    var K = { site: 0, minggu: 1, hazard: 2, jatuh_tempo: 3, tepat_waktu: 4, lewat_target: 5,
+              pelapor: 6, oak: 7, coaching: 8, observasi: 9, dms: 10, insiden: 11, berkonsekuensi: 12 };
+
+    function keObjek(b) {
+        var o = {};
+        Object.keys(K).forEach(function (n) { o[n] = b[K[n]]; });
+        return o;
+    }
+
+    function mulaiLeading() {
+        if (ldSiap) { return; }
+        ldSiap = true;
+
+        el('ld-indikator').innerHTML = INDIKATOR.map(function (x) {
+            return '<option value="' + x.k + '">' + esc(x.label) + '</option>';
+        }).join('');
+
+        el('ld-body').innerHTML = memuat('Memuat indikator mingguan dari OBDS… '
+            + 'Agregasinya memindai jutaan baris, jadi butuh beberapa detik.');
+
+        ambil(@json(route('ohs-score-card.incident-management.leading-indicator')))
+            .then(function (j) {
+                if (!j.ok) {
+                    el('ld-body').innerHTML = kotakPesan('Indikator tidak bisa dimuat', esc(j.pesan), true);
+                    return;
+                }
+
+                ldData = j;
+
+                var adaIsi = {};
+                j.baris.forEach(function (b) { if (b[K.hazard] > 0) { adaIsi[b[K.site]] = true; } });
+
+                el('ld-site').innerHTML = '<option value="all">Semua site</option>'
+                    + Object.keys(adaIsi).map(function (i) {
+                        return '<option value="' + i + '">' + esc(j.site[i]) + '</option>';
+                    }).join('');
+
+                gambarLeading();
+            })
+            .catch(function (err) {
+                el('ld-body').innerHTML = kotakPesan('Permintaan ke server gagal', esc(err && err.message), true);
+            });
+
+        el('ld-site').addEventListener('change', gambarLeading);
+        el('ld-indikator').addEventListener('change', gambarLeading);
+    }
+
+    /** Korelasi Pearson; null bila sampelnya terlalu sedikit untuk dipercaya. */
+    function pearson(xs, ys) {
+        var n = xs.length;
+        if (n < 8) { return null; }
+        var mx = 0, my = 0, i;
+        for (i = 0; i < n; i++) { mx += xs[i]; my += ys[i]; }
+        mx /= n; my /= n;
+        var sxy = 0, sx = 0, sy = 0;
+        for (i = 0; i < n; i++) {
+            var a = xs[i] - mx, b = ys[i] - my;
+            sxy += a * b; sx += a * a; sy += b * b;
+        }
+        return sx && sy ? sxy / Math.sqrt(sx * sy) : null;
+    }
+
+    /** Dinormalkan per site supaya site besar tidak mendominasi korelasinya. */
+    function baku(arr) {
+        var isi = arr.filter(function (x) { return x !== null; });
+        if (isi.length < 4) { return null; }
+        var m = isi.reduce(function (s, x) { return s + x; }, 0) / isi.length;
+        var sd = Math.sqrt(isi.reduce(function (s, x) { return s + (x - m) * (x - m); }, 0) / isi.length);
+        if (!sd) { return null; }
+        return arr.map(function (x) { return x === null ? null : (x - m) / sd; });
+    }
+
+    function korelasiLag(ind, siteIdx, minggu) {
+        var hasil = [];
+
+        for (var lag = 0; lag <= 8; lag++) {
+            var X = [], Y = [];
+
+            siteIdx.forEach(function (si) {
+                var deret = minggu.map(function (w) {
+                    var b = ldData.baris.find(function (r) { return r[K.site] === si && r[K.minggu] === w; });
+                    return b ? keObjek(b) : { hazard: 0, jatuh_tempo: 0, tepat_waktu: 0, lewat_target: 0,
+                                              pelapor: 0, oak: 0, coaching: 0, observasi: 0, dms: 0, insiden: 0 };
+                });
+                var x = baku(deret.map(function (r) {
+                    var v = ind.f(r);
+                    return (v === null || v === undefined || isNaN(v)) ? null : v;
+                }));
+                var y = baku(deret.map(function (r) { return r.insiden; }));
+                if (!x || !y) { return; }
+
+                for (var t = lag; t < minggu.length; t++) {
+                    if (x[t - lag] === null || y[t] === null) { continue; }
+                    X.push(x[t - lag]); Y.push(y[t]);
+                }
+            });
+
+            hasil.push({ lag: lag, r: pearson(X, Y), n: X.length });
+        }
+
+        return hasil;
+    }
+
+    function gambarLeading() {
+        if (!ldData) { return; }
+
+        var site = el('ld-site').value;
+        var ind = INDIKATOR.filter(function (x) { return x.k === el('ld-indikator').value; })[0] || INDIKATOR[0];
+        var batas = ldData.batas_lengkap;
+        var minggu = ldData.minggu.filter(function (w) { return !batas || w <= batas; });
+        var semuaSite = [];
+        ldData.baris.forEach(function (b) {
+            if (b[K.hazard] > 0 && semuaSite.indexOf(b[K.site]) === -1) { semuaSite.push(b[K.site]); }
+        });
+        var siteIdx = site === 'all' ? semuaSite : [+site];
+
+        // Agregat per minggu untuk site yang dipilih
+        var agg = minggu.map(function (w) {
+            var o = { minggu: w };
+            Object.keys(K).forEach(function (n) { if (n !== 'site' && n !== 'minggu') { o[n] = 0; } });
+            ldData.baris.forEach(function (b) {
+                if (b[K.minggu] !== w || siteIdx.indexOf(b[K.site]) === -1) { return; }
+                Object.keys(K).forEach(function (n) {
+                    if (n !== 'site' && n !== 'minggu') { o[n] += b[K[n]]; }
+                });
+            });
+            return o;
+        });
+
+        var lag = korelasiLag(ind, siteIdx, minggu);
+        var totInsiden = agg.reduce(function (s, r) { return s + r.insiden; }, 0);
+
+        // Kesehatan tiap indikator, selalu dihitung untuk SELURUH site supaya
+        // penilaiannya tidak berubah-ubah mengikuti pilihan site.
+        var sehat = INDIKATOR.map(function (x) {
+            var lc = korelasiLag(x, semuaSite, minggu).filter(function (r) { return r.lag >= 1 && r.r !== null; });
+            var terbaik = lc.reduce(function (b, r) {
+                return (!b || Math.abs(r.r) > Math.abs(b.r)) ? r : b;
+            }, null);
+
+            var nilai = minggu.map(function (w) {
+                var o = {};
+                Object.keys(K).forEach(function (n) { if (n !== 'site' && n !== 'minggu') { o[n] = 0; } });
+                ldData.baris.forEach(function (b) {
+                    if (b[K.minggu] !== w) { return; }
+                    Object.keys(K).forEach(function (n) {
+                        if (n !== 'site' && n !== 'minggu') { o[n] += b[K[n]]; }
+                    });
+                });
+                return x.f(o);
+            }).filter(function (v) { return v !== null && !isNaN(v); });
+
+            var rata = nilai.reduce(function (a, v) { return a + v; }, 0) / (nilai.length || 1);
+            var sd = Math.sqrt(nilai.reduce(function (a, v) { return a + (v - rata) * (v - rata); }, 0) / (nilai.length || 1));
+            var cv = rata ? sd / rata : 0;
+            var pita = terbaik ? 2 / Math.sqrt(terbaik.n) : 1;
+
+            var verdikt, kelas;
+            if (x.persen && rata >= 97) {
+                verdikt = 'Jenuh: hampir selalu mendekati 100%, tidak membedakan minggu berisiko';
+                kelas = 'bg-warning-focus text-warning-main';
+            } else if (cv < 0.03) {
+                verdikt = 'Datar: hampir tidak berubah antar minggu';
+                kelas = 'bg-warning-focus text-warning-main';
+            } else if (terbaik && Math.abs(terbaik.r) >= pita) {
+                verdikt = 'Ada sinyal: nilainya ' + (terbaik.r < 0 ? 'lebih rendah' : 'lebih tinggi') + ' '
+                    + terbaik.lag + ' minggu sebelum minggu yang insidennya banyak';
+                kelas = (terbaik.r < 0 && x.aktivitas) ? 'bg-success-focus text-success-main' : 'bg-info-focus text-info-main';
+            } else {
+                verdikt = 'Belum terlihat hubungan dengan insiden';
+                kelas = 'bg-neutral-200 text-secondary-light';
+            }
+
+            return { x: x, terbaik: terbaik, rata: rata, verdikt: verdikt, kelas: kelas };
+        });
+
+        el('ld-body').innerHTML =
+            panel('Tren Mingguan · ' + esc(site === 'all' ? 'semua site' : ldData.site[+site]),
+                esc(minggu.length + ' minggu (' + (minggu[0] || '') + ' s.d. ' + (batas || '') + '), '
+                    + fmt(totInsiden) + ' insiden. Panel atas insiden (lagging), panel bawah indikator (leading).'),
+                '<div class="imd-chart" data-imi="ld-chart" style="height:400px"></div>')
+            + '<div class="row gy-4 mb-24"><div class="col-xxl-6">'
+            +   panel('Uji Lead-Lag', 'Korelasi antara nilai indikator <i>k</i> minggu sebelumnya dan jumlah '
+                    + 'insiden minggu ini, dinormalkan per site. Batang yang melewati garis putus-putus '
+                    + 'cukup kuat untuk ditindaklanjuti.',
+                    '<div class="imd-chart" data-imi="ld-lag" style="height:300px"></div>'
+                    + '<p class="text-xs text-secondary-light mt-12 mb-0">Korelasi bukan sebab-akibat. Nilai '
+                    + 'positif pada indikator aktivitas sering berarti site yang sibuk punya lebih banyak '
+                    + 'laporan sekaligus lebih banyak insiden. Konfirmasi lewat deep dive per insiden.</p>',
+                    'h-100')
+            + '</div><div class="col-xxl-6">'
+            +   panel('Kesehatan Indikator · semua site', 'Mana yang layak dipakai sebagai leading indicator',
+                    '<div class="table-responsive"><table class="table bordered-table sm-table mb-0">'
+                    + '<thead><tr><th>Indikator</th><th class="text-end">Rata-rata/mgg</th>'
+                    + '<th class="text-end">Lag terkuat</th><th>Penilaian</th></tr></thead><tbody>'
+                    + sehat.map(function (h) {
+                        return '<tr style="cursor:pointer" data-ind="' + h.x.k + '">'
+                            + '<td><span class="text-sm fw-semibold">' + esc(h.x.label) + '</span></td>'
+                            + '<td class="text-end">' + (h.x.persen ? h.rata.toFixed(1) + '%'
+                                : h.x.desimal ? h.rata.toFixed(1) : fmt(Math.round(h.rata))) + '</td>'
+                            + '<td class="text-end text-xs">' + (h.terbaik
+                                ? h.terbaik.lag + ' mgg · r ' + h.terbaik.r.toFixed(2) : '-') + '</td>'
+                            + '<td><span class="' + h.kelas + ' px-8 py-2 rounded-pill fw-medium text-xs" '
+                            +   'style="white-space:normal">' + esc(h.verdikt) + '</span></td></tr>';
+                    }).join('')
+                    + '</tbody></table></div>'
+                    + '<p class="text-xs text-secondary-light mt-12 mb-0">Klik baris untuk menampilkan '
+                    + 'indikator itu di grafik.</p>', 'h-100')
+            + '</div></div>'
+            + panel('Catatan Leading Indicator', null,
+                '<div class="row gy-3">'
+                + [['Sumber', 'mv_inspeksi_hazard, mv_oak, mv_coaching, mv_observasi (bcbeats), '
+                    + 'mv_dms_violation_report (bcsid) dan mv_investigasi. Semuanya materialized view, '
+                    + 'jadi minggu terakhir bisa belum lengkap dan sudah dipotong otomatis.'],
+                   ['Belum termasuk', 'Jam kerja atau jumlah pekerja sebagai pembagi, sehingga angkanya masih '
+                    + 'jumlah absolut, bukan rate. Site yang besar otomatis terlihat lebih tinggi.'],
+                   ['Cara membaca', '"% tepat waktu" dihitung dari temuan yang sudah jatuh tempo; '
+                    + '"lewat target" dihitung terhadap hari ini, jadi minggu-minggu lama cenderung lebih kecil.']]
+                    .map(function (c) {
+                        return '<div class="col-xxl-4"><div class="border input-form-light radius-8 p-16 h-100">'
+                            + '<span class="text-md fw-semibold d-block mb-8">' + esc(c[0]) + '</span>'
+                            + '<p class="text-sm text-secondary-light mb-0">' + esc(c[1]) + '</p></div></div>';
+                    }).join('')
+                + '</div>', 'mb-0');
+
+        el('ld-body').querySelectorAll('tr[data-ind]').forEach(function (tr) {
+            tr.addEventListener('click', function () {
+                el('ld-indikator').value = tr.dataset.ind;
+                gambarLeading();
+            });
+        });
+
+        var label = minggu.map(function (w) {
+            var d = new Date(w + 'T00:00:00');
+            return d.getDate() + ' ' + BULAN[d.getMonth()];
+        });
+        var nilaiInd = agg.map(function (r) {
+            var v = ind.f(r);
+            return (v === null || isNaN(v)) ? null : v;
+        });
+
+        gambar('ld-chart', {
+            animation: false,
+            tooltip: tip({
+                trigger: 'axis', axisPointer: { type: 'line', lineStyle: { color: INK3 } },
+                valueFormatter: function (v) {
+                    return (v === null || v === undefined) ? '-' : (ind.desimal ? (+v).toFixed(ind.desimal) : fmt(Math.round(v)));
+                }
+            }),
+            axisPointer: { link: [{ xAxisIndex: 'all' }] },
+            legend: { data: ['Insiden', 'Berkonsekuensi'], top: 0, right: 0, itemWidth: 10, itemHeight: 10,
+                      textStyle: { color: INK2, fontSize: 11 } },
+            title: [
+                { text: 'Insiden (lagging)', left: 0, top: 0, textStyle: { fontSize: 12, fontWeight: 500, color: INK2 } },
+                { text: ind.label + ' (leading)', left: 0, top: '42%', textStyle: { fontSize: 12, fontWeight: 500, color: INK2 } }
+            ],
+            grid: [{ left: 48, right: 12, top: 24, height: '26%' }, { left: 48, right: 12, top: '50%', bottom: 30 }],
+            xAxis: [0, 1].map(function (i) {
+                return {
+                    type: 'category', gridIndex: i, data: label, axisTick: { show: false },
+                    axisLine: { lineStyle: { color: GRID } },
+                    axisLabel: { show: i === 1, color: INK3, fontSize: 10.5, hideOverlap: true }
+                };
+            }),
+            yAxis: [0, 1].map(function (i) {
+                return {
+                    type: 'value', gridIndex: i, splitNumber: i ? 4 : 2, minInterval: i ? 0 : 1,
+                    scale: i === 1 && !!ind.persen,
+                    splitLine: { lineStyle: { color: GRID, type: 'dashed' } },
+                    axisLabel: { color: INK3, fontSize: 10, formatter: function (v) { return ind.persen && i ? v + '%' : v; } }
+                };
+            }),
+            series: [
+                { name: 'Insiden', type: 'bar', xAxisIndex: 0, yAxisIndex: 0, barMaxWidth: 14,
+                  data: agg.map(function (r) { return r.insiden; }),
+                  itemStyle: { color: PALETTE[6], borderRadius: [3, 3, 0, 0] } },
+                { name: 'Berkonsekuensi', type: 'bar', xAxisIndex: 0, yAxisIndex: 0, barMaxWidth: 14, barGap: '-100%',
+                  data: agg.map(function (r) { return r.berkonsekuensi; }),
+                  itemStyle: { color: INK, opacity: 0.55, borderRadius: [3, 3, 0, 0] } },
+                { name: ind.label, type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: nilaiInd,
+                  showSymbol: false, connectNulls: false,
+                  lineStyle: { width: 2, color: PALETTE[0] },
+                  areaStyle: { color: PALETTE[0], opacity: 0.08 } }
+            ]
+        });
+
+        var pertama = lag.filter(function (r) { return r.n; })[0];
+        var pita = pertama ? 2 / Math.sqrt(pertama.n) : null;
+
+        gambar('ld-lag', {
+            animation: false,
+            grid: { left: 44, right: 12, top: 14, bottom: 42 },
+            tooltip: tip({
+                trigger: 'axis', axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(100,116,139,.08)' } },
+                formatter: function (p) {
+                    var r = lag[p[0].dataIndex];
+                    return r.lag + ' minggu sebelumnya<br>r = <b>' + (r.r === null ? '-' : r.r.toFixed(3))
+                        + '</b> · n = ' + r.n;
+                }
+            }),
+            xAxis: {
+                type: 'category', data: lag.map(function (r) { return r.lag === 0 ? 'minggu sama' : r.lag + ' mgg'; }),
+                name: 'jarak waktu', nameLocation: 'middle', nameGap: 28,
+                nameTextStyle: { color: INK3, fontSize: 11 },
+                axisTick: { show: false }, axisLine: { lineStyle: { color: GRID } },
+                axisLabel: { color: INK3, fontSize: 10.5, interval: 0 }
+            },
+            yAxis: {
+                type: 'value',
+                min: function (v) { return Math.min(-0.3, Math.floor(v.min * 10) / 10); },
+                max: function (v) { return Math.max(0.3, Math.ceil(v.max * 10) / 10); },
+                splitLine: { lineStyle: { color: GRID, type: 'dashed' } },
+                axisLabel: { color: INK3, fontSize: 10 }
+            },
+            series: [{
+                type: 'bar', barMaxWidth: 26,
+                data: lag.map(function (r) {
+                    var kuat = pita && r.r !== null && Math.abs(r.r) >= pita;
+                    return {
+                        value: r.r === null ? null : +r.r.toFixed(3),
+                        itemStyle: {
+                            color: r.r === null ? NETRAL : (kuat ? (r.r < 0 ? PALETTE[1] : PALETTE[3]) : NETRAL),
+                            borderRadius: (r.r || 0) >= 0 ? [3, 3, 0, 0] : [0, 0, 3, 3]
+                        }
+                    };
+                }),
+                markLine: pita ? {
+                    symbol: 'none', silent: true, label: { show: false },
+                    lineStyle: { color: INK3, type: 'dashed' },
+                    data: [{ yAxis: pita }, { yAxis: -pita }]
+                } : undefined
+            }]
+        });
+    }
+
+    // Tab terakhir diingat; kalau yang tersimpan sudah tidak ada, kembali ke Ringkasan.
+    var simpan = 'ringkasan';
+    try { simpan = window.localStorage.getItem('imd-tab') || 'ringkasan'; } catch (err) { /* diabaikan */ }
+    if (['ringkasan', 'deep', 'leading'].indexOf(simpan) === -1) { simpan = 'ringkasan'; }
+    if (simpan !== 'ringkasan') { bukaTab(simpan); }
 })();
 </script>
 @endsection

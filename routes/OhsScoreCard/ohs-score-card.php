@@ -10,7 +10,9 @@ use App\Http\Controllers\OhsScoreCard\BlindspotTbcPicSubcontController;
 use App\Http\Controllers\OhsScoreCard\FitToWorkAwalShiftController;
 use App\Http\Controllers\OhsScoreCard\GoldenTimeEmergencyController;
 use App\Http\Controllers\OhsScoreCard\GrSeatbeltController;
+use App\Http\Controllers\OhsScoreCard\IncidentDeepDiveController;
 use App\Http\Controllers\OhsScoreCard\IncidentGapCctvDmsController;
+use App\Http\Controllers\OhsScoreCard\IncidentLeadingIndicatorController;
 use App\Http\Controllers\OhsScoreCard\IncidentManagementDashboardController;
 use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
 use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
@@ -211,6 +213,17 @@ Route::middleware('evaluasi-well.access')
             ->name('incident-management.dashboard.index');
         Route::get('/incident-management/dashboard/data', [IncidentManagementDashboardController::class, 'data'])
             ->name('incident-management.dashboard.data');
+
+        // Tab Deep Dive: satu insiden ditelusuri lintas tujuh materialized view
+        Route::get('/incident-management/deep-dive/daftar', [IncidentDeepDiveController::class, 'daftar'])
+            ->name('incident-management.deep-dive.daftar');
+        Route::get('/incident-management/deep-dive/{insiden}', [IncidentDeepDiveController::class, 'detail'])
+            ->whereNumber('insiden')
+            ->name('incident-management.deep-dive.detail');
+
+        // Tab Leading Indicator: agregasi mingguan per site
+        Route::get('/incident-management/leading-indicator', [IncidentLeadingIndicatorController::class, 'data'])
+            ->name('incident-management.leading-indicator');
 
         // Parameter SIRM "Deviasi Rekayasa Engineering Overspeed"
         Route::get('/pelanggaran-overspeed', [PelanggaranOverspeedController::class, 'index'])
