@@ -21,7 +21,7 @@
             ['label' => 'Blindspot TBC',                             'icon' => 'solar:eye-closed-outline', 'url' => route('ohs-score-card.blindspot-tbc.index')],
             ['label' => 'Blindspot GR',                              'icon' => 'solar:eye-closed-outline', 'url' => route('ohs-score-card.blindspot-gr.index')],
             ['label' => 'Coverage Area Kritis Pengawas Suptend up',                     'icon' => 'solar:map-point-outline'],
-            ['label' => '%Pengawasan Berjarak',                                        'icon' => 'solar:ruler-outline'],
+            ['label' => '%Pengawasan Berjarak',                                        'icon' => 'solar:ruler-outline', 'url' => route('ohs-score-card.pengawasan-berjarak.index')],
             ['label' => '%Blindspot temuan Real Time',                                 'icon' => 'solar:alarm-outline'],
             ['label' => 'Coverage Daily Area Kritis Pengawas Safety',                   'icon' => 'solar:shield-check-outline'],
             ['label' => 'Speak up fatigue',                                             'icon' => 'solar:user-speak-outline'],

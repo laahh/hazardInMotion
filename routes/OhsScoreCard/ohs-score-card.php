@@ -9,6 +9,7 @@ use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
 use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
 use App\Http\Controllers\OhsScoreCard\PelaksanaanEdukasiController;
+use App\Http\Controllers\OhsScoreCard\PengawasanBerjarakController;
 use App\Http\Controllers\OhsScoreCard\RasioKelayakanKerjaController;
 use App\Http\Controllers\OhsScoreCard\RatioTbcGrController;
 use App\Http\Controllers\OhsScoreCard\RoadSummaryController;
@@ -55,6 +56,16 @@ Route::middleware('evaluasi-well.access')
         Route::get('/ratio-tbc-gr/{dataset}/export', [RatioTbcGrController::class, 'export'])
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('ratio-tbc-gr.export');
+
+        // Parameter SOD "% Pengawasan Berjarak"
+        Route::get('/pengawasan-berjarak', [PengawasanBerjarakController::class, 'index'])
+            ->name('pengawasan-berjarak.index');
+        Route::get('/pengawasan-berjarak/overview', [PengawasanBerjarakController::class, 'overview'])
+            ->name('pengawasan-berjarak.overview');
+        Route::get('/pengawasan-berjarak/data', [PengawasanBerjarakController::class, 'data'])
+            ->name('pengawasan-berjarak.data');
+        Route::get('/pengawasan-berjarak/export', [PengawasanBerjarakController::class, 'export'])
+            ->name('pengawasan-berjarak.export');
 
         // Parameter SOD "Blindspot GR"
         Route::get('/blindspot-gr', [BlindspotGrController::class, 'index'])
