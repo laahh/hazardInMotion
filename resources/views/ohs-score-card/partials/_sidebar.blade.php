@@ -22,7 +22,7 @@
             ['label' => 'Blindspot GR',                              'icon' => 'solar:eye-closed-outline', 'url' => route('ohs-score-card.blindspot-gr.index')],
             ['label' => 'Coverage Area Kritis Pengawas Suptend up',                     'icon' => 'solar:map-point-outline'],
             ['label' => '%Pengawasan Berjarak',                                        'icon' => 'solar:ruler-outline', 'url' => route('ohs-score-card.pengawasan-berjarak.index')],
-            ['label' => '%Blindspot temuan Real Time',                                 'icon' => 'solar:alarm-outline'],
+            ['label' => '%Blindspot temuan Real Time',                                 'icon' => 'solar:alarm-outline', 'url' => route('ohs-score-card.blindspot-real-time.index')],
             ['label' => 'Coverage Daily Area Kritis Pengawas Safety',                   'icon' => 'solar:shield-check-outline'],
             ['label' => 'Speak up fatigue',                                             'icon' => 'solar:user-speak-outline'],
             ['label' => 'Tidak ada temuan penggunaan HP',                               'icon' => 'solar:smartphone-outline', 'url' => route('ohs-score-card.penggunaan-hp.index')],
