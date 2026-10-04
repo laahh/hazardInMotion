@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
@@ -591,6 +592,109 @@ final class IsiLeadtimeAlertBedms extends Command
         return null;
     }
 
+    /**
+     * Nama kolom tabel rekap menurut skemanya sendiri.
+     *
+     * Tabel ini sudah dua kali berganti bentuk -- mula-mula hasil scrape
+     * Tableau, kini snake_case dengan nama persentase yang terpotong di 60
+     * huruf -- jadi namanya dibaca, bukan ditulis mati. Nilai 'gaya' mencatat
+     * bagaimana tabelnya menulis bulan, supaya baris baru ditulis seragam
+     * dengan yang sudah ada.
+     *
+     * @return array<string, string>|null  null bila ada kolom yang tak ditemukan
+     */
+    private function kolomRekap(): ?array
+    {
+        $ada = [];
+
+        foreach (Schema::getColumnListing(self::TABEL_REKAP) as $column) {
+            $ada[mb_strtolower($column)] = $column;
+        }
+
+        $calon = [
+            'site' => ['site'],
+            'mitra' => ['perusahaan', 'Perusahaan', 'perusahaan_pic'],
+            'bulan' => ['month_of_event_time', 'Month_of_event_time', 'Month_of_Event_Time'],
+            'persen' => ['Leadtime_Alert_masuk_ke_Server_Evidence_BeDMS_under_5_min'],
+        ];
+
+        $out = [];
+
+        foreach ($calon as $peran => $nama) {
+            $ketemu = null;
+
+            foreach ($nama as $n) {
+                if (isset($ada[mb_strtolower($n)])) {
+                    $ketemu = $ada[mb_strtolower($n)];
+                    break;
+                }
+            }
+
+            // Kolom persentase punya cadangan berbasis awalan karena namanya
+            // terpotong saat tabelnya dirapikan.
+            if ($ketemu === null && $peran === 'persen') {
+                foreach ($ada as $kecil => $asli) {
+                    if (str_starts_with($kecil, 'pct_leadtime')) {
+                        $ketemu = $asli;
+                        break;
+                    }
+                }
+            }
+
+            if ($ketemu === null) {
+                $this->error(sprintf(
+                    'Kolom untuk "%s" tidak ada di %s. Kolom yang tersedia: %s.',
+                    $peran,
+                    self::TABEL_REKAP,
+                    implode(', ', array_values($ada))
+                ));
+
+                return null;
+            }
+
+            $out[$peran] = $ketemu;
+        }
+
+        $contoh = DB::table(self::TABEL_REKAP)->value($out['bulan']);
+        $out['gaya'] = $contoh !== null && preg_match('/^M\d{1,2}$/i', trim((string) $contoh)) === 1
+            ? 'kode'
+            : 'inggris';
+
+        return $out;
+    }
+
+    /** Menulis satu nomor bulan sesuai gaya yang dipakai tabel rekap. */
+    private function ejaanBulan(string $gaya, int $nomor): string
+    {
+        return $gaya === 'kode' ? sprintf('M%02d', $nomor) : self::BULAN_INGGRIS[$nomor];
+    }
+
+    /**
+     * Kolom jejak scrape yang hanya ada di bentuk tabel yang lama.
+     *
+     * @param  array<string, string>  $kolom
+     * @return array<string, mixed>
+     */
+    private function kolomTambahan(array $kolom): array
+    {
+        $ada = array_map('mb_strtolower', Schema::getColumnListing(self::TABEL_REKAP));
+        $out = [];
+
+        if (in_array('scraped_at', $ada, true)) {
+            $out['scraped_at'] = now();
+        }
+
+        if (in_array('tableau_view_id', $ada, true)) {
+            $out['tableau_view_id'] = null;
+        }
+
+        if (in_array('source_url', $ada, true)) {
+            $out['source_url'] = 'artisan ohs:isi-leadtime-alert';
+        }
+
+        return $out;
+    }
+
     /** @param  array<int, array<string, mixed>>  $baris */
     private function tampilkan(array $baris): void
     {
@@ -618,20 +722,34 @@ final class IsiLeadtimeAlertBedms extends Command
      */
     private function tulis(array $baris, array $bulanList): int
     {
-        $namaBulan = array_map(static fn (int $b): string => self::BULAN_INGGRIS[$b], $bulanList);
-        $sekarang = now();
+        $kolom = $this->kolomRekap();
 
-        return DB::transaction(function () use ($baris, $namaBulan, $sekarang): int {
-            DB::table(self::TABEL_REKAP)->whereIn('Month_of_event_time', $namaBulan)->delete();
+        if ($kolom === null) {
+            return 0;
+        }
 
-            $muatan = array_map(static fn (array $r): array => [
-                'scraped_at' => $sekarang,
-                'tableau_view_id' => null,
-                'source_url' => 'artisan ohs:isi-leadtime-alert',
-                'Month_of_event_time' => $r['bulan'],
-                'Perusahaan' => $r['perusahaan'],
-                'site' => $r['site'],
-                'Leadtime_Alert_masuk_ke_Server_Evidence_BeDMS_under_5_min' => $r['persen'],
+        // Bulan ditulis dengan ejaan yang sudah dipakai tabelnya, dan yang
+        // dihapus mencakup semua ejaan supaya baris lama bergaya lain ikut
+        // terbuang alih-alih menumpuk.
+        $hapus = [];
+        $ejaan = [];
+
+        foreach ($bulanList as $b) {
+            $semua = [sprintf('M%02d', $b), 'M' . $b, self::BULAN_INGGRIS[$b]];
+            $hapus = array_merge($hapus, $semua);
+            $ejaan[self::BULAN_INGGRIS[$b]] = $this->ejaanBulan($kolom['gaya'], $b);
+        }
+
+        $tambahan = $this->kolomTambahan($kolom);
+
+        return DB::transaction(function () use ($baris, $hapus, $ejaan, $kolom, $tambahan): int {
+            DB::table(self::TABEL_REKAP)->whereIn($kolom['bulan'], $hapus)->delete();
+
+            $muatan = array_map(static fn (array $r): array => $tambahan + [
+                $kolom['bulan'] => $ejaan[$r['bulan']] ?? $r['bulan'],
+                $kolom['mitra'] => $r['perusahaan'],
+                $kolom['site'] => $r['site'],
+                $kolom['persen'] => $r['persen'],
             ], $baris);
 
             foreach (array_chunk($muatan, 500) as $potongan) {

@@ -11,6 +11,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -27,6 +28,14 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * mentah setahun penuh terlalu berat untuk dijalankan tiap kali filter
  * diganti. Pola ini sama dengan parameter OHS Score Card lainnya.
  *
+ * NAMA KOLOM DIBACA DARI SKEMA, bukan ditulis mati. Tabel ini sudah dua kali
+ * berganti bentuk: mula-mula hasil scrape Tableau (Month_of_event_time,
+ * Perusahaan, Leadtime_Alert_masuk_ke_Server_Evidence_BeDMS_under_5_min), kini
+ * snake_case dengan nama persentase yang terpotong di 60 huruf
+ * (pct_leadtime_alert_masuk_ke_server_evidence_bedms_under_5_mi). Bulannya pun
+ * ikut berubah dari nama Inggris menjadi M01-M12. kolom() dan nomorBulan()
+ * menangani keduanya sekaligus.
+ *
  * SKALA ANGKA. Kolom sumbernya bertipe double tanpa satuan yang pasti:
  * perintah pengisi menulis persen (0-100), sedangkan hasil scrape Tableau
  * untuk parameter sejenis menulis pecahan (0-1). Karena itu skalanya
@@ -39,10 +48,25 @@ final class LeadtimeAlertBedmsController extends Controller
 
     private const TABLE = 'lead_leadtime_alert_entry_to_bedms_month';
 
-    private const COL_SITE = 'site';
-    private const COL_PERUSAHAAN = 'Perusahaan';
-    private const COL_BULAN = 'Month_of_event_time';
-    private const COL_PERSEN = 'Leadtime_Alert_masuk_ke_Server_Evidence_BeDMS_under_5_min';
+    /**
+     * Calon nama kolom untuk tiap peran, diurutkan dari bentuk yang dipakai
+     * sekarang ke bentuk lama. Lihat catatan NAMA KOLOM di docblock kelas.
+     *
+     * @var array<string, array<int, string>>
+     */
+    private const KOLOM_CALON = [
+        'site' => ['site'],
+        'mitra' => ['perusahaan', 'Perusahaan', 'perusahaan_pic'],
+        'bulan' => ['month_of_event_time', 'Month_of_event_time', 'Month_of_Event_Time'],
+        'persen' => ['Leadtime_Alert_masuk_ke_Server_Evidence_BeDMS_under_5_min'],
+    ];
+
+    /**
+     * Cadangan untuk kolom persentase: namanya terpotong saat dirapikan
+     * ("..._under_5_min" menjadi "..._under_5_mi"), jadi mencocokkan nama
+     * lengkap saja rapuh. Kolom mana pun yang namanya diawali ini dipakai.
+     */
+    private const PREFIKS_PERSEN = 'pct_leadtime';
 
     /** Ambang evidence dianggap tepat waktu, ikut definisi parameternya. */
     private const AMBANG_MENIT = 5;
@@ -56,7 +80,7 @@ final class LeadtimeAlertBedmsController extends Controller
         [0.0,  1, '<80%'],
     ];
 
-    /** Bulan tersimpan sebagai nama Inggris; dipetakan untuk urutan & label. */
+    /** Bulan bisa tertulis M01-M12 maupun nama Inggris; lihat nomorBulan(). */
     private const MONTH_MAP = [
         'January' => [1, 'Januari'], 'February' => [2, 'Februari'], 'March' => [3, 'Maret'],
         'April' => [4, 'April'], 'May' => [5, 'Mei'], 'June' => [6, 'Juni'],
@@ -68,27 +92,43 @@ final class LeadtimeAlertBedmsController extends Controller
      * Bulan yang tidak ikut dihitung, sejalan dengan halaman parameter
      * lainnya: Oktober masih berjalan saat data ini diambil.
      */
-    private const EXCLUDED_MONTHS = ['October'];
+    private const EXCLUDED_MONTHS = [10];
 
-    private const FILTERABLE = [
-        'site' => self::COL_SITE,
-        'mitra' => self::COL_PERUSAHAAN,
-    ];
+    /**
+     * Dimensi yang bisa difilter. Berupa metode, bukan konstanta, karena nama
+     * kolomnya baru diketahui setelah skema tabel dibaca.
+     *
+     * @return array<string, string>
+     */
+    private function filterable(): array
+    {
+        $k = $this->kolom();
 
-    private const SEARCHABLE = [self::COL_SITE, self::COL_PERUSAHAAN, self::COL_BULAN];
+        return ['site' => $k['site'], 'mitra' => $k['mitra']];
+    }
 
-    private const ORDERABLE = [
-        0 => self::COL_SITE,
-        1 => self::COL_PERUSAHAAN,
-        3 => self::COL_PERSEN,
-    ];
+    /** @return array<int, string> */
+    private function searchable(): array
+    {
+        $k = $this->kolom();
+
+        return [$k['site'], $k['mitra'], $k['bulan']];
+    }
+
+    /** @return array<int, string> */
+    private function orderable(): array
+    {
+        $k = $this->kolom();
+
+        return [0 => $k['site'], 1 => $k['mitra'], 3 => $k['persen']];
+    }
 
     public function index(): View
     {
         return view('ohs-score-card.leadtime-alert-bedms.index', [
             'filterOptions' => [
-                'site' => $this->distinctValues(self::COL_SITE),
-                'mitra' => $this->distinctValues(self::COL_PERUSAHAAN),
+                'site' => $this->distinctValues($this->kolom()['site']),
+                'mitra' => $this->distinctValues($this->kolom()['mitra']),
             ],
             'monthOptions' => $this->monthOptions(),
             'target' => self::TARGET_PERCENT,
@@ -107,10 +147,10 @@ final class LeadtimeAlertBedmsController extends Controller
 
         $rows = $this->baseQuery($request)
             ->selectRaw(
-                self::COL_SITE . ' AS site, '
-                . '`' . self::COL_PERUSAHAAN . '` AS mitra, '
-                . '`' . self::COL_BULAN . '` AS bulan, '
-                . 'AVG(`' . self::COL_PERSEN . '`) AS persen'
+                $this->kolom()['site'] . ' AS site, '
+                . '`' . $this->kolom()['mitra'] . '` AS mitra, '
+                . '`' . $this->kolom()['bulan'] . '` AS bulan, '
+                . 'AVG(`' . $this->kolom()['persen'] . '`) AS persen'
             )
             ->groupBy('site', 'mitra', 'bulan')
             ->get();
@@ -119,7 +159,7 @@ final class LeadtimeAlertBedmsController extends Controller
         $monthSeen = [];
 
         foreach ($rows as $row) {
-            $monthNo = self::MONTH_MAP[$row->bulan][0] ?? 0;
+            $monthNo = $this->nomorBulan((string) $row->bulan);
 
             if ($monthNo === 0) {
                 continue; // nama bulan tak dikenal: jangan diam-diam dianggap bulan lain
@@ -427,7 +467,7 @@ final class LeadtimeAlertBedmsController extends Controller
                 . 'bcsid.dms_alert di Postgres, atau tunggu scraper Tableau mengisinya.';
         }
 
-        $kosong = (clone $this->baseQuery($request))->whereNull(self::COL_PERSEN)->count();
+        $kosong = (clone $this->baseQuery($request))->whereNull($this->kolom()['persen'])->count();
 
         if ($kosong === 0) {
             return null;
@@ -451,7 +491,7 @@ final class LeadtimeAlertBedmsController extends Controller
         $rows = (clone $query)
             ->select($this->columns())
             ->orderBy(
-                $this->dtOrderColumn($request, self::ORDERABLE, self::COL_SITE),
+                $this->dtOrderColumn($request, $this->orderable(), $this->kolom()['site']),
                 $this->dtDirection($request, 'asc')
             )
             ->orderBy('id')
@@ -474,8 +514,8 @@ final class LeadtimeAlertBedmsController extends Controller
 
         $query = $this->dataQuery($request)
             ->select($this->columns())
-            ->orderBy(self::COL_SITE)
-            ->orderBy(self::COL_PERUSAHAAN)
+            ->orderBy($this->kolom()['site'])
+            ->orderBy($this->kolom()['mitra'])
             ->orderBy('id');
 
         return $this->dtExport(
@@ -501,10 +541,10 @@ final class LeadtimeAlertBedmsController extends Controller
         // sini menghasilkan kutipan ganda yang ditolak MySQL. (selectRaw di
         // overview() lain soal -- di sana tidak ada pengutipan otomatis.)
         return [
-            self::COL_SITE . ' AS site',
-            self::COL_PERUSAHAAN . ' AS mitra',
-            self::COL_BULAN . ' AS bulan_sumber',
-            self::COL_PERSEN . ' AS persen',
+            $this->kolom()['site'] . ' AS site',
+            $this->kolom()['mitra'] . ' AS mitra',
+            $this->kolom()['bulan'] . ' AS bulan_sumber',
+            $this->kolom()['persen'] . ' AS persen',
         ];
     }
 
@@ -517,8 +557,8 @@ final class LeadtimeAlertBedmsController extends Controller
 
         if ($nilai >= 1 && $nilai <= 4) {
             [$batas] = self::SCORE_BANDS[4 - $nilai];
-            $query->whereNotNull(self::COL_PERSEN)
-                ->where(self::COL_PERSEN, '>=', $batas / $skala);
+            $query->whereNotNull($this->kolom()['persen'])
+                ->where($this->kolom()['persen'], '>=', $batas / $skala);
 
             // Band teratas sengaja tanpa batas atas. Sebelumnya dibatasi
             // < 101 dan angka di atas itu -- entah salah hitung di sumber atau
@@ -526,16 +566,16 @@ final class LeadtimeAlertBedmsController extends Controller
             // sehingga jumlah keempat band tidak lagi sama dengan jumlah baris.
             if ($nilai < 4) {
                 $atas = self::SCORE_BANDS[3 - $nilai][0];
-                $query->where(self::COL_PERSEN, '<', $atas / $skala);
+                $query->where($this->kolom()['persen'], '<', $atas / $skala);
             }
         } elseif (trim((string) $request->input('nilai', '')) === 'kosong') {
-            $query->whereNull(self::COL_PERSEN);
+            $query->whereNull($this->kolom()['persen']);
         }
 
         $this->dtApplySearch(
             $query,
             (string) $request->input('search.value', $request->input('search', '')),
-            self::SEARCHABLE
+            $this->searchable()
         );
 
         return $query;
@@ -546,11 +586,11 @@ final class LeadtimeAlertBedmsController extends Controller
     {
         $query = DB::table(self::TABLE);
 
-        if (self::EXCLUDED_MONTHS !== []) {
-            $query->whereNotIn(self::COL_BULAN, self::EXCLUDED_MONTHS);
+        foreach (self::EXCLUDED_MONTHS as $nomor) {
+            $query->whereNotIn($this->kolom()['bulan'], $this->namaBulan($nomor));
         }
 
-        foreach (self::FILTERABLE as $parameter => $column) {
+        foreach ($this->filterable() as $parameter => $column) {
             $value = trim((string) $request->input($parameter, ''));
 
             if ($value !== '') {
@@ -561,12 +601,7 @@ final class LeadtimeAlertBedmsController extends Controller
         $month = (int) $request->input('month', 0);
 
         if ($month >= 1 && $month <= 12) {
-            $names = array_keys(array_filter(
-                self::MONTH_MAP,
-                static fn (array $v): bool => $v[0] === $month
-            ));
-
-            $query->whereIn(self::COL_BULAN, $names ?: ['__tidak_ada__']);
+            $query->whereIn($this->kolom()['bulan'], $this->namaBulan($month));
         }
 
         return $query;
@@ -585,7 +620,9 @@ final class LeadtimeAlertBedmsController extends Controller
         return [
             'site' => trim((string) $row->site),
             'mitra' => trim((string) $row->mitra),
-            'bulan' => self::MONTH_MAP[$row->bulan_sumber][1] ?? trim((string) $row->bulan_sumber),
+            'bulan' => $this->nomorBulan((string) $row->bulan_sumber) === 0
+                ? trim((string) $row->bulan_sumber)
+                : self::monthLabel($this->nomorBulan((string) $row->bulan_sumber)),
             'persen' => $persen,
             'nilai' => $persen === null ? null : $nilai,
             'nilai_band' => $persen === null ? null : $band,
@@ -617,17 +654,101 @@ final class LeadtimeAlertBedmsController extends Controller
             return $skala;
         }
 
-        $max = DB::table(self::TABLE)->max(self::COL_PERSEN);
+        $max = DB::table(self::TABLE)->max($this->kolom()['persen']);
 
         return $skala = ($max !== null && (float) $max <= 1.0) ? 100.0 : 1.0;
+    }
+
+    /**
+     * Nama kolom menurut skema tabelnya sendiri.
+     *
+     * Tabel ini sudah dua kali diganti bentuknya, jadi namanya tidak ditulis
+     * mati. Hasilnya di-cache per permintaan karena dipakai berkali-kali.
+     *
+     * @return array<string, string>
+     */
+    private function kolom(): array
+    {
+        static $peta = null;
+
+        if ($peta !== null) {
+            return $peta;
+        }
+
+        $ada = [];
+
+        foreach (Schema::getColumnListing(self::TABLE) as $column) {
+            $ada[mb_strtolower($column)] = $column;
+        }
+
+        $out = [];
+
+        foreach (self::KOLOM_CALON as $peran => $calon) {
+            $out[$peran] = $calon[0];
+
+            foreach ($calon as $nama) {
+                if (isset($ada[mb_strtolower($nama)])) {
+                    $out[$peran] = $ada[mb_strtolower($nama)];
+                    continue 2;
+                }
+            }
+
+            // Hanya kolom persentase yang punya cadangan berbasis awalan;
+            // peran lain memang harus cocok persis.
+            if ($peran === 'persen') {
+                foreach ($ada as $kecil => $asli) {
+                    if (str_starts_with($kecil, self::PREFIKS_PERSEN)) {
+                        $out[$peran] = $asli;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return $peta = $out;
+    }
+
+    /**
+     * Nomor bulan dari dua bentuk penulisan yang pernah dipakai tabel ini:
+     * "M01".."M12" maupun nama bulan Inggris. 0 bila tidak dikenali.
+     */
+    private function nomorBulan(string $nilai): int
+    {
+        $nilai = trim($nilai);
+
+        if (preg_match('/^M(\d{1,2})$/i', $nilai, $cocok) === 1) {
+            $nomor = (int) $cocok[1];
+
+            return $nomor >= 1 && $nomor <= 12 ? $nomor : 0;
+        }
+
+        return self::MONTH_MAP[$nilai][0] ?? 0;
+    }
+
+    /**
+     * Semua ejaan satu nomor bulan, untuk dipakai di whereIn.
+     *
+     * @return array<int, string>
+     */
+    private function namaBulan(int $nomor): array
+    {
+        $out = [sprintf('M%02d', $nomor), 'M' . $nomor];
+
+        foreach (self::MONTH_MAP as $inggris => [$no]) {
+            if ($no === $nomor) {
+                $out[] = $inggris;
+            }
+        }
+
+        return $out;
     }
 
     private function baseCount(): int
     {
         $query = DB::table(self::TABLE);
 
-        if (self::EXCLUDED_MONTHS !== []) {
-            $query->whereNotIn(self::COL_BULAN, self::EXCLUDED_MONTHS);
+        foreach (self::EXCLUDED_MONTHS as $nomor) {
+            $query->whereNotIn($this->kolom()['bulan'], $this->namaBulan($nomor));
         }
 
         return $query->count();
@@ -671,14 +792,14 @@ final class LeadtimeAlertBedmsController extends Controller
     {
         $months = [];
 
-        foreach ($this->distinctValues(self::COL_BULAN) as $name) {
-            if (in_array($name, self::EXCLUDED_MONTHS, true)) {
+        foreach ($this->distinctValues($this->kolom()['bulan']) as $nilai) {
+            $nomor = $this->nomorBulan($nilai);
+
+            if ($nomor === 0 || in_array($nomor, self::EXCLUDED_MONTHS, true)) {
                 continue;
             }
 
-            if (isset(self::MONTH_MAP[$name])) {
-                $months[self::MONTH_MAP[$name][0]] = self::MONTH_MAP[$name][1];
-            }
+            $months[$nomor] = self::monthLabel($nomor);
         }
 
         ksort($months);

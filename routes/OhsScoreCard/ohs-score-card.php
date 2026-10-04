@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 use App\Http\Controllers\OhsScoreCard\BerecordController;
 use App\Http\Controllers\OhsScoreCard\BlindspotGrController;
+use App\Http\Controllers\OhsScoreCard\BlindspotRealTimeController;
 use App\Http\Controllers\OhsScoreCard\BlindspotTbcController;
+use App\Http\Controllers\OhsScoreCard\GrSeatbeltController;
+use App\Http\Controllers\OhsScoreCard\IncidentGapCctvDmsController;
 use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
 use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
 use App\Http\Controllers\OhsScoreCard\PelaksanaanEdukasiController;
 use App\Http\Controllers\OhsScoreCard\PengawasanBerjarakController;
+use App\Http\Controllers\OhsScoreCard\PenggunaanHpController;
 use App\Http\Controllers\OhsScoreCard\RasioKelayakanKerjaController;
 use App\Http\Controllers\OhsScoreCard\RatioTbcGrController;
 use App\Http\Controllers\OhsScoreCard\RoadSummaryController;
@@ -57,6 +61,36 @@ Route::middleware('evaluasi-well.access')
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('ratio-tbc-gr.export');
 
+        // Parameter SOD "Incident dengan Gap Coverage CCTV & Gap pada DMS"
+        Route::get('/incident-gap-cctv-dms', [IncidentGapCctvDmsController::class, 'index'])
+            ->name('incident-gap-cctv-dms.index');
+        Route::get('/incident-gap-cctv-dms/overview', [IncidentGapCctvDmsController::class, 'overview'])
+            ->name('incident-gap-cctv-dms.overview');
+        Route::get('/incident-gap-cctv-dms/data', [IncidentGapCctvDmsController::class, 'data'])
+            ->name('incident-gap-cctv-dms.data');
+        Route::get('/incident-gap-cctv-dms/export', [IncidentGapCctvDmsController::class, 'export'])
+            ->name('incident-gap-cctv-dms.export');
+
+        // Parameter SOD "GR Seatbelt"
+        Route::get('/gr-seatbelt', [GrSeatbeltController::class, 'index'])
+            ->name('gr-seatbelt.index');
+        Route::get('/gr-seatbelt/overview', [GrSeatbeltController::class, 'overview'])
+            ->name('gr-seatbelt.overview');
+        Route::get('/gr-seatbelt/data', [GrSeatbeltController::class, 'data'])
+            ->name('gr-seatbelt.data');
+        Route::get('/gr-seatbelt/export', [GrSeatbeltController::class, 'export'])
+            ->name('gr-seatbelt.export');
+
+        // Parameter SOD "Tidak ada temuan penggunaan HP"
+        Route::get('/penggunaan-hp', [PenggunaanHpController::class, 'index'])
+            ->name('penggunaan-hp.index');
+        Route::get('/penggunaan-hp/overview', [PenggunaanHpController::class, 'overview'])
+            ->name('penggunaan-hp.overview');
+        Route::get('/penggunaan-hp/data', [PenggunaanHpController::class, 'data'])
+            ->name('penggunaan-hp.data');
+        Route::get('/penggunaan-hp/export', [PenggunaanHpController::class, 'export'])
+            ->name('penggunaan-hp.export');
+
         // Parameter SOD "% Pengawasan Berjarak"
         Route::get('/pengawasan-berjarak', [PengawasanBerjarakController::class, 'index'])
             ->name('pengawasan-berjarak.index');
@@ -66,6 +100,16 @@ Route::middleware('evaluasi-well.access')
             ->name('pengawasan-berjarak.data');
         Route::get('/pengawasan-berjarak/export', [PengawasanBerjarakController::class, 'export'])
             ->name('pengawasan-berjarak.export');
+
+        // Parameter SOD "% Blindspot temuan Real Time"
+        Route::get('/blindspot-real-time', [BlindspotRealTimeController::class, 'index'])
+            ->name('blindspot-real-time.index');
+        Route::get('/blindspot-real-time/overview', [BlindspotRealTimeController::class, 'overview'])
+            ->name('blindspot-real-time.overview');
+        Route::get('/blindspot-real-time/data', [BlindspotRealTimeController::class, 'data'])
+            ->name('blindspot-real-time.data');
+        Route::get('/blindspot-real-time/export', [BlindspotRealTimeController::class, 'export'])
+            ->name('blindspot-real-time.export');
 
         // Parameter SOD "Blindspot GR"
         Route::get('/blindspot-gr', [BlindspotGrController::class, 'index'])
