@@ -32,7 +32,7 @@
             ['label' => 'Kinerja Pengawasan Control Room DMS',                          'icon' => 'solar:monitor-outline', 'url' => route('ohs-score-card.kinerja-control-room-dms.index')],
         ],
         'SIRC' => [
-            ['label' => 'Perulangan rekomendasi hasil investigasi',                     'icon' => 'solar:refresh-outline'],
+            ['label' => 'Perulangan rekomendasi hasil investigasi',                     'icon' => 'solar:refresh-outline', 'url' => route('ohs-score-card.perulangan-rekomendasi.index')],
         ],
         'OC' => [
             ['label' => 'Kesesuaian Implementasi IKK',                                  'icon' => 'solar:clipboard-check-outline'],

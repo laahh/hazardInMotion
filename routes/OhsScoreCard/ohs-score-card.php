@@ -14,6 +14,7 @@ use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
 use App\Http\Controllers\OhsScoreCard\PelaksanaanEdukasiController;
 use App\Http\Controllers\OhsScoreCard\PengawasanBerjarakController;
 use App\Http\Controllers\OhsScoreCard\PenggunaanHpController;
+use App\Http\Controllers\OhsScoreCard\PerulanganRekomendasiController;
 use App\Http\Controllers\OhsScoreCard\RasioKelayakanKerjaController;
 use App\Http\Controllers\OhsScoreCard\RatioTbcGrController;
 use App\Http\Controllers\OhsScoreCard\RoadSummaryController;
@@ -133,6 +134,16 @@ Route::middleware('evaluasi-well.access')
         Route::get('/blindspot-tbc/{dataset}/export', [BlindspotTbcController::class, 'export'])
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('blindspot-tbc.export');
+
+        // Parameter SIRC "Perulangan rekomendasi hasil investigasi"
+        Route::get('/perulangan-rekomendasi', [PerulanganRekomendasiController::class, 'index'])
+            ->name('perulangan-rekomendasi.index');
+        Route::get('/perulangan-rekomendasi/overview', [PerulanganRekomendasiController::class, 'overview'])
+            ->name('perulangan-rekomendasi.overview');
+        Route::get('/perulangan-rekomendasi/data', [PerulanganRekomendasiController::class, 'data'])
+            ->name('perulangan-rekomendasi.data');
+        Route::get('/perulangan-rekomendasi/export', [PerulanganRekomendasiController::class, 'export'])
+            ->name('perulangan-rekomendasi.export');
 
         // Parameter wellbeing "Rasio Kelayakan Kerja"
         Route::get('/rasio-kelayakan-kerja', [RasioKelayakanKerjaController::class, 'index'])
