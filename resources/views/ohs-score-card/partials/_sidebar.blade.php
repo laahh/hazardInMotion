@@ -91,7 +91,7 @@
             'label' => 'Incident Management',
             'icon' => 'solar:danger-triangle-outline',
             'items' => [
-                ['label' => 'Dashboard',        'icon' => 'solar:chart-2-outline'],
+                ['label' => 'Dashboard',        'icon' => 'solar:chart-2-outline', 'url' => route('ohs-score-card.incident-management.dashboard.index')],
                 ['label' => 'Korelasi Insiden', 'icon' => 'solar:graph-new-outline'],
                 ['label' => 'Master Data',      'icon' => 'solar:database-outline'],
             ],

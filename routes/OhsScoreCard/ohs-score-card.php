@@ -11,6 +11,7 @@ use App\Http\Controllers\OhsScoreCard\FitToWorkAwalShiftController;
 use App\Http\Controllers\OhsScoreCard\GoldenTimeEmergencyController;
 use App\Http\Controllers\OhsScoreCard\GrSeatbeltController;
 use App\Http\Controllers\OhsScoreCard\IncidentGapCctvDmsController;
+use App\Http\Controllers\OhsScoreCard\IncidentManagementDashboardController;
 use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
 use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
@@ -203,6 +204,13 @@ Route::middleware('evaluasi-well.access')
             ->name('kinerja-control-room-dms.data');
         Route::get('/kinerja-control-room-dms/export', [KinerjaControlRoomDmsController::class, 'export'])
             ->name('kinerja-control-room-dms.export');
+
+        // Incident Management — dashboard korelasi insiden & IPLS
+        // (OBDS: bcbeats.mv_investigasi, bukan app_mixer)
+        Route::get('/incident-management/dashboard', [IncidentManagementDashboardController::class, 'index'])
+            ->name('incident-management.dashboard.index');
+        Route::get('/incident-management/dashboard/data', [IncidentManagementDashboardController::class, 'data'])
+            ->name('incident-management.dashboard.data');
 
         // Parameter SIRM "Deviasi Rekayasa Engineering Overspeed"
         Route::get('/pelanggaran-overspeed', [PelanggaranOverspeedController::class, 'index'])
