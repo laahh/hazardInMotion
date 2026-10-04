@@ -282,69 +282,6 @@
 
   </div>
 
-  {{-- Catatan sumber data --}}
-  <div class="row gy-4">
-    <div class="col-12">
-      <div class="card radius-8 border">
-        <div class="card-header border-bottom bg-base py-16 px-24">
-          <h6 class="text-lg fw-semibold mb-0">Catatan Data</h6>
-          <span class="text-sm text-secondary-light" data-imi="meta">Sumber: {{ $tabel }}</span>
-        </div>
-        <div class="card-body p-24">
-          <div class="row gy-3">
-            <div class="col-xxl-6">
-              <div class="border input-form-light radius-8 p-16 h-100">
-                <span class="text-md fw-semibold d-block mb-8">Sumber</span>
-                <p class="text-sm text-secondary-light mb-0">
-                  <code>{{ $tabel }}</code> di OBDS, kolom JSONB <code>rootcause</code> dan
-                  <code>tindakan_perbaikan</code>. Materialized view, jadi isinya snapshot — bukan realtime.
-                  <b>Insiden yang tidak diinvestigasi tidak ikut dihitung</b>, begitu juga status DELETED
-                  dan data uji ("Test"). Membuangnya hampir tidak menyentuh sisi IPLS — dari 1.128 insiden
-                  tak terinvestigasi hanya satu yang punya analisis layer — tetapi membuat kategori
-                  "Belum dikategorikan" menyusut drastis, karena kategori kecelakaan memang baru diisi
-                  saat investigasi berjalan.
-                </p>
-              </div>
-            </div>
-            <div class="col-xxl-6">
-              <div class="border input-form-light radius-8 p-16 h-100">
-                <span class="text-md fw-semibold d-block mb-8">Tanggal &amp; site</span>
-                <p class="text-sm text-secondary-light mb-0">
-                  Memakai tanggal dan site hasil validasi investigasi; bila kosong, memakai data
-                  laporan CCR.
-                </p>
-              </div>
-            </div>
-            <div class="col-xxl-6">
-              <div class="border input-form-light radius-8 p-16 h-100">
-                <span class="text-md fw-semibold d-block mb-8">Penggabungan kategori</span>
-                <p class="text-sm text-secondary-light mb-0">
-                  Near Miss, Near Miss HIPO dan Non HIPO digabung jadi Near Miss; First Aid,
-                  Medical Treatment dan Major Injury jadi Injury; Hazard HIPO digabung dengan
-                  Pelanggaran PSPP. "Belum dikategorikan" berarti kategorinya memang belum diisi,
-                  kebanyakan pada insiden yang tidak diinvestigasi.
-                </p>
-              </div>
-            </div>
-            <div class="col-xxl-6">
-              <div class="border input-form-light radius-8 p-16 h-100">
-                <span class="text-md fw-semibold d-block mb-8">Label layer &amp; efektivitas perbaikan</span>
-                <p class="text-sm text-secondary-light mb-0">
-                  Nama pendek tiap layer disusun dari daftar aktivitas di dalamnya, bukan nama resmi
-                  sistem. Panel Efektivitas Perbaikan hanya memakai temuan ber-status
-                  <i>Root cause</i>, dan pasangannya dihitung per insiden — bukan per temuan —
-                  supaya satu insiden dengan banyak root cause dan banyak CAR tidak menggelembungkan
-                  alurnya. Insiden yang root cause-nya baru ada di MySQL
-                  <code>app_mixer.lpi_insiden</code> belum ikut dihitung.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   </div>{{-- /pane ringkasan --}}
 
   {{-- ================= Deep Dive Insiden ================= --}}
@@ -1152,7 +1089,8 @@
         el('status').textContent = fmt(jumlah(d1, D1.n)) + ' insiden diinvestigasi · '
             + fmt(jumlah(d1, D1.ipls)) + ' punya analisis IPLS · '
             + fmt(jumlah(d2Semua, D2.n)) + ' temuan layer · '
-            + fmt(jumlah(carRows, CAR.n)) + ' tindakan perbaikan';
+            + fmt(jumlah(carRows, CAR.n)) + ' tindakan perbaikan'
+            + (payload.meta ? ' · data per ' + payload.meta.diambil : '');
     }
 
     // ---- Filter ------------------------------------------------------------
@@ -1250,8 +1188,6 @@
 
             payload = json;
             el('isi').classList.remove('d-none');
-            el('meta').textContent = 'Sumber: ' + json.meta.tabel
-                + ' · diambil ' + json.meta.diambil + ' lewat ' + json.meta.koneksi;
 
             if (typeof echarts === 'undefined') {
                 tampilkanGagal('Pustaka grafik (ECharts) gagal dimuat dari CDN, jadi grafiknya tidak '
