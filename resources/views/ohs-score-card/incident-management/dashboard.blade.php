@@ -50,7 +50,7 @@
     <div>
       <h6 class="fw-semibold mb-0">Incident Management &amp; IPLS</h6>
       <div class="text-secondary-light text-sm mt-4" data-imi="scope">
-        Memuat data insiden dan analisis 5 layer IPLS dari OBDS…
+        Memuat insiden yang diinvestigasi beserta analisis 5 layer IPLS dari OBDS…
       </div>
     </div>
     <ul class="d-flex align-items-center gap-2">
@@ -117,7 +117,7 @@
           <div class="card-header border-bottom bg-base py-16 px-24">
             <h6 class="text-lg fw-semibold mb-0">Insiden per Bulan</h6>
             <span class="text-sm text-secondary-light">
-              Ditumpuk per status investigasi; yang "Tidak investigasi" umumnya Illness, Fire Case kecil, dan Spill
+              Hanya insiden yang diinvestigasi; yang tidak diinvestigasi tidak ikut dihitung di seluruh halaman ini
             </span>
           </div>
           <div class="card-body p-24">
@@ -269,7 +269,11 @@
                 <p class="text-sm text-secondary-light mb-0">
                   <code>{{ $tabel }}</code> di OBDS, kolom JSONB <code>rootcause</code> dan
                   <code>tindakan_perbaikan</code>. Materialized view, jadi isinya snapshot — bukan realtime.
-                  Status DELETED dan data uji ("Test") tidak ikut dihitung.
+                  <b>Insiden yang tidak diinvestigasi tidak ikut dihitung</b>, begitu juga status DELETED
+                  dan data uji ("Test"). Membuangnya hampir tidak menyentuh sisi IPLS — dari 1.128 insiden
+                  tak terinvestigasi hanya satu yang punya analisis layer — tetapi membuat kategori
+                  "Belum dikategorikan" menyusut drastis, karena kategori kecelakaan memang baru diisi
+                  saat investigasi berjalan.
                 </p>
               </div>
             </div>
@@ -445,10 +449,16 @@
         });
     }
 
-    function saringD2() {
+    /**
+     * pakaiStatus=false dipakai kartu ringkasan: cacah temuan di sana harus
+     * mengikuti filter tahun & site saja, tidak ikut sakelar status layer yang
+     * memang milik panel Korelasi IPLS.
+     */
+    function saringD2(pakaiStatus) {
         return payload.d2.filter(function (r) {
             return cocokTahun(r[D2.tahun]) && cocokSite(r[D2.site])
-                && (state.status === 'all' || String(r[D2.status]) === String(state.status));
+                && (!pakaiStatus || state.status === 'all'
+                    || String(r[D2.status]) === String(state.status));
         });
     }
 
@@ -469,15 +479,17 @@
     }
 
     // ---- Kartu ringkasan utama ---------------------------------------------
-    function renderKpi(d1, carRows) {
+    function renderKpi(d1, d2Semua, carRows) {
         var dim = payload.dim;
-        var iInv = dim.status.indexOf('Investigasi');
-        var iTidak = dim.status.indexOf('Tidak investigasi');
+        var iBaru = dim.status.indexOf('Insiden baru');
 
         var total = jumlah(d1, D1.n);
-        var inv = jumlah(d1.filter(function (r) { return r[D1.status] === iInv; }), D1.n);
-        var tidak = jumlah(d1.filter(function (r) { return r[D1.status] === iTidak; }), D1.n);
+        // Insiden yang baru masuk dan belum ditriase; sisanya sudah diinvestigasi.
+        var baru = iBaru === -1
+            ? 0
+            : jumlah(d1.filter(function (r) { return r[D1.status] === iBaru; }), D1.n);
         var ipls = jumlah(d1, D1.ipls);
+        var temuan = jumlah(d2Semua, D2.n);
 
         var iClosed = dim.status_car.indexOf('Closed');
         var iClosedOd = dim.status_car.indexOf('Closed overdue');
@@ -496,18 +508,24 @@
         var kartu = [
             {
                 grad: 'bg-gradient-end-1', icon: 'solar:danger-triangle-outline', dot: 'bg-primary-600',
-                label: 'Total Insiden', value: fmt(total),
-                foot: fmt(tidak) + ' tidak diinvestigasi'
+                label: 'Insiden Diinvestigasi', value: fmt(total),
+                foot: baru
+                    ? fmt(baru) + ' di antaranya masih berstatus insiden baru'
+                    : 'Insiden yang tidak diinvestigasi tidak ikut dihitung'
             },
             {
                 grad: 'bg-gradient-end-2', icon: 'solar:clipboard-check-outline', dot: 'bg-success-main',
-                label: 'Diinvestigasi', value: fmt(inv),
-                foot: pct(inv, total) + '% dari total', bar: pct(inv, total), barKelas: 'bg-success-main'
+                label: 'Punya Analisis IPLS', value: fmt(ipls),
+                foot: pct(ipls, total) + '% dari insiden di samping',
+                bar: pct(ipls, total), barKelas: 'bg-success-main'
             },
             {
                 grad: 'bg-gradient-end-6', icon: 'solar:layers-minimalistic-outline', dot: 'bg-info-main',
-                label: 'Punya Analisis IPLS', value: fmt(ipls),
-                foot: pct(ipls, inv) + '% dari yang diinvestigasi', bar: pct(ipls, inv), barKelas: 'bg-info-main'
+                label: 'Temuan Layer IPLS', value: fmt(temuan),
+                foot: ipls
+                    ? 'Rata-rata ' + (temuan / ipls).toLocaleString('id-ID', { maximumFractionDigits: 1 })
+                        + ' temuan per insiden yang dianalisis'
+                    : 'Belum ada temuan'
             },
             {
                 grad: 'bg-gradient-end-3', icon: 'solar:wrench-outline', dot: 'bg-yellow',
@@ -1006,7 +1024,8 @@
         if (!payload) { return; }
 
         var d1 = saringD1();
-        var d2 = saringD2();
+        var d2 = saringD2(true);
+        var d2Semua = saringD2(false);
         var carRows = saringCar();
         var rcRows = saringRc();
 
@@ -1015,10 +1034,10 @@
             ? payload.tahun[0] + '–' + payload.tahun[payload.tahun.length - 1]
             : state.tahun;
 
-        el('scope').textContent = 'Insiden ' + namaTahun + ', ' + namaSite
+        el('scope').textContent = 'Insiden yang diinvestigasi ' + namaTahun + ', ' + namaSite
             + ', beserta analisis 5 layer IPLS dan tindakan perbaikan (CAR)';
 
-        aman('kpi', function () { renderKpi(d1, carRows); });
+        aman('kpi', function () { renderKpi(d1, d2Semua, carRows); });
         aman('tren', function () { renderTren(d1); });
         aman('site', function () { renderSite(d1); });
         aman('sankey-a', function () { renderSankeyA(d1); });
@@ -1028,9 +1047,9 @@
         aman('tabel', function () { renderTabel(d2); });
         aman('car', function () { renderCar(carRows); });
 
-        el('status').textContent = fmt(jumlah(d1, D1.n)) + ' insiden · '
+        el('status').textContent = fmt(jumlah(d1, D1.n)) + ' insiden diinvestigasi · '
             + fmt(jumlah(d1, D1.ipls)) + ' punya analisis IPLS · '
-            + fmt(jumlah(d2, D2.n)) + ' temuan layer · '
+            + fmt(jumlah(d2Semua, D2.n)) + ' temuan layer · '
             + fmt(jumlah(carRows, CAR.n)) + ' tindakan perbaikan';
     }
 

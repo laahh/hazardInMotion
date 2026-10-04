@@ -46,8 +46,20 @@ use Throwable;
  * dalam JSONB, bukan insiden, jadi jumlahnya memang jauh melebihi cacah
  * insiden di d1 dan keduanya tidak boleh dibandingkan langsung.
  *
- * YANG DIKECUALIKAN: status_investigasi 'DELETED' dan data uji
- * (kategori_kecelakaan 'Test'), sejalan catatan di kaki halaman.
+ * YANG DIKECUALIKAN (lihat STATUS_DIKECUALIKAN):
+ *
+ *   DELETED            insiden yang sudah dihapus
+ *   TIDAK INVESTIGASI  insiden yang memang tidak diinvestigasi
+ *
+ * plus data uji (kategori_kecelakaan 'Test').
+ *
+ * MEMBUANG 'TIDAK INVESTIGASI' NYARIS TIDAK MENYENTUH SISI IPLS. Dari 1.128
+ * insiden berstatus itu, hanya SATU yang punya analisis layer -- 9 temuan dan
+ * 8 CAR, di bawah 0,2% dari keseluruhan. Yang berubah banyak justru sisi
+ * insidennya: cacahnya turun dari 2.264 ke 1.136, dan kategori 'Belum
+ * dikategorikan' menyusut dari 1.227 ke 100 karena kategori kecelakaan memang
+ * baru diisi saat investigasi berjalan. Efeknya Sankey dan peta panas jadi
+ * terbaca, tidak lagi didominasi satu simpul abu-abu raksasa.
  */
 final class IncidentManagementDashboardController extends Controller
 {
@@ -57,13 +69,19 @@ final class IncidentManagementDashboardController extends Controller
     private const TABLE = 'bcbeats.mv_investigasi';
 
     /**
+     * Status investigasi yang tidak ikut dihitung sama sekali.
+     * Alasan tiap nilainya ada di docblock kelas.
+     */
+    private const STATUS_DIKECUALIKAN = ['DELETED', 'TIDAK INVESTIGASI'];
+
+    /**
      * mv_investigasi adalah snapshot materialized view, bukan data realtime,
      * jadi menahan hasilnya sepuluh menit tidak membuat angkanya basi tetapi
      * menghemat empat kueri JSONB yang lumayan berat ke RDS.
      */
     private const CACHE_TTL = 600;
 
-    private const CACHE_KEY = 'ohs-score-card.incident-ipls.v1';
+    private const CACHE_KEY = 'ohs-score-card.incident-ipls.v2';
 
     /**
      * Batas bawah data yang ditarik. Di bawah 2022 hanya tersisa satu baris
@@ -289,6 +307,7 @@ final class IncidentManagementDashboardController extends Controller
         $kategori = self::SQL_KATEGORI;
         $tabel = self::TABLE;
         $awal = self::TAHUN_AWAL;
+        $dibuang = "'" . implode("', '", self::STATUS_DIKECUALIKAN) . "'";
 
         return <<<SQL
             basis AS (
@@ -302,7 +321,7 @@ final class IncidentManagementDashboardController extends Controller
                     rootcause,
                     tindakan_perbaikan
                 FROM {$tabel}
-                WHERE status_investigasi <> 'DELETED'
+                WHERE status_investigasi NOT IN ({$dibuang})
                   AND COALESCE(kategori_kecelakaan, '') <> 'Test'
                   AND {$tanggal} >= DATE '{$awal}-01-01'
             )
