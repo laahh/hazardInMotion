@@ -38,7 +38,7 @@
             ['label' => 'Kesesuaian Implementasi IKK',                                  'icon' => 'solar:clipboard-check-outline'],
             ['label' => '% SPIP yang dilakukan Commissioning',                          'icon' => 'solar:settings-outline'],
             ['label' => 'Laporan Perizinan Usaha Jasa',                                 'icon' => 'solar:document-text-outline'],
-            ['label' => '% Blindspot TBC dengan PIC Subcontractor',                     'icon' => 'solar:users-group-rounded-outline'],
+            ['label' => '% Blindspot TBC dengan PIC Subcontractor',                     'icon' => 'solar:users-group-rounded-outline', 'url' => route('ohs-score-card.blindspot-tbc-pic-subcont.index')],
         ],
         'HSECT' => [
             ['label' => 'Peer Pressure',                                                'icon' => 'solar:users-group-two-rounded-outline', 'url' => route('ohs-score-card.peer-pressure.index')],
@@ -59,7 +59,7 @@
         ],
         'OH & IH' => [
             ['label' => 'Rasio kelayakan kerja (wellbeing)',                            'icon' => 'solar:heart-pulse-outline', 'url' => route('ohs-score-card.rasio-kelayakan-kerja.index')],
-            ['label' => 'Pemeriksaan Fit to Work awal shift pekerja',                   'icon' => 'solar:stethoscope-outline'],
+            ['label' => 'Pemeriksaan Fit to Work awal shift pekerja',                   'icon' => 'solar:stethoscope-outline', 'url' => route('ohs-score-card.fit-to-work-awal-shift.index')],
             ['label' => 'Pelaksanaan Sobriety Test Jam Kritis dan Pengecekan Sobriety Test', 'icon' => 'solar:test-tube-outline'],
         ],
         'ER & SS' => [

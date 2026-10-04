@@ -14,43 +14,31 @@ use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Parameter SOD "Kinerja Pengawasan Control Room DMS".
+ * Parameter wellbeing "Pemeriksaan Fit to Work awal shift pekerja".
  *
- * Sumbernya satu tabel, lead_kinerja_control_room_dms: satu baris per
- * site x perusahaan x bulan, isinya persentase kinerja pengawas control room.
- * Tidak ada tabel rinciannya, jadi halaman ini hanya punya dua tab: Ringkasan
- * dan Data. (Ada lead_kinerja_control_room_dms_month, tetapi masih nol baris
- * dan bentuknya belum jelas, jadi belum dipakai.)
+ * Sumbernya satu tabel, lead_fit_to_work_awal_shift: satu baris per
+ * site x perusahaan x bulan, isinya persentase pengisian aggregator Fit to
+ * Work di awal shift. Makin tinggi makin baik. Tidak ada tabel rinciannya.
  *
- * ARAHNYA KEBALIKAN dari Blindspot TBC: di sini makin tinggi persentase makin
- * baik, jadi hijau dipakai untuk angka besar dan Nilai 4 adalah yang tertinggi.
- *
- * BULAN DITULIS M01-M12, bukan nama bulan Inggris. Sumbernya pernah memakai
- * nama Inggris lalu berganti ke kode bulan, dan pergantian itu sempat membuat
- * tab Ringkasan kosong total karena pemetaannya hanya mengenal satu bentuk.
- * nomorBulan() kini mengenali keduanya, dan namaBulan() menghasilkan semua
- * ejaan satu bulan untuk dipakai di whereIn, sehingga filter maupun
- * pengecualian Oktober bekerja apa pun gaya penulisannya.
- *
- * NILAI KOSONG. 43 dari 171 baris ber-pct NULL. Itu dibiarkan sebagai "tidak
- * ada data", bukan diubah jadi nol, karena nol berarti kinerjanya betul-betul
- * nihil dan itu dua hal yang berbeda.
+ * BULAN TERTULIS M01-M12, bukan nama bulan Inggris seperti sebagian parameter
+ * lain. nomorBulan() mengenali kedua bentuk, jadi kalau sumbernya nanti
+ * berganti gaya penulisan halaman ini tidak ikut rusak.
  *
  * AMBANG & BAND mengikuti sistem penilaian OHS Score Card yang sama dengan
  * halaman Ratio TBC & GR (target 90%, band 98/90/80). Belum ada konfirmasi
  * bahwa parameter ini memakai band yang sama; kalau berbeda, ubah SCORE_BANDS
  * dan TARGET_PERCENT di bawah.
  */
-final class KinerjaControlRoomDmsController extends Controller
+final class FitToWorkAwalShiftController extends Controller
 {
     use ServesDataTable;
 
-    private const TABLE = 'lead_kinerja_control_room_dms';
+    private const TABLE = 'lead_fit_to_work_awal_shift';
 
-    private const COL_SITE = 'site';
-    private const COL_PERUSAHAAN = 'perusahaan';
-    private const COL_BULAN = 'month_of_event_time';
-    private const COL_PERSEN = 'pct_kinerja_pengawas_control_room';
+    private const COL_SITE = 'site_dedicated';
+    private const COL_PERUSAHAAN = 'nama_perusahaan';
+    private const COL_BULAN = 'month_of_tanggal_date';
+    private const COL_PERSEN = 'pct_pengisian_aggregator';
 
     private const TARGET_PERCENT = 90.0;
 
@@ -61,7 +49,6 @@ final class KinerjaControlRoomDmsController extends Controller
         [0.0,  1, '<80%'],
     ];
 
-    /** Bulan bisa tertulis M01-M12 maupun nama Inggris; lihat nomorBulan(). */
     private const MONTH_MAP = [
         'January' => [1, 'Januari'], 'February' => [2, 'Februari'], 'March' => [3, 'Maret'],
         'April' => [4, 'April'], 'May' => [5, 'Mei'], 'June' => [6, 'Juni'],
@@ -69,10 +56,7 @@ final class KinerjaControlRoomDmsController extends Controller
         'October' => [10, 'Oktober'], 'November' => [11, 'November'], 'December' => [12, 'Desember'],
     ];
 
-    /**
-     * Bulan yang tidak ikut dihitung, sejalan dengan halaman Ratio TBC & GR
-     * dan Blindspot TBC: Oktober masih berjalan saat data ini diambil.
-     */
+    /** Oktober masih berjalan saat data ini diambil, sejalan halaman lain. */
     private const EXCLUDED_MONTHS = [10];
 
     private const FILTERABLE = [
@@ -90,7 +74,7 @@ final class KinerjaControlRoomDmsController extends Controller
 
     public function index(): View
     {
-        return view('ohs-score-card.kinerja-control-room-dms.index', [
+        return view('ohs-score-card.fit-to-work-awal-shift.index', [
             'filterOptions' => [
                 'site' => $this->distinctValues(self::COL_SITE),
                 'mitra' => $this->distinctValues(self::COL_PERUSAHAAN),
@@ -123,8 +107,8 @@ final class KinerjaControlRoomDmsController extends Controller
         foreach ($rows as $row) {
             $monthNo = $this->nomorBulan((string) $row->bulan);
 
-            if ($monthNo === 0) {
-                continue; // nama bulan tak dikenal: jangan diam-diam dianggap bulan lain
+            if ($monthNo === 0 || in_array($monthNo, self::EXCLUDED_MONTHS, true)) {
+                continue;
             }
 
             $monthSeen[$monthNo] = true;
@@ -133,7 +117,7 @@ final class KinerjaControlRoomDmsController extends Controller
 
             $grid[$site . '|' . $mitra]['site'] = $site;
             $grid[$site . '|' . $mitra]['mitra'] = $mitra;
-            // NULL dibiarkan NULL: "belum ada datanya" bukan "kinerjanya nol".
+            // NULL dibiarkan NULL: "belum ada pengisian tercatat" bukan "nol persen".
             $grid[$site . '|' . $mitra]['bulan'][$monthNo] = $row->persen === null
                 ? null
                 : round((float) $row->persen, 2);
@@ -205,9 +189,9 @@ final class KinerjaControlRoomDmsController extends Controller
      * Mengelompokkan baris per site supaya sel site-nya bisa digabung dengan
      * rowspan di tabel.
      *
-     * Site diurutkan dari yang paling rendah kinerjanya, dan di dalam tiap
-     * site barisnya juga dari yang paling rendah, sehingga yang perlu
-     * ditangani lebih dulu tetap berada di atas meski sudah dikelompokkan.
+     * Site diurutkan dari yang capaiannya paling rendah, dan di dalam tiap site
+     * barisnya juga dari yang paling rendah, sehingga yang perlu ditangani
+     * lebih dulu tetap berada di atas meski sudah dikelompokkan.
      *
      * @param  array<int, array<string, mixed>>  $rows
      * @return array<int, array<string, mixed>>
@@ -220,8 +204,6 @@ final class KinerjaControlRoomDmsController extends Controller
             $perSite[$row['site']][] = $row;
         }
 
-        // Bobot sebuah site = capaian terendahnya; satu perusahaan yang jeblok
-        // tidak boleh tersamarkan oleh perusahaan lain yang bagus di site sama.
         $bobot = [];
 
         foreach ($perSite as $site => $baris) {
@@ -229,6 +211,7 @@ final class KinerjaControlRoomDmsController extends Controller
                 array_column($baris, 'average'),
                 static fn (?float $v): bool => $v !== null
             );
+            // Baris tanpa angka didorong ke belakang lewat sentinel 101.
             $bobot[$site] = $nilai !== [] ? min($nilai) : 101.0;
         }
 
@@ -296,9 +279,6 @@ final class KinerjaControlRoomDmsController extends Controller
             'memenuhi_target' => $rata !== null && $rata >= self::TARGET_PERCENT,
             'tertinggi' => $nilai !== [] ? max($nilai) : null,
             'terendah' => $nilai !== [] ? min($nilai) : null,
-            // Penyebutnya hanya pasangan yang punya angka. Pasangan yang
-            // seluruh bulannya kosong tidak bisa dibilang gagal memenuhi
-            // target, jadi dilaporkan terpisah.
             'kombinasi' => count($nilai),
             'kombinasi_kosong' => count($matrix) - count($nilai),
             'memenuhi' => count(array_filter(
@@ -357,7 +337,7 @@ final class KinerjaControlRoomDmsController extends Controller
     }
 
     /**
-     * Lima pasangan dengan capaian terendah: itu yang perlu dibaca lebih dulu.
+     * Lima pasangan dengan capaian terendah.
      *
      * @param  array<int, array<string, mixed>>  $matrix
      * @return array<int, array<string, mixed>>
@@ -418,12 +398,13 @@ final class KinerjaControlRoomDmsController extends Controller
         ];
     }
 
-    /**
-     * Keterangan tentang sel yang kosong, supaya matriks berlubang tidak
-     * dikira kinerjanya nol.
-     */
+    /** Keterangan tentang sel kosong, supaya matriks berlubang tidak disalahbaca. */
     private function catatan(Request $request): ?string
     {
+        if (! DB::table(self::TABLE)->exists()) {
+            return 'Tabel ' . self::TABLE . ' masih kosong, jadi belum ada yang bisa ditampilkan.';
+        }
+
         $kosong = (clone $this->baseQuery($request))->whereNull(self::COL_PERSEN)->count();
 
         if ($kosong === 0) {
@@ -475,7 +456,7 @@ final class KinerjaControlRoomDmsController extends Controller
         return $this->dtExport(
             $request,
             $query,
-            ['Site', 'Perusahaan', 'Bulan', 'Kinerja (%)', 'Nilai', 'Keterangan'],
+            ['Site', 'Perusahaan', 'Bulan', 'Pengisian Aggregator (%)', 'Nilai', 'Keterangan'],
             function (object $row): array {
                 $p = $this->present($row);
 
@@ -484,7 +465,7 @@ final class KinerjaControlRoomDmsController extends Controller
                     $p['persen'] ?? '', $p['nilai'] ?? '', $p['keterangan'],
                 ];
             },
-            'kinerja-control-room-dms'
+            'fit-to-work-awal-shift'
         );
     }
 
@@ -510,10 +491,8 @@ final class KinerjaControlRoomDmsController extends Controller
             $query->whereNotNull(self::COL_PERSEN)
                 ->where(self::COL_PERSEN, '>=', $batas);
 
-            // Band teratas sengaja tanpa batas atas. Sebelumnya dibatasi
-            // < 101 dan angka di atas itu -- entah salah hitung di sumber atau
-            // satuan yang berbeda -- lenyap dari semua filter Nilai sekaligus,
-            // sehingga jumlah keempat band tidak lagi sama dengan jumlah baris.
+            // Band teratas sengaja tanpa batas atas, supaya angka di atas 100
+            // tidak lenyap dari semua filter sekaligus.
             if ($nilai < 4) {
                 $atas = self::SCORE_BANDS[3 - $nilai][0];
                 $query->where(self::COL_PERSEN, '<', $atas);
@@ -566,13 +545,12 @@ final class KinerjaControlRoomDmsController extends Controller
     {
         $persen = $row->persen === null ? null : round((float) $row->persen, 2);
         [, $nilai, $band] = $this->scoreBandFor($persen ?? 0.0);
+        $monthNo = $this->nomorBulan((string) $row->bulan_sumber);
 
         return [
             'site' => trim((string) $row->site),
             'mitra' => trim((string) $row->mitra),
-            'bulan' => $this->nomorBulan((string) $row->bulan_sumber) === 0
-                ? trim((string) $row->bulan_sumber)
-                : self::monthLabel($this->nomorBulan((string) $row->bulan_sumber)),
+            'bulan' => $monthNo === 0 ? trim((string) $row->bulan_sumber) : self::monthLabel($monthNo),
             'persen' => $persen,
             'nilai' => $persen === null ? null : $nilai,
             'nilai_band' => $persen === null ? null : $band,
@@ -588,7 +566,7 @@ final class KinerjaControlRoomDmsController extends Controller
     // ======================================================================
 
     /**
-     * Nomor bulan dari dua bentuk penulisan yang pernah dipakai tabel ini:
+     * Nomor bulan dari dua bentuk penulisan yang dipakai sumber ini:
      * "M01".."M12" maupun nama bulan Inggris. 0 bila tidak dikenali.
      */
     private function nomorBulan(string $nilai): int
@@ -605,7 +583,7 @@ final class KinerjaControlRoomDmsController extends Controller
     }
 
     /**
-     * Semua ejaan satu nomor bulan, untuk dipakai di whereIn.
+     * Semua cara penulisan satu nomor bulan, untuk dipakai di whereIn.
      *
      * @return array<int, string>
      */

@@ -6,6 +6,8 @@ use App\Http\Controllers\OhsScoreCard\BerecordController;
 use App\Http\Controllers\OhsScoreCard\BlindspotGrController;
 use App\Http\Controllers\OhsScoreCard\BlindspotRealTimeController;
 use App\Http\Controllers\OhsScoreCard\BlindspotTbcController;
+use App\Http\Controllers\OhsScoreCard\BlindspotTbcPicSubcontController;
+use App\Http\Controllers\OhsScoreCard\FitToWorkAwalShiftController;
 use App\Http\Controllers\OhsScoreCard\GrSeatbeltController;
 use App\Http\Controllers\OhsScoreCard\IncidentGapCctvDmsController;
 use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
@@ -112,6 +114,16 @@ Route::middleware('evaluasi-well.access')
         Route::get('/blindspot-real-time/export', [BlindspotRealTimeController::class, 'export'])
             ->name('blindspot-real-time.export');
 
+        // Parameter SOD "% Blindspot TBC dengan PIC Subcontractor"
+        Route::get('/blindspot-tbc-pic-subcont', [BlindspotTbcPicSubcontController::class, 'index'])
+            ->name('blindspot-tbc-pic-subcont.index');
+        Route::get('/blindspot-tbc-pic-subcont/overview', [BlindspotTbcPicSubcontController::class, 'overview'])
+            ->name('blindspot-tbc-pic-subcont.overview');
+        Route::get('/blindspot-tbc-pic-subcont/data', [BlindspotTbcPicSubcontController::class, 'data'])
+            ->name('blindspot-tbc-pic-subcont.data');
+        Route::get('/blindspot-tbc-pic-subcont/export', [BlindspotTbcPicSubcontController::class, 'export'])
+            ->name('blindspot-tbc-pic-subcont.export');
+
         // Parameter SOD "Blindspot GR"
         Route::get('/blindspot-gr', [BlindspotGrController::class, 'index'])
             ->name('blindspot-gr.index');
@@ -145,14 +157,29 @@ Route::middleware('evaluasi-well.access')
         Route::get('/perulangan-rekomendasi/export', [PerulanganRekomendasiController::class, 'export'])
             ->name('perulangan-rekomendasi.export');
 
+        // Parameter wellbeing "Pemeriksaan Fit to Work awal shift pekerja"
+        Route::get('/fit-to-work-awal-shift', [FitToWorkAwalShiftController::class, 'index'])
+            ->name('fit-to-work-awal-shift.index');
+        Route::get('/fit-to-work-awal-shift/overview', [FitToWorkAwalShiftController::class, 'overview'])
+            ->name('fit-to-work-awal-shift.overview');
+        Route::get('/fit-to-work-awal-shift/data', [FitToWorkAwalShiftController::class, 'data'])
+            ->name('fit-to-work-awal-shift.data');
+        Route::get('/fit-to-work-awal-shift/export', [FitToWorkAwalShiftController::class, 'export'])
+            ->name('fit-to-work-awal-shift.export');
+
         // Parameter wellbeing "Rasio Kelayakan Kerja"
         Route::get('/rasio-kelayakan-kerja', [RasioKelayakanKerjaController::class, 'index'])
             ->name('rasio-kelayakan-kerja.index');
-        Route::get('/rasio-kelayakan-kerja/overview', [RasioKelayakanKerjaController::class, 'overview'])
+        // {dataset}: minecon (lead_ratio_kelayakan_kerja) atau subcon
+        // (lead_subcont_ratio_kelayakan_kerja); nama lain ditolak di sini.
+        Route::get('/rasio-kelayakan-kerja/{dataset}/overview', [RasioKelayakanKerjaController::class, 'overview'])
+            ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('rasio-kelayakan-kerja.overview');
-        Route::get('/rasio-kelayakan-kerja/data', [RasioKelayakanKerjaController::class, 'data'])
+        Route::get('/rasio-kelayakan-kerja/{dataset}/data', [RasioKelayakanKerjaController::class, 'data'])
+            ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('rasio-kelayakan-kerja.data');
-        Route::get('/rasio-kelayakan-kerja/export', [RasioKelayakanKerjaController::class, 'export'])
+        Route::get('/rasio-kelayakan-kerja/{dataset}/export', [RasioKelayakanKerjaController::class, 'export'])
+            ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('rasio-kelayakan-kerja.export');
 
         // Parameter SOD "Leadtime Alert DMS masuk ke Server"

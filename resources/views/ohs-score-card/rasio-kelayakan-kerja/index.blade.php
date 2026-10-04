@@ -39,9 +39,16 @@
     border-radius: 8px; min-width: 76px;
     letter-spacing: 0.02em;
   }
-  .rkk-matrix thead .rkk-site { z-index: 4; background: #F8FAFC; }
+  .rkk-matrix .rkk-mitra {
+    position: sticky; left: 79px; z-index: 2;
+    background: #fff; color: #2E6BE6 !important;
+    font-weight: 700; text-align: left !important;
+    border-radius: 8px; min-width: 150px;
+    box-shadow: 1px 0 0 #EEF2F7;
+  }
+  .rkk-matrix thead .rkk-site, .rkk-matrix thead .rkk-mitra { z-index: 4; background: #F8FAFC; }
   .rkk-matrix .rkk-avg { font-weight: 800; color: #334155 !important; background: #F1F5F9; border-radius: 8px; }
-  /* Kinerja: naik berarti membaik, jadi panah atas hijau. */
+  /* Kelayakan kerja: naik berarti membaik, jadi panah atas hijau. */
   .rkk-matrix .rkk-trend--up { color: #16A34A; font-weight: 800; }
   .rkk-matrix .rkk-trend--down { color: #DC2626; font-weight: 800; }
   .rkk-matrix .rkk-trend--flat { color: #94A3B8; font-weight: 800; }
@@ -56,7 +63,7 @@
     position: relative; z-index: 1;
   }
   .rkk-matrix .rkk-empty { background: #F1F5F9; color: #CBD5E1 !important; border-radius: 6px; }
-  /* Gradasi persentase: angka besar hijau, karena di sini tinggi berarti baik. */
+  /* Gradasi persentase: angka besar hijau, karena tinggi berarti baik. */
   .rkk-t1 { background: #E0484A; }
   .rkk-t2 { background: #F08C2E; }
   .rkk-t3 { background: #F2C230; color: #1F2937 !important; }
@@ -76,7 +83,7 @@
   <div>
     <h6 class="fw-semibold mb-0">Rasio Kelayakan Kerja</h6>
     <div class="text-secondary-light text-sm mt-4">
-      Persentase pekerja dengan hasil MCU Fit, per site tiap bulan
+      Persentase pekerja dengan hasil MCU Fit, per perusahaan di tiap site
     </div>
   </div>
   <ul class="d-flex align-items-center gap-2">
@@ -91,60 +98,50 @@
   </ul>
 </div>
 
+@php
+  // Satu tab per (kumpulan data x jenis panel); tab pertama yang aktif.
+  $tabs = [];
+  foreach ($datasets as $ds) {
+      $tabs[] = ['key' => $ds['slug'] . '-ringkasan', 'label' => 'Ringkasan ' . $ds['label'], 'kind' => 'ringkasan', 'ds' => $ds];
+      $tabs[] = ['key' => $ds['slug'] . '-data', 'label' => 'Data ' . $ds['label'], 'kind' => 'data', 'ds' => $ds];
+  }
+@endphp
+
 <ul class="nav nav-pills style-three pill-tab border input-form-light p-0 radius-8 bg-neutral-50 d-inline-flex mb-24"
     id="rkk-tab" role="tablist">
-  <li class="nav-item" role="presentation">
-    <button class="nav-link px-24 py-10 text-md text-center radius-8 active" id="rkk-tab-ringkasan"
-            data-bs-toggle="pill" data-bs-target="#rkk-pane-ringkasan"
-            type="button" role="tab" aria-controls="rkk-pane-ringkasan" aria-selected="true">
-      Ringkasan
-    </button>
-  </li>
-  <li class="nav-item" role="presentation">
-    <button class="nav-link px-24 py-10 text-md text-center radius-8" id="rkk-tab-data"
-            data-bs-toggle="pill" data-bs-target="#rkk-pane-data"
-            type="button" role="tab" aria-controls="rkk-pane-data" aria-selected="false">
-      Data
-    </button>
-  </li>
+  @foreach ($tabs as $i => $tab)
+    <li class="nav-item" role="presentation">
+      <button class="nav-link px-24 py-10 text-md text-center radius-8 {{ $i === 0 ? 'active' : '' }}"
+              id="rkk-tab-{{ $tab['key'] }}"
+              data-bs-toggle="pill" data-bs-target="#rkk-pane-{{ $tab['key'] }}"
+              type="button" role="tab" aria-controls="rkk-pane-{{ $tab['key'] }}"
+              aria-selected="{{ $i === 0 ? 'true' : 'false' }}">
+        {{ $tab['label'] }}
+      </button>
+    </li>
+  @endforeach
 </ul>
 
 <div class="tab-content">
-  <div class="tab-pane fade show active" id="rkk-pane-ringkasan" role="tabpanel">
-    @include('ohs-score-card.rasio-kelayakan-kerja.partials._ringkasan')
-  </div>
-  <div class="tab-pane fade" id="rkk-pane-data" role="tabpanel">
-    @include('ohs-score-card.rasio-kelayakan-kerja.partials._data')
-  </div>
+  @foreach ($tabs as $i => $tab)
+    <div class="tab-pane fade {{ $i === 0 ? 'show active' : '' }}"
+         id="rkk-pane-{{ $tab['key'] }}" role="tabpanel">
+      @include('ohs-score-card.rasio-kelayakan-kerja.partials._' . $tab['kind'],
+               ['ds' => $tab['ds'], 'target' => $target])
+    </div>
+  @endforeach
 </div>
 @endsection
 
 @section('page-scripts')
 <script>
 // ---- Tab Ringkasan ----------------------------------------------------------
-(function () {
+// Satu pabrik, dipakai untuk tiap kumpulan data. Semua pencarian elemen
+// dilakukan di dalam root agar dua salinan tidak saling menimpa.
+window.rkkOverview = (function () {
     'use strict';
 
-    var root = document.querySelector('.rkk-overview');
-    if (!root) { return; }
-
-    // Warna seri grafik diambil dari palet WowDash yang sudah dipakai
-    // dashboard lain di aplikasi ini, bukan palet baru.
     var PALETTE = ['#487FFF', '#45B369', '#FF9F29', '#EF4A00', '#8252E9', '#00B8F2', '#E0484A'];
-
-    var overviewUrl = root.dataset.url;
-    var filterEls = Array.prototype.slice.call(root.querySelectorAll('.rkk-filter'));
-    var charts = { monthly: null };
-    var loaded = false;
-
-    // 'persen' atau 'nilai'. Payload terakhir disimpan supaya mengganti mode
-    // cukup menggambar ulang matriks, tanpa memanggil server lagi.
-    var matrixMode = 'persen';
-    var lastPayload = null;
-
-    function el(name) {
-        return root.querySelector('[data-rkk="' + name + '"]');
-    }
 
     function escapeHtml(value) {
         return String(value === null || value === undefined ? '' : value)
@@ -172,8 +169,6 @@
         return 'rkk-t1';
     }
 
-    // Mode Nilai memakai 4 band resmi, bukan gradasi di atas, supaya warna sel
-    // tidak pernah bertentangan dengan angka Nilai-nya.
     function nilaiClass(nilai) {
         return { 1: 'rkk-n1', 2: 'rkk-n2', 3: 'rkk-n3', 4: 'rkk-n4' }[nilai] || 'rkk-empty';
     }
@@ -196,385 +191,494 @@
         }[nilai] || 'bg-neutral-400';
     }
 
-    function cellClass(cell) {
-        return matrixMode === 'nilai' ? nilaiClass(cell.nilai) : tierClass(cell.pct);
-    }
+    return function create(root) {
+        var overviewUrl = root.dataset.url;
+        var filterEls = Array.prototype.slice.call(root.querySelectorAll('.rkk-filter'));
+        var charts = { monthly: null, hasil: null };
+        var loaded = false;
 
-    function currentFilters() {
-        var out = {};
-        filterEls.forEach(function (node) {
-            if (node.value) { out[node.dataset.column] = node.value; }
-        });
-        return out;
-    }
+        // 'persen' atau 'nilai'. Payload terakhir disimpan supaya mengganti
+        // mode cukup menggambar ulang matriks, tanpa memanggil server lagi.
+        var matrixMode = 'persen';
+        var lastPayload = null;
 
-    // ---- Kartu ringkasan utama ---------------------------------------------
-    function renderKpi(k) {
-        var cards = [
-            {
-                grad: 'bg-gradient-end-1', icon: 'solar:heart-pulse-outline', dot: 'bg-primary-600',
-                label: 'Rata-rata MCU Fit',
-                value: k.rata === null ? '–' : fmtPct(k.rata),
-                foot: k.rata === null
-                    ? 'Belum ada data'
-                    : '<span class="' + nilaiBadgeClass(k.nilai) + ' px-1 rounded-2 fw-medium text-sm">Nilai '
-                        + k.nilai + '</span> '
-                        + (k.memenuhi_target ? 'Memenuhi' : 'Belum memenuhi') + ' target ' + k.target + '%'
-            },
-            {
-                grad: 'bg-gradient-end-2', icon: 'solar:check-circle-outline', dot: 'bg-success-main',
-                label: 'Memenuhi Target', value: fmtNum(k.memenuhi) + ' / ' + fmtNum(k.kombinasi),
-                foot: 'Site yang rata-ratanya ≥ ' + k.target + '%'
-                    + (k.kombinasi_kosong
-                        ? ' · ' + fmtNum(k.kombinasi_kosong) + ' site lain belum berdata'
-                        : '')
-            },
-            {
-                grad: 'bg-gradient-end-5', icon: 'solar:arrow-down-outline', dot: 'bg-danger-main',
-                label: 'Capaian Terendah',
-                value: k.terendah === null ? '–' : fmtPct(k.terendah),
-                foot: k.tertinggi === null ? 'Belum ada data' : 'Tertinggi ' + fmtPct(k.tertinggi)
-            },
-            {
-                grad: 'bg-gradient-end-3', icon: 'solar:calendar-outline', dot: 'bg-yellow',
-                label: 'Cakupan', value: fmtNum(k.bulan_count) + ' bulan',
-                foot: fmtNum(k.site_count) + ' site · '
-                    + fmtNum(k.sel_terisi) + ' sel terisi'
-                    + (k.sel_kosong ? ', ' + fmtNum(k.sel_kosong) + ' kosong' : '')
-            }
-        ];
-
-        el('kpi').innerHTML = cards.map(function (c) {
-            return '<div class="col-xxl-3 col-sm-6">'
-                + '<div class="card p-3 shadow-2 radius-8 border input-form-light h-100 ' + c.grad + '">'
-                +   '<div class="card-body p-0">'
-                +     '<div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">'
-                +       '<div class="d-flex align-items-center gap-2">'
-                +         '<span class="mb-0 w-48-px h-48-px ' + c.dot + ' text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">'
-                +           '<iconify-icon icon="' + c.icon + '" class="icon"></iconify-icon>'
-                +         '</span>'
-                +         '<div>'
-                +           '<span class="mb-2 fw-medium text-secondary-light text-sm">' + escapeHtml(c.label) + '</span>'
-                +           '<h6 class="fw-semibold">' + c.value + '</h6>'
-                +         '</div>'
-                +       '</div>'
-                +     '</div>'
-                +     '<p class="text-sm mb-0">' + c.foot + '</p>'
-                +   '</div>'
-                + '</div></div>';
-        }).join('');
-    }
-
-    // ---- Capaian per site ---------------------------------------------------
-    function renderPerSite(list) {
-        var host = el('per-site');
-        if (!list.length) {
-            host.innerHTML = '<p class="text-secondary-light text-sm text-center py-24 mb-0">Tidak ada data.</p>';
-            return;
+        function el(name) {
+            return root.querySelector('[data-rkk="' + name + '"]');
         }
-        host.innerHTML = list.map(function (s, i) {
-            return '<div class="' + (i ? 'mt-20' : '') + '">'
-                + '<div class="d-flex align-items-center justify-content-between mb-8">'
-                +   '<span class="text-sm fw-semibold">' + escapeHtml(s.site) + '</span>'
-                +   '<span class="text-sm fw-medium text-secondary-light">' + fmtPct(s.percent) + '</span>'
-                + '</div>'
-                + '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px rkk-track"'
-                +   ' title="Target ' + s.target + '%">'
-                +   '<div class="progress-bar ' + nilaiBarClass(s.nilai) + ' rounded-pill" role="progressbar"'
-                +     ' style="width:' + Math.min(100, s.percent) + '%" aria-valuenow="' + Math.round(s.percent) + '"'
-                +     ' aria-valuemin="0" aria-valuemax="100"></div>'
-                +   '<span class="rkk-track__target" style="left:' + s.target + '%"></span>'
-                + '</div>'
-                + '<span class="text-xs text-secondary-light">' + fmtNum(s.jumlah)
-                +   ' bulan berdata · terendah ' + fmtPct(s.terendah) + '</span>'
-                + '</div>';
-        }).join('');
-    }
 
-    // ---- Perlu perhatian ----------------------------------------------------
-    function renderTerendah(list) {
-        var body = el('terendah');
-        if (!list.length) {
-            body.innerHTML = '<tr><td colspan="3" class="text-center text-secondary-light py-24">Tidak ada data.</td></tr>';
-            return;
+        function cellClass(cell) {
+            return matrixMode === 'nilai' ? nilaiClass(cell.nilai) : tierClass(cell.pct);
         }
-        body.innerHTML = list.map(function (t) {
-            return '<tr>'
-                + '<td>'
-                +   '<span class="text-md fw-semibold d-block">' + escapeHtml(t.site) + '</span>'
-                +   '<span class="text-sm text-secondary-light">terendah ' + fmtPct(t.terendah) + '</span>'
-                + '</td>'
-                + '<td class="text-center"><span class="' + nilaiBadgeClass(t.nilai)
-                +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + t.nilai + '</span></td>'
-                + '<td class="text-end fw-medium">' + fmtPct(t.percent) + '</td>'
-                + '</tr>';
-        }).join('');
-    }
 
-    /** Legenda ikut mode: gradasi persentase, atau 4 band Nilai. */
-    function renderLegend() {
-        var items = matrixMode === 'nilai'
-            ? [
-                { color: '#E0484A', label: 'Nilai 1 · <80%' },
-                { color: '#F08C2E', label: 'Nilai 2 · 80–90%' },
-                { color: '#F2C230', label: 'Nilai 3 · 90–98%' },
-                { color: '#16A34A', label: 'Nilai 4 · 98–100%' }
-            ]
-            : [
-                { color: '#E0484A', label: '<62%' },
-                { color: '#F08C2E', label: '62–78%' },
-                { color: '#F2C230', label: '78–90%' },
-                { color: '#86C96B', label: '90–98%' },
-                { color: '#059669', label: '≥98%' }
+        function currentFilters() {
+            var out = {};
+            filterEls.forEach(function (node) {
+                if (node.value) { out[node.dataset.column] = node.value; }
+            });
+            return out;
+        }
+
+        // ---- Kartu ringkasan utama -----------------------------------------
+        function renderKpi(k) {
+            var cards = [
+                {
+                    grad: 'bg-gradient-end-1', icon: 'solar:heart-pulse-outline', dot: 'bg-primary-600',
+                    label: 'Rata-rata MCU Fit',
+                    value: k.rata === null ? '–' : fmtPct(k.rata),
+                    foot: k.rata === null
+                        ? 'Belum ada data'
+                        : '<span class="' + nilaiBadgeClass(k.nilai) + ' px-1 rounded-2 fw-medium text-sm">Nilai '
+                            + k.nilai + '</span> '
+                            + (k.memenuhi_target ? 'Memenuhi' : 'Belum memenuhi') + ' target ' + k.target + '%'
+                },
+                k.dari_rincian
+                    ? {
+                        grad: 'bg-gradient-end-5', icon: 'solar:user-cross-outline', dot: 'bg-danger-main',
+                        label: 'Belum Fit', value: fmtNum(k.unfit),
+                        foot: 'Dari ' + fmtNum(k.karyawan) + ' karyawan yang sudah MCU'
+                    }
+                    : {
+                        grad: 'bg-gradient-end-5', icon: 'solar:arrow-down-outline', dot: 'bg-danger-main',
+                        label: 'Capaian Terendah',
+                        value: k.terendah === null ? '–' : fmtPct(k.terendah),
+                        foot: k.tertinggi === null ? 'Belum ada data' : 'Tertinggi ' + fmtPct(k.tertinggi)
+                    },
+                {
+                    grad: 'bg-gradient-end-2', icon: 'solar:check-circle-outline', dot: 'bg-success-main',
+                    label: 'Memenuhi Target', value: fmtNum(k.memenuhi) + ' / ' + fmtNum(k.kombinasi),
+                    foot: 'Rata-rata bulanannya ≥ ' + k.target + '%'
+                        + (k.kombinasi_kosong ? ' · ' + fmtNum(k.kombinasi_kosong) + ' lainnya belum berdata' : '')
+                },
+                {
+                    grad: 'bg-gradient-end-3', icon: 'solar:calendar-outline', dot: 'bg-yellow',
+                    label: 'Cakupan', value: fmtNum(k.bulan_count) + ' bulan',
+                    foot: fmtNum(k.site_count) + ' site'
+                        + (k.mitra_count ? ', ' + fmtNum(k.mitra_count) + ' perusahaan' : '')
+                        + ' · ' + fmtNum(k.sel_terisi) + ' sel terisi'
+                        + (k.sel_kosong ? ', ' + fmtNum(k.sel_kosong) + ' kosong' : '')
+                }
             ];
 
-        el('legend').innerHTML = items.map(function (it) {
-            return '<span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;">'
-                + '<span class="rounded-1" style="width:14px;height:14px;background:' + it.color + ';"></span>'
-                + escapeHtml(it.label) + '</span>';
-        }).join('');
-
-        el('matrix-subtitle').textContent = matrixMode === 'nilai'
-            ? 'Nilai 1–4 dari persentase MCU Fit tiap site'
-            : 'Persentase pekerja dengan hasil MCU Fit, tiap site';
-    }
-
-    function renderMatrix(months, rows) {
-        var table = el('matrix');
-        var thead = table.querySelector('thead');
-        var tbody = table.querySelector('tbody');
-
-        var head = '<tr><th class="rkk-site">SITE</th><th>RATA</th><th>TREND</th>';
-        months.forEach(function (m, i) {
-            head += '<th class="' + (i === months.length - 1 ? 'rkk-th-last' : '') + '">'
-                + escapeHtml(m.label) + '</th>';
-        });
-        thead.innerHTML = head + '</tr>';
-
-        if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="' + (months.length + 3) + '" class="text-center py-24 text-secondary-light">'
-                + 'Tidak ada data untuk filter ini.</td></tr>';
-            return;
+            el('kpi').innerHTML = cards.map(function (c) {
+                return '<div class="col-xxl-3 col-sm-6">'
+                    + '<div class="card p-3 shadow-2 radius-8 border input-form-light h-100 ' + c.grad + '">'
+                    +   '<div class="card-body p-0">'
+                    +     '<div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">'
+                    +       '<div class="d-flex align-items-center gap-2">'
+                    +         '<span class="mb-0 w-48-px h-48-px ' + c.dot + ' text-white flex-shrink-0 d-flex justify-content-center align-items-center rounded-circle h6">'
+                    +           '<iconify-icon icon="' + c.icon + '" class="icon"></iconify-icon>'
+                    +         '</span>'
+                    +         '<div>'
+                    +           '<span class="mb-2 fw-medium text-secondary-light text-sm">' + escapeHtml(c.label) + '</span>'
+                    +           '<h6 class="fw-semibold">' + c.value + '</h6>'
+                    +         '</div>'
+                    +       '</div>'
+                    +     '</div>'
+                    +     '<p class="text-sm mb-0">' + c.foot + '</p>'
+                    +   '</div>'
+                    + '</div></div>';
+            }).join('');
         }
 
-        tbody.innerHTML = rows.map(function (row, i) {
-            // Tanpa rowspan: tiap baris sudah satu site tersendiri, karena
-            // sumber ini belum memuat dimensi perusahaan.
-            var html = '<tr><td class="rkk-site">' + escapeHtml(row.site) + '</td>';
-
-            if (row.average === null) {
-                html += '<td class="rkk-avg" title="Belum ada data">–</td>';
-            } else {
-                var tipRata = fmtPct(row.average) + ' · Nilai ' + row.nilai + ' (' + row.nilai_band + ')'
-                    + ' · dari ' + row.bulan_terisi + ' bulan · terendah ' + fmtPct(row.terendah);
-                html += '<td class="rkk-avg" title="' + escapeHtml(tipRata) + '">'
-                    + (matrixMode === 'nilai' ? row.nilai : fmtPct(row.average)) + '</td>';
+        // ---- Capaian per site ------------------------------------------------
+        function renderPerSite(list) {
+            var host = el('per-site');
+            if (!list.length) {
+                host.innerHTML = '<p class="text-secondary-light text-sm text-center py-24 mb-0">Tidak ada data.</p>';
+                return;
             }
+            host.innerHTML = list.map(function (s, i) {
+                return '<div class="' + (i ? 'mt-20' : '') + '">'
+                    + '<div class="d-flex align-items-center justify-content-between mb-8">'
+                    +   '<span class="text-sm fw-semibold">' + escapeHtml(s.site) + '</span>'
+                    +   '<span class="text-sm fw-medium text-secondary-light">' + fmtPct(s.percent) + '</span>'
+                    + '</div>'
+                    + '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px rkk-track"'
+                    +   ' title="Target ' + s.target + '%">'
+                    +   '<div class="progress-bar ' + nilaiBarClass(s.nilai) + ' rounded-pill" role="progressbar"'
+                    +     ' style="width:' + Math.min(100, s.percent) + '%" aria-valuenow="' + Math.round(s.percent) + '"'
+                    +     ' aria-valuemin="0" aria-valuemax="100"></div>'
+                    +   '<span class="rkk-track__target" style="left:' + s.target + '%"></span>'
+                    + '</div>'
+                    + '<span class="text-xs text-secondary-light">' + fmtNum(s.jumlah)
+                    +   ' baris berdata · terendah ' + fmtPct(s.terendah) + '</span>'
+                    + '</div>';
+            }).join('');
+        }
 
-            if (row.trend === 'up') {
-                html += '<td class="rkk-trend--up" title="Naik dari bulan sebelumnya">&uarr;</td>';
-            } else if (row.trend === 'down') {
-                html += '<td class="rkk-trend--down" title="Turun dari bulan sebelumnya">&darr;</td>';
-            } else if (row.trend === 'flat') {
-                html += '<td class="rkk-trend--flat" title="Sama dengan bulan sebelumnya">=</td>';
-            } else {
-                html += '<td class="text-secondary-light">–</td>';
+        // ---- Perlu perhatian -------------------------------------------------
+        function renderTerendah(list, punyaMitra) {
+            var body = el('terendah');
+            el('terendah-kol1').textContent = punyaMitra ? 'Site & Perusahaan' : 'Site';
+
+            if (!list.length) {
+                body.innerHTML = '<tr><td colspan="3" class="text-center text-secondary-light py-24">Tidak ada data.</td></tr>';
+                return;
             }
+            body.innerHTML = list.map(function (t) {
+                var sub = t.mitra
+                    ? escapeHtml(t.mitra) + ', terendah ' + fmtPct(t.terendah)
+                    : 'terendah ' + fmtPct(t.terendah);
 
-            // Variabel sengaja dinamai m, bukan i: i di luar sudah dipakai
-            // sebagai index baris untuk perhitungan rowspan site.
-            row.cells.forEach(function (cell, m) {
-                if (cell === null) {
-                    html += '<td class="rkk-empty" title="' + escapeHtml(months[m].label)
-                        + ': belum ada data">–</td>';
-                    return;
-                }
+                return '<tr>'
+                    + '<td>'
+                    +   '<span class="text-md fw-semibold d-block">' + escapeHtml(t.site) + '</span>'
+                    +   '<span class="text-sm text-secondary-light">' + sub + '</span>'
+                    + '</td>'
+                    + '<td class="text-center"><span class="' + nilaiBadgeClass(t.nilai)
+                    +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + t.nilai + '</span></td>'
+                    + '<td class="text-end fw-medium">' + fmtPct(t.percent) + '</td>'
+                    + '</tr>';
+            }).join('');
+        }
 
-                // Tooltip selalu memuat kedua angka, apa pun mode tampilannya,
-                // supaya berganti mode tidak menghilangkan informasi.
-                var tip = row.site + ' · ' + months[m].label + ': '
-                    + fmtPct(cell.pct) + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')';
+        /** Legenda ikut mode: gradasi persentase, atau 4 band Nilai. */
+        function renderLegend(punyaMitra) {
+            var items = matrixMode === 'nilai'
+                ? [
+                    { color: '#E0484A', label: 'Nilai 1 · <80%' },
+                    { color: '#F08C2E', label: 'Nilai 2 · 80–90%' },
+                    { color: '#F2C230', label: 'Nilai 3 · 90–98%' },
+                    { color: '#16A34A', label: 'Nilai 4 · 98–100%' }
+                ]
+                : [
+                    { color: '#E0484A', label: '<62%' },
+                    { color: '#F08C2E', label: '62–78%' },
+                    { color: '#F2C230', label: '78–90%' },
+                    { color: '#86C96B', label: '90–98%' },
+                    { color: '#059669', label: '≥98%' }
+                ];
 
-                html += '<td class="rkk-cell ' + cellClass(cell) + '" title="' + escapeHtml(tip) + '">'
-                    + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
-                    + '</td>';
+            el('legend').innerHTML = items.map(function (it) {
+                return '<span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;">'
+                    + '<span class="rounded-1" style="width:14px;height:14px;background:' + it.color + ';"></span>'
+                    + escapeHtml(it.label) + '</span>';
+            }).join('');
+
+            var cakupan = punyaMitra ? 'tiap perusahaan di tiap site' : 'tiap site';
+
+            el('matrix-subtitle').textContent = matrixMode === 'nilai'
+                ? 'Nilai 1–4 dari persentase MCU Fit, ' + cakupan
+                : 'Persentase pekerja dengan hasil MCU Fit, ' + cakupan;
+        }
+
+        function renderMatrix(months, rows, punyaMitra) {
+            var table = el('matrix');
+            var thead = table.querySelector('thead');
+            var tbody = table.querySelector('tbody');
+            var tetap = punyaMitra ? 4 : 3;
+
+            var head = '<tr><th class="rkk-site">SITE</th>'
+                + (punyaMitra ? '<th class="rkk-mitra">PERUSAHAAN</th>' : '')
+                + '<th>RATA</th><th>TREND</th>';
+            months.forEach(function (m, i) {
+                head += '<th class="' + (i === months.length - 1 ? 'rkk-th-last' : '') + '">'
+                    + escapeHtml(m.label) + '</th>';
             });
+            thead.innerHTML = head + '</tr>';
 
-            return html + '</tr>';
-        }).join('');
-    }
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="' + (months.length + tetap) + '" class="text-center py-24 text-secondary-light">'
+                    + 'Tidak ada data untuk filter ini.</td></tr>';
+                return;
+            }
 
-    // ---- Grafik -------------------------------------------------------------
-    function renderMonthlyChart(payload) {
-        var node = el('chart-monthly');
-        if (!node || typeof ApexCharts === 'undefined') { return; }
+            // Sel site digabung dengan rowspan hanya kalau ada kolom perusahaan;
+            // tanpa itu satu baris sudah satu site.
+            var span = {};
+            var lewati = {};
 
-        if (charts.monthly) {
-            charts.monthly.destroy();
-            charts.monthly = null;
-        }
-
-        if (!payload.series.length) {
-            node.innerHTML = '<p class="text-secondary-light text-sm text-center py-40 mb-0">Tidak ada data.</p>';
-            return;
-        }
-        node.innerHTML = '';
-
-        charts.monthly = new ApexCharts(node, {
-            series: payload.series,
-            chart: { type: 'line', height: 320, toolbar: { show: false }, zoom: { enabled: false } },
-            colors: PALETTE,
-            stroke: { curve: 'smooth', width: 3 },
-            markers: { size: 4, hover: { size: 5 } },
-            dataLabels: { enabled: false },
-            xaxis: {
-                categories: payload.labels,
-                labels: { style: { fontSize: '11px' } }
-            },
-            yaxis: {
-                min: 0, max: 100,
-                labels: { formatter: function (v) { return Math.round(v) + '%'; } }
-            },
-            legend: { position: 'top', horizontalAlign: 'left', fontSize: '12px' },
-            grid: { borderColor: '#EEF2F7', strokeDashArray: 4 },
-            annotations: {
-                yaxis: [{
-                    y: {{ $target }},
-                    borderColor: '#0F172A',
-                    strokeDashArray: 4,
-                    label: {
-                        text: 'Target {{ $target }}%',
-                        style: { fontSize: '10px', background: '#0F172A', color: '#fff' }
+            if (punyaMitra) {
+                rows.forEach(function (row, i) {
+                    if (i > 0 && rows[i - 1].site === row.site) {
+                        lewati[i] = true;
+                        return;
                     }
-                }]
-            },
-            tooltip: {
-                shared: true,
-                // WAJIB eksplisit: kombinasi shared + intersect melempar error
-                // sehingga grafiknya gagal dirender sama sekali.
-                intersect: false,
-                y: { formatter: function (v) { return v === null ? 'belum ada data' : fmtPct(v); } }
+                    var n = 1;
+                    while (i + n < rows.length && rows[i + n].site === row.site) { n++; }
+                    span[i] = n;
+                });
             }
-        });
-        charts.monthly.render();
-    }
 
-    /** Keterangan dari server, atau disembunyikan kalau tidak ada. */
-    function renderCatatan(text) {
-        el('note').textContent = text || '';
-        el('note-wrap').classList.toggle('d-none', !text);
-    }
+            tbody.innerHTML = rows.map(function (row, i) {
+                var html = '<tr>';
 
-    /** Membungkus renderer agar kegagalan satu panel tidak menjatuhkan sisanya. */
-    function safe(label, fn) {
-        try {
-            fn();
-        } catch (err) {
-            if (typeof console !== 'undefined' && console.error) {
-                console.error('Rasio Kelayakan Kerja: panel "' + label + '" gagal dirender', err);
-            }
+                if (!punyaMitra) {
+                    html += '<td class="rkk-site">' + escapeHtml(row.site) + '</td>';
+                } else if (!lewati[i]) {
+                    html += '<td class="rkk-site" rowspan="' + span[i] + '">'
+                        + escapeHtml(row.site) + '</td>';
+                }
+
+                if (punyaMitra) {
+                    html += '<td class="rkk-mitra">' + escapeHtml(row.mitra) + '</td>';
+                }
+
+                if (row.average === null) {
+                    html += '<td class="rkk-avg" title="Belum ada data">–</td>';
+                } else {
+                    var tip = fmtPct(row.average) + ' · Nilai ' + row.nilai + ' (' + row.nilai_band + ')'
+                        + ' · dari ' + row.bulan_terisi + ' bulan · terendah ' + fmtPct(row.terendah);
+                    html += '<td class="rkk-avg" title="' + escapeHtml(tip) + '">'
+                        + (matrixMode === 'nilai' ? row.nilai : fmtPct(row.average)) + '</td>';
+                }
+
+                if (row.trend === 'up') {
+                    html += '<td class="rkk-trend--up" title="Naik dari bulan sebelumnya">&uarr;</td>';
+                } else if (row.trend === 'down') {
+                    html += '<td class="rkk-trend--down" title="Turun dari bulan sebelumnya">&darr;</td>';
+                } else if (row.trend === 'flat') {
+                    html += '<td class="rkk-trend--flat" title="Sama dengan bulan sebelumnya">=</td>';
+                } else {
+                    html += '<td class="text-secondary-light">–</td>';
+                }
+
+                // Variabel sengaja dinamai m: i di luar sudah dipakai sebagai
+                // index baris untuk perhitungan rowspan site.
+                row.cells.forEach(function (cell, m) {
+                    if (cell === null) {
+                        html += '<td class="rkk-empty" title="' + escapeHtml(months[m].label)
+                            + ': belum ada data">–</td>';
+                        return;
+                    }
+
+                    // Tooltip selalu memuat kedua angka, apa pun mode
+                    // tampilannya, supaya berganti mode tidak menghilangkan
+                    // informasi.
+                    var tipSel = row.site + (punyaMitra ? ' · ' + row.mitra : '')
+                        + ' · ' + months[m].label + ': ' + fmtPct(cell.pct)
+                        + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')';
+
+                    html += '<td class="rkk-cell ' + cellClass(cell) + '" title="' + escapeHtml(tipSel) + '">'
+                        + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
+                        + '</td>';
+                });
+
+                return html + '</tr>';
+            }).join('');
         }
-    }
 
-    function load() {
-        var params = new URLSearchParams(currentFilters());
-        el('status').textContent = 'memuat…';
+        // ---- Hasil MCU --------------------------------------------------------
+        function renderHasil(payload) {
+            var node = el('chart-hasil');
+            if (!node || typeof ApexCharts === 'undefined') { return; }
 
-        fetch(overviewUrl + (params.toString() ? '?' + params.toString() : ''), {
-            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
-        })
-            .then(function (res) {
-                if (!res.ok) { throw new Error('HTTP ' + res.status); }
-                return res.json();
-            })
-            .then(function (json) {
-                lastPayload = json;
+            if (charts.hasil) {
+                charts.hasil.destroy();
+                charts.hasil = null;
+            }
 
-                safe('kpi', function () { renderKpi(json.kpi); });
-                safe('legend', renderLegend);
-                safe('matrix', function () { renderMatrix(json.months || [], json.matrix || []); });
-                safe('per-site', function () { renderPerSite(json.per_site || []); });
-                safe('terendah', function () { renderTerendah(json.terendah || []); });
-                safe('monthly', function () { renderMonthlyChart(json.monthly); });
-                safe('catatan', function () { renderCatatan(json.catatan); });
+            if (!payload.tersedia || !payload.rows.length) {
+                node.innerHTML = '<p class="text-secondary-light text-sm text-center py-40 mb-0">'
+                    + 'Kumpulan data ini belum punya tabel rincian hasil MCU.</p>';
+                return;
+            }
+            node.innerHTML = '';
 
-                var k = json.kpi;
-                el('status').textContent = (k.rata === null ? 'belum ada data' : fmtPct(k.rata) + ' rata-rata')
-                    + ' · ' + k.kombinasi + ' site · ' + k.bulan_count + ' bulan';
-                loaded = true;
-            })
-            .catch(function (err) {
-                el('status').textContent = 'gagal memuat';
-                if (typeof console !== 'undefined' && console.error) {
-                    console.error('Ringkasan Rasio Kelayakan Kerja: gagal memuat', err);
+            var rows = payload.rows;
+
+            charts.hasil = new ApexCharts(node, {
+                series: [{ name: 'Karyawan', data: rows.map(function (r) { return r.jumlah; }) }],
+                chart: { type: 'bar', height: Math.max(220, rows.length * 44 + 60), toolbar: { show: false } },
+                // Hijau untuk kategori yang terhitung Fit, merah untuk yang tidak.
+                colors: ['#16A34A'],
+                plotOptions: {
+                    bar: {
+                        horizontal: true, borderRadius: 4, barHeight: '58%', distributed: true
+                    }
+                },
+                legend: { show: false },
+                dataLabels: {
+                    enabled: true,
+                    formatter: function (v) { return fmtNum(v); },
+                    style: { fontSize: '11px', colors: ['#fff'] }
+                },
+                xaxis: {
+                    categories: rows.map(function (r) { return r.label; }),
+                    labels: { style: { fontSize: '11px' }, formatter: function (v) { return fmtNum(v); } }
+                },
+                yaxis: { labels: { style: { fontSize: '11px' }, maxWidth: 260 } },
+                grid: { borderColor: '#EEF2F7', strokeDashArray: 4 },
+                tooltip: {
+                    y: {
+                        formatter: function (v, opts) {
+                            var r = rows[opts.dataPointIndex] || {};
+                            return fmtNum(v) + ' karyawan (' + fmtPct(r.percent) + ') — '
+                                + (r.fit ? 'terhitung Fit' : 'tidak Fit');
+                        }
+                    }
                 }
             });
-    }
 
-    filterEls.forEach(function (node) {
-        node.addEventListener('change', load);
-    });
+            // Warna per batang mengikuti status Fit-nya, bukan urutan.
+            charts.hasil.updateOptions({
+                colors: rows.map(function (r) { return r.fit ? '#16A34A' : '#E0484A'; })
+            }, false, false);
 
-    // Ganti mode hanya menggambar ulang dari payload terakhir, tidak ada
-    // permintaan baru ke server, karena angka Nilai sudah ikut dikirim.
-    root.querySelectorAll('.rkk-switch__btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            if (btn.dataset.mode === matrixMode) { return; }
+            charts.hasil.render();
+        }
 
-            matrixMode = btn.dataset.mode;
+        // ---- Tren bulanan -----------------------------------------------------
+        function renderMonthlyChart(payload, punyaMitra) {
+            var node = el('chart-monthly');
+            if (!node || typeof ApexCharts === 'undefined') { return; }
 
-            root.querySelectorAll('.rkk-switch__btn').forEach(function (b) {
-                // Kelas aktifnya 'active' (bawaan nav-pills WowDash),
-                // bukan kelas buatan sendiri.
-                b.classList.toggle('active', b.dataset.mode === matrixMode);
+            el('monthly-sub').textContent = punyaMitra
+                ? 'Persentase MCU Fit per perusahaan; garis yang menanjak berarti membaik'
+                : 'Persentase MCU Fit per site; garis yang menanjak berarti membaik';
+
+            if (charts.monthly) {
+                charts.monthly.destroy();
+                charts.monthly = null;
+            }
+
+            if (!payload.series.length) {
+                node.innerHTML = '<p class="text-secondary-light text-sm text-center py-40 mb-0">Tidak ada data.</p>';
+                return;
+            }
+            node.innerHTML = '';
+
+            charts.monthly = new ApexCharts(node, {
+                series: payload.series,
+                chart: { type: 'line', height: 320, toolbar: { show: false }, zoom: { enabled: false } },
+                colors: PALETTE,
+                stroke: { curve: 'smooth', width: 3 },
+                markers: { size: 4, hover: { size: 5 } },
+                dataLabels: { enabled: false },
+                xaxis: { categories: payload.labels, labels: { style: { fontSize: '11px' } } },
+                yaxis: {
+                    min: 0, max: 100,
+                    labels: { formatter: function (v) { return Math.round(v) + '%'; } }
+                },
+                legend: { position: 'top', horizontalAlign: 'left', fontSize: '12px' },
+                grid: { borderColor: '#EEF2F7', strokeDashArray: 4 },
+                annotations: {
+                    yaxis: [{
+                        y: @json($target),
+                        borderColor: '#0F172A',
+                        strokeDashArray: 4,
+                        label: {
+                            text: 'Target ' + @json($target) + '%',
+                            style: { fontSize: '10px', background: '#0F172A', color: '#fff' }
+                        }
+                    }]
+                },
+                tooltip: {
+                    shared: true,
+                    // WAJIB eksplisit: kombinasi shared + intersect melempar
+                    // error sehingga grafiknya gagal dirender sama sekali.
+                    intersect: false,
+                    y: { formatter: function (v) { return v === null ? 'belum ada data' : fmtPct(v); } }
+                }
             });
+            charts.monthly.render();
+        }
 
-            renderLegend();
+        function renderCatatan(text) {
+            el('note').textContent = text || '';
+            el('note-wrap').classList.toggle('d-none', !text);
+        }
 
-            if (lastPayload) {
-                renderMatrix(lastPayload.months || [], lastPayload.matrix || []);
+        /** Membungkus renderer agar kegagalan satu panel tidak menjatuhkan sisanya. */
+        function safe(label, fn) {
+            try {
+                fn();
+            } catch (err) {
+                if (typeof console !== 'undefined' && console.error) {
+                    console.error('Rasio Kelayakan Kerja: panel "' + label + '" gagal dirender', err);
+                }
             }
+        }
+
+        function load() {
+            var params = new URLSearchParams(currentFilters());
+            el('status').textContent = 'memuat…';
+
+            fetch(overviewUrl + (params.toString() ? '?' + params.toString() : ''), {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            })
+                .then(function (res) {
+                    if (!res.ok) { throw new Error('HTTP ' + res.status); }
+                    return res.json();
+                })
+                .then(function (json) {
+                    lastPayload = json;
+                    var punyaMitra = !!json.has_mitra;
+
+                    safe('kpi', function () { renderKpi(json.kpi); });
+                    safe('legend', function () { renderLegend(punyaMitra); });
+                    safe('matrix', function () { renderMatrix(json.months || [], json.matrix || [], punyaMitra); });
+                    safe('per-site', function () { renderPerSite(json.per_site || []); });
+                    safe('terendah', function () { renderTerendah(json.terendah || [], punyaMitra); });
+                    safe('hasil', function () { renderHasil(json.hasil_mcu || { tersedia: false, rows: [] }); });
+                    safe('monthly', function () { renderMonthlyChart(json.monthly, punyaMitra); });
+                    safe('catatan', function () { renderCatatan(json.catatan); });
+
+                    var k = json.kpi;
+                    el('status').textContent = (k.rata === null ? 'belum ada data' : fmtPct(k.rata) + ' MCU Fit')
+                        + (k.dari_rincian ? ' dari ' + fmtNum(k.karyawan) + ' karyawan' : '')
+                        + ' · ' + k.kombinasi + (punyaMitra ? ' kombinasi site/perusahaan' : ' site')
+                        + ' · ' + k.bulan_count + ' bulan';
+                    loaded = true;
+                })
+                .catch(function (err) {
+                    el('status').textContent = 'gagal memuat';
+                    if (typeof console !== 'undefined' && console.error) {
+                        console.error('Ringkasan Rasio Kelayakan Kerja: gagal memuat', err);
+                    }
+                });
+        }
+
+        filterEls.forEach(function (node) {
+            node.addEventListener('change', load);
         });
-    });
 
-    el('reset').addEventListener('click', function () {
-        filterEls.forEach(function (node) { node.value = ''; });
-        load();
-    });
+        // Ganti mode hanya menggambar ulang dari payload terakhir, tidak ada
+        // permintaan baru ke server, karena angka Nilai sudah ikut dikirim.
+        root.querySelectorAll('.rkk-switch__btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (btn.dataset.mode === matrixMode) { return; }
 
-    load();
+                matrixMode = btn.dataset.mode;
 
-    var tab = document.querySelector('#rkk-tab-ringkasan');
-    if (tab) {
-        tab.addEventListener('shown.bs.tab', function () {
-            if (!loaded) { load(); return; }
-            // ApexCharts tidak bisa mengukur elemen yang sedang tersembunyi,
-            // jadi ukurannya dihitung ulang saat tab kembali tampil.
-            if (charts.monthly && typeof charts.monthly.windowResizeHandler === 'function') {
-                charts.monthly.windowResizeHandler();
+                root.querySelectorAll('.rkk-switch__btn').forEach(function (b) {
+                    // Kelas aktifnya 'active' (bawaan nav-pills WowDash).
+                    b.classList.toggle('active', b.dataset.mode === matrixMode);
+                });
+
+                if (lastPayload) {
+                    var punyaMitra = !!lastPayload.has_mitra;
+                    renderLegend(punyaMitra);
+                    renderMatrix(lastPayload.months || [], lastPayload.matrix || [], punyaMitra);
+                }
+            });
+        });
+
+        el('reset').addEventListener('click', function () {
+            filterEls.forEach(function (node) { node.value = ''; });
+            load();
+        });
+
+        return {
+            load: load,
+            // Dipanggil saat tab-nya ditampilkan: ApexCharts tidak bisa
+            // mengukur elemen yang sedang tersembunyi.
+            show: function () {
+                if (!loaded) { load(); return; }
+                Object.keys(charts).forEach(function (k) {
+                    if (charts[k] && typeof charts[k].windowResizeHandler === 'function') {
+                        charts[k].windowResizeHandler();
+                    }
+                });
             }
-        });
-    }
+        };
+    };
 })();
 </script>
 <script>
 // ---- Tab Data ---------------------------------------------------------------
-(function () {
+window.rkkDataTable = (function () {
     'use strict';
-
-    var root = document.querySelector('.rkk-datatable');
-    if (!root) { return; }
-
-    var tableEl = root.querySelector('[data-rkk="table"]');
-    if (!tableEl || typeof DataTable === 'undefined') { return; }
-    if (DataTable.ext) {
-        DataTable.ext.errMode = 'none';
-    }
-
-    var dataUrl = root.dataset.url;
-    var exportUrl = root.dataset.exportUrl;
-    var filterEls = Array.prototype.slice.call(root.querySelectorAll('.rkkd-filter'));
-    var hintEl = root.querySelector('[data-rkk="hint"]');
 
     function escapeHtml(value) {
         return String(value === null || value === undefined ? '' : value)
@@ -601,126 +705,171 @@
         }[nilai] || 'bg-neutral-200 text-secondary-light';
     }
 
-    function currentFilters() {
-        var out = {};
-        filterEls.forEach(function (node) {
-            if (node.value) { out[node.dataset.column] = node.value; }
-        });
-        return out;
-    }
+    return function create(root) {
+        var tableEl = root.querySelector('[data-rkk="table"]');
+        if (!tableEl || typeof DataTable === 'undefined') {
+            return null;
+        }
+        if (DataTable.ext) {
+            DataTable.ext.errMode = 'none';
+        }
 
-    var table = new DataTable(tableEl, {
-        processing: true,
-        serverSide: true,
-        searching: true,
-        ordering: true,
-        order: [[0, 'asc']],
-        pageLength: 25,
-        lengthMenu: [25, 50, 100, 200],
-        autoWidth: false,
-        layout: {
-            topStart: 'pageLength',
-            topEnd: 'search',
-            bottomStart: 'info',
-            bottomEnd: 'paging'
-        },
-        ajax: {
-            url: dataUrl,
-            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            data: function (d) {
-                var filters = currentFilters();
-                Object.keys(filters).forEach(function (key) { d[key] = filters[key]; });
-            },
-            dataSrc: function (json) {
-                hintEl.textContent = fmtNum(json.recordsFiltered) + ' baris';
-                return json.data || [];
-            },
-            error: function (xhr, error) {
-                hintEl.textContent = 'gagal memuat';
-                if (typeof console !== 'undefined' && console.error) {
-                    console.error('Rasio Kelayakan Kerja: gagal memuat data', error, xhr && xhr.status);
-                }
-            }
-        },
-        columns: [
-            { data: 'site' },
-            { data: 'tahun' },
-            // Bulan tersimpan sebagai nama bulan Inggris, jadi mengurutkannya
-            // hanya menghasilkan urutan abjad yang menyesatkan.
-            { data: 'bulan', orderable: false },
-            {
-                data: 'persen',
-                className: 'text-end',
-                render: function (d, type) {
+        var dataUrl = root.dataset.url;
+        var exportUrl = root.dataset.exportUrl;
+        var filterEls = Array.prototype.slice.call(root.querySelectorAll('.rkkd-filter'));
+        var hintEl = root.querySelector('[data-rkk="hint"]');
+
+        // Bentuk kolom berbeda antar kumpulan data, jadi dibaca dari atribut
+        // alih-alih ditulis mati di sini.
+        var kolom = JSON.parse(root.dataset.columns || '[]');
+
+        function currentFilters() {
+            var out = {};
+            filterEls.forEach(function (node) {
+                if (node.value) { out[node.dataset.column] = node.value; }
+            });
+            return out;
+        }
+
+        var columns = kolom.map(function (c) {
+            var def = { data: c.key, className: c.class || '' };
+
+            if (c.tipe === 'persen') {
+                def.render = function (d, type) {
                     if (type !== 'display') { return d === null ? -1 : d; }
                     return d === null
                         ? '<span class="text-secondary-light">–</span>'
                         : '<span class="fw-semibold">' + fmtPct(d) + '</span>';
-                }
-            },
-            {
-                data: 'nilai',
-                className: 'text-center',
-                orderable: false,
-                render: function (d, type, row) {
+                };
+            } else if (c.tipe === 'nilai') {
+                def.orderable = false;
+                def.render = function (d, type, row) {
                     if (type !== 'display') { return d; }
                     if (d === null) { return '<span class="text-secondary-light">–</span>'; }
                     return '<span class="' + nilaiBadgeClass(d) + ' px-8 py-2 rounded-pill fw-medium text-xs"'
-                        + ' title="' + escapeHtml(row.nilai_band) + '">' + d + '</span>';
+                        + ' title="' + escapeHtml(row.nilai_band || '') + '">' + d + '</span>';
+                };
+            } else if (c.tipe === 'status') {
+                def.orderable = false;
+                def.render = function (d, type) {
+                    if (type !== 'display') { return d; }
+                    var kelas = d === 'Fit'
+                        ? 'bg-success-focus text-success-main'
+                        : 'bg-danger-focus text-danger-main';
+                    return '<span class="' + kelas + ' px-8 py-2 rounded-pill fw-medium text-xs">'
+                        + escapeHtml(d) + '</span>';
+                };
+            }
+
+            return def;
+        });
+
+        var table = new DataTable(tableEl, {
+            processing: true,
+            serverSide: true,
+            searching: true,
+            // Pengurutan dimatikan: server selalu mengurutkan per site lalu id,
+            // dan kolomnya berbeda antar kumpulan data.
+            ordering: false,
+            pageLength: 25,
+            lengthMenu: [25, 50, 100, 200],
+            autoWidth: false,
+            layout: {
+                topStart: 'pageLength',
+                topEnd: 'search',
+                bottomStart: 'info',
+                bottomEnd: 'paging'
+            },
+            ajax: {
+                url: dataUrl,
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                data: function (d) {
+                    var filters = currentFilters();
+                    Object.keys(filters).forEach(function (key) { d[key] = filters[key]; });
+                },
+                dataSrc: function (json) {
+                    hintEl.textContent = fmtNum(json.recordsFiltered) + ' baris';
+                    return json.data || [];
+                },
+                error: function (xhr, error) {
+                    hintEl.textContent = 'gagal memuat';
+                    if (typeof console !== 'undefined' && console.error) {
+                        console.error('Rasio Kelayakan Kerja: gagal memuat data', error, xhr && xhr.status);
+                    }
                 }
             },
-            {
-                data: 'keterangan',
-                orderable: false,
-                render: function (d, type, row) {
-                    if (type !== 'display') { return d; }
-                    var kelas = row.persen === null
-                        ? 'text-secondary-light'
-                        : (row.memenuhi_target ? 'text-success-main' : 'text-danger-main');
-                    return '<span class="' + kelas + ' fw-medium text-sm">' + escapeHtml(d) + '</span>';
-                }
+            columns: columns,
+            language: {
+                processing: 'Memuat…',
+                lengthMenu: 'Tampilkan _MENU_ baris',
+                info: 'Menampilkan _START_–_END_ dari _TOTAL_ baris',
+                infoEmpty: 'Tidak ada baris',
+                infoFiltered: '(disaring dari _MAX_ baris)',
+                search: 'Cari:',
+                zeroRecords: 'Tidak ada baris untuk filter ini.',
+                paginate: { first: '«', last: '»', next: '›', previous: '‹' }
             }
-        ],
-        language: {
-            processing: 'Memuat…',
-            lengthMenu: 'Tampilkan _MENU_ baris',
-            info: 'Menampilkan _START_–_END_ dari _TOTAL_ baris',
-            infoEmpty: 'Tidak ada baris',
-            infoFiltered: '(disaring dari _MAX_ baris)',
-            search: 'Cari:',
-            zeroRecords: 'Tidak ada baris untuk filter ini.',
-            paginate: { first: '«', last: '»', next: '›', previous: '‹' }
+        });
+
+        filterEls.forEach(function (node) {
+            node.addEventListener('change', function () { table.ajax.reload(); });
+        });
+
+        root.querySelector('[data-rkk="reset"]').addEventListener('click', function () {
+            filterEls.forEach(function (node) { node.value = ''; });
+            table.search('');
+            table.ajax.reload();
+        });
+
+        root.querySelectorAll('[data-rkk="export"]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var params = new URLSearchParams(currentFilters());
+                var search = table.search();
+                if (search) { params.set('search', search); }
+                params.set('format', btn.dataset.format);
+                window.location.href = exportUrl + '?' + params.toString();
+            });
+        });
+
+        return {
+            // Tabel dibangun saat pane-nya masih tersembunyi, jadi lebar kolom
+            // dihitung ulang begitu tab-nya pertama kali dibuka.
+            show: function () { table.columns.adjust(); }
+        };
+    };
+})();
+</script>
+<script>
+// ---- Perakitan tab ----------------------------------------------------------
+(function () {
+    'use strict';
+
+    var panes = {};
+
+    document.querySelectorAll('.rkk-overview').forEach(function (root) {
+        panes[root.closest('.tab-pane').id] = window.rkkOverview(root);
+    });
+
+    document.querySelectorAll('.rkk-datatable').forEach(function (root) {
+        var instance = window.rkkDataTable(root);
+        if (instance) {
+            panes[root.closest('.tab-pane').id] = instance;
         }
     });
 
-    filterEls.forEach(function (node) {
-        node.addEventListener('change', function () { table.ajax.reload(); });
-    });
-
-    root.querySelector('[data-rkk="reset"]').addEventListener('click', function () {
-        filterEls.forEach(function (node) { node.value = ''; });
-        table.search('');
-        table.ajax.reload();
-    });
-
-    root.querySelectorAll('[data-rkk="export"]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var params = new URLSearchParams(currentFilters());
-            var search = table.search();
-            if (search) { params.set('search', search); }
-            params.set('format', btn.dataset.format);
-            window.location.href = exportUrl + '?' + params.toString();
-        });
-    });
-
-    // Tabel dibangun saat pane-nya masih tersembunyi, jadi lebar kolom
-    // dihitung ulang begitu tab-nya pertama kali dibuka.
-    var tab = document.querySelector('#rkk-tab-data');
-    if (tab) {
-        tab.addEventListener('shown.bs.tab', function () {
-            table.columns.adjust();
-        });
+    // Hanya pane yang aktif sejak awal yang langsung dimuat; sisanya menunggu
+    // tab-nya dibuka, supaya halaman tidak menembak empat query sekaligus.
+    var active = document.querySelector('.tab-pane.active');
+    if (active && panes[active.id] && panes[active.id].load) {
+        panes[active.id].load();
     }
+
+    document.querySelectorAll('#rkk-tab [data-bs-toggle="pill"]').forEach(function (btn) {
+        btn.addEventListener('shown.bs.tab', function () {
+            var id = (btn.dataset.bsTarget || '').replace('#', '');
+            if (panes[id] && panes[id].show) { panes[id].show(); }
+        });
+    });
 })();
 </script>
 @endsection
