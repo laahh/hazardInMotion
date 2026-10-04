@@ -8,12 +8,14 @@ use App\Http\Controllers\OhsScoreCard\BlindspotRealTimeController;
 use App\Http\Controllers\OhsScoreCard\BlindspotTbcController;
 use App\Http\Controllers\OhsScoreCard\BlindspotTbcPicSubcontController;
 use App\Http\Controllers\OhsScoreCard\FitToWorkAwalShiftController;
+use App\Http\Controllers\OhsScoreCard\GoldenTimeEmergencyController;
 use App\Http\Controllers\OhsScoreCard\GrSeatbeltController;
 use App\Http\Controllers\OhsScoreCard\IncidentGapCctvDmsController;
 use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
 use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
 use App\Http\Controllers\OhsScoreCard\PelaksanaanEdukasiController;
+use App\Http\Controllers\OhsScoreCard\PelanggaranOverspeedController;
 use App\Http\Controllers\OhsScoreCard\PengawasanBerjarakController;
 use App\Http\Controllers\OhsScoreCard\PenggunaanHpController;
 use App\Http\Controllers\OhsScoreCard\PerulanganRekomendasiController;
@@ -201,6 +203,26 @@ Route::middleware('evaluasi-well.access')
             ->name('kinerja-control-room-dms.data');
         Route::get('/kinerja-control-room-dms/export', [KinerjaControlRoomDmsController::class, 'export'])
             ->name('kinerja-control-room-dms.export');
+
+        // Parameter SIRM "Deviasi Rekayasa Engineering Overspeed"
+        Route::get('/pelanggaran-overspeed', [PelanggaranOverspeedController::class, 'index'])
+            ->name('pelanggaran-overspeed.index');
+        Route::get('/pelanggaran-overspeed/overview', [PelanggaranOverspeedController::class, 'overview'])
+            ->name('pelanggaran-overspeed.overview');
+        Route::get('/pelanggaran-overspeed/data', [PelanggaranOverspeedController::class, 'data'])
+            ->name('pelanggaran-overspeed.data');
+        Route::get('/pelanggaran-overspeed/export', [PelanggaranOverspeedController::class, 'export'])
+            ->name('pelanggaran-overspeed.export');
+
+        // Parameter Emergency Response "Tidak ada pelaporan melewati batas golden time"
+        Route::get('/golden-time-emergency', [GoldenTimeEmergencyController::class, 'index'])
+            ->name('golden-time-emergency.index');
+        Route::get('/golden-time-emergency/overview', [GoldenTimeEmergencyController::class, 'overview'])
+            ->name('golden-time-emergency.overview');
+        Route::get('/golden-time-emergency/data', [GoldenTimeEmergencyController::class, 'data'])
+            ->name('golden-time-emergency.data');
+        Route::get('/golden-time-emergency/export', [GoldenTimeEmergencyController::class, 'export'])
+            ->name('golden-time-emergency.export');
 
         // Parameter HSECT — "Peer Pressure" (hse_automation: bcsid.mv_berecord)
         Route::get('/peer-pressure', [BerecordController::class, 'index'])

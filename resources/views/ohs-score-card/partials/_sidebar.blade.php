@@ -26,7 +26,7 @@
             ['label' => 'Coverage Daily Area Kritis Pengawas Safety',                   'icon' => 'solar:shield-check-outline'],
             ['label' => 'Speak up fatigue',                                             'icon' => 'solar:user-speak-outline'],
             ['label' => 'Tidak ada temuan penggunaan HP',                               'icon' => 'solar:smartphone-outline', 'url' => route('ohs-score-card.penggunaan-hp.index')],
-            ['label' => 'GR Seatbelt',                                                  'icon' => 'mdi:seatbelt', 'url' => route('ohs-score-card.gr-seatbelt.index')],
+            // ['label' => 'GR Seatbelt',                                                  'icon' => 'mdi:seatbelt'], 
             ['label' => 'Incident dengan Gap Coverage CCTV & Gap pada DMS',             'icon' => 'solar:videocamera-outline', 'url' => route('ohs-score-card.incident-gap-cctv-dms.index')],
             ['label' => 'Leadtime Alert DMS masuk ke Server',                           'icon' => 'solar:server-outline', 'url' => route('ohs-score-card.leadtime-alert-bedms.index')],
             ['label' => 'Kinerja Pengawasan Control Room DMS',                          'icon' => 'solar:monitor-outline', 'url' => route('ohs-score-card.kinerja-control-room-dms.index')],
@@ -49,8 +49,8 @@
             ['label' => 'Jalan sesuai standar',                                         'icon' => 'solar:routing-outline', 'url' => route('ohs-score-card.jalan-sesuai-standar.index')],
         ],
         'SIRM' => [
-            ['label' => 'Deviasi Rekayasa Engineering Seatbelt',                        'icon' => 'mdi:seatbelt'],
-            ['label' => 'Deviasi Rekayasa Engineering Overspeed',                       'icon' => 'solar:speedometer-outline'],
+            ['label' => 'Deviasi Rekayasa Engineering Seatbelt',                        'icon' => 'mdi:seatbelt', 'url' => route('ohs-score-card.gr-seatbelt.index')],
+            ['label' => 'Deviasi Rekayasa Engineering Overspeed',                       'icon' => 'solar:speedometer-outline', 'url' => route('ohs-score-card.pelanggaran-overspeed.index')],
             ['label' => 'Pemenuhan Regulasi',                                           'icon' => 'solar:clipboard-list-outline'],
             ['label' => 'Penuntasan pengendalian rekayasa',                             'icon' => 'solar:wrench-outline'],
         ],
@@ -63,7 +63,7 @@
             ['label' => 'Pelaksanaan Sobriety Test Jam Kritis dan Pengecekan Sobriety Test', 'icon' => 'solar:test-tube-outline'],
         ],
         'ER & SS' => [
-            ['label' => 'Tidak ada pelaporan melewati batas golden time',               'icon' => 'solar:clock-circle-outline'],
+            ['label' => 'Tidak ada pelaporan melewati batas golden time',               'icon' => 'solar:clock-circle-outline', 'url' => route('ohs-score-card.golden-time-emergency.index')],
             ['label' => 'Kesiapan alat Emergency',                                      'icon' => 'solar:siren-outline'],
         ],
     ];
