@@ -16,10 +16,10 @@
     $deptMenus = [
         'SOD' => [
             ['label' => 'Ratio TBC',                                     'icon' => 'solar:chart-square-outline', 'url' => route('ohs-score-card.ratio-tbc-gr.index')],
-            ['label' => 'Ratio GR',                                      'icon' => 'solar:chart-square-outline'],
+            // ['label' => 'Ratio GR',                                      'icon' => 'solar:chart-square-outline'],
             ['label' => 'Coverage Daily',                                          'icon' => 'solar:map-outline'],
             ['label' => 'Blindspot TBC',                             'icon' => 'solar:eye-closed-outline', 'url' => route('ohs-score-card.blindspot-tbc.index')],
-            ['label' => 'Blindspot GR',                              'icon' => 'solar:eye-closed-outline'],
+            ['label' => 'Blindspot GR',                              'icon' => 'solar:eye-closed-outline', 'url' => route('ohs-score-card.blindspot-gr.index')],
             ['label' => 'Coverage Area Kritis Pengawas Suptend up',                     'icon' => 'solar:map-point-outline'],
             ['label' => '%Pengawasan Berjarak',                                        'icon' => 'solar:ruler-outline'],
             ['label' => '%Blindspot temuan Real Time',                                 'icon' => 'solar:alarm-outline'],

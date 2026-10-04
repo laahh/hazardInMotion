@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\OhsScoreCard\BerecordController;
+use App\Http\Controllers\OhsScoreCard\BlindspotGrController;
 use App\Http\Controllers\OhsScoreCard\BlindspotTbcController;
 use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
 use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
@@ -54,6 +55,16 @@ Route::middleware('evaluasi-well.access')
         Route::get('/ratio-tbc-gr/{dataset}/export', [RatioTbcGrController::class, 'export'])
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('ratio-tbc-gr.export');
+
+        // Parameter SOD "Blindspot GR"
+        Route::get('/blindspot-gr', [BlindspotGrController::class, 'index'])
+            ->name('blindspot-gr.index');
+        Route::get('/blindspot-gr/overview', [BlindspotGrController::class, 'overview'])
+            ->name('blindspot-gr.overview');
+        Route::get('/blindspot-gr/data', [BlindspotGrController::class, 'data'])
+            ->name('blindspot-gr.data');
+        Route::get('/blindspot-gr/export', [BlindspotGrController::class, 'export'])
+            ->name('blindspot-gr.export');
 
         // Parameter SOD "Blindspot TBC" — minecon & subcon
         Route::get('/blindspot-tbc', [BlindspotTbcController::class, 'index'])
