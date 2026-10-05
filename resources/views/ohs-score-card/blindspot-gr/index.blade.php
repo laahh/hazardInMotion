@@ -172,7 +172,7 @@ var bgrModalDetail = (function () {
     function num(v) { return Number(v || 0).toLocaleString('id-ID'); }
 
     function ubin(label, nilai, catatan, kelas) {
-        return '<div class="col-xxl-3 col-md-6">'
+        return '<div class="col-md-6">'
             + '<div class="border input-form-light radius-8 p-16 h-100">'
             +   '<span class="text-sm text-secondary-light d-block">' + esc(label) + '</span>'
             +   '<h6 class="fw-semibold mt-8 mb-4 ' + (kelas || '') + '">' + nilai + '</h6>'
@@ -190,38 +190,47 @@ var bgrModalDetail = (function () {
             ? 'Persentase blindspot'
             : 'Temuan di sel ini';
 
+        // Persentase di matriks bulanan ternyata persis temuan blindspot
+        // dibagi SELURUH baris sel ini -- yang blindspot maupun tidak. Diuji
+        // ke 23 sel yang terisi, cocok semua. Jadi baris yang tidak bertanda
+        // blindspot bukan baris terbuang: dia sisa penyebutnya, dan angka
+        // persen di sel bisa diterangkan utuh di sini.
+        var penyebut = r.temuan + r.bukan_blindspot;
+
         var isi = '<div class="row gy-3 mb-20">'
             + ubin(labelSel, esc(koordinat.nilai || '–'),
-                   koordinat.ukuran === 'persen'
-                       ? 'dari matriks persentase'
-                       : 'dari matriks jumlah temuan')
-            + ubin('Temuan Blindspot', num(r.temuan), 'pelanggaran Golden Rules yang terhitung')
-            + ubin('PIC Kecolongan', num(r.pic), 'pengawas berbeda yang areanya luput')
-            + ubin('Yang Menangkap', num(r.pelapor),
-                   r.perusahaan_pelapor + ' perusahaan pelapor berbeda')
+                   penyebut > 0
+                       ? num(r.temuan) + ' dari ' + num(penyebut) + ' baris di sel ini'
+                       : (koordinat.ukuran === 'persen'
+                            ? 'dari matriks persentase'
+                            : 'dari matriks jumlah temuan'))
+            + ubin('Total Temuan', num(r.temuan),
+                   num(r.pic) + ' PIC kecolongan · ' + num(r.pelapor) + ' pelapor dari '
+                   + num(r.perusahaan_pelapor) + ' perusahaan')
             + '</div>';
 
-        // Baris yang ada di tabel rincian tapi tidak bertanda blindspot tetap
-        // disebut. Kalau dibuang diam-diam, pembaca yang mencocokkan modal ini
-        // dengan sumber mentahnya menemukan selisih tanpa keterangan -- dan
-        // pada sel yang temuan blindspot-nya nol, modal akan terlihat kosong
-        // seolah tidak ada data sama sekali.
+        // Tanpa keterangan ini, sel yang temuan blindspot-nya nol akan terlihat
+        // kosong seolah datanya hilang, padahal nol itu memang hasilnya: ada
+        // pengamatan di sel tersebut, tidak satu pun blindspot.
         if (r.bukan_blindspot > 0) {
             isi += '<div class="alert bg-info-focus text-info-main border-info-main'
-                + ' radius-8 px-20 py-12 mb-20 text-sm">'
-                + '<strong>' + num(r.bukan_blindspot) + ' baris lain</strong> di sel ini ada'
-                + ' di tabel rincian tapi tidak bertanda blindspot, jadi tidak ikut dihitung'
-                + ' maupun ditampilkan di bawah.'
+                + ' radius-8 px-20 py-12 mb-20 text-sm mt-0">'
+                + '<strong>Penyebutnya ' + num(penyebut) + ' baris.</strong> '
+                + num(r.bukan_blindspot) + ' di antaranya tidak bertanda blindspot, jadi ikut'
+                + ' membentuk persentase tapi tidak ikut didaftar di bawah.'
                 + '</div>';
         }
 
         if (!j.baris.length) {
             bagian('isi').innerHTML = isi
                 + '<div class="text-center text-secondary-light py-24">'
-                + 'Tidak ada temuan blindspot di tabel rincian untuk kombinasi ini.'
-                + (koordinat.ukuran === 'persen'
-                    ? ' Angka di sel berasal dari tabel bulanan yang terpisah, jadi tetap sahih.'
-                    : '')
+                + (penyebut > 0
+                    ? 'Tidak satu pun dari ' + num(penyebut) + ' baris di sel ini bertanda'
+                      + ' blindspot, jadi persentasenya memang nol -- bukan datanya yang kosong.'
+                    : 'Tidak ada baris di tabel rincian untuk kombinasi ini.'
+                      + (koordinat.ukuran === 'persen'
+                          ? ' Angka di sel berasal dari tabel bulanan yang terpisah, jadi tetap sahih.'
+                          : ''))
                 + '</div>';
             bagian('kaki').textContent = '';
             return;
@@ -235,7 +244,7 @@ var bgrModalDetail = (function () {
             +     daftarRingkas(j.per_pelapor, 'perusahaan')
             +   '</div>'
             +   '<div class="col-xxl-6">'
-            +     '<h6 class="text-md fw-semibold mb-4">PIC paling sering kecolongan</h6>'
+            +     '<h6 class="text-md fw-semibold mb-4">PIC</h6>'
             +     '<span class="text-xs text-secondary-light d-block mb-12">'
             +       'Pengawas yang areanya paling banyak luput di bulan ini</span>'
             +     daftarPic(j.per_pic)

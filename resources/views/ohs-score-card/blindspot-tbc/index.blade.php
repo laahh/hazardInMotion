@@ -178,7 +178,7 @@ var bsModalDetail = (function () {
     function num(v) { return Number(v || 0).toLocaleString('id-ID'); }
 
     function ubin(label, nilai, catatan, kelas) {
-        return '<div class="col-xxl-3 col-md-6">'
+        return '<div class="col-md-6">'
             + '<div class="border input-form-light radius-8 p-16 h-100">'
             +   '<span class="text-sm text-secondary-light d-block">' + esc(label) + '</span>'
             +   '<h6 class="fw-semibold mt-8 mb-4 ' + (kelas || '') + '">' + nilai + '</h6>'
@@ -202,10 +202,9 @@ var bsModalDetail = (function () {
                    koordinat.ukuran === 'persen'
                        ? 'dari matriks persentase'
                        : 'dari matriks jumlah temuan')
-            + ubin('Temuan', num(r.temuan), 'tercatat di tabel rincian')
-            + ubin('PIC Kecolongan', num(r.pic), 'pengawas berbeda yang areanya luput')
-            + ubin('Yang Menangkap', num(r.pelapor),
-                   r.perusahaan_pelapor + ' perusahaan pelapor berbeda')
+            + ubin('Total Temuan', num(r.temuan),
+                   num(r.pic) + ' PIC kecolongan · ' + num(r.pelapor) + ' pelapor dari '
+                   + num(r.perusahaan_pelapor) + ' perusahaan')
             + '</div>';
 
         if (!j.baris.length) {
@@ -228,7 +227,7 @@ var bsModalDetail = (function () {
             +     daftarRingkas(j.per_pelapor, 'perusahaan', r.temuan)
             +   '</div>'
             +   '<div class="col-xxl-6">'
-            +     '<h6 class="text-md fw-semibold mb-4">PIC paling sering kecolongan</h6>'
+            +     '<h6 class="text-md fw-semibold mb-4">PIC</h6>'
             +     '<span class="text-xs text-secondary-light d-block mb-12">'
             +       'Pengawas yang areanya paling banyak luput di bulan ini</span>'
             +     daftarPic(j.per_pic, r.temuan)
