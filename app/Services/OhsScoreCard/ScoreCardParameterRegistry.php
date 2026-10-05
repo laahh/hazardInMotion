@@ -29,13 +29,17 @@ final class ScoreCardParameterRegistry
      *
      * SENGAJA DIPATOK, bukan diturunkan dari data. Konsekuensinya pasangan
      * site/kontraktor di luar daftar ini tidak ikut tampil meskipun datanya
-     * ada; lihat catatan di dashboard.
+     * ada: saat ini BMO 1/PT MTN, GMO/PT BAR, dan LMO/PT MTN punya angka
+     * tetapi tidak berkolom. Tambahkan di sini kalau ingin ikut tampil.
+     *
+     * BMO 1/PT FAD dan BMO 2/PT BUMA pernah ada di daftar ini lalu dibuang:
+     * keduanya warisan tabel contoh dan tidak punya data sama sekali.
      *
      * @var array<string, array<int, string>>
      */
     public const KOLOM = [
-        'BMO 1' => ['PT BUMA', 'PT FAD', 'PT KDC', 'PT MTL'],
-        'BMO 2' => ['PT BUMA', 'PT PAMA'],
+        'BMO 1' => ['PT BUMA', 'PT KDC', 'PT MTL'],
+        'BMO 2' => ['PT PAMA'],
         'BMO 3' => ['PT BAR'],
         'GMO' => ['PT KDC', 'PT PAMA'],
         'LMO' => ['PT BUMA', 'PT FAD'],
