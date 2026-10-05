@@ -63,6 +63,16 @@
     position: relative; z-index: 1;
   }
   .cvd-matrix .cvd-empty { background: #F1F5F9; color: #CBD5E1 !important; border-radius: 6px; }
+
+  /* Hanya sel berisi angka yang bisa dibuka rinciannya. */
+  .cvd-matrix .cvd-cell--klik { cursor: pointer; }
+  .cvd-matrix .cvd-cell--klik:focus-visible {
+    outline: 2px solid #487FFF; outline-offset: 1px; position: relative; z-index: 2;
+  }
+
+  /* Tabel konteks di dalam modal digulir sendiri agar modalnya tidak memanjang. */
+  .cvd-modal-scroll { max-height: 34vh; overflow: auto; }
+  .cvd-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
   /* Gradasi persentase: angka besar hijau, karena di sini tinggi berarti baik. */
   .cvd-t1 { background: #E0484A; }
   .cvd-t2 { background: #F08C2E; }
@@ -124,11 +134,219 @@
     @include('ohs-score-card.coverage-area-daily.partials._data')
   </div>
 </div>
+
+{{-- Modal rincian satu sel. Ditaruh di luar tab pane supaya tidak ikut
+     tersembunyi saat berpindah tab. --}}
+<div class="modal fade" id="cvd-detail-modal" tabindex="-1" aria-labelledby="cvd-detail-judul" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content radius-12">
+      <div class="modal-header border-bottom py-16 px-24">
+        <div>
+          <h6 class="modal-title text-lg fw-semibold mb-0" id="cvd-detail-judul">Rincian Bulan</h6>
+          <span class="text-sm text-secondary-light" data-cvm="subjudul"></span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body p-24"><div data-cvm="isi"></div></div>
+      <div class="modal-footer border-top py-12 px-24">
+        <span class="text-sm text-secondary-light me-auto" data-cvm="kaki"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary radius-8" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
+
 
 @section('page-scripts')
 <script>
 // ---- Tab Ringkasan ----------------------------------------------------------
+// ---- Modal rincian satu sel matriks -----------------------------------------
+var cvdModalDetail = (function () {
+    'use strict';
+
+    var el = document.getElementById('cvd-detail-modal');
+    if (!el) { return null; }
+
+    var bagian = function (n) { return el.querySelector('[data-cvm="' + n + '"]'); };
+    var permintaan = 0;
+
+    function esc(v) {
+        return String(v === null || v === undefined ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function num(v) { return Number(v || 0).toLocaleString('id-ID'); }
+
+    function pct(v) {
+        return v === null || v === undefined
+            ? '–'
+            : Number(v).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+    }
+
+    function ubin(label, nilai, catatan, kelas) {
+        return '<div class="col-xxl-3 col-md-6">'
+            + '<div class="border input-form-light radius-8 p-16 h-100">'
+            +   '<span class="text-sm text-secondary-light d-block">' + esc(label) + '</span>'
+            +   '<h6 class="fw-semibold mt-8 mb-4 ' + (kelas || '') + '">' + nilai + '</h6>'
+            +   '<span class="text-xs text-secondary-light">' + esc(catatan) + '</span>'
+            + '</div></div>';
+    }
+
+    /** Batang mini agar perbandingan antar baris terbaca tanpa membaca angkanya. */
+    function batang(persen, target) {
+        var p = persen === null ? 0 : Math.min(100, persen);
+        var warna = persen === null ? 'bg-neutral-400'
+            : (persen >= target ? 'bg-success-main' : persen >= target - 10 ? 'bg-warning-main' : 'bg-danger-main');
+        return '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px">'
+            + '<div class="progress-bar ' + warna + ' rounded-pill" role="progressbar"'
+            + ' style="width:' + p + '%" aria-valuenow="' + Math.round(p) + '"'
+            + ' aria-valuemin="0" aria-valuemax="100"></div></div>';
+    }
+
+    function render(j) {
+        var c = j.sel;
+        var target = j.target;
+        var capai = c.persen === null ? '' : (c.memenuhi_target ? 'text-success-main' : 'text-danger-main');
+
+        // Keempat kartu satu keluarga: Tercakup + Belum = Terdaftar, dan
+        // Persentase = Tercakup / Terdaftar. Semuanya dari tabel ringkasan yang
+        // sama dengan matriksnya, jadi tidak mungkin bertentangan dengan selnya.
+        var isi = '<div class="row gy-3 mb-20">'
+            + ubin('Terdaftar', num(c.terdaftar), 'lokasi-hari yang harus dicakup')
+            + ubin('Tercakup', num(c.tercover), 'sudah dikunjungi', 'text-success-main')
+            + ubin('Belum Tercakup', num(c.belum), 'luput dari pengawasan harian',
+                   c.belum ? 'text-danger-main' : '')
+            + ubin('Persentase', pct(c.persen),
+                   c.terdaftar
+                       ? num(c.tercover) + ' dibagi ' + num(c.terdaftar) + ' · target ' + target + '%'
+                       : 'tidak ada lokasi terdaftar',
+                   capai)
+            + '</div>';
+
+        if (j.site && j.site.terdaftar) {
+            isi += '<p class="text-sm text-secondary-light mb-20">Seluruh site ' + esc(j.judul.site)
+                + ' pada ' + esc(j.judul.bulan) + ': <span class="fw-semibold">' + pct(j.site.persen)
+                + '</span> (' + num(j.site.tercover) + ' dari ' + num(j.site.terdaftar) + ' lokasi-hari).</p>';
+        }
+
+        isi += '<div class="row gy-4">'
+            +   '<div class="col-xxl-6">'
+            +     '<h6 class="text-md fw-semibold mb-4">Riwayat ' + esc(j.judul.pic) + ' di ' + esc(j.judul.site) + '</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Apakah bulan ini kebetulan buruk, atau memang begitu terus</span>'
+            +     tabelRiwayat(j, target)
+            +   '</div>'
+            +   '<div class="col-xxl-6">'
+            +     '<h6 class="text-md fw-semibold mb-4">Seluruh PIC di ' + esc(j.judul.site)
+            +       ' · ' + esc(j.judul.bulan) + '</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Apakah masalahnya milik satu PIC atau menyeluruh</span>'
+            +     tabelSebulan(j, target)
+            +   '</div>'
+            + '</div>';
+
+        bagian('isi').innerHTML = isi;
+        bagian('kaki').textContent = 'Parameter ini belum punya tabel rincian per lokasi, '
+            + 'jadi yang ditampilkan konteks di sekeliling sel — semuanya dari sumber yang sama dengan matriks.';
+    }
+
+    function tabelRiwayat(j, target) {
+        if (!j.riwayat.length) {
+            return '<div class="text-center text-secondary-light py-24">Tidak ada bulan lain untuk dibandingkan.</div>';
+        }
+
+        return '<div class="table-responsive cvd-modal-scroll">'
+            + '<table class="table bordered-table sm-table mb-0"><thead><tr>'
+            +   '<th>Bulan</th><th class="text-end">Tercakup</th>'
+            +   '<th class="text-end">Terdaftar</th><th style="width:34%">Capaian</th>'
+            + '</tr></thead><tbody>'
+            + j.riwayat.map(function (r) {
+                var ini = r.bulan === j.judul.bulan + ' 2026' || r.bulan.indexOf(j.judul.bulan) === 0;
+                return '<tr' + (ini ? ' class="bg-primary-50"' : '') + '>'
+                    + '<td class="text-sm' + (ini ? ' fw-semibold' : '') + '">' + esc(r.bulan) + '</td>'
+                    + '<td class="text-end">' + num(r.tercover) + '</td>'
+                    + '<td class="text-end text-secondary-light">' + num(r.terdaftar) + '</td>'
+                    + '<td>' + batang(r.persen, target)
+                    +   '<span class="text-xs text-secondary-light">' + pct(r.persen) + '</span></td>'
+                    + '</tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    function tabelSebulan(j, target) {
+        if (!j.sebulan.length) {
+            return '<div class="text-center text-secondary-light py-24">Tidak ada PIC lain di site ini.</div>';
+        }
+
+        return '<div class="table-responsive cvd-modal-scroll">'
+            + '<table class="table bordered-table sm-table mb-0"><thead><tr>'
+            +   '<th>PIC</th><th class="text-end">Tercakup</th>'
+            +   '<th class="text-end">Terdaftar</th><th style="width:34%">Capaian</th>'
+            + '</tr></thead><tbody>'
+            + j.sebulan.map(function (r) {
+                return '<tr' + (r.ini ? ' class="bg-primary-50"' : '') + '>'
+                    + '<td class="text-sm' + (r.ini ? ' fw-semibold' : '') + '">' + esc(r.pic)
+                    +   (r.ini ? ' <span class="text-xs text-primary-600">(sel ini)</span>' : '') + '</td>'
+                    + '<td class="text-end">' + num(r.tercover) + '</td>'
+                    + '<td class="text-end text-secondary-light">' + num(r.terdaftar) + '</td>'
+                    + '<td>' + batang(r.persen, target)
+                    +   '<span class="text-xs text-secondary-light">' + pct(r.persen) + '</span></td>'
+                    + '</tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    function buka(url, koordinat) {
+        // Nomor permintaan menjaga agar jawaban yang datang terlambat untuk sel
+        // yang sudah tidak dibuka lagi tidak menimpa isi modal.
+        var ini = ++permintaan;
+
+        el.querySelector('#cvd-detail-judul').textContent =
+            'Rincian ' + koordinat.bulan + ' · ' + koordinat.site;
+        bagian('subjudul').textContent = 'PIC ' + koordinat.pic;
+        bagian('kaki').textContent = '';
+        bagian('isi').innerHTML = '<div class="text-center text-secondary-light py-40">'
+            + '<div class="spinner-border spinner-border-sm text-primary-600 me-2" role="status"></div>'
+            + 'Memuat rincian…</div>';
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        }
+
+        var q = new URLSearchParams({
+            site: koordinat.site, pic: koordinat.pic, month: koordinat.month
+        });
+
+        fetch(url + '?' + q.toString(), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) {
+                if (!res.ok) { throw new Error('HTTP ' + res.status); }
+                return res.json();
+            })
+            .then(function (j) {
+                if (ini !== permintaan) { return; }
+                if (!j.ok) {
+                    bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                        + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                        + esc(j.pesan || 'Rincian tidak bisa dimuat.') + '</div>';
+                    return;
+                }
+                render(j);
+            })
+            .catch(function (err) {
+                if (ini !== permintaan) { return; }
+                bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                    + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                    + 'Permintaan ke server gagal. ' + esc(err && err.message) + '</div>';
+            });
+    }
+
+    return { buka: buka };
+})();
+
 (function () {
     'use strict';
 
@@ -205,6 +423,34 @@
 
     function cellClass(cell) {
         return matrixMode === 'nilai' ? nilaiClass(cell.nilai) : tierClass(cell.pct);
+    }
+
+    // Delegasi di tabel, bukan di tiap sel: matriks digambar ulang setiap ganti
+    // filter atau mode, dan pendengar per sel akan ikut hilang.
+    var matrixEl = el('matrix');
+
+    if (cvdModalDetail && matrixEl && root.dataset.detailUrl) {
+        var bukaSel = function (td) {
+            cvdModalDetail.buka(root.dataset.detailUrl, {
+                site: td.dataset.site,
+                pic: td.dataset.pic,
+                month: td.dataset.month,
+                bulan: td.dataset.bulan
+            });
+        };
+
+        matrixEl.addEventListener('click', function (e) {
+            var td = e.target.closest('.cvd-cell--klik');
+            if (td && matrixEl.contains(td)) { bukaSel(td); }
+        });
+
+        matrixEl.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') { return; }
+            var td = e.target.closest('.cvd-cell--klik');
+            if (!td || !matrixEl.contains(td)) { return; }
+            e.preventDefault();
+            bukaSel(td);
+        });
     }
 
     function currentFilters() {
@@ -450,7 +696,15 @@
                     + fmtPct(cell.pct) + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')'
                     + ' · ' + fmtNum(cell.tercover) + ' dari ' + fmtNum(cell.terdaftar) + ' lokasi-hari';
 
-                html += '<td class="cvd-cell ' + cellClass(cell) + '" title="' + escapeHtml(tip) + '">'
+                // Koordinat sel dibawa di atribut, bukan ditebak dari posisi
+                // DOM: urutan baris berubah mengikuti pengurutan per site.
+                html += '<td class="cvd-cell cvd-cell--klik ' + cellClass(cell) + '"'
+                    + ' role="button" tabindex="0"'
+                    + ' data-site="' + escapeHtml(row.site) + '"'
+                    + ' data-pic="' + escapeHtml(row.pic) + '"'
+                    + ' data-month="' + months[m].number + '"'
+                    + ' data-bulan="' + escapeHtml(months[m].label) + '"'
+                    + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
                     + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
                     + '</td>';
             });

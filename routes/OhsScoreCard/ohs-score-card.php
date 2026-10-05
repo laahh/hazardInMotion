@@ -244,6 +244,8 @@ Route::middleware('evaluasi-well.access')
             ->name('coverage-area-daily.index');
         Route::get('/coverage-area-daily/overview', [CoverageAreaDailyController::class, 'overview'])
             ->name('coverage-area-daily.overview');
+        Route::get('/coverage-area-daily/detail-bulan', [CoverageAreaDailyController::class, 'detailBulan'])
+            ->name('coverage-area-daily.detail-bulan');
         Route::get('/coverage-area-daily/data', [CoverageAreaDailyController::class, 'data'])
             ->name('coverage-area-daily.data');
         Route::get('/coverage-area-daily/export', [CoverageAreaDailyController::class, 'export'])

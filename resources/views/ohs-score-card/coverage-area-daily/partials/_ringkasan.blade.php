@@ -1,5 +1,6 @@
 {{-- Tab Ringkasan Coverage Daily. --}}
-<div class="cvd-overview" data-url="{{ route('ohs-score-card.coverage-area-daily.overview') }}">
+<div class="cvd-overview" data-url="{{ route('ohs-score-card.coverage-area-daily.overview') }}"
+     data-detail-url="{{ route('ohs-score-card.coverage-area-daily.detail-bulan') }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">
