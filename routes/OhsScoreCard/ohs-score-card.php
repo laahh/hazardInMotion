@@ -9,6 +9,7 @@ use App\Http\Controllers\OhsScoreCard\BlindspotTbcController;
 use App\Http\Controllers\OhsScoreCard\BlindspotTbcPicSubcontController;
 use App\Http\Controllers\OhsScoreCard\CoverageAreaDailyController;
 use App\Http\Controllers\OhsScoreCard\CoverageAreaKritisController;
+use App\Http\Controllers\OhsScoreCard\CoverageDailyAreaKritisSafetyController;
 use App\Http\Controllers\OhsScoreCard\FitToWorkAwalShiftController;
 use App\Http\Controllers\OhsScoreCard\GoldenTimeEmergencyController;
 use App\Http\Controllers\OhsScoreCard\GrSeatbeltController;
@@ -201,6 +202,18 @@ Route::middleware('evaluasi-well.access')
         Route::get('/fit-to-work-awal-shift/export', [FitToWorkAwalShiftController::class, 'export'])
             ->name('fit-to-work-awal-shift.export');
 
+        // Parameter wellbeing "Speak up fatigue"
+        Route::get('/speak-up-fatigue', [SpeakUpFatigueController::class, 'index'])
+            ->name('speak-up-fatigue.index');
+        Route::get('/speak-up-fatigue/overview', [SpeakUpFatigueController::class, 'overview'])
+            ->name('speak-up-fatigue.overview');
+        Route::get('/speak-up-fatigue/detail-bulan', [SpeakUpFatigueController::class, 'detailBulan'])
+            ->name('speak-up-fatigue.detail-bulan');
+        Route::get('/speak-up-fatigue/data', [SpeakUpFatigueController::class, 'data'])
+            ->name('speak-up-fatigue.data');
+        Route::get('/speak-up-fatigue/export', [SpeakUpFatigueController::class, 'export'])
+            ->name('speak-up-fatigue.export');
+
         // Parameter wellbeing "Rasio Kelayakan Kerja"
         Route::get('/rasio-kelayakan-kerja', [RasioKelayakanKerjaController::class, 'index'])
             ->name('rasio-kelayakan-kerja.index');
@@ -291,6 +304,18 @@ Route::middleware('evaluasi-well.access')
             ->name('coverage-area-kritis.data');
         Route::get('/coverage-area-kritis/export', [CoverageAreaKritisController::class, 'export'])
             ->name('coverage-area-kritis.export');
+
+        // Parameter SOD "Coverage Daily Area Kritis Pengawas Safety"
+        Route::get('/coverage-daily-area-kritis-safety', [CoverageDailyAreaKritisSafetyController::class, 'index'])
+            ->name('coverage-daily-area-kritis-safety.index');
+        Route::get('/coverage-daily-area-kritis-safety/overview', [CoverageDailyAreaKritisSafetyController::class, 'overview'])
+            ->name('coverage-daily-area-kritis-safety.overview');
+        Route::get('/coverage-daily-area-kritis-safety/detail-bulan', [CoverageDailyAreaKritisSafetyController::class, 'detailBulan'])
+            ->name('coverage-daily-area-kritis-safety.detail-bulan');
+        Route::get('/coverage-daily-area-kritis-safety/data', [CoverageDailyAreaKritisSafetyController::class, 'data'])
+            ->name('coverage-daily-area-kritis-safety.data');
+        Route::get('/coverage-daily-area-kritis-safety/export', [CoverageDailyAreaKritisSafetyController::class, 'export'])
+            ->name('coverage-daily-area-kritis-safety.export');
 
         // Parameter SIRM "Deviasi Rekayasa Engineering Overspeed"
         Route::get('/pelanggaran-overspeed', [PelanggaranOverspeedController::class, 'index'])
