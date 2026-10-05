@@ -891,6 +891,7 @@ class SportEvaluationDashboardController extends Controller
 
             $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
                 'No',
+                'User ID',
                 'Nama',
                 'Kode SID',
                 'Site',
@@ -907,6 +908,7 @@ class SportEvaluationDashboardController extends Controller
             foreach ($rows as $index => $row) {
                 $sheet->fromArray([
                     $index + 1,
+                    (string) ($row->id ?? '-'),
                     (string) ($row->nama ?: '-'),
                     (string) ($row->kode_sid ?: '-'),
                     $this->siteResolver->resolveOrDash(
