@@ -93,7 +93,7 @@
             'items' => [
                 ['label' => 'Dashboard',        'icon' => 'solar:chart-2-outline', 'url' => route('ohs-score-card.incident-management.dashboard.index')],
                 ['label' => 'Korelasi Insiden', 'icon' => 'solar:graph-new-outline'],
-                ['label' => 'Master Data',      'icon' => 'solar:database-outline'],
+                ['label' => 'Master Data',      'icon' => 'solar:database-outline', 'url' => route('ohs-score-card.incident-management.master-data.index')],
             ],
         ],
         [

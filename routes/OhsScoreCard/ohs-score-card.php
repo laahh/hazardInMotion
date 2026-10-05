@@ -14,6 +14,7 @@ use App\Http\Controllers\OhsScoreCard\IncidentDeepDiveController;
 use App\Http\Controllers\OhsScoreCard\IncidentGapCctvDmsController;
 use App\Http\Controllers\OhsScoreCard\IncidentLeadingIndicatorController;
 use App\Http\Controllers\OhsScoreCard\IncidentManagementDashboardController;
+use App\Http\Controllers\OhsScoreCard\IncidentMasterDataController;
 use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
 use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
@@ -224,6 +225,14 @@ Route::middleware('evaluasi-well.access')
         // Tab Leading Indicator: agregasi mingguan per site
         Route::get('/incident-management/leading-indicator', [IncidentLeadingIndicatorController::class, 'data'])
             ->name('incident-management.leading-indicator');
+
+        // Master Data: baris mentah mv_investigasi, tanpa penyaringan
+        Route::get('/incident-management/master-data', [IncidentMasterDataController::class, 'index'])
+            ->name('incident-management.master-data.index');
+        Route::get('/incident-management/master-data/data', [IncidentMasterDataController::class, 'data'])
+            ->name('incident-management.master-data.data');
+        Route::get('/incident-management/master-data/export', [IncidentMasterDataController::class, 'export'])
+            ->name('incident-management.master-data.export');
 
         // Parameter SIRM "Deviasi Rekayasa Engineering Overspeed"
         Route::get('/pelanggaran-overspeed', [PelanggaranOverspeedController::class, 'index'])
