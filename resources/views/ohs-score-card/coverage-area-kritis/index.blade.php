@@ -73,17 +73,23 @@
   /* Tabel konteks di dalam modal digulir sendiri agar modalnya tidak memanjang. */
   .cak-modal-scroll { max-height: 34vh; overflow: auto; }
   .cak-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
-  /* Gradasi persentase: angka besar hijau, karena di sini tinggi berarti baik. */
-  .cak-t1 { background: #E0484A; }
-  .cak-t2 { background: #F08C2E; }
-  .cak-t3 { background: #F2C230; color: #1F2937 !important; }
-  .cak-t4 { background: #86C96B; }
-  .cak-t5 { background: #059669; }
-  /* Mode Nilai: 4 band resmi, warnanya senada dengan kartu perusahaan. */
-  .cak-n1 { background: #E0484A; }
-  .cak-n2 { background: #F08C2E; }
-  .cak-n3 { background: #F2C230; color: #1F2937 !important; }
-  .cak-n4 { background: #16A34A; }
+  /* Warna band mengikuti lembar penilaian resmi. Kedua mode memakai ambang
+     yang sama, jadi satu sel tidak berubah warna ketika modenya diganti.
+     Kuning dan hijau muda memakai teks gelap agar tetap terbaca. */
+  .cak-t1, .cak-n1 { background: #FF0000; }
+  .cak-t2, .cak-n2 { background: #FFC000; color: #1F2937 !important; }
+  .cak-t3, .cak-n3 { background: #FFFF00; color: #1F2937 !important; }
+  .cak-t4, .cak-n4 { background: #92D050; color: #1F2937 !important; }
+
+  /* Lencana dan batang memakai warna band yang sama persis dengan sel. */
+  .cak-b1 { background: #FFE5E5; color: #B91C1C !important; }
+  .cak-b2 { background: #FFF2CC; color: #92400E !important; }
+  .cak-b3 { background: #FFFBCC; color: #854D0E !important; }
+  .cak-b4 { background: #E8F5DC; color: #3F6212 !important; }
+  .cak-bar1 { background: #FF0000; }
+  .cak-bar2 { background: #FFC000; }
+  .cak-bar3 { background: #FFFF00; }
+  .cak-bar4 { background: #92D050; }
 
 </style>
 @endsection
@@ -421,42 +427,52 @@ var cakModalDetail = (function () {
         }) + '%';
     }
 
-    // Gradasi warna untuk mode Persentase: 5 tingkat, lebih halus daripada
-    // band Nilai sehingga perbedaan antar bulan lebih mudah terlihat.
+    // BAND SELALU DITURUNKAN DARI PERSENTASE, tidak pernah dari nilai yang
+    // sudah dibulatkan: pembulatan dua desimal bisa menyeberangi batas band.
+    // Ambangnya sama persis dengan SCORE_BANDS di controller, dan capaian di
+    // atas 8% ikut band tertinggi.
+    function bandPersen(pct) {
+        var v = Number(pct);
+        if (!isFinite(v)) { return 0; }
+        if (v >= 6) { return 4; }
+        if (v >= 4) { return 3; }
+        if (v >= 2) { return 2; }
+        return 1;
+    }
+
+    /** Nilai ditampilkan dengan koma, mis. "3,50". */
+    function fmtNilai(nilai) {
+        if (nilai === null || nilai === undefined || nilai === '') { return '–'; }
+        return Number(nilai).toLocaleString('id-ID', {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        });
+    }
+
     function tierClass(pct) {
-        if (pct >= 98) return 'cak-t5';
-        if (pct >= 90) return 'cak-t4';
-        if (pct >= 78) return 'cak-t3';
-        if (pct >= 62) return 'cak-t2';
-        return 'cak-t1';
+        return { 1: 'cak-t1', 2: 'cak-t2', 3: 'cak-t3', 4: 'cak-t4' }[bandPersen(pct)] || 'cak-empty';
     }
 
-    // Mode Nilai memakai 4 band resmi, bukan gradasi di atas, supaya warna sel
-    // tidak pernah bertentangan dengan angka Nilai-nya.
-    function nilaiClass(nilai) {
-        return { 1: 'cak-n1', 2: 'cak-n2', 3: 'cak-n3', 4: 'cak-n4' }[nilai] || 'cak-empty';
+    function nilaiClass(pct) {
+        return { 1: 'cak-n1', 2: 'cak-n2', 3: 'cak-n3', 4: 'cak-n4' }[bandPersen(pct)] || 'cak-empty';
     }
 
-    // Kelas badge mengikuti sistem warna WowDash (bg-*-focus + text-*-main),
-    // bukan warna inline, supaya ikut tema dan konsisten dengan modul lain.
-    function nilaiBadgeClass(nilai) {
+    // Kelas sendiri, bukan warna semantik WowDash: di sana band 3 memetakan ke
+    // "info" yang biru, sementara selnya kuning.
+    function nilaiBadgeClass(pct) {
         return {
-            1: 'bg-danger-focus text-danger-main',
-            2: 'bg-warning-focus text-warning-main',
-            3: 'bg-info-focus text-info-main',
-            4: 'bg-success-focus text-success-main'
-        }[nilai] || 'bg-neutral-200 text-secondary-light';
+            1: 'cak-b1', 2: 'cak-b2', 3: 'cak-b3', 4: 'cak-b4'
+        }[bandPersen(pct)] || 'bg-neutral-200 text-secondary-light';
     }
 
-    function nilaiBarClass(nilai) {
+    function nilaiBarClass(pct) {
         return {
-            1: 'bg-danger-main', 2: 'bg-warning-main',
-            3: 'bg-info-main', 4: 'bg-success-main'
-        }[nilai] || 'bg-neutral-400';
+            1: 'cak-bar1', 2: 'cak-bar2', 3: 'cak-bar3', 4: 'cak-bar4'
+        }[bandPersen(pct)] || 'bg-neutral-400';
     }
 
+    // Warna sel SELALU dari persentasenya, apa pun mode tampilannya.
     function cellClass(cell) {
-        return matrixMode === 'nilai' ? nilaiClass(cell.nilai) : tierClass(cell.pct);
+        return (matrixMode === 'nilai' ? nilaiClass : tierClass)(cell.pct);
     }
 
     function currentFilters() {
@@ -476,8 +492,8 @@ var cakModalDetail = (function () {
                 value: k.rata === null ? '–' : fmtPct(k.rata),
                 foot: k.rata === null
                     ? 'Belum ada data'
-                    : '<span class="' + nilaiBadgeClass(k.nilai) + ' px-1 rounded-2 fw-medium text-sm">Nilai '
-                        + k.nilai + '</span> '
+                    : '<span class="' + nilaiBadgeClass(k.rata) + ' px-1 rounded-2 fw-medium text-sm">Nilai '
+                        + fmtNilai(k.nilai) + '</span> '
                         + (k.memenuhi_target ? 'Memenuhi' : 'Belum memenuhi') + ' target ' + k.target + '%'
             },
             {
@@ -539,7 +555,7 @@ var cakModalDetail = (function () {
                 + '</div>'
                 + '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px cak-track"'
                 +   ' title="Target ' + s.target + '%">'
-                +   '<div class="progress-bar ' + nilaiBarClass(s.nilai) + ' rounded-pill" role="progressbar"'
+                +   '<div class="progress-bar ' + nilaiBarClass(s.percent) + ' rounded-pill" role="progressbar"'
                 +     ' style="width:' + Math.min(100, s.percent) + '%" aria-valuenow="' + Math.round(s.percent) + '"'
                 +     ' aria-valuemin="0" aria-valuemax="100"></div>'
                 +   '<span class="cak-track__target" style="left:' + s.target + '%"></span>'
@@ -563,12 +579,12 @@ var cakModalDetail = (function () {
                 + '<div class="border input-form-light radius-8 p-16 h-100">'
                 +   '<div class="d-flex align-items-center justify-content-between gap-2 mb-12">'
                 +     '<span class="text-md fw-semibold">' + escapeHtml(p.pic) + '</span>'
-                +     '<span class="' + nilaiBadgeClass(p.nilai) + ' px-8 py-2 rounded-pill fw-medium text-xs">Nilai '
-                +       p.nilai + '</span>'
+                +     '<span class="' + nilaiBadgeClass(p.percent) + ' px-8 py-2 rounded-pill fw-medium text-xs">Nilai '
+                +       fmtNilai(p.nilai) + '</span>'
                 +   '</div>'
                 +   '<h6 class="mb-8 fw-semibold">' + fmtPct(p.percent) + '</h6>'
                 +   '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px mb-8">'
-                +     '<div class="progress-bar ' + nilaiBarClass(p.nilai) + ' rounded-pill" role="progressbar"'
+                +     '<div class="progress-bar ' + nilaiBarClass(p.percent) + ' rounded-pill" role="progressbar"'
                 +       ' style="width:' + Math.min(100, p.percent) + '%" aria-valuenow="' + Math.round(p.percent) + '"'
                 +       ' aria-valuemin="0" aria-valuemax="100"></div>'
                 +   '</div>'
@@ -592,8 +608,8 @@ var cakModalDetail = (function () {
                 +   '<span class="text-sm text-secondary-light">' + escapeHtml(t.pic)
                 +     ' · ' + fmtNum(t.tercover) + '/' + fmtNum(t.terdaftar) + ' lokasi-minggu</span>'
                 + '</td>'
-                + '<td class="text-center"><span class="' + nilaiBadgeClass(t.nilai)
-                +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + t.nilai + '</span></td>'
+                + '<td class="text-center"><span class="' + nilaiBadgeClass(t.percent)
+                +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + fmtNilai(t.nilai) + '</span></td>'
                 + '<td class="text-end fw-medium">' + fmtPct(t.percent) + '</td>'
                 + '</tr>';
         }).join('');
@@ -603,17 +619,16 @@ var cakModalDetail = (function () {
     function renderLegend() {
         var items = matrixMode === 'nilai'
             ? [
-                { color: '#E0484A', label: 'Nilai 1 · <80%' },
-                { color: '#F08C2E', label: 'Nilai 2 · 80–90%' },
-                { color: '#F2C230', label: 'Nilai 3 · 90–98%' },
-                { color: '#16A34A', label: 'Nilai 4 · 98–100%' }
+                { color: '#FF0000', label: 'Nilai 1 · 0–<2%' },
+                { color: '#FFC000', label: 'Nilai 2 · 2–<4%' },
+                { color: '#FFFF00', label: 'Nilai 3 · 4–<6%' },
+                { color: '#92D050', label: 'Nilai 4 · ≥6%' }
             ]
             : [
-                { color: '#E0484A', label: '<62%' },
-                { color: '#F08C2E', label: '62–78%' },
-                { color: '#F2C230', label: '78–90%' },
-                { color: '#86C96B', label: '90–98%' },
-                { color: '#059669', label: '≥98%' }
+                { color: '#FF0000', label: '0–<2%' },
+                { color: '#FFC000', label: '2–<4%' },
+                { color: '#FFFF00', label: '4–<6%' },
+                { color: '#92D050', label: '≥6%' }
             ];
 
         el('legend').innerHTML = items.map(function (it) {

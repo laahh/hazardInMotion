@@ -66,13 +66,34 @@ final class CoverageAreaKritisController extends Controller
     private const COL_TERCOVER = 'coverage_suptend_up';
     private const COL_TERDAFTAR = 'distinct_count_of_helper_detail_lokasi_teregister_week';
 
-    private const TARGET_PERCENT = 90.0;
+    /**
+     * Pintu masuk band tertinggi. Bukan 90% seperti parameter coverage lain:
+     * skala parameter manajemen ini memang berhenti di 8%, jadi target 90%
+     * akan membuat setiap kartu berbunyi "belum memenuhi" selamanya.
+     */
+    private const TARGET_PERCENT = 6.0;
 
+    /**
+     * Band penilaian: [batas bawah, batas atas, nilai dasar, label].
+     *
+     * SKALANYA BERHENTI DI 8%, DAN ITU DISENGAJA. Parameter ini dinilai untuk
+     * manajemen, jadi ambangnya jauh lebih rendah daripada parameter coverage
+     * operasional yang bertarget 90%. Dikonfirmasi pengguna.
+     *
+     * CAPAIAN DI ATAS 8% IKUT NILAI 4. Dengan data sekarang itu berlaku untuk
+     * 49 dari 57 sel (86%), karena sebaran halaman ini membentang 0-100%
+     * dengan median 41,67%. Jadi jangan kaget melihat matriks yang nyaris
+     * seluruhnya hijau -- yang berguna dibaca di sini justru sel yang jatuh di
+     * bawah 8%.
+     *
+     * NILAINYA BERKOMA: di dalam satu band, nilai melandai mengikuti posisi
+     * capaian di antara kedua batasnya. Band teratas datar di 4,00.
+     */
     private const SCORE_BANDS = [
-        [98.0, 4, '98% - 100%'],
-        [90.0, 3, '90% - <98%'],
-        [80.0, 2, '80% - <90%'],
-        [0.0,  1, '<80%'],
+        [6.0, 8.0, 4, '6% - 8%'],
+        [4.0, 6.0, 3, '4% - <6%'],
+        [2.0, 4.0, 2, '2% - <4%'],
+        [0.0, 2.0, 1, '0% - <2%'],
     ];
 
     private const MONTH_MAP = [
@@ -1102,14 +1123,35 @@ final class CoverageAreaKritisController extends Controller
     }
 
     /** @return array{0: float, 1: int, 2: string} */
+    /**
+     * Nilai berkoma untuk satu capaian.
+     *
+     * @return array{0: float, 1: float, 2: string}
+     */
     private function scoreBandFor(float $percent): array
     {
-        foreach (self::SCORE_BANDS as $band) {
-            if ($percent >= $band[0]) {
-                return $band;
+        foreach (self::SCORE_BANDS as [$bawah, $atas, $dasar, $label]) {
+            if ($percent < $bawah) {
+                continue;
             }
+
+            // Band teratas datar, termasuk untuk capaian di atas 8%.
+            if ($dasar >= 4) {
+                return [$bawah, 4.0, $label];
+            }
+
+            $rentang = $atas - $bawah;
+            $nilai = $rentang > 0
+                ? $dasar + ($percent - $bawah) / $rentang
+                : (float) $dasar;
+
+            // Tidak boleh menyentuh angka band berikutnya, supaya angka dan
+            // label band di layar tidak pernah bertentangan.
+            $nilai = min($nilai, $dasar + 0.99);
+
+            return [$bawah, round(max(1.0, min(4.0, $nilai)), 2), $label];
         }
 
-        return [0.0, 1, '<80%'];
+        return [0.0, 1.0, '0% - <2%'];
     }
 }
