@@ -24,10 +24,10 @@
         'SOD' => [
             ['label' => 'Ratio TBC',                                     'icon' => 'solar:chart-square-outline', 'url' => route('ohs-score-card.ratio-tbc-gr.index')],
             // ['label' => 'Ratio GR',                                      'icon' => 'solar:chart-square-outline'],
-            ['label' => 'Coverage Daily',                                          'icon' => 'solar:map-outline'],
+            ['label' => 'Coverage Daily',                                          'icon' => 'solar:map-outline', 'url' => route('ohs-score-card.coverage-area-daily.index')],
             ['label' => 'Blindspot TBC',                             'icon' => 'solar:eye-closed-outline', 'url' => route('ohs-score-card.blindspot-tbc.index')],
             ['label' => 'Blindspot GR',                              'icon' => 'solar:eye-closed-outline', 'url' => route('ohs-score-card.blindspot-gr.index')],
-            ['label' => 'Coverage Area Kritis Pengawas Suptend up',                     'icon' => 'solar:map-point-outline'],
+            ['label' => 'Coverage Area Kritis Pengawas Suptend up',                     'icon' => 'solar:map-point-outline', 'url' => route('ohs-score-card.coverage-area-kritis.index')],
             ['label' => '%Pengawasan Berjarak',                                        'icon' => 'solar:ruler-outline', 'url' => route('ohs-score-card.pengawasan-berjarak.index')],
             ['label' => '%Blindspot temuan Real Time',                                 'icon' => 'solar:alarm-outline', 'url' => route('ohs-score-card.blindspot-real-time.index')],
             ['label' => 'Coverage Daily Area Kritis Pengawas Safety',                   'icon' => 'solar:shield-check-outline'],

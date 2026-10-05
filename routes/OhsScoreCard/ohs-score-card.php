@@ -7,6 +7,8 @@ use App\Http\Controllers\OhsScoreCard\BlindspotGrController;
 use App\Http\Controllers\OhsScoreCard\BlindspotRealTimeController;
 use App\Http\Controllers\OhsScoreCard\BlindspotTbcController;
 use App\Http\Controllers\OhsScoreCard\BlindspotTbcPicSubcontController;
+use App\Http\Controllers\OhsScoreCard\CoverageAreaDailyController;
+use App\Http\Controllers\OhsScoreCard\CoverageAreaKritisController;
 use App\Http\Controllers\OhsScoreCard\FitToWorkAwalShiftController;
 use App\Http\Controllers\OhsScoreCard\GoldenTimeEmergencyController;
 use App\Http\Controllers\OhsScoreCard\GrSeatbeltController;
@@ -233,6 +235,26 @@ Route::middleware('evaluasi-well.access')
             ->name('incident-management.master-data.data');
         Route::get('/incident-management/master-data/export', [IncidentMasterDataController::class, 'export'])
             ->name('incident-management.master-data.export');
+
+        // Parameter SOD "Coverage Daily"
+        Route::get('/coverage-area-daily', [CoverageAreaDailyController::class, 'index'])
+            ->name('coverage-area-daily.index');
+        Route::get('/coverage-area-daily/overview', [CoverageAreaDailyController::class, 'overview'])
+            ->name('coverage-area-daily.overview');
+        Route::get('/coverage-area-daily/data', [CoverageAreaDailyController::class, 'data'])
+            ->name('coverage-area-daily.data');
+        Route::get('/coverage-area-daily/export', [CoverageAreaDailyController::class, 'export'])
+            ->name('coverage-area-daily.export');
+
+        // Parameter SOD "Coverage Area Kritis Pengawas Suptend up"
+        Route::get('/coverage-area-kritis', [CoverageAreaKritisController::class, 'index'])
+            ->name('coverage-area-kritis.index');
+        Route::get('/coverage-area-kritis/overview', [CoverageAreaKritisController::class, 'overview'])
+            ->name('coverage-area-kritis.overview');
+        Route::get('/coverage-area-kritis/data', [CoverageAreaKritisController::class, 'data'])
+            ->name('coverage-area-kritis.data');
+        Route::get('/coverage-area-kritis/export', [CoverageAreaKritisController::class, 'export'])
+            ->name('coverage-area-kritis.export');
 
         // Parameter SIRM "Deviasi Rekayasa Engineering Overspeed"
         Route::get('/pelanggaran-overspeed', [PelanggaranOverspeedController::class, 'index'])
