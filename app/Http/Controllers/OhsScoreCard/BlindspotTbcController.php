@@ -701,54 +701,13 @@ final class BlindspotTbcController extends Controller
                 . 'belum terisi. Matriks persentase tetap berjalan dari ' . $monthly . '.';
         }
 
-        // Keduanya terisi, tapi detailnya bisa jauh lebih sempit daripada
-        // tabel bulanan; itu perlu dikatakan supaya panel temuan yang kurus
-        // tidak dikira berarti tidak ada temuan.
-        $pasanganBulanan = $this->pasanganSiteMitra($monthly, $this->monthlyColumns($monthly));
-        $pasanganDetail = $this->pasanganSiteMitra($detail, [
-            'site' => self::COL_SITE,
-            'mitra' => self::COL_PIC_PERUSAHAAN,
-        ]);
-
-        // Dihitung sebagai selisih dua arah, bukan sekadar beda cacah: kedua
-        // tabel bisa sama-sama memuat pasangan yang tidak ada di tabel lain,
-        // jadi membandingkan jumlahnya saja bisa menghasilkan kalimat janggal
-        // seperti "14 dari 13".
-        $tanpaRincian = array_diff($pasanganBulanan, $pasanganDetail);
-        $tanpaPersen = array_diff($pasanganDetail, $pasanganBulanan);
-
-        $bagian = [];
-
-        if ($tanpaRincian !== []) {
-            $bagian[] = count($tanpaRincian) . ' dari ' . count($pasanganBulanan)
-                . ' pasangan site-perusahaan di ' . $monthly . ' belum punya rincian temuan di '
-                . $detail;
-        }
-
-        if ($tanpaPersen !== []) {
-            $bagian[] = count($tanpaPersen) . ' pasangan yang ada temuannya belum punya persentase resmi';
-        }
-
-        if ($bagian === []) {
-            return null;
-        }
-
-        return ucfirst(implode(', dan ', $bagian)) . '. Tiap panel hanya memuat pasangan '
-            . 'yang tersedia di sumbernya masing-masing.';
-    }
-
-    /**
-     * @param  array<string, string>  $kolom
-     * @return array<int, string>
-     */
-    private function pasanganSiteMitra(string $table, array $kolom): array
-    {
-        return DB::table($table)
-            ->distinct()
-            ->selectRaw("CONCAT(TRIM(" . $kolom['site'] . "), '|', TRIM(" . $kolom['mitra'] . ")) AS pasangan")
-            ->pluck('pasangan')
-            ->map(static fn ($v): string => (string) $v)
-            ->all();
+        // Kedua tabel terisi. Cakupannya memang bisa berbeda -- ada pasangan
+        // site-perusahaan yang punya persentase tanpa rincian dan sebaliknya --
+        // tetapi perbedaan itu tidak lagi diumumkan di sini atas permintaan
+        // pengguna. Sel yang tidak punya persentase sudah ditandai N/A di
+        // matriksnya sendiri, jadi pembaca tetap melihatnya di tempat yang
+        // tepat tanpa kalimat tambahan di atas halaman.
+        return null;
     }
 
     // ======================================================================

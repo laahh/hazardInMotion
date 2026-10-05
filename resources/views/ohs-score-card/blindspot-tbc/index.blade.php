@@ -55,6 +55,10 @@
     position: relative; z-index: 1;
   }
   .bs-matrix .bs-empty { background: #F1F5F9; color: #CBD5E1 !important; border-radius: 6px; }
+  /* Di matriks persentase, sel tanpa angka ditandai N/A hijau: tidak adanya
+     persentase blindspot di sini dibaca sebagai keadaan yang tidak bermasalah,
+     bukan lubang data yang perlu diwaspadai. */
+  .bs-matrix .bs-na { background: #16A34A; color: #fff !important; border-radius: 6px; }
 
   /* Hanya sel berisi angka yang bisa dibuka rinciannya. */
   .bs-matrix .bs-cell--klik { cursor: pointer; }
@@ -729,8 +733,13 @@ window.bsOverview = (function () {
 
                 row.cells.forEach(function (value, m) {
                     if (value === null) {
-                        html += '<td class="bs-empty" title="' + escapeHtml(months[m].label)
-                            + ': tidak ada data">–</td>';
+                        // Perender ini dipakai dua matriks, jadi tampilan sel
+                        // kosongnya ditentukan pemanggil, bukan diseragamkan.
+                        html += opsi.kosong
+                            ? '<td class="bs-na" title="' + escapeHtml(months[m].label)
+                                + ': tidak ada persentase blindspot">N/A</td>'
+                            : '<td class="bs-empty" title="' + escapeHtml(months[m].label)
+                                + ': tidak ada data">–</td>';
                         return;
                     }
 
@@ -955,6 +964,8 @@ window.bsOverview = (function () {
                     });
                     safe('persen', function () {
                         renderMatrix('persen', json.persen || kosong, {
+                            // Hanya matriks ini yang memakai N/A hijau.
+                            kosong: true,
                             ringkasLabel: 'RATA', satuan: 'blindspot', tier: tierPersen,
                             sel: function (v) { return Number(v).toFixed(1) + '%'; },
                             ringkas: function (row) {
