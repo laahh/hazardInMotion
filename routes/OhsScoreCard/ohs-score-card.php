@@ -65,6 +65,9 @@ Route::middleware('evaluasi-well.access')
         Route::get('/ratio-tbc-gr/{dataset}/overview', [RatioTbcGrController::class, 'overview'])
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('ratio-tbc-gr.overview');
+        Route::get('/ratio-tbc-gr/{dataset}/detail-bulan', [RatioTbcGrController::class, 'detailBulan'])
+            ->whereIn('dataset', ['minecon', 'subcon'])
+            ->name('ratio-tbc-gr.detail-bulan');
         Route::get('/ratio-tbc-gr/{dataset}/data', [RatioTbcGrController::class, 'data'])
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('ratio-tbc-gr.data');

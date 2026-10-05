@@ -73,6 +73,20 @@
     position: relative; z-index: 1;
   }
   .ov-matrix .ov-empty { background: #F1F5F9; color: #CBD5E1 !important; border-radius: 6px; }
+
+  /* Sel berisi angka bisa dibuka rinciannya; yang kosong tidak, jadi hanya
+     yang bisa diklik yang diberi kursor dan cincin fokus. */
+  .ov-matrix .ov-cell--klik { cursor: pointer; }
+  .ov-matrix .ov-cell--klik:focus-visible {
+    outline: 2px solid #487FFF; outline-offset: 1px; position: relative; z-index: 2;
+  }
+
+  /* Tabel di dalam modal bisa ratusan baris, jadi digulir di dalam modalnya
+     sendiri dengan kepala tabel yang tetap terlihat. */
+  .ov-modal-scroll { max-height: 52vh; overflow: auto; }
+  .ov-modal-scroll thead th {
+    position: sticky; top: 0; z-index: 1; background: #F8FAFC;
+  }
   .ov-t1 { background: #E0484A; }
   .ov-t2 { background: #F08C2E; }
   .ov-t3 { background: #F2C230; color: #1F2937 !important; }
@@ -139,10 +153,250 @@
     </div>
   @endforeach
 </div>
+
+{{-- Satu modal dipakai bersama kedua kumpulan data; isinya diganti JS saat sel
+     matriks diklik. Ditaruh di luar tab pane supaya tidak ikut tersembunyi. --}}
+<div class="modal fade" id="ov-detail-modal" tabindex="-1" aria-labelledby="ov-detail-judul" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content radius-12">
+      <div class="modal-header border-bottom py-16 px-24">
+        <div>
+          <h6 class="modal-title text-lg fw-semibold mb-0" id="ov-detail-judul">Rincian Bulan</h6>
+          <span class="text-sm text-secondary-light" data-ovm="subjudul"></span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body p-24">
+        <div data-ovm="isi"></div>
+      </div>
+      <div class="modal-footer border-top py-12 px-24">
+        <span class="text-sm text-secondary-light me-auto" data-ovm="kaki"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary radius-8" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
+
 
 @section('page-scripts')
 <script>
+// ---- Modal rincian satu sel matriks -----------------------------------------
+var ovModalDetail = (function () {
+    'use strict';
+
+    var el = document.getElementById('ov-detail-modal');
+    if (!el) { return null; }
+
+    var bagian = function (n) { return el.querySelector('[data-ovm="' + n + '"]'); };
+    var permintaan = 0;
+
+    function esc(v) {
+        return String(v === null || v === undefined ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function num(v) { return Number(v || 0).toLocaleString('id-ID'); }
+
+    function pct(v) {
+        return v === null || v === undefined
+            ? '–'
+            : Number(v).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+    }
+
+    function lencanaStatus(st) {
+        return ({
+            'Melapor': 'bg-success-focus text-success-main',
+            'Belum Melapor': 'bg-danger-focus text-danger-main',
+            'Di Luar RFID': 'bg-neutral-200 text-secondary-light'
+        })[st] || 'bg-neutral-200 text-secondary-light';
+    }
+
+    function ubin(label, nilai, catatan, kelas) {
+        return '<div class="col-xxl col-md-4 col-sm-6">'
+            + '<div class="border input-form-light radius-8 p-16 h-100">'
+            +   '<span class="text-sm text-secondary-light d-block">' + esc(label) + '</span>'
+            +   '<h6 class="fw-semibold mt-8 mb-4 ' + (kelas || '') + '">' + nilai + '</h6>'
+            +   '<span class="text-xs text-secondary-light">' + esc(catatan) + '</span>'
+            + '</div></div>';
+    }
+
+    /**
+     * DUA ANGKA, DAN KEDUANYA MEMANG BISA BERBEDA.
+     *
+     * Matriks memakai persentase resmi dari tabel ringkasan, sedangkan isi
+     * modal ini dihitung dari tabel rincian -- dan kedua tabel itu tidak selalu
+     * sinkron; sebagian site atau bulan belum masuk ke tabel rincian. Kalau
+     * modal cuma menampilkan satu angka, pembaca akan mengira angka di sel
+     * salah. Jadi keduanya ditampilkan apa adanya, dan selisihnya dijelaskan.
+     */
+    function render(j, pctSel) {
+        var r = j.ringkas;
+        var selisih = (pctSel !== null && pctSel !== undefined && r.persen !== null)
+            ? Math.abs(pctSel - r.persen)
+            : null;
+        var beda = selisih === null || selisih >= 0.05;
+
+        var ringkasan = '<div class="row gy-3 mb-20">'
+            + ubin('Rasio di sel matriks', pct(pctSel), 'persentase resmi dari tabel ringkasan')
+            + ubin('Dihitung dari rincian', pct(r.persen),
+                   r.dasar ? r.melapor + ' dari ' + r.dasar + ' pengawas' : 'tidak ada basis RFID',
+                   beda ? 'text-warning-main' : '')
+            + ubin('Melapor', num(r.melapor), 'punya TBC di bulan ini', 'text-success-main')
+            + ubin('Belum Melapor', num(r.belum), 'ada RFID tapi tidak ada TBC',
+                   r.belum ? 'text-danger-main' : '')
+            + ubin('Di Luar RFID', num(r.offsite), 'tidak ikut menentukan rasio')
+            + '</div>';
+
+        if (beda) {
+            ringkasan += '<div class="alert alert-warning bg-warning-focus border-warning-main'
+                + ' text-warning-main radius-8 px-20 py-12 mb-20 d-flex align-items-start gap-2">'
+                + '<iconify-icon icon="solar:info-circle-outline" class="icon text-xl flex-shrink-0">'
+                + '</iconify-icon><span class="text-sm">'
+                + (r.persen === null
+                    ? 'Tabel rincian belum memuat kombinasi ini, jadi daftar pengawas di bawah kosong. '
+                        + 'Angka di sel matriks tetap sahih karena diambil dari tabel ringkasan.'
+                    : 'Tabel ringkasan dan tabel rincian belum sepenuhnya sinkron untuk kombinasi ini, '
+                        + 'jadi kedua angka di atas berbeda ' + pct(selisih).replace('%', '') + ' poin. '
+                        + 'Daftar di bawah mengikuti tabel rincian.')
+                + '</span></div>';
+        }
+
+        if (!j.baris.length) {
+            bagian('isi').innerHTML = ringkasan
+                + '<div class="text-center text-secondary-light py-24">'
+                + 'Tidak ada baris pengawas untuk kombinasi ini.</div>';
+            bagian('kaki').textContent = '';
+            return;
+        }
+
+        var adaMitra = j.judul.mitra === '';
+
+        var baris = j.baris.map(function (b) {
+            return '<tr data-status="' + esc(b.status) + '"'
+                + ' data-cari="' + esc((b.sid + ' ' + b.nama + ' ' + b.jabatan + ' ' + b.mitra).toLowerCase()) + '">'
+                + '<td><span class="text-sm fw-semibold d-block">' + esc(b.nama || '-') + '</span>'
+                +   '<span class="text-xs text-secondary-light">' + esc(b.sid || '-') + '</span></td>'
+                + (adaMitra ? '<td class="text-sm">' + esc(b.mitra || '-') + '</td>' : '')
+                + '<td class="text-sm">' + esc(b.jabatan || '-')
+                +   (b.jabatan_struktural && b.jabatan_struktural !== b.jabatan
+                        ? '<span class="text-xs text-secondary-light d-block">'
+                            + esc(b.jabatan_struktural) + '</span>'
+                        : '')
+                + '</td>'
+                + '<td class="text-end">' + num(b.rfid) + '</td>'
+                + '<td class="text-end">' + num(b.tbc) + '</td>'
+                + '<td><span class="' + lencanaStatus(b.status)
+                +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + esc(b.status) + '</span></td>'
+                + '</tr>';
+        }).join('');
+
+        bagian('isi').innerHTML = ringkasan
+            + '<div class="row gy-2 gx-2 align-items-end mb-12">'
+            +   '<div class="col-sm-5"><input type="text" class="form-control form-control-sm radius-8"'
+            +     ' placeholder="Cari nama, SID, jabatan…" data-ovm="cari"></div>'
+            +   '<div class="col-sm-4"><select class="form-select form-select-sm radius-8" data-ovm="saring">'
+            +     '<option value="">Semua status</option>'
+            +     '<option value="Belum Melapor">Belum Melapor</option>'
+            +     '<option value="Melapor">Melapor</option>'
+            +     '<option value="Di Luar RFID">Di Luar RFID</option>'
+            +   '</select></div>'
+            +   '<div class="col-sm-3 text-sm-end"><span class="text-sm text-secondary-light"'
+            +     ' data-ovm="hitung"></span></div>'
+            + '</div>'
+            + '<div class="table-responsive ov-modal-scroll">'
+            +   '<table class="table bordered-table sm-table mb-0" data-ovm="tabel"><thead><tr>'
+            +     '<th>Pengawas</th>' + (adaMitra ? '<th>Perusahaan</th>' : '')
+            +     '<th>Jabatan</th><th class="text-end">RFID</th><th class="text-end">TBC</th><th>Status</th>'
+            +   '</tr></thead><tbody>' + baris + '</tbody></table>'
+            + '</div>';
+
+        bagian('kaki').textContent = j.terpotong
+            ? 'Menampilkan ' + num(j.batas) + ' baris pertama dari ' + num(r.semua) + '.'
+            : num(r.semua) + ' pengawas tercatat di sel ini.';
+
+        pasangSaringan();
+    }
+
+    /** Pencarian dan filter status dikerjakan di baris yang sudah ada, tanpa ke server lagi. */
+    function pasangSaringan() {
+        var cari = bagian('cari');
+        var saring = bagian('saring');
+        var hitung = bagian('hitung');
+        var semua = Array.prototype.slice.call(el.querySelectorAll('[data-ovm="tabel"] tbody tr'));
+
+        function terapkan() {
+            var teks = (cari.value || '').trim().toLowerCase();
+            var status = saring.value;
+            var tampil = 0;
+
+            semua.forEach(function (tr) {
+                var cocok = (!status || tr.dataset.status === status)
+                    && (!teks || tr.dataset.cari.indexOf(teks) !== -1);
+                tr.classList.toggle('d-none', !cocok);
+                if (cocok) { tampil++; }
+            });
+
+            hitung.textContent = tampil === semua.length
+                ? semua.length + ' baris'
+                : tampil + ' dari ' + semua.length + ' baris';
+        }
+
+        cari.addEventListener('input', terapkan);
+        saring.addEventListener('change', terapkan);
+        terapkan();
+    }
+
+    function buka(url, koordinat) {
+        // Nomor permintaan menjaga agar jawaban yang datang terlambat untuk sel
+        // yang sudah tidak dibuka lagi tidak menimpa isi modal.
+        var ini = ++permintaan;
+
+        el.querySelector('#ov-detail-judul').textContent =
+            'Rincian ' + koordinat.bulan + ' · ' + koordinat.site;
+        bagian('subjudul').textContent = koordinat.mitra || 'Seluruh perusahaan di site ini';
+        bagian('kaki').textContent = '';
+        bagian('isi').innerHTML = '<div class="text-center text-secondary-light py-40">'
+            + '<div class="spinner-border spinner-border-sm text-primary-600 me-2" role="status"></div>'
+            + 'Memuat rincian…</div>';
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        }
+
+        var q = new URLSearchParams({
+            site: koordinat.site, mitra: koordinat.mitra || '', month: koordinat.month
+        });
+
+        fetch(url + '?' + q.toString(), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) {
+                if (!res.ok) { throw new Error('HTTP ' + res.status); }
+                return res.json();
+            })
+            .then(function (j) {
+                if (ini !== permintaan) { return; }
+                if (!j.ok) {
+                    bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                        + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                        + esc(j.pesan || 'Rincian tidak bisa dimuat.') + '</div>';
+                    return;
+                }
+                render(j, koordinat.pct);
+            })
+            .catch(function (err) {
+                if (ini !== permintaan) { return; }
+                bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                    + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                    + 'Permintaan ke server gagal. ' + esc(err && err.message) + '</div>';
+            });
+    }
+
+    return { buka: buka };
+})();
+
 // ---- Tab Ringkasan ----------------------------------------------------------
 // Satu pabrik, dipakai untuk tiap kumpulan data. Semua pencarian elemen
 // dilakukan di dalam root agar dua salinan tidak saling menimpa.
@@ -223,6 +477,34 @@ window.oscOverview = (function () {
 
         function cellClass(cell) {
             return matrixMode === 'nilai' ? nilaiClass(cell.nilai) : tierClass(cell.pct);
+        }
+
+        // Delegasi di tabel, bukan di tiap sel: matriks digambar ulang setiap
+        // ganti filter atau mode, dan pendengar per sel akan ikut hilang.
+        if (ovModalDetail && matrixEl && root.dataset.detailUrl) {
+            var bukaSel = function (td) {
+                ovModalDetail.buka(root.dataset.detailUrl, {
+                    site: td.dataset.site,
+                    mitra: td.dataset.mitra,
+                    month: td.dataset.month,
+                    bulan: td.dataset.bulan,
+                    // Persentase resmi milik sel, dari tabel ringkasan.
+                    pct: td.dataset.pct === '' ? null : Number(td.dataset.pct)
+                });
+            };
+
+            matrixEl.addEventListener('click', function (e) {
+                var td = e.target.closest('.ov-cell--klik');
+                if (td && matrixEl.contains(td)) { bukaSel(td); }
+            });
+
+            matrixEl.addEventListener('keydown', function (e) {
+                if (e.key !== 'Enter' && e.key !== ' ') { return; }
+                var td = e.target.closest('.ov-cell--klik');
+                if (!td || !matrixEl.contains(td)) { return; }
+                e.preventDefault();
+                bukaSel(td);
+            });
         }
 
         function currentFilters() {
@@ -476,8 +758,17 @@ window.oscOverview = (function () {
                             : fmtNum(cell.standar) + ' dari ' + fmtNum(cell.total) + ' pengawas · ')
                         + fmtPct(cell.pct) + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')';
 
-                    html += '<td class="ov-cell ' + cellClass(cell) + '"'
-                        + ' title="' + escapeHtml(tip) + '">'
+                    // Koordinat sel dibawa di atribut, bukan ditebak dari
+                    // posisi DOM: urutan baris berubah mengikuti pengurutan per
+                    // site, dan membaca ulang dari indeks akan mudah meleset.
+                    html += '<td class="ov-cell ov-cell--klik ' + cellClass(cell) + '"'
+                        + ' role="button" tabindex="0"'
+                        + ' data-site="' + escapeHtml(row.site) + '"'
+                        + ' data-mitra="' + escapeHtml(hasMitra ? row.mitra : '') + '"'
+                        + ' data-month="' + months[m].number + '"'
+                        + ' data-bulan="' + escapeHtml(months[m].label) + '"'
+                        + ' data-pct="' + cell.pct + '"'
+                        + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
                         + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
                         + '</td>';
                 });

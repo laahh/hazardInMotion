@@ -64,6 +64,14 @@ final class RatioTbcGrController extends Controller
 
     private const DEFAULT_DATASET = 'minecon';
 
+    /**
+     * Batas baris yang dikirim ke modal rincian. Sel terpadat berisi 663
+     * baris (BMO 2 x Pamapersada), jadi batas ini tidak pernah terpakai pada
+     * data sekarang; dipasang supaya sumber yang membengkak tidak diam-diam
+     * mengirim puluhan ribu baris ke browser.
+     */
+    private const BATAS_BARIS_MODAL = 1000;
+
     /** Nama kolom di sumber panjang-panjang; dipendekkan lewat alias. */
     private const COL_SITE = 'site_dedicated_pelapor_all_karyawan';
     private const COL_PERUSAHAAN = 'perusahaan_pelapor_all_karyawan';
@@ -664,6 +672,110 @@ final class RatioTbcGrController extends Controller
         );
 
         return $query;
+    }
+
+    /**
+     * Isi satu sel matriks Pemenuhan per Bulan, untuk modal rincian.
+     *
+     * Dipanggil saat satu sel diklik. Site dan bulan selalu dikirim; mitra
+     * hanya ada di minecon, karena ringkasan subcon bergrain site x bulan saja
+     * sehingga selnya memang mewakili SELURUH perusahaan di site itu. Tanpa
+     * mitra, filternya cukup site + bulan dan modalnya menampilkan kolom
+     * perusahaan supaya terlihat siapa saja yang ada di balik angka itu.
+     *
+     * CACAHNYA DIHITUNG ULANG DI SINI, bukan diambil dari ringkasan, dengan
+     * aturan yang sama persis dengan presentDetail(): pengawas di luar basis
+     * RFID tidak ikut jadi penyebut. Kalau tidak, angka di modal bisa berbeda
+     * dari persentase di selnya dan tidak ada yang bisa menjelaskan kenapa.
+     */
+    public function detailBulan(Request $request, string $dataset = self::DEFAULT_DATASET): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $mitra = trim((string) $request->input('mitra', ''));
+        $bulan = (int) $request->input('month', 0);
+
+        if ($site === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        $query = DB::table($this->table($dataset, 'detail'))
+            ->where(self::COL_SITE, $site)
+            ->whereIn(self::COL_BULAN, $this->nilaiBulan($bulan));
+
+        if ($mitra !== '') {
+            $query->where(self::COL_PERUSAHAAN, $mitra);
+        }
+
+        $baris = (clone $query)
+            ->select($this->detailColumns())
+            // Yang belum melapor didahulukan: itu yang perlu ditindaklanjuti.
+            ->orderByRaw('CASE WHEN ' . self::COL_RFID . ' <= 0 THEN 2'
+                . ' WHEN ' . self::COL_TBC . ' > 0 THEN 1 ELSE 0 END')
+            ->orderBy(self::COL_PERUSAHAAN)
+            ->orderBy(self::COL_NAMA)
+            ->limit(self::BATAS_BARIS_MODAL + 1)
+            ->get()
+            ->map(fn (object $row): array => $this->presentDetail($row))
+            ->all();
+
+        $terpotong = count($baris) > self::BATAS_BARIS_MODAL;
+
+        if ($terpotong) {
+            $baris = array_slice($baris, 0, self::BATAS_BARIS_MODAL);
+        }
+
+        $cacah = (clone $query)
+            ->selectRaw(
+                'COUNT(*) AS semua, '
+                . 'SUM(CASE WHEN ' . self::COL_RFID . ' > 0 THEN 1 ELSE 0 END) AS dasar, '
+                . 'SUM(CASE WHEN ' . self::COL_RFID . ' > 0 AND ' . self::COL_TBC . ' > 0 THEN 1 ELSE 0 END) AS melapor'
+            )
+            ->first();
+
+        $dasar = (int) ($cacah->dasar ?? 0);
+        $melapor = (int) ($cacah->melapor ?? 0);
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'dataset' => self::DATASETS[$dataset]['label'] ?? $dataset,
+                'site' => $site,
+                'mitra' => $mitra,
+                'bulan' => self::monthLabel($bulan),
+            ],
+            'ringkas' => [
+                'semua' => (int) ($cacah->semua ?? 0),
+                'dasar' => $dasar,
+                'melapor' => $melapor,
+                'belum' => $dasar - $melapor,
+                'offsite' => (int) ($cacah->semua ?? 0) - $dasar,
+                'persen' => $dasar > 0 ? round($melapor / $dasar * 100, 2) : null,
+            ],
+            'terpotong' => $terpotong,
+            'batas' => self::BATAS_BARIS_MODAL,
+            'baris' => $baris,
+        ]);
+    }
+
+    /**
+     * Semua cara penulisan satu nomor bulan di kolom sumber.
+     *
+     * @return array<int, string>
+     */
+    private function nilaiBulan(int $nomor): array
+    {
+        $out = [sprintf('M%02d', $nomor), 'M' . $nomor];
+
+        foreach (self::MONTH_MAP as $inggris => [$no]) {
+            if ($no === $nomor) {
+                $out[] = $inggris;
+            }
+        }
+
+        return $out;
     }
 
     /**

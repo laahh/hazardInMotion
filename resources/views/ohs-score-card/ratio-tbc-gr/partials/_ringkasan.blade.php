@@ -7,7 +7,8 @@
   $ds: satu entri dari $datasets pada RatioTbcGrController::index().
 --}}
 <div class="osc-overview" data-dataset="{{ $ds['slug'] }}"
-     data-url="{{ route('ohs-score-card.ratio-tbc-gr.overview', $ds['slug']) }}">
+     data-url="{{ route('ohs-score-card.ratio-tbc-gr.overview', $ds['slug']) }}"
+     data-detail-url="{{ route('ohs-score-card.ratio-tbc-gr.detail-bulan', $ds['slug']) }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">
