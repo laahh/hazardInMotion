@@ -46,13 +46,26 @@ final class PengawasanBerjarakController extends Controller
     private const COL_BULAN = 'month_of_date_for_join';
     private const COL_PERSEN = 'pct_berjarak';
 
-    private const TARGET_PERCENT = 90.0;
+    /** Pintu masuk band tertinggi; sebelumnya 90%, kini mengikuti band resmi. */
+    private const TARGET_PERCENT = 80.0;
 
+    /**
+     * Band penilaian: [batas bawah, batas atas, nilai dasar, label].
+     *
+     * URUTANNYA TERBAIK DULU, dan itu bukan sekadar gaya: dataQuery() menyaring
+     * tab Data lewat SCORE_BANDS[4 - $nilai][0] dan SCORE_BANDS[3 - $nilai][0],
+     * jadi elemen pertama tiap baris harus tetap batas bawah band dan urutannya
+     * tidak boleh dibalik.
+     *
+     * NILAINYA BERKOMA: di dalam satu band, nilai melandai mengikuti posisi
+     * capaian di antara kedua batasnya -- 75% bernilai 3,50, bukan 3. Band
+     * teratas datar di 4,00 begitu capaian menyentuh 80%.
+     */
     private const SCORE_BANDS = [
-        [98.0, 4, '98% - 100%'],
-        [90.0, 3, '90% - <98%'],
-        [80.0, 2, '80% - <90%'],
-        [0.0,  1, '<80%'],
+        [80.0, 100.0, 4, '>= 80%'],
+        [70.0,  80.0, 3, '70% - <80%'],
+        [60.0,  70.0, 2, '60% - <70%'],
+        [0.0,   60.0, 1, '<60%'],
     ];
 
     private const MONTH_MAP = [
@@ -925,14 +938,34 @@ final class PengawasanBerjarakController extends Controller
     }
 
     /** @return array{0: float, 1: int, 2: string} */
+    /**
+     * Nilai berkoma untuk satu capaian.
+     *
+     * @return array{0: float, 1: float, 2: string}
+     */
     private function scoreBandFor(float $percent): array
     {
-        foreach (self::SCORE_BANDS as $band) {
-            if ($percent >= $band[0]) {
-                return $band;
+        foreach (self::SCORE_BANDS as [$bawah, $atas, $dasar, $label]) {
+            if ($percent < $bawah) {
+                continue;
             }
+
+            if ($dasar >= 4) {
+                return [$bawah, 4.0, $label];
+            }
+
+            $rentang = $atas - $bawah;
+            $nilai = $rentang > 0
+                ? $dasar + ($percent - $bawah) / $rentang
+                : (float) $dasar;
+
+            // Tidak boleh menyentuh angka band berikutnya, supaya angka dan
+            // label band di layar tidak pernah bertentangan.
+            $nilai = min($nilai, $dasar + 0.99);
+
+            return [$bawah, round(max(1.0, min(4.0, $nilai)), 2), $label];
         }
 
-        return [0.0, 1, '<80%'];
+        return [0.0, 1.0, '<60%'];
     }
 }
