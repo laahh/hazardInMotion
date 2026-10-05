@@ -140,6 +140,8 @@ Route::middleware('evaluasi-well.access')
             ->name('blindspot-gr.index');
         Route::get('/blindspot-gr/overview', [BlindspotGrController::class, 'overview'])
             ->name('blindspot-gr.overview');
+        Route::get('/blindspot-gr/detail-bulan', [BlindspotGrController::class, 'detailBulan'])
+            ->name('blindspot-gr.detail-bulan');
         Route::get('/blindspot-gr/data', [BlindspotGrController::class, 'data'])
             ->name('blindspot-gr.data');
         Route::get('/blindspot-gr/export', [BlindspotGrController::class, 'export'])

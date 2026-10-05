@@ -631,10 +631,6 @@ window.bsOverview = (function () {
             }
         }
 
-        /**
-         * Satu penggambar untuk dua matriks: persentase dan cacah temuan.
-         * Keduanya sebentuk, yang berbeda hanya cara memformat angkanya.
-         */
         // Delegasi di kedua tabel matriks, bukan di tiap sel: matriks
         // digambar ulang setiap ganti filter, dan pendengar per sel ikut hilang.
         ['persen', 'temuan'].forEach(function (nama) {
@@ -666,6 +662,10 @@ window.bsOverview = (function () {
             });
         });
 
+        /**
+         * Satu penggambar untuk dua matriks: persentase dan cacah temuan.
+         * Keduanya sebentuk, yang berbeda hanya cara memformat angkanya.
+         */
         function renderMatrix(name, payload, opsi) {
             var table = el(name);
             var thead = table.querySelector('thead');

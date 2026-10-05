@@ -75,6 +75,13 @@ final class BlindspotGrController extends Controller
     /** Nilai is_blindspot yang berarti "ya". Lihat catatan di docblock kelas. */
     private const NILAI_BLINDSPOT = ['True', 'true', 'TRUE', '1', 'Y', 'Ya'];
 
+    /**
+     * Batas baris yang dikirim ke modal rincian. Sel terpadat berisi 3
+     * temuan, jadi batas ini jauh dari terpakai; dipasang supaya sumber
+     * yang membengkak tidak diam-diam mengirim ribuan baris ke browser.
+     */
+    private const BATAS_BARIS_MODAL = 500;
+
     private const MONTH_MAP = [
         'January' => [1, 'Januari'], 'February' => [2, 'Februari'], 'March' => [3, 'Maret'],
         'April' => [4, 'April'], 'May' => [5, 'Mei'], 'June' => [6, 'Juni'],
@@ -767,6 +774,149 @@ final class BlindspotGrController extends Controller
         }
 
         return $query;
+    }
+
+    /**
+     * Isi satu sel matriks bulanan, untuk modal rincian.
+     *
+     * Dipakai oleh kedua matriks di tab Ringkasan -- Persentase Blindspot dan
+     * Jumlah Temuan -- karena koordinat selnya sama: site x perusahaan PIC x
+     * bulan.
+     *
+     * PENYARINGAN is_blindspot IKUT, DAN YANG TERSARING IKUT DILAPORKAN.
+     * Tabel rincian memuat lima baris yang ternyata bukan blindspot; kalau
+     * cuma dibuang diam-diam, pembaca yang membandingkan modal dengan sumber
+     * mentah akan menemukan selisih tanpa penjelasan. Jadi baris itu tetap
+     * dihitung terpisah sebagai 'bukan_blindspot' dan disebut di modal.
+     *
+     * YANG DITONJOLKAN PELAPORNYA. Blindspot GR berarti pelanggaran Golden
+     * Rules di area sebuah perusahaan yang justru dilaporkan pihak lain, bukan
+     * pengawas perusahaan itu sendiri -- jadi yang ingin diketahui pembaca
+     * siapa yang menangkapnya, bukan sekadar berapa banyak.
+     */
+    public function detailBulan(Request $request): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $mitra = trim((string) $request->input('mitra', ''));
+        $bulan = (int) $request->input('month', 0);
+
+        if ($site === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        $dasar = function (bool $hanyaBlindspot = true) use ($site, $mitra, $bulan): Builder {
+            $query = DB::table(self::TABEL_DETAIL)
+                ->where(self::COL_SITE, $site)
+                ->whereIn(self::COL_BULAN, $this->monthNames($bulan));
+
+            if ($mitra !== '') {
+                $query->where(self::COL_PIC_PERUSAHAAN, $mitra);
+            }
+
+            if (Schema::hasColumn(self::TABEL_DETAIL, self::COL_IS_BLINDSPOT)) {
+                if ($hanyaBlindspot) {
+                    $query->whereIn(self::COL_IS_BLINDSPOT, self::NILAI_BLINDSPOT);
+                } else {
+                    $query->where(function (Builder $inner): void {
+                        $inner->whereNull(self::COL_IS_BLINDSPOT)
+                            ->orWhereNotIn(self::COL_IS_BLINDSPOT, self::NILAI_BLINDSPOT);
+                    });
+                }
+            }
+
+            return $query;
+        };
+
+        $baris = $dasar()
+            ->select($this->detailColumns())
+            ->orderBy(self::COL_PELAPOR_PERUSAHAAN)
+            ->orderBy(self::COL_TASK)
+            ->limit(self::BATAS_BARIS_MODAL + 1)
+            ->get()
+            ->map(fn (object $row): array => $this->presentDetail($row))
+            ->all();
+
+        $terpotong = count($baris) > self::BATAS_BARIS_MODAL;
+
+        if ($terpotong) {
+            $baris = array_slice($baris, 0, self::BATAS_BARIS_MODAL);
+        }
+
+        $cacah = $dasar()
+            ->selectRaw(
+                'COUNT(*) AS temuan, '
+                . 'COUNT(DISTINCT ' . self::COL_PIC_SID . ') AS pic, '
+                . 'COUNT(DISTINCT ' . self::COL_PELAPOR_NAMA . ') AS pelapor, '
+                . 'COUNT(DISTINCT ' . self::COL_PELAPOR_PERUSAHAAN . ') AS perusahaan_pelapor'
+            )
+            ->first();
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'site' => $site,
+                'mitra' => $mitra,
+                'bulan' => self::monthLabel($bulan),
+            ],
+            'ringkas' => [
+                'temuan' => (int) ($cacah->temuan ?? 0),
+                'pic' => (int) ($cacah->pic ?? 0),
+                'pelapor' => (int) ($cacah->pelapor ?? 0),
+                'perusahaan_pelapor' => (int) ($cacah->perusahaan_pelapor ?? 0),
+                'bukan_blindspot' => $dasar(false)->count(),
+            ],
+            'per_pelapor' => $this->pelaporTerbanyak($dasar()),
+            'per_pic' => $this->picTerbanyak($dasar()),
+            'terpotong' => $terpotong,
+            'batas' => self::BATAS_BARIS_MODAL,
+            'baris' => $baris,
+        ]);
+    }
+
+    /**
+     * Perusahaan yang menangkap temuan di sel ini, terbanyak di atas.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function pelaporTerbanyak(Builder $query): array
+    {
+        return $query
+            ->selectRaw(self::COL_PELAPOR_PERUSAHAAN . ' AS perusahaan, COUNT(*) AS n')
+            ->groupBy('perusahaan')
+            ->orderByDesc('n')
+            ->get()
+            ->map(static fn (object $r): array => [
+                'perusahaan' => trim((string) $r->perusahaan) ?: '-',
+                'n' => (int) $r->n,
+            ])
+            ->all();
+    }
+
+    /**
+     * PIC yang areanya paling sering kecolongan di sel ini.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function picTerbanyak(Builder $query): array
+    {
+        return $query
+            ->selectRaw(
+                self::COL_PIC_NAMA . ' AS pic, '
+                . self::COL_PIC_SID . ' AS sid, COUNT(*) AS n'
+            )
+            ->groupBy('pic', 'sid')
+            ->orderByDesc('n')
+            ->limit(10)
+            ->get()
+            ->map(static fn (object $r): array => [
+                'pic' => trim((string) $r->pic) ?: '-',
+                'sid' => trim((string) $r->sid) ?: '-',
+                'n' => (int) $r->n,
+            ])
+            ->all();
     }
 
     /**
