@@ -75,17 +75,24 @@
   .spip-modal-scroll { max-height: 32vh; overflow: auto; }
   .spip-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
 
-  /* Gradasi persentase: angka besar hijau, karena di sini tinggi berarti baik. */
-  .spip-t1 { background: #E0484A; }
-  .spip-t2 { background: #F08C2E; }
-  .spip-t3 { background: #F2C230; color: #1F2937 !important; }
-  .spip-t4 { background: #86C96B; }
-  .spip-t5 { background: #059669; }
-  /* Mode Nilai: 4 band resmi, warnanya senada dengan kartu perusahaan. */
-  .spip-n1 { background: #E0484A; }
-  .spip-n2 { background: #F08C2E; }
-  .spip-n3 { background: #F2C230; color: #1F2937 !important; }
-  .spip-n4 { background: #16A34A; }
+  /* Warna band mengikuti lembar penilaian resmi: merah, jingga, kuning,
+     hijau muda. Kedua mode memakai ambang yang sama, jadi satu sel tidak
+     berubah warna ketika modenya diganti. Kuning dan hijau muda memakai teks
+     gelap agar tetap terbaca. */
+  .spip-t1, .spip-n1 { background: #FF0000; }
+  .spip-t2, .spip-n2 { background: #FFC000; color: #1F2937 !important; }
+  .spip-t3, .spip-n3 { background: #FFFF00; color: #1F2937 !important; }
+  .spip-t4, .spip-n4 { background: #92D050; color: #1F2937 !important; }
+
+  /* Lencana dan batang memakai warna band yang sama persis dengan sel. */
+  .spip-b1 { background: #FFE5E5; color: #B91C1C !important; }
+  .spip-b2 { background: #FFF2CC; color: #92400E !important; }
+  .spip-b3 { background: #FFFBCC; color: #854D0E !important; }
+  .spip-b4 { background: #E8F5DC; color: #3F6212 !important; }
+  .spip-bar1 { background: #FF0000; }
+  .spip-bar2 { background: #FFC000; }
+  .spip-bar3 { background: #FFFF00; }
+  .spip-bar4 { background: #92D050; }
 
 </style>
 @endsection
@@ -248,7 +255,7 @@ var spipModalDetail = (function () {
                            : 'tidak ada baris untuk bulan ini')
                        : 'SPIP yang dilakukan commissioning DMS',
                    capai)
-            + ubin('Nilai', c.nilai === null ? '–' : c.nilai,
+            + ubin('Nilai', fmtNilai(c.nilai),
                    c.nilai_band === null ? 'tidak dinilai tanpa persentase' : 'band ' + c.nilai_band)
             + ubin('Selisih ke Target', selisih,
                    kosong ? 'target ' + target + '% · belum bisa dibandingkan' : 'target ' + target + '%',
@@ -450,42 +457,53 @@ var spipModalDetail = (function () {
         }) + '%';
     }
 
-    // Gradasi warna untuk mode Persentase: 5 tingkat, lebih halus daripada
-    // band Nilai sehingga perbedaan antar bulan lebih mudah terlihat.
+    // BAND SELALU DITURUNKAN DARI PERSENTASE, tidak pernah dari nilai.
+    // Nilai dibulatkan dua desimal untuk ditampilkan, dan pembulatan itu bisa
+    // menyeberangi batas band. Ambangnya sama persis dengan SCORE_BANDS.
+    function bandPersen(pct) {
+        var v = Number(pct);
+        if (!isFinite(v)) { return 0; }
+        if (v >= 98) { return 4; }
+        if (v >= 96) { return 3; }
+        if (v >= 94) { return 2; }
+        return 1;
+    }
+
+    /** Nilai ditampilkan dengan koma, mis. "3,95". */
+    function fmtNilai(nilai) {
+        if (nilai === null || nilai === undefined || nilai === '') { return '–'; }
+        return Number(nilai).toLocaleString('id-ID', {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        });
+    }
+
     function tierClass(pct) {
-        if (pct >= 98) return 'spip-t5';
-        if (pct >= 90) return 'spip-t4';
-        if (pct >= 78) return 'spip-t3';
-        if (pct >= 62) return 'spip-t2';
-        return 'spip-t1';
+        return { 1: 'spip-t1', 2: 'spip-t2', 3: 'spip-t3', 4: 'spip-t4' }[bandPersen(pct)] || 'spip-empty';
     }
 
-    // Mode Nilai memakai 4 band resmi, bukan gradasi di atas, supaya warna sel
-    // tidak pernah bertentangan dengan angka Nilai-nya.
-    function nilaiClass(nilai) {
-        return { 1: 'spip-n1', 2: 'spip-n2', 3: 'spip-n3', 4: 'spip-n4' }[nilai] || 'spip-empty';
+    function nilaiClass(pct) {
+        return { 1: 'spip-n1', 2: 'spip-n2', 3: 'spip-n3', 4: 'spip-n4' }[bandPersen(pct)] || 'spip-empty';
     }
 
-    // Kelas badge mengikuti sistem warna WowDash (bg-*-focus + text-*-main),
-    // bukan warna inline, supaya ikut tema dan konsisten dengan modul lain.
-    function nilaiBadgeClass(nilai) {
+    // Kelas sendiri, bukan warna semantik WowDash: di sana band 3 memetakan ke
+    // "info" yang BIRU, sementara selnya kuning -- lencana dan matriks jadi
+    // bertentangan di halaman yang sama.
+    function nilaiBadgeClass(pct) {
         return {
-            1: 'bg-danger-focus text-danger-main',
-            2: 'bg-warning-focus text-warning-main',
-            3: 'bg-info-focus text-info-main',
-            4: 'bg-success-focus text-success-main'
-        }[nilai] || 'bg-neutral-200 text-secondary-light';
+            1: 'spip-b1', 2: 'spip-b2', 3: 'spip-b3', 4: 'spip-b4'
+        }[bandPersen(pct)] || 'bg-neutral-200 text-secondary-light';
     }
 
-    function nilaiBarClass(nilai) {
+    function nilaiBarClass(pct) {
         return {
-            1: 'bg-danger-main', 2: 'bg-warning-main',
-            3: 'bg-info-main', 4: 'bg-success-main'
-        }[nilai] || 'bg-neutral-400';
+            1: 'spip-bar1', 2: 'spip-bar2', 3: 'spip-bar3', 4: 'spip-bar4'
+        }[bandPersen(pct)] || 'bg-neutral-400';
     }
 
+    // Warna sel SELALU dari persentasenya, apa pun mode tampilannya, supaya
+    // berganti mode tidak pernah mengubah warna sel yang datanya sama.
     function cellClass(cell) {
-        return matrixMode === 'nilai' ? nilaiClass(cell.nilai) : tierClass(cell.pct);
+        return (matrixMode === 'nilai' ? nilaiClass : tierClass)(cell.pct);
     }
 
     function currentFilters() {
@@ -505,8 +523,8 @@ var spipModalDetail = (function () {
                 value: k.rata === null ? '–' : fmtPct(k.rata),
                 foot: k.rata === null
                     ? 'Belum ada data'
-                    : '<span class="' + nilaiBadgeClass(k.nilai) + ' px-1 rounded-2 fw-medium text-sm">Nilai '
-                        + k.nilai + '</span> '
+                    : '<span class="' + nilaiBadgeClass(k.rata) + ' px-1 rounded-2 fw-medium text-sm">Nilai '
+                        + fmtNilai(k.nilai) + '</span> '
                         + (k.memenuhi_target ? 'Memenuhi' : 'Belum memenuhi') + ' target ' + k.target + '%'
             },
             {
@@ -568,7 +586,7 @@ var spipModalDetail = (function () {
                 + '</div>'
                 + '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px spip-track"'
                 +   ' title="Target ' + s.target + '%">'
-                +   '<div class="progress-bar ' + nilaiBarClass(s.nilai) + ' rounded-pill" role="progressbar"'
+                +   '<div class="progress-bar ' + nilaiBarClass(s.percent) + ' rounded-pill" role="progressbar"'
                 +     ' style="width:' + Math.min(100, s.percent) + '%" aria-valuenow="' + Math.round(s.percent) + '"'
                 +     ' aria-valuemin="0" aria-valuemax="100"></div>'
                 +   '<span class="spip-track__target" style="left:' + s.target + '%"></span>'
@@ -592,12 +610,12 @@ var spipModalDetail = (function () {
                 + '<div class="border input-form-light radius-8 p-16 h-100">'
                 +   '<div class="d-flex align-items-center justify-content-between gap-2 mb-12">'
                 +     '<span class="text-md fw-semibold">' + escapeHtml(p.mitra) + '</span>'
-                +     '<span class="' + nilaiBadgeClass(p.nilai) + ' px-8 py-2 rounded-pill fw-medium text-xs">Nilai '
-                +       p.nilai + '</span>'
+                +     '<span class="' + nilaiBadgeClass(p.percent) + ' px-8 py-2 rounded-pill fw-medium text-xs">Nilai '
+                +       fmtNilai(p.nilai) + '</span>'
                 +   '</div>'
                 +   '<h6 class="mb-8 fw-semibold">' + fmtPct(p.percent) + '</h6>'
                 +   '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px mb-8">'
-                +     '<div class="progress-bar ' + nilaiBarClass(p.nilai) + ' rounded-pill" role="progressbar"'
+                +     '<div class="progress-bar ' + nilaiBarClass(p.percent) + ' rounded-pill" role="progressbar"'
                 +       ' style="width:' + Math.min(100, p.percent) + '%" aria-valuenow="' + Math.round(p.percent) + '"'
                 +       ' aria-valuemin="0" aria-valuemax="100"></div>'
                 +   '</div>'
@@ -621,8 +639,8 @@ var spipModalDetail = (function () {
                 +   '<span class="text-sm text-secondary-light">' + escapeHtml(t.mitra)
                 +     ', terendah ' + fmtPct(t.terendah) + '</span>'
                 + '</td>'
-                + '<td class="text-center"><span class="' + nilaiBadgeClass(t.nilai)
-                +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + t.nilai + '</span></td>'
+                + '<td class="text-center"><span class="' + nilaiBadgeClass(t.percent)
+                +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + fmtNilai(t.nilai) + '</span></td>'
                 + '<td class="text-end fw-medium">' + fmtPct(t.percent) + '</td>'
                 + '</tr>';
         }).join('');
@@ -632,17 +650,16 @@ var spipModalDetail = (function () {
     function renderLegend() {
         var items = matrixMode === 'nilai'
             ? [
-                { color: '#E0484A', label: 'Nilai 1 · <80%' },
-                { color: '#F08C2E', label: 'Nilai 2 · 80–90%' },
-                { color: '#F2C230', label: 'Nilai 3 · 90–98%' },
-                { color: '#16A34A', label: 'Nilai 4 · 98–100%' }
+                { color: '#FF0000', label: 'Nilai 1 · <94%' },
+                { color: '#FFC000', label: 'Nilai 2 · 94–96%' },
+                { color: '#FFFF00', label: 'Nilai 3 · 96–98%' },
+                { color: '#92D050', label: 'Nilai 4 · 98–100%' }
             ]
             : [
-                { color: '#E0484A', label: '<62%' },
-                { color: '#F08C2E', label: '62–78%' },
-                { color: '#F2C230', label: '78–90%' },
-                { color: '#86C96B', label: '90–98%' },
-                { color: '#059669', label: '≥98%' }
+                { color: '#FF0000', label: '<94%' },
+                { color: '#FFC000', label: '94–96%' },
+                { color: '#FFFF00', label: '96–98%' },
+                { color: '#92D050', label: '98–100%' }
             ];
 
         el('legend').innerHTML = items.map(function (it) {
@@ -935,13 +952,13 @@ var spipModalDetail = (function () {
         }) + '%';
     }
 
-    function nilaiBadgeClass(nilai) {
+    function nilaiBadgeClass(pct) {
+        var v = Number(pct);
+        var b = !isFinite(v) ? 0 : (v >= 98 ? 4 : v >= 96 ? 3 : v >= 94 ? 2 : 1);
+
         return {
-            1: 'bg-danger-focus text-danger-main',
-            2: 'bg-warning-focus text-warning-main',
-            3: 'bg-info-focus text-info-main',
-            4: 'bg-success-focus text-success-main'
-        }[nilai] || 'bg-neutral-200 text-secondary-light';
+            1: 'spip-b1', 2: 'spip-b2', 3: 'spip-b3', 4: 'spip-b4'
+        }[b] || 'bg-neutral-200 text-secondary-light';
     }
 
     function currentFilters() {

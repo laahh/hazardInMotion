@@ -80,11 +80,25 @@ final class SpipCommissioningController extends Controller
 
     private const TARGET_PERCENT = 90.0;
 
+    /**
+     * Band penilaian: [batas bawah, batas atas, nilai dasar, label].
+     *
+     * NILAINYA BERKOMA, BUKAN BULAT. Di dalam satu band, nilai melandai
+     * mengikuti posisi capaian di antara kedua batasnya -- 97,0% bernilai
+     * 3,50, bukan 3 -- sehingga dua baris yang sama-sama "Nilai 3" tetap bisa
+     * dibedakan. Lihat scoreBandFor().
+     *
+     * BAND TERATAS DATAR DI 4,00: begitu capaian menyentuh 98%, nilainya sudah
+     * penuh dan tidak melandai lagi sampai 100%.
+     *
+     * BAND TERBAWAH melandai dari 1,00 di 0% sampai 2,00 di 94%, jadi capaian
+     * buruk pun tetap terbedakan satu sama lain.
+     */
     private const SCORE_BANDS = [
-        [98.0, 4, '98% - 100%'],
-        [90.0, 3, '90% - <98%'],
-        [80.0, 2, '80% - <90%'],
-        [0.0,  1, '<80%'],
+        [98.0, 100.0, 4, '98% - 100%'],
+        [96.0,  98.0, 3, '96% - <98%'],
+        [94.0,  96.0, 2, '94% - <96%'],
+        [0.0,   94.0, 1, '<94%'],
     ];
 
     /**
@@ -1262,14 +1276,38 @@ final class SpipCommissioningController extends Controller
     }
 
     /** @return array{0: float, 1: int, 2: string} */
+    /**
+     * Nilai berkoma untuk satu capaian.
+     *
+     * Dikembalikan sebagai [batas bawah band, nilai, label band] supaya
+     * pemanggil yang membongkar [, $nilai, $band] tetap bekerja.
+     *
+     * @return array{0: float, 1: float, 2: string}
+     */
     private function scoreBandFor(float $percent): array
     {
-        foreach (self::SCORE_BANDS as $band) {
-            if ($percent >= $band[0]) {
-                return $band;
+        foreach (self::SCORE_BANDS as [$bawah, $atas, $dasar, $label]) {
+            if ($percent < $bawah) {
+                continue;
             }
+
+            if ($dasar >= 4) {
+                return [$bawah, 4.0, $label];
+            }
+
+            $rentang = $atas - $bawah;
+            $nilai = $rentang > 0
+                ? $dasar + ($percent - $bawah) / $rentang
+                : (float) $dasar;
+
+            // Tidak boleh menyentuh angka band berikutnya: 93,90% menghasilkan
+            // 1,99893 yang membulat jadi 2,00 dan akan tampil sebagai "Nilai 2"
+            // di sel yang labelnya masih "<94%".
+            $nilai = min($nilai, $dasar + 0.99);
+
+            return [$bawah, round(max(1.0, min(4.0, $nilai)), 2), $label];
         }
 
-        return [0.0, 1, '<80%'];
+        return [0.0, 1.0, '<94%'];
     }
 }

@@ -66,6 +66,17 @@
   .bgr-modal-scroll { max-height: 42vh; overflow: auto; }
   .bgr-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
   /* Nol temuan itu kabar baik, jadi warnanya hijau, bukan abu-abu kosong. */
+  /* Warna band mengikuti lembar penilaian resmi. Arahnya terbalik dari
+     parameter Ratio: di sini 0-5% yang hijau (Nilai 4) dan di atas 15% yang
+     merah (Nilai 1), karena blindspot makin kecil makin baik. Kuning dan
+     hijau muda memakai teks gelap agar tetap terbaca. */
+  .bs-n1 { background: #FF0000; }
+  .bs-n2 { background: #FFC000; color: #1F2937 !important; }
+  .bs-n3 { background: #FFFF00; color: #1F2937 !important; }
+  .bs-n4 { background: #92D050; color: #1F2937 !important; }
+
+  /* Skala cacah temuan tetap gradasi lama: satuannya bukan persen, jadi band
+     5/10/15% tidak berlaku di sana. */
   .bs-k0 { background: #16A34A; }
   .bs-k1 { background: #86C96B; }
   .bs-k2 { background: #F2C230; color: #1F2937 !important; }
@@ -421,12 +432,71 @@ window.bsOverview = (function () {
 
     // Skala warna matriks persentase. Berbeda dari halaman Ratio TBC & GR:
     // di sini angka kecil yang hijau, karena yang diukur adalah yang luput.
+    // Band datang DARI SERVER (score_bands), tidak ditulis ulang di sini,
+    // supaya definisi di layar tidak bisa menyimpang dari yang dipakai
+    // controller. Diisi saat payload pertama tiba.
+    var BANDS = [];
+
+    function bandUntuk(pct) {
+        var v = Number(pct);
+        if (!isFinite(v)) { return null; }
+
+        for (var i = 0; i < BANDS.length; i++) {
+            if (v <= BANDS[i].atas) { return BANDS[i]; }
+        }
+
+        return BANDS.length ? BANDS[BANDS.length - 1] : null;
+    }
+
+    /** Nilai berkoma; rumusnya sama persis dengan scoreBandFor() di PHP. */
+    function nilaiUntuk(pct) {
+        var b = bandUntuk(pct);
+        if (!b) { return null; }
+        if (b.nilai >= 4) { return 4; }
+
+        var rentang = b.atas - b.bawah;
+        if (rentang <= 0) { return b.nilai; }
+
+        // Jarak dari batas ATAS: makin kecil persennya, makin tinggi nilainya.
+        var n = b.nilai + (b.atas - Number(pct)) / rentang;
+
+        return Math.round(Math.min(n, b.nilai + 0.99) * 100) / 100;
+    }
+
+    function fmtNilai(nilai) {
+        if (nilai === null || nilai === undefined) { return '–'; }
+        return Number(nilai).toLocaleString('id-ID', {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        });
+    }
+
+    /**
+     * Memasang band dari server dan menyusun legendanya sekalian, supaya
+     * keterangan warna di layar selalu mengikuti definisi di controller.
+     */
+    function setBands(daftar) {
+        BANDS = (daftar || []).map(function (b) {
+            return {
+                bawah: Number(b.bawah),
+                atas: Number(b.atas),
+                nilai: Number(b.nilai),
+                label: String(b.label),
+                warna: String(b.warna)
+            };
+        });
+
+        // Legenda diurutkan dari yang terburuk supaya terbaca seperti tangga
+        // risiko: merah dulu, hijau terakhir.
+        LEGENDA.persen = BANDS.slice().sort(function (a, b) {
+            return a.nilai - b.nilai;
+        }).map(function (b) {
+            return { color: b.warna, label: 'Nilai ' + b.nilai + ' · ' + b.label };
+        });
+    }
+
     function tierPersen(pct) {
-        if (pct <= 0) return 'bs-k0';
-        if (pct <= 2) return 'bs-k1';
-        if (pct <= 5) return 'bs-k2';
-        if (pct <= 10) return 'bs-k3';
-        return 'bs-k4';
+        var b = bandUntuk(pct);
+        return b ? 'bs-n' + b.nilai : 'bs-k0';
     }
 
     /** Skala untuk cacah temuan; arahnya sama, hanya satuannya berbeda. */
@@ -593,13 +663,8 @@ window.bsOverview = (function () {
         }
 
         var LEGENDA = {
-            persen: [
-                { color: '#16A34A', label: '0%' },
-                { color: '#86C96B', label: 'sampai 2%' },
-                { color: '#F2C230', label: '2–5%' },
-                { color: '#F08C2E', label: '5–10%' },
-                { color: '#E0484A', label: 'lebih dari 10%' }
-            ],
+            // Diisi dari score_bands saat payload tiba; lihat setBands().
+            persen: [],
             temuan: [
                 { color: '#16A34A', label: 'tidak ada temuan' },
                 { color: '#86C96B', label: '1–2' },
@@ -965,6 +1030,7 @@ window.bsOverview = (function () {
                     // boleh membuat seluruh dashboard tampak kosong.
                     safe('tata-letak', function () { aturTataLetak(json.ukuran); });
                     safe('kpi', function () { renderKpi(json.kpi); });
+                    safe('bands', function () { setBands(json.score_bands || []); });
                     safe('legend', function () {
                         renderLegend('persen');
                         renderLegend('temuan');
@@ -977,9 +1043,14 @@ window.bsOverview = (function () {
                                 return row.average === null ? '–' : fmtPct(row.average);
                             },
                             ringkasTip: function (row) {
-                                return row.average === null
-                                    ? 'Belum ada data'
-                                    : 'Rata-rata ' + fmtPct(row.average) + ', tertinggi ' + fmtPct(row.puncak);
+                                if (row.average === null) { return 'Belum ada data'; }
+
+                                var b = bandUntuk(row.average);
+
+                                return 'Rata-rata ' + fmtPct(row.average)
+                                    + ', tertinggi ' + fmtPct(row.puncak)
+                                    + (b ? ' · Nilai ' + fmtNilai(nilaiUntuk(row.average))
+                                           + ' (' + b.label + ')' : '');
                             }
                         });
                     });

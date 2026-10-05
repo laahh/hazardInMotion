@@ -100,6 +100,34 @@ final class BlindspotGrController extends Controller
      */
     private const AMBANG_PERSEN = 5.0;
 
+    /**
+     * Band penilaian: [batas bawah, batas atas, nilai dasar, label].
+     *
+     * ARAHNYA TERBALIK dari parameter Ratio dan Coverage: di sini MAKIN KECIL
+     * MAKIN BAIK, karena yang diukur pelanggaran yang luput. Band 4 justru ada
+     * di 0-5% dan band 1 di atas 15%. Urutannya sengaja terbaik dulu, dan
+     * scoreBandFor() mencocokkan dengan "persen <= batas atas".
+     *
+     * NILAINYA BERKOMA. Di dalam satu band, nilai melandai mengikuti posisi
+     * capaian: 7,5% bernilai 3,50, bukan 3. Karena arahnya terbalik, yang
+     * dihitung jaraknya dari batas ATAS band (sisi yang lebih buruk), jadi
+     * capaian yang makin kecil memberi nilai yang makin besar.
+     *
+     * BAND TERBAIK DATAR DI 4,00: berapa pun di bawah 5%, nilainya sudah penuh.
+     *
+     * BATAS MILIK BAND YANG LEBIH BAIK: tepat 5% masuk band 4, tepat 10% masuk
+     * band 3, tepat 15% masuk band 2.
+     *
+     * BAND TERBURUK dibatasi di 100% supaya tetap bisa dilandaikan; capaian
+     * 100% bernilai 1,00 dan 15% bernilai mendekati 2,00.
+     */
+    private const SCORE_BANDS = [
+        [0.0,   5.0, 4, '0% - 5%'],
+        [5.0,  10.0, 3, '>5% - 10%'],
+        [10.0, 15.0, 2, '>10% - 15%'],
+        [15.0, 100.0, 1, '>15%'],
+    ];
+
     private const DETAIL_FILTERABLE = [
         'site' => self::COL_SITE,
         'mitra' => self::COL_PIC_PERUSAHAAN,
@@ -168,6 +196,7 @@ final class BlindspotGrController extends Controller
             'per_pelapor' => $this->buildPerPelapor($request),
             'monthly' => $this->buildMonthlySeries($sumber, $ukuran),
             'catatan' => $this->catatan($request),
+            'score_bands' => $this->bandUntukView(),
         ]);
     }
 
@@ -608,6 +637,62 @@ final class BlindspotGrController extends Controller
     }
 
     /** Keterangan tentang sumber yang belum terisi atau baris yang disaring. */
+    /**
+     * Nilai berkoma untuk satu persentase blindspot.
+     *
+     * @return array{0: float, 1: float, 2: string}
+     */
+    private function scoreBandFor(float $percent): array
+    {
+        foreach (self::SCORE_BANDS as [$bawah, $atas, $dasar, $label]) {
+            if ($percent > $atas) {
+                continue;
+            }
+
+            if ($dasar >= 4) {
+                return [$atas, 4.0, $label];
+            }
+
+            $rentang = $atas - $bawah;
+
+            // Jarak diukur dari batas ATAS karena arahnya terbalik: makin jauh
+            // di bawah batas itu, makin tinggi nilainya.
+            $nilai = $rentang > 0
+                ? $dasar + ($atas - $percent) / $rentang
+                : (float) $dasar;
+
+            // Tidak boleh menyentuh angka band berikutnya, supaya angka dan
+            // label band di layar tidak pernah bertentangan.
+            $nilai = min($nilai, $dasar + 0.99);
+
+            return [$atas, round(max(1.0, min(4.0, $nilai)), 2), $label];
+        }
+
+        // Di atas 100%: tidak seharusnya terjadi, tetapi tetap diberi nilai
+        // terendah daripada melempar.
+        return [100.0, 1.0, '>15%'];
+    }
+
+    /**
+     * Band untuk dikirim ke view, supaya warna dan angka Nilai di layar
+     * memakai definisi yang sama persis dengan di sini -- tidak ditulis ulang
+     * di JavaScript dan berisiko menyimpang.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function bandUntukView(): array
+    {
+        $warna = [1 => '#FF0000', 2 => '#FFC000', 3 => '#FFFF00', 4 => '#92D050'];
+
+        return array_map(static fn (array $b): array => [
+            'bawah' => $b[0],
+            'atas' => $b[1],
+            'nilai' => $b[2],
+            'label' => $b[3],
+            'warna' => $warna[$b[2]] ?? '#CBD5E1',
+        ], self::SCORE_BANDS);
+    }
+
     private function catatan(Request $request): ?string
     {
         $bagian = [];
