@@ -7,7 +7,8 @@
   $ds: satu entri dari $datasets pada RasioKelayakanKerjaController::index().
 --}}
 <div class="rkk-overview" data-dataset="{{ $ds['slug'] }}"
-     data-url="{{ route('ohs-score-card.rasio-kelayakan-kerja.overview', $ds['slug']) }}">
+     data-url="{{ route('ohs-score-card.rasio-kelayakan-kerja.overview', $ds['slug']) }}"
+     data-detail-url="{{ route('ohs-score-card.rasio-kelayakan-kerja.detail-bulan', $ds['slug']) }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">

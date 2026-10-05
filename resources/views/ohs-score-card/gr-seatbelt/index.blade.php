@@ -54,6 +54,17 @@
     transform: scale(1.06); box-shadow: 0 0 0 2px rgba(220,38,38,.3);
     position: relative; z-index: 1;
   }
+  /* Semua sel bisa dibuka rinciannya, termasuk yang nol: nol di sini adalah
+     jawaban "tidak ada pelanggaran", bukan sel tanpa data. */
+  .hp-matrix .hp-cell--klik { cursor: pointer; }
+  .hp-matrix .hp-cell--klik:focus-visible {
+    outline: 2px solid #487FFF; outline-offset: 1px; position: relative; z-index: 2;
+  }
+
+  /* Tabel konteks di dalam modal digulir sendiri agar modalnya tidak memanjang. */
+  .grs-modal-scroll { max-height: 34vh; overflow: auto; }
+  .grs-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
+
   /* Nol adalah keadaan yang diinginkan, jadi hijau — bukan sel kosong abu-abu. */
   .hp-k0 { background: #16A34A; }
   .hp-k1 { background: #F2C230; color: #1F2937 !important; }
@@ -109,10 +120,261 @@
     @include('ohs-score-card.gr-seatbelt.partials._data')
   </div>
 </div>
+
+{{-- Modal rincian satu sel. Ditaruh di luar tab pane supaya tidak ikut
+     tersembunyi saat berpindah tab. --}}
+<div class="modal fade" id="grs-detail-modal" tabindex="-1" aria-labelledby="grs-detail-judul" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content radius-12">
+      <div class="modal-header border-bottom py-16 px-24">
+        <div>
+          <h6 class="modal-title text-lg fw-semibold mb-0" id="grs-detail-judul">Rincian Bulan</h6>
+          <span class="text-sm text-secondary-light" data-grsm="subjudul"></span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body p-24"><div data-grsm="isi"></div></div>
+      <div class="modal-footer border-top py-12 px-24">
+        <span class="text-sm text-secondary-light me-auto" data-grsm="kaki"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary radius-8" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('page-scripts')
 <script>
+// ---- Modal rincian satu sel matriks -----------------------------------------
+//
+// Yang diukur parameter ini cacah pelanggaran dengan target nol, bukan
+// persentase, jadi modalnya tidak memuat capaian, Nilai 1-4, maupun selisih ke
+// target persen — tidak satu pun dari itu ada penyebutnya di sumber.
+//
+// SEL BERNILAI 0 DIJAWAB PENUH, tidak dikosongkan. Nol di halaman ini berarti
+// "tidak ada pelanggaran tercatat", sebuah hasil yang bagus, bukan "data belum
+// masuk" seperti di halaman capaian.
+var grsModalDetail = (function () {
+    'use strict';
+
+    var el = document.getElementById('grs-detail-modal');
+    if (!el) { return null; }
+
+    var bagian = function (n) { return el.querySelector('[data-grsm="' + n + '"]'); };
+    var permintaan = 0;
+
+    function esc(v) {
+        return String(v === null || v === undefined ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function num(v) { return Number(v || 0).toLocaleString('id-ID'); }
+
+    function kataBulan(n, satuan) {
+        return num(n) + ' ' + satuan;
+    }
+
+    function ubin(label, nilai, catatan, kelas) {
+        return '<div class="col-xxl-3 col-md-6">'
+            + '<div class="border input-form-light radius-8 p-16 h-100">'
+            +   '<span class="text-sm text-secondary-light d-block">' + esc(label) + '</span>'
+            +   '<h6 class="fw-semibold mt-8 mb-4 ' + (kelas || '') + '">' + nilai + '</h6>'
+            +   '<span class="text-xs text-secondary-light">' + esc(catatan) + '</span>'
+            + '</div></div>';
+    }
+
+    /** Batang mini supaya perbandingan antar baris terbaca tanpa membaca angka. */
+    function batang(jumlah, puncak) {
+        var lebar = puncak > 0 ? Math.round(jumlah / puncak * 100) : 0;
+        return '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px">'
+            + '<div class="progress-bar ' + (jumlah > 0 ? 'bg-danger-main' : 'bg-success-main')
+            + ' rounded-pill" role="progressbar" style="width:' + (jumlah > 0 ? lebar : 0) + '%"'
+            + ' aria-valuenow="' + jumlah + '" aria-valuemin="0" aria-valuemax="'
+            + (puncak || 1) + '"></div></div>';
+    }
+
+    /** Angka sel apa adanya, dengan nol yang sengaja dibaca sebagai "bersih". */
+    function angka(jumlah) {
+        return jumlah > 0
+            ? '<span class="fw-semibold text-danger-main">' + num(jumlah) + '</span>'
+            : '<span class="text-success-main fw-semibold">0</span>';
+    }
+
+    /** Spanduk pembuka: nol dan bukan nol menceritakan hal yang berbeda. */
+    function spanduk(j) {
+        var r = j.rekam;
+
+        if (j.sel.bersih) {
+            var lanjut = r.bersih_beruntun > 1
+                ? ' Pasangan ini sudah ' + kataBulan(r.bersih_beruntun, 'bulan berturut-turut')
+                  + ' tanpa pelanggaran sampai ' + j.judul.bulan + '.'
+                : '';
+
+            return '<div class="alert bg-success-focus border-success-main text-success-main'
+                + ' radius-8 px-20 py-12 mb-20 d-flex align-items-start gap-2">'
+                + '<iconify-icon icon="solar:check-circle-outline" class="icon text-xl flex-shrink-0"></iconify-icon>'
+                + '<span class="text-sm">Tidak ada pelanggaran seatbelt tercatat di ' + esc(j.judul.bulan)
+                +   ' untuk ' + esc(j.judul.mitra) + ' di ' + esc(j.judul.site) + '.'
+                +   ' Nol adalah target parameter ini, jadi sel ini kosong karena bersih —'
+                +   ' bukan karena datanya belum masuk.' + esc(lanjut) + '</span></div>';
+        }
+
+        return '<div class="alert bg-danger-focus border-danger-main text-danger-main'
+            + ' radius-8 px-20 py-12 mb-20 d-flex align-items-start gap-2">'
+            + '<iconify-icon icon="mdi:seatbelt" class="icon text-xl flex-shrink-0"></iconify-icon>'
+            + '<span class="text-sm">' + esc(kataBulan(j.sel.jumlah, 'pelanggaran seatbelt'))
+            +   ' tercatat di ' + esc(j.judul.bulan) + ' untuk ' + esc(j.judul.mitra)
+            +   ' di ' + esc(j.judul.site) + '. Targetnya nol, jadi angka berapa pun di atas nol'
+            +   ' adalah selisih ke target.</span></div>';
+    }
+
+    function render(j) {
+        var r = j.rekam;
+        var s = j.site_bulan;
+        var p = j.peringkat;
+
+        // Keempat kartu menjawab empat pertanyaan yang berbeda: berapa di sel
+        // ini, berapa se-site pada bulan yang sama, seburuk apa posisinya di
+        // antara perusahaan lain, dan seperti apa rekam jejaknya. Tidak ada
+        // kartu capaian/Nilai/selisih-persen: cacah tidak punya penyebut.
+        var isi = spanduk(j)
+            + '<div class="row gy-3 mb-20">'
+            + ubin('Pelanggaran Bulan Ini', num(j.sel.jumlah),
+                   j.sel.bersih ? 'sesuai target — targetnya nol' : 'target parameter ini nol',
+                   j.sel.bersih ? 'text-success-main' : 'text-danger-main')
+            + ubin('Se-Site ' + j.judul.bulan, num(s.jumlah),
+                   s.kedapatan + ' dari ' + s.pernah + ' perusahaan di ' + j.judul.site
+                   + ' kedapatan bulan ini',
+                   s.jumlah ? '' : 'text-success-main')
+            + ubin('Posisi di Site',
+                   p.posisi === null ? 'Bersih' : 'ke-' + num(p.posisi),
+                   p.posisi === null
+                       ? 'tidak ikut menyumbang pelanggaran bulan ini'
+                       : 'dari ' + p.dari + ' perusahaan yang kedapatan, terbanyak lebih dulu',
+                   p.posisi === 1 ? 'text-danger-main' : (p.posisi === null ? 'text-success-main' : ''))
+            + ubin('Bulan Bersih', num(r.bulan_bersih) + ' / ' + num(r.bulan_count),
+                   r.terakhir_kena
+                       ? 'total ' + num(r.total) + ' pelanggaran · terakhir kedapatan ' + r.terakhir_kena
+                       : 'belum pernah kedapatan sepanjang periode ini',
+                   r.bulan_kena ? '' : 'text-success-main')
+            + '</div>';
+
+        var lintas = (j.lintas_site || []).length > 1;
+        var kolom = lintas ? 'col-xxl-4' : 'col-xxl-6';
+
+        isi += '<div class="row gy-4">'
+            +   '<div class="' + kolom + '">'
+            +     '<h6 class="text-md fw-semibold mb-4">Riwayat ' + esc(j.judul.mitra)
+            +       ' di ' + esc(j.judul.site) + '</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Sekali kejadian atau berulang tiap bulan</span>'
+            +     tabel(j.riwayat, 'bulan', 'Bulan')
+            +   '</div>'
+            +   '<div class="' + kolom + '">'
+            +     '<h6 class="text-md fw-semibold mb-4">Perusahaan di ' + esc(j.judul.site)
+            +       ' · ' + esc(j.judul.bulan) + '</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Satu perusahaan saja atau memang se-site</span>'
+            +     tabel(j.sebulan, 'mitra', 'Perusahaan')
+            +   '</div>';
+
+        if (lintas) {
+            isi += '<div class="' + kolom + '">'
+                +   '<h6 class="text-md fw-semibold mb-4">' + esc(j.judul.mitra)
+                +     ' di Site Lain · ' + esc(j.judul.bulan) + '</h6>'
+                +   '<span class="text-xs text-secondary-light d-block mb-12">'
+                +     'Melekat pada perusahaannya atau pada site ini saja</span>'
+                +   tabel(j.lintas_site, 'site', 'Site')
+                + '</div>';
+        }
+
+        bagian('isi').innerHTML = isi + '</div>';
+        bagian('kaki').textContent = 'Sumbernya sudah berupa cacah task, tanpa tabel rincian '
+            + 'per pelanggaran, jadi yang ditampilkan konteks di sekeliling sel — semuanya '
+            + 'dari sumber yang sama dengan matriks. Baris bernilai 0 berarti bersih pada '
+            + 'bulan itu, bukan belum ada datanya.';
+    }
+
+    /**
+     * Satu tabel konteks. Baris bernilai 0 sengaja ikut tampil: tanpa baris
+     * nol, "bersih" tidak bisa dibedakan dari "tidak terdaftar".
+     */
+    function tabel(daftar, kunci, judulKolom) {
+        if (!daftar || !daftar.length) {
+            return '<div class="text-center text-secondary-light py-24">Tidak ada pembanding.</div>';
+        }
+
+        var puncak = Math.max.apply(null, daftar.map(function (r) { return r.jumlah; })) || 0;
+
+        return '<div class="table-responsive grs-modal-scroll">'
+            + '<table class="table bordered-table sm-table mb-0"><thead><tr>'
+            +   '<th>' + esc(judulKolom) + '</th><th class="text-end">Pelanggaran</th>'
+            +   '<th style="width:34%">Porsi</th>'
+            + '</tr></thead><tbody>'
+            + daftar.map(function (r) {
+                return '<tr' + (r.ini ? ' class="bg-primary-50"' : '') + '>'
+                    + '<td class="text-sm' + (r.ini ? ' fw-semibold' : '') + '">' + esc(r[kunci])
+                    +   (r.ini ? ' <span class="text-xs text-primary-600">(sel ini)</span>' : '') + '</td>'
+                    + '<td class="text-end">' + angka(r.jumlah) + '</td>'
+                    + '<td>' + batang(r.jumlah, puncak)
+                    +   '<span class="text-xs text-secondary-light">'
+                    +     (r.jumlah > 0 ? esc(kataBulan(r.jumlah, 'pelanggaran')) : 'bersih')
+                    +   '</span></td>'
+                    + '</tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    function buka(url, koordinat) {
+        // Nomor permintaan menjaga agar jawaban yang datang terlambat untuk sel
+        // yang sudah tidak dibuka lagi tidak menimpa isi modal.
+        var ini = ++permintaan;
+
+        el.querySelector('#grs-detail-judul').textContent =
+            'Rincian ' + koordinat.bulan + ' · ' + koordinat.site;
+        bagian('subjudul').textContent = koordinat.mitra;
+        bagian('kaki').textContent = '';
+        bagian('isi').innerHTML = '<div class="text-center text-secondary-light py-40">'
+            + '<div class="spinner-border spinner-border-sm text-primary-600 me-2" role="status"></div>'
+            + 'Memuat rincian…</div>';
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        }
+
+        var q = new URLSearchParams({
+            site: koordinat.site, mitra: koordinat.mitra, month: koordinat.month
+        });
+
+        fetch(url + '?' + q.toString(), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) {
+                if (!res.ok) { throw new Error('HTTP ' + res.status); }
+                return res.json();
+            })
+            .then(function (j) {
+                if (ini !== permintaan) { return; }
+                if (!j.ok) {
+                    bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                        + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                        + esc(j.pesan || 'Rincian tidak bisa dimuat.') + '</div>';
+                    return;
+                }
+                render(j);
+            })
+            .catch(function (err) {
+                if (ini !== permintaan) { return; }
+                bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                    + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                    + 'Permintaan ke server gagal. ' + esc(err && err.message) + '</div>';
+            });
+    }
+
+    return { buka: buka };
+})();
+
 // ---- Tab Ringkasan ----------------------------------------------------------
 (function () {
     'use strict';
@@ -129,6 +391,34 @@
 
     function el(name) {
         return root.querySelector('[data-hp="' + name + '"]');
+    }
+
+    // Delegasi di tabel, bukan di tiap sel: matriks digambar ulang setiap ganti
+    // filter, dan pendengar per sel akan ikut hilang.
+    var matrixEl = el('matrix');
+
+    if (grsModalDetail && matrixEl && root.dataset.detailUrl) {
+        var bukaSel = function (td) {
+            grsModalDetail.buka(root.dataset.detailUrl, {
+                site: td.dataset.site,
+                mitra: td.dataset.mitra,
+                month: td.dataset.month,
+                bulan: td.dataset.bulan
+            });
+        };
+
+        matrixEl.addEventListener('click', function (e) {
+            var td = e.target.closest('.hp-cell--klik');
+            if (td && matrixEl.contains(td)) { bukaSel(td); }
+        });
+
+        matrixEl.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') { return; }
+            var td = e.target.closest('.hp-cell--klik');
+            if (!td || !matrixEl.contains(td)) { return; }
+            e.preventDefault();
+            bukaSel(td);
+        });
     }
 
     function escapeHtml(value) {
@@ -329,7 +619,15 @@
                 var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
                     + (jumlah === 0 ? 'tidak ada pelanggaran' : fmtNum(jumlah) + ' pelanggaran');
 
-                html += '<td class="hp-cell ' + tierClass(jumlah) + '" title="' + escapeHtml(tip) + '">'
+                // Koordinat sel dibawa di atribut, bukan ditebak dari posisi
+                // DOM: urutan baris berubah mengikuti pengurutan per site.
+                html += '<td class="hp-cell hp-cell--klik ' + tierClass(jumlah) + '"'
+                    + ' role="button" tabindex="0"'
+                    + ' data-site="' + escapeHtml(row.site) + '"'
+                    + ' data-mitra="' + escapeHtml(row.mitra) + '"'
+                    + ' data-month="' + months[m].number + '"'
+                    + ' data-bulan="' + escapeHtml(months[m].label) + '"'
+                    + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
                     + fmtNum(jumlah) + '</td>';
             });
 

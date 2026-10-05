@@ -83,6 +83,9 @@ final class RasioKelayakanKerjaController extends Controller
 
     private const TARGET_PERCENT = 90.0;
 
+    /** Batas baris karyawan yang dikirim ke modal rincian sel. */
+    private const BATAS_BARIS_MODAL = 500;
+
     private const SCORE_BANDS = [
         [98.0, 4, '98% - 100%'],
         [90.0, 3, '90% - <98%'],
@@ -729,6 +732,482 @@ final class RasioKelayakanKerjaController extends Controller
                 ? 'Belum ada data'
                 : ($persen >= self::TARGET_PERCENT ? 'Memenuhi target' : 'Di bawah target'),
         ];
+    }
+
+    // ======================================================================
+    // Modal rincian satu sel "Capaian per Bulan"
+    // ======================================================================
+
+    /**
+     * Rincian satu sel matriks bulanan.
+     *
+     * DUA ARKETIPE DALAM SATU ENDPOINT, karena dua kumpulan data halaman ini
+     * bentuk sumbernya berbeda: minecon punya tabel rincian sehingga selnya
+     * bisa dipecah jadi daftar karyawan, subcon tidak punya sehingga modalnya
+     * hanya bisa menyajikan konteks di sekeliling sel. Yang membedakan cuma
+     * ada/tidaknya DATASETS[...]['detail'], jadi kedua bentuk itu dilayani
+     * jalur yang sama dan bedanya dinyatakan lewat 'punya_rincian'.
+     *
+     * TIGA HAL YANG MEMANG TIDAK BISA DITURUNKAN DARI SUMBER. Ketiganya
+     * dikatakan apa adanya ke modal, bukan dikarang:
+     *
+     * 1. Tabel bulanan hanya menyimpan persentasenya, bukan pembilang dan
+     *    penyebutnya. "95,92% di Juli" karena itu tidak bisa dipecah jadi
+     *    "47 dari 49 karyawan", dan modal tidak menampilkan penyebut untuk sel.
+     * 2. Tabel rincian tidak punya kolom bulan, hanya tahun. Daftar karyawan
+     *    MUSTAHIL disaring ke bulan yang diklik; ia dikirim sebagai angka
+     *    setahun penuh, ditandai 'setahun' => true, dan panelnya menyebut itu
+     *    terus terang — sejalan dengan panel Hasil MCU di tab Ringkasan yang
+     *    sudah memakai pendekatan yang sama.
+     * 3. Persentase bulanan dan persentase dari rincian bukan ukuran yang
+     *    sama. BMO 2 / PT Pamapersada Nusantara: 67,89% bila delapan angka
+     *    bulanannya dirata-ratakan, 95,86% bila dihitung dari 1.593
+     *    karyawannya, karena rata-rata antar bulan memberi bobot sama pada
+     *    bulan berisi 2 orang dan bulan berisi 500 orang. Selisih itu dikirim
+     *    sebagai muatan tersendiri supaya modal wajib menerangkannya, bukan
+     *    menaruh kedua angka berdampingan tanpa keterangan.
+     */
+    public function detailBulan(Request $request, string $dataset = self::DEFAULT_DATASET): JsonResponse
+    {
+        $dataset = $this->dataset($dataset);
+        $punyaMitra = self::DATASETS[$dataset]['has_mitra'];
+        $kolom = $this->kolomBulanan($dataset);
+
+        $site = trim((string) $request->input('site', ''));
+        $mitra = $punyaMitra ? trim((string) $request->input('mitra', '')) : '';
+
+        // monthHeadings() halaman ini mengirim nomor 1-12 karena sumbernya
+        // cuma bernama bulan. Kode tahun*100+bulan tetap diterima supaya
+        // tautan dari halaman bertahun tidak patah.
+        $kode = (int) $request->input('month', 0);
+        $bulan = $kode > 9999 ? $kode % 100 : $kode;
+        $tahun = $kode > 9999 ? intdiv($kode, 100) : null;
+
+        if ($site === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        if ($punyaMitra && $mitra === '') {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Perusahaan wajib diisi: satu baris matriks minecon adalah '
+                    . 'gabungan site dan perusahaan, bukan site saja.',
+            ]);
+        }
+
+        // Dihormati persis seperti overview(): Oktober tidak pernah muncul di
+        // matriks, jadi tidak boleh bisa dibuka lewat endpoint ini juga.
+        if (in_array($bulan, self::EXCLUDED_MONTHS, true)) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => self::monthLabel($bulan) . ' tidak ditampilkan di halaman ini '
+                    . 'karena bulannya masih berjalan saat data diambil.',
+            ]);
+        }
+
+        // AVG yang sama persis dengan overview(), supaya angka sel dan angka
+        // modal tidak mungkin berbeda.
+        $sel = $this->agregatPersen(
+            DB::table($this->table($dataset, 'summary'))
+                ->where($kolom['site'], $site)
+                ->whereIn($kolom['bulan'], $this->namaBulan($bulan))
+                ->when($tahun !== null, fn (Builder $q): Builder => $q->where($kolom['tahun'], $tahun))
+                ->when($punyaMitra, fn (Builder $q): Builder => $q->where($kolom['mitra'], $mitra)),
+            $kolom['persen']
+        );
+
+        $riwayat = $this->riwayatBaris($dataset, $site, $mitra, $tahun);
+        $baris = $this->rataBaris($riwayat);
+        $rincian = $this->rincianKaryawan($dataset, $site, $mitra);
+
+        return response()->json([
+            'ok' => true,
+            'dataset' => $dataset,
+            'punya_rincian' => $rincian !== null,
+            'punya_mitra' => $punyaMitra,
+            'judul' => [
+                'dataset' => self::DATASETS[$dataset]['label'],
+                'site' => $site,
+                'mitra' => $punyaMitra ? $mitra : null,
+                'bulan' => self::monthLabel($bulan),
+                'tahun' => $tahun,
+            ],
+            'target' => self::TARGET_PERCENT,
+            'sel' => $sel,
+            'baris' => $baris,
+            'riwayat' => $this->tandaiBulan($riwayat, $bulan),
+            // Minecon: perusahaan lain di site yang sama. Subcon tidak punya
+            // dimensi perusahaan, jadi tetangga terdekatnya adalah site lain.
+            'tetangga' => $punyaMitra
+                ? $this->tandaiLabel(
+                    $this->tetanggaBulan($dataset, $bulan, $tahun, 'mitra', $site),
+                    $mitra
+                )
+                : $this->tandaiLabel(
+                    $this->tetanggaBulan($dataset, $bulan, $tahun, 'site'),
+                    $site
+                ),
+            // Sumbu ketiga, hanya bermakna untuk minecon: perusahaan yang sama
+            // di site lain pada bulan ini -- masalah site atau masalah mitra?
+            'lintas_site' => $punyaMitra
+                ? $this->tandaiLabel(
+                    $this->tetanggaBulan($dataset, $bulan, $tahun, 'site', null, $mitra),
+                    $site
+                )
+                : [],
+            'rincian' => $rincian,
+            'selisih' => $this->selisihUkuran($baris, $rincian),
+            'catatan' => $this->catatanModal($dataset, $sel, $rincian),
+        ]);
+    }
+
+    /**
+     * Persentase sekumpulan baris bulanan, dengan AVG yang sama seperti
+     * overview(). 'baris' ikut dikirim karena nol baris berarti sel itu tidak
+     * ada di tabel, bukan nol persen.
+     *
+     * @return array<string, mixed>
+     */
+    private function agregatPersen(Builder $query, string $kolomPersen): array
+    {
+        $row = $query
+            ->selectRaw('AVG(' . $kolomPersen . ') AS persen, COUNT(*) AS baris')
+            ->first();
+
+        $persen = ($row->persen ?? null) === null ? null : round((float) $row->persen, 2);
+        [, $nilai, $band] = $this->scoreBandFor($persen ?? 0.0);
+
+        return [
+            'persen' => $persen,
+            'baris' => (int) ($row->baris ?? 0),
+            'nilai' => $persen === null ? null : $nilai,
+            'nilai_band' => $persen === null ? null : $band,
+            'memenuhi_target' => $persen !== null && $persen >= self::TARGET_PERCENT,
+        ];
+    }
+
+    /**
+     * Baris matriks yang sama sepanjang bulan: capaian sel ini kronis atau
+     * sesaat?
+     *
+     * Tiap bulan diagregasi lalu dibulatkan dua angka sebelum dipakai, persis
+     * seperti buildMatrix(), supaya rata-ratanya sama dengan kolom RATA.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function riwayatBaris(string $dataset, string $site, string $mitra, ?int $tahun): array
+    {
+        $kolom = $this->kolomBulanan($dataset);
+
+        $rows = DB::table($this->table($dataset, 'summary'))
+            ->where($kolom['site'], $site)
+            ->when(
+                self::DATASETS[$dataset]['has_mitra'],
+                fn (Builder $q): Builder => $q->where($kolom['mitra'], $mitra)
+            )
+            ->when($tahun !== null, fn (Builder $q): Builder => $q->where($kolom['tahun'], $tahun))
+            ->selectRaw($kolom['bulan'] . ' AS bulan, AVG(' . $kolom['persen'] . ') AS persen')
+            ->groupBy('bulan')
+            ->get();
+
+        $out = [];
+
+        foreach ($rows as $r) {
+            $nomor = $this->nomorBulan((string) $r->bulan);
+
+            if ($nomor === 0 || in_array($nomor, self::EXCLUDED_MONTHS, true)) {
+                continue; // bulan tak dikenal atau sengaja dikecualikan
+            }
+
+            $persen = $r->persen === null ? null : round((float) $r->persen, 2);
+            [, $nilai, $band] = $this->scoreBandFor($persen ?? 0.0);
+
+            $out[] = [
+                'nomor' => $nomor,
+                'bulan' => self::monthLabel($nomor),
+                'persen' => $persen,
+                'nilai' => $persen === null ? null : $nilai,
+                'nilai_band' => $persen === null ? null : $band,
+                'memenuhi_target' => $persen !== null && $persen >= self::TARGET_PERCENT,
+            ];
+        }
+
+        usort($out, static fn (array $a, array $b): int => $a['nomor'] <=> $b['nomor']);
+
+        return $out;
+    }
+
+    /**
+     * Rata-rata baris dari riwayatnya, sehingga angkanya dijamin sama dengan
+     * kolom RATA di matriks tanpa query tambahan.
+     *
+     * @param  array<int, array<string, mixed>>  $riwayat
+     * @return array<string, mixed>
+     */
+    private function rataBaris(array $riwayat): array
+    {
+        $nilai = array_values(array_filter(
+            array_column($riwayat, 'persen'),
+            static fn (?float $v): bool => $v !== null
+        ));
+
+        $rata = $nilai !== [] ? round(array_sum($nilai) / count($nilai), 2) : null;
+        [, $band, $bandLabel] = $this->scoreBandFor($rata ?? 0.0);
+
+        return [
+            'persen' => $rata,
+            'nilai' => $rata === null ? null : $band,
+            'nilai_band' => $rata === null ? null : $bandLabel,
+            'bulan_terisi' => count($nilai),
+            'terendah' => $nilai !== [] ? min($nilai) : null,
+            'tertinggi' => $nilai !== [] ? max($nilai) : null,
+            'memenuhi_target' => $rata !== null && $rata >= self::TARGET_PERCENT,
+        ];
+    }
+
+    /**
+     * Baris lain pada bulan yang sama, dikelompokkan menurut $peran ('mitra'
+     * atau 'site').
+     *
+     * Satu helper untuk tiga panel: perusahaan lain di site ini, site lain di
+     * bulan ini, dan perusahaan yang sama di site lain. Filter halaman sengaja
+     * tidak diteruskan ke sini — gunanya justru memperlihatkan sekeliling sel,
+     * yang akan hilang kalau ikut dipersempit.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function tetanggaBulan(
+        string $dataset,
+        int $bulan,
+        ?int $tahun,
+        string $peran,
+        ?string $site = null,
+        ?string $mitra = null
+    ): array {
+        $kolom = $this->kolomBulanan($dataset);
+
+        $rows = DB::table($this->table($dataset, 'summary'))
+            ->whereIn($kolom['bulan'], $this->namaBulan($bulan))
+            ->when($tahun !== null, fn (Builder $q): Builder => $q->where($kolom['tahun'], $tahun))
+            ->when($site !== null, fn (Builder $q): Builder => $q->where($kolom['site'], $site))
+            ->when($mitra !== null, fn (Builder $q): Builder => $q->where($kolom['mitra'], $mitra))
+            ->selectRaw($kolom[$peran] . ' AS label, AVG(' . $kolom['persen'] . ') AS persen')
+            ->groupBy('label')
+            ->get();
+
+        $out = [];
+
+        foreach ($rows as $r) {
+            $persen = $r->persen === null ? null : round((float) $r->persen, 2);
+            [, $nilai, $band] = $this->scoreBandFor($persen ?? 0.0);
+
+            $out[] = [
+                'label' => trim((string) $r->label),
+                'persen' => $persen,
+                'nilai' => $persen === null ? null : $nilai,
+                'nilai_band' => $persen === null ? null : $band,
+                'memenuhi_target' => $persen !== null && $persen >= self::TARGET_PERCENT,
+            ];
+        }
+
+        // Terendah di atas: yang perlu perhatian lebih dulu terlihat.
+        usort($out, static fn (array $a, array $b): int => ($a['persen'] ?? 101.0) <=> ($b['persen'] ?? 101.0));
+
+        return $out;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function tandaiBulan(array $rows, int $bulan): array
+    {
+        return array_map(static function (array $row) use ($bulan): array {
+            $row['ini'] = $row['nomor'] === $bulan;
+
+            return $row;
+        }, $rows);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function tandaiLabel(array $rows, string $label): array
+    {
+        return array_map(static function (array $row) use ($label): array {
+            $row['ini'] = $row['label'] === $label;
+
+            return $row;
+        }, $rows);
+    }
+
+    /**
+     * Karyawan di balik baris ini, dari tabel rincian. null bila kumpulan data
+     * ini memang tidak punya tabel rincian (subcon).
+     *
+     * SETAHUN PENUH, BUKAN BULAN YANG DIKLIK. Tabel rincian tidak punya kolom
+     * bulan, jadi penyaringan ke bulan mustahil. Menyajikannya seolah tersaring
+     * akan membuat modal berbohong; yang dilakukan justru menandainya dengan
+     * 'setahun' => true dan mengirim daftar tahun yang tercakup, supaya modal
+     * bisa mengatakannya.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function rincianKaryawan(string $dataset, string $site, string $mitra): ?array
+    {
+        $tabel = self::DATASETS[$dataset]['detail'];
+
+        if ($tabel === null || ! Schema::hasTable($tabel)) {
+            return null;
+        }
+
+        $kolom = $this->kolomBulanan($dataset);
+
+        $dasar = fn (): Builder => DB::table($tabel)
+            ->where($kolom['site'], $site)
+            ->where($kolom['mitra'], $mitra);
+
+        $cacah = $dasar()
+            ->selectRaw('COUNT(*) AS total, SUM(' . $kolom['persen'] . ' > 0) AS fit')
+            ->first();
+
+        $total = (int) ($cacah->total ?? 0);
+        $fit = (int) ($cacah->fit ?? 0);
+        $persen = $total > 0 ? round($fit / $total * 100, 2) : null;
+        [, $nilai, $band] = $this->scoreBandFor($persen ?? 0.0);
+
+        $baris = $dasar()
+            ->select($this->selectColumns($dataset))
+            ->orderBy($kolom['persen'])
+            ->orderBy(self::COL_NAMA)
+            ->limit(self::BATAS_BARIS_MODAL + 1)
+            ->get()
+            ->map(fn (object $row): array => $this->present($row, $dataset))
+            ->all();
+
+        $terpotong = count($baris) > self::BATAS_BARIS_MODAL;
+
+        if ($terpotong) {
+            $baris = array_slice($baris, 0, self::BATAS_BARIS_MODAL);
+        }
+
+        return [
+            'tabel' => $tabel,
+            'setahun' => true,
+            'tahun' => $dasar()
+                ->distinct()
+                ->orderBy($kolom['tahun'])
+                ->pluck($kolom['tahun'])
+                ->map(static fn ($v): int => (int) $v)
+                ->all(),
+            'total' => $total,
+            'fit' => $fit,
+            'unfit' => $total - $fit,
+            'persen' => $persen,
+            'nilai' => $persen === null ? null : $nilai,
+            'nilai_band' => $persen === null ? null : $band,
+            'hasil' => $this->sebaranHasil($dasar(), $kolom['persen'], $total),
+            'baris' => $baris,
+            'terpotong' => $terpotong,
+            'batas' => self::BATAS_BARIS_MODAL,
+        ];
+    }
+
+    /**
+     * Sebaran hasil_mcu_fin untuk baris ini. Fit/tidaknya diturunkan dari
+     * persentase, bukan dari teks hasilnya, persis seperti present():
+     * "fit with note with follow up" tetap terhitung Fit.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function sebaranHasil(Builder $query, string $kolomPersen, int $total): array
+    {
+        return $query
+            ->selectRaw(
+                "COALESCE(NULLIF(TRIM(" . self::COL_HASIL . "), ''), '(Tidak Diisi)') AS label, "
+                . 'COUNT(*) AS jumlah, '
+                . 'SUM(' . $kolomPersen . ' > 0) AS fit'
+            )
+            ->groupBy('label')
+            ->orderByDesc('jumlah')
+            ->get()
+            ->map(static fn (object $r): array => [
+                'label' => (string) $r->label,
+                'jumlah' => (int) $r->jumlah,
+                'fit' => (int) $r->fit > 0,
+                'percent' => $total > 0 ? round((int) $r->jumlah / $total * 100, 2) : 0.0,
+            ])
+            ->all();
+    }
+
+    /**
+     * Dua angka yang sama-sama benar tetapi berbeda ukurannya, beserta
+     * sebabnya. Dikirim terpisah supaya modal tidak boleh menaruh keduanya
+     * berdampingan tanpa keterangan; lihat docblock detailBulan().
+     *
+     * @param  array<string, mixed>  $baris
+     * @param  array<string, mixed>|null  $rincian
+     * @return array<string, mixed>|null
+     */
+    private function selisihUkuran(array $baris, ?array $rincian): ?array
+    {
+        if ($rincian === null || $rincian['persen'] === null || $baris['persen'] === null) {
+            return null;
+        }
+
+        $delta = round($rincian['persen'] - $baris['persen'], 2);
+
+        return [
+            'bulanan' => $baris['persen'],
+            'bulan_terisi' => $baris['bulan_terisi'],
+            'rincian' => $rincian['persen'],
+            'karyawan' => $rincian['total'],
+            'delta' => $delta,
+            // Di bawah satu poin keduanya praktis sama; menerangkan selisih
+            // sebesar itu justru membingungkan.
+            'besar' => abs($delta) >= 1.0,
+        ];
+    }
+
+    /**
+     * Kalimat kejujuran yang bergantung pada data, dikirim ke modal supaya
+     * tidak ada angka yang berdiri tanpa keterangan.
+     *
+     * @param  array<string, mixed>  $sel
+     * @param  array<string, mixed>|null  $rincian
+     * @return array<int, string>
+     */
+    private function catatanModal(string $dataset, array $sel, ?array $rincian): array
+    {
+        $out = [];
+
+        if ($sel['baris'] === 0) {
+            $out[] = 'Kombinasi ini tidak punya baris di ' . $this->table($dataset, 'summary')
+                . ' untuk bulan tersebut.';
+        }
+
+        // Penyebutnya memang tidak tersimpan; lebih baik dikatakan daripada
+        // pembaca mengira angkanya bisa ditelusuri ke jumlah orang.
+        $out[] = 'Tabel ' . $this->table($dataset, 'summary') . ' hanya menyimpan persentasenya, '
+            . 'bukan berapa karyawan yang diperiksa di bulan itu, jadi persentase sel tidak bisa '
+            . 'dipecah menjadi jumlah orang.';
+
+        if ($rincian === null) {
+            $out[] = 'Kumpulan data ' . self::DATASETS[$dataset]['label'] . ' belum punya tabel '
+                . 'rincian, jadi daftar karyawan di balik angka ini memang tidak tersedia — bukan '
+                . 'kosong karena filter.';
+
+            return $out;
+        }
+
+        $out[] = 'Daftar karyawan diambil dari ' . $rincian['tabel'] . ', yang tidak punya kolom '
+            . 'bulan. Isinya setahun penuh dan sama untuk bulan mana pun di baris ini.';
+
+        return $out;
     }
 
     // ======================================================================

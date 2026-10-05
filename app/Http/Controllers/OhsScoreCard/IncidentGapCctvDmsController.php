@@ -63,6 +63,9 @@ final class IncidentGapCctvDmsController extends Controller
     /** Oktober masih berjalan saat data ini diambil, sejalan halaman lain. */
     private const EXCLUDED_MONTHS = [10];
 
+    /** Pagar supaya modal tidak pernah mengirim ribuan baris sekaligus. */
+    private const BATAS_BARIS_MODAL = 500;
+
     private const DETAIL_FILTERABLE = [
         'site' => self::COL_SITE,
         'mitra' => self::COL_PERUSAHAAN,
@@ -356,7 +359,21 @@ final class IncidentGapCctvDmsController extends Controller
      */
     private function cacahDetail(Request $request, string $column): array
     {
-        $rows = $this->detailQueryFiltered($request)
+        return $this->pecahanLayer($this->detailQueryFiltered($request), $column);
+    }
+
+    /**
+     * Pecahan baris deviasi menurut satu kolom lapisan.
+     *
+     * Dipisah dari cacahDetail() supaya modal rincian sel bisa memakai SQL
+     * yang persis sama di atas lingkup yang lebih sempit; kalau rumusnya
+     * bercabang, panel modal dan panel halaman bisa diam-diam berbeda.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function pecahanLayer(Builder $query, string $column): array
+    {
+        $rows = $query
             ->selectRaw("COALESCE(NULLIF(TRIM($column), ''), '(Tidak Diisi)') AS label, COUNT(*) AS jumlah")
             ->groupBy('label')
             ->orderByDesc('jumlah')
@@ -429,6 +446,148 @@ final class IncidentGapCctvDmsController extends Controller
             . 'berbeda: satu insiden bisa punya lebih dari satu deviasi layer. Matriks dan kartu '
             . 'insiden memakai ' . self::TABEL_RINGKASAN . ', sedangkan panel klasifikasi, status, '
             . 'dan jenis alat memakai ' . self::TABEL_DETAIL . '.';
+    }
+
+    // ======================================================================
+    // Modal rincian satu sel matriks
+    // ======================================================================
+
+    /**
+     * Pecahan satu sel matriks: site x perusahaan x bulan.
+     *
+     * YANG DIBONGKAR DI SINI ADALAH LAPISANNYA, bukan sekadar daftar insiden.
+     * Sel cuma memberi satu angka — "ada 2 insiden di BMO 3 bulan Juli" —
+     * sementara pertanyaan yang sebenarnya adalah gap-nya di lapisan mana.
+     * Tabel detail menjawabnya lewat tiga sumbu yang isinya sudah diperiksa
+     * satu per satu, bukan ditebak dari namanya:
+     *
+     *   activity_layer1   2 nilai  : "7. CCTV" (22) vs "4. In Cabin Camera" (5)
+     *                               -> persis dua paruh nama parameter ini:
+     *                                  gap coverage CCTV vs gap pada DMS.
+     *   klasifikasi_layer 7 nilai  : tidak terpasang / tidak berfungsi /
+     *                               deviasi laporan / follow up tidak
+     *                               dilakukan / belum diwajibkan -> bentuk
+     *                               gapnya, sumbu paling informatif.
+     *   status_layer1     2 nilai  : NON CONFIRMITY (15) vs IMPROVEMENT (12)
+     *                               -> pelanggaran tegas vs usulan perbaikan.
+     *   keterangan_layer  27 nilai dari 27 baris: teks bebas, unik tiap baris.
+     *                               Bukan dimensi, jadi tempatnya di daftar
+     *                               baris, bukan di panel pecahan.
+     *
+     * UKURAN SELNYA CACAH INSIDEN, BUKAN PERSENTASE. Kolomnya
+     * incident_dengan_gap_cctv_dms dan tabel ringkasan tidak menyimpan
+     * penyebut apa pun — tidak ada cacah insiden seluruhnya, tidak ada cacah
+     * unit terpantau. Karena itu modal ini tidak menampilkan persentase
+     * capaian maupun band nilai: keduanya harus dikarang untuk bisa ada.
+     * Satu-satunya porsi yang ditampilkan adalah porsi antar-lapisan di dalam
+     * sel ini sendiri, yang penyebutnya memang ada (cacah baris deviasi).
+     *
+     * Insiden diambil dari tabel ringkasan dengan SUM yang sama persis seperti
+     * overview(), sedangkan pecahan lapisan dari tabel detail. Keduanya memang
+     * bisa berbeda — satu insiden boleh punya beberapa deviasi — dan selisih
+     * itu dikirim apa adanya lewat 'selisih' supaya modal menerangkannya,
+     * bukan menyembunyikannya.
+     */
+    public function detailBulan(Request $request): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $mitra = trim((string) $request->input('mitra', ''));
+
+        // monthHeadings() halaman ini mengirim 1-12, tapi kode tahun*100+bulan
+        // tetap diterima supaya pemanggil lain tidak perlu tahu bedanya.
+        $kode = (int) $request->input('month', 0);
+        $bulan = $kode > 9999 ? $kode % 100 : $kode;
+
+        if ($site === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        // Bulan yang dikecualikan ditolak terang-terangan. Kalau hanya ikut
+        // disaring seperti di overview(), hasilnya nol baris — dan nol di
+        // halaman ini berarti "tidak ada insiden", bukan "bulan ini tidak
+        // dihitung". Dua hal yang sangat berbeda.
+        if (in_array($bulan, self::EXCLUDED_MONTHS, true)) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => self::monthLabel($bulan) . ' belum ikut dihitung pada parameter ini, '
+                    . 'jadi rinciannya tidak tersedia.',
+            ]);
+        }
+
+        $ejaan = $this->namaBulan($bulan);
+
+        /** Lingkup satu sel di tabel detail; dipanggil ulang agar tidak saling mencemari. */
+        $rincian = function () use ($site, $mitra, $ejaan): Builder {
+            $query = DB::table(self::TABEL_DETAIL)
+                ->where(self::COL_SITE, $site)
+                ->whereIn(self::COL_BULAN, $ejaan);
+
+            // Perusahaan kosong berarti seluruh perusahaan di site itu; matriks
+            // selalu mengirimnya, tapi pemanggil lain belum tentu.
+            if ($mitra !== '') {
+                $query->where(self::COL_PERUSAHAAN, $mitra);
+            }
+
+            return $query;
+        };
+
+        $ringkasan = DB::table(self::TABEL_RINGKASAN)
+            ->where(self::COL_SITE, $site)
+            ->whereIn(self::COL_BULAN, $ejaan);
+
+        if ($mitra !== '') {
+            $ringkasan->where(self::COL_PERUSAHAAN, $mitra);
+        }
+
+        $sel = (clone $ringkasan)
+            ->selectRaw('COUNT(*) AS baris, COALESCE(SUM(' . self::COL_JUMLAH . '), 0) AS insiden')
+            ->first();
+
+        $baris = $rincian()
+            ->select($this->detailColumns())
+            ->orderBy(self::COL_ACTIVITY)
+            ->orderBy(self::COL_KLASIFIKASI)
+            ->orderBy('id')
+            ->limit(self::BATAS_BARIS_MODAL + 1)
+            ->get()
+            ->map(fn (object $row): array => $this->present($row))
+            ->all();
+
+        $terpotong = count($baris) > self::BATAS_BARIS_MODAL;
+
+        if ($terpotong) {
+            $baris = array_slice($baris, 0, self::BATAS_BARIS_MODAL);
+        }
+
+        $deviasi = $rincian()->count();
+        $insiden = (int) ($sel->insiden ?? 0);
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'site' => $site,
+                'mitra' => $mitra,
+                'bulan' => self::monthLabel($bulan),
+            ],
+            'ringkas' => [
+                'insiden' => $insiden,
+                'deviasi' => $deviasi,
+                // Selisih dikirim siap pakai supaya sisi JS tidak perlu
+                // menyimpulkan sendiri arah ketidakcocokannya.
+                'selisih' => $deviasi - $insiden,
+                'baris_ringkasan' => (int) ($sel->baris ?? 0),
+                'rata_deviasi' => $insiden > 0 ? round($deviasi / $insiden, 2) : null,
+            ],
+            'per_alat' => $this->pecahanLayer($rincian(), self::COL_ACTIVITY),
+            'per_klasifikasi' => $this->pecahanLayer($rincian(), self::COL_KLASIFIKASI),
+            'per_status' => $this->pecahanLayer($rincian(), self::COL_STATUS),
+            'terpotong' => $terpotong,
+            'batas' => self::BATAS_BARIS_MODAL,
+            'baris' => $baris,
+        ]);
     }
 
     // ======================================================================

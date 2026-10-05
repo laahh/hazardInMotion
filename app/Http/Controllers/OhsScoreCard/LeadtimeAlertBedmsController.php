@@ -480,6 +480,286 @@ final class LeadtimeAlertBedmsController extends Controller
     }
 
     // ======================================================================
+    // Rincian satu sel matriks
+    // ======================================================================
+
+    /**
+     * Rincian satu sel "Capaian per Bulan": satu site x perusahaan x bulan.
+     *
+     * SUMBERNYA HANYA MENYIMPAN PERSENTASE. Tabel rekapnya cuma berisi site,
+     * perusahaan, bulan, dan satu kolom persen. Pembilang dan penyebutnya --
+     * jumlah alert dan berapa di antaranya yang evidence-nya masuk di bawah
+     * AMBANG_MENIT -- memang dihitung oleh `ohs:isi-leadtime-alert`, tetapi
+     * tidak ikut ditulis ke tabel rekap. Jadi modal ini TIDAK bisa menguraikan
+     * sel menjadi "sekian dari sekian", dan tidak ada tabel rincian lain yang
+     * bisa menggantikannya tanpa memindai bcsid.dms_alert di Postgres --
+     * persis beban yang dihindari dengan adanya tabel rekap ini. Yang
+     * disajikan konteks di sekeliling sel, seluruhnya dari tabel yang sama
+     * dengan matriksnya, sehingga angkanya tidak mungkin bertentangan.
+     *
+     * TIGA SUMBU, karena satu perusahaan di sini bekerja di 2-5 site sekaligus
+     * (PT PAMA di lima di antaranya):
+     *
+     *   riwayat      site x perusahaan sepanjang bulan -> kronis atau sesaat?
+     *   sebulan      site x bulan di seluruh perusahaan -> satu mitra atau se-site?
+     *   lintas_site  perusahaan x bulan di seluruh site -> mitranya atau sitenya?
+     *
+     * Tanpa sumbu ketiga, pembaca tidak bisa memisahkan "perusahaan ini memang
+     * lambat" dari "server di site ini yang bermasalah".
+     *
+     * NAMA KOLOM TETAP LEWAT kolom(), tidak ditulis mati -- lihat catatan NAMA
+     * KOLOM di docblock kelas. Begitu pula skalaPersen(), supaya sel dan modal
+     * memakai satuan yang sama.
+     *
+     * PERINGKAT dihitung di antara seluruh sel bulan itu, tertinggi di urutan
+     * pertama karena di parameter ini makin tinggi makin baik.
+     */
+    public function detailBulan(Request $request): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $mitra = trim((string) $request->input('mitra', ''));
+
+        // monthHeadings() halaman ini mengirim nomor 1-12, tetapi kode
+        // tahun*100+bulan tetap diterima supaya penanda sel yang lebih
+        // lengkap tidak langsung ditolak. Tahunnya sendiri dibuang: tabel
+        // rekap ini tidak menyimpan tahun sama sekali, jadi menyaringnya akan
+        // menjanjikan ketelitian yang tidak dimiliki sumbernya.
+        $kode = (int) $request->input('month', 0);
+        $bulan = $kode > 9999 ? $kode % 100 : $kode;
+
+        if ($site === '' || $mitra === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site, perusahaan, dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        if (in_array($bulan, self::EXCLUDED_MONTHS, true)) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => self::monthLabel($bulan) . ' tidak ikut dihitung di parameter ini, '
+                    . 'jadi tidak ada sel yang bisa dirinci.',
+            ]);
+        }
+
+        $nilaiBulan = $this->namaBulan($bulan);
+        $skala = $this->skalaPersen();
+
+        // AVG dipakai persis seperti di overview(), bukan nilai baris tunggal,
+        // supaya sel dan modal tidak bisa berbeda kalau suatu saat sumbernya
+        // memuat lebih dari satu baris per kunci.
+        $persen = DB::table(self::TABLE)
+            ->where($this->kolom()['site'], $site)
+            ->where($this->kolom()['mitra'], $mitra)
+            ->whereIn($this->kolom()['bulan'], $nilaiBulan)
+            ->avg($this->kolom()['persen']);
+
+        $persen = $persen === null ? null : round((float) $persen * $skala, 2);
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'site' => $site,
+                'mitra' => $mitra,
+                'bulan' => self::monthLabel($bulan),
+            ],
+            'target' => self::TARGET_PERCENT,
+            'ambang_menit' => self::AMBANG_MENIT,
+            'sel' => $this->bentukNilai($persen),
+            'peringkat' => $this->peringkatBulan($nilaiBulan, $site, $mitra),
+            'riwayat' => $this->riwayatSelama($site, $mitra),
+            'sebulan' => $this->sebulanDiSite($site, $nilaiBulan, $mitra),
+            'lintas_site' => $this->lintasSite($mitra, $nilaiBulan, $site),
+        ]);
+    }
+
+    /**
+     * Satu persentase lengkap dengan nilai, band, dan selisihnya ke target.
+     *
+     * @return array<string, mixed>
+     */
+    private function bentukNilai(?float $persen): array
+    {
+        if ($persen === null) {
+            return [
+                'persen' => null, 'nilai' => null, 'nilai_band' => null,
+                'memenuhi_target' => false, 'selisih' => null,
+            ];
+        }
+
+        [, $nilai, $band] = $this->scoreBandFor($persen);
+
+        return [
+            'persen' => $persen,
+            'nilai' => $nilai,
+            'nilai_band' => $band,
+            'memenuhi_target' => $persen >= self::TARGET_PERCENT,
+            'selisih' => round($persen - self::TARGET_PERCENT, 2),
+        ];
+    }
+
+    /**
+     * Urutan sel ini di antara seluruh sel pada bulan yang sama, tertinggi
+     * lebih dulu. Sel tanpa persentase tidak ikut diurutkan maupun dihitung.
+     *
+     * @param  array<int, string>  $nilaiBulan
+     * @return array<string, mixed>
+     */
+    private function peringkatBulan(array $nilaiBulan, string $site, string $mitra): array
+    {
+        $skala = $this->skalaPersen();
+
+        $rows = DB::table(self::TABLE)
+            ->whereIn($this->kolom()['bulan'], $nilaiBulan)
+            ->whereNotNull($this->kolom()['persen'])
+            ->selectRaw(
+                '`' . $this->kolom()['site'] . '` AS site, '
+                . '`' . $this->kolom()['mitra'] . '` AS mitra, '
+                . 'AVG(`' . $this->kolom()['persen'] . '`) AS persen'
+            )
+            ->groupBy('site', 'mitra')
+            ->get()
+            ->map(static fn (object $r): array => [
+                'site' => trim((string) $r->site),
+                'mitra' => trim((string) $r->mitra),
+                'persen' => round((float) $r->persen * $skala, 2),
+            ])
+            ->all();
+
+        usort($rows, static fn (array $a, array $b): int => $b['persen'] <=> $a['persen']);
+
+        $posisi = null;
+
+        foreach ($rows as $i => $r) {
+            if ($r['site'] === $site && $r['mitra'] === $mitra) {
+                $posisi = $i + 1;
+                break;
+            }
+        }
+
+        $semua = array_column($rows, 'persen');
+
+        return [
+            'posisi' => $posisi,
+            'dari' => count($rows),
+            'rata' => $semua === [] ? null : round(array_sum($semua) / count($semua), 2),
+        ];
+    }
+
+    /**
+     * Site x perusahaan yang sama sepanjang bulan: kronis atau sesaat?
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function riwayatSelama(string $site, string $mitra): array
+    {
+        $skala = $this->skalaPersen();
+
+        $rows = DB::table(self::TABLE)
+            ->where($this->kolom()['site'], $site)
+            ->where($this->kolom()['mitra'], $mitra)
+            ->selectRaw(
+                '`' . $this->kolom()['bulan'] . '` AS bulan, '
+                . 'AVG(`' . $this->kolom()['persen'] . '`) AS persen'
+            )
+            ->groupBy('bulan')
+            ->get();
+
+        $out = [];
+
+        foreach ($rows as $r) {
+            $nomor = $this->nomorBulan((string) $r->bulan);
+
+            if ($nomor === 0 || in_array($nomor, self::EXCLUDED_MONTHS, true)) {
+                continue; // sejalan dengan overview(): bulan tak dikenal & Oktober tidak ikut
+            }
+
+            $out[] = [
+                'nomor' => $nomor,
+                'bulan' => self::monthLabel($nomor),
+                'persen' => $r->persen === null ? null : round((float) $r->persen * $skala, 2),
+            ];
+        }
+
+        usort($out, static fn (array $a, array $b): int => $a['nomor'] <=> $b['nomor']);
+
+        return $out;
+    }
+
+    /**
+     * Seluruh perusahaan di site ini pada bulan yang sama: lambatnya milik
+     * satu mitra atau seluruh site?
+     *
+     * @param  array<int, string>  $nilaiBulan
+     * @return array<int, array<string, mixed>>
+     */
+    private function sebulanDiSite(string $site, array $nilaiBulan, string $mitraTerpilih): array
+    {
+        return $this->ringkasKolom(
+            DB::table(self::TABLE)
+                ->where($this->kolom()['site'], $site)
+                ->whereIn($this->kolom()['bulan'], $nilaiBulan),
+            $this->kolom()['mitra'],
+            'mitra',
+            $mitraTerpilih
+        );
+    }
+
+    /**
+     * Perusahaan yang sama di seluruh site pada bulan yang sama.
+     *
+     * Panel ini masuk akal di sini karena tiap perusahaan di tabel ini bekerja
+     * di beberapa site sekaligus; kalau evidence-nya telat di semua site,
+     * yang bermasalah perangkat atau jaringan mitranya, bukan sitenya.
+     *
+     * @param  array<int, string>  $nilaiBulan
+     * @return array<int, array<string, mixed>>
+     */
+    private function lintasSite(string $mitra, array $nilaiBulan, string $siteTerpilih): array
+    {
+        return $this->ringkasKolom(
+            DB::table(self::TABLE)
+                ->where($this->kolom()['mitra'], $mitra)
+                ->whereIn($this->kolom()['bulan'], $nilaiBulan),
+            $this->kolom()['site'],
+            'site',
+            $siteTerpilih
+        );
+    }
+
+    /**
+     * Rata-rata persentase per nilai satu kolom, tertinggi di atas, dengan
+     * penanda pada baris yang sedang dibuka.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function ringkasKolom(Builder $query, string $kolom, string $kunci, string $terpilih): array
+    {
+        $skala = $this->skalaPersen();
+
+        $out = $query
+            ->selectRaw(
+                '`' . $kolom . '` AS label, '
+                . 'AVG(`' . $this->kolom()['persen'] . '`) AS persen'
+            )
+            ->groupBy('label')
+            ->get()
+            ->map(static fn (object $r): array => [
+                'label' => trim((string) $r->label),
+                'persen' => $r->persen === null ? null : round((float) $r->persen * $skala, 2),
+            ])
+            ->all();
+
+        usort($out, static fn (array $a, array $b): int => ($b['persen'] ?? -1.0) <=> ($a['persen'] ?? -1.0));
+
+        return array_map(static fn (array $r): array => [
+            $kunci => $r['label'],
+            'persen' => $r['persen'],
+            'ini' => $r['label'] === $terpilih,
+        ], $out);
+    }
+
+    // ======================================================================
     // Tab Data
     // ======================================================================
 

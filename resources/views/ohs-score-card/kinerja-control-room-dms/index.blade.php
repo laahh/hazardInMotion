@@ -63,6 +63,18 @@
     position: relative; z-index: 1;
   }
   .kcr-matrix .kcr-empty { background: #F1F5F9; color: #CBD5E1 !important; border-radius: 6px; }
+
+  /* Hanya sel berisi angka yang bisa dibuka rinciannya; sel strip memang tidak
+     punya apa-apa untuk diurai. */
+  .kcr-matrix .kcr-cell--klik { cursor: pointer; }
+  .kcr-matrix .kcr-cell--klik:focus-visible {
+    outline: 2px solid #487FFF; outline-offset: 1px; position: relative; z-index: 2;
+  }
+
+  /* Tabel konteks di dalam modal digulir sendiri agar modalnya tidak memanjang. */
+  .kcr-modal-scroll { max-height: 32vh; overflow: auto; }
+  .kcr-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
+
   /* Gradasi persentase: angka besar hijau, karena di sini tinggi berarti baik. */
   .kcr-t1 { background: #E0484A; }
   .kcr-t2 { background: #F08C2E; }
@@ -124,10 +136,251 @@
     @include('ohs-score-card.kinerja-control-room-dms.partials._data')
   </div>
 </div>
+
+{{-- Modal rincian satu sel. Ditaruh di luar tab pane supaya tidak ikut
+     tersembunyi saat berpindah tab. --}}
+<div class="modal fade" id="kcr-detail-modal" tabindex="-1" aria-labelledby="kcr-detail-judul" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content radius-12">
+      <div class="modal-header border-bottom py-16 px-24">
+        <div>
+          <h6 class="modal-title text-lg fw-semibold mb-0" id="kcr-detail-judul">Rincian Bulan</h6>
+          <span class="text-sm text-secondary-light" data-kcrm="subjudul"></span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body p-24"><div data-kcrm="isi"></div></div>
+      <div class="modal-footer border-top py-12 px-24">
+        <span class="text-sm text-secondary-light me-auto" data-kcrm="kaki"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary radius-8" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('page-scripts')
 <script>
+// ---- Modal rincian satu sel matriks -----------------------------------------
+var kcrModalDetail = (function () {
+    'use strict';
+
+    var el = document.getElementById('kcr-detail-modal');
+    if (!el) { return null; }
+
+    var bagian = function (n) { return el.querySelector('[data-kcrm="' + n + '"]'); };
+    var permintaan = 0;
+
+    function esc(v) {
+        return String(v === null || v === undefined ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function num(v) { return Number(v || 0).toLocaleString('id-ID'); }
+
+    function pct(v) {
+        return v === null || v === undefined
+            ? '–'
+            : Number(v).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+    }
+
+    function ubin(label, nilai, catatan, kelas) {
+        return '<div class="col-xxl-3 col-md-6">'
+            + '<div class="border input-form-light radius-8 p-16 h-100">'
+            +   '<span class="text-sm text-secondary-light d-block">' + esc(label) + '</span>'
+            +   '<h6 class="fw-semibold mt-8 mb-4 ' + (kelas || '') + '">' + nilai + '</h6>'
+            +   '<span class="text-xs text-secondary-light">' + esc(catatan) + '</span>'
+            + '</div></div>';
+    }
+
+    /**
+     * Kolom pembanding sebuah baris panel. Baris tanpa persentase TIDAK diberi
+     * batang sama sekali: batang sepanjang nol akan terbaca sebagai capaian 0%,
+     * padahal artinya justru tidak ada angkanya. Keterangannya pun dibedakan,
+     * karena "barisnya ada tapi kosong" bukan hal yang sama dengan "tidak ada
+     * barisnya".
+     */
+    function banding(baris, target) {
+        if (baris.persen === null || baris.persen === undefined) {
+            return '<span class="text-xs text-secondary-light fst-italic">'
+                + (baris.ada_baris ? 'persentase belum diisi' : 'tidak ada baris di bulan ini')
+                + '</span>';
+        }
+
+        var p = Math.min(100, baris.persen);
+        var warna = baris.persen >= target ? 'bg-success-main'
+            : baris.persen >= target - 10 ? 'bg-warning-main' : 'bg-danger-main';
+
+        return '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px">'
+            + '<div class="progress-bar ' + warna + ' rounded-pill" role="progressbar"'
+            + ' style="width:' + p + '%" aria-valuenow="' + Math.round(p) + '"'
+            + ' aria-valuemin="0" aria-valuemax="100"></div></div>';
+    }
+
+    /** Capaian satu baris panel, dengan strip yang tidak bisa dikira nol. */
+    function capaianSel(baris) {
+        return baris.persen === null || baris.persen === undefined
+            ? '<span class="text-secondary-light">–</span>'
+            : pct(baris.persen);
+    }
+
+    function render(j) {
+        var c = j.sel;
+        var target = j.target;
+        var r = j.peringkat;
+        var k = j.kelengkapan;
+        var kosong = c.persen === null;
+        var capai = kosong ? '' : (c.memenuhi_target ? 'text-success-main' : 'text-danger-main');
+
+        // Kartunya BUKAN "sekian dari sekian" seperti halaman Coverage:
+        // lead_kinerja_control_room_dms cuma menyimpan persentase, tanpa
+        // pembilang maupun penyebut, jadi selnya memang tidak bisa diurai.
+        var selisih = c.selisih === null ? '–'
+            : (c.selisih >= 0 ? '+' : '') + Number(c.selisih).toLocaleString('id-ID',
+                { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' poin';
+
+        var isi = '<div class="row gy-3 mb-20">'
+            + ubin('Capaian', kosong ? 'Tidak ada data' : pct(c.persen),
+                   kosong
+                       ? (c.ada_baris
+                           ? 'barisnya ada, persentasenya belum diisi'
+                           : 'tidak ada baris untuk bulan ini')
+                       : 'kinerja pengawas control room DMS',
+                   capai)
+            + ubin('Nilai', c.nilai === null ? '–' : c.nilai,
+                   c.nilai_band === null ? 'tidak dinilai tanpa persentase' : 'band ' + c.nilai_band)
+            + ubin('Selisih ke Target', selisih,
+                   kosong ? 'target ' + target + '% · belum bisa dibandingkan' : 'target ' + target + '%',
+                   capai)
+            + ubin('Peringkat Bulan Ini',
+                   r.posisi === null ? '–' : 'ke-' + r.posisi,
+                   r.posisi === null
+                       ? 'sel tanpa persentase tidak ikut diperingkat'
+                       : 'dari ' + r.dari + ' sel berangka · rata-rata ' + pct(r.rata))
+            + '</div>';
+
+        // Penyebut peringkat sengaja diterangkan: 22 pasangan site x
+        // perusahaan tidak semuanya punya angka tiap bulan, dan tanpa kalimat
+        // ini "dari sekian sel" mudah dikira seluruh pasangan.
+        isi += '<p class="text-sm text-secondary-light mb-20">Di ' + esc(j.judul.bulan) + ', '
+            + '<span class="fw-semibold">' + num(k.berangka) + '</span> dari ' + num(k.pasangan)
+            + ' pasangan site &amp; perusahaan punya persentase'
+            + (k.tanpa_persen ? ' · ' + num(k.tanpa_persen) + ' ada barisnya tetapi kosong' : '')
+            + (k.tanpa_baris ? ' · ' + num(k.tanpa_baris) + ' tidak ada barisnya' : '')
+            + '.</p>';
+
+        isi += '<div class="row gy-4 mb-20">'
+            +   '<div class="col-xxl-6">'
+            +     '<h6 class="text-md fw-semibold mb-4">Riwayat ' + esc(j.judul.mitra)
+            +       ' di ' + esc(j.judul.site) + '</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Apakah bulan ini kebetulan buruk, atau memang begitu terus</span>'
+            +     tabelDaftar(j.riwayat, 'bulan', 'Bulan', target, j.judul.bulan)
+            +   '</div>'
+            +   '<div class="col-xxl-6">'
+            +     '<h6 class="text-md fw-semibold mb-4">Seluruh perusahaan di ' + esc(j.judul.site)
+            +       ' · ' + esc(j.judul.bulan) + '</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Apakah masalahnya milik satu perusahaan atau menyeluruh</span>'
+            +     tabelDaftar(j.sebulan, 'mitra', 'Perusahaan', target, null)
+            +   '</div>'
+            + '</div>';
+
+        // Panel ketiga: tiap perusahaan di parameter ini bekerja di 2 sampai 5
+        // site, jadi capaiannya di site lain memisahkan "perusahaannya lemah"
+        // dari "sitenya yang bermasalah". Disembunyikan kalau memang cuma satu
+        // site, karena tidak ada yang bisa dibandingkan.
+        if (j.lintas_site && j.lintas_site.length > 1) {
+            isi += '<h6 class="text-md fw-semibold mb-4">' + esc(j.judul.mitra)
+                +    ' di site lain · ' + esc(j.judul.bulan) + '</h6>'
+                + '<span class="text-xs text-secondary-light d-block mb-12">'
+                +   'Apakah perusahaan ini lemah di mana-mana, atau hanya di site ini</span>'
+                + tabelDaftar(j.lintas_site, 'site', 'Site', target, null);
+        }
+
+        bagian('isi').innerHTML = isi;
+        bagian('kaki').textContent = 'Sumber parameter ini hanya menyimpan persentase — tidak ada '
+            + 'pembilang dan penyebut untuk diurai — jadi yang ditampilkan konteks di sekeliling sel, '
+            + 'semuanya dari tabel yang sama dengan matriks. Strip berarti tidak ada datanya, bukan nol.';
+    }
+
+    /**
+     * Satu bentuk tabel untuk ketiga panel. Kolom pertamanya berganti nama
+     * mengikuti sumbu yang sedang dibandingkan, dan baris tanpa persentase
+     * tetap ditulis supaya pembanding yang kosong tidak lenyap diam-diam.
+     */
+    function tabelDaftar(baris, kunci, judulKolom, target, sorotLabel) {
+        if (!baris || !baris.length) {
+            return '<div class="text-center text-secondary-light py-24">Tidak ada pembanding.</div>';
+        }
+
+        return '<div class="table-responsive kcr-modal-scroll">'
+            + '<table class="table bordered-table sm-table mb-0"><thead><tr>'
+            +   '<th>' + esc(judulKolom) + '</th><th class="text-end">Capaian</th>'
+            +   '<th style="width:40%">&nbsp;</th>'
+            + '</tr></thead><tbody>'
+            + baris.map(function (b) {
+                var ini = b.ini === true || (sorotLabel !== null && b[kunci] === sorotLabel);
+                return '<tr' + (ini ? ' class="bg-primary-50"' : '') + '>'
+                    + '<td class="text-sm' + (ini ? ' fw-semibold' : '') + '">' + esc(b[kunci])
+                    +   (ini ? ' <span class="text-xs text-primary-600">(sel ini)</span>' : '') + '</td>'
+                    + '<td class="text-end' + (ini ? ' fw-semibold' : '') + '">' + capaianSel(b) + '</td>'
+                    + '<td>' + banding(b, target) + '</td>'
+                    + '</tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    function buka(url, koordinat) {
+        // Nomor permintaan menjaga agar jawaban yang datang terlambat untuk sel
+        // yang sudah tidak dibuka lagi tidak menimpa isi modal.
+        var ini = ++permintaan;
+
+        el.querySelector('#kcr-detail-judul').textContent =
+            'Rincian ' + koordinat.bulan + ' · ' + koordinat.site;
+        bagian('subjudul').textContent = koordinat.mitra;
+        bagian('kaki').textContent = '';
+        bagian('isi').innerHTML = '<div class="text-center text-secondary-light py-40">'
+            + '<div class="spinner-border spinner-border-sm text-primary-600 me-2" role="status"></div>'
+            + 'Memuat rincian…</div>';
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        }
+
+        var q = new URLSearchParams({
+            site: koordinat.site, mitra: koordinat.mitra, month: koordinat.month
+        });
+
+        fetch(url + '?' + q.toString(), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) {
+                if (!res.ok) { throw new Error('HTTP ' + res.status); }
+                return res.json();
+            })
+            .then(function (j) {
+                if (ini !== permintaan) { return; }
+                if (!j.ok) {
+                    bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                        + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                        + esc(j.pesan || 'Rincian tidak bisa dimuat.') + '</div>';
+                    return;
+                }
+                render(j);
+            })
+            .catch(function (err) {
+                if (ini !== permintaan) { return; }
+                bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                    + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                    + 'Permintaan ke server gagal. ' + esc(err && err.message) + '</div>';
+            });
+    }
+
+    return { buka: buka };
+})();
+
 // ---- Tab Ringkasan ----------------------------------------------------------
 (function () {
     'use strict';
@@ -151,6 +404,34 @@
 
     function el(name) {
         return root.querySelector('[data-kcr="' + name + '"]');
+    }
+
+    // Delegasi di tabel, bukan di tiap sel: matriks digambar ulang setiap ganti
+    // filter atau mode, dan pendengar per sel akan ikut hilang.
+    var matrixEl = el('matrix');
+
+    if (kcrModalDetail && matrixEl && root.dataset.detailUrl) {
+        var bukaSel = function (td) {
+            kcrModalDetail.buka(root.dataset.detailUrl, {
+                site: td.dataset.site,
+                mitra: td.dataset.mitra,
+                month: td.dataset.month,
+                bulan: td.dataset.bulan
+            });
+        };
+
+        matrixEl.addEventListener('click', function (e) {
+            var td = e.target.closest('.kcr-cell--klik');
+            if (td && matrixEl.contains(td)) { bukaSel(td); }
+        });
+
+        matrixEl.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') { return; }
+            var td = e.target.closest('.kcr-cell--klik');
+            if (!td || !matrixEl.contains(td)) { return; }
+            e.preventDefault();
+            bukaSel(td);
+        });
     }
 
     function escapeHtml(value) {
@@ -448,7 +729,15 @@
                 var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
                     + fmtPct(cell.pct) + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')';
 
-                html += '<td class="kcr-cell ' + cellClass(cell) + '" title="' + escapeHtml(tip) + '">'
+                // Koordinat sel dibawa di atribut, bukan ditebak dari posisi
+                // DOM: urutan baris berubah mengikuti pengurutan per site.
+                html += '<td class="kcr-cell kcr-cell--klik ' + cellClass(cell) + '"'
+                    + ' role="button" tabindex="0"'
+                    + ' data-site="' + escapeHtml(row.site) + '"'
+                    + ' data-mitra="' + escapeHtml(row.mitra) + '"'
+                    + ' data-month="' + months[m].number + '"'
+                    + ' data-bulan="' + escapeHtml(months[m].label) + '"'
+                    + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
                     + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
                     + '</td>';
             });

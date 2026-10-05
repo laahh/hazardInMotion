@@ -63,6 +63,18 @@
     position: relative; z-index: 1;
   }
   .gte-matrix .gte-empty { background: #F1F5F9; color: #CBD5E1 !important; border-radius: 6px; }
+
+  /* Hanya sel berangka yang bisa dibuka rinciannya. */
+  .gte-matrix .gte-cell--klik { cursor: pointer; }
+  .gte-matrix .gte-cell--klik:focus-visible {
+    outline: 2px solid #487FFF; outline-offset: 1px; position: relative; z-index: 2;
+  }
+
+  /* Daftar insiden di dalam modal digulir sendiri. */
+  .gte-modal-scroll { max-height: 42vh; overflow: auto; }
+  .gte-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
+  /* Jeda lapor dibaca berpasangan dengan ambang, jadi angkanya disejajarkan. */
+  .gte-modal-scroll .gte-jeda { font-variant-numeric: tabular-nums; white-space: nowrap; }
   /* Gradasi persentase: angka besar hijau, karena di sini tinggi berarti baik. */
   .gte-t1 { background: #E0484A; }
   .gte-t2 { background: #F08C2E; }
@@ -133,10 +145,324 @@
     @include('ohs-score-card.golden-time-emergency.partials._data')
   </div>
 </div>
+
+{{-- Modal rincian satu sel matriks bulanan. Ditaruh di luar .gte-overview dan
+     di luar tab pane supaya tidak ikut tersembunyi saat tab berpindah. --}}
+<div class="modal fade" id="gte-detail-modal" tabindex="-1" aria-labelledby="gte-detail-judul" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content radius-12">
+      <div class="modal-header border-bottom py-16 px-24">
+        <div>
+          <h6 class="modal-title text-lg fw-semibold mb-0" id="gte-detail-judul">Rincian Bulan</h6>
+          <span class="text-sm text-secondary-light" data-gtem="subjudul"></span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body p-24"><div data-gtem="isi"></div></div>
+      <div class="modal-footer border-top py-12 px-24">
+        <span class="text-sm text-secondary-light me-auto" data-gtem="kaki"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary radius-8" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('page-scripts')
 <script>
+// ---- Modal rincian satu sel matriks bulanan ---------------------------------
+var gteModalDetail = (function () {
+    'use strict';
+
+    var el = document.getElementById('gte-detail-modal');
+    if (!el) { return null; }
+
+    var bagian = function (n) { return el.querySelector('[data-gtem="' + n + '"]'); };
+    var permintaan = 0;
+
+    function esc(v) {
+        return String(v === null || v === undefined ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function num(v) { return Number(v || 0).toLocaleString('id-ID'); }
+
+    function pct(v) {
+        return Number(v || 0).toLocaleString('id-ID', {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        }) + '%';
+    }
+
+    /** Menit mentah menjadi satuan yang enak dibaca, sejalan lamaTampil() di PHP. */
+    function lama(m) {
+        if (m === null || m === undefined) { return '–'; }
+        m = Number(m);
+        if (m < 60 && m > -60) { return num(m) + ' mnt'; }
+        if (Math.abs(m) < 1440) {
+            var j = m < 0 ? Math.ceil(m / 60) : Math.floor(m / 60);
+            return num(j) + ' jam ' + num(Math.abs(m % 60)) + ' mnt';
+        }
+        var h = m < 0 ? Math.ceil(m / 1440) : Math.floor(m / 1440);
+        return num(h) + ' hari ' + num(Math.floor(Math.abs(m % 1440) / 60)) + ' jam';
+    }
+
+    function ubin(label, nilai, catatan, kelas) {
+        return '<div class="col-md-3 col-sm-6">'
+            + '<div class="border input-form-light radius-8 p-16 h-100">'
+            +   '<span class="text-sm text-secondary-light d-block">' + esc(label) + '</span>'
+            +   '<h6 class="fw-semibold mt-8 mb-4 ' + (kelas || '') + '">' + nilai + '</h6>'
+            +   '<span class="text-xs text-secondary-light">' + catatan + '</span>'
+            + '</div></div>';
+    }
+
+    function peringatan(warna, html) {
+        return '<div class="alert bg-' + warna + '-focus text-' + warna + '-main border-'
+            + warna + '-main radius-8 px-20 py-12 mb-20 text-sm mt-0">' + html + '</div>';
+    }
+
+    /** Sebaran jeda di sel ini; batang hijau untuk kelompok yang tepat waktu. */
+    function daftarSebaran(list, bermenit) {
+        if (!list || !list.length) {
+            return '<div class="text-center text-secondary-light py-16">Tidak ada jeda yang tercatat.</div>';
+        }
+        return '<div class="table-responsive"><table class="table bordered-table sm-table mb-0"><tbody>'
+            + list.map(function (b) {
+                return '<tr><td class="text-sm">' + esc(b.label) + '</td>'
+                    + '<td class="text-end fw-semibold" style="width:64px">' + num(b.jumlah) + '</td>'
+                    + '<td style="width:40%"><div class="progress w-100 bg-primary-50 rounded-pill h-8-px">'
+                    + '<div class="progress-bar rounded-pill bg-' + (b.tepat_waktu ? 'success' : 'danger')
+                    + '-main" role="progressbar" style="width:'
+                    + (bermenit > 0 ? (b.jumlah / bermenit * 100) : 0) + '%"'
+                    + ' aria-valuenow="' + b.jumlah + '" aria-valuemin="0"'
+                    + ' aria-valuemax="' + bermenit + '"></div></div></td></tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    /** Baris ringkasan pembentuk sel, satu per lead investigasi. */
+    function daftarRingkasan(list) {
+        return '<div class="table-responsive"><table class="table bordered-table sm-table mb-0"><tbody>'
+            + list.map(function (b) {
+                return '<tr><td class="text-sm">' + esc(b.lead) + '</td>'
+                    + '<td class="text-end fw-semibold" style="width:90px">'
+                    + (b.persen === null ? '–' : pct(b.persen)) + '</td></tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    function render(j, koordinat) {
+        var r = j.ringkas;
+        var s = j.ringkasan;
+
+        // Heading matriks disingkat tiga huruf; begitu jawabannya tiba, judul
+        // diganti dengan nama bulan utuh dari server.
+        el.querySelector('#gte-detail-judul').textContent =
+            'Rincian ' + j.judul.bulan + ' · ' + j.judul.site;
+
+        // Sel bermode 'nilai' menampilkan angka 1-4; persentasenya tetap yang
+        // menerangkan sel itu, jadi kartu pertama selalu memakai persen dari
+        // tabel ringkasan dan mode cuma mengubah keterangannya.
+        var isi = '<div class="row gy-3 mb-20">'
+            + ubin('Dilaporkan dalam golden time',
+                   s.persen === null ? '–' : pct(s.persen),
+                   koordinat.ukuran === 'nilai'
+                       ? 'sel menampilkan Nilai ' + esc(koordinat.nilai || '–')
+                         + ' yang berasal dari persentase ini'
+                       : 'angka yang tampil di sel matriks')
+            + ubin('Insiden di sel ini', num(r.insiden),
+                   num(r.tepat) + ' tepat waktu · <span class="text-danger-main fw-semibold">'
+                   + num(r.telat) + ' melewati batas</span>')
+            + ubin('Jeda terlama', esc(lama(r.terlama)),
+                   r.bermenit > 0
+                       ? 'median ' + esc(lama(r.median)) + ' · tercepat ' + esc(lama(r.tercepat))
+                       : 'belum ada jeda yang tercatat',
+                   r.terlama !== null && r.terlama >= j.ambang ? 'text-danger-main' : 'text-success-main')
+            + ubin('Baris ringkasan', num(s.baris.length),
+                   s.baris.length > 1
+                       ? 'dipecah per lead investigasi; sel memakai rata-ratanya'
+                       : 'satu lead investigasi di sel ini')
+            + '</div>';
+
+        // Dua baris ringkasan yang berbeda angkanya membuat sel bernilai
+        // tengah-tengah, misalnya 100% dan 0% menjadi 50%. Tanpa diterangkan,
+        // angka itu akan terbaca seperti salah hitung.
+        if (s.baris.length > 1) {
+            isi += peringatan('info',
+                '<strong>Sel ini terbentuk dari ' + num(s.baris.length) + ' baris ringkasan.</strong> '
+                + 'Tabel ringkasan memecah baris per lead investigasi, sedangkan matriks tidak, '
+                + 'jadi angka di sel adalah rata-rata dari '
+                + s.baris.map(function (b) {
+                    return (b.persen === null ? '–' : pct(b.persen)) + ' (' + esc(b.lead) + ')';
+                }).join(' dan ') + '.');
+        }
+
+        // Dua persentase berdampingan yang berbeda akan dikira salah satunya
+        // keliru; kalau memang berbeda, sebabnya disebutkan di tempat.
+        if (s.persen !== null && r.persen_rincian !== null
+            && Math.abs(s.persen - r.persen_rincian) > 0.51) {
+            isi += peringatan('warning',
+                '<strong>Ringkasan dan rincian tidak sama.</strong> Tabel ringkasan menyebut '
+                + pct(s.persen) + ', sedangkan dihitung ulang dari ' + num(r.bermenit)
+                + ' insiden di bawah dengan ambang ' + num(j.ambang) + ' menit hasilnya '
+                + pct(r.persen_rincian) + '. Kartu di atas memakai angka ringkasan supaya sama '
+                + 'dengan sel yang baru diklik.');
+        }
+
+        if (r.negatif > 0) {
+            isi += peringatan('warning',
+                '<strong>' + num(r.negatif) + ' insiden bermenit negatif.</strong> '
+                + 'Jam kejadian dan jam pelaporannya melewati tengah malam tetapi dicatat sebagai '
+                + 'hari yang sama di sumbernya. Angkanya dibiarkan apa adanya dan tetap terhitung '
+                + 'tepat waktu, mengikuti pct_golden_time bawaan.');
+        }
+
+        if (!j.baris.length) {
+            bagian('isi').innerHTML = isi
+                + '<div class="text-center text-secondary-light py-24">'
+                + 'Tidak ada baris insiden di tabel rincian untuk kombinasi ini, '
+                + 'padahal tabel ringkasan punya angkanya.</div>';
+            bagian('kaki').textContent = '';
+            return;
+        }
+
+        isi += '<div class="row gy-4 mb-20">'
+            +   '<div class="col-xxl-' + (s.baris.length > 1 ? '7' : '12') + '">'
+            +     '<h6 class="text-md fw-semibold mb-4">Sebaran jeda pelaporan</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Jarak dari waktu kejadian ke waktu pelaporan; hijau berarti di bawah '
+            +       num(j.ambang) + ' menit</span>'
+            +     daftarSebaran(j.sebaran, r.bermenit)
+            +   '</div>';
+
+        if (s.baris.length > 1) {
+            isi += '<div class="col-xxl-5">'
+                +   '<h6 class="text-md fw-semibold mb-4">Lead investigasi</h6>'
+                +   '<span class="text-xs text-secondary-light d-block mb-12">'
+                +     'Baris ringkasan yang membentuk sel ini</span>'
+                +   daftarRingkasan(s.baris)
+                + '</div>';
+        }
+
+        isi += '</div>';
+
+        isi += '<h6 class="text-md fw-semibold mb-4">Daftar insiden</h6>'
+            + '<span class="text-xs text-secondary-light d-block mb-12">'
+            +   'Diurutkan dari jeda terlama; baris merah melewati batas golden time</span>'
+            + '<div class="row gy-2 gx-2 align-items-end mb-12">'
+            +   '<div class="col-sm-8"><input type="text" class="form-control form-control-sm radius-8"'
+            +     ' placeholder="Cari kronologi, waktu, lead investigasi…" data-gtem="cari"></div>'
+            +   '<div class="col-sm-4 text-sm-end"><span class="text-sm text-secondary-light"'
+            +     ' data-gtem="hitung"></span></div>'
+            + '</div>'
+            + '<div class="table-responsive gte-modal-scroll">'
+            +   '<table class="table bordered-table sm-table mb-0" data-gtem="tabel"><thead><tr>'
+            +     '<th>Waktu insiden</th><th>Waktu pelaporan</th><th class="text-end">Jeda lapor</th>'
+            +     '<th>Status</th><th>Lead investigasi</th><th>Kronologi</th>'
+            +   '</tr></thead><tbody>'
+            +   j.baris.map(function (b) {
+                    var warna = b.menit === null
+                        ? 'text-secondary-light'
+                        : (b.tepat_waktu ? 'text-success-main' : 'text-danger-main');
+
+                    return '<tr data-cari="'
+                        + esc((b.waktu_insiden + ' ' + b.waktu_lapor + ' ' + b.lead + ' '
+                               + b.status + ' ' + b.kronologi).toLowerCase()) + '">'
+                        + '<td class="text-xs">' + esc(b.waktu_insiden) + '</td>'
+                        + '<td class="text-xs">' + esc(b.waktu_lapor) + '</td>'
+                        + '<td class="text-end gte-jeda fw-semibold ' + warna + '">'
+                        +   esc(b.menit_label) + '</td>'
+                        + '<td><span class="text-xs ' + warna + '">' + esc(b.status) + '</span></td>'
+                        + '<td class="text-xs text-secondary-light">' + esc(b.lead) + '</td>'
+                        + '<td><span class="text-sm text-secondary-light gte-kronologi" title="'
+                        +   esc(b.kronologi) + '">' + esc(b.kronologi || '-') + '</span></td>'
+                        + '</tr>';
+                }).join('')
+            +   '</tbody></table></div>';
+
+        bagian('isi').innerHTML = isi;
+        bagian('kaki').textContent = j.terpotong
+            ? 'Menampilkan ' + num(j.batas) + ' insiden pertama dari ' + num(r.insiden) + '.'
+            : num(r.insiden) + ' insiden tercatat di sel ini, ' + num(r.telat)
+              + ' di antaranya melewati batas ' + num(j.ambang) + ' menit.';
+
+        pasangPencarian();
+    }
+
+    /** Pencarian dikerjakan di baris yang sudah ada, tanpa ke server lagi. */
+    function pasangPencarian() {
+        var cari = bagian('cari');
+        var hitung = bagian('hitung');
+        var semua = Array.prototype.slice.call(el.querySelectorAll('[data-gtem="tabel"] tbody tr'));
+
+        function terapkan() {
+            var teks = (cari.value || '').trim().toLowerCase();
+            var tampil = 0;
+
+            semua.forEach(function (tr) {
+                var cocok = !teks || tr.dataset.cari.indexOf(teks) !== -1;
+                tr.classList.toggle('d-none', !cocok);
+                if (cocok) { tampil++; }
+            });
+
+            hitung.textContent = tampil === semua.length
+                ? semua.length + ' insiden'
+                : tampil + ' dari ' + semua.length + ' insiden';
+        }
+
+        cari.addEventListener('input', terapkan);
+        terapkan();
+    }
+
+    function buka(url, koordinat) {
+        // Nomor permintaan menjaga agar jawaban yang datang terlambat untuk sel
+        // yang sudah tidak dibuka lagi tidak menimpa isi modal.
+        var ini = ++permintaan;
+
+        el.querySelector('#gte-detail-judul').textContent =
+            'Rincian ' + koordinat.bulan + ' · ' + koordinat.site;
+        bagian('subjudul').textContent = koordinat.mitra || 'Seluruh perusahaan di site ini';
+        bagian('kaki').textContent = '';
+        bagian('isi').innerHTML = '<div class="text-center text-secondary-light py-40">'
+            + '<div class="spinner-border spinner-border-sm text-primary-600 me-2" role="status"></div>'
+            + 'Memuat rincian…</div>';
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        }
+
+        var q = new URLSearchParams({
+            site: koordinat.site, mitra: koordinat.mitra || '', month: koordinat.month
+        });
+
+        fetch(url + '?' + q.toString(), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) {
+                if (!res.ok) { throw new Error('HTTP ' + res.status); }
+                return res.json();
+            })
+            .then(function (j) {
+                if (ini !== permintaan) { return; }
+                if (!j.ok) {
+                    bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                        + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                        + esc(j.pesan || 'Rincian tidak bisa dimuat.') + '</div>';
+                    return;
+                }
+                render(j, koordinat);
+            })
+            .catch(function (err) {
+                if (ini !== permintaan) { return; }
+                bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                    + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                    + 'Permintaan ke server gagal. ' + esc(err && err.message) + '</div>';
+            });
+    }
+
+    return { buka: buka };
+})();
+
 // ---- Tab Ringkasan ----------------------------------------------------------
 (function () {
     'use strict';
@@ -411,6 +737,38 @@
             : 'Persentase pelaporan dalam golden time, tiap perusahaan di tiap site';
     }
 
+    // Delegasi dipasang di elemen tabel, bukan di tiap sel: matriks digambar
+    // ulang setiap ganti filter atau mode tampilan, dan pendengar per sel akan
+    // ikut hilang bersama baris lamanya.
+    (function pasangKlikSel() {
+        var tabel = el('matrix');
+        if (!gteModalDetail || !tabel || !root.dataset.detailUrl) { return; }
+
+        var bukaSel = function (td) {
+            gteModalDetail.buka(root.dataset.detailUrl, {
+                site: td.dataset.site,
+                mitra: td.dataset.mitra,
+                month: td.dataset.month,
+                bulan: td.dataset.bulan,
+                ukuran: td.dataset.ukuran,
+                nilai: td.dataset.nilai
+            });
+        };
+
+        tabel.addEventListener('click', function (e) {
+            var td = e.target.closest('.gte-cell--klik');
+            if (td && tabel.contains(td)) { bukaSel(td); }
+        });
+
+        tabel.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') { return; }
+            var td = e.target.closest('.gte-cell--klik');
+            if (!td || !tabel.contains(td)) { return; }
+            e.preventDefault();
+            bukaSel(td);
+        });
+    })();
+
     function renderMatrix(months, rows) {
         var table = el('matrix');
         var thead = table.querySelector('thead');
@@ -484,9 +842,21 @@
                 var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
                     + fmtPct(cell.pct) + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')';
 
-                html += '<td class="gte-cell ' + cellClass(cell) + '" title="' + escapeHtml(tip) + '">'
-                    + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
-                    + '</td>';
+                var tampil = matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%';
+
+                // Koordinat sel dibawa di atribut, bukan ditebak dari posisi
+                // DOM: urutan baris berubah mengikuti pengelompokan per site,
+                // dan matriks digambar ulang setiap ganti filter atau mode.
+                html += '<td class="gte-cell gte-cell--klik ' + cellClass(cell) + '"'
+                    + ' role="button" tabindex="0"'
+                    + ' data-site="' + escapeHtml(row.site) + '"'
+                    + ' data-mitra="' + escapeHtml(row.mitra) + '"'
+                    + ' data-month="' + months[m].number + '"'
+                    + ' data-bulan="' + escapeHtml(months[m].label) + '"'
+                    + ' data-ukuran="' + escapeHtml(matrixMode) + '"'
+                    + ' data-nilai="' + escapeHtml(tampil) + '"'
+                    + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
+                    + tampil + '</td>';
             });
 
             return html + '</tr>';

@@ -57,6 +57,12 @@ final class PenggunaanHpController extends Controller
     /** Oktober masih berjalan saat data ini diambil, sejalan halaman lain. */
     private const EXCLUDED_MONTHS = [10];
 
+    /**
+     * Targetnya nol, bukan sebuah persentase: nama parameternya "tidak ada
+     * temuan penggunaan HP", jadi yang baik adalah tidak muncul sama sekali.
+     */
+    private const TARGET_TEMUAN = 0;
+
     private const FILTERABLE = [
         'site' => self::COL_SITE,
         'mitra' => self::COL_PERUSAHAAN,
@@ -369,6 +375,309 @@ final class PenggunaanHpController extends Controller
         return 'Tabel ' . self::TABLE . ' hanya memuat site, perusahaan, dan bulan yang kedapatan '
             . 'temuan. Sel bernilai 0 berarti tidak ada temuan pada bulan itu, bukan datanya belum '
             . 'masuk, dan perusahaan yang tidak pernah muncul sama sekali memang tidak punya temuan.';
+    }
+
+    // ======================================================================
+    // Rincian satu sel matriks
+    // ======================================================================
+
+    /**
+     * Rincian satu sel "Capaian per Bulan": site x perusahaan x bulan.
+     *
+     * TIDAK ADA KARTU CAPAIAN MAUPUN NILAI 1-4 DI SINI, dan itu disengaja.
+     * Yang diukur cacah temuan tanpa penyebut, jadi persentase dan band Nilai
+     * tidak bisa diturunkan dari sumber; memaksakannya sama saja mengarang
+     * angka. Penggantinya cacah itu sendiri terhadap target nol, ditambah
+     * konteks riwayat dan sebulan.
+     *
+     * SEL BERNILAI 0 ADALAH JAWABAN YANG SAH, BUKAN DATA YANG HILANG.
+     * buildMatrix() mengirim bulan tanpa baris sebagai 0 dan mewarnainya hijau,
+     * jadi rincian untuk sel itu pun harus berbunyi "tidak ada temuan di bulan
+     * ini" — hasil yang justru bagus — bukan panel kosong.
+     *
+     * Kedua panel sengaja dipadankan dengan sumbu matriksnya, supaya modal
+     * membaca persis seperti baris dan kolom yang diklik:
+     *   - riwayat memuat seluruh bulan yang tercakup data, bulan bersih ikut
+     *     dengan nilai 0;
+     *   - sebulan memuat semua perusahaan yang pernah kedapatan di site itu,
+     *     yang bersih pada bulan ini ikut dengan nilai 0.
+     */
+    public function detailBulan(Request $request): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $mitra = trim((string) $request->input('mitra', ''));
+
+        // monthHeadings() halaman ini mengirim nomor 1-12 polos karena bulan di
+        // sumber tidak bertahun ("M01"/"January"). Kode tahun*100+bulan tetap
+        // diterima supaya tautan dari halaman bertahun tidak patah.
+        $kode = (int) $request->input('month', 0);
+        $bulan = $kode > 9999 ? $kode % 100 : $kode;
+
+        if ($site === '' || $mitra === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site, perusahaan, dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        if (in_array($bulan, self::EXCLUDED_MONTHS, true)) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => self::monthLabel($bulan) . ' tidak ikut dihitung di parameter ini karena '
+                    . 'bulannya masih berjalan saat data diambil.',
+            ]);
+        }
+
+        $nilaiBulan = $this->namaBulan($bulan);
+        $sebulan = $this->sebulanDiSite($site, $nilaiBulan, $mitra);
+        $riwayat = $this->riwayatPasangan($site, $mitra, $this->sumbuBulan($bulan), $bulan);
+
+        // Angka sel diambil dari riwayat, bukan dari query terpisah: keduanya
+        // jadi satu agregasi yang sama persis dengan overview(), sehingga sel
+        // matriks dan isi modal tidak mungkin berbeda.
+        $jumlah = 0;
+
+        foreach ($riwayat as $baris) {
+            if ($baris['ini']) {
+                $jumlah = $baris['jumlah'];
+            }
+        }
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'site' => $site,
+                'mitra' => $mitra,
+                'bulan' => self::monthLabel($bulan),
+            ],
+            'target' => self::TARGET_TEMUAN,
+            'sel' => [
+                'jumlah' => $jumlah,
+                'bersih' => $jumlah === self::TARGET_TEMUAN,
+            ],
+            'ringkas' => $this->ringkasRiwayat($riwayat, $bulan),
+            'riwayat' => $riwayat,
+            'sebulan' => $sebulan,
+            'site' => [
+                'jumlah' => array_sum(array_column($sebulan, 'jumlah')),
+                'mitra_kena' => count(array_filter($sebulan, static fn (array $r): bool => $r['jumlah'] > 0)),
+                'mitra_count' => count($sebulan),
+            ],
+            'semua' => $this->semuaSiteBulan($nilaiBulan),
+        ]);
+    }
+
+    /**
+     * Sumbu bulan panel riwayat: rentang bulan yang tercakup data, ditambah
+     * bulan yang dibuka kalau kebetulan di luar rentang itu — selnya tetap
+     * harus bisa ditunjuk di panelnya.
+     *
+     * @return array<int, int>
+     */
+    private function sumbuBulan(int $bulanIni): array
+    {
+        $ada = [];
+
+        foreach ($this->distinctValues(self::COL_BULAN) as $nilai) {
+            $nomor = $this->nomorBulan($nilai);
+
+            if ($nomor !== 0) {
+                $ada[] = $nomor;
+            }
+        }
+
+        $months = $this->rentangBulan($ada);
+
+        if (! in_array($bulanIni, $months, true)) {
+            $months[] = $bulanIni;
+            sort($months);
+        }
+
+        return $months;
+    }
+
+    /**
+     * Baris matriksnya: pasangan site x perusahaan ini sepanjang bulan yang
+     * tercakup. Bulan tanpa baris ikut bernilai 0 — itu bulan bersihnya, dan
+     * menyembunyikannya akan membuat yang baik tampak seperti data hilang.
+     *
+     * @param  array<int, int>  $months
+     * @return array<int, array<string, mixed>>
+     */
+    private function riwayatPasangan(string $site, string $mitra, array $months, int $bulanIni): array
+    {
+        $rows = DB::table(self::TABLE)
+            ->where(self::COL_SITE, $site)
+            ->where(self::COL_PERUSAHAAN, $mitra)
+            ->selectRaw(self::COL_BULAN . ' AS bulan, SUM(' . self::COL_JUMLAH . ') AS jumlah')
+            ->groupBy('bulan')
+            ->get();
+
+        $perBulan = [];
+
+        foreach ($rows as $row) {
+            $nomor = $this->nomorBulan((string) $row->bulan);
+
+            if ($nomor === 0) {
+                continue; // nama bulan tak dikenal: jangan diam-diam dianggap bulan lain
+            }
+
+            $perBulan[$nomor] = ($perBulan[$nomor] ?? 0) + (int) $row->jumlah;
+        }
+
+        $out = [];
+
+        foreach ($months as $nomor) {
+            $out[] = [
+                'nomor' => $nomor,
+                'bulan' => self::monthLabel($nomor),
+                'jumlah' => $perBulan[$nomor] ?? 0,
+                'ini' => $nomor === $bulanIni,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Kolom matriksnya: seluruh perusahaan yang pernah kedapatan di site ini,
+     * dengan cacah temuannya pada bulan yang dibuka. Yang bersih bulan ini
+     * tetap ditampilkan bernilai 0, sama seperti selnya di matriks.
+     *
+     * @param  array<int, string>  $nilaiBulan
+     * @return array<int, array<string, mixed>>
+     */
+    private function sebulanDiSite(string $site, array $nilaiBulan, string $mitraTerpilih): array
+    {
+        $daftarQuery = DB::table(self::TABLE)->where(self::COL_SITE, $site);
+
+        foreach (self::EXCLUDED_MONTHS as $nomor) {
+            $daftarQuery->whereNotIn(self::COL_BULAN, $this->namaBulan($nomor));
+        }
+
+        $daftar = $daftarQuery
+            ->distinct()
+            ->pluck(self::COL_PERUSAHAAN)
+            ->map(static fn ($v): string => trim((string) $v))
+            ->filter(static fn (string $v): bool => $v !== '')
+            ->unique()
+            ->values()
+            ->all();
+
+        // Perusahaan yang dibuka selalu ikut, walau belum pernah kedapatan di
+        // site ini sama sekali — modalnya tidak boleh menghilangkan selnya.
+        if (! in_array($mitraTerpilih, $daftar, true)) {
+            $daftar[] = $mitraTerpilih;
+        }
+
+        $bulanIni = DB::table(self::TABLE)
+            ->where(self::COL_SITE, $site)
+            ->whereIn(self::COL_BULAN, $nilaiBulan)
+            ->selectRaw(self::COL_PERUSAHAAN . ' AS mitra, SUM(' . self::COL_JUMLAH . ') AS jumlah')
+            ->groupBy('mitra')
+            ->pluck('jumlah', 'mitra');
+
+        $out = [];
+
+        foreach ($daftar as $mitra) {
+            $out[] = [
+                'mitra' => $mitra,
+                'jumlah' => (int) ($bulanIni[$mitra] ?? 0),
+                'ini' => $mitra === $mitraTerpilih,
+            ];
+        }
+
+        usort(
+            $out,
+            static fn (array $a, array $b): int => $b['jumlah'] <=> $a['jumlah']
+                ?: strcmp($a['mitra'], $b['mitra'])
+        );
+
+        return $out;
+    }
+
+    /**
+     * Bentuk temuan parameter ini pada bulan yang sama di seluruh site, untuk
+     * menjawab "bulannya memang ramai atau cuma site ini".
+     *
+     * @param  array<int, string>  $nilaiBulan
+     * @return array<string, mixed>
+     */
+    private function semuaSiteBulan(array $nilaiBulan): array
+    {
+        $row = DB::table(self::TABLE)
+            ->whereIn(self::COL_BULAN, $nilaiBulan)
+            ->selectRaw(
+                'COALESCE(SUM(' . self::COL_JUMLAH . '), 0) AS jumlah, '
+                . 'COUNT(DISTINCT ' . self::COL_SITE . ') AS site_kena'
+            )
+            ->first();
+
+        return [
+            'jumlah' => (int) ($row->jumlah ?? 0),
+            'site_kena' => (int) ($row->site_kena ?? 0),
+        ];
+    }
+
+    /**
+     * Ringkasan baris riwayat: berapa bulan bersih, kapan terakhir kedapatan,
+     * dan sudah berapa bulan beruntun bersih sampai bulan yang dibuka.
+     *
+     * @param  array<int, array<string, mixed>>  $riwayat
+     * @return array<string, mixed>
+     */
+    private function ringkasRiwayat(array $riwayat, int $bulanIni): array
+    {
+        $total = 0;
+        $bersih = 0;
+        $puncak = 0;
+        $puncakBulan = null;
+        $terakhirKena = null;
+        $beruntun = 0;
+
+        foreach ($riwayat as $baris) {
+            $total += $baris['jumlah'];
+
+            if ($baris['jumlah'] === 0) {
+                $bersih++;
+                continue;
+            }
+
+            $terakhirKena = $baris['bulan'];
+
+            if ($baris['jumlah'] > $puncak) {
+                $puncak = $baris['jumlah'];
+                $puncakBulan = $baris['bulan'];
+            }
+        }
+
+        // Beruntun dihitung mundur dari bulan yang dibuka, bukan dari bulan
+        // terakhir di sumbu: yang ditanya "sampai bulan ini sudah berapa lama
+        // bersih", bukan keadaan sesudahnya.
+        $sampaiSini = [];
+
+        foreach ($riwayat as $baris) {
+            $sampaiSini[] = $baris['jumlah'];
+
+            if ($baris['nomor'] === $bulanIni) {
+                break;
+            }
+        }
+
+        for ($i = count($sampaiSini) - 1; $i >= 0 && $sampaiSini[$i] === 0; $i--) {
+            $beruntun++;
+        }
+
+        return [
+            'bulan_count' => count($riwayat),
+            'bulan_bersih' => $bersih,
+            'bulan_kena' => count($riwayat) - $bersih,
+            'total' => $total,
+            'puncak' => $puncak,
+            'puncak_bulan' => $puncakBulan,
+            'terakhir_kena' => $terakhirKena,
+            'beruntun_bersih' => $beruntun,
+        ];
     }
 
     // ======================================================================

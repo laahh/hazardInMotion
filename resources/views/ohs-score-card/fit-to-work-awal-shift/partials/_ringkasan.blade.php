@@ -1,5 +1,6 @@
 {{-- Tab Ringkasan Pemeriksaan Fit to Work Awal Shift. --}}
-<div class="ftw-overview" data-url="{{ route('ohs-score-card.fit-to-work-awal-shift.overview') }}">
+<div class="ftw-overview" data-url="{{ route('ohs-score-card.fit-to-work-awal-shift.overview') }}"
+     data-detail-url="{{ route('ohs-score-card.fit-to-work-awal-shift.detail-bulan') }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">

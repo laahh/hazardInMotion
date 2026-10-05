@@ -1,5 +1,6 @@
 {{-- Tab Ringkasan "Tidak ada pelaporan melewati batas golden time". --}}
-<div class="gte-overview" data-url="{{ route('ohs-score-card.golden-time-emergency.overview') }}">
+<div class="gte-overview" data-url="{{ route('ohs-score-card.golden-time-emergency.overview') }}"
+     data-detail-url="{{ route('ohs-score-card.golden-time-emergency.detail-bulan') }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">

@@ -5,7 +5,8 @@
   persentase, dan targetnya nol. Karena itu tidak ada switch Persentase/Nilai,
   dan sel bernilai 0 diwarnai hijau karena memang itu keadaan yang diinginkan.
 --}}
-<div class="bps-overview" data-url="{{ route('ohs-score-card.blindspot-tbc-pic-subcont.overview') }}">
+<div class="bps-overview" data-url="{{ route('ohs-score-card.blindspot-tbc-pic-subcont.overview') }}"
+     data-detail-url="{{ route('ohs-score-card.blindspot-tbc-pic-subcont.detail-bulan') }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">

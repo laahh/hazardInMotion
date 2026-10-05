@@ -209,6 +209,17 @@
     position: relative; z-index: 1;
   }
   .ov-matrix .ov-empty { background: #F1F5F9; color: #CBD5E1 !important; border-radius: 6px; }
+
+  /* Hanya sel berisi angka yang bisa dibuka rinciannya. */
+  .ov-matrix .ov-cell--klik { cursor: pointer; }
+  .ov-matrix .ov-cell--klik:focus-visible {
+    outline: 2px solid #0F172A; outline-offset: 1px; position: relative; z-index: 2;
+  }
+
+  /* Tabel panjang di dalam modal digulir sendiri, bukan ikut badan modal. */
+  .ov-modal-scroll { max-height: 42vh; overflow: auto; }
+  .ov-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
+
   .ov-t1 { background: #E0484A; }
   .ov-t2 { background: #F08C2E; }
   .ov-t3 { background: #F2C230; color: #1F2937 !important; }
@@ -366,7 +377,10 @@
           <div class="card-body p-24">
             <div class="d-flex align-items-center flex-wrap gap-3 mb-16" id="ov-legend"></div>
             <div class="ov-matrix-wrap">
-              <table class="ov-matrix" id="ov-matrix">
+              {{-- URL rincian ditempel di tabelnya: di situ pula klik sel
+                   didelegasikan, jadi keduanya tidak bisa terpisah. --}}
+              <table class="ov-matrix" id="ov-matrix"
+                     data-detail-url="{{ route('ohs-score-card.jalan-sesuai-standar.detail-bulan') }}">
                 <thead></thead>
                 <tbody></tbody>
               </table>
@@ -613,9 +627,339 @@
   </div>
 
 </div>
+
+{{-- Modal rincian satu sel matriks bulanan.
+     Diletakkan di luar tab pane supaya tidak ikut tersembunyi saat tab
+     "Data Segmen" aktif. --}}
+<div class="modal fade" id="ov-detail-modal" tabindex="-1" aria-labelledby="ov-detail-judul" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content radius-12">
+      <div class="modal-header border-bottom py-16 px-24">
+        <div>
+          <h6 class="modal-title text-lg fw-semibold mb-0" id="ov-detail-judul">Rincian Bulan</h6>
+          <span class="text-sm text-secondary-light" data-ovm="subjudul"></span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body p-24"><div data-ovm="isi"></div></div>
+      <div class="modal-footer border-top py-12 px-24">
+        <span class="text-sm text-secondary-light me-auto" data-ovm="kaki"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary radius-8" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('page-scripts')
+<script>
+// ---- Modal rincian satu sel matriks bulanan ---------------------------------
+var ovModalDetail = (function () {
+    'use strict';
+
+    var el = document.getElementById('ov-detail-modal');
+    if (!el) { return null; }
+
+    var bagian = function (n) { return el.querySelector('[data-ovm="' + n + '"]'); };
+    var permintaan = 0;
+
+    function esc(v) {
+        return String(v === null || v === undefined ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function num(v) { return Number(v || 0).toLocaleString('id-ID'); }
+
+    function pct(v) {
+        return Number(v || 0).toLocaleString('id-ID', {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        }) + '%';
+    }
+
+    function ubin(label, nilai, catatan, kelas) {
+        return '<div class="col-md-6 col-xxl-3">'
+            + '<div class="border input-form-light radius-8 p-16 h-100">'
+            +   '<span class="text-sm text-secondary-light d-block">' + esc(label) + '</span>'
+            +   '<h6 class="fw-semibold mt-8 mb-4 ' + (kelas || '') + '">' + nilai + '</h6>'
+            +   '<span class="text-xs text-secondary-light">' + esc(catatan) + '</span>'
+            + '</div></div>';
+    }
+
+    /** Daftar berbatang: label, jumlah, lalu panjang batang relatif terbesar. */
+    function daftarBatang(baris, kunci, warna) {
+        var isi = (baris || []).filter(function (b) { return b.jumlah > 0; });
+
+        if (!isi.length) {
+            return '<div class="text-center text-secondary-light py-16">Tidak ada.</div>';
+        }
+
+        var maks = isi[0].jumlah || 1;
+
+        return '<div class="table-responsive"><table class="table bordered-table sm-table mb-0"><tbody>'
+            + isi.map(function (b) {
+                return '<tr><td class="text-sm">' + esc(b[kunci]) + '</td>'
+                    + '<td class="text-end fw-semibold" style="width:72px">' + num(b.jumlah) + '</td>'
+                    + '<td style="width:38%"><div class="progress w-100 bg-primary-50 rounded-pill h-8-px">'
+                    + '<div class="progress-bar ' + warna + ' rounded-pill" role="progressbar"'
+                    + ' style="width:' + (b.jumlah / maks * 100) + '%" aria-valuenow="' + b.jumlah + '"'
+                    + ' aria-valuemin="0" aria-valuemax="' + maks + '"></div></div></td></tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    function tabelPit(baris) {
+        if (!baris || !baris.length) {
+            return '<div class="text-center text-secondary-light py-16">Tidak ada.</div>';
+        }
+
+        return '<div class="table-responsive ov-modal-scroll">'
+            + '<table class="table bordered-table sm-table mb-0"><thead><tr>'
+            +   '<th>Pit</th><th class="text-end">Segmen</th>'
+            +   '<th class="text-end">Tidak sesuai</th><th class="text-end">Capaian</th>'
+            + '</tr></thead><tbody>'
+            + baris.map(function (b) {
+                return '<tr><td><span class="text-sm d-block">' + esc(b.pit) + '</span>'
+                    +   '<span class="text-xs text-secondary-light">' + num(b.ruas) + ' ruas</span></td>'
+                    + '<td class="text-end text-sm">' + num(b.total) + '</td>'
+                    + '<td class="text-end text-sm fw-semibold">' + num(b.tidak_sesuai) + '</td>'
+                    + '<td class="text-end text-sm">' + pct(b.percent) + '</td></tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    function tabelMinggu(baris, lintasTahun) {
+        return '<div class="table-responsive ov-modal-scroll">'
+            + '<table class="table bordered-table sm-table mb-0"><thead><tr>'
+            +   '<th>Minggu</th><th class="text-end">Segmen</th>'
+            +   '<th class="text-end">Standar</th><th class="text-end">Capaian</th>'
+            + '</tr></thead><tbody>'
+            + baris.map(function (b) {
+                var label = 'W' + b.minggu + (lintasTahun ? " '" + String(b.tahun).slice(2) : '');
+                return '<tr><td class="text-sm">' + esc(label) + '</td>'
+                    + '<td class="text-end text-sm">' + num(b.total) + '</td>'
+                    + '<td class="text-end text-sm">' + num(b.standar) + '</td>'
+                    + '<td class="text-end text-sm fw-semibold">' + pct(b.percent) + '</td></tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    /** Nilai cek: yang gagal ditandai merah supaya terbaca sekilas. */
+    function cek(nilai, gagal) {
+        return gagal
+            ? '<span class="text-danger-main fw-semibold">' + esc(nilai) + '</span>'
+            : '<span class="text-secondary-light">' + esc(nilai) + '</span>';
+    }
+
+    function tabelSegmen(baris) {
+        return '<div class="table-responsive ov-modal-scroll">'
+            + '<table class="table bordered-table sm-table mb-0" data-ovm="tabel"><thead><tr>'
+            +   '<th>Pit &amp; ruas</th><th>Segmen</th><th>Minggu</th>'
+            +   '<th>Grade</th><th>Lebar</th><th>Superelevasi</th><th>Junction</th>'
+            + '</tr></thead><tbody>'
+            + baris.map(function (b) {
+                var junction = [];
+                if (b.junction_1 !== '-') { junction.push('1: ' + b.junction_1); }
+                if (b.junction_s !== '-') { junction.push('S: ' + b.junction_s); }
+
+                return '<tr data-cari="'
+                    + esc((b.pit + ' ' + b.nama_jalan + ' ' + b.segment + ' ' + b.grade_stat + ' '
+                           + b.road_width + ' ' + b.supereleva + ' ' + b.junction_1 + ' '
+                           + b.junction_s).toLowerCase()) + '">'
+                    + '<td><span class="text-sm d-block">' + esc(b.nama_jalan) + '</span>'
+                    +   '<span class="text-xs text-secondary-light">' + esc(b.pit) + '</span></td>'
+                    + '<td class="text-sm">' + num(b.segment) + '</td>'
+                    + '<td class="text-xs text-secondary-light">W' + b.minggu + '</td>'
+                    + '<td class="text-xs">' + cek(b.grade_stat, b.grade_stat !== 'ACCEPT') + '</td>'
+                    + '<td class="text-xs">' + cek(b.road_width, b.road_width !== 'ACCEPT') + '</td>'
+                    + '<td class="text-xs">' + cek(b.supereleva, b.supereleva !== 'ACCEPT') + '</td>'
+                    + '<td class="text-xs">'
+                    +   (junction.length
+                            ? cek(junction.join(' · '),
+                                  b.junction_1 === 'REJECT' || b.junction_s === 'REJECT')
+                            : '<span class="text-secondary-light">–</span>')
+                    + '</td></tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    function render(j, koordinat) {
+        var r = j.ringkas;
+        var minggu = j.per_minggu || [];
+        var tahun = minggu.map(function (b) { return b.tahun; });
+        var lintasTahun = tahun.some(function (t) { return t !== tahun[0]; });
+        var daftarMinggu = minggu.map(function (b) {
+            return 'W' + b.minggu + (lintasTahun ? " '" + String(b.tahun).slice(2) : '');
+        }).join(', ');
+
+        var terburuk = (j.per_jenis || []).filter(function (b) { return b.jumlah > 0; })[0] || null;
+
+        // Yang diklik bisa persentase atau Nilai, tergantung mode matriks.
+        // Kartu pertama menyebut angka yang persis dia klik, catatannya memuat
+        // keduanya supaya tidak ada informasi yang hilang.
+        var isi = '<div class="row gy-3 mb-20">'
+            + ubin('Capaian sel',
+                   koordinat.ukuran === 'nilai' ? 'Nilai ' + r.nilai : pct(r.percent),
+                   num(r.standar) + ' dari ' + num(r.total) + ' segmen memenuhi standar · '
+                   + (koordinat.ukuran === 'nilai' ? pct(r.percent) : 'Nilai ' + r.nilai)
+                   + ' (' + r.nilai_band + ')')
+            + ubin('Segmen tidak sesuai', num(r.tidak_sesuai),
+                   pct(r.tidak_sesuai_percent) + ' dari segmen di sel ini')
+            + ubin('Penyebab terbanyak',
+                   terburuk ? esc(terburuk.label) : '–',
+                   terburuk
+                       ? num(terburuk.jumlah) + ' segmen gagal cek ini'
+                       : 'Tidak ada cek yang gagal di sel ini')
+            + ubin('Cakupan', num(r.pit) + ' pit · ' + num(r.ruas) + ' ruas',
+                   num(r.minggu) + ' minggu: ' + daftarMinggu)
+            + '</div>';
+
+        // Tabel sumbernya berbutir MINGGU, bukan bulan. Tanpa keterangan ini
+        // pembaca tidak punya cara tahu minggu mana yang masuk hitungan sel —
+        // dan 8 dari 40 minggu di data ini membelah dua bulan.
+        isi += '<div class="alert bg-info-focus text-info-main border-info-main'
+            + ' radius-8 px-20 py-12 mb-20 text-sm mt-0">'
+            + '<strong>Bulan diturunkan dari nomor minggu.</strong> Satu minggu dimiliki bulan'
+            + ' tempat hari Kamisnya jatuh (ISO 8601), jadi sel ' + esc(koordinat.bulan)
+            + ' ini tersusun dari ' + num(r.minggu) + ' minggu: ' + esc(daftarMinggu) + '.'
+            + '</div>';
+
+        isi += '<div class="row gy-4 mb-20">'
+            +   '<div class="col-xxl-6">'
+            +     '<h6 class="text-md fw-semibold mb-4">Jenis ketidaksesuaian</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Satu segmen bisa gagal lebih dari satu cek, jadi jumlah batang ini wajar'
+            +       ' melebihi ' + num(r.tidak_sesuai) + ' segmen tidak sesuai</span>'
+            +     daftarBatang(j.per_jenis, 'label', 'bg-danger-main')
+            +   '</div>'
+            +   '<div class="col-xxl-6">'
+            +     '<h6 class="text-md fw-semibold mb-4">Per pit</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Pit penyumbang segmen tidak sesuai terbanyak di atas</span>'
+            +     tabelPit(j.per_pit)
+            +   '</div>'
+            + '</div>';
+
+        isi += '<div class="row gy-4 mb-20"><div class="col-12">'
+            +   '<h6 class="text-md fw-semibold mb-4">Per minggu</h6>'
+            +   '<span class="text-xs text-secondary-light d-block mb-12">'
+            +     'Penyusun sel ini; penjumlahannya persis angka di matriks</span>'
+            +   tabelMinggu(minggu, lintasTahun)
+            + '</div></div>';
+
+        if (!j.baris.length) {
+            isi += '<div class="text-center text-secondary-light py-24">'
+                + 'Seluruh ' + num(r.total) + ' segmen di sel ini memenuhi standar.'
+                + '</div>';
+            bagian('isi').innerHTML = isi;
+            bagian('kaki').textContent = num(r.total) + ' segmen terevaluasi · tidak ada yang gagal.';
+            return;
+        }
+
+        isi += '<h6 class="text-md fw-semibold mb-4">Contoh segmen tidak sesuai</h6>'
+            + '<span class="text-xs text-secondary-light d-block mb-12">'
+            +   'Diurutkan dari yang paling banyak gagal ceknya</span>'
+            + '<div class="row gy-2 gx-2 align-items-end mb-12">'
+            +   '<div class="col-sm-8"><input type="text" class="form-control form-control-sm radius-8"'
+            +     ' placeholder="Cari pit, ruas, segmen, status cek…" data-ovm="cari"></div>'
+            +   '<div class="col-sm-4 text-sm-end"><span class="text-sm text-secondary-light"'
+            +     ' data-ovm="hitung"></span></div>'
+            + '</div>'
+            + tabelSegmen(j.baris);
+
+        bagian('isi').innerHTML = isi;
+        bagian('kaki').textContent = j.terpotong
+            ? 'Menampilkan ' + num(j.batas) + ' segmen terburuk dari ' + num(r.tidak_sesuai)
+              + ' yang tidak sesuai. Unduh tab Data Segmen untuk daftar lengkapnya.'
+            : num(r.tidak_sesuai) + ' segmen tidak sesuai di sel ini, semuanya terdaftar.';
+
+        pasangPencarian();
+    }
+
+    /** Pencarian dikerjakan di baris yang sudah ada, tanpa ke server lagi. */
+    function pasangPencarian() {
+        var cari = bagian('cari');
+        var hitung = bagian('hitung');
+        var semua = Array.prototype.slice.call(el.querySelectorAll('[data-ovm="tabel"] tbody tr'));
+
+        function terapkan() {
+            var teks = (cari.value || '').trim().toLowerCase();
+            var tampil = 0;
+
+            semua.forEach(function (tr) {
+                var cocok = !teks || tr.dataset.cari.indexOf(teks) !== -1;
+                tr.classList.toggle('d-none', !cocok);
+                if (cocok) { tampil++; }
+            });
+
+            hitung.textContent = tampil === semua.length
+                ? semua.length + ' segmen'
+                : tampil + ' dari ' + semua.length + ' segmen';
+        }
+
+        cari.addEventListener('input', terapkan);
+        terapkan();
+    }
+
+    function buka(url, koordinat) {
+        // Nomor permintaan menjaga agar jawaban yang datang terlambat untuk sel
+        // yang sudah tidak dibuka lagi tidak menimpa isi modal.
+        var ini = ++permintaan;
+
+        el.querySelector('#ov-detail-judul').textContent =
+            'Rincian ' + koordinat.bulan + ' · ' + koordinat.site;
+
+        var sub = koordinat.mitra || 'Seluruh perusahaan di site ini';
+        if (koordinat.pit) { sub += ' · pit ' + koordinat.pit; }
+        bagian('subjudul').textContent = sub;
+
+        bagian('kaki').textContent = '';
+        bagian('isi').innerHTML = '<div class="text-center text-secondary-light py-40">'
+            + '<div class="spinner-border spinner-border-sm text-primary-600 me-2" role="status"></div>'
+            + 'Memuat rincian…</div>';
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        }
+
+        // pit dan year ikut dikirim: keduanya membentuk sel di matriks, jadi
+        // tanpa itu modal akan memecah sel yang lebih besar daripada yang diklik.
+        var q = new URLSearchParams({
+            site: koordinat.site,
+            mitra: koordinat.mitra || '',
+            pit: koordinat.pit || '',
+            year: koordinat.year || '',
+            month: koordinat.month
+        });
+
+        fetch(url + '?' + q.toString(), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) {
+                if (!res.ok) { throw new Error('HTTP ' + res.status); }
+                return res.json();
+            })
+            .then(function (j) {
+                if (ini !== permintaan) { return; }
+                if (!j.ok) {
+                    bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                        + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                        + esc(j.pesan || 'Rincian tidak bisa dimuat.') + '</div>';
+                    return;
+                }
+                render(j, koordinat);
+            })
+            .catch(function (err) {
+                if (ini !== permintaan) { return; }
+                bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                    + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                    + 'Permintaan ke server gagal. ' + esc(err && err.message) + '</div>';
+            });
+    }
+
+    return { buka: buka };
+})();
+</script>
 <script>
 // ---- Tab Overview Dashboard -------------------------------------------------
 (function () {
@@ -623,6 +967,35 @@
     var matrixEl = document.querySelector('#ov-matrix');
     if (!matrixEl) {
         return;
+    }
+
+    // Delegasi di tabel, bukan di tiap sel: matriks digambar ulang setiap ganti
+    // filter atau mode, dan pendengar per sel akan ikut hilang. URL rincian
+    // menempel di tabel yang sama, jadi keduanya tidak bisa terpisah.
+    if (ovModalDetail && matrixEl.dataset.detailUrl) {
+        var bukaSel = function (td) {
+            ovModalDetail.buka(matrixEl.dataset.detailUrl, {
+                site: td.dataset.site,
+                mitra: td.dataset.mitra,
+                month: td.dataset.month,
+                bulan: td.dataset.bulan,
+                ukuran: td.dataset.ukuran,
+                nilai: td.dataset.nilai
+            });
+        };
+
+        matrixEl.addEventListener('click', function (e) {
+            var td = e.target.closest('.ov-cell--klik');
+            if (td && matrixEl.contains(td)) { bukaSel(td); }
+        });
+
+        matrixEl.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') { return; }
+            var td = e.target.closest('.ov-cell--klik');
+            if (!td || !matrixEl.contains(td)) { return; }
+            e.preventDefault();
+            bukaSel(td);
+        });
     }
 
     var filterEls = Array.prototype.slice.call(document.querySelectorAll('.ov-filter'));
@@ -922,8 +1295,19 @@
                     + fmtNum(cell.standar) + ' / ' + fmtNum(cell.total) + ' segmen standar · '
                     + fmtPct(cell.pct) + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')';
 
-                html += '<td class="ov-cell ' + cellClass(cell) + '"'
-                    + ' title="' + escapeHtml(tip) + '">'
+                // Koordinat sel dibawa di atribut, bukan ditebak dari posisi
+                // DOM: matriks digambar ulang tiap ganti filter/mode dan
+                // urutan barisnya ikut berubah.
+                html += '<td class="ov-cell ov-cell--klik ' + cellClass(cell) + '"'
+                    + ' role="button" tabindex="0"'
+                    + ' data-site="' + escapeHtml(row.site) + '"'
+                    + ' data-mitra="' + escapeHtml(row.mitra) + '"'
+                    + ' data-month="' + months[m].number + '"'
+                    + ' data-bulan="' + escapeHtml(months[m].label) + '"'
+                    + ' data-ukuran="' + matrixMode + '"'
+                    + ' data-nilai="' + escapeHtml(matrixMode === 'nilai'
+                        ? 'Nilai ' + cell.nilai : fmtPct(cell.pct)) + '"'
+                    + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
                     + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
                     + '</td>';
             });

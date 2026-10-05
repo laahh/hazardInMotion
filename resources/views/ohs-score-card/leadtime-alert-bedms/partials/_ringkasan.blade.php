@@ -1,5 +1,6 @@
 {{-- Tab Ringkasan Leadtime Alert DMS masuk ke Server. --}}
-<div class="lab-overview" data-url="{{ route('ohs-score-card.leadtime-alert-bedms.overview') }}">
+<div class="lab-overview" data-url="{{ route('ohs-score-card.leadtime-alert-bedms.overview') }}"
+     data-detail-url="{{ route('ohs-score-card.leadtime-alert-bedms.detail-bulan') }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">

@@ -42,6 +42,16 @@ final class RoadSummaryController extends Controller
     /** Opsi dropdown filter di-cache, query DISTINCT-nya mahal di tabel sebesar ini. */
     private const FILTER_CACHE_TTL = 600;
 
+    /**
+     * Batas contoh segmen yang dikirim ke modal rincian sel.
+     *
+     * Sel terpadat berisi 12 ribu segmen (GMO/PAMA Januari), jadi daftar
+     * mentah tidak pernah jadi pilihan: modal menyajikan pecahan ringkas
+     * (per minggu, per pit, per jenis cek) lalu hanya contoh segmen yang
+     * paling banyak gagal ceknya sebanyak batas ini.
+     */
+    private const BATAS_BARIS_MODAL = 500;
+
     /** Kolom yang boleh difilter persis (exact match) dari query string. */
     private const FILTERABLE = [
         'site', 'pit', 'mitra', 'year', 'week', 'grade_stat', 'road_width', 'supereleva',
@@ -65,6 +75,22 @@ final class RoadSummaryController extends Controller
         . " AND (junction_1 IS NULL OR junction_1 IN ('-', '', 'ACCEPT'))"
         . " AND (junction_s IS NULL OR junction_s IN ('-', '', 'ACCEPT'))"
         . ")";
+
+    /**
+     * Jenis cek yang bisa menggugurkan sebuah segmen: [label, ekspresi gagal].
+     *
+     * Satu daftar untuk Pareto di dashboard dan untuk pecahan penyebab di
+     * modal rincian sel, supaya keduanya tidak bisa menghitung hal berbeda.
+     * Junction hanya dihitung gagal bila nilainya 'REJECT' — '-' berarti
+     * segmen itu memang bukan titik pertemuan, jadi ceknya tidak berlaku.
+     */
+    private const JENIS_CEK = [
+        'gagal_lebar' => ['Lebar Jalan', "road_width <> 'ACCEPT'"],
+        'gagal_super' => ['Superelevasi', "supereleva <> 'ACCEPT'"],
+        'gagal_grade' => ['Grade', "grade_stat <> 'ACCEPT'"],
+        'gagal_junction_1' => ['Junction 1', "junction_1 = 'REJECT'"],
+        'gagal_junction_s' => ['Junction S', "junction_s = 'REJECT'"],
+    ];
 
     /** Nilai yang diterima filter Kesimpulan. */
     private const CONCLUSION_STANDARD = 'standar';
@@ -425,23 +451,13 @@ final class RoadSummaryController extends Controller
             ->selectRaw(
                 'pit,'
                 . ' COUNT(*) AS total,'
-                . " SUM(grade_stat <> 'ACCEPT') AS gagal_grade,"
-                . " SUM(road_width <> 'ACCEPT') AS gagal_lebar,"
-                . " SUM(supereleva <> 'ACCEPT') AS gagal_super,"
-                . " SUM(junction_1 = 'REJECT') AS gagal_junction_1,"
-                . " SUM(junction_s = 'REJECT') AS gagal_junction_s,"
+                . $this->jenisCekSelect()
                 . ' SUM(NOT ' . self::STANDARD_SQL . ') AS tidak_sesuai'
             )
             ->groupBy('pit')
             ->get();
 
-        $jenis = [
-            'gagal_lebar' => 'Lebar Jalan',
-            'gagal_super' => 'Superelevasi',
-            'gagal_grade' => 'Grade',
-            'gagal_junction_1' => 'Junction 1',
-            'gagal_junction_s' => 'Junction S',
-        ];
+        $jenis = array_map(static fn (array $j): string => $j[0], self::JENIS_CEK);
 
         $totalJenis = array_fill_keys(array_keys($jenis), 0);
         $perArea = [];
@@ -699,6 +715,296 @@ final class RoadSummaryController extends Controller
         ];
     }
 
+
+    /**
+     * Potongan SELECT penjumlahan bersyarat untuk tiap jenis cek.
+     * Diakhiri koma, karena selalu dipakai di tengah daftar kolom.
+     */
+    private function jenisCekSelect(): string
+    {
+        $parts = [];
+
+        foreach (self::JENIS_CEK as $key => [, $sql]) {
+            $parts[] = ' SUM(' . $sql . ') AS ' . $key . ',';
+        }
+
+        return implode('', $parts);
+    }
+
+    // ======================================================================
+    // Rincian satu sel matriks "Capaian per Bulan"
+    // ======================================================================
+
+    /**
+     * Isi modal untuk satu sel matriks bulanan (site x perusahaan x bulan).
+     *
+     * Ukuran selnya adalah PERSENTASE segmen yang memenuhi standar, dengan
+     * penyebut jumlah segmen yang dievaluasi di sel itu. Keduanya nyata
+     * tersimpan per baris, jadi band Nilai di modal memakai scoreBandFor()
+     * yang sama dengan sel — tidak ada angka yang dikarang.
+     *
+     * Dua hal yang menentukan bentuk jawaban ini:
+     *
+     *  1. Butiran tabelnya MINGGU, bukan bulan. overview() mengelompokkan
+     *     per (site, mitra, year, week) lalu menurunkan bulan dari nomor
+     *     minggu dengan aturan Kamis (monthOfIsoWeek()). Endpoint ini memakai
+     *     weeksOfMonth() — helper yang sama yang kini dipakai filter Bulan —
+     *     sehingga sel dan modal mustahil menjaring minggu yang berbeda.
+     *     Itu penting: 8 dari 40 minggu di data ini membelah dua bulan.
+     *
+     *  2. Satu sel bisa berisi belasan ribu segmen (terpadat: GMO/PAMA
+     *     Januari, 12.236 segmen). Daftar mentah karena itu tidak dikirim.
+     *     Yang dikirim pecahan ringkas — per minggu, per pit, per jenis cek —
+     *     ditambah paling banyak BATAS_BARIS_MODAL contoh segmen yang paling
+     *     banyak gagal ceknya.
+     */
+    public function detailBulan(Request $request): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $mitra = trim((string) $request->input('mitra', ''));
+        $pit = trim((string) $request->input('pit', ''));
+
+        // Matriks halaman ini mengirim nomor bulan 1-12, tapi halaman lain
+        // memakai kode tahun*100+bulan. Diterima keduanya supaya pemanggil
+        // tidak perlu tahu bentuk mana yang dipakai.
+        $kode = (int) $request->input('month', 0);
+        $bulan = $kode > 9999 ? $kode % 100 : $kode;
+        $tahun = $kode > 9999 ? intdiv($kode, 100) : (int) $request->input('year', 0);
+
+        if ($site === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        $weeksByYear = $this->weeksOfMonth($bulan, $tahun > 0 ? $tahun : null);
+
+        if ($weeksByYear === []) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Tidak ada minggu yang jatuh di ' . (self::MONTH_LABELS[$bulan] ?? '-')
+                    . ' pada data yang tersimpan.',
+            ]);
+        }
+
+        $dasar = function () use ($site, $mitra, $pit, $weeksByYear): Builder {
+            $query = $this->baseQuery()->where('site', $site);
+
+            if ($mitra !== '') {
+                $query->where('mitra', $mitra);
+            }
+
+            // Filter pit di dashboard ikut membentuk sel, jadi ikut dibawa
+            // ke sini — kalau tidak, modal memecah sel yang lebih besar
+            // daripada yang diklik.
+            if ($pit !== '') {
+                $query->where('pit', $pit);
+            }
+
+            $this->whereYearWeeks($query, $weeksByYear);
+
+            return $query;
+        };
+
+        $perMinggu = $this->rincianPerMinggu($dasar());
+        $total = array_sum(array_column($perMinggu, 'total'));
+        $standar = array_sum(array_column($perMinggu, 'standar'));
+
+        if ($total === 0) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Tidak ada segmen terevaluasi untuk kombinasi ini.',
+            ]);
+        }
+
+        [$perPit, $perJenis] = $this->rincianPerPitDanJenis($dasar());
+
+        $pct = round($standar / $total * 100, 2);
+        [, $nilai, $band] = $this->scoreBandFor($pct);
+
+        $tidakSesuai = $total - $standar;
+        $contoh = $tidakSesuai > 0 ? $this->contohSegmen($dasar()) : [];
+        $terpotong = count($contoh) > self::BATAS_BARIS_MODAL;
+
+        if ($terpotong) {
+            $contoh = array_slice($contoh, 0, self::BATAS_BARIS_MODAL);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'site' => $site,
+                'mitra' => $mitra,
+                'pit' => $pit,
+                'bulan' => self::MONTH_LABELS[$bulan] ?? '-',
+            ],
+            'ringkas' => [
+                'total' => $total,
+                'standar' => $standar,
+                'tidak_sesuai' => $tidakSesuai,
+                'percent' => $pct,
+                'tidak_sesuai_percent' => round($tidakSesuai / $total * 100, 2),
+                'nilai' => $nilai,
+                'nilai_band' => $band,
+                'target' => self::TARGET_PERCENT,
+                'memenuhi_target' => $pct >= self::TARGET_PERCENT,
+                'pit' => count($perPit),
+                'ruas' => (int) ($dasar()->distinct()->count('nama_jalan')),
+                'minggu' => count($perMinggu),
+            ],
+            'per_minggu' => $perMinggu,
+            'per_pit' => $perPit,
+            'per_jenis' => $perJenis,
+            'terpotong' => $terpotong,
+            'batas' => self::BATAS_BARIS_MODAL,
+            'baris' => $contoh,
+        ]);
+    }
+
+    /**
+     * Minggu-minggu penyusun sel ini.
+     *
+     * Agregatnya persis seperti overview(): COUNT(*) dan SUM(STANDARD_SQL)
+     * atas pengelompokan year+week yang sama, jadi penjumlahannya di PHP
+     * menghasilkan angka yang identik dengan sel.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function rincianPerMinggu(Builder $query): array
+    {
+        return $query
+            ->selectRaw('year, week, COUNT(*) AS total, SUM(' . self::STANDARD_SQL . ') AS standar')
+            ->groupBy('year', 'week')
+            ->orderBy('year')
+            ->orderBy('week')
+            ->get()
+            ->map(function (object $row): array {
+                $total = (int) $row->total;
+                $standar = (int) $row->standar;
+
+                return [
+                    'tahun' => (int) $row->year,
+                    'minggu' => (int) $row->week,
+                    'total' => $total,
+                    'standar' => $standar,
+                    'tidak_sesuai' => $total - $standar,
+                    'percent' => $total > 0 ? round($standar / $total * 100, 2) : 0.0,
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * Sebaran per pit sekaligus pecahan jenis ketidaksesuaian, dari satu query.
+     *
+     * Catatan kejujuran: satu segmen bisa gagal di lebih dari satu cek, jadi
+     * jumlah seluruh batang "per jenis" wajar melebihi cacah segmen tidak
+     * sesuai. Itu dinyatakan di modal, bukan disembunyikan.
+     *
+     * @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, mixed>>}
+     */
+    private function rincianPerPitDanJenis(Builder $query): array
+    {
+        $rows = $query
+            ->selectRaw(
+                'pit,'
+                . ' COUNT(*) AS total,'
+                . ' COUNT(DISTINCT nama_jalan) AS ruas,'
+                . $this->jenisCekSelect()
+                . ' SUM(' . self::STANDARD_SQL . ') AS standar'
+            )
+            ->groupBy('pit')
+            ->get();
+
+        $totalJenis = array_fill_keys(array_keys(self::JENIS_CEK), 0);
+        $perPit = [];
+
+        foreach ($rows as $row) {
+            foreach (array_keys(self::JENIS_CEK) as $key) {
+                $totalJenis[$key] += (int) $row->$key;
+            }
+
+            $total = (int) $row->total;
+            $standar = (int) $row->standar;
+
+            $perPit[] = [
+                'pit' => trim((string) ($row->pit ?? '')) ?: '-',
+                'total' => $total,
+                'standar' => $standar,
+                'tidak_sesuai' => $total - $standar,
+                'ruas' => (int) $row->ruas,
+                'percent' => $total > 0 ? round($standar / $total * 100, 2) : 0.0,
+            ];
+        }
+
+        // Pit yang paling banyak menyumbang segmen tidak sesuai di atas:
+        // itu yang perlu ditindaklanjuti, bukan yang kebetulan terbesar.
+        usort($perPit, static fn (array $a, array $b): int => $b['tidak_sesuai'] <=> $a['tidak_sesuai']);
+
+        arsort($totalJenis);
+        $perJenis = [];
+
+        foreach ($totalJenis as $key => $jumlah) {
+            $perJenis[] = [
+                'label' => self::JENIS_CEK[$key][0],
+                'jumlah' => $jumlah,
+            ];
+        }
+
+        return [$perPit, $perJenis];
+    }
+
+    /**
+     * Contoh segmen tidak sesuai, yang paling banyak gagal ceknya di atas.
+     *
+     * Hanya segmen tidak sesuai yang didaftar: segmen standar tidak punya
+     * yang perlu dibaca satu per satu, dan sel terbesar berisi belasan ribu
+     * baris. Diambil satu lebih banyak dari batas supaya pemanggil tahu
+     * daftarnya terpotong.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function contohSegmen(Builder $query): array
+    {
+        $bobot = implode(' + ', array_map(
+            static fn (array $j): string => '(' . $j[1] . ')',
+            array_values(self::JENIS_CEK)
+        ));
+
+        return $query
+            ->whereRaw('NOT ' . self::STANDARD_SQL)
+            ->select([
+                'pit', 'mitra', 'year', 'week', 'nama_jalan', 'segment',
+                'grade_stat', 'road_width', 'supereleva', 'junction_1', 'junction_s',
+            ])
+            ->selectRaw('(' . $bobot . ') AS gagal')
+            ->orderByRaw('(' . $bobot . ') DESC')
+            ->orderBy('pit')
+            ->orderBy('nama_jalan')
+            ->orderBy('segment')
+            ->limit(self::BATAS_BARIS_MODAL + 1)
+            ->get()
+            ->map(static function (object $row): array {
+                $teks = static fn ($value): string => trim((string) $value);
+
+                return [
+                    'pit' => $teks($row->pit) ?: '-',
+                    'mitra' => $teks($row->mitra) ?: '-',
+                    'tahun' => (int) $row->year,
+                    'minggu' => (int) $row->week,
+                    'nama_jalan' => $teks($row->nama_jalan) ?: '-',
+                    'segment' => (int) $row->segment,
+                    'grade_stat' => $teks($row->grade_stat) ?: '-',
+                    'road_width' => $teks($row->road_width) ?: '-',
+                    'supereleva' => $teks($row->supereleva) ?: '-',
+                    'junction_1' => $teks($row->junction_1) ?: '-',
+                    'junction_s' => $teks($row->junction_s) ?: '-',
+                    'gagal' => (int) $row->gagal,
+                ];
+            })
+            ->all();
+    }
 
     public function export(Request $request): StreamedResponse|JsonResponse
     {
@@ -1119,13 +1425,7 @@ final class RoadSummaryController extends Controller
             return;
         }
 
-        $weeksByYear = [];
-
-        foreach ($this->yearWeekPairs() as $pair) {
-            if ($this->monthOfIsoWeek($pair['year'], $pair['week']) === $month) {
-                $weeksByYear[$pair['year']][] = $pair['week'];
-            }
-        }
+        $weeksByYear = $this->weeksOfMonth($month);
 
         if ($weeksByYear === []) {
             $query->whereRaw('1 = 0'); // bulan dipilih tapi tak ada datanya
@@ -1133,6 +1433,46 @@ final class RoadSummaryController extends Controller
             return;
         }
 
+        $this->whereYearWeeks($query, $weeksByYear);
+    }
+
+    /**
+     * Minggu mana saja yang dimiliki sebuah bulan, menurut aturan Kamis di
+     * monthOfIsoWeek().
+     *
+     * Dipisahkan menjadi helper karena dipakai dua tempat yang WAJIB sepakat:
+     * filter Bulan di tabel dan rincian satu sel matriks. Kalau keduanya
+     * memakai penurunan minggu->bulan yang berbeda, modal akan menjaring
+     * minggu yang tidak sama dengan selnya dan angkanya tidak akan cocok.
+     *
+     * @return array<int, array<int, int>> [tahun => daftar minggu]
+     */
+    private function weeksOfMonth(int $month, ?int $year = null): array
+    {
+        $weeksByYear = [];
+
+        foreach ($this->yearWeekPairs() as $pair) {
+            if ($year !== null && $pair['year'] !== $year) {
+                continue;
+            }
+
+            if ($this->monthOfIsoWeek($pair['year'], $pair['week']) === $month) {
+                $weeksByYear[$pair['year']][] = $pair['week'];
+            }
+        }
+
+        return $weeksByYear;
+    }
+
+    /**
+     * (year, week) yang diizinkan, ditulis sebagai OR per tahun supaya kolom
+     * year/week dipakai apa adanya — index idx_road_summary_periode
+     * (site, year, week, mitra) tetap terpakai, tidak ada fungsi tanggal di WHERE.
+     *
+     * @param  array<int, array<int, int>>  $weeksByYear
+     */
+    private function whereYearWeeks(Builder $query, array $weeksByYear): void
+    {
         $query->where(function (Builder $outer) use ($weeksByYear): void {
             foreach ($weeksByYear as $year => $weeks) {
                 $outer->orWhere(function (Builder $inner) use ($year, $weeks): void {

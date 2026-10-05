@@ -1,5 +1,6 @@
 {{-- Tab Ringkasan Kinerja Pengawasan Control Room DMS. --}}
-<div class="kcr-overview" data-url="{{ route('ohs-score-card.kinerja-control-room-dms.overview') }}">
+<div class="kcr-overview" data-url="{{ route('ohs-score-card.kinerja-control-room-dms.overview') }}"
+     data-detail-url="{{ route('ohs-score-card.kinerja-control-room-dms.detail-bulan') }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">

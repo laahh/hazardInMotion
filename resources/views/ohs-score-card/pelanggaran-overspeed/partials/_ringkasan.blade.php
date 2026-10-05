@@ -9,7 +9,8 @@
   terikat tepat satu site, jadi memecah matriks dengannya hanya memanjangkan
   tabel tanpa menambah informasi.
 --}}
-<div class="osp-overview" data-url="{{ route('ohs-score-card.pelanggaran-overspeed.overview') }}">
+<div class="osp-overview" data-url="{{ route('ohs-score-card.pelanggaran-overspeed.overview') }}"
+     data-detail-url="{{ route('ohs-score-card.pelanggaran-overspeed.detail-bulan') }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">

@@ -54,6 +54,16 @@
     transform: scale(1.06); box-shadow: 0 0 0 2px rgba(220,38,38,.3);
     position: relative; z-index: 1;
   }
+  /* Sel nol pun bisa dibuka: di halaman ini nol adalah hasil pengukuran,
+     bukan data yang hilang, dan modalnya memang menerangkan itu. */
+  .gap-matrix .gap-cell--klik { cursor: pointer; }
+  .gap-matrix .gap-cell--klik:focus-visible {
+    outline: 2px solid #487FFF; outline-offset: 1px; position: relative; z-index: 2;
+  }
+
+  /* Daftar deviasi di dalam modal digulir sendiri. */
+  .gap-modal-scroll { max-height: 40vh; overflow: auto; }
+  .gap-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
   /* Keterangan deviasi panjang-panjang; dipotong agar baris tabel tetap rapi. */
   .gap-keterangan {
     display: block; max-width: 380px;
@@ -115,9 +125,245 @@
     @include('ohs-score-card.incident-gap-cctv-dms.partials._data')
   </div>
 </div>
+
+{{-- Modal rincian satu sel matriks.
+     Ditaruh di luar .gap-overview dan di luar tab pane supaya tidak ikut
+     tersembunyi saat tab Data yang aktif. --}}
+<div class="modal fade" id="gap-detail-modal" tabindex="-1" aria-labelledby="gap-detail-judul" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content radius-12">
+      <div class="modal-header border-bottom py-16 px-24">
+        <div>
+          <h6 class="modal-title text-lg fw-semibold mb-0" id="gap-detail-judul">Gap di Lapisan Mana</h6>
+          <span class="text-sm text-secondary-light" data-gapm="subjudul"></span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body p-24"><div data-gapm="isi"></div></div>
+      <div class="modal-footer border-top py-12 px-24">
+        <span class="text-sm text-secondary-light me-auto" data-gapm="kaki"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary radius-8" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('page-scripts')
+<script>
+// ---- Modal rincian satu sel matriks -----------------------------------------
+var gapModalDetail = (function () {
+    'use strict';
+
+    var el = document.getElementById('gap-detail-modal');
+    if (!el) { return null; }
+
+    var bagian = function (n) { return el.querySelector('[data-gapm="' + n + '"]'); };
+    var permintaan = 0;
+
+    function esc(v) {
+        return String(v === null || v === undefined ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function num(v) { return Number(v || 0).toLocaleString('id-ID'); }
+
+    function ubin(label, nilai, catatan, kelas) {
+        return '<div class="col-md-6">'
+            + '<div class="border input-form-light radius-8 p-16 h-100">'
+            +   '<span class="text-sm text-secondary-light d-block">' + esc(label) + '</span>'
+            +   '<h6 class="fw-semibold mt-8 mb-4 ' + (kelas || '') + '">' + nilai + '</h6>'
+            +   '<span class="text-xs text-secondary-light">' + esc(catatan) + '</span>'
+            + '</div></div>';
+    }
+
+    /**
+     * Pecahan satu lapisan. Parameter ini berbutir LAPISAN, bukan insiden:
+     * satu insiden bisa punya beberapa baris deviasi, jadi pecahan inilah yang
+     * menjawab "gap-nya di lapisan mana", bukan sekadar daftar insiden.
+     */
+    function daftarLapis(baris, warna) {
+        if (!baris || !baris.length) {
+            return '<div class="text-center text-secondary-light py-16">Tidak ada data.</div>';
+        }
+        var maks = baris[0].jumlah || 1;
+        return '<div class="table-responsive"><table class="table bordered-table sm-table mb-0"><tbody>'
+            + baris.map(function (b) {
+                return '<tr><td class="text-sm">' + esc(b.label) + '</td>'
+                    + '<td class="text-end fw-semibold" style="width:64px">' + num(b.jumlah) + '</td>'
+                    + '<td class="text-end text-xs text-secondary-light" style="width:64px">'
+                    +   Number(b.percent).toFixed(1) + '%</td>'
+                    + '<td style="width:30%"><div class="progress w-100 bg-primary-50 rounded-pill h-8-px">'
+                    + '<div class="progress-bar ' + warna + ' rounded-pill" role="progressbar"'
+                    + ' style="width:' + (b.jumlah / maks * 100) + '%" aria-valuenow="' + b.jumlah + '"'
+                    + ' aria-valuemin="0" aria-valuemax="' + maks + '"></div></div></td></tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    function render(j, koordinat) {
+        var r = j.ringkas;
+
+        var isi = '<div class="row gy-3 mb-20">'
+            + ubin('Insiden dengan Gap', esc(koordinat.nilai || num(r.insiden)),
+                   'nilai sel yang diklik, dari tabel ringkasan')
+            + ubin('Baris Deviasi', num(r.deviasi),
+                   r.rata_deviasi === null
+                       ? 'dari tabel rincian'
+                       : 'rata-rata ' + r.rata_deviasi + ' baris per insiden')
+            + '</div>';
+
+        // Ringkasan mencacah INSIDEN, rincian mencacah BARIS LAPISAN. Keduanya
+        // memang tidak sama, jadi selisihnya diterangkan -- bukan disembunyikan
+        // -- supaya tidak terbaca sebagai data yang hilang.
+        if (r.selisih !== 0) {
+            isi += '<div class="alert bg-info-focus text-info-main border-info-main'
+                + ' radius-8 px-20 py-12 mb-20 text-sm">'
+                + 'Ringkasan mencacah <strong>insiden</strong> (' + num(r.insiden) + '), '
+                + 'rincian mencacah <strong>baris lapisan</strong> (' + num(r.deviasi) + '). '
+                + 'Satu insiden bisa punya beberapa baris deviasi, jadi kedua angka ini '
+                + 'memang berbeda dan keduanya benar.'
+                + '</div>';
+        }
+
+        if (!j.baris.length) {
+            bagian('isi').innerHTML = isi
+                + '<div class="text-center text-secondary-light py-24">'
+                + 'Tidak ada baris deviasi di tabel rincian untuk kombinasi ini.</div>';
+            bagian('kaki').textContent = '';
+            return;
+        }
+
+        isi += '<div class="row gy-4 mb-20">'
+            +   '<div class="col-xxl-4">'
+            +     '<h6 class="text-md fw-semibold mb-4">Activity</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Kegiatan saat gap terjadi</span>'
+            +     daftarLapis(j.per_alat, 'bg-info-main')
+            +   '</div>'
+            +   '<div class="col-xxl-4">'
+            +     '<h6 class="text-md fw-semibold mb-4">Klasifikasi</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Jenis ketidaksesuaian yang tercatat</span>'
+            +     daftarLapis(j.per_klasifikasi, 'bg-warning-main')
+            +   '</div>'
+            +   '<div class="col-xxl-4">'
+            +     '<h6 class="text-md fw-semibold mb-4">Status</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Status lapisan pada saat kejadian</span>'
+            +     daftarLapis(j.per_status, 'bg-danger-main')
+            +   '</div>'
+            + '</div>';
+
+        isi += '<h6 class="text-md fw-semibold mb-12">Daftar deviasi</h6>'
+            + '<div class="row gy-2 gx-2 align-items-end mb-12">'
+            +   '<div class="col-sm-8"><input type="text" class="form-control form-control-sm radius-8"'
+            +     ' placeholder="Cari activity, klasifikasi, status, keterangan…" data-gapm="cari"></div>'
+            +   '<div class="col-sm-4 text-sm-end"><span class="text-sm text-secondary-light"'
+            +     ' data-gapm="hitung"></span></div>'
+            + '</div>'
+            + '<div class="table-responsive gap-modal-scroll">'
+            +   '<table class="table bordered-table sm-table mb-0" data-gapm="tabel"><thead><tr>'
+            +     '<th>Activity</th><th>Klasifikasi</th><th>Status</th>'
+            +     '<th class="text-end">Insiden</th><th>Keterangan</th>'
+            +   '</tr></thead><tbody>'
+            +   j.baris.map(function (b) {
+                    return '<tr data-cari="'
+                        + esc((b.activity + ' ' + b.klasifikasi + ' ' + b.status + ' '
+                               + b.keterangan).toLowerCase()) + '">'
+                        + '<td><span class="text-sm">' + esc(b.activity || '-') + '</span></td>'
+                        + '<td><span class="text-sm">' + esc(b.klasifikasi || '-') + '</span></td>'
+                        + '<td><span class="text-sm">' + esc(b.status || '-') + '</span></td>'
+                        + '<td class="text-end fw-semibold">' + num(b.jumlah) + '</td>'
+                        + '<td><span class="text-sm text-secondary-light gap-keterangan">'
+                        +   esc(b.keterangan || '-') + '</span></td>'
+                        + '</tr>';
+                }).join('')
+            +   '</tbody></table></div>';
+
+        bagian('isi').innerHTML = isi;
+        bagian('kaki').textContent = j.terpotong
+            ? 'Menampilkan ' + num(j.batas) + ' baris pertama dari ' + num(r.deviasi) + '.'
+            : num(r.deviasi) + ' baris deviasi tercatat di sel ini.';
+
+        pasangPencarian();
+    }
+
+    /** Pencarian dikerjakan di baris yang sudah ada, tanpa ke server lagi. */
+    function pasangPencarian() {
+        var cari = bagian('cari');
+        var hitung = bagian('hitung');
+        var semua = Array.prototype.slice.call(el.querySelectorAll('[data-gapm="tabel"] tbody tr'));
+
+        function terapkan() {
+            var teks = (cari.value || '').trim().toLowerCase();
+            var tampil = 0;
+
+            semua.forEach(function (tr) {
+                var cocok = !teks || tr.dataset.cari.indexOf(teks) !== -1;
+                tr.classList.toggle('d-none', !cocok);
+                if (cocok) { tampil++; }
+            });
+
+            hitung.textContent = tampil === semua.length
+                ? semua.length + ' baris'
+                : tampil + ' dari ' + semua.length + ' baris';
+        }
+
+        cari.addEventListener('input', terapkan);
+        terapkan();
+    }
+
+    function buka(url, koordinat) {
+        // Nomor permintaan menjaga agar jawaban yang datang terlambat untuk sel
+        // yang sudah tidak dibuka lagi tidak menimpa isi modal.
+        var ini = ++permintaan;
+
+        el.querySelector('#gap-detail-judul').textContent =
+            'Rincian ' + koordinat.bulan + ' · ' + koordinat.site;
+        bagian('subjudul').textContent = koordinat.mitra || 'Seluruh perusahaan di site ini';
+        bagian('kaki').textContent = '';
+        bagian('isi').innerHTML = '<div class="text-center text-secondary-light py-40">'
+            + '<div class="spinner-border spinner-border-sm text-primary-600 me-2" role="status"></div>'
+            + 'Memuat rincian…</div>';
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        }
+
+        var q = new URLSearchParams({
+            site: koordinat.site, mitra: koordinat.mitra || '', month: koordinat.month
+        });
+
+        fetch(url + '?' + q.toString(), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) {
+                if (!res.ok) { throw new Error('HTTP ' + res.status); }
+                return res.json();
+            })
+            .then(function (j) {
+                if (ini !== permintaan) { return; }
+                if (!j.ok) {
+                    bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                        + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                        + esc(j.pesan || 'Rincian tidak bisa dimuat.') + '</div>';
+                    return;
+                }
+                render(j, koordinat);
+            })
+            .catch(function (err) {
+                if (ini !== permintaan) { return; }
+                bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                    + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                    + 'Permintaan ke server gagal. ' + esc(err && err.message) + '</div>';
+            });
+    }
+
+    return { buka: buka };
+})();
+</script>
 <script>
 // ---- Tab Ringkasan ----------------------------------------------------------
 (function () {
@@ -140,6 +386,35 @@
 
     function el(name) {
         return root.querySelector('[data-gap="' + name + '"]');
+    }
+
+    // Delegasi di tabel, bukan di tiap sel: matriks digambar ulang setiap ganti
+    // filter, dan pendengar per sel akan ikut hilang.
+    var matrixEl = el('matrix');
+
+    if (gapModalDetail && matrixEl && root.dataset.detailUrl) {
+        var bukaSel = function (td) {
+            gapModalDetail.buka(root.dataset.detailUrl, {
+                site: td.dataset.site,
+                mitra: td.dataset.mitra,
+                month: td.dataset.month,
+                bulan: td.dataset.bulan,
+                nilai: td.dataset.nilai
+            });
+        };
+
+        matrixEl.addEventListener('click', function (e) {
+            var td = e.target.closest('.gap-cell--klik');
+            if (td && matrixEl.contains(td)) { bukaSel(td); }
+        });
+
+        matrixEl.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') { return; }
+            var td = e.target.closest('.gap-cell--klik');
+            if (!td || !matrixEl.contains(td)) { return; }
+            e.preventDefault();
+            bukaSel(td);
+        });
     }
 
     function escapeHtml(value) {
@@ -340,7 +615,16 @@
                 var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
                     + (jumlah === 0 ? 'tidak ada insiden' : fmtNum(jumlah) + ' insiden');
 
-                html += '<td class="gap-cell ' + tierClass(jumlah) + '" title="' + escapeHtml(tip) + '">'
+                // Koordinat sel dibawa di atribut, bukan ditebak dari posisi
+                // DOM: urutan baris ikut berubah tiap kali filter diganti.
+                html += '<td class="gap-cell gap-cell--klik ' + tierClass(jumlah) + '"'
+                    + ' role="button" tabindex="0"'
+                    + ' data-site="' + escapeHtml(row.site) + '"'
+                    + ' data-mitra="' + escapeHtml(row.mitra) + '"'
+                    + ' data-month="' + months[m].number + '"'
+                    + ' data-bulan="' + escapeHtml(months[m].label) + '"'
+                    + ' data-nilai="' + escapeHtml(fmtNum(jumlah)) + '"'
+                    + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
                     + fmtNum(jumlah) + '</td>';
             });
 

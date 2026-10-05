@@ -50,6 +50,8 @@ Route::middleware('evaluasi-well.access')
         // Parameter SGI — "Jalan sesuai standar" (app_mixer.road_summary)
         Route::get('/jalan-sesuai-standar', [RoadSummaryController::class, 'index'])
             ->name('jalan-sesuai-standar.index');
+        Route::get('/jalan-sesuai-standar/detail-bulan', [RoadSummaryController::class, 'detailBulan'])
+            ->name('jalan-sesuai-standar.detail-bulan');
         Route::get('/jalan-sesuai-standar/data', [RoadSummaryController::class, 'data'])
             ->name('jalan-sesuai-standar.data');
         Route::get('/jalan-sesuai-standar/export', [RoadSummaryController::class, 'export'])
@@ -80,6 +82,8 @@ Route::middleware('evaluasi-well.access')
             ->name('incident-gap-cctv-dms.index');
         Route::get('/incident-gap-cctv-dms/overview', [IncidentGapCctvDmsController::class, 'overview'])
             ->name('incident-gap-cctv-dms.overview');
+        Route::get('/incident-gap-cctv-dms/detail-bulan', [IncidentGapCctvDmsController::class, 'detailBulan'])
+            ->name('incident-gap-cctv-dms.detail-bulan');
         Route::get('/incident-gap-cctv-dms/data', [IncidentGapCctvDmsController::class, 'data'])
             ->name('incident-gap-cctv-dms.data');
         Route::get('/incident-gap-cctv-dms/export', [IncidentGapCctvDmsController::class, 'export'])
@@ -90,6 +94,8 @@ Route::middleware('evaluasi-well.access')
             ->name('gr-seatbelt.index');
         Route::get('/gr-seatbelt/overview', [GrSeatbeltController::class, 'overview'])
             ->name('gr-seatbelt.overview');
+        Route::get('/gr-seatbelt/detail-bulan', [GrSeatbeltController::class, 'detailBulan'])
+            ->name('gr-seatbelt.detail-bulan');
         Route::get('/gr-seatbelt/data', [GrSeatbeltController::class, 'data'])
             ->name('gr-seatbelt.data');
         Route::get('/gr-seatbelt/export', [GrSeatbeltController::class, 'export'])
@@ -100,6 +106,8 @@ Route::middleware('evaluasi-well.access')
             ->name('penggunaan-hp.index');
         Route::get('/penggunaan-hp/overview', [PenggunaanHpController::class, 'overview'])
             ->name('penggunaan-hp.overview');
+        Route::get('/penggunaan-hp/detail-bulan', [PenggunaanHpController::class, 'detailBulan'])
+            ->name('penggunaan-hp.detail-bulan');
         Route::get('/penggunaan-hp/data', [PenggunaanHpController::class, 'data'])
             ->name('penggunaan-hp.data');
         Route::get('/penggunaan-hp/export', [PenggunaanHpController::class, 'export'])
@@ -134,6 +142,8 @@ Route::middleware('evaluasi-well.access')
             ->name('blindspot-tbc-pic-subcont.index');
         Route::get('/blindspot-tbc-pic-subcont/overview', [BlindspotTbcPicSubcontController::class, 'overview'])
             ->name('blindspot-tbc-pic-subcont.overview');
+        Route::get('/blindspot-tbc-pic-subcont/detail-bulan', [BlindspotTbcPicSubcontController::class, 'detailBulan'])
+            ->name('blindspot-tbc-pic-subcont.detail-bulan');
         Route::get('/blindspot-tbc-pic-subcont/data', [BlindspotTbcPicSubcontController::class, 'data'])
             ->name('blindspot-tbc-pic-subcont.data');
         Route::get('/blindspot-tbc-pic-subcont/export', [BlindspotTbcPicSubcontController::class, 'export'])
@@ -172,6 +182,8 @@ Route::middleware('evaluasi-well.access')
             ->name('perulangan-rekomendasi.index');
         Route::get('/perulangan-rekomendasi/overview', [PerulanganRekomendasiController::class, 'overview'])
             ->name('perulangan-rekomendasi.overview');
+        Route::get('/perulangan-rekomendasi/detail-bulan', [PerulanganRekomendasiController::class, 'detailBulan'])
+            ->name('perulangan-rekomendasi.detail-bulan');
         Route::get('/perulangan-rekomendasi/data', [PerulanganRekomendasiController::class, 'data'])
             ->name('perulangan-rekomendasi.data');
         Route::get('/perulangan-rekomendasi/export', [PerulanganRekomendasiController::class, 'export'])
@@ -182,6 +194,8 @@ Route::middleware('evaluasi-well.access')
             ->name('fit-to-work-awal-shift.index');
         Route::get('/fit-to-work-awal-shift/overview', [FitToWorkAwalShiftController::class, 'overview'])
             ->name('fit-to-work-awal-shift.overview');
+        Route::get('/fit-to-work-awal-shift/detail-bulan', [FitToWorkAwalShiftController::class, 'detailBulan'])
+            ->name('fit-to-work-awal-shift.detail-bulan');
         Route::get('/fit-to-work-awal-shift/data', [FitToWorkAwalShiftController::class, 'data'])
             ->name('fit-to-work-awal-shift.data');
         Route::get('/fit-to-work-awal-shift/export', [FitToWorkAwalShiftController::class, 'export'])
@@ -195,6 +209,8 @@ Route::middleware('evaluasi-well.access')
         Route::get('/rasio-kelayakan-kerja/{dataset}/overview', [RasioKelayakanKerjaController::class, 'overview'])
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('rasio-kelayakan-kerja.overview');
+        Route::get('/rasio-kelayakan-kerja/{dataset}/detail-bulan', [RasioKelayakanKerjaController::class, 'detailBulan'])
+            ->name('rasio-kelayakan-kerja.detail-bulan');
         Route::get('/rasio-kelayakan-kerja/{dataset}/data', [RasioKelayakanKerjaController::class, 'data'])
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('rasio-kelayakan-kerja.data');
@@ -207,6 +223,8 @@ Route::middleware('evaluasi-well.access')
             ->name('leadtime-alert-bedms.index');
         Route::get('/leadtime-alert-bedms/overview', [LeadtimeAlertBedmsController::class, 'overview'])
             ->name('leadtime-alert-bedms.overview');
+        Route::get('/leadtime-alert-bedms/detail-bulan', [LeadtimeAlertBedmsController::class, 'detailBulan'])
+            ->name('leadtime-alert-bedms.detail-bulan');
         Route::get('/leadtime-alert-bedms/data', [LeadtimeAlertBedmsController::class, 'data'])
             ->name('leadtime-alert-bedms.data');
         Route::get('/leadtime-alert-bedms/export', [LeadtimeAlertBedmsController::class, 'export'])
@@ -217,6 +235,8 @@ Route::middleware('evaluasi-well.access')
             ->name('kinerja-control-room-dms.index');
         Route::get('/kinerja-control-room-dms/overview', [KinerjaControlRoomDmsController::class, 'overview'])
             ->name('kinerja-control-room-dms.overview');
+        Route::get('/kinerja-control-room-dms/detail-bulan', [KinerjaControlRoomDmsController::class, 'detailBulan'])
+            ->name('kinerja-control-room-dms.detail-bulan');
         Route::get('/kinerja-control-room-dms/data', [KinerjaControlRoomDmsController::class, 'data'])
             ->name('kinerja-control-room-dms.data');
         Route::get('/kinerja-control-room-dms/export', [KinerjaControlRoomDmsController::class, 'export'])
@@ -277,6 +297,8 @@ Route::middleware('evaluasi-well.access')
             ->name('pelanggaran-overspeed.index');
         Route::get('/pelanggaran-overspeed/overview', [PelanggaranOverspeedController::class, 'overview'])
             ->name('pelanggaran-overspeed.overview');
+        Route::get('/pelanggaran-overspeed/detail-bulan', [PelanggaranOverspeedController::class, 'detailBulan'])
+            ->name('pelanggaran-overspeed.detail-bulan');
         Route::get('/pelanggaran-overspeed/data', [PelanggaranOverspeedController::class, 'data'])
             ->name('pelanggaran-overspeed.data');
         Route::get('/pelanggaran-overspeed/export', [PelanggaranOverspeedController::class, 'export'])
@@ -287,6 +309,8 @@ Route::middleware('evaluasi-well.access')
             ->name('golden-time-emergency.index');
         Route::get('/golden-time-emergency/overview', [GoldenTimeEmergencyController::class, 'overview'])
             ->name('golden-time-emergency.overview');
+        Route::get('/golden-time-emergency/detail-bulan', [GoldenTimeEmergencyController::class, 'detailBulan'])
+            ->name('golden-time-emergency.detail-bulan');
         Route::get('/golden-time-emergency/data', [GoldenTimeEmergencyController::class, 'data'])
             ->name('golden-time-emergency.data');
         Route::get('/golden-time-emergency/export', [GoldenTimeEmergencyController::class, 'export'])

@@ -437,6 +437,427 @@ final class KinerjaControlRoomDmsController extends Controller
     }
 
     // ======================================================================
+    // Modal rincian satu sel
+    // ======================================================================
+
+    /**
+     * Isi satu sel matriks Capaian per Bulan, untuk modal rincian.
+     *
+     * SUMBERNYA HANYA PERSENTASE. lead_kinerja_control_room_dms cuma punya
+     * pct_kinerja_pengawas_control_room -- tidak ada pembilang maupun penyebut
+     * seperti halaman Coverage yang menyimpan tercover dan terdaftar, dan tidak
+     * ada tabel rincian yang bisa menggantikannya (lead_..._month masih nol
+     * baris). Jadi sel ini TIDAK bisa diurai jadi "sekian dari sekian"; yang
+     * disajikan konteks di sekelilingnya, seluruhnya dari tabel yang sama
+     * dengan matriksnya, sehingga angkanya tidak mungkin bertentangan.
+     *
+     * KOSONG BUKAN NOL, DAN ADA DUA MACAM KOSONG. 40 dari 155 baris di luar
+     * Oktober ber-pct NULL, dan di samping itu 43 sel matriks memang tidak
+     * punya barisnya sama sekali. Keduanya tampil sebagai strip di matriks,
+     * padahal artinya berbeda: yang pertama "barisnya ada, angkanya belum
+     * diisi", yang kedua "pasangan ini memang tidak beroperasi di bulan itu".
+     * Karena itu tiap baris panel di modal membawa ada_baris, dan panel-panel
+     * di sini sengaja menampilkan bulan/perusahaan/site yang TIDAK punya angka
+     * sekalipun -- kalau yang kosong disembunyikan, pembaca akan mengira
+     * pembandingnya memang cuma segitu.
+     *
+     *   riwayat      site x perusahaan sepanjang bulan -> kronis atau sesaat?
+     *   sebulan      site x bulan di seluruh perusahaan -> satu mitra atau se-site?
+     *   lintas_site  perusahaan x bulan di seluruh site -> mitranya atau sitenya?
+     *
+     * PANEL KETIGA dipakai karena perusahaan di sini bekerja lintas site --
+     * tiap perusahaan muncul di 2 sampai 5 site, PT PAMA di lima. Tanpa itu
+     * pembaca tidak bisa memisahkan "perusahaan ini memang lemah" dari "site
+     * ini yang bermasalah".
+     *
+     * PERINGKAT dihitung hanya di antara pasangan yang punya angka pada bulan
+     * itu, tertinggi lebih dulu karena di parameter ini makin tinggi makin
+     * baik. Pasangan tanpa angka tidak ikut diperingkat -- dan jumlahnya
+     * dilaporkan lewat kelengkapan supaya penyebutnya tidak terbaca sebagai
+     * seluruh pasangan.
+     */
+    public function detailBulan(Request $request): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $mitra = trim((string) $request->input('mitra', ''));
+
+        // monthHeadings() halaman ini mengirim number 1-12, tetapi kode
+        // tahun*100+bulan ikut diterima supaya modal tetap bekerja kalau suatu
+        // saat sumbernya menyimpan tahun juga.
+        $kode = (int) $request->input('month', 0);
+        $bulan = $kode > 9999 ? $kode % 100 : $kode;
+
+        if ($site === '' || $mitra === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site, perusahaan, dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        // Oktober dikecualikan di overview(), jadi tidak boleh punya rincian --
+        // kalau dibiarkan, modal akan memunculkan angka yang tidak ada selnya.
+        if (in_array($bulan, self::EXCLUDED_MONTHS, true)) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => self::monthLabel($bulan) . ' tidak ikut dihitung di parameter ini, '
+                    . 'jadi tidak ada rinciannya.',
+            ]);
+        }
+
+        $nilaiBulan = $this->namaBulan($bulan);
+
+        // Diagregasi persis seperti overview(), bukan diambil nilai baris
+        // tunggal, supaya sel dan modal tidak bisa berbeda kalau suatu saat
+        // sumbernya memuat lebih dari satu baris per kunci.
+        $sel = $this->agregat(
+            DB::table(self::TABLE)
+                ->where(self::COL_SITE, $site)
+                ->where(self::COL_PERUSAHAAN, $mitra)
+                ->whereIn(self::COL_BULAN, $nilaiBulan)
+        );
+
+        $konteks = $this->konteksBulan($nilaiBulan, $site, $mitra);
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'site' => $site,
+                'mitra' => $mitra,
+                'bulan' => self::monthLabel($bulan),
+            ],
+            'target' => self::TARGET_PERCENT,
+            'sel' => $this->bentukNilai($sel['persen'], $sel['baris'] > 0),
+            'peringkat' => $konteks['peringkat'],
+            'kelengkapan' => $konteks['kelengkapan'],
+            'riwayat' => $this->riwayatSelama($site, $mitra),
+            'sebulan' => $this->sebulanDiSite($site, $nilaiBulan, $mitra),
+            'lintas_site' => $this->lintasSite($mitra, $nilaiBulan, $site),
+        ]);
+    }
+
+    /**
+     * Rata-rata persentase sebuah himpunan baris, beserta cacah barisnya.
+     *
+     * SUM/COUNT dipakai, bukan AVG, karena hasilnya sama persis tetapi bisa
+     * dijumlahkan antar kelompok -- kolom bulan pernah ditulis dua gaya
+     * ("M01" dan "January"), dan kalau keduanya muncul bersamaan, AVG per
+     * kelompok tidak bisa digabung tanpa membobot ulang.
+     *
+     * @return array{baris: int, terisi: int, persen: float|null}
+     */
+    private function agregat(Builder $query): array
+    {
+        $row = $query->selectRaw(
+            'COUNT(*) AS baris, '
+            . 'COUNT(' . self::COL_PERSEN . ') AS terisi, '
+            . 'SUM(' . self::COL_PERSEN . ') AS jumlah'
+        )->first();
+
+        $terisi = $row === null ? 0 : (int) $row->terisi;
+
+        return [
+            'baris' => $row === null ? 0 : (int) $row->baris,
+            'terisi' => $terisi,
+            'persen' => $terisi === 0 ? null : round((float) $row->jumlah / $terisi, 2),
+        ];
+    }
+
+    /**
+     * Satu persentase lengkap dengan nilai, band, dan selisihnya ke target.
+     *
+     * ada_baris memisahkan dua sebab sel bisa kosong, dan itu yang membuat
+     * modal tidak boleh menampilkan 0 untuk keduanya.
+     *
+     * @return array<string, mixed>
+     */
+    private function bentukNilai(?float $persen, bool $adaBaris): array
+    {
+        if ($persen === null) {
+            return [
+                'persen' => null, 'nilai' => null, 'nilai_band' => null,
+                'memenuhi_target' => false, 'selisih' => null, 'ada_baris' => $adaBaris,
+            ];
+        }
+
+        [, $nilai, $band] = $this->scoreBandFor($persen);
+
+        return [
+            'persen' => $persen,
+            'nilai' => $nilai,
+            'nilai_band' => $band,
+            'memenuhi_target' => $persen >= self::TARGET_PERCENT,
+            'selisih' => round($persen - self::TARGET_PERCENT, 2),
+            'ada_baris' => $adaBaris,
+        ];
+    }
+
+    /**
+     * Peringkat sel ini di bulan yang sama, sekaligus kelengkapan data bulan
+     * itu. Keduanya lahir dari satu query yang sama supaya penyebut peringkat
+     * dan cacah "belum berdata" tidak mungkin saling bertentangan.
+     *
+     * @param  array<int, string>  $nilaiBulan
+     * @return array{peringkat: array<string, mixed>, kelengkapan: array<string, int>}
+     */
+    private function konteksBulan(array $nilaiBulan, string $site, string $mitra): array
+    {
+        $rows = DB::table(self::TABLE)
+            ->whereIn(self::COL_BULAN, $nilaiBulan)
+            ->selectRaw(
+                self::COL_SITE . ' AS site, '
+                . self::COL_PERUSAHAAN . ' AS mitra, '
+                . 'COUNT(' . self::COL_PERSEN . ') AS terisi, '
+                . 'SUM(' . self::COL_PERSEN . ') AS jumlah'
+            )
+            ->groupBy('site', 'mitra')
+            ->get();
+
+        $berangka = [];
+        $tanpaPersen = 0;
+
+        foreach ($rows as $r) {
+            if ((int) $r->terisi === 0) {
+                $tanpaPersen++; // barisnya ada, persentasenya belum diisi
+                continue;
+            }
+
+            $berangka[] = [
+                'site' => trim((string) $r->site),
+                'mitra' => trim((string) $r->mitra),
+                'persen' => round((float) $r->jumlah / (int) $r->terisi, 2),
+            ];
+        }
+
+        usort($berangka, static fn (array $a, array $b): int => $b['persen'] <=> $a['persen']);
+
+        $posisi = null;
+
+        foreach ($berangka as $i => $r) {
+            if ($r['site'] === $site && $r['mitra'] === $mitra) {
+                $posisi = $i + 1;
+                break;
+            }
+        }
+
+        $semua = array_column($berangka, 'persen');
+        $pasangan = $this->jumlahPasangan();
+
+        return [
+            'peringkat' => [
+                'posisi' => $posisi,
+                'dari' => count($berangka),
+                'rata' => $semua === [] ? null : round(array_sum($semua) / count($semua), 2),
+            ],
+            'kelengkapan' => [
+                'berangka' => count($berangka),
+                'tanpa_persen' => $tanpaPersen,
+                'tanpa_baris' => max(0, $pasangan - count($berangka) - $tanpaPersen),
+                'pasangan' => $pasangan,
+            ],
+        ];
+    }
+
+    /** Banyaknya pasangan site x perusahaan yang muncul di matriks. */
+    private function jumlahPasangan(): int
+    {
+        $query = DB::table(self::TABLE);
+
+        foreach (self::EXCLUDED_MONTHS as $nomor) {
+            $query->whereNotIn(self::COL_BULAN, $this->namaBulan($nomor));
+        }
+
+        $row = $query->selectRaw(
+            'COUNT(DISTINCT ' . self::COL_SITE . ', ' . self::COL_PERUSAHAAN . ') AS n'
+        )->first();
+
+        return $row === null ? 0 : (int) $row->n;
+    }
+
+    /**
+     * Site x perusahaan yang sama sepanjang bulan: kronis atau sesaat?
+     *
+     * Seluruh bulan sumbu matriks ditulis, termasuk yang tidak punya baris,
+     * supaya bulan yang hilang tidak lenyap begitu saja dari pembanding.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function riwayatSelama(string $site, string $mitra): array
+    {
+        $rows = DB::table(self::TABLE)
+            ->where(self::COL_SITE, $site)
+            ->where(self::COL_PERUSAHAAN, $mitra)
+            ->selectRaw(
+                self::COL_BULAN . ' AS bulan, '
+                . 'COUNT(*) AS baris, '
+                . 'COUNT(' . self::COL_PERSEN . ') AS terisi, '
+                . 'SUM(' . self::COL_PERSEN . ') AS jumlah'
+            )
+            ->groupBy('bulan')
+            ->get();
+
+        $perNomor = [];
+
+        foreach ($rows as $r) {
+            $nomor = $this->nomorBulan((string) $r->bulan);
+
+            if ($nomor === 0) {
+                continue; // nama bulan tak dikenal: jangan diam-diam digabung
+            }
+
+            $perNomor[$nomor]['baris'] = ($perNomor[$nomor]['baris'] ?? 0) + (int) $r->baris;
+            $perNomor[$nomor]['terisi'] = ($perNomor[$nomor]['terisi'] ?? 0) + (int) $r->terisi;
+            $perNomor[$nomor]['jumlah'] = ($perNomor[$nomor]['jumlah'] ?? 0.0) + (float) $r->jumlah;
+        }
+
+        $out = [];
+
+        foreach ($this->monthOptions() as $nomor => $label) {
+            $entri = $perNomor[$nomor] ?? null;
+
+            $out[] = [
+                'nomor' => $nomor,
+                'bulan' => $label,
+                'persen' => $entri === null || $entri['terisi'] === 0
+                    ? null
+                    : round($entri['jumlah'] / $entri['terisi'], 2),
+                'ada_baris' => $entri !== null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Seluruh perusahaan di site ini pada bulan yang sama: masalahnya milik
+     * satu mitra atau menyeluruh?
+     *
+     * @param  array<int, string>  $nilaiBulan
+     * @return array<int, array<string, mixed>>
+     */
+    private function sebulanDiSite(string $site, array $nilaiBulan, string $mitraTerpilih): array
+    {
+        return $this->ringkasKolom(
+            DB::table(self::TABLE)
+                ->where(self::COL_SITE, $site)
+                ->whereIn(self::COL_BULAN, $nilaiBulan),
+            self::COL_PERUSAHAAN,
+            'mitra',
+            $mitraTerpilih,
+            $this->labelTersedia(self::COL_PERUSAHAAN, self::COL_SITE, $site)
+        );
+    }
+
+    /**
+     * Perusahaan yang sama di seluruh site pada bulan yang sama: mitranya yang
+     * lemah atau sitenya?
+     *
+     * @param  array<int, string>  $nilaiBulan
+     * @return array<int, array<string, mixed>>
+     */
+    private function lintasSite(string $mitra, array $nilaiBulan, string $siteTerpilih): array
+    {
+        return $this->ringkasKolom(
+            DB::table(self::TABLE)
+                ->where(self::COL_PERUSAHAAN, $mitra)
+                ->whereIn(self::COL_BULAN, $nilaiBulan),
+            self::COL_SITE,
+            'site',
+            $siteTerpilih,
+            $this->labelTersedia(self::COL_SITE, self::COL_PERUSAHAAN, $mitra)
+        );
+    }
+
+    /**
+     * Nilai satu kolom yang pernah muncul bersama sebuah penyaring, di luar
+     * bulan yang dikecualikan. Dipakai sebagai daftar lengkap pembanding,
+     * supaya yang tidak punya baris di bulan terpilih tetap ikut tampil.
+     *
+     * @return array<int, string>
+     */
+    private function labelTersedia(string $kolom, string $filterKolom, string $filterNilai): array
+    {
+        $query = DB::table(self::TABLE)->where($filterKolom, $filterNilai);
+
+        foreach (self::EXCLUDED_MONTHS as $nomor) {
+            $query->whereNotIn(self::COL_BULAN, $this->namaBulan($nomor));
+        }
+
+        return $query->distinct()
+            ->pluck($kolom)
+            ->map(static fn ($v): string => trim((string) $v))
+            ->filter(static fn (string $v): bool => $v !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Rata-rata persentase per nilai satu kolom, tertinggi di atas, dengan
+     * penanda pada baris yang sedang dibuka.
+     *
+     * Yang tidak punya angka ditaruh di bawah dan dibedakan: "barisnya ada
+     * tetapi persentasenya kosong" tidak sama dengan "tidak ada barisnya".
+     *
+     * @param  array<int, string>  $semuaLabel
+     * @return array<int, array<string, mixed>>
+     */
+    private function ringkasKolom(
+        Builder $query,
+        string $kolom,
+        string $kunci,
+        string $terpilih,
+        array $semuaLabel
+    ): array {
+        $rows = $query
+            ->selectRaw(
+                $kolom . ' AS label, '
+                . 'COUNT(*) AS baris, '
+                . 'COUNT(' . self::COL_PERSEN . ') AS terisi, '
+                . 'SUM(' . self::COL_PERSEN . ') AS jumlah'
+            )
+            ->groupBy('label')
+            ->get();
+
+        $perLabel = [];
+
+        foreach ($rows as $r) {
+            $label = trim((string) $r->label);
+            $perLabel[$label]['baris'] = ($perLabel[$label]['baris'] ?? 0) + (int) $r->baris;
+            $perLabel[$label]['terisi'] = ($perLabel[$label]['terisi'] ?? 0) + (int) $r->terisi;
+            $perLabel[$label]['jumlah'] = ($perLabel[$label]['jumlah'] ?? 0.0) + (float) $r->jumlah;
+        }
+
+        $out = [];
+
+        foreach ($semuaLabel as $label) {
+            $entri = $perLabel[$label] ?? null;
+
+            $out[] = [
+                $kunci => $label,
+                'persen' => $entri === null || $entri['terisi'] === 0
+                    ? null
+                    : round($entri['jumlah'] / $entri['terisi'], 2),
+                'ada_baris' => $entri !== null,
+                'ini' => $label === $terpilih,
+            ];
+        }
+
+        // Yang berangka lebih dulu dan dari yang tertinggi; sisanya diurutkan
+        // abjad supaya posisinya tidak berubah-ubah antar bulan.
+        usort($out, static function (array $a, array $b) use ($kunci): int {
+            if (($a['persen'] === null) !== ($b['persen'] === null)) {
+                return $a['persen'] === null ? 1 : -1;
+            }
+
+            return $a['persen'] === null
+                ? strcmp((string) $a[$kunci], (string) $b[$kunci])
+                : $b['persen'] <=> $a['persen'];
+        });
+
+        return $out;
+    }
+
+    // ======================================================================
     // Tab Data
     // ======================================================================
 

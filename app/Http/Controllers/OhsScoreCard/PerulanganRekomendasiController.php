@@ -69,6 +69,17 @@ final class PerulanganRekomendasiController extends Controller
     /** Oktober masih berjalan saat data ini diambil, sejalan halaman lain. */
     private const EXCLUDED_MONTHS = [10];
 
+    /** Batas baris rincian yang dikirim ke modal satu sel. */
+    private const BATAS_BARIS_MODAL = 500;
+
+    /**
+     * Batas baris yang dipindai saat mencari butir tindakan yang sama di sel
+     * lain. Pemindaian itu dilakukan di PHP karena perbandingannya butuh
+     * pemecahan teks, jadi diberi pagar supaya tidak ikut membesar kalau
+     * tabelnya suatu saat membengkak.
+     */
+    private const BATAS_PINDAI_LINTAS = 5000;
+
     private const DETAIL_FILTERABLE = [
         'site' => self::COL_SITE,
         'mitra' => self::COL_PERUSAHAAN,
@@ -556,6 +567,319 @@ final class PerulanganRekomendasiController extends Controller
             'tindakan' => $rata($row->tindakan),
             'jumlah' => (int) $row->jumlah,
         ];
+    }
+
+    // ======================================================================
+    // Rincian satu sel matriks
+    // ======================================================================
+
+    /**
+     * Rincian satu sel "Perulangan per Bulan": site x perusahaan x bulan.
+     *
+     * Angka selnya tetap diambil dari tabel ringkasan dengan SUM yang sama
+     * persis seperti overview(), supaya sel dan modal tidak mungkin berselisih.
+     * Daftar barisnya dari tabel detail, dan selisih keduanya (satu kombinasi
+     * punya ringkasan tanpa rincian) disebut terang-terangan di kartu.
+     *
+     * PANEL TINDAKAN ADALAH INTI MODAL INI, SEKALIGUS BAGIAN YANG PALING
+     * MUDAH MENIPU. Parameter ini soal rekomendasi yang terulang, jadi
+     * pertanyaan pembaca adalah "tindakan perbaikan apa yang itu-itu lagi".
+     * Tetapi tindakan_perbaikan_pencegahan teks bebas: pada data saat ini
+     * ke-19 isinya unik seluruhnya, sehingga mengelompokkannya mentah-mentah
+     * hanya menghasilkan 19 kelompok berisi satu — rapi di layar, nol
+     * informasi. Dua hal karena itu dikerjakan di sini:
+     *
+     *   1. teksnya dipecah dulu jadi butir aksi (lihat butirAksi()), karena
+     *      satu baris kerap memuat beberapa tindakan sekaligus;
+     *   2. tiap butir juga dihitung kemunculannya DI LUAR sel ini, sebab di
+     *      dalam satu sel praktis tidak pernah ada butir kembar. Perulangan
+     *      yang nyata justru terlihat antar bulan.
+     */
+    public function detailBulan(Request $request): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $mitra = trim((string) $request->input('mitra', ''));
+
+        // monthHeadings() halaman ini mengirim nomor 1-12, tetapi halaman lain
+        // di modul yang sama memakai kode tahun*100+bulan. Keduanya diterima
+        // supaya pemanggilnya tidak perlu tahu bedanya.
+        $kode = (int) $request->input('month', 0);
+        $bulan = $kode > 9999 ? $kode % 100 : $kode;
+
+        if ($site === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        if (in_array($bulan, self::EXCLUDED_MONTHS, true)) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => self::monthLabel($bulan) . ' tidak ikut dihitung pada parameter ini, '
+                    . 'jadi tidak ada rinciannya.',
+            ]);
+        }
+
+        $dasar = function (string $tabel) use ($site, $mitra, $bulan): Builder {
+            $query = DB::table($tabel)
+                ->where(self::COL_SITE, $site)
+                ->whereIn(self::COL_BULAN, $this->namaBulan($bulan));
+
+            // Sel tanpa perusahaan berarti seluruh perusahaan di site itu;
+            // matriks saat ini selalu mengirimnya, tetapi modal tidak boleh
+            // runtuh kalau suatu saat ada baris agregat.
+            if ($mitra !== '') {
+                $query->where(self::COL_PERUSAHAAN, $mitra);
+            }
+
+            return $query;
+        };
+
+        $baris = $dasar(self::TABEL_DETAIL)
+            ->select($this->detailColumns())
+            ->orderBy(self::COL_KETERANGAN)
+            ->orderBy('id')
+            ->limit(self::BATAS_BARIS_MODAL + 1)
+            ->get();
+
+        $terpotong = $baris->count() > self::BATAS_BARIS_MODAL;
+
+        if ($terpotong) {
+            $baris = $baris->take(self::BATAS_BARIS_MODAL);
+        }
+
+        // Panel dihitung dari query sendiri, bukan dari baris yang sudah
+        // dipotong: pemotongan itu urusan tampilan, bukan urusan angka.
+        $perTindakan = $this->tindakanBerulang($dasar(self::TABEL_DETAIL), $site, $mitra, $bulan);
+        $perRekomendasi = $this->rekomendasiTerulang($dasar(self::TABEL_DETAIL));
+
+        $nilaiSel = (int) $dasar(self::TABEL_RINGKASAN)->sum(self::COL_JUMLAH);
+        $rincian = $dasar(self::TABEL_DETAIL)->count();
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'site' => $site,
+                'mitra' => $mitra,
+                'bulan' => self::monthLabel($bulan),
+            ],
+            'ringkas' => [
+                'nilai_sel' => $nilaiSel,
+                'rincian' => $rincian,
+                'rekomendasi' => count($perRekomendasi),
+                'butir' => (int) array_sum(array_column($perTindakan, 'n')),
+                'butir_unik' => count($perTindakan),
+                'butir_berulang' => count(array_filter(
+                    $perTindakan,
+                    static fn (array $t): bool => $t['lain'] > 0
+                )),
+            ],
+            'per_tindakan' => $perTindakan,
+            'per_rekomendasi' => $perRekomendasi,
+            'terpotong' => $terpotong,
+            'batas' => self::BATAS_BARIS_MODAL,
+            'baris' => $baris->map(fn (object $row): array => $this->present($row))->all(),
+        ]);
+    }
+
+    /**
+     * Butir tindakan perbaikan di sel ini, yang paling sering muncul lagi di
+     * atas.
+     *
+     * "Muncul lagi" diurutkan dari cacah sel LAIN yang meminta butir yang
+     * sama, bukan dari cacah di dalam sel ini: di dalam satu sel praktis tidak
+     * pernah ada butir kembar, jadi pengurutan yang hanya memakai cacah lokal
+     * tidak memberi tahu apa pun.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function tindakanBerulang(Builder $query, string $site, string $mitra, int $bulan): array
+    {
+        $diSel = [];
+
+        foreach ($query->select(self::COL_TINDAKAN . ' AS tindakan')->get() as $row) {
+            foreach ($this->butirAksi((string) $row->tindakan) as $aksi) {
+                $kunci = self::kunciAksi($aksi);
+                $diSel[$kunci]['teks'] ??= $aksi;
+                $diSel[$kunci]['n'] = ($diSel[$kunci]['n'] ?? 0) + 1;
+            }
+        }
+
+        if ($diSel === []) {
+            return [];
+        }
+
+        $lain = $this->kemunculanDiSelLain(array_keys($diSel), $site, $mitra, $bulan);
+        $out = [];
+
+        foreach ($diSel as $kunci => $agg) {
+            $selLain = $lain[$kunci] ?? [];
+
+            $out[] = [
+                'tindakan' => $agg['teks'],
+                'n' => $agg['n'],
+                'lain' => count($selLain),
+                // Dibatasi lima: ini petunjuk arah, bukan daftar lengkap.
+                'sel_lain' => array_slice($selLain, 0, 5),
+            ];
+        }
+
+        usort($out, static function (array $a, array $b): int {
+            return [$b['lain'], $b['n'], $a['tindakan']] <=> [$a['lain'], $a['n'], $b['tindakan']];
+        });
+
+        return $out;
+    }
+
+    /**
+     * Sel lain yang juga meminta butir aksi yang sama.
+     *
+     * @param  array<int, string>  $kunci  kunci butir aksi yang dicari
+     * @return array<string, array<int, string>>  kunci -> label sel lain
+     */
+    private function kemunculanDiSelLain(array $kunci, string $site, string $mitra, int $bulan): array
+    {
+        $dicari = array_flip($kunci);
+        $query = DB::table(self::TABEL_DETAIL)->select([
+            self::COL_SITE . ' AS site',
+            self::COL_PERUSAHAAN . ' AS mitra',
+            self::COL_BULAN . ' AS bulan_sumber',
+            self::COL_TINDAKAN . ' AS tindakan',
+        ]);
+
+        foreach (self::EXCLUDED_MONTHS as $nomor) {
+            $query->whereNotIn(self::COL_BULAN, $this->namaBulan($nomor));
+        }
+
+        $out = [];
+
+        foreach ($query->limit(self::BATAS_PINDAI_LINTAS)->get() as $row) {
+            $rSite = trim((string) $row->site);
+            $rMitra = trim((string) $row->mitra);
+            $rBulan = $this->nomorBulan((string) $row->bulan_sumber);
+
+            $selIni = $rSite === $site
+                && $rBulan === $bulan
+                && ($mitra === '' || $rMitra === $mitra);
+
+            if ($selIni) {
+                continue;
+            }
+
+            $label = $rSite . ' · ' . ($rMitra !== '' ? $rMitra : '-') . ' · '
+                . ($rBulan === 0 ? trim((string) $row->bulan_sumber) : self::monthLabel($rBulan));
+
+            foreach ($this->butirAksi((string) $row->tindakan) as $aksi) {
+                $k = self::kunciAksi($aksi);
+
+                if (isset($dicari[$k])) {
+                    // Dikunci per label supaya dua baris di sel yang sama tidak
+                    // dihitung dua kali.
+                    $out[$k][$label] = true;
+                }
+            }
+        }
+
+        return array_map(static fn (array $sel): array => array_keys($sel), $out);
+    }
+
+    /**
+     * Rekomendasi yang terulang di sel ini, beserta berapa tindakan perbaikan
+     * yang digantungkan padanya.
+     *
+     * keterangan_layer-lah yang benar-benar mengelompok: satu temuan
+     * perulangan kerap melahirkan beberapa baris tindakan. Panel ini yang
+     * menjelaskan kenapa cacah sel bisa lebih besar dari jumlah temuannya.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function rekomendasiTerulang(Builder $query): array
+    {
+        $rows = $query->select([
+            self::COL_KETERANGAN . ' AS keterangan',
+            self::COL_TINDAKAN . ' AS tindakan',
+        ])->get();
+
+        $kelompok = [];
+
+        foreach ($rows as $row) {
+            $teks = trim(preg_replace('/\s*\R\s*/u', ' ', (string) $row->keterangan) ?? '');
+            $kunci = mb_strtolower($teks);
+
+            $kelompok[$kunci]['teks'] ??= $teks !== '' ? $teks : '(keterangan kosong)';
+            $kelompok[$kunci]['baris'] = ($kelompok[$kunci]['baris'] ?? 0) + 1;
+            $kelompok[$kunci]['butir'] = ($kelompok[$kunci]['butir'] ?? 0)
+                + count($this->butirAksi((string) $row->tindakan));
+        }
+
+        $out = array_map(static fn (array $agg): array => [
+            'keterangan' => $agg['teks'],
+            'baris' => $agg['baris'],
+            'butir' => $agg['butir'],
+        ], array_values($kelompok));
+
+        usort($out, static fn (array $a, array $b): int => $b['baris'] <=> $a['baris']);
+
+        return $out;
+    }
+
+    /**
+     * Memecah satu sel tindakan_perbaikan_pencegahan jadi butir-butir aksi.
+     *
+     * Kolomnya teks bebas yang diketik tangan: ada yang bernomor "1.", ada
+     * yang berpeluru "-", ada yang hanya berganti baris, dan ada pula yang
+     * satu kalimat tetapi terpotong lebar kolom sumber. Baris tanpa penanda
+     * yang diawali huruf kecil karena itu dianggap sambungan kalimat
+     * sebelumnya, bukan butir baru — tanpa aturan itu "… di area CPP GMO
+     * terkait / pemasangan kanopi" akan terbelah jadi dua tindakan palsu.
+     *
+     * Kalau tidak ada yang bisa dipecah, teks utuhnya dikembalikan apa adanya
+     * supaya tidak ada baris yang hilang dari hitungan.
+     *
+     * @return array<int, string>
+     */
+    private function butirAksi(string $teks): array
+    {
+        $penanda = '/^(?:[-–—•*·]+|\(?\d+[.)]|[a-zA-Z][.)])\s+/u';
+        $out = [];
+
+        foreach (preg_split('/\R/u', $teks) ?: [] as $baris) {
+            $baris = trim($baris);
+
+            if ($baris === '' || preg_match('/^[-–—•*·]+$/u', $baris) === 1) {
+                continue; // peluru yatim tanpa teks
+            }
+
+            $berpenanda = preg_match($penanda, $baris) === 1;
+            $bersih = trim(preg_replace('/\s+/u', ' ', (string) preg_replace($penanda, '', $baris)));
+
+            if ($bersih === '') {
+                continue;
+            }
+
+            if (! $berpenanda && $out !== [] && preg_match('/^\p{Ll}/u', $bersih) === 1) {
+                $out[count($out) - 1] .= ' ' . $bersih;
+
+                continue;
+            }
+
+            $out[] = $bersih;
+        }
+
+        if ($out !== []) {
+            return $out;
+        }
+
+        $utuh = trim(preg_replace('/\s+/u', ' ', $teks) ?? '');
+
+        return $utuh === '' ? [] : [$utuh];
+    }
+
+    /** Kunci penyamaan dua butir aksi; beda huruf besar dan tanda akhir diabaikan. */
+    private static function kunciAksi(string $aksi): string
+    {
+        return mb_strtolower(rtrim($aksi, " .,;:"));
     }
 
     // ======================================================================

@@ -428,6 +428,341 @@ final class PelanggaranOverspeedController extends Controller
     }
 
     // ======================================================================
+    // Rincian satu sel matriks
+    // ======================================================================
+
+    /**
+     * Rincian satu sel matriks "Pelanggar per Bulan".
+     *
+     * PARAMETERNYA SITE + PERUSAHAAN + BULAN, persis grain baris matriks di
+     * overview(): di sana pengelompokannya site x perusahaan x bulan dan
+     * seluruh PIC di dalamnya DIJUMLAHKAN. Menambahkan pic sebagai parameter
+     * karena itu akan menjaring lebih sempit daripada selnya sendiri.
+     *
+     * Sudah diperiksa ke sumber: tidak ada satu pun (site, perusahaan, bulan)
+     * yang ditangani lebih dari satu PIC, jadi untuk data sekarang SUM selalu
+     * atas satu baris. Penjumlahannya tetap ditulis supaya tetap sama dengan
+     * overview() seandainya kelak ada.
+     *
+     * SEL NOL TETAP DIBUKA. Nol di halaman ini bukan "data belum masuk"
+     * melainkan "tidak ada pelanggar", dan itu kabar baik yang pantas dibaca
+     * lengkap dengan konteksnya.
+     *
+     * YANG DIJUMLAHKAN TETAP ORANG, BUKAN KEJADIAN, dan hanya di dalam satu
+     * baris sumber. Menjumlahkan antar bulan bisa menghitung orang yang sama
+     * lebih dari sekali; SID-nya tidak tersimpan sehingga pengulangan itu tidak
+     * mungkin dikurangkan. Peringatannya ikut dikirim dan ditampilkan di modal.
+     */
+    public function detailBulan(Request $request): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $mitra = trim((string) $request->input('mitra', ''));
+
+        // Bulan di sumber tidak bertahun ("July", bukan "July 2026"), jadi
+        // monthHeadings() mengirim 1-12. Kode tahun*100+bulan tetap diterima
+        // supaya tautan dari halaman lain tidak patah; tahunnya diabaikan
+        // karena memang tidak ada yang bisa dicocokkan.
+        $kode = (int) $request->input('month', 0);
+        $bulan = $kode > 9999 ? $kode % 100 : $kode;
+
+        if ($site === '' || $mitra === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site, perusahaan, dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        if (in_array($bulan, self::EXCLUDED_MONTHS, true)) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => self::monthLabel($bulan) . ' masih berjalan saat data ini diambil dan '
+                    . 'dikecualikan dari seluruh halaman, jadi rinciannya tidak ditampilkan.',
+            ]);
+        }
+
+        $months = $this->bulanTercakup();
+        $riwayat = $this->riwayatPasangan($site, $mitra, $months, $bulan);
+        $jumlah = $this->jumlahPelanggar($bulan, $site, $mitra);
+        $siteBulan = $this->jumlahPelanggar($bulan, $site);
+        $semuaBulan = $this->jumlahPelanggar($bulan);
+        $total = array_sum(array_column($riwayat, 'jumlah'));
+        $kena = count(array_filter($riwayat, static fn (array $r): bool => $r['jumlah'] > 0));
+        $puncak = $riwayat === [] ? 0 : max(array_column($riwayat, 'jumlah'));
+        $bulanPuncak = null;
+
+        foreach ($riwayat as $r) {
+            if ($puncak > 0 && $r['jumlah'] === $puncak && $bulanPuncak === null) {
+                $bulanPuncak = $r['bulan'];
+            }
+        }
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'site' => $site,
+                'mitra' => $mitra,
+                'bulan' => self::monthLabel($bulan),
+            ],
+            'sel' => [
+                'jumlah' => $jumlah,
+                'bersih' => $jumlah === 0,
+                // Porsi, bukan capaian: parameter ini tidak punya penyebut
+                // sehingga tidak ada band Nilai 1-4 yang bisa diturunkan.
+                'porsi_site' => $siteBulan > 0 ? round($jumlah / $siteBulan * 100, 2) : null,
+                'porsi_semua' => $semuaBulan > 0 ? round($jumlah / $semuaBulan * 100, 2) : null,
+            ],
+            'pasangan' => [
+                'total' => $total,
+                'bulan_count' => count($months),
+                'bulan_kena' => $kena,
+                'bulan_bersih' => count($months) - $kena,
+                'puncak' => $puncak,
+                'bulan_puncak' => $bulanPuncak,
+            ],
+            'site_bulan' => [
+                'jumlah' => $siteBulan,
+                'mitra_count' => $this->cacahDimensi($bulan, self::COL_PERUSAHAAN, $site),
+            ],
+            'semua_bulan' => [
+                'jumlah' => $semuaBulan,
+                'site_count' => $this->cacahDimensi($bulan, self::COL_SITE),
+            ],
+            'riwayat' => $riwayat,
+            'sebulan' => $this->sebulanDiSite($site, $bulan, $mitra),
+            'pic' => $this->picDiSite($site, $bulan, $mitra),
+        ]);
+    }
+
+    /** Tabel dengan bulan yang dikecualikan sudah dibuang, tanpa filter halaman. */
+    private function tabelTercakup(): Builder
+    {
+        $query = DB::table(self::TABLE);
+
+        foreach (self::EXCLUDED_MONTHS as $nomor) {
+            $query->whereNotIn(self::COL_BULAN, $this->namaBulan($nomor));
+        }
+
+        return $query;
+    }
+
+    /**
+     * Bulan yang dipakai matriks, dihitung dengan cara yang sama persis dengan
+     * overview() tetapi tanpa filter halaman: rincian memang sengaja
+     * memperlihatkan seluruh riwayat, bukan potongan yang sedang disaring.
+     *
+     * @return array<int, int>
+     */
+    private function bulanTercakup(): array
+    {
+        $seen = [];
+
+        foreach ($this->tabelTercakup()->distinct()->pluck(self::COL_BULAN) as $nilai) {
+            $nomor = $this->nomorBulan((string) $nilai);
+
+            if ($nomor !== 0) {
+                $seen[$nomor] = true;
+            }
+        }
+
+        return $this->rentangBulan(array_keys($seen));
+    }
+
+    /** Cacah pelanggar satu bulan, dipersempit ke site dan/atau perusahaan. */
+    private function jumlahPelanggar(int $bulan, ?string $site = null, ?string $mitra = null): int
+    {
+        $query = DB::table(self::TABLE)->whereIn(self::COL_BULAN, $this->namaBulan($bulan));
+
+        if ($site !== null) {
+            $query->where(self::COL_SITE, $site);
+        }
+
+        if ($mitra !== null) {
+            $query->where(self::COL_PERUSAHAAN, $mitra);
+        }
+
+        return (int) $query->sum(self::COL_JUMLAH);
+    }
+
+    /** Banyaknya nilai berbeda satu kolom pada bulan itu, opsional dalam satu site. */
+    private function cacahDimensi(int $bulan, string $kolom, ?string $site = null): int
+    {
+        $query = DB::table(self::TABLE)->whereIn(self::COL_BULAN, $this->namaBulan($bulan));
+
+        if ($site !== null) {
+            $query->where(self::COL_SITE, $site);
+        }
+
+        return $query->distinct()->count($kolom);
+    }
+
+    /**
+     * Pasangan site x perusahaan yang sama sepanjang bulan yang tercakup:
+     * kronis atau sesaat?
+     *
+     * Bulan tanpa baris diterbitkan sebagai 0, bukan dilewati — sama dengan
+     * buildMatrix(), karena bulan bersih justru kabar baiknya.
+     *
+     * @param  array<int, int>  $months
+     * @return array<int, array<string, mixed>>
+     */
+    private function riwayatPasangan(string $site, string $mitra, array $months, int $bulanIni): array
+    {
+        $perBulan = [];
+
+        $rows = $this->tabelTercakup()
+            ->where(self::COL_SITE, $site)
+            ->where(self::COL_PERUSAHAAN, $mitra)
+            ->selectRaw(self::COL_BULAN . ' AS bulan, SUM(' . self::COL_JUMLAH . ') AS jumlah')
+            ->groupBy('bulan')
+            ->get();
+
+        foreach ($rows as $r) {
+            $nomor = $this->nomorBulan((string) $r->bulan);
+
+            if ($nomor !== 0) {
+                $perBulan[$nomor] = ($perBulan[$nomor] ?? 0) + (int) $r->jumlah;
+            }
+        }
+
+        $out = [];
+
+        foreach ($months as $nomor) {
+            $out[] = [
+                'nomor' => $nomor,
+                'bulan' => self::monthLabel($nomor),
+                'jumlah' => $perBulan[$nomor] ?? 0,
+                'ini' => $nomor === $bulanIni,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Site x bulan yang sama di seluruh perusahaan: pelanggarnya milik satu
+     * perusahaan saja atau memang merata se-site?
+     *
+     * Perusahaan sel yang sedang dibuka selalu disertakan, walau nol, supaya
+     * sel bersih tetap punya barisnya sendiri untuk dibandingkan.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function sebulanDiSite(string $site, int $bulan, string $mitraTerpilih): array
+    {
+        $rows = DB::table(self::TABLE)
+            ->where(self::COL_SITE, $site)
+            ->whereIn(self::COL_BULAN, $this->namaBulan($bulan))
+            ->selectRaw(self::COL_PERUSAHAAN . ' AS mitra, SUM(' . self::COL_JUMLAH . ') AS jumlah')
+            ->groupBy('mitra')
+            ->get();
+
+        $out = [];
+        $adaTerpilih = false;
+
+        foreach ($rows as $r) {
+            $mitra = trim((string) $r->mitra);
+            $adaTerpilih = $adaTerpilih || $mitra === $mitraTerpilih;
+
+            $out[] = [
+                'mitra' => $mitra,
+                'jumlah' => (int) $r->jumlah,
+                'ini' => $mitra === $mitraTerpilih,
+            ];
+        }
+
+        if (! $adaTerpilih) {
+            $out[] = ['mitra' => $mitraTerpilih, 'jumlah' => 0, 'ini' => true];
+        }
+
+        usort($out, static fn (array $a, array $b): int => ($b['jumlah'] <=> $a['jumlah'])
+            ?: strcmp($a['mitra'], $b['mitra']));
+
+        return $out;
+    }
+
+    /**
+     * PIC approval di site ini — dimensi yang membedakan parameter ini dari
+     * halaman cacah lain, dan satu-satunya sumbu ketiga yang dipunyainya.
+     *
+     * Daftar PIC-nya diambil dari SELURUH tabel untuk site itu, bukan hanya
+     * bulan yang dibuka. Kalau hanya bulan itu yang dikueri, sel bersih akan
+     * tampil tanpa satu nama pun, padahal justru itu yang ingin dibaca: siapa
+     * PIC di site ini, dan di bulan ini tidak ada satu pun pelanggar di bawahnya.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function picDiSite(string $site, int $bulan, string $mitra): array
+    {
+        $nilaiBulan = $this->namaBulan($bulan);
+
+        $total = $this->tabelTercakup()
+            ->where(self::COL_SITE, $site)
+            ->selectRaw(
+                self::COL_PIC . ' AS pic, '
+                . 'SUM(' . self::COL_JUMLAH . ') AS jumlah, '
+                . 'COUNT(DISTINCT ' . self::COL_PERUSAHAAN . ') AS mitra_count'
+            )
+            ->groupBy('pic')
+            ->get();
+
+        $perBulan = $this->ringkasPicBulan($site, $nilaiBulan);
+        $perSel = $this->ringkasPicBulan($site, $nilaiBulan, $mitra);
+
+        $out = [];
+
+        foreach ($total as $r) {
+            $pic = trim((string) $r->pic);
+            $sel = $perSel[$pic] ?? 0;
+
+            $out[] = [
+                'pic' => $pic,
+                'sel' => $sel,
+                'bulan_ini' => $perBulan[$pic] ?? 0,
+                'total' => (int) $r->jumlah,
+                'mitra_count' => (int) $r->mitra_count,
+                'ini' => $sel > 0,
+            ];
+        }
+
+        usort($out, static fn (array $a, array $b): int => ($b['sel'] <=> $a['sel'])
+            ?: (($b['bulan_ini'] <=> $a['bulan_ini'])
+            ?: ($b['total'] <=> $a['total'])));
+
+        return $out;
+    }
+
+    /**
+     * Cacah pelanggar per PIC pada satu bulan di satu site, opsional dipersempit
+     * ke satu perusahaan.
+     *
+     * @param  array<int, string>  $nilaiBulan
+     * @return array<string, int>
+     */
+    private function ringkasPicBulan(string $site, array $nilaiBulan, ?string $mitra = null): array
+    {
+        $query = DB::table(self::TABLE)
+            ->where(self::COL_SITE, $site)
+            ->whereIn(self::COL_BULAN, $nilaiBulan);
+
+        if ($mitra !== null) {
+            $query->where(self::COL_PERUSAHAAN, $mitra);
+        }
+
+        $rows = $query
+            ->selectRaw(self::COL_PIC . ' AS pic, SUM(' . self::COL_JUMLAH . ') AS jumlah')
+            ->groupBy('pic')
+            ->get();
+
+        $out = [];
+
+        foreach ($rows as $r) {
+            $out[trim((string) $r->pic)] = (int) $r->jumlah;
+        }
+
+        return $out;
+    }
+
+    // ======================================================================
     // Tab Data
     // ======================================================================
 

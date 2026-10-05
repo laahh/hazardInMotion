@@ -66,6 +66,17 @@
   .bps-k2 { background: #F08C2E; }
   .bps-k3 { background: #E0484A; }
 
+  /* Seluruh sel bisa dibuka, termasuk yang bernilai nol: nol di sini berarti
+     "tidak ada temuan", sebuah hasil yang baik, dan itu pun layak dijelaskan. */
+  .bps-matrix .bps-cell--klik { cursor: pointer; }
+  .bps-matrix .bps-cell--klik:focus-visible {
+    outline: 2px solid #487FFF; outline-offset: 1px; position: relative; z-index: 2;
+  }
+
+  /* Daftar temuan di dalam modal digulir sendiri. */
+  .bps-modal-scroll { max-height: 42vh; overflow: auto; }
+  .bps-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
+
 </style>
 @endsection
 
@@ -115,9 +126,245 @@
     @include('ohs-score-card.blindspot-tbc-pic-subcont.partials._data')
   </div>
 </div>
+
+{{-- Modal rincian satu sel. Ditaruh di luar tab pane supaya tidak ikut
+     tersembunyi saat berpindah tab. --}}
+<div class="modal fade" id="bps-detail-modal" tabindex="-1" aria-labelledby="bps-detail-judul" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content radius-12">
+      <div class="modal-header border-bottom py-16 px-24">
+        <div>
+          <h6 class="modal-title text-lg fw-semibold mb-0" id="bps-detail-judul">Rincian Bulan</h6>
+          <span class="text-sm text-secondary-light" data-bpsm="subjudul"></span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body p-24"><div data-bpsm="isi"></div></div>
+      <div class="modal-footer border-top py-12 px-24">
+        <span class="text-sm text-secondary-light me-auto" data-bpsm="kaki"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary radius-8" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('page-scripts')
+<script>
+// ---- Modal rincian satu sel matriks -----------------------------------------
+var bpsModalDetail = (function () {
+    'use strict';
+
+    var el = document.getElementById('bps-detail-modal');
+    if (!el) { return null; }
+
+    var bagian = function (n) { return el.querySelector('[data-bpsm="' + n + '"]'); };
+    var permintaan = 0;
+
+    function esc(v) {
+        return String(v === null || v === undefined ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function num(v) { return Number(v || 0).toLocaleString('id-ID'); }
+
+    function ubin(label, nilai, catatan, kelas) {
+        return '<div class="col-md-6">'
+            + '<div class="border input-form-light radius-8 p-16 h-100">'
+            +   '<span class="text-sm text-secondary-light d-block">' + esc(label) + '</span>'
+            +   '<h6 class="fw-semibold mt-8 mb-4 ' + (kelas || '') + '">' + nilai + '</h6>'
+            +   '<span class="text-xs text-secondary-light">' + esc(catatan) + '</span>'
+            + '</div></div>';
+    }
+
+    function render(j, koordinat) {
+        var r = j.ringkas;
+
+        var isi = '<div class="row gy-3 mb-20">'
+            + ubin('Temuan di sel ini', esc(koordinat.nilai || num(r.temuan)),
+                   'dari matriks Temuan per Bulan',
+                   r.temuan === 0 ? 'text-success-main' : '')
+            + ubin('Total Temuan', num(r.temuan),
+                   num(r.pic) + ' PIC kecolongan · ' + num(r.pelapor) + ' pelapor dari '
+                   + num(r.perusahaan_pelapor) + ' perusahaan')
+            + '</div>';
+
+        // Nol di halaman ini BUKAN data yang hilang melainkan hasil yang
+        // diinginkan: tidak ada temuan blindspot di sel itu. Sel nol pun bisa
+        // diklik, dan jawabannya harus berbunyi begitu -- bukan modal kosong
+        // yang membuat pembaca mengira datanya belum masuk.
+        if (!j.baris.length) {
+            bagian('isi').innerHTML = isi
+                + '<div class="alert bg-success-focus text-success-main border-success-main'
+                + ' radius-8 px-20 py-16 mb-0 text-center">'
+                + '<strong>Tidak ada temuan blindspot di bulan ini.</strong><br>'
+                + '<span class="text-sm">Itu keadaan yang diinginkan parameter ini — '
+                + 'bukan data yang belum masuk.</span>'
+                + '</div>';
+            bagian('kaki').textContent = '';
+            return;
+        }
+
+        isi += '<div class="row gy-4 mb-20">'
+            +   '<div class="col-xxl-6">'
+            +     '<h6 class="text-md fw-semibold mb-4">Perusahaan yang menangkap</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Blindspot berarti temuan ini didapat pihak lain, bukan pengawas areanya sendiri</span>'
+            +     daftarRingkas(j.per_pelapor, 'perusahaan')
+            +   '</div>'
+            +   '<div class="col-xxl-6">'
+            +     '<h6 class="text-md fw-semibold mb-4">PIC</h6>'
+            +     '<span class="text-xs text-secondary-light d-block mb-12">'
+            +       'Pengawas subcontractor yang areanya paling banyak luput di bulan ini</span>'
+            +     daftarPic(j.per_pic)
+            +   '</div>'
+            + '</div>';
+
+        isi += '<h6 class="text-md fw-semibold mb-12">Daftar temuan</h6>'
+            + '<div class="row gy-2 gx-2 align-items-end mb-12">'
+            +   '<div class="col-sm-8"><input type="text" class="form-control form-control-sm radius-8"'
+            +     ' placeholder="Cari task, PIC, pelapor, deskripsi…" data-bpsm="cari"></div>'
+            +   '<div class="col-sm-4 text-sm-end"><span class="text-sm text-secondary-light"'
+            +     ' data-bpsm="hitung"></span></div>'
+            + '</div>'
+            + '<div class="table-responsive bps-modal-scroll">'
+            +   '<table class="table bordered-table sm-table mb-0" data-bpsm="tabel"><thead><tr>'
+            +     '<th>Task</th><th>PIC area</th><th>Ditemukan oleh</th><th>Deskripsi</th>'
+            +   '</tr></thead><tbody>'
+            +   j.baris.map(function (b) {
+                    return '<tr data-cari="'
+                        + esc((b.task + ' ' + b.pic + ' ' + b.sid_pic + ' ' + b.pelapor + ' '
+                               + b.pelapor_perusahaan + ' ' + b.deskripsi).toLowerCase()) + '">'
+                        + '<td class="text-xs">' + esc(b.task || '-') + '</td>'
+                        + '<td><span class="text-sm d-block">' + esc(b.pic || '-') + '</span>'
+                        +   '<span class="text-xs text-secondary-light">' + esc(b.sid_pic || '-') + '</span></td>'
+                        + '<td><span class="text-sm d-block">' + esc(b.pelapor || '-') + '</span>'
+                        +   '<span class="text-xs text-secondary-light">'
+                        +   esc(b.pelapor_perusahaan || '-') + '</span></td>'
+                        + '<td><span class="text-sm text-secondary-light">'
+                        +   esc(b.deskripsi || '-') + '</span></td>'
+                        + '</tr>';
+                }).join('')
+            +   '</tbody></table></div>';
+
+        bagian('isi').innerHTML = isi;
+        bagian('kaki').textContent = j.terpotong
+            ? 'Menampilkan ' + num(j.batas) + ' temuan pertama dari ' + num(r.temuan) + '.'
+            : num(r.temuan) + ' temuan tercatat di sel ini.';
+
+        pasangPencarian();
+    }
+
+    function daftarRingkas(baris, kunci) {
+        if (!baris || !baris.length) {
+            return '<div class="text-center text-secondary-light py-16">Tidak ada data.</div>';
+        }
+        var maks = baris[0].n || 1;
+        return '<div class="table-responsive"><table class="table bordered-table sm-table mb-0"><tbody>'
+            + baris.map(function (b) {
+                return '<tr><td class="text-sm">' + esc(b[kunci]) + '</td>'
+                    + '<td class="text-end fw-semibold" style="width:64px">' + num(b.n) + '</td>'
+                    + '<td style="width:34%"><div class="progress w-100 bg-primary-50 rounded-pill h-8-px">'
+                    + '<div class="progress-bar bg-warning-main rounded-pill" role="progressbar"'
+                    + ' style="width:' + (b.n / maks * 100) + '%" aria-valuenow="' + b.n + '"'
+                    + ' aria-valuemin="0" aria-valuemax="' + maks + '"></div></div></td></tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    function daftarPic(baris) {
+        if (!baris || !baris.length) {
+            return '<div class="text-center text-secondary-light py-16">Tidak ada data.</div>';
+        }
+        var maks = baris[0].n || 1;
+        return '<div class="table-responsive"><table class="table bordered-table sm-table mb-0"><tbody>'
+            + baris.map(function (b) {
+                return '<tr><td><span class="text-sm d-block">' + esc(b.pic) + '</span>'
+                    + '<span class="text-xs text-secondary-light">' + esc(b.sid) + '</span></td>'
+                    + '<td class="text-end fw-semibold" style="width:64px">' + num(b.n) + '</td>'
+                    + '<td style="width:34%"><div class="progress w-100 bg-primary-50 rounded-pill h-8-px">'
+                    + '<div class="progress-bar bg-danger-main rounded-pill" role="progressbar"'
+                    + ' style="width:' + (b.n / maks * 100) + '%" aria-valuenow="' + b.n + '"'
+                    + ' aria-valuemin="0" aria-valuemax="' + maks + '"></div></div></td></tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    /** Pencarian dikerjakan di baris yang sudah ada, tanpa ke server lagi. */
+    function pasangPencarian() {
+        var cari = bagian('cari');
+        var hitung = bagian('hitung');
+        var semua = Array.prototype.slice.call(el.querySelectorAll('[data-bpsm="tabel"] tbody tr'));
+
+        function terapkan() {
+            var teks = (cari.value || '').trim().toLowerCase();
+            var tampil = 0;
+
+            semua.forEach(function (tr) {
+                var cocok = !teks || tr.dataset.cari.indexOf(teks) !== -1;
+                tr.classList.toggle('d-none', !cocok);
+                if (cocok) { tampil++; }
+            });
+
+            hitung.textContent = tampil === semua.length
+                ? semua.length + ' temuan'
+                : tampil + ' dari ' + semua.length + ' temuan';
+        }
+
+        cari.addEventListener('input', terapkan);
+        terapkan();
+    }
+
+    function buka(url, koordinat) {
+        // Nomor permintaan menjaga agar jawaban yang datang terlambat untuk sel
+        // yang sudah tidak dibuka lagi tidak menimpa isi modal.
+        var ini = ++permintaan;
+
+        el.querySelector('#bps-detail-judul').textContent =
+            'Rincian ' + koordinat.bulan + ' · ' + koordinat.site;
+        bagian('subjudul').textContent = koordinat.mitra || 'Seluruh perusahaan di site ini';
+        bagian('kaki').textContent = '';
+        bagian('isi').innerHTML = '<div class="text-center text-secondary-light py-40">'
+            + '<div class="spinner-border spinner-border-sm text-primary-600 me-2" role="status"></div>'
+            + 'Memuat rincian…</div>';
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        }
+
+        var q = new URLSearchParams({
+            site: koordinat.site, mitra: koordinat.mitra || '', month: koordinat.month
+        });
+
+        fetch(url + '?' + q.toString(), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (res) {
+                if (!res.ok) { throw new Error('HTTP ' + res.status); }
+                return res.json();
+            })
+            .then(function (j) {
+                if (ini !== permintaan) { return; }
+                if (!j.ok) {
+                    bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                        + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                        + esc(j.pesan || 'Rincian tidak bisa dimuat.') + '</div>';
+                    return;
+                }
+                render(j, koordinat);
+            })
+            .catch(function (err) {
+                if (ini !== permintaan) { return; }
+                bagian('isi').innerHTML = '<div class="alert alert-danger bg-danger-focus'
+                    + ' border-danger-main text-danger-main radius-8 px-20 py-12 mb-0">'
+                    + 'Permintaan ke server gagal. ' + esc(err && err.message) + '</div>';
+            });
+    }
+
+    return { buka: buka };
+})();
+</script>
 <script>
 // ---- Tab Ringkasan ----------------------------------------------------------
 (function () {
@@ -135,6 +382,35 @@
 
     function el(name) {
         return root.querySelector('[data-bps="' + name + '"]');
+    }
+
+    // Delegasi di tabel, bukan di tiap sel: matriks digambar ulang setiap ganti
+    // filter, dan pendengar per sel akan ikut hilang.
+    var matrixEl = el('matrix');
+
+    if (bpsModalDetail && matrixEl && root.dataset.detailUrl) {
+        var bukaSel = function (td) {
+            bpsModalDetail.buka(root.dataset.detailUrl, {
+                site: td.dataset.site,
+                mitra: td.dataset.mitra,
+                month: td.dataset.month,
+                bulan: td.dataset.bulan,
+                nilai: td.dataset.nilai
+            });
+        };
+
+        matrixEl.addEventListener('click', function (e) {
+            var td = e.target.closest('.bps-cell--klik');
+            if (td && matrixEl.contains(td)) { bukaSel(td); }
+        });
+
+        matrixEl.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') { return; }
+            var td = e.target.closest('.bps-cell--klik');
+            if (!td || !matrixEl.contains(td)) { return; }
+            e.preventDefault();
+            bukaSel(td);
+        });
     }
 
     function escapeHtml(value) {
@@ -335,7 +611,16 @@
                 var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
                     + (jumlah === 0 ? 'tidak ada temuan' : fmtNum(jumlah) + ' temuan');
 
-                html += '<td class="bps-cell ' + tierClass(jumlah) + '" title="' + escapeHtml(tip) + '">'
+                // Koordinat sel dibawa di atribut, bukan ditebak dari posisi
+                // DOM: urutan baris berubah mengikuti pengurutan per site.
+                html += '<td class="bps-cell bps-cell--klik ' + tierClass(jumlah) + '"'
+                    + ' role="button" tabindex="0"'
+                    + ' data-site="' + escapeHtml(row.site) + '"'
+                    + ' data-mitra="' + escapeHtml(row.mitra) + '"'
+                    + ' data-month="' + months[m].number + '"'
+                    + ' data-bulan="' + escapeHtml(months[m].label) + '"'
+                    + ' data-nilai="' + escapeHtml(fmtNum(jumlah)) + '"'
+                    + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
                     + fmtNum(jumlah) + '</td>';
             });
 

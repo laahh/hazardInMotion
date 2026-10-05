@@ -62,6 +62,9 @@ final class BlindspotTbcPicSubcontController extends Controller
     /** Oktober masih berjalan saat data ini diambil, sejalan halaman lain. */
     private const EXCLUDED_MONTHS = [10];
 
+    /** Pagar supaya satu sel yang sangat ramai tidak menjatuhkan modal. */
+    private const BATAS_BARIS_MODAL = 500;
+
     private const FILTERABLE = [
         'site' => self::COL_SITE,
         'mitra' => self::COL_PERUSAHAAN,
@@ -590,6 +593,158 @@ final class BlindspotTbcPicSubcontController extends Controller
             // tinggi baris tabel maupun memecah sel CSV.
             'deskripsi' => trim(preg_replace('/\s*\R\s*/u', ' ', (string) $row->deskripsi) ?? ''),
         ];
+    }
+
+    // ======================================================================
+    // Modal rincian satu sel matriks
+    // ======================================================================
+
+    /**
+     * Isi satu sel matriks "Temuan per Bulan", untuk modal rincian.
+     *
+     * Halaman ini hanya punya satu matriks dan sumbernya tabel rincian itu
+     * sendiri, jadi modal mencacah dengan COUNT(*) atas tabel yang sama persis
+     * seperti overview(). Selama keduanya tidak menyaring apa pun lagi, sel dan
+     * modal tidak mungkin berselisih.
+     *
+     * TIDAK ADA DEDUPE DI SINI, DAN ITU HASIL PEMERIKSAAN, BUKAN KELALAIAN.
+     * Tabel saudaranya detail_lead_subcont_blindspot_tbc memuat tiap temuan
+     * tepat dua kali (244 baris untuk 122 temuan) sehingga halaman Blindspot
+     * TBC wajib membuang kembarannya lewat detailTanpaKembar(). Tabel ini
+     * diperiksa dengan kunci yang sama -- site, perusahaan_pic,
+     * month_of_date_for_join, task_number -- dan hasilnya 123 baris, 123 kunci
+     * unik, 123 task unik: nol kembaran. Memasang dedupe di sini justru akan
+     * membuat modal berbeda dari overview() yang mencacah mentah.
+     *
+     * YANG DITONJOLKAN PELAPORNYA. Blindspot berarti temuan di area sebuah
+     * subkontraktor yang justru ditemukan pihak lain, jadi yang ingin diketahui
+     * pembaca siapa yang menangkapnya, bukan sekadar berapa banyak. Di seluruh
+     * 123 baris tidak satu pun perusahaan pelapornya sama dengan perusahaan
+     * PIC-nya, sehingga sisi "ditemukan pihak lain" memang selalu benar.
+     */
+    public function detailBulan(Request $request): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $mitra = trim((string) $request->input('mitra', ''));
+
+        // monthHeadings() halaman ini mengirim 1-12, tapi bentuk tahun*100+bulan
+        // tetap diterima supaya modal tidak pecah kalau heading berubah. Bagian
+        // tahunnya sengaja tidak dipakai menyaring: overview() pun tidak
+        // mengelompokkan per tahun, dan menambahkannya hanya di sini akan
+        // membuat modal berbeda dari selnya.
+        $kode = (int) $request->input('month', 0);
+        $bulan = $kode > 9999 ? $kode % 100 : $kode;
+
+        if ($site === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        if (in_array($bulan, self::EXCLUDED_MONTHS, true)) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => self::monthLabel($bulan) . ' tidak ikut ditampilkan di parameter ini '
+                    . 'karena bulannya masih berjalan saat data diambil.',
+            ]);
+        }
+
+        $dasar = fn (): Builder => DB::table(self::TABLE)
+            ->where(self::COL_SITE, $site)
+            ->whereIn(self::COL_BULAN, $this->namaBulan($bulan))
+            ->when($mitra !== '', fn (Builder $q): Builder => $q->where(self::COL_PERUSAHAAN, $mitra));
+
+        $baris = $dasar()
+            ->select($this->columns())
+            ->orderBy(self::COL_PELAPOR_PERUSAHAAN)
+            ->orderBy(self::COL_TASK)
+            ->limit(self::BATAS_BARIS_MODAL + 1)
+            ->get()
+            ->map(fn (object $row): array => $this->present($row))
+            ->all();
+
+        $terpotong = count($baris) > self::BATAS_BARIS_MODAL;
+
+        if ($terpotong) {
+            $baris = array_slice($baris, 0, self::BATAS_BARIS_MODAL);
+        }
+
+        $cacah = $dasar()
+            ->selectRaw(
+                'COUNT(*) AS temuan, '
+                . 'COUNT(DISTINCT ' . self::COL_SID . ') AS pic, '
+                . 'COUNT(DISTINCT ' . self::COL_PELAPOR_NAMA . ') AS pelapor, '
+                . 'COUNT(DISTINCT ' . self::COL_PELAPOR_PERUSAHAAN . ') AS perusahaan_pelapor'
+            )
+            ->first();
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'site' => $site,
+                'mitra' => $mitra,
+                'bulan' => self::monthLabel($bulan),
+            ],
+            'ringkas' => [
+                'temuan' => (int) ($cacah->temuan ?? 0),
+                'pic' => (int) ($cacah->pic ?? 0),
+                'pelapor' => (int) ($cacah->pelapor ?? 0),
+                'perusahaan_pelapor' => (int) ($cacah->perusahaan_pelapor ?? 0),
+            ],
+            'per_pelapor' => $this->pelaporTerbanyak($dasar()),
+            'per_pic' => $this->picTerbanyak($dasar()),
+            'terpotong' => $terpotong,
+            'batas' => self::BATAS_BARIS_MODAL,
+            'baris' => $baris,
+        ]);
+    }
+
+    /**
+     * Perusahaan yang menangkap temuan di sel ini, terbanyak di atas.
+     *
+     * Tidak dipotong: perusahaan pelapor di seluruh tabel cuma empat, jadi
+     * daftarnya selalu pendek dan memotongnya hanya akan menyembunyikan
+     * informasi.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function pelaporTerbanyak(Builder $query): array
+    {
+        return $query
+            ->selectRaw(self::COL_PELAPOR_PERUSAHAAN . ' AS perusahaan, COUNT(*) AS n')
+            ->groupBy('perusahaan')
+            ->orderByDesc('n')
+            ->get()
+            ->map(static fn (object $r): array => [
+                'perusahaan' => trim((string) $r->perusahaan) ?: '-',
+                'n' => (int) $r->n,
+            ])
+            ->all();
+    }
+
+    /**
+     * PIC yang areanya paling sering kecolongan di sel ini.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function picTerbanyak(Builder $query): array
+    {
+        return $query
+            ->selectRaw(
+                self::COL_PIC . ' AS pic, '
+                . self::COL_SID . ' AS sid, COUNT(*) AS n'
+            )
+            ->groupBy('pic', 'sid')
+            ->orderByDesc('n')
+            ->limit(10)
+            ->get()
+            ->map(static fn (object $r): array => [
+                'pic' => trim((string) $r->pic) ?: '-',
+                'sid' => trim((string) $r->sid) ?: '-',
+                'n' => (int) $r->n,
+            ])
+            ->all();
     }
 
     // ======================================================================

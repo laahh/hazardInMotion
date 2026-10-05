@@ -5,7 +5,9 @@
   persentase, dan targetnya nol. Karena itu tidak ada switch Persentase/Nilai,
   dan sel bernilai 0 diwarnai hijau karena memang itu keadaan yang diinginkan.
 --}}
-<div class="gap-overview" data-url="{{ route('ohs-score-card.incident-gap-cctv-dms.overview') }}">
+<div class="gap-overview"
+     data-url="{{ route('ohs-score-card.incident-gap-cctv-dms.overview') }}"
+     data-detail-url="{{ route('ohs-score-card.incident-gap-cctv-dms.detail-bulan') }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">

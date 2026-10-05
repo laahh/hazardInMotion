@@ -86,6 +86,9 @@ final class GoldenTimeEmergencyController extends Controller
         ['Lebih dari 2 jam', 121, null],
     ];
 
+    /** Batas baris yang dikirim ke modal rincian satu sel. */
+    private const BATAS_BARIS_MODAL = 500;
+
     private const TARGET_PERCENT = 90.0;
 
     private const SCORE_BANDS = [
@@ -609,6 +612,239 @@ final class GoldenTimeEmergencyController extends Controller
         }
 
         return implode(' ', $pesan);
+    }
+
+    // ======================================================================
+    // Modal rincian satu sel matriks bulanan
+    // ======================================================================
+
+    /**
+     * Isi satu sel "Capaian per Bulan", yaitu site x perusahaan x bulan.
+     *
+     * YANG DITONJOLKAN JEDANYA, BUKAN CACAHNYA. Persentase di sel hanya
+     * memberi tahu berapa banyak yang telat; yang tidak terbaca dari matriks
+     * adalah seberapa telat. Tabel rincian menyimpan jam kejadian, jam
+     * pelaporan, dan golden_time_dalam_menit, jadi tiap insiden bisa
+     * ditampilkan dengan jeda lapornya sendiri, diurutkan dari yang terlama,
+     * dan ditandai apakah melewati AMBANG_MENIT.
+     *
+     * PERSENNYA DIAMBIL DARI RINGKASAN, BUKAN DIHITUNG ULANG, persis seperti
+     * overview(): AVG(pct_golden_time) atas baris ringkasan yang jatuh di sel
+     * ini. Dengan begitu angka di kartu tidak mungkin berbeda dari angka di
+     * sel. Hasil hitung ulang dari rincian tetap dikirim terpisah
+     * ('persen_rincian') supaya pembaca bisa melihat keduanya; pada data saat
+     * ini keduanya cocok di seluruh 75 sel.
+     *
+     * SATU SEL BISA PUNYA LEBIH DARI SATU BARIS RINGKASAN karena
+     * perusahaan_lead_investigasi ikut memecah grain di tabel ringkasan. Tiga
+     * sel seperti itu, dan dua di antaranya berisi 100% dan 0% sehingga selnya
+     * menjadi 50%. Cacah baris dan daftar lead investigasinya ikut dikirim
+     * supaya angka 50% itu bisa diterangkan, bukan terbaca sebagai salah hitung.
+     */
+    public function detailBulan(Request $request): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $mitra = trim((string) $request->input('mitra', ''));
+
+        // monthHeadings() halaman ini mengirim nomor 1-12, tapi kode
+        // tahun*100+bulan tetap diterima supaya tidak pecah kalau penomoran
+        // heading berubah.
+        $kode = (int) $request->input('month', 0);
+        $bulan = $kode > 9999 ? $kode % 100 : $kode;
+
+        if ($site === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        if (in_array($bulan, self::EXCLUDED_MONTHS, true)) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => self::monthLabel($bulan) . ' tidak ikut ditampilkan di halaman ini '
+                    . 'karena datanya belum lengkap.',
+            ]);
+        }
+
+        /** Satu kueri dasar untuk kedua tabel; kolom koordinatnya senama. */
+        $dasar = function (string $tabel) use ($site, $mitra, $bulan): Builder {
+            $query = DB::table($tabel)
+                ->where(self::COL_SITE, $site)
+                ->whereIn(self::COL_BULAN, $this->namaBulan($bulan));
+
+            if ($mitra !== '') {
+                $query->where(self::COL_PERUSAHAAN, $mitra);
+            }
+
+            return $query;
+        };
+
+        $baris = $dasar(self::TABEL_DETAIL)
+            ->select($this->detailColumns())
+            // Terlama di atas: yang paling jauh melewati golden time itu yang
+            // perlu dibaca lebih dulu.
+            ->orderByDesc(self::COL_MENIT)
+            ->orderBy('id')
+            ->limit(self::BATAS_BARIS_MODAL + 1)
+            ->get()
+            ->map(fn (object $row): array => $this->present($row))
+            ->all();
+
+        $terpotong = count($baris) > self::BATAS_BARIS_MODAL;
+
+        if ($terpotong) {
+            $baris = array_slice($baris, 0, self::BATAS_BARIS_MODAL);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'site' => $site,
+                'mitra' => $mitra,
+                'bulan' => self::monthLabel($bulan),
+            ],
+            'ambang' => self::AMBANG_MENIT,
+            'ringkas' => $this->ringkasSel($dasar(self::TABEL_DETAIL)),
+            'ringkasan' => $this->ringkasanSel($dasar(self::TABEL_RINGKASAN)),
+            'sebaran' => $this->sebaranSel($dasar(self::TABEL_DETAIL)),
+            'terpotong' => $terpotong,
+            'batas' => self::BATAS_BARIS_MODAL,
+            'baris' => $baris,
+        ]);
+    }
+
+    /**
+     * Cacah dan sebaran jeda lapor untuk satu sel, dari tabel rincian.
+     *
+     * @return array<string, mixed>
+     */
+    private function ringkasSel(Builder $query): array
+    {
+        $menit = (clone $query)
+            ->whereNotNull(self::COL_MENIT)
+            ->orderBy(self::COL_MENIT)
+            ->pluck(self::COL_MENIT)
+            ->map(static fn ($v): int => (int) $v)
+            ->all();
+
+        $insiden = (clone $query)->count();
+        $total = count($menit);
+
+        if ($total === 0) {
+            return [
+                'insiden' => $insiden,
+                'bermenit' => 0,
+                'tepat' => 0,
+                'telat' => 0,
+                'persen_rincian' => null,
+                'median' => null,
+                'terlama' => null,
+                'tercepat' => null,
+                'rata' => null,
+                'negatif' => 0,
+            ];
+        }
+
+        $tepat = count(array_filter($menit, static fn (int $m): bool => $m < self::AMBANG_MENIT));
+        $tengah = (int) floor(($total - 1) / 2);
+
+        return [
+            'insiden' => $insiden,
+            // Dipisah dari 'insiden' supaya baris tanpa menit tidak diam-diam
+            // hilang dari penyebut tanpa penjelasan.
+            'bermenit' => $total,
+            'tepat' => $tepat,
+            'telat' => $total - $tepat,
+            'persen_rincian' => round($tepat / $total * 100, 2),
+            'median' => $total % 2 === 1
+                ? $menit[$tengah]
+                : (int) round(($menit[$tengah] + $menit[$tengah + 1]) / 2),
+            'terlama' => max($menit),
+            'tercepat' => min($menit),
+            'rata' => (int) round(array_sum($menit) / $total),
+            'negatif' => count(array_filter($menit, static fn (int $m): bool => $m < 0)),
+        ];
+    }
+
+    /**
+     * Angka sel menurut tabel ringkasan, beserta baris-baris pembentuknya.
+     *
+     * AVG-nya sama persis dengan overview(), jadi kartu di modal tidak mungkin
+     * menyimpang dari sel yang baru saja diklik.
+     *
+     * @return array<string, mixed>
+     */
+    private function ringkasanSel(Builder $query): array
+    {
+        $baris = (clone $query)
+            ->select([
+                self::COL_LEAD . ' AS lead_investigasi',
+                self::COL_PERSEN . ' AS persen',
+            ])
+            ->orderByDesc(self::COL_PERSEN)
+            ->get();
+
+        $nilai = $baris
+            ->pluck('persen')
+            ->filter(static fn ($v): bool => $v !== null)
+            ->map(static fn ($v): float => (float) $v)
+            ->all();
+
+        return [
+            'persen' => $nilai === []
+                ? null
+                : round(array_sum($nilai) / count($nilai), 2),
+            'baris' => $baris->map(static function (object $r): array {
+                $lead = trim((string) ($r->lead_investigasi ?? ''));
+
+                return [
+                    'lead' => $lead === '' ? '-' : $lead,
+                    'persen' => $r->persen === null ? null : round((float) $r->persen, 2),
+                ];
+            })->all(),
+        ];
+    }
+
+    /**
+     * Sebaran jeda lapor di sel ini, memakai KELOMPOK_MENIT yang sama dengan
+     * panel sebaran di tab Ringkasan supaya kelompoknya tidak berbeda arti.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function sebaranSel(Builder $query): array
+    {
+        $menit = (clone $query)
+            ->whereNotNull(self::COL_MENIT)
+            ->pluck(self::COL_MENIT)
+            ->map(static fn ($v): int => (int) $v)
+            ->all();
+
+        $total = count($menit);
+        $out = [];
+
+        foreach (self::KELOMPOK_MENIT as [$label, $bawah, $atas]) {
+            $jumlah = count(array_filter(
+                $menit,
+                static fn (int $m): bool => ($bawah === null || $m >= $bawah)
+                    && ($atas === null || $m < $atas)
+            ));
+
+            // Kelompok kosong dibuang: di satu sel yang isinya beberapa insiden
+            // saja, deretan nol hanya menambah panjang tanpa menambah arti.
+            if ($jumlah === 0) {
+                continue;
+            }
+
+            $out[] = [
+                'label' => $label,
+                'jumlah' => $jumlah,
+                'persen' => $total > 0 ? round($jumlah / $total * 100, 2) : 0.0,
+                'tepat_waktu' => $atas === self::AMBANG_MENIT,
+            ];
+        }
+
+        return $out;
     }
 
     // ======================================================================
