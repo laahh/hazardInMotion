@@ -1339,8 +1339,15 @@ final class RatioTbcGrController extends Controller
                 ? $dasar + ($percent - $bawah) / $rentang
                 : (float) $dasar;
 
-            // Dibulatkan dua desimal; pembatasan 1-4 menjaga capaian di luar
-            // 0-100 (kalau sumbernya nanti aneh) tidak menghasilkan nilai liar.
+            // Dibulatkan dua desimal, TAPI tidak boleh menyentuh angka band
+            // berikutnya. Tanpa batas ini, capaian 93,90% menghasilkan
+            // 1,99893 yang membulat menjadi 2,00 dan tampil sebagai "Nilai 2"
+            // di sel yang label bandnya masih "<94%" -- angka dan keterangan
+            // di layar saling bertentangan. Dengan batas ini ia tampil 1,99.
+            $nilai = min($nilai, $dasar + 0.99);
+
+            // Pembatasan 1-4 menjaga capaian di luar 0-100 (kalau sumbernya
+            // nanti aneh) tidak menghasilkan nilai liar.
             return [$bawah, round(max(1.0, min(4.0, $nilai)), 2), $label];
         }
 

@@ -87,11 +87,12 @@
   .ov-modal-scroll thead th {
     position: sticky; top: 0; z-index: 1; background: #F8FAFC;
   }
-  .ov-t1 { background: #E0484A; }
-  .ov-t2 { background: #F08C2E; }
-  .ov-t3 { background: #F2C230; color: #1F2937 !important; }
-  .ov-t4 { background: #86C96B; }
-  .ov-t5 { background: #059669; }
+  /* Mode Persentase memakai ambang band yang sama dengan mode Nilai, jadi
+     warnanya ikut sama: satu sel tidak berubah warna saat mode diganti. */
+  .ov-t1 { background: #FF0000; }
+  .ov-t2 { background: #FFC000; color: #1F2937 !important; }
+  .ov-t3 { background: #FFFF00; color: #1F2937 !important; }
+  .ov-t4 { background: #92D050; color: #1F2937 !important; }
   /* Mode Nilai: 4 band resmi, warnanya senada dengan kartu perusahaan. */
   /* Warna band mengikuti lembar penilaian resmi: merah, jingga, kuning,
      hijau muda. Kuning dan hijau muda memakai teks gelap agar tetap terbaca. */
@@ -459,21 +460,24 @@ window.oscOverview = (function () {
     // Gradasi warna untuk mode Persentase: 5 tingkat, lebih halus daripada
     // band Nilai sehingga perbedaan antar bulan lebih mudah terlihat.
     function tierClass(pct) {
-        if (pct >= 98) return 'ov-t5';
-        if (pct >= 90) return 'ov-t4';
-        if (pct >= 78) return 'ov-t3';
-        if (pct >= 62) return 'ov-t2';
-        return 'ov-t1';
+        return { 1: 'ov-t1', 2: 'ov-t2', 3: 'ov-t3', 4: 'ov-t4' }[bandPersen(pct)] || 'ov-empty';
     }
 
     // Mode Nilai memakai 4 band resmi (SCORE_BANDS), bukan gradasi di atas,
     // supaya warna sel tidak pernah bertentangan dengan angka Nilai-nya.
-    // Nilai kini berkoma, jadi bandnya diambil dari bagian bulatnya: 3,95
-    // masih band 3 (kuning), dan hanya 4,00 yang hijau. Tanpa pembulatan ke
-    // bawah ini, seluruh sel berkoma akan jatuh ke kelas abu-abu.
-    function bandNilai(nilai) {
-        var n = Math.floor(Number(nilai) || 0);
-        return Math.min(4, Math.max(1, n));
+    // BAND SELALU DITURUNKAN DARI PERSENTASE, tidak pernah dari nilai.
+    // Nilai dibulatkan dua desimal untuk ditampilkan, dan pembulatan itu bisa
+    // menyeberangi batas band: capaian 93,90% menghasilkan 1,99893 yang
+    // membulat menjadi 2,00, sehingga membaca bandnya dari angka itu akan
+    // memberi warna band 2 pada sel yang sebenarnya masih band 1. Ambangnya
+    // sama persis dengan SCORE_BANDS di controller.
+    function bandPersen(pct) {
+        var v = Number(pct);
+        if (!isFinite(v)) { return 0; }
+        if (v >= 98) { return 4; }
+        if (v >= 96) { return 3; }
+        if (v >= 94) { return 2; }
+        return 1;
     }
 
     /** Nilai ditampilkan dengan koma, mis. "3,95". */
@@ -484,22 +488,22 @@ window.oscOverview = (function () {
         });
     }
 
-    function nilaiClass(nilai) {
-        return { 1: 'ov-n1', 2: 'ov-n2', 3: 'ov-n3', 4: 'ov-n4' }[bandNilai(nilai)] || 'ov-empty';
+    function nilaiClass(pct) {
+        return { 1: 'ov-n1', 2: 'ov-n2', 3: 'ov-n3', 4: 'ov-n4' }[bandPersen(pct)] || 'ov-empty';
     }
 
     // Kelas badge mengikuti sistem warna WowDash (bg-*-focus + text-*-main),
     // bukan warna inline, supaya ikut tema dan konsisten dengan modul lain.
-    function nilaiBadgeClass(nilai) {
+    function nilaiBadgeClass(pct) {
         return {
             1: 'ov-b1', 2: 'ov-b2', 3: 'ov-b3', 4: 'ov-b4'
-        }[bandNilai(nilai)] || 'bg-neutral-200 text-secondary-light';
+        }[bandPersen(pct)] || 'bg-neutral-200 text-secondary-light';
     }
 
-    function nilaiBarClass(nilai) {
+    function nilaiBarClass(pct) {
         return {
             1: 'ov-bar1', 2: 'ov-bar2', 3: 'ov-bar3', 4: 'ov-bar4'
-        }[bandNilai(nilai)] || 'bg-neutral-400';
+        }[bandPersen(pct)] || 'bg-neutral-400';
     }
 
     return function create(root) {
@@ -520,8 +524,12 @@ window.oscOverview = (function () {
             return root.querySelector('[data-ov="' + name + '"]');
         }
 
+        // Warna sel SELALU dari persentasenya, apa pun mode tampilannya.
+        // Sebelumnya mode Nilai memakai angka nilai dan mode Persentase memakai
+        // persen, sehingga sel di sekitar batas band bisa berganti warna hanya
+        // karena modenya diganti -- padahal datanya sama.
         function cellClass(cell) {
-            return matrixMode === 'nilai' ? nilaiClass(cell.nilai) : tierClass(cell.pct);
+            return (matrixMode === 'nilai' ? nilaiClass : tierClass)(cell.pct);
         }
 
         // Delegasi di tabel, bukan di tiap sel: matriks digambar ulang setiap
@@ -581,7 +589,7 @@ window.oscOverview = (function () {
                 {
                     grad: 'bg-gradient-end-3', icon: 'solar:medal-star-outline', dot: 'bg-yellow',
                     label: 'Rasio Pelaporan', value: fmtPct(k.standar_pct),
-                    foot: '<span class="' + nilaiBadgeClass(k.nilai) + ' px-1 rounded-2 fw-medium text-sm">Nilai '
+                    foot: '<span class="' + nilaiBadgeClass(k.standar_pct) + ' px-1 rounded-2 fw-medium text-sm">Nilai '
                         + fmtNilai(k.nilai) + '</span> '
                         + (k.memenuhi_target ? 'Memenuhi' : 'Belum memenuhi') + ' target ' + k.target + '%'
                 }
@@ -621,12 +629,12 @@ window.oscOverview = (function () {
                     + '<div class="border input-form-light radius-8 p-16 h-100">'
                     +   '<div class="d-flex align-items-center justify-content-between gap-2 mb-12">'
                     +     '<span class="text-md fw-semibold">' + escapeHtml(p.mitra) + '</span>'
-                    +     '<span class="' + nilaiBadgeClass(p.nilai) + ' px-8 py-2 rounded-pill fw-medium text-xs">Nilai '
+                    +     '<span class="' + nilaiBadgeClass(p.percent) + ' px-8 py-2 rounded-pill fw-medium text-xs">Nilai '
                     +       fmtNilai(p.nilai) + '</span>'
                     +   '</div>'
                     +   '<h6 class="mb-8 fw-semibold">' + fmtPct(p.percent) + '</h6>'
                     +   '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px mb-8">'
-                    +     '<div class="progress-bar ' + nilaiBarClass(p.nilai) + ' rounded-pill" role="progressbar"'
+                    +     '<div class="progress-bar ' + nilaiBarClass(p.percent) + ' rounded-pill" role="progressbar"'
                     +       ' style="width:' + Math.min(100, p.percent) + '%" aria-valuenow="' + Math.round(p.percent) + '"'
                     +       ' aria-valuemin="0" aria-valuemax="100"></div>'
                     +   '</div>'
@@ -657,7 +665,7 @@ window.oscOverview = (function () {
                     + '</div>'
                     + '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px ov-track"'
                     +   ' title="Target ' + s.target + '%">'
-                    +   '<div class="progress-bar ' + nilaiBarClass(s.nilai) + ' rounded-pill" role="progressbar"'
+                    +   '<div class="progress-bar ' + nilaiBarClass(s.percent) + ' rounded-pill" role="progressbar"'
                     +     ' style="width:' + Math.min(100, s.percent) + '%" aria-valuenow="' + Math.round(s.percent) + '"'
                     +     ' aria-valuemin="0" aria-valuemax="100"></div>'
                     +   '<span class="ov-track__target" style="left:' + s.target + '%"></span>'
@@ -681,7 +689,7 @@ window.oscOverview = (function () {
                     +   '<span class="text-sm text-secondary-light">'
                     +     escapeHtml(t.mitra || '-') + ', ' + fmtPct(t.percent) + '</span>'
                     + '</td>'
-                    + '<td class="text-center"><span class="' + nilaiBadgeClass(t.nilai)
+                    + '<td class="text-center"><span class="' + nilaiBadgeClass(t.percent)
                     +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + fmtNilai(t.nilai) + '</span></td>'
                     + '<td class="text-end fw-medium">'
                     +   (t.tidak_sesuai === null ? '–' : fmtNum(t.tidak_sesuai)) + '</td>'
@@ -699,11 +707,10 @@ window.oscOverview = (function () {
                     { color: '#92D050', label: 'Nilai 4 · 98–100%' }
                 ]
                 : [
-                    { color: '#E0484A', label: '<62%' },
-                    { color: '#F08C2E', label: '62–78%' },
-                    { color: '#F2C230', label: '78–90%' },
-                    { color: '#86C96B', label: '90–98%' },
-                    { color: '#059669', label: '≥98%' }
+                    { color: '#FF0000', label: '<94%' },
+                    { color: '#FFC000', label: '94–96%' },
+                    { color: '#FFFF00', label: '96–98%' },
+                    { color: '#92D050', label: '98–100%' }
                 ];
 
             el('legend').innerHTML = items.map(function (it) {
