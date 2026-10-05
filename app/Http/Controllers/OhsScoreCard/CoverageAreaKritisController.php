@@ -552,6 +552,225 @@ final class CoverageAreaKritisController extends Controller
     // Tab Data
     // ======================================================================
 
+    /**
+     * Isi satu sel matriks Capaian per Bulan, untuk modal rincian.
+     *
+     * TIDAK ADA TABEL RINCIAN YANG BISA DIPAKAI, dan itu menentukan isi
+     * modalnya. Kandidat terbaiknya, scr_hsecm_coverage_area_kritis_daily,
+     * sekilas cocok sekali -- butirannya Detil_Lokasi x Site x minggu, satuan
+     * lokasi-minggu yang sama dengan parameter ini -- tetapi sudah diperiksa
+     * dan ditolak karena tiga alasan yang berdiri sendiri-sendiri:
+     *
+     *   - isinya HANYA yang tidak tercover. Seluruh 4.944 barisnya berstatus
+     *     "Tidak Tercover" dengan Tercover = 0; namanya pun "Trigger - Detail
+     *     Lokasi Tidak Tercover". Itu daftar pemicu, bukan populasi, jadi
+     *     penyebutnya tidak ada dan persentase mustahil diturunkan darinya;
+     *   - tidak punya kolom PIC sama sekali, padahal baris matriks bergrain
+     *     site x PIC (BAR, BAR,ACI, BUMA, FAD, KDC, MTN, PAMA), sehingga
+     *     mustahil disaring ke sel yang diklik;
+     *   - rentangnya minggu 30-41 tahun 2026 saja, sementara ringkasan
+     *     berjalan April sampai Oktober. Empat dari enam bulan yang tampil
+     *     tidak tercakup sama sekali.
+     *
+     * Karena itu modal ini TIDAK memecah sel jadi daftar lokasi. Yang
+     * disajikan konteks di sekeliling sel, seluruhnya dari tabel ringkasan
+     * yang sama dengan matriksnya, sehingga angkanya tidak mungkin
+     * bertentangan dengan sel yang diklik:
+     *
+     *   riwayat  site x PIC yang sama sepanjang bulan -> kronis atau sesaat?
+     *   sebulan  site x bulan yang sama di seluruh PIC -> satu PIC atau se-site?
+     *
+     * Mengarang daftar lokasi dari sumber yang tidak cocok akan memberi angka
+     * yang terlihat meyakinkan tetapi salah, dan itu lebih buruk daripada
+     * mengakui rinciannya belum ada.
+     */
+    public function detailBulan(Request $request): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $pic = trim((string) $request->input('pic', ''));
+
+        // Matriks halaman ini memakai KODE tahun*100 + bulan, bukan 1-12,
+        // karena bulan di sumber bertahun ("April 2026"). Nomor bulan polos
+        // tetap diterima supaya tautan lama tidak patah.
+        $kode = (int) $request->input('month', 0);
+        $bulan = $kode > 9999 ? $kode % 100 : $kode;
+        $tahun = $kode > 9999 ? intdiv($kode, 100) : null;
+
+        if ($site === '' || $pic === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site, PIC, dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        $nilaiBulan = $this->nilaiBulanTepat($bulan, $tahun);
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'site' => $site,
+                'pic' => $pic,
+                'bulan' => $tahun === null
+                    ? self::monthLabel($bulan)
+                    : $this->labelBulan($tahun * 100 + $bulan),
+            ],
+            'target' => self::TARGET_PERCENT,
+            'sel' => $this->agregat(
+                DB::table(self::TABLE)
+                    ->where(self::COL_SITE, $site)
+                    ->where(self::COL_PIC, $pic)
+                    ->whereIn(self::COL_BULAN, $nilaiBulan)
+            ),
+            'riwayat' => $this->riwayatSelama($site, $pic),
+            'sebulan' => $this->sebulanDiSite($site, $nilaiBulan, $pic),
+            'site' => $this->agregat(
+                DB::table(self::TABLE)
+                    ->where(self::COL_SITE, $site)
+                    ->whereIn(self::COL_BULAN, $nilaiBulan)
+            ),
+        ]);
+    }
+
+    /**
+     * Nilai month_of_date_hst yang berarti bulan ini, dipersempit ke tahunnya
+     * kalau tahunnya diketahui. Tanpa penyempitan itu, "April 2026" dan
+     * "April 2025" akan tercampur jadi satu sel.
+     *
+     * @return array<int, string>
+     */
+    private function nilaiBulanTepat(int $bulan, ?int $tahun): array
+    {
+        if ($tahun === null) {
+            return $this->namaBulan($bulan);
+        }
+
+        $out = [];
+
+        foreach (self::MONTH_MAP as $inggris => [$no]) {
+            if ($no === $bulan) {
+                $out[] = $inggris . ' ' . $tahun;
+                $out[] = $inggris;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Capaian berbobot sekumpulan baris: lokasi-minggu tercover dibagi
+     * lokasi-minggu terdaftar. Bukan rata-rata persentase antar baris --
+     * selisih keduanya 8 poin di parameter ini, lihat docblock kelas.
+     *
+     * @return array<string, mixed>
+     */
+    private function agregat(Builder $query): array
+    {
+        $row = $query
+            ->selectRaw(
+                'COALESCE(SUM(' . self::COL_TERCOVER . '), 0) AS tercover, '
+                . 'COALESCE(SUM(' . self::COL_TERDAFTAR . '), 0) AS terdaftar'
+            )
+            ->first();
+
+        $tercover = (int) ($row->tercover ?? 0);
+        $terdaftar = (int) ($row->terdaftar ?? 0);
+        $persen = $terdaftar > 0 ? round($tercover / $terdaftar * 100, 2) : null;
+        [, $nilai, $band] = $this->scoreBandFor($persen ?? 0.0);
+
+        return [
+            'tercover' => $tercover,
+            'terdaftar' => $terdaftar,
+            'belum' => $terdaftar - $tercover,
+            'persen' => $persen,
+            'nilai' => $persen === null ? null : $nilai,
+            'nilai_band' => $persen === null ? null : $band,
+            'memenuhi_target' => $persen !== null && $persen >= self::TARGET_PERCENT,
+        ];
+    }
+
+    /**
+     * Site x PIC yang sama sepanjang bulan: capaian sel ini kronis atau sesaat?
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function riwayatSelama(string $site, string $pic): array
+    {
+        $rows = DB::table(self::TABLE)
+            ->where(self::COL_SITE, $site)
+            ->where(self::COL_PIC, $pic)
+            ->selectRaw(
+                self::COL_BULAN . ' AS bulan, '
+                . 'SUM(' . self::COL_TERCOVER . ') AS tercover, '
+                . 'SUM(' . self::COL_TERDAFTAR . ') AS terdaftar'
+            )
+            ->groupBy('bulan')
+            ->get();
+
+        $out = [];
+
+        foreach ($rows as $r) {
+            $kunci = $this->uraikanBulan((string) $r->bulan);
+
+            if ($kunci === null || in_array($kunci[1], self::EXCLUDED_MONTHS, true)) {
+                continue;
+            }
+
+            $terdaftar = (int) $r->terdaftar;
+
+            $out[] = [
+                'kode' => $kunci[0] * 100 + $kunci[1],
+                'bulan' => $this->labelBulan($kunci[0] * 100 + $kunci[1]),
+                'tercover' => (int) $r->tercover,
+                'terdaftar' => $terdaftar,
+                'persen' => $terdaftar > 0 ? round((int) $r->tercover / $terdaftar * 100, 2) : null,
+            ];
+        }
+
+        usort($out, static fn (array $a, array $b): int => $a['kode'] <=> $b['kode']);
+
+        return $out;
+    }
+
+    /**
+     * Site x bulan yang sama di seluruh PIC: yang tertinggal satu PIC saja
+     * atau memang se-site?
+     *
+     * @param  array<int, string>  $nilaiBulan
+     * @return array<int, array<string, mixed>>
+     */
+    private function sebulanDiSite(string $site, array $nilaiBulan, string $picTerpilih): array
+    {
+        $rows = DB::table(self::TABLE)
+            ->where(self::COL_SITE, $site)
+            ->whereIn(self::COL_BULAN, $nilaiBulan)
+            ->selectRaw(
+                self::COL_PIC . ' AS pic, '
+                . 'SUM(' . self::COL_TERCOVER . ') AS tercover, '
+                . 'SUM(' . self::COL_TERDAFTAR . ') AS terdaftar'
+            )
+            ->groupBy('pic')
+            ->get();
+
+        $out = [];
+
+        foreach ($rows as $r) {
+            $terdaftar = (int) $r->terdaftar;
+            $pic = trim((string) $r->pic);
+
+            $out[] = [
+                'pic' => $pic,
+                'ini' => $pic === $picTerpilih,
+                'tercover' => (int) $r->tercover,
+                'terdaftar' => $terdaftar,
+                'persen' => $terdaftar > 0 ? round((int) $r->tercover / $terdaftar * 100, 2) : null,
+            ];
+        }
+
+        usort($out, static fn (array $a, array $b): int => ($b['persen'] ?? -1) <=> ($a['persen'] ?? -1));
+
+        return $out;
+    }
+
     public function data(Request $request): JsonResponse
     {
         $query = $this->dataQuery($request);

@@ -1,5 +1,6 @@
 {{-- Tab Ringkasan Coverage Area Kritis Pengawas Suptend up. --}}
-<div class="cak-overview" data-url="{{ route('ohs-score-card.coverage-area-kritis.overview') }}">
+<div class="cak-overview" data-url="{{ route('ohs-score-card.coverage-area-kritis.overview') }}"
+     data-detail-url="{{ route('ohs-score-card.coverage-area-kritis.detail-bulan') }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">

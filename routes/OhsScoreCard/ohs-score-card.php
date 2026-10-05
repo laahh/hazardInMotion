@@ -261,6 +261,8 @@ Route::middleware('evaluasi-well.access')
             ->name('coverage-area-kritis.index');
         Route::get('/coverage-area-kritis/overview', [CoverageAreaKritisController::class, 'overview'])
             ->name('coverage-area-kritis.overview');
+        Route::get('/coverage-area-kritis/detail-bulan', [CoverageAreaKritisController::class, 'detailBulan'])
+            ->name('coverage-area-kritis.detail-bulan');
         Route::get('/coverage-area-kritis/data', [CoverageAreaKritisController::class, 'data'])
             ->name('coverage-area-kritis.data');
         Route::get('/coverage-area-kritis/export', [CoverageAreaKritisController::class, 'export'])
