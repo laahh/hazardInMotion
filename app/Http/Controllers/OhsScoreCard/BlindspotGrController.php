@@ -253,17 +253,23 @@ final class BlindspotGrController extends Controller
             $site = trim((string) $row->site);
             $mitra = trim((string) $row->mitra);
 
-            // Bulan yang seluruh nilainya NULL tidak dianggap tercakup: di
-            // tabel ini 145 dari 168 baris memang masih kosong, dan menjadikan
-            // semuanya kolom bulan hanya menghasilkan matriks penuh strip.
-            if ($row->persen === null) {
-                continue;
-            }
-
+            // PERSEN KOSONG BERARTI NOL, BUKAN "TIDAK ADA DATA". Di parameter
+            // ini tidak adanya angka berarti tidak ada blindspot sama sekali --
+            // keadaan terbaik, bukan lubang data. Sudah diperiksa menyeluruh:
+            // dari 145 baris ber-persen NULL dan 52 kombinasi yang tidak punya
+            // baris sama sekali, NOL di antaranya punya temuan di
+            // detail_lead_blindspot_gr. Jadi menampilkannya sebagai 0% hijau
+            // tidak menyembunyikan satu pun blindspot yang nyata.
+            //
+            // Kalau suatu saat tabel bulanan mulai memuat baris yang NULL
+            // PADAHAL rinciannya berisi, pemeriksaan itu perlu diulang: saat
+            // itu NULL tidak lagi sama dengan nol.
             $monthSeen[$monthNo] = true;
             $grid[$site . '|' . $mitra]['site'] = $site;
             $grid[$site . '|' . $mitra]['mitra'] = $mitra;
-            $grid[$site . '|' . $mitra]['bulan'][$monthNo] = round((float) $row->persen * $skala, 2);
+            $grid[$site . '|' . $mitra]['bulan'][$monthNo] = $row->persen === null
+                ? 0.0
+                : round((float) $row->persen * $skala, 2);
         }
 
         ksort($monthSeen);
@@ -277,12 +283,12 @@ final class BlindspotGrController extends Controller
             $terisi = [];
 
             foreach ($months as $monthNo) {
-                $value = $entry['bulan'][$monthNo] ?? null;
+                // Pasangan site x perusahaan yang tidak punya baris di bulan
+                // tertentu juga berarti tidak ada blindspot, bukan data hilang.
+                // Alasan dan buktinya sama dengan di buildPersen() di atas.
+                $value = $entry['bulan'][$monthNo] ?? 0.0;
                 $cells[] = $value;
-
-                if ($value !== null) {
-                    $terisi[] = $value;
-                }
+                $terisi[] = $value;
             }
 
             $average = $terisi !== [] ? round(array_sum($terisi) / count($terisi), 2) : null;
