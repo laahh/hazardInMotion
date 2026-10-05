@@ -93,10 +93,22 @@
   .ov-t4 { background: #86C96B; }
   .ov-t5 { background: #059669; }
   /* Mode Nilai: 4 band resmi, warnanya senada dengan kartu perusahaan. */
-  .ov-n1 { background: #E0484A; }
-  .ov-n2 { background: #F08C2E; }
-  .ov-n3 { background: #F2C230; color: #1F2937 !important; }
-  .ov-n4 { background: #16A34A; }
+  /* Warna band mengikuti lembar penilaian resmi: merah, jingga, kuning,
+     hijau muda. Kuning dan hijau muda memakai teks gelap agar tetap terbaca. */
+  .ov-n1 { background: #FF0000; }
+  .ov-n2 { background: #FFC000; color: #1F2937 !important; }
+  .ov-n3 { background: #FFFF00; color: #1F2937 !important; }
+  .ov-n4 { background: #92D050; color: #1F2937 !important; }
+
+  /* Lencana dan batang memakai warna band yang sama persis dengan sel. */
+  .ov-b1 { background: #FFE5E5; color: #B91C1C !important; }
+  .ov-b2 { background: #FFF2CC; color: #92400E !important; }
+  .ov-b3 { background: #FFFBCC; color: #854D0E !important; }
+  .ov-b4 { background: #E8F5DC; color: #3F6212 !important; }
+  .ov-bar1 { background: #FF0000; }
+  .ov-bar2 { background: #FFC000; }
+  .ov-bar3 { background: #FFFF00; }
+  .ov-bar4 { background: #92D050; }
 
 </style>
 @endsection
@@ -456,26 +468,38 @@ window.oscOverview = (function () {
 
     // Mode Nilai memakai 4 band resmi (SCORE_BANDS), bukan gradasi di atas,
     // supaya warna sel tidak pernah bertentangan dengan angka Nilai-nya.
+    // Nilai kini berkoma, jadi bandnya diambil dari bagian bulatnya: 3,95
+    // masih band 3 (kuning), dan hanya 4,00 yang hijau. Tanpa pembulatan ke
+    // bawah ini, seluruh sel berkoma akan jatuh ke kelas abu-abu.
+    function bandNilai(nilai) {
+        var n = Math.floor(Number(nilai) || 0);
+        return Math.min(4, Math.max(1, n));
+    }
+
+    /** Nilai ditampilkan dengan koma, mis. "3,95". */
+    function fmtNilai(nilai) {
+        if (nilai === null || nilai === undefined || nilai === '') { return '–'; }
+        return Number(nilai).toLocaleString('id-ID', {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        });
+    }
+
     function nilaiClass(nilai) {
-        return { 1: 'ov-n1', 2: 'ov-n2', 3: 'ov-n3', 4: 'ov-n4' }[nilai] || 'ov-empty';
+        return { 1: 'ov-n1', 2: 'ov-n2', 3: 'ov-n3', 4: 'ov-n4' }[bandNilai(nilai)] || 'ov-empty';
     }
 
     // Kelas badge mengikuti sistem warna WowDash (bg-*-focus + text-*-main),
     // bukan warna inline, supaya ikut tema dan konsisten dengan modul lain.
     function nilaiBadgeClass(nilai) {
         return {
-            1: 'bg-danger-focus text-danger-main',
-            2: 'bg-warning-focus text-warning-main',
-            3: 'bg-info-focus text-info-main',
-            4: 'bg-success-focus text-success-main'
-        }[nilai] || 'bg-neutral-200 text-secondary-light';
+            1: 'ov-b1', 2: 'ov-b2', 3: 'ov-b3', 4: 'ov-b4'
+        }[bandNilai(nilai)] || 'bg-neutral-200 text-secondary-light';
     }
 
     function nilaiBarClass(nilai) {
         return {
-            1: 'bg-danger-main', 2: 'bg-warning-main',
-            3: 'bg-info-main', 4: 'bg-success-main'
-        }[nilai] || 'bg-neutral-400';
+            1: 'ov-bar1', 2: 'ov-bar2', 3: 'ov-bar3', 4: 'ov-bar4'
+        }[bandNilai(nilai)] || 'bg-neutral-400';
     }
 
     return function create(root) {
@@ -558,7 +582,7 @@ window.oscOverview = (function () {
                     grad: 'bg-gradient-end-3', icon: 'solar:medal-star-outline', dot: 'bg-yellow',
                     label: 'Rasio Pelaporan', value: fmtPct(k.standar_pct),
                     foot: '<span class="' + nilaiBadgeClass(k.nilai) + ' px-1 rounded-2 fw-medium text-sm">Nilai '
-                        + k.nilai + '</span> '
+                        + fmtNilai(k.nilai) + '</span> '
                         + (k.memenuhi_target ? 'Memenuhi' : 'Belum memenuhi') + ' target ' + k.target + '%'
                 }
             ];
@@ -598,7 +622,7 @@ window.oscOverview = (function () {
                     +   '<div class="d-flex align-items-center justify-content-between gap-2 mb-12">'
                     +     '<span class="text-md fw-semibold">' + escapeHtml(p.mitra) + '</span>'
                     +     '<span class="' + nilaiBadgeClass(p.nilai) + ' px-8 py-2 rounded-pill fw-medium text-xs">Nilai '
-                    +       p.nilai + '</span>'
+                    +       fmtNilai(p.nilai) + '</span>'
                     +   '</div>'
                     +   '<h6 class="mb-8 fw-semibold">' + fmtPct(p.percent) + '</h6>'
                     +   '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px mb-8">'
@@ -658,7 +682,7 @@ window.oscOverview = (function () {
                     +     escapeHtml(t.mitra || '-') + ', ' + fmtPct(t.percent) + '</span>'
                     + '</td>'
                     + '<td class="text-center"><span class="' + nilaiBadgeClass(t.nilai)
-                    +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + t.nilai + '</span></td>'
+                    +   ' px-8 py-2 rounded-pill fw-medium text-xs">' + fmtNilai(t.nilai) + '</span></td>'
                     + '<td class="text-end fw-medium">'
                     +   (t.tidak_sesuai === null ? '–' : fmtNum(t.tidak_sesuai)) + '</td>'
                     + '</tr>';
@@ -669,10 +693,10 @@ window.oscOverview = (function () {
         function renderLegend() {
             var items = matrixMode === 'nilai'
                 ? [
-                    { color: '#E0484A', label: 'Nilai 1 · <80%' },
-                    { color: '#F08C2E', label: 'Nilai 2 · 80–90%' },
-                    { color: '#F2C230', label: 'Nilai 3 · 90–98%' },
-                    { color: '#16A34A', label: 'Nilai 4 · 98–100%' }
+                    { color: '#FF0000', label: 'Nilai 1 · <94%' },
+                    { color: '#FFC000', label: 'Nilai 2 · 94–96%' },
+                    { color: '#FFFF00', label: 'Nilai 3 · 96–98%' },
+                    { color: '#92D050', label: 'Nilai 4 · 98–100%' }
                 ]
                 : [
                     { color: '#E0484A', label: '<62%' },
@@ -746,12 +770,12 @@ window.oscOverview = (function () {
                 var terisi = row.cells.filter(function (c) { return c !== null; }).length;
                 var avgTip = row.total === null
                     ? 'Rata-rata ' + terisi + ' bulan · ' + fmtPct(row.average)
-                        + ' · Nilai ' + row.nilai + ' (' + row.nilai_band + ')'
+                        + ' · Nilai ' + fmtNilai(row.nilai) + ' (' + row.nilai_band + ')'
                     : fmtNum(row.total) + ' pengawas · ' + fmtPct(row.average)
-                        + ' · Nilai ' + row.nilai + ' (' + row.nilai_band + ')';
+                        + ' · Nilai ' + fmtNilai(row.nilai) + ' (' + row.nilai_band + ')';
 
                 html += '<td class="ov-avg" title="' + escapeHtml(avgTip) + '">'
-                    + (matrixMode === 'nilai' ? row.nilai : fmtPct(row.average)) + '</td>';
+                    + (matrixMode === 'nilai' ? fmtNilai(row.nilai) : fmtPct(row.average)) + '</td>';
 
                 if (row.trend === 'up') {
                     html += '<td class="ov-trend--up" title="Naik dari bulan sebelumnya">&uarr;</td>';
@@ -777,7 +801,7 @@ window.oscOverview = (function () {
                         + (cell.total === null
                             ? ''
                             : fmtNum(cell.standar) + ' dari ' + fmtNum(cell.total) + ' pengawas · ')
-                        + fmtPct(cell.pct) + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')';
+                        + fmtPct(cell.pct) + ' · Nilai ' + fmtNilai(cell.nilai) + ' (' + cell.nilai_band + ')';
 
                     // Koordinat sel dibawa di atribut, bukan ditebak dari
                     // posisi DOM: urutan baris berubah mengikuti pengurutan per
@@ -790,7 +814,7 @@ window.oscOverview = (function () {
                         + ' data-bulan="' + escapeHtml(months[m].label) + '"'
                         + ' data-pct="' + cell.pct + '"'
                         + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
-                        + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
+                        + (matrixMode === 'nilai' ? fmtNilai(cell.nilai) : Math.round(cell.pct) + '%')
                         + '</td>';
                 });
 

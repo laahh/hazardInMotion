@@ -110,11 +110,28 @@ final class RatioTbcGrController extends Controller
      */
     private const EXCLUDED_MONTHS = ['October'];
 
+    /**
+     * Band penilaian: [batas bawah, batas atas, nilai dasar, label].
+     *
+     * NILAINYA BERKOMA, BUKAN BULAT. Di dalam satu band, nilai melandai
+     * mengikuti posisi capaian di antara kedua batasnya -- 97,0% bernilai
+     * 3,50, bukan 3 -- sehingga dua perusahaan yang sama-sama "Nilai 3" tetap
+     * bisa dibedakan. Lihat scoreBandFor().
+     *
+     * BAND TERATAS DATAR DI 4,00. Begitu capaian menyentuh 98% nilainya sudah
+     * 4,00 penuh dan tidak melandai lagi sampai 100%. Ini mengikuti keputusan
+     * pengguna: rumus Excel rujukan justru membuat 98% bernilai 3,00 -- lebih
+     * rendah daripada 97,9% yang 3,95 -- karena band teratasnya ikut melandai
+     * dari 3. Penurunan itu sengaja TIDAK ditiru.
+     *
+     * BAND TERBAWAH melandai dari 1,00 di 0% sampai 2,00 di 94%, jadi capaian
+     * buruk pun tetap terbedakan satu sama lain.
+     */
     private const SCORE_BANDS = [
-        [98.0, 4, '98% - 100%'],
-        [90.0, 3, '90% - <98%'],
-        [80.0, 2, '80% - <90%'],
-        [0.0,  1, '<80%'],
+        [98.0, 100.0, 4, '98% - 100%'],
+        [96.0,  98.0, 3, '96% - <98%'],
+        [94.0,  96.0, 2, '94% - <96%'],
+        [0.0,   94.0, 1, '<94%'],
     ];
 
     /** Kolom detail yang boleh difilter persis. */
@@ -1297,14 +1314,36 @@ final class RatioTbcGrController extends Controller
     }
 
     /** @return array{0: float, 1: int, 2: string} */
+    /**
+     * Nilai berkoma untuk satu capaian.
+     *
+     * Dikembalikan dalam bentuk [batas bawah band, nilai, label band] supaya
+     * pemanggil lama yang membongkar [, $nilai, $band] tetap bekerja.
+     *
+     * @return array{0: float, 1: float, 2: string}
+     */
     private function scoreBandFor(float $percent): array
     {
-        foreach (self::SCORE_BANDS as $band) {
-            if ($percent >= $band[0]) {
-                return $band;
+        foreach (self::SCORE_BANDS as [$bawah, $atas, $dasar, $label]) {
+            if ($percent < $bawah) {
+                continue;
             }
+
+            // Band teratas datar: 98% ke atas sudah 4,00 penuh.
+            if ($dasar >= 4) {
+                return [$bawah, 4.0, $label];
+            }
+
+            $rentang = $atas - $bawah;
+            $nilai = $rentang > 0
+                ? $dasar + ($percent - $bawah) / $rentang
+                : (float) $dasar;
+
+            // Dibulatkan dua desimal; pembatasan 1-4 menjaga capaian di luar
+            // 0-100 (kalau sumbernya nanti aneh) tidak menghasilkan nilai liar.
+            return [$bawah, round(max(1.0, min(4.0, $nilai)), 2), $label];
         }
 
-        return [0.0, 1, '<80%'];
+        return [0.0, 1.0, '<94%'];
     }
 }
