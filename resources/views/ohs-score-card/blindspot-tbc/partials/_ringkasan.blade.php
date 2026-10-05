@@ -11,7 +11,8 @@
   $ds: satu entri dari $datasets pada BlindspotTbcController::index().
 --}}
 <div class="bs-overview" data-dataset="{{ $ds['slug'] }}"
-     data-url="{{ route('ohs-score-card.blindspot-tbc.overview', $ds['slug']) }}">
+     data-url="{{ route('ohs-score-card.blindspot-tbc.overview', $ds['slug']) }}"
+     data-detail-url="{{ route('ohs-score-card.blindspot-tbc.detail-bulan', $ds['slug']) }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">

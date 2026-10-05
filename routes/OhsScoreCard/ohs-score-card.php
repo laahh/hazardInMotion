@@ -151,6 +151,9 @@ Route::middleware('evaluasi-well.access')
         Route::get('/blindspot-tbc/{dataset}/overview', [BlindspotTbcController::class, 'overview'])
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('blindspot-tbc.overview');
+        Route::get('/blindspot-tbc/{dataset}/detail-bulan', [BlindspotTbcController::class, 'detailBulan'])
+            ->whereIn('dataset', ['minecon', 'subcon'])
+            ->name('blindspot-tbc.detail-bulan');
         Route::get('/blindspot-tbc/{dataset}/data', [BlindspotTbcController::class, 'data'])
             ->whereIn('dataset', ['minecon', 'subcon'])
             ->name('blindspot-tbc.data');
