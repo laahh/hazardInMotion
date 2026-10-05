@@ -746,6 +746,10 @@ final class RatioTbcGrController extends Controller
                 'mitra' => $mitra,
                 'bulan' => self::monthLabel($bulan),
             ],
+            // Target ikut dikirim supaya pewarnaan kartu persentase di modal
+            // memakai ambang yang sama dengan sisa halaman, bukan angka yang
+            // dipatok ulang di JS dan bisa menyimpang kalau ambangnya berubah.
+            'target' => self::TARGET_PERCENT,
             'ringkas' => [
                 'semua' => (int) ($cacah->semua ?? 0),
                 'dasar' => $dasar,

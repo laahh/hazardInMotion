@@ -223,13 +223,14 @@ var ovModalDetail = (function () {
     }
 
     /**
-     * DUA ANGKA, DAN KEDUANYA MEMANG BISA BERBEDA.
+     * Dua sumber angka, dan keduanya memang bisa berbeda.
      *
      * Matriks memakai persentase resmi dari tabel ringkasan, sedangkan isi
      * modal ini dihitung dari tabel rincian -- dan kedua tabel itu tidak selalu
-     * sinkron; sebagian site atau bulan belum masuk ke tabel rincian. Kalau
-     * modal cuma menampilkan satu angka, pembaca akan mengira angka di sel
-     * salah. Jadi keduanya ditampilkan apa adanya, dan selisihnya dijelaskan.
+     * sinkron; sebagian site atau bulan belum masuk ke tabel rincian. Angkanya
+     * tidak lagi ditampilkan sebagai kartu, tetapi selisihnya tetap diberitahu
+     * lewat peringatan: tanpa itu, daftar yang kosong atau cacah yang tidak
+     * sesuai persentase di sel akan terbaca sebagai kesalahan halaman.
      */
     function render(j, pctSel) {
         var r = j.ringkas;
@@ -238,15 +239,33 @@ var ovModalDetail = (function () {
             : null;
         var beda = selisih === null || selisih >= 0.05;
 
+        // RFID lebih dulu karena dialah penyebut rasionya: Melapor + Belum
+        // Melapor selalu berjumlah persis sebesar kartu ini. Pengawas di luar
+        // basis RFID tidak dapat kartu sendiri melainkan disebut di keterangan,
+        // supaya ketiga angka di atas tetap bisa dijumlahkan tanpa catatan kaki.
+        // Keempat angka ini satu keluarga, semuanya dari tabel rincian:
+        // Melapor + Belum Melapor = RFID, dan Persentase = Melapor / RFID.
+        // Persentase sengaja TIDAK memakai angka sel matriks meski itu yang
+        // resmi -- kalau dicampur, keempat kartu tidak lagi bisa dijumlahkan
+        // dan pembaca tidak punya cara memeriksanya. Selisih dengan sel
+        // matriks sudah diberitahu lewat peringatan di bawah.
+        var capai = r.persen === null
+            ? ''
+            : (j.target !== undefined && r.persen >= j.target ? 'text-success-main' : 'text-danger-main');
+
         var ringkasan = '<div class="row gy-3 mb-20">'
-            + ubin('Rasio di sel matriks', pct(pctSel), 'persentase resmi dari tabel ringkasan')
-            + ubin('Dihitung dari rincian', pct(r.persen),
-                   r.dasar ? r.melapor + ' dari ' + r.dasar + ' pengawas' : 'tidak ada basis RFID',
-                   beda ? 'text-warning-main' : '')
+            + ubin('RFID', num(r.dasar),
+                   'dasar rasio'
+                   + (r.offsite ? ' · ' + num(r.offsite) + ' di luar RFID tidak dihitung' : ''))
             + ubin('Melapor', num(r.melapor), 'punya TBC di bulan ini', 'text-success-main')
             + ubin('Belum Melapor', num(r.belum), 'ada RFID tapi tidak ada TBC',
                    r.belum ? 'text-danger-main' : '')
-            + ubin('Di Luar RFID', num(r.offsite), 'tidak ikut menentukan rasio')
+            + ubin('Persentase', pct(r.persen),
+                   r.dasar
+                       ? num(r.melapor) + ' dibagi ' + num(r.dasar)
+                           + (j.target === undefined ? '' : ' · target ' + j.target + '%')
+                       : 'tidak ada basis RFID',
+                   capai)
             + '</div>';
 
         if (beda) {
@@ -256,10 +275,12 @@ var ovModalDetail = (function () {
                 + '</iconify-icon><span class="text-sm">'
                 + (r.persen === null
                     ? 'Tabel rincian belum memuat kombinasi ini, jadi daftar pengawas di bawah kosong. '
-                        + 'Angka di sel matriks tetap sahih karena diambil dari tabel ringkasan.'
-                    : 'Tabel ringkasan dan tabel rincian belum sepenuhnya sinkron untuk kombinasi ini, '
-                        + 'jadi kedua angka di atas berbeda ' + pct(selisih).replace('%', '') + ' poin. '
-                        + 'Daftar di bawah mengikuti tabel rincian.')
+                        + 'Angka ' + pct(pctSel) + ' di sel matriks tetap sahih karena diambil dari '
+                        + 'tabel ringkasan.'
+                    : 'Sel matriks menunjukkan ' + pct(pctSel) + ' dari tabel ringkasan, sedangkan '
+                        + 'rincian di bawah menghasilkan ' + pct(r.persen) + ' — kedua tabel belum '
+                        + 'sepenuhnya sinkron untuk kombinasi ini. Daftar di bawah mengikuti tabel '
+                        + 'rincian.')
                 + '</span></div>';
         }
 
