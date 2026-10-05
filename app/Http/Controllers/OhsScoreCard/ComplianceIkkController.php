@@ -79,6 +79,13 @@ final class ComplianceIkkController extends Controller
     /** Tabel mentahnya; hanya sumberIzin() yang menyentuhnya. */
     private const TABEL_SUMBER = 'detail_lead_compliance_ikk';
 
+    /**
+     * Batas baris daftar IPK di modal. Sel terpadat berisi 131 izin, jadi
+     * batas ini longgar; dipasang supaya sumber yang membengkak tidak
+     * diam-diam mengirim ribuan baris ke browser.
+     */
+    private const BATAS_BARIS_MODAL = 500;
+
     /** Tabel bulanan resmi, dipakai sebagai pembanding di catatan(). */
     private const TABEL_BULANAN = 'lead_compliance_ikk';
 
@@ -618,6 +625,39 @@ final class ComplianceIkkController extends Controller
 
         $nilaiBulan = $this->nilaiBulanTepat($bulan, $tahun);
 
+        // Satu kueri dasar untuk sel ini, dipakai ulang oleh daftar maupun
+        // pecahannya. sumberIzin() sudah mendedupe per kode izin, jadi tiap
+        // baris di bawah benar-benar satu IPK.
+        $selIni = fn () => $this->sumberIzin()
+            ->where(self::COL_SITE, $site)
+            ->where(self::COL_PIC, $pic)
+            ->whereIn(self::COL_BULAN, $nilaiBulan);
+
+        $baris = $selIni()
+            ->select(['kode_ikk', 'nama_ikk', 'departemen_ikk', 'lokasi_ikk',
+                'lokasi_detail_ikk', 'tanggal_ikk', 'ada_okk'])
+            // Yang belum ber-OKK didahulukan: itu yang perlu ditindak.
+            ->orderBy('ada_okk')
+            ->orderBy('tanggal_ikk')
+            ->limit(self::BATAS_BARIS_MODAL + 1)
+            ->get()
+            ->map(static fn (object $r): array => [
+                'kode' => trim((string) $r->kode_ikk),
+                'nama' => trim((string) $r->nama_ikk),
+                'departemen' => trim((string) $r->departemen_ikk),
+                'lokasi' => trim((string) $r->lokasi_ikk),
+                'lokasi_detail' => trim((string) $r->lokasi_detail_ikk),
+                'tanggal' => (string) $r->tanggal_ikk,
+                'ada_okk' => (int) $r->ada_okk === 1,
+            ])
+            ->all();
+
+        $terpotong = count($baris) > self::BATAS_BARIS_MODAL;
+
+        if ($terpotong) {
+            $baris = array_slice($baris, 0, self::BATAS_BARIS_MODAL);
+        }
+
         return response()->json([
             'ok' => true,
             'judul' => [
@@ -641,6 +681,11 @@ final class ComplianceIkkController extends Controller
                     ->where(self::COL_SITE, $site)
                     ->whereIn(self::COL_BULAN, $nilaiBulan)
             ),
+            'per_departemen' => $this->pecahanIzin($selIni(), 'departemen_ikk'),
+            'per_lokasi' => $this->pecahanIzin($selIni(), 'lokasi_ikk', 10),
+            'batas' => self::BATAS_BARIS_MODAL,
+            'terpotong' => $terpotong,
+            'baris' => $baris,
         ]);
     }
 
@@ -706,6 +751,40 @@ final class ComplianceIkkController extends Controller
      *
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * Kepatuhan per satu dimensi izin, yang paling banyak BELUM ber-OKK di
+     * atas -- bukan yang terbanyak, karena yang dicari pembaca adalah yang
+     * perlu ditindak.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $selIni
+     * @return array<int, array<string, mixed>>
+     */
+    private function pecahanIzin($selIni, string $kolom, ?int $batas = null): array
+    {
+        $rows = $selIni
+            ->selectRaw($kolom . ' AS label, COUNT(*) AS izin, SUM(ada_okk) AS ada')
+            ->groupBy('label')
+            ->get()
+            ->map(static function (object $r): array {
+                $izin = (int) $r->izin;
+                $ada = (int) $r->ada;
+
+                return [
+                    'label' => trim((string) $r->label) ?: '(tidak diisi)',
+                    'izin' => $izin,
+                    'ada_okk' => $ada,
+                    'belum_okk' => $izin - $ada,
+                    'persen' => $izin > 0 ? round($ada / $izin * 100, 2) : null,
+                ];
+            })
+            ->all();
+
+        usort($rows, static fn (array $a, array $b): int
+            => [$b['belum_okk'], $b['izin']] <=> [$a['belum_okk'], $a['izin']]);
+
+        return $batas === null ? $rows : array_slice($rows, 0, $batas);
+    }
+
     private function riwayatSelama(string $site, string $pic): array
     {
         $rows = $this->sumberIzin()

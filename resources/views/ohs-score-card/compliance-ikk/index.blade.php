@@ -73,6 +73,11 @@
   /* Tabel konteks di dalam modal digulir sendiri agar modalnya tidak memanjang. */
   .ikk-modal-scroll { max-height: 34vh; overflow: auto; }
   .ikk-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
+  /* Daftar izin bisa berisi ratusan baris, jadi digulir lebih panjang. */
+  .ikk-izin-scroll { max-height: 46vh; overflow: auto; }
+  .ikk-izin-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
+  /* Nama pekerjaan dan lokasi panjang-panjang; dipotong agar baris tetap rapi. */
+  .ikk-teks { display: block; max-width: 340px; }
   /* Gradasi persentase: angka besar hijau, karena di sini tinggi berarti baik. */
   .ikk-t1 { background: #E0484A; }
   .ikk-t2 { background: #F08C2E; }
@@ -249,9 +254,136 @@ var ikkModalDetail = (function () {
             +   '</div>'
             + '</div>';
 
+        // Pecahan per dimensi izin, lalu daftar izinnya sendiri. Keduanya
+        // dari sumber yang sama dengan selnya, jadi angkanya tidak mungkin
+        // bertentangan dengan kartu di atas.
+        if (j.per_departemen && j.per_departemen.length) {
+            isi += '<div class="row gy-4 mt-4 mb-20">'
+                +   '<div class="col-xxl-6">'
+                +     '<h6 class="text-md fw-semibold mb-4">Per departemen</h6>'
+                +     '<span class="text-xs text-secondary-light d-block mb-12">'
+                +       'Yang paling banyak belum ber-OKK di atas</span>'
+                +     tabelPecahan(j.per_departemen, 'Departemen')
+                +   '</div>'
+                +   '<div class="col-xxl-6">'
+                +     '<h6 class="text-md fw-semibold mb-4">Per lokasi</h6>'
+                +     '<span class="text-xs text-secondary-light d-block mb-12">'
+                +       'Sepuluh teratas menurut jumlah izin yang belum ber-OKK</span>'
+                +     tabelPecahan(j.per_lokasi, 'Lokasi')
+                +   '</div>'
+                + '</div>';
+        }
+
+        isi += daftarIzin(j);
+
         bagian('isi').innerHTML = isi;
-        bagian('kaki').textContent = 'Parameter ini belum punya tabel rincian per lokasi, '
-            + 'jadi yang ditampilkan konteks di sekeliling sel — semuanya dari sumber yang sama dengan matriks.';
+
+        var n = (j.baris || []).length;
+        bagian('kaki').textContent = j.terpotong
+            ? 'Menampilkan ' + num(j.batas) + ' izin pertama dari ' + num(c.terdaftar) + '.'
+            : num(n) + ' izin kerja tercatat di sel ini — tiap izin dihitung sekali.';
+
+        pasangPencarian();
+    }
+
+    /** Pecahan kepatuhan per satu dimensi izin. */
+    function tabelPecahan(baris, judulKolom) {
+        if (!baris || !baris.length) {
+            return '<div class="text-center text-secondary-light py-16">Tidak ada data.</div>';
+        }
+
+        return '<div class="table-responsive ikk-modal-scroll">'
+            + '<table class="table bordered-table sm-table mb-0"><thead><tr>'
+            +   '<th>' + esc(judulKolom) + '</th><th class="text-end">Belum</th>'
+            +   '<th class="text-end">IPK</th><th class="text-end">Capaian</th>'
+            + '</tr></thead><tbody>'
+            + baris.map(function (b) {
+                return '<tr' + (b.belum_okk > 0 ? ' class="bg-warning-focus"' : '') + '>'
+                    + '<td><span class="text-sm ikk-teks">' + esc(b.label) + '</span></td>'
+                    + '<td class="text-end fw-semibold ' + (b.belum_okk > 0 ? 'text-danger-main' : '')
+                    +   '">' + num(b.belum_okk) + '</td>'
+                    + '<td class="text-end text-secondary-light">' + num(b.izin) + '</td>'
+                    + '<td class="text-end">' + pct(b.persen) + '</td>'
+                    + '</tr>';
+            }).join('')
+            + '</tbody></table></div>';
+    }
+
+    /** Daftar izin kerja di sel ini; yang belum ber-OKK didahulukan. */
+    function daftarIzin(j) {
+        var baris = j.baris || [];
+
+        if (!baris.length) {
+            return '<h6 class="text-md fw-semibold mb-12 mt-20">Daftar izin kerja</h6>'
+                + '<div class="text-center text-secondary-light py-24">'
+                + 'Tidak ada izin kerja tercatat untuk kombinasi ini.</div>';
+        }
+
+        return '<h6 class="text-md fw-semibold mb-4 mt-20">Daftar izin kerja</h6>'
+            + '<span class="text-xs text-secondary-light d-block mb-12">'
+            +   'Satu baris per IPK; yang belum ber-OKK ditaruh di atas</span>'
+            + '<div class="row gy-2 gx-2 align-items-end mb-12">'
+            +   '<div class="col-sm-8"><input type="text" class="form-control form-control-sm radius-8"'
+            +     ' placeholder="Cari kode, pekerjaan, departemen, lokasi…" data-ikkm="cari"></div>'
+            +   '<div class="col-sm-4 text-sm-end"><span class="text-sm text-secondary-light"'
+            +     ' data-ikkm="hitung"></span></div>'
+            + '</div>'
+            + '<div class="table-responsive ikk-izin-scroll">'
+            +   '<table class="table bordered-table sm-table mb-0" data-ikkm="tabel"><thead><tr>'
+            +     '<th>Kode</th><th>Pekerjaan</th><th>Departemen</th><th>Lokasi</th>'
+            +     '<th>Mulai</th><th class="text-center">OKK</th>'
+            +   '</tr></thead><tbody>'
+            +   baris.map(function (b) {
+                    return '<tr data-cari="'
+                        + esc((b.kode + ' ' + b.nama + ' ' + b.departemen + ' '
+                               + b.lokasi + ' ' + b.lokasi_detail).toLowerCase()) + '"'
+                        + (b.ada_okk ? '' : ' class="bg-danger-focus"') + '>'
+                        + '<td class="text-xs">' + esc(b.kode) + '</td>'
+                        + '<td><span class="text-sm ikk-teks">' + esc(b.nama || '-') + '</span></td>'
+                        + '<td><span class="text-xs text-secondary-light ikk-teks">'
+                        +   esc(b.departemen || '-') + '</span></td>'
+                        + '<td><span class="text-sm d-block">' + esc(b.lokasi || '-') + '</span>'
+                        +   '<span class="text-xs text-secondary-light">'
+                        +   esc(b.lokasi_detail || '-') + '</span></td>'
+                        + '<td class="text-xs text-secondary-light">' + esc(b.tanggal || '-') + '</td>'
+                        + '<td class="text-center">'
+                        +   (b.ada_okk
+                                ? '<span class="bg-success-focus text-success-main px-8 py-2 radius-4 text-xs">ada</span>'
+                                : '<span class="bg-danger-focus text-danger-main px-8 py-2 radius-4 text-xs fw-semibold">belum</span>')
+                        + '</td>'
+                        + '</tr>';
+                }).join('')
+            +   '</tbody></table></div>';
+    }
+
+    /** Pencarian dikerjakan di baris yang sudah ada, tanpa ke server lagi. */
+    function pasangPencarian() {
+        var cari = bagian('cari');
+        var hitung = bagian('hitung');
+
+        if (!cari || !hitung) { return; }
+
+        var semua = Array.prototype.slice.call(
+            el.querySelectorAll('[data-ikkm="tabel"] tbody tr')
+        );
+
+        function terapkan() {
+            var teks = (cari.value || '').trim().toLowerCase();
+            var tampil = 0;
+
+            semua.forEach(function (tr) {
+                var cocok = !teks || tr.dataset.cari.indexOf(teks) !== -1;
+                tr.classList.toggle('d-none', !cocok);
+                if (cocok) { tampil++; }
+            });
+
+            hitung.textContent = tampil === semua.length
+                ? semua.length + ' izin'
+                : tampil + ' dari ' + semua.length + ' izin';
+        }
+
+        cari.addEventListener('input', terapkan);
+        terapkan();
     }
 
     function tabelRiwayat(j, target) {
