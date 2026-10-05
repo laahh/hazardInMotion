@@ -16,61 +16,53 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * Parameter SOD "Kesesuaian Implementasi IKK".
  *
- * Sumbernya lead_coverage_daily_area_kritis_pengawas_safety: 58 baris, satu
- * baris per site x perusahaan pemilik izin x bulan. Yang diukur berapa persen
- * izin kerja khusus yang sudah dilengkapi OKK, dari
- * yang terdaftar. Makin tinggi makin baik. Tidak ada tabel rinciannya.
+ * Dua tabel:
  *
- * KEMBARAN DEKAT "Coverage Area Kritis Pengawas Suptend up", DAN PERBEDAANNYA
- * BUKAN SEKADAR NAMA. Halaman ini diturunkan dari halaman itu karena bentuk
- * tabelnya sama persis, tetapi dua hal berbeda dan keduanya mengubah arti
- * angkanya:
+ *   lead_compliance_ikk        -> persentase resmi per site x perusahaan x bulan
+ *   detail_lead_compliance_ikk -> 2.725 baris, satu per izin kerja khusus (IPK)
  *
- *   - PENYEBUTNYA PER HARI, bukan per minggu. Kolomnya
- *     distinct_count_of_helper_detail_lokasi_teregister_date, sementara
- *     halaman Suptend up memakai ..._teregister_week. Satuan di seluruh
- *     halaman ini karena itu "IPK": satu lokasi yang terdaftar empat
- *     minggu dihitung dua puluh delapan, bukan empat. Angkanya pun jauh lebih
- *     besar -- 6.662 IPK dibanding 1.203 lokasi-minggu di halaman
- *     Suptend up -- jadi kedua halaman TIDAK bisa dibandingkan langsung.
- *   - YANG DIUKUR PENGAWAS SAFETY, bukan superintendent ke atas. Populasi
- *     pengawasnya berbeda, jadi capaian rendah di sini tidak berarti hal yang
- *     sama dengan capaian rendah di halaman itu.
+ * Yang diukur: dari sekian IPK yang terbit, berapa persen yang sudah
+ * dilengkapi OKK. Makin tinggi makin baik.
  *
- * PERSENNYA BISA DITURUNKAN. pctcoverage_safety sama persis dengan
- * coverage_safety dibagi penyebutnya; sudah diperiksa, cocok di SELURUH 58
- * baris tanpa satu pun selisih. Karena itu rata-rata keseluruhan dihitung
- * BERBOBOT, bukan dengan merata-ratakan persentase.
+ * SELURUH HALAMAN DIBANGUN DARI TABEL RINCIAN, BUKAN TABEL BULANAN, dan itu
+ * bukan jalan pintas. status_okk hanya punya dua nilai -- "IPK ada OKK" (2.617
+ * baris) dan "Belum OKK" (108 baris) -- sehingga persentasenya bisa diturunkan
+ * utuh. Hasilnya sudah dibandingkan sel per sel dengan lead_compliance_ikk:
+ * SELURUH 71 sel cocok tanpa satu pun selisih. Keuntungannya, sel bisa dibaca
+ * "sekian dari sekian IPK sudah ber-OKK" -- penguraian yang tidak bisa
+ * dilakukan parameter persentase lain di modul ini.
  *
- * ANGKA BERBOBOTNYA LEBIH RENDAH, dan itu kebalikan dari dugaan biasa.
- * Capaian berbobotnya 45,83% (3.053 dari 6.662 IPK), sementara
- * merata-ratakan persentase memberi angka lebih tinggi. Sebabnya site dengan
- * lokasi terdaftar paling banyak justru capaiannya paling rendah -- BMO 2
- * memikul 2.014 IPK sementara BMO 1 hanya 416 -- sehingga rata-rata
- * polos menyembunyikan beban yang sebenarnya.
+ * TAPI HANYA KALAU DIDEDUPE PER KODE IZIN, dan ini bagian yang paling mudah
+ * dirusak. 60 kode muncul DUA KALI dengan status BERBEDA antar salinan -- satu
+ * "Belum OKK", satu "IPK ada OKK", pada tanggal dan lokasi yang sama persis --
+ * yaitu izin yang sama sebelum dan sesudah OKK-nya terbit. Tanpa dedupe, 25
+ * dari 78 sel TIDAK cocok dengan tabel bulanan. Karena itu seluruh kueri
+ * halaman ini lewat sumberIzin(), yang mengelompokkan per kode dan memenangkan
+ * salinan yang patuh lewat MAX(). Jangan membaca TABEL_SUMBER langsung.
  *
- * BESAR SELISIHNYA TERGANTUNG BASIS, jadi JANGAN ditulis mati di sini.
- * Dihitung atas 11 baris matriks (site x PIC) selisihnya sekitar 6 poin;
- * dihitung atas 58 baris sumber sekitar 8 poin. Yang ditampilkan ke pembaca
- * adalah basis matriks, dan catatan() menurunkannya sendiri dari $matrix
- * supaya angkanya ikut berubah saat datanya bertambah. Kartu ringkasan memakai
- * angka berbobot, matriks menampilkan persen per sel apa adanya.
+ * SUMBER ITU MENYAMAR SEBAGAI TABEL RINGKASAN. sumberIzin() memaparkan
+ * ada_okk (0/1) sebagai pembilang dan satu (selalu 1) sebagai penyebut,
+ * sehingga seluruh mesin yang diwarisi dari halaman Coverage -- matriks, KPI
+ * berbobot, tren, modal empat kartu -- bekerja tanpa diubah. Membaca
+ * COL_TERCOVER/COL_TERDAFTAR di sini berarti "IPK ber-OKK" dan "IPK terbit".
  *
- * TIDAK ADA OKTOBER DI TABEL INI. Isinya April sampai September 2026 saja,
- * jadi EXCLUDED_MONTHS tidak pernah benar-benar menyaring apa pun di sini.
- * Konstanta itu tetap dipasang supaya halaman ini berperilaku sama dengan
- * halaman OHS Score Card lain begitu Oktober masuk.
+ * TABEL RINCIAN TIDAK PUNYA KOLOM BULAN. Yang ada hanya
+ * second_of_start_date_convert berupa TEKS tanggal berformat AS, mis.
+ * "6/30/2026 2:30:00 PM". EKSPR_TANGGAL menguraikannya; seluruh 2.725 baris
+ * terurai, nol gagal, rentangnya 20 Februari sampai 5 Oktober 2026. Bulan
+ * dipaparkan sebagai "September 2026" supaya uraikanBulan() yang diwarisi
+ * tetap mengenalinya.
  *
- * NAMA KOLOM PERSENNYA TANPA GARIS BAWAH: "pctcoverage_safety", bukan
- * "pct_coverage_safety" seperti pola tabel lain. Mudah salah ketik.
+ * CAPAIANNYA TINGGI, jadi jangan kaget melihat matriks hijau: 2.577 dari 2.625
+ * IPK sudah ber-OKK (98,17%, Nilai 4). Yang berguna dibaca di halaman ini
+ * justru sel yang menyimpang, bukan rata-ratanya.
  *
- * SATU NILAI PIC BERISI DUA PERUSAHAAN, "BAR,ACI". Dibiarkan apa adanya karena
- * memang begitu tersimpan di sumber; memecahnya akan menggandakan cacah
- * IPK yang penyebutnya tidak ikut terpecah.
+ * OKTOBER DIKECUALIKAN seperti halaman lain -- rinciannya baru sampai 5
+ * Oktober, jadi memasukkannya akan membuat bulan berjalan terlihat timpang.
  *
  * AMBANG & BAND mengikuti sistem penilaian OHS Score Card yang sama dengan
  * halaman lain (target 90%, band 98/90/80). Belum ada konfirmasi bahwa
- * parameter ini memakai band yang sama; kalau berbeda, ubah SCORE_BANDS dan
+ * parameter OC ini memakai band yang sama; kalau berbeda, ubah SCORE_BANDS dan
  * TARGET_PERCENT di bawah.
  */
 final class ComplianceIkkController extends Controller
@@ -594,34 +586,16 @@ final class ComplianceIkkController extends Controller
     /**
      * Isi satu sel matriks Capaian per Bulan, untuk modal rincian.
      *
-     * TIDAK ADA TABEL RINCIAN YANG BISA DIPAKAI, dan itu menentukan isi
-     * modalnya. Kandidat terbaiknya, scr_hsecm_coverage_area_kritis_daily,
-     * sekilas cocok sekali -- butirannya Detil_Lokasi x Site x minggu, satuan
-     * IPK yang sama dengan parameter ini -- tetapi sudah diperiksa
-     * dan ditolak karena tiga alasan yang berdiri sendiri-sendiri:
+     * SELNYA BISA DIURAI PENUH, berbeda dari halaman Coverage yang mesin ini
+     * diwarisi darinya. Di sana tidak ada tabel rincian dan modalnya hanya
+     * menyajikan konteks; di sini detail_lead_compliance_ikk memuat satu baris
+     * per izin kerja, dan persentase sel adalah proporsi izin yang sudah
+     * ber-OKK. Jadi kartu "IPK Terbit / Sudah ber-OKK / Belum ber-OKK /
+     * Persentase" memang menurunkan angka selnya, bukan menyertainya.
      *
-     *   - isinya HANYA yang tidak tercover. Seluruh 4.944 barisnya berstatus
-     *     "Tidak Tercover" dengan Tercover = 0; namanya pun "Trigger - Detail
-     *     Lokasi Tidak Tercover". Itu daftar pemicu, bukan populasi, jadi
-     *     penyebutnya tidak ada dan persentase mustahil diturunkan darinya;
-     *   - tidak punya kolom PIC sama sekali, padahal baris matriks bergrain
-     *     site x PIC (BAR, BAR,ACI, BUMA, FAD, KDC, MTN, PAMA), sehingga
-     *     mustahil disaring ke sel yang diklik;
-     *   - rentangnya minggu 30-41 tahun 2026 saja, sementara ringkasan
-     *     berjalan April sampai Oktober. Empat dari enam bulan yang tampil
-     *     tidak tercakup sama sekali.
-     *
-     * Karena itu modal ini TIDAK memecah sel jadi daftar lokasi. Yang
-     * disajikan konteks di sekeliling sel, seluruhnya dari tabel ringkasan
-     * yang sama dengan matriksnya, sehingga angkanya tidak mungkin
-     * bertentangan dengan sel yang diklik:
-     *
-     *   riwayat  site x PIC yang sama sepanjang bulan -> kronis atau sesaat?
-     *   sebulan  site x bulan yang sama di seluruh PIC -> satu PIC atau se-site?
-     *
-     * Mengarang daftar lokasi dari sumber yang tidak cocok akan memberi angka
-     * yang terlihat meyakinkan tetapi salah, dan itu lebih buruk daripada
-     * mengakui rinciannya belum ada.
+     * ANGKANYA LEWAT sumberIzin(), yang mendedupe per kode izin. Tanpa itu 25
+     * dari 78 sel tidak cocok dengan tabel bulanan; dengan itu seluruhnya
+     * cocok. Lihat docblock kelas.
      */
     public function detailBulan(Request $request): JsonResponse
     {
@@ -845,7 +819,7 @@ final class ComplianceIkkController extends Controller
         return $this->dtExport(
             $request,
             $query,
-            ['Site', 'Perusahaan', 'Bulan', 'Dikunjungi', 'Terdaftar', 'Coverage (%)', 'Nilai', 'Keterangan'],
+            ['Site', 'Perusahaan', 'Bulan', 'Sudah ber-OKK', 'IPK Terbit', 'Kesesuaian (%)', 'Nilai', 'Keterangan'],
             function (object $row): array {
                 $p = $this->present($row);
 

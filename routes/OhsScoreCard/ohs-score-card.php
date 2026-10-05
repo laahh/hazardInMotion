@@ -9,6 +9,7 @@ use App\Http\Controllers\OhsScoreCard\BlindspotTbcController;
 use App\Http\Controllers\OhsScoreCard\BlindspotTbcPicSubcontController;
 use App\Http\Controllers\OhsScoreCard\CoverageAreaDailyController;
 use App\Http\Controllers\OhsScoreCard\CoverageAreaKritisController;
+use App\Http\Controllers\OhsScoreCard\ComplianceIkkController;
 use App\Http\Controllers\OhsScoreCard\CoverageDailyAreaKritisSafetyController;
 use App\Http\Controllers\OhsScoreCard\FitToWorkAwalShiftController;
 use App\Http\Controllers\OhsScoreCard\GoldenTimeEmergencyController;
@@ -329,6 +330,18 @@ Route::middleware('evaluasi-well.access')
             ->name('coverage-daily-area-kritis-safety.data');
         Route::get('/coverage-daily-area-kritis-safety/export', [CoverageDailyAreaKritisSafetyController::class, 'export'])
             ->name('coverage-daily-area-kritis-safety.export');
+
+        // Parameter OC "Kesesuaian Implementasi IKK"
+        Route::get('/compliance-ikk', [ComplianceIkkController::class, 'index'])
+            ->name('compliance-ikk.index');
+        Route::get('/compliance-ikk/overview', [ComplianceIkkController::class, 'overview'])
+            ->name('compliance-ikk.overview');
+        Route::get('/compliance-ikk/detail-bulan', [ComplianceIkkController::class, 'detailBulan'])
+            ->name('compliance-ikk.detail-bulan');
+        Route::get('/compliance-ikk/data', [ComplianceIkkController::class, 'data'])
+            ->name('compliance-ikk.data');
+        Route::get('/compliance-ikk/export', [ComplianceIkkController::class, 'export'])
+            ->name('compliance-ikk.export');
 
         // Parameter SIRM "Deviasi Rekayasa Engineering Overspeed"
         Route::get('/pelanggaran-overspeed', [PelanggaranOverspeedController::class, 'index'])

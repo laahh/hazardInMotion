@@ -76,7 +76,7 @@
               <th>Perusahaan</th>
               <th>Bulan</th>
               <th class="text-end">Dikunjungi</th>
-              <th class="text-end">Terdaftar</th>
+              <th class="text-end">IPK</th>
               <th class="text-end">Coverage</th>
               <th class="text-center">Nilai</th>
               <th>Keterangan</th>

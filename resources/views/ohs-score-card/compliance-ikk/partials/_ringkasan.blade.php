@@ -61,7 +61,7 @@
           <div>
             <h6 class="text-lg fw-semibold mb-0">Capaian per Bulan</h6>
             <span class="text-sm text-secondary-light" data-ikk="matrix-subtitle">
-              Persentase IPK area kritis yang dikunjungi, tiap PIC di tiap site
+              Persentase IPK yang sudah ber-OKK, tiap perusahaan di tiap site
             </span>
           </div>
           <ul class="nav nav-pills style-three pill-tab border input-form-light p-0 radius-8 bg-neutral-50 flex-nowrap"
@@ -142,7 +142,7 @@
         <div class="card-header border-bottom bg-base py-16 px-24">
           <h6 class="text-lg fw-semibold mb-0">Tren Bulanan</h6>
           <span class="text-sm text-secondary-light">
-            Coverage area kritis per site, berbobot jumlah lokasi terdaftar; garis menanjak berarti membaik
+            Kesesuaian IKK per site, berbobot jumlah IPK; garis menanjak berarti membaik
           </span>
         </div>
         <div class="card-body p-24">

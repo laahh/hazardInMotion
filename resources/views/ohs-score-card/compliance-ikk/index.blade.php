@@ -93,7 +93,7 @@
   <div>
     <h6 class="fw-semibold mb-0">Kesesuaian Implementasi IKK</h6>
     <div class="text-secondary-light text-sm mt-4">
-      Persentase IPK area kritis yang dikunjungi pengawas safety
+      Persentase izin kerja khusus yang sudah dilengkapi OKK, per perusahaan pemilik di tiap site
     </div>
   </div>
   <ul class="d-flex align-items-center gap-2">
@@ -208,17 +208,17 @@ var ikkModalDetail = (function () {
         var target = j.target;
         var capai = c.persen === null ? '' : (c.memenuhi_target ? 'text-success-main' : 'text-danger-main');
 
-        // Keempat kartu satu keluarga: Tercakup + Belum = Terdaftar, dan
-        // Persentase = Tercakup / Terdaftar. Semuanya dari tabel ringkasan yang
+        // Keempat kartu satu keluarga: Ber-OKK + Belum = IPK Terbit, dan
+        // Persentase = Ber-OKK / IPK Terbit. Semuanya dari sumber yang
         // sama dengan matriksnya, jadi tidak mungkin bertentangan dengan selnya.
         //
         // SATUANNYA LOKASI-MINGGU, bukan IPK seperti Coverage Daily:
         // penyebut parameter ini dihitung per minggu, jadi satu lokasi yang
         // terdaftar empat minggu bernilai empat, bukan dua puluh delapan.
         var isi = '<div class="row gy-3 mb-20">'
-            + ubin('Terdaftar', num(c.terdaftar), 'IPK area kritis yang harus dicakup')
-            + ubin('Tercakup', num(c.tercover), 'dikunjungi pengawas safety', 'text-success-main')
-            + ubin('Belum Tercakup', num(c.belum), 'luput dari pengawas safety',
+            + ubin('IPK Terbit', num(c.terdaftar), 'izin kerja khusus yang terbit di bulan ini')
+            + ubin('Sudah ber-OKK', num(c.tercover), 'izin yang OKK-nya sudah ada', 'text-success-main')
+            + ubin('Belum ber-OKK', num(c.belum), 'izin yang OKK-nya belum ada',
                    c.belum ? 'text-danger-main' : '')
             + ubin('Persentase', pct(c.persen),
                    c.terdaftar
@@ -261,8 +261,8 @@ var ikkModalDetail = (function () {
 
         return '<div class="table-responsive ikk-modal-scroll">'
             + '<table class="table bordered-table sm-table mb-0"><thead><tr>'
-            +   '<th>Bulan</th><th class="text-end">Tercakup</th>'
-            +   '<th class="text-end">Terdaftar</th><th style="width:34%">Capaian</th>'
+            +   '<th>Bulan</th><th class="text-end">Ber-OKK</th>'
+            +   '<th class="text-end">IPK</th><th style="width:34%">Capaian</th>'
             + '</tr></thead><tbody>'
             + j.riwayat.map(function (r) {
                 // Judul memuat tahun kalau tahunnya diketahui ("April 2026"),
@@ -287,8 +287,8 @@ var ikkModalDetail = (function () {
 
         return '<div class="table-responsive ikk-modal-scroll">'
             + '<table class="table bordered-table sm-table mb-0"><thead><tr>'
-            +   '<th>PIC</th><th class="text-end">Tercakup</th>'
-            +   '<th class="text-end">Terdaftar</th><th style="width:34%">Capaian</th>'
+            +   '<th>Perusahaan</th><th class="text-end">Ber-OKK</th>'
+            +   '<th class="text-end">IPK</th><th style="width:34%">Capaian</th>'
             + '</tr></thead><tbody>'
             + j.sebulan.map(function (r) {
                 return '<tr' + (r.ini ? ' class="bg-primary-50"' : '') + '>'
@@ -623,8 +623,8 @@ var ikkModalDetail = (function () {
         }).join('');
 
         el('matrix-subtitle').textContent = matrixMode === 'nilai'
-            ? 'Nilai 1–4 dari coverage area kritis, tiap PIC di tiap site'
-            : 'Persentase IPK area kritis yang dikunjungi, tiap PIC di tiap site';
+            ? 'Nilai 1–4 dari kesesuaian IKK, tiap perusahaan di tiap site'
+            : 'Persentase IPK yang sudah ber-OKK, tiap perusahaan di tiap site';
     }
 
     function renderMatrix(months, rows) {
