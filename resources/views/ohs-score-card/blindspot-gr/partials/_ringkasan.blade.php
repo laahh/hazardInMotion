@@ -74,12 +74,25 @@
          terisi, cacah temuan kalau belum. Lihat aturTataLetak(). --}}
     <div class="col-xxl-8" data-bs-el="slot-utama">
       <div class="card h-100 radius-8 border" data-bs-el="kartu-persen">
-        <div class="card-header border-bottom bg-base py-16 px-24">
+        <div class="card-header border-bottom bg-base py-16 px-24 d-flex flex-wrap align-items-center justify-content-between gap-3">
+          <div>
           <h6 class="text-lg fw-semibold mb-0">Persentase Blindspot per Bulan</h6>
-          <span class="text-sm text-secondary-light">
+          <span class="text-sm text-secondary-light" data-bs-el="persen-sub">
             Dari {{ $tabel_bulanan }}; makin besar angkanya makin banyak yang luput,
             jadi hijau berarti baik
           </span>
+          </div>
+          <ul class="nav nav-pills pill-tab border input-form-light p-0 radius-8 bg-neutral-50 d-inline-flex flex-nowrap"
+              role="tablist">
+            <li class="nav-item flex-shrink-0" role="presentation">
+              <button type="button" class="nav-link px-16 py-6 text-sm text-center radius-8 active bs-switch__btn"
+                      data-mode="persen">Persentase</button>
+            </li>
+            <li class="nav-item flex-shrink-0" role="presentation">
+              <button type="button" class="nav-link px-16 py-6 text-sm text-center radius-8 bs-switch__btn"
+                      data-mode="nilai">Nilai</button>
+            </li>
+          </ul>
         </div>
         <div class="card-body p-24">
           <div class="d-flex align-items-center flex-wrap gap-3 mb-16" data-bs-el="legend-persen"></div>

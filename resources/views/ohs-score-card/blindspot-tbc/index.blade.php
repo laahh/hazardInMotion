@@ -1005,6 +1005,53 @@ window.bsOverview = (function () {
             }
         }
 
+        // 'persen' atau 'nilai'. Payload terakhir disimpan supaya mengganti
+        // mode cukup menggambar ulang matriks, tanpa memanggil server lagi.
+        var modePersen = 'persen';
+        var lastPayload = null;
+
+        /**
+         * Matriks persentase, digambar menurut mode yang sedang dipilih.
+         * Warna selnya SAMA di kedua mode -- keduanya berasal dari band yang
+         * sama -- yang berganti hanya angka yang ditulis di dalam sel.
+         */
+        function renderPersen() {
+            var kosong = { tersedia: false, tabel: '-', months: [], rows: [] };
+            var nilaiMode = modePersen === 'nilai';
+
+            renderMatrix('persen', (lastPayload && lastPayload.persen) || kosong, {
+                // Hanya matriks ini yang memakai N/A hijau.
+                kosong: true,
+                ringkasLabel: 'RATA',
+                satuan: nilaiMode ? 'nilai' : 'blindspot',
+                tier: tierPersen,
+                sel: function (v) {
+                    return nilaiMode ? fmtNilai(nilaiUntuk(v)) : Number(v).toFixed(1) + '%';
+                },
+                ringkas: function (row) {
+                    if (row.average === null) { return '–'; }
+                    return nilaiMode ? fmtNilai(nilaiUntuk(row.average)) : fmtPct(row.average);
+                },
+                ringkasTip: function (row) {
+                    if (row.average === null) { return 'Belum ada data'; }
+
+                    var b = bandUntuk(row.average);
+
+                    return 'Rata-rata ' + fmtPct(row.average)
+                        + ', tertinggi ' + fmtPct(row.puncak)
+                        + (b ? ' · Nilai ' + fmtNilai(nilaiUntuk(row.average))
+                               + ' (' + b.label + ')' : '');
+                }
+            });
+
+            var sub = el('persen-sub');
+            if (sub) {
+                sub.textContent = nilaiMode
+                    ? 'Nilai 1–4 dari persentase blindspot; makin kecil persentasenya makin tinggi nilainya'
+                    : 'Persentase blindspot tiap perusahaan di tiap site; makin besar makin banyak yang luput';
+            }
+        }
+
         function load() {
             var params = new URLSearchParams(currentFilters());
             statusEl.textContent = 'memuat…';
@@ -1021,6 +1068,7 @@ window.bsOverview = (function () {
 
                     // Tiap panel dibungkus sendiri: satu panel yang gagal tidak
                     // boleh membuat seluruh dashboard tampak kosong.
+                    lastPayload = json;
                     safe('tata-letak', function () { aturTataLetak(json.ukuran); });
                     safe('kpi', function () { renderKpi(json.kpi); });
                     safe('bands', function () { setBands(json.score_bands || []); });
@@ -1028,27 +1076,7 @@ window.bsOverview = (function () {
                         renderLegend('persen');
                         renderLegend('temuan');
                     });
-                    safe('persen', function () {
-                        renderMatrix('persen', json.persen || kosong, {
-                            // Hanya matriks ini yang memakai N/A hijau.
-                            kosong: true,
-                            ringkasLabel: 'RATA', satuan: 'blindspot', tier: tierPersen,
-                            sel: function (v) { return Number(v).toFixed(1) + '%'; },
-                            ringkas: function (row) {
-                                return row.average === null ? '–' : fmtPct(row.average);
-                            },
-                            ringkasTip: function (row) {
-                                if (row.average === null) { return 'Belum ada data'; }
-
-                                var b = bandUntuk(row.average);
-
-                                return 'Rata-rata ' + fmtPct(row.average)
-                                    + ', tertinggi ' + fmtPct(row.puncak)
-                                    + (b ? ' · Nilai ' + fmtNilai(nilaiUntuk(row.average))
-                                           + ' (' + b.label + ')' : '');
-                            }
-                        });
-                    });
+                    safe('persen', renderPersen);
                     safe('temuan', function () {
                         renderMatrix('temuan', json.temuan || kosong, {
                             ringkasLabel: 'TOTAL', satuan: 'temuan', tier: tierTemuan,
@@ -1083,6 +1111,22 @@ window.bsOverview = (function () {
 
         filterEls.forEach(function (node) {
             node.addEventListener('change', load);
+        });
+
+        // Ganti mode hanya menggambar ulang dari payload terakhir; tidak ada
+        // permintaan baru ke server karena persentasenya sudah ada di tangan.
+        root.querySelectorAll('.bs-switch__btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (btn.dataset.mode === modePersen) { return; }
+
+                modePersen = btn.dataset.mode;
+
+                root.querySelectorAll('.bs-switch__btn').forEach(function (b) {
+                    b.classList.toggle('active', b.dataset.mode === modePersen);
+                });
+
+                renderPersen();
+            });
         });
 
         root.querySelector('[data-bs-el="reset"]').addEventListener('click', function () {
