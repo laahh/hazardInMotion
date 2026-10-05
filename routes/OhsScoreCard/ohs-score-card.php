@@ -110,6 +110,8 @@ Route::middleware('evaluasi-well.access')
             ->name('pengawasan-berjarak.index');
         Route::get('/pengawasan-berjarak/overview', [PengawasanBerjarakController::class, 'overview'])
             ->name('pengawasan-berjarak.overview');
+        Route::get('/pengawasan-berjarak/detail-bulan', [PengawasanBerjarakController::class, 'detailBulan'])
+            ->name('pengawasan-berjarak.detail-bulan');
         Route::get('/pengawasan-berjarak/data', [PengawasanBerjarakController::class, 'data'])
             ->name('pengawasan-berjarak.data');
         Route::get('/pengawasan-berjarak/export', [PengawasanBerjarakController::class, 'export'])
@@ -120,6 +122,8 @@ Route::middleware('evaluasi-well.access')
             ->name('blindspot-real-time.index');
         Route::get('/blindspot-real-time/overview', [BlindspotRealTimeController::class, 'overview'])
             ->name('blindspot-real-time.overview');
+        Route::get('/blindspot-real-time/detail-bulan', [BlindspotRealTimeController::class, 'detailBulan'])
+            ->name('blindspot-real-time.detail-bulan');
         Route::get('/blindspot-real-time/data', [BlindspotRealTimeController::class, 'data'])
             ->name('blindspot-real-time.data');
         Route::get('/blindspot-real-time/export', [BlindspotRealTimeController::class, 'export'])

@@ -89,6 +89,13 @@ final class BlindspotRealTimeController extends Controller
      */
     private const AMBANG_PERSEN = 1.0;
 
+    /**
+     * Batas baris yang dikirim ke modal rincian. Sel terpadat berisi 20
+     * temuan, jadi batas ini jauh dari terpakai; dipasang supaya sumber
+     * yang membengkak tidak diam-diam mengirim ribuan baris ke browser.
+     */
+    private const BATAS_BARIS_MODAL = 500;
+
     private const DETAIL_FILTERABLE = [
         'site' => self::COL_SITE,
         'mitra' => self::COL_PIC_PERUSAHAAN,
@@ -791,6 +798,150 @@ final class BlindspotRealTimeController extends Controller
             'task' => (string) $row->task,
             'deskripsi' => $teks($row->deskripsi),
         ];
+    }
+
+    /**
+     * Isi satu sel matriks bulanan, untuk modal rincian.
+     *
+     * Dipakai kedua matriks di tab Ringkasan -- Persentase dan Jumlah Temuan --
+     * karena koordinat selnya sama: site x perusahaan PIC x bulan.
+     *
+     * TIDAK PERLU DEDUPE. Berbeda dari detail_lead_subcont_blindspot_tbc yang
+     * memuat tiap temuan dua kali, tabel ini sudah diperiksa dan tidak punya
+     * satu pun kunci (site, perusahaan, bulan, task) berulang: 129 baris untuk
+     * 129 temuan di 44 sel, terpadat 20 temuan.
+     *
+     * TIDAK ADA KOLOM is_blindspot yang perlu disaring, berbeda dari Blindspot
+     * GR; seluruh baris di tabel ini memang temuan blindspot.
+     *
+     * PENYEBUT PERSENTASE TIDAK ADA DI KEDUA TABEL. Persentase di matriks
+     * adalah temuan blindspot dibagi SELURUH temuan di sel itu, dan pembagi itu
+     * tidak tersimpan di sini maupun di tabel bulanan. Penyebut tersiratnya
+     * (temuan / persen) berkisar 6 sampai 1.194 dan tidak bisa dipulihkan
+     * dengan tepat karena persennya dibulatkan dua desimal, jadi modal ini
+     * sengaja TIDAK menampilkan angka itu. Yang bisa dijamin: ringkasan dan
+     * rincian sepakat penuh tentang SEL MANA yang punya blindspot -- nol sel
+     * berpersen 0 yang ternyata ada temuannya, nol sel berpersen di atas nol
+     * yang rinciannya kosong, dan nol sel rincian yang hilang dari ringkasan.
+     *
+     * YANG DITONJOLKAN ALAT PENGAWASANNYA. Itu yang membedakan parameter ini
+     * dari Blindspot GR maupun TBC: temuan di sini tertangkap alat (Post Event
+     * - DMS 56, Drone 35, CCTV Support 23, Mining Eyes 10, CCTV Portable 4,
+     * BeGesit 1), bukan oleh pengawas. Pertanyaan pertama pembaca adalah
+     * "ketahuan lewat alat apa", jadi panel itu didahulukan.
+     */
+    public function detailBulan(Request $request): JsonResponse
+    {
+        $site = trim((string) $request->input('site', ''));
+        $mitra = trim((string) $request->input('mitra', ''));
+        $bulan = (int) $request->input('month', 0);
+
+        if ($site === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json([
+                'ok' => false,
+                'pesan' => 'Site dan bulan wajib diisi untuk membuka rincian.',
+            ]);
+        }
+
+        $dasar = function () use ($site, $mitra, $bulan): Builder {
+            $query = DB::table(self::TABEL_DETAIL)
+                ->where(self::COL_SITE, $site)
+                ->whereIn(self::COL_BULAN, $this->namaBulan($bulan));
+
+            if ($mitra !== '') {
+                $query->where(self::COL_PIC_PERUSAHAAN, $mitra);
+            }
+
+            return $query;
+        };
+
+        $baris = $dasar()
+            ->select($this->detailColumns())
+            ->orderBy(self::COL_TOOLS)
+            ->orderBy(self::COL_TASK)
+            ->limit(self::BATAS_BARIS_MODAL + 1)
+            ->get()
+            ->map(fn (object $row): array => $this->presentDetail($row))
+            ->all();
+
+        $terpotong = count($baris) > self::BATAS_BARIS_MODAL;
+
+        if ($terpotong) {
+            $baris = array_slice($baris, 0, self::BATAS_BARIS_MODAL);
+        }
+
+        $cacah = $dasar()
+            ->selectRaw(
+                'COUNT(*) AS temuan, '
+                . 'COUNT(DISTINCT ' . self::COL_PIC_SID . ') AS pic, '
+                . 'COUNT(DISTINCT ' . self::COL_TOOLS . ') AS alat, '
+                . 'COUNT(DISTINCT ' . self::COL_PELAPOR_PERUSAHAAN . ') AS perusahaan_pelapor'
+            )
+            ->first();
+
+        return response()->json([
+            'ok' => true,
+            'judul' => [
+                'site' => $site,
+                'mitra' => $mitra,
+                'bulan' => self::monthLabel($bulan),
+            ],
+            'ringkas' => [
+                'temuan' => (int) ($cacah->temuan ?? 0),
+                'pic' => (int) ($cacah->pic ?? 0),
+                'alat' => (int) ($cacah->alat ?? 0),
+                'perusahaan_pelapor' => (int) ($cacah->perusahaan_pelapor ?? 0),
+            ],
+            'per_alat' => $this->alatTerbanyak($dasar()),
+            'per_pic' => $this->picTerbanyak($dasar()),
+            'terpotong' => $terpotong,
+            'batas' => self::BATAS_BARIS_MODAL,
+            'baris' => $baris,
+        ]);
+    }
+
+    /**
+     * Alat yang menangkap temuan di sel ini, terbanyak di atas. Panel ini khas
+     * parameter real time: di sini yang menangkap adalah alat, bukan orang.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function alatTerbanyak(Builder $query): array
+    {
+        return $query
+            ->selectRaw(self::COL_TOOLS . ' AS alat, COUNT(*) AS n')
+            ->groupBy('alat')
+            ->orderByDesc('n')
+            ->get()
+            ->map(static fn (object $r): array => [
+                'alat' => trim((string) $r->alat) ?: '-',
+                'n' => (int) $r->n,
+            ])
+            ->all();
+    }
+
+    /**
+     * PIC yang areanya paling sering kecolongan di sel ini.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function picTerbanyak(Builder $query): array
+    {
+        return $query
+            ->selectRaw(
+                self::COL_PIC_NAMA . ' AS pic, '
+                . self::COL_PIC_SID . ' AS sid, COUNT(*) AS n'
+            )
+            ->groupBy('pic', 'sid')
+            ->orderByDesc('n')
+            ->limit(10)
+            ->get()
+            ->map(static fn (object $r): array => [
+                'pic' => trim((string) $r->pic) ?: '-',
+                'sid' => trim((string) $r->sid) ?: '-',
+                'n' => (int) $r->n,
+            ])
+            ->all();
     }
 
     // ======================================================================

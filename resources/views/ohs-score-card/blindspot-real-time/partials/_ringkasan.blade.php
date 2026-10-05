@@ -7,7 +7,8 @@
   JS menukar posisi keduanya -- lihat aturTataLetak() di index.
 --}}
 <div class="bs-overview"
-     data-url="{{ route('ohs-score-card.blindspot-real-time.overview') }}">
+     data-url="{{ route('ohs-score-card.blindspot-real-time.overview') }}"
+     data-detail-url="{{ route('ohs-score-card.blindspot-real-time.detail-bulan') }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">

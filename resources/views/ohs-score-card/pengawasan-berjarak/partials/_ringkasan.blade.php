@@ -1,5 +1,6 @@
 {{-- Tab Ringkasan % Pengawasan Berjarak. --}}
-<div class="pbj-overview" data-url="{{ route('ohs-score-card.pengawasan-berjarak.overview') }}">
+<div class="pbj-overview" data-url="{{ route('ohs-score-card.pengawasan-berjarak.overview') }}"
+     data-detail-url="{{ route('ohs-score-card.pengawasan-berjarak.detail-bulan') }}">
 
   {{-- Filter --}}
   <div class="card radius-8 border mb-24">
