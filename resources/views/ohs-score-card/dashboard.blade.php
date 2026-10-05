@@ -4919,107 +4919,6 @@
       <!-- Pertumbuhan User Aktif End -->
 
       <!-- Score Card Parameter start -->
-      @php
-        /*
-         |------------------------------------------------------------------
-         | Matriks Score Card: parameter (baris) x site/kontraktor (kolom)
-         |------------------------------------------------------------------
-         | PENTING: seluruh angka di tabel ini masih DATA DUMMY. Belum ada
-         | sumber realisasi per parameter/site/kontraktor di aplikasi, jadi
-         | nilainya dibangkitkan deterministik dari crc32(parameter|site|
-         | kontraktor) — stabil tiap refresh, bukan acak tiap muat ulang.
-         |
-         | Untuk memakai data asli nanti: isi $scoreCardMatrix dengan bentuk
-         | [parameter][site][kontraktor] => float. Sisa kode (baris Score,
-         | pewarnaan, header) tidak perlu diubah.
-         */
-
-        // Kontraktor yang beroperasi di tiap site — menentukan kolom tabel.
-        $scoreCardSites = [
-            'BMO 1' => ['PT BUMA', 'PT FAD', 'PT KDC', 'PT MTL'],
-            'BMO 2' => ['PT BUMA', 'PT PAMA'],
-            'BMO 3' => ['PT BAR'],
-            'GMO'   => ['PT KDC', 'PT PAMA'],
-            'LMO'   => ['PT BUMA', 'PT FAD'],
-            'SMO'   => ['PT MTN'],
-        ];
-
-        $scoreCardParameters = [
-            'Ratio Pelaporan TBC & GR',
-            'Coverage Area Daily',
-            'Blindspot TBC yang dilaporkan BC',
-            'Blindspot GR yang dilaporkan BC',
-            'Coverage Area Kritis Pengawas Suptend up',
-            '% Pengawasan Berjarak',
-            '% Blindspot temuan Real Time',
-            'Coverage Daily Area Kritis Pengawas Safety',
-            'Speak up fatigue',
-            'Tidak ada temuan penggunaan HP',
-            'Incident dengan Gap Coverage CCTV & Gap pada DMS',
-            'Leadtime Alert DMS masuk ke Server',
-            'Kinerja Pengawasan Control Room DMS',
-            'Perulangan rekomendasi hasil investigasi',
-            'Kesesuaian Implementasi IKK',
-            '% SPIP yang dilakukan Commissioning',
-            'Laporan Perizinan Usaha Jasa',
-            '% Blindspot TBC dengan PIC Subcontractor',
-            'Peer Pressure',
-            'Pemenuhan Sertifikasi Pengawas Teknis',
-            'Pemenuhan Sertifikasi Tenaga Teknis',
-            'Jalan sesuai standar',
-            'Deviasi Rekayasa Engineering Seatbelt',
-            'Deviasi Rekayasa Engineering Overspeed',
-            'Pemenuhan Regulasi',
-            'Penuntasan pengendalian rekayasa',
-            'Utilisasi BeSigma',
-            'Rasio kelayakan kerja (wellbeing)',
-            'Pemeriksaan Fit to Work awal shift pekerja',
-            'Pelaksanaan Sobriety Test Jam Kritis dan Pengecekan Sobriety Test',
-            'Tidak ada pelaporan melewati batas golden time',
-            'Kesiapan alat Emergency',
-        ];
-
-        $scoreCardColumnCount = array_sum(array_map('count', $scoreCardSites));
-
-        // ---- Data dummy deterministik, condong ke capaian tinggi ----------
-        $scoreCardMatrix = [];
-        foreach ($scoreCardParameters as $param) {
-            foreach ($scoreCardSites as $site => $contractors) {
-                foreach ($contractors as $contractor) {
-                    $hash = crc32($param . '|' . $site . '|' . $contractor);
-                    $spread = $hash >> 4;
-                    $scoreCardMatrix[$param][$site][$contractor] = match (true) {
-                        $hash % 100 < 46 => 100.0,
-                        $hash % 100 < 70 => 90 + ($spread % 1000) / 100,
-                        $hash % 100 < 86 => 78 + ($spread % 1200) / 100,
-                        $hash % 100 < 95 => 62 + ($spread % 1600) / 100,
-                        default          => 20 + ($spread % 4200) / 100,
-                    };
-                }
-            }
-        }
-
-        // Rata-rata seluruh parameter per kolom, dipakai di baris Score (tfoot).
-        $scoreCardColumnScore = [];
-        foreach ($scoreCardSites as $site => $contractors) {
-            foreach ($contractors as $contractor) {
-                $sum = 0.0;
-                foreach ($scoreCardParameters as $param) {
-                    $sum += (float) $scoreCardMatrix[$param][$site][$contractor];
-                }
-                $scoreCardColumnScore[$site . '|' . $contractor] = $sum / max(count($scoreCardParameters), 1);
-            }
-        }
-        $scoreCardOverall = array_sum($scoreCardColumnScore) / max(count($scoreCardColumnScore), 1);
-
-        $scoreCardCellClass = static function (float $value): string {
-            if ($value >= 100.0) return 'osc-sc--t5';
-            if ($value >= 90.0)  return 'osc-sc--t4';
-            if ($value >= 78.0)  return 'osc-sc--t3';
-            if ($value >= 62.0)  return 'osc-sc--t2';
-            return 'osc-sc--t1';
-        };
-      @endphp
       <div class="col-12">
         <style>
           /* Mengikuti bahasa visual kartu "Pola Aktivitas Penggunaan Aktif":
@@ -5086,15 +4985,24 @@
             background: #F8FAFC;
             color: #64748B !important;
           }
+          /* Parameter yang belum punya sumber data: tetap terdaftar, tapi
+             tidak menuntut perhatian sebanyak baris yang berangka. */
+          .osc-sc-col-param--kosong { color: #94A3B8 !important; font-weight: 500; }
+          .osc-sc-col-param--kosong .osc-sc-catatan {
+            display: block;
+            font-size: 10px;
+            font-weight: 400;
+            color: #CBD5E1;
+          }
 
-          /* ---- Tile nilai ---- */
+          /* ---- Tile nilai: capaian di atas, Nilai 1-4 di bawahnya ---- */
           .osc-sc-cell {
             font-weight: 700;
-            color: #fff;
-            min-width: 70px;
+            min-width: 86px;
             border-radius: 6px;
             border: 1px solid rgba(255, 255, 255, 0.75);
             transition: transform .12s ease, box-shadow .12s ease;
+            line-height: 1.15;
           }
           .osc-sc-cell:hover {
             transform: scale(1.06);
@@ -5102,11 +5010,30 @@
             position: relative;
             z-index: 1;
           }
-          .osc-sc--t5 { background: #059669; }
-          .osc-sc--t4 { background: #34D399; }
-          .osc-sc--t3 { background: #FCD34D; color: #1F2937; }
-          .osc-sc--t2 { background: #FB923C; }
-          .osc-sc--t1 { background: #F87171; }
+          .osc-sc-cell__val { display: block; font-size: 12px; font-weight: 800; }
+          .osc-sc-cell__nilai {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            opacity: .78;
+            margin-top: 1px;
+          }
+
+          /* Warna band resmi, sama dengan halaman tiap parameter. */
+          .osc-sc--b4 { background: #92D050; color: #1F2937; }
+          .osc-sc--b3 { background: #FFFF00; color: #1F2937; }
+          .osc-sc--b2 { background: #FFC000; color: #1F2937; }
+          .osc-sc--b1 { background: #FF0000; color: #fff; }
+          /* Ada angkanya, tapi band resminya belum ditetapkan. */
+          .osc-sc--tanpa-band { background: #E2E8F0; color: #475569; }
+          /* Belum ada sumber datanya sama sekali. */
+          .osc-sc--kosong {
+            background: #F8FAFC;
+            color: #CBD5E1;
+            border-style: dashed;
+            border-color: #E2E8F0;
+            font-weight: 600;
+          }
 
           /* ---- Baris Score: sticky di bawah ---- */
           .osc-sc-table tfoot td {
@@ -5124,12 +5051,22 @@
             box-shadow: 0 -1px 0 #EEF2F7;
           }
 
+          .osc-sc-bulan {
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 12px;
+            color: #0F172A;
+            background: #fff;
+            min-width: 150px;
+          }
+
           @media (max-width: 768px) {
             .osc-sc-col-param { width: 184px; min-width: 184px; max-width: 184px; }
           }
         </style>
 
-        <div class="card h-100 w-100 wc-card">
+        <div class="card h-100 w-100 wc-card" data-osc-sc="card">
           <div class="card-body p-24">
             <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
               <div class="d-flex align-items-start gap-3 min-w-0">
@@ -5139,88 +5076,222 @@
                 <div class="min-w-0">
                   <h6 class="mb-1 fw-bold text-lg wc-card__title">Score Card Parameter</h6>
                   <span class="wc-card__subtitle">Capaian tiap parameter per site &amp; kontraktor</span>
-                  <span class="text-xs d-block mt-4" style="color:#94A3B8;">
-                    {{ count($scoreCardParameters) }} parameter ·
-                    {{ count($scoreCardSites) }} site ·
-                    {{ $scoreCardColumnCount }} kolom kontraktor
-                  </span>
+                  <span class="text-xs d-block mt-4" style="color:#94A3B8;" data-osc-sc="meta"></span>
                 </div>
               </div>
-              <div class="wc-card__badge">
-                <iconify-icon icon="mdi:chart-box-outline"></iconify-icon>
-                <span>Rata-rata {{ number_format($scoreCardOverall, 2, ',', '.') }}% · data dummy</span>
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <label class="text-xs fw-medium" style="color:#64748B;" for="osc-sc-bulan">Bulan</label>
+                <select id="osc-sc-bulan" class="osc-sc-bulan" data-osc-sc="bulan">
+                  <option value="">Semua bulan</option>
+                </select>
+                <span class="wc-card__badge" data-osc-sc="badge"></span>
               </div>
             </div>
 
             <div class="osc-sc-wrap mb-8">
               <table class="osc-sc-table">
-                <thead>
-                  <tr>
-                    <th rowspan="2" class="osc-sc-col-param">Nama Parameter</th>
-                    @foreach ($scoreCardSites as $site => $contractors)
-                      <th colspan="{{ count($contractors) }}" class="osc-sc-th-site">{{ $site }}</th>
-                    @endforeach
-                  </tr>
-                  <tr>
-                    @foreach ($scoreCardSites as $site => $contractors)
-                      @foreach ($contractors as $contractor)
-                        <th>{{ $contractor }}</th>
-                      @endforeach
-                    @endforeach
-                  </tr>
-                </thead>
-                <tbody>
-                  @foreach ($scoreCardParameters as $param)
-                    <tr>
-                      <td class="osc-sc-col-param" title="{{ $param }}">{{ $param }}</td>
-                      @foreach ($scoreCardSites as $site => $contractors)
-                        @foreach ($contractors as $contractor)
-                          @php $value = (float) $scoreCardMatrix[$param][$site][$contractor]; @endphp
-                          <td class="osc-sc-cell {{ $scoreCardCellClass($value) }}"
-                              title="{{ $param }} — {{ $site }} / {{ $contractor }}: {{ number_format($value, 2, ',', '.') }}%">
-                            {{ number_format($value, 2, ',', '.') }}%
-                          </td>
-                        @endforeach
-                      @endforeach
-                    </tr>
-                  @endforeach
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td class="osc-sc-col-param">Score</td>
-                    @foreach ($scoreCardSites as $site => $contractors)
-                      @foreach ($contractors as $contractor)
-                        @php $score = $scoreCardColumnScore[$site . '|' . $contractor]; @endphp
-                        <td class="osc-sc-cell {{ $scoreCardCellClass($score) }}"
-                            title="Rata-rata {{ count($scoreCardParameters) }} parameter — {{ $site }} / {{ $contractor }}">
-                          {{ number_format($score, 2, ',', '.') }}%
-                        </td>
-                      @endforeach
-                    @endforeach
-                  </tr>
-                </tfoot>
+                <thead data-osc-sc="thead"></thead>
+                <tbody data-osc-sc="tbody"></tbody>
+                <tfoot data-osc-sc="tfoot"></tfoot>
               </table>
             </div>
 
             <div class="d-flex align-items-center flex-wrap gap-3 mb-16">
-              <span class="text-xs fw-medium" style="color:#64748B;">Capaian</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#F87171;"></span>&lt;62%</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#FB923C;"></span>62–77,99%</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#FCD34D;"></span>78–89,99%</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#34D399;"></span>90–99,99%</span>
-              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#059669;"></span>100%</span>
+              <span class="text-xs fw-medium" style="color:#64748B;">Nilai</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#FF0000;"></span>Nilai 1</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#FFC000;"></span>Nilai 2</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#FFFF00;"></span>Nilai 3</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#92D050;"></span>Nilai 4</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#E2E8F0;"></span>band belum ditetapkan</span>
+              <span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;"><span class="rounded-1" style="width:14px;height:14px;background:#F8FAFC;border:1px dashed #E2E8F0;"></span>belum ada data</span>
             </div>
 
             <div class="wc-tip wc-tip--green">
               <iconify-icon icon="solar:clipboard-check-bold" class="flex-shrink-0"></iconify-icon>
-              <span>
-                Baris <strong>Score</strong> menempel di dasar tabel — rata-rata {{ count($scoreCardParameters) }} parameter
-                untuk tiap kombinasi site &amp; kontraktor. Arahkan kursor ke sel untuk melihat rinciannya.
-              </span>
+              <span data-osc-sc="catatan"></span>
             </div>
           </div>
         </div>
       </div>
+
+      <script>
+      (function () {
+          var root = document.querySelector('[data-osc-sc="card"]');
+
+          if (!root) { return; }
+
+          // SATU PERENDER untuk muatan awal dan untuk pergantian bulan. Kalau
+          // tabelnya digambar dua kali -- sekali di Blade, sekali di sini --
+          // keduanya pasti menyimpang cepat atau lambat.
+          var urlData = @json(route('ohs-score-card.score-card-parameter'));
+          var bulanTerisi = false;
+
+          function el(nama) {
+              return root.querySelector('[data-osc-sc="' + nama + '"]');
+          }
+
+          function esc(teks) {
+              return String(teks === null || teks === undefined ? '' : teks)
+                  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+          }
+
+          function fmtNilai(n) {
+              if (n === null || n === undefined || n === '') { return '–'; }
+              return Number(n).toLocaleString('id-ID', {
+                  minimumFractionDigits: 2, maximumFractionDigits: 2
+              });
+          }
+
+          /* Warna SELALU dari Nilai, tidak pernah dari capaian mentah: tiap
+             parameter punya arah dan ambang sendiri, jadi hanya Nilai yang
+             bisa dibandingkan antar baris. */
+          function kelasSel(sel) {
+              if (!sel || !sel.ada) { return 'osc-sc--kosong'; }
+              if (sel.nilai === null || sel.band === null) { return 'osc-sc--tanpa-band'; }
+
+              return 'osc-sc--b' + sel.band;
+          }
+
+          function selHtml(sel, param, site, kontraktor) {
+              var alamat = param + ' — ' + site + ' / ' + kontraktor;
+
+              if (!sel || !sel.ada) {
+                  return '<td class="osc-sc-cell osc-sc--kosong" title="'
+                      + esc(alamat + ': belum ada data') + '">–</td>';
+              }
+
+              var tip = alamat + ': ' + sel.teks + (sel.nilai === null
+                  ? ' · band resmi belum ditetapkan'
+                  : ' · Nilai ' + fmtNilai(sel.nilai) + ' (' + (sel.band_label || '') + ')');
+
+              return '<td class="osc-sc-cell ' + kelasSel(sel) + '" title="' + esc(tip) + '">'
+                  + '<span class="osc-sc-cell__val">' + esc(sel.teks) + '</span>'
+                  + '<span class="osc-sc-cell__nilai">'
+                  + (sel.nilai === null ? 'tanpa Nilai' : 'Nilai ' + fmtNilai(sel.nilai))
+                  + '</span></td>';
+          }
+
+          /* Pilihan bulan diisi dari data, sekali saja: daftar bulannya
+             tidak berubah ketika bulan yang dipilih berganti. */
+          function isiPilihanBulan(data) {
+              if (bulanTerisi) { return; }
+
+              var pilih = el('bulan');
+
+              (data.bulan_tersedia || []).forEach(function (b) {
+                  var opsi = document.createElement('option');
+                  opsi.value = String(b.nomor);
+                  opsi.textContent = b.label;
+                  pilih.appendChild(opsi);
+              });
+
+              pilih.value = data.bulan_terpilih === null ? '' : String(data.bulan_terpilih);
+              bulanTerisi = true;
+          }
+
+          function render(data) {
+              isiPilihanBulan(data);
+              var kolom = data.kolom || {};
+              var sites = Object.keys(kolom);
+
+              var baris1 = '<tr><th rowspan="2" class="osc-sc-col-param">Nama Parameter</th>';
+              var baris2 = '<tr>';
+
+              sites.forEach(function (site) {
+                  baris1 += '<th colspan="' + kolom[site].length + '" class="osc-sc-th-site">'
+                      + esc(site) + '</th>';
+                  kolom[site].forEach(function (k) {
+                      baris2 += '<th>' + esc(k) + '</th>';
+                  });
+              });
+
+              el('thead').innerHTML = baris1 + '</tr>' + baris2 + '</tr>';
+
+              el('tbody').innerHTML = (data.parameter || []).map(function (p) {
+                  var sel = (data.matriks || {})[p.nama] || {};
+                  var html = '<tr><td class="osc-sc-col-param'
+                      + (p.ada_sumber ? '' : ' osc-sc-col-param--kosong')
+                      + '" title="' + esc(p.nama) + '">' + esc(p.nama)
+                      + (p.ada_sumber ? '' : '<span class="osc-sc-catatan">belum ada sumber data</span>')
+                      + '</td>';
+
+                  sites.forEach(function (site) {
+                      kolom[site].forEach(function (k) {
+                          html += selHtml((sel[site] || {})[k], p.nama, site, k);
+                      });
+                  });
+
+                  return html + '</tr>';
+              }).join('');
+
+              var skor = data.skor_kolom || {};
+              var tfoot = '<tr><td class="osc-sc-col-param">Score<span class="osc-sc-catatan">'
+                  + 'rata-rata Nilai</span></td>';
+              var totalSkor = 0;
+              var nSkor = 0;
+
+              sites.forEach(function (site) {
+                  kolom[site].forEach(function (k) {
+                      var s = skor[site + '|' + k] || { nilai: null, terisi: 0 };
+                      var kelas = s.nilai === null ? 'osc-sc--kosong' : 'osc-sc--b' + Math.floor(s.nilai);
+
+                      if (s.nilai !== null) { totalSkor += Number(s.nilai); nSkor++; }
+
+                      tfoot += '<td class="osc-sc-cell ' + kelas + '" title="'
+                          + esc('Rata-rata Nilai dari ' + s.terisi + ' parameter berdata — ' + site + ' / ' + k)
+                          + '"><span class="osc-sc-cell__val">' + (s.nilai === null ? '–' : fmtNilai(s.nilai))
+                          + '</span><span class="osc-sc-cell__nilai">' + s.terisi + ' parameter</span></td>';
+                  });
+              });
+
+              el('tfoot').innerHTML = tfoot + '</tr>';
+
+              var berdata = (data.parameter || []).filter(function (p) { return p.ada_sumber; }).length;
+
+              el('meta').textContent = (data.parameter || []).length + ' parameter ('
+                  + berdata + ' berdata) · ' + sites.length + ' site · '
+                  + data.jumlah_kolom + ' kolom kontraktor';
+
+              el('badge').innerHTML = '<iconify-icon icon="mdi:chart-box-outline"></iconify-icon>'
+                  + '<span>Rata-rata Nilai ' + (nSkor ? fmtNilai(totalSkor / nSkor) : '–')
+                  + ' · ' + esc(data.label_bulan) + '</span>';
+
+              var tanpa = (data.tanpa_sumber || []).length;
+
+              el('catatan').innerHTML = 'Baris <strong>Score</strong> adalah <strong>rata-rata Nilai</strong>, '
+                  + 'bukan rata-rata persen — capaian antar parameter tidak sebanding karena arahnya berbeda '
+                  + '(0% pada Blindspot adalah hasil terbaik, 0% pada Ratio yang terburuk). '
+                  + 'Arahkan kursor ke sel untuk melihat capaian asli dan band-nya.'
+                  + (tanpa ? ' <strong>' + tanpa + ' parameter</strong> masih tanpa sumber data dan ditandai abu-abu.' : '');
+          }
+
+          function muat(bulan) {
+              var url = urlData + (bulan ? '?bulan=' + encodeURIComponent(bulan) : '');
+
+              fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+                  .then(function (r) {
+                      if (!r.ok) { throw new Error('HTTP ' + r.status); }
+
+                      return r.json();
+                  })
+                  .then(render)
+                  .catch(function () {
+                      // Gagal memuat tidak boleh mengosongkan tabel yang sudah
+                      // tampil; cukup beri tahu lewat badge.
+                      el('badge').innerHTML = '<iconify-icon icon="mdi:alert-outline"></iconify-icon>'
+                          + '<span>Gagal memuat bulan itu</span>';
+                  });
+          }
+
+          el('bulan').addEventListener('change', function () {
+              muat(this.value);
+          });
+
+          el('meta').textContent = 'memuat data parameter…';
+          muat('');
+      })();
+      </script>
       <!-- Score Card Parameter End -->
 
       <!-- Pola Aktivitas Penggunaan Aktif start -->

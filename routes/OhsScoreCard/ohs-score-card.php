@@ -49,6 +49,8 @@ Route::middleware('evaluasi-well.access')
     ->name('ohs-score-card.')
     ->group(function (): void {
         Route::get('/', [OhsScoreCardDashboardController::class, 'index'])->name('index');
+        Route::get('/score-card-parameter', [OhsScoreCardDashboardController::class, 'scoreCardParameter'])
+            ->name('score-card-parameter');
 
         // Parameter SGI — "Jalan sesuai standar" (app_mixer.road_summary)
         Route::get('/jalan-sesuai-standar', [RoadSummaryController::class, 'index'])

@@ -1,0 +1,281 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services\OhsScoreCard;
+
+/**
+ * Daftar sumber data dan band resmi untuk tabel "Score Card Parameter".
+ *
+ * SATU BARIS = SATU PARAMETER. Tiap entri menunjuk tabel ringkasan milik
+ * halaman parameter itu, lengkap dengan nama kolom site/kontraktor/bulan/nilai,
+ * cara meringkasnya, dan band penilaiannya.
+ *
+ * AMBANG BAND DI SINI DIGANDAKAN dari SCORE_BANDS milik controller tiap
+ * halaman -- controller tetap pemilik kebenarannya. Penggandaan ini disengaja
+ * supaya tabel ringkasan tidak perlu memuat 21 controller sekaligus, dan
+ * dijaga oleh skrip pembanding yang memeriksa keduanya tetap sama. Kalau
+ * ambang di controller diubah, ubah juga di sini.
+ *
+ * PARAMETER TANPA SUMBER sengaja tetap didaftarkan dengan 'sumber' => null.
+ * Barisnya tetap muncul di tabel sebagai sel kosong bertanda, supaya kerangka
+ * 32 parameter tetap utuh dan yang belum tergarap kelihatan, bukan hilang
+ * diam-diam.
+ */
+final class ScoreCardParameterRegistry
+{
+    /**
+     * Kolom tabel: site beserta kontraktor yang ditampilkan.
+     *
+     * SENGAJA DIPATOK, bukan diturunkan dari data. Konsekuensinya pasangan
+     * site/kontraktor di luar daftar ini tidak ikut tampil meskipun datanya
+     * ada; lihat catatan di dashboard.
+     *
+     * @var array<string, array<int, string>>
+     */
+    public const KOLOM = [
+        'BMO 1' => ['PT BUMA', 'PT FAD', 'PT KDC', 'PT MTL'],
+        'BMO 2' => ['PT BUMA', 'PT PAMA'],
+        'BMO 3' => ['PT BAR'],
+        'GMO' => ['PT KDC', 'PT PAMA'],
+        'LMO' => ['PT BUMA', 'PT FAD'],
+        'SMO' => ['PT MTN'],
+    ];
+
+    /**
+     * Nama kontraktor ditulis berbeda-beda antar tabel: ada yang memakai nama
+     * lengkap ("PT Bukit Makmur Mandiri Utama"), ada yang singkatan telanjang
+     * ("BUMA"), ada pula yang "PT BUMA". Semuanya dipetakan ke satu label
+     * kolom supaya satu kontraktor tidak terpecah jadi beberapa kolom.
+     *
+     * Kuncinya sudah dinormalkan: huruf kecil, tanpa awalan "pt", tanpa spasi
+     * ganda. Lihat ScoreCardParameterMatrix::kunciKontraktor().
+     *
+     * @var array<string, string>
+     */
+    public const ALIAS_KONTRAKTOR = [
+        'buma' => 'PT BUMA',
+        'bukit makmur mandiri utama' => 'PT BUMA',
+        'bar' => 'PT BAR',
+        'bumi artlantis raya' => 'PT BAR',
+        'fad' => 'PT FAD',
+        'fajar anugerah dinamika' => 'PT FAD',
+        'kdc' => 'PT KDC',
+        'kaltim diamond coal' => 'PT KDC',
+        'mtl' => 'PT MTL',
+        'mutiara tanjung lestari' => 'PT MTL',
+        'mtn' => 'PT MTN',
+        'madhani talatah nusantara' => 'PT MTN',
+        'pama' => 'PT PAMA',
+        'pamapersada nusantara' => 'PT PAMA',
+    ];
+
+    /**
+     * Keluarga band:
+     *   naik  -> makin besar makin baik; [ambang2, ambang3, ambang4, batas atas]
+     *   turun -> makin kecil makin baik; [batas band 4, band 3, band 2]
+     *   cacah -> mencacah kejadian; 0 terbaik
+     *   biner -> hanya 100% yang bernilai 4
+     */
+    public const BAND_NAIK = 'naik';
+    public const BAND_TURUN = 'turun';
+    public const BAND_CACAH = 'cacah';
+    public const BAND_BINER = 'biner';
+
+    /** Nilai sel diringkas dengan rata-rata (persentase) atau jumlah (cacah). */
+    public const RINGKAS_RATA = 'rata';
+    public const RINGKAS_JUMLAH = 'jumlah';
+
+    /**
+     * Urutan baris mengikuti tabel Score Card yang dipakai manajemen.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function parameter(): array
+    {
+        return [
+            self::persen('Ratio Pelaporan TBC & GR', 'lead_ratio_pelapor_tbc',
+                'site_dedicated_pelapor_all_karyawan', 'perusahaan_pelapor_all_karyawan',
+                'month_of_date_time', 'pct_ratio_pelapor_tbc', [94, 96, 98, 100]),
+
+            self::persen('Coverage Area Daily', 'lead_coverage_area_daily',
+                'site_hst', 'pic_detail_lokasi_maincont',
+                'month_of_date_hst', 'pct_coverage_daily', [94, 96, 98, 100]),
+
+            self::terbalik('Blindspot TBC yang dilaporkan BC', 'lead_blindspot_tbc_month',
+                'site', 'perusahaan_pic', 'month_of_date_for_join', 'pct_blindspot_tbc_dari_bc'),
+
+            self::terbalik('Blindspot GR yang dilaporkan BC', 'lead_blindspot_gr_month',
+                'site', 'perusahaan_pic', 'month_of_date_for_join', 'blindspot_gr'),
+
+            self::persen('Coverage Area Kritis Pengawas Suptend up',
+                'lead_coverage_area_kritis_pengawas_suptend_up',
+                'site_hst', 'pic_detail_lokasi_clean',
+                'month_of_date_hst', 'pctcoverage_suptend_up', [2, 4, 6, 8]),
+
+            self::persen('% Pengawasan Berjarak', 'lead_pengawasan_berjarak',
+                'site', 'perusahaan_pelapor_all_karyawan',
+                'month_of_date_for_join', 'pct_berjarak', [60, 70, 80, 100]),
+
+            // Band parameter ini belum ditetapkan (L1 tertulis "X<0%", yang
+            // tidak mungkin terjadi), jadi capaiannya ditampilkan tanpa Nilai.
+            self::tanpaBand('% Blindspot temuan Real Time', 'lead_blindspot_laporan_real_time',
+                'site', 'perusahaan_pic', 'month_of_date_for_join',
+                'pct_blindspot_temuan_real_time'),
+
+            self::persen('Coverage Daily Area Kritis Pengawas Safety',
+                'lead_coverage_daily_area_kritis_pengawas_safety',
+                'site_hst', 'pic_detail_lokasi_clean',
+                'month_of_date_hst', 'pctcoverage_safety', [85, 90, 95, 100]),
+
+            self::persen('Speak up fatigue', 'lead_speak_up_sebelum_alert',
+                'site_dedicated', 'nama_perusahaan',
+                'month_of_event_time', 'pct_true_alert_fatigue_speak_up_sebelum', [96, 98, 100, 100]),
+
+            self::cacah('Tidak ada temuan penggunaan HP', 'lead_gr_penggunaan_hp',
+                'site', 'perusahaan_pic', 'month_of_date_for_join', 'distinct_count_of_task_number'),
+
+            self::cacah('Incident dengan Gap Coverage CCTV & Gap pada DMS', 'lead_inc_gap_cctv_dms',
+                'site1', 'perusahaan', 'month_of_tanggal_kejadian', 'incident_dengan_gap_cctv_dms'),
+
+            self::persen('Leadtime Alert DMS masuk ke Server',
+                'lead_leadtime_alert_entry_to_bedms_month',
+                'site', 'perusahaan', 'month_of_event_time',
+                'pct_leadtime_alert_masuk_ke_server_evidence_bedms_under_5_mi', [70, 80, 90, 100]),
+
+            self::persen('Kinerja Pengawasan Control Room DMS', 'lead_kinerja_control_room_dms',
+                'site', 'perusahaan', 'month_of_event_time',
+                'pct_kinerja_pengawas_control_room', [85, 90, 95, 100]),
+
+            self::cacah('Perulangan rekomendasi hasil investigasi', 'lead_perulangan_rekomendasi',
+                'site1', 'perusahaan', 'month_of_ccr_waktu_insiden',
+                'count_of_layer_tindakan_perbaikan1'),
+
+            self::persen('Kesesuaian Implementasi IKK', 'lead_compliance_ikk',
+                'ra_site_name', 'company_name_ikk_work_permit',
+                'month_of_start_date_convert', 'pct_compliance_ikk', [85, 90, 95, 100]),
+
+            self::persen('% SPIP yang dilakukan Commissioning', 'lead_scr_spip_commisioning_new',
+                'site_existing', 'perusahaan_pemilik_existing',
+                'performance_month', 'performance_pct', [80, 90, 98, 100]),
+
+            self::kosong('Laporan Perizinan Usaha Jasa'),
+
+            // Tabel bulanannya ada tetapi kosong (0 baris), dan satu-satunya
+            // kolom persen di tabel rincian bernilai 100,00 untuk semua baris.
+            self::kosong('% Blindspot TBC dengan PIC Subcontractor'),
+
+            // Kriterianya naratif (terlaksana / perulangan / tindak lanjut),
+            // bukan ambang angka.
+            self::kosong('Peer Pressure'),
+
+            self::kosong('Pemenuhan Sertifikasi Pengawas Teknis'),
+            self::kosong('Pemenuhan Sertifikasi Tenaga Teknis'),
+
+            // Dihitung dari road_summary yang berbasis MINGGU, bukan bulan;
+            // penanganannya khusus di ScoreCardParameterMatrix.
+            [
+                'nama' => 'Jalan sesuai standar',
+                'sumber' => 'road_summary',
+                'khusus' => 'road_summary',
+                'band' => self::BAND_NAIK,
+                'ambang' => [95, 98, 100, 100],
+                'satuan' => '%',
+                'ringkas' => self::RINGKAS_RATA,
+            ],
+
+            self::cacah('Deviasi Rekayasa Engineering Seatbelt', 'lead_gr_seatbelt',
+                'site', 'perusahaan_pic', 'month_of_date_for_join', 'distinct_count_of_task_number'),
+
+            self::cacah('Deviasi Rekayasa Engineering Overspeed', 'lead_pelanggaran_overspeed',
+                'site_by_approval', 'perusahaan', 'month_of_start_date_be_record',
+                'distinct_count_of_kode_sid_bep_vw_berecord'),
+
+            self::kosong('Pemenuhan Regulasi'),
+            self::kosong('Penuntasan pengendalian rekayasa'),
+            self::kosong('Utilisasi BeSigma'),
+
+            self::persen('Rasio kelayakan kerja (wellbeing)', 'lead_ratio_kelayakan_kerja',
+                'site_dedicated', 'nama_perusahaan',
+                'month_of_tanggal_pelaksanaan_mcu', 'pct_mcu_fit', [85, 90, 95, 100]),
+
+            self::persen('Pemeriksaan Fit to Work awal shift pekerja', 'lead_fit_to_work_awal_shift',
+                'site_dedicated', 'nama_perusahaan',
+                'month_of_tanggal_date', 'pct_pengisian_aggregator', [85, 90, 95, 100]),
+
+            self::kosong('Pelaksanaan Sobriety Test Jam Kritis dan Pengecekan Sobriety Test'),
+
+            [
+                'nama' => 'Tidak ada pelaporan melewati batas golden time',
+                'sumber' => 'lead_golden_time_emergency',
+                'site' => 'site1',
+                'mitra' => 'perusahaan',
+                'bulan' => 'month_of_ccr_waktu_insiden',
+                'nilai' => 'pct_golden_time',
+                'band' => self::BAND_BINER,
+                'ambang' => [],
+                'satuan' => '%',
+                'ringkas' => self::RINGKAS_RATA,
+            ],
+
+            self::kosong('Kesiapan alat Emergency'),
+        ];
+    }
+
+    /** @param array<int, int|float> $ambang */
+    private static function persen(
+        string $nama, string $tabel, string $site, string $mitra,
+        string $bulan, string $nilai, array $ambang
+    ): array {
+        return [
+            'nama' => $nama, 'sumber' => $tabel, 'site' => $site, 'mitra' => $mitra,
+            'bulan' => $bulan, 'nilai' => $nilai,
+            'band' => self::BAND_NAIK, 'ambang' => $ambang,
+            'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+        ];
+    }
+
+    private static function terbalik(
+        string $nama, string $tabel, string $site, string $mitra,
+        string $bulan, string $nilai
+    ): array {
+        return [
+            'nama' => $nama, 'sumber' => $tabel, 'site' => $site, 'mitra' => $mitra,
+            'bulan' => $bulan, 'nilai' => $nilai,
+            'band' => self::BAND_TURUN, 'ambang' => [5, 10, 15],
+            'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+        ];
+    }
+
+    private static function cacah(
+        string $nama, string $tabel, string $site, string $mitra,
+        string $bulan, string $nilai
+    ): array {
+        return [
+            'nama' => $nama, 'sumber' => $tabel, 'site' => $site, 'mitra' => $mitra,
+            'bulan' => $bulan, 'nilai' => $nilai,
+            'band' => self::BAND_CACAH, 'ambang' => [3, 5],
+            'satuan' => '', 'ringkas' => self::RINGKAS_JUMLAH,
+        ];
+    }
+
+    private static function tanpaBand(
+        string $nama, string $tabel, string $site, string $mitra,
+        string $bulan, string $nilai
+    ): array {
+        return [
+            'nama' => $nama, 'sumber' => $tabel, 'site' => $site, 'mitra' => $mitra,
+            'bulan' => $bulan, 'nilai' => $nilai,
+            'band' => null, 'ambang' => [],
+            'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+        ];
+    }
+
+    private static function kosong(string $nama): array
+    {
+        return [
+            'nama' => $nama, 'sumber' => null, 'band' => null, 'ambang' => [],
+            'satuan' => '', 'ringkas' => self::RINGKAS_RATA,
+        ];
+    }
+}

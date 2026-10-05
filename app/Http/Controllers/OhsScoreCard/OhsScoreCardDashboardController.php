@@ -6,7 +6,9 @@ namespace App\Http\Controllers\OhsScoreCard;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\SportEvaluation\SportEvaluationDashboardController;
+use App\Services\OhsScoreCard\ScoreCardParameterMatrix;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
@@ -22,13 +24,42 @@ final class OhsScoreCardDashboardController extends Controller
 
     public function __construct(
         private readonly SportEvaluationDashboardController $dashboard,
+        private readonly ScoreCardParameterMatrix $scoreCard,
     ) {}
 
     public function index(Request $request): View
     {
+        // Score Card SENGAJA TIDAK dirakit di sini. Sumbernya 22 tabel di
+        // database jauh, dan merakitnya saat cache dingin memakan beberapa
+        // detik -- itu akan menahan seluruh dashboard. Kartunya memanggil
+        // scoreCardParameter() sendiri setelah halaman tampil.
         return view('ohs-score-card.dashboard', $this->dashboard->buildIndexData(
             $this->filtersFromRequest($request)
         ));
+    }
+
+    /** Matriks Score Card untuk satu bulan, dipakai saat filter bulan diganti. */
+    public function scoreCardParameter(Request $request): JsonResponse
+    {
+        return response()->json($this->scoreCard->bangun($this->bulanDari($request)));
+    }
+
+    /**
+     * Bulan dari query string. Nilai di luar 1-12 -- termasuk teks dan nol --
+     * diperlakukan sebagai "semua bulan", bukan ditolak dengan galat, supaya
+     * tautan lama tidak mematahkan dashboard.
+     */
+    private function bulanDari(Request $request): ?int
+    {
+        $raw = $request->input('bulan', $request->input('month', ''));
+
+        if (!is_scalar($raw) || !preg_match('/^\d{1,2}$/', (string) $raw)) {
+            return null;
+        }
+
+        $n = (int) $raw;
+
+        return $n >= 1 && $n <= 12 ? $n : null;
     }
 
     /**
