@@ -19,6 +19,7 @@ use App\Http\Controllers\OhsScoreCard\IncidentLeadingIndicatorController;
 use App\Http\Controllers\OhsScoreCard\IncidentManagementDashboardController;
 use App\Http\Controllers\OhsScoreCard\IncidentMasterDataController;
 use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
+use App\Http\Controllers\OhsScoreCard\SpipCommissioningController;
 use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
 use App\Http\Controllers\OhsScoreCard\PelaksanaanEdukasiController;
@@ -254,6 +255,18 @@ Route::middleware('evaluasi-well.access')
             ->name('kinerja-control-room-dms.data');
         Route::get('/kinerja-control-room-dms/export', [KinerjaControlRoomDmsController::class, 'export'])
             ->name('kinerja-control-room-dms.export');
+
+        // Parameter OC "% SPIP yang dilakukan Commissioning"
+        Route::get('/spip-commissioning', [SpipCommissioningController::class, 'index'])
+            ->name('spip-commissioning.index');
+        Route::get('/spip-commissioning/overview', [SpipCommissioningController::class, 'overview'])
+            ->name('spip-commissioning.overview');
+        Route::get('/spip-commissioning/detail-bulan', [SpipCommissioningController::class, 'detailBulan'])
+            ->name('spip-commissioning.detail-bulan');
+        Route::get('/spip-commissioning/data', [SpipCommissioningController::class, 'data'])
+            ->name('spip-commissioning.data');
+        Route::get('/spip-commissioning/export', [SpipCommissioningController::class, 'export'])
+            ->name('spip-commissioning.export');
 
         // Incident Management — dashboard korelasi insiden & IPLS
         // (OBDS: bcbeats.mv_investigasi, bukan app_mixer)
