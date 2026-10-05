@@ -220,16 +220,23 @@
   .ov-modal-scroll { max-height: 42vh; overflow: auto; }
   .ov-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
 
-  .ov-t1 { background: #E0484A; }
-  .ov-t2 { background: #F08C2E; }
-  .ov-t3 { background: #F2C230; color: #1F2937 !important; }
-  .ov-t4 { background: #86C96B; }
-  .ov-t5 { background: #059669; }
+  /* Warna band resmi. Mode Persentase dan Nilai memakai ambang yang sama,
+     jadi satu sel tidak pernah berganti warna ketika modenya diganti. */
+  .ov-t1, .ov-n1 { background: #FF0000; }
+  .ov-t2, .ov-n2 { background: #FFC000; color: #1F2937 !important; }
+  .ov-t3, .ov-n3 { background: #FFFF00; color: #1F2937 !important; }
+  .ov-t4, .ov-n4 { background: #92D050; color: #1F2937 !important; }
+
+  /* Lencana dan batang memakai band yang sama persis dengan sel. */
+  .ov-b1 { background: #FFE5E5; color: #B91C1C !important; }
+  .ov-b2 { background: #FFF2CC; color: #92400E !important; }
+  .ov-b3 { background: #FFFBCC; color: #854D0E !important; }
+  .ov-b4 { background: #E8F5DC; color: #3F6212 !important; }
+  .ov-bar1 { background: #FF0000; }
+  .ov-bar2 { background: #FFC000; }
+  .ov-bar3 { background: #FFFF00; }
+  .ov-bar4 { background: #92D050; }
   /* Mode Nilai: 4 band resmi, warnanya senada dengan kartu perusahaan. */
-  .ov-n1 { background: #E0484A; }
-  .ov-n2 { background: #F08C2E; }
-  .ov-n3 { background: #F2C230; color: #1F2937 !important; }
-  .ov-n4 { background: #16A34A; }
   .ov-matrix .ov-cell { font-variant-numeric: tabular-nums; }
 
 </style>
@@ -1028,28 +1035,40 @@ var ovModalDetail = (function () {
         }) + '%';
     }
 
-    // Gradasi warna untuk mode Persentase: 5 tingkat, lebih halus daripada
-    // band Nilai sehingga perbedaan antar bulan lebih mudah terlihat.
-    function tierClass(pct) {
-        if (pct >= 98) return 'ov-t5';
-        if (pct >= 90) return 'ov-t4';
-        if (pct >= 78) return 'ov-t3';
-        if (pct >= 62) return 'ov-t2';
-        return 'ov-t1';
+    // BAND SELALU DITURUNKAN DARI PERSENTASE, tidak pernah dari nilai yang
+    // sudah dibulatkan: pembulatan dua desimal bisa menyeberangi batas band.
+    // Ambangnya sama persis dengan SCORE_BANDS di controller.
+    function bandPersen(pct) {
+        var v = Number(pct);
+        if (!isFinite(v)) { return 0; }
+        if (v >= 100) { return 4; }
+        if (v >= 98) { return 3; }
+        if (v >= 95) { return 2; }
+        return 1;
     }
 
-    // Mode Nilai memakai 4 band resmi (SCORE_BANDS), bukan gradasi di atas,
-    // supaya warna sel tidak pernah bertentangan dengan angka Nilai-nya.
-    function nilaiClass(nilai) {
-        return { 1: 'ov-n1', 2: 'ov-n2', 3: 'ov-n3', 4: 'ov-n4' }[nilai] || 'ov-empty';
+    /** Nilai ditampilkan dengan koma, mis. "3,50". */
+    function fmtNilai(nilai) {
+        if (nilai === null || nilai === undefined || nilai === '') { return '–'; }
+        return Number(nilai).toLocaleString('id-ID', {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        });
+    }
+
+    function tierClass(pct) {
+        return { 1: 'ov-t1', 2: 'ov-t2', 3: 'ov-t3', 4: 'ov-t4' }[bandPersen(pct)] || 'ov-empty';
+    }
+
+    function nilaiClass(pct) {
+        return { 1: 'ov-n1', 2: 'ov-n2', 3: 'ov-n3', 4: 'ov-n4' }[bandPersen(pct)] || 'ov-empty';
     }
 
     function cellClass(cell) {
-        return matrixMode === 'nilai' ? nilaiClass(cell.nilai) : tierClass(cell.pct);
+        return (matrixMode === 'nilai' ? nilaiClass : tierClass)(cell.pct);
     }
 
-    function nilaiColor(nilai) {
-        return { 1: '#E0484A', 2: '#F08C2E', 3: '#F2C230', 4: '#16A34A' }[nilai] || '#94A3B8';
+    function nilaiColor(pct) {
+        return { 1: '#FF0000', 2: '#FFC000', 3: '#FFFF00', 4: '#92D050' }[bandPersen(pct)] || '#94A3B8';
     }
 
     function currentFilters() {
@@ -1062,20 +1081,22 @@ var ovModalDetail = (function () {
 
     // Kelas badge mengikuti sistem warna WowDash (bg-*-focus + text-*-main),
     // bukan warna inline, supaya ikut tema dan konsisten dengan modul lain.
-    function nilaiBadgeClass(nilai) {
+    function nilaiBadgeClass(pct) {
+        var v = Number(pct);
+        var b = !isFinite(v) ? 0 : (v >= 100 ? 4 : v >= 98 ? 3 : v >= 95 ? 2 : 1);
+
         return {
-            1: 'bg-danger-focus text-danger-main',
-            2: 'bg-warning-focus text-warning-main',
-            3: 'bg-info-focus text-info-main',
-            4: 'bg-success-focus text-success-main'
-        }[nilai] || 'bg-neutral-200 text-secondary-light';
+            1: 'ov-b1', 2: 'ov-b2', 3: 'ov-b3', 4: 'ov-b4'
+        }[b] || 'bg-neutral-200 text-secondary-light';
     }
 
-    function nilaiBarClass(nilai) {
+    function nilaiBarClass(pct) {
+        var v = Number(pct);
+        var b = !isFinite(v) ? 0 : (v >= 100 ? 4 : v >= 98 ? 3 : v >= 95 ? 2 : 1);
+
         return {
-            1: 'bg-danger-main', 2: 'bg-warning-main',
-            3: 'bg-info-main', 4: 'bg-success-main'
-        }[nilai] || 'bg-neutral-400';
+            1: 'ov-bar1', 2: 'ov-bar2', 3: 'ov-bar3', 4: 'ov-bar4'
+        }[b] || 'bg-neutral-400';
     }
 
     // ---- Kartu ringkasan utama --------------------------------------------
@@ -1203,18 +1224,17 @@ var ovModalDetail = (function () {
     function renderLegend() {
         var host = document.querySelector('#ov-legend');
         var items = matrixMode === 'nilai'
-            ? [
-                { color: '#E0484A', label: 'Nilai 1 · <80%' },
-                { color: '#F08C2E', label: 'Nilai 2 · 80–90%' },
-                { color: '#F2C230', label: 'Nilai 3 · 90–98%' },
-                { color: '#16A34A', label: 'Nilai 4 · 98–100%' }
+                        ? [
+                { color: '#FF0000', label: 'Nilai 1 · <95%' },
+                { color: '#FFC000', label: 'Nilai 2 · 95–<98%' },
+                { color: '#FFFF00', label: 'Nilai 3 · 98–<100%' },
+                { color: '#92D050', label: 'Nilai 4 · tepat 100%' }
             ]
             : [
-                { color: '#E0484A', label: '<62%' },
-                { color: '#F08C2E', label: '62–78%' },
-                { color: '#F2C230', label: '78–90%' },
-                { color: '#86C96B', label: '90–98%' },
-                { color: '#059669', label: '≥98%' }
+                { color: '#FF0000', label: '<95%' },
+                { color: '#FFC000', label: '95–<98%' },
+                { color: '#FFFF00', label: '98–<100%' },
+                { color: '#92D050', label: 'tepat 100%' }
             ];
 
         host.innerHTML = items.map(function (it) {
@@ -1270,8 +1290,8 @@ var ovModalDetail = (function () {
 
             html += '<td class="ov-mitra">' + escapeHtml(row.mitra) + '</td>'
                 + '<td class="ov-avg" title="' + fmtNum(row.total) + ' segmen · '
-                +   fmtPct(row.average) + ' · Nilai ' + row.nilai + ' (' + escapeHtml(row.nilai_band) + ')">'
-                +   (matrixMode === 'nilai' ? row.nilai : fmtPct(row.average)) + '</td>';
+                +   fmtPct(row.average) + ' · Nilai ' + fmtNilai(row.nilai) + ' (' + escapeHtml(row.nilai_band) + ')">'
+                +   (matrixMode === 'nilai' ? fmtNilai(row.nilai) : fmtPct(row.average)) + '</td>';
 
             if (row.trend === 'up') {
                 html += '<td class="ov-trend--up" title="Naik dari bulan sebelumnya">&uarr;</td>';
@@ -1293,7 +1313,7 @@ var ovModalDetail = (function () {
                 // supaya berganti mode tidak menghilangkan informasi.
                 var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
                     + fmtNum(cell.standar) + ' / ' + fmtNum(cell.total) + ' segmen standar · '
-                    + fmtPct(cell.pct) + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')';
+                    + fmtPct(cell.pct) + ' · Nilai ' + fmtNilai(cell.nilai) + ' (' + cell.nilai_band + ')';
 
                 // Koordinat sel dibawa di atribut, bukan ditebak dari posisi
                 // DOM: matriks digambar ulang tiap ganti filter/mode dan
@@ -1308,7 +1328,7 @@ var ovModalDetail = (function () {
                     + ' data-nilai="' + escapeHtml(matrixMode === 'nilai'
                         ? 'Nilai ' + cell.nilai : fmtPct(cell.pct)) + '"'
                     + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
-                    + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
+                    + (matrixMode === 'nilai' ? fmtNilai(cell.nilai) : Math.round(cell.pct) + '%')
                     + '</td>';
             });
 
@@ -1665,11 +1685,18 @@ var ovModalDetail = (function () {
 
     function updateNilai(summary) {
         var nilai = Number(summary.nilai || 0);
-        var style = nilaiStyle[nilai];
+        // Bandnya dari persentase, bukan dari nilai yang sudah dibulatkan:
+        // peta ini berkunci 1-4 sedangkan nilai kini berkoma, sehingga
+        // nilaiStyle[3.5] tidak pernah ketemu dan kartunya kehilangan warna.
+        var pct = Number(summary.standar_pct);
+        var band = !isFinite(pct) ? 0 : (pct >= 100 ? 4 : pct >= 98 ? 3 : pct >= 95 ? 2 : 1);
+        var style = nilaiStyle[band];
         var card = document.querySelector('#rs-nilai-card');
         var icon = document.querySelector('#rs-nilai-icon');
 
-        document.querySelector('#rs-nilai').textContent = nilai ? String(nilai) : '–';
+        document.querySelector('#rs-nilai').textContent = nilai
+            ? nilai.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : '–';
         document.querySelector('#rs-nilai-meta').textContent = summary.nilai_band || 'dari % standar';
 
         if (!style) {

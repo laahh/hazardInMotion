@@ -63,11 +63,24 @@
   <div class="row gy-4 mb-24">
     <div class="col-xxl-8">
       <div class="card h-100 radius-8 border">
-        <div class="card-header border-bottom bg-base py-16 px-24">
-          <h6 class="text-lg fw-semibold mb-0">Perulangan per Bulan</h6>
-          <span class="text-sm text-secondary-light">
+        <div class="card-header border-bottom bg-base py-16 px-24 d-flex align-items-center flex-wrap gap-3 justify-content-between">
+          <div>
+            <h6 class="text-lg fw-semibold mb-0">Perulangan per Bulan</h6>
+            <span class="text-sm text-secondary-light">
             Cacah perulangan dari {{ $tabel_ringkasan }}; hijau berarti tidak ada yang terulang bulan itu
-          </span>
+            </span>
+          </div>
+          <ul class="nav nav-pills style-three pill-tab border input-form-light p-0 radius-8 bg-neutral-50 flex-nowrap"
+              role="tablist">
+            <li class="nav-item" role="presentation">
+              <button type="button" class="nav-link px-16 py-6 text-sm text-center radius-8 active rek-switch__btn"
+                      data-mode="jumlah">Jumlah</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button type="button" class="nav-link px-16 py-6 text-sm text-center radius-8 rek-switch__btn"
+                      data-mode="nilai">Nilai</button>
+            </li>
+          </ul>
         </div>
         <div class="card-body p-24">
           <div class="d-flex align-items-center flex-wrap gap-3 mb-16" data-rek="legend"></div>

@@ -103,13 +103,24 @@ final class ComplianceIkkController extends Controller
     private const COL_TERCOVER = 'ada_okk';
     private const COL_TERDAFTAR = 'satu';
 
-    private const TARGET_PERCENT = 90.0;
+    private const TARGET_PERCENT = 95.0;
 
+    /**
+     * Band penilaian resmi: [batas bawah, batas atas, nilai dasar, label].
+     *
+     * URUTANNYA TERBAIK DULU, dan itu bukan sekadar gaya: dataQuery()
+     * menyaring tab Data lewat SCORE_BANDS[4 - $nilai][0], jadi elemen
+     * pertama tiap baris harus tetap batas bawah dan urutannya tidak
+     * boleh dibalik.
+     *
+     * NILAINYA BERKOMA: di dalam satu band nilai melandai mengikuti posisi
+     * capaian di antara kedua batasnya, jadi angkanya tidak meloncat.
+     */
     private const SCORE_BANDS = [
-        [98.0, 4, '98% - 100%'],
-        [90.0, 3, '90% - <98%'],
-        [80.0, 2, '80% - <90%'],
-        [0.0,  1, '<80%'],
+        [95.0, 100.0, 4, '95% - 100%'],
+        [90.0, 95.0, 3, '90% - <95%'],
+        [85.0, 90.0, 2, '85% - <90%'],
+        [0.0, 85.0, 1, '<85%'],
     ];
 
     private const MONTH_MAP = [
@@ -1233,12 +1244,27 @@ final class ComplianceIkkController extends Controller
     /** @return array{0: float, 1: int, 2: string} */
     private function scoreBandFor(float $percent): array
     {
-        foreach (self::SCORE_BANDS as $band) {
-            if ($percent >= $band[0]) {
-                return $band;
+        foreach (self::SCORE_BANDS as [$bawah, $atas, $dasar, $label]) {
+            if ($percent < $bawah) {
+                continue;
             }
+
+            if ($dasar >= 4) {
+                return [$bawah, 4.0, $label];
+            }
+
+            $rentang = $atas - $bawah;
+            $nilai = $rentang > 0
+                ? $dasar + ($percent - $bawah) / $rentang
+                : (float) $dasar;
+
+            // Tidak boleh menyentuh angka band berikutnya, supaya angka dan
+            // label band di layar tidak pernah bertentangan.
+            $nilai = min($nilai, $dasar + 0.99);
+
+            return [$bawah, round(max(1.0, min(4.0, $nilai)), 2), $label];
         }
 
-        return [0.0, 1, '<80%'];
+        return [0.0, 1.0, '<85%'];
     }
 }

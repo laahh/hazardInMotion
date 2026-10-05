@@ -464,8 +464,8 @@ var spipModalDetail = (function () {
         var v = Number(pct);
         if (!isFinite(v)) { return 0; }
         if (v >= 98) { return 4; }
-        if (v >= 96) { return 3; }
-        if (v >= 94) { return 2; }
+        if (v >= 90) { return 3; }
+        if (v >= 80) { return 2; }
         return 1;
     }
 
@@ -650,14 +650,14 @@ var spipModalDetail = (function () {
     function renderLegend() {
         var items = matrixMode === 'nilai'
             ? [
-                { color: '#FF0000', label: 'Nilai 1 · <94%' },
-                { color: '#FFC000', label: 'Nilai 2 · 94–96%' },
-                { color: '#FFFF00', label: 'Nilai 3 · 96–98%' },
+                { color: '#FF0000', label: 'Nilai 1 · <80%' },
+                { color: '#FFC000', label: 'Nilai 2 · 80–<90%' },
+                { color: '#FFFF00', label: 'Nilai 3 · 90–<98%' },
                 { color: '#92D050', label: 'Nilai 4 · 98–100%' }
             ]
             : [
-                { color: '#FF0000', label: '<94%' },
-                { color: '#FFC000', label: '94–96%' },
+                { color: '#FF0000', label: '<80%' },
+                { color: '#FFC000', label: '80–<90%' },
                 { color: '#FFFF00', label: '96–98%' },
                 { color: '#92D050', label: '98–100%' }
             ];
@@ -716,10 +716,10 @@ var spipModalDetail = (function () {
             if (row.average === null) {
                 html += '<td class="spip-avg" title="Belum ada data">–</td>';
             } else {
-                var tipRata = fmtPct(row.average) + ' · Nilai ' + row.nilai + ' (' + row.nilai_band + ')'
+                var tipRata = fmtPct(row.average) + ' · Nilai ' + fmtNilai(row.nilai) + ' (' + row.nilai_band + ')'
                     + ' · dari ' + row.bulan_terisi + ' bulan · terendah ' + fmtPct(row.terendah);
                 html += '<td class="spip-avg" title="' + escapeHtml(tipRata) + '">'
-                    + (matrixMode === 'nilai' ? row.nilai : fmtPct(row.average)) + '</td>';
+                    + (matrixMode === 'nilai' ? fmtNilai(row.nilai) : fmtPct(row.average)) + '</td>';
             }
 
             if (row.trend === 'up') {
@@ -744,7 +744,7 @@ var spipModalDetail = (function () {
                 // Tooltip selalu memuat kedua angka, apa pun mode tampilannya,
                 // supaya berganti mode tidak menghilangkan informasi.
                 var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
-                    + fmtPct(cell.pct) + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')';
+                    + fmtPct(cell.pct) + ' · Nilai ' + fmtNilai(cell.nilai) + ' (' + cell.nilai_band + ')';
 
                 // Koordinat sel dibawa di atribut, bukan ditebak dari posisi
                 // DOM: urutan baris berubah mengikuti pengurutan per site.
@@ -755,7 +755,7 @@ var spipModalDetail = (function () {
                     + ' data-month="' + months[m].number + '"'
                     + ' data-bulan="' + escapeHtml(months[m].label) + '"'
                     + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
-                    + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
+                    + (matrixMode === 'nilai' ? fmtNilai(cell.nilai) : Math.round(cell.pct) + '%')
                     + '</td>';
             });
 
@@ -954,7 +954,7 @@ var spipModalDetail = (function () {
 
     function nilaiBadgeClass(pct) {
         var v = Number(pct);
-        var b = !isFinite(v) ? 0 : (v >= 98 ? 4 : v >= 96 ? 3 : v >= 94 ? 2 : 1);
+        var b = !isFinite(v) ? 0 : (v >= 98 ? 4 : v >= 90 ? 3 : v >= 80 ? 2 : 1);
 
         return {
             1: 'spip-b1', 2: 'spip-b2', 3: 'spip-b3', 4: 'spip-b4'

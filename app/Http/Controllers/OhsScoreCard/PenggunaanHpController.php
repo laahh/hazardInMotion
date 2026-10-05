@@ -40,6 +40,23 @@ final class PenggunaanHpController extends Controller
 {
     use ServesDataTable;
 
+    /**
+     * Band resmi parameter berbasis cacah: [batas atas, nilai, label].
+     *
+     *   X = 0        -> Nilai 4      1 <= X <= 3  -> Nilai 3
+     *   4 <= X <= 5  -> Nilai 2      X > 5        -> Nilai 1
+     *
+     * NILAINYA SENGAJA BULAT, tanpa koma seperti parameter persentase: yang
+     * diukur adalah banyaknya kejadian, jadi tidak ada posisi "di antara" dua
+     * batas yang bermakna. Batas ditulis sebagai batas ATAS supaya rata-rata
+     * bulanan yang berupa pecahan tetap jatuh di band yang masuk akal.
+     */
+    private const SCORE_BANDS = [
+        [0.0, 4, 'tidak ada temuan'],
+        [3.0, 3, '1 - 3 temuan'],
+        [5.0, 2, '4 - 5 temuan'],
+    ];
+
     private const TABLE = 'lead_gr_penggunaan_hp';
 
     private const COL_SITE = 'site';
@@ -169,6 +186,23 @@ final class PenggunaanHpController extends Controller
      * @param  array<int, int>  $months
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * Nilai 1-4 untuk sebuah cacah. Menerima pecahan supaya rata-rata bulanan
+     * sebuah baris bisa dinilai dengan aturan yang sama.
+     *
+     * @return array{0: int, 1: string}
+     */
+    private function nilaiUntukCacah(float $jumlah): array
+    {
+        foreach (self::SCORE_BANDS as [$batasAtas, $nilai, $label]) {
+            if ($jumlah <= $batasAtas) {
+                return [$nilai, $label];
+            }
+        }
+
+        return [1, 'lebih dari 5 temuan'];
+    }
+
     private function buildMatrix(array $grid, array $months): array
     {
         $out = [];
@@ -190,6 +224,11 @@ final class PenggunaanHpController extends Controller
                 }
             }
 
+            // Nilai dihitung di sini, bukan di layar, supaya matriks, kartu,
+            // dan modal tidak mungkin berselisih angka.
+            $rata = $months === [] ? 0.0 : $total / count($months);
+            [$nilaiBaris, $bandBaris] = $this->nilaiUntukCacah($rata);
+
             $out[] = [
                 'site' => $entry['site'],
                 'mitra' => $entry['mitra'],
@@ -199,6 +238,13 @@ final class PenggunaanHpController extends Controller
                 'bulan_bersih' => $bersih,
                 'bulan_kena' => count($months) - $bersih,
                 'trend' => $this->trendOf($cells),
+                'nilai_cells' => array_map(
+                    fn (int $n): int => $this->nilaiUntukCacah((float) $n)[0],
+                    $cells
+                ),
+                'rata' => round($rata, 2),
+                'nilai' => $nilaiBaris,
+                'nilai_band' => $bandBaris,
             ];
         }
 

@@ -66,10 +66,12 @@
   .osp-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
 
   /* Nol adalah keadaan yang diinginkan, jadi hijau — bukan sel kosong abu-abu. */
-  .osp-k0 { background: #16A34A; }
-  .osp-k1 { background: #F2C230; color: #1F2937 !important; }
-  .osp-k2 { background: #F08C2E; }
-  .osp-k3 { background: #E0484A; }
+  /* Warna band resmi; ambangnya sama persis dengan SCORE_BANDS di
+     controller. Nol adalah hasil terbaik, jadi hijau. */
+  .osp-k4 { background: #92D050; color: #1F2937 !important; }
+  .osp-k3 { background: #FFFF00; color: #1F2937 !important; }
+  .osp-k2 { background: #FFC000; color: #1F2937 !important; }
+  .osp-k1 { background: #FF0000; }
 
 </style>
 @endsection
@@ -462,11 +464,22 @@ var ospModalDetail = (function () {
     }
 
     // Nol hijau, dan makin banyak pelanggar makin merah.
+    var matrixMode = 'jumlah';
+    var lastPayload = null;
+
+    // BAND SELALU DITURUNKAN DARI CACAHNYA, tidak pernah dari angka Nilai.
+    // Ambangnya sama persis dengan SCORE_BANDS di controller.
+    function bandCacah(jumlah) {
+        var v = Number(jumlah);
+        if (!isFinite(v)) { return 0; }
+        if (v <= 0) { return 4; }
+        if (v <= 3) { return 3; }
+        if (v <= 5) { return 2; }
+        return 1;
+    }
+
     function tierClass(jumlah) {
-        if (jumlah <= 0) return 'osp-k0';
-        if (jumlah === 1) return 'osp-k1';
-        if (jumlah === 2) return 'osp-k2';
-        return 'osp-k3';
+        return { 1: 'osp-k1', 2: 'osp-k2', 3: 'osp-k3', 4: 'osp-k4' }[bandCacah(jumlah)] || 'osp-k4';
     }
 
     function currentFilters() {
@@ -606,12 +619,20 @@ var ospModalDetail = (function () {
     }
 
     function renderLegend() {
-        var items = [
-            { color: '#16A34A', label: 'tidak ada pelanggar' },
-            { color: '#F2C230', label: '1 pelanggar' },
-            { color: '#F08C2E', label: '2 pelanggar' },
-            { color: '#E0484A', label: '3 atau lebih' }
-        ];
+        // Warna sel sama di kedua mode, jadi legendanya hanya berganti kata.
+        var items = matrixMode === 'nilai'
+            ? [
+                { color: '#FF0000', label: 'Nilai 1 \· lebih dari 5' },
+                { color: '#FFC000', label: 'Nilai 2 \· 4-5' },
+                { color: '#FFFF00', label: 'Nilai 3 \· 1-3' },
+                { color: '#92D050', label: 'Nilai 4 \· tidak ada' }
+            ]
+            : [
+                { color: '#FF0000', label: 'lebih dari 5 pelanggar' },
+                { color: '#FFC000', label: '4-5 pelanggar' },
+                { color: '#FFFF00', label: '1-3 pelanggar' },
+                { color: '#92D050', label: 'tidak ada pelanggar' }
+            ];
 
         el('legend').innerHTML = items.map(function (it) {
             return '<span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;">'
@@ -619,6 +640,26 @@ var ospModalDetail = (function () {
                 + escapeHtml(it.label) + '</span>';
         }).join('');
     }
+
+    // Ganti mode hanya menggambar ulang dari payload terakhir: angka Nilai
+    // sudah ikut dikirim, jadi tidak perlu meminta ulang ke server.
+    root.querySelectorAll('.osp-switch__btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (btn.dataset.mode === matrixMode) { return; }
+
+            matrixMode = btn.dataset.mode;
+
+            root.querySelectorAll('.osp-switch__btn').forEach(function (b) {
+                b.classList.toggle('active', b.dataset.mode === matrixMode);
+            });
+
+            renderLegend();
+
+            if (lastPayload) {
+                renderMatrix(lastPayload.months || [], lastPayload.matrix || []);
+            }
+        });
+    });
 
     function renderMatrix(months, rows) {
         var table = el('matrix');
@@ -659,7 +700,7 @@ var ospModalDetail = (function () {
                     + escapeHtml(row.site) + '</td>')
                 + '<td class="osp-mitra">' + escapeHtml(row.mitra) + '</td>'
                 + '<td class="osp-total" title="' + escapeHtml(row.bulan_kena + ' bulan kedapatan, '
-                    + row.bulan_bersih + ' bulan bersih') + '">' + fmtNum(row.total) + '</td>';
+                    + row.bulan_bersih + ' bulan bersih') + '">' + (matrixMode === 'nilai' ? row.nilai : fmtNum(row.total)) + '</td>';
 
             if (row.trend === 'up') {
                 html += '<td class="osp-trend--up" title="Bertambah dari bulan sebelumnya">&uarr;</td>';
@@ -686,7 +727,7 @@ var ospModalDetail = (function () {
                     + ' data-month="' + months[m].number + '"'
                     + ' data-bulan="' + escapeHtml(months[m].label) + '"'
                     + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
-                    + fmtNum(jumlah) + '</td>';
+                    + (matrixMode === 'nilai' ? bandCacah(jumlah) : fmtNum(jumlah)) + '</td>';
             });
 
             return html + '</tr>';
@@ -765,6 +806,7 @@ var ospModalDetail = (function () {
             })
             .then(function (json) {
                 safe('kpi', function () { renderKpi(json.kpi); });
+                lastPayload = json;
                 safe('legend', renderLegend);
                 safe('matrix', function () { renderMatrix(json.months || [], json.matrix || []); });
                 safe('per-site', function () { renderPerSite(json.per_site || []); });

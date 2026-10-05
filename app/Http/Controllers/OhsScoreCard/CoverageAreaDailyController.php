@@ -64,13 +64,24 @@ final class CoverageAreaDailyController extends Controller
     private const COL_TERCOVER = 'coverage_daily';
     private const COL_TERDAFTAR = 'distinct_count_of_helper_detail_lokasi_teregister_date';
 
-    private const TARGET_PERCENT = 90.0;
+    private const TARGET_PERCENT = 98.0;
 
+    /**
+     * Band penilaian resmi: [batas bawah, batas atas, nilai dasar, label].
+     *
+     * URUTANNYA TERBAIK DULU, dan itu bukan sekadar gaya: dataQuery()
+     * menyaring tab Data lewat SCORE_BANDS[4 - $nilai][0], jadi elemen
+     * pertama tiap baris harus tetap batas bawah dan urutannya tidak
+     * boleh dibalik.
+     *
+     * NILAINYA BERKOMA: di dalam satu band nilai melandai mengikuti posisi
+     * capaian di antara kedua batasnya, jadi angkanya tidak meloncat.
+     */
     private const SCORE_BANDS = [
-        [98.0, 4, '98% - 100%'],
-        [90.0, 3, '90% - <98%'],
-        [80.0, 2, '80% - <90%'],
-        [0.0,  1, '<80%'],
+        [98.0, 100.0, 4, '98% - 100%'],
+        [96.0, 98.0, 3, '96% - <98%'],
+        [94.0, 96.0, 2, '94% - <96%'],
+        [0.0, 94.0, 1, '<94%'],
     ];
 
     private const MONTH_MAP = [
@@ -1098,12 +1109,27 @@ final class CoverageAreaDailyController extends Controller
     /** @return array{0: float, 1: int, 2: string} */
     private function scoreBandFor(float $percent): array
     {
-        foreach (self::SCORE_BANDS as $band) {
-            if ($percent >= $band[0]) {
-                return $band;
+        foreach (self::SCORE_BANDS as [$bawah, $atas, $dasar, $label]) {
+            if ($percent < $bawah) {
+                continue;
             }
+
+            if ($dasar >= 4) {
+                return [$bawah, 4.0, $label];
+            }
+
+            $rentang = $atas - $bawah;
+            $nilai = $rentang > 0
+                ? $dasar + ($percent - $bawah) / $rentang
+                : (float) $dasar;
+
+            // Tidak boleh menyentuh angka band berikutnya, supaya angka dan
+            // label band di layar tidak pernah bertentangan.
+            $nilai = min($nilai, $dasar + 0.99);
+
+            return [$bawah, round(max(1.0, min(4.0, $nilai)), 2), $label];
         }
 
-        return [0.0, 1, '<80%'];
+        return [0.0, 1.0, '<94%'];
     }
 }

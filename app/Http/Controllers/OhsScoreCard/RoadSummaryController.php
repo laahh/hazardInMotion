@@ -120,15 +120,26 @@ final class RoadSummaryController extends Controller
      * capaian terbaik. Kalau ternyata 100% seharusnya punya nilai sendiri
      * (mis. Nilai 5), cukup tambahkan band baru di paling atas.
      */
+    /**
+     * Band penilaian resmi: [batas bawah, batas atas, nilai dasar, label].
+     *
+     * URUTANNYA TERBAIK DULU, dan itu bukan sekadar gaya: dataQuery()
+     * menyaring tab Data lewat SCORE_BANDS[4 - $nilai][0], jadi elemen
+     * pertama tiap baris harus tetap batas bawah dan urutannya tidak
+     * boleh dibalik.
+     *
+     * NILAINYA BERKOMA: di dalam satu band nilai melandai mengikuti posisi
+     * capaian di antara kedua batasnya, jadi angkanya tidak meloncat.
+     */
     private const SCORE_BANDS = [
-        [98.0, 4, '98% – 100%'],
-        [90.0, 3, '90% – <98%'],
-        [80.0, 2, '80% – <90%'],
-        [0.0,  1, '<80%'],
+        [100.0, 100.0, 4, '100%'],
+        [98.0, 100.0, 3, '98% - <100%'],
+        [95.0, 98.0, 2, '95% - <98%'],
+        [0.0, 95.0, 1, '<95%'],
     ];
 
     /** Target kepatuhan jalan yang dipakai di dashboard Overview. */
-    private const TARGET_PERCENT = 90.0;
+    private const TARGET_PERCENT = 100.0;
 
     private const MONTH_LABELS = [
         1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
@@ -1337,15 +1348,28 @@ final class RoadSummaryController extends Controller
      */
     private function scoreBandFor(float $percent): array
     {
-        foreach (self::SCORE_BANDS as $band) {
-            if ($percent >= $band[0]) {
-                return $band;
+        foreach (self::SCORE_BANDS as [$bawah, $atas, $dasar, $label]) {
+            if ($percent < $bawah) {
+                continue;
             }
+
+            if ($dasar >= 4) {
+                return [$bawah, 4.0, $label];
+            }
+
+            $rentang = $atas - $bawah;
+            $nilai = $rentang > 0
+                ? $dasar + ($percent - $bawah) / $rentang
+                : (float) $dasar;
+
+            // Tidak boleh menyentuh angka band berikutnya, supaya angka dan
+            // label band di layar tidak pernah bertentangan.
+            $nilai = min($nilai, $dasar + 0.99);
+
+            return [$bawah, round(max(1.0, min(4.0, $nilai)), 2), $label];
         }
 
-        // Tidak tercapai: band terakhir berambang 0. Disediakan agar aman
-        // kalau daftar band diubah dan ambang terbawah tidak lagi 0.
-        return [0.0, 1, '<80%'];
+        return [0.0, 1.0, '<95%'];
     }
 
     /**

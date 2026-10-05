@@ -76,16 +76,10 @@
   /* Jeda lapor dibaca berpasangan dengan ambang, jadi angkanya disejajarkan. */
   .gte-modal-scroll .gte-jeda { font-variant-numeric: tabular-nums; white-space: nowrap; }
   /* Gradasi persentase: angka besar hijau, karena di sini tinggi berarti baik. */
-  .gte-t1 { background: #E0484A; }
-  .gte-t2 { background: #F08C2E; }
-  .gte-t3 { background: #F2C230; color: #1F2937 !important; }
-  .gte-t4 { background: #86C96B; }
-  .gte-t5 { background: #059669; }
+  /* Band parameter ini biner: hanya Nilai 1 dan Nilai 4 yang bisa muncul. */
+  .gte-t1, .gte-n1 { background: #FF0000; }
+  .gte-t4, .gte-n4 { background: #92D050; color: #1F2937 !important; }
   /* Mode Nilai: 4 band resmi, warnanya senada dengan kartu perusahaan. */
-  .gte-n1 { background: #E0484A; }
-  .gte-n2 { background: #F08C2E; }
-  .gte-n3 { background: #F2C230; color: #1F2937 !important; }
-  .gte-n4 { background: #16A34A; }
 
   /* Kronologi insiden panjang-panjang; dipotong supaya barisnya tetap rapi
      dan teks utuhnya tetap bisa dibaca lewat tooltip. */
@@ -504,31 +498,28 @@ var gteModalDetail = (function () {
         }) + '%';
     }
 
-    // Gradasi warna untuk mode Persentase: 5 tingkat, lebih halus daripada
-    // band Nilai sehingga perbedaan antar bulan lebih mudah terlihat.
-    function tierClass(pct) {
-        if (pct >= 98) return 'gte-t5';
-        if (pct >= 90) return 'gte-t4';
-        if (pct >= 78) return 'gte-t3';
-        if (pct >= 62) return 'gte-t2';
-        return 'gte-t1';
+    // Band biner: 100% tepat waktu berarti tidak ada pelaporan yang lewat.
+    function bandPersen(pct) {
+        var v = Number(pct);
+        if (!isFinite(v)) { return 0; }
+        return v >= 100 ? 4 : 1;
     }
 
-    // Mode Nilai memakai 4 band resmi, bukan gradasi di atas, supaya warna sel
-    // tidak pernah bertentangan dengan angka Nilai-nya.
-    function nilaiClass(nilai) {
-        return { 1: 'gte-n1', 2: 'gte-n2', 3: 'gte-n3', 4: 'gte-n4' }[nilai] || 'gte-empty';
+    function tierClass(pct) {
+        return { 1: 'gte-t1', 4: 'gte-t4' }[bandPersen(pct)] || 'gte-empty';
+    }
+
+    function nilaiClass(pct) {
+        return { 1: 'gte-n1', 4: 'gte-n4' }[bandPersen(pct)] || 'gte-empty';
     }
 
     // Kelas badge mengikuti sistem warna WowDash (bg-*-focus + text-*-main),
     // bukan warna inline, supaya ikut tema dan konsisten dengan modul lain.
-    function nilaiBadgeClass(nilai) {
-        return {
-            1: 'bg-danger-focus text-danger-main',
-            2: 'bg-warning-focus text-warning-main',
-            3: 'bg-info-focus text-info-main',
-            4: 'bg-success-focus text-success-main'
-        }[nilai] || 'bg-neutral-200 text-secondary-light';
+    function nilaiBadgeClass(pct) {
+        var v = Number(pct);
+        return (isFinite(v) && v >= 100)
+            ? 'bg-success-focus text-success-main'
+            : (isFinite(v) ? 'bg-danger-focus text-danger-main' : 'bg-neutral-200 text-secondary-light');
     }
 
     function nilaiBarClass(nilai) {
@@ -539,7 +530,7 @@ var gteModalDetail = (function () {
     }
 
     function cellClass(cell) {
-        return matrixMode === 'nilai' ? nilaiClass(cell.nilai) : tierClass(cell.pct);
+        return (matrixMode === 'nilai' ? nilaiClass : tierClass)(cell.pct);
     }
 
     function currentFilters() {
@@ -713,17 +704,12 @@ var gteModalDetail = (function () {
     function renderLegend() {
         var items = matrixMode === 'nilai'
             ? [
-                { color: '#E0484A', label: 'Nilai 1 · <80%' },
-                { color: '#F08C2E', label: 'Nilai 2 · 80–90%' },
-                { color: '#F2C230', label: 'Nilai 3 · 90–98%' },
-                { color: '#16A34A', label: 'Nilai 4 · 98–100%' }
+                { color: '#FF0000', label: 'Nilai 1 · ada pelaporan yang lewat' },
+                { color: '#92D050', label: 'Nilai 4 · tidak ada yang lewat' }
             ]
             : [
-                { color: '#E0484A', label: '<62%' },
-                { color: '#F08C2E', label: '62–78%' },
-                { color: '#F2C230', label: '78–90%' },
-                { color: '#86C96B', label: '90–98%' },
-                { color: '#059669', label: '≥98%' }
+                { color: '#FF0000', label: '<100%' },
+                { color: '#92D050', label: '100%' }
             ];
 
         el('legend').innerHTML = items.map(function (it) {

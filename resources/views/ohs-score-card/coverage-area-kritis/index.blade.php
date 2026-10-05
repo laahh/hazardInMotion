@@ -685,11 +685,11 @@ var cakModalDetail = (function () {
             if (row.average === null) {
                 html += '<td class="cak-avg" title="Belum ada data">–</td>';
             } else {
-                var tipRata = fmtPct(row.average) + ' · Nilai ' + row.nilai + ' (' + row.nilai_band + ')'
+                var tipRata = fmtPct(row.average) + ' · Nilai ' + fmtNilai(row.nilai) + ' (' + row.nilai_band + ')'
                     + ' · ' + fmtNum(row.tercover) + ' dari ' + fmtNum(row.terdaftar) + ' lokasi-minggu'
                     + ' · ' + row.bulan_terisi + ' bulan';
                 html += '<td class="cak-avg" title="' + escapeHtml(tipRata) + '">'
-                    + (matrixMode === 'nilai' ? row.nilai : fmtPct(row.average)) + '</td>';
+                    + (matrixMode === 'nilai' ? fmtNilai(row.nilai) : fmtPct(row.average)) + '</td>';
             }
 
             if (row.trend === 'up') {
@@ -714,7 +714,7 @@ var cakModalDetail = (function () {
                 // Tooltip selalu memuat kedua angka, apa pun mode tampilannya,
                 // supaya berganti mode tidak menghilangkan informasi.
                 var tip = row.site + ' · ' + row.pic + ' · ' + months[m].label + ': '
-                    + fmtPct(cell.pct) + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')'
+                    + fmtPct(cell.pct) + ' · Nilai ' + fmtNilai(cell.nilai) + ' (' + cell.nilai_band + ')'
                     + ' · ' + fmtNum(cell.tercover) + ' dari ' + fmtNum(cell.terdaftar) + ' lokasi-minggu';
 
                 // Koordinat sel dibawa di atribut, bukan ditebak dari posisi
@@ -726,7 +726,7 @@ var cakModalDetail = (function () {
                     + ' data-month="' + months[m].number + '"'
                     + ' data-bulan="' + escapeHtml(months[m].label) + '"'
                     + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
-                    + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
+                    + (matrixMode === 'nilai' ? fmtNilai(cell.nilai) : Math.round(cell.pct) + '%')
                     + '</td>';
             });
 

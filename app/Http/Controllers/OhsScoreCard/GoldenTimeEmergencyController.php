@@ -89,13 +89,19 @@ final class GoldenTimeEmergencyController extends Controller
     /** Batas baris yang dikirim ke modal rincian satu sel. */
     private const BATAS_BARIS_MODAL = 500;
 
-    private const TARGET_PERCENT = 90.0;
+    private const TARGET_PERCENT = 100.0;
 
+    /**
+     * Band resmi parameter ini BINER, bukan bertingkat empat: yang dinilai
+     * adalah cacah pelaporan yang melewati golden time -- X=0 bernilai 4,
+     * X=1 (atau lebih) bernilai 1. Tabel resmi tidak punya L2 dan L3.
+     *
+     * Halaman ini mengukur persentase pelaporan yang TEPAT waktu, jadi X=0
+     * setara dengan 100%. Karena itu tidak ada nilai berkoma di sini.
+     */
     private const SCORE_BANDS = [
-        [98.0, 4, '98% - 100%'],
-        [90.0, 3, '90% - <98%'],
-        [80.0, 2, '80% - <90%'],
-        [0.0,  1, '<80%'],
+        [100.0, 100.0, 4, '100% - tidak ada yang lewat'],
+        [0.0,   100.0, 1, '<100% - ada yang lewat'],
     ];
 
     private const MONTH_MAP = [
@@ -1187,12 +1193,12 @@ final class GoldenTimeEmergencyController extends Controller
     /** @return array{0: float, 1: int, 2: string} */
     private function scoreBandFor(float $percent): array
     {
-        foreach (self::SCORE_BANDS as $band) {
-            if ($percent >= $band[0]) {
-                return $band;
+        foreach (self::SCORE_BANDS as [$bawah, $atas, $dasar, $label]) {
+            if ($percent >= $bawah) {
+                return [$bawah, (float) $dasar, $label];
             }
         }
 
-        return [0.0, 1, '<80%'];
+        return [0.0, 1.0, '<100% - ada yang lewat'];
     }
 }

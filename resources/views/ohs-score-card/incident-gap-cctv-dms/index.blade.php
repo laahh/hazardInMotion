@@ -71,10 +71,12 @@
   }
 
   /* Nol adalah keadaan yang diinginkan, jadi hijau — bukan sel kosong abu-abu. */
-  .gap-k0 { background: #16A34A; }
-  .gap-k1 { background: #F2C230; color: #1F2937 !important; }
-  .gap-k2 { background: #F08C2E; }
-  .gap-k3 { background: #E0484A; }
+  /* Warna band resmi; ambangnya sama persis dengan SCORE_BANDS di
+     controller. Nol adalah hasil terbaik, jadi hijau. */
+  .gap-k4 { background: #92D050; color: #1F2937 !important; }
+  .gap-k3 { background: #FFFF00; color: #1F2937 !important; }
+  .gap-k2 { background: #FFC000; color: #1F2937 !important; }
+  .gap-k1 { background: #FF0000; }
 
 </style>
 @endsection
@@ -434,11 +436,22 @@ var gapModalDetail = (function () {
     }
 
     // Nol hijau, dan makin banyak insiden makin merah.
+    var matrixMode = 'jumlah';
+    var lastPayload = null;
+
+    // BAND SELALU DITURUNKAN DARI CACAHNYA, tidak pernah dari angka Nilai.
+    // Ambangnya sama persis dengan SCORE_BANDS di controller.
+    function bandCacah(jumlah) {
+        var v = Number(jumlah);
+        if (!isFinite(v)) { return 0; }
+        if (v <= 0) { return 4; }
+        if (v <= 3) { return 3; }
+        if (v <= 5) { return 2; }
+        return 1;
+    }
+
     function tierClass(jumlah) {
-        if (jumlah <= 0) return 'gap-k0';
-        if (jumlah === 1) return 'gap-k1';
-        if (jumlah === 2) return 'gap-k2';
-        return 'gap-k3';
+        return { 1: 'gap-k1', 2: 'gap-k2', 3: 'gap-k3', 4: 'gap-k4' }[bandCacah(jumlah)] || 'gap-k4';
     }
 
     function currentFilters() {
@@ -544,12 +557,20 @@ var gapModalDetail = (function () {
     }
 
     function renderLegend() {
-        var items = [
-            { color: '#16A34A', label: 'tidak ada insiden' },
-            { color: '#F2C230', label: '1 insiden' },
-            { color: '#F08C2E', label: '2 insiden' },
-            { color: '#E0484A', label: '3 atau lebih' }
-        ];
+        // Warna sel sama di kedua mode, jadi legendanya hanya berganti kata.
+        var items = matrixMode === 'nilai'
+            ? [
+                { color: '#FF0000', label: 'Nilai 1 \· lebih dari 5' },
+                { color: '#FFC000', label: 'Nilai 2 \· 4-5' },
+                { color: '#FFFF00', label: 'Nilai 3 \· 1-3' },
+                { color: '#92D050', label: 'Nilai 4 \· tidak ada' }
+            ]
+            : [
+                { color: '#FF0000', label: 'lebih dari 5 insiden' },
+                { color: '#FFC000', label: '4-5 insiden' },
+                { color: '#FFFF00', label: '1-3 insiden' },
+                { color: '#92D050', label: 'tidak ada insiden' }
+            ];
 
         el('legend').innerHTML = items.map(function (it) {
             return '<span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;">'
@@ -557,6 +578,26 @@ var gapModalDetail = (function () {
                 + escapeHtml(it.label) + '</span>';
         }).join('');
     }
+
+    // Ganti mode hanya menggambar ulang dari payload terakhir: angka Nilai
+    // sudah ikut dikirim, jadi tidak perlu meminta ulang ke server.
+    root.querySelectorAll('.gap-switch__btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (btn.dataset.mode === matrixMode) { return; }
+
+            matrixMode = btn.dataset.mode;
+
+            root.querySelectorAll('.gap-switch__btn').forEach(function (b) {
+                b.classList.toggle('active', b.dataset.mode === matrixMode);
+            });
+
+            renderLegend();
+
+            if (lastPayload) {
+                renderMatrix(lastPayload.months || [], lastPayload.matrix || []);
+            }
+        });
+    });
 
     function renderMatrix(months, rows) {
         var table = el('matrix');
@@ -597,7 +638,7 @@ var gapModalDetail = (function () {
                     + escapeHtml(row.site) + '</td>')
                 + '<td class="gap-mitra">' + escapeHtml(row.mitra) + '</td>'
                 + '<td class="gap-total" title="' + escapeHtml(row.bulan_kena + ' bulan kedapatan, '
-                    + row.bulan_bersih + ' bulan bersih') + '">' + fmtNum(row.total) + '</td>';
+                    + row.bulan_bersih + ' bulan bersih') + '">' + (matrixMode === 'nilai' ? row.nilai : fmtNum(row.total)) + '</td>';
 
             if (row.trend === 'up') {
                 html += '<td class="gap-trend--up" title="Bertambah dari bulan sebelumnya">&uarr;</td>';
@@ -625,7 +666,7 @@ var gapModalDetail = (function () {
                     + ' data-bulan="' + escapeHtml(months[m].label) + '"'
                     + ' data-nilai="' + escapeHtml(fmtNum(jumlah)) + '"'
                     + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
-                    + fmtNum(jumlah) + '</td>';
+                    + (matrixMode === 'nilai' ? bandCacah(jumlah) : fmtNum(jumlah)) + '</td>';
             });
 
             return html + '</tr>';
@@ -754,6 +795,7 @@ var gapModalDetail = (function () {
             })
             .then(function (json) {
                 safe('kpi', function () { renderKpi(json.kpi); });
+                lastPayload = json;
                 safe('legend', renderLegend);
                 safe('matrix', function () { renderMatrix(json.months || [], json.matrix || []); });
                 safe('per-site', function () { renderPerSite(json.per_site || []); });

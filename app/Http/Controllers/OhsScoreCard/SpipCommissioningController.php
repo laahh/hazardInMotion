@@ -78,7 +78,7 @@ final class SpipCommissioningController extends Controller
     private const COL_BULAN = 'performance_month';
     private const COL_PERSEN = 'performance_pct';
 
-    private const TARGET_PERCENT = 90.0;
+    private const TARGET_PERCENT = 98.0;
 
     /**
      * Band penilaian: [batas bawah, batas atas, nilai dasar, label].
@@ -96,9 +96,9 @@ final class SpipCommissioningController extends Controller
      */
     private const SCORE_BANDS = [
         [98.0, 100.0, 4, '98% - 100%'],
-        [96.0,  98.0, 3, '96% - <98%'],
-        [94.0,  96.0, 2, '94% - <96%'],
-        [0.0,   94.0, 1, '<94%'],
+        [90.0,  98.0, 3, '90% - <98%'],
+        [80.0,  90.0, 2, '80% - <90%'],
+        [0.0,   80.0, 1, '<80%'],
     ];
 
     /**
@@ -1308,6 +1308,6 @@ final class SpipCommissioningController extends Controller
             return [$bawah, round(max(1.0, min(4.0, $nilai)), 2), $label];
         }
 
-        return [0.0, 1.0, '<94%'];
+        return [0.0, 1.0, '<80%'];
     }
 }

@@ -74,16 +74,23 @@
   .ftw-modal-scroll { max-height: 32vh; overflow: auto; }
   .ftw-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
   /* Gradasi persentase: angka besar hijau, karena di sini tinggi berarti baik. */
-  .ftw-t1 { background: #E0484A; }
-  .ftw-t2 { background: #F08C2E; }
-  .ftw-t3 { background: #F2C230; color: #1F2937 !important; }
-  .ftw-t4 { background: #86C96B; }
-  .ftw-t5 { background: #059669; }
+  /* Warna band resmi. Mode Persentase dan Nilai memakai ambang yang sama,
+     jadi satu sel tidak pernah berganti warna ketika modenya diganti. */
+  .ftw-t1, .ftw-n1 { background: #FF0000; }
+  .ftw-t2, .ftw-n2 { background: #FFC000; color: #1F2937 !important; }
+  .ftw-t3, .ftw-n3 { background: #FFFF00; color: #1F2937 !important; }
+  .ftw-t4, .ftw-n4 { background: #92D050; color: #1F2937 !important; }
+
+  /* Lencana dan batang memakai band yang sama persis dengan sel. */
+  .ftw-b1 { background: #FFE5E5; color: #B91C1C !important; }
+  .ftw-b2 { background: #FFF2CC; color: #92400E !important; }
+  .ftw-b3 { background: #FFFBCC; color: #854D0E !important; }
+  .ftw-b4 { background: #E8F5DC; color: #3F6212 !important; }
+  .ftw-bar1 { background: #FF0000; }
+  .ftw-bar2 { background: #FFC000; }
+  .ftw-bar3 { background: #FFFF00; }
+  .ftw-bar4 { background: #92D050; }
   /* Mode Nilai: 4 band resmi, warnanya senada dengan kartu perusahaan. */
-  .ftw-n1 { background: #E0484A; }
-  .ftw-n2 { background: #F08C2E; }
-  .ftw-n3 { background: #F2C230; color: #1F2937 !important; }
-  .ftw-n4 { background: #16A34A; }
 
 </style>
 @endsection
@@ -405,42 +412,56 @@ var ftwModalDetail = (function () {
         }) + '%';
     }
 
-    // Gradasi warna untuk mode Persentase: 5 tingkat, lebih halus daripada
-    // band Nilai sehingga perbedaan antar bulan lebih mudah terlihat.
-    function tierClass(pct) {
-        if (pct >= 98) return 'ftw-t5';
-        if (pct >= 90) return 'ftw-t4';
-        if (pct >= 78) return 'ftw-t3';
-        if (pct >= 62) return 'ftw-t2';
-        return 'ftw-t1';
+    // BAND SELALU DITURUNKAN DARI PERSENTASE, tidak pernah dari nilai yang
+    // sudah dibulatkan: pembulatan dua desimal bisa menyeberangi batas band.
+    // Ambangnya sama persis dengan SCORE_BANDS di controller.
+    function bandPersen(pct) {
+        var v = Number(pct);
+        if (!isFinite(v)) { return 0; }
+        if (v >= 95) { return 4; }
+        if (v >= 90) { return 3; }
+        if (v >= 85) { return 2; }
+        return 1;
     }
 
-    // Mode Nilai memakai 4 band resmi, bukan gradasi di atas, supaya warna sel
-    // tidak pernah bertentangan dengan angka Nilai-nya.
-    function nilaiClass(nilai) {
-        return { 1: 'ftw-n1', 2: 'ftw-n2', 3: 'ftw-n3', 4: 'ftw-n4' }[nilai] || 'ftw-empty';
+    /** Nilai ditampilkan dengan koma, mis. "3,50". */
+    function fmtNilai(nilai) {
+        if (nilai === null || nilai === undefined || nilai === '') { return '–'; }
+        return Number(nilai).toLocaleString('id-ID', {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        });
+    }
+
+    function tierClass(pct) {
+        return { 1: 'ftw-t1', 2: 'ftw-t2', 3: 'ftw-t3', 4: 'ftw-t4' }[bandPersen(pct)] || 'ftw-empty';
+    }
+
+    function nilaiClass(pct) {
+        return { 1: 'ftw-n1', 2: 'ftw-n2', 3: 'ftw-n3', 4: 'ftw-n4' }[bandPersen(pct)] || 'ftw-empty';
     }
 
     // Kelas badge mengikuti sistem warna WowDash (bg-*-focus + text-*-main),
     // bukan warna inline, supaya ikut tema dan konsisten dengan modul lain.
-    function nilaiBadgeClass(nilai) {
+    function nilaiBadgeClass(pct) {
+        var v = Number(pct);
+        var b = !isFinite(v) ? 0 : (v >= 95 ? 4 : v >= 90 ? 3 : v >= 85 ? 2 : 1);
+
         return {
-            1: 'bg-danger-focus text-danger-main',
-            2: 'bg-warning-focus text-warning-main',
-            3: 'bg-info-focus text-info-main',
-            4: 'bg-success-focus text-success-main'
-        }[nilai] || 'bg-neutral-200 text-secondary-light';
+            1: 'ftw-b1', 2: 'ftw-b2', 3: 'ftw-b3', 4: 'ftw-b4'
+        }[b] || 'bg-neutral-200 text-secondary-light';
     }
 
-    function nilaiBarClass(nilai) {
+    function nilaiBarClass(pct) {
+        var v = Number(pct);
+        var b = !isFinite(v) ? 0 : (v >= 95 ? 4 : v >= 90 ? 3 : v >= 85 ? 2 : 1);
+
         return {
-            1: 'bg-danger-main', 2: 'bg-warning-main',
-            3: 'bg-info-main', 4: 'bg-success-main'
-        }[nilai] || 'bg-neutral-400';
+            1: 'ftw-bar1', 2: 'ftw-bar2', 3: 'ftw-bar3', 4: 'ftw-bar4'
+        }[b] || 'bg-neutral-400';
     }
 
     function cellClass(cell) {
-        return matrixMode === 'nilai' ? nilaiClass(cell.nilai) : tierClass(cell.pct);
+        return (matrixMode === 'nilai' ? nilaiClass : tierClass)(cell.pct);
     }
 
     function currentFilters() {
@@ -586,18 +607,17 @@ var ftwModalDetail = (function () {
     /** Legenda ikut mode: gradasi persentase, atau 4 band Nilai. */
     function renderLegend() {
         var items = matrixMode === 'nilai'
-            ? [
-                { color: '#E0484A', label: 'Nilai 1 · <80%' },
-                { color: '#F08C2E', label: 'Nilai 2 · 80–90%' },
-                { color: '#F2C230', label: 'Nilai 3 · 90–98%' },
-                { color: '#16A34A', label: 'Nilai 4 · 98–100%' }
+                        ? [
+                { color: '#FF0000', label: 'Nilai 1 · <85%' },
+                { color: '#FFC000', label: 'Nilai 2 · 85–<90%' },
+                { color: '#FFFF00', label: 'Nilai 3 · 90–<95%' },
+                { color: '#92D050', label: 'Nilai 4 · 95–100%' }
             ]
             : [
-                { color: '#E0484A', label: '<62%' },
-                { color: '#F08C2E', label: '62–78%' },
-                { color: '#F2C230', label: '78–90%' },
-                { color: '#86C96B', label: '90–98%' },
-                { color: '#059669', label: '≥98%' }
+                { color: '#FF0000', label: '<85%' },
+                { color: '#FFC000', label: '85–<90%' },
+                { color: '#FFFF00', label: '90–<95%' },
+                { color: '#92D050', label: '95–100%' }
             ];
 
         el('legend').innerHTML = items.map(function (it) {
@@ -654,10 +674,10 @@ var ftwModalDetail = (function () {
             if (row.average === null) {
                 html += '<td class="ftw-avg" title="Belum ada data">–</td>';
             } else {
-                var tipRata = fmtPct(row.average) + ' · Nilai ' + row.nilai + ' (' + row.nilai_band + ')'
+                var tipRata = fmtPct(row.average) + ' · Nilai ' + fmtNilai(row.nilai) + ' (' + row.nilai_band + ')'
                     + ' · dari ' + row.bulan_terisi + ' bulan · terendah ' + fmtPct(row.terendah);
                 html += '<td class="ftw-avg" title="' + escapeHtml(tipRata) + '">'
-                    + (matrixMode === 'nilai' ? row.nilai : fmtPct(row.average)) + '</td>';
+                    + (matrixMode === 'nilai' ? fmtNilai(row.nilai) : fmtPct(row.average)) + '</td>';
             }
 
             if (row.trend === 'up') {
@@ -682,7 +702,7 @@ var ftwModalDetail = (function () {
                 // Tooltip selalu memuat kedua angka, apa pun mode tampilannya,
                 // supaya berganti mode tidak menghilangkan informasi.
                 var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
-                    + fmtPct(cell.pct) + ' · Nilai ' + cell.nilai + ' (' + cell.nilai_band + ')';
+                    + fmtPct(cell.pct) + ' · Nilai ' + fmtNilai(cell.nilai) + ' (' + cell.nilai_band + ')';
 
                 // Koordinat sel dibawa di atribut, bukan ditebak dari posisi
                 // DOM: urutan baris berubah mengikuti pengurutan per site.
@@ -693,7 +713,7 @@ var ftwModalDetail = (function () {
                     + ' data-month="' + months[m].number + '"'
                     + ' data-bulan="' + escapeHtml(months[m].label) + '"'
                     + ' title="' + escapeHtml(tip + ' \· klik untuk rincian') + '">'
-                    + (matrixMode === 'nilai' ? cell.nilai : Math.round(cell.pct) + '%')
+                    + (matrixMode === 'nilai' ? fmtNilai(cell.nilai) : Math.round(cell.pct) + '%')
                     + '</td>';
             });
 
@@ -890,13 +910,13 @@ var ftwModalDetail = (function () {
         }) + '%';
     }
 
-    function nilaiBadgeClass(nilai) {
+    function nilaiBadgeClass(pct) {
+        var v = Number(pct);
+        var b = !isFinite(v) ? 0 : (v >= 95 ? 4 : v >= 90 ? 3 : v >= 85 ? 2 : 1);
+
         return {
-            1: 'bg-danger-focus text-danger-main',
-            2: 'bg-warning-focus text-warning-main',
-            3: 'bg-info-focus text-info-main',
-            4: 'bg-success-focus text-success-main'
-        }[nilai] || 'bg-neutral-200 text-secondary-light';
+            1: 'ftw-b1', 2: 'ftw-b2', 3: 'ftw-b3', 4: 'ftw-b4'
+        }[b] || 'bg-neutral-200 text-secondary-light';
     }
 
     function currentFilters() {
@@ -963,8 +983,15 @@ var ftwModalDetail = (function () {
                 render: function (d, type, row) {
                     if (type !== 'display') { return d; }
                     if (d === null) { return '<span class="text-secondary-light">–</span>'; }
-                    return '<span class="' + nilaiBadgeClass(d) + ' px-8 py-2 rounded-pill fw-medium text-xs"'
-                        + ' title="' + escapeHtml(row.nilai_band) + '">' + d + '</span>';
+                    // Warnanya dari persentase baris ini, bukan dari angka
+                    // nilainya: nilai 1-4 kalau dibaca sebagai persen selalu
+                    // jatuh ke band terbawah dan semua lencana memerah.
+                    return '<span class="' + nilaiBadgeClass(row.persen) + ' px-8 py-2 rounded-pill fw-medium text-xs"'
+                        + ' title="' + escapeHtml(row.nilai_band) + '">'
+                        + Number(d).toLocaleString('id-ID', {
+                            minimumFractionDigits: 2, maximumFractionDigits: 2
+                        })
+                        + '</span>';
                 }
             },
             {
