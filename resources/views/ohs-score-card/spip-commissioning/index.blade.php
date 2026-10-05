@@ -1025,8 +1025,15 @@ var spipModalDetail = (function () {
                 render: function (d, type, row) {
                     if (type !== 'display') { return d; }
                     if (d === null) { return '<span class="text-secondary-light">–</span>'; }
-                    return '<span class="' + nilaiBadgeClass(d) + ' px-8 py-2 rounded-pill fw-medium text-xs"'
-                        + ' title="' + escapeHtml(row.nilai_band) + '">' + d + '</span>';
+                    // Warnanya diambil dari persentase baris ini, bukan dari
+                    // angka nilainya: nilai 1-4 kalau dibaca sebagai persen
+                    // selalu jatuh ke band terbawah dan semua lencana memerah.
+                    return '<span class="' + nilaiBadgeClass(row.persen) + ' px-8 py-2 rounded-pill fw-medium text-xs"'
+                        + ' title="' + escapeHtml(row.nilai_band) + '">'
+                        + Number(d).toLocaleString('id-ID', {
+                            minimumFractionDigits: 2, maximumFractionDigits: 2
+                        })
+                        + '</span>';
                 }
             },
             {

@@ -462,8 +462,11 @@ var pbjModalDetail = (function () {
         }[bandPersen(pct)] || 'bg-neutral-400';
     }
 
+    // Warna sel SELALU dari persentasenya, apa pun mode tampilannya. Mengirim
+    // cell.nilai ke sini akan membaca angka 1-4 sebagai persen, sehingga
+    // seluruh sel jatuh ke band terbawah dan matriks menjadi merah semua.
     function cellClass(cell) {
-        return matrixMode === 'nilai' ? nilaiClass(cell.nilai) : tierClass(cell.pct);
+        return (matrixMode === 'nilai' ? nilaiClass : tierClass)(cell.pct);
     }
 
     function currentFilters() {
@@ -985,8 +988,15 @@ var pbjModalDetail = (function () {
                 render: function (d, type, row) {
                     if (type !== 'display') { return d; }
                     if (d === null) { return '<span class="text-secondary-light">–</span>'; }
-                    return '<span class="' + nilaiBadgeClass(d) + ' px-8 py-2 rounded-pill fw-medium text-xs"'
-                        + ' title="' + escapeHtml(row.nilai_band) + '">' + d + '</span>';
+                    // Warnanya diambil dari persentase baris ini, bukan dari
+                    // angka nilainya: nilai 1-4 kalau dibaca sebagai persen
+                    // selalu jatuh ke band terbawah dan semua lencana memerah.
+                    return '<span class="' + nilaiBadgeClass(row.persen) + ' px-8 py-2 rounded-pill fw-medium text-xs"'
+                        + ' title="' + escapeHtml(row.nilai_band) + '">'
+                        + Number(d).toLocaleString('id-ID', {
+                            minimumFractionDigits: 2, maximumFractionDigits: 2
+                        })
+                        + '</span>';
                 }
             },
             {

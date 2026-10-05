@@ -924,13 +924,16 @@ var cakModalDetail = (function () {
         }) + '%';
     }
 
-    function nilaiBadgeClass(nilai) {
+    // Ambangnya sama persis dengan SCORE_BANDS di controller dan dengan
+    // bandPersen() di skrip matriks, supaya satu baris tidak pernah berwarna
+    // lain antara tabel Data dan matriks.
+    function nilaiBadgeClass(pct) {
+        var v = Number(pct);
+        var b = !isFinite(v) ? 0 : (v >= 6 ? 4 : v >= 4 ? 3 : v >= 2 ? 2 : 1);
+
         return {
-            1: 'bg-danger-focus text-danger-main',
-            2: 'bg-warning-focus text-warning-main',
-            3: 'bg-info-focus text-info-main',
-            4: 'bg-success-focus text-success-main'
-        }[nilai] || 'bg-neutral-200 text-secondary-light';
+            1: 'cak-b1', 2: 'cak-b2', 3: 'cak-b3', 4: 'cak-b4'
+        }[b] || 'bg-neutral-200 text-secondary-light';
     }
 
     function currentFilters() {
@@ -1013,8 +1016,15 @@ var cakModalDetail = (function () {
                 render: function (d, type, row) {
                     if (type !== 'display') { return d; }
                     if (d === null) { return '<span class="text-secondary-light">–</span>'; }
-                    return '<span class="' + nilaiBadgeClass(d) + ' px-8 py-2 rounded-pill fw-medium text-xs"'
-                        + ' title="' + escapeHtml(row.nilai_band) + '">' + d + '</span>';
+                    // Warnanya diambil dari persentase baris ini, bukan dari
+                    // angka nilainya: nilai 1-4 kalau dibaca sebagai persen
+                    // selalu jatuh ke band terbawah dan semua lencana memerah.
+                    return '<span class="' + nilaiBadgeClass(row.persen) + ' px-8 py-2 rounded-pill fw-medium text-xs"'
+                        + ' title="' + escapeHtml(row.nilai_band) + '">'
+                        + Number(d).toLocaleString('id-ID', {
+                            minimumFractionDigits: 2, maximumFractionDigits: 2
+                        })
+                        + '</span>';
                 }
             },
             {
