@@ -31,6 +31,8 @@ use App\Http\Controllers\OhsScoreCard\PerulanganRekomendasiController;
 use App\Http\Controllers\OhsScoreCard\RasioKelayakanKerjaController;
 use App\Http\Controllers\OhsScoreCard\RatioTbcGrController;
 use App\Http\Controllers\OhsScoreCard\RoadSummaryController;
+use App\Http\Controllers\OhsScoreCard\SertifikasiPengawasTeknisController;
+use App\Http\Controllers\OhsScoreCard\SertifikasiTenagaTeknisController;
 use App\Http\Controllers\OhsScoreCard\SpeakUpFatigueController;
 use App\Http\Controllers\OhsScoreCard\ValidasiTbcTabController;
 use Illuminate\Support\Facades\Route;
@@ -332,6 +334,31 @@ Route::middleware('evaluasi-well.access')
             ->name('coverage-daily-area-kritis-safety.data');
         Route::get('/coverage-daily-area-kritis-safety/export', [CoverageDailyAreaKritisSafetyController::class, 'export'])
             ->name('coverage-daily-area-kritis-safety.export');
+
+        // Parameter HSECT — "Pemenuhan Sertifikasi Pengawas Teknis"
+        Route::get('/sertifikasi-pengawas-teknis', [SertifikasiPengawasTeknisController::class, 'index'])
+            ->name('sertifikasi-pengawas-teknis.index');
+        Route::get('/sertifikasi-pengawas-teknis/overview', [SertifikasiPengawasTeknisController::class, 'overview'])
+            ->name('sertifikasi-pengawas-teknis.overview');
+        Route::get('/sertifikasi-pengawas-teknis/detail-sel', [SertifikasiPengawasTeknisController::class, 'detailSel'])
+            ->name('sertifikasi-pengawas-teknis.detail-sel');
+        Route::get('/sertifikasi-pengawas-teknis/data', [SertifikasiPengawasTeknisController::class, 'data'])
+            ->name('sertifikasi-pengawas-teknis.data');
+        Route::get('/sertifikasi-pengawas-teknis/export', [SertifikasiPengawasTeknisController::class, 'export'])
+            ->name('sertifikasi-pengawas-teknis.export');
+
+        // Parameter HSECT — "Pemenuhan Sertifikasi Tenaga Teknis"
+        Route::get('/sertifikasi-tenaga-teknis', [SertifikasiTenagaTeknisController::class, 'index'])
+            ->name('sertifikasi-tenaga-teknis.index');
+        Route::get('/sertifikasi-tenaga-teknis/overview', [SertifikasiTenagaTeknisController::class, 'overview'])
+            ->name('sertifikasi-tenaga-teknis.overview');
+        Route::get('/sertifikasi-tenaga-teknis/detail-sel', [SertifikasiTenagaTeknisController::class, 'detailSel'])
+            ->name('sertifikasi-tenaga-teknis.detail-sel');
+        Route::get('/sertifikasi-tenaga-teknis/data', [SertifikasiTenagaTeknisController::class, 'data'])
+            ->name('sertifikasi-tenaga-teknis.data');
+        Route::get('/sertifikasi-tenaga-teknis/export', [SertifikasiTenagaTeknisController::class, 'export'])
+            ->name('sertifikasi-tenaga-teknis.export');
+
 
         // Parameter OC "Kesesuaian Implementasi IKK"
         Route::get('/compliance-ikk', [ComplianceIkkController::class, 'index'])

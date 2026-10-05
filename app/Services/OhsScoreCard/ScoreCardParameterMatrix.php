@@ -48,6 +48,13 @@ final class ScoreCardParameterMatrix
      */
     private const TTL_DETIK = 600;
 
+    /**
+     * Penanda bulan untuk parameter yang datanya tidak punya dimensi waktu.
+     * Nilainya berlaku untuk bulan mana pun dan tidak pernah ditawarkan di
+     * penyaring bulan.
+     */
+    private const BULAN_TANPA_WAKTU = 0;
+
     /** Cache per-permintaan: satu tabel tidak ditarik dua kali. */
     private array $cache = [];
 
@@ -95,6 +102,13 @@ final class ScoreCardParameterMatrix
                 }
 
                 [, , $b] = explode('|', (string) $kunci);
+
+                // Parameter tanpa dimensi waktu tidak boleh menambah pilihan
+                // bulan: nilainya sama untuk bulan apa pun.
+                if ((int) $b === self::BULAN_TANPA_WAKTU) {
+                    continue;
+                }
+
                 $bulanAda[(int) $b] = true;
             }
 
@@ -149,9 +163,11 @@ final class ScoreCardParameterMatrix
         $hasil = Cache::remember(
             'osc-sc:sumber:' . md5($kunciCache),
             self::TTL_DETIK,
-            fn (): ?array => ($p['khusus'] ?? null) === 'road_summary'
-                ? $this->ambilRoadSummary()
-                : $this->ambilRingkasan($p)
+            fn (): ?array => match ($p['khusus'] ?? null) {
+                'road_summary' => $this->ambilRoadSummary(),
+                'kompetensi' => $this->ambilKompetensi($p),
+                default => $this->ambilRingkasan($p),
+            }
         );
 
         return $this->cache[$kunciCache] = $hasil;
@@ -239,6 +255,68 @@ final class ScoreCardParameterMatrix
         foreach ($out as $k => $v) {
             $out[$k] = [
                 'jumlah' => $v['baris'] > 0 ? $v['jumlah'] / $v['baris'] * 100.0 : 0.0,
+                'baris' => 1,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Tabel sertifikasi kompetensi: dihitung per ORANG unik, bukan per baris,
+     * karena satu orang punya satu baris untuk tiap pasangan dokumen x izin
+     * kerja. Tabelnya juga TIDAK PUNYA KOLOM BULAN, jadi hasilnya disimpan di
+     * bulan 0 dan ringkas() mengambilnya untuk bulan mana pun.
+     *
+     * Ambangnya sama dengan AbstractSertifikasiKompetensiController.
+     *
+     * @return array<string, array{jumlah: float, baris: int}>|null
+     */
+    private function ambilKompetensi(array $p): ?array
+    {
+        $kolomAda = $this->skema()[$p['sumber']] ?? null;
+
+        if ($kolomAda === null) {
+            return null;
+        }
+
+        foreach ([$p['site'], $p['mitra'], 'nama_karyawan', $p['nilai']] as $k) {
+            if (!isset($kolomAda[$k])) {
+                return null;
+            }
+        }
+
+        $nama = $this->kutip('nama_karyawan');
+        $sertifikasi = $this->kutip($p['nilai']);
+
+        $rows = DB::table($p['sumber'])
+            ->selectRaw(
+                $this->kutip($p['site']) . ' AS site, '
+                . $this->kutip($p['mitra']) . ' AS mitra, '
+                . 'COUNT(DISTINCT ' . $nama . ') AS total, '
+                . 'COUNT(DISTINCT CASE WHEN ' . $sertifikasi . ' IS NOT NULL'
+                . " AND TRIM(" . $sertifikasi . ") <> '' THEN " . $nama . ' END) AS bersertifikat'
+            )
+            ->groupBy('site', 'mitra')
+            ->get();
+
+        $out = [];
+
+        foreach ($rows as $r) {
+            $total = (int) $r->total;
+
+            if ($total <= 0) {
+                continue;
+            }
+
+            $kunci = $this->kunciSel((string) $r->site, (string) $r->mitra, self::BULAN_TANPA_WAKTU);
+
+            if ($kunci === null) {
+                continue;
+            }
+
+            $out[$kunci] = [
+                'jumlah' => (int) $r->bersertifikat / $total * 100.0,
                 'baris' => 1,
             ];
         }
@@ -377,7 +455,11 @@ final class ScoreCardParameterMatrix
      */
     private function ringkas(array $p, array $perBulan, string $site, string $kontraktor, ?int $bulan): ?float
     {
-        $bulanDipakai = $bulan === null ? range(1, 12) : [$bulan];
+        // Parameter tanpa dimensi waktu disimpan di bulan 0 dan diambil apa
+        // adanya, berapa pun bulan yang dipilih.
+        $bulanDipakai = ($p['tanpa_bulan'] ?? false)
+            ? [self::BULAN_TANPA_WAKTU]
+            : ($bulan === null ? range(1, 12) : [$bulan]);
 
         $jumlah = 0.0;
         $baris = 0;

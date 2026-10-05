@@ -173,8 +173,11 @@ final class ScoreCardParameterRegistry
             // bukan ambang angka.
             self::kosong('Peer Pressure'),
 
-            self::kosong('Pemenuhan Sertifikasi Pengawas Teknis'),
-            self::kosong('Pemenuhan Sertifikasi Tenaga Teknis'),
+            // Kedua parameter sertifikasi TIDAK PUNYA DIMENSI WAKTU: tabel
+            // sumbernya hanya memuat keadaan saat ini. Nilainya karena itu sama
+            // untuk bulan mana pun, dan penyaring bulan tidak mengubahnya.
+            self::kompetensi('Pemenuhan Sertifikasi Pengawas Teknis', 'competency_pengawas_teknis'),
+            self::kompetensi('Pemenuhan Sertifikasi Tenaga Teknis', 'competency_tenaga_teknis'),
 
             // Dihitung dari road_summary yang berbasis MINGGU, bukan bulan;
             // penanganannya khusus di ScoreCardParameterMatrix.
@@ -271,6 +274,22 @@ final class ScoreCardParameterRegistry
             'nama' => $nama, 'sumber' => $tabel, 'site' => $site, 'mitra' => $mitra,
             'bulan' => $bulan, 'nilai' => $nilai,
             'band' => null, 'ambang' => [],
+            'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+        ];
+    }
+
+    /**
+     * Parameter sertifikasi kompetensi. Dihitung per ORANG unik, bukan per
+     * baris, dan tanpa dimensi bulan -- lihat
+     * AbstractSertifikasiKompetensiController untuk alasannya.
+     */
+    private static function kompetensi(string $nama, string $tabel): array
+    {
+        return [
+            'nama' => $nama, 'sumber' => $tabel, 'khusus' => 'kompetensi',
+            'site' => 'nama_site', 'mitra' => 'perusahaan',
+            'bulan' => null, 'nilai' => 'sertifikasi', 'tanpa_bulan' => true,
+            'band' => self::BAND_NAIK, 'ambang' => [50, 60, 80, 100],
             'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
         ];
     }

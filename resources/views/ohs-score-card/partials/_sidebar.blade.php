@@ -49,8 +49,8 @@
         ],
         'HSECT' => [
             ['label' => 'Peer Pressure',                                                'icon' => 'solar:users-group-two-rounded-outline', 'url' => route('ohs-score-card.peer-pressure.index')],
-            ['label' => 'Pemenuhan Sertifikasi Pengawas Teknis',                        'icon' => 'solar:diploma-outline'],
-            ['label' => 'Pemenuhan Sertifikasi Tenaga Teknis',                          'icon' => 'solar:diploma-verified-outline'],
+            ['label' => 'Pemenuhan Sertifikasi Pengawas Teknis',                        'icon' => 'solar:diploma-outline', 'url' => route('ohs-score-card.sertifikasi-pengawas-teknis.index')],
+            ['label' => 'Pemenuhan Sertifikasi Tenaga Teknis',                          'icon' => 'solar:diploma-verified-outline', 'url' => route('ohs-score-card.sertifikasi-tenaga-teknis.index')],
         ],
         'SGI' => [
             ['label' => 'Jalan sesuai standar',                                         'icon' => 'solar:routing-outline', 'url' => route('ohs-score-card.jalan-sesuai-standar.index')],
