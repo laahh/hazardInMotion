@@ -5191,63 +5191,69 @@
           }
 
           /**
-           * Kartu site di bagian atas dashboard: rata-rata Nilai seluruh
-           * parameter di site itu.
+           * Kartu site di bagian atas dashboard.
            *
-           * YANG DIRATA-RATAKAN NILAI, BUKAN PERSEN -- sama dengan baris Score
-           * di tabel. Persen antar parameter tidak sebanding karena arahnya
-           * berbeda-beda, jadi merata-ratakannya akan menyesatkan.
-           *
-           * Dihitung dari SELURUH sel site itu, bukan rata-rata dari rata-rata
-           * kolom, supaya kontraktor yang parameternya lebih banyak tidak
-           * kehilangan bobotnya.
+           * Angkanya PERSEN DARI NILAI SEMPURNA (Nilai dibagi 4), bukan
+           * rata-rata persen capaian -- capaian antar parameter tidak
+           * sebanding karena arahnya berbeda-beda. Perhitungannya di server
+           * (ringkas_site) supaya kartu dan tabel tidak mungkin berselisih.
            */
           function isiKartuSite(data) {
-              var kolom = data.kolom || {};
-              var total = {};
-              var cacah = {};
-
-              Object.keys(kolom).forEach(function (site) {
-                  total[site] = 0;
-                  cacah[site] = 0;
-              });
-
-              Object.keys(data.matriks || {}).forEach(function (param) {
-                  var baris = data.matriks[param] || {};
-
-                  Object.keys(kolom).forEach(function (site) {
-                      kolom[site].forEach(function (k) {
-                          var sel = (baris[site] || {})[k];
-
-                          if (sel && sel.ada && sel.nilai !== null) {
-                              total[site] += Number(sel.nilai);
-                              cacah[site] += 1;
-                          }
-                      });
-                  });
-              });
+              var ringkas = data.ringkas_site || {};
 
               document.querySelectorAll('[data-osc-site]').forEach(function (node) {
-                  var site = node.dataset.oscSite;
+                  var r = ringkas[node.dataset.oscSite];
 
-                  node.textContent = (site && cacah[site])
-                      ? fmtNilai(total[site] / cacah[site])
+                  node.textContent = (r && r.persen !== null && r.persen !== undefined)
+                      ? fmtPersen(r.persen)
                       : '–';
               });
 
               document.querySelectorAll('[data-osc-site-sub]').forEach(function (node) {
-                  var site = node.dataset.oscSiteSub;
-
-                  if (!site || !(site in kolom)) {
-                      node.textContent = 'tidak ada kolom di Score Card';
-
-                      return;
-                  }
-
-                  node.textContent = cacah[site]
-                      ? 'rata-rata Nilai dari ' + cacah[site] + ' parameter · ' + data.label_bulan
-                      : 'belum ada data pada ' + data.label_bulan;
+                  node.innerHTML = teksSelisih(ringkas[node.dataset.oscSiteSub], data);
               });
+          }
+
+          function fmtPersen(n) {
+              return Number(n).toLocaleString('id-ID', {
+                  minimumFractionDigits: 1, maximumFractionDigits: 1
+              }) + '%';
+          }
+
+          /** Naik atau turun dibanding bulan sebelumnya, dalam poin persen. */
+          function teksSelisih(r, data) {
+              if (!r) {
+                  return '<span class="text-secondary-light">tidak ada kolom di Score Card</span>';
+              }
+
+              if (r.persen === null || r.persen === undefined) {
+                  return '<span class="text-secondary-light">belum ada data pada '
+                      + esc(data.label_bulan) + '</span>';
+              }
+
+              if (r.selisih === null || r.selisih === undefined) {
+                  // Tampilan "Semua bulan" dan Januari memang tidak punya
+                  // pembanding; lihat ringkasSite() di controller.
+                  return '<span class="text-secondary-light">'
+                      + (r.bulan_sebelum
+                          ? 'belum ada data ' + esc(r.bulan_sebelum) + ' untuk dibandingkan'
+                          : 'tanpa pembanding bulan sebelumnya')
+                      + '</span>';
+              }
+
+              var naik = r.selisih > 0.05;
+              var turun = r.selisih < -0.05;
+              var kelas = naik
+                  ? 'bg-success-focus text-success-main'
+                  : (turun ? 'bg-danger-focus text-danger-main' : 'bg-neutral-200 text-secondary-light');
+
+              // Arahnya sudah disebut lewat kata "Naik"/"Turun", jadi angkanya
+              // dipakai apa adanya tanpa tanda minus -- "Turun -1,8%" terbaca
+              // sebagai negatif ganda.
+              return (naik ? 'Naik ' : (turun ? 'Turun ' : 'Tetap '))
+                  + '<span class="' + kelas + ' px-1 rounded-2 fw-medium text-sm">'
+                  + fmtPersen(Math.abs(r.selisih))
+                  + '</span> dari ' + esc(r.bulan_sebelum);
           }
 
           function render(data) {

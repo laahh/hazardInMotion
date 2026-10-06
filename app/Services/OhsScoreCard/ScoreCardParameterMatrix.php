@@ -147,6 +147,7 @@ final class ScoreCardParameterMatrix
             ], $parameter),
             'matriks' => $matriks,
             'skor_kolom' => $this->skorKolom($matriks, $kolom),
+            'ringkas_site' => $this->ringkasSite($parameter, $sumber, $kolom, $bulan),
             'bulan_tersedia' => array_map(
                 static fn (int $n): array => ['nomor' => $n, 'label' => self::LABEL_BULAN[$n]],
                 array_keys($bulanAda)
@@ -825,6 +826,120 @@ final class ScoreCardParameterMatrix
                     'band' => null, 'teks' => '–',
                 ];
             }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Rata-rata Nilai per site untuk kartu di bagian atas dashboard, beserta
+     * pembandingnya terhadap bulan sebelumnya.
+     *
+     * PERSENNYA ADALAH NILAI DIBAGI 4, bukan rata-rata persen capaian. Persen
+     * capaian antar parameter tidak sebanding -- 0% pada Blindspot adalah
+     * hasil terbaik sedangkan 0% pada Ratio yang terburuk -- jadi yang
+     * dirata-ratakan tetap Nilai, lalu dinyatakan sebagai persen dari nilai
+     * sempurna 4,00 supaya enak dibaca di kartu.
+     *
+     * PEMBANDINGNYA HANYA BULAN TEPAT SEBELUMNYA, dan sengaja TIDAK melintasi
+     * pergantian tahun: data di matriks ini hanya bernomor bulan tanpa tahun,
+     * jadi membandingkan Januari dengan Desember berarti membandingkan dua
+     * tahun yang berbeda tanpa bisa dibuktikan. Untuk Januari, dan untuk
+     * tampilan "Semua bulan", pembandingnya dikosongkan.
+     *
+     * Tidak ada query tambahan: seluruh sumber sudah ditarik di jalan pertama.
+     *
+     * @param  array<int, array<string, mixed>>  $parameter
+     * @param  array<string, array<string, array{jumlah: float, baris: int}>|null>  $sumber
+     * @param  array<string, array<int, string>>  $kolom
+     * @return array<string, array<string, mixed>>
+     */
+    private function ringkasSite(array $parameter, array $sumber, array $kolom, ?int $bulan): array
+    {
+        $kini = $this->rataSite($parameter, $sumber, $kolom, $bulan);
+
+        // Januari tidak punya bulan sebelumnya di dalam kumpulan data ini.
+        $bulanSebelum = ($bulan === null || $bulan <= 1) ? null : $bulan - 1;
+        $sebelum = $bulanSebelum === null
+            ? []
+            : $this->rataSite($parameter, $sumber, $kolom, $bulanSebelum);
+
+        $out = [];
+
+        foreach ($kolom as $site => $_) {
+            $n = $kini[$site]['nilai'] ?? null;
+            $nSebelum = $sebelum[$site]['nilai'] ?? null;
+
+            $out[$site] = [
+                'nilai' => $n,
+                'persen' => $n === null ? null : round($n / 4 * 100, 2),
+                'parameter' => $kini[$site]['cacah'] ?? 0,
+                'bulan_sebelum' => $bulanSebelum === null ? null : self::LABEL_BULAN[$bulanSebelum],
+                'persen_sebelum' => $nSebelum === null ? null : round($nSebelum / 4 * 100, 2),
+                'selisih' => ($n === null || $nSebelum === null)
+                    ? null
+                    : round(($n - $nSebelum) / 4 * 100, 2),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Rata-rata Nilai per site untuk satu bulan.
+     *
+     * Parameter tanpa band tidak punya Nilai, jadi tidak ikut membagi --
+     * memasukkannya sebagai nol akan menyeret rata-ratanya turun tanpa dasar.
+     *
+     * @param  array<int, array<string, mixed>>  $parameter
+     * @param  array<string, array<string, array{jumlah: float, baris: int}>|null>  $sumber
+     * @param  array<string, array<int, string>>  $kolom
+     * @return array<string, array{nilai: float|null, cacah: int}>
+     */
+    private function rataSite(array $parameter, array $sumber, array $kolom, ?int $bulan): array
+    {
+        $total = [];
+        $cacah = [];
+
+        foreach ($kolom as $site => $_) {
+            $total[$site] = 0.0;
+            $cacah[$site] = 0;
+        }
+
+        foreach ($parameter as $p) {
+            $perBulan = $sumber[$p['nama']] ?? null;
+
+            if ($perBulan === null || $p['band'] === null) {
+                continue;
+            }
+
+            foreach ($kolom as $site => $kontraktor) {
+                foreach ($kontraktor as $k) {
+                    $capaian = $this->ringkas($p, $perBulan, $site, $k, $bulan);
+
+                    if ($capaian === null) {
+                        continue;
+                    }
+
+                    [$nilai, ] = $this->nilaiBand($p, $capaian);
+
+                    if ($nilai === null) {
+                        continue;
+                    }
+
+                    $total[$site] += (float) $nilai;
+                    $cacah[$site]++;
+                }
+            }
+        }
+
+        $out = [];
+
+        foreach ($kolom as $site => $_) {
+            $out[$site] = [
+                'nilai' => $cacah[$site] > 0 ? round($total[$site] / $cacah[$site], 2) : null,
+                'cacah' => $cacah[$site],
+            ];
         }
 
         return $out;
