@@ -17,6 +17,23 @@ namespace App\Services\OhsScoreCard;
  * dijaga oleh skrip pembanding yang memeriksa keduanya tetap sama. Kalau
  * ambang di controller diubah, ubah juga di sini.
  *
+ * SEL KOSONG DITULIS "N/A" DAN DINILAI PENUH. Tiap parameter menyatakan
+ * ujung "terbaik"-nya lewat 'kosong_berarti', dan angkanya BERBEDA-BEDA
+ * mengikuti arah band masing-masing:
+ *
+ *   arah naik   -> batas atas band teratas (biasanya 100, tetapi 8 untuk
+ *                  Coverage Area Kritis yang band teratasnya 6%-8%)
+ *   arah turun  -> 0, karena nol adalah hasil terbaik
+ *   cacah       -> 0, karena tidak ada kejadian adalah hasil terbaik
+ *
+ * Mengisi semuanya dengan angka yang sama akan salah arah untuk separuh
+ * parameter: 0 pada parameter arah naik justru memberi Nilai 1 merah.
+ *
+ * YANG DIKLAIM ANGKA ITU perlu disadari. Untuk parameter cacah dan arah turun
+ * sudah dibuktikan dari tabelnya bahwa sel kosong berarti kejadiannya tidak
+ * ada. Untuk parameter arah naik, sel kosong umumnya berarti BELUM DIUKUR,
+ * dan menilainya penuh adalah keputusan pengguna, bukan temuan data.
+ *
  * PARAMETER TANPA SUMBER sengaja tetap didaftarkan dengan 'sumber' => null.
  * Barisnya tetap muncul di tabel sebagai sel kosong bertanda, supaya kerangka
  * 32 parameter tetap utuh dan yang belum tergarap kelihatan, bukan hilang
@@ -133,10 +150,23 @@ final class ScoreCardParameterRegistry
                     'kosong_label' => 'N/A',
                 ],
 
+            // Sel kosong berarti pasangan itu tidak punya lokasi kritis
+            // terdaftar sama sekali, bukan lokasi yang gagal dikunjungi:
+            // tabelnya memuat 60 baris dengan jumlah lokasi terdaftar
+            // minimum 2, tanpa baris bernilai nol maupun NULL. Tidak ada
+            // lokasi berarti tidak ada yang terlewat, jadi ditulis "N/A".
+            //
+            // NILAINYA 6, BUKAN 0 maupun 100: arah parameter ini NAIK dan band
+            // teratasnya 6%-8%, jadi 6 adalah ambang masuk Nilai 4. Mengisinya
+            // 0 akan memberi Nilai 1 merah, sedangkan 100 di luar rentang band
+            // yang masuk akal untuk parameter ini.
             self::persen('Coverage Area Kritis Pengawas Suptend up',
                 'lead_coverage_area_kritis_pengawas_suptend_up',
                 'site_hst', 'pic_detail_lokasi_clean',
-                'month_of_date_hst', 'pctcoverage_suptend_up', [2, 4, 6, 8]),
+                'month_of_date_hst', 'pctcoverage_suptend_up', [2, 4, 6, 8]) + [
+                    'kosong_berarti' => 6.0,
+                    'kosong_label' => 'N/A',
+                ],
 
             self::persen('% Pengawasan Berjarak', 'lead_pengawasan_berjarak',
                 'site', 'perusahaan_pelapor_all_karyawan',
@@ -153,6 +183,9 @@ final class ScoreCardParameterRegistry
                 'nilai' => 'pct_blindspot_temuan_real_time',
                 'band' => self::BAND_TURUN, 'ambang' => [0, 3, 5],
                 'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+                // Arah turun: nol adalah hasil terbaik.
+                'kosong_berarti' => 0.0,
+                'kosong_label' => 'N/A',
             ],
 
             self::persen('Coverage Daily Area Kritis Pengawas Safety',
@@ -296,6 +329,12 @@ final class ScoreCardParameterRegistry
                 'skala' => 100.0,
                 'band' => self::BAND_REKAYASA, 'ambang' => [80, 100],
                 'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+                // TEPAT 100, BUKAN LEBIH. Band teratas parameter ini menuntut
+                // capaian DI ATAS komitmen, dan tidak adanya komitmen tidak
+                // bisa disebut melampauinya. Yang bisa dikatakan hanya tidak
+                // ada komitmen yang tertunggak, yaitu 100% -- Nilai 3.
+                'kosong_berarti' => 100.0,
+                'kosong_label' => 'N/A',
             ],
             // Pembilangnya di MySQL, penyebutnya di database BeSigma
             // (Postgres), jadi tidak bisa di-JOIN; lihat ambilBesigma().
@@ -335,6 +374,10 @@ final class ScoreCardParameterRegistry
                 'ambang' => [],
                 'satuan' => '%',
                 'ringkas' => self::RINGKAS_RATA,
+                // Tidak ada insiden berarti tidak ada pelaporan yang lewat
+                // batas, jadi 100% -- satu-satunya capaian yang bernilai 4.
+                'kosong_berarti' => 100.0,
+                'kosong_label' => 'N/A',
             ],
 
             self::kosong('Kesiapan alat Emergency'),
@@ -351,6 +394,9 @@ final class ScoreCardParameterRegistry
             'bulan' => $bulan, 'nilai' => $nilai,
             'band' => self::BAND_NAIK, 'ambang' => $ambang,
             'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+            // Arah naik: yang terbaik ada di batas atas band teratas.
+            'kosong_berarti' => (float) ($ambang[3] ?? 100),
+            'kosong_label' => 'N/A',
         ];
     }
 
@@ -363,6 +409,9 @@ final class ScoreCardParameterRegistry
             'bulan' => $bulan, 'nilai' => $nilai,
             'band' => self::BAND_TURUN, 'ambang' => [5, 10, 15],
             'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+            // Arah turun: nol adalah hasil terbaik.
+            'kosong_berarti' => 0.0,
+            'kosong_label' => 'N/A',
         ];
     }
 
@@ -375,6 +424,9 @@ final class ScoreCardParameterRegistry
             'bulan' => $bulan, 'nilai' => $nilai,
             'band' => self::BAND_CACAH, 'ambang' => [3, 5],
             'satuan' => '', 'ringkas' => self::RINGKAS_JUMLAH,
+            // Tidak ada kejadian adalah hasil terbaik.
+            'kosong_berarti' => 0.0,
+            'kosong_label' => 'N/A',
         ];
     }
 
@@ -392,6 +444,8 @@ final class ScoreCardParameterRegistry
             'bulan' => null, 'nilai' => 'sertifikasi', 'tanpa_bulan' => true,
             'band' => self::BAND_NAIK, 'ambang' => [50, 60, 80, 100],
             'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+            'kosong_berarti' => 100.0,
+            'kosong_label' => 'N/A',
         ];
     }
 
@@ -410,6 +464,8 @@ final class ScoreCardParameterRegistry
             'bulan' => $bulan, 'nilai' => $nilai, 'skala' => 100.0,
             'band' => self::BAND_NAIK, 'ambang' => $ambang,
             'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+            'kosong_berarti' => (float) ($ambang[3] ?? 100),
+            'kosong_label' => 'N/A',
         ];
     }
 
