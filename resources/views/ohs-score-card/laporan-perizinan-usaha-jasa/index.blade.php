@@ -5,11 +5,17 @@
 {{--
   Laporan Perizinan Usaha Jasa.
 
-  ANGKANYA PROPORSI DEVIASI, BUKAN KEPATUHAN. Nol berarti tidak ada
-  subkontraktor yang menyimpang, dan itu hasil TERBAIK. Karena itu warna hijau
-  ada di bawah dan merah di atas, urutannya dari yang TERBESAR, dan panah tren
-  naik berwarna merah -- kebalikan dari halaman kepatuhan seperti Pemenuhan
-  Regulasi. Jangan menyalin pewarnaan dari halaman itu ke sini.
+  ANGKANYA TINGKAT PEMENUHAN, dibaca dari kolom performance_<bulan>_26_pct
+  (rasio 0-1, dikali 100). Seratus persen berarti tidak ada subkontraktor yang
+  menyimpang dan itu hasil TERBAIK, jadi arahnya NAIK: hijau di atas, merah di
+  bawah, dan barisnya diurutkan dari yang TERENDAH karena itu yang perlu
+  ditindak.
+
+  ARTI KOLOM ITU PERNAH BERUBAH. Sebelumnya kolom yang sama memuat proporsi
+  deviasi (nol berarti terbaik), dan halaman ini dibangun untuk itu. Kalau
+  suatu saat angkanya terlihat terbalik lagi, periksa catatan di bawah matriks:
+  controller membandingkan kolom persen dengan cacah deviasi dan akan
+  menyebutkan selisihnya.
 
   TIDAK ADA MODE "NILAI". Band resmi parameter ini belum ada, jadi warnanya
   memakai ambang sementara dari controller dan angka Nilai 1-4 tidak pernah
@@ -58,12 +64,12 @@
     outline: 2px solid #487FFF; outline-offset: 1px; position: relative; z-index: 2;
   }
 
-  /* Band 4 = 0% deviasi = terbaik. Arahnya terbalik dari halaman kepatuhan. */
+  /* Band 4 = 100% pemenuhan = terbaik. Arahnya naik. */
   .lpu-b1 { background: #FF0000; color: #fff; }
   .lpu-b2 { background: #FFC000; color: #1F2937; }
   .lpu-b3 { background: #FFFF00; color: #1F2937; }
   .lpu-b4 { background: #92D050; color: #1F2937; }
-  /* Bulan itu belum terdata -- bukan 0% deviasi. */
+  /* Bulan itu belum terdata -- bukan 0% pemenuhan. */
   .lpu-kosong {
     background: #F8FAFC; color: #CBD5E1; border-style: dashed; border-color: #E2E8F0;
   }
@@ -185,13 +191,13 @@
 
     function renderKpi(k) {
         el('kpi').innerHTML =
-            ubin('Deviasi keseluruhan', fmtPct(k.rata),
-                fmtNum(k.deviasi) + ' kejadian · 0% adalah hasil terbaik')
+            ubin('Pemenuhan keseluruhan', fmtPct(k.rata),
+                '100% adalah hasil terbaik · ' + fmtNum(k.deviasi) + ' deviasi tercatat')
             + ubin('Total subcontractor', fmtNum(k.subcont),
                 'di ' + fmtNum(k.kombinasi) + ' pasangan site &amp; main contractor')
-            + ubin('Tanpa deviasi', fmtNum(k.kombinasi_bersih) + ' / ' + fmtNum(k.kombinasi),
-                'pasangan bersih sepanjang periode')
-            + ubin('Tertinggi', fmtPct(k.tertinggi), 'pada satu pasangan');
+            + ubin('Sudah 100%', fmtNum(k.kombinasi_sempurna) + ' / ' + fmtNum(k.kombinasi),
+                'pasangan tanpa deviasi sepanjang periode')
+            + ubin('Terendah', fmtPct(k.terendah), 'pada satu pasangan');
     }
 
     // ------------------------------------------------------------- MATRIKS
@@ -231,7 +237,7 @@
                 + '<td>' + fmtNum(row.subcont) + '</td>'
                 + '<td class="lpu-rata" title="' + escapeHtml(
                     fmtNum(row.deviasi) + ' deviasi · ' + row.bulan_terisi + ' bulan terdata'
-                    + (row.puncak ? ' · tertinggi di ' + row.puncak : ''))
+                    + (row.terendah ? ' · terendah di ' + row.terendah : ''))
                 + '">' + fmtPct(row.average) + '</td>';
 
             row.cells.forEach(function (sel, m) {
@@ -243,8 +249,9 @@
                 }
 
                 var tip = row.site + ' · ' + row.mitra + ' · ' + months[m].label + ': '
-                    + sel.deviasi + ' dari ' + sel.total + ' subcontractor menyimpang ('
-                    + fmtPct(sel.pct) + ')';
+                    + 'pemenuhan ' + fmtPct(sel.pct) + ' · '
+                    + fmtNum(sel.deviasi) + ' dari ' + fmtNum(sel.total)
+                    + ' subcontractor menyimpang';
 
                 html += '<td class="lpu-cell lpu-cell--klik ' + cellClass(sel) + '"'
                     + ' role="button" tabindex="0"'
@@ -252,7 +259,7 @@
                     + ' data-mitra="' + escapeHtml(row.mitra) + '"'
                     + ' data-bulan="' + months[m].number + '"'
                     + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
-                    + (sel.pct === 0 ? '0%' : fmtPct(sel.pct))
+                    + (sel.pct === 100 ? '100%' : fmtPct(sel.pct))
                     + '</td>';
             });
 
@@ -282,9 +289,10 @@
         }
 
         el(nama).innerHTML = rows.map(function (r) {
-            /* Lebar bar dibesarkan lima kali karena deviasinya kecil (0-12%);
-               tanpa itu seluruh batang tampak kosong dan tidak terbaca. */
-            var lebar = Math.max(0, Math.min(100, Number(r.percent || 0) * 5));
+            /* Nilainya berkerumun di 88-100%, jadi batang yang digambar dari
+               nol semuanya tampak penuh dan tak terbedakan. Yang digambar
+               karena itu KEKURANGANNYA terhadap 100%, diperbesar lima kali. */
+            var lebar = Math.max(2, Math.min(100, (100 - Number(r.percent || 0)) * 5));
 
             return '<div class="mb-16">'
                 + '<div class="d-flex align-items-center justify-content-between gap-2 mb-6">'
@@ -293,7 +301,8 @@
                 + '<span class="' + badgeClass(r.band) + ' px-8 py-2 rounded-pill fw-medium text-xs">'
                 + fmtPct(r.percent) + '</span>'
                 + '</div>'
-                + '<div class="lpu-bar"><span class="' + barClass(r.band) + '" style="width:' + lebar + '%;"></span></div>'
+                + '<div class="lpu-bar" title="panjang batang = kekurangan terhadap 100%">'
+                + '<span class="' + barClass(r.band) + '" style="width:' + lebar + '%;"></span></div>'
                 + '<span class="text-xs text-secondary-light">'
                 + fmtNum(r.deviasi) + ' deviasi dari ' + fmtNum(r.total) + ' pemeriksaan</span>'
                 + '</div>';
@@ -306,20 +315,28 @@
             return;
         }
 
-        var maks = Math.max.apply(null, d.data.map(function (x) { return Number(x || 0); }));
+        /* Batangnya menggambarkan KEKURANGAN terhadap 100%, bukan nilainya:
+           seluruh angka ada di 90-100% sehingga batang dari nol tampak sama
+           tinggi semua dan tidak memberi tahu apa pun. */
+        var kurang = d.data.map(function (x) {
+            return x === null ? null : 100 - Number(x);
+        });
+        var maks = Math.max.apply(null, kurang.map(function (x) { return Number(x || 0); }));
 
         el('per-bulan').innerHTML = '<div class="d-flex align-items-end gap-2" style="height:140px;">'
             + d.labels.map(function (l, i) {
                 var v = d.data[i];
-                var tinggi = (maks > 0 && v !== null) ? Math.max(3, Number(v) / maks * 100) : 3;
+                var k = kurang[i];
+                var tinggi = (maks > 0 && k !== null) ? Math.max(3, k / maks * 100) : 3;
 
                 return '<div class="flex-fill d-flex flex-column align-items-center gap-1"'
-                    + ' title="' + escapeHtml(l + ': ' + fmtPct(v)) + '">'
+                    + ' title="' + escapeHtml(l + ': pemenuhan ' + fmtPct(v)
+                        + ' · kurang ' + fmtPct(k)) + '">'
                     + '<span class="text-xs text-secondary-light">'
                     + (v === null ? '–' : Number(v).toLocaleString('id-ID',
                         { maximumFractionDigits: 1 }) + '%') + '</span>'
                     + '<div style="width:100%;height:' + tinggi + '%;background:'
-                    + (Number(v || 0) > 0 ? '#FF0000' : '#92D050')
+                    + (Number(k || 0) > 0 ? '#FF0000' : '#92D050')
                     + ';border-radius:4px 4px 0 0;"></div>'
                     + '<span class="text-xs text-secondary-light">' + escapeHtml(l.substring(0, 3))
                     + '</span></div>';
@@ -362,22 +379,22 @@
 
         var html = '<div class="row gy-3 mb-16">'
             + '<div class="col-sm-6"><div class="card radius-8 border h-100"><div class="card-body p-16">'
-            + '<span class="text-xs text-secondary-light d-block mb-4">Deviasi</span>'
+            + '<span class="text-xs text-secondary-light d-block mb-4">Pemenuhan</span>'
             + '<h6 class="fw-semibold mb-0">' + fmtPct(d.persen) + '</h6>'
             + '<span class="text-xs text-secondary-light">'
-            + fmtNum(d.deviasi) + ' dari ' + fmtNum(d.total) + ' subcontractor</span>'
+            + fmtNum(d.deviasi) + ' dari ' + fmtNum(d.total) + ' subcontractor menyimpang</span>'
             + '</div></div></div>'
             + '<div class="col-sm-6"><div class="card radius-8 border h-100"><div class="card-body p-16">'
-            + '<span class="text-xs text-secondary-light d-block mb-4">Peringkat deviasi tertinggi</span>'
+            + '<span class="text-xs text-secondary-light d-block mb-4">Peringkat perlu ditindak</span>'
             + '<h6 class="fw-semibold mb-0">' + fmtNum(d.peringkat) + ' dari ' + fmtNum(d.dari) + '</h6>'
-            + '<span class="text-xs text-secondary-light">peringkat 1 = deviasi terbesar</span>'
+            + '<span class="text-xs text-secondary-light">peringkat 1 = pemenuhan terendah</span>'
             + '</div></div></div></div>';
 
         if (d.riwayat && d.riwayat.length) {
             html += '<h6 class="text-sm fw-semibold mb-8">Riwayat kombinasi ini</h6>'
                 + '<div class="lpu-modal-scroll mb-16"><table class="table table-sm mb-0">'
                 + '<thead><tr><th>Bulan</th><th class="text-end">Deviasi</th>'
-                + '<th class="text-end">Proporsi</th></tr></thead><tbody>'
+                + '<th class="text-end">Pemenuhan</th></tr></thead><tbody>'
                 + d.riwayat.map(function (r) {
                     return '<tr' + (r.ini ? ' class="fw-semibold"' : '') + '>'
                         + '<td>' + escapeHtml(r.label) + (r.ini ? ' (sel ini)' : '') + '</td>'
@@ -390,10 +407,10 @@
 
         if (d.sebulan && d.sebulan.length) {
             html += '<h6 class="text-sm fw-semibold mb-8">Kombinasi lain pada ' + escapeHtml(d.bulan)
-                + ' — terbesar lebih dulu</h6>'
+                + ' — terendah lebih dulu</h6>'
                 + '<div class="lpu-modal-scroll"><table class="table table-sm mb-0">'
                 + '<thead><tr><th>Site</th><th>Main Contractor</th>'
-                + '<th class="text-end">Deviasi</th></tr></thead><tbody>'
+                + '<th class="text-end">Pemenuhan</th></tr></thead><tbody>'
                 + d.sebulan.map(function (s) {
                     return '<tr><td>' + escapeHtml(s.site) + '</td>'
                         + '<td>' + escapeHtml(s.mitra) + '</td>'
@@ -448,7 +465,7 @@
 
                 var k = json.kpi;
                 el('status').textContent = fmtNum(k.kombinasi) + ' pasangan site/main contractor · '
-                    + fmtNum(k.subcont) + ' subcontractor · deviasi ' + fmtPct(k.rata);
+                    + fmtNum(k.subcont) + ' subcontractor · pemenuhan ' + fmtPct(k.rata);
             })
             .catch(function () {
                 el('status').textContent = 'Gagal memuat data.';
@@ -591,9 +608,10 @@
                         }
 
                         return '<span class="lpu-b' + b.band + ' px-6 py-2 radius-4 text-xs fw-medium"'
-                            + ' title="' + escapeHtml(b.label + ': ' + b.deviasi + ' deviasi · '
-                                + fmtPct(b.persen)) + '">'
-                            + escapeHtml(b.label.substring(0, 3)) + ' ' + fmtNum(b.deviasi)
+                            + ' title="' + escapeHtml(b.label + ': pemenuhan ' + fmtPct(b.persen)
+                                + ' · ' + (b.deviasi === null ? '?' : b.deviasi) + ' deviasi') + '">'
+                            + escapeHtml(b.label.substring(0, 3)) + ' '
+                            + Math.round(b.persen) + '%'
                             + '</span>';
                     }).join('') + '</div>';
                 }

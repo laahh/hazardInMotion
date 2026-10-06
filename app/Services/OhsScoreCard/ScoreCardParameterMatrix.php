@@ -233,9 +233,9 @@ final class ScoreCardParameterMatrix
     /**
      * Laporan Perizinan Usaha Jasa: subkontraktor menyimpang dibagi seluruhnya.
      *
-     * ANGKANYA PROPORSI DEVIASI, BUKAN KEPATUHAN. Nol adalah hasil TERBAIK.
-     * Registry sengaja mendaftarkannya tanpa band supaya tidak ada Nilai yang
-     * dikarang; begitu band resminya ada, arahnya BAND_TURUN.
+     * ANGKANYA TINGKAT PEMENUHAN: 100% adalah hasil TERBAIK. Registry sengaja
+     * mendaftarkannya tanpa band supaya tidak ada Nilai yang dikarang; begitu
+     * band resminya ada, arahnya BAND_NAIK.
      *
      * TABELNYA BERFORMAT LEBAR: satu baris per main_cont x site_dedicated,
      * dengan bulan sebagai kolom. Jadi tiap baris dibongkar menjadi sembilan
@@ -246,9 +246,9 @@ final class ScoreCardParameterMatrix
      * Tanpa itu, main contractor dengan satu subkontraktor dihitung sama besar
      * dengan yang punya tiga puluh delapan.
      *
-     * ANGKANYA DIHITUNG DARI KOLOM deviasi, BUKAN DARI KOLOM pct: lihat
-     * LaporanPerizinanUsahaJasa, performance_sep_26_pct bertipe int sehingga
-     * rasio pecahan akan terpotong kalau ditulis ke sana.
+     * PERSENTASENYA DARI KOLOM performance_<bulan>_26_pct, sama dengan
+     * halamannya. Pembilangnya diturunkan dari persen itu dikali cacah
+     * subkontraktor supaya rata-ratanya tetap bisa tertimbang.
      *
      * @return array<string, array{jumlah: float, baris: int}>|null
      */
@@ -272,7 +272,7 @@ final class ScoreCardParameterMatrix
             foreach (LaporanPerizinanUsahaJasa::BULAN as $akhiran => $bulan) {
                 // Kolom bulan yang belum dibuat di tabel dilewati, bukan
                 // dianggap nol deviasi.
-                if (!isset($kolomAda[LaporanPerizinanUsahaJasa::kolomDeviasi($akhiran)])) {
+                if (!isset($kolomAda[LaporanPerizinanUsahaJasa::kolomPersen($akhiran)])) {
                     continue;
                 }
 
@@ -292,7 +292,8 @@ final class ScoreCardParameterMatrix
                     continue;
                 }
 
-                $out[$kunci]['jumlah'] = ($out[$kunci]['jumlah'] ?? 0.0) + $angka['deviasi'];
+                $out[$kunci]['jumlah'] = ($out[$kunci]['jumlah'] ?? 0.0)
+                    + $angka['persen'] / 100 * $angka['total'];
                 $out[$kunci]['baris'] = ($out[$kunci]['baris'] ?? 0) + $angka['total'];
             }
         }

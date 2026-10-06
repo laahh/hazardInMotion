@@ -20,11 +20,22 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * Sumbernya scr_business_license_performance: 16 baris, satu per main_cont x
  * site_dedicated, BERFORMAT LEBAR dengan bulan sebagai kolom.
  *
- * ANGKANYA PROPORSI DEVIASI, BUKAN KEPATUHAN. Nol berarti tidak ada
- * subkontraktor yang menyimpang -- hasil TERBAIK. Seluruh pengurutan,
- * peringkat, dan pewarnaan di halaman ini karena itu berarah TURUN: yang
- * terbesar justru yang paling perlu dilihat. Lihat LaporanPerizinanUsahaJasa
- * untuk pembuktian rumusnya.
+ * PERSENTASENYA DARI KOLOM performance_<bulan>_26_pct (rasio 0-1, dikali 100)
+ * dan merupakan TINGKAT PEMENUHAN: 100% berarti tidak ada subkontraktor yang
+ * menyimpang, dan itu hasil TERBAIK. Arahnya NAIK -- pengurutan, peringkat,
+ * dan pewarnaan semuanya menempatkan yang TERENDAH sebagai yang paling perlu
+ * ditindak.
+ *
+ * Cacah deviasi tetap ditampilkan sebagai pendamping dan dipakai memeriksa
+ * silang kolom pct; lihat LaporanPerizinanUsahaJasa, termasuk catatan bahwa
+ * arti kolom itu pernah berubah.
+ *
+ * RATA-RATANYA TERTIMBANG terhadap cacah subkontraktor. Untuk SATU baris itu
+ * tidak mengubah apa pun -- penyebutnya sama di seluruh bulan, sehingga
+ * rata-rata tertimbang dan rata-rata biasa menghasilkan angka yang sama. Yang
+ * membedakan ada di tingkat site dan keseluruhan, tempat main contractor
+ * dengan satu subkontraktor tidak boleh berbobot sama dengan yang punya tiga
+ * puluh delapan.
  *
  * BAND RESMINYA BELUM ADA. Ambang di AMBANG_SEMENTARA bukan dari tabel band
  * resmi; dipakai hanya supaya selnya terbaca. Karena itu halaman ini TIDAK
@@ -38,14 +49,14 @@ final class LaporanPerizinanUsahaJasaController extends Controller
     private const TABEL = LaporanPerizinanUsahaJasa::TABEL;
 
     /**
-     * Ambang warna SEMENTARA, bukan band resmi, dan BERARAH TURUN: nol persen
-     * deviasi adalah hasil terbaik.
+     * Ambang warna SEMENTARA, bukan band resmi, BERARAH NAIK: seratus persen
+     * pemenuhan adalah hasil terbaik.
      *
-     * Bentuknya mengikuti band "% Blindspot temuan Real Time" yang memang
-     * berarah sama (0% terbaik, >5% terburuk), tetapi itu band parameter LAIN.
-     * Begitu band resmi parameter ini ada, ganti di sini saja.
+     * Bentuknya mengikuti parameter kepatuhan lain di modul ini, dan rentang
+     * datanya sekarang memang 88,89%-100%. Begitu band resmi parameter ini
+     * ada, ganti di sini saja.
      */
-    private const AMBANG_SEMENTARA = [0.0, 3.0, 5.0];
+    private const AMBANG_SEMENTARA = [95.0, 98.0, 100.0];
 
     /** Batas baris yang dikirim ke modal rincian sel. */
     private const BATAS_DETAIL = 200;
@@ -58,8 +69,8 @@ final class LaporanPerizinanUsahaJasaController extends Controller
     {
         return view('ohs-score-card.laporan-perizinan-usaha-jasa.index', [
             'judul' => 'Laporan Perizinan Usaha Jasa',
-            'penjelasan' => 'Subkontraktor yang menyimpang dibagi seluruh subkontraktor '
-                . 'tiap main contractor di tiap site',
+            'penjelasan' => 'Tingkat pemenuhan perizinan subkontraktor tiap main contractor '
+                . 'di tiap site',
             'tabel' => self::TABEL,
             'legenda' => $this->legendaSementara(),
             'filterOptions' => [
@@ -88,19 +99,20 @@ final class LaporanPerizinanUsahaJasaController extends Controller
             }
 
             $sel = [];
-            $deviasi = 0;
+            $penuh = 0.0;
             $dasar = 0;
+            $deviasi = 0;
 
             foreach ($bulanDipilih as $akhiran => $nomor) {
                 $angka = LaporanPerizinanUsahaJasa::selBulan($r, $akhiran);
 
                 if ($angka === null) {
-                    // Bulan itu belum terdata -- bukan nol deviasi.
+                    // Bulan itu belum terdata -- bukan nol pemenuhan.
                     $sel[] = ['ada' => false, 'pct' => null, 'band' => null];
                     continue;
                 }
 
-                $persen = round($angka['deviasi'] / $angka['total'] * 100, 2);
+                $persen = $angka['persen'];
 
                 $sel[] = [
                     'ada' => true,
@@ -108,22 +120,18 @@ final class LaporanPerizinanUsahaJasaController extends Controller
                     'band' => $this->bandSementara($persen),
                     'deviasi' => $angka['deviasi'],
                     'total' => $angka['total'],
-                    // Kolom pct bawaan disimpan apa adanya supaya selisih
-                    // dengan hitungan sendiri ketahuan kalau sumbernya berubah.
-                    'pct_sumber' => $r->{LaporanPerizinanUsahaJasa::kolomPersen($akhiran)} === null
-                        ? null
-                        : round((float) $r->{LaporanPerizinanUsahaJasa::kolomPersen($akhiran)} * 100, 2),
+                    'sepakat' => $angka['sepakat'],
                 ];
 
-                $deviasi += $angka['deviasi'];
+                // Pembilang diturunkan DARI PERSENNYA, bukan dari kolom
+                // deviasi, supaya kolom pct benar-benar yang menentukan setiap
+                // angka di halaman ini -- termasuk rata-rata tertimbangnya.
+                $penuh += $persen / 100 * $angka['total'];
                 $dasar += $angka['total'];
+                $deviasi += (int) ($angka['deviasi'] ?? 0);
             }
 
-            // RATA-RATANYA TERTIMBANG: dijumlahkan dulu deviasi dan
-            // penyebutnya, baru dibagi. Merata-ratakan persentase bulanan
-            // memberi bobot sama kepada main contractor berisi 1 subkontraktor
-            // dan yang berisi 38.
-            $rata = $dasar > 0 ? round($deviasi / $dasar * 100, 2) : null;
+            $rata = $dasar > 0 ? round($penuh / $dasar * 100, 2) : null;
 
             $baris[] = [
                 'site' => $site,
@@ -134,14 +142,14 @@ final class LaporanPerizinanUsahaJasaController extends Controller
                 'deviasi' => $deviasi,
                 'subcont' => (int) $r->total_perusahaan_subcontractor,
                 'bulan_terisi' => count(array_filter($sel, static fn (array $s): bool => $s['ada'])),
-                'puncak' => $this->bulanPuncak($sel, $bulanDipilih),
+                'terendah' => $this->bulanTerendah($sel, $bulanDipilih),
             ];
         }
 
-        // ARAH TURUN: deviasi TERBESAR lebih dulu, karena itu yang perlu
-        // ditindak. Kebalikan dari parameter kepatuhan.
+        // ARAH NAIK: pemenuhan TERENDAH lebih dulu, karena itu yang perlu
+        // ditindak. Baris tanpa angka ditaruh di belakang, bukan di depan.
         usort($baris, static function (array $a, array $b): int {
-            return ($b['average'] ?? -1.0) <=> ($a['average'] ?? -1.0);
+            return ($a['average'] ?? 101.0) <=> ($b['average'] ?? 101.0);
         });
 
         return response()->json([
@@ -163,24 +171,26 @@ final class LaporanPerizinanUsahaJasaController extends Controller
     }
 
     /**
-     * Bulan dengan deviasi tertinggi di satu baris, untuk kolom penanda.
+     * Bulan dengan pemenuhan terendah di satu baris, untuk kolom penanda.
      *
      * @param  array<int, array<string, mixed>>  $sel
      * @param  array<string, int>  $bulan
      */
-    private function bulanPuncak(array $sel, array $bulan): ?string
+    private function bulanTerendah(array $sel, array $bulan): ?string
     {
         $nomor = array_values($bulan);
-        $terbaik = null;
+        $terendah = null;
         $indeks = null;
 
         foreach ($sel as $i => $s) {
-            if (!$s['ada'] || $s['pct'] <= 0.0) {
+            // Bulan yang sudah sempurna bukan temuan, jadi tidak dianggap
+            // sebagai titik terendah yang perlu ditunjuk.
+            if (!$s['ada'] || $s['pct'] >= 100.0) {
                 continue;
             }
 
-            if ($terbaik === null || $s['pct'] > $terbaik) {
-                $terbaik = $s['pct'];
+            if ($terendah === null || $s['pct'] < $terendah) {
+                $terendah = $s['pct'];
                 $indeks = $i;
             }
         }
@@ -194,21 +204,23 @@ final class LaporanPerizinanUsahaJasaController extends Controller
      */
     private function bangunKpi(array $baris): array
     {
-        $deviasi = 0;
+        $penuh = 0.0;
         $dasar = 0;
         $subcont = 0;
-        $tertinggi = null;
-        $bersih = 0;
+        $deviasi = 0;
+        $terendah = null;
+        $sempurna = 0;
 
         foreach ($baris as $b) {
             $subcont += $b['subcont'];
+            $deviasi += $b['deviasi'];
 
             foreach ($b['cells'] as $s) {
                 if (!$s['ada']) {
                     continue;
                 }
 
-                $deviasi += $s['deviasi'];
+                $penuh += $s['pct'] / 100 * $s['total'];
                 $dasar += $s['total'];
             }
 
@@ -216,14 +228,14 @@ final class LaporanPerizinanUsahaJasaController extends Controller
                 continue;
             }
 
-            $tertinggi = $tertinggi === null ? $b['average'] : max($tertinggi, $b['average']);
+            $terendah = $terendah === null ? $b['average'] : min($terendah, $b['average']);
 
-            if ($b['average'] <= 0.0) {
-                $bersih++;
+            if ($b['average'] >= 100.0) {
+                $sempurna++;
             }
         }
 
-        $rata = $dasar > 0 ? round($deviasi / $dasar * 100, 2) : null;
+        $rata = $dasar > 0 ? round($penuh / $dasar * 100, 2) : null;
 
         return [
             'rata' => $rata,
@@ -231,8 +243,8 @@ final class LaporanPerizinanUsahaJasaController extends Controller
             'deviasi' => $deviasi,
             'subcont' => $subcont,
             'kombinasi' => count($baris),
-            'kombinasi_bersih' => $bersih,
-            'tertinggi' => $tertinggi,
+            'kombinasi_sempurna' => $sempurna,
+            'terendah' => $terendah,
         ];
     }
 
@@ -252,10 +264,12 @@ final class LaporanPerizinanUsahaJasaController extends Controller
                     continue;
                 }
 
-                $kelompok[$label]['deviasi'] = ($kelompok[$label]['deviasi'] ?? 0) + $s['deviasi'];
+                $kelompok[$label]['penuh'] = ($kelompok[$label]['penuh'] ?? 0.0)
+                    + $s['pct'] / 100 * $s['total'];
                 $kelompok[$label]['total'] = ($kelompok[$label]['total'] ?? 0) + $s['total'];
             }
 
+            $kelompok[$label]['deviasi'] = ($kelompok[$label]['deviasi'] ?? 0) + $b['deviasi'];
             $kelompok[$label]['baris'] = ($kelompok[$label]['baris'] ?? 0) + 1;
         }
 
@@ -266,7 +280,7 @@ final class LaporanPerizinanUsahaJasaController extends Controller
                 continue;
             }
 
-            $persen = round($a['deviasi'] / $a['total'] * 100, 2);
+            $persen = round($a['penuh'] / $a['total'] * 100, 2);
 
             $out[] = [
                 'label' => (string) $label,
@@ -278,8 +292,8 @@ final class LaporanPerizinanUsahaJasaController extends Controller
             ];
         }
 
-        // Deviasi terbesar lebih dulu.
-        usort($out, static fn (array $a, array $b): int => $b['percent'] <=> $a['percent']);
+        // Pemenuhan terendah lebih dulu.
+        usort($out, static fn (array $a, array $b): int => $a['percent'] <=> $b['percent']);
 
         return $out;
     }
@@ -296,7 +310,7 @@ final class LaporanPerizinanUsahaJasaController extends Controller
         $i = 0;
 
         foreach ($bulan as $nomor) {
-            $deviasi = 0;
+            $penuh = 0.0;
             $total = 0;
 
             foreach ($baris as $b) {
@@ -306,12 +320,12 @@ final class LaporanPerizinanUsahaJasaController extends Controller
                     continue;
                 }
 
-                $deviasi += $s['deviasi'];
+                $penuh += $s['pct'] / 100 * $s['total'];
                 $total += $s['total'];
             }
 
             $label[] = LaporanPerizinanUsahaJasa::LABEL_BULAN[$nomor];
-            $data[] = $total > 0 ? round($deviasi / $total * 100, 2) : null;
+            $data[] = $total > 0 ? round($penuh / $total * 100, 2) : null;
             $i++;
         }
 
@@ -322,40 +336,69 @@ final class LaporanPerizinanUsahaJasaController extends Controller
     {
         $bagian = [];
 
-        // Bulan yang seluruh barisnya nol deviasi. Perlu disebut karena nol di
-        // sini berarti "sudah diperiksa dan bersih", dan itu mudah tertukar
+        // Bulan yang seluruh barisnya sudah 100%. Perlu disebut karena sempurna
+        // di sini berarti "sudah diperiksa dan bersih", dan itu mudah tertukar
         // dengan "belum diisi".
-        // SATU QUERY UNTUK SEMBILAN BULAN, bukan sembilan COUNT terpisah.
-        // Databasenya jauh, dan sembilan perjalanan pulang-pergi hanya untuk
+        //
+        // SATU QUERY UNTUK SEMBILAN BULAN, bukan sembilan COUNT terpisah:
+        // databasenya jauh, dan sembilan perjalanan pulang-pergi hanya untuk
         // satu kalimat catatan membuat halaman ini menunggu beberapa detik.
         $pilih = [];
 
         foreach (array_keys(LaporanPerizinanUsahaJasa::BULAN) as $akhiran) {
-            $kolom = LaporanPerizinanUsahaJasa::kolomDeviasi($akhiran);
-            $pilih[] = 'SUM(`' . $kolom . '` <> 0) AS `' . $akhiran . '`';
+            $kolom = LaporanPerizinanUsahaJasa::kolomPersen($akhiran);
+            $pilih[] = 'SUM(`' . $kolom . '` < 1) AS `' . $akhiran . '`';
         }
 
         $cacah = DB::table(self::TABEL)->selectRaw(implode(', ', $pilih))->first();
-        $nol = [];
+        $sempurna = [];
 
         foreach (LaporanPerizinanUsahaJasa::BULAN as $akhiran => $nomor) {
             if ((int) ($cacah->{$akhiran} ?? 0) === 0) {
-                $nol[] = LaporanPerizinanUsahaJasa::LABEL_BULAN[$nomor];
+                $sempurna[] = LaporanPerizinanUsahaJasa::LABEL_BULAN[$nomor];
             }
         }
 
-        if ($nol !== []) {
+        if ($sempurna !== []) {
             $bagian[] = sprintf(
-                'Pada %s seluruh baris mencatat 0 deviasi. Kolom deviasi memang terisi '
-                . '(bukan kosong), jadi itu dibaca sebagai tidak ada penyimpangan, bukan '
-                . 'sebagai data yang belum masuk.',
-                implode(' dan ', $nol)
+                'Pada %s seluruh baris mencatat 100%%. Kolomnya memang terisi (bukan kosong), '
+                . 'jadi itu dibaca sebagai tidak ada penyimpangan, bukan sebagai data yang '
+                . 'belum masuk.',
+                implode(' dan ', $sempurna)
             );
         }
 
-        $bagian[] = 'Angka di halaman ini adalah PROPORSI DEVIASI, bukan tingkat kepatuhan: '
-            . '0% berarti tidak ada subkontraktor yang menyimpang dan itu hasil terbaik. '
-            . 'Urutannya karena itu dari yang terbesar.';
+        // PEMERIKSAAN SILANG, bukan sekadar catatan. Arti kolom performance_*_pct
+        // pernah berubah dari proporsi deviasi menjadi komplemennya, dan
+        // perubahan seperti itu tidak mengubah bentuk datanya sama sekali --
+        // satu-satunya cara menangkapnya adalah membandingkannya dengan cacah
+        // deviasi. Yang ditampilkan tetap kolom persen; selisihnya disebutkan
+        // supaya tidak tersembunyi.
+        $tidakSepakat = 0;
+
+        foreach ($this->queryDasar($request)->get() as $r) {
+            foreach (array_keys(LaporanPerizinanUsahaJasa::BULAN) as $akhiran) {
+                $x = LaporanPerizinanUsahaJasa::selBulan($r, $akhiran);
+
+                if ($x !== null && !$x['sepakat']) {
+                    $tidakSepakat++;
+                }
+            }
+        }
+
+        if ($tidakSepakat > 0) {
+            $bagian[] = sprintf(
+                'PERHATIAN: %d sel memiliki kolom performance_*_pct yang tidak sejalan dengan '
+                . '1 dikurangi deviasi dibagi total subcontractor. Yang ditampilkan adalah '
+                . 'kolom performance_*_pct.',
+                $tidakSepakat
+            );
+        }
+
+        $bagian[] = 'Persentase di halaman ini dibaca dari kolom performance_<bulan>_26_pct '
+            . '(rasio 0-1, dikali 100) dan merupakan TINGKAT PEMENUHAN: 100% berarti tidak ada '
+            . 'subkontraktor yang menyimpang dan itu hasil terbaik. Urutannya karena itu dari '
+            . 'yang terendah.';
 
         return implode(' ', $bagian);
     }
@@ -390,7 +433,7 @@ final class LaporanPerizinanUsahaJasaController extends Controller
             return response()->json(['message' => 'Bulan itu belum terdata untuk kombinasi ini.'], 404);
         }
 
-        $persen = round($angka['deviasi'] / $angka['total'] * 100, 2);
+        $persen = $angka['persen'];
 
         // Riwayat kombinasi yang sama sepanjang bulan yang ada.
         $riwayat = [];
@@ -402,13 +445,11 @@ final class LaporanPerizinanUsahaJasaController extends Controller
                 continue;
             }
 
-            $p = round($x['deviasi'] / $x['total'] * 100, 2);
-
             $riwayat[] = [
                 'bulan' => $n,
                 'label' => LaporanPerizinanUsahaJasa::LABEL_BULAN[$n],
-                'persen' => $p,
-                'band' => $this->bandSementara($p),
+                'persen' => $x['persen'],
+                'band' => $this->bandSementara($x['persen']),
                 'deviasi' => $x['deviasi'],
                 'total' => $x['total'],
                 'ini' => $n === $nomor,
@@ -416,7 +457,8 @@ final class LaporanPerizinanUsahaJasaController extends Controller
         }
 
         // Peringkat sel ini di antara kombinasi lain pada bulan yang sama.
-        // ARAH TURUN: deviasi terbesar menempati peringkat 1.
+        // ARAH NAIK: pemenuhan terendah menempati peringkat 1, karena itu yang
+        // paling perlu ditindak.
         $sebulan = [];
 
         foreach (DB::table(self::TABEL)->get() as $r) {
@@ -429,13 +471,13 @@ final class LaporanPerizinanUsahaJasaController extends Controller
             $sebulan[] = [
                 'site' => trim((string) $r->site_dedicated),
                 'mitra' => trim((string) $r->main_cont),
-                'persen' => round($x['deviasi'] / $x['total'] * 100, 2),
+                'persen' => $x['persen'],
                 'deviasi' => $x['deviasi'],
                 'total' => $x['total'],
             ];
         }
 
-        usort($sebulan, static fn (array $a, array $b): int => $b['persen'] <=> $a['persen']);
+        usort($sebulan, static fn (array $a, array $b): int => $a['persen'] <=> $b['persen']);
 
         $peringkat = 0;
 
@@ -516,8 +558,8 @@ final class LaporanPerizinanUsahaJasaController extends Controller
         $kepala = ['Site', 'Main Contractor', 'Total Subcontractor'];
 
         foreach (LaporanPerizinanUsahaJasa::BULAN as $n) {
-            $kepala[] = LaporanPerizinanUsahaJasa::LABEL_BULAN[$n] . ' (deviasi)';
             $kepala[] = LaporanPerizinanUsahaJasa::LABEL_BULAN[$n] . ' (%)';
+            $kepala[] = LaporanPerizinanUsahaJasa::LABEL_BULAN[$n] . ' (deviasi)';
         }
 
         $kepala[] = 'Rata-rata (%)';
@@ -529,8 +571,8 @@ final class LaporanPerizinanUsahaJasaController extends Controller
                 $baris = [$r['site'], $r['mitra'], $r['subcont']];
 
                 foreach ($r['bulan'] as $b) {
-                    $baris[] = $b['ada'] ? $b['deviasi'] : '-';
                     $baris[] = $b['ada'] ? number_format($b['persen'], 2, ',', '.') : '-';
+                    $baris[] = $b['ada'] && $b['deviasi'] !== null ? $b['deviasi'] : '-';
                 }
 
                 $baris[] = $r['rata'] === null
@@ -546,8 +588,9 @@ final class LaporanPerizinanUsahaJasaController extends Controller
     private function sajikan(object $row): array
     {
         $bulan = [];
-        $deviasi = 0;
+        $penuh = 0.0;
         $dasar = 0;
+        $deviasi = 0;
 
         foreach (LaporanPerizinanUsahaJasa::BULAN as $akhiran => $nomor) {
             $angka = LaporanPerizinanUsahaJasa::selBulan($row, $akhiran);
@@ -557,7 +600,7 @@ final class LaporanPerizinanUsahaJasaController extends Controller
                 continue;
             }
 
-            $persen = round($angka['deviasi'] / $angka['total'] * 100, 2);
+            $persen = $angka['persen'];
 
             $bulan[] = [
                 'ada' => true,
@@ -567,11 +610,12 @@ final class LaporanPerizinanUsahaJasaController extends Controller
                 'band' => $this->bandSementara($persen),
             ];
 
-            $deviasi += $angka['deviasi'];
+            $penuh += $persen / 100 * $angka['total'];
             $dasar += $angka['total'];
+            $deviasi += (int) ($angka['deviasi'] ?? 0);
         }
 
-        $rata = $dasar > 0 ? round($deviasi / $dasar * 100, 2) : null;
+        $rata = $dasar > 0 ? round($penuh / $dasar * 100, 2) : null;
 
         return [
             'site' => trim((string) $row->site_dedicated),
@@ -620,26 +664,25 @@ final class LaporanPerizinanUsahaJasaController extends Controller
     }
 
     /**
-     * Nomor band 1-4 dari ambang SEMENTARA, BERARAH TURUN.
+     * Nomor band 1-4 dari ambang SEMENTARA, BERARAH NAIK.
      *
-     * Nol persen deviasi adalah hasil terbaik, jadi band 4 ada di bawah dan
-     * band 1 di atas -- kebalikan dari parameter kepatuhan. Ini bukan Nilai
-     * resmi dan tidak pernah ditampilkan sebagai angka Nilai; nomornya hanya
-     * menentukan warna sel.
+     * Seratus persen pemenuhan adalah hasil terbaik, jadi band 4 ada di atas.
+     * Ini bukan Nilai resmi dan tidak pernah ditampilkan sebagai angka Nilai;
+     * nomornya hanya menentukan warna sel.
      */
     private function bandSementara(float $persen): int
     {
-        [$b4, $b3, $b2] = self::AMBANG_SEMENTARA;
+        [$b2, $b3, $b4] = self::AMBANG_SEMENTARA;
 
-        if ($persen <= $b4) {
+        if ($persen >= $b4) {
             return 4;
         }
 
-        if ($persen <= $b3) {
+        if ($persen >= $b3) {
             return 3;
         }
 
-        if ($persen <= $b2) {
+        if ($persen >= $b2) {
             return 2;
         }
 
@@ -649,12 +692,12 @@ final class LaporanPerizinanUsahaJasaController extends Controller
     /** @return array<int, array{band: int, label: string}> */
     private function legendaSementara(): array
     {
-        [$b4, $b3, $b2] = self::AMBANG_SEMENTARA;
+        [$b2, $b3, $b4] = self::AMBANG_SEMENTARA;
 
         return [
-            ['band' => 1, 'label' => '>' . $this->pct($b2)],
-            ['band' => 2, 'label' => '>' . $this->pct($b3) . ' - ' . $this->pct($b2)],
-            ['band' => 3, 'label' => '>' . $this->pct($b4) . ' - ' . $this->pct($b3)],
+            ['band' => 1, 'label' => '<' . $this->pct($b2)],
+            ['band' => 2, 'label' => $this->pct($b2) . ' - <' . $this->pct($b3)],
+            ['band' => 3, 'label' => $this->pct($b3) . ' - <' . $this->pct($b4)],
             ['band' => 4, 'label' => $this->pct($b4)],
         ];
     }

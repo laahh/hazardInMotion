@@ -56,7 +56,7 @@
               <th>Main Contractor</th>
               <th class="text-end">Subcont</th>
               <th class="text-end">Total Deviasi</th>
-              <th class="text-end">Rata-rata</th>
+              <th class="text-end">Rata-rata Pemenuhan</th>
               <th>Per Bulan</th>
             </tr>
           </thead>
@@ -65,8 +65,8 @@
       </div>
 
       <span class="text-xs text-secondary-light d-block mt-12">
-        Angka di kolom "Per Bulan" adalah <strong>cacah deviasi</strong>, bukan persentase;
-        arahkan kursor untuk melihat proporsinya. Hijau berarti nol deviasi.
+        Angka di kolom "Per Bulan" adalah <strong>persentase pemenuhan</strong> yang dibulatkan;
+        arahkan kursor untuk melihat cacah deviasinya. Hijau berarti 100% terpenuhi.
       </span>
     </div>
   </div>

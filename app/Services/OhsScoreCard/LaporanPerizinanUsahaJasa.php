@@ -7,21 +7,25 @@ namespace App\Services\OhsScoreCard;
 /**
  * Definisi bersama parameter "Laporan Perizinan Usaha Jasa".
  *
- * ARAHNYA TERBALIK DARI PARAMETER KEPATUHAN LAIN, dan ini hal pertama yang
- * harus disadari: kolom performance_<bulan>_26_pct BUKAN tingkat kepatuhan,
- * melainkan PROPORSI DEVIASI. Nol berarti tidak ada subkontraktor yang
- * menyimpang -- itu hasil TERBAIK, bukan terburuk. Memperlakukannya seperti
- * Pemenuhan Regulasi akan membalik seluruh pemeringkatan dan pewarnaannya.
+ * PERSENTASENYA DIBACA DARI KOLOM performance_<bulan>_26_pct, yang menyimpan
+ * RASIO 0-1 (0,92857143 berarti 92,86%) sehingga dikalikan 100 -- bukan dibaca
+ * sebagai persen mentah.
  *
- * RUMUSNYA SUDAH DIBUKTIKAN dari datanya sendiri:
- * deviasi_<bulan>_26 / total_perusahaan_subcontractor, cocok di 144 dari 144
- * sel, tanpa satu pun selisih.
+ * KOLOMNYA TINGKAT PEMENUHAN, BUKAN PROPORSI DEVIASI. Seratus persen berarti
+ * tidak ada subkontraktor yang menyimpang dan itu hasil TERBAIK; arahnya NAIK,
+ * sama seperti Pemenuhan Regulasi.
  *
- * ANGKANYA DIHITUNG ULANG DARI CACAH, BUKAN DIBACA DARI KOLOM pct. Dua alasan:
- * (1) supaya rata-rata antar bulan bisa TERTIMBANG, dan (2) karena
- * performance_sep_26_pct bertipe int sedangkan delapan bulan lainnya
- * decimal(18,8) -- rasio seperti 0,07 akan terpotong menjadi 0 kalau ditulis
- * ke kolom itu. Kolom deviasi semuanya int dan utuh, jadi itu yang dipercaya.
+ * ISI KOLOM INI PERNAH BERUBAH ARTI, dan itu sebabnya pemeriksaan silang di
+ * bawah ada. Pada 6 Oktober 2026 kolomnya masih memuat proporsi deviasi
+ * (deviasi/total, 0 berarti terbaik); hari yang sama isinya diganti menjadi
+ * komplemennya, 1 - deviasi/total. Pembalikan seperti itu tidak mengubah
+ * bentuk datanya sama sekali -- tetap rasio 0-1 yang terlihat wajar -- jadi
+ * satu-satunya cara menangkapnya adalah membandingkannya dengan kolom cacah.
+ *
+ * KOLOM deviasi TETAP DIBACA sebagai pendamping: cacahnya dipakai di tooltip
+ * dan modal, dan dipakai MEMERIKSA kolom pct lewat penanda 'sepakat'. Kalau
+ * suatu saat keduanya tidak lagi sejalan, selisihnya dilaporkan di catatan
+ * halaman alih-alih diam-diam dipilih salah satu.
  *
  * TABELNYA BERFORMAT LEBAR: satu baris per main_cont x site_dedicated, dengan
  * bulan sebagai KOLOM, bukan baris. Akhiran bulannya singkatan Indonesia dan
@@ -62,24 +66,40 @@ final class LaporanPerizinanUsahaJasa
     }
 
     /**
-     * Cacah deviasi dan penyebutnya untuk satu baris pada satu bulan.
+     * Angka satu baris pada satu bulan.
+     *
+     * PERSENNYA DARI KOLOM performance_<bulan>_26_pct (rasio 0-1, dikali 100),
+     * dan merupakan TINGKAT PEMENUHAN. Cacah deviasi ikut dikembalikan sebagai
+     * pendamping untuk tooltip dan modal, beserta penanda 'sepakat' yang
+     * mengatakan apakah kolom pct masih sejalan dengan 1 - deviasi/total.
      *
      * Mengembalikan null kalau bulan itu memang tidak terdata, supaya
-     * pemanggilnya bisa membedakannya dari nol deviasi yang sesungguhnya.
+     * pemanggilnya bisa membedakannya dari pemenuhan nol yang sesungguhnya.
      *
-     * @return array{deviasi: int, total: int}|null
+     * @return array{persen: float, deviasi: int|null, total: int, sepakat: bool}|null
      */
     public static function selBulan(object $row, string $akhiran): ?array
     {
         $total = (int) ($row->total_perusahaan_subcontractor ?? 0);
+        $pct = $row->{self::kolomPersen($akhiran)} ?? null;
         $deviasi = $row->{self::kolomDeviasi($akhiran)} ?? null;
 
-        // Tanpa subkontraktor tidak ada yang bisa dibagi, dan deviasi yang
-        // belum terisi bukan berarti nol deviasi.
-        if ($total <= 0 || $deviasi === null) {
+        // Tanpa subkontraktor tidak ada penyebut, dan bulan yang kolom
+        // persennya belum terisi bukan berarti nol pemenuhan.
+        if ($total <= 0 || $pct === null) {
             return null;
         }
 
-        return ['deviasi' => (int) $deviasi, 'total' => $total];
+        // Rasio 0-1, bukan persen mentah.
+        $persen = round((float) $pct * 100, 2);
+
+        return [
+            'persen' => $persen,
+            'deviasi' => $deviasi === null ? null : (int) $deviasi,
+            'total' => $total,
+            // Pemenuhan semestinya komplemen dari proporsi deviasi.
+            'sepakat' => $deviasi === null
+                || abs(round((1 - (int) $deviasi / $total) * 100, 2) - $persen) <= 0.02,
+        ];
     }
 }

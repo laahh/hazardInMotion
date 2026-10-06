@@ -55,9 +55,9 @@
     <div class="col-12">
       <div class="card h-100 radius-8 border">
         <div class="card-header border-bottom bg-base py-16 px-24">
-          <h6 class="text-lg fw-semibold mb-0">Deviasi per Bulan</h6>
+          <h6 class="text-lg fw-semibold mb-0">Pemenuhan per Bulan</h6>
           <span class="text-sm text-secondary-light">
-            Subkontraktor yang menyimpang dibagi seluruh subkontraktor — 0% adalah hasil terbaik
+            Dari kolom performance_&lt;bulan&gt;_26_pct — 100% adalah hasil terbaik
           </span>
         </div>
         <div class="card-body p-24">
@@ -69,11 +69,11 @@
             </table>
           </div>
           <span class="text-xs text-secondary-light d-block mt-12">
-            <strong>Hijau berarti nol deviasi</strong>, bukan nol capaian — arah parameter ini
-            terbalik dari halaman kepatuhan, dan barisnya diurutkan dari deviasi terbesar.
-            Kolom "Rata" adalah rata-rata tertimbang: seluruh deviasi dan seluruh pemeriksaan
-            dijumlahkan dulu, baru dibagi. Sel bergaris putus-putus berarti bulan itu belum
-            terdata, bukan 0%. Klik sel untuk rinciannya.
+            <strong>Hijau berarti 100% terpenuhi.</strong> Barisnya diurutkan dari pemenuhan
+            terendah karena itu yang perlu ditindak. Kolom "Rata" adalah rata-rata tertimbang:
+            seluruh pemeriksaan dijumlahkan dulu, baru dibagi, jadi main contractor dengan satu
+            subkontraktor tidak berbobot sama dengan yang punya tiga puluh delapan. Sel bergaris
+            putus-putus berarti bulan itu belum terdata, bukan 0%. Klik sel untuk rinciannya.
           </span>
         </div>
       </div>
@@ -86,7 +86,7 @@
       <div class="card h-100 radius-8 border">
         <div class="card-header border-bottom bg-base py-16 px-24">
           <h6 class="text-lg fw-semibold mb-0">Per Site</h6>
-          <span class="text-sm text-secondary-light">deviasi terbesar lebih dulu</span>
+          <span class="text-sm text-secondary-light">pemenuhan terendah lebih dulu</span>
         </div>
         <div class="card-body p-24" data-lpu="per-site"></div>
       </div>
@@ -95,7 +95,7 @@
       <div class="card h-100 radius-8 border">
         <div class="card-header border-bottom bg-base py-16 px-24">
           <h6 class="text-lg fw-semibold mb-0">Per Main Contractor</h6>
-          <span class="text-sm text-secondary-light">deviasi terbesar lebih dulu</span>
+          <span class="text-sm text-secondary-light">pemenuhan terendah lebih dulu</span>
         </div>
         <div class="card-body p-24" data-lpu="per-mitra"></div>
       </div>
@@ -103,8 +103,10 @@
     <div class="col-xxl-4 col-md-12">
       <div class="card h-100 radius-8 border">
         <div class="card-header border-bottom bg-base py-16 px-24">
-          <h6 class="text-lg fw-semibold mb-0">Deviasi per Bulan</h6>
-          <span class="text-sm text-secondary-light">seluruh site digabung</span>
+          <h6 class="text-lg fw-semibold mb-0">Pemenuhan per Bulan</h6>
+          <span class="text-sm text-secondary-light">
+            seluruh site digabung · tinggi batang = kekurangan terhadap 100%
+          </span>
         </div>
         <div class="card-body p-24" data-lpu="per-bulan"></div>
       </div>

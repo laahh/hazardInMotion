@@ -286,9 +286,9 @@ final class ScoreCardParameterRegistry
                 // bukan persentase, supaya rata-ratanya tertimbang; hasil
                 // baginya pecahan 0-1.
                 'skala' => 100.0,
-                // ARAHNYA TURUN: angka ini PROPORSI DEVIASI, bukan kepatuhan.
-                // Nol berarti tidak ada subkontraktor yang menyimpang, dan itu
-                // hasil TERBAIK.
+                // ARAHNYA NAIK: angka ini TINGKAT PEMENUHAN, dibaca dari
+                // kolom performance_<bulan>_26_pct. Seratus persen berarti
+                // tidak ada subkontraktor yang menyimpang -- hasil TERBAIK.
                 //
                 // BAND RESMINYA BELUM ADA, jadi dibiarkan null dengan sengaja:
                 // sel tetap menampilkan persentasenya tetapi TANPA angka Nilai,
@@ -296,7 +296,7 @@ final class ScoreCardParameterRegistry
                 // parameter ini juga tidak ikut menghitung rata-rata kartu site
                 // -- rataSite() memang melewati parameter tanpa band.
                 //
-                // Begitu band resminya ada, isi 'band' => self::BAND_TURUN dan
+                // Begitu band resminya ada, isi 'band' => self::BAND_NAIK dan
                 // 'ambang' di sini; halamannya punya AMBANG_SEMENTARA sendiri
                 // yang juga perlu diganti.
                 'band' => null,
