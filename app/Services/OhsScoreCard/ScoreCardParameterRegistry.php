@@ -260,6 +260,16 @@ final class ScoreCardParameterRegistry
                 'ambang' => [95, 98, 100, 100],
                 'satuan' => '%',
                 'ringkas' => self::RINGKAS_RATA,
+                // Sel kosong berarti pasangan itu tidak punya ruas jalan yang
+                // disurvei sama sekali di road_summary -- bukan ruas yang
+                // gagal standar. Tidak ada jalan di bawah standar, jadi
+                // dianggap capaian penuh dan ditulis "N/A".
+                //
+                // NILAINYA 100, BUKAN 0: arah parameter ini NAIK, jadi yang
+                // terbaik ada di ujung atas. Mengisinya 0 seperti parameter
+                // cacah justru memberi Nilai 1 merah.
+                'kosong_berarti' => 100.0,
+                'kosong_label' => 'N/A',
             ],
 
             // 33 baris, nilai terkecil 1, tanpa baris nol.
