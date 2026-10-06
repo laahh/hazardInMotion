@@ -21,6 +21,7 @@ use App\Http\Controllers\OhsScoreCard\IncidentManagementDashboardController;
 use App\Http\Controllers\OhsScoreCard\IncidentMasterDataController;
 use App\Http\Controllers\OhsScoreCard\KesiapanAlatEmergencyController;
 use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
+use App\Http\Controllers\OhsScoreCard\LaporanPerizinanUsahaJasaController;
 use App\Http\Controllers\OhsScoreCard\SpipCommissioningController;
 use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
@@ -466,6 +467,21 @@ Route::middleware('evaluasi-well.access')
             ->name('pemenuhan-regulasi.data');
         Route::get('/pemenuhan-regulasi/export', [PemenuhanRegulasiController::class, 'export'])
             ->name('pemenuhan-regulasi.export');
+
+        // Parameter "Laporan Perizinan Usaha Jasa".
+        // scr_business_license_performance berformat lebar: bulan sebagai
+        // kolom, Januari-September 2026. Angkanya PROPORSI DEVIASI -- nol
+        // adalah hasil terbaik.
+        Route::get('/laporan-perizinan-usaha-jasa', [LaporanPerizinanUsahaJasaController::class, 'index'])
+            ->name('laporan-perizinan-usaha-jasa.index');
+        Route::get('/laporan-perizinan-usaha-jasa/overview', [LaporanPerizinanUsahaJasaController::class, 'overview'])
+            ->name('laporan-perizinan-usaha-jasa.overview');
+        Route::get('/laporan-perizinan-usaha-jasa/detail-bulan', [LaporanPerizinanUsahaJasaController::class, 'detailBulan'])
+            ->name('laporan-perizinan-usaha-jasa.detail-bulan');
+        Route::get('/laporan-perizinan-usaha-jasa/data', [LaporanPerizinanUsahaJasaController::class, 'data'])
+            ->name('laporan-perizinan-usaha-jasa.data');
+        Route::get('/laporan-perizinan-usaha-jasa/export', [LaporanPerizinanUsahaJasaController::class, 'export'])
+            ->name('laporan-perizinan-usaha-jasa.export');
 
         // Parameter HSECT — "Peer Pressure" (hse_automation: bcsid.mv_berecord)
         Route::get('/peer-pressure', [BerecordController::class, 'index'])

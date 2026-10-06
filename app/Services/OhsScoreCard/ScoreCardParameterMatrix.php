@@ -190,6 +190,7 @@ final class ScoreCardParameterMatrix
                 'road_summary' => $this->ambilRoadSummary(),
                 'kesiapan_emergency' => $this->ambilKesiapanEmergency(),
                 'pemenuhan_regulasi' => $this->ambilPemenuhanRegulasi($p),
+                'perizinan_usaha_jasa' => $this->ambilPerizinanUsahaJasa($p),
                 'kompetensi' => $this->ambilKompetensi($p),
                 'besigma' => $this->ambilBesigma($p),
                 'pic_subcont' => $this->ambilPicSubcont($p),
@@ -227,6 +228,76 @@ final class ScoreCardParameterMatrix
             ->get();
 
         return $this->kelompokkan($rows);
+    }
+
+    /**
+     * Laporan Perizinan Usaha Jasa: subkontraktor menyimpang dibagi seluruhnya.
+     *
+     * ANGKANYA PROPORSI DEVIASI, BUKAN KEPATUHAN. Nol adalah hasil TERBAIK.
+     * Registry sengaja mendaftarkannya tanpa band supaya tidak ada Nilai yang
+     * dikarang; begitu band resminya ada, arahnya BAND_TURUN.
+     *
+     * TABELNYA BERFORMAT LEBAR: satu baris per main_cont x site_dedicated,
+     * dengan bulan sebagai kolom. Jadi tiap baris dibongkar menjadi sembilan
+     * sel bulanan di sini.
+     *
+     * DISIMPAN SEBAGAI CACAH, BUKAN PERSENTASE PER BULAN, supaya ringkas()
+     * menghasilkan deviasi_total/pemeriksaan_total -- rata-rata TERTIMBANG.
+     * Tanpa itu, main contractor dengan satu subkontraktor dihitung sama besar
+     * dengan yang punya tiga puluh delapan.
+     *
+     * ANGKANYA DIHITUNG DARI KOLOM deviasi, BUKAN DARI KOLOM pct: lihat
+     * LaporanPerizinanUsahaJasa, performance_sep_26_pct bertipe int sehingga
+     * rasio pecahan akan terpotong kalau ditulis ke sana.
+     *
+     * @return array<string, array{jumlah: float, baris: int}>|null
+     */
+    private function ambilPerizinanUsahaJasa(array $p): ?array
+    {
+        $kolomAda = $this->skema()[$p['sumber']] ?? null;
+
+        if ($kolomAda === null) {
+            return null;
+        }
+
+        foreach (['site_dedicated', 'main_cont', 'total_perusahaan_subcontractor'] as $k) {
+            if (!isset($kolomAda[$k])) {
+                return null;
+            }
+        }
+
+        $out = [];
+
+        foreach (DB::table($p['sumber'])->get() as $r) {
+            foreach (LaporanPerizinanUsahaJasa::BULAN as $akhiran => $bulan) {
+                // Kolom bulan yang belum dibuat di tabel dilewati, bukan
+                // dianggap nol deviasi.
+                if (!isset($kolomAda[LaporanPerizinanUsahaJasa::kolomDeviasi($akhiran)])) {
+                    continue;
+                }
+
+                $angka = LaporanPerizinanUsahaJasa::selBulan($r, $akhiran);
+
+                if ($angka === null) {
+                    continue;
+                }
+
+                $kunci = $this->kunciSel(
+                    (string) $r->site_dedicated,
+                    (string) $r->main_cont,
+                    $bulan
+                );
+
+                if ($kunci === null) {
+                    continue;
+                }
+
+                $out[$kunci]['jumlah'] = ($out[$kunci]['jumlah'] ?? 0.0) + $angka['deviasi'];
+                $out[$kunci]['baris'] = ($out[$kunci]['baris'] ?? 0) + $angka['total'];
+            }
+        }
+
+        return $out;
     }
 
     /**

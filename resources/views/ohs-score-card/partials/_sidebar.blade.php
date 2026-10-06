@@ -44,7 +44,7 @@
         'OC' => [
             ['label' => 'Kesesuaian Implementasi IKK',                                  'icon' => 'solar:clipboard-check-outline', 'url' => route('ohs-score-card.compliance-ikk.index')],
             ['label' => '% SPIP yang dilakukan Commissioning',                          'icon' => 'solar:settings-outline', 'url' => route('ohs-score-card.spip-commissioning.index')],
-            ['label' => 'Laporan Perizinan Usaha Jasa',                                 'icon' => 'solar:document-text-outline'],
+            ['label' => 'Laporan Perizinan Usaha Jasa',                                 'icon' => 'solar:document-text-outline', 'url' => route('ohs-score-card.laporan-perizinan-usaha-jasa.index')],
             ['label' => '% Blindspot TBC dengan PIC Subcontractor',                     'icon' => 'solar:users-group-rounded-outline', 'url' => route('ohs-score-card.blindspot-tbc-pic-subcont.index')],
         ],
         'HSECT' => [

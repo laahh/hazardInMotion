@@ -247,7 +247,32 @@ final class ScoreCardParameterRegistry
                 'site_existing', 'perusahaan_pemilik_existing',
                 'performance_month', 'performance_pct', [80, 90, 98, 100]),
 
-            self::kosong('Laporan Perizinan Usaha Jasa'),
+            [
+                'nama' => 'Laporan Perizinan Usaha Jasa',
+                'sumber' => 'scr_business_license_performance',
+                'khusus' => 'perizinan_usaha_jasa',
+                // Sumbernya menyimpan CACAH deviasi dan cacah subkontraktor,
+                // bukan persentase, supaya rata-ratanya tertimbang; hasil
+                // baginya pecahan 0-1.
+                'skala' => 100.0,
+                // ARAHNYA TURUN: angka ini PROPORSI DEVIASI, bukan kepatuhan.
+                // Nol berarti tidak ada subkontraktor yang menyimpang, dan itu
+                // hasil TERBAIK.
+                //
+                // BAND RESMINYA BELUM ADA, jadi dibiarkan null dengan sengaja:
+                // sel tetap menampilkan persentasenya tetapi TANPA angka Nilai,
+                // karena memberi Nilai berarti mengarang skor resmi. Akibatnya
+                // parameter ini juga tidak ikut menghitung rata-rata kartu site
+                // -- rataSite() memang melewati parameter tanpa band.
+                //
+                // Begitu band resminya ada, isi 'band' => self::BAND_TURUN dan
+                // 'ambang' di sini; halamannya punya AMBANG_SEMENTARA sendiri
+                // yang juga perlu diganti.
+                'band' => null,
+                'ambang' => [],
+                'satuan' => '%',
+                'ringkas' => self::RINGKAS_RATA,
+            ],
 
             // Temuan dibebankan ke perusahaan MINECON di atas subkon yang
             // jadi PIC-nya, diturunkan dari view relasi perusahaan di OLAP;
