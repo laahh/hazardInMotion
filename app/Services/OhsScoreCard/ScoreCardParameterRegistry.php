@@ -123,11 +123,16 @@ final class ScoreCardParameterRegistry
                 'site', 'perusahaan_pelapor_all_karyawan',
                 'month_of_date_for_join', 'pct_berjarak', [60, 70, 80, 100]),
 
-            // Band parameter ini belum ditetapkan (L1 tertulis "X<0%", yang
-            // tidak mungkin terjadi), jadi capaiannya ditampilkan tanpa Nilai.
-            self::tanpaBand('% Blindspot temuan Real Time', 'lead_blindspot_laporan_real_time',
+            // MAKIN BESAR MAKIN BAIK di sini, kebalikan Blindspot TBC dan GR:
+            // yang diukur bukan bahaya yang luput, melainkan temuan yang
+            // berhasil ditangkap secara real time.
+            //
+            // L1 (X<0%) TIDAK AKAN PERNAH TERJADI karena persentase tidak bisa
+            // negatif, jadi band terburuk yang mungkin muncul adalah L2.
+            // Ditulis apa adanya mengikuti tabel band resmi.
+            self::persen('% Blindspot temuan Real Time', 'lead_blindspot_laporan_real_time',
                 'site', 'perusahaan_pic', 'month_of_date_for_join',
-                'pct_blindspot_temuan_real_time'),
+                'pct_blindspot_temuan_real_time', [0, 3, 5, 100]),
 
             self::persen('Coverage Daily Area Kritis Pengawas Safety',
                 'lead_coverage_daily_area_kritis_pengawas_safety',
@@ -291,17 +296,6 @@ final class ScoreCardParameterRegistry
         ];
     }
 
-    private static function tanpaBand(
-        string $nama, string $tabel, string $site, string $mitra,
-        string $bulan, string $nilai
-    ): array {
-        return [
-            'nama' => $nama, 'sumber' => $tabel, 'site' => $site, 'mitra' => $mitra,
-            'bulan' => $bulan, 'nilai' => $nilai,
-            'band' => null, 'ambang' => [],
-            'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
-        ];
-    }
 
     /**
      * Parameter sertifikasi kompetensi. Dihitung per ORANG unik, bukan per

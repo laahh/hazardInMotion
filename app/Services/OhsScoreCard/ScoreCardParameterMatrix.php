@@ -63,33 +63,36 @@ final class ScoreCardParameterMatrix
 
     /**
      * @param  int|null  $bulan  1-12, atau null untuk seluruh bulan.
+     * @param  bool  $bulanBawaan  true kalau $bulan berasal dari bawaan, bukan
+     *                             pilihan pengguna. Bawaan yang ternyata tidak
+     *                             berdata akan mundur ke bulan terakhir yang
+     *                             berisi; pilihan pengguna tidak pernah
+     *                             digeser diam-diam.
      * @return array<string, mixed>
      */
-    public function bangun(?int $bulan = null): array
+    public function bangun(?int $bulan = null, bool $bulanBawaan = false): array
     {
         $parameter = ScoreCardParameterRegistry::parameter();
         $kolom = ScoreCardParameterRegistry::KOLOM;
 
-        $matriks = [];
+        // JALAN PERTAMA: tarik semua sumber dan catat bulan mana yang berisi.
+        // Bulannya belum bisa dipakai menyusun sel, karena bawaan "bulan lalu"
+        // baru boleh dipastikan setelah ketahuan bulan mana saja yang berdata.
+        $sumber = [];
         $bulanAda = [];
         $tanpaSumber = [];
 
         foreach ($parameter as $p) {
             $nama = $p['nama'];
-
-            if ($p['sumber'] === null) {
-                $matriks[$nama] = $this->selKosong($kolom);
-                $tanpaSumber[] = $nama;
-                continue;
-            }
-
-            $perBulan = $this->ambil($p);
+            $perBulan = $p['sumber'] === null ? null : $this->ambil($p);
 
             if ($perBulan === null) {
-                $matriks[$nama] = $this->selKosong($kolom);
+                $sumber[$nama] = null;
                 $tanpaSumber[] = $nama;
                 continue;
             }
+
+            $sumber[$nama] = $perBulan;
 
             // Sebuah bulan hanya ditawarkan di penyaring kalau benar-benar
             // menghasilkan angka. Bulan yang barisnya ada tetapi nilainya
@@ -111,11 +114,27 @@ final class ScoreCardParameterMatrix
 
                 $bulanAda[(int) $b] = true;
             }
-
-            $matriks[$nama] = $this->selParameter($p, $perBulan, $kolom, $bulan);
         }
 
         ksort($bulanAda);
+
+        // Bawaan yang kosong lebih buruk daripada bawaan yang meleset sebulan:
+        // tabel yang terbuka kosong terbaca seperti kerusakan.
+        if ($bulanBawaan && $bulan !== null && !isset($bulanAda[$bulan])) {
+            $bulan = $bulanAda === [] ? null : (int) array_key_last($bulanAda);
+        }
+
+        // JALAN KEDUA: susun selnya dengan bulan yang sudah pasti. Sumbernya
+        // sudah di tangan, jadi ini tidak menambah query sama sekali.
+        $matriks = [];
+
+        foreach ($parameter as $p) {
+            $nama = $p['nama'];
+
+            $matriks[$nama] = $sumber[$nama] === null
+                ? $this->selKosong($kolom)
+                : $this->selParameter($p, $sumber[$nama], $kolom, $bulan);
+        }
 
         return [
             'kolom' => $kolom,

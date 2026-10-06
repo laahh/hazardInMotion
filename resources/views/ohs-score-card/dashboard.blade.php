@@ -5266,8 +5266,17 @@
                   + (tanpa ? ' <strong>' + tanpa + ' parameter</strong> masih tanpa sumber data dan ditandai abu-abu.' : '');
           }
 
+          /* Tanpa argumen, parameter bulan sengaja TIDAK dikirim supaya
+             server memakai bawaannya (bulan lalu). Pilihan pengguna selalu
+             dikirim, termasuk "Semua bulan" yang jadi "semua" -- kalau yang
+             itu dikirim sebagai string kosong, ia tak terbedakan dari muatan
+             pertama dan tabel akan balik ke bulan lalu terus-menerus. */
           function muat(bulan) {
-              var url = urlData + (bulan ? '?bulan=' + encodeURIComponent(bulan) : '');
+              var url = urlData;
+
+              if (bulan !== undefined && bulan !== null) {
+                  url += '?bulan=' + encodeURIComponent(bulan === '' ? 'semua' : bulan);
+              }
 
               fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
                   .then(function (r) {
@@ -5289,7 +5298,7 @@
           });
 
           el('meta').textContent = 'memuat data parameter…';
-          muat('');
+          muat();
       })();
       </script>
       <!-- Score Card Parameter End -->

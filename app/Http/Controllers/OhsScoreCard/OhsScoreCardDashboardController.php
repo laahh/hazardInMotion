@@ -41,25 +41,57 @@ final class OhsScoreCardDashboardController extends Controller
     /** Matriks Score Card untuk satu bulan, dipakai saat filter bulan diganti. */
     public function scoreCardParameter(Request $request): JsonResponse
     {
-        return response()->json($this->scoreCard->bangun($this->bulanDari($request)));
+        [$bulan, $bawaan] = $this->bulanDari($request);
+
+        return response()->json($this->scoreCard->bangun($bulan, $bawaan));
     }
 
     /**
-     * Bulan dari query string. Nilai di luar 1-12 -- termasuk teks dan nol --
-     * diperlakukan sebagai "semua bulan", bukan ditolak dengan galat, supaya
-     * tautan lama tidak mematahkan dashboard.
+     * Bulan dari query string, beserta penanda apakah itu bawaan.
+     *
+     * TIGA KEADAAN YANG DIBEDAKAN:
+     *
+     *   parameter tidak dikirim  -> bawaan, yaitu BULAN LALU
+     *   dikirim angka 1-12       -> bulan itu, pilihan pengguna
+     *   dikirim kosong atau lain -> seluruh bulan, pilihan pengguna
+     *
+     * Membedakan "tidak dikirim" dari "dikirim kosong" itu yang membuat
+     * pengguna tetap bisa memilih "Semua bulan": tanpa itu, pilihan tersebut
+     * tak bisa dibedakan dari muatan pertama dan selalu berubah jadi bawaan.
+     *
+     * Nilai di luar 1-12 -- termasuk teks dan nol -- diperlakukan sebagai
+     * seluruh bulan, bukan ditolak dengan galat, supaya tautan lama tidak
+     * mematahkan dashboard.
+     *
+     * @return array{0: int|null, 1: bool}
      */
-    private function bulanDari(Request $request): ?int
+    private function bulanDari(Request $request): array
     {
+        if (!$request->has('bulan') && !$request->has('month')) {
+            return [$this->bulanLalu(), true];
+        }
+
         $raw = $request->input('bulan', $request->input('month', ''));
 
-        if (!is_scalar($raw) || !preg_match('/^\d{1,2}$/', (string) $raw)) {
-            return null;
+        if (!is_scalar($raw) || preg_match('/^\d{1,2}$/', (string) $raw) !== 1) {
+            return [null, false];
         }
 
         $n = (int) $raw;
 
-        return $n >= 1 && $n <= 12 ? $n : null;
+        return [$n >= 1 && $n <= 12 ? $n : null, false];
+    }
+
+    /**
+     * Bulan lalu sebagai angka 1-12.
+     *
+     * subMonthNoOverflow menjaga tanggal 31 tidak melompat ke bulan berikutnya
+     * saat bulan sebelumnya lebih pendek -- 31 Maret mundur ke Februari, bukan
+     * ke Maret lagi.
+     */
+    private function bulanLalu(): int
+    {
+        return (int) now()->subMonthNoOverflow()->format('n');
     }
 
     /**
