@@ -90,6 +90,30 @@ final class BlindspotRealTimeController extends Controller
     private const AMBANG_PERSEN = 1.0;
 
     /**
+     * Band penilaian resmi: [batas bawah, batas atas, nilai dasar, label].
+     *
+     * ARAHNYA NAIK -- MAKIN BESAR MAKIN BAIK -- dan itu KEBALIKAN dari halaman
+     * Blindspot TBC maupun GR. Di sana yang diukur bahaya yang luput, jadi
+     * angka kecil yang baik; di sini yang diukur temuan yang BERHASIL
+     * ditangkap secara real time, jadi angka besar yang baik. Jangan disamakan
+     * dengan kedua halaman itu meskipun namanya sama-sama "blindspot".
+     *
+     * Urutannya terbaik dulu, dan scoreBandFor() mencocokkan dengan
+     * "persen >= batas bawah".
+     *
+     * BAND 1 TIDAK AKAN PERNAH TERJADI. Tabel band resmi menuliskannya sebagai
+     * "X<0%", sedangkan persentase tidak bisa negatif. Ditulis apa adanya
+     * mengikuti tabel resmi; konsekuensinya band terburuk yang mungkin muncul
+     * di layar adalah band 2.
+     */
+    private const SCORE_BANDS = [
+        [5.0, 100.0, 4, '>= 5%'],
+        [3.0, 5.0, 3, '3% - <5%'],
+        [0.0, 3.0, 2, '0% - <3%'],
+        [-100.0, 0.0, 1, '<0%'],
+    ];
+
+    /**
      * Batas baris yang dikirim ke modal rincian. Sel terpadat berisi 20
      * temuan, jadi batas ini jauh dari terpakai; dipasang supaya sumber
      * yang membengkak tidak diam-diam mengirim ribuan baris ke browser.
@@ -166,7 +190,61 @@ final class BlindspotRealTimeController extends Controller
             'per_tools' => $this->buildPerTools($request),
             'monthly' => $this->buildMonthlySeries($sumber, $ukuran),
             'catatan' => $this->catatan($request),
+            'score_bands' => $this->bandUntukView(),
         ]);
+    }
+
+    /**
+     * Nilai berkoma untuk satu capaian.
+     *
+     * Di dalam satu band nilainya melandai mengikuti jarak dari batas BAWAH --
+     * sisi yang lebih buruk -- karena arahnya naik. Band teratas datar di 4,00.
+     *
+     * @return array{0: float, 1: float, 2: string}
+     */
+    private function scoreBandFor(float $percent): array
+    {
+        foreach (self::SCORE_BANDS as [$bawah, $atas, $dasar, $label]) {
+            if ($percent < $bawah) {
+                continue;
+            }
+
+            if ($dasar >= 4) {
+                return [$bawah, 4.0, $label];
+            }
+
+            $rentang = $atas - $bawah;
+            $nilai = $rentang > 0
+                ? $dasar + ($percent - $bawah) / $rentang
+                : (float) $dasar;
+
+            // Tidak boleh menyentuh angka band berikutnya, supaya angka dan
+            // label band di layar tidak pernah bertentangan.
+            $nilai = min($nilai, $dasar + 0.99);
+
+            return [$bawah, round(max(1.0, min(4.0, $nilai)), 2), $label];
+        }
+
+        return [-100.0, 1.0, '<0%'];
+    }
+
+    /**
+     * Band untuk dipakai di layar. Warnanya ikut dikirim supaya legenda dan
+     * sel tidak bisa memakai palet yang berbeda.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function bandUntukView(): array
+    {
+        $warna = [1 => '#FF0000', 2 => '#FFC000', 3 => '#FFFF00', 4 => '#92D050'];
+
+        return array_map(static fn (array $b): array => [
+            'bawah' => $b[0],
+            'atas' => $b[1],
+            'nilai' => $b[2],
+            'label' => $b[3],
+            'warna' => $warna[$b[2]] ?? '#CBD5E1',
+        ], self::SCORE_BANDS);
     }
 
     /**

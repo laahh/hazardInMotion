@@ -66,6 +66,14 @@
   .brt-modal-scroll { max-height: 42vh; overflow: auto; }
   .brt-modal-scroll thead th { position: sticky; top: 0; z-index: 1; background: #F8FAFC; }
   /* Nol temuan itu kabar baik, jadi warnanya hijau, bukan abu-abu kosong. */
+  /* Warna band resmi parameter ini. ARAHNYA NAIK: angka besar yang hijau,
+     kebalikan halaman Blindspot TBC dan GR. */
+  .bs-n1 { background: #FF0000; }
+  .bs-n2 { background: #FFC000; color: #1F2937 !important; }
+  .bs-n3 { background: #FFFF00; color: #1F2937 !important; }
+  .bs-n4 { background: #92D050; color: #1F2937 !important; }
+
+  /* Skala lama, masih dipakai matriks cacah temuan yang satuannya berbeda. */
   .bs-k0 { background: #16A34A; }
   .bs-k1 { background: #86C96B; }
   .bs-k2 { background: #F2C230; color: #1F2937 !important; }
@@ -399,12 +407,54 @@ window.bsOverview = (function () {
 
     // Skala warna matriks persentase. Berbeda dari halaman Ratio TBC & GR:
     // di sini angka kecil yang hijau, karena yang diukur adalah yang luput.
+    // Band datang DARI SERVER (score_bands), tidak ditulis ulang di sini,
+    // supaya definisi di layar tidak bisa menyimpang dari yang dipakai
+    // controller. Diisi saat payload pertama tiba.
+    var BANDS = [];
+
+    /**
+     * Band untuk satu persentase.
+     *
+     * Dicari dari band TERBAIK dan berhenti pada band pertama yang batas
+     * bawahnya sudah terlampaui -- arahnya naik, jadi makin besar makin baik.
+     * Ini kebalikan halaman Blindspot TBC yang mencocokkan dari batas atas.
+     */
+    function bandUntuk(pct) {
+        var v = Number(pct);
+        if (!isFinite(v)) { return null; }
+
+        for (var i = 0; i < BANDS.length; i++) {
+            if (v >= BANDS[i].bawah) { return BANDS[i]; }
+        }
+
+        return BANDS.length ? BANDS[BANDS.length - 1] : null;
+    }
+
+    /** Nilai berkoma; rumusnya sama persis dengan scoreBandFor() di PHP. */
+    function nilaiUntuk(pct) {
+        var b = bandUntuk(pct);
+        if (!b) { return null; }
+        if (b.nilai >= 4) { return 4; }
+
+        var rentang = b.atas - b.bawah;
+        if (rentang <= 0) { return b.nilai; }
+
+        // Jarak dari batas BAWAH: makin besar persennya, makin tinggi nilainya.
+        var n = b.nilai + (Number(pct) - b.bawah) / rentang;
+
+        return Math.round(Math.min(n, b.nilai + 0.99) * 100) / 100;
+    }
+
+    function fmtNilai(nilai) {
+        if (nilai === null || nilai === undefined) { return '–'; }
+        return Number(nilai).toLocaleString('id-ID', {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        });
+    }
+
     function tierPersen(pct) {
-        if (pct <= 0) return 'bs-k0';
-        if (pct <= 2) return 'bs-k1';
-        if (pct <= 5) return 'bs-k2';
-        if (pct <= 10) return 'bs-k3';
-        return 'bs-k4';
+        var b = bandUntuk(pct);
+        return b ? 'bs-n' + b.nilai : 'bs-k0';
     }
 
     /** Skala untuk cacah temuan; arahnya sama, hanya satuannya berbeda. */
@@ -420,6 +470,8 @@ window.bsOverview = (function () {
         var overviewUrl = root.dataset.url;
         var charts = { pic: null, pelapor: null, monthly: null, tools: null };
         var loaded = false;
+        var modePersen = 'persen';
+        var payloadTerakhir = null;
 
         var filterEls = Array.prototype.slice.call(root.querySelectorAll('.bs-filter'));
         var statusEl = root.querySelector('[data-bs-el="status"]');
@@ -618,6 +670,30 @@ window.bsOverview = (function () {
                 { color: '#E0484A', label: 'lebih dari 10' }
             ]
         };
+
+        /**
+         * Memasang band dari server dan menyusun legendanya sekalian, supaya
+         * keterangan warna di layar selalu mengikuti definisi di controller.
+         */
+        function setBands(daftar) {
+            BANDS = (daftar || []).map(function (b) {
+                return {
+                    bawah: Number(b.bawah),
+                    atas: Number(b.atas),
+                    nilai: Number(b.nilai),
+                    label: String(b.label),
+                    warna: String(b.warna)
+                };
+            });
+
+            // Legenda diurutkan dari yang terburuk supaya terbaca seperti
+            // tangga: merah dulu, hijau terakhir.
+            LEGENDA.persen = BANDS.slice().sort(function (a, b) {
+                return a.nilai - b.nilai;
+            }).map(function (b) {
+                return { color: b.warna, label: 'Nilai ' + b.nilai + ' · ' + b.label };
+            });
+        }
 
         function renderLegend(jenis) {
             el('legend-' + jenis).innerHTML = LEGENDA[jenis].map(function (it) {
@@ -965,6 +1041,47 @@ window.bsOverview = (function () {
             }
         }
 
+        /**
+         * Matriks persentase. Dipisah jadi fungsi tersendiri supaya sakelar
+         * mode bisa menggambar ulang tanpa meminta data lagi ke server.
+         */
+        function renderPersen() {
+            if (!payloadTerakhir) { return; }
+
+            renderMatrix('persen', payloadTerakhir.persen || { tersedia: false, tabel: '-', months: [], rows: [] }, {
+                ringkasLabel: 'RATA', satuan: 'blindspot', tier: tierPersen,
+                // Warna sel SELALU dari persentasenya, apa pun mode
+                // tampilannya; yang berganti hanya angkanya.
+                sel: function (v) {
+                    return modePersen === 'nilai'
+                        ? fmtNilai(nilaiUntuk(v))
+                        : Number(v).toFixed(1) + '%';
+                },
+                ringkas: function (row) {
+                    if (row.average === null) { return '–'; }
+
+                    return modePersen === 'nilai'
+                        ? fmtNilai(nilaiUntuk(row.average))
+                        : fmtPct(row.average);
+                },
+                ringkasTip: function (row) {
+                    if (row.average === null) { return 'Belum ada data'; }
+
+                    return 'Rata-rata ' + fmtPct(row.average)
+                        + ' · Nilai ' + fmtNilai(nilaiUntuk(row.average))
+                        + ', tertinggi ' + fmtPct(row.puncak);
+                }
+            });
+
+            var sub = el('persen-sub');
+
+            if (sub) {
+                sub.textContent = modePersen === 'nilai'
+                    ? 'Nilai 1–4 dari persentase temuan real time, tiap perusahaan di tiap site'
+                    : 'Persentase temuan yang tertangkap real time; makin besar makin baik';
+            }
+        }
+
         function load() {
             var params = new URLSearchParams(currentFilters());
             statusEl.textContent = 'memuat…';
@@ -983,24 +1100,16 @@ window.bsOverview = (function () {
                     // boleh membuat seluruh dashboard tampak kosong.
                     safe('tata-letak', function () { aturTataLetak(json.ukuran); });
                     safe('kpi', function () { renderKpi(json.kpi); });
+                    // Band dipasang LEBIH DULU: legenda dan sel sama-sama
+                    // membacanya, jadi kalau dipasang belakangan keduanya
+                    // sempat tergambar dengan band kosong.
+                    payloadTerakhir = json;
+                    safe('bands', function () { setBands(json.score_bands || []); });
                     safe('legend', function () {
                         renderLegend('persen');
                         renderLegend('temuan');
                     });
-                    safe('persen', function () {
-                        renderMatrix('persen', json.persen || kosong, {
-                            ringkasLabel: 'RATA', satuan: 'blindspot', tier: tierPersen,
-                            sel: function (v) { return Number(v).toFixed(1) + '%'; },
-                            ringkas: function (row) {
-                                return row.average === null ? '–' : fmtPct(row.average);
-                            },
-                            ringkasTip: function (row) {
-                                return row.average === null
-                                    ? 'Belum ada data'
-                                    : 'Rata-rata ' + fmtPct(row.average) + ', tertinggi ' + fmtPct(row.puncak);
-                            }
-                        });
-                    });
+                    safe('persen', renderPersen);
                     safe('temuan', function () {
                         renderMatrix('temuan', json.temuan || kosong, {
                             ringkasLabel: 'TOTAL', satuan: 'temuan', tier: tierTemuan,
@@ -1036,6 +1145,22 @@ window.bsOverview = (function () {
 
         filterEls.forEach(function (node) {
             node.addEventListener('change', load);
+        });
+
+        // Ganti mode hanya menggambar ulang dari payload terakhir; tidak ada
+        // permintaan baru ke server karena persentasenya sudah ada di tangan.
+        root.querySelectorAll('.bs-switch__btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (btn.dataset.mode === modePersen) { return; }
+
+                modePersen = btn.dataset.mode;
+
+                root.querySelectorAll('.bs-switch__btn').forEach(function (b) {
+                    b.classList.toggle('active', b.dataset.mode === modePersen);
+                });
+
+                renderPersen();
+            });
         });
 
         root.querySelector('[data-bs-el="reset"]').addEventListener('click', function () {
