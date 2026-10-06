@@ -160,9 +160,23 @@ final class ScoreCardParameterRegistry
                 'site', 'perusahaan', 'month_of_event_time',
                 'pct_kinerja_pengawas_control_room', [85, 90, 95, 100]),
 
+            // SEL KOSONG DI SINI BERARTI TIDAK ADA PERULANGAN, bukan data
+            // yang belum masuk -- dan itu hasil TERBAIK, bukan ketiadaan.
+            //
+            // Dibuktikan dari tabelnya: 13 baris, nilai terkecil 1, dan tidak
+            // satu pun baris bernilai 0. Tabel itu hanya mencatat ketika
+            // perulangan benar-benar terjadi, jadi kombinasi yang tidak
+            // tercatat memang bersih.
+            //
+            // Karena itu sel kosong diperlakukan sebagai cacah 0 -- yang jatuh
+            // ke band teratas dan berwarna hijau -- dan ditulis "N/A" supaya
+            // tidak tertukar dengan angka nol hasil pengukuran.
             self::cacah('Perulangan rekomendasi hasil investigasi', 'lead_perulangan_rekomendasi',
                 'site1', 'perusahaan', 'month_of_ccr_waktu_insiden',
-                'count_of_layer_tindakan_perbaikan1'),
+                'count_of_layer_tindakan_perbaikan1') + [
+                    'kosong_berarti' => 0.0,
+                    'kosong_label' => 'N/A',
+                ],
 
             self::persen('Kesesuaian Implementasi IKK', 'lead_compliance_ikk',
                 'ra_site_name', 'company_name_ikk_work_permit',

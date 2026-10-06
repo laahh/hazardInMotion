@@ -595,6 +595,20 @@ final class ScoreCardParameterMatrix
             foreach ($kontraktor as $k) {
                 $nilai = $this->ringkas($p, $perBulan, $site, $k, $bulan);
 
+                // Sebagian parameter cacah mencatat baris HANYA ketika
+                // kejadiannya ada, sehingga sel kosong berarti "tidak terjadi"
+                // -- hasil terbaik, bukan data hilang. Parameter seperti itu
+                // menyatakannya lewat 'kosong_berarti' di registry.
+                if ($nilai === null && array_key_exists('kosong_berarti', $p)) {
+                    $sel = $this->beriNilai($p, (float) $p['kosong_berarti']);
+                    $sel['teks'] = (string) ($p['kosong_label'] ?? 'N/A');
+                    $sel['kosong_baik'] = true;
+
+                    $out[$site][$k] = $sel;
+
+                    continue;
+                }
+
                 $out[$site][$k] = $nilai === null
                     ? ['ada' => false, 'capaian' => null, 'nilai' => null, 'band' => null, 'teks' => '–']
                     : $this->beriNilai($p, $nilai);
