@@ -59,15 +59,15 @@
             ['label' => 'Deviasi Rekayasa Engineering Seatbelt',                        'icon' => 'mdi:seatbelt', 'url' => route('ohs-score-card.gr-seatbelt.index')],
             ['label' => 'Deviasi Rekayasa Engineering Overspeed',                       'icon' => 'solar:speedometer-outline', 'url' => route('ohs-score-card.pelanggaran-overspeed.index')],
             ['label' => 'Pemenuhan Regulasi',                                           'icon' => 'solar:clipboard-list-outline'],
-            ['label' => 'Penuntasan pengendalian rekayasa',                             'icon' => 'solar:wrench-outline'],
+            ['label' => 'Penuntasan pengendalian rekayasa',                             'icon' => 'solar:wrench-outline', 'url' => route('ohs-score-card.penuntasan-pengendalian-rekayasa.index')],
         ],
         'G&H' => [
-            ['label' => 'Utilisasi BeSigma',                                            'icon' => 'solar:widget-outline'],
+            ['label' => 'Utilisasi BeSigma',                                            'icon' => 'solar:widget-outline', 'url' => route('ohs-score-card.utilisasi-besigma.index')],
         ],
         'OH & IH' => [
             ['label' => 'Rasio kelayakan kerja (wellbeing)',                            'icon' => 'solar:heart-pulse-outline', 'url' => route('ohs-score-card.rasio-kelayakan-kerja.index')],
             ['label' => 'Pemeriksaan Fit to Work awal shift pekerja',                   'icon' => 'solar:stethoscope-outline', 'url' => route('ohs-score-card.fit-to-work-awal-shift.index')],
-            ['label' => 'Pelaksanaan Sobriety Test Jam Kritis dan Pengecekan Sobriety Test', 'icon' => 'solar:test-tube-outline'],
+            ['label' => 'Pelaksanaan Sobriety Test Jam Kritis dan Pengecekan Sobriety Test', 'icon' => 'solar:test-tube-outline', 'url' => route('ohs-score-card.sobriety-test.index')],
         ],
         'ER & SS' => [
             ['label' => 'Tidak ada pelaporan melewati batas golden time',               'icon' => 'solar:clock-circle-outline', 'url' => route('ohs-score-card.golden-time-emergency.index')],

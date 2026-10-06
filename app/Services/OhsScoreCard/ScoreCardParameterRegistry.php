@@ -85,6 +85,8 @@ final class ScoreCardParameterRegistry
     public const BAND_TURUN = 'turun';
     public const BAND_CACAH = 'cacah';
     public const BAND_BINER = 'biner';
+    /** Band Penuntasan Rekayasa: nilai tertinggi justru DI ATAS 100%. */
+    public const BAND_REKAYASA = 'rekayasa';
 
     /** Nilai sel diringkas dengan rata-rata (persentase) atau jumlah (cacah). */
     public const RINGKAS_RATA = 'rata';
@@ -199,8 +201,28 @@ final class ScoreCardParameterRegistry
                 'distinct_count_of_kode_sid_bep_vw_berecord'),
 
             self::kosong('Pemenuhan Regulasi'),
-            self::kosong('Penuntasan pengendalian rekayasa'),
-            self::kosong('Utilisasi BeSigma'),
+            [
+                'nama' => 'Penuntasan pengendalian rekayasa',
+                'sumber' => 'lead_replikasi_rekayasa_engineering',
+                'site' => 'site', 'mitra' => 'perusahaan',
+                'bulan' => 'month_name', 'nilai' => 'target_komitmen',
+                'skala' => 100.0,
+                'band' => self::BAND_REKAYASA, 'ambang' => [80, 100],
+                'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+            ],
+            // Pembilangnya di MySQL, penyebutnya di database BeSigma
+            // (Postgres), jadi tidak bisa di-JOIN; lihat ambilBesigma().
+            // Ketika BeSigma tidak terjangkau, parameter ini tampil sebagai
+            // belum bersumber alih-alih diberi angka yang salah.
+            [
+                'nama' => 'Utilisasi BeSigma',
+                'sumber' => 'lead_utilisasi_besigma',
+                'khusus' => 'besigma',
+                'site' => 'site_dedicated', 'mitra' => 'company',
+                'bulan' => 'month_name', 'nilai' => 'distinct_kode_sid',
+                'band' => self::BAND_NAIK, 'ambang' => [96, 98, 100, 100],
+                'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+            ],
 
             self::persen('Rasio kelayakan kerja (wellbeing)', 'lead_ratio_kelayakan_kerja',
                 'site_dedicated', 'nama_perusahaan',
@@ -210,7 +232,10 @@ final class ScoreCardParameterRegistry
                 'site_dedicated', 'nama_perusahaan',
                 'month_of_tanggal_date', 'pct_pengisian_aggregator', [85, 90, 95, 100]),
 
-            self::kosong('Pelaksanaan Sobriety Test Jam Kritis dan Pengecekan Sobriety Test'),
+            // Kolomnya rasio 0-1, jadi diskalakan 100 kali.
+            self::rasio('Pelaksanaan Sobriety Test Jam Kritis dan Pengecekan Sobriety Test',
+                'lead_sobriety_test', 'site_dedicated', 'nama_perusahaan',
+                'month_name', 'pengisian_aggregator', [96, 98, 100, 100]),
 
             [
                 'nama' => 'Tidak ada pelaporan melewati batas golden time',
@@ -290,6 +315,24 @@ final class ScoreCardParameterRegistry
             'site' => 'nama_site', 'mitra' => 'perusahaan',
             'bulan' => null, 'nilai' => 'sertifikasi', 'tanpa_bulan' => true,
             'band' => self::BAND_NAIK, 'ambang' => [50, 60, 80, 100],
+            'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+        ];
+    }
+
+    /**
+     * Parameter yang kolom nilainya berupa RASIO 0-1, bukan persen. Diskalakan
+     * 100 kali sebelum dinilai.
+     *
+     * @param  array<int, int|float>  $ambang
+     */
+    private static function rasio(
+        string $nama, string $tabel, string $site, string $mitra,
+        string $bulan, string $nilai, array $ambang
+    ): array {
+        return [
+            'nama' => $nama, 'sumber' => $tabel, 'site' => $site, 'mitra' => $mitra,
+            'bulan' => $bulan, 'nilai' => $nilai, 'skala' => 100.0,
+            'band' => self::BAND_NAIK, 'ambang' => $ambang,
             'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
         ];
     }

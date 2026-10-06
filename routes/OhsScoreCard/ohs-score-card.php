@@ -31,7 +31,10 @@ use App\Http\Controllers\OhsScoreCard\PerulanganRekomendasiController;
 use App\Http\Controllers\OhsScoreCard\RasioKelayakanKerjaController;
 use App\Http\Controllers\OhsScoreCard\RatioTbcGrController;
 use App\Http\Controllers\OhsScoreCard\RoadSummaryController;
+use App\Http\Controllers\OhsScoreCard\PenuntasanRekayasaController;
 use App\Http\Controllers\OhsScoreCard\SertifikasiPengawasTeknisController;
+use App\Http\Controllers\OhsScoreCard\SobrietyTestController;
+use App\Http\Controllers\OhsScoreCard\UtilisasiBesigmaController;
 use App\Http\Controllers\OhsScoreCard\SertifikasiTenagaTeknisController;
 use App\Http\Controllers\OhsScoreCard\SpeakUpFatigueController;
 use App\Http\Controllers\OhsScoreCard\ValidasiTbcTabController;
@@ -358,6 +361,43 @@ Route::middleware('evaluasi-well.access')
             ->name('sertifikasi-tenaga-teknis.data');
         Route::get('/sertifikasi-tenaga-teknis/export', [SertifikasiTenagaTeknisController::class, 'export'])
             ->name('sertifikasi-tenaga-teknis.export');
+
+        // Parameter "Utilisasi BeSigma"
+        Route::get('/utilisasi-besigma', [UtilisasiBesigmaController::class, 'index'])
+            ->name('utilisasi-besigma.index');
+        Route::get('/utilisasi-besigma/overview', [UtilisasiBesigmaController::class, 'overview'])
+            ->name('utilisasi-besigma.overview');
+        Route::get('/utilisasi-besigma/detail-bulan', [UtilisasiBesigmaController::class, 'detailBulan'])
+            ->name('utilisasi-besigma.detail-bulan');
+        Route::get('/utilisasi-besigma/data', [UtilisasiBesigmaController::class, 'data'])
+            ->name('utilisasi-besigma.data');
+        Route::get('/utilisasi-besigma/export', [UtilisasiBesigmaController::class, 'export'])
+            ->name('utilisasi-besigma.export');
+
+        // Parameter "Penuntasan pengendalian rekayasa"
+        Route::get('/penuntasan-pengendalian-rekayasa', [PenuntasanRekayasaController::class, 'index'])
+            ->name('penuntasan-pengendalian-rekayasa.index');
+        Route::get('/penuntasan-pengendalian-rekayasa/overview', [PenuntasanRekayasaController::class, 'overview'])
+            ->name('penuntasan-pengendalian-rekayasa.overview');
+        Route::get('/penuntasan-pengendalian-rekayasa/detail-bulan', [PenuntasanRekayasaController::class, 'detailBulan'])
+            ->name('penuntasan-pengendalian-rekayasa.detail-bulan');
+        Route::get('/penuntasan-pengendalian-rekayasa/data', [PenuntasanRekayasaController::class, 'data'])
+            ->name('penuntasan-pengendalian-rekayasa.data');
+        Route::get('/penuntasan-pengendalian-rekayasa/export', [PenuntasanRekayasaController::class, 'export'])
+            ->name('penuntasan-pengendalian-rekayasa.export');
+
+        // Parameter "Pelaksanaan Sobriety Test"
+        Route::get('/sobriety-test', [SobrietyTestController::class, 'index'])
+            ->name('sobriety-test.index');
+        Route::get('/sobriety-test/overview', [SobrietyTestController::class, 'overview'])
+            ->name('sobriety-test.overview');
+        Route::get('/sobriety-test/detail-bulan', [SobrietyTestController::class, 'detailBulan'])
+            ->name('sobriety-test.detail-bulan');
+        Route::get('/sobriety-test/data', [SobrietyTestController::class, 'data'])
+            ->name('sobriety-test.data');
+        Route::get('/sobriety-test/export', [SobrietyTestController::class, 'export'])
+            ->name('sobriety-test.export');
+
 
 
         // Parameter OC "Kesesuaian Implementasi IKK"

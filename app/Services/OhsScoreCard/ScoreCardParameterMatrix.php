@@ -166,6 +166,7 @@ final class ScoreCardParameterMatrix
             fn (): ?array => match ($p['khusus'] ?? null) {
                 'road_summary' => $this->ambilRoadSummary(),
                 'kompetensi' => $this->ambilKompetensi($p),
+                'besigma' => $this->ambilBesigma($p),
                 default => $this->ambilRingkasan($p),
             }
         );
@@ -317,6 +318,70 @@ final class ScoreCardParameterMatrix
 
             $out[$kunci] = [
                 'jumlah' => (int) $r->bersertifikat / $total * 100.0,
+                'baris' => 1,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Utilisasi BeSigma: SID aktif (MySQL) dibagi pengguna terdaftar
+     * (Postgres BeSigma). Dua database berbeda, jadi pembagiannya di PHP.
+     *
+     * Mengembalikan null ketika BeSigma tidak terjangkau -- parameter ini lalu
+     * tampil sebagai "belum ada sumber data", bukan diberi angka yang salah.
+     * Ambangnya sama dengan UtilisasiBesigmaController.
+     *
+     * @return array<string, array{jumlah: float, baris: int}>|null
+     */
+    private function ambilBesigma(array $p): ?array
+    {
+        $kolomAda = $this->skema()[$p['sumber']] ?? null;
+
+        if ($kolomAda === null) {
+            return null;
+        }
+
+        $terdaftar = app(BesigmaPenggunaTerdaftar::class);
+
+        if (!$terdaftar->tersedia()) {
+            return null;
+        }
+
+        $rows = DB::table($p['sumber'])
+            ->selectRaw(
+                $this->kutip($p['site']) . ' AS site, '
+                . $this->kutip($p['mitra']) . ' AS mitra, '
+                . $this->kutip($p['bulan']) . ' AS bulan, '
+                . 'SUM(' . $this->kutip($p['nilai']) . ') AS aktif'
+            )
+            ->groupBy('site', 'mitra', 'bulan')
+            ->get();
+
+        $out = [];
+
+        foreach ($rows as $r) {
+            $penyebut = $terdaftar->untuk((string) $r->site, (string) $r->mitra);
+
+            if ($penyebut === null || $penyebut <= 0) {
+                continue; // tidak terdaftar di BeSigma: jangan mengarang angka
+            }
+
+            $bulan = $this->nomorBulan((string) $r->bulan);
+
+            if ($bulan === null) {
+                continue;
+            }
+
+            $kunci = $this->kunciSel((string) $r->site, (string) $r->mitra, $bulan);
+
+            if ($kunci === null) {
+                continue;
+            }
+
+            $out[$kunci] = [
+                'jumlah' => (float) $r->aktif / $penyebut * 100.0,
                 'baris' => 1,
             ];
         }
@@ -481,11 +546,13 @@ final class ScoreCardParameterMatrix
             return null;
         }
 
+        $skala = (float) ($p['skala'] ?? 1.0);
+
         if ($p['ringkas'] === ScoreCardParameterRegistry::RINGKAS_JUMLAH) {
-            return $jumlah;
+            return $jumlah * $skala;
         }
 
-        return $baris > 0 ? $jumlah / $baris : null;
+        return $baris > 0 ? $jumlah / $baris * $skala : null;
     }
 
     /** @return array<string, mixed> */
@@ -517,6 +584,7 @@ final class ScoreCardParameterMatrix
             ScoreCardParameterRegistry::BAND_NAIK => $this->bandNaik($p['ambang'], $x),
             ScoreCardParameterRegistry::BAND_TURUN => $this->bandTurun($p['ambang'], $x),
             ScoreCardParameterRegistry::BAND_CACAH => $this->bandCacah($x),
+            ScoreCardParameterRegistry::BAND_REKAYASA => $this->bandRekayasa($p['ambang'], $x),
             ScoreCardParameterRegistry::BAND_BINER => $x >= 100.0
                 ? [4.0, '100% - tidak ada yang lewat']
                 : [1.0, '<100% - ada yang lewat'],
@@ -591,6 +659,36 @@ final class ScoreCardParameterMatrix
         }
 
         return [1.0, '>' . $this->angka($b2) . '%'];
+    }
+
+    /**
+     * Penuntasan Rekayasa: melebihi komitmen adalah hasil TERBAIK, jadi band
+     * teratas ada di atas 100% dan band 3 hanya tepat di 100%. Ambangnya sama
+     * dengan PenuntasanRekayasaController::nilaiUntuk().
+     *
+     * @param  array<int, int|float>  $ambang  [batas band 2, batas 100%]
+     * @return array{0: float, 1: string}
+     */
+    private function bandRekayasa(array $ambang, float $x): array
+    {
+        [$b2, $penuh] = array_map('floatval', $ambang);
+
+        if ($x > $penuh) {
+            return [4.0, '>' . $this->angka($penuh) . '%'];
+        }
+
+        if ($x >= $penuh) {
+            return [3.0, $this->angka($penuh) . '%'];
+        }
+
+        if ($x >= $b2) {
+            $nilai = 2.0 + ($x - $b2) / ($penuh - $b2);
+
+            return [round(min($nilai, 2.99), 2),
+                $this->angka($b2) . '% - <' . $this->angka($penuh) . '%'];
+        }
+
+        return [round(min(1.0 + $x / $b2, 1.99), 2), '<' . $this->angka($b2) . '%'];
     }
 
     /** @return array{0: float, 1: string} */
