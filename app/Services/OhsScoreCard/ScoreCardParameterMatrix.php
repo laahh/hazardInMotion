@@ -186,6 +186,7 @@ final class ScoreCardParameterMatrix
                 'road_summary' => $this->ambilRoadSummary(),
                 'kompetensi' => $this->ambilKompetensi($p),
                 'besigma' => $this->ambilBesigma($p),
+                'pic_subcont' => $this->ambilPicSubcont($p),
                 default => $this->ambilRingkasan($p),
             }
         );
@@ -339,6 +340,74 @@ final class ScoreCardParameterMatrix
                 'jumlah' => (int) $r->bersertifikat / $total * 100.0,
                 'baris' => 1,
             ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Blindspot TBC dengan PIC Subcontractor: temuan dibebankan ke perusahaan
+     * MINECON di atas subkon yang jadi PIC-nya.
+     *
+     * Tabel temuannya di MySQL, relasi perusahaannya di Postgres OLAP, jadi
+     * pemetaannya dilakukan di PHP lewat MineconRelasi. Pasangan yang
+     * minecon-nya ganda atau belum terpetakan sengaja TIDAK dibebankan ke
+     * siapa pun -- salah menempel temuan ke kontraktor lebih buruk daripada
+     * mengosongkan selnya.
+     *
+     * Mengembalikan null ketika relasi tidak terjangkau, sehingga parameter
+     * ini tampil sebagai belum bersumber alih-alih kosong tanpa penjelasan.
+     *
+     * @return array<string, array{jumlah: float, baris: int}>|null
+     */
+    private function ambilPicSubcont(array $p): ?array
+    {
+        $kolomAda = $this->skema()[$p['sumber']] ?? null;
+
+        if ($kolomAda === null) {
+            return null;
+        }
+
+        $relasi = app(MineconRelasi::class);
+
+        if (!$relasi->tersedia()) {
+            return null;
+        }
+
+        $rows = DB::table($p['sumber'])
+            ->selectRaw(
+                $this->kutip($p['site']) . ' AS site, '
+                . $this->kutip($p['mitra']) . ' AS subkon, '
+                . $this->kutip($p['bulan']) . ' AS bulan, '
+                . 'COUNT(DISTINCT ' . $this->kutip($p['nilai']) . ') AS temuan'
+            )
+            ->groupBy('site', 'subkon', 'bulan')
+            ->get();
+
+        $out = [];
+
+        foreach ($rows as $r) {
+            $site = trim((string) $r->site);
+            $minecon = $relasi->untuk($site, (string) $r->subkon)['minecon'];
+
+            if ($minecon === null) {
+                continue; // ganda atau belum terpetakan: jangan salah tempel
+            }
+
+            $bulan = $this->nomorBulan((string) $r->bulan);
+
+            if ($bulan === null) {
+                continue;
+            }
+
+            $kunci = $this->kunciSel($site, $minecon, $bulan);
+
+            if ($kunci === null) {
+                continue;
+            }
+
+            $out[$kunci]['jumlah'] = ($out[$kunci]['jumlah'] ?? 0.0) + (float) $r->temuan;
+            $out[$kunci]['baris'] = ($out[$kunci]['baris'] ?? 0) + 1;
         }
 
         return $out;

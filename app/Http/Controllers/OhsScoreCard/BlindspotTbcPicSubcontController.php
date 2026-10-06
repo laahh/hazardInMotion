@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\OhsScoreCard;
 
 use App\Http\Controllers\Concerns\ServesDataTable;
+use App\Services\OhsScoreCard\MineconRelasi;
 use App\Http\Controllers\Controller;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Query\Builder;
@@ -85,6 +86,10 @@ final class BlindspotTbcPicSubcontController extends Controller
         6 => self::COL_TASK,
     ];
 
+    public function __construct(
+        private readonly MineconRelasi $minecon,
+    ) {}
+
     public function index(): View
     {
         return view('ohs-score-card.blindspot-tbc-pic-subcont.index', [
@@ -92,6 +97,7 @@ final class BlindspotTbcPicSubcontController extends Controller
                 'site' => $this->distinctValues(self::COL_SITE),
                 'mitra' => $this->distinctValues(self::COL_PERUSAHAAN),
                 'pelapor' => $this->distinctValues(self::COL_PELAPOR_PERUSAHAAN),
+                'minecon' => $this->daftarMinecon(),
             ],
             'monthOptions' => $this->monthOptions(),
             'tabel' => self::TABLE,
@@ -494,13 +500,13 @@ final class BlindspotTbcPicSubcontController extends Controller
         return $this->dtExport(
             $request,
             $query,
-            ['Site', 'Perusahaan PIC', 'SID PIC', 'Nama PIC', 'Perusahaan Pelapor',
-             'Nama Pelapor', 'Tahun', 'Bulan', 'Nomor Task', 'Deskripsi Temuan'],
+            ['Site', 'Perusahaan Minecon', 'Perusahaan PIC (Subkon)', 'SID PIC', 'Nama PIC',
+             'Perusahaan Pelapor', 'Nama Pelapor', 'Tahun', 'Bulan', 'Nomor Task', 'Deskripsi Temuan'],
             function (object $row): array {
                 $p = $this->present($row);
 
                 return [
-                    $p['site'], $p['mitra'], $p['sid_pic'], $p['pic'],
+                    $p['site'], $p['minecon'], $p['mitra'], $p['sid_pic'], $p['pic'],
                     $p['pelapor_perusahaan'], $p['pelapor'], $p['tahun'], $p['bulan'],
                     $p['task'], $p['deskripsi'],
                 ];
@@ -566,7 +572,81 @@ final class BlindspotTbcPicSubcontController extends Controller
             $query->whereIn(self::COL_BULAN, $this->namaBulan($month));
         }
 
+        $this->saringMinecon($query, trim((string) $request->input('minecon', '')));
+
         return $query;
+    }
+
+    /**
+     * Menyaring menurut perusahaan minecon.
+     *
+     * Minecon TIDAK ADA DI TABEL INI -- diturunkan dari view relasi di
+     * database lain -- jadi tidak bisa ditulis sebagai WHERE biasa. Caranya:
+     * pasangan site/subkon yang bermuara ke minecon itu dikumpulkan dulu di
+     * PHP, lalu dipakai sebagai daftar pasangan yang diizinkan.
+     */
+    private function saringMinecon(Builder $query, string $minecon): void
+    {
+        if ($minecon === '') {
+            return;
+        }
+
+        $pasangan = [];
+
+        foreach ($this->pasanganSiteMitra() as [$site, $mitra]) {
+            if ($this->minecon->label($site, $mitra) === $minecon) {
+                $pasangan[] = [$site, $mitra];
+            }
+        }
+
+        if ($pasangan === []) {
+            // Tidak ada yang cocok: jangan diam-diam menampilkan semuanya.
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->where(function (Builder $q) use ($pasangan): void {
+            foreach ($pasangan as [$site, $mitra]) {
+                $q->orWhere(function (Builder $w) use ($site, $mitra): void {
+                    $w->where(self::COL_SITE, $site)->where(self::COL_PERUSAHAAN, $mitra);
+                });
+            }
+        });
+    }
+
+    /**
+     * Seluruh pasangan site/subkon yang ada di tabel ini.
+     *
+     * @return array<int, array{0: string, 1: string}>
+     */
+    private function pasanganSiteMitra(): array
+    {
+        return DB::table(self::TABLE)
+            ->selectRaw(self::COL_SITE . ' AS s, ' . self::COL_PERUSAHAAN . ' AS m')
+            ->distinct()
+            ->get()
+            ->map(static fn (object $r): array => [trim((string) $r->s), trim((string) $r->m)])
+            ->all();
+    }
+
+    /**
+     * Daftar minecon yang benar-benar muncul, untuk isi penyaring.
+     *
+     * @return array<int, string>
+     */
+    private function daftarMinecon(): array
+    {
+        $out = [];
+
+        foreach ($this->pasanganSiteMitra() as [$site, $mitra]) {
+            $out[] = $this->minecon->label($site, $mitra);
+        }
+
+        $out = array_values(array_unique($out));
+        sort($out);
+
+        return $out;
     }
 
     /**
@@ -579,9 +659,18 @@ final class BlindspotTbcPicSubcontController extends Controller
         $teks = static fn ($value): string => trim((string) $value);
         $monthNo = $this->nomorBulan((string) $row->bulan_sumber);
 
+        $site = $teks($row->site);
+        $mitra = $teks($row->mitra);
+        $relasi = $this->minecon->untuk($site, $mitra);
+
         return [
-            'site' => $teks($row->site),
-            'mitra' => $teks($row->mitra),
+            'site' => $site,
+            'mitra' => $mitra,
+            // Perusahaan minecon di atas subkon ini; lihat MineconRelasi untuk
+            // aturan ketika relasinya ganda atau tidak ketemu.
+            'minecon' => $relasi['minecon'] ?? $this->minecon->label($site, $mitra),
+            'minecon_pasti' => $relasi['minecon'] !== null,
+            'minecon_status' => $relasi['status'],
             'sid_pic' => $teks($row->sid_pic),
             'pic' => $teks($row->pic),
             'pelapor_perusahaan' => $teks($row->pelapor_perusahaan),

@@ -174,9 +174,24 @@ final class ScoreCardParameterRegistry
 
             self::kosong('Laporan Perizinan Usaha Jasa'),
 
-            // Tabel bulanannya ada tetapi kosong (0 baris), dan satu-satunya
-            // kolom persen di tabel rincian bernilai 100,00 untuk semua baris.
-            self::kosong('% Blindspot TBC dengan PIC Subcontractor'),
+            // Temuan dibebankan ke perusahaan MINECON di atas subkon yang
+            // jadi PIC-nya, diturunkan dari view relasi perusahaan di OLAP;
+            // lihat ambilPicSubcont() dan MineconRelasi.
+            //
+            // YANG DITAMPILKAN CACAH, BUKAN PERSENTASE: tabel bulanannya kosong
+            // (0 baris) dan satu-satunya kolom persen di tabel rincian bernilai
+            // 100,00 untuk seluruh 123 baris, jadi tidak ada penyebut yang
+            // sahih. Band resmi parameter ini berbasis persen, karena itu
+            // Nilainya sengaja dikosongkan.
+            [
+                'nama' => '% Blindspot TBC dengan PIC Subcontractor',
+                'sumber' => 'detail_lead_subcont_blindspot_tbc_pic_subcont',
+                'khusus' => 'pic_subcont',
+                'site' => 'site', 'mitra' => 'perusahaan_pic',
+                'bulan' => 'month_of_date_for_join', 'nilai' => 'task_number',
+                'band' => null, 'ambang' => [],
+                'satuan' => '', 'ringkas' => self::RINGKAS_JUMLAH,
+            ],
 
             // Kriterianya naratif (terlaksana / perulangan / tindak lanjut),
             // bukan ambang angka.

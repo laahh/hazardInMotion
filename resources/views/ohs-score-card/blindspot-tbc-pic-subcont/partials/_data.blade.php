@@ -39,7 +39,19 @@
           </select>
         </div>
         <div class="col-xxl-4 col-md-4 col-sm-6">
-          <label class="form-label text-sm fw-medium mb-8" for="bpsd-mitra">Perusahaan PIC</label>
+          {{-- Minecon tidak ada di tabel ini; diturunkan dari view relasi
+               perusahaan, jadi penyaringnya bekerja lewat daftar pasangan
+               site/subkon. Lihat BlindspotTbcPicSubcontController::saringMinecon(). --}}
+          <label class="form-label text-sm fw-medium mb-8" for="bpsd-minecon">Perusahaan Minecon</label>
+          <select class="form-select form-select-sm radius-8 bpsd-filter" id="bpsd-minecon" data-column="minecon">
+            <option value="">Semua Minecon</option>
+            @foreach ($filterOptions['minecon'] as $option)
+              <option value="{{ $option }}">{{ $option }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-xxl-4 col-md-4 col-sm-6">
+          <label class="form-label text-sm fw-medium mb-8" for="bpsd-mitra">Perusahaan PIC (Subkon)</label>
           <select class="form-select form-select-sm radius-8 bpsd-filter" id="bpsd-mitra" data-column="mitra">
             <option value="">Semua Perusahaan</option>
             @foreach ($filterOptions['mitra'] as $option)
@@ -77,7 +89,8 @@
           <thead>
             <tr>
               <th>Site</th>
-              <th>Perusahaan PIC</th>
+              <th>Perusahaan Minecon</th>
+              <th>Perusahaan PIC (Subkon)</th>
               <th>PIC</th>
               <th>Pelapor</th>
               <th>Deskripsi Temuan</th>

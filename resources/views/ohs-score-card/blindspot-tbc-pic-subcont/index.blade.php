@@ -917,6 +917,22 @@ var bpsModalDetail = (function () {
         },
         columns: [
             { data: 'site' },
+            {
+                data: 'minecon',
+                render: function (d, type, row) {
+                    if (type !== 'display') { return d; }
+
+                    // Yang belum pasti ditandai supaya tidak terbaca sebagai
+                    // fakta: relasinya ganda, atau memang belum terpetakan.
+                    return row.minecon_pasti
+                        ? escapeHtml(d)
+                        : '<span class="text-secondary-light fst-italic" title="'
+                            + escapeHtml(row.minecon_status === 'ganda'
+                                ? 'Subkon ini tercatat di bawah lebih dari satu Minecon di site ini'
+                                : 'Belum ada relasi untuk subkon ini di view relasi perusahaan')
+                            + '">' + escapeHtml(d) + '</span>';
+                }
+            },
             { data: 'mitra' },
             {
                 data: 'pic',
