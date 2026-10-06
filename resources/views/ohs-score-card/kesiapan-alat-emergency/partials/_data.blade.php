@@ -35,6 +35,15 @@
           </select>
         </div>
         <div class="col-xxl-3 col-md-4 col-sm-6">
+          <label class="form-label text-sm fw-medium mb-8" for="kaed-pemilik">Perusahaan Pemilik</label>
+          <select class="form-select form-select-sm radius-8 kaed-filter" id="kaed-pemilik" data-column="pemilik">
+            <option value="">Semua Perusahaan</option>
+            @foreach ($filterOptions['pemilik'] as $option)
+              <option value="{{ $option }}">{{ $option }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
           <label class="form-label text-sm fw-medium mb-8" for="kaed-kategori">Kategori Alat</label>
           <select class="form-select form-select-sm radius-8 kaed-filter" id="kaed-kategori" data-column="kategori">
             <option value="">Semua Kategori</option>
@@ -52,16 +61,16 @@
             @endforeach
           </select>
         </div>
-        <div class="col-xxl-2 col-md-6 col-sm-6">
+        <div class="col-xxl-1 col-md-4 col-sm-6">
           <label class="form-label text-sm fw-medium mb-8" for="kaed-bulan">Bulan</label>
           <select class="form-select form-select-sm radius-8 kaed-filter" id="kaed-bulan" data-column="bulan_filter">
-            <option value="">Semua Bulan</option>
+            <option value="">Semua</option>
             @foreach ($monthOptions as $nomor => $label)
               <option value="{{ $nomor }}">{{ $label }}</option>
             @endforeach
           </select>
         </div>
-        <div class="col-xxl-2 col-md-6 col-sm-6">
+        <div class="col-xxl-1 col-md-4 col-sm-6">
           <button type="button" class="btn btn-sm btn-outline-secondary radius-8 w-100"
                   data-kaed="reset">Reset</button>
         </div>
@@ -74,6 +83,7 @@
               <th>No Registrasi</th>
               <th>Peralatan</th>
               <th>Site</th>
+              <th>Perusahaan Pemilik</th>
               <th>Kategori</th>
               <th>Bulan</th>
               <th class="text-end">Hari Good</th>

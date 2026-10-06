@@ -5,9 +5,11 @@
 {{--
   Kesiapan Alat Emergency.
 
-  SUMBU MATRIKSNYA SITE x KATEGORI ALAT, bukan site x perusahaan seperti
-  halaman parameter lain: kolom perusahaan_pemilik di inventaris kosong pada
-  80% baris, jadi memakainya hanya menghasilkan satu kolom besar tanpa nama.
+  SUMBU MATRIKSNYA SITE x PERUSAHAAN PEMILIK. Kolom perusahaan_pemilik di
+  inventaris memang kosong pada 3.485 baris, tetapi itu bukan data hilang --
+  seluruhnya berkepemilikan "BC" dan dibaca sebagai PT BC oleh controller.
+  Kategori alat tetap ada, tetapi sebagai filter dan sebagai rincian di dalam
+  modal, bukan sebagai sumbu.
 
   PENYEBUT TIAP SEL SAMA SEPANJANG BULAN -- yaitu cacah alat di inventaris --
   sehingga persentasenya bisa dibandingkan antar bulan tanpa tertipu oleh
@@ -29,13 +31,13 @@
     background: #F8FAFC; color: #64748B; font-weight: 600; font-size: 11px; border-radius: 8px;
   }
   .kae-matrix thead th.kae-th-last { background: #2E90FA !important; color: #fff !important; }
-  .kae-matrix .kae-site, .kae-matrix .kae-kategori {
+  .kae-matrix .kae-site, .kae-matrix .kae-pemilik {
     position: sticky; z-index: 2; text-align: left !important;
     background: #F1F5F9; color: #0F172A !important; border-radius: 8px;
   }
   .kae-matrix .kae-site { left: 0; font-weight: 700; min-width: 128px; }
-  .kae-matrix .kae-kategori { left: 128px; font-weight: 600; min-width: 190px; }
-  .kae-matrix thead .kae-site, .kae-matrix thead .kae-kategori {
+  .kae-matrix .kae-pemilik { left: 128px; font-weight: 600; min-width: 190px; }
+  .kae-matrix thead .kae-site, .kae-matrix thead .kae-pemilik {
     z-index: 4; background: #F8FAFC; color: #64748B !important;
   }
   .kae-matrix .kae-rata {
@@ -213,7 +215,7 @@
                 'dari ' + fmtNum(k.alat) + ' alat di inventaris · target ' + fmtPct(k.target))
             + ubin('Nilai', fmtNilai(k.nilai), escapeHtml(k.nilai_band || '–'))
             + ubin('Memenuhi target', fmtNum(k.kombinasi_memenuhi) + ' / ' + fmtNum(k.kombinasi),
-                'pasangan site &amp; kategori alat')
+                'pasangan site &amp; perusahaan')
             + ubin('Terendah', fmtPct(k.terendah),
                 fmtNum(k.bulan_count) + ' bulan terdata');
     }
@@ -223,7 +225,8 @@
         var thead = root.querySelector('[data-kae="matrix"] thead');
         var tbody = root.querySelector('[data-kae="matrix"] tbody');
 
-        thead.innerHTML = '<tr><th class="kae-site">Site</th><th class="kae-kategori">Kategori Alat</th>'
+        thead.innerHTML = '<tr><th class="kae-site">Site</th>'
+            + '<th class="kae-pemilik">Perusahaan Pemilik</th>'
             + '<th>Rata</th><th>Tren</th>'
             + months.map(function (m, i) {
                 return '<th class="' + (i === months.length - 1 ? 'kae-th-last' : '') + '">'
@@ -250,7 +253,7 @@
             var html = '<tr>'
                 + (lewati[i] ? '' : '<td class="kae-site" rowspan="' + span[i] + '">'
                     + escapeHtml(row.site) + '</td>')
-                + '<td class="kae-kategori">' + escapeHtml(row.kategori) + '</td>'
+                + '<td class="kae-pemilik">' + escapeHtml(row.pemilik) + '</td>'
                 + '<td class="kae-rata" title="' + escapeHtml(
                     fmtPct(row.average) + ' · Nilai ' + fmtNilai(row.nilai)
                     + ' (' + (row.nilai_band || '') + ') · ' + row.total + ' alat · '
@@ -271,19 +274,19 @@
             row.cells.forEach(function (sel, m) {
                 if (!sel.ada) {
                     html += '<td class="kae-cell kae-kosong" title="'
-                        + escapeHtml(row.site + ' · ' + row.kategori + ' · ' + months[m].label
+                        + escapeHtml(row.site + ' · ' + row.pemilik + ' · ' + months[m].label
                             + ': belum ada lembar periksa') + '">–</td>';
                     return;
                 }
 
-                var tip = row.site + ' · ' + row.kategori + ' · ' + months[m].label + ': '
+                var tip = row.site + ' · ' + row.pemilik + ' · ' + months[m].label + ': '
                     + sel.siap + ' dari ' + sel.total + ' alat siap (' + fmtPct(sel.pct)
                     + ') · Nilai ' + fmtNilai(sel.nilai) + ' (' + (sel.nilai_band || '') + ')';
 
                 html += '<td class="kae-cell kae-cell--klik ' + cellClass(sel) + '"'
                     + ' role="button" tabindex="0"'
                     + ' data-site="' + escapeHtml(row.site) + '"'
-                    + ' data-kategori="' + escapeHtml(row.kategori) + '"'
+                    + ' data-pemilik="' + escapeHtml(row.pemilik) + '"'
                     + ' data-bulan="' + months[m].number + '"'
                     + ' title="' + escapeHtml(tip + ' · klik untuk rincian') + '">'
                     + (matrixMode === 'nilai' ? fmtNilai(sel.nilai) : Math.round(sel.pct) + '%')
@@ -294,8 +297,8 @@
         }).join('');
 
         el('matrix-subtitle').textContent = matrixMode === 'nilai'
-            ? 'Nilai 1–4 tiap kategori alat di tiap site'
-            : 'Persentase alat siap tiap kategori di tiap site';
+            ? 'Nilai 1–4 tiap perusahaan pemilik di tiap site'
+            : 'Persentase alat siap tiap perusahaan pemilik di tiap site';
     }
 
     function renderLegend() {
@@ -338,15 +341,15 @@
     var modalEl = document.getElementById('kae-modal');
     var modal = modalEl && window.bootstrap ? new window.bootstrap.Modal(modalEl) : null;
 
-    function bukaDetail(site, kategori, bulan) {
+    function bukaDetail(site, pemilik, bulan) {
         if (!modal) { return; }
 
         var params = new URLSearchParams(currentFilters());
         params.set('site', site);
-        params.set('kategori', kategori);
+        params.set('pemilik', pemilik);
         params.set('bulan', bulan);
 
-        document.querySelector('[data-kae="modal-judul"]').textContent = site + ' · ' + kategori;
+        document.querySelector('[data-kae="modal-judul"]').textContent = site + ' · ' + pemilik;
         document.querySelector('[data-kae="modal-isi"]').innerHTML =
             '<div class="text-center py-24 text-secondary-light text-sm">Memuat rincian…</div>';
         modal.show();
@@ -398,15 +401,28 @@
                 }).join('') + '</tbody></table></div>';
         }
 
+        if (d.per_kategori && d.per_kategori.length > 1) {
+            html += '<h6 class="text-sm fw-semibold mb-8">Per kategori alat</h6>'
+                + '<div class="kae-modal-scroll mb-16"><table class="table table-sm mb-0">'
+                + '<thead><tr><th>Kategori</th><th class="text-end">Siap</th>'
+                + '<th class="text-end">Dari yang diperiksa</th></tr></thead><tbody>'
+                + d.per_kategori.map(function (r) {
+                    return '<tr><td>' + escapeHtml(r.kategori) + '</td>'
+                        + '<td class="text-end">' + fmtNum(r.siap) + ' / ' + fmtNum(r.diperiksa) + '</td>'
+                        + '<td class="text-end">' + fmtPct(r.persen) + '</td></tr>';
+                }).join('') + '</tbody></table></div>';
+        }
+
         if (d.belum_siap && d.belum_siap.length) {
             html += '<h6 class="text-sm fw-semibold mb-8">Alat yang belum siap pada '
                 + escapeHtml(d.bulan) + '</h6>'
                 + '<div class="kae-modal-scroll"><table class="table table-sm mb-0">'
-                + '<thead><tr><th>No Registrasi</th><th>Peralatan</th>'
+                + '<thead><tr><th>No Registrasi</th><th>Peralatan</th><th>Kategori</th>'
                 + '<th class="text-end">Hari Good</th><th>Alasan</th></tr></thead><tbody>'
                 + d.belum_siap.map(function (s) {
                     return '<tr><td>' + escapeHtml(s.no_registrasi) + '</td>'
                         + '<td>' + escapeHtml(s.nama) + '</td>'
+                        + '<td class="text-xs">' + escapeHtml(s.kategori) + '</td>'
                         + '<td class="text-end">' + fmtNum(s.hari_good) + ' / ' + fmtNum(s.hari_isi) + '</td>'
                         + '<td class="text-xs">' + escapeHtml(s.alasan) + '</td></tr>';
                 }).join('') + '</tbody></table></div>';
@@ -429,13 +445,13 @@
 
     matrixEl.addEventListener('click', function (e) {
         var td = e.target.closest('.kae-cell--klik');
-        if (td) { bukaDetail(td.dataset.site, td.dataset.kategori, td.dataset.bulan); }
+        if (td) { bukaDetail(td.dataset.site, td.dataset.pemilik, td.dataset.bulan); }
     });
 
     matrixEl.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter' && e.key !== ' ') { return; }
         var td = e.target.closest('.kae-cell--klik');
-        if (td) { e.preventDefault(); bukaDetail(td.dataset.site, td.dataset.kategori, td.dataset.bulan); }
+        if (td) { e.preventDefault(); bukaDetail(td.dataset.site, td.dataset.pemilik, td.dataset.bulan); }
     });
 
     root.querySelectorAll('.kae-switch__btn').forEach(function (btn) {
@@ -475,7 +491,7 @@
                 safe('legend', renderLegend);
                 safe('matrix', function () { renderMatrix(json.months || [], json.matrix || []); });
                 safe('per-site', function () { renderPanel('per-site', json.per_site); });
-                safe('per-kategori', function () { renderPanel('per-kategori', json.per_kategori); });
+                safe('per-pemilik', function () { renderPanel('per-pemilik', json.per_pemilik); });
 
                 var catatan = el('catatan');
                 catatan.textContent = json.catatan || '';
@@ -483,7 +499,7 @@
 
                 var k = json.kpi;
                 el('status').textContent = fmtNum(k.alat) + ' alat · '
-                    + fmtNum(k.kombinasi) + ' pasangan site/kategori · '
+                    + fmtNum(k.kombinasi) + ' pasangan site/perusahaan · '
                     + fmtNum(k.bulan_count) + ' bulan · kesiapan ' + fmtPct(k.rata)
                     + ' · Nilai ' + fmtNilai(k.nilai);
             })
@@ -586,6 +602,7 @@
             { data: 'no_registrasi' },
             { data: 'nama' },
             { data: 'site' },
+            { data: 'pemilik' },
             { data: 'kategori' },
             // Bulan tersimpan sebagai nama, jadi urutannya dipegang nomor bulan.
             {

@@ -43,11 +43,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * 30 hari dan bulan berjalan yang belum penuh terbuang diam-diam: terukur
  * 0% untuk Juni, September, dan Oktober padahal sebenarnya 95-96%.
  *
- * SUMBU KEDUANYA KATEGORI ALAT, BUKAN PERUSAHAAN. Kolom perusahaan_pemilik
- * kosong pada 3.488 dari 4.373 baris inventaris (80%), jadi memakainya sebagai
- * sumbu hanya menghasilkan satu kolom besar tanpa nama. kategori_peralatan
- * terisi penuh dan punya 8 nilai yang bermakna.
- *
  * SITE DIAMBIL DARI INVENTARIS, bukan dari lembar periksa: inventaris adalah
  * baseline-nya, dan ada 137 pasangan yang site-nya berbeda di antara kedua
  * tabel. Memakai site lembar periksa akan membuat sebuah alat berpindah site
@@ -76,6 +71,9 @@ final class KesiapanAlatEmergencyController extends Controller
     /** Status harian yang membatalkan kesiapan sebuah alat. */
     private const STATUS_TIDAK_SIAP = ['Not Good', 'Breakdown', 'Kembali ke CCR'];
 
+    /** Label untuk alat yang pemiliknya memang tidak tercatat di mana pun. */
+    private const PEMILIK_TAK_DIKENAL = '(pemilik belum dicatat)';
+
     /** Batas baris yang dikirim ke modal rincian sel. */
     private const BATAS_DETAIL = 200;
 
@@ -94,6 +92,7 @@ final class KesiapanAlatEmergencyController extends Controller
             'legenda' => $this->legendaBand(),
             'filterOptions' => [
                 'site' => $this->nilaiBerbeda('site'),
+                'pemilik' => $this->daftarPemilik(),
                 'kategori' => $this->nilaiBerbeda('kategori_peralatan'),
                 'klasifikasi' => $this->nilaiBerbeda('klasifikasi_alat'),
             ],
@@ -116,7 +115,7 @@ final class KesiapanAlatEmergencyController extends Controller
         foreach ($baseline as $kunci => $dasar) {
             $grid[$kunci] = [
                 'site' => $dasar['site'],
-                'kategori' => $dasar['kategori'],
+                'pemilik' => $dasar['pemilik'],
                 'total' => $dasar['total'],
                 'bulan' => [],
             ];
@@ -144,37 +143,41 @@ final class KesiapanAlatEmergencyController extends Controller
             'matrix' => $matrix,
             'kpi' => $this->bangunKpi($matrix, $months),
             'per_site' => $this->ringkasPer($matrix, 'site'),
-            'per_kategori' => $this->ringkasPer($matrix, 'kategori'),
+            'per_pemilik' => $this->ringkasPer($matrix, 'pemilik'),
             'monthly' => $this->deretBulanan($matrix, $months),
             'catatan' => $this->catatan($request),
         ]);
     }
 
     /**
-     * Penyebut: cacah alat di inventaris per site dan kategori.
+     * Penyebut: cacah alat di inventaris per site dan perusahaan pemilik.
      *
-     * @return array<string, array{site: string, kategori: string, total: int}>
+     * @return array<string, array{site: string, pemilik: string, total: int}>
      */
     private function baseline(Request $request): array
     {
         $rows = $this->queryInventaris($request)
-            ->selectRaw('TRIM(site) AS site, TRIM(kategori_peralatan) AS kategori, COUNT(*) AS total')
-            ->groupBy('site', 'kategori')
+            ->selectRaw(
+                'TRIM(site) AS site, '
+                . $this->ekspresiPemilik() . ' AS pemilik, '
+                . 'COUNT(*) AS total'
+            )
+            ->groupBy('site', 'pemilik')
             ->get();
 
         $out = [];
 
         foreach ($rows as $row) {
             $site = (string) $row->site;
-            $kategori = (string) $row->kategori;
+            $pemilik = (string) $row->pemilik;
 
-            if ($site === '' || $kategori === '') {
+            if ($site === '' || $pemilik === '') {
                 continue;
             }
 
-            $out[$site . '|' . $kategori] = [
+            $out[$site . '|' . $pemilik] = [
                 'site' => $site,
-                'kategori' => $kategori,
+                'pemilik' => $pemilik,
                 'total' => (int) $row->total,
             ];
         }
@@ -183,7 +186,7 @@ final class KesiapanAlatEmergencyController extends Controller
     }
 
     /**
-     * Pembilang: cacah alat siap per site, kategori, dan bulan.
+     * Pembilang: cacah alat siap per site, pemilik, dan bulan.
      *
      * @return array<string, array<int, array{siap: int, diperiksa: int}>>
      */
@@ -191,11 +194,11 @@ final class KesiapanAlatEmergencyController extends Controller
     {
         $rows = $this->queryKesiapan($request)
             ->selectRaw(
-                'site, kategori, bulan, '
+                'site, pemilik, bulan, '
                 . 'COUNT(*) AS diperiksa, '
                 . 'SUM(siap) AS siap'
             )
-            ->groupBy('site', 'kategori', 'bulan')
+            ->groupBy('site', 'pemilik', 'bulan')
             ->get();
 
         $out = [];
@@ -207,7 +210,7 @@ final class KesiapanAlatEmergencyController extends Controller
                 continue; // nama bulan tak dikenal: jangan diam-diam dianggap bulan lain
             }
 
-            $kunci = trim((string) $row->site) . '|' . trim((string) $row->kategori);
+            $kunci = trim((string) $row->site) . '|' . trim((string) $row->pemilik);
 
             $out[$kunci][$nomor] = [
                 'siap' => (int) $row->siap,
@@ -275,7 +278,7 @@ final class KesiapanAlatEmergencyController extends Controller
 
             $out[] = [
                 'site' => $entry['site'],
-                'kategori' => $entry['kategori'],
+                'pemilik' => $entry['pemilik'],
                 'cells' => $cells,
                 'average' => $rata,
                 'nilai' => $rata === null ? null : $nilaiRata,
@@ -459,6 +462,8 @@ final class KesiapanAlatEmergencyController extends Controller
             return null;
         }
 
+        $catatan = [];
+
         // Alat yang sepanjang seluruh bulan tidak pernah muncul di lembar
         // periksa sama sekali. Ini bukan "belum ada datanya" yang netral --
         // alat itu memang tidak pernah diperiksa, dan ikut menekan kesiapan.
@@ -470,19 +475,34 @@ final class KesiapanAlatEmergencyController extends Controller
             })
             ->count();
 
-        if ($tanpaPeriksa === 0) {
-            return null;
+        if ($tanpaPeriksa > 0) {
+            $catatan[] = sprintf(
+                '%s dari %s alat di %s tidak pernah muncul di %s. Alat itu tetap '
+                . 'ikut menjadi penyebut dan dihitung belum siap, karena yang diukur '
+                . 'adalah "di setiap bulannya diperiksa atau tidak".',
+                number_format($tanpaPeriksa, 0, ',', '.'),
+                number_format($inventaris, 0, ',', '.'),
+                self::TABEL_INVENTARIS,
+                self::TABEL_INSPEKSI
+            );
         }
 
-        return sprintf(
-            '%s dari %s alat di %s tidak pernah muncul di %s. Alat itu tetap '
-            . 'ikut menjadi penyebut dan dihitung belum siap, karena yang diukur '
-            . 'adalah "di setiap bulannya diperiksa atau tidak".',
-            number_format($tanpaPeriksa, 0, ',', '.'),
-            number_format($inventaris, 0, ',', '.'),
-            self::TABEL_INVENTARIS,
-            self::TABEL_INSPEKSI
-        );
+        $takDikenal = (int) $this->queryInventaris($request)
+            ->whereRaw($this->ekspresiPemilik() . ' = ?', [self::PEMILIK_TAK_DIKENAL])
+            ->count();
+
+        if ($takDikenal > 0) {
+            $catatan[] = sprintf(
+                '%s alat tidak bisa dipetakan ke perusahaan pemilik: perusahaan_pemilik '
+                . 'kosong dan kepemilikan_peralatan bukan BC, sehingga tidak ada yang bisa '
+                . 'dijadikan namanya. Alat itu dikumpulkan di baris "%s", bukan dibuang, '
+                . 'supaya penyebutnya tetap utuh.',
+                number_format($takDikenal, 0, ',', '.'),
+                self::PEMILIK_TAK_DIKENAL
+            );
+        }
+
+        return $catatan === [] ? null : implode(' ', $catatan);
     }
 
     // ======================================================================
@@ -492,16 +512,16 @@ final class KesiapanAlatEmergencyController extends Controller
     public function detailBulan(Request $request): JsonResponse
     {
         $site = trim((string) $request->input('site', ''));
-        $kategori = trim((string) $request->input('kategori', ''));
+        $pemilik = trim((string) $request->input('pemilik', ''));
         $bulan = (int) $request->input('bulan', 0);
 
-        if ($site === '' || $kategori === '' || $bulan < 1 || $bulan > 12) {
-            return response()->json(['message' => 'Site, kategori, dan bulan wajib diisi.'], 422);
+        if ($site === '' || $pemilik === '' || $bulan < 1 || $bulan > 12) {
+            return response()->json(['message' => 'Site, perusahaan, dan bulan wajib diisi.'], 422);
         }
 
         $total = (int) $this->queryInventaris($request)
             ->whereRaw('TRIM(site) = ?', [$site])
-            ->whereRaw('TRIM(kategori_peralatan) = ?', [$kategori])
+            ->whereRaw($this->ekspresiPemilik() . ' = ?', [$pemilik])
             ->count();
 
         if ($total === 0) {
@@ -512,7 +532,7 @@ final class KesiapanAlatEmergencyController extends Controller
 
         $sel = $this->queryKesiapan($request)
             ->where('site', $site)
-            ->where('kategori', $kategori)
+            ->where('pemilik', $pemilik)
             ->where('bulan', $namaBulan)
             ->selectRaw('COUNT(*) AS diperiksa, SUM(siap) AS siap')
             ->first();
@@ -528,7 +548,7 @@ final class KesiapanAlatEmergencyController extends Controller
 
         foreach ($this->queryKesiapan($request)
             ->where('site', $site)
-            ->where('kategori', $kategori)
+            ->where('pemilik', $pemilik)
             ->selectRaw('bulan, COUNT(*) AS diperiksa, SUM(siap) AS siap')
             ->groupBy('bulan')
             ->get() as $r) {
@@ -552,20 +572,45 @@ final class KesiapanAlatEmergencyController extends Controller
 
         ksort($riwayat);
 
+        // Rincian per kategori alat di dalam sel ini: satu perusahaan di satu
+        // site bisa memegang ratusan alat dari berbagai kategori, dan yang
+        // menarik justru kategori mana yang menyeret angkanya turun.
+        $perKategori = $this->queryKesiapan($request)
+            ->where('site', $site)
+            ->where('pemilik', $pemilik)
+            ->where('bulan', $namaBulan)
+            ->selectRaw('kategori, COUNT(*) AS diperiksa, SUM(siap) AS siap')
+            ->groupBy('kategori')
+            ->orderBy('kategori')
+            ->get()
+            ->map(static fn (object $r): array => [
+                'kategori' => (string) $r->kategori,
+                'siap' => (int) $r->siap,
+                'diperiksa' => (int) $r->diperiksa,
+                'persen' => (int) $r->diperiksa > 0
+                    ? round((int) $r->siap / (int) $r->diperiksa * 100, 2)
+                    : null,
+            ])
+            ->all();
+
         // Alat yang bulan itu TIDAK siap, beserta alasannya. Ini yang membuat
         // angka di sel bisa ditelusuri sampai ke nomor registrasinya.
         $belumSiap = $this->queryKesiapan($request)
             ->where('site', $site)
-            ->where('kategori', $kategori)
+            ->where('pemilik', $pemilik)
             ->where('bulan', $namaBulan)
             ->where('siap', 0)
-            ->selectRaw('no_registrasi, nama_peralatan, hari_isi, hari_good, hari_ng, hari_bd, hari_ccr')
+            ->selectRaw(
+                'no_registrasi, nama_peralatan, kategori, '
+                . 'hari_isi, hari_good, hari_ng, hari_bd, hari_ccr'
+            )
             ->orderBy('no_registrasi')
             ->limit(self::BATAS_DETAIL)
             ->get()
             ->map(fn (object $r): array => [
                 'no_registrasi' => (string) $r->no_registrasi,
                 'nama' => (string) $r->nama_peralatan,
+                'kategori' => (string) $r->kategori,
                 'hari_isi' => (int) $r->hari_isi,
                 'hari_good' => (int) $r->hari_good,
                 'alasan' => $this->alasanBelumSiap($r),
@@ -573,7 +618,7 @@ final class KesiapanAlatEmergencyController extends Controller
             ->all();
 
         return response()->json([
-            'judul' => $site . ' · ' . $kategori,
+            'judul' => $site . ' · ' . $pemilik,
             'bulan' => $namaBulan,
             'persen' => $persen,
             'nilai' => $nilai,
@@ -586,6 +631,7 @@ final class KesiapanAlatEmergencyController extends Controller
             'target' => $this->target(),
             'memenuhi_target' => $persen >= $this->target(),
             'riwayat' => array_values($riwayat),
+            'per_kategori' => $perKategori,
             'belum_siap' => $belumSiap,
             'belum_siap_dipotong' => count($belumSiap) >= self::BATAS_DETAIL,
         ]);
@@ -626,7 +672,7 @@ final class KesiapanAlatEmergencyController extends Controller
             ->orderBy(
                 $this->dtOrderColumn($request, [
                     0 => 'no_registrasi', 1 => 'nama_peralatan', 2 => 'site',
-                    3 => 'kategori', 5 => 'hari_good',
+                    3 => 'pemilik', 4 => 'kategori', 6 => 'hari_good',
                 ], 'no_registrasi'),
                 $this->dtDirection($request, 'asc')
             )
@@ -648,7 +694,7 @@ final class KesiapanAlatEmergencyController extends Controller
     {
         $rows = $this->queryData($request)
             ->orderBy('site')
-            ->orderBy('kategori')
+            ->orderBy('pemilik')
             ->orderBy('no_registrasi')
             ->limit($this->dtExportRowLimit())
             ->get()
@@ -657,11 +703,13 @@ final class KesiapanAlatEmergencyController extends Controller
         return $this->dtExport(
             'kesiapan-alat-emergency.csv',
             [
-                'No Registrasi', 'Nama Peralatan', 'Site', 'Kategori', 'Bulan',
-                'Hari Terisi', 'Hari Good', 'Hari Tidak Good', 'Siap', 'Keterangan',
+                'No Registrasi', 'Nama Peralatan', 'Site', 'Perusahaan Pemilik',
+                'Kategori', 'Bulan', 'Hari Terisi', 'Hari Good', 'Hari Tidak Good',
+                'Siap', 'Keterangan',
             ],
             $rows->map(static fn (array $r): array => [
-                $r['no_registrasi'], $r['nama'], $r['site'], $r['kategori'], $r['bulan'],
+                $r['no_registrasi'], $r['nama'], $r['site'], $r['pemilik'],
+                $r['kategori'], $r['bulan'],
                 $r['hari_isi'], $r['hari_good'], $r['hari_tidak_good'],
                 $r['siap'] ? 'Ya' : 'Tidak',
                 $r['alasan'],
@@ -676,7 +724,7 @@ final class KesiapanAlatEmergencyController extends Controller
         $this->dtApplySearch(
             $query,
             (string) $request->input('search.value', $request->input('search', '')),
-            ['no_registrasi', 'nama_peralatan', 'site', 'kategori']
+            ['no_registrasi', 'nama_peralatan', 'site', 'pemilik', 'kategori']
         );
 
         return $query;
@@ -692,6 +740,7 @@ final class KesiapanAlatEmergencyController extends Controller
             'no_registrasi' => (string) $row->no_registrasi,
             'nama' => (string) $row->nama_peralatan,
             'site' => (string) $row->site,
+            'pemilik' => (string) $row->pemilik,
             'kategori' => (string) $row->kategori,
             'bulan' => $nomor === 0 ? trim((string) $row->bulan) : $this->namaBulan($nomor),
             'bulan_nomor' => $nomor,
@@ -715,6 +764,30 @@ final class KesiapanAlatEmergencyController extends Controller
     // ======================================================================
 
     /**
+     * Perusahaan pemilik sebuah alat.
+     *
+     * KOLOM perusahaan_pemilik KOSONG DI 3.485 BARIS, DAN ITU BUKAN DATA
+     * HILANG. Seluruhnya berkepemilikan "BC", dan 3.485 + 557 baris yang
+     * menulis "PT BC" secara eksplisit berjumlah tepat 4.042 -- sama persis
+     * dengan cacah alat berkepemilikan BC. Jadi yang kosong memang milik
+     * Berau Coal sendiri dan boleh dibaca sebagai PT BC.
+     *
+     * Yang tidak bisa dipetakan hanya 3 baris dari 4.373 (2 Mitra Kerja tanpa
+     * nama perusahaan, 1 tanpa keduanya). Baris itu TIDAK dibuang, melainkan
+     * dikumpulkan di satu label sendiri supaya penyebutnya tetap utuh dan
+     * kekurangannya kelihatan di layar.
+     */
+    private function ekspresiPemilik(string $awalan = ''): string
+    {
+        $p = $awalan === '' ? '' : $awalan . '.';
+
+        return 'COALESCE('
+            . "NULLIF(TRIM({$p}perusahaan_pemilik), ''), "
+            . "CASE WHEN TRIM({$p}kepemilikan_peralatan) = 'BC' THEN 'PT BC' END, "
+            . "'" . self::PEMILIK_TAK_DIKENAL . "')";
+    }
+
+    /**
      * Inventaris sebagai baseline, dengan filter layar diterapkan.
      */
     private function queryInventaris(Request $request): Builder
@@ -733,13 +806,19 @@ final class KesiapanAlatEmergencyController extends Controller
             }
         }
 
+        $pemilik = trim((string) $request->input('pemilik', ''));
+
+        if ($pemilik !== '') {
+            $query->whereRaw($this->ekspresiPemilik() . ' = ?', [$pemilik]);
+        }
+
         return $query;
     }
 
     /**
      * Satu baris per alat per bulan, sudah lengkap dengan cacah hari dan
-     * penanda siap. Site dan kategorinya diambil dari INVENTARIS lewat JOIN,
-     * bukan dari lembar periksa.
+     * penanda siap. Site, pemilik, dan kategorinya diambil dari INVENTARIS
+     * lewat JOIN, bukan dari lembar periksa.
      *
      * JOIN-nya INNER dan itu disengaja: alat yang diperiksa tetapi tidak ada
      * di inventaris tidak punya penyebut, jadi tidak bisa dijadikan persentase.
@@ -767,7 +846,9 @@ final class KesiapanAlatEmergencyController extends Controller
             ->join(self::TABEL_INVENTARIS . ' as i', 'i.no_registrasi', '=', 'p.no_registrasi')
             ->selectRaw(
                 'p.no_registrasi, i.nama_peralatan, '
-                . 'TRIM(i.site) AS site, TRIM(i.kategori_peralatan) AS kategori, '
+                . 'TRIM(i.site) AS site, '
+                . $this->ekspresiPemilik('i') . ' AS pemilik, '
+                . 'TRIM(i.kategori_peralatan) AS kategori, '
                 . 'p.bulan, p.hari_isi, p.hari_good, p.hari_ng, p.hari_bd, p.hari_ccr, '
                 . 'CASE WHEN p.hari_isi > 0 AND p.hari_ng = 0 AND p.hari_bd = 0 '
                 . 'AND p.hari_ccr = 0 THEN 1 ELSE 0 END AS siap'
@@ -785,14 +866,20 @@ final class KesiapanAlatEmergencyController extends Controller
             }
         }
 
+        $pemilik = trim((string) $request->input('pemilik', ''));
+
+        if ($pemilik !== '') {
+            $query->whereRaw($this->ekspresiPemilik('i') . ' = ?', [$pemilik]);
+        }
+
         $bulan = (int) $request->input('bulan_filter', 0);
 
         if ($bulan >= 1 && $bulan <= 12) {
             $query->where('p.bulan', $this->namaBulan($bulan));
         }
 
-        // Dibungkus sekali lagi supaya alias site/kategori/siap bisa dipakai
-        // di WHERE dan ORDER BY oleh pemanggilnya.
+        // Dibungkus sekali lagi supaya alias site/pemilik/kategori/siap bisa
+        // dipakai di WHERE dan ORDER BY oleh pemanggilnya.
         return DB::query()->fromSub($query, 'k');
     }
 
@@ -894,6 +981,21 @@ final class KesiapanAlatEmergencyController extends Controller
             ->distinct()
             ->orderBy($kolom)
             ->pluck($kolom)
+            ->map(static fn ($v): string => trim((string) $v))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /** @return array<int, string> */
+    private function daftarPemilik(): array
+    {
+        return DB::table(self::TABEL_INVENTARIS)
+            ->selectRaw($this->ekspresiPemilik() . ' AS pemilik')
+            ->distinct()
+            ->orderBy('pemilik')
+            ->pluck('pemilik')
             ->map(static fn ($v): string => trim((string) $v))
             ->filter()
             ->unique()

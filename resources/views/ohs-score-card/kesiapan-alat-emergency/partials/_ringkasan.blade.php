@@ -18,6 +18,15 @@
           </select>
         </div>
         <div class="col-xxl-3 col-md-4 col-sm-6">
+          <label class="form-label text-sm fw-medium mb-8" for="kae-pemilik">Perusahaan Pemilik</label>
+          <select class="form-select form-select-sm radius-8 kae-filter" id="kae-pemilik" data-column="pemilik">
+            <option value="">Semua Perusahaan</option>
+            @foreach ($filterOptions['pemilik'] as $option)
+              <option value="{{ $option }}">{{ $option }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-xxl-2 col-md-4 col-sm-6">
           <label class="form-label text-sm fw-medium mb-8" for="kae-kategori">Kategori Alat</label>
           <select class="form-select form-select-sm radius-8 kae-filter" id="kae-kategori" data-column="kategori">
             <option value="">Semua Kategori</option>
@@ -35,18 +44,18 @@
             @endforeach
           </select>
         </div>
-        <div class="col-xxl-2 col-md-6 col-sm-6">
+        <div class="col-xxl-1 col-md-4 col-sm-6">
           <label class="form-label text-sm fw-medium mb-8" for="kae-bulan">Bulan</label>
           <select class="form-select form-select-sm radius-8 kae-filter" id="kae-bulan" data-column="bulan_filter">
-            <option value="">Semua Bulan</option>
+            <option value="">Semua</option>
             @foreach ($monthOptions as $nomor => $label)
               <option value="{{ $nomor }}">{{ $label }}</option>
             @endforeach
           </select>
         </div>
-        <div class="col-xxl-2 col-md-6 col-sm-6">
+        <div class="col-xxl-1 col-md-4 col-sm-6">
           <button type="button" class="btn btn-outline-secondary btn-sm w-100 radius-8" data-kae="reset">
-            Reset filter
+            Reset
           </button>
         </div>
       </div>
@@ -59,7 +68,7 @@
   {{-- Kartu ringkasan utama --}}
   <div class="row gy-4 mb-24" data-kae="kpi"></div>
 
-  {{-- Matriks site/kategori x bulan --}}
+  {{-- Matriks site/perusahaan x bulan --}}
   <div class="row gy-4 mb-24">
     <div class="col-12">
       <div class="card h-100 radius-8 border">
@@ -67,7 +76,7 @@
           <div>
             <h6 class="text-lg fw-semibold mb-0">Kesiapan per Bulan</h6>
             <span class="text-sm text-secondary-light" data-kae="matrix-subtitle">
-              Persentase alat siap tiap kategori di tiap site
+              Persentase alat siap tiap perusahaan pemilik di tiap site
             </span>
           </div>
           <ul class="nav nav-pills style-three pill-tab border input-form-light p-0 radius-8 bg-neutral-50 flex-nowrap"
@@ -91,10 +100,10 @@
             </table>
           </div>
           <span class="text-xs text-secondary-light d-block mt-12">
-            Penyebut tiap sel adalah seluruh alat di inventaris, jadi alat yang bulan itu
-            tidak diperiksa ikut dihitung belum siap. Sel bergaris putus-putus berarti
-            kelompok itu belum punya lembar periksa sama sekali pada bulan tersebut, bukan 0%.
-            Klik sel untuk rinciannya.
+            Penyebut tiap sel adalah seluruh alat milik perusahaan itu di site itu, jadi alat
+            yang bulan itu tidak diperiksa ikut dihitung belum siap. Sel bergaris putus-putus
+            berarti kelompok itu belum punya lembar periksa sama sekali pada bulan tersebut,
+            bukan 0%. Klik sel untuk rinciannya per kategori alat.
           </span>
         </div>
       </div>
@@ -115,10 +124,10 @@
     <div class="col-xxl-6 col-md-6">
       <div class="card h-100 radius-8 border">
         <div class="card-header border-bottom bg-base py-16 px-24">
-          <h6 class="text-lg fw-semibold mb-0">Per Kategori Alat</h6>
+          <h6 class="text-lg fw-semibold mb-0">Per Perusahaan Pemilik</h6>
           <span class="text-sm text-secondary-light">terendah lebih dulu</span>
         </div>
-        <div class="card-body p-24" data-kae="per-kategori"></div>
+        <div class="card-body p-24" data-kae="per-pemilik"></div>
       </div>
     </div>
   </div>
