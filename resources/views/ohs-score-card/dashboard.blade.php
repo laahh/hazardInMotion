@@ -4727,13 +4727,13 @@
                       </span>
                       <div>
                         <span class="mb-2 fw-medium text-secondary-light text-sm">Site BMO 1</span>
-                        <h6 class="fw-semibold">80%</h6>
+                        <h6 class="fw-semibold" data-osc-site="BMO 1">–</h6>
                       </div>
                     </div>
                   
                     <div id="total-sales-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalKaryawanWeekIncrease ?? 0) }} ({{ number_format($totalKaryawanWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
+                <p class="text-sm mb-0" data-osc-site-sub="BMO 1">memuat…</p>
               </div>
             </div>
           </div>
@@ -4752,13 +4752,13 @@
                       </span>
                       <div>
                         <span class="mb-2 fw-medium text-secondary-light text-sm">Site BMO 2</span>
-                        <h6 class="fw-semibold">90%</h6>
+                        <h6 class="fw-semibold" data-osc-site="BMO 2">–</h6>
                       </div>
                     </div>
                   
                     <div id="new-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Sudah install <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">{{ number_format($newUsersInstallPercent ?? 0, 1) }}%</span>karyawan</p>
+                <p class="text-sm mb-0" data-osc-site-sub="BMO 2">memuat…</p>
               </div>
             </div>
           </div>
@@ -4777,13 +4777,13 @@
                       </span>
                       <div>
                         <span class="mb-2 fw-medium text-secondary-light text-sm">Site BMO 3</span>
-                        <h6 class="fw-semibold">90%</h6>
+                        <h6 class="fw-semibold" data-osc-site="BMO 3">–</h6>
                       </div>
                     </div>
                   
                     <div id="active-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($activeUsersWeekIncrease ?? 0) }} ({{ number_format($activeUsersWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
+                <p class="text-sm mb-0" data-osc-site-sub="BMO 3">memuat…</p>
               </div>
             </div>
           </div>
@@ -4799,13 +4799,13 @@
                       </span>
                       <div>
                         <span class="mb-2 fw-medium text-secondary-light text-sm">Site SMO</span>
-                        <h6 class="fw-semibold">100%</h6>
+                        <h6 class="fw-semibold" data-osc-site="SMO">–</h6>
                       </div>
                     </div>
                   
                     <div id="conversion-user-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalKomunitasWeekIncrease ?? 0) }} ({{ number_format($totalKomunitasWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
+                <p class="text-sm mb-0" data-osc-site-sub="SMO">memuat…</p>
               </div>
             </div>
           </div>
@@ -4821,13 +4821,13 @@
                       </span>
                       <div>
                         <span class="mb-2 fw-medium text-secondary-light text-sm">Site GMO</span>
-                        <h6 class="fw-semibold">100%</h6>
+                        <h6 class="fw-semibold" data-osc-site="GMO">–</h6>
                       </div>
                     </div>
                   
                     <div id="leads-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalMainBarengWeekIncrease ?? 0) }} ({{ number_format($totalMainBarengWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
+                <p class="text-sm mb-0" data-osc-site-sub="GMO">memuat…</p>
               </div>
             </div>
           </div>
@@ -4843,13 +4843,13 @@
                       </span>
                       <div>
                         <span class="mb-2 fw-medium text-secondary-light text-sm">Site LMO</span>
-                        <h6 class="fw-semibold">100%</h6>
+                        <h6 class="fw-semibold" data-osc-site="LMO">–</h6>
                       </div>
                     </div>
                   
                     <div id="total-profit-chart" class="remove-tooltip-title rounded-tooltip-value"></div>
                 </div>
-                <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($totalGoalAktifWeekIncrease ?? 0) }} ({{ number_format($totalGoalAktifWeekIncreasePercent ?? 0, 1) }}%)</span> this week</p>
+                <p class="text-sm mb-0" data-osc-site-sub="LMO">memuat…</p>
               </div>
             </div>
           </div>
@@ -4880,13 +4880,13 @@
                   </span>
                   <div>
                     <span class="mb-2 fw-medium text-secondary-light text-sm">Marine</span>
-                    <h6 class="fw-semibold">90%</h6>
+                    <h6 class="fw-semibold" data-osc-site="">–</h6>
                   </div>
                 </div>
 
                 <div id="active-trend-sparkline" class="remove-tooltip-title rounded-tooltip-value"></div>
             </div>
-            <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($activeTrendWeekIncrease ?? 0) }} user</span> this week</p>
+            <p class="text-sm mb-0" data-osc-site-sub="Marine">tidak ada kolom di Score Card</p>
           </div>
         </div>
 
@@ -4905,13 +4905,13 @@
                   </span>
                   <div>
                     <span class="mb-2 fw-medium text-secondary-light text-sm">Site HO/Explorasi</span>
-                    <h6 class="fw-semibold">90%</h6>
+                    <h6 class="fw-semibold" data-osc-site="">–</h6>
                   </div>
                 </div>
 
                 <div id="active-users-sparkline" class="remove-tooltip-title rounded-tooltip-value"></div>
             </div>
-            <p class="text-sm mb-0">Increase by  <span class="bg-success-focus px-1 rounded-2 fw-medium text-success-main text-sm">+{{ number_format($activeTrendWeekIncrease ?? 0) }} user</span> this week</p>
+            <p class="text-sm mb-0" data-osc-site-sub="HO/Explorasi">tidak ada kolom di Score Card</p>
           </div>
         </div>
 
@@ -5190,6 +5190,66 @@
               bulanTerisi = true;
           }
 
+          /**
+           * Kartu site di bagian atas dashboard: rata-rata Nilai seluruh
+           * parameter di site itu.
+           *
+           * YANG DIRATA-RATAKAN NILAI, BUKAN PERSEN -- sama dengan baris Score
+           * di tabel. Persen antar parameter tidak sebanding karena arahnya
+           * berbeda-beda, jadi merata-ratakannya akan menyesatkan.
+           *
+           * Dihitung dari SELURUH sel site itu, bukan rata-rata dari rata-rata
+           * kolom, supaya kontraktor yang parameternya lebih banyak tidak
+           * kehilangan bobotnya.
+           */
+          function isiKartuSite(data) {
+              var kolom = data.kolom || {};
+              var total = {};
+              var cacah = {};
+
+              Object.keys(kolom).forEach(function (site) {
+                  total[site] = 0;
+                  cacah[site] = 0;
+              });
+
+              Object.keys(data.matriks || {}).forEach(function (param) {
+                  var baris = data.matriks[param] || {};
+
+                  Object.keys(kolom).forEach(function (site) {
+                      kolom[site].forEach(function (k) {
+                          var sel = (baris[site] || {})[k];
+
+                          if (sel && sel.ada && sel.nilai !== null) {
+                              total[site] += Number(sel.nilai);
+                              cacah[site] += 1;
+                          }
+                      });
+                  });
+              });
+
+              document.querySelectorAll('[data-osc-site]').forEach(function (node) {
+                  var site = node.dataset.oscSite;
+
+                  node.textContent = (site && cacah[site])
+                      ? fmtNilai(total[site] / cacah[site])
+                      : '–';
+              });
+
+              document.querySelectorAll('[data-osc-site-sub]').forEach(function (node) {
+                  var site = node.dataset.oscSiteSub;
+
+                  if (!site || !(site in kolom)) {
+                      node.textContent = 'tidak ada kolom di Score Card';
+
+                      return;
+                  }
+
+                  node.textContent = cacah[site]
+                      ? 'rata-rata Nilai dari ' + cacah[site] + ' parameter · ' + data.label_bulan
+                      : 'belum ada data pada ' + data.label_bulan;
+              });
+          }
+
           function render(data) {
               isiPilihanBulan(data);
               var kolom = data.kolom || {};
@@ -5259,6 +5319,8 @@
 
               var tanpa = (data.tanpa_sumber || []).length;
 
+              safeKartu(data);
+
               el('catatan').innerHTML = 'Baris <strong>Score</strong> adalah <strong>rata-rata Nilai</strong>, '
                   + 'bukan rata-rata persen — capaian antar parameter tidak sebanding karena arahnya berbeda '
                   + '(0% pada Blindspot adalah hasil terbaik, 0% pada Ratio yang terburuk). '
@@ -5271,6 +5333,18 @@
              dikirim, termasuk "Semua bulan" yang jadi "semua" -- kalau yang
              itu dikirim sebagai string kosong, ia tak terbedakan dari muatan
              pertama dan tabel akan balik ke bulan lalu terus-menerus. */
+          /* Kartu site berada di luar kartu ini; kegagalannya tidak boleh
+             ikut mengosongkan tabel Score Card. */
+          function safeKartu(data) {
+              try {
+                  isiKartuSite(data);
+              } catch (e) {
+                  if (typeof console !== 'undefined' && console.error) {
+                      console.error('Score Card: gagal mengisi kartu site', e);
+                  }
+              }
+          }
+
           function muat(bulan) {
               var url = urlData;
 
