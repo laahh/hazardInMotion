@@ -77,11 +77,10 @@
         <div class="card-header border-bottom bg-base py-16 px-24 d-flex align-items-center flex-wrap gap-3 justify-content-between">
           <div>
             <h6 class="text-lg fw-semibold mb-0">Persentase Blindspot per Bulan</h6>
-            {{-- ARAHNYA NAIK di parameter ini, kebalikan Blindspot TBC dan GR:
-                 yang diukur temuan yang BERHASIL ditangkap real time, jadi
-                 angka besar yang baik. --}}
+            {{-- ARAHNYA TURUN, sama dengan Blindspot TBC dan GR: yang diukur
+                 bahaya yang luput, jadi nol adalah hasil terbaik. --}}
             <span class="text-sm text-secondary-light" data-bs-el="persen-sub">
-              Persentase temuan yang tertangkap real time; makin besar makin baik
+              Persentase blindspot temuan real time; makin kecil makin baik, 0% terbaik
             </span>
           </div>
           <ul class="nav nav-pills pill-tab border input-form-light p-0 radius-8 bg-neutral-50 d-inline-flex flex-nowrap"

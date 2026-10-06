@@ -123,16 +123,18 @@ final class ScoreCardParameterRegistry
                 'site', 'perusahaan_pelapor_all_karyawan',
                 'month_of_date_for_join', 'pct_berjarak', [60, 70, 80, 100]),
 
-            // MAKIN BESAR MAKIN BAIK di sini, kebalikan Blindspot TBC dan GR:
-            // yang diukur bukan bahaya yang luput, melainkan temuan yang
-            // berhasil ditangkap secara real time.
-            //
-            // L1 (X<0%) TIDAK AKAN PERNAH TERJADI karena persentase tidak bisa
-            // negatif, jadi band terburuk yang mungkin muncul adalah L2.
-            // Ditulis apa adanya mengikuti tabel band resmi.
-            self::persen('% Blindspot temuan Real Time', 'lead_blindspot_laporan_real_time',
-                'site', 'perusahaan_pic', 'month_of_date_for_join',
-                'pct_blindspot_temuan_real_time', [0, 3, 5, 100]),
+            // MAKIN KECIL MAKIN BAIK, sama dengan Blindspot TBC dan GR:
+            // yang diukur bahaya yang luput, jadi nol adalah hasil terbaik.
+            // Ambangnya [batas Nilai 4, Nilai 3, Nilai 2] = tepat 0%, 3%, 5%.
+            [
+                'nama' => '% Blindspot temuan Real Time',
+                'sumber' => 'lead_blindspot_laporan_real_time',
+                'site' => 'site', 'mitra' => 'perusahaan_pic',
+                'bulan' => 'month_of_date_for_join',
+                'nilai' => 'pct_blindspot_temuan_real_time',
+                'band' => self::BAND_TURUN, 'ambang' => [0, 3, 5],
+                'satuan' => '%', 'ringkas' => self::RINGKAS_RATA,
+            ],
 
             self::persen('Coverage Daily Area Kritis Pengawas Safety',
                 'lead_coverage_daily_area_kritis_pengawas_safety',

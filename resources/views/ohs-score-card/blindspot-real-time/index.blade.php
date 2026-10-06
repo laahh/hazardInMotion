@@ -40,11 +40,10 @@
   }
   .bs-matrix thead .bs-site, .bs-matrix thead .bs-mitra { z-index: 4; background: #F8FAFC; }
   .bs-matrix .bs-total { font-weight: 800; color: #334155 !important; background: #F1F5F9; border-radius: 8px; }
-  /* ARAHNYA NAIK di parameter ini: yang diukur temuan yang BERHASIL
-     ditangkap real time, jadi panah atas hijau dan panah bawah merah --
-     kebalikan halaman Blindspot TBC dan GR. */
-  .bs-matrix .bs-trend--up { color: #16A34A; font-weight: 800; }
-  .bs-matrix .bs-trend--down { color: #DC2626; font-weight: 800; }
+  /* ARAHNYA TURUN di parameter ini: nol adalah hasil terbaik, jadi panah
+     atas merah dan panah bawah hijau -- sama dengan Blindspot TBC dan GR. */
+  .bs-matrix .bs-trend--up { color: #DC2626; font-weight: 800; }
+  .bs-matrix .bs-trend--down { color: #16A34A; font-weight: 800; }
   .bs-matrix .bs-trend--flat { color: #94A3B8; font-weight: 800; }
   .bs-matrix .bs-cell {
     font-weight: 700; color: #fff; min-width: 54px;
@@ -428,15 +427,14 @@ window.bsOverview = (function () {
      * Band untuk satu persentase.
      *
      * Dicari dari band TERBAIK dan berhenti pada band pertama yang batas
-     * bawahnya sudah terlampaui -- arahnya naik, jadi makin besar makin baik.
-     * Ini kebalikan halaman Blindspot TBC yang mencocokkan dari batas atas.
+     * atasnya belum terlampaui -- arahnya turun, jadi makin kecil makin baik.
      */
     function bandUntuk(pct) {
         var v = Number(pct);
         if (!isFinite(v)) { return null; }
 
         for (var i = 0; i < BANDS.length; i++) {
-            if (v >= BANDS[i].bawah) { return BANDS[i]; }
+            if (v <= BANDS[i].atas) { return BANDS[i]; }
         }
 
         return BANDS.length ? BANDS[BANDS.length - 1] : null;
@@ -451,8 +449,8 @@ window.bsOverview = (function () {
         var rentang = b.atas - b.bawah;
         if (rentang <= 0) { return b.nilai; }
 
-        // Jarak dari batas BAWAH: makin besar persennya, makin tinggi nilainya.
-        var n = b.nilai + (Number(pct) - b.bawah) / rentang;
+        // Jarak dari batas ATAS: makin kecil persennya, makin tinggi nilainya.
+        var n = b.nilai + (b.atas - Number(pct)) / rentang;
 
         return Math.round(Math.min(n, b.nilai + 0.99) * 100) / 100;
     }
@@ -538,7 +536,7 @@ window.bsOverview = (function () {
                 k.ukuran === 'persen'
                     ? {
                         grad: 'bg-gradient-end-5', icon: 'solar:eye-outline', dot: 'bg-primary-600',
-                        label: 'Rata-rata Temuan Real Time', value: fmtPct(k.rata_persen),
+                        label: 'Rata-rata Blindspot Real Time', value: fmtPct(k.rata_persen),
                         foot: 'Nilai ' + fmtNilai(nilaiUntuk(k.rata_persen))
                             + ' · tertinggi ' + fmtPct(k.puncak_persen) + ' di antara '
                             + fmtNum(k.kombinasi) + ' pasangan site &amp; perusahaan'
@@ -552,7 +550,7 @@ window.bsOverview = (function () {
                     ? {
                         grad: 'bg-gradient-end-3', icon: 'solar:medal-ribbon-outline', dot: 'bg-success-main',
                         label: 'Mencapai Nilai 4', value: fmtNum(k.nilai_empat),
-                        foot: 'dari ' + fmtNum(k.kombinasi) + ' pasangan · rata-ratanya 5% atau lebih'
+                        foot: 'dari ' + fmtNum(k.kombinasi) + ' pasangan · rata-ratanya tepat 0%'
                     }
                     : {
                         grad: 'bg-gradient-end-3', icon: 'solar:buildings-outline', dot: 'bg-warning-main',
@@ -607,7 +605,7 @@ window.bsOverview = (function () {
 
             el('per-site-judul').textContent = persen ? 'Rata-rata per Site' : 'Temuan per Site';
             el('per-site-sub').textContent = persen
-                ? 'Diwarnai menurut band; Nilai 4 mulai 5%'
+                ? 'Diwarnai menurut band; Nilai 4 hanya tepat 0%'
                 : 'Dihitung dari cacah temuan';
 
             if (!list.length) {
@@ -650,7 +648,7 @@ window.bsOverview = (function () {
 
             el('per-mitra-kol1').textContent = persen ? 'Rata-rata' : 'Temuan';
             el('per-mitra-sub').textContent = persen
-                ? 'Diurutkan dari persentase tertinggi — makin besar makin baik'
+                ? 'Diurutkan dari persentase tertinggi — makin kecil makin baik'
                 : 'Diurutkan dari temuan terbanyak';
 
             if (!list.length) {
@@ -1113,8 +1111,8 @@ window.bsOverview = (function () {
 
             if (sub) {
                 sub.textContent = modePersen === 'nilai'
-                    ? 'Nilai 1–4 dari persentase temuan real time, tiap perusahaan di tiap site'
-                    : 'Persentase temuan yang tertangkap real time; makin besar makin baik';
+                    ? 'Nilai 1–4 dari persentase blindspot real time, tiap perusahaan di tiap site'
+                    : 'Persentase blindspot temuan real time; makin kecil makin baik, 0% terbaik';
             }
         }
 

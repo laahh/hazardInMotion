@@ -92,25 +92,23 @@ final class BlindspotRealTimeController extends Controller
     /**
      * Band penilaian resmi: [batas bawah, batas atas, nilai dasar, label].
      *
-     * ARAHNYA NAIK -- MAKIN BESAR MAKIN BAIK -- dan itu KEBALIKAN dari halaman
-     * Blindspot TBC maupun GR. Di sana yang diukur bahaya yang luput, jadi
-     * angka kecil yang baik; di sini yang diukur temuan yang BERHASIL
-     * ditangkap secara real time, jadi angka besar yang baik. Jangan disamakan
-     * dengan kedua halaman itu meskipun namanya sama-sama "blindspot".
+     * ARAHNYA TURUN -- MAKIN KECIL MAKIN BAIK -- sama dengan halaman Blindspot
+     * TBC dan GR: yang diukur bahaya yang luput, jadi nol adalah hasil
+     * terbaik.
+     *
+     *     X = 0%          -> 4        3% < X <= 5%  -> 2
+     *     0% < X <= 3%    -> 3        X > 5%        -> 1
      *
      * Urutannya terbaik dulu, dan scoreBandFor() mencocokkan dengan
-     * "persen >= batas bawah".
+     * "persen <= batas atas".
      *
-     * BAND 1 TIDAK AKAN PERNAH TERJADI. Tabel band resmi menuliskannya sebagai
-     * "X<0%", sedangkan persentase tidak bisa negatif. Ditulis apa adanya
-     * mengikuti tabel resmi; konsekuensinya band terburuk yang mungkin muncul
-     * di layar adalah band 2.
+     * BAND 4 HANYA TEPAT DI NOL, jadi rentangnya nol dan nilainya datar 4,00.
      */
     private const SCORE_BANDS = [
-        [5.0, 100.0, 4, '>= 5%'],
-        [3.0, 5.0, 3, '3% - <5%'],
-        [0.0, 3.0, 2, '0% - <3%'],
-        [-100.0, 0.0, 1, '<0%'],
+        [0.0, 0.0, 4, '0%'],
+        [0.0, 3.0, 3, '>0% - 3%'],
+        [3.0, 5.0, 2, '>3% - 5%'],
+        [5.0, 100.0, 1, '>5%'],
     ];
 
     /**
@@ -197,35 +195,36 @@ final class BlindspotRealTimeController extends Controller
     /**
      * Nilai berkoma untuk satu capaian.
      *
-     * Di dalam satu band nilainya melandai mengikuti jarak dari batas BAWAH --
-     * sisi yang lebih buruk -- karena arahnya naik. Band teratas datar di 4,00.
+     * Di dalam satu band nilainya melandai mengikuti jarak dari batas ATAS --
+     * sisi yang lebih buruk -- karena arahnya turun. Makin jauh di bawah batas
+     * itu, makin tinggi nilainya.
      *
      * @return array{0: float, 1: float, 2: string}
      */
     private function scoreBandFor(float $percent): array
     {
         foreach (self::SCORE_BANDS as [$bawah, $atas, $dasar, $label]) {
-            if ($percent < $bawah) {
+            if ($percent > $atas) {
                 continue;
             }
 
             if ($dasar >= 4) {
-                return [$bawah, 4.0, $label];
+                return [$atas, 4.0, $label];
             }
 
             $rentang = $atas - $bawah;
             $nilai = $rentang > 0
-                ? $dasar + ($percent - $bawah) / $rentang
+                ? $dasar + ($atas - $percent) / $rentang
                 : (float) $dasar;
 
             // Tidak boleh menyentuh angka band berikutnya, supaya angka dan
             // label band di layar tidak pernah bertentangan.
             $nilai = min($nilai, $dasar + 0.99);
 
-            return [$bawah, round(max(1.0, min(4.0, $nilai)), 2), $label];
+            return [$atas, round(max(1.0, min(4.0, $nilai)), 2), $label];
         }
 
-        return [-100.0, 1.0, '<0%'];
+        return [100.0, 1.0, '>5%'];
     }
 
     /**
@@ -520,9 +519,8 @@ final class BlindspotRealTimeController extends Controller
                 static fn (array $r): bool => $r['di_atas_ambang']
             )),
             'ambang' => self::AMBANG_PERSEN,
-            // Berapa pasangan yang rata-ratanya sudah mencapai band teratas.
-            // Menggantikan hitungan "di atas ambang" yang membingkai angka
-            // tinggi sebagai masalah -- di parameter ini tinggi justru tujuan.
+            // Berapa pasangan yang rata-ratanya sudah mencapai band teratas,
+            // yaitu tepat 0% -- tidak ada blindspot yang luput sama sekali.
             'nilai_empat' => count(array_filter(
                 $persen['rows'],
                 fn (array $r): bool => $r['average'] !== null

@@ -661,7 +661,9 @@ final class ScoreCardParameterMatrix
         [$b4, $b3, $b2] = array_map('floatval', $ambang);
 
         $band = [
-            [0.0, $b4, 4, '0% - ' . $this->angka($b4) . '%'],
+            // Batas bawah dan atas bisa sama -- misalnya band "tepat 0%" --
+            // dan "0% - 0%" hanya membingungkan.
+            [0.0, $b4, 4, $b4 <= 0.0 ? '0%' : '0% - ' . $this->angka($b4) . '%'],
             [$b4, $b3, 3, '>' . $this->angka($b4) . '% - ' . $this->angka($b3) . '%'],
             [$b3, $b2, 2, '>' . $this->angka($b3) . '% - ' . $this->angka($b2) . '%'],
         ];
