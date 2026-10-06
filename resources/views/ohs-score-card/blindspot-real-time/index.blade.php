@@ -713,6 +713,24 @@ window.bsOverview = (function () {
             });
         }
 
+        /**
+         * Legenda untuk panel per site dan per perusahaan. Keterangannya sama
+         * dengan legenda matriks, tetapi perlu dipasang terpisah karena
+         * panelnya berada di kartu lain dan warnanya mudah disalahbaca tanpa
+         * keterangan.
+         */
+        function renderLegendPanel() {
+            var host = el('legend-panel');
+
+            if (!host) { return; }
+
+            host.innerHTML = LEGENDA.persen.map(function (it) {
+                return '<span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;">'
+                    + '<span class="rounded-1" style="width:12px;height:12px;background:' + it.color + ';"></span>'
+                    + escapeHtml(it.label) + '</span>';
+            }).join('');
+        }
+
         function renderLegend(jenis) {
             el('legend-' + jenis).innerHTML = LEGENDA[jenis].map(function (it) {
                 return '<span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;">'
@@ -1126,6 +1144,7 @@ window.bsOverview = (function () {
                     safe('legend', function () {
                         renderLegend('persen');
                         renderLegend('temuan');
+                        renderLegendPanel();
                     });
                     safe('persen', renderPersen);
                     safe('temuan', function () {
@@ -1177,6 +1196,7 @@ window.bsOverview = (function () {
                     b.classList.toggle('active', b.dataset.mode === modePersen);
                 });
 
+                renderLegend('persen');
                 renderPersen();
             });
         });

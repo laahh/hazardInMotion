@@ -74,6 +74,17 @@
      parameter Ratio: di sini 0-5% yang hijau (Nilai 4) dan di atas 15% yang
      merah (Nilai 1), karena blindspot makin kecil makin baik. Kuning dan
      hijau muda memakai teks gelap agar tetap terbaca. */
+  /* Batang dan lencana panel memakai band yang sama dengan sel matriks,
+     supaya satu angka tidak pernah berwarna lain di dua tempat. */
+  .bs-bar-n1 { background: #FF0000; }
+  .bs-bar-n2 { background: #FFC000; }
+  .bs-bar-n3 { background: #FFFF00; }
+  .bs-bar-n4 { background: #92D050; }
+  .bs-badge-n1 { background: #FFE5E5; color: #B91C1C !important; }
+  .bs-badge-n2 { background: #FFF2CC; color: #92400E !important; }
+  .bs-badge-n3 { background: #FFFBCC; color: #854D0E !important; }
+  .bs-badge-n4 { background: #E8F5DC; color: #3F6212 !important; }
+
   .bs-n1 { background: #FF0000; }
   .bs-n2 { background: #FFC000; color: #1F2937 !important; }
   .bs-n3 { background: #FFFF00; color: #1F2937 !important; }
@@ -600,13 +611,19 @@ window.bsOverview = (function () {
             var puncak = Math.max.apply(null, list.map(function (s) { return s.nilai; })) || 1;
 
             host.innerHTML = list.map(function (s, i) {
+                // Batang mengikuti BAND, bukan "di atas ambang": band membedakan
+                // empat tingkat, sedangkan ambang hanya merah atau hijau.
+                var band = persen ? bandUntuk(s.nilai) : null;
+                var warna = band ? 'bs-bar-n' + band.nilai : 'bg-primary-600';
+
                 return '<div class="' + (i ? 'mt-20' : '') + '">'
                     + '<div class="d-flex align-items-center justify-content-between mb-8">'
                     +   '<span class="text-sm fw-semibold">' + escapeHtml(s.site) + '</span>'
-                    +   '<span class="text-sm fw-medium text-secondary-light">' + angka(s.nilai) + '</span>'
+                    +   '<span class="text-sm fw-medium text-secondary-light">' + angka(s.nilai)
+                    +   (band ? ' · Nilai ' + fmtNilai(nilaiUntuk(s.nilai)) : '') + '</span>'
                     + '</div>'
                     + '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px">'
-                    +   '<div class="progress-bar ' + (s.di_atas_ambang ? 'bg-danger-main' : 'bg-success-main')
+                    +   '<div class="progress-bar ' + warna
                     +     ' rounded-pill" role="progressbar"'
                     +     ' style="width:' + (s.nilai / puncak * 100) + '%" aria-valuenow="' + s.nilai + '"'
                     +     ' aria-valuemin="0" aria-valuemax="' + puncak + '"></div>'
@@ -634,9 +651,11 @@ window.bsOverview = (function () {
                 return;
             }
             body.innerHTML = list.map(function (m) {
-                var kelas = m.di_atas_ambang
-                    ? 'bg-danger-focus text-danger-main'
-                    : 'bg-success-focus text-success-main';
+                // Lencana mengikuti BAND; lihat catatan di renderPerSite().
+                var band = persen ? bandUntuk(m.nilai) : null;
+                var kelas = band
+                    ? 'bs-badge-n' + band.nilai
+                    : 'bg-neutral-200 text-secondary-light';
 
                 return '<tr>'
                     + '<td><span class="text-md fw-medium">' + escapeHtml(m.mitra) + '</span>'
@@ -660,6 +679,24 @@ window.bsOverview = (function () {
                 { color: '#E0484A', label: 'lebih dari 10' }
             ]
         };
+
+        /**
+         * Legenda untuk panel per site dan per perusahaan. Keterangannya sama
+         * dengan legenda matriks, tetapi perlu dipasang terpisah karena
+         * panelnya berada di kartu lain dan warnanya mudah disalahbaca tanpa
+         * keterangan.
+         */
+        function renderLegendPanel() {
+            var host = el('legend-panel');
+
+            if (!host) { return; }
+
+            host.innerHTML = LEGENDA.persen.map(function (it) {
+                return '<span class="d-inline-flex align-items-center gap-1 text-xs" style="color:#64748B;">'
+                    + '<span class="rounded-1" style="width:12px;height:12px;background:' + it.color + ';"></span>'
+                    + escapeHtml(it.label) + '</span>';
+            }).join('');
+        }
 
         function renderLegend(jenis) {
             el('legend-' + jenis).innerHTML = LEGENDA[jenis].map(function (it) {
@@ -1075,6 +1112,7 @@ window.bsOverview = (function () {
                     safe('legend', function () {
                         renderLegend('persen');
                         renderLegend('temuan');
+                        renderLegendPanel();
                     });
                     safe('persen', renderPersen);
                     safe('temuan', function () {
@@ -1125,6 +1163,7 @@ window.bsOverview = (function () {
                     b.classList.toggle('active', b.dataset.mode === modePersen);
                 });
 
+                renderLegend('persen');
                 renderPersen();
             });
         });

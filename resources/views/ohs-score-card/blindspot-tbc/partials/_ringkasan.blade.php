@@ -116,7 +116,12 @@
           <h6 class="text-lg fw-semibold mb-0" data-bs-el="per-site-judul">Rata-rata per Site</h6>
           <span class="text-sm text-secondary-light" data-bs-el="per-site-sub">Ambang {{ $ds['ambang'] }}%</span>
         </div>
-        <div class="card-body p-24" data-bs-el="per-site"></div>
+        <div class="card-body p-24">
+          {{-- Keterangan warna untuk batang di bawah ini DAN lencana di kartu
+               per perusahaan: keduanya memakai band yang sama. --}}
+          <div class="d-flex align-items-center flex-wrap gap-3 mb-16" data-bs-el="legend-panel"></div>
+          <div data-bs-el="per-site"></div>
+        </div>
       </div>
     </div>
   </div>
