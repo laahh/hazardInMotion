@@ -110,11 +110,42 @@ final class ScoreCardParameterRegistry
     public const RINGKAS_JUMLAH = 'jumlah';
 
     /**
+     * Parameter yang untuk sementara tidak ditampilkan di matriks Score Card.
+     *
+     * SENGAJA DISEMBUNYIKAN, BUKAN DIHAPUS. Entri parameternya tetap utuh di
+     * parameter() lengkap dengan catatannya, jadi memunculkannya kembali cukup
+     * dengan membuang namanya dari daftar ini -- tidak perlu menulis ulang
+     * definisinya dan tidak ada riwayat yang hilang.
+     *
+     * Parameter yang disembunyikan hilang sepenuhnya dari matriks: tidak
+     * menjadi baris, dan tidak ikut menghitung rata-rata kartu site.
+     *
+     * @var array<int, string>
+     */
+    public const DISEMBUNYIKAN = [
+        // Diminta disembunyikan 6 Oktober 2026.
+        'Peer Pressure',
+    ];
+
+    /**
      * Urutan baris mengikuti tabel Score Card yang dipakai manajemen.
      *
      * @return array<int, array<string, mixed>>
      */
     public static function parameter(): array
+    {
+        return array_values(array_filter(
+            self::semuaParameter(),
+            static fn (array $p): bool => !in_array($p['nama'], self::DISEMBUNYIKAN, true)
+        ));
+    }
+
+    /**
+     * Seluruh parameter apa adanya, termasuk yang sedang disembunyikan.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private static function semuaParameter(): array
     {
         return [
             self::persen('Ratio Pelaporan TBC & GR', 'lead_ratio_pelapor_tbc',
@@ -295,6 +326,9 @@ final class ScoreCardParameterRegistry
 
             // Kriterianya naratif (terlaksana / perulangan / tindak lanjut),
             // bukan ambang angka.
+            //
+            // SEDANG DISEMBUNYIKAN lewat DISEMBUNYIKAN di atas, jadi barisnya
+            // tidak muncul di matriks. Entrinya sengaja dibiarkan di sini.
             self::kosong('Peer Pressure'),
 
             // Kedua parameter sertifikasi TIDAK PUNYA DIMENSI WAKTU: tabel
