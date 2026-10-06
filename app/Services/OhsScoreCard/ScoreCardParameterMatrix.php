@@ -649,13 +649,53 @@ final class ScoreCardParameterMatrix
             return null;
         }
 
-        $skala = (float) ($p['skala'] ?? 1.0);
+        $skala = $this->skala($p);
 
         if ($p['ringkas'] === ScoreCardParameterRegistry::RINGKAS_JUMLAH) {
             return $jumlah * $skala;
         }
 
         return $baris > 0 ? $jumlah / $baris * $skala : null;
+    }
+
+    /**
+     * Pengali untuk kolom nilai.
+     *
+     * 'auto' menebaknya dari nilai TERTINGGI di kolom itu: kalau tidak pernah
+     * melewati 1, isinya pecahan 0-1 dan harus dikali 100. Aturan yang sama
+     * dipakai skalaPersen() di BlindspotGrController, supaya halaman dan tabel
+     * ini tidak pernah membaca angka yang sama dengan skala berbeda.
+     *
+     * Deteksi dipakai alih-alih angka tetap karena sumbernya bisa berganti
+     * bentuk; kalau suatu saat kolomnya diisi persen langsung, keduanya ikut
+     * menyesuaikan tanpa perlu disunting.
+     */
+    private function skala(array $p): float
+    {
+        $skala = $p['skala'] ?? 1.0;
+
+        if ($skala !== 'auto') {
+            return (float) $skala;
+        }
+
+        $kunci = 'skala:' . $p['sumber'] . '|' . $p['nilai'];
+
+        if (array_key_exists($kunci, $this->cache)) {
+            return (float) $this->cache[$kunci];
+        }
+
+        try {
+            $max = DB::table($p['sumber'])->max($p['nilai']);
+        } catch (\Throwable $e) {
+            report($e);
+            $max = null;
+        }
+
+        // Tabel kosong: 1.0 lebih aman daripada 100.0, karena tidak mengubah
+        // angka apa pun yang mungkin sudah berupa persen.
+        $hasil = ($max !== null && (float) $max <= 1.0) ? 100.0 : 1.0;
+
+        return (float) ($this->cache[$kunci] = $hasil);
     }
 
     /** @return array<string, mixed> */

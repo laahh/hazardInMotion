@@ -111,8 +111,27 @@ final class ScoreCardParameterRegistry
             self::terbalik('Blindspot TBC yang dilaporkan BC', 'lead_blindspot_tbc_month',
                 'site', 'perusahaan_pic', 'month_of_date_for_join', 'pct_blindspot_tbc_dari_bc'),
 
+            // DUA HAL KHUSUS DI PARAMETER INI.
+            //
+            // 1. KOLOMNYA PECAHAN 0-1, BUKAN PERSEN. Nilainya hanya 0 · 0,5 · 1
+            //    dan tiap baris bernilai punya temuan nyata di rincian: 0,5
+            //    muncul pada kombinasi dengan 2 temuan, 1,0 pada yang 1 atau 3
+            //    temuan. Artinya rasio blindspot terhadap seluruh temuan, jadi
+            //    1,0 berarti 100% -- bukan 1%. Skalanya dideteksi otomatis,
+            //    sama seperti skalaPersen() di BlindspotGrController.
+            //
+            // 2. SEL KOSONG BERARTI TIDAK ADA BLINDSPOT, bukan data hilang.
+            //    Dibuktikan: 101 dari 124 baris NULL, dan TIDAK SATU PUN punya
+            //    temuan di detail_lead_blindspot_gr; tidak ada pula kombinasi
+            //    yang ada di rincian tetapi hilang dari tabel bulanan. Karena
+            //    arahnya terbalik, nol adalah hasil terbaik -- jadi sel kosong
+            //    bernilai 0% dan ditulis "N/A".
             self::terbalik('Blindspot GR yang dilaporkan BC', 'lead_blindspot_gr_month',
-                'site', 'perusahaan_pic', 'month_of_date_for_join', 'blindspot_gr'),
+                'site', 'perusahaan_pic', 'month_of_date_for_join', 'blindspot_gr') + [
+                    'skala' => 'auto',
+                    'kosong_berarti' => 0.0,
+                    'kosong_label' => 'N/A',
+                ],
 
             self::persen('Coverage Area Kritis Pengawas Suptend up',
                 'lead_coverage_area_kritis_pengawas_suptend_up',
@@ -145,11 +164,20 @@ final class ScoreCardParameterRegistry
                 'site_dedicated', 'nama_perusahaan',
                 'month_of_event_time', 'pct_true_alert_fatigue_speak_up_sebelum', [96, 98, 100, 100]),
 
+            // Tabelnya hanya mencatat temuan; 29 baris, nilai terkecil 1,
+            // tanpa baris bernilai nol. Sel kosong berarti tidak ada temuan.
             self::cacah('Tidak ada temuan penggunaan HP', 'lead_gr_penggunaan_hp',
-                'site', 'perusahaan_pic', 'month_of_date_for_join', 'distinct_count_of_task_number'),
+                'site', 'perusahaan_pic', 'month_of_date_for_join', 'distinct_count_of_task_number') + [
+                    'kosong_berarti' => 0.0,
+                    'kosong_label' => 'N/A',
+                ],
 
+            // 20 baris, nilai terkecil 1, tanpa baris nol.
             self::cacah('Incident dengan Gap Coverage CCTV & Gap pada DMS', 'lead_inc_gap_cctv_dms',
-                'site1', 'perusahaan', 'month_of_tanggal_kejadian', 'incident_dengan_gap_cctv_dms'),
+                'site1', 'perusahaan', 'month_of_tanggal_kejadian', 'incident_dengan_gap_cctv_dms') + [
+                    'kosong_berarti' => 0.0,
+                    'kosong_label' => 'N/A',
+                ],
 
             self::persen('Leadtime Alert DMS masuk ke Server',
                 'lead_leadtime_alert_entry_to_bedms_month',
@@ -229,12 +257,20 @@ final class ScoreCardParameterRegistry
                 'ringkas' => self::RINGKAS_RATA,
             ],
 
+            // 33 baris, nilai terkecil 1, tanpa baris nol.
             self::cacah('Deviasi Rekayasa Engineering Seatbelt', 'lead_gr_seatbelt',
-                'site', 'perusahaan_pic', 'month_of_date_for_join', 'distinct_count_of_task_number'),
+                'site', 'perusahaan_pic', 'month_of_date_for_join', 'distinct_count_of_task_number') + [
+                    'kosong_berarti' => 0.0,
+                    'kosong_label' => 'N/A',
+                ],
 
+            // 47 baris, nilai terkecil 1, tanpa baris nol.
             self::cacah('Deviasi Rekayasa Engineering Overspeed', 'lead_pelanggaran_overspeed',
                 'site_by_approval', 'perusahaan', 'month_of_start_date_be_record',
-                'distinct_count_of_kode_sid_bep_vw_berecord'),
+                'distinct_count_of_kode_sid_bep_vw_berecord') + [
+                    'kosong_berarti' => 0.0,
+                    'kosong_label' => 'N/A',
+                ],
 
             self::kosong('Pemenuhan Regulasi'),
             [
