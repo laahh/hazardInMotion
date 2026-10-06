@@ -58,7 +58,7 @@
         'SIRM' => [
             ['label' => 'Deviasi Rekayasa Engineering Seatbelt',                        'icon' => 'mdi:seatbelt', 'url' => route('ohs-score-card.gr-seatbelt.index')],
             ['label' => 'Deviasi Rekayasa Engineering Overspeed',                       'icon' => 'solar:speedometer-outline', 'url' => route('ohs-score-card.pelanggaran-overspeed.index')],
-            ['label' => 'Pemenuhan Regulasi',                                           'icon' => 'solar:clipboard-list-outline'],
+            ['label' => 'Pemenuhan Regulasi',                                           'icon' => 'solar:clipboard-list-outline', 'url' => route('ohs-score-card.pemenuhan-regulasi.index')],
             ['label' => 'Penuntasan pengendalian rekayasa',                             'icon' => 'solar:wrench-outline', 'url' => route('ohs-score-card.penuntasan-pengendalian-rekayasa.index')],
         ],
         'G&H' => [

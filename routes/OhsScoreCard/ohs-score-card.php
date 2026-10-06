@@ -26,6 +26,7 @@ use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
 use App\Http\Controllers\OhsScoreCard\OhsScoreCardDashboardController;
 use App\Http\Controllers\OhsScoreCard\PelaksanaanEdukasiController;
 use App\Http\Controllers\OhsScoreCard\PelanggaranOverspeedController;
+use App\Http\Controllers\OhsScoreCard\PemenuhanRegulasiController;
 use App\Http\Controllers\OhsScoreCard\PengawasanBerjarakController;
 use App\Http\Controllers\OhsScoreCard\PenggunaanHpController;
 use App\Http\Controllers\OhsScoreCard\PerulanganRekomendasiController;
@@ -450,6 +451,21 @@ Route::middleware('evaluasi-well.access')
             ->name('kesiapan-alat-emergency.data');
         Route::get('/kesiapan-alat-emergency/export', [KesiapanAlatEmergencyController::class, 'export'])
             ->name('kesiapan-alat-emergency.export');
+
+        // Parameter "Pemenuhan Regulasi".
+        // Ringkasan per site & perusahaan regulatory_compliance_summary,
+        // daftar regulasinya regulatory_compliance_detail. Keduanya potret
+        // satu waktu -- tidak ada kolom bulan -- jadi tidak ada rute per bulan.
+        Route::get('/pemenuhan-regulasi', [PemenuhanRegulasiController::class, 'index'])
+            ->name('pemenuhan-regulasi.index');
+        Route::get('/pemenuhan-regulasi/overview', [PemenuhanRegulasiController::class, 'overview'])
+            ->name('pemenuhan-regulasi.overview');
+        Route::get('/pemenuhan-regulasi/detail-sel', [PemenuhanRegulasiController::class, 'detailSel'])
+            ->name('pemenuhan-regulasi.detail-sel');
+        Route::get('/pemenuhan-regulasi/data', [PemenuhanRegulasiController::class, 'data'])
+            ->name('pemenuhan-regulasi.data');
+        Route::get('/pemenuhan-regulasi/export', [PemenuhanRegulasiController::class, 'export'])
+            ->name('pemenuhan-regulasi.export');
 
         // Parameter HSECT — "Peer Pressure" (hse_automation: bcsid.mv_berecord)
         Route::get('/peer-pressure', [BerecordController::class, 'index'])

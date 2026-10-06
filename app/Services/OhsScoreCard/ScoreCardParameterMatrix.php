@@ -189,6 +189,7 @@ final class ScoreCardParameterMatrix
             fn (): ?array => match ($p['khusus'] ?? null) {
                 'road_summary' => $this->ambilRoadSummary(),
                 'kesiapan_emergency' => $this->ambilKesiapanEmergency(),
+                'pemenuhan_regulasi' => $this->ambilPemenuhanRegulasi($p),
                 'kompetensi' => $this->ambilKompetensi($p),
                 'besigma' => $this->ambilBesigma($p),
                 'pic_subcont' => $this->ambilPicSubcont($p),
@@ -226,6 +227,66 @@ final class ScoreCardParameterMatrix
             ->get();
 
         return $this->kelompokkan($rows);
+    }
+
+    /**
+     * Pemenuhan Regulasi: kewajiban yang dipenuhi dibagi seluruh kewajiban.
+     *
+     * DISIMPAN SEBAGAI CACAH, BUKAN PERSENTASE, supaya ringkas() menghasilkan
+     * patuh_total/kewajiban_total -- rata-rata TERTIMBANG, sama seperti halaman
+     * Pemenuhan Regulasi. Merata-ratakan persentase antar sektor memberi bobot
+     * sama kepada sektor berisi 3 kewajiban dan sektor berisi 300.
+     *
+     * TIDAK ADA KOLOM BULAN DI TABELNYA. Isinya potret satu waktu, jadi seluruh
+     * selnya disimpan di BULAN_TANPA_WAKTU dan registry menandainya dengan
+     * 'tanpa_bulan' => true; angkanya sama untuk bulan mana pun yang dipilih.
+     *
+     * PT BERAU COAL TERBUANG DENGAN SENDIRINYA lewat labelKontraktor(): matriks
+     * ini hanya punya kolom kontraktor. Nama perusahaan di sumbernya versi
+     * panjang ("PT Bukit Makmur Mandiri Utama"), dan ALIAS_KONTRAKTOR sudah
+     * memetakannya.
+     *
+     * @return array<string, array{jumlah: float, baris: int}>|null
+     */
+    private function ambilPemenuhanRegulasi(array $p): ?array
+    {
+        $kolomAda = $this->skema()[$p['sumber']] ?? null;
+
+        if ($kolomAda === null) {
+            return null;
+        }
+
+        foreach (['department', 'user_group'] as $k) {
+            if (!isset($kolomAda[$k])) {
+                return null;
+            }
+        }
+
+        $out = [];
+
+        foreach (DB::table($p['sumber'])->get() as $r) {
+            $kunci = $this->kunciSel(
+                (string) $r->department,
+                (string) $r->user_group,
+                self::BULAN_TANPA_WAKTU
+            );
+
+            if ($kunci === null) {
+                continue;
+            }
+
+            $cacah = PemenuhanRegulasi::cacahBaris($r);
+
+            // Seluruh sektornya bertanda "-": tidak ada yang bisa dibagi.
+            if ($cacah['total'] <= 0.0) {
+                continue;
+            }
+
+            $out[$kunci]['jumlah'] = ($out[$kunci]['jumlah'] ?? 0.0) + $cacah['patuh'];
+            $out[$kunci]['baris'] = ($out[$kunci]['baris'] ?? 0) + (int) $cacah['total'];
+        }
+
+        return $out;
     }
 
     /**

@@ -320,7 +320,30 @@ final class ScoreCardParameterRegistry
                     'kosong_label' => 'N/A',
                 ],
 
-            self::kosong('Pemenuhan Regulasi'),
+            [
+                'nama' => 'Pemenuhan Regulasi',
+                'sumber' => 'regulatory_compliance_summary',
+                'khusus' => 'pemenuhan_regulasi',
+                // Tabelnya potret satu waktu dan TIDAK punya kolom bulan sama
+                // sekali, jadi angkanya sama untuk bulan mana pun yang dipilih.
+                'tanpa_bulan' => true,
+                // Sumbernya menyimpan CACAH kewajiban, bukan persentase, supaya
+                // rata-ratanya tertimbang; hasil baginya pecahan 0-1.
+                'skala' => 100.0,
+                // BAND RESMINYA BELUM ADA. Dibiarkan null dengan sengaja: sel
+                // tetap menampilkan persentasenya, tetapi TANPA angka Nilai,
+                // karena memberi Nilai berarti mengarang skor resmi. Akibatnya
+                // parameter ini juga tidak ikut menghitung rata-rata kartu site
+                // -- rataSite() memang melewati parameter tanpa band.
+                //
+                // Begitu band resminya ada, cukup isi 'band' dan 'ambang' di
+                // sini; halaman /ohs-score-card/pemenuhan-regulasi punya
+                // ambangnya sendiri di AMBANG_SEMENTARA yang juga perlu diganti.
+                'band' => null,
+                'ambang' => [],
+                'satuan' => '%',
+                'ringkas' => self::RINGKAS_RATA,
+            ],
             [
                 'nama' => 'Penuntasan pengendalian rekayasa',
                 'sumber' => 'lead_replikasi_rekayasa_engineering',
