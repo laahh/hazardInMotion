@@ -61,6 +61,9 @@ final class ScoreCardParameterMatrix
     /** Peta tabel => kolom, diambil sekali untuk seluruh skema. */
     private ?array $skema = null;
 
+    /** Peta nama site yang sudah diringkas => kunci kolom. */
+    private ?array $petaSite = null;
+
     /**
      * @param  int|null  $bulan  1-12, atau null untuk seluruh bulan.
      * @param  bool  $bulanBawaan  true kalau $bulan berasal dari bawaan, bukan
@@ -268,17 +271,16 @@ final class ScoreCardParameterMatrix
                 continue;
             }
 
+            // CACAH MENTAH, bukan persentase per bulan: 'jumlah' adalah
+            // segmen yang sesuai standar dan 'baris' seluruh segmennya.
+            //
+            // Dengan begitu ringkas() menghasilkan segmen_standar / segmen_total
+            // -- rata-rata TERTIMBANG, persis seperti buildOverviewMatrix() di
+            // RoadSummaryController. Menyimpannya sebagai persentase per bulan
+            // akan membuat rata-ratanya tak berbobot, dan bulan dengan dua
+            // ratus segmen dihitung sama besar dengan bulan yang hanya lima.
             $out[$kunci]['jumlah'] = ($out[$kunci]['jumlah'] ?? 0.0) + (float) $r->standar;
             $out[$kunci]['baris'] = ($out[$kunci]['baris'] ?? 0) + (int) $r->total;
-        }
-
-        // Disimpan sebagai persentase per bulan supaya bentuknya sama dengan
-        // sumber lain: 'jumlah' menjadi total persen, 'baris' pembaginya.
-        foreach ($out as $k => $v) {
-            $out[$k] = [
-                'jumlah' => $v['baris'] > 0 ? $v['jumlah'] / $v['baris'] * 100.0 : 0.0,
-                'baris' => 1,
-            ];
         }
 
         return $out;
@@ -509,18 +511,45 @@ final class ScoreCardParameterMatrix
     /** Kunci "site|kontraktor|bulan", atau null kalau kolomnya tidak ditampilkan. */
     private function kunciSel(string $site, string $mitra, int $bulan): ?string
     {
-        $site = trim($site);
+        $siteKolom = $this->siteKolom($site);
         $label = $this->labelKontraktor($mitra);
 
-        if ($label === null || !isset(ScoreCardParameterRegistry::KOLOM[$site])) {
+        if ($siteKolom === null || $label === null) {
             return null;
         }
 
-        if (!in_array($label, ScoreCardParameterRegistry::KOLOM[$site], true)) {
+        if (!in_array($label, ScoreCardParameterRegistry::KOLOM[$siteKolom], true)) {
             return null;
         }
 
-        return $site . '|' . $label . '|' . $bulan;
+        return $siteKolom . '|' . $label . '|' . $bulan;
+    }
+
+    /**
+     * Nama site dari sumber ke kunci kolom.
+     *
+     * SUMBERNYA TIDAK MENULIS SITE DENGAN CARA YANG SAMA: road_summary memakai
+     * "BMO1" tanpa spasi sedangkan kolom memakai "BMO 1". Pencocokan harfiah
+     * membuang seluruh baris BMO1, BMO2, dan BMO3 tanpa jejak. Karena itu
+     * dicocokkan setelah spasi dan kapital diabaikan; nama site yang ada tidak
+     * ada yang bertabrakan di bentuk itu.
+     */
+    private function siteKolom(string $mentah): ?string
+    {
+        if ($this->petaSite === null) {
+            $this->petaSite = [];
+
+            foreach (array_keys(ScoreCardParameterRegistry::KOLOM) as $s) {
+                $this->petaSite[$this->ringkasNama($s)] = $s;
+            }
+        }
+
+        return $this->petaSite[$this->ringkasNama($mentah)] ?? null;
+    }
+
+    private function ringkasNama(string $teks): string
+    {
+        return (string) preg_replace('/\s+/u', '', mb_strtolower(trim($teks)));
     }
 
     private function labelKontraktor(string $mentah): ?string

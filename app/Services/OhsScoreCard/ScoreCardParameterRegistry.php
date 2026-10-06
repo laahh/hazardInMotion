@@ -251,6 +251,11 @@ final class ScoreCardParameterRegistry
                 'nama' => 'Jalan sesuai standar',
                 'sumber' => 'road_summary',
                 'khusus' => 'road_summary',
+                // Sumbernya menyimpan CACAH segmen, bukan persentase, supaya
+                // rata-ratanya tertimbang seperti di halaman Jalan sesuai
+                // standar. Hasil bagi segmen_standar/segmen_total berupa
+                // pecahan 0-1, jadi dikali seratus di sini.
+                'skala' => 100.0,
                 'band' => self::BAND_NAIK,
                 'ambang' => [95, 98, 100, 100],
                 'satuan' => '%',
