@@ -71,7 +71,7 @@
         ],
         'ER & SS' => [
             ['label' => 'Tidak ada pelaporan melewati batas golden time',               'icon' => 'solar:clock-circle-outline', 'url' => route('ohs-score-card.golden-time-emergency.index')],
-            ['label' => 'Kesiapan alat Emergency',                                      'icon' => 'solar:siren-outline'],
+            ['label' => 'Kesiapan alat Emergency',                                      'icon' => 'solar:siren-outline', 'url' => route('ohs-score-card.kesiapan-alat-emergency.index')],
         ],
     ];
 

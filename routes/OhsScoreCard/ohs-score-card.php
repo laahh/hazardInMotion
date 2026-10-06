@@ -19,6 +19,7 @@ use App\Http\Controllers\OhsScoreCard\IncidentGapCctvDmsController;
 use App\Http\Controllers\OhsScoreCard\IncidentLeadingIndicatorController;
 use App\Http\Controllers\OhsScoreCard\IncidentManagementDashboardController;
 use App\Http\Controllers\OhsScoreCard\IncidentMasterDataController;
+use App\Http\Controllers\OhsScoreCard\KesiapanAlatEmergencyController;
 use App\Http\Controllers\OhsScoreCard\KinerjaControlRoomDmsController;
 use App\Http\Controllers\OhsScoreCard\SpipCommissioningController;
 use App\Http\Controllers\OhsScoreCard\LeadtimeAlertBedmsController;
@@ -435,6 +436,20 @@ Route::middleware('evaluasi-well.access')
             ->name('golden-time-emergency.data');
         Route::get('/golden-time-emergency/export', [GoldenTimeEmergencyController::class, 'export'])
             ->name('golden-time-emergency.export');
+
+        // Parameter Emergency Response — "Kesiapan alat Emergency".
+        // Baseline emergency_equipment_inventory, pemeriksaan bulanan
+        // emergency_equipment_daily_inspection.
+        Route::get('/kesiapan-alat-emergency', [KesiapanAlatEmergencyController::class, 'index'])
+            ->name('kesiapan-alat-emergency.index');
+        Route::get('/kesiapan-alat-emergency/overview', [KesiapanAlatEmergencyController::class, 'overview'])
+            ->name('kesiapan-alat-emergency.overview');
+        Route::get('/kesiapan-alat-emergency/detail-bulan', [KesiapanAlatEmergencyController::class, 'detailBulan'])
+            ->name('kesiapan-alat-emergency.detail-bulan');
+        Route::get('/kesiapan-alat-emergency/data', [KesiapanAlatEmergencyController::class, 'data'])
+            ->name('kesiapan-alat-emergency.data');
+        Route::get('/kesiapan-alat-emergency/export', [KesiapanAlatEmergencyController::class, 'export'])
+            ->name('kesiapan-alat-emergency.export');
 
         // Parameter HSECT — "Peer Pressure" (hse_automation: bcsid.mv_berecord)
         Route::get('/peer-pressure', [BerecordController::class, 'index'])
