@@ -380,7 +380,28 @@ final class ScoreCardParameterRegistry
                 'kosong_label' => 'N/A',
             ],
 
-            self::kosong('Kesiapan alat Emergency'),
+            [
+                'nama' => 'Kesiapan alat Emergency',
+                'sumber' => 'emergency_equipment_inventory',
+                'khusus' => 'kesiapan_emergency',
+                // Sumbernya menyimpan CACAH alat, bukan persentase, supaya
+                // rata-ratanya tertimbang: hasil bagi siap/total berupa
+                // pecahan 0-1, jadi dikali seratus di sini.
+                'skala' => 100.0,
+                'band' => self::BAND_NAIK,
+                'ambang' => [80, 90, 98, 100],
+                'satuan' => '%',
+                'ringkas' => self::RINGKAS_RATA,
+                // YANG DIKLAIM DI SINI PERLU DISADARI. Sel kosong pada
+                // parameter ini berarti kontraktor itu TIDAK PUNYA alat
+                // emergency terdaftar di site itu -- 4 dari 10 kolom, karena
+                // 92% alat emergency milik BC sendiri dan BC bukan kolom di
+                // matriks ini. Menyebutnya 100% berarti menilai penuh sesuatu
+                // yang tidak ada alatnya. Itu mengikuti keputusan "semua
+                // parameter yang kosong di-N/A-kan", bukan temuan data.
+                'kosong_berarti' => 100.0,
+                'kosong_label' => 'N/A',
+            ],
         ];
     }
 

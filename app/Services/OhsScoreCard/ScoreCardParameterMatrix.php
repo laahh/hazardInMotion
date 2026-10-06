@@ -188,6 +188,7 @@ final class ScoreCardParameterMatrix
             self::TTL_DETIK,
             fn (): ?array => match ($p['khusus'] ?? null) {
                 'road_summary' => $this->ambilRoadSummary(),
+                'kesiapan_emergency' => $this->ambilKesiapanEmergency(),
                 'kompetensi' => $this->ambilKompetensi($p),
                 'besigma' => $this->ambilBesigma($p),
                 'pic_subcont' => $this->ambilPicSubcont($p),
@@ -225,6 +226,67 @@ final class ScoreCardParameterMatrix
             ->get();
 
         return $this->kelompokkan($rows);
+    }
+
+    /**
+     * Kesiapan alat Emergency: cacah alat siap dibagi cacah alat di inventaris.
+     *
+     * DISIMPAN SEBAGAI CACAH, BUKAN PERSENTASE PER BULAN, supaya ringkas()
+     * menghasilkan siap_total/alat_total -- rata-rata TERTIMBANG, sama seperti
+     * halaman Kesiapan Alat Emergency. Menyimpannya sebagai persentase bulanan
+     * membuat bulan dengan empat ratus alat dihitung sama besar dengan bulan
+     * yang hanya lima.
+     *
+     * PENYEBUTNYA TIDAK BERGANTUNG BULAN: yang membagi adalah cacah alat di
+     * inventaris, tetap sepanjang tahun. Itu memang maksudnya -- alat yang
+     * bulan itu tidak diperiksa harus ikut menekan angkanya.
+     *
+     * HANYA KOLOM KONTRAKTOR YANG TERPAKAI. Sebagian besar alat emergency
+     * milik BC sendiri, dan BC bukan kolom di matriks ini, jadi kunciSel()
+     * membuang baris PT BC dengan sendirinya lewat labelKontraktor().
+     *
+     * @return array<string, array{jumlah: float, baris: int}>|null
+     */
+    private function ambilKesiapanEmergency(): ?array
+    {
+        $skema = $this->skema();
+
+        if (!isset($skema[KesiapanAlatEmergency::TABEL_INVENTARIS])
+            || !isset($skema[KesiapanAlatEmergency::TABEL_INSPEKSI])) {
+            return null;
+        }
+
+        $baseline = KesiapanAlatEmergency::baseline();
+        $out = [];
+
+        foreach (KesiapanAlatEmergency::siapPerBulan() as $row) {
+            $bulan = $this->nomorBulan((string) $row->bulan);
+
+            if ($bulan === 0) {
+                continue; // nama bulan tak dikenal: jangan dianggap bulan lain
+            }
+
+            $site = trim((string) $row->site);
+            $pemilik = trim((string) $row->pemilik);
+            $total = $baseline[$site . '|' . $pemilik] ?? 0;
+
+            // Tanpa penyebut tidak ada yang bisa dibagi. Ini juga membuang
+            // alat yang diperiksa tetapi tidak terdaftar di inventaris.
+            if ($total <= 0) {
+                continue;
+            }
+
+            $kunci = $this->kunciSel($site, $pemilik, $bulan);
+
+            if ($kunci === null) {
+                continue;
+            }
+
+            $out[$kunci]['jumlah'] = ($out[$kunci]['jumlah'] ?? 0.0) + (float) $row->siap;
+            $out[$kunci]['baris'] = ($out[$kunci]['baris'] ?? 0) + $total;
+        }
+
+        return $out;
     }
 
     /**

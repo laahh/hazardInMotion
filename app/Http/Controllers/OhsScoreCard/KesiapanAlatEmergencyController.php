@@ -6,6 +6,7 @@ namespace App\Http\Controllers\OhsScoreCard;
 
 use App\Http\Controllers\Concerns\ServesDataTable;
 use App\Http\Controllers\Controller;
+use App\Services\OhsScoreCard\KesiapanAlatEmergency;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
@@ -54,9 +55,12 @@ final class KesiapanAlatEmergencyController extends Controller
 {
     use ServesDataTable;
 
-    private const TABEL_INVENTARIS = 'emergency_equipment_inventory';
+    // Nama tabel, aturan "siap", dan cara membaca perusahaan pemilik tinggal
+    // di KesiapanAlatEmergency supaya halaman ini dan sel Score Card tidak
+    // bisa berangsur berbeda aturan.
+    private const TABEL_INVENTARIS = KesiapanAlatEmergency::TABEL_INVENTARIS;
 
-    private const TABEL_INSPEKSI = 'emergency_equipment_daily_inspection';
+    private const TABEL_INSPEKSI = KesiapanAlatEmergency::TABEL_INSPEKSI;
 
     /**
      * Bulan tersimpan sebagai nama Indonesia tanpa tahun ("September"), jadi
@@ -68,11 +72,8 @@ final class KesiapanAlatEmergencyController extends Controller
         'September' => 9, 'Oktober' => 10, 'November' => 11, 'Desember' => 12,
     ];
 
-    /** Status harian yang membatalkan kesiapan sebuah alat. */
-    private const STATUS_TIDAK_SIAP = ['Not Good', 'Breakdown', 'Kembali ke CCR'];
-
-    /** Label untuk alat yang pemiliknya memang tidak tercatat di mana pun. */
-    private const PEMILIK_TAK_DIKENAL = '(pemilik belum dicatat)';
+    /** Label untuk alat yang pemiliknya memang tidak bisa ditentukan. */
+    private const PEMILIK_TAK_DIKENAL = KesiapanAlatEmergency::PEMILIK_TAK_DIKENAL;
 
     /** Batas baris yang dikirim ke modal rincian sel. */
     private const BATAS_DETAIL = 200;
@@ -763,28 +764,10 @@ final class KesiapanAlatEmergencyController extends Controller
     // Query inti
     // ======================================================================
 
-    /**
-     * Perusahaan pemilik sebuah alat.
-     *
-     * KOLOM perusahaan_pemilik KOSONG DI 3.485 BARIS, DAN ITU BUKAN DATA
-     * HILANG. Seluruhnya berkepemilikan "BC", dan 3.485 + 557 baris yang
-     * menulis "PT BC" secara eksplisit berjumlah tepat 4.042 -- sama persis
-     * dengan cacah alat berkepemilikan BC. Jadi yang kosong memang milik
-     * Berau Coal sendiri dan boleh dibaca sebagai PT BC.
-     *
-     * Yang tidak bisa dipetakan hanya 3 baris dari 4.373 (2 Mitra Kerja tanpa
-     * nama perusahaan, 1 tanpa keduanya). Baris itu TIDAK dibuang, melainkan
-     * dikumpulkan di satu label sendiri supaya penyebutnya tetap utuh dan
-     * kekurangannya kelihatan di layar.
-     */
+    /** Lihat KesiapanAlatEmergency::ekspresiPemilik() untuk alasannya. */
     private function ekspresiPemilik(string $awalan = ''): string
     {
-        $p = $awalan === '' ? '' : $awalan . '.';
-
-        return 'COALESCE('
-            . "NULLIF(TRIM({$p}perusahaan_pemilik), ''), "
-            . "CASE WHEN TRIM({$p}kepemilikan_peralatan) = 'BC' THEN 'PT BC' END, "
-            . "'" . self::PEMILIK_TAK_DIKENAL . "')";
+        return KesiapanAlatEmergency::ekspresiPemilik($awalan);
     }
 
     /**
@@ -825,24 +808,8 @@ final class KesiapanAlatEmergencyController extends Controller
      */
     private function queryKesiapan(Request $request): Builder
     {
-        $hari = $this->ekspresiHari();
-
-        $perAlat = DB::table(self::TABEL_INSPEKSI)
-            ->selectRaw(
-                'no_registrasi, bulan, '
-                . 'SUM(' . $hari['isi'] . ') AS hari_isi, '
-                . 'SUM(' . $hari['good'] . ') AS hari_good, '
-                . 'SUM(' . $hari['ng'] . ') AS hari_ng, '
-                . 'SUM(' . $hari['bd'] . ') AS hari_bd, '
-                . 'SUM(' . $hari['ccr'] . ') AS hari_ccr'
-            )
-            // SEBUAH ALAT BISA PUNYA LEBIH DARI SATU LEMBAR dalam sebulan
-            // (9 kejadian di Juni). Dijumlahkan dulu supaya temuan di lembar
-            // kedua tidak hilang karena lembar pertama bersih.
-            ->groupBy('no_registrasi', 'bulan');
-
         $query = DB::query()
-            ->fromSub($perAlat, 'p')
+            ->fromSub(KesiapanAlatEmergency::perAlat(), 'p')
             ->join(self::TABEL_INVENTARIS . ' as i', 'i.no_registrasi', '=', 'p.no_registrasi')
             ->selectRaw(
                 'p.no_registrasi, i.nama_peralatan, '
@@ -850,8 +817,7 @@ final class KesiapanAlatEmergencyController extends Controller
                 . $this->ekspresiPemilik('i') . ' AS pemilik, '
                 . 'TRIM(i.kategori_peralatan) AS kategori, '
                 . 'p.bulan, p.hari_isi, p.hari_good, p.hari_ng, p.hari_bd, p.hari_ccr, '
-                . 'CASE WHEN p.hari_isi > 0 AND p.hari_ng = 0 AND p.hari_bd = 0 '
-                . 'AND p.hari_ccr = 0 THEN 1 ELSE 0 END AS siap'
+                . KesiapanAlatEmergency::ekspresiSiap('p') . ' AS siap'
             );
 
         foreach ([
@@ -881,46 +847,6 @@ final class KesiapanAlatEmergencyController extends Controller
         // Dibungkus sekali lagi supaya alias site/pemilik/kategori/siap bisa
         // dipakai di WHERE dan ORDER BY oleh pemanggilnya.
         return DB::query()->fromSub($query, 'k');
-    }
-
-    /**
-     * Ekspresi penjumlahan untuk 31 kolom day_NN_condition.
-     *
-     * WAJIB `<=>`, BUKAN `=`. Dengan `=`, kolom hari yang kosong menghasilkan
-     * NULL dan satu NULL membuat seluruh penjumlahan ikut NULL -- setiap bulan
-     * 30 hari dan bulan berjalan langsung terbuang dari hasil.
-     *
-     * @return array{isi: string, good: string, ng: string, bd: string, ccr: string}
-     */
-    private function ekspresiHari(): array
-    {
-        $kolom = [];
-
-        for ($i = 1; $i <= 31; $i++) {
-            $kolom[] = sprintf('`day_%02d_condition`', $i);
-        }
-
-        $cacah = static function (string $status) use ($kolom): string {
-            $bagian = array_map(
-                static fn (string $c): string => '(' . $c . ' <=> ' . "'" . $status . "'" . ')',
-                $kolom
-            );
-
-            return '(' . implode(' + ', $bagian) . ')';
-        };
-
-        $isi = array_map(
-            static fn (string $c): string => '(' . $c . ' IS NOT NULL AND TRIM(' . $c . ") <> '')",
-            $kolom
-        );
-
-        return [
-            'isi' => '(' . implode(' + ', $isi) . ')',
-            'good' => $cacah('Good'),
-            'ng' => $cacah(self::STATUS_TIDAK_SIAP[0]),
-            'bd' => $cacah(self::STATUS_TIDAK_SIAP[1]),
-            'ccr' => $cacah(self::STATUS_TIDAK_SIAP[2]),
-        ];
     }
 
     // ======================================================================
