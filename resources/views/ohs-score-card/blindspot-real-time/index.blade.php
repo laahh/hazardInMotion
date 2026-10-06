@@ -40,9 +40,11 @@
   }
   .bs-matrix thead .bs-site, .bs-matrix thead .bs-mitra { z-index: 4; background: #F8FAFC; }
   .bs-matrix .bs-total { font-weight: 800; color: #334155 !important; background: #F1F5F9; border-radius: 8px; }
-  /* Untuk blindspot, naik berarti memburuk, jadi panah atas diwarnai merah. */
-  .bs-matrix .bs-trend--up { color: #DC2626; font-weight: 800; }
-  .bs-matrix .bs-trend--down { color: #16A34A; font-weight: 800; }
+  /* ARAHNYA NAIK di parameter ini: yang diukur temuan yang BERHASIL
+     ditangkap real time, jadi panah atas hijau dan panah bawah merah --
+     kebalikan halaman Blindspot TBC dan GR. */
+  .bs-matrix .bs-trend--up { color: #16A34A; font-weight: 800; }
+  .bs-matrix .bs-trend--down { color: #DC2626; font-weight: 800; }
   .bs-matrix .bs-trend--flat { color: #94A3B8; font-weight: 800; }
   .bs-matrix .bs-cell {
     font-weight: 700; color: #fff; min-width: 54px;
@@ -68,6 +70,16 @@
   /* Nol temuan itu kabar baik, jadi warnanya hijau, bukan abu-abu kosong. */
   /* Warna band resmi parameter ini. ARAHNYA NAIK: angka besar yang hijau,
      kebalikan halaman Blindspot TBC dan GR. */
+  /* Batang dan lencana panel memakai band yang sama dengan sel matriks. */
+  .bs-bar-n1 { background: #FF0000; }
+  .bs-bar-n2 { background: #FFC000; }
+  .bs-bar-n3 { background: #FFFF00; }
+  .bs-bar-n4 { background: #92D050; }
+  .bs-badge-n1 { background: #FFE5E5; color: #B91C1C !important; }
+  .bs-badge-n2 { background: #FFF2CC; color: #92400E !important; }
+  .bs-badge-n3 { background: #FFFBCC; color: #854D0E !important; }
+  .bs-badge-n4 { background: #E8F5DC; color: #3F6212 !important; }
+
   .bs-n1 { background: #FF0000; }
   .bs-n2 { background: #FFC000; color: #1F2937 !important; }
   .bs-n3 { background: #FFFF00; color: #1F2937 !important; }
@@ -525,10 +537,11 @@ window.bsOverview = (function () {
             var cards = [
                 k.ukuran === 'persen'
                     ? {
-                        grad: 'bg-gradient-end-5', icon: 'solar:eye-closed-outline', dot: 'bg-danger-main',
-                        label: 'Rata-rata Blindspot', value: fmtPct(k.rata_persen),
-                        foot: 'Tertinggi ' + fmtPct(k.puncak_persen) + ' di antara ' + fmtNum(k.kombinasi)
-                            + ' pasangan site &amp; perusahaan'
+                        grad: 'bg-gradient-end-5', icon: 'solar:eye-outline', dot: 'bg-primary-600',
+                        label: 'Rata-rata Temuan Real Time', value: fmtPct(k.rata_persen),
+                        foot: 'Nilai ' + fmtNilai(nilaiUntuk(k.rata_persen))
+                            + ' · tertinggi ' + fmtPct(k.puncak_persen) + ' di antara '
+                            + fmtNum(k.kombinasi) + ' pasangan site &amp; perusahaan'
                     }
                     : {
                         grad: 'bg-gradient-end-5', icon: 'solar:eye-closed-outline', dot: 'bg-danger-main',
@@ -537,9 +550,9 @@ window.bsOverview = (function () {
                     },
                 k.ukuran === 'persen'
                     ? {
-                        grad: 'bg-gradient-end-3', icon: 'solar:danger-triangle-outline', dot: 'bg-warning-main',
-                        label: 'Di Atas Ambang', value: fmtNum(k.di_atas_ambang),
-                        foot: 'Rata-ratanya lebih dari ' + k.ambang + '%'
+                        grad: 'bg-gradient-end-3', icon: 'solar:medal-ribbon-outline', dot: 'bg-success-main',
+                        label: 'Mencapai Nilai 4', value: fmtNum(k.nilai_empat),
+                        foot: 'dari ' + fmtNum(k.kombinasi) + ' pasangan · rata-ratanya 5% atau lebih'
                     }
                     : {
                         grad: 'bg-gradient-end-3', icon: 'solar:buildings-outline', dot: 'bg-warning-main',
@@ -594,7 +607,7 @@ window.bsOverview = (function () {
 
             el('per-site-judul').textContent = persen ? 'Rata-rata per Site' : 'Temuan per Site';
             el('per-site-sub').textContent = persen
-                ? 'Ambang ' + k.ambang + '%'
+                ? 'Diwarnai menurut band; Nilai 4 mulai 5%'
                 : 'Dihitung dari cacah temuan';
 
             if (!list.length) {
@@ -605,20 +618,26 @@ window.bsOverview = (function () {
             var puncak = Math.max.apply(null, list.map(function (s) { return s.nilai; })) || 1;
 
             host.innerHTML = list.map(function (s, i) {
+                // Batang mengikuti BAND, bukan "di atas ambang". Ambang lama
+                // mewarnai yang tinggi merah, padahal di parameter ini tinggi
+                // itu justru baik.
+                var band = persen ? bandUntuk(s.nilai) : null;
+                var warna = band ? 'bs-bar-n' + band.nilai : 'bg-primary-600';
+
                 return '<div class="' + (i ? 'mt-20' : '') + '">'
                     + '<div class="d-flex align-items-center justify-content-between mb-8">'
                     +   '<span class="text-sm fw-semibold">' + escapeHtml(s.site) + '</span>'
-                    +   '<span class="text-sm fw-medium text-secondary-light">' + angka(s.nilai) + '</span>'
+                    +   '<span class="text-sm fw-medium text-secondary-light">' + angka(s.nilai)
+                    +   (band ? ' · Nilai ' + fmtNilai(nilaiUntuk(s.nilai)) : '') + '</span>'
                     + '</div>'
                     + '<div class="progress w-100 bg-primary-50 rounded-pill h-8-px">'
-                    +   '<div class="progress-bar ' + (s.di_atas_ambang ? 'bg-danger-main' : 'bg-success-main')
+                    +   '<div class="progress-bar ' + warna
                     +     ' rounded-pill" role="progressbar"'
                     +     ' style="width:' + (s.nilai / puncak * 100) + '%" aria-valuenow="' + s.nilai + '"'
                     +     ' aria-valuemin="0" aria-valuemax="' + puncak + '"></div>'
                     + '</div>'
                     + '<span class="text-xs text-secondary-light">' + fmtNum(s.jumlah)
-                    +   ' perusahaan · tertinggi ' + angka(s.puncak)
-                    +   (s.di_atas_ambang ? ' · di atas ambang ' + k.ambang + '%' : '') + '</span>'
+                    +   ' perusahaan · tertinggi ' + angka(s.puncak) + '</span>'
                     + '</div>';
             }).join('');
         }
@@ -631,7 +650,7 @@ window.bsOverview = (function () {
 
             el('per-mitra-kol1').textContent = persen ? 'Rata-rata' : 'Temuan';
             el('per-mitra-sub').textContent = persen
-                ? 'Diurutkan dari persentase tertinggi'
+                ? 'Diurutkan dari persentase tertinggi — makin besar makin baik'
                 : 'Diurutkan dari temuan terbanyak';
 
             if (!list.length) {
@@ -639,9 +658,11 @@ window.bsOverview = (function () {
                 return;
             }
             body.innerHTML = list.map(function (m) {
-                var kelas = m.di_atas_ambang
-                    ? 'bg-danger-focus text-danger-main'
-                    : 'bg-success-focus text-success-main';
+                // Lencana mengikuti BAND; lihat catatan di renderPerSite().
+                var band = persen ? bandUntuk(m.nilai) : null;
+                var kelas = band
+                    ? 'bs-badge-n' + band.nilai
+                    : 'bg-neutral-200 text-secondary-light';
 
                 return '<tr>'
                     + '<td><span class="text-md fw-medium">' + escapeHtml(m.mitra) + '</span>'
@@ -655,13 +676,10 @@ window.bsOverview = (function () {
         }
 
         var LEGENDA = {
-            persen: [
-                { color: '#16A34A', label: '0%' },
-                { color: '#86C96B', label: 'sampai 2%' },
-                { color: '#F2C230', label: '2–5%' },
-                { color: '#F08C2E', label: '5–10%' },
-                { color: '#E0484A', label: 'lebih dari 10%' }
-            ],
+            // Sengaja kosong: diisi setBands() dari score_bands yang dikirim
+            // controller, supaya tidak ada dua definisi band yang bisa
+            // menyimpang. Daftar literal di sini dulu memakai arah terbalik.
+            persen: [],
             temuan: [
                 { color: '#16A34A', label: 'tidak ada temuan' },
                 { color: '#86C96B', label: '1–2' },

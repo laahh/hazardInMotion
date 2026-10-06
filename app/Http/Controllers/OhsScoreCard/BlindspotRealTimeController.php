@@ -520,6 +520,14 @@ final class BlindspotRealTimeController extends Controller
                 static fn (array $r): bool => $r['di_atas_ambang']
             )),
             'ambang' => self::AMBANG_PERSEN,
+            // Berapa pasangan yang rata-ratanya sudah mencapai band teratas.
+            // Menggantikan hitungan "di atas ambang" yang membingkai angka
+            // tinggi sebagai masalah -- di parameter ini tinggi justru tujuan.
+            'nilai_empat' => count(array_filter(
+                $persen['rows'],
+                fn (array $r): bool => $r['average'] !== null
+                    && $this->scoreBandFor((float) $r['average'])[1] >= 4.0
+            )),
             'site_count' => count(array_unique(array_column($sumber['rows'], 'site'))),
             'mitra_count' => count(array_unique(array_column($sumber['rows'], 'mitra'))),
             'bulan_count' => count($sumber['months']),
