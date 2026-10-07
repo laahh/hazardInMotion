@@ -215,6 +215,51 @@ final class MonitoringSafetyEngineeringRecordGridService
     }
 
     /**
+     * Soft delete — record tetap ada di DB (deleted_at) dan tercatat di log perubahan.
+     *
+     * @param  list<int>  $ids
+     * @return array{deleted: int, deleted_ids: list<int>, errors: list<string>}
+     */
+    public function bulkDelete(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn (int $id): bool => $id > 0)));
+        $userId = Auth::id();
+        $scope = $this->picScope->forCurrentUser();
+        $deletedIds = [];
+        $errors = [];
+
+        DB::transaction(function () use ($ids, $userId, $scope, &$deletedIds, &$errors): void {
+            $records = MonitoringSafetyEngineeringRecord::query()->whereIn('id', $ids)->get()->keyBy('id');
+
+            foreach ($ids as $id) {
+                $record = $records->get($id);
+                if ($record === null) {
+                    $errors[] = 'Record ID ' . $id . ' tidak ditemukan atau sudah dihapus.';
+
+                    continue;
+                }
+
+                if (! $this->picScope->allowsRecord($record, $scope)) {
+                    $errors[] = 'Record ID ' . $id . ' di luar site/perusahaan Anda.';
+
+                    continue;
+                }
+
+                $this->changeLogService->logDelete($record, $userId);
+                $record->forceFill(['updated_by' => $userId])->save();
+                $record->delete();
+                $deletedIds[] = $id;
+            }
+        });
+
+        return [
+            'deleted' => count($deletedIds),
+            'deleted_ids' => $deletedIds,
+            'errors' => $errors,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function fetchChangeHistory(int $recordId, ?string $field = null): array

@@ -87,6 +87,24 @@ final class MonitoringSafetyEngineeringRecordChangeLogService
         return $this->insertLogRows($rows);
     }
 
+    public function logDelete(MonitoringSafetyEngineeringRecord $record, ?int $userId): int
+    {
+        return $this->insertLogRows([
+            $this->buildRow(
+                recordId: $record->id,
+                batch: (string) Str::uuid(),
+                action: 'deleted',
+                field: 'record',
+                label: 'Record',
+                oldValue: $this->formatDisplay('pengendalian_rekayasa', $record->pengendalian_rekayasa),
+                newValue: null,
+                changedAt: now(),
+                userId: $userId,
+                periodYear: (int) $record->period_year,
+            ),
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */

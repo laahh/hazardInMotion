@@ -54,5 +54,6 @@ Route::middleware(['auth'])
                 ->name('history')
                 ->whereNumber('recordId');
             Route::post('/records', [MonitoringSafetyEngineeringRecordUpdateController::class, 'save'])->name('save');
+            Route::delete('/records', [MonitoringSafetyEngineeringRecordUpdateController::class, 'destroy'])->name('destroy');
         });
     });

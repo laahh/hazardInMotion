@@ -17,6 +17,8 @@ class MonitoringSafetyEngineeringRecordUpdateController extends Controller
 {
     use ProvidesMonitoringSafetyEngineeringLayout;
 
+    private const DELETE_ALLOWED_EMAILS = ['admin@gmail.com'];
+
     public function __construct(
         private readonly MonitoringSafetyEngineeringRecordGridService $gridService,
     ) {}
@@ -35,6 +37,7 @@ class MonitoringSafetyEngineeringRecordUpdateController extends Controller
             'planYears' => range($currentYear - 1, $currentYear + 2),
             'gridConfig' => $gridConfig,
             'picScope' => $picScope,
+            'canDelete' => $this->canDelete($request),
         ]));
     }
 
@@ -91,6 +94,42 @@ class MonitoringSafetyEngineeringRecordUpdateController extends Controller
             'saved' => $result['saved'] ?? [],
             'errors' => $result['errors'],
         ], $result['errors'] !== [] && ($result['created'] + $result['updated']) === 0 ? 422 : 200);
+    }
+
+    public function destroy(Request $request): JsonResponse
+    {
+        if (! $this->canDelete($request)) {
+            return response()->json(['message' => 'Anda tidak memiliki akses untuk menghapus data.'], 403);
+        }
+
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['required', 'integer', 'min:1'],
+        ]);
+
+        try {
+            $result = $this->gridService->bulkDelete($validated['ids']);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'Gagal menghapus data. ' . $e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Berhasil menghapus ' . $result['deleted'] . ' baris.',
+            'deleted' => $result['deleted'],
+            'deleted_ids' => $result['deleted_ids'],
+            'errors' => $result['errors'],
+        ], $result['deleted'] === 0 ? 422 : 200);
+    }
+
+    private function canDelete(Request $request): bool
+    {
+        $email = strtolower(trim((string) $request->user()?->email));
+
+        return in_array($email, self::DELETE_ALLOWED_EMAILS, true);
     }
 
     public function history(Request $request, int $recordId): JsonResponse

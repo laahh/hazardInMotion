@@ -6,6 +6,24 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 @include('MonitoringSafetyEngginering.partials.crm-styles')
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable@14.6.1/dist/handsontable.full.min.css">
+<style>
+   .crm-grid-btn--danger { color: #D92D20; border-color: #F3B4AE; }
+   .crm-grid-btn--danger:hover { color: #fff; background: #D92D20; border-color: #D92D20; }
+   .crm-grid-btn--danger-solid { color: #fff; background: #D92D20; border-color: #D92D20; }
+   .crm-grid-btn--danger-solid:hover { color: #fff; background: #B42318; border-color: #B42318; }
+   .crm-history-panel.mse-delete-panel { width: min(460px, 100%); }
+   .mse-delete-text { font-size: 0.85rem; color: #2F2F3A; margin-bottom: 0.6rem; }
+   .mse-delete-list {
+      list-style: disc; padding-left: 1.2rem; margin: 0 0 0.6rem;
+      font-size: 0.8rem; color: #475467; max-height: 10rem; overflow-y: auto;
+   }
+   .mse-delete-list li { margin-bottom: 0.2rem; overflow-wrap: anywhere; }
+   .mse-delete-note { font-size: 0.75rem; color: #848488; }
+   .mse-delete-footer {
+      display: flex; justify-content: flex-end; gap: 0.5rem;
+      padding: 0.75rem 1.25rem 1rem; border-top: 1px solid #E6E9EB;
+   }
+</style>
 @endpush
 
 @section('content')
@@ -76,6 +94,12 @@
          <span class="material-symbols-outlined text-base">history</span>
          Riwayat
       </button>
+      @if($canDelete)
+      <button type="button" id="mse-btn-delete" class="crm-grid-btn crm-grid-btn--danger" disabled title="Hapus baris terpilih">
+         <span class="material-symbols-outlined text-base">delete</span>
+         Hapus Baris
+      </button>
+      @endif
       <div class="crm-col-picker">
          <button type="button" id="mse-btn-columns" class="crm-grid-btn" @disabled(! $tablesReady)>
             <span class="material-symbols-outlined text-base">view_column</span>
@@ -127,6 +151,30 @@
       </div>
    </div>
 </div>
+
+<div id="mse-delete-modal" class="crm-history-modal" role="alertdialog" aria-modal="true" aria-labelledby="mse-delete-title" aria-describedby="mse-delete-body">
+   <div class="crm-history-panel mse-delete-panel">
+      <div class="crm-history-header">
+         <div>
+            <p id="mse-delete-title" class="crm-history-title">Hapus Baris?</p>
+            <p id="mse-delete-subtitle" class="crm-history-subtitle">—</p>
+         </div>
+         <button type="button" id="mse-delete-close" class="crm-history-close" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="mse-delete-body" class="crm-history-body">
+         <p class="mse-delete-text">Baris berikut akan dihapus:</p>
+         <ul id="mse-delete-list" class="mse-delete-list"></ul>
+         <p class="mse-delete-note">Baris tidak lagi tampil di grid maupun dashboard. Penghapusan tercatat di log perubahan.</p>
+      </div>
+      <div class="mse-delete-footer">
+         <button type="button" id="mse-delete-cancel" class="crm-grid-btn">Batal</button>
+         <button type="button" id="mse-delete-confirm" class="crm-grid-btn crm-grid-btn--danger-solid">
+            <span class="material-symbols-outlined text-base">delete</span>
+            Hapus
+         </button>
+      </div>
+   </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -140,6 +188,8 @@
    const picScope = @json($picScope ?? ['scoped' => false]);
    const recordsUrl = @json(route('monitoring-safety-engineering.data-update.records'));
    const saveUrl = @json(route('monitoring-safety-engineering.data-update.save'));
+   const deleteUrl = @json(route('monitoring-safety-engineering.data-update.destroy'));
+   const canDelete = @json($canDelete);
    const historyUrlTemplate = @json(route('monitoring-safety-engineering.data-update.history', ['recordId' => 0]));
    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
    const columnVisibilityStorageKey = 'mse-data-update-hidden-columns';
@@ -188,7 +238,15 @@
       fieldLabels[col.key] = col.label;
    });
 
+   const deleteModal = document.getElementById('mse-delete-modal');
+   const deleteList = document.getElementById('mse-delete-list');
+   const deleteSubtitle = document.getElementById('mse-delete-subtitle');
+   const deleteBtn = document.getElementById('mse-btn-delete');
+   const deleteConfirmBtn = document.getElementById('mse-delete-confirm');
+   const deletePreviewLimit = 8;
+
    let hot = null;
+   let pendingDeleteRows = [];
    let selectedRecordId = null;
    let selectedFieldKey = null;
    let historyRecordId = null;
@@ -251,6 +309,137 @@
       const prop = typeof colIndex === 'number' && colIndex >= 0 ? hot.colToProp(colIndex) : null;
       selectedFieldKey = typeof prop === 'string' ? prop : null;
       if (historyBtn) historyBtn.disabled = !selectedRecordId;
+   }
+
+   function collectSelectedRows() {
+      if (!hot) return [];
+      const ranges = hot.getSelected() || [];
+      const visualRows = new Set();
+      ranges.forEach(function (range) {
+         const from = Math.max(0, Math.min(range[0], range[2]));
+         const to = Math.max(range[0], range[2]);
+         for (let r = from; r <= to; r++) visualRows.add(r);
+      });
+
+      const source = hot.getSourceData();
+      return Array.from(visualRows).sort(function (a, b) { return a - b; }).map(function (visualRow) {
+         const rowData = source[hot.toPhysicalRow(visualRow)] || {};
+         return {
+            physicalRow: hot.toPhysicalRow(visualRow),
+            id: rowData.id ? parseInt(rowData.id, 10) : null,
+            label: String(rowData.pengendalian_rekayasa ?? '').trim(),
+            site: rowData.site || '',
+            perusahaan: rowData.perusahaan || '',
+         };
+      });
+   }
+
+   function syncDeleteButton() {
+      if (deleteBtn) deleteBtn.disabled = !tablesReady || collectSelectedRows().length === 0;
+   }
+
+   function openDeleteModal() {
+      if (!canDelete) return;
+      const rows = collectSelectedRows();
+      if (rows.length === 0 || !deleteModal) return;
+
+      pendingDeleteRows = rows;
+      const savedCount = rows.filter(function (row) { return row.id; }).length;
+      const unsavedCount = rows.length - savedCount;
+
+      if (deleteSubtitle) {
+         const parts = [rows.length + ' baris dipilih'];
+         if (unsavedCount > 0) parts.push(unsavedCount + ' belum tersimpan');
+         deleteSubtitle.textContent = parts.join(' · ');
+      }
+
+      if (deleteList) {
+         const items = rows.slice(0, deletePreviewLimit).map(function (row) {
+            const name = row.label || '(tanpa Pengendalian Rekayasa)';
+            const meta = [row.site, row.perusahaan].filter(Boolean).join(' / ');
+            const badge = row.id ? '' : ' — baris baru';
+            return '<li>' + escapeHtml(name) + (meta ? ' <span class="text-crm-muted">· ' + escapeHtml(meta) + '</span>' : '') + escapeHtml(badge) + '</li>';
+         });
+         if (rows.length > deletePreviewLimit) {
+            items.push('<li>… dan ' + (rows.length - deletePreviewLimit) + ' baris lainnya</li>');
+         }
+         deleteList.innerHTML = items.join('');
+      }
+
+      if (deleteConfirmBtn) deleteConfirmBtn.disabled = false;
+      deleteModal.classList.add('crm-history-modal--open');
+      document.getElementById('mse-delete-cancel')?.focus();
+   }
+
+   function closeDeleteModal() {
+      deleteModal?.classList.remove('crm-history-modal--open');
+      pendingDeleteRows = [];
+   }
+
+   function removePhysicalRows(physicalRows) {
+      if (!hot || physicalRows.length === 0) return;
+      const sorted = physicalRows
+         .map(function (row) { return hot.toVisualRow(row); })
+         .filter(function (row) { return row !== null && row >= 0; })
+         .sort(function (a, b) { return b - a; });
+      hot.alter('remove_row', sorted.map(function (row) { return [row, 1]; }), undefined, 'mse_delete');
+   }
+
+   async function confirmDelete() {
+      if (!hot || pendingDeleteRows.length === 0) return;
+
+      const rows = pendingDeleteRows;
+      const ids = rows.filter(function (row) { return row.id; }).map(function (row) { return row.id; });
+      let deletedIds = ids;
+      let warnings = [];
+
+      if (deleteConfirmBtn) deleteConfirmBtn.disabled = true;
+      hideAlert();
+
+      if (ids.length > 0) {
+         setStatus('Menghapus ' + ids.length + ' baris...', '');
+         try {
+            const response = await fetch(deleteUrl, {
+               method: 'DELETE',
+               headers: {
+                  'Content-Type': 'application/json',
+                  Accept: 'application/json',
+                  'X-CSRF-TOKEN': csrfToken,
+               },
+               body: JSON.stringify({ ids: ids }),
+            });
+            const payload = await response.json();
+
+            if (!response.ok) {
+               const errorLines = (payload.errors || []).join(' | ');
+               throw new Error((payload.message || 'Gagal menghapus data.') + (errorLines ? ' ' + errorLines : ''));
+            }
+
+            deletedIds = (payload.deleted_ids || []).map(function (id) { return parseInt(id, 10); });
+            warnings = payload.errors || [];
+         } catch (error) {
+            closeDeleteModal();
+            showAlert(error.message || 'Gagal menghapus data.', 'error');
+            setStatus('Gagal menghapus', 'error');
+            return;
+         }
+      }
+
+      const deletedSet = new Set(deletedIds);
+      const toRemove = rows.filter(function (row) { return !row.id || deletedSet.has(row.id); });
+      clearDirtyForIds(deletedIds);
+      removePhysicalRows(toRemove.map(function (row) { return row.physicalRow; }));
+      closeDeleteModal();
+      syncDeleteButton();
+
+      const message = toRemove.length + ' baris dihapus.';
+      if (warnings.length > 0) {
+         showAlert(message + ' Peringatan: ' + warnings.join(' | '), 'info');
+         setStatus('Terhapus sebagian', '');
+      } else {
+         showAlert(message, 'success');
+         setStatus(hot.countRows() + ' baris', 'success');
+      }
    }
 
    function renderHistory(payload) {
@@ -530,7 +719,18 @@
             items: {
                row_above: {},
                row_below: {},
-               remove_row: {},
+               mse_remove_row: {
+                  name: 'Hapus baris…',
+                  callback: function () {
+                     openDeleteModal();
+                  },
+                  hidden: function () {
+                     return !canDelete;
+                  },
+                  disabled: function () {
+                     return collectSelectedRows().length === 0;
+                  },
+               },
                sep1: '---------',
                mse_history: {
                   name: 'Riwayat baris',
@@ -625,6 +825,11 @@
          afterSelection: function (row, col) {
             updateSelectedRecord(row, col);
          },
+         afterSelectionEnd: syncDeleteButton,
+         afterDeselect: syncDeleteButton,
+         outsideClickDeselects: function (target) {
+            return !(target instanceof Element && target.closest('.crm-grid-toolbar, #mse-delete-modal'));
+         },
          afterRenderer: function (td, _row, _col, prop, value) {
             if (statusFields.has(prop)) return;
             const text = value === null || value === undefined ? '' : String(value);
@@ -674,6 +879,7 @@
          const rows = payload.data || [];
          hot.loadData(rows);
          dirtyById.clear();
+         syncDeleteButton();
          const yearLabel = periodYear === null || periodYear === undefined ? 'Semua Tahun' : ('Tahun ' + periodYear);
          setStatus(rows.length + ' baris · ' + yearLabel, 'success');
       } catch (error) {
@@ -968,12 +1174,20 @@
       if (historyRecordId && field) openHistoryModal(historyRecordId, field);
    });
    document.getElementById('mse-history-close')?.addEventListener('click', closeHistoryModal);
+   deleteBtn?.addEventListener('click', openDeleteModal);
+   deleteConfirmBtn?.addEventListener('click', confirmDelete);
+   document.getElementById('mse-delete-cancel')?.addEventListener('click', closeDeleteModal);
+   document.getElementById('mse-delete-close')?.addEventListener('click', closeDeleteModal);
+   deleteModal?.addEventListener('click', function (event) {
+      if (event.target === deleteModal) closeDeleteModal();
+   });
    historyModal?.addEventListener('click', function (event) {
       if (event.target === historyModal) closeHistoryModal();
    });
    document.addEventListener('keydown', function (event) {
       if (event.key === 'Escape') {
          closeHistoryModal();
+         closeDeleteModal();
          toggleColumnPanel(false);
       }
    });
