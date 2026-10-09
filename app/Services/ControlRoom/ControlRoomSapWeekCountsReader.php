@@ -129,9 +129,12 @@ final class ControlRoomSapWeekCountsReader
      */
     private function cacheKey(array $sids, array $dates, bool $withFindings): string
     {
+        $window = $this->dutyWindow->windowDays();
+
         return 'control-room:sap-week-counts:v13:'.($withFindings ? 'full' : 'counts').':'.hash(
             'sha1',
-            implode(',', $sids).'|'.($dates[0] ?? '').'|'.($dates[array_key_last($dates)] ?? ''),
+            implode(',', $sids).'|'.($dates[0] ?? '').'|'.($dates[array_key_last($dates)] ?? '')
+                .($window === ControlRoomSapDutyReader::DEFAULT_WINDOW_DAYS ? '' : '|w'.$window),
         );
     }
 

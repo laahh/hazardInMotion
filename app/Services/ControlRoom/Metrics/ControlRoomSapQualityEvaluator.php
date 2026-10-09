@@ -37,10 +37,14 @@ final class ControlRoomSapQualityEvaluator
 
     public const LOCATION_CAP = 8;
 
+    /**
+     * @param  list<string>  $excludedAxes  sumbu yang tidak dinilai (tidak masuk komposit/radar)
+     */
     public function __construct(
         private readonly SapAchievement $sapAchievement,
         private readonly FindingVariety $variety,
         private readonly ControlRoomSapDutyReader $dutyWindow,
+        private readonly array $excludedAxes = [],
     ) {}
 
     /**
@@ -105,6 +109,7 @@ final class ControlRoomSapQualityEvaluator
             self::AXIS_LOCATION => $location,
             self::AXIS_DEPTH => $depth,
         ];
+        $scores = array_diff_key($scores, array_flip($this->excludedAxes));
         $composite = $total === 0 ? 0.0 : round(array_sum($scores) / count($scores), 1);
         $weakest = $this->weakestAxis($scores, $total);
 

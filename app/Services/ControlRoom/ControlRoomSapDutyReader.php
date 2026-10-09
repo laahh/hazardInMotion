@@ -22,13 +22,30 @@ final class ControlRoomSapDutyReader
 
     private const CACHE_SECONDS = 300;
 
+    public const DEFAULT_WINDOW_DAYS = 2;
+
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
+        private readonly int $windowDays = self::DEFAULT_WINDOW_DAYS,
     ) {}
 
     /**
-     * Hari H (tanggal jaga) sampai akhir H+1, supaya laporan yang disubmit
-     * keesokan hari tetap masuk.
+     * Salinan dengan panjang jendela lain. Pengawas (tanpa shift, jaga tiap
+     * hari) memakai 1 hari supaya satu laporan tidak terhitung di dua tanggal.
+     */
+    public function withWindowDays(int $days): self
+    {
+        return new self($this->olap, max(1, $days));
+    }
+
+    public function windowDays(): int
+    {
+        return $this->windowDays;
+    }
+
+    /**
+     * Default: hari H (tanggal jaga) sampai akhir H+1, supaya laporan yang
+     * disubmit keesokan hari tetap masuk.
      *
      * @return array{start: CarbonImmutable, end: CarbonImmutable}
      */
@@ -38,7 +55,7 @@ final class ControlRoomSapDutyReader
 
         return [
             'start' => $start,
-            'end' => $start->addDays(2),
+            'end' => $start->addDays($this->windowDays),
         ];
     }
 
@@ -76,7 +93,7 @@ final class ControlRoomSapDutyReader
             return $this->payload($meta, [], reachable: false, errors: ['Sumber SAP (OBDS) tidak terjangkau.']);
         }
 
-        $cacheKey = 'control-room:sap-duty:v16:'.$sid.':'.$meta['date'];
+        $cacheKey = 'control-room:sap-duty:v16:'.$sid.':'.$meta['date'].$this->cacheSuffix();
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['cards'])) {
             return $this->payload($meta, $cached['cards'], reachable: true);
@@ -94,6 +111,11 @@ final class ControlRoomSapDutyReader
         }
 
         return $this->payload($meta, $cards, reachable: $errors === [] || $cards !== [], errors: $errors);
+    }
+
+    private function cacheSuffix(): string
+    {
+        return $this->windowDays === self::DEFAULT_WINDOW_DAYS ? '' : ':w'.$this->windowDays;
     }
 
     /**

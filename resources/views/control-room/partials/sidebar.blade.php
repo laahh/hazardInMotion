@@ -22,6 +22,12 @@ $rr = function (string $name, array $params = []) {
                 </a>
             </li>
             <li>
+                <a href="{{ $rr('control-room.pengawas.index') }}" class="{{ request()->routeIs('control-room.pengawas.*') ? 'active-page' : '' }}">
+                    <i class="ri-team-line menu-icon"></i>
+                    <span>Monitoring Pengawas</span>
+                </a>
+            </li>
+            <li>
                 <a href="{{ $rr('control-room.schedule.index') }}" class="{{ request()->routeIs('control-room.schedule.*') ? 'active-page' : '' }}">
                     <i class="ri-calendar-check-line menu-icon"></i>
                     <span>Jadwal Rencana</span>

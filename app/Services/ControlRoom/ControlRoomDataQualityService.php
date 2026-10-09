@@ -58,7 +58,17 @@ final class ControlRoomDataQualityService
         ?ControlRoomSiteCode $site,
         CarbonImmutable $today,
     ): array {
-        $people = $this->roster($weekStart, $site, $today);
+        return $this->evaluateRoster($this->roster($weekStart, $site, $today), $weekStart);
+    }
+
+    /**
+     * Evaluasi roster apa pun (jadwal Control Room atau daftar pengawas).
+     *
+     * @param  array<string, array{sid: string, name: string, sites: array<string, string>, dates: array<string, string>}>  $people
+     * @return array{loaded: bool, rows: list<array<string, mixed>>, kpi: array<string, mixed>}
+     */
+    public function evaluateRoster(array $people, CarbonImmutable $weekStart): array
+    {
         if ($people === []) {
             return [
                 'loaded' => true,

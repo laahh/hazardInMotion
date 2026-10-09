@@ -9,6 +9,7 @@ use App\Http\Controllers\ControlRoom\ControlRoomTbcValidationController;
 use App\Http\Controllers\ControlRoom\ControlRoomTutorialController;
 use App\Http\Controllers\ControlRoom\DashboardController;
 use App\Http\Controllers\ControlRoom\DataQualityController;
+use App\Http\Controllers\ControlRoom\PengawasMonitorController;
 use App\Http\Controllers\ControlRoom\ScheduleController;
 use Illuminate\Support\Facades\Route;
 
@@ -62,6 +63,8 @@ Route::middleware('auth')->group(function (): void {
     });
     Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
     Route::get('/data-quality', [DataQualityController::class, 'index'])->name('data-quality.index');
+    Route::get('/pengawas', [PengawasMonitorController::class, 'index'])->name('pengawas.index');
+    Route::get('/pengawas/sap-detail', [PengawasMonitorController::class, 'sapDetail'])->name('pengawas.sap-detail');
     Route::get('/sap', [ControlRoomSapController::class, 'index'])->name('sap.index');
     Route::get('/qr-code', [ControlRoomQrCodeController::class, 'index'])->name('qr-code.index');
     Route::get('/tutorial/embed', [ControlRoomTutorialController::class, 'embed'])->name('tutorial.embed');

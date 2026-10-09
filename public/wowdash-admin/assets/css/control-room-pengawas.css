@@ -1,0 +1,67 @@
+/* Monitoring Pengawas Control Room — tambahan di atas control-room-dashboard.css */
+
+.ocr-pg-search {
+    min-width: 220px;
+}
+
+.ocr-pg-table th.ocr-pg-day {
+    min-width: 64px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.ocr-pg-table th.ocr-pg-day.is-today {
+    color: #3952bc;
+}
+
+.ocr-pg-table th.ocr-pg-day small {
+    display: block;
+    font-weight: 500;
+    opacity: 0.75;
+}
+
+.ocr-pg-table td.ocr-heat-cell {
+    padding: 0;
+}
+
+.ocr-pg-table .ocr-pg-cell-btn {
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 4px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ocr-pg-table .ocr-pg-cell-btn:hover,
+.ocr-pg-table .ocr-pg-cell-btn:focus-visible {
+    outline: 2px solid #3952bc;
+    outline-offset: -2px;
+}
+
+.ocr-pg-table .ocr-pg-sticky {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--white, #fff);
+}
+
+.ocr-pg-site {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: #6b7280;
+}
+
+.ocr-pg-section-title {
+    margin: 8px 0 0;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.ocr-pg-empty-filter[hidden] {
+    display: none;
+}
