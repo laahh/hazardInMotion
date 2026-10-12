@@ -22,6 +22,8 @@ Route::prefix('form/pengajuan-treatment-banned')
         Route::get('/sukses', [RosterTreatmentPublicController::class, 'success'])->name('success');
         Route::get('/lookup', [RosterTreatmentPublicController::class, 'lookup'])->name('lookup');
         Route::post('/', [RosterTreatmentPublicController::class, 'store'])
-            ->middleware('throttle:6,1')
+            // Prefix wajib: tanpa itu counter-nya sama dengan throttle:30,1 grup,
+            // jadi buka form + Cari NIK beberapa kali sudah menghabiskan jatah submit.
+            ->middleware('throttle:6,1,roster-treatment-submit')
             ->name('store');
     });

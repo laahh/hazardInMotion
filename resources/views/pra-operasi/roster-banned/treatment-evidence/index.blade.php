@@ -173,8 +173,17 @@
         autoWidth: false,
         ajax: {
             url: @json(route('pra-operasi.roster-banned.treatment.data')),
+            // Kirim hanya parameter yang dibaca controller — payload default DataTables
+            // (columns[...] x14) bikin URL > 2 KB dan ditolak 403 oleh proxy server.
             data: function (d) {
-                d.status = statusFilter.value;
+                return {
+                    draw: d.draw,
+                    start: d.start,
+                    length: d.length,
+                    search: { value: d.search.value },
+                    order: d.order.length ? [{ column: d.order[0].column, dir: d.order[0].dir }] : [],
+                    status: statusFilter.value,
+                };
             },
         },
         columns: [
