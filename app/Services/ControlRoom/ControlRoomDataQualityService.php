@@ -38,7 +38,7 @@ final class ControlRoomDataQualityService
     ): array {
         $today = CarbonImmutable::parse($now ?? now())->startOfDay();
         $cacheKey = sprintf(
-            'control-room:data-quality:v3:%s:%s:%s',
+            'control-room:data-quality:v4:%s:%s:%s',
             $weekStart->toDateString(),
             $site?->value ?? 'ALL',
             $today->toDateString(),

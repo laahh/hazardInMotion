@@ -46,7 +46,7 @@ final class PengawasMonitorService
     {
         $today = CarbonImmutable::now()->startOfDay();
         $cacheKey = sprintf(
-            'control-room:pengawas-monitor:v1:%s:%s:%s:%s',
+            'control-room:pengawas-monitor:v2:%s:%s:%s:%s',
             $site?->value ?? 'ALL',
             $period->start->toDateString(),
             $today->toDateString(),

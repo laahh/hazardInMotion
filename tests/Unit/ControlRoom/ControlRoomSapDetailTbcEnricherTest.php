@@ -39,37 +39,6 @@ final class ControlRoomSapDetailTbcEnricherTest extends TestCase
         $this->assertSame(1, $payload['tbc_counts']['belum']);
     }
 
-    public function test_tab_tbc_memakai_kartu_basis_bila_diberikan(): void
-    {
-        Http::fake([
-            '*' => Http::sequence()
-                ->push("Tasklist,Kategori
-500,TBC
-", 200, ['Content-Type' => 'text/csv'])
-                ->push("Tasklist
-500
-", 200, ['Content-Type' => 'text/csv']),
-        ]);
-
-        $payload = (new ControlRoomSapDetailTbcEnricher(
-            new GSheetTbcReader(sheetId: 'fake-detail-tbc-basis', gid: '0'),
-        ))->enrich([
-            'cards' => [
-                ['id' => '9374205', 'type' => 'hazard', 'status' => 'CLOSED'],
-                ['id' => '999', 'type' => 'observasi', 'status' => 'OPEN'],
-            ],
-        ], [
-            ['id' => '500', 'type' => 'hazard', 'status' => 'OPEN'],
-            ['id' => '501', 'type' => 'inspeksi', 'status' => 'OPEN'],
-        ]);
-
-        $this->assertTrue($payload['tbc_loaded']);
-        $this->assertSame(['500', '501'], array_column($payload['tbc_cards'], 'id'));
-        $this->assertSame(['all' => 2, 'sudah' => 1, 'belum' => 1], $payload['tbc_counts']);
-        $this->assertSame('belum', $payload['cards'][0]['tbc']);
-        $this->assertNull($payload['cards'][1]['tbc']);
-    }
-
     public function test_tanpa_hazard_inspeksi_tbc_tidak_dimuat(): void
     {
         $payload = (new ControlRoomSapDetailTbcEnricher(

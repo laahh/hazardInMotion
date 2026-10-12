@@ -27,10 +27,15 @@ final class ControlRoomSapWeekCountsReader
 
     private const QUERY_TIMEOUT_MS = 6000;
 
+    private readonly ControlRoomAajCarSource $hazardSource;
+
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
         private readonly ControlRoomSapDutyReader $dutyWindow,
-    ) {}
+        ?ControlRoomAajCarSource $hazardSource = null,
+    ) {
+        $this->hazardSource = $hazardSource ?? new ControlRoomAajCarSource($olap);
+    }
 
     /**
      * @param  list<array<string, mixed>>  $scheduleDays
@@ -131,7 +136,7 @@ final class ControlRoomSapWeekCountsReader
     {
         $window = $this->dutyWindow->windowDays();
 
-        return 'control-room:sap-week-counts:v13:'.($withFindings ? 'full' : 'counts').':'.hash(
+        return 'control-room:sap-week-counts:v14:'.($withFindings ? 'full' : 'counts').':'.hash(
             'sha1',
             implode(',', $sids).'|'.($dates[0] ?? '').'|'.($dates[array_key_last($dates)] ?? '')
                 .($window === ControlRoomSapDutyReader::DEFAULT_WINDOW_DAYS ? '' : '|w'.$window),
@@ -278,19 +283,7 @@ final class ControlRoomSapWeekCountsReader
     {
         $placeholders = implode(',', array_fill(0, count($sids), '?'));
         $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate();
-        $hazardDetail = $withDetails
-            ? "COALESCE(NULLIF(BTRIM(COALESCE(subketidaksesuaian, '')), ''), NULLIF(BTRIM(COALESCE(ketidaksesuaian, '')), ''), '') AS category,
-                    COALESCE(nama_goldenrule, '') AS golden_rule,
-                    COALESCE(lokasi, '') AS lokasi,
-                    COALESCE(detil_lokasi, '') AS detil_lokasi,
-                    CAST(id_laporan AS text) AS report_id,
-                    LEFT(COALESCE(deskripsi_temuan, ''), 400) AS description,
-                    COALESCE(nama_pic, '') AS pic,
-                    COALESCE(perusahaan_pic, '') AS company,
-                    COALESCE(status_laporan, '') AS status"
-            : "'' AS category, '' AS golden_rule, '' AS lokasi, '' AS detil_lokasi,
-                    CAST(id_laporan AS text) AS report_id,
-                    '' AS description, '' AS pic, '' AS company, '' AS status";
+        $hazardSql = $this->hazardUnionPart(count($sids), $withDetails);
         $observasiDetail = $withDetails
             ? "COALESCE(NULLIF(BTRIM(COALESCE(jenis_kegiatan, '')), ''), NULLIF(BTRIM(COALESCE(tools_observasi, '')), ''), '') AS category,
                     '' AS golden_rule,
@@ -313,27 +306,7 @@ final class ControlRoomSapWeekCountsReader
                     '' AS description, '' AS pic, '' AS company, '' AS status";
 
         $sql = "
-            SELECT sid, at, component, category, golden_rule, lokasi, detil_lokasi, report_id, description, pic, company, status, name
-            FROM (
-                SELECT
-                    kode_sid_pelapor AS sid,
-                    tanggal_laporan AS at,
-                    CASE
-                        WHEN POSITION('INSPEKSI' IN UPPER(COALESCE(jenis_laporan, ''))) > 0 THEN 'inspeksi'
-                        WHEN POSITION('HAZARD' IN UPPER(COALESCE(jenis_laporan, ''))) > 0 THEN 'hazard'
-                        ELSE NULL
-                    END AS component,
-                    {$hazardDetail},
-                    COALESCE(nama_pelapor, '') AS name
-                FROM bcbeats.mv_inspeksi_hazard
-                WHERE kode_sid_pelapor IN ({$placeholders})
-                  AND tanggal_laporan >= CAST(? AS timestamp)
-                  AND tanggal_laporan < CAST(? AS timestamp)
-                  AND {$tools['sql']}
-            ) hazard
-            WHERE component IS NOT NULL
-
-            UNION ALL
+            {$hazardSql['sql']}
 
             SELECT
                 kode_sid_pelapor AS sid,
@@ -365,7 +338,7 @@ final class ControlRoomSapWeekCountsReader
 
         $range = [$start->toDateTimeString(), $end->toDateTimeString()];
         $bindings = [
-            ...$sids, ...$range, ...$tools['bindings'],
+            ...($hazardSql['sql'] === '' ? [] : [...$sids, ...$range, ...$hazardSql['bindings']]),
             ...$sids, ...$range, ...$tools['bindings'],
             ...$sids, ...$range, ...$tools['bindings'],
         ];
@@ -384,6 +357,54 @@ final class ControlRoomSapWeekCountsReader
         }
 
         return $findings;
+    }
+
+    /**
+     * Bagian Hazard/Inspeksi UNION dari bcbeats.aaj_car_all_year_from_dav.
+     * Sumber tidak usable → '' (observasi/OAK tetap dihitung).
+     *
+     * @return array{sql: string, bindings: list<string>}
+     */
+    private function hazardUnionPart(int $sidCount, bool $withDetails): array
+    {
+        $src = $this->hazardSource;
+        if (! $src->isUsable()) {
+            return ['sql' => '', 'bindings' => []];
+        }
+
+        $tools = $src->toolsPredicate();
+        $detail = $withDetails
+            ? "{$src->categoryExpr()} AS category,
+                    COALESCE({$src->text('golden_rule')}, '') AS golden_rule,
+                    COALESCE({$src->text('lokasi')}, '') AS lokasi,
+                    COALESCE({$src->text('detil_lokasi')}, '') AS detil_lokasi,
+                    {$src->reportIdExpr()} AS report_id,
+                    LEFT(COALESCE({$src->text('description')}, ''), 400) AS description,
+                    COALESCE({$src->text('nama_pic')}, '') AS pic,
+                    COALESCE({$src->text('perusahaan_pic')}, '') AS company,
+                    COALESCE({$src->text('status')}, '') AS status"
+            : "'' AS category, '' AS golden_rule, '' AS lokasi, '' AS detil_lokasi,
+                    {$src->reportIdExpr()} AS report_id,
+                    '' AS description, '' AS pic, '' AS company, '' AS status";
+
+        return [
+            'sql' => "SELECT sid, at, component, category, golden_rule, lokasi, detil_lokasi, report_id, description, pic, company, status, name
+            FROM (
+                SELECT
+                    {$src->sidExpr()} AS sid,
+                    {$src->atExpr()} AS at,
+                    {$src->componentCase()} AS component,
+                    {$detail},
+                    COALESCE({$src->text('nama_pelapor')}, '') AS name
+                FROM ".ControlRoomAajCarSource::TABLE."
+                WHERE {$src->sidRangeWhere($sidCount)}
+                  AND {$tools['sql']}
+            ) hazard
+            WHERE component IS NOT NULL
+
+            UNION ALL",
+            'bindings' => $tools['bindings'],
+        ];
     }
 
     /**

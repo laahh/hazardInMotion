@@ -30,10 +30,15 @@ final class ControlRoomSapQualityFindingsReader
 
     private const LOCATION_HITS_TIMEOUT_MS = 6000;
 
+    private readonly ControlRoomAajCarSource $hazardSource;
+
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
         private readonly ControlRoomSapDutyReader $dutyWindow,
-    ) {}
+        ?ControlRoomAajCarSource $hazardSource = null,
+    ) {
+        $this->hazardSource = $hazardSource ?? new ControlRoomAajCarSource($olap);
+    }
 
     /**
      * @param  list<string>  $sids
@@ -52,7 +57,7 @@ final class ControlRoomSapQualityFindingsReader
         sort($sids);
         $start = $from->startOfDay();
         $end = $this->dutyWindow->reportingWindow($lastDutyDate)['end'];
-        $cacheKey = 'control-room:sap-quality-findings:v5:'.hash(
+        $cacheKey = 'control-room:sap-quality-findings:v6:'.hash(
             'sha1',
             implode(',', $sids).'|'.$start->toDateTimeString().'|'.$end->toDateTimeString(),
         );
@@ -87,17 +92,17 @@ final class ControlRoomSapQualityFindingsReader
 
     public static function locationHitsDayCacheKey(string $date): string
     {
-        return 'control-room:sap-location-hits:v9:day:'.$date;
+        return 'control-room:sap-location-hits:v10:day:'.$date;
     }
 
     public static function locationHitsStaleCacheKey(string $date): string
     {
-        return 'control-room:sap-location-hits:v9:stale:'.$date;
+        return 'control-room:sap-location-hits:v10:stale:'.$date;
     }
 
     public static function locationHitsRangeCacheKey(string $from, string $untilExclusive): string
     {
-        return 'control-room:sap-location-hits:v9:range:'.$from.':'.$untilExclusive;
+        return 'control-room:sap-location-hits:v10:range:'.$from.':'.$untilExclusive;
     }
 
     /**
@@ -335,18 +340,28 @@ final class ControlRoomSapQualityFindingsReader
     public function locationHitQueries(CarbonImmutable $from, CarbonImmutable $until): array
     {
         $range = [$from->toDateTimeString(), $until->toDateTimeString()];
+        $src = $this->hazardSource;
+        $queries = [];
+        if ($src->isUsable()) {
+            $queries['hazard'] = [
+                'sql' => "
+                    SELECT lokasi, detil_lokasi, MAX(at) AS at
+                    FROM (
+                        SELECT {$src->text('lokasi')} AS lokasi,
+                               {$src->text('detil_lokasi')} AS detil_lokasi,
+                               {$src->atExpr()} AS at
+                        FROM ".ControlRoomAajCarSource::TABLE."
+                    ) hazard
+                    WHERE at >= CAST(? AS timestamp)
+                      AND at < CAST(? AS timestamp)
+                    GROUP BY lokasi, detil_lokasi
+                ",
+                'bindings' => $range,
+            ];
+        }
 
         return [
-            'hazard' => [
-                'sql' => '
-                    SELECT lokasi, detil_lokasi, MAX(tanggal_laporan) AS at
-                    FROM bcbeats.mv_inspeksi_hazard
-                    WHERE tanggal_laporan >= CAST(? AS timestamp)
-                      AND tanggal_laporan < CAST(? AS timestamp)
-                    GROUP BY lokasi, detil_lokasi
-                ',
-                'bindings' => $range,
-            ],
+            ...$queries,
             'observasi' => [
                 'sql' => '
                     SELECT lokasi, detil_lokasi, MAX(tanggal_observasi) AS at
@@ -416,6 +431,48 @@ final class ControlRoomSapQualityFindingsReader
     }
 
     /**
+     * Bagian Hazard/Inspeksi UNION dari bcbeats.aaj_car_all_year_from_dav.
+     *
+     * @return array{sql: string, bindings: list<string>}
+     */
+    private function hazardUnionPart(int $sidCount): array
+    {
+        $src = $this->hazardSource;
+        if (! $src->isUsable()) {
+            return ['sql' => '', 'bindings' => []];
+        }
+
+        $tools = $src->toolsPredicate();
+        $reportId = $src->reportIdExpr();
+        $at = $src->atExpr();
+
+        return [
+            'sql' => "SELECT sid, at, component, category, lokasi, detil_lokasi, report_id, has_text, has_photo, has_geo
+            FROM (
+                SELECT DISTINCT ON ({$reportId})
+                    {$src->sidExpr()} AS sid,
+                    {$at} AS at,
+                    {$src->componentCase()} AS component,
+                    {$src->categoryExpr()} AS category,
+                    {$src->text('lokasi')} AS lokasi,
+                    {$src->text('detil_lokasi')} AS detil_lokasi,
+                    {$reportId} AS report_id,
+                    {$src->present('description')} AS has_text,
+                    {$src->present('url_foto')} AS has_photo,
+                    {$src->present('latitude', 'longitude')} AS has_geo
+                FROM ".ControlRoomAajCarSource::TABLE."
+                WHERE {$src->sidRangeWhere($sidCount)}
+                  AND {$tools['sql']}
+                ORDER BY {$reportId}, {$at}
+            ) hazard
+            WHERE component IS NOT NULL
+
+            UNION ALL",
+            'bindings' => $tools['bindings'],
+        ];
+    }
+
+    /**
      * Satu statement per chunk: BitmapAnd SID+tanggal, tanpa TOAST foto/deskripsi.
      * Tetap filter tools OCR — ini statistik personil jaga, bukan coverage area.
      *
@@ -426,38 +483,9 @@ final class ControlRoomSapQualityFindingsReader
     {
         $placeholders = implode(',', array_fill(0, count($sids), '?'));
         $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate();
+        $hazard = $this->hazardUnionPart(count($sids));
         $sql = "
-            SELECT sid, at, component, category, lokasi, detil_lokasi, report_id, has_text, has_photo, has_geo
-            FROM (
-                SELECT DISTINCT ON (id_laporan)
-                    kode_sid_pelapor AS sid,
-                    tanggal_laporan AS at,
-                    CASE
-                        WHEN POSITION('INSPEKSI' IN UPPER(COALESCE(jenis_laporan, ''))) > 0 THEN 'inspeksi'
-                        WHEN POSITION('HAZARD' IN UPPER(COALESCE(jenis_laporan, ''))) > 0 THEN 'hazard'
-                        ELSE NULL
-                    END AS component,
-                    COALESCE(
-                        NULLIF(BTRIM(COALESCE(subketidaksesuaian, '')), ''),
-                        NULLIF(BTRIM(COALESCE(ketidaksesuaian, '')), ''),
-                        ''
-                    ) AS category,
-                    lokasi,
-                    detil_lokasi,
-                    CAST(id_laporan AS text) AS report_id,
-                    (deskripsi_temuan IS NOT NULL) AS has_text,
-                    (url_foto IS NOT NULL) AS has_photo,
-                    (latitude IS NOT NULL AND longitude IS NOT NULL) AS has_geo
-                FROM bcbeats.mv_inspeksi_hazard
-                WHERE kode_sid_pelapor IN ({$placeholders})
-                  AND tanggal_laporan >= CAST(? AS timestamp)
-                  AND tanggal_laporan < CAST(? AS timestamp)
-                  AND {$tools['sql']}
-                ORDER BY id_laporan, tanggal_laporan
-            ) hazard
-            WHERE component IS NOT NULL
-
-            UNION ALL
+            {$hazard['sql']}
 
             SELECT sid, at, component, category, lokasi, detil_lokasi, report_id, has_text, has_photo, has_geo
             FROM (
@@ -515,7 +543,7 @@ final class ControlRoomSapQualityFindingsReader
 
         $range = [$start->toDateTimeString(), $end->toDateTimeString()];
         $bindings = [
-            ...$sids, ...$range, ...$tools['bindings'],
+            ...($hazard['sql'] === '' ? [] : [...$sids, ...$range, ...$hazard['bindings']]),
             ...$sids, ...$range, ...$tools['bindings'],
             ...$sids, ...$range, ...$tools['bindings'],
         ];

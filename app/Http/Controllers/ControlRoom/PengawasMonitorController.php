@@ -10,7 +10,6 @@ use App\Http\Requests\ControlRoom\ControlRoomPengawasIndexRequest;
 use App\Http\Requests\ControlRoom\ControlRoomPengawasSapDetailRequest;
 use App\Services\ControlRoom\ControlRoomIsoWeekPeriod;
 use App\Services\ControlRoom\ControlRoomSapDetailTbcEnricher;
-use App\Services\ControlRoom\ControlRoomTbcBasisReader;
 use App\Services\ControlRoom\PengawasMonitorService;
 use App\Services\ControlRoom\Reference\PengawasRoster;
 use Carbon\CarbonImmutable;
@@ -45,16 +44,11 @@ final class PengawasMonitorController extends Controller
         ControlRoomPengawasSapDetailRequest $request,
         PengawasMonitorService $monitor,
         ControlRoomSapDetailTbcEnricher $tbc,
-        ControlRoomTbcBasisReader $tbcBasis,
     ): JsonResponse {
-        $reader = $monitor->dutyReader();
-        $sid = $request->validated('sid');
-        $date = CarbonImmutable::parse($request->validated('date'));
-        $window = $reader->reportingWindow($date);
-
-        return response()->json($tbc->enrich(
-            $reader->forDuty($sid, $date, ControlRoomShiftCode::S1),
-            $tbcBasis->cardsForSid($sid, $window['start'], $window['end']),
-        ));
+        return response()->json($tbc->enrich($monitor->dutyReader()->forDuty(
+            $request->validated('sid'),
+            CarbonImmutable::parse($request->validated('date')),
+            ControlRoomShiftCode::S1,
+        )));
     }
 }

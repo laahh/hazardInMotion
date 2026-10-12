@@ -123,39 +123,6 @@ final class ControlRoomDashboardInsightsAssemblerTest extends TestCase
         $this->assertSame(2, $insights['quality'][0]['tbc_basis']);
     }
 
-    public function test_tbc_memakai_basis_terpisah_bukan_temuan_sap(): void
-    {
-        $sapFindings = [
-            $this->finding('FJAVJ', '2026-08-31 08:15:00', 'hazard', 'APD', '', reportId: '9374205'),
-            $this->finding('FJAVJ', '2026-08-31 09:00:00', 'inspeksi', 'APD', '', reportId: '111'),
-        ];
-        $tbcBasis = [
-            $this->finding('FJAVJ', '2026-08-31 08:20:00', 'hazard', '', '', reportId: '500'),
-            $this->finding('FJAVJ', '2026-08-31 08:30:00', 'hazard', '', '', reportId: '501'),
-            $this->finding('FJAVJ', '2026-08-31 08:40:00', 'inspeksi', '', '', reportId: '502'),
-            $this->finding('FJAVJ', '2026-08-31 08:50:00', 'inspeksi', '', '', reportId: '503'),
-        ];
-
-        $insights = $this->assembler()->fromFindings(
-            $sapFindings,
-            $this->schedule(),
-            ['uncovered' => [], 'total' => 0],
-            $this->assembler()->tbcRowsMatchingFindings($tbcBasis, [['Tasklist' => '500']]),
-            sapLoaded: true,
-            tbcLoaded: true,
-            tbcFindings: $tbcBasis,
-        );
-
-        $this->assertSame(1, $insights['tbcMetaBySid']['FJAVJ']['matched']);
-        $this->assertSame(4, $insights['tbcMetaBySid']['FJAVJ']['total']);
-        $this->assertSame(25.0, $insights['highlight']['tbcPercentage']);
-        $this->assertSame(4, $insights['quality'][0]['tbc_basis']);
-        $this->assertSame(2, $insights['quality'][0]['total_findings']);
-        $statuses = array_column($insights['highlight']['tbcItems'], 'status', 'tasklist');
-        $this->assertSame('Sudah TBC', $statuses['500']);
-        $this->assertArrayNotHasKey('9374205', $statuses);
-    }
-
     public function test_tbc_loaded_tanpa_cocokan_menghasilkan_nol_persen(): void
     {
         $insights = $this->assembler()->fromFindings(

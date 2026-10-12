@@ -24,10 +24,15 @@ final class ControlRoomSapDutyReader
 
     public const DEFAULT_WINDOW_DAYS = 2;
 
+    private readonly ControlRoomAajCarSource $hazardSource;
+
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
         private readonly int $windowDays = self::DEFAULT_WINDOW_DAYS,
-    ) {}
+        ?ControlRoomAajCarSource $hazardSource = null,
+    ) {
+        $this->hazardSource = $hazardSource ?? new ControlRoomAajCarSource($olap);
+    }
 
     /**
      * Salinan dengan panjang jendela lain. Pengawas (tanpa shift, jaga tiap
@@ -35,7 +40,7 @@ final class ControlRoomSapDutyReader
      */
     public function withWindowDays(int $days): self
     {
-        return new self($this->olap, max(1, $days));
+        return new self($this->olap, max(1, $days), $this->hazardSource);
     }
 
     public function windowDays(): int
@@ -93,7 +98,7 @@ final class ControlRoomSapDutyReader
             return $this->payload($meta, [], reachable: false, errors: ['Sumber SAP (OBDS) tidak terjangkau.']);
         }
 
-        $cacheKey = 'control-room:sap-duty:v16:'.$sid.':'.$meta['date'].$this->cacheSuffix();
+        $cacheKey = 'control-room:sap-duty:v17:'.$sid.':'.$meta['date'].$this->cacheSuffix();
         $cached = Cache::get($cacheKey);
         if (is_array($cached) && isset($cached['cards'])) {
             return $this->payload($meta, $cached['cards'], reachable: true);
@@ -138,29 +143,50 @@ final class ControlRoomSapDutyReader
     }
 
     /**
-     * SID + rentang H/H+1 memakai index kode_sid_pelapor dan tanggal
-     * (BitmapAnd). Jangan MATERIALIZED seluruh riwayat SID.
+     * Hazard/Inspeksi dari bcbeats.aaj_car_all_year_from_dav. Kolom di-alias
+     * ke nama lama (mv_inspeksi_hazard) supaya mapHazardInspeksi tidak berubah.
      *
      * @param  list<string>  $errors
      * @return list<object>
      */
     private function fetchHazardInspeksi(string $sid, CarbonImmutable $start, CarbonImmutable $end, array &$errors): array
     {
+        $src = $this->hazardSource;
+        if (! $src->isUsable()) {
+            $errors[] = 'Sumber Hazard/Inspeksi ('.ControlRoomAajCarSource::TABLE.') tidak memiliki kolom yang dibutuhkan.';
+
+            return [];
+        }
+
         $limit = self::PER_TYPE_LIMIT;
-        $tools = ControlRoomInspeksiHazardToolFilter::sqlPredicate();
+        $tools = $src->toolsPredicate();
+        $reportId = $src->reportIdExpr();
+        $at = $src->atExpr();
         $sql = "
-            SELECT DISTINCT ON (id_laporan)
-                   id_laporan, tanggal_laporan, jenis_laporan, status_laporan,
-                   deskripsi_temuan, ketidaksesuaian, subketidaksesuaian, tools_observasi,
-                   lokasi, detil_lokasi, latitude, longitude,
-                   nama_pelapor, jabatan_fungsional_pelapor, perusahaan_pelapor,
-                   nama_pic, jabatan_fungsional_pic, perusahaan_pic, url_foto
-            FROM bcbeats.mv_inspeksi_hazard
-            WHERE kode_sid_pelapor = ?
-              AND tanggal_laporan >= CAST(? AS timestamp)
-              AND tanggal_laporan < CAST(? AS timestamp)
+            SELECT DISTINCT ON ({$reportId})
+                   {$reportId} AS id_laporan,
+                   {$at} AS tanggal_laporan,
+                   {$src->text('jenis')} AS jenis_laporan,
+                   {$src->text('status')} AS status_laporan,
+                   {$src->text('description')} AS deskripsi_temuan,
+                   {$src->text('category')} AS ketidaksesuaian,
+                   {$src->text('subcategory')} AS subketidaksesuaian,
+                   {$src->text('tools')} AS tools_observasi,
+                   {$src->text('lokasi')} AS lokasi,
+                   {$src->text('detil_lokasi')} AS detil_lokasi,
+                   {$src->text('latitude')} AS latitude,
+                   {$src->text('longitude')} AS longitude,
+                   {$src->text('nama_pelapor')} AS nama_pelapor,
+                   {$src->text('jabatan_fungsional_pelapor')} AS jabatan_fungsional_pelapor,
+                   {$src->text('perusahaan_pelapor')} AS perusahaan_pelapor,
+                   {$src->text('nama_pic')} AS nama_pic,
+                   {$src->text('jabatan_fungsional_pic')} AS jabatan_fungsional_pic,
+                   {$src->text('perusahaan_pic')} AS perusahaan_pic,
+                   {$src->text('url_foto')} AS url_foto
+            FROM ".ControlRoomAajCarSource::TABLE."
+            WHERE {$src->sidRangeWhere(1)}
               AND {$tools['sql']}
-            ORDER BY id_laporan, tanggal_laporan
+            ORDER BY {$reportId}, {$at}
             LIMIT {$limit}
         ";
 
