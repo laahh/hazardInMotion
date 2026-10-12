@@ -18,6 +18,7 @@ use App\Services\ControlRoom\ControlRoomSapDutyReader;
 use App\Services\ControlRoom\ControlRoomSapPhotoResolver;
 use App\Services\ControlRoom\ControlRoomSapWeekCountsReader;
 use App\Services\ControlRoom\ControlRoomSiteDutyBoardService;
+use App\Services\ControlRoom\ControlRoomTbcBasisReader;
 use App\Services\ControlRoom\DashboardMockDataProvider;
 use App\Services\ControlRoom\DashboardScheduleWeekAssembler;
 use Carbon\CarbonImmutable;
@@ -146,14 +147,17 @@ final class DashboardController extends Controller
         ControlRoomDashboardSapDetailRequest $request,
         ControlRoomSapDutyReader $reader,
         ControlRoomSapDetailTbcEnricher $tbc,
+        ControlRoomTbcBasisReader $tbcBasis,
     ): JsonResponse {
         $shift = ControlRoomShiftCode::from($request->validated('shift'));
+        $sid = $request->validated('sid');
+        $date = CarbonImmutable::parse($request->validated('date'));
+        $window = $reader->reportingWindow($date);
 
-        return response()->json($tbc->enrich($reader->forDuty(
-            $request->validated('sid'),
-            CarbonImmutable::parse($request->validated('date')),
-            $shift,
-        )));
+        return response()->json($tbc->enrich(
+            $reader->forDuty($sid, $date, $shift),
+            $tbcBasis->cardsForSid($sid, $window['start'], $window['end']),
+        ));
     }
 
     public function sapPhotos(ControlRoomDashboardSapPhotosRequest $request, ControlRoomSapPhotoResolver $photos): JsonResponse

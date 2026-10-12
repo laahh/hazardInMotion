@@ -21,38 +21,38 @@ final class ControlRoomSapDetailTbcEnricher
 
     /**
      * @param  array<string, mixed>  $payload
+     * @param  list<array<string, mixed>>|null  $tbcBasisCards  kartu tab TBC dari
+     *     ControlRoomTbcBasisReader; null = pakai Hazard/Inspeksi dari $payload['cards']
      * @return array<string, mixed>
      */
-    public function enrich(array $payload): array
+    public function enrich(array $payload, ?array $tbcBasisCards = null): array
     {
         /** @var list<array<string, mixed>> $cards */
         $cards = $payload['cards'] ?? [];
-        $lookup = $this->matchedSet($this->hazardInspeksiIds($cards));
+        $basis = $tbcBasisCards ?? $cards;
+        $lookup = $this->matchedSet(array_values(array_unique([
+            ...$this->hazardInspeksiIds($cards),
+            ...$this->hazardInspeksiIds($basis),
+        ])));
+
         $annotated = [];
+        foreach ($cards as $card) {
+            $card['tbc'] = $this->isHazardInspeksi($card) ? $this->tbcFlag($card, $lookup) : null;
+            $annotated[] = $card;
+        }
+
         $tbcCards = [];
         $counts = ['all' => 0, 'sudah' => 0, 'belum' => 0];
-
-        foreach ($cards as $card) {
-            $type = strtolower(trim((string) ($card['type'] ?? '')));
-            $id = trim((string) ($card['id'] ?? ''));
-            $tbc = null;
-            if (in_array($type, ['hazard', 'inspeksi'], true) && $id !== '' && $id !== '—') {
-                if ($lookup['loaded']) {
-                    $tbc = isset($lookup['set'][$id]) ? 'sudah' : 'belum';
-                }
-                $card['tbc'] = $tbc;
-                $tbcCards[] = $card;
-                $counts['all']++;
-                if ($tbc === 'sudah') {
-                    $counts['sudah']++;
-                }
-                if ($tbc === 'belum') {
-                    $counts['belum']++;
-                }
-            } else {
-                $card['tbc'] = null;
+        foreach ($basis as $card) {
+            if (! $this->isHazardInspeksi($card)) {
+                continue;
             }
-            $annotated[] = $card;
+            $card['tbc'] = $this->tbcFlag($card, $lookup);
+            $tbcCards[] = $card;
+            $counts['all']++;
+            if ($card['tbc'] !== null) {
+                $counts[$card['tbc']]++;
+            }
         }
 
         $payload['cards'] = $annotated;
@@ -61,6 +61,30 @@ final class ControlRoomSapDetailTbcEnricher
         $payload['tbc_cards'] = $tbcCards;
 
         return $payload;
+    }
+
+    /**
+     * @param  array<string, mixed>  $card
+     */
+    private function isHazardInspeksi(array $card): bool
+    {
+        $type = strtolower(trim((string) ($card['type'] ?? '')));
+        $id = trim((string) ($card['id'] ?? ''));
+
+        return in_array($type, ['hazard', 'inspeksi'], true) && $id !== '' && $id !== '—';
+    }
+
+    /**
+     * @param  array<string, mixed>  $card
+     * @param  array{loaded: bool, set: array<string, true>}  $lookup
+     */
+    private function tbcFlag(array $card, array $lookup): ?string
+    {
+        if (! $lookup['loaded']) {
+            return null;
+        }
+
+        return isset($lookup['set'][trim((string) ($card['id'] ?? ''))]) ? 'sudah' : 'belum';
     }
 
     /**

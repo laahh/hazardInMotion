@@ -42,6 +42,7 @@ final class ControlRoomDashboardInsightsAssembler
         private readonly HsecmDatabaseRepository $hsecm,
         private readonly ControlRoomSapDutyReader $dutyWindow,
         ?GSheetTbcReader $gsheetTbc = null,
+        private readonly ?ControlRoomTbcBasisReader $tbcBasis = null,
     ) {
         $this->gsheetTbc = $gsheetTbc ?? new GSheetTbcReader();
     }
@@ -78,7 +79,10 @@ final class ControlRoomDashboardInsightsAssembler
         });
 
         $usable = $sapLoaded ? $this->onDutyFindings($findings, $scheduleDays) : [];
-        $tbcLookup = $this->loadTbcValidationsForFindings($usable);
+        $basis = $this->tbcBasisFindings($scheduleDays);
+        $tbcLookup = ($basis === null || $basis['loaded'])
+            ? $this->loadTbcValidationsForFindings($basis['findings'] ?? $usable)
+            : ['rows' => [], 'loaded' => false];
 
         return $this->fromFindings(
             $findings,
@@ -87,7 +91,44 @@ final class ControlRoomDashboardInsightsAssembler
             $tbcLookup['rows'],
             $sapLoaded,
             $tbcLookup['loaded'],
+            $basis['findings'] ?? null,
         );
+    }
+
+    /**
+     * Hazard/Inspeksi basis TBC (aaj_car_all_year_from_dav) pada jendela jaga.
+     * Null = reader tidak dipasang → TBC memakai temuan mv_inspeksi_hazard.
+     *
+     * @param  list<array<string, mixed>>  $scheduleDays
+     * @return array{loaded: bool, findings: list<array<string, mixed>>}|null
+     */
+    private function tbcBasisFindings(array $scheduleDays): ?array
+    {
+        if ($this->tbcBasis === null) {
+            return null;
+        }
+
+        $running = $this->runningScheduleDays($scheduleDays);
+        $sids = array_keys($this->namesBySid($running));
+        $dates = array_values(array_filter(array_map(
+            static fn (array $day): string => (string) ($day['date'] ?? ''),
+            $running,
+        )));
+        if ($sids === [] || $dates === []) {
+            return ['loaded' => true, 'findings' => []];
+        }
+        sort($dates);
+
+        $raw = $this->tbcBasis->findingsForSids(
+            array_map('strval', $sids),
+            CarbonImmutable::parse($dates[0])->startOfDay(),
+            $this->dutyWindow->reportingWindow(CarbonImmutable::parse($dates[array_key_last($dates)]))['end'],
+        );
+
+        return [
+            'loaded' => $raw['loaded'],
+            'findings' => $raw['loaded'] ? $this->onDutyFindings($raw['findings'], $running) : [],
+        ];
     }
 
     /**
@@ -110,15 +151,17 @@ final class ControlRoomDashboardInsightsAssembler
         array $tbcRows,
         bool $sapLoaded,
         bool $tbcLoaded = false,
+        ?array $tbcFindings = null,
     ): array {
         $usable = $sapLoaded ? $this->onDutyFindings($findings, $scheduleDays) : [];
+        $tbcSource = $tbcFindings ?? $usable;
         $matchedIds = $this->matchedTasklistSet($tbcRows);
-        $tbcMeta = $tbcLoaded ? $this->tbcMetaBySid($usable, $scheduleDays, $matchedIds) : [];
+        $tbcMeta = $tbcLoaded ? $this->tbcMetaBySid($tbcSource, $scheduleDays, $matchedIds) : [];
 
         return [
             'pareto' => $this->paretoFromFindings($usable),
-            'highlight' => $this->highlightFromFindings($usable, $coverage, $tbcRows, $tbcLoaded),
-            'quality' => $sapLoaded ? $this->qualityFromFindings($usable, $scheduleDays, $matchedIds, $tbcLoaded) : [],
+            'highlight' => $this->highlightFromFindings($usable, $coverage, $tbcRows, $tbcLoaded, $tbcSource),
+            'quality' => $sapLoaded ? $this->qualityFromFindings($usable, $scheduleDays, $matchedIds, $tbcLoaded, $tbcSource) : [],
             'personnelCoverage' => $this->personnelCoverageFromFindings($usable, $scheduleDays),
             'tbcBySlot' => $this->tbcPercentBySidDate($scheduleDays, $tbcMeta),
             'tbcMetaBySid' => $tbcMeta,
@@ -182,18 +225,21 @@ final class ControlRoomDashboardInsightsAssembler
      * @param  list<array<string, mixed>>  $tbcRows
      * @return array{goldenRules: list<array{name: string, count: int, items: list<array<string, string>>}>, blindspotCount: int, blindspotTotal: int, tbcPercentage: ?float, blindspotItems: list<array<string, string>>, tbcItems: list<array<string, string>>}
      */
-    private function highlightFromFindings(array $findings, array $coverage, array $tbcRows, bool $tbcLoaded = false): array
+    private function highlightFromFindings(array $findings, array $coverage, array $tbcRows, bool $tbcLoaded = false, ?array $tbcFindings = null): array
     {
         $golden = [];
         $goldenItems = [];
         $hazardInspeksi = 0;
         $blindspotItems = [];
         $uncovered = $coverage['uncovered'] ?? [];
-        foreach ($findings as $finding) {
+        $tbcFindings ??= $findings;
+        foreach ($tbcFindings as $finding) {
             $component = (string) ($finding['component'] ?? '');
             if ($component === 'hazard' || $component === 'inspeksi') {
                 $hazardInspeksi++;
             }
+        }
+        foreach ($findings as $finding) {
             $rule = trim((string) ($finding['golden_rule'] ?? ''));
             if (! $this->isGoldenRuleViolation($rule)) {
                 continue;
@@ -223,7 +269,7 @@ final class ControlRoomDashboardInsightsAssembler
             ? null
             : $this->tbc->percentage(count($tbcRows), $hazardInspeksi);
         $tbcItems = $tbcLoaded
-            ? $this->tbcHighlightItemsFromFindings($findings, $this->matchedTasklistSet($tbcRows))
+            ? $this->tbcHighlightItemsFromFindings($tbcFindings, $this->matchedTasklistSet($tbcRows))
             : [];
         if ($tbcItems === []) {
             foreach ($tbcRows as $row) {
@@ -365,8 +411,16 @@ final class ControlRoomDashboardInsightsAssembler
      * @param  array<string, true>  $matchedIds
      * @return list<array<string, mixed>>
      */
-    private function qualityFromFindings(array $findings, array $scheduleDays, array $matchedIds = [], bool $tbcLoaded = false): array
+    private function qualityFromFindings(array $findings, array $scheduleDays, array $matchedIds = [], bool $tbcLoaded = false, ?array $tbcFindings = null): array
     {
+        $tbcBySid = [];
+        foreach ($tbcFindings ?? $findings as $finding) {
+            $sid = strtoupper(trim((string) ($finding['sid'] ?? '')));
+            if ($sid !== '') {
+                $tbcBySid[$sid][] = $finding;
+            }
+        }
+
         $scheduleDays = $this->runningScheduleDays($scheduleDays);
         $namesBySid = $this->namesBySid($scheduleDays);
         if ($namesBySid === []) {
@@ -390,7 +444,7 @@ final class ControlRoomDashboardInsightsAssembler
                 $categories[] = $this->findingCategory($finding);
             }
 
-            $tbcCounts = $this->tbcCountsForPerson($personFindings, $matchedIds);
+            $tbcCounts = $this->tbcCountsForPerson($this->uniqueQualityFindings($tbcBySid[$sid] ?? []), $matchedIds);
 
             $rows[] = [
                 'name' => $name,
