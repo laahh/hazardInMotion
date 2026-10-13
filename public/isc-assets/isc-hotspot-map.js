@@ -2554,17 +2554,8 @@
     if (site) {
       site.value = resolveHazardSiteOption(row);
     }
-    if (row && (row.entity || "person") === "person" && row.sid) {
-      fillPersonFields("pelapor", {
-        sid: row.sid,
-        npk: "",
-        nama: row.name || "",
-        jabatan: row.job_title || "",
-        username: "",
-        password: ""
-      });
-      lookupSidFill("pelapor", row.sid);
-    }
+    // Pelapor sengaja TIDAK diisi dari row (row.sid itu karyawan yang melanggar,
+    // bukan pelapor) — user input SID manual, nama/jabatan menyusul dari lookup.
     fillAutoDeskripsiTemuan(row);
     fillAutoKetidaksesuaian();
     prepareHazardTrailFoto(row);
@@ -4685,6 +4676,14 @@
     });
     pelaporSid.addEventListener("input", function () {
       clearTimeout(pelaporSidTimer);
+      // SID berubah → buang nama/jabatan SID sebelumnya sampai lookup baru selesai.
+      ["npk", "nama", "jabatan"].forEach(function (field) {
+        var el = document.getElementById("gm-hazard-pelapor-" + field);
+        if (el) {
+          el.value = "";
+        }
+      });
+      clearAccessCredentials();
       pelaporSidTimer = setTimeout(function () {
         lookupSidFill("pelapor", pelaporSid.value);
       }, 450);
