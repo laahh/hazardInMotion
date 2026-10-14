@@ -429,29 +429,6 @@
           @endforeach
         </div>
 
-        <div class="ro-tip ro-tip--amber mb-16 flex-shrink-0">
-          <iconify-icon icon="solar:calendar-bold" class="flex-shrink-0"></iconify-icon>
-          @if ($peta && $adaPolaHarian && count($duaTerpadat) === 2)
-            <span>
-              Pelanggaran paling padat jatuh di hari <b>{{ $duaTerpadat[0]['nama'] }}</b>
-              (rata-rata {{ number_format($duaTerpadat[0]['rata'], 0, ',', '.') }} karyawan)
-              dan <b>{{ $duaTerpadat[1]['nama'] }}</b>
-              ({{ number_format($duaTerpadat[1]['rata'], 0, ',', '.') }} karyawan).
-            </span>
-          @elseif ($peta)
-            <span>
-              <b>Tidak ada pola hari-dalam-seminggu</b> &mdash; selisih hari terpadat dan terlonggar hanya
-              {{ number_format($peta['sebaranHari'] * 100, 1, ',', '.') }}%. Wajar: flag pelanggaran
-              berlaku per <b>blok</b> (sekali melewati ambang on-site, karyawan ter-flag berhari-hari
-              berturut-turut), bukan per kejadian harian. Yang terbaca di heatmap adalah
-              <b>naik-turun antar minggu</b>, dengan puncak {{ number_format($peta['puncak']['jumlah'], 0, ',', '.') }}
-              karyawan pada {{ $peta['puncak']['tanggal'] }}.
-            </span>
-          @else
-            <span>Pelanggaran paling padat jatuh di hari <b>Kamis</b> dan <b>Jumat</b> &mdash; berimpit dengan akhir blok kerja sebelum jadwal off.</span>
-          @endif
-        </div>
-
         <div class="row g-3 flex-shrink-0">
           @foreach ([
             {{-- Tanpa pola hari-dalam-seminggu, menampilkan "hari terbanyak"
