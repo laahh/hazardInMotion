@@ -214,20 +214,5 @@
   @endif
 @endforeach
 
-@if ($temuanKini)
-  <div class="col-12 mt-0">
-    <span class="text-secondary-light text-xs">
-      Hanya karyawan {{ implode(', ', config('dms_roster.reg_live.kode_pt', [])) }}.
-      @if (config('dms_roster.reg_live.kecualikan_master_banned', true))
-        Tidak termasuk karyawan yang sudah tercatat di
-        <a href="{{ route('pra-operasi.roster-banned.index') }}" class="text-primary-600">Master Roster Banned</a> (sudah ditindak/treatment).
-      @endif
-      Dihitung langsung dari scan RFID {{ $temuanKini['jendela'] }} hari terakhir (diambil {{ $temuanKini['diambil'] }}).
-      Karyawan yang belum scan hari ini dinilai sampai kemarin; tanda ≥ = periode lebih panjang dari jendela data.
-      Cuti = tidak tap lebih dari 5 hari berturut-turut. Kategori longgar (Transportasi Massal, Mekanik) dikecualikan dari aturan banned.
-    </span>
-  </div>
-@endif
-
 {{-- Modal: daftar per aturan (JSON) dan timeline tap RFID per karyawan. --}}
 <script src="{{ asset('dms-assets/roster-compliance/roster-temuan.js') }}?v=4"></script>
