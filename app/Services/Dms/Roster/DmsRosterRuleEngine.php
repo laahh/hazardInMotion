@@ -202,6 +202,68 @@ final class DmsRosterRuleEngine
     }
 
     /**
+     * REG-1/2/3 dinilai per HARI INI (hari terakhir pola), dihitung mundur —
+     * beda dari redK1/2/3 yang menandai pelanggaran kapan pun sejak 1 Januari.
+     *
+     *   REG-1  run kerja P/M yang masih berlanjut sampai hari ini
+     *   REG-2  on-site (P/M/o) sejak blok cuti terakhir sampai hari ini
+     *   REG-3  blok cuti terakhir yang SUDAH selesai; cuti yang masih berjalan
+     *          belum bisa dinilai pendek, jadi dilewati
+     *
+     * Indeks mulai/selesai mengacu ke posisi karakter pola (0 = 1 Januari).
+     *
+     * @return array{reg1: ?array{hari:int,mulai:int,selesai:int}, reg2: ?array{hari:int,mulai:int,selesai:int}, reg3: ?array{hari:int,mulai:int,selesai:int}}
+     */
+    public function pelanggaranTerkini(DmsRosterEvaluation $e): array
+    {
+        $kosong = ['reg1' => null, 'reg2' => null, 'reg3' => null];
+        $p = $e->pola;
+        $akhir = strlen($p) - 1;
+
+        if ($e->longgar || $akhir < 0) {
+            return $kosong;
+        }
+
+        $kerja = $this->runMundur($p, $akhir, static fn (string $ch): bool => $ch === 'P' || $ch === 'M');
+        $onsite = $this->runMundur($p, $akhir, static fn (string $ch): bool => $ch !== 'c');
+
+        // Lewati cuti yang masih berjalan, lalu masa on-site sesudah cuti
+        // terakhir; yang tersisa di ujung adalah blok cuti terakhir yang selesai.
+        $k = $akhir;
+        while ($k >= 0 && $p[$k] === 'c') {
+            $k--;
+        }
+        while ($k >= 0 && $p[$k] !== 'c') {
+            $k--;
+        }
+        $cuti = $k >= 0 ? $this->runMundur($p, $k, static fn (string $ch): bool => $ch === 'c') : null;
+
+        return [
+            'reg1' => $kerja !== null && $kerja['hari'] > ($this->ambang['kerja_beruntun'] ?? 13) ? $kerja : null,
+            'reg2' => $onsite !== null && $onsite['hari'] > ($this->ambang['onsite'] ?? 71) ? $onsite : null,
+            'reg3' => $cuti !== null && $cuti['hari'] < ($this->ambang['cuti_min'] ?? 12) ? $cuti : null,
+        ];
+    }
+
+    /**
+     * Run berakhiran di $selesai yang semua karakternya memenuhi $cocok.
+     *
+     * @param  callable(string): bool  $cocok
+     * @return array{hari:int,mulai:int,selesai:int}|null
+     */
+    private function runMundur(string $p, int $selesai, callable $cocok): ?array
+    {
+        $k = $selesai;
+        while ($k >= 0 && $cocok($p[$k])) {
+            $k--;
+        }
+
+        $hari = $selesai - $k;
+
+        return $hari > 0 ? ['hari' => $hari, 'mulai' => $k + 1, 'selesai' => $selesai] : null;
+    }
+
+    /**
      * @return array<string, int>
      */
     public function ambang(): array

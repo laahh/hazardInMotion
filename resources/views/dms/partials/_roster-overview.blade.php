@@ -440,6 +440,9 @@
     </div>
   </div>
 
+  {{-- ══════════ REG-1/2/3 PER HARI INI ══════════ --}}
+  @include('dms.partials._roster-reg-terkini')
+
   {{-- ══════════ HEATMAP HARIAN ══════════ --}}
   <div class="col-xxl-9 col-lg-6">
     <div class="card h-100 ro-card">

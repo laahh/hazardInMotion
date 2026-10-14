@@ -802,6 +802,9 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         // (bcsid.mv_checkinout_rfid) via `php artisan dms:sync-roster-rfid`.
         Route::get('/roster-compliance', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'index'])->name('roster-compliance');
         Route::get('/roster-compliance/wajib-cuti.csv', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'unduhWajibCuti'])->name('roster-compliance.wajib-cuti');
+        Route::get('/roster-compliance/reg-terkini/{kode}.csv', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'unduhRegTerkini'])
+            ->whereIn('kode', ['reg1', 'reg2', 'reg3'])
+            ->name('roster-compliance.reg-terkini');
         Route::get('/roster-compliance/karyawan/{sid}', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'detail'])->name('roster-compliance.detail');
 
         // Halaman ringkasan bergaya dashboard PnC. Kartu Total Karyawan,
@@ -844,6 +847,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
                 'perSiteLive' => $total->perSite(),
                 'karyawanLive' => $karyawan->ambil((int) $req->query('hal', '1'), $perPage, $tahun),
                 'perluTindakanLive' => $karyawan->perluTindakan(12, $tahun),
+                'regTerkiniLive' => $karyawan->regTerkini($tahun),
                 'agregatLive' => $agregat,
                 'heatmapLive' => $peta,
             ]);

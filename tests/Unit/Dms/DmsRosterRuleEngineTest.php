@@ -245,6 +245,59 @@ class DmsRosterRuleEngineTest extends TestCase
         $this->assertFalse($e->everRed);
     }
 
+    public function test_reg1_terkini_hanya_run_kerja_yang_berlanjut_sampai_hari_ini(): void
+    {
+        $sedang = $this->engine->pelanggaranTerkini($this->evaluasi('oo'.str_repeat('P', 15)));
+        $sudahLewat = $this->engine->pelanggaranTerkini($this->evaluasi(str_repeat('P', 20).'o'));
+        $belumAmbang = $this->engine->pelanggaranTerkini($this->evaluasi('oo'.str_repeat('M', 13)));
+
+        $this->assertSame(['hari' => 15, 'mulai' => 2, 'selesai' => 16], $sedang['reg1']);
+        $this->assertNull($sudahLewat['reg1']);
+        $this->assertNull($belumAmbang['reg1']);
+    }
+
+    public function test_reg2_terkini_menghitung_onsite_mundur_sampai_cuti_terakhir(): void
+    {
+        // Off pendek ikut terhitung on-site; yang memutus hanya blok cuti.
+        $pola = str_repeat('c', 12).str_repeat('PPPPPPo', 10).'PP';
+        $kena = $this->engine->pelanggaranTerkini($this->evaluasi($pola));
+        $pas71 = $this->engine->pelanggaranTerkini($this->evaluasi(str_repeat('c', 12).str_repeat('P', 71)));
+
+        $this->assertSame(['hari' => 72, 'mulai' => 12, 'selesai' => 83], $kena['reg2']);
+        $this->assertNull($pas71['reg2']);
+    }
+
+    public function test_reg3_terkini_memakai_blok_cuti_terakhir_yang_sudah_selesai(): void
+    {
+        // Cuti pendek lama tidak dihitung bila cuti sesudahnya sudah cukup.
+        $pendekTerakhir = str_repeat('P', 6).str_repeat('c', 14).str_repeat('P', 6).str_repeat('c', 8).'PPP';
+        $pendekLama = str_repeat('P', 6).str_repeat('c', 8).str_repeat('P', 6).str_repeat('c', 14).'PPP';
+
+        $kena = $this->engine->pelanggaranTerkini($this->evaluasi($pendekTerakhir));
+        $bersih = $this->engine->pelanggaranTerkini($this->evaluasi($pendekLama));
+
+        $this->assertSame(['hari' => 8, 'mulai' => 26, 'selesai' => 33], $kena['reg3']);
+        $this->assertNull($bersih['reg3']);
+    }
+
+    public function test_reg3_terkini_mengabaikan_cuti_yang_masih_berjalan(): void
+    {
+        // Cuti 7 hari yang belum selesai belum bisa dinilai pendek; yang
+        // dinilai blok sebelumnya (14 hari, cukup).
+        $pola = str_repeat('P', 6).str_repeat('c', 14).str_repeat('P', 6).str_repeat('c', 7);
+
+        $this->assertNull($this->engine->pelanggaranTerkini($this->evaluasi($pola))['reg3']);
+    }
+
+    public function test_pelanggaran_terkini_kosong_untuk_kategori_longgar(): void
+    {
+        $pola = str_repeat('c', 8).str_repeat('P', 80);
+
+        $hasil = $this->engine->pelanggaranTerkini($this->evaluasi($pola, 'Mekanik'));
+
+        $this->assertSame(['reg1' => null, 'reg2' => null, 'reg3' => null], $hasil);
+    }
+
     private function evaluasi(
         string $pola,
         string $kategori = 'Operator Hauler',
