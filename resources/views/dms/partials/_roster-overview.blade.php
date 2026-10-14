@@ -466,7 +466,7 @@
   {{-- ══════════ DAFTAR PERLU TINDAKAN ══════════ --}}
   <div class="col-xxl-3">
     <div class="card h-100 radius-8 border-0">
-      <div class="card-body p-24">
+      <div class="card-body p-24 d-flex flex-column">
         <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
           <h6 class="mb-0 fw-bold text-lg">Karyawan Perlu Tindakan</h6>
           <span class="text-secondary-light text-sm">
@@ -481,7 +481,11 @@
           diurutkan dari yang terpanjang.
         </span>
 
-        <div class="mt-24 overflow-y-auto scroll-sm" style="max-height: 380px;">
+        {{-- Daftar mengisi sisa tinggi kartu lalu bergulir, bukan menentukan
+             tinggi baris: kalau tidak, kartu heatmap di sebelahnya ikut
+             memanjang dan menyisakan ruang kosong di bawah grid. --}}
+        <div class="ro-isi-sisa mt-24">
+        <div class="ro-isi-sisa__gulir overflow-y-auto scroll-sm">
           @foreach ($perluTindakan as $i => $p)
             <div class="d-flex align-items-center justify-content-between gap-3 {{ $i === count($perluTindakan) - 1 ? '' : 'mb-24' }}">
               <div class="d-flex align-items-center gap-2" style="min-width:0">
@@ -501,6 +505,7 @@
               </span>
             </div>
           @endforeach
+        </div>
         </div>
 
         @if ($tindakan && $totalTindakan > count($perluTindakan))

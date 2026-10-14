@@ -312,3 +312,15 @@
 .ro-aturan-tile:focus-visible { background-color: #F8FAFC !important; outline: none; }
 .ro-aturan-tile:disabled { cursor: default; }
 .ro-durasi-lebih { color: #B45309; background: #FEF3C7; border-radius: 4px; padding: 0 4px; font-weight: 700; }
+
+/* Wadah yang mengisi sisa tinggi kartu (flex column) tanpa ikut menentukan
+   tinggi baris: isinya diposisikan absolut lalu bergulir. Dipakai daftar
+   "Karyawan Perlu Tindakan" supaya tinggi barisnya ditentukan kartu heatmap
+   di sebelahnya. Di layar sempit (kartu ditumpuk) daftar kembali mengalir
+   biasa dengan batas tinggi. */
+.ro-isi-sisa { position: relative; flex: 1 1 auto; min-height: 220px; }
+.ro-isi-sisa__gulir { position: absolute; inset: 0; padding-right: 4px; }
+@media (max-width: 1399.98px) {
+  .ro-isi-sisa { min-height: 0; }
+  .ro-isi-sisa__gulir { position: static; max-height: 380px; }
+}
