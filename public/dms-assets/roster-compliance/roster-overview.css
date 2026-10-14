@@ -314,28 +314,3 @@
 .ro-aturan:focus-visible { box-shadow: 0 6px 18px rgba(15, 23, 42, .10); transform: translateY(-1px); }
 .ro-aturan:disabled { cursor: default; opacity: .75; }
 .ro-durasi-lebih { color: #B45309; background: #FEF3C7; border-radius: 4px; padding: 0 4px; font-weight: 700; }
-
-/* ── Timeline harian mini per baris tabel modal aturan ──────────────────
-   Satu elemen per baris: warna hari digambar sebagai gradien dari pola
-   (roster-temuan.js), celah 1px antar hari dari lapisan ::after, dan garis
-   tanda (merah aturan banned / kuning mapping) di atasnya. Kepala kolom
-   memakai label bulan/minggu yang sama lebarnya, jadi tanggal sejajar. */
-.ro-mini-th { min-width: 580px; vertical-align: bottom; }
-.ro-mini-label { position: relative; display: block; width: 560px; }
-.ro-mini-label .ro-strip__labels { min-width: 0; width: 100%; }
-.ro-mini-label .ro-strip__mark { font-size: 10px; }
-.ro-mini-label .ro-strip__week { font-size: 9px; }
-.ro-mini-td { padding-top: 6px !important; padding-bottom: 6px !important; }
-.ro-mini { width: 560px; }
-.ro-mini__tanda { height: 3px; margin-bottom: 2px; border-radius: 2px; }
-.ro-mini__bar { position: relative; height: 18px; border-radius: 2px; }
-.ro-mini__bar::after {
-  content: ''; position: absolute; inset: 0;
-  background: repeating-linear-gradient(to right,
-    transparent 0,
-    transparent calc(100% / var(--ro-mini-n, 180) - 1px),
-    #FFFFFF calc(100% / var(--ro-mini-n, 180) - 1px),
-    #FFFFFF calc(100% / var(--ro-mini-n, 180)));
-}
-.ro-temuan-row:hover .ro-mini__bar::after,
-.ro-temuan-row.is-pilih .ro-mini__bar::after { opacity: .6; }

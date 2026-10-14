@@ -112,9 +112,6 @@ final class RosterComplianceController extends Controller
             'up' => true,
             'per' => $data['per'],
             'diambil' => $data['diambil'],
-            // Dipakai menggambar label bulan/minggu kolom timeline harian.
-            'awal' => $data['awal'],
-            'jendela' => $data['jendela'],
             'baris' => $data['daftar'][$kode],
         ]);
     }

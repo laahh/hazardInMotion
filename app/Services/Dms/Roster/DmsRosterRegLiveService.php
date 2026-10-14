@@ -44,7 +44,7 @@ final class DmsRosterRegLiveService
     ) {}
 
     /**
-     * @return array{per:string,diambil:string,jendela:int,awal:string,daftar:array<string,list<array<string,mixed>>>}|null
+     * @return array{per:string,diambil:string,jendela:int,daftar:array<string,list<array<string,mixed>>>}|null
      *         null bila RFID tidak terjangkau / query gagal.
      */
     public function ambil(): ?array
@@ -52,7 +52,7 @@ final class DmsRosterRegLiveService
         $hariIni = CarbonImmutable::now()->startOfDay();
         // Versi master banned ikut di kunci: begitu ada orang di-banned atau
         // dicabut, hasil langsung dihitung ulang tanpa menunggu TTL habis.
-        $key = 'dms_roster:aturan_live:v4:'.$hariIni->toDateString().':'.$this->versiMasterBanned();
+        $key = 'dms_roster:aturan_live:v5:'.$hariIni->toDateString().':'.$this->versiMasterBanned();
 
         $tersimpan = Cache::get($key);
         if (is_array($tersimpan)) {
@@ -270,7 +270,7 @@ final class DmsRosterRegLiveService
     }
 
     /**
-     * @return array{per:string,diambil:string,jendela:int,awal:string,daftar:array<string,list<array<string,mixed>>>}|null
+     * @return array{per:string,diambil:string,jendela:int,daftar:array<string,list<array<string,mixed>>>}|null
      */
     private function hitung(CarbonImmutable $hariIni): ?array
     {
@@ -314,17 +314,10 @@ final class DmsRosterRegLiveService
                 'pt' => (string) $k->kode_pt,
                 'site' => (string) ($k->site ?: '—'),
                 'scan_terakhir' => $hariScan === [] ? '—' : $tanggal(max(array_keys($hariScan))),
-                // Timeline mini di tabel modal; diisi di bawah bila ada scan.
-                'pola' => str_repeat('o', $panjang),
-                'tanda' => str_repeat('-', $panjang),
             ];
 
             if ($hariScan !== []) {
-                $param = $this->engine->paramPerusahaan((string) $k->perusahaan);
-                $eval = $this->engine->evaluasi($this->rakitDeret($hariScan, $panjang), (string) $k->kategori, $param['thr'], $param['map']);
-                $dasar = array_merge($dasar, $this->timelineMini($eval, $panjang));
-
-                foreach ($this->nilaiEvaluasi($eval, $param) as $kode => $run) {
+                foreach ($this->nilai($hariScan, $panjang, (string) $k->kategori, (string) $k->perusahaan) as $kode => $run) {
                     if ($run !== null) {
                         $daftar[$kode][] = $dasar + $this->barisPola($kode, $run, $tanggal);
                     }
@@ -346,30 +339,7 @@ final class DmsRosterRegLiveService
             'per' => $hariIni->translatedFormat('j M Y'),
             'diambil' => CarbonImmutable::now()->translatedFormat('j M Y H:i'),
             'jendela' => $panjang,
-            'awal' => $awal->toDateString(),
             'daftar' => $daftar,
-        ];
-    }
-
-    /**
-     * Pola & tanda harian ringkas untuk satu baris tabel, satu karakter per
-     * hari sepanjang jendela (indeks 0 = $awal):
-     *   pola   P/M/o/c, 'x' = hari ini belum ada scan
-     *   tanda  'm' aturan banned (periode/berturut-turut), 'k' mapping, '-' bersih
-     *
-     * @return array{pola:string,tanda:string}
-     */
-    public function timelineMini(DmsRosterEvaluation $eval, int $panjang): array
-    {
-        $merah = $this->tandaMerah($eval);
-        $tanda = '';
-        for ($i = 0; $i < $panjang; $i++) {
-            $tanda .= isset($merah[$i]) ? 'm' : (($eval->yel[$i] ?? '') !== '' ? 'k' : '-');
-        }
-
-        return [
-            'pola' => str_pad($eval->pola, $panjang, 'x'),
-            'tanda' => $tanda,
         ];
     }
 

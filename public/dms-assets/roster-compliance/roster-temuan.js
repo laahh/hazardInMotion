@@ -44,7 +44,6 @@
 
     function renderDaftar(modal, json) {
         var baris = json.baris;
-        modal.querySelector('[data-ro-th-timeline]').innerHTML = json.awal ? labelHtml(json.awal, json.jendela) : '';
         modal.querySelector('[data-ro-tbody]').innerHTML = baris.map(function (r, i) {
             return '<tr class="ro-temuan-row" data-ro-sid="' + esc(r.sid) + '" title="Lihat timeline RFID ' + esc(r.nama) + '">'
                 + '<td>' + (i + 1) + '</td>'
@@ -53,7 +52,6 @@
                 + '<td>' + esc(r.pt) + '</td>'
                 + '<td class="text-nowrap">' + esc(r.site) + '</td>'
                 + '<td class="text-end fw-semibold text-nowrap">' + esc(r.nilai) + '</td>'
-                + '<td class="ro-mini-td">' + miniHtml(r) + '</td>'
                 + '<td class="text-nowrap">' + esc(r.mulai) + '</td>'
                 + '<td class="text-nowrap">' + esc(r.selesai) + '</td>'
                 + '<td class="text-sm">' + esc(r.keterangan) + '</td>'
@@ -152,36 +150,6 @@
 
         return '<div class="ro-strip__labels">' + bulan + '</div>'
             + '<div class="ro-strip__labels ro-strip__labels--week">' + minggu + '</div>';
-    }
-
-    var WARNA_KODE = { P: 'var(--ro-pagi)', M: 'var(--ro-malam)', o: 'var(--ro-off)', c: 'var(--ro-cuti)', x: '#CBD5E1' };
-    var WARNA_TANDA = { m: 'var(--ro-flag)', k: 'var(--ro-mapping)', '-': 'transparent' };
-
-    /**
-     * Gradien linear dengan satu segmen per run karakter sama — satu elemen
-     * per baris, bukan ratusan sel, supaya tabel ratusan orang tetap ringan.
-     */
-    function gradien(str, warna) {
-        var n = str.length;
-        var stop = [];
-        var i = 0;
-        while (i < n) {
-            var j = i;
-            while (j < n && str[j] === str[i]) { j++; }
-            var c = warna[str[i]] || 'transparent';
-            stop.push(c + ' ' + (i / n * 100).toFixed(3) + '% ' + (j / n * 100).toFixed(3) + '%');
-            i = j;
-        }
-        return 'linear-gradient(to right,' + stop.join(',') + ')';
-    }
-
-    function miniHtml(r) {
-        if (!r.pola) { return ''; }
-        var n = r.pola.length;
-        return '<div class="ro-mini" style="--ro-mini-n:' + n + '">'
-            + '<div class="ro-mini__tanda" style="background:' + gradien(r.tanda || '', WARNA_TANDA) + '"></div>'
-            + '<div class="ro-mini__bar" style="background-image:' + gradien(r.pola, WARNA_KODE) + '"></div>'
-            + '</div>';
     }
 
     function stripHtml(hari) {
