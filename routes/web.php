@@ -801,6 +801,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         // Kepatuhan Roster LIVE — pola roster dirakit dari scan RFID
         // (bcsid.mv_checkinout_rfid) via `php artisan dms:sync-roster-rfid`.
         Route::get('/roster-compliance', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'index'])->name('roster-compliance');
+        Route::get('/roster-compliance/scorecard.csv', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'unduhScorecard'])->name('roster-compliance.scorecard');
         Route::get('/roster-compliance/wajib-cuti.csv', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'unduhWajibCuti'])->name('roster-compliance.wajib-cuti');
         // REG-1/2/3 & MAP-1/2/3 per hari ini, langsung dari RFID.
         Route::get('/roster-compliance/terkini/karyawan/{sid}.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'timelineTerkini'])
@@ -852,7 +853,13 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
             return view($view, [
                 'totalKaryawanLive' => $total->ambil(),
                 'perSiteLive' => $total->perSite(),
-                'karyawanLive' => $karyawan->ambil((int) $req->query('hal', '1'), $perPage, $tahun),
+                // Filter tabel scorecard dibaca dengan sanitasi yang sama dengan
+                // halaman Kepatuhan Roster (Live); nomor halaman lewat ?hal=.
+                'karyawanLive' => $karyawan->ambil(
+                    ['tahun' => $tahun, 'page' => max(1, (int) $req->query('hal', '1'))]
+                        + \App\Http\Controllers\DMS\RosterComplianceController::filters($req),
+                    $perPage,
+                ),
                 'perluTindakanLive' => $karyawan->perluTindakan(12, $tahun),
                 // REG-1/2/3 per hari ini: langsung dari RFID, bukan dari pola.
                 'regTerkiniLive' => app(\App\Services\Dms\Roster\DmsRosterRegLiveService::class)->ambil(),

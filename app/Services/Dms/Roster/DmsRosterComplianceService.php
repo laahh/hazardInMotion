@@ -52,7 +52,9 @@ final class DmsRosterComplianceService
         $tersaring = $this->saring($baris, $filters);
         $tersaring = $this->urutkan($tersaring, (string) ($filters['sort'] ?? 'nama'), (string) ($filters['dir'] ?? 'asc'));
 
-        $perPage = (int) config('dms_roster.per_page', 30);
+        // Pemanggil boleh menentukan ukuran halaman sendiri (mis. tabel
+        // scorecard Ringkasan Roster yang barisnya membawa timeline).
+        $perPage = max(1, (int) ($filters['per_page'] ?? config('dms_roster.per_page', 30)));
         $totalHalaman = max(1, (int) ceil(count($tersaring) / $perPage));
         $halaman = min(max(1, (int) ($filters['page'] ?? 1)), $totalHalaman);
         $potongan = array_slice($tersaring, ($halaman - 1) * $perPage, $perPage);
@@ -191,6 +193,31 @@ final class DmsRosterComplianceService
         usort($wajib, static fn (array $a, array $b): int => $b['onCur'] <=> $a['onCur']);
 
         return $wajib;
+    }
+
+    /**
+     * Seluruh baris hasil filter & urutan (tanpa paginasi) — dipakai tombol
+     * unduh tabel scorecard, supaya isi CSV sama persis dengan yang disaring.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return list<array<string, mixed>>
+     */
+    public function daftarTersaring(array $filters): array
+    {
+        $filters = $this->normalisasiFilters($filters);
+        $tahun = (int) $filters['tahun'];
+        $meta = $this->meta($tahun);
+        if ($meta['jumlah'] === 0) {
+            return [];
+        }
+
+        $periode = $this->resolvePeriode($filters, $tahun, $meta['panjang'], $meta['hari_terakhir']);
+        $baris = $this->evaluasiRingkas($tahun, $periode['r0'], $periode['r1'], $meta['disinkron'], $meta['panjang'])['baris'];
+
+        return $this->lengkapiLabel(
+            $this->urutkan($this->saring($baris, $filters), (string) $filters['sort'], (string) $filters['dir']),
+            $tahun,
+        );
     }
 
     /**

@@ -5,8 +5,12 @@
   Barisnya LIVE: $karyawanLive berisi satu halaman hasil evaluasi rule engine
   atas pola roster nyata, lengkap dengan metadata paginasi. Nomor halaman
   dibawa lewat query ?hal=N. Baris contoh di bawah hanya dipakai bila tabel
-  sinkronisasi belum terisi. Kontrol filter masih belum difungsikan — filter,
-  pengurutan, dan ekspor lengkap ada di halaman Kepatuhan Roster (Live).
+  sinkronisasi belum terisi.
+
+  Toolbar filter (cari, status, notes, roster, kategori, perusahaan, site,
+  periode, urutan kolom, unduh CSV) bekerja lewat query string dan diproses
+  DmsRosterComplianceService — sanitasinya sama dengan halaman Kepatuhan
+  Roster (Live), lihat RosterComplianceController::filters().
 --}}
 
 @php
@@ -231,6 +235,31 @@
     }
     $nomorHal = array_values(array_unique($nomorHal));
     sort($nomorHal);
+
+    // ── Filter tabel ──────────────────────────────────────────────────────
+    // Semua lewat query string (GET) supaya hasil filter bisa dibagikan via
+    // URL dan tombol back browser tetap bekerja. Keadaan & pilihan dropdown
+    // datang dari pembaca (DmsRosterOverviewKaryawanReader::ambil()).
+    $f = $live['filters'] ?? [];
+    $opsi = $live['opsi'] ?? ['status' => [], 'kategori' => [], 'roster' => [], 'site' => [], 'pt' => []];
+    $periodeTabel = $live['periode'] ?? ['jenis' => '', 'nilai' => '', 'minggu' => [], 'bulan' => [], 'dari' => '', 'sampai' => ''];
+    $jenisPeriode = (string) ($periodeTabel['jenis'] ?? '');
+    $nilaiPeriode = (string) ($periodeTabel['nilai'] ?? '');
+    $namaBulan = [1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    $urlTabel = request()->url();
+    $adaFilter = collect(['q', 'status', 'note', 'roster', 'kategori', 'pt', 'site', 'periode'])
+        ->contains(static fn (string $k): bool => (string) ($f[$k] ?? '') !== '');
+
+    // Header kolom yang bisa diurutkan: klik sekali naik, klik lagi turun.
+    // Kunci urut = nama kolom di DmsRosterComplianceService::urutkan().
+    $urutKini = (string) ($f['sort'] ?? 'nama');
+    $arahKini = (string) ($f['dir'] ?? 'asc');
+    $tautanUrut = static function (string $kunci) use ($urutKini, $arahKini): string {
+        $arah = $urutKini === $kunci && $arahKini === 'asc' ? 'desc' : 'asc';
+
+        return request()->fullUrlWithQuery(['sort' => $kunci, 'dir' => $arah, 'hal' => null]).'#ro-scorecard';
+    };
+    $panahUrut = static fn (string $kunci): string => $urutKini === $kunci ? ($arahKini === 'asc' ? ' ▲' : ' ▼') : '';
 @endphp
 
 <div class="col-12" id="ro-scorecard">
@@ -251,58 +280,141 @@
         </div>
       </div>
 
-      {{-- Toolbar tampilan saja — tidak difungsikan karena halaman ini mockup. --}}
-      <div class="ro-sc-toolbar mb-16">
+      {{-- Toolbar filter (GET). Dropdown langsung menerapkan filter saat
+           diganti; kolom cari diterapkan dengan Enter. Nomor halaman sengaja
+           tidak ikut form, jadi setiap filter baru mulai lagi dari halaman 1. --}}
+      <form method="GET" action="{{ $urlTabel }}#ro-scorecard" class="ro-sc-toolbar mb-16" id="roScFilter">
+        <input type="hidden" name="sort" value="{{ $f['sort'] ?? 'nama' }}">
+        <input type="hidden" name="dir" value="{{ $f['dir'] ?? 'asc' }}">
+        <input type="hidden" name="periode" value="{{ $jenisPeriode }}" data-ro-periode>
+        <input type="hidden" name="nilai" value="{{ $nilaiPeriode }}" data-ro-nilai>
+        <input type="hidden" name="note" value="{{ $f['note'] ?? '' }}" data-ro-note>
+
         <div class="row g-2 align-items-center">
           <div class="col-xl-3 col-md-4 col-sm-6">
-            <input type="search" class="form-control form-control-sm" placeholder="Cari nama / kode SID…" disabled>
+            <input type="search" name="q" value="{{ $f['q'] ?? '' }}" class="form-control form-control-sm"
+                   placeholder="Cari nama / SID / jabatan… (Enter)" @disabled(! $live)>
           </div>
-          @foreach (['Semua status', 'Semua notes', 'Semua roster', 'Semua jabatan', 'Semua perusahaan'] as $ph)
-            <div class="col-xl-2 col-md-4 col-sm-6">
-              <select class="form-select form-select-sm" disabled><option>{{ $ph }}</option></select>
-            </div>
-          @endforeach
+          <div class="col-xl-2 col-md-4 col-sm-6">
+            <select name="status" class="form-select form-select-sm" data-ro-auto @disabled(! $live)>
+              <option value="">Semua status</option>
+              @foreach ($opsi['status'] as $s)
+                <option value="{{ $s }}" @selected(($f['status'] ?? '') === $s)>{{ $s }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-xl-2 col-md-4 col-sm-6">
+            <select class="form-select form-select-sm" data-ro-note-select @disabled(! $live)>
+              <option value="">Semua notes</option>
+              <option value="pel" @selected(($f['note'] ?? '') === 'pel')>Pelanggaran regulasi (periode)</option>
+              <option value="wajib" @selected(($f['note'] ?? '') === 'wajib')>Wajib cuti (segera)</option>
+              <option value="map" @selected(($f['note'] ?? '') === 'map')>Tidak sesuai mapping</option>
+            </select>
+          </div>
+          <div class="col-xl-2 col-md-4 col-sm-6">
+            <select name="roster" class="form-select form-select-sm" data-ro-auto @disabled(! $live)>
+              <option value="">Semua roster</option>
+              @foreach ($opsi['roster'] as $r)
+                <option value="{{ $r }}" @selected(($f['roster'] ?? '') === (string) $r)>Roster ke-{{ $r }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-xl-3 col-md-4 col-sm-6">
+            <select name="kategori" class="form-select form-select-sm" data-ro-auto @disabled(! $live)>
+              <option value="">Semua kategori jabatan</option>
+              @foreach ($opsi['kategori'] as $k)
+                <option value="{{ $k }}" @selected(($f['kategori'] ?? '') === $k)>{{ $k }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-xl-3 col-md-4 col-sm-6">
+            <select name="pt" class="form-select form-select-sm" data-ro-auto @disabled(! $live)>
+              <option value="">Semua perusahaan</option>
+              @foreach ($opsi['pt'] as $p)
+                <option value="{{ $p['kode'] }}" @selected(($f['pt'] ?? '') === $p['kode'])>{{ $p['kode'] }} &mdash; {{ $p['nama'] }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-xl-2 col-md-4 col-sm-6">
+            <select name="site" class="form-select form-select-sm" data-ro-auto @disabled(! $live)>
+              <option value="">Semua site</option>
+              @foreach ($opsi['site'] as $s)
+                <option value="{{ $s }}" @selected(($f['site'] ?? '') === $s)>{{ $s }}</option>
+              @endforeach
+            </select>
+          </div>
           <div class="col-xl-1 col-md-4 col-sm-6">
-            <button type="button" class="btn btn-sm btn-outline-success-600 radius-8 w-100" disabled>
+            <a href="{{ $live ? route('dms.roster-compliance.scorecard', request()->except('hal')) : '#' }}"
+               class="btn btn-sm btn-outline-success-600 radius-8 w-100 {{ $live ? '' : 'disabled' }}"
+               title="Unduh CSV sesuai filter">
               <iconify-icon icon="solar:file-download-bold" class="align-middle"></iconify-icon>
-            </button>
+            </a>
           </div>
         </div>
 
         <div class="d-flex flex-wrap align-items-center gap-2 mt-12">
-          <button type="button" class="btn btn-sm btn-outline-success-600 radius-8" disabled>Detail harian</button>
-          <button type="button" class="btn btn-sm btn-outline-danger radius-8" disabled>Wajib cuti (segera)</button>
+          <button type="button" class="btn btn-sm btn-outline-success-600 radius-8" data-ro-detail-semua
+                  aria-pressed="false" @disabled(! $live)>Detail harian</button>
+          <button type="button" class="btn btn-sm radius-8 {{ ($f['note'] ?? '') === 'wajib' ? 'btn-danger' : 'btn-outline-danger' }}"
+                  data-ro-wajib aria-pressed="{{ ($f['note'] ?? '') === 'wajib' ? 'true' : 'false' }}" @disabled(! $live)>Wajib cuti (segera)</button>
+
           <span class="text-secondary-light text-sm ms-8">Periode:</span>
-          @foreach (['Kuartal', 'Bulan', 'Minggu'] as $p)
-            <select class="form-select form-select-sm w-auto" disabled><option>{{ $p }}</option></select>
-          @endforeach
-          <input type="date" class="form-control form-control-sm w-auto" value="2026-01-01" disabled>
+          <select class="form-select form-select-sm w-auto" data-ro-jenis="kuartal" @disabled(! $live)>
+            <option value="">Kuartal</option>
+            @foreach ([1, 2, 3, 4] as $q)
+              <option value="{{ $q }}" @selected($jenisPeriode === 'kuartal' && $nilaiPeriode === (string) $q)>Q{{ $q }}</option>
+            @endforeach
+          </select>
+          <select class="form-select form-select-sm w-auto" data-ro-jenis="bulan" @disabled(! $live)>
+            <option value="">Bulan</option>
+            @foreach ($periodeTabel['bulan'] ?? [] as $b)
+              <option value="{{ $b }}" @selected($jenisPeriode === 'bulan' && $nilaiPeriode === (string) $b)>{{ $namaBulan[$b] ?? $b }}</option>
+            @endforeach
+          </select>
+          <select class="form-select form-select-sm w-auto" data-ro-jenis="minggu" @disabled(! $live)>
+            <option value="">Minggu</option>
+            @foreach ($periodeTabel['minggu'] ?? [] as $w)
+              <option value="{{ $w }}" @selected($jenisPeriode === 'minggu' && $nilaiPeriode === (string) $w)>Minggu ke-{{ $w }}</option>
+            @endforeach
+          </select>
+          <input type="date" name="dari" value="{{ $jenisPeriode === 'custom' ? ($periodeTabel['dari'] ?? '') : '' }}"
+                 class="form-control form-control-sm w-auto" data-ro-tanggal title="Dari tanggal" @disabled(! $live)>
           <span class="text-secondary-light">–</span>
-          <input type="date" class="form-control form-control-sm w-auto" value="2026-09-30" disabled>
-          <button type="button" class="btn btn-sm btn-outline-primary-600 radius-8" disabled>Reset</button>
+          <input type="date" name="sampai" value="{{ $jenisPeriode === 'custom' ? ($periodeTabel['sampai'] ?? '') : '' }}"
+                 class="form-control form-control-sm w-auto" data-ro-tanggal title="Sampai tanggal" @disabled(! $live)>
+          <a href="{{ $urlTabel }}#ro-scorecard" class="btn btn-sm btn-outline-primary-600 radius-8 {{ $adaFilter ? '' : 'disabled' }}">Reset</a>
+
+          @if ($live && $jenisPeriode !== '')
+            <span class="text-xs text-secondary-light">
+              Periode aktif: <b>{{ $periodeTabel['label'] ?? '' }}</b> &mdash; memengaruhi status, kolom roster kini, dan notes;
+              kolom "all roster" tetap YTD.
+            </span>
+          @endif
         </div>
-      </div>
+      </form>
 
       <div class="ro-sc-scroll">
         <table class="ro-sc-table">
           <thead>
             <tr>
               <th class="num">#</th>
-              <th>SID</th>
-              <th>Perusahaan</th>
-              <th>Nama ▲</th>
-              <th>Jabatan</th>
-              <th>Site</th>
-              <th class="num">Roster</th>
-              <th class="num">On-site</th>
-              <th class="num">Pagi</th>
-              <th class="num">Malam</th>
-              <th class="num">Off</th>
-              <th class="num">Cuti</th>
-              <th>Shift kerja maks (roster kini)</th>
-              <th>On-site maks (all roster)</th>
-              <th>Cuti min (all roster)</th>
-              <th>Status</th>
+              @foreach ([
+                ['sid', 'SID', ''], ['perusahaan', 'Perusahaan', ''], ['nama', 'Nama', ''],
+                ['jabatan', 'Jabatan', ''], ['site', 'Site', ''], ['roster', 'Roster', 'num'],
+                ['hadir', 'On-site', 'num'], ['pagi', 'Pagi', 'num'], ['malam', 'Malam', 'num'],
+                ['off', 'Off', 'num'], ['cutiCur', 'Cuti', 'num'],
+                ['onNoOff', 'Shift kerja maks (roster kini)', ''], ['onAll', 'On-site maks (all roster)', ''],
+                ['cutiMin', 'Cuti min (all roster)', ''], ['status', 'Status', ''],
+              ] as [$kunci, $judulKolom, $kelas])
+                <th class="{{ $kelas }}">
+                  @if ($live)
+                    <a href="{{ $tautanUrut($kunci) }}" class="ro-sc-sort {{ $urutKini === $kunci ? 'is-aktif' : '' }}"
+                       title="Urutkan menurut {{ $judulKolom }}">{{ $judulKolom }}{{ $panahUrut($kunci) }}</a>
+                  @else
+                    {{ $judulKolom }}
+                  @endif
+                </th>
+              @endforeach
               <th>Notes</th>
               <th>Timeline harian</th>
             </tr>
@@ -405,9 +517,17 @@
 
       <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mt-16">
         <span class="text-secondary-light text-sm">
-          @if ($live)
+          @if ($live && $live['total'] === 0)
+            Tidak ada karyawan yang cocok dengan filter ini.
+            <a href="{{ $urlTabel }}#ro-scorecard" class="text-primary-600">Reset filter</a>
+          @elseif ($live)
             Menampilkan <b>{{ number_format($live['dari'], 0, ',', '.') }}&ndash;{{ number_format($live['sampai'], 0, ',', '.') }}</b>
-            dari <b>{{ number_format($live['total'], 0, ',', '.') }}</b> karyawan wajib dicek
+            dari <b>{{ number_format($live['total'], 0, ',', '.') }}</b>
+            @if ($adaFilter)
+              karyawan cocok filter (populasi {{ number_format($live['populasi'], 0, ',', '.') }})
+            @else
+              karyawan wajib dicek
+            @endif
             &middot; hal {{ $halKini }}/{{ number_format($halTotal, 0, ',', '.') }}
             &middot; data s/d {{ \Carbon\Carbon::parse($live['hari_terakhir'])->translatedFormat('d M Y') }}
           @else
@@ -452,3 +572,72 @@
     </div>
   </div>
 </div>
+
+<script>
+// Toolbar filter scorecard: dropdown langsung menerapkan filter; tiga pilihan
+// periode (kuartal/bulan/minggu) dan rentang tanggal saling meniadakan.
+(function () {
+    'use strict';
+
+    var form = document.getElementById('roScFilter');
+    if (!form) { return; }
+
+    var periode = form.querySelector('[data-ro-periode]');
+    var nilai = form.querySelector('[data-ro-nilai]');
+    var note = form.querySelector('[data-ro-note]');
+    var jenis = form.querySelectorAll('[data-ro-jenis]');
+    var tanggal = form.querySelectorAll('[data-ro-tanggal]');
+
+    function kirim() { form.requestSubmit ? form.requestSubmit() : form.submit(); }
+
+    form.querySelectorAll('[data-ro-auto]').forEach(function (el) {
+        el.addEventListener('change', kirim);
+    });
+
+    form.querySelector('[data-ro-note-select]').addEventListener('change', function (e) {
+        note.value = e.target.value;
+        kirim();
+    });
+
+    form.querySelector('[data-ro-wajib]').addEventListener('click', function () {
+        note.value = note.value === 'wajib' ? '' : 'wajib';
+        kirim();
+    });
+
+    jenis.forEach(function (sel) {
+        sel.addEventListener('change', function () {
+            jenis.forEach(function (lain) { if (lain !== sel) { lain.value = ''; } });
+            tanggal.forEach(function (t) { t.value = ''; });
+            periode.value = sel.value === '' ? '' : sel.dataset.roJenis;
+            nilai.value = sel.value;
+            kirim();
+        });
+    });
+
+    tanggal.forEach(function (t) {
+        t.addEventListener('change', function () {
+            jenis.forEach(function (sel) { sel.value = ''; });
+            var adaTanggal = Array.prototype.some.call(tanggal, function (x) { return x.value !== ''; });
+            periode.value = adaTanggal ? 'custom' : '';
+            nilai.value = '';
+            kirim();
+        });
+    });
+
+    // "Detail harian": buka/tutup semua panel pola harian di halaman ini.
+    var tombolDetail = form.querySelector('[data-ro-detail-semua]');
+    tombolDetail.addEventListener('click', function () {
+        var buka = tombolDetail.getAttribute('aria-pressed') !== 'true';
+        tombolDetail.setAttribute('aria-pressed', buka ? 'true' : 'false');
+        tombolDetail.classList.toggle('btn-success-600', buka);
+        tombolDetail.classList.toggle('btn-outline-success-600', !buka);
+        document.querySelectorAll('#ro-scorecard .collapse[id^="tl-"]').forEach(function (el) {
+            if (window.bootstrap && window.bootstrap.Collapse) {
+                window.bootstrap.Collapse.getOrCreateInstance(el, { toggle: false })[buka ? 'show' : 'hide']();
+            } else {
+                el.classList.toggle('show', buka);
+            }
+        });
+    });
+})();
+</script>

@@ -10,7 +10,7 @@
 @section('title', 'Ringkasan Roster — Live')
 
 @section('css')
-<link rel="stylesheet" href="{{ asset('dms-assets/roster-compliance/roster-overview.css') }}?v=7">
+<link rel="stylesheet" href="{{ asset('dms-assets/roster-compliance/roster-overview.css') }}?v=8">
 @endsection
 
 @section('content')

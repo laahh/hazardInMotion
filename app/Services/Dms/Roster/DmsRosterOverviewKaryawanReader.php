@@ -13,15 +13,11 @@ use Throwable;
  * Pembaca data karyawan untuk halaman Ringkasan Roster: baris tabel
  * "Scorecard per Karyawan & Timeline" dan daftar "Karyawan Perlu Tindakan".
  *
- * Scorecard membaca dms_roster_pola x dms_roster_karyawan (hasil sinkronisasi
- * RFID) langsung, disaring ke base wajib_cek, lalu tiap pola dijalankan lewat
- * DmsRosterRuleEngine. Sengaja TIDAK lewat DmsRosterComplianceService: tabel
- * ini cuma butuh satu halaman (±10 baris), sedangkan service itu mengevaluasi
- * seluruh populasi untuk menyusun agregat yang tidak dipakai di sini.
- *
- * Sebaliknya daftar perlu tindakan MEMANG butuh peringkat seluruh populasi,
- * jadi bagian itu meminjam DmsRosterComplianceService::daftarWajibCuti() yang
- * hasil evaluasinya di-cache bersama kartu agregat halaman ini.
+ * Keduanya butuh hasil evaluasi seluruh populasi (scorecard untuk filter &
+ * urutan, perlu tindakan untuk peringkat), jadi keduanya meminjam
+ * DmsRosterComplianceService yang hasil evaluasinya di-cache bersama kartu
+ * agregat halaman ini. Pola harian lengkap (panel collapse scorecard) hanya
+ * dievaluasi ulang untuk baris yang tampil.
  *
  * Kedua metode mengembalikan null bila tabel kosong atau database tidak
  * terjangkau, supaya halaman bisa jatuh kembali ke data contoh tanpa gagal
@@ -35,124 +31,139 @@ final class DmsRosterOverviewKaryawanReader
     ) {}
 
     /**
-     * Satu halaman baris scorecard.
+     * Satu halaman baris scorecard sesuai filter tabel (cari, status, notes,
+     * roster, kategori, perusahaan, site, periode, urutan).
      *
+     * Penyaringan, pengurutan, dan paginasi dikerjakan
+     * DmsRosterComplianceService::dashboard() atas hasil evaluasi seluruh
+     * populasi yang sudah di-cache (dipakai bersama kartu agregat halaman
+     * ini), jadi filter tidak menambah evaluasi baru. Pola harian lengkap
+     * untuk panel collapse hanya dievaluasi ulang untuk baris yang tampil.
+     *
+     * @param  array<string, mixed>  $filters  Hasil RosterComplianceController::filters().
      * @return array<string, mixed>|null
      */
-    public function ambil(int $halaman = 1, int $perPage = 10, ?int $tahun = null): ?array
+    public function ambil(array $filters, int $perPage = 10): ?array
     {
-        $tahun ??= CarbonImmutable::now()->year;
-        $perPage = max(1, $perPage);
-
         try {
-            $meta = DB::table('dms_roster_pola as p')
-                ->join('dms_roster_karyawan as k', 'k.id', '=', 'p.karyawan_id')
-                ->where('p.tahun', $tahun)
-                ->where('k.wajib_cek', true)
-                ->selectRaw('COUNT(*) AS jumlah, MAX(p.hari_terakhir) AS hari_terakhir')
-                ->first();
-
-            if ($meta === null || (int) $meta->jumlah === 0) {
+            $payload = $this->compliance->dashboard($filters + ['per_page' => max(1, $perPage)]);
+            if (! ($payload['up'] ?? false)) {
                 return null;
             }
 
-            $total = (int) $meta->jumlah;
-            $totalHalaman = max(1, (int) ceil($total / $perPage));
-            $halaman = min(max(1, $halaman), $totalHalaman);
-
-            // Urut nama, dengan id sebagai pemecah seri: nama karyawan tidak
-            // unik, dan tanpa kunci kedua urutannya bisa bergeser antar
-            // halaman sehingga ada baris yang terlewat atau tampil dua kali.
-            $rows = DB::table('dms_roster_pola as p')
-                ->join('dms_roster_karyawan as k', 'k.id', '=', 'p.karyawan_id')
-                ->where('p.tahun', $tahun)
-                ->where('k.wajib_cek', true)
-                ->select('k.kode_sid', 'k.nama', 'k.jabatan_struktural as jabatan', 'k.kategori',
-                    'k.perusahaan', 'k.kode_pt', 'k.site', 'p.pola')
-                ->orderBy('k.nama')
-                ->orderBy('k.id')
-                ->forPage($halaman, $perPage)
-                ->get();
+            $polaHalaman = $this->polaUntuk(array_column($payload['baris'], 'sid'), (int) $payload['tahun']);
         } catch (Throwable $e) {
             Log::warning('DmsRoster overview karyawan gagal: '.$e->getMessage());
 
             return null;
         }
 
-        if ($rows->isEmpty()) {
-            return null;
-        }
-
-        $awal = CarbonImmutable::create($tahun, 1, 1)->startOfDay();
-        $hariTerakhir = is_string($meta->hari_terakhir ?? null) && $meta->hari_terakhir !== ''
-            ? CarbonImmutable::parse((string) $meta->hari_terakhir)
-            : $awal;
-        $panjang = (int) floor($awal->diffInDays($hariTerakhir, false)) + 1;
-
         $ambang = $this->engine->ambang();
+        $pg = $payload['paginasi'];
+        $panjang = (int) $payload['meta']['panjang'];
         $baris = [];
 
-        foreach ($rows as $i => $row) {
-            $param = $this->paramPt((string) $row->perusahaan);
-            $eval = $this->engine->evaluasi(
-                substr((string) $row->pola, 0, max(1, $panjang)),
-                (string) $row->kategori,
-                $param['thr'],
-                $param['map'],
+        foreach ($payload['baris'] as $i => $r) {
+            $longgar = (bool) $r['longgar'];
+            $pola = $polaHalaman[$r['sid']] ?? null;
+            $eval = $pola === null ? null : $this->engine->evaluasi(
+                substr($pola['pola'], 0, max(1, $panjang)),
+                $pola['kategori'],
+                $this->paramPt($pola['perusahaan'])['thr'],
+                $this->paramPt($pola['perusahaan'])['map'],
             );
 
             $baris[] = [
                 // Nomor urut lanjut antar halaman, bukan mulai 1 lagi.
-                'no' => ($halaman - 1) * $perPage + $i + 1,
-                'sid' => (string) $row->kode_sid,
-                'pt' => (string) $row->kode_pt,
-                'perusahaan' => (string) $row->perusahaan,
-                'nama' => (string) $row->nama,
-                'jabatan' => (string) ($row->jabatan ?? '—'),
-                'kategori' => (string) $row->kategori,
-                'site' => (string) ($row->site ?? '—'),
-                'roster' => $eval->roster,
-                'onsite' => $eval->hadir,
-                'pagi' => $eval->pagi,
-                'malam' => $eval->malam,
-                'off' => $eval->off,
-                'cuti' => $eval->cutiCur,
+                'no' => ($pg['halaman'] - 1) * $pg['per_page'] + $i + 1,
+                'sid' => (string) $r['sid'],
+                'pt' => (string) $r['kode_pt'],
+                'perusahaan' => (string) $r['perusahaan'],
+                'nama' => (string) $r['nama'],
+                'jabatan' => $r['jabatan'] !== '' ? (string) $r['jabatan'] : '—',
+                'kategori' => (string) $r['kategori'],
+                'site' => $r['site'] !== '' ? (string) $r['site'] : '—',
+                'roster' => (int) $r['roster'],
+                'onsite' => (int) $r['hadir'],
+                'pagi' => (int) $r['pagi'],
+                'malam' => (int) $r['malam'],
+                'off' => (int) $r['off'],
+                'cuti' => (int) $r['cutiCur'],
                 'shiftMaks' => [
-                    $eval->onNoOff.' hari beruntun',
-                    $this->rentang($awal, $eval->onS, $eval->onE),
-                    ! $eval->longgar && $eval->onNoOff > ($ambang['kerja_beruntun'] ?? 13),
+                    $r['onNoOff'].' hari beruntun',
+                    $r['rentang_onNoOff'] !== '' ? $r['rentang_onNoOff'] : '—',
+                    ! $longgar && $r['onNoOff'] > ($ambang['kerja_beruntun'] ?? 13),
                 ],
                 'onsiteMaks' => [
-                    $eval->onAll.' hari',
-                    $eval->onAll > 0 ? 'roster ke-'.$eval->onAllR.' · '.$this->rentang($awal, $eval->onAllS, $eval->onAllE) : '—',
-                    ! $eval->longgar && $eval->onAll > ($ambang['onsite'] ?? 71),
+                    $r['onAll'].' hari',
+                    $r['onAll'] > 0 ? 'roster ke-'.$r['onAllR'].' · '.$r['rentang_onAll'] : '—',
+                    ! $longgar && $r['onAll'] > ($ambang['onsite'] ?? 71),
                 ],
                 'cutiMin' => [
-                    $eval->cutiMin > 0 ? $eval->cutiMin.' hari' : '—',
-                    $eval->cutiMin > 0 ? 'roster ke-'.$eval->cutiMinR.' · '.$this->rentang($awal, $eval->cutiMinS, $eval->cutiMinE) : '—',
-                    ! $eval->longgar && $eval->cutiMin > 0 && $eval->cutiMin < ($ambang['cuti_min'] ?? 12),
+                    $r['cutiMin'] > 0 ? $r['cutiMin'].' hari' : '—',
+                    $r['cutiMin'] > 0 ? 'roster ke-'.$r['cutiMinR'].' · '.$r['rentang_cutiMin'] : '—',
+                    ! $longgar && $r['cutiMin'] > 0 && $r['cutiMin'] < ($ambang['cuti_min'] ?? 12),
                 ],
-                'status' => $eval->status,
-                'pelanggaran' => $eval->everRed,
-                'longgar' => $eval->longgar,
+                'status' => (string) $r['status'],
+                'pelanggaran' => (bool) $r['everRed'],
+                'longgar' => $longgar,
                 // Dipakai panel collapse untuk menggambar pola harian.
-                'pola' => $eval->pola,
-                'merah' => array_map(static fn (string $v): bool => $v !== '', $eval->red),
+                'pola' => $eval?->pola ?? '',
+                'merah' => $eval === null ? [] : array_map(static fn (string $v): bool => $v !== '', $eval->red),
             ];
         }
 
         return [
-            'tahun' => $tahun,
-            'hari_terakhir' => $hariTerakhir->toDateString(),
+            'tahun' => (int) $payload['tahun'],
+            'hari_terakhir' => (string) $payload['meta']['hari_terakhir'],
             'panjang' => $panjang,
-            'total' => $total,
-            'halaman' => $halaman,
-            'per_page' => $perPage,
-            'total_halaman' => $totalHalaman,
-            'dari' => ($halaman - 1) * $perPage + 1,
-            'sampai' => ($halaman - 1) * $perPage + count($baris),
+            'total' => (int) $pg['total_baris'],
+            'populasi' => (int) $payload['agregat']['total'],
+            'halaman' => (int) $pg['halaman'],
+            'per_page' => (int) $pg['per_page'],
+            'total_halaman' => (int) $pg['total_halaman'],
+            'dari' => (int) $pg['dari'],
+            'sampai' => (int) $pg['sampai'],
             'baris' => $baris,
+            // Isi pilihan dropdown filter & keadaannya saat ini.
+            'filters' => $payload['filters'],
+            'periode' => $payload['periode'],
+            'opsi' => [
+                'status' => $payload['statusTersedia'],
+                'kategori' => $payload['kategoriTersedia'],
+                'roster' => $payload['rosterTersedia'],
+                'site' => $payload['siteTersedia'],
+                'pt' => array_map(
+                    static fn (array $p): array => ['kode' => $p['kode'], 'nama' => $p['perusahaan']],
+                    $payload['perPt'],
+                ),
+            ],
         ];
+    }
+
+    /**
+     * Pola mentah untuk sekumpulan SID (satu halaman tabel).
+     *
+     * @param  list<string>  $sids
+     * @return array<string, array{pola:string,kategori:string,perusahaan:string}>
+     */
+    private function polaUntuk(array $sids, int $tahun): array
+    {
+        if ($sids === []) {
+            return [];
+        }
+
+        return DB::table('dms_roster_pola as p')
+            ->join('dms_roster_karyawan as k', 'k.id', '=', 'p.karyawan_id')
+            ->where('p.tahun', $tahun)
+            ->whereIn('k.kode_sid', $sids)
+            ->get(['k.kode_sid', 'p.pola', 'k.kategori', 'k.perusahaan'])
+            ->mapWithKeys(static fn (object $r): array => [(string) $r->kode_sid => [
+                'pola' => (string) $r->pola,
+                'kategori' => (string) $r->kategori,
+                'perusahaan' => (string) $r->perusahaan,
+            ]])
+            ->all();
     }
 
     /**
@@ -217,15 +228,5 @@ final class DmsRosterOverviewKaryawanReader
             'thr' => (int) ($p['thr'] ?? config('dms_roster.thr_default', 7)),
             'map' => (string) ($p['map'] ?? config('dms_roster.map_default', 'block')),
         ];
-    }
-
-    private function rentang(CarbonImmutable $awal, int $mulai, int $selesai): string
-    {
-        if ($mulai < 0 || $selesai < 0) {
-            return '—';
-        }
-
-        return $awal->addDays($mulai)->translatedFormat('j M')
-            .'–'.$awal->addDays($selesai)->translatedFormat('j M');
     }
 }

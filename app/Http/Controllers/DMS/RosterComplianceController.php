@@ -30,7 +30,7 @@ final class RosterComplianceController extends Controller
 
     public function index(Request $request): View
     {
-        return view('dms.roster-compliance', $this->service->dashboard($this->filters($request)));
+        return view('dms.roster-compliance', $this->service->dashboard(self::filters($request)));
     }
 
     /**
@@ -43,7 +43,7 @@ final class RosterComplianceController extends Controller
             return response()->json(['message' => 'Kode SID tidak valid.'], 422);
         }
 
-        $detail = $this->service->detailKaryawan($sid, $this->tahun($request));
+        $detail = $this->service->detailKaryawan($sid, self::tahun($request));
 
         if (($detail['found'] ?? false) === false) {
             return response()->json(['message' => 'Karyawan tidak ada di populasi roster tahun ini.'], 404);
@@ -58,7 +58,7 @@ final class RosterComplianceController extends Controller
      */
     public function unduhWajibCuti(Request $request): StreamedResponse
     {
-        $filters = $this->filters($request);
+        $filters = self::filters($request);
         $baris = $this->service->daftarWajibCuti($filters);
         $nama = 'wajib-cuti-'.CarbonImmutable::now()->format('Ymd-Hi').'.csv';
 
@@ -76,6 +76,44 @@ final class RosterComplianceController extends Controller
                 fputcsv($out, [
                     $r['sid'], $r['nama'], $r['jabatan'], $r['kategori'], $r['perusahaan'],
                     $r['site'], $r['roster'], $r['onCur'], $r['onAll'], $r['cutiMin'], $r['status'],
+                ], ';');
+            }
+
+            fclose($out);
+        }, $nama, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    /**
+     * Isi tabel scorecard sesuai filter yang sedang aktif (tanpa paginasi) —
+     * tombol unduh di toolbar tabel Ringkasan Roster.
+     */
+    public function unduhScorecard(Request $request): StreamedResponse
+    {
+        $baris = $this->service->daftarTersaring(self::filters($request));
+        $nama = 'scorecard-roster-'.CarbonImmutable::now()->format('Ymd-Hi').'.csv';
+
+        return response()->streamDownload(function () use ($baris): void {
+            $out = fopen('php://output', 'wb');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, [
+                'SID', 'Nama', 'Jabatan', 'Kategori', 'Perusahaan', 'Site', 'Roster ke-',
+                'On-site', 'Pagi', 'Malam', 'Off', 'Cuti',
+                'Shift kerja maks (hari)', 'Rentang shift maks',
+                'On-site maks (hari)', 'Rentang on-site maks',
+                'Cuti min (hari)', 'Rentang cuti min',
+                'Status', 'Pelanggaran YTD', 'Wajib cuti',
+            ], ';');
+
+            foreach ($baris as $r) {
+                fputcsv($out, [
+                    $r['sid'], $r['nama'], $r['jabatan'], $r['kategori'], $r['perusahaan'], $r['site'], $r['roster'],
+                    $r['hadir'], $r['pagi'], $r['malam'], $r['off'], $r['cutiCur'],
+                    $r['onNoOff'], $r['rentang_onNoOff'],
+                    $r['onAll'], $r['rentang_onAll'],
+                    $r['cutiMin'], $r['rentang_cutiMin'],
+                    $r['status'], $r['everRed'] ? 'Ya' : 'Tidak', $r['wajib'] ? 'Ya' : 'Tidak',
                 ], ';');
             }
 
@@ -173,7 +211,7 @@ final class RosterComplianceController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function filters(Request $request): array
+    public static function filters(Request $request): array
     {
         $periode = (string) $request->query('periode', '');
         $periode = in_array($periode, ['kuartal', 'bulan', 'minggu', 'custom'], true) ? $periode : '';
@@ -181,7 +219,7 @@ final class RosterComplianceController extends Controller
         $dir = strtolower((string) $request->query('dir', 'asc'));
 
         return [
-            'tahun' => $this->tahun($request),
+            'tahun' => self::tahun($request),
             'q' => mb_substr(trim((string) $request->query('q', '')), 0, 100),
             'pt' => mb_substr(trim((string) $request->query('pt', '')), 0, 20),
             'site' => mb_substr(trim((string) $request->query('site', '')), 0, 60),
@@ -195,15 +233,15 @@ final class RosterComplianceController extends Controller
                 : '',
             'periode' => $periode,
             'nilai' => mb_substr(trim((string) $request->query('nilai', '')), 0, 4),
-            'dari' => $this->tanggal($request->query('dari')),
-            'sampai' => $this->tanggal($request->query('sampai')),
+            'dari' => self::tanggal($request->query('dari')),
+            'sampai' => self::tanggal($request->query('sampai')),
             'sort' => mb_substr(trim((string) $request->query('sort', 'nama')), 0, 20),
             'dir' => $dir === 'desc' ? 'desc' : 'asc',
             'page' => max(1, (int) $request->query('page', 1)),
         ];
     }
 
-    private function tahun(Request $request): int
+    private static function tahun(Request $request): int
     {
         $tahun = (int) $request->query('tahun', (string) CarbonImmutable::now()->year);
         $sekarang = CarbonImmutable::now()->year;
@@ -211,10 +249,14 @@ final class RosterComplianceController extends Controller
         return $tahun >= 2020 && $tahun <= $sekarang ? $tahun : $sekarang;
     }
 
-    private function tanggal(mixed $nilai): string
+    private static function tanggal(mixed $nilai): string
     {
         $s = trim((string) $nilai);
 
-        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $s) === 1 ? $s : '';
+        // Format cocok belum tentu tanggal yang ada (mis. 2026-13-99) —
+        // tanggal mustahil akan menggagalkan parsing periode di service.
+        return preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $s, $m) === 1 && checkdate((int) $m[2], (int) $m[3], (int) $m[1])
+            ? $s
+            : '';
     }
 }
