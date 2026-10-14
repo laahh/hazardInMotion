@@ -44,7 +44,7 @@ final class DmsRosterRegLiveService
     ) {}
 
     /**
-     * @return array{per:string,diambil:string,jendela:int,daftar:array<string,list<array<string,mixed>>>}|null
+     * @return array{per:string,diambil:string,jendela:int,populasi:int,daftar:array<string,list<array<string,mixed>>>}|null
      *         null bila RFID tidak terjangkau / query gagal.
      */
     public function ambil(): ?array
@@ -52,7 +52,7 @@ final class DmsRosterRegLiveService
         $hariIni = CarbonImmutable::now()->startOfDay();
         // Versi master banned ikut di kunci: begitu ada orang di-banned atau
         // dicabut, hasil langsung dihitung ulang tanpa menunggu TTL habis.
-        $key = 'dms_roster:aturan_live:v5:'.$hariIni->toDateString().':'.$this->versiMasterBanned();
+        $key = 'dms_roster:aturan_live:v6:'.$hariIni->toDateString().':'.$this->versiMasterBanned();
 
         $tersimpan = Cache::get($key);
         if (is_array($tersimpan)) {
@@ -270,7 +270,7 @@ final class DmsRosterRegLiveService
     }
 
     /**
-     * @return array{per:string,diambil:string,jendela:int,daftar:array<string,list<array<string,mixed>>>}|null
+     * @return array{per:string,diambil:string,jendela:int,populasi:int,daftar:array<string,list<array<string,mixed>>>}|null
      */
     private function hitung(CarbonImmutable $hariIni): ?array
     {
@@ -339,6 +339,8 @@ final class DmsRosterRegLiveService
             'per' => $hariIni->translatedFormat('j M Y'),
             'diambil' => CarbonImmutable::now()->translatedFormat('j M Y H:i'),
             'jendela' => $panjang,
+            // Karyawan yang dinilai (7 PT, tanpa master banned) — pembagi persen tile.
+            'populasi' => $karyawan->count(),
             'daftar' => $daftar,
         ];
     }

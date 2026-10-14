@@ -19,9 +19,7 @@
     $lencana = $lencana ?? ['teks' => 'DATA CONTOH', 'kelas' => 'bg-warning-focus text-warning-main'];
 
     // Ambang dibaca dari config yang sama dengan rule engine, supaya label
-    // tile tidak pernah menyebut angka yang berbeda dari yang dihitung.
-    $ambangReg3 = (int) config('dms_roster.ambang.cuti_min', 12);
-    $ambangOvershift = (int) config('dms_roster.ambang.overshift', 8);
+    // kartu tidak pernah menyebut angka yang berbeda dari yang dihitung.
     $ambangWajib = (int) config('dms_roster.ambang.wajib_cuti', 71);
 
     // ── Total karyawan: LIVE bila tersedia, jika tidak pakai angka contoh ──
@@ -34,7 +32,7 @@
         ? $live['punya_simper_aktif'] / $live['total'] * 100
         : null;
 
-    // ── Empat tile: pakai agregat asli bila tersedia ──────────────────────
+    // ── Agregat pola roster (donat, kepatuhan keseluruhan) ────────────────
     // Sumbernya DmsRosterComplianceService (dipakai bersama halaman
     // Kepatuhan Roster Live), jadi angka di dua halaman tidak mungkin beda.
     $ag = $agregatLive ?? null;
@@ -42,8 +40,6 @@
     $pctTile = static fn (int $x): string => $basisTile > 0
         ? number_format($x / $basisTile * 100, 1, ',', '.').'%'
         : '0%';
-    $rasio = static fn (int $x): string => number_format($x, 0, ',', '.')
-        .' / '.number_format($basisTile, 0, ',', '.');
 
     // ── Donat pelanggaran ─────────────────────────────────────────────────
     // Penyebutnya selalu populasi yang BENAR-BENAR dievaluasi ($ag['total']),
@@ -55,87 +51,29 @@
     $persenPatuh = $basisDonat > 0 ? $patuh / $basisDonat * 100 : 0;
     $persenPelanggaran = 100 - $persenPatuh;
 
-    if ($ag) {
-        $cutiOk = $ag['total'] - $ag['reg3'];
-        $overshift = $ag['status']['Overshift'] ?? 0;
-
-        $tiles = [
-            [
-                'label' => 'Kepatuhan Roster',
-                'nilai' => $pctTile($patuh),
-                'sub' => $rasio($patuh),
-                'subTeks' => 'tanpa pelanggaran REG',
-                'ikon' => 'solar:clipboard-check-bold',
-                'warnaIkon' => 'text-primary-600 bg-primary-light border-primary-light-white',
-                'pil' => 'bg-success-focus text-success-main',
-                'border' => 'border border-top-0',
-            ],
-            [
-                'label' => 'Cuti Memenuhi Ambang',
-                'nilai' => $pctTile($cutiOk),
-                'sub' => $rasio($cutiOk),
-                'subTeks' => 'cuti terpendek ≥ '.$ambangReg3.' hari',
-                'ikon' => 'solar:calendar-date-bold',
-                'warnaIkon' => 'text-yellow bg-yellow-light border-yellow-light-white',
-                'pil' => 'bg-success-focus text-success-main',
-                'border' => 'border border-top-0 border-start-0 border-end-0',
-            ],
-            [
-                'label' => 'Overshift (kini)',
-                'nilai' => $pctTile($overshift),
-                'sub' => $rasio($overshift),
-                'subTeks' => 'kerja ≥'.$ambangOvershift.' hari beruntun',
-                'ikon' => 'solar:alarm-bold',
-                // Dashboard PnC memakai text-lilac/bg-lilac-light yang tidak
-                // pernah didefinisikan di style.css; dipakai palet ungu yang ada.
-                'warnaIkon' => 'text-purple bg-purple-light border-purple-light-white',
-                'pil' => 'bg-warning-focus text-warning-main',
-                'border' => 'border border-top-0 border-bottom-0',
-            ],
-            [
-                'label' => 'Wajib Cuti Segera',
-                'nilai' => $pctTile($ag['wajib_cuti']),
-                'sub' => $rasio($ag['wajib_cuti']),
-                // Rumus persis referensi: hitung mundur dari hari terakhir
-                // selama belum ketemu cuti; wajib bila > ambang dan bukan
-                // kategori regulasi longgar.
-                'subTeks' => 'on-site berjalan >'.$ambangWajib.' hari',
-                'ikon' => 'solar:shield-warning-bold',
-                'warnaIkon' => 'text-pink bg-pink-light border-pink-light-white',
-                'pil' => 'bg-danger-focus text-danger-main',
-                'border' => 'border border-top-0 border-bottom-0 border-start-0 border-end-0',
-            ],
-        ];
-    } else {
-        $tiles = [
-            [
-                'label' => 'Kepatuhan Roster', 'nilai' => '82,4%', 'sub' => '4.605 / 5.588',
-                'subTeks' => 'tanpa pelanggaran REG', 'ikon' => 'solar:clipboard-check-bold',
-                'warnaIkon' => 'text-primary-600 bg-primary-light border-primary-light-white',
-                'pil' => 'bg-success-focus text-success-main', 'border' => 'border border-top-0',
-            ],
-            [
-                'label' => 'Cuti Memenuhi Ambang', 'nilai' => '96,2%', 'sub' => '1.204 / 1.252',
-                'subTeks' => 'cuti terpendek ≥ '.$ambangReg3.' hari', 'ikon' => 'solar:calendar-date-bold',
-                'warnaIkon' => 'text-yellow bg-yellow-light border-yellow-light-white',
-                'pil' => 'bg-success-focus text-success-main',
-                'border' => 'border border-top-0 border-start-0 border-end-0',
-            ],
-            [
-                'label' => 'Overshift (kini)', 'nilai' => '3,1%', 'sub' => '173 / 5.588',
-                'subTeks' => 'kerja ≥'.$ambangOvershift.' hari beruntun', 'ikon' => 'solar:alarm-bold',
-                'warnaIkon' => 'text-purple bg-purple-light border-purple-light-white',
-                'pil' => 'bg-warning-focus text-warning-main',
-                'border' => 'border border-top-0 border-bottom-0',
-            ],
-            [
-                'label' => 'Wajib Cuti Segera', 'nilai' => '1,8%', 'sub' => '101 / 5.588',
-                'subTeks' => 'on-site berjalan >'.$ambangWajib.' hari',
-                'ikon' => 'solar:shield-warning-bold',
-                'warnaIkon' => 'text-pink bg-pink-light border-pink-light-white',
-                'pil' => 'bg-danger-focus text-danger-main',
-                'border' => 'border border-top-0 border-bottom-0 border-start-0 border-end-0',
-            ],
+    // ── Empat tile: aturan banned per hari ini, langsung dari RFID ────────
+    // Sumbernya DmsRosterRegLiveService ($regTerkiniLive) — angka yang sama
+    // dengan modal detailnya. Persen dihitung terhadap karyawan yang benar-
+    // benar dinilai aturan ini (7 PT, tanpa master banned), bukan total
+    // karyawan di kartu kiri.
+    $regKini = $regTerkiniLive ?? null;
+    $populasiAturan = (int) ($regKini['populasi'] ?? 0);
+    $borderTile = [
+        'border border-top-0',
+        'border border-top-0 border-start-0 border-end-0',
+        'border border-top-0 border-bottom-0',
+        'border border-top-0 border-bottom-0 border-start-0 border-end-0',
+    ];
+    $tiles = [];
+    foreach (\App\Services\Dms\Roster\DmsRosterAturanKartu::daftar() as $i => $k) {
+        $n = \App\Services\Dms\Roster\DmsRosterAturanKartu::jumlahOrang($k, $regKini);
+        $tiles[] = $k + [
+            'jumlah' => $n === null ? '—' : number_format($n, 0, ',', '.'),
+            'persen' => $n !== null && $populasiAturan > 0
+                ? number_format($n / $populasiAturan * 100, 1, ',', '.').'% dari '.number_format($populasiAturan, 0, ',', '.').' karyawan'
+                : null,
+            'tab' => array_key_first($k['item']),
+            'border' => $borderTile[$i] ?? 'border',
         ];
     }
 
@@ -347,23 +285,31 @@
 
         <div class="col-xxl-6">
           <div class="row h-100 g-0">
+            {{-- Tiap tile membuka modal detail aturannya (daftar nama, unduh
+                 CSV, timeline tap RFID per orang) dari _roster-reg-terkini. --}}
             @foreach ($tiles as $t)
               <div class="col-6 p-0 m-0">
-                <div class="card-body p-24 h-100 d-flex flex-column justify-content-center {{ $t['border'] }}">
-                  <div class="d-flex flex-wrap align-items-center justify-content-between gap-1 mb-8">
-                    <div>
-                      <span class="mb-12 w-44-px h-44-px {{ $t['warnaIkon'] }} border flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6">
-                        <iconify-icon icon="{{ $t['ikon'] }}" class="icon"></iconify-icon>
-                      </span>
-                      <span class="mb-1 fw-bold text-secondary-light text-md">{{ $t['label'] }}</span>
-                      <h6 class="fw-semibold text-primary-light mb-1">{{ $t['nilai'] }}</h6>
-                    </div>
-                  </div>
-                  <p class="text-sm mb-0">
-                    <span class="{{ $t['pil'] }} px-1 rounded-2 fw-medium text-sm">{{ $t['sub'] }}</span>
-                    {{ $t['subTeks'] }}
-                  </p>
-                </div>
+                <button type="button"
+                        class="ro-aturan-tile card-body p-24 h-100 w-100 text-start bg-transparent d-flex flex-column justify-content-center {{ $t['border'] }}"
+                        data-bs-toggle="modal" data-bs-target="#roModalTemuan-{{ $t['id'] }}" data-ro-tab="{{ $t['tab'] }}"
+                        title="{{ $t['catatan'] }}" @disabled(! $regKini)>
+                  <span class="mb-12 w-44-px h-44-px bg-{{ $t['warna'] }}-focus text-{{ $t['warna'] }}-main border flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6">
+                    <iconify-icon icon="{{ $t['ikon'] }}" class="icon"></iconify-icon>
+                  </span>
+                  <span class="d-block mb-1 fw-bold text-secondary-light text-md">
+                    {{ $t['judul'] }} <span class="text-{{ $t['warna'] }}-main">{{ $t['ambang'] }}</span>
+                  </span>
+                  <span class="d-block h6 fw-semibold text-primary-light mb-1">
+                    {{ $t['jumlah'] }} <span class="text-sm text-secondary-light fw-normal">orang</span>
+                  </span>
+                  <span class="d-block text-sm mb-0">
+                    <span class="bg-{{ $t['warna'] }}-focus text-{{ $t['warna'] }}-main px-1 rounded-2 fw-medium text-sm">{{ $t['perlakuan'] }}</span>
+                    {{ $t['persen'] ?? ($regKini ? '' : 'RFID tidak terjangkau saat ini') }}
+                  </span>
+                  @if ($regKini)
+                    <span class="d-block text-xs fw-semibold text-primary-600 mt-8">Lihat detail &rarr;</span>
+                  @endif
+                </button>
               </div>
             @endforeach
           </div>
