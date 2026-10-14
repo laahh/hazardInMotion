@@ -52,7 +52,7 @@ final class DmsRosterRegLiveService
         $hariIni = CarbonImmutable::now()->startOfDay();
         // Versi master banned ikut di kunci: begitu ada orang di-banned atau
         // dicabut, hasil langsung dihitung ulang tanpa menunggu TTL habis.
-        $key = 'dms_roster:aturan_live:v6:'.$hariIni->toDateString().':'.$this->versiMasterBanned();
+        $key = 'dms_roster:aturan_live:v7:'.$hariIni->toDateString().':'.$this->versiMasterBanned();
 
         $tersimpan = Cache::get($key);
         if (is_array($tersimpan)) {
@@ -369,13 +369,22 @@ final class DmsRosterRegLiveService
             default => '',
         };
 
-        return [
+        $baris = [
             'nilai' => ($run['terpotong'] ? '≥' : '').$run['hari'].' hari',
             'urut' => $run['hari'],
             'mulai' => $tanggal($run['mulai']),
             'selesai' => $tanggal($run['selesai']),
             'keterangan' => $keterangan,
         ];
+
+        // Kartu "Karyawan Perlu Tindakan" butuh jadwal banned terpisah dari
+        // kalimat keterangan: tanggal hari ke-74 dan apakah sudah lewat.
+        if ($kode === 'onsite') {
+            $baris['tgl_banned'] = $hariKe($aturan['onsite_banned_hari_ke']);
+            $baris['jatuh_tempo'] = $run['hari'] >= $aturan['onsite_banned_hari_ke'];
+        }
+
+        return $baris;
     }
 
     /**

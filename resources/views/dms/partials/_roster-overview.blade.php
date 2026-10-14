@@ -3,24 +3,23 @@
 
   Hampir seluruh kartu sudah LIVE, memakai variabel yang dikirim route:
   $totalKaryawanLive / $perSiteLive (populasi + sebaran site), $agregatLive
-  (hasil rule engine: pelanggaran, REG, wajib cuti, status), $heatmapLive
-  (grid kalender harian), $perluTindakanLive (peringkat wajib cuti), dan
-  $karyawanLive (satu halaman baris scorecard).
+  (hasil rule engine: pelanggaran, status), $heatmapLive (grid kalender
+  harian), $karyawanLive (satu halaman baris scorecard), dan $regTerkiniLive
+  (aturan banned per hari ini langsung dari RFID: empat tile + daftar
+  Karyawan Perlu Tindakan).
 
   Setiap kartu punya cabang contoh: bila variabelnya null — tabel sinkronisasi
   belum terisi atau database tidak terjangkau — halaman tetap render dengan
-  angka contoh, bukan 500. Variabel $judul, $subjudul, dan $lencana dikirim
-  view pemanggil hanya untuk membedakan label halaman.
+  angka contoh, bukan 500. Pengecualian: kartu berbasis RFID menampilkan
+  keadaan "tidak terjangkau", karena nama orang contoh mudah disangka asli.
+  Variabel $judul, $subjudul, dan $lencana dikirim view pemanggil hanya untuk
+  membedakan label halaman.
 --}}
 
 @php
     $judul = $judul ?? 'Ringkasan Kepatuhan Roster';
     $subjudul = $subjudul ?? 'Safety & Roster · Kepatuhan Jam Kerja Karyawan';
     $lencana = $lencana ?? ['teks' => 'DATA CONTOH', 'kelas' => 'bg-warning-focus text-warning-main'];
-
-    // Ambang dibaca dari config yang sama dengan rule engine, supaya label
-    // kartu tidak pernah menyebut angka yang berbeda dari yang dihitung.
-    $ambangWajib = (int) config('dms_roster.ambang.wajib_cuti', 71);
 
     // ── Total karyawan: LIVE bila tersedia, jika tidak pakai angka contoh ──
     // Angka utama = yang PUNYA SIMPER AKTIF, bukan seluruh karyawan aktif.
@@ -135,18 +134,15 @@
     $adaPolaHarian = ($peta['sebaranHari'] ?? 0) >= 0.05;
 
     // ── Daftar karyawan perlu tindakan ────────────────────────────────────
-    // Peringkat wajib cuti (on-site berjalan terpanjang lebih dulu).
-    $tindakan = $perluTindakanLive ?? null;
-    $perluTindakan = $tindakan['baris'] ?? [
-        ['nama' => 'A-3-00014042', 'sid' => 'A-3-00014042', 'site' => 'LMO', 'pt' => 'BUMA', 'hari' => 112, 'sejak' => '11 Jun 2026'],
-        ['nama' => 'A-14-00014039', 'sid' => 'A-14-00014039', 'site' => 'LMO', 'pt' => 'BUMA', 'hari' => 104, 'sejak' => '19 Jun 2026'],
-        ['nama' => 'A-14-00013966-2', 'sid' => 'A-14-00013966-2', 'site' => 'LMO', 'pt' => 'BUMA', 'hari' => 98, 'sejak' => '25 Jun 2026'],
-        ['nama' => 'B-7-00013904', 'sid' => 'B-7-00013904', 'site' => 'BMO 2', 'pt' => 'PAMA', 'hari' => 91, 'sejak' => '2 Jul 2026'],
-        ['nama' => 'B-2-00013877', 'sid' => 'B-2-00013877', 'site' => 'GMO', 'pt' => 'PAMA', 'hari' => 88, 'sejak' => '5 Jul 2026'],
-        ['nama' => 'C-9-00013810', 'sid' => 'C-9-00013810', 'site' => 'SMO', 'pt' => 'MTN', 'hari' => 83, 'sejak' => '10 Jul 2026'],
-        ['nama' => 'C-1-00013788', 'sid' => 'C-1-00013788', 'site' => 'BMO 1', 'pt' => 'KDC', 'hari' => 79, 'sejak' => '14 Jul 2026'],
-    ];
-    $totalTindakan = $tindakan['total'] ?? count($perluTindakan);
+    // = yang harus di-banned sekarang: "Pelanggaran periode kerja > 70 hari"
+    // dari RFID langsung — daftar yang SAMA dengan tile & modalnya (7 PT,
+    // tanpa master banned), sudah urut periode terpanjang lebih dulu.
+    // Tanpa data RFID kartu menampilkan keadaan kosong, bukan nama contoh.
+    $perluTindakan = $regKini['daftar']['onsite'] ?? [];
+    $totalTindakan = count($perluTindakan);
+    $jatuhTempo = count(array_filter($perluTindakan, static fn (array $p): bool => (bool) ($p['jatuh_tempo'] ?? false)));
+    $onsiteMaks = (int) config('dms_roster.reg_live.aturan.onsite_maks', 70);
+    $hariBanned = (int) config('dms_roster.reg_live.aturan.onsite_banned_hari_ke', 74);
 
     // ── Bar chart per site, dipecah kelompok jabatan struktural ───────────
     // Pakai data asli bila tersedia; kalau tidak, contoh dengan bentuk sama.
@@ -470,15 +466,20 @@
         <div class="d-flex align-items-center flex-wrap gap-2 justify-content-between">
           <h6 class="mb-0 fw-bold text-lg">Karyawan Perlu Tindakan</h6>
           <span class="text-secondary-light text-sm">
-            {{ number_format($totalTindakan, 0, ',', '.') }} orang
-            @if ($tindakan)
-              <span class="text-success-600 fw-semibold">&middot; live</span>
+            @if ($regKini)
+              {{ number_format($totalTindakan, 0, ',', '.') }} orang
+              <span class="text-success-600 fw-semibold">&middot; RFID</span>
+            @else
+              &mdash;
             @endif
           </span>
         </div>
         <span class="ro-card__subtitle mt-4">
-          Wajib cuti segera &mdash; on-site berjalan lebih dari {{ $ambangWajib }} hari tanpa cuti,
-          diurutkan dari yang terpanjang.
+          Harus di-banned sekarang &mdash; periode kerja lebih dari {{ $onsiteMaks }} hari sejak cuti terakhir
+          (banned 14 hari di hari ke-{{ $hariBanned }}), urut dari yang terpanjang.
+          @if ($jatuhTempo > 0)
+            <b class="text-danger-main">{{ number_format($jatuhTempo, 0, ',', '.') }} sudah lewat hari ke-{{ $hariBanned }}.</b>
+          @endif
         </span>
 
         {{-- Daftar mengisi sisa tinggi kartu lalu bergulir, bukan menentukan
@@ -486,34 +487,56 @@
              memanjang dan menyisakan ruang kosong di bawah grid. --}}
         <div class="ro-isi-sisa mt-24">
         <div class="ro-isi-sisa__gulir overflow-y-auto scroll-sm">
+          @if (! $regKini)
+            <p class="text-secondary-light text-sm mb-0">RFID tidak terjangkau saat ini; muat ulang beberapa saat lagi.</p>
+          @elseif ($perluTindakan === [])
+            <p class="text-success-600 text-sm fw-medium mb-0">Tidak ada karyawan yang harus di-banned per hari ini.</p>
+          @endif
+          {{-- Klik nama membuka modal "Pelanggaran periode kerja" (daftar
+               lengkap + timeline tap RFID) dari _roster-reg-terkini. --}}
           @foreach ($perluTindakan as $i => $p)
-            <div class="d-flex align-items-center justify-content-between gap-3 {{ $i === count($perluTindakan) - 1 ? '' : 'mb-24' }}">
-              <div class="d-flex align-items-center gap-2" style="min-width:0">
+            <button type="button"
+                    class="ro-tindakan-item w-100 text-start bg-transparent border-0 p-0 d-flex align-items-center justify-content-between gap-3 {{ $loop->last ? '' : 'mb-20' }}"
+                    data-bs-toggle="modal" data-bs-target="#roModalTemuan-onsite" data-ro-tab="onsite"
+                    title="{{ $p['keterangan'] }}">
+              <span class="d-flex align-items-center gap-2" style="min-width:0">
                 <span class="w-40-px h-40-px radius-8 flex-shrink-0 bg-danger-focus text-danger-main d-flex justify-content-center align-items-center">
-                  <iconify-icon icon="solar:close-circle-bold"></iconify-icon>
+                  <iconify-icon icon="solar:forbidden-circle-bold"></iconify-icon>
                 </span>
-                <div class="flex-grow-1" style="min-width:0">
-                  <h6 class="text-md mb-0 fw-normal text-truncate">{{ $p['nama'] }}</h6>
-                  <span class="text-sm text-secondary-light fw-normal">
+                <span class="flex-grow-1" style="min-width:0">
+                  <span class="d-block text-md text-primary-light text-truncate">{{ $p['nama'] }}</span>
+                  <span class="d-block text-sm text-secondary-light text-truncate">
                     {{ $p['sid'] }} &middot; {{ $p['site'] }} &middot; {{ $p['pt'] }}
                   </span>
-                </div>
-              </div>
-              <span class="text-end flex-shrink-0">
-                <span class="text-danger-main text-sm fw-bold d-block">{{ number_format($p['hari'], 0, ',', '.') }} hari</span>
-                <span class="text-secondary-light text-xs">sejak {{ $p['sejak'] }}</span>
+                </span>
               </span>
-            </div>
+              <span class="text-end flex-shrink-0">
+                <span class="text-danger-main text-sm fw-bold d-block">{{ $p['nilai'] }}</span>
+                @if ($p['jatuh_tempo'] ?? false)
+                  <span class="badge bg-danger-focus text-danger-main text-xs" title="Hari ke-{{ $hariBanned }} jatuh {{ $p['tgl_banned'] ?? '' }}">Jatuh tempo</span>
+                @else
+                  <span class="text-secondary-light text-xs">banned {{ $p['tgl_banned'] ?? '' }}</span>
+                @endif
+              </span>
+            </button>
           @endforeach
         </div>
         </div>
 
-        @if ($tindakan && $totalTindakan > count($perluTindakan))
-          <a href="{{ route('dms.roster-compliance.wajib-cuti') }}"
-             class="btn btn-sm btn-outline-danger radius-8 w-100 mt-16 d-inline-flex align-items-center justify-content-center gap-1">
-            <iconify-icon icon="solar:file-download-bold" class="icon"></iconify-icon>
-            Unduh daftar lengkap ({{ number_format($totalTindakan, 0, ',', '.') }})
-          </a>
+        @if ($regKini && $totalTindakan > 0)
+          <div class="d-flex gap-2 mt-16">
+            <button type="button" data-bs-toggle="modal" data-bs-target="#roModalTemuan-onsite" data-ro-tab="onsite"
+                    class="btn btn-sm btn-outline-primary radius-8 flex-grow-1 d-inline-flex align-items-center justify-content-center gap-1">
+              <iconify-icon icon="solar:list-bold" class="icon"></iconify-icon>
+              Lihat detail
+            </button>
+            <a href="{{ route('dms.roster-compliance.terkini.unduh', ['kode' => 'onsite']) }}"
+               class="btn btn-sm btn-outline-danger radius-8 d-inline-flex align-items-center justify-content-center gap-1"
+               title="Unduh daftar lengkap (CSV)">
+              <iconify-icon icon="solar:file-download-bold" class="icon"></iconify-icon>
+              Unduh ({{ number_format($totalTindakan, 0, ',', '.') }})
+            </a>
+          </div>
         @endif
       </div>
     </div>

@@ -860,7 +860,6 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
                         + \App\Http\Controllers\DMS\RosterComplianceController::filters($req),
                     $perPage,
                 ),
-                'perluTindakanLive' => $karyawan->perluTindakan(12, $tahun),
                 // REG-1/2/3 per hari ini: langsung dari RFID, bukan dari pola.
                 'regTerkiniLive' => app(\App\Services\Dms\Roster\DmsRosterRegLiveService::class)->ambil(),
                 'agregatLive' => $agregat,

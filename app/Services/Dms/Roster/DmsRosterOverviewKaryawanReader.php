@@ -4,24 +4,23 @@ declare(strict_types=1);
 
 namespace App\Services\Dms\Roster;
 
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Pembaca data karyawan untuk halaman Ringkasan Roster: baris tabel
- * "Scorecard per Karyawan & Timeline" dan daftar "Karyawan Perlu Tindakan".
+ * Pembaca baris tabel "Scorecard per Karyawan & Timeline" di halaman
+ * Ringkasan Roster.
  *
- * Keduanya butuh hasil evaluasi seluruh populasi (scorecard untuk filter &
- * urutan, perlu tindakan untuk peringkat), jadi keduanya meminjam
- * DmsRosterComplianceService yang hasil evaluasinya di-cache bersama kartu
- * agregat halaman ini. Pola harian lengkap (panel collapse scorecard) hanya
- * dievaluasi ulang untuk baris yang tampil.
+ * Filter & urutan butuh hasil evaluasi seluruh populasi, jadi pembaca ini
+ * meminjam DmsRosterComplianceService yang hasil evaluasinya di-cache bersama
+ * kartu agregat halaman ini. Pola harian lengkap (panel collapse) hanya
+ * dievaluasi ulang untuk baris yang tampil. Mengembalikan null bila tabel
+ * kosong atau database tidak terjangkau, supaya halaman jatuh ke data contoh
+ * tanpa gagal render.
  *
- * Kedua metode mengembalikan null bila tabel kosong atau database tidak
- * terjangkau, supaya halaman bisa jatuh kembali ke data contoh tanpa gagal
- * render.
+ * (Daftar "Karyawan Perlu Tindakan" kini dari DmsRosterRegLiveService —
+ * aturan banned periode kerja > 70 hari langsung dari RFID.)
  */
 final class DmsRosterOverviewKaryawanReader
 {
@@ -164,55 +163,6 @@ final class DmsRosterOverviewKaryawanReader
                 'perusahaan' => (string) $r->perusahaan,
             ]])
             ->all();
-    }
-
-    /**
-     * Karyawan yang paling perlu ditindak: peringkat wajib cuti, on-site
-     * berjalan terpanjang lebih dulu.
-     *
-     * @return array{total:int,baris:list<array<string,mixed>>}|null
-     */
-    public function perluTindakan(int $limit = 12, ?int $tahun = null): ?array
-    {
-        $tahun ??= CarbonImmutable::now()->year;
-
-        try {
-            $meta = $this->compliance->meta($tahun);
-            if ($meta['jumlah'] === 0) {
-                return null;
-            }
-
-            $wajib = $this->compliance->daftarWajibCuti(['tahun' => $tahun]);
-        } catch (Throwable $e) {
-            Log::warning('DmsRoster perlu tindakan gagal: '.$e->getMessage());
-
-            return null;
-        }
-
-        if ($wajib === []) {
-            return ['total' => 0, 'baris' => []];
-        }
-
-        $akhir = CarbonImmutable::parse($meta['hari_terakhir']);
-        $baris = [];
-
-        foreach (array_slice($wajib, 0, max(1, $limit)) as $r) {
-            $hari = (int) $r['onCur'];
-            // onCur dihitung mundur dari hari terakhir data, jadi awal blok
-            // on-site yang sedang berjalan = hari terakhir - (onCur - 1).
-            $mulai = $akhir->subDays(max(0, $hari - 1));
-
-            $baris[] = [
-                'sid' => (string) $r['sid'],
-                'nama' => (string) $r['nama'],
-                'pt' => (string) $r['kode_pt'],
-                'site' => (string) ($r['site'] !== '' ? $r['site'] : '—'),
-                'hari' => $hari,
-                'sejak' => $mulai->translatedFormat('j M Y'),
-            ];
-        }
-
-        return ['total' => count($wajib), 'baris' => $baris];
     }
 
     /**
