@@ -240,3 +240,18 @@
   background: var(--ro-flag);
   box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .9);
 }
+
+/* Tile REG/MAP di kartu Pelanggaran Regulasi & Mapping Roster: tombol pembuka modal. */
+.ro-temuan-tile {
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ro-temuan-tile:hover,
+.ro-temuan-tile:focus-visible {
+  border-color: var(--primary-600, #487fff) !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .08);
+}
+.ro-temuan-tile:disabled {
+  cursor: default;
+  opacity: .7;
+}

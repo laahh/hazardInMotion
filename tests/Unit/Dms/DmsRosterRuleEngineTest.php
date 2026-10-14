@@ -298,6 +298,53 @@ class DmsRosterRuleEngineTest extends TestCase
         $this->assertSame(['reg1' => null, 'reg2' => null, 'reg3' => null], $hasil);
     }
 
+    public function test_map1_terkini_blok_kerja_terakhir_melebihi_blok_pt(): void
+    {
+        // thr 7 → blok 6 hari; blok kerja terakhir 9 hari (belum REG-1).
+        $hasil = $this->engine->mappingTerkini($this->evaluasi('ccccccc'.str_repeat('P', 9)), 7, 'block');
+
+        $this->assertSame(['hari' => 9, 'mulai' => 7, 'selesai' => 15, 'pada' => 13], $hasil['map1']);
+        $this->assertNull($hasil['map3']);
+    }
+
+    public function test_mapping_terkini_tidak_dinilai_bila_blok_sudah_kena_reg1(): void
+    {
+        $hasil = $this->engine->mappingTerkini($this->evaluasi('ccccccc'.str_repeat('P', 14)), 7, 'block');
+
+        $this->assertSame(['map1' => null, 'map2' => null, 'map3' => null], $hasil);
+    }
+
+    public function test_map2_terkini_pama_ganti_shift_tanpa_off(): void
+    {
+        $hasil = $this->engine->mappingTerkini($this->evaluasi('cccccccPPPMMM'), 7, 'pama');
+
+        $this->assertSame(['hari' => 6, 'mulai' => 7, 'selesai' => 12, 'pada' => 10], $hasil['map2']);
+        $this->assertNull($hasil['map3']);
+    }
+
+    public function test_map3_terkini_pagi_setelah_malam_untuk_non_pama(): void
+    {
+        $hasil = $this->engine->mappingTerkini($this->evaluasi('cccccccMMMPP'), 7, 'block');
+
+        $this->assertSame(['hari' => 5, 'mulai' => 7, 'selesai' => 11, 'pada' => 10], $hasil['map3']);
+        $this->assertNull($hasil['map2']);
+    }
+
+    public function test_mapping_terkini_memakai_blok_terakhir_sebelum_off_pendek(): void
+    {
+        // Sedang off 2 hari; blok kerja terakhir sebelumnya tetap dinilai.
+        $hasil = $this->engine->mappingTerkini($this->evaluasi('cccccccMMPPoo'), 7, 'block');
+
+        $this->assertSame(['hari' => 4, 'mulai' => 7, 'selesai' => 10, 'pada' => 9], $hasil['map3']);
+    }
+
+    public function test_mapping_terkini_kosong_saat_sedang_cuti(): void
+    {
+        $hasil = $this->engine->mappingTerkini($this->evaluasi('MMMPPPPPPPP'.str_repeat('o', 7)), 7, 'block');
+
+        $this->assertSame(['map1' => null, 'map2' => null, 'map3' => null], $hasil);
+    }
+
     private function evaluasi(
         string $pola,
         string $kategori = 'Operator Hauler',

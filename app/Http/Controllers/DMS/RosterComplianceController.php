@@ -85,36 +85,62 @@ final class RosterComplianceController extends Controller
         ]);
     }
 
+    /** Judul kolom jumlah hari per kode REG/MAP, dipakai CSV. */
+    private const KOLOM_HARI_TERKINI = [
+        'reg1' => 'Kerja beruntun (hari)',
+        'reg2' => 'On-site tanpa cuti (hari)',
+        'reg3' => 'Panjang cuti terakhir (hari)',
+        'map1' => 'Panjang blok kerja (hari)',
+        'map2' => 'Panjang blok kerja (hari)',
+        'map3' => 'Panjang blok kerja (hari)',
+    ];
+
     /**
-     * Daftar lengkap pelanggar satu REG per hari ini, langsung dari RFID —
-     * tombol unduh kartu REG-1/2/3 di halaman Ringkasan Roster. $kode sudah
-     * dibatasi reg1|reg2|reg3 oleh constraint route.
+     * Detail satu REG/MAP per hari ini (langsung dari RFID) — dimuat modal
+     * kartu Pelanggaran Regulasi / Mapping Roster saat tab dibuka, supaya
+     * ribuan baris tidak ikut di-render bersama halaman. $kode dibatasi
+     * constraint route.
      */
-    public function unduhRegTerkini(DmsRosterRegLiveService $live, string $kode): StreamedResponse
+    public function detailTerkini(DmsRosterRegLiveService $live, string $kode): JsonResponse
+    {
+        $data = $live->ambil();
+        if ($data === null) {
+            return response()->json(['up' => false, 'pesan' => 'RFID tidak terjangkau, coba beberapa saat lagi.'], 503);
+        }
+
+        return response()->json([
+            'up' => true,
+            'per' => $data['per'],
+            'diambil' => $data['diambil'],
+            'baris' => $data['daftar'][$kode],
+        ]);
+    }
+
+    /**
+     * Daftar lengkap satu REG/MAP per hari ini sebagai CSV.
+     */
+    public function unduhTerkini(DmsRosterRegLiveService $live, string $kode): StreamedResponse
     {
         $data = $live->ambil();
         abort_if($data === null, 503, 'RFID tidak terjangkau, coba beberapa saat lagi.');
 
-        $baris = $data['reg'][$kode];
-        $kolomHari = [
-            'reg1' => 'Kerja beruntun (hari)',
-            'reg2' => 'On-site tanpa cuti (hari)',
-            'reg3' => 'Panjang cuti terakhir (hari)',
-        ][$kode];
-        $nama = strtoupper(str_replace('reg', 'reg-', $kode)).'-rfid-'.CarbonImmutable::now()->format('Ymd-Hi').'.csv';
+        $baris = $data['daftar'][$kode];
+        $kolomHari = self::KOLOM_HARI_TERKINI[$kode];
+        $nama = strtoupper(substr($kode, 0, 3).'-'.substr($kode, 3)).'-rfid-'.CarbonImmutable::now()->format('Ymd-Hi').'.csv';
 
         return response()->streamDownload(function () use ($baris, $kolomHari): void {
             $out = fopen('php://output', 'wb');
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, [
                 'SID', 'Nama', 'Jabatan', 'Kategori', 'Perusahaan', 'Site',
-                $kolomHari, 'Mulai', 'Selesai', 'Scan terakhir',
+                $kolomHari, 'Mulai', 'Selesai', 'Keterangan', 'Scan terakhir',
             ], ';');
 
             foreach ($baris as $r) {
                 fputcsv($out, [
                     $r['sid'], $r['nama'], $r['jabatan'], $r['kategori'], $r['perusahaan'], $r['site'],
-                    ($r['terpotong'] ? '>=' : '').$r['hari'], $r['mulai'], $r['selesai'], $r['scan_terakhir'],
+                    ($r['terpotong'] ? '>=' : '').$r['hari'], $r['mulai'], $r['selesai'],
+                    $r['keterangan'], $r['scan_terakhir'],
                 ], ';');
             }
 

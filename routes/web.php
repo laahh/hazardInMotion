@@ -802,9 +802,13 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         // (bcsid.mv_checkinout_rfid) via `php artisan dms:sync-roster-rfid`.
         Route::get('/roster-compliance', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'index'])->name('roster-compliance');
         Route::get('/roster-compliance/wajib-cuti.csv', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'unduhWajibCuti'])->name('roster-compliance.wajib-cuti');
-        Route::get('/roster-compliance/reg-terkini/{kode}.csv', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'unduhRegTerkini'])
-            ->whereIn('kode', ['reg1', 'reg2', 'reg3'])
-            ->name('roster-compliance.reg-terkini');
+        // REG-1/2/3 & MAP-1/2/3 per hari ini, langsung dari RFID.
+        Route::get('/roster-compliance/terkini/{kode}.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'detailTerkini'])
+            ->whereIn('kode', \App\Services\Dms\Roster\DmsRosterRegLiveService::KODE)
+            ->name('roster-compliance.terkini.detail');
+        Route::get('/roster-compliance/terkini/{kode}.csv', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'unduhTerkini'])
+            ->whereIn('kode', \App\Services\Dms\Roster\DmsRosterRegLiveService::KODE)
+            ->name('roster-compliance.terkini.unduh');
         Route::get('/roster-compliance/karyawan/{sid}', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'detail'])->name('roster-compliance.detail');
 
         // Halaman ringkasan bergaya dashboard PnC. Kartu Total Karyawan,

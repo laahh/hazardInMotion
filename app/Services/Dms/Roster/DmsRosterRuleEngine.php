@@ -246,6 +246,75 @@ final class DmsRosterRuleEngine
     }
 
     /**
+     * MAP-1/2/3 per HARI INI pada blok kerja terakhir dalam masa on-site
+     * berjalan: run P/M yang berakhir hari ini, atau sebelum off pendek yang
+     * sedang dijalani. Sedang cuti = tidak ada blok yang dinilai.
+     *
+     * Sama seperti referensi, blok yang sudah kena REG-1 tidak dinilai MAP.
+     * Pengecualian kategori longgar hanya berlaku untuk MAP-1.
+     *
+     * 'pada' = indeks hari pertama yang menyimpang (hari ke-(blok+1) untuk
+     * MAP-1, hari pergantian shift untuk MAP-2/3).
+     *
+     * @return array{map1: ?array{hari:int,mulai:int,selesai:int,pada:int}, map2: ?array{hari:int,mulai:int,selesai:int,pada:int}, map3: ?array{hari:int,mulai:int,selesai:int,pada:int}}
+     */
+    public function mappingTerkini(DmsRosterEvaluation $e, int $thr, string $map): array
+    {
+        $hasil = ['map1' => null, 'map2' => null, 'map3' => null];
+        $p = $e->pola;
+
+        $akhir = strlen($p) - 1;
+        while ($akhir >= 0 && $p[$akhir] === 'o') {
+            $akhir--;
+        }
+        if ($akhir < 0 || $p[$akhir] === 'c') {
+            return $hasil;
+        }
+
+        $blok = $this->runMundur($p, $akhir, static fn (string $ch): bool => $ch === 'P' || $ch === 'M');
+        if ($blok === null || $blok['hari'] > ($this->ambang['kerja_beruntun'] ?? 13)) {
+            return $hasil;
+        }
+
+        $maxblock = $thr - 1;
+        if ($blok['hari'] > $maxblock && ! $e->longgar) {
+            $hasil['map1'] = $blok + ['pada' => $blok['mulai'] + $maxblock];
+        }
+
+        $sudahMalam = false;
+        for ($k = $blok['mulai']; $k <= $blok['selesai']; $k++) {
+            if ($map === 'pama' && $k > $blok['mulai'] && $p[$k] !== $p[$k - 1]) {
+                $hasil['map2'] = $blok + ['pada' => $k];
+                break;
+            }
+            if ($map !== 'pama' && $p[$k] === 'P' && $sudahMalam) {
+                $hasil['map3'] = $blok + ['pada' => $k];
+                break;
+            }
+            $sudahMalam = $sudahMalam || $p[$k] === 'M';
+        }
+
+        return $hasil;
+    }
+
+    /**
+     * Parameter roster perusahaan: thr (blok MAP-1 = thr - 1) dan jenis map.
+     *
+     * @return array{thr:int,map:string}
+     */
+    public function paramPerusahaan(string $perusahaan): array
+    {
+        /** @var array<string, array<string, mixed>> $daftar */
+        $daftar = config('dms_roster.perusahaan', []);
+        $p = $daftar[$perusahaan] ?? [];
+
+        return [
+            'thr' => (int) ($p['thr'] ?? config('dms_roster.thr_default', 7)),
+            'map' => (string) ($p['map'] ?? config('dms_roster.map_default', 'block')),
+        ];
+    }
+
+    /**
      * Run berakhiran di $selesai yang semua karakternya memenuhi $cocok.
      *
      * @param  callable(string): bool  $cocok
