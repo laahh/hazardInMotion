@@ -304,3 +304,13 @@
 .ro-strip__dot.is-kuning { background: var(--ro-mapping); }
 
 .ro-hari-scroll { max-height: 360px; overflow-y: auto; }
+
+/* Kartu aturan banned: seluruh kartu adalah tombol pembuka modal detail.
+   Garis kiri berwarna = jenis perlakuan (merah banned, kuning highlight). */
+.ro-aturan { cursor: pointer; border-left: 4px solid transparent !important; transition: box-shadow .15s ease, transform .15s ease; }
+.ro-aturan--danger { border-left-color: var(--ro-flag) !important; }
+.ro-aturan--warning { border-left-color: var(--ro-mapping) !important; }
+.ro-aturan:hover:not(:disabled),
+.ro-aturan:focus-visible { box-shadow: 0 6px 18px rgba(15, 23, 42, .10); transform: translateY(-1px); }
+.ro-aturan:disabled { cursor: default; opacity: .75; }
+.ro-durasi-lebih { color: #B45309; background: #FEF3C7; border-radius: 4px; padding: 0 4px; font-weight: 700; }

@@ -85,19 +85,19 @@ final class RosterComplianceController extends Controller
         ]);
     }
 
-    /** Judul kolom jumlah hari per kode REG/MAP, dipakai CSV. */
-    private const KOLOM_HARI_TERKINI = [
-        'reg1' => 'Kerja beruntun (hari)',
-        'reg2' => 'On-site tanpa cuti (hari)',
-        'reg3' => 'Panjang cuti terakhir (hari)',
-        'map1' => 'Panjang blok kerja (hari)',
-        'map2' => 'Panjang blok kerja (hari)',
-        'map3' => 'Panjang blok kerja (hari)',
+    /** Judul kolom nilai, mulai, selesai per kode aturan — dipakai CSV. */
+    private const KOLOM_TERKINI = [
+        'onsite' => ['Periode kerja', 'Mulai on-site', 'Hari terakhir'],
+        'beruntun' => ['Bekerja berturut-turut', 'Mulai', 'Hari terakhir'],
+        'jam12' => ['Durasi shift terakhir', 'Check-in', 'Check-out'],
+        'map1' => ['Panjang blok kerja', 'Mulai blok', 'Akhir blok'],
+        'map2' => ['Panjang blok kerja', 'Mulai blok', 'Akhir blok'],
+        'map3' => ['Panjang blok kerja', 'Mulai blok', 'Akhir blok'],
     ];
 
     /**
-     * Detail satu REG/MAP per hari ini (langsung dari RFID) — dimuat modal
-     * kartu Pelanggaran Regulasi / Mapping Roster saat tab dibuka, supaya
+     * Detail satu aturan banned per hari ini (langsung dari RFID) — dimuat modal
+     * kartu aturan di Ringkasan Roster saat tab dibuka, supaya
      * ribuan baris tidak ikut di-render bersama halaman. $kode dibatasi
      * constraint route.
      */
@@ -118,7 +118,7 @@ final class RosterComplianceController extends Controller
 
     /**
      * Timeline harian satu karyawan langsung dari RFID (kode shift, flag
-     * REG/MAP, gate & jam check-in/out, durasi) — dibuka dari baris tabel
+     * aturan, gate & jam check-in/out, durasi) — dibuka dari baris tabel
      * modal temuan.
      */
     public function timelineTerkini(DmsRosterRegLiveService $live, string $sid): JsonResponse
@@ -137,7 +137,7 @@ final class RosterComplianceController extends Controller
     }
 
     /**
-     * Daftar lengkap satu REG/MAP per hari ini sebagai CSV.
+     * Daftar lengkap satu aturan banned per hari ini sebagai CSV.
      */
     public function unduhTerkini(DmsRosterRegLiveService $live, string $kode): StreamedResponse
     {
@@ -145,21 +145,21 @@ final class RosterComplianceController extends Controller
         abort_if($data === null, 503, 'RFID tidak terjangkau, coba beberapa saat lagi.');
 
         $baris = $data['daftar'][$kode];
-        $kolomHari = self::KOLOM_HARI_TERKINI[$kode];
-        $nama = strtoupper(substr($kode, 0, 3).'-'.substr($kode, 3)).'-rfid-'.CarbonImmutable::now()->format('Ymd-Hi').'.csv';
+        [$kolomNilai, $kolomMulai, $kolomSelesai] = self::KOLOM_TERKINI[$kode];
+        $nama = 'aturan-'.$kode.'-rfid-'.CarbonImmutable::now()->format('Ymd-Hi').'.csv';
 
-        return response()->streamDownload(function () use ($baris, $kolomHari): void {
+        return response()->streamDownload(function () use ($baris, $kolomNilai, $kolomMulai, $kolomSelesai): void {
             $out = fopen('php://output', 'wb');
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, [
                 'SID', 'Nama', 'Jabatan', 'Kategori', 'Perusahaan', 'Site',
-                $kolomHari, 'Mulai', 'Selesai', 'Keterangan', 'Scan terakhir',
+                $kolomNilai, $kolomMulai, $kolomSelesai, 'Keterangan', 'Scan terakhir',
             ], ';');
 
             foreach ($baris as $r) {
                 fputcsv($out, [
                     $r['sid'], $r['nama'], $r['jabatan'], $r['kategori'], $r['perusahaan'], $r['site'],
-                    ($r['terpotong'] ? '>=' : '').$r['hari'], $r['mulai'], $r['selesai'],
+                    $r['nilai'], $r['mulai'], $r['selesai'],
                     $r['keterangan'], $r['scan_terakhir'],
                 ], ';');
             }

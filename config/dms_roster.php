@@ -219,6 +219,28 @@ return [
         'jendela_hari' => 180,
         'cache_ttl' => 900,
         'timeout_ms' => 20000,
+
+        // Tabel "Penegakan Aturan & Alur Banned/Unban". Angka di sini angka
+        // ATURAN (bukan replikasi kode referensi seperti blok 'ambang' di
+        // atas), jadi on-site memakai > 70, bukan > 71.
+        'aturan' => [
+            // Periode kerja > 70 hari → banned 14 hari (cuti 14 hari), jatuh
+            // di hari ke-74 (1 hari perjalanan keluar mess + 1 hari induksi).
+            'onsite_maks' => 70,
+            'onsite_banned_hari_ke' => 74,
+            'onsite_banned_lama' => 14,
+
+            // Bekerja > 13 hari berturut-turut → banned 1 hari off di hari ke-14.
+            'beruntun_maks' => 13,
+            'beruntun_banned_hari_ke' => 14,
+
+            // Waktu kerja (check-in → check-out gate) maksimal 12 jam → highlight.
+            // Dinilai pada shift lengkap terakhir yang check-in-nya dalam
+            // N hari terakhir; jumlah shift > 12 jam dihitung dalam jendela.
+            'jam_kerja_maks' => 12,
+            'jam_kerja_hari_terkini' => 3,
+            'jam_kerja_jendela' => 7,
+        ],
     ],
 
     'per_page' => 30,

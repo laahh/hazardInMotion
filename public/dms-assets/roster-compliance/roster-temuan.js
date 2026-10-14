@@ -1,8 +1,8 @@
 /*
- * Modal kartu "Pelanggaran Regulasi" & "Tidak Sesuai Mapping Roster"
+ * Modal empat kartu aturan banned (periode kerja, berturut-turut, jam kerja, mapping)
  * (resources/views/dms/partials/_roster-reg-terkini.blade.php).
  *
- *   1. Daftar per kode REG/MAP — dimuat sekali per kode lewat JSON, disaring di klien.
+ *   1. Daftar per aturan — dimuat sekali per kode lewat JSON, disaring di klien.
  *   2. Klik baris → timeline harian karyawan itu langsung dari RFID: strip
  *      kode shift per hari (bulan/kuartal & minggu ISO di atasnya, titik
  *      merah/kuning untuk hari ber-flag), lalu detail tap per hari — gate
@@ -16,6 +16,14 @@
 
     var BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
     var LABEL_KODE = { P: 'Shift Pagi', M: 'Shift Malam', o: 'Off', c: 'Cuti', x: 'Belum ada scan hari ini' };
+    // [label lencana, kelas warna] per kode aturan dari server.
+    var LABEL_TEMUAN = {
+        onsite: ['Periode kerja > 70 hari', 'bg-danger-focus text-danger-main'],
+        beruntun: ['Bekerja > 13 hari berturut-turut', 'bg-danger-focus text-danger-main'],
+        map1: ['MAP-1 · Melebihi blok roster', 'bg-warning-focus text-warning-main'],
+        map2: ['MAP-2 · Wajib OFF ganti shift', 'bg-warning-focus text-warning-main'],
+        map3: ['MAP-3 · Urutan shift terbalik', 'bg-warning-focus text-warning-main']
+    };
 
     function esc(v) {
         return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
@@ -35,7 +43,6 @@
     // ── Daftar per kode ─────────────────────────────────────────────────
 
     function renderDaftar(modal, baris) {
-        var pakaiKet = modal.dataset.roKeterangan === '1';
         modal.querySelector('[data-ro-tbody]').innerHTML = baris.map(function (r, i) {
             return '<tr class="ro-temuan-row" data-ro-sid="' + esc(r.sid) + '" title="Lihat timeline RFID ' + esc(r.nama) + '">'
                 + '<td>' + (i + 1) + '</td>'
@@ -44,11 +51,11 @@
                 + '<td>' + esc(r.jabatan) + '</td>'
                 + '<td>' + esc(r.pt) + '</td>'
                 + '<td>' + esc(r.site) + '</td>'
-                + '<td class="text-end fw-semibold">' + (r.terpotong ? '≥' : '') + esc(r.hari) + '</td>'
-                + '<td>' + esc(r.mulai) + '</td>'
-                + '<td>' + esc(r.selesai) + '</td>'
-                + (pakaiKet ? '<td>' + esc(r.keterangan) + '</td>' : '')
-                + '<td>' + esc(r.scan_terakhir) + '</td>'
+                + '<td class="text-end fw-semibold text-nowrap">' + esc(r.nilai) + '</td>'
+                + '<td class="text-nowrap">' + esc(r.mulai) + '</td>'
+                + '<td class="text-nowrap">' + esc(r.selesai) + '</td>'
+                + '<td class="text-sm">' + esc(r.keterangan) + '</td>'
+                + '<td class="text-nowrap">' + esc(r.scan_terakhir) + '</td>'
                 + '</tr>';
         }).join('');
         saring(modal);
@@ -81,7 +88,9 @@
             b.classList.toggle('active', b === btn);
         });
         modal.querySelector('[data-ro-definisi-teks]').textContent = btn.dataset.roDefinisi;
-        modal.querySelector('[data-ro-th-hari]').textContent = btn.dataset.roKolomHari;
+        JSON.parse(btn.dataset.roKolom).forEach(function (judul, i) {
+            modal.querySelector('[data-ro-th="' + i + '"]').textContent = judul;
+        });
         modal.querySelector('[data-ro-unduh-btn]').href = btn.dataset.roUnduh;
         modal.querySelector('[data-ro-tbody]').innerHTML = '';
 
@@ -157,17 +166,26 @@
         if (!h.keluar) {
             return h.masuk ? '<span class="text-warning-main">tidak ada check-out</span>' : '<span class="text-secondary-light">—</span>';
         }
-        var tglLain = h.keluar.tanggal && h.label.indexOf(h.keluar.tanggal) === -1;
-        return '<b>' + esc(h.keluar.jam) + '</b>' + (tglLain ? ' <span class="text-secondary-light text-xs">(' + esc(h.keluar.tanggal) + ')</span>' : '');
+        return '<b>' + esc(h.keluar.jam) + '</b>'
+            + (h.keluar.beda_hari ? ' <span class="text-secondary-light text-xs">(' + esc(h.keluar.tanggal) + ')</span>' : '');
     }
 
-    function catatan(h) {
-        if (h.merah) { return '<span class="text-danger-main">' + esc(h.merah) + '</span>'; }
-        if (h.kuning) { return '<span class="text-warning-main">' + esc(h.kuning) + '</span>'; }
-        return '';
+    function durasi(h, jamMaks) {
+        if (!h.durasi) { return '—'; }
+        return h.lebih_jam
+            ? '<span class="ro-durasi-lebih" title="Lebih dari ' + esc(jamMaks) + ' jam">' + esc(h.durasi) + '</span>'
+            : esc(h.durasi);
     }
 
-    function kartuHari(h) {
+    function catatan(h, jamMaks) {
+        var isi = [];
+        if (h.merah) { isi.push('<span class="text-danger-main">' + esc(h.merah) + '</span>'); }
+        if (h.kuning) { isi.push('<span class="text-warning-main">' + esc(h.kuning) + '</span>'); }
+        if (h.lebih_jam) { isi.push('<span class="text-warning-main">Waktu kerja &gt; ' + esc(jamMaks) + ' jam</span>'); }
+        return isi.join('<br>');
+    }
+
+    function kartuHari(h, jamMaks) {
         var tap = h.tap.length === 0
             ? '<p class="text-secondary-light text-sm mb-0">Tidak ada tap RFID pada tanggal ini.</p>'
             : '<table class="table sm-table mb-0"><thead><tr><th>Jam</th><th>Jenis</th><th>Gate</th><th>Status</th></tr></thead><tbody>'
@@ -181,19 +199,19 @@
             + '<div class="d-flex flex-wrap justify-content-between gap-2 mb-12">'
             + '<div><div class="fw-bold">' + esc(h.label) + '</div>'
             + '<span class="ro-strip__key sh-' + esc(h.kode) + '"></span> <span class="text-sm">' + esc(LABEL_KODE[h.kode] || h.kode) + '</span></div>'
-            + '<div class="text-sm">' + catatan(h) + '</div></div>'
+            + '<div class="text-sm">' + catatan(h, jamMaks) + '</div></div>'
             + '<div class="row g-3 mb-12">'
             + '<div class="col-sm-4"><div class="text-xs text-secondary-light">Check-in</div><div>' + jamMasuk(h) + '</div>'
             + '<div class="text-sm text-secondary-light">' + esc(h.masuk ? h.masuk.gate : '') + '</div></div>'
             + '<div class="col-sm-4"><div class="text-xs text-secondary-light">Check-out</div><div>' + jamKeluar(h) + '</div>'
             + '<div class="text-sm text-secondary-light">' + esc(h.keluar ? h.keluar.gate : '') + '</div></div>'
-            + '<div class="col-sm-4"><div class="text-xs text-secondary-light">Durasi</div><div class="fw-bold">' + esc(h.durasi || '—') + '</div></div>'
+            + '<div class="col-sm-4"><div class="text-xs text-secondary-light">Durasi</div><div class="fw-bold">' + durasi(h, jamMaks) + '</div></div>'
             + '</div>'
             + '<div class="text-xs text-secondary-light mb-4">Semua tap pada tanggal ini</div>' + tap
             + '</div>';
     }
 
-    function tabelHari(hari) {
+    function tabelHari(hari, jamMaks) {
         // Terbaru di atas; hanya hari yang punya tap atau flag supaya tabel tidak 180 baris kosong.
         var baris = [];
         for (var i = hari.length - 1; i >= 0; i--) {
@@ -204,8 +222,8 @@
                 + '<td><span class="ro-strip__key sh-' + esc(h.kode) + '"></span> ' + esc(LABEL_KODE[h.kode] || h.kode) + '</td>'
                 + '<td>' + jamMasuk(h) + '</td><td>' + esc(h.masuk ? h.masuk.gate : '') + '</td>'
                 + '<td>' + jamKeluar(h) + '</td><td>' + esc(h.keluar ? h.keluar.gate : '') + '</td>'
-                + '<td class="text-nowrap">' + esc(h.durasi || '—') + '</td>'
-                + '<td class="text-sm">' + catatan(h) + '</td>'
+                + '<td class="text-nowrap">' + durasi(h, jamMaks) + '</td>'
+                + '<td class="text-sm">' + catatan(h, jamMaks) + '</td>'
                 + '</tr>');
         }
 
@@ -226,13 +244,13 @@
             row.classList.add('is-pilih');
             row.scrollIntoView({ block: 'nearest' });
         }
-        wadah.querySelector('[data-ro-hari-detail]').innerHTML = kartuHari(data.hari[i]);
+        wadah.querySelector('[data-ro-hari-detail]').innerHTML = kartuHari(data.hari[i], data.jam_maks);
     }
 
     function renderTimeline(wadah, data) {
         var lencana = data.temuan.map(function (t) {
-            var reg = t.indexOf('REG') === 0;
-            return '<span class="badge ' + (reg ? 'bg-danger-focus text-danger-main' : 'bg-warning-focus text-warning-main') + ' me-1">' + esc(t) + '</span>';
+            var info = LABEL_TEMUAN[t] || [t, 'bg-neutral-200 text-secondary-light'];
+            return '<span class="badge ' + info[1] + ' me-1 mb-1">' + esc(info[0]) + '</span>';
         }).join('');
 
         wadah.innerHTML = '<button type="button" class="btn btn-sm btn-light radius-8 mb-16 d-inline-flex align-items-center gap-1" data-ro-kembali>'
@@ -248,12 +266,13 @@
             + '<span><i class="sh-P ro-strip__key"></i>Pagi</span><span><i class="sh-M ro-strip__key"></i>Malam</span>'
             + '<span><i class="sh-o ro-strip__key"></i>Off</span><span><i class="sh-c ro-strip__key"></i>Cuti (off &gt; 5 hari)</span>'
             + '<span><i class="sh-x ro-strip__key"></i>Belum scan hari ini</span>'
-            + '<span><i class="ro-strip__dot is-merah"></i>Pelanggaran regulasi</span>'
+            + '<span><i class="ro-strip__dot is-merah"></i>Periode kerja / berturut-turut (banned)</span>'
             + '<span><i class="ro-strip__dot is-kuning"></i>Tidak sesuai mapping</span>'
+            + '<span><span class="ro-durasi-lebih">durasi</span> waktu kerja &gt; ' + esc(data.jam_maks) + ' jam</span>'
             + '</div>'
             + '<p class="text-xs text-secondary-light mb-12">Klik batang hari atau baris tabel untuk melihat detail tap RFID.</p>'
             + '<div data-ro-hari-detail class="mb-16"></div>'
-            + tabelHari(data.hari);
+            + tabelHari(data.hari, data.jam_maks);
 
         // Default: hari terakhir yang punya tap.
         var awal = data.hari.length - 1;

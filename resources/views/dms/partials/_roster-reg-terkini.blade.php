@@ -1,119 +1,155 @@
 {{--
-  Dua kartu temuan roster PER HARI INI, dihitung mundur langsung dari scan
-  RFID (bcsid.mv_checkinout_rfid), tidak lewat dms_roster_pola:
+  Empat kartu "Penegakan Aturan & Alur Banned/Unban" PER HARI INI, dihitung
+  mundur langsung dari scan RFID (bcsid.mv_checkinout_rfid), tidak lewat
+  dms_roster_pola:
 
-    • Pelanggaran Regulasi (merah)      REG-1 / REG-2 / REG-3
-    • Tidak Sesuai Mapping Roster (kuning)  MAP-1 / MAP-2 / MAP-3
+    1. Pelanggaran periode kerja > 70 hari         → Banned 14 hari
+    2. Pelanggaran bekerja > 13 hari berturut-turut → Banned 1 hari off
+    3. Waktu kerja maksimal 12 jam                  → Highlight (peringatan)
+    4. Tidak sesuai mapping roster perusahaan       → Highlight (peringatan)
 
-  Berbeda dari tile "Pelanggaran" di atasnya yang menghitung siapa pun yang
-  PERNAH melanggar sejak 1 Januari.
-
-  Sumber angka: $regTerkiniLive dari DmsRosterRegLiveService::ambil(). Kartu
-  hanya menampilkan jumlah; daftar nama dimuat modal lewat JSON saat tab dibuka
-  (route dms.roster-compliance.terkini.detail), karena REG-3/MAP bisa ribuan
-  baris dan tidak pantas ikut di-render bersama halaman.
+  Angka: $regTerkiniLive dari DmsRosterRegLiveService::ambil(); ambang dari
+  config dms_roster.reg_live.aturan. Kartu hanya menampilkan jumlah; daftar
+  nama dimuat modal lewat JSON saat dibuka, dan baris daftar membuka timeline
+  tap RFID karyawan itu (public/dms-assets/roster-compliance/roster-temuan.js).
 --}}
 @php
     $temuanKini = $regTerkiniLive ?? null;
-    $ambangRoster = config('dms_roster.ambang', []);
+    $aturan = config('dms_roster.reg_live.aturan', []);
+    $onsiteMaks = $aturan['onsite_maks'] ?? 70;
+    $beruntunMaks = $aturan['beruntun_maks'] ?? 13;
+    $jamMaks = $aturan['jam_kerja_maks'] ?? 12;
 
-    $kartuTemuan = [
+    // Item per kartu: [label tab, definisi, kolom nilai, kolom mulai, kolom selesai].
+    $kartuAturan = [
         [
-            'id' => 'regulasi',
-            'judul' => 'Pelanggaran Regulasi',
-            'sub' => 'Regulasi fatigue yang sedang dilanggar per hari ini.',
-            'ikon' => 'solar:danger-triangle-bold',
-            'warnaIkon' => 'bg-danger-focus text-danger-main',
-            'warnaAngka' => 'text-danger-main',
-            'tombol' => 'btn-outline-danger',
-            'keterangan' => false,
+            'id' => 'onsite',
+            'ikon' => 'solar:calendar-date-bold',
+            'warna' => 'danger',
+            'judul' => 'Pelanggaran periode kerja',
+            'ambang' => '> '.$onsiteMaks.' hari',
+            'perlakuan' => 'Banned '.($aturan['onsite_banned_lama'] ?? 14).' hari',
+            'perlakuanSub' => '(cuti '.($aturan['onsite_banned_lama'] ?? 14).' hari)',
+            'catatan' => 'Banned akan hari ke-'.($aturan['onsite_banned_hari_ke'] ?? 74).', dengan asumsi 1 hari perjalanan keluar mess & 1 hari induksi awal.',
             'item' => [
-                'reg1' => ['REG-1', 'Kerja beruntun', 'Kerja '.(($ambangRoster['kerja_beruntun'] ?? 13) + 1).' hari atau lebih tanpa off sampai hari ini.', 'Kerja beruntun (hari)'],
-                'reg2' => ['REG-2', 'On-site belum cuti', 'On-site lebih dari '.($ambangRoster['onsite'] ?? 71).' hari sejak cuti terakhir.', 'On-site (hari)'],
-                'reg3' => ['REG-3', 'Cuti terlalu pendek', 'Cuti terakhir yang sudah selesai kurang dari '.($ambangRoster['cuti_min'] ?? 12).' hari.', 'Panjang cuti (hari)'],
+                'onsite' => ['Periode kerja > '.$onsiteMaks.' hari', 'On-site (kerja + off pendek) lebih dari '.$onsiteMaks.' hari sejak cuti terakhir, sampai hari ini.', 'Periode kerja', 'Mulai on-site', 'Hari terakhir'],
+            ],
+        ],
+        [
+            'id' => 'beruntun',
+            'ikon' => 'solar:users-group-rounded-bold',
+            'warna' => 'danger',
+            'judul' => 'Pelanggaran bekerja',
+            'ambang' => '> '.$beruntunMaks.' hari berturut-turut',
+            'perlakuan' => 'Banned 1 hari off',
+            'perlakuanSub' => '',
+            'catatan' => 'Banned hari ke-'.($aturan['beruntun_banned_hari_ke'] ?? 14).'.',
+            'item' => [
+                'beruntun' => ['Bekerja > '.$beruntunMaks.' hari berturut-turut', 'Kerja setiap hari tanpa satu pun hari off, lebih dari '.$beruntunMaks.' hari sampai hari ini.', 'Berturut-turut', 'Mulai', 'Hari terakhir'],
+            ],
+        ],
+        [
+            'id' => 'jam12',
+            'ikon' => 'solar:clock-circle-bold',
+            'warna' => 'warning',
+            'judul' => 'Waktu kerja',
+            'ambang' => 'maksimal '.$jamMaks.' jam',
+            'perlakuan' => 'Highlight warna',
+            'perlakuanSub' => '(peringatan)',
+            'catatan' => 'Akan mempengaruhi waktu istirahat hari berikutnya.',
+            'item' => [
+                'jam12' => ['Waktu kerja > '.$jamMaks.' jam', 'Shift terakhir ('.($aturan['jam_kerja_hari_terkini'] ?? 3).' hari terakhir) lebih dari '.$jamMaks.' jam dari tap check-in sampai check-out gate.', 'Durasi', 'Check-in', 'Check-out'],
             ],
         ],
         [
             'id' => 'mapping',
-            'judul' => 'Tidak Sesuai Mapping Roster',
-            'sub' => 'Peringatan desain roster pada blok kerja terakhir.',
-            'ikon' => 'solar:map-arrow-square-bold',
-            'warnaIkon' => 'bg-warning-focus text-warning-main',
-            'warnaAngka' => 'text-warning-main',
-            'tombol' => 'btn-outline-warning',
-            'keterangan' => true,
+            'ikon' => 'solar:document-text-bold',
+            'warna' => 'warning',
+            'judul' => 'Tidak sesuai mapping',
+            'ambang' => 'roster perusahaan',
+            'perlakuan' => 'Highlight warna',
+            'perlakuanSub' => '(peringatan)',
+            'catatan' => 'Perusahaan tidak sesuai komitmen plan design roster, waktu kerja & istirahat yang diajukan.',
             'item' => [
-                'map1' => ['MAP-1', 'Melebihi blok roster', 'Blok kerja lebih panjang dari pola roster PT-nya, tapi belum '.(($ambangRoster['kerja_beruntun'] ?? 13) + 1).' hari.', 'Blok kerja (hari)'],
-                'map2' => ['MAP-2', 'Wajib OFF saat ganti shift', 'Khusus PAMA: pindah Pagi↔Malam tanpa diselingi off.', 'Blok kerja (hari)'],
-                'map3' => ['MAP-3', 'Urutan shift terbalik', 'PT selain PAMA: shift Pagi muncul setelah Malam dalam satu blok.', 'Blok kerja (hari)'],
+                'map1' => ['MAP-1 · Melebihi blok roster', 'Blok kerja terakhir lebih panjang dari pola roster PT-nya, tapi belum '.($beruntunMaks + 1).' hari.', 'Blok kerja', 'Mulai blok', 'Akhir blok'],
+                'map2' => ['MAP-2 · Wajib OFF saat ganti shift', 'Khusus PAMA: pindah Pagi↔Malam tanpa diselingi off.', 'Blok kerja', 'Mulai blok', 'Akhir blok'],
+                'map3' => ['MAP-3 · Urutan shift terbalik', 'PT selain PAMA: shift Pagi muncul setelah Malam dalam satu blok.', 'Blok kerja', 'Mulai blok', 'Akhir blok'],
             ],
         ],
     ];
+
+    // Satu orang bisa kena lebih dari satu MAP; angka kartu = orang unik.
+    $jumlahOrang = static function (array $kode) use ($temuanKini): ?int {
+        if (! $temuanKini) {
+            return null;
+        }
+        $sid = [];
+        foreach ($kode as $k) {
+            foreach ($temuanKini['daftar'][$k] ?? [] as $r) {
+                $sid[$r['sid']] = true;
+            }
+        }
+
+        return count($sid);
+    };
 @endphp
 
-@foreach ($kartuTemuan as $kartu)
-  <div class="col-xxl-6 col-lg-6">
-    <div class="card h-100 radius-8 border-0">
-      <div class="card-body p-24 d-flex flex-column">
-        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
-          <div class="d-flex align-items-start gap-12" style="min-width:0">
-            <span class="w-44-px h-44-px {{ $kartu['warnaIkon'] }} flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-0">
-              <iconify-icon icon="{{ $kartu['ikon'] }}" class="icon"></iconify-icon>
-            </span>
-            <div style="min-width:0">
-              <h6 class="mb-1 fw-bold text-lg">{{ $kartu['judul'] }}</h6>
-              <span class="ro-card__subtitle">{{ $kartu['sub'] }}</span>
-            </div>
-          </div>
-          @if ($temuanKini)
-            <span class="text-secondary-light text-xs" title="Diambil langsung dari RFID {{ $temuanKini['diambil'] }}">
-              per {{ $temuanKini['per'] }} <span class="text-success-600 fw-semibold">&middot; RFID</span>
-            </span>
+@foreach ($kartuAturan as $kartu)
+  @php $orang = $jumlahOrang(array_keys($kartu['item'])); @endphp
+  <div class="col-xxl-3 col-md-6">
+    <button type="button"
+            class="ro-aturan card h-100 radius-8 border-0 w-100 text-start p-0 ro-aturan--{{ $kartu['warna'] }}"
+            data-bs-toggle="modal" data-bs-target="#roModalTemuan-{{ $kartu['id'] }}"
+            data-ro-tab="{{ array_key_first($kartu['item']) }}" @disabled(! $temuanKini)>
+      <span class="card-body p-20 d-flex flex-column w-100">
+        <span class="d-flex align-items-start gap-12">
+          <span class="w-44-px h-44-px bg-{{ $kartu['warna'] }}-focus text-{{ $kartu['warna'] }}-main flex-shrink-0 d-flex justify-content-center align-items-center radius-8 h6 mb-0">
+            <iconify-icon icon="{{ $kartu['ikon'] }}" class="icon"></iconify-icon>
+          </span>
+          <span style="min-width:0">
+            <span class="d-block text-sm text-secondary-light fw-medium">{{ $kartu['judul'] }}</span>
+            <span class="d-block fw-bold text-{{ $kartu['warna'] }}-main">{{ $kartu['ambang'] }}</span>
+          </span>
+        </span>
+
+        <span class="d-flex align-items-end gap-2 mt-16">
+          <span class="h4 fw-bold mb-0 text-primary-light">{{ $orang === null ? '—' : number_format($orang, 0, ',', '.') }}</span>
+          <span class="text-secondary-light text-sm mb-1">orang</span>
+        </span>
+
+        <span class="d-block mt-12">
+          <span class="badge bg-{{ $kartu['warna'] }}-focus text-{{ $kartu['warna'] }}-main fw-semibold">{{ $kartu['perlakuan'] }}</span>
+          @if ($kartu['perlakuanSub'])
+            <span class="text-xs text-secondary-light">{{ $kartu['perlakuanSub'] }}</span>
           @endif
-        </div>
+        </span>
+        <span class="d-block text-xs text-secondary-light mt-8 flex-grow-1">{{ $kartu['catatan'] }}</span>
 
-        <div class="row g-3 mt-8 flex-grow-1">
-          @foreach ($kartu['item'] as $kode => [$singkat, $label, $definisi])
-            <div class="col-sm-4">
-              <button type="button"
-                      class="ro-temuan-tile w-100 h-100 text-start bg-neutral-50 border radius-8 p-16 d-flex flex-column"
-                      data-bs-toggle="modal" data-bs-target="#roModalTemuan-{{ $kartu['id'] }}"
-                      data-ro-tab="{{ $kode }}" @disabled(! $temuanKini) title="{{ $definisi }}">
-                <span class="text-xs fw-bold text-secondary-light">{{ $singkat }}</span>
-                <span class="text-sm fw-semibold text-primary-light">{{ $label }}</span>
-                <span class="h5 fw-bold mb-0 mt-auto pt-8 {{ $kartu['warnaAngka'] }}">
-                  {{ $temuanKini ? number_format(count($temuanKini['daftar'][$kode]), 0, ',', '.') : '—' }}
-                </span>
-                <span class="text-xs text-secondary-light">orang</span>
-              </button>
-            </div>
-          @endforeach
-        </div>
-
-        @if ($temuanKini)
-          <button type="button" class="btn btn-sm {{ $kartu['tombol'] }} radius-8 w-100 mt-16 d-inline-flex align-items-center justify-content-center gap-1"
-                  data-bs-toggle="modal" data-bs-target="#roModalTemuan-{{ $kartu['id'] }}" data-ro-tab="{{ array_key_first($kartu['item']) }}">
-            <iconify-icon icon="solar:list-bold" class="icon"></iconify-icon>
-            Lihat detail {{ implode(' · ', array_column($kartu['item'], 0)) }}
-          </button>
-        @else
-          <p class="text-secondary-light text-sm mb-0 mt-16">RFID tidak terjangkau saat ini; muat ulang beberapa saat lagi.</p>
-        @endif
-      </div>
-    </div>
+        <span class="d-flex align-items-center justify-content-between mt-12 text-xs">
+          @if ($temuanKini)
+            <span class="text-secondary-light">per {{ $temuanKini['per'] }} <span class="text-success-600 fw-semibold">&middot; RFID</span></span>
+            <span class="fw-semibold text-primary-600">Lihat detail &rarr;</span>
+          @else
+            <span class="text-secondary-light">RFID tidak terjangkau saat ini</span>
+          @endif
+        </span>
+      </span>
+    </button>
   </div>
 
   @if ($temuanKini)
     <div class="modal fade" id="roModalTemuan-{{ $kartu['id'] }}" tabindex="-1" aria-labelledby="roModalTemuanJudul-{{ $kartu['id'] }}" aria-hidden="true"
-         data-ro-keterangan="{{ $kartu['keterangan'] ? '1' : '0' }}"
          data-ro-timeline-url="{{ route('dms.roster-compliance.terkini.timeline', ['sid' => '__SID__']) }}">
       <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content radius-8">
           <div class="modal-header">
             <div>
-              <h6 class="modal-title fw-bold" id="roModalTemuanJudul-{{ $kartu['id'] }}">{{ $kartu['judul'] }}</h6>
+              <h6 class="modal-title fw-bold" id="roModalTemuanJudul-{{ $kartu['id'] }}">
+                {{ $kartu['judul'] }} {{ $kartu['ambang'] }}
+                <span class="badge bg-{{ $kartu['warna'] }}-focus text-{{ $kartu['warna'] }}-main ms-1">{{ $kartu['perlakuan'] }}</span>
+              </h6>
               <span class="text-secondary-light text-sm">
-                Per {{ $temuanKini['per'] }} &middot; RFID diambil {{ $temuanKini['diambil'] }}
+                Per {{ $temuanKini['per'] }} &middot; RFID diambil {{ $temuanKini['diambil'] }} &middot; {{ $kartu['catatan'] }}
               </span>
             </div>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
@@ -123,57 +159,55 @@
             <div class="d-none" data-ro-view-detail></div>
 
             <div data-ro-view-daftar>
-            <ul class="nav nav-pills gap-2 mb-16" role="tablist">
-              @foreach ($kartu['item'] as $kode => [$singkat, $label, $definisi, $kolomHari])
-                <li class="nav-item" role="presentation">
-                  <button type="button" class="nav-link radius-8 px-16 py-8 text-sm" role="tab"
-                          data-ro-tab-btn="{{ $kode }}"
-                          data-ro-definisi="{{ $definisi }}"
-                          data-ro-kolom-hari="{{ $kolomHari }}"
-                          data-ro-url="{{ route('dms.roster-compliance.terkini.detail', ['kode' => $kode]) }}"
-                          data-ro-unduh="{{ route('dms.roster-compliance.terkini.unduh', ['kode' => $kode]) }}">
-                    <b>{{ $singkat }}</b> &middot; {{ $label }}
-                    <span class="badge bg-neutral-200 text-secondary-light ms-1">{{ number_format(count($temuanKini['daftar'][$kode]), 0, ',', '.') }}</span>
-                  </button>
-                </li>
-              @endforeach
-            </ul>
+              <ul class="nav nav-pills gap-2 mb-16 {{ count($kartu['item']) === 1 ? 'd-none' : '' }}" role="tablist">
+                @foreach ($kartu['item'] as $kode => [$label, $definisi, $kolomNilai, $kolomMulai, $kolomSelesai])
+                  <li class="nav-item" role="presentation">
+                    <button type="button" class="nav-link radius-8 px-16 py-8 text-sm" role="tab"
+                            data-ro-tab-btn="{{ $kode }}"
+                            data-ro-definisi="{{ $definisi }}"
+                            data-ro-kolom="{{ json_encode([$kolomNilai, $kolomMulai, $kolomSelesai]) }}"
+                            data-ro-url="{{ route('dms.roster-compliance.terkini.detail', ['kode' => $kode]) }}"
+                            data-ro-unduh="{{ route('dms.roster-compliance.terkini.unduh', ['kode' => $kode]) }}">
+                      {{ $label }}
+                      <span class="badge bg-neutral-200 text-secondary-light ms-1">{{ number_format(count($temuanKini['daftar'][$kode]), 0, ',', '.') }}</span>
+                    </button>
+                  </li>
+                @endforeach
+              </ul>
 
-            <p class="text-secondary-light text-sm mb-12" data-ro-definisi-teks></p>
+              <p class="text-secondary-light text-sm mb-12" data-ro-definisi-teks></p>
 
-            <div class="d-flex flex-wrap gap-2 justify-content-between mb-16">
-              <input type="search" class="form-control form-control-sm w-auto" style="min-width:260px"
-                     placeholder="Cari nama, SID, site, PT…" data-ro-cari>
-              <a href="#" class="btn btn-sm btn-outline-danger radius-8 d-inline-flex align-items-center gap-1" data-ro-unduh-btn>
-                <iconify-icon icon="solar:file-download-bold" class="icon"></iconify-icon>
-                Unduh CSV
-              </a>
-            </div>
+              <div class="d-flex flex-wrap gap-2 justify-content-between mb-16">
+                <input type="search" class="form-control form-control-sm w-auto" style="min-width:260px"
+                       placeholder="Cari nama, SID, site, PT…" data-ro-cari>
+                <a href="#" class="btn btn-sm btn-outline-danger radius-8 d-inline-flex align-items-center gap-1" data-ro-unduh-btn>
+                  <iconify-icon icon="solar:file-download-bold" class="icon"></iconify-icon>
+                  Unduh CSV
+                </a>
+              </div>
 
-            <div class="table-responsive">
-              <table class="table bordered-table sm-table mb-0">
-                <thead>
-                  <tr>
-                    <th>No</th>
-                    <th>SID</th>
-                    <th>Nama</th>
-                    <th>Jabatan</th>
-                    <th>PT</th>
-                    <th>Site</th>
-                    <th class="text-end" data-ro-th-hari>Hari</th>
-                    <th>Mulai</th>
-                    <th>Selesai</th>
-                    @if ($kartu['keterangan'])
+              <div class="table-responsive">
+                <table class="table bordered-table sm-table mb-0">
+                  <thead>
+                    <tr>
+                      <th>No</th>
+                      <th>SID</th>
+                      <th>Nama</th>
+                      <th>Jabatan</th>
+                      <th>PT</th>
+                      <th>Site</th>
+                      <th class="text-end" data-ro-th="0">Nilai</th>
+                      <th data-ro-th="1">Mulai</th>
+                      <th data-ro-th="2">Selesai</th>
                       <th>Keterangan</th>
-                    @endif
-                    <th>Scan terakhir</th>
-                  </tr>
-                </thead>
-                <tbody data-ro-tbody></tbody>
-              </table>
-              <p class="text-secondary-light text-sm text-center my-16 d-none" data-ro-pesan></p>
-            </div>
-            <p class="text-secondary-light text-xs mt-8 mb-0">Klik baris untuk melihat timeline tap RFID karyawan tersebut.</p>
+                      <th>Scan terakhir</th>
+                    </tr>
+                  </thead>
+                  <tbody data-ro-tbody></tbody>
+                </table>
+                <p class="text-secondary-light text-sm text-center my-16 d-none" data-ro-pesan></p>
+              </div>
+              <p class="text-secondary-light text-xs mt-8 mb-0">Klik baris untuk melihat timeline tap RFID karyawan tersebut.</p>
             </div>
           </div>
         </div>
@@ -186,11 +220,11 @@
   <div class="col-12 mt-0">
     <span class="text-secondary-light text-xs">
       Dihitung langsung dari scan RFID {{ $temuanKini['jendela'] }} hari terakhir (diambil {{ $temuanKini['diambil'] }}).
-      Karyawan yang belum scan hari ini dinilai sampai kemarin; tanda ≥ = run lebih panjang dari jendela.
-      Satu karyawan bisa masuk lebih dari satu kode. Kategori longgar (Transportasi Massal, Mekanik) dikecualikan dari REG-1/2/3 dan MAP-1.
+      Karyawan yang belum scan hari ini dinilai sampai kemarin; tanda ≥ = periode lebih panjang dari jendela data.
+      Cuti = tidak tap lebih dari 5 hari berturut-turut. Kategori longgar (Transportasi Massal, Mekanik) dikecualikan dari aturan banned.
     </span>
   </div>
 @endif
 
-{{-- Modal temuan: daftar per kode (JSON) dan timeline tap RFID per karyawan. --}}
-<script src="{{ asset('dms-assets/roster-compliance/roster-temuan.js') }}?v=1"></script>
+{{-- Modal: daftar per aturan (JSON) dan timeline tap RFID per karyawan. --}}
+<script src="{{ asset('dms-assets/roster-compliance/roster-temuan.js') }}?v=2"></script>

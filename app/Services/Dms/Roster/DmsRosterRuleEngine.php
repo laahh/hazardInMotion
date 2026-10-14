@@ -212,10 +212,13 @@ final class DmsRosterRuleEngine
      *
      * Indeks mulai/selesai mengacu ke posisi karakter pola (0 = 1 Januari).
      *
+     * @param  array<string, int>  $ambang  Penimpa ambang config untuk pemanggil
+     *         yang memakai angka aturan lain (mis. aturan banned on-site > 70).
      * @return array{reg1: ?array{hari:int,mulai:int,selesai:int}, reg2: ?array{hari:int,mulai:int,selesai:int}, reg3: ?array{hari:int,mulai:int,selesai:int}}
      */
-    public function pelanggaranTerkini(DmsRosterEvaluation $e): array
+    public function pelanggaranTerkini(DmsRosterEvaluation $e, array $ambang = []): array
     {
+        $ambang += $this->ambang;
         $kosong = ['reg1' => null, 'reg2' => null, 'reg3' => null];
         $p = $e->pola;
         $akhir = strlen($p) - 1;
@@ -239,9 +242,9 @@ final class DmsRosterRuleEngine
         $cuti = $k >= 0 ? $this->runMundur($p, $k, static fn (string $ch): bool => $ch === 'c') : null;
 
         return [
-            'reg1' => $kerja !== null && $kerja['hari'] > ($this->ambang['kerja_beruntun'] ?? 13) ? $kerja : null,
-            'reg2' => $onsite !== null && $onsite['hari'] > ($this->ambang['onsite'] ?? 71) ? $onsite : null,
-            'reg3' => $cuti !== null && $cuti['hari'] < ($this->ambang['cuti_min'] ?? 12) ? $cuti : null,
+            'reg1' => $kerja !== null && $kerja['hari'] > ($ambang['kerja_beruntun'] ?? 13) ? $kerja : null,
+            'reg2' => $onsite !== null && $onsite['hari'] > ($ambang['onsite'] ?? 71) ? $onsite : null,
+            'reg3' => $cuti !== null && $cuti['hari'] < ($ambang['cuti_min'] ?? 12) ? $cuti : null,
         ];
     }
 

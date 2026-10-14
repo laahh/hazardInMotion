@@ -267,6 +267,14 @@ class DmsRosterRuleEngineTest extends TestCase
         $this->assertNull($pas71['reg2']);
     }
 
+    public function test_ambang_onsite_terkini_bisa_ditimpa_pemanggil(): void
+    {
+        $e = $this->evaluasi(str_repeat('c', 12).str_repeat('PPPPPPo', 10).'P');
+
+        $this->assertNull($this->engine->pelanggaranTerkini($e)['reg2']);
+        $this->assertSame(71, $this->engine->pelanggaranTerkini($e, ['onsite' => 70])['reg2']['hari']);
+    }
+
     public function test_reg3_terkini_memakai_blok_cuti_terakhir_yang_sudah_selesai(): void
     {
         // Cuti pendek lama tidak dihitung bila cuti sesudahnya sudah cukup.
