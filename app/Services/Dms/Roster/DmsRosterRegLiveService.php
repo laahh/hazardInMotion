@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Dms\Roster;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -30,7 +31,8 @@ use Throwable;
  *
  * Master karyawan (nama, jabatan, kategori, perusahaan, populasi wajib_cek)
  * dibaca dari dms_roster_karyawan, dibatasi ke PT di config
- * dms_roster.reg_live.kode_pt (tujuh PT yang punya desain roster).
+ * dms_roster.reg_live.kode_pt (tujuh PT yang punya desain roster), dan tanpa
+ * karyawan yang sudah tercatat di sid_roster_banned_master (sudah treatment).
  */
 final class DmsRosterRegLiveService
 {
@@ -42,13 +44,15 @@ final class DmsRosterRegLiveService
     ) {}
 
     /**
-     * @return array{per:string,diambil:string,jendela:int,daftar:array<string,list<array<string,mixed>>>}|null
+     * @return array{per:string,diambil:string,jendela:int,awal:string,daftar:array<string,list<array<string,mixed>>>}|null
      *         null bila RFID tidak terjangkau / query gagal.
      */
     public function ambil(): ?array
     {
         $hariIni = CarbonImmutable::now()->startOfDay();
-        $key = 'dms_roster:aturan_live:v2:'.$hariIni->toDateString();
+        // Versi master banned ikut di kunci: begitu ada orang di-banned atau
+        // dicabut, hasil langsung dihitung ulang tanpa menunggu TTL habis.
+        $key = 'dms_roster:aturan_live:v4:'.$hariIni->toDateString().':'.$this->versiMasterBanned();
 
         $tersimpan = Cache::get($key);
         if (is_array($tersimpan)) {
@@ -266,7 +270,7 @@ final class DmsRosterRegLiveService
     }
 
     /**
-     * @return array{per:string,diambil:string,jendela:int,daftar:array<string,list<array<string,mixed>>>}|null
+     * @return array{per:string,diambil:string,jendela:int,awal:string,daftar:array<string,list<array<string,mixed>>>}|null
      */
     private function hitung(CarbonImmutable $hariIni): ?array
     {
@@ -282,6 +286,10 @@ final class DmsRosterRegLiveService
                 ->when(
                     config('dms_roster.reg_live.kode_pt', []) !== [],
                     static fn ($q) => $q->whereIn('kode_pt', config('dms_roster.reg_live.kode_pt')),
+                )
+                ->when(
+                    (bool) config('dms_roster.reg_live.kecualikan_master_banned', true),
+                    fn ($q) => $this->kecualikanMasterBanned($q),
                 )
                 ->select('kode_sid', 'nama', 'jabatan_struktural as jabatan', 'kategori', 'perusahaan', 'kode_pt', 'site')
                 ->get();
@@ -306,10 +314,17 @@ final class DmsRosterRegLiveService
                 'pt' => (string) $k->kode_pt,
                 'site' => (string) ($k->site ?: '—'),
                 'scan_terakhir' => $hariScan === [] ? '—' : $tanggal(max(array_keys($hariScan))),
+                // Timeline mini di tabel modal; diisi di bawah bila ada scan.
+                'pola' => str_repeat('o', $panjang),
+                'tanda' => str_repeat('-', $panjang),
             ];
 
             if ($hariScan !== []) {
-                foreach ($this->nilai($hariScan, $panjang, (string) $k->kategori, (string) $k->perusahaan) as $kode => $run) {
+                $param = $this->engine->paramPerusahaan((string) $k->perusahaan);
+                $eval = $this->engine->evaluasi($this->rakitDeret($hariScan, $panjang), (string) $k->kategori, $param['thr'], $param['map']);
+                $dasar = array_merge($dasar, $this->timelineMini($eval, $panjang));
+
+                foreach ($this->nilaiEvaluasi($eval, $param) as $kode => $run) {
                     if ($run !== null) {
                         $daftar[$kode][] = $dasar + $this->barisPola($kode, $run, $tanggal);
                     }
@@ -331,7 +346,30 @@ final class DmsRosterRegLiveService
             'per' => $hariIni->translatedFormat('j M Y'),
             'diambil' => CarbonImmutable::now()->translatedFormat('j M Y H:i'),
             'jendela' => $panjang,
+            'awal' => $awal->toDateString(),
             'daftar' => $daftar,
+        ];
+    }
+
+    /**
+     * Pola & tanda harian ringkas untuk satu baris tabel, satu karakter per
+     * hari sepanjang jendela (indeks 0 = $awal):
+     *   pola   P/M/o/c, 'x' = hari ini belum ada scan
+     *   tanda  'm' aturan banned (periode/berturut-turut), 'k' mapping, '-' bersih
+     *
+     * @return array{pola:string,tanda:string}
+     */
+    public function timelineMini(DmsRosterEvaluation $eval, int $panjang): array
+    {
+        $merah = $this->tandaMerah($eval);
+        $tanda = '';
+        for ($i = 0; $i < $panjang; $i++) {
+            $tanda .= isset($merah[$i]) ? 'm' : (($eval->yel[$i] ?? '') !== '' ? 'k' : '-');
+        }
+
+        return [
+            'pola' => str_pad($eval->pola, $panjang, 'x'),
+            'tanda' => $tanda,
         ];
     }
 
@@ -474,6 +512,45 @@ final class DmsRosterRegLiveService
     private function durasi(int $menit): string
     {
         return intdiv($menit, 60).'j '.($menit % 60).'m';
+    }
+
+    /**
+     * Buang karyawan yang sudah pernah tercatat di sid_roster_banned_master
+     * (Master Roster Banned) — mereka sudah ditindak/treatment, jadi tidak
+     * dimunculkan lagi di kartu aturan. Dicocokkan lewat SID ATAU NIK supaya
+     * orang yang SID-nya berganti tetap terkecualikan.
+     *
+     * whereNotNull di subquery wajib: satu NULL di daftar NOT IN membuat
+     * seluruh perbandingan bernilai NULL dan semua baris ikut terbuang.
+     */
+    private function kecualikanMasterBanned(Builder $q): Builder
+    {
+        return $q
+            ->whereNotIn('kode_sid', static fn ($s) => $s->from('sid_roster_banned_master')->whereNotNull('sid')->select('sid'))
+            ->where(static fn ($w) => $w
+                ->whereNull('nik')
+                ->orWhereNotIn('nik', static fn ($s) => $s->from('sid_roster_banned_master')->whereNotNull('nik')->where('nik', '<>', '')->select('nik')));
+    }
+
+    /**
+     * Sidik ringkas isi master banned (jumlah baris + perubahan terakhir).
+     * Gagal dibaca = string kosong; kunci cache tetap valid.
+     */
+    private function versiMasterBanned(): string
+    {
+        if (! config('dms_roster.reg_live.kecualikan_master_banned', true)) {
+            return '';
+        }
+
+        try {
+            $v = DB::table('sid_roster_banned_master')->selectRaw('COUNT(*) AS n, MAX(updated_at) AS t')->first();
+
+            return md5(($v->n ?? 0).'|'.($v->t ?? ''));
+        } catch (Throwable $e) {
+            Log::warning('DmsRoster versi master banned gagal: '.$e->getMessage());
+
+            return '';
+        }
     }
 
     private function panjangJendela(): int

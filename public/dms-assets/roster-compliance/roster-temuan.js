@@ -42,16 +42,18 @@
 
     // ── Daftar per kode ─────────────────────────────────────────────────
 
-    function renderDaftar(modal, baris) {
+    function renderDaftar(modal, json) {
+        var baris = json.baris;
+        modal.querySelector('[data-ro-th-timeline]').innerHTML = json.awal ? labelHtml(json.awal, json.jendela) : '';
         modal.querySelector('[data-ro-tbody]').innerHTML = baris.map(function (r, i) {
             return '<tr class="ro-temuan-row" data-ro-sid="' + esc(r.sid) + '" title="Lihat timeline RFID ' + esc(r.nama) + '">'
                 + '<td>' + (i + 1) + '</td>'
-                + '<td>' + esc(r.sid) + '</td>'
-                + '<td class="fw-medium">' + esc(r.nama) + '</td>'
-                + '<td>' + esc(r.jabatan) + '</td>'
+                + '<td><div class="fw-medium text-nowrap">' + esc(r.nama) + '</div>'
+                + '<div class="text-xs text-secondary-light text-nowrap">' + esc(r.sid) + ' · ' + esc(r.jabatan) + '</div></td>'
                 + '<td>' + esc(r.pt) + '</td>'
-                + '<td>' + esc(r.site) + '</td>'
+                + '<td class="text-nowrap">' + esc(r.site) + '</td>'
                 + '<td class="text-end fw-semibold text-nowrap">' + esc(r.nilai) + '</td>'
+                + '<td class="ro-mini-td">' + miniHtml(r) + '</td>'
                 + '<td class="text-nowrap">' + esc(r.mulai) + '</td>'
                 + '<td class="text-nowrap">' + esc(r.selesai) + '</td>'
                 + '<td class="text-sm">' + esc(r.keterangan) + '</td>'
@@ -102,9 +104,9 @@
         pesan(modal, 'Memuat data RFID…');
         ambilJson(btn.dataset.roUrl)
             .then(function (json) {
-                cacheDaftar[kode] = json.baris;
+                cacheDaftar[kode] = json;
                 // Abaikan respons bila pengguna sudah pindah tab sebelum data tiba.
-                if (btn.classList.contains('active')) { renderDaftar(modal, json.baris); }
+                if (btn.classList.contains('active')) { renderDaftar(modal, json); }
             })
             .catch(function (err) { pesan(modal, 'Gagal memuat: ' + err.message); });
     }
@@ -125,14 +127,17 @@
         return Math.ceil(((d - awalTahun) / 86400000 + 1) / 7);
     }
 
-    function stripHtml(hari) {
-        var n = hari.length;
+    /**
+     * Label bulan (+ kuartal di Jan/Apr/Jul/Okt) dan minggu ISO untuk n hari
+     * mulai tanggal ISO $awal, diposisikan dalam persen lebar strip.
+     */
+    function labelHtml(awal, n) {
+        var mulai = new Date(awal + 'T00:00:00Z');
         var bulan = '';
         var minggu = '';
-        var bar = '';
 
-        hari.forEach(function (h, i) {
-            var tgl = new Date(h.iso + 'T00:00:00Z');
+        for (var i = 0; i < n; i++) {
+            var tgl = new Date(mulai.getTime() + i * 86400000);
             var kiri = (i / n * 100).toFixed(3) + '%';
             var bln = tgl.getUTCMonth();
 
@@ -143,7 +148,46 @@
             if (tgl.getUTCDay() === 1) {
                 minggu += '<span class="ro-strip__week" style="left:' + kiri + '">W' + mingguIso(tgl) + '</span>';
             }
+        }
 
+        return '<div class="ro-strip__labels">' + bulan + '</div>'
+            + '<div class="ro-strip__labels ro-strip__labels--week">' + minggu + '</div>';
+    }
+
+    var WARNA_KODE = { P: 'var(--ro-pagi)', M: 'var(--ro-malam)', o: 'var(--ro-off)', c: 'var(--ro-cuti)', x: '#CBD5E1' };
+    var WARNA_TANDA = { m: 'var(--ro-flag)', k: 'var(--ro-mapping)', '-': 'transparent' };
+
+    /**
+     * Gradien linear dengan satu segmen per run karakter sama — satu elemen
+     * per baris, bukan ratusan sel, supaya tabel ratusan orang tetap ringan.
+     */
+    function gradien(str, warna) {
+        var n = str.length;
+        var stop = [];
+        var i = 0;
+        while (i < n) {
+            var j = i;
+            while (j < n && str[j] === str[i]) { j++; }
+            var c = warna[str[i]] || 'transparent';
+            stop.push(c + ' ' + (i / n * 100).toFixed(3) + '% ' + (j / n * 100).toFixed(3) + '%');
+            i = j;
+        }
+        return 'linear-gradient(to right,' + stop.join(',') + ')';
+    }
+
+    function miniHtml(r) {
+        if (!r.pola) { return ''; }
+        var n = r.pola.length;
+        return '<div class="ro-mini" style="--ro-mini-n:' + n + '">'
+            + '<div class="ro-mini__tanda" style="background:' + gradien(r.tanda || '', WARNA_TANDA) + '"></div>'
+            + '<div class="ro-mini__bar" style="background-image:' + gradien(r.pola, WARNA_KODE) + '"></div>'
+            + '</div>';
+    }
+
+    function stripHtml(hari) {
+        var bar = '';
+
+        hari.forEach(function (h, i) {
             var flag = h.merah ? ' is-merah' : (h.kuning ? ' is-kuning' : '');
             var judul = h.label + ' — ' + (LABEL_KODE[h.kode] || h.kode)
                 + (h.merah ? ' · ' + h.merah : (h.kuning ? ' · ' + h.kuning : ''));
@@ -152,8 +196,7 @@
         });
 
         return '<div class="ro-strip">'
-            + '<div class="ro-strip__labels">' + bulan + '</div>'
-            + '<div class="ro-strip__labels ro-strip__labels--week">' + minggu + '</div>'
+            + labelHtml(hari[0].iso, hari.length)
             + '<div class="ro-strip__bars">' + bar + '</div>'
             + '</div>';
     }

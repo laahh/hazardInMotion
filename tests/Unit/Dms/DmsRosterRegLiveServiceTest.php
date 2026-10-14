@@ -89,6 +89,28 @@ class DmsRosterRegLiveServiceTest extends TestCase
         $this->assertNull($hasil['beruntun']);
     }
 
+    public function test_timeline_mini_menandai_hari_berturut_turut_dan_hari_ini_belum_scan(): void
+    {
+        $engine = new DmsRosterRuleEngine();
+        // 6 hari off (jadi cuti), 14 hari kerja (> 13), hari ini belum scan.
+        $eval = $engine->evaluasi('oooooo'.str_repeat('P', 14), 'Operator Hauler', 7, 'block');
+
+        $mini = $this->svc->timelineMini($eval, 21);
+
+        $this->assertSame('cccccc'.str_repeat('P', 14).'x', $mini['pola']);
+        $this->assertSame('------'.str_repeat('m', 14).'-', $mini['tanda']);
+    }
+
+    public function test_timeline_mini_menandai_mapping_sebagai_kuning(): void
+    {
+        $engine = new DmsRosterRuleEngine();
+        $eval = $engine->evaluasi('ccccccMMMPP', 'Operator Hauler', 7, 'block');
+
+        $mini = $this->svc->timelineMini($eval, 11);
+
+        $this->assertSame('---------kk', $mini['tanda']);
+    }
+
     public function test_jam_kerja_lebih_dari_12_jam_pada_shift_terkini(): void
     {
         $hariIni = CarbonImmutable::parse('2026-10-14');

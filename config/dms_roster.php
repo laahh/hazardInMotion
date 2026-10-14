@@ -225,6 +225,10 @@ return [
         // Dicocokkan ke dms_roster_karyawan.kode_pt.
         'kode_pt' => ['PAMA', 'BUMA', 'FAD', 'KDC', 'MTN', 'MTL', 'BAR'],
 
+        // Karyawan yang sudah tercatat di sid_roster_banned_master (sudah
+        // ditindak/treatment) tidak dimunculkan lagi. Dicocokkan lewat SID/NIK.
+        'kecualikan_master_banned' => true,
+
         // Tabel "Penegakan Aturan & Alur Banned/Unban". Angka di sini angka
         // ATURAN (bukan replikasi kode referensi seperti blok 'ambang' di
         // atas), jadi on-site memakai > 70, bukan > 71.

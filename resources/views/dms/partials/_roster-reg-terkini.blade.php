@@ -191,12 +191,14 @@
                   <thead>
                     <tr>
                       <th>No</th>
-                      <th>SID</th>
                       <th>Nama</th>
-                      <th>Jabatan</th>
                       <th>PT</th>
                       <th>Site</th>
                       <th class="text-end" data-ro-th="0">Nilai</th>
+                      <th class="ro-mini-th">
+                        <span class="d-block mb-4">Timeline harian</span>
+                        <span class="ro-mini-label" data-ro-th-timeline></span>
+                      </th>
                       <th data-ro-th="1">Mulai</th>
                       <th data-ro-th="2">Selesai</th>
                       <th>Keterangan</th>
@@ -207,7 +209,16 @@
                 </table>
                 <p class="text-secondary-light text-sm text-center my-16 d-none" data-ro-pesan></p>
               </div>
-              <p class="text-secondary-light text-xs mt-8 mb-0">Klik baris untuk melihat timeline tap RFID karyawan tersebut.</p>
+              <div class="ro-sc-legend mt-12">
+                <span><i class="sh-P ro-strip__key"></i>Pagi</span>
+                <span><i class="sh-M ro-strip__key"></i>Malam</span>
+                <span><i class="sh-o ro-strip__key"></i>Off</span>
+                <span><i class="sh-c ro-strip__key"></i>Cuti</span>
+                <span><i class="sh-x ro-strip__key"></i>Belum scan hari ini</span>
+                <span><i class="ro-strip__dot is-merah"></i>Aturan banned</span>
+                <span><i class="ro-strip__dot is-kuning"></i>Tidak sesuai mapping</span>
+              </div>
+              <p class="text-secondary-light text-xs mt-8 mb-0">Klik baris untuk melihat timeline tap RFID karyawan tersebut (gate, jam check-in/out, durasi per hari).</p>
             </div>
           </div>
         </div>
@@ -220,6 +231,10 @@
   <div class="col-12 mt-0">
     <span class="text-secondary-light text-xs">
       Hanya karyawan {{ implode(', ', config('dms_roster.reg_live.kode_pt', [])) }}.
+      @if (config('dms_roster.reg_live.kecualikan_master_banned', true))
+        Tidak termasuk karyawan yang sudah tercatat di
+        <a href="{{ route('pra-operasi.roster-banned.index') }}" class="text-primary-600">Master Roster Banned</a> (sudah ditindak/treatment).
+      @endif
       Dihitung langsung dari scan RFID {{ $temuanKini['jendela'] }} hari terakhir (diambil {{ $temuanKini['diambil'] }}).
       Karyawan yang belum scan hari ini dinilai sampai kemarin; tanda ≥ = periode lebih panjang dari jendela data.
       Cuti = tidak tap lebih dari 5 hari berturut-turut. Kategori longgar (Transportasi Massal, Mekanik) dikecualikan dari aturan banned.
@@ -228,4 +243,4 @@
 @endif
 
 {{-- Modal: daftar per aturan (JSON) dan timeline tap RFID per karyawan. --}}
-<script src="{{ asset('dms-assets/roster-compliance/roster-temuan.js') }}?v=2"></script>
+<script src="{{ asset('dms-assets/roster-compliance/roster-temuan.js') }}?v=3"></script>
