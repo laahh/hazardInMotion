@@ -23,6 +23,14 @@ final class PengawasMonitorService
 
     private const PAGE_CACHE_SECONDS = 180;
 
+    /** Snapshot terakhir yang sukses — dipakai "Semua Site" selagi warm berikutnya berjalan. */
+    private const LAST_GOOD_SECONDS = 604800;
+
+    /** Minggu yang diminta user untuk "Semua Site" tapi belum punya snapshot — diambil warmer. */
+    private const PENDING_WEEKS_KEY = 'control-room:pengawas-monitor:pending-all-weeks';
+
+    private const PENDING_WEEKS_SECONDS = 86400;
+
     private readonly ControlRoomSapDutyReader $dailyWindow;
 
     public function __construct(
@@ -44,27 +52,130 @@ final class PengawasMonitorService
      */
     public function build(?ControlRoomSiteCode $site, ControlRoomIsoWeekPeriod $period): array
     {
-        $today = CarbonImmutable::now()->startOfDay();
-        $cacheKey = sprintf(
-            'control-room:pengawas-monitor:v2:%s:%s:%s:%s',
-            $site?->value ?? 'ALL',
-            $period->start->toDateString(),
-            $today->toDateString(),
-            hash('crc32b', serialize(config('control-room-pengawas.list', []))),
-        );
-
-        $cached = Cache::get($cacheKey);
+        $cached = Cache::get($this->freshKey($site, $period));
         if (is_array($cached)) {
             return $cached;
         }
 
-        $payload = $this->buildUncached($site, $period, $today);
+        return $this->warm($site, $period);
+    }
+
+    /**
+     * "Semua Site" (±250 SID) terlalu berat untuk request HTTP — ±40 query OBDS
+     * berurutan melewati timeout ALB (504). Halaman hanya membaca snapshot;
+     * perhitungannya oleh `control-room:pengawas-warm` di scheduler.
+     *
+     * @return array<string, mixed>
+     */
+    public function snapshotOrQueue(?ControlRoomSiteCode $site, ControlRoomIsoWeekPeriod $period): array
+    {
+        $cached = Cache::get($this->freshKey($site, $period)) ?? Cache::get($this->lastGoodKey($site, $period));
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        $pending = $this->pendingWeeks();
+        if (! in_array($period->isoWeekValue(), $pending, true)) {
+            Cache::put(self::PENDING_WEEKS_KEY, [...$pending, $period->isoWeekValue()], self::PENDING_WEEKS_SECONDS);
+        }
+
+        return $this->placeholder($site, $period);
+    }
+
+    /**
+     * Hitung ulang dari OBDS dan simpan (fresh + last-good) bila sukses.
+     *
+     * @return array<string, mixed>
+     */
+    public function warm(?ControlRoomSiteCode $site, ControlRoomIsoWeekPeriod $period): array
+    {
+        $payload = $this->buildUncached($site, $period, CarbonImmutable::now()->startOfDay());
         // Gagal OBDS tidak di-cache supaya muat ulang berikutnya mencoba lagi.
         if ($payload['loaded'] && $payload['dataQuality']['loaded']) {
-            Cache::put($cacheKey, $payload, self::PAGE_CACHE_SECONDS);
+            $payload['generatedAt'] = CarbonImmutable::now()->toDateTimeString();
+            Cache::put($this->freshKey($site, $period), $payload, self::PAGE_CACHE_SECONDS);
+            Cache::put($this->lastGoodKey($site, $period), $payload, self::LAST_GOOD_SECONDS);
         }
 
         return $payload;
+    }
+
+    /**
+     * @return list<string> nilai iso_week (mis. 2026-W41)
+     */
+    public function pendingWeeks(): array
+    {
+        $weeks = Cache::get(self::PENDING_WEEKS_KEY);
+
+        return is_array($weeks) ? array_values($weeks) : [];
+    }
+
+    public function forgetPendingWeek(string $isoWeek): void
+    {
+        $remaining = array_values(array_diff($this->pendingWeeks(), [$isoWeek]));
+        Cache::put(self::PENDING_WEEKS_KEY, $remaining, self::PENDING_WEEKS_SECONDS);
+    }
+
+    private function freshKey(?ControlRoomSiteCode $site, ControlRoomIsoWeekPeriod $period): string
+    {
+        return sprintf(
+            'control-room:pengawas-monitor:v2:%s:%s:%s:%s',
+            $site?->value ?? 'ALL',
+            $period->start->toDateString(),
+            CarbonImmutable::now()->toDateString(),
+            $this->rosterHash(),
+        );
+    }
+
+    private function lastGoodKey(?ControlRoomSiteCode $site, ControlRoomIsoWeekPeriod $period): string
+    {
+        return sprintf(
+            'control-room:pengawas-monitor:last-good:v1:%s:%s:%s',
+            $site?->value ?? 'ALL',
+            $period->start->toDateString(),
+            $this->rosterHash(),
+        );
+    }
+
+    private function rosterHash(): string
+    {
+        return hash('crc32b', serialize(config('control-room-pengawas.list', [])));
+    }
+
+    /**
+     * Payload kosong berbentuk sama dengan build() — tanpa satu pun query OBDS.
+     *
+     * @return array<string, mixed>
+     */
+    private function placeholder(?ControlRoomSiteCode $site, ControlRoomIsoWeekPeriod $period): array
+    {
+        $people = $this->roster->forSite($site);
+        $dates = $this->runningDates($period->start, CarbonImmutable::now()->startOfDay());
+        $rows = $this->achievement->rows($people, $dates, [], false);
+
+        return [
+            'loaded' => false,
+            'preparing' => true,
+            'people' => count($people),
+            'days' => $this->achievement->dayHeads($dates),
+            'rows' => $rows,
+            'kpi' => $this->achievement->kpiCards($rows, null, []),
+            'personnelCoverage' => [],
+            'pareto' => ['s1' => [], 's2' => []],
+            'highlight' => [
+                'goldenRules' => [], 'blindspotCount' => 0, 'blindspotTotal' => 0,
+                'tbcPercentage' => null, 'blindspotItems' => [], 'tbcItems' => [],
+            ],
+            'quality' => [],
+            'dataQuality' => [
+                'loaded' => false,
+                'rows' => [],
+                'kpi' => [
+                    'personnel' => 0, 'avg_composite' => null, 'avg_mix' => null,
+                    'labels' => ['Belum ada temuan' => 0, 'Perlu perbaikan' => 0, 'Cukup' => 0, 'Baik' => 0],
+                ],
+            ],
+        ];
     }
 
     /**

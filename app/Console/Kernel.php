@@ -147,6 +147,15 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->appendOutputTo(storage_path('logs/pra-operasi-sync-roster.log'));
 
+        // Control Room: snapshot Monitoring Pengawas "Semua Site" (±40 query OBDS,
+        // terlalu lama untuk request HTTP → 504). Halaman hanya membaca snapshot.
+        $schedule->command('control-room:pengawas-warm')
+            ->timezone('Asia/Makassar')
+            ->everyFiveMinutes()
+            ->withoutOverlapping(30)
+            ->runInBackground()
+            ->appendOutputTo(storage_path('logs/control-room-pengawas-warm.log'));
+
         $schedule->command('ohs-dashboard:digest')
             ->timezone('Asia/Jakarta')
             ->everyMinute()

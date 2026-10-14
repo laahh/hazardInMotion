@@ -36,7 +36,9 @@ final class PengawasMonitorController extends Controller
             'site' => $site,
             'siteParam' => $site?->value ?? ControlRoomPengawasIndexRequest::ALL_SITES,
             'sites' => $roster->sites(),
-            'monitor' => $monitor->build($site, $period),
+            'monitor' => $site === null
+                ? $monitor->snapshotOrQueue(null, $period)
+                : $monitor->build($site, $period),
         ]);
     }
 

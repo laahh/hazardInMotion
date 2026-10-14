@@ -78,7 +78,17 @@
             </div>
         </form>
 
-        @if (! $monitor['loaded'])
+        @if (! empty($monitor['preparing']))
+            <div class="ocr-notice" role="status">
+                <i class="ri-time-line"></i>
+                <span>Data Semua Site untuk minggu ini sedang disiapkan di latar belakang (±5–10 menit). Muat ulang beberapa saat lagi, atau pilih satu site untuk melihat datanya sekarang.</span>
+            </div>
+        @elseif ($site === null && ! empty($monitor['generatedAt']))
+            <div class="ocr-notice" role="status">
+                <i class="ri-information-line"></i>
+                <span>Semua Site: data per {{ \Carbon\CarbonImmutable::parse($monitor['generatedAt'])->format('d M H:i') }} (diperbarui otomatis tiap ±5 menit).</span>
+            </div>
+        @elseif (! $monitor['loaded'])
             <div class="ocr-notice" role="status">
                 <i class="ri-error-warning-line"></i>
                 <span>Sumber SAP (OBDS) tidak terjangkau. Daftar pengawas tetap tampil, angka SAP kosong. Muat ulang beberapa saat lagi.</span>
