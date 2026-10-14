@@ -7,6 +7,7 @@ namespace Tests\Unit\Dms;
 use App\Services\Dms\Roster\DmsRosterRegLiveService;
 use App\Services\Dms\Roster\DmsRosterRuleEngine;
 use App\Services\PembatasanLV\PembatasanLVOlapQuery;
+use Carbon\CarbonImmutable;
 use Tests\TestCase;
 
 /**
@@ -83,6 +84,63 @@ class DmsRosterRegLiveServiceTest extends TestCase
         $this->assertNull($hasil['reg1']);
         $this->assertNull($hasil['reg2']);
         $this->assertNull($hasil['reg3']);
+    }
+
+    public function test_susun_hari_memasangkan_checkout_shift_malam_di_hari_berikutnya(): void
+    {
+        $awal = CarbonImmutable::parse('2026-10-10');
+        $tap = [
+            $this->tap('2026-10-10 17:25:49', 'CHECK IN', 'Pos BPL'),
+            $this->tap('2026-10-11 06:29:43', 'CHECK OUT', 'Pos Office'),
+            $this->tap('2026-10-11 17:22:44', 'CHECK IN', 'Pos BPL'),
+        ];
+
+        $hari = $this->svc->susunHari($tap, $awal, 3);
+
+        $this->assertSame('M', $hari[0]['kode']);
+        $this->assertSame(['jam' => '17:25', 'gate' => 'Pos BPL'], $hari[0]['masuk']);
+        $this->assertSame(['jam' => '06:29', 'tanggal' => '11 Oct', 'gate' => 'Pos Office'], $hari[0]['keluar']);
+        $this->assertSame('13j 3m', $hari[0]['durasi']);
+        // Check-out 11 Okt pagi milik shift 10 Okt, bukan shift 11 Okt.
+        $this->assertNull($hari[1]['keluar']);
+        $this->assertSame('o', $hari[2]['kode']);
+    }
+
+    public function test_susun_hari_tidak_memakai_checkout_sesudah_checkin_berikutnya(): void
+    {
+        $awal = CarbonImmutable::parse('2026-10-09');
+        $tap = [
+            $this->tap('2026-10-09 05:27:36', 'CHECK IN', 'A'),
+            $this->tap('2026-10-10 17:25:49', 'CHECK IN', 'A'),
+            $this->tap('2026-10-11 06:29:43', 'CHECK OUT', 'B'),
+        ];
+
+        $hari = $this->svc->susunHari($tap, $awal, 3);
+
+        $this->assertSame('P', $hari[0]['kode']);
+        $this->assertNull($hari[0]['keluar']);
+        $this->assertNull($hari[0]['durasi']);
+        $this->assertSame('B', $hari[1]['keluar']['gate']);
+    }
+
+    public function test_susun_hari_tap_tidak_lolos_tampil_tapi_tidak_dihitung_hadir(): void
+    {
+        $awal = CarbonImmutable::parse('2026-10-09');
+        $tap = [$this->tap('2026-10-09 06:00:00', 'CHECK IN', 'A', false)];
+
+        $hari = $this->svc->susunHari($tap, $awal, 1);
+
+        $this->assertSame('o', $hari[0]['kode']);
+        $this->assertCount(1, $hari[0]['tap']);
+        $this->assertFalse($hari[0]['tap'][0]['lolos']);
+    }
+
+    /**
+     * @return array{waktu:string,jenis:string,gate:string,lolos:bool}
+     */
+    private function tap(string $waktu, string $jenis, string $gate, bool $lolos = true): array
+    {
+        return ['waktu' => $waktu, 'jenis' => $jenis, 'gate' => $gate, 'lolos' => $lolos];
     }
 
     /**

@@ -803,6 +803,9 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         Route::get('/roster-compliance', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'index'])->name('roster-compliance');
         Route::get('/roster-compliance/wajib-cuti.csv', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'unduhWajibCuti'])->name('roster-compliance.wajib-cuti');
         // REG-1/2/3 & MAP-1/2/3 per hari ini, langsung dari RFID.
+        Route::get('/roster-compliance/terkini/karyawan/{sid}.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'timelineTerkini'])
+            ->where('sid', '[A-Za-z0-9]{1,20}')
+            ->name('roster-compliance.terkini.timeline');
         Route::get('/roster-compliance/terkini/{kode}.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'detailTerkini'])
             ->whereIn('kode', \App\Services\Dms\Roster\DmsRosterRegLiveService::KODE)
             ->name('roster-compliance.terkini.detail');

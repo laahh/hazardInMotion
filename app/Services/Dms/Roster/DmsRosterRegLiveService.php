@@ -70,6 +70,168 @@ final class DmsRosterRegLiveService
      */
     public function nilai(array $hariScan, int $panjang, string $kategori, string $perusahaan = ''): array
     {
+        $param = $this->engine->paramPerusahaan($perusahaan);
+
+        return $this->nilaiEvaluasi(
+            $this->engine->evaluasi($this->rakitDeret($hariScan, $panjang), $kategori, $param['thr'], $param['map']),
+            $param,
+        );
+    }
+
+    /**
+     * Timeline harian satu karyawan untuk jendela yang sama, langsung dari
+     * RFID: kode shift, flag REG/MAP per hari, dan detail tap (gate, jam
+     * check-in/out, durasi).
+     *
+     * @return array<string, mixed>|null  null bila RFID tidak terjangkau.
+     */
+    public function timeline(string $sid): ?array
+    {
+        $hariIni = CarbonImmutable::now()->startOfDay();
+        $panjang = $this->panjangJendela();
+        $awal = $hariIni->subDays($panjang - 1);
+
+        try {
+            $k = DB::table('dms_roster_karyawan')
+                ->where('kode_sid', $sid)
+                ->first(['kode_sid', 'nama', 'jabatan_struktural as jabatan', 'kategori', 'perusahaan', 'kode_pt', 'site']);
+            if ($k === null) {
+                return ['ditemukan' => false];
+            }
+
+            $tap = $this->tarikTapKaryawan($sid, $awal, $hariIni);
+        } catch (Throwable $e) {
+            Log::warning('DmsRoster timeline RFID gagal: '.$e->getMessage());
+
+            return null;
+        }
+
+        $hari = $this->susunHari($tap, $awal, $panjang);
+        $hariScan = [];
+        foreach ($hari as $i => $h) {
+            if ($h['kode'] !== 'o') {
+                $hariScan[$i] = $h['kode'];
+            }
+        }
+
+        $param = $this->engine->paramPerusahaan((string) $k->perusahaan);
+        $deret = $this->rakitDeret($hariScan, $panjang);
+        $eval = $this->engine->evaluasi($deret, (string) $k->kategori, $param['thr'], $param['map']);
+        $n = strlen($eval->pola);
+
+        foreach ($hari as $i => &$h) {
+            // Kode setelah normalisasi (off panjang jadi cuti); hari ini tanpa
+            // scan tidak dinilai, ditandai 'x'.
+            $h['kode'] = $i < $n ? $eval->pola[$i] : 'x';
+            $h['merah'] = $eval->red[$i] ?? '';
+            $h['kuning'] = $eval->yel[$i] ?? '';
+        }
+        unset($h);
+
+        $temuan = [];
+        foreach ($this->nilaiEvaluasi($eval, $param) as $kode => $run) {
+            if ($run !== null) {
+                $temuan[] = strtoupper(substr($kode, 0, 3)).'-'.substr($kode, 3);
+            }
+        }
+
+        return [
+            'ditemukan' => true,
+            'sid' => (string) $k->kode_sid,
+            'nama' => (string) $k->nama,
+            'jabatan' => (string) ($k->jabatan ?: '—'),
+            'kategori' => (string) $k->kategori,
+            'perusahaan' => (string) $k->perusahaan,
+            'pt' => (string) $k->kode_pt,
+            'site' => (string) ($k->site ?: '—'),
+            'blok' => $param['thr'] - 1,
+            'temuan' => $temuan,
+            'hari' => $hari,
+        ];
+    }
+
+    /**
+     * Pasangkan tap RFID per hari — murni, tanpa DB.
+     *
+     * Kode hari dari CHECK IN pertama yang lolos (P < batas menit pagi, M
+     * sesudahnya). Check-out dipasangkan ke check-in itu: CHECK OUT lolos
+     * pertama sesudahnya, sebelum check-in lolos berikutnya dan paling lama
+     * 24 jam — sehingga check-out pagi milik shift malam kemarin tidak
+     * tertukar ke shift hari ini. Semua tap (termasuk yang tidak lolos)
+     * tetap dilampirkan per tanggal untuk ditelusuri.
+     *
+     * @param  list<array{waktu:string,jenis:string,gate:string,lolos:bool}>  $tap  Urut waktu naik.
+     * @return list<array<string, mixed>>
+     */
+    public function susunHari(array $tap, CarbonImmutable $awal, int $panjang): array
+    {
+        $batasPagi = (int) config('dms_roster.populasi.batas_menit_pagi', 720);
+        $tap = array_map(static fn (array $t): array => $t + ['t' => CarbonImmutable::parse($t['waktu'])], $tap);
+        $checkIn = array_values(array_filter($tap, static fn (array $t): bool => $t['lolos'] && $t['jenis'] === 'CHECK IN'));
+        $checkOut = array_values(array_filter($tap, static fn (array $t): bool => $t['lolos'] && $t['jenis'] === 'CHECK OUT'));
+
+        $perTanggal = [];
+        foreach ($tap as $t) {
+            $perTanggal[$t['t']->toDateString()][] = [
+                'jam' => $t['t']->format('H:i'),
+                'jenis' => $t['jenis'],
+                'gate' => $t['gate'],
+                'lolos' => $t['lolos'],
+            ];
+        }
+
+        $hari = [];
+        for ($i = 0; $i < $panjang; $i++) {
+            $tgl = $awal->addDays($i);
+            $iso = $tgl->toDateString();
+            $masuk = null;
+            $berikut = null;
+            foreach ($checkIn as $j => $c) {
+                if ($c['t']->toDateString() === $iso) {
+                    $masuk = $c;
+                    $berikut = $checkIn[$j + 1]['t'] ?? null;
+                    break;
+                }
+            }
+
+            $keluar = null;
+            if ($masuk !== null) {
+                $batas = $masuk['t']->addDay();
+                if ($berikut !== null && $berikut->lt($batas)) {
+                    $batas = $berikut;
+                }
+                foreach ($checkOut as $o) {
+                    if ($o['t']->gt($masuk['t']) && $o['t']->lt($batas)) {
+                        $keluar = $o;
+                        break;
+                    }
+                }
+            }
+
+            $menitMasuk = $masuk ? $masuk['t']->hour * 60 + $masuk['t']->minute : null;
+            $hari[] = [
+                'iso' => $iso,
+                'label' => $tgl->translatedFormat('D, j M Y'),
+                'kode' => $masuk === null ? 'o' : ($menitMasuk < $batasPagi ? 'P' : 'M'),
+                'masuk' => $masuk ? ['jam' => $masuk['t']->format('H:i'), 'gate' => $masuk['gate']] : null,
+                'keluar' => $keluar ? [
+                    'jam' => $keluar['t']->format('H:i'),
+                    'tanggal' => $keluar['t']->translatedFormat('j M'),
+                    'gate' => $keluar['gate'],
+                ] : null,
+                'durasi' => $keluar ? $this->durasi($masuk['t'], $keluar['t']) : null,
+                'tap' => $perTanggal[$iso] ?? [],
+            ];
+        }
+
+        return $hari;
+    }
+
+    /**
+     * @param  array<int, string>  $hariScan  offset => 'P'|'M'
+     */
+    private function rakitDeret(array $hariScan, int $panjang): string
+    {
         $deret = str_repeat('o', $panjang);
         foreach ($hariScan as $i => $kode) {
             if ($i >= 0 && $i < $panjang) {
@@ -82,8 +244,22 @@ final class DmsRosterRegLiveService
             $deret = substr($deret, 0, -1);
         }
 
-        $param = $this->engine->paramPerusahaan($perusahaan);
-        $eval = $this->engine->evaluasi($deret, $kategori, $param['thr'], $param['map']);
+        return $deret;
+    }
+
+    private function durasi(CarbonImmutable $masuk, CarbonImmutable $keluar): string
+    {
+        $menit = (int) floor($masuk->diffInMinutes($keluar, true));
+
+        return intdiv($menit, 60).'j '.($menit % 60).'m';
+    }
+
+    /**
+     * @param  array{thr:int,map:string}  $param
+     * @return array<string, array<string, mixed>|null>
+     */
+    private function nilaiEvaluasi(DmsRosterEvaluation $eval, array $param): array
+    {
         $hasil = [];
 
         foreach ($this->engine->pelanggaranTerkini($eval) as $kode => $run) {
@@ -108,7 +284,7 @@ final class DmsRosterRegLiveService
      */
     private function hitung(CarbonImmutable $hariIni): ?array
     {
-        $panjang = max(30, (int) config('dms_roster.reg_live.jendela_hari', 180));
+        $panjang = $this->panjangJendela();
         $awal = $hariIni->subDays($panjang - 1);
 
         try {
@@ -183,6 +359,45 @@ final class DmsRosterRegLiveService
             'map3' => 'Shift Pagi setelah Malam pada '.$tanggal($run['pada']),
             default => '',
         };
+    }
+
+    private function panjangJendela(): int
+    {
+        return max(30, (int) config('dms_roster.reg_live.jendela_hari', 180));
+    }
+
+    /**
+     * Seluruh tap satu SID selama jendela (±2 tap/hari). Kolom kode_sid
+     * dibandingkan apa adanya supaya indeksnya terpakai (±80 ms).
+     *
+     * @return list<array{waktu:string,jenis:string,gate:string,lolos:bool}>
+     */
+    private function tarikTapKaryawan(string $sid, CarbonImmutable $awal, CarbonImmutable $hariIni): array
+    {
+        $rows = $this->olap->select(
+            "SELECT s.tanggal_checkinout AS waktu, s.jenis_checkinout AS jenis, s.gate,
+                    upper(trim(coalesce(s.status_lolos, ''))) = ? AS lolos
+             FROM bcsid.mv_checkinout_rfid s
+             WHERE s.kode_sid = ?
+               AND s.tanggal_checkinout >= ?
+               AND s.tanggal_checkinout < ?
+             ORDER BY s.tanggal_checkinout",
+            [
+                strtoupper((string) config('dms_roster.populasi.status_lolos_scan', 'PASSED')),
+                $sid,
+                $awal->toDateTimeString(),
+                // Sehari lebih supaya check-out shift malam hari ini ikut terbaca.
+                $hariIni->addDays(2)->toDateTimeString(),
+            ],
+            (int) config('dms_roster.reg_live.timeout_ms', 20000),
+        );
+
+        return array_map(static fn (object $r): array => [
+            'waktu' => (string) $r->waktu,
+            'jenis' => strtoupper(trim((string) $r->jenis)),
+            'gate' => trim((string) ($r->gate ?? '')) ?: '—',
+            'lolos' => (bool) $r->lolos,
+        ], $rows);
     }
 
     /**

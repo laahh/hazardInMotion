@@ -255,3 +255,52 @@
   cursor: default;
   opacity: .7;
 }
+
+/* ── Timeline tap RFID satu karyawan (modal temuan) ─────────────────────
+   Satu batang = satu hari, warna = kode shift (palet sama dengan grid pola).
+   Titik di atas batang: merah = pelanggaran regulasi, kuning = mapping. */
+:root {
+  --ro-belum: repeating-linear-gradient(45deg, #CBD5E1 0 2px, #F1F5F9 2px 4px);
+  --ro-mapping: #F59E0B;
+}
+.ro-temuan-row { cursor: pointer; }
+.ro-temuan-row:hover td { background: #F1F5F9; }
+.ro-temuan-row.is-pilih td { background: #E0E7FF; }
+
+.ro-strip { overflow-x: auto; padding-bottom: 4px; }
+.ro-strip__labels { position: relative; height: 18px; min-width: 540px; }
+.ro-strip__labels--week { height: 16px; }
+.ro-strip__mark,
+.ro-strip__week {
+  position: absolute; top: 0; white-space: nowrap;
+  font-size: 11px; font-weight: 700; color: #334155;
+  border-left: 2px solid #334155; padding-left: 3px; line-height: 14px;
+}
+.ro-strip__week { font-size: 10px; font-weight: 500; font-style: italic; color: #94A3B8; border-left-color: #CBD5E1; }
+.ro-strip__bars { display: flex; gap: 1px; height: 46px; min-width: 540px; padding-top: 8px; }
+.ro-strip__bar {
+  position: relative; flex: 1 1 0; min-width: 2px; height: 100%;
+  border: 0; padding: 0; border-radius: 1px; cursor: pointer;
+}
+.ro-strip__bar:hover { filter: brightness(.88); }
+.ro-strip__bar.is-pilih { outline: 2px solid #0F172A; outline-offset: 1px; z-index: 1; }
+.ro-strip__bar.is-merah::before,
+.ro-strip__bar.is-kuning::before {
+  content: ''; position: absolute; top: -7px; left: 50%; transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 999px;
+}
+.ro-strip__bar.is-merah::before { background: var(--ro-flag); }
+.ro-strip__bar.is-kuning::before { background: var(--ro-mapping); }
+
+.sh-P.ro-strip__bar, .sh-P.ro-strip__key { background: var(--ro-pagi); }
+.sh-M.ro-strip__bar, .sh-M.ro-strip__key { background: var(--ro-malam); }
+.sh-o.ro-strip__bar, .sh-o.ro-strip__key { background: var(--ro-off); }
+.sh-c.ro-strip__bar, .sh-c.ro-strip__key { background: var(--ro-cuti); }
+.sh-x.ro-strip__bar, .sh-x.ro-strip__key { background: var(--ro-belum); }
+
+.ro-strip__key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+.ro-strip__dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; margin-right: 5px; }
+.ro-strip__dot.is-merah { background: var(--ro-flag); }
+.ro-strip__dot.is-kuning { background: var(--ro-mapping); }
+
+.ro-hari-scroll { max-height: 360px; overflow-y: auto; }

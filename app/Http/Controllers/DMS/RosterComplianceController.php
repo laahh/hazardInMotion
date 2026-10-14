@@ -117,6 +117,26 @@ final class RosterComplianceController extends Controller
     }
 
     /**
+     * Timeline harian satu karyawan langsung dari RFID (kode shift, flag
+     * REG/MAP, gate & jam check-in/out, durasi) — dibuka dari baris tabel
+     * modal temuan.
+     */
+    public function timelineTerkini(DmsRosterRegLiveService $live, string $sid): JsonResponse
+    {
+        $data = $live->timeline(mb_substr(trim($sid), 0, 20));
+
+        if ($data === null) {
+            return response()->json(['up' => false, 'pesan' => 'RFID tidak terjangkau, coba beberapa saat lagi.'], 503);
+        }
+
+        if (! $data['ditemukan']) {
+            return response()->json(['up' => false, 'pesan' => 'Karyawan tidak ditemukan.'], 404);
+        }
+
+        return response()->json(['up' => true] + $data);
+    }
+
+    /**
      * Daftar lengkap satu REG/MAP per hari ini sebagai CSV.
      */
     public function unduhTerkini(DmsRosterRegLiveService $live, string $kode): StreamedResponse

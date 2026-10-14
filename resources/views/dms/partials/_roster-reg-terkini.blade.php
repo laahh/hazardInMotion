@@ -105,7 +105,8 @@
 
   @if ($temuanKini)
     <div class="modal fade" id="roModalTemuan-{{ $kartu['id'] }}" tabindex="-1" aria-labelledby="roModalTemuanJudul-{{ $kartu['id'] }}" aria-hidden="true"
-         data-ro-keterangan="{{ $kartu['keterangan'] ? '1' : '0' }}">
+         data-ro-keterangan="{{ $kartu['keterangan'] ? '1' : '0' }}"
+         data-ro-timeline-url="{{ route('dms.roster-compliance.terkini.timeline', ['sid' => '__SID__']) }}">
       <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content radius-8">
           <div class="modal-header">
@@ -118,6 +119,10 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
           </div>
           <div class="modal-body">
+            {{-- Tampilan detail satu karyawan (timeline RFID), diisi JS. --}}
+            <div class="d-none" data-ro-view-detail></div>
+
+            <div data-ro-view-daftar>
             <ul class="nav nav-pills gap-2 mb-16" role="tablist">
               @foreach ($kartu['item'] as $kode => [$singkat, $label, $definisi, $kolomHari])
                 <li class="nav-item" role="presentation">
@@ -168,6 +173,8 @@
               </table>
               <p class="text-secondary-light text-sm text-center my-16 d-none" data-ro-pesan></p>
             </div>
+            <p class="text-secondary-light text-xs mt-8 mb-0">Klik baris untuk melihat timeline tap RFID karyawan tersebut.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -185,110 +192,5 @@
   </div>
 @endif
 
-<script>
-// Modal temuan: buka tab sesuai tile yang diklik, muat daftarnya sekali lewat
-// JSON, lalu saring di klien.
-(function () {
-    'use strict';
-
-    var cache = {};
-
-    function esc(v) {
-        return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-        });
-    }
-
-    function render(modal, baris) {
-        var pakaiKet = modal.dataset.roKeterangan === '1';
-        var tbody = modal.querySelector('[data-ro-tbody]');
-        tbody.innerHTML = baris.map(function (r, i) {
-            return '<tr>'
-                + '<td>' + (i + 1) + '</td>'
-                + '<td>' + esc(r.sid) + '</td>'
-                + '<td>' + esc(r.nama) + '</td>'
-                + '<td>' + esc(r.jabatan) + '</td>'
-                + '<td>' + esc(r.pt) + '</td>'
-                + '<td>' + esc(r.site) + '</td>'
-                + '<td class="text-end fw-semibold">' + (r.terpotong ? '≥' : '') + esc(r.hari) + '</td>'
-                + '<td>' + esc(r.mulai) + '</td>'
-                + '<td>' + esc(r.selesai) + '</td>'
-                + (pakaiKet ? '<td>' + esc(r.keterangan) + '</td>' : '')
-                + '<td>' + esc(r.scan_terakhir) + '</td>'
-                + '</tr>';
-        }).join('');
-        saring(modal);
-    }
-
-    function pesan(modal, teks) {
-        var p = modal.querySelector('[data-ro-pesan]');
-        p.textContent = teks || '';
-        p.classList.toggle('d-none', !teks);
-    }
-
-    function saring(modal) {
-        var q = modal.querySelector('[data-ro-cari]').value.trim().toLowerCase();
-        var rows = modal.querySelectorAll('[data-ro-tbody] tr');
-        var tampil = 0;
-        rows.forEach(function (tr) {
-            var cocok = q === '' || tr.textContent.toLowerCase().indexOf(q) !== -1;
-            tr.classList.toggle('d-none', !cocok);
-            if (cocok) { tampil++; }
-        });
-        pesan(modal, rows.length === 0 ? 'Tidak ada karyawan pada kode ini per hari ini.'
-            : (tampil === 0 ? 'Tidak ada yang cocok.' : ''));
-    }
-
-    function bukaTab(modal, kode) {
-        var btn = modal.querySelector('[data-ro-tab-btn="' + kode + '"]');
-        if (!btn) { return; }
-
-        modal.querySelectorAll('[data-ro-tab-btn]').forEach(function (b) {
-            b.classList.toggle('active', b === btn);
-        });
-        modal.querySelector('[data-ro-definisi-teks]').textContent = btn.dataset.roDefinisi;
-        modal.querySelector('[data-ro-th-hari]').textContent = btn.dataset.roKolomHari;
-        modal.querySelector('[data-ro-unduh-btn]').href = btn.dataset.roUnduh;
-        modal.querySelector('[data-ro-tbody]').innerHTML = '';
-
-        if (cache[kode]) {
-            render(modal, cache[kode]);
-            return;
-        }
-
-        pesan(modal, 'Memuat data RFID…');
-        fetch(btn.dataset.roUrl, { headers: { 'Accept': 'application/json' } })
-            .then(function (res) { return res.json(); })
-            .then(function (json) {
-                if (!json.up) { throw new Error(json.pesan || 'RFID tidak terjangkau.'); }
-                cache[kode] = json.baris;
-                // Abaikan respons bila pengguna sudah pindah tab sebelum data tiba.
-                if (btn.classList.contains('active')) { render(modal, json.baris); }
-            })
-            .catch(function (err) {
-                pesan(modal, 'Gagal memuat: ' + err.message);
-            });
-    }
-
-    document.querySelectorAll('[id^="roModalTemuan-"]').forEach(function (modal) {
-        modal.addEventListener('show.bs.modal', function (e) {
-            var pemicu = e.relatedTarget;
-            modal.querySelector('[data-ro-cari]').value = '';
-            bukaTab(modal, pemicu && pemicu.dataset.roTab
-                ? pemicu.dataset.roTab
-                : modal.querySelector('[data-ro-tab-btn]').dataset.roTabBtn);
-        });
-
-        modal.querySelectorAll('[data-ro-tab-btn]').forEach(function (b) {
-            b.addEventListener('click', function () {
-                modal.querySelector('[data-ro-cari]').value = '';
-                bukaTab(modal, b.dataset.roTabBtn);
-            });
-        });
-
-        modal.querySelector('[data-ro-cari]').addEventListener('input', function () {
-            saring(modal);
-        });
-    });
-})();
-</script>
+{{-- Modal temuan: daftar per kode (JSON) dan timeline tap RFID per karyawan. --}}
+<script src="{{ asset('dms-assets/roster-compliance/roster-temuan.js') }}?v=1"></script>
