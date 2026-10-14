@@ -847,7 +847,8 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
                 'perSiteLive' => $total->perSite(),
                 'karyawanLive' => $karyawan->ambil((int) $req->query('hal', '1'), $perPage, $tahun),
                 'perluTindakanLive' => $karyawan->perluTindakan(12, $tahun),
-                'regTerkiniLive' => $karyawan->regTerkini($tahun),
+                // REG-1/2/3 per hari ini: langsung dari RFID, bukan dari pola.
+                'regTerkiniLive' => app(\App\Services\Dms\Roster\DmsRosterRegLiveService::class)->ambil(),
                 'agregatLive' => $agregat,
                 'heatmapLive' => $peta,
             ]);

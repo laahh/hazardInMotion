@@ -6,6 +6,7 @@ namespace App\Http\Controllers\DMS;
 
 use App\Http\Controllers\Controller;
 use App\Services\Dms\Roster\DmsRosterComplianceService;
+use App\Services\Dms\Roster\DmsRosterRegLiveService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -85,37 +86,35 @@ final class RosterComplianceController extends Controller
     }
 
     /**
-     * Daftar lengkap pelanggar satu REG per hari terakhir data — tombol unduh
-     * kartu REG-1/2/3 di halaman Ringkasan Roster. $kode sudah dibatasi
-     * reg1|reg2|reg3 oleh constraint route.
+     * Daftar lengkap pelanggar satu REG per hari ini, langsung dari RFID —
+     * tombol unduh kartu REG-1/2/3 di halaman Ringkasan Roster. $kode sudah
+     * dibatasi reg1|reg2|reg3 oleh constraint route.
      */
-    public function unduhRegTerkini(Request $request, string $kode): StreamedResponse
+    public function unduhRegTerkini(DmsRosterRegLiveService $live, string $kode): StreamedResponse
     {
-        $tahun = $this->tahun($request);
-        $baris = $this->service->daftarRegTerkini($tahun)[$kode];
-        $awal = CarbonImmutable::create($tahun, 1, 1)->startOfDay();
+        $data = $live->ambil();
+        abort_if($data === null, 503, 'RFID tidak terjangkau, coba beberapa saat lagi.');
+
+        $baris = $data['reg'][$kode];
         $kolomHari = [
             'reg1' => 'Kerja beruntun (hari)',
             'reg2' => 'On-site tanpa cuti (hari)',
             'reg3' => 'Panjang cuti terakhir (hari)',
         ][$kode];
-        $nama = strtoupper(str_replace('reg', 'reg-', $kode)).'-terkini-'.CarbonImmutable::now()->format('Ymd-Hi').'.csv';
+        $nama = strtoupper(str_replace('reg', 'reg-', $kode)).'-rfid-'.CarbonImmutable::now()->format('Ymd-Hi').'.csv';
 
-        return response()->streamDownload(function () use ($baris, $awal, $kolomHari): void {
+        return response()->streamDownload(function () use ($baris, $kolomHari): void {
             $out = fopen('php://output', 'wb');
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, [
                 'SID', 'Nama', 'Jabatan', 'Kategori', 'Perusahaan', 'Site',
-                $kolomHari, 'Mulai', 'Selesai', 'Status hari ini',
+                $kolomHari, 'Mulai', 'Selesai', 'Scan terakhir',
             ], ';');
 
             foreach ($baris as $r) {
                 fputcsv($out, [
                     $r['sid'], $r['nama'], $r['jabatan'], $r['kategori'], $r['perusahaan'], $r['site'],
-                    $r['run']['hari'],
-                    $awal->addDays($r['run']['mulai'])->toDateString(),
-                    $awal->addDays($r['run']['selesai'])->toDateString(),
-                    $r['status'],
+                    ($r['terpotong'] ? '>=' : '').$r['hari'], $r['mulai'], $r['selesai'], $r['scan_terakhir'],
                 ], ';');
             }
 

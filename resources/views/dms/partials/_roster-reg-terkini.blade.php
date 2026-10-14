@@ -1,9 +1,10 @@
 {{--
-  Tiga kartu REG-1/2/3 — pelanggaran regulasi fatigue PER HARI INI (hari
-  terakhir data sinkronisasi), dihitung mundur. Berbeda dari tile "Pelanggaran"
-  di atasnya yang menghitung siapa pun yang PERNAH melanggar sejak 1 Januari.
+  Tiga kartu REG-1/2/3 — pelanggaran regulasi fatigue PER HARI INI, dihitung
+  mundur langsung dari scan RFID (bcsid.mv_checkinout_rfid), tidak lewat
+  dms_roster_pola. Berbeda dari tile "Pelanggaran" di atasnya yang menghitung
+  siapa pun yang PERNAH melanggar sejak 1 Januari.
 
-  Sumber: $regTerkiniLive dari DmsRosterOverviewKaryawanReader::regTerkini().
+  Sumber: $regTerkiniLive dari DmsRosterRegLiveService::ambil().
   Kartu menampilkan beberapa nama teratas; modal memuat seluruh baris dan
   tombol unduh mengambil CSV lengkap dari server. Bila data belum tersedia,
   kartu menampilkan keadaan kosong — sengaja TANPA nama contoh, karena daftar
@@ -65,15 +66,15 @@
           <span class="text-secondary-light text-sm mb-1">
             orang
             @if ($regKini)
-              &middot; per {{ $regKini['hari_terakhir'] }}
-              <span class="text-success-600 fw-semibold">&middot; live</span>
+              &middot; per {{ $regKini['per'] }}
+              <span class="text-success-600 fw-semibold" title="Diambil langsung dari RFID {{ $regKini['diambil'] }}">&middot; RFID</span>
             @endif
           </span>
         </div>
 
         <div class="mt-16 flex-grow-1">
           @if (! $regKini)
-            <p class="text-secondary-light text-sm mb-0">Data roster belum tersedia.</p>
+            <p class="text-secondary-light text-sm mb-0">RFID tidak terjangkau saat ini; muat ulang beberapa saat lagi.</p>
           @elseif ($daftarReg === [])
             <p class="text-success-600 text-sm fw-medium mb-0">
               <iconify-icon icon="solar:check-circle-bold" class="align-middle"></iconify-icon>
@@ -89,7 +90,7 @@
                   </span>
                 </div>
                 <span class="text-end flex-shrink-0">
-                  <span class="text-danger-main text-sm fw-bold d-block">{{ number_format($r['hari'], 0, ',', '.') }} hari</span>
+                  <span class="text-danger-main text-sm fw-bold d-block">{{ $r['terpotong'] ? '≥' : '' }}{{ number_format($r['hari'], 0, ',', '.') }} hari</span>
                   <span class="text-secondary-light text-xs">{{ ($k['keterangan'])($r) }}</span>
                 </span>
               </div>
@@ -124,7 +125,8 @@
             <div>
               <h6 class="modal-title fw-bold" id="roModalRegJudul-{{ $kode }}">{{ $k['judul'] }}</h6>
               <span class="text-secondary-light text-sm">
-                {{ number_format(count($daftarReg), 0, ',', '.') }} orang &middot; per {{ $regKini['hari_terakhir'] }} &middot; {{ $k['definisi'] }}
+                {{ number_format(count($daftarReg), 0, ',', '.') }} orang &middot; per {{ $regKini['per'] }}
+                &middot; RFID diambil {{ $regKini['diambil'] }} &middot; {{ $k['definisi'] }}
               </span>
             </div>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
@@ -152,7 +154,7 @@
                     <th class="text-end">{{ $k['kolomHari'] }}</th>
                     <th>Mulai</th>
                     <th>Selesai</th>
-                    <th>Status hari ini</th>
+                    <th>Scan terakhir</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -164,10 +166,10 @@
                       <td>{{ $r['jabatan'] }}</td>
                       <td>{{ $r['pt'] }}</td>
                       <td>{{ $r['site'] }}</td>
-                      <td class="text-end fw-semibold text-danger-main">{{ number_format($r['hari'], 0, ',', '.') }}</td>
+                      <td class="text-end fw-semibold text-danger-main">{{ $r['terpotong'] ? '≥' : '' }}{{ number_format($r['hari'], 0, ',', '.') }}</td>
                       <td>{{ $r['mulai'] }}</td>
                       <td>{{ $r['selesai'] }}</td>
-                      <td>{{ $r['status'] }}</td>
+                      <td>{{ $r['scan_terakhir'] }}</td>
                     </tr>
                   @endforeach
                 </tbody>
@@ -184,9 +186,9 @@
 @if ($regKini)
   <div class="col-12 mt-0">
     <span class="text-secondary-light text-xs">
-      Satu karyawan bisa masuk lebih dari satu REG, jadi ketiga angka tidak dijumlahkan.
-      REG-2 per hari ini sama dengan daftar <b>Karyawan Perlu Tindakan</b> (wajib cuti).
-      Kategori regulasi longgar (Transportasi Massal, Mekanik) dikecualikan.
+      Dihitung langsung dari scan RFID {{ $regKini['jendela'] }} hari terakhir (diambil {{ $regKini['diambil'] }}).
+      Karyawan yang belum scan hari ini dinilai sampai kemarin. Tanda ≥ = run lebih panjang dari jendela.
+      Satu karyawan bisa masuk lebih dari satu REG; kategori longgar (Transportasi Massal, Mekanik) dikecualikan.
     </span>
   </div>
 @endif

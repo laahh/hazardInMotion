@@ -207,6 +207,20 @@ return [
         'evaluasi_ttl' => 300,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Kartu REG-1/2/3 per hari ini (DmsRosterRegLiveService)
+    |--------------------------------------------------------------------------
+    | Query langsung ke bcsid.mv_checkinout_rfid, tidak lewat dms_roster_pola.
+    | jendela_hari harus cukup panjang untuk menemukan cuti sebelum masa
+    | on-site berjalan; run yang lebih panjang dari jendela ditandai "≥".
+    */
+    'reg_live' => [
+        'jendela_hari' => 180,
+        'cache_ttl' => 900,
+        'timeout_ms' => 20000,
+    ],
+
     'per_page' => 30,
 
     // Halaman Ringkasan Roster memakai angka lebih kecil: tiap baris

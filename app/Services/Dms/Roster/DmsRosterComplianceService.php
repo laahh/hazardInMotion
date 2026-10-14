@@ -194,41 +194,6 @@ final class DmsRosterComplianceService
     }
 
     /**
-     * Karyawan yang melanggar REG-1/2/3 per hari terakhir data (lihat
-     * DmsRosterRuleEngine::pelanggaranTerkini), dikelompokkan per kode REG.
-     * Urutan: REG-1/2 dari run terpanjang, REG-3 dari cuti terpendek.
-     *
-     * @return array{reg1: list<array<string, mixed>>, reg2: list<array<string, mixed>>, reg3: list<array<string, mixed>>}
-     */
-    public function daftarRegTerkini(int $tahun): array
-    {
-        $hasil = ['reg1' => [], 'reg2' => [], 'reg3' => []];
-        $meta = $this->meta($tahun);
-        if ($meta['jumlah'] === 0) {
-            return $hasil;
-        }
-
-        // Periode default = sama dengan dashboard(), jadi cache evaluasinya terpakai bersama.
-        $periode = $this->resolvePeriode($this->normalisasiFilters(['tahun' => $tahun]), $tahun, $meta['panjang'], $meta['hari_terakhir']);
-        $baris = $this->evaluasiRingkas($tahun, $periode['r0'], $periode['r1'], $meta['disinkron'], $meta['panjang'])['baris'];
-
-        foreach ($baris as $r) {
-            foreach ($r['kini'] as $kode => $run) {
-                if ($run !== null) {
-                    $hasil[$kode][] = $r + ['run' => $run];
-                }
-            }
-        }
-
-        $panjangDulu = static fn (array $a, array $b): int => $b['run']['hari'] <=> $a['run']['hari'];
-        usort($hasil['reg1'], $panjangDulu);
-        usort($hasil['reg2'], $panjangDulu);
-        usort($hasil['reg3'], static fn (array $a, array $b): int => $a['run']['hari'] <=> $b['run']['hari']);
-
-        return $hasil;
-    }
-
-    /**
      * Lengkapi filter dengan nilai default. View selalu menerima seluruh key,
      * jadi form filter tidak pernah rontok karena pemanggil mengirim array
      * sebagian (mis. dari command, test, atau tautan lama tanpa parameter).
@@ -303,7 +268,7 @@ final class DmsRosterComplianceService
      */
     private function evaluasiRingkas(int $tahun, int $r0, int $r1, string $disinkron, int $panjangData): array
     {
-        $key = sprintf('dms_roster:ringkas:v4:%d:%d:%d:%d:%s', $tahun, $r0, $r1, $panjangData, md5($disinkron));
+        $key = sprintf('dms_roster:ringkas:v3:%d:%d:%d:%d:%s', $tahun, $r0, $r1, $panjangData, md5($disinkron));
         $ttl = (int) config('dms_roster.cache.evaluasi_ttl', 300);
 
         /** @var array{baris: list<array<string, mixed>>, seri: array<string, mixed>} */
@@ -380,7 +345,6 @@ final class DmsRosterComplianceService
                             'k3' => $eval->redK3,
                             'longgar' => $eval->longgar,
                             'wajib' => $this->engine->wajibCuti($eval),
-                            'kini' => $this->engine->pelanggaranTerkini($eval),
                         ];
 
                         $this->akumulasiSeri(

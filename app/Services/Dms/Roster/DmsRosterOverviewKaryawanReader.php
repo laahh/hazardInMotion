@@ -205,52 +205,6 @@ final class DmsRosterOverviewKaryawanReader
     }
 
     /**
-     * Pelanggaran REG-1/2/3 per hari terakhir data, lengkap seluruh baris
-     * (kartu menampilkan beberapa teratas, modal menampilkan semuanya).
-     *
-     * @return array{hari_terakhir:string,reg:array<string,list<array<string,mixed>>>}|null
-     */
-    public function regTerkini(?int $tahun = null): ?array
-    {
-        $tahun ??= CarbonImmutable::now()->year;
-
-        try {
-            $meta = $this->compliance->meta($tahun);
-            if ($meta['jumlah'] === 0) {
-                return null;
-            }
-
-            $daftar = $this->compliance->daftarRegTerkini($tahun);
-        } catch (Throwable $e) {
-            Log::warning('DmsRoster REG terkini gagal: '.$e->getMessage());
-
-            return null;
-        }
-
-        $awal = CarbonImmutable::create($tahun, 1, 1)->startOfDay();
-        $reg = [];
-
-        foreach ($daftar as $kode => $baris) {
-            $reg[$kode] = array_map(static fn (array $r): array => [
-                'sid' => (string) $r['sid'],
-                'nama' => (string) $r['nama'],
-                'jabatan' => (string) ($r['jabatan'] !== '' ? $r['jabatan'] : '—'),
-                'pt' => (string) $r['kode_pt'],
-                'site' => (string) ($r['site'] !== '' ? $r['site'] : '—'),
-                'status' => (string) $r['status'],
-                'hari' => (int) $r['run']['hari'],
-                'mulai' => $awal->addDays((int) $r['run']['mulai'])->translatedFormat('j M Y'),
-                'selesai' => $awal->addDays((int) $r['run']['selesai'])->translatedFormat('j M Y'),
-            ], $baris);
-        }
-
-        return [
-            'hari_terakhir' => CarbonImmutable::parse($meta['hari_terakhir'])->translatedFormat('j M Y'),
-            'reg' => $reg,
-        ];
-    }
-
-    /**
      * @return array{thr:int,map:string}
      */
     private function paramPt(string $perusahaan): array
