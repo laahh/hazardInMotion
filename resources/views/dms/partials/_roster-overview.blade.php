@@ -265,32 +265,6 @@
   </div>
 </div>
 
-@if ($live && $ag)
-  <div class="alert alert-success bg-success-100 text-success-600 border-success-100 px-24 py-13 mb-24 radius-8 d-flex gap-2 align-items-start" role="alert">
-    <iconify-icon icon="solar:check-circle-bold" class="icon text-lg flex-shrink-0 mt-2"></iconify-icon>
-    <div class="text-sm">
-      <b>Data live.</b> Total karyawan, keempat tile, donat pelanggaran, heatmap harian, daftar perlu tindakan,
-      dan tabel scorecard dihitung dari pola roster hasil sinkronisasi RFID
-      (<code>dms_roster_pola</code> &times; <code>dms_roster_karyawan</code>, basis <code>wajib_cek</code>),
-      memakai rumus yang sama dengan halaman Kepatuhan Roster (Live).
-    </div>
-  </div>
-@else
-  {{-- <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-24 radius-8 d-flex gap-2 align-items-start" role="alert">
-    <iconify-icon icon="solar:info-circle-bold" class="icon text-lg flex-shrink-0 mt-2"></iconify-icon>
-    <div class="text-sm">
-      <b>Sebagian angka masih contoh.</b>
-      @if (! $live)
-        Kartu Total Karyawan belum bisa dibaca &mdash; koneksi database tidak tersedia.
-      @endif
-      @if (! $ag)
-        Agregat roster belum tersedia: tabel sinkronisasi masih kosong atau belum pernah dikompilasi.
-        Jalankan <code>php artisan dms:sync-roster-rfid --master --full</code> lebih dulu.
-      @endif
-    </div>
-  </div> --}}
-@endif
-
 <div class="row gy-4">
   {{-- ══════════ KARTU HERO + 4 TILE ══════════ --}}
   <div class="col-xxl-9">
