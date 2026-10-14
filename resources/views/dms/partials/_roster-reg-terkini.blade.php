@@ -219,6 +219,7 @@
 @if ($temuanKini)
   <div class="col-12 mt-0">
     <span class="text-secondary-light text-xs">
+      Hanya karyawan {{ implode(', ', config('dms_roster.reg_live.kode_pt', [])) }}.
       Dihitung langsung dari scan RFID {{ $temuanKini['jendela'] }} hari terakhir (diambil {{ $temuanKini['diambil'] }}).
       Karyawan yang belum scan hari ini dinilai sampai kemarin; tanda ≥ = periode lebih panjang dari jendela data.
       Cuti = tidak tap lebih dari 5 hari berturut-turut. Kategori longgar (Transportasi Massal, Mekanik) dikecualikan dari aturan banned.

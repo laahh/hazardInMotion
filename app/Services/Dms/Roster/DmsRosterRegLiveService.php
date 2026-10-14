@@ -29,7 +29,8 @@ use Throwable;
  * sampai kemarin — tidak dianggap off, supaya run kerjanya tidak terputus palsu.
  *
  * Master karyawan (nama, jabatan, kategori, perusahaan, populasi wajib_cek)
- * dibaca dari dms_roster_karyawan.
+ * dibaca dari dms_roster_karyawan, dibatasi ke PT di config
+ * dms_roster.reg_live.kode_pt (tujuh PT yang punya desain roster).
  */
 final class DmsRosterRegLiveService
 {
@@ -47,7 +48,7 @@ final class DmsRosterRegLiveService
     public function ambil(): ?array
     {
         $hariIni = CarbonImmutable::now()->startOfDay();
-        $key = 'dms_roster:aturan_live:v1:'.$hariIni->toDateString();
+        $key = 'dms_roster:aturan_live:v2:'.$hariIni->toDateString();
 
         $tersimpan = Cache::get($key);
         if (is_array($tersimpan)) {
@@ -278,6 +279,10 @@ final class DmsRosterRegLiveService
             $shift = $this->rfid->shiftTerakhir($hariIni->subDays($aturan['jam_kerja_jendela'] - 1), $hariIni, $aturan['jam_kerja_maks']);
             $karyawan = DB::table('dms_roster_karyawan')
                 ->where('wajib_cek', true)
+                ->when(
+                    config('dms_roster.reg_live.kode_pt', []) !== [],
+                    static fn ($q) => $q->whereIn('kode_pt', config('dms_roster.reg_live.kode_pt')),
+                )
                 ->select('kode_sid', 'nama', 'jabatan_struktural as jabatan', 'kategori', 'perusahaan', 'kode_pt', 'site')
                 ->get();
         } catch (Throwable $e) {

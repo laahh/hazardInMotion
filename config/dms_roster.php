@@ -220,6 +220,11 @@ return [
         'cache_ttl' => 900,
         'timeout_ms' => 20000,
 
+        // Hanya perusahaan ini yang ditampilkan di kartu aturan banned —
+        // ketujuh PT yang punya desain roster di blok 'perusahaan'.
+        // Dicocokkan ke dms_roster_karyawan.kode_pt.
+        'kode_pt' => ['PAMA', 'BUMA', 'FAD', 'KDC', 'MTN', 'MTL', 'BAR'],
+
         // Tabel "Penegakan Aturan & Alur Banned/Unban". Angka di sini angka
         // ATURAN (bukan replikasi kode referensi seperti blok 'ambang' di
         // atas), jadi on-site memakai > 70, bukan > 71.
