@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Dms\Roster;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -109,6 +110,8 @@ final class DmsRosterOverviewKaryawanReader
                 // Dipakai panel collapse untuk menggambar pola harian.
                 'pola' => $eval?->pola ?? '',
                 'merah' => $eval === null ? [] : array_map(static fn (string $v): bool => $v !== '', $eval->red),
+                // Daftar kejadian pelanggaran (rentang tanggal) di bawah kalender.
+                'riwayat' => $eval === null ? [] : $this->riwayatPelanggaran($eval, (int) $payload['tahun']),
             ];
         }
 
@@ -138,6 +141,79 @@ final class DmsRosterOverviewKaryawanReader
                 ),
             ],
         ];
+    }
+
+    /**
+     * Kejadian pelanggaran sepanjang tahun, satu entri per run yang melanggar,
+     * urut tanggal. Memakai ambang rule engine yang sama dengan titik merah di
+     * kalender dan kolom tabel, jadi ketiganya selalu sepakat. Run kerja
+     * beruntun yang berada DI DALAM periode on-site panjang dicatat sebagai
+     * kejadian sendiri — keduanya pelanggaran yang berbeda.
+     *
+     * @return list<array{jenis:string,teks:string,mulai:string,selesai:string,hari:int}>
+     */
+    public function riwayatPelanggaran(DmsRosterEvaluation $e, int $tahun): array
+    {
+        if ($e->longgar || $e->pola === '') {
+            return [];
+        }
+
+        $ambang = $this->engine->ambang();
+        $awal = CarbonImmutable::create($tahun, 1, 1)->startOfDay();
+        $p = $e->pola;
+        $n = strlen($p);
+        $out = [];
+
+        $aturan = [
+            // [cocok-karakter, apakah run melanggar, jenis, teks]
+            [
+                static fn (string $c): bool => $c !== 'c',
+                static fn (int $len): bool => $len > ($ambang['onsite'] ?? 71),
+                'Periode kerja',
+                static fn (int $len): string => $len.' hari on-site tanpa cuti',
+            ],
+            [
+                static fn (string $c): bool => $c === 'P' || $c === 'M',
+                static fn (int $len): bool => $len > ($ambang['kerja_beruntun'] ?? 13),
+                'Bekerja berturut-turut',
+                static fn (int $len): string => $len.' hari tanpa off',
+            ],
+            [
+                static fn (string $c): bool => $c === 'c',
+                static fn (int $len): bool => $len < ($ambang['cuti_min'] ?? 12),
+                'Cuti terlalu pendek',
+                static fn (int $len): string => 'cuti hanya '.$len.' hari',
+            ],
+        ];
+
+        foreach ($aturan as [$cocok, $melanggar, $jenis, $teks]) {
+            $i = 0;
+            while ($i < $n) {
+                if (! $cocok($p[$i])) {
+                    $i++;
+
+                    continue;
+                }
+                $j = $i;
+                while ($j < $n && $cocok($p[$j])) {
+                    $j++;
+                }
+                if ($melanggar($j - $i)) {
+                    $out[] = [
+                        'jenis' => $jenis,
+                        'teks' => $teks($j - $i),
+                        'mulai' => $awal->addDays($i)->translatedFormat('j M'),
+                        'selesai' => $awal->addDays($j - 1)->translatedFormat('j M'),
+                        'hari' => $i,
+                    ];
+                }
+                $i = $j;
+            }
+        }
+
+        usort($out, static fn (array $a, array $b): int => $a['hari'] <=> $b['hari']);
+
+        return $out;
     }
 
     /**

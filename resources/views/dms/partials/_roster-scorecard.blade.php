@@ -37,21 +37,31 @@
      * @param  list<bool>  $merah  hari ter-flag pelanggaran
      * @return array{grid: array<int, array<int, array{kode:string,merah:bool,label:string}|null>>, kolom: int}
      */
-    $gridDari = function (string $pola, array $merah) use ($tlAwal): array {
+    // Hari ke-N on-site sejak cuti terakhir yang WAJIB sudah cuti: aturan
+    // banned periode kerja > 70 hari → batasnya hari ke-71.
+    $batasWajibCuti = (int) config('dms_roster.reg_live.aturan.onsite_maks', 70) + 1;
+
+    $gridDari = function (string $pola, array $merah) use ($tlAwal, $batasWajibCuti): array {
         $grid = array_fill(0, 7, []);
         $kolom = 0;
         $n = strlen($pola);
+        // Hari ke-N on-site: kerja + off pendek dihitung, mulai lagi dari 1
+        // setelah blok cuti — sama dengan cara aturan periode kerja menghitung.
+        $ke = 0;
 
         for ($i = 0; $i < $n; $i++) {
             $t = $tlAwal->copy()->addDays($i);
             if ($i > 0 && $t->dayOfWeek === \Carbon\Carbon::MONDAY) {
                 $kolom++;
             }
+            $ke = $pola[$i] === 'c' ? 0 : $ke + 1;
 
             $grid[($t->dayOfWeek + 6) % 7][$kolom] = [
                 'kode' => $pola[$i],
                 'merah' => (bool) ($merah[$i] ?? false),
                 'label' => $t->translatedFormat('D, d M Y'),
+                'ke' => $ke,
+                'batas' => $ke === $batasWajibCuti,
             ];
         }
 
@@ -101,9 +111,16 @@
                 continue;
             }
 
-            $judul = $sel['label'].' — '.$kodeLabel[$sel['kode']].($sel['merah'] ? ' · ⚠ pelanggaran' : '');
+            $ke = (int) ($sel['ke'] ?? 0);
+            $judul = $sel['label'].' — '.$kodeLabel[$sel['kode']]
+                .($ke > 0 ? ' · hari kerja ke-'.$ke : '')
+                .(($sel['batas'] ?? false) ? ' · ⛔ seharusnya sudah cuti (periode kerja > '.($ke - 1).' hari)' : '')
+                .($sel['merah'] ? ' · ⚠ pelanggaran' : '');
             $out .= '<span class="ro-hm-cell sh-'.$sel['kode'].($sel['merah'] ? ' is-flag' : '')
-                .'" title="'.e($judul).'"></span>';
+                .(($sel['batas'] ?? false) ? ' is-batas' : '')
+                .'" title="'.e($judul).'">'
+                .($ke > 0 ? '<span class="ro-hm-ke">'.$ke.'</span>' : '')
+                .'</span>';
         }
 
         return $out;
@@ -212,6 +229,7 @@
             'pelanggaran' => $r['pelanggaran'],
             'pola' => $r['pola'],
             'merah' => $r['merah'],
+            'riwayat' => $r['riwayat'] ?? [],
         ], $live['baris']);
     }
 
@@ -489,6 +507,8 @@
                           <span><i class="ro-sw ro-sw-off"></i>Off</span>
                           <span><i class="ro-sw ro-sw-cuti"></i>Cuti</span>
                           <span><i class="ro-sw ro-sw-flag"></i>Hari ter-flag</span>
+                          <span><i class="ro-sw ro-sw-batas"></i>Hari ke-{{ $batasWajibCuti }}: seharusnya sudah cuti</span>
+                          <span class="ro-sc-muted">angka = hari kerja ke-N sejak cuti</span>
                         </div>
                       </div>
 
@@ -505,6 +525,30 @@
                           </div>
                         </div>
                       </div>
+
+                      {{-- Kapan saja karyawan ini melanggar — kejadian yang sama
+                           dengan titik merah di kalender. --}}
+                      @if (isset($r['riwayat']))
+                        <div class="ro-sc-riwayat mt-16">
+                          <div class="ro-sc-detail__title mb-8">
+                            Riwayat pelanggaran
+                            <span class="ro-sc-muted fw-normal">&middot; {{ count($r['riwayat']) }} kejadian sepanjang {{ $tlRentang }}</span>
+                          </div>
+                          @if ($r['riwayat'] === [])
+                            <span class="text-success-600 text-sm fw-medium">Tidak ada pelanggaran regulasi.</span>
+                          @else
+                            <ul class="ro-sc-riwayat__list">
+                              @foreach ($r['riwayat'] as $kej)
+                                <li>
+                                  <span class="ro-sc-riwayat__tgl">{{ $kej['mulai'] }}{{ $kej['mulai'] !== $kej['selesai'] ? ' – '.$kej['selesai'] : '' }}</span>
+                                  <span class="ro-sc-note-red">⚠ {{ $kej['jenis'] }}</span>
+                                  <span class="text-secondary-light">{{ $kej['teks'] }}</span>
+                                </li>
+                              @endforeach
+                            </ul>
+                          @endif
+                        </div>
+                      @endif
                      </div>
                     </div>
                   </div>
