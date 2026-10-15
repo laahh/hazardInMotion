@@ -6,7 +6,6 @@ namespace App\Services\Isc;
 
 use App\Actions\Isc\IscSyncActiveViolationsAction;
 use App\Models\Isc\IscBoundaryEvent;
-use App\Models\Isc\IscIntervention;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -51,7 +50,11 @@ final class IscMapsInterventionService
      */
     public function payload(?User $user, bool $demo = false): array
     {
-        $canCreate = $user?->can('create', IscIntervention::class) ?? false;
+        // Sama dengan otorisasi rute simpan dari peta (IscHazardReportStoreRequest /
+        // IscInterventionStoreRequest): siapa pun yang login boleh melapor &
+        // mengintervensi — tidak lagi dibatasi peran isc-pic/admin. Flag ini
+        // yang menampilkan tombol "Laporan Hazard" di peta.
+        $canCreate = $user !== null;
         if ($demo) {
             return $this->fromRows($this->demoTasks(), 'demo', true, $canCreate);
         }

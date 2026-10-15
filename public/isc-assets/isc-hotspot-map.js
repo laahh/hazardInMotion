@@ -2529,7 +2529,7 @@
 
   function openHazardReport(row) {
     if (!ivCanCreate) {
-      toast("Hanya PIC yang dapat mengirim laporan hazard.");
+      toast("Silakan login untuk mengirim laporan hazard.");
       return;
     }
     if (!mapsHazardReportsUrl) {
