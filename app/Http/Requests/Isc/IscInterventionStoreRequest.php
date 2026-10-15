@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Isc;
 
-use App\Models\Isc\IscIntervention;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -12,7 +11,11 @@ final class IscInterventionStoreRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('create', IscIntervention::class) ?? false;
+        // Siapa pun yang login boleh membuat intervensi (tidak lagi dibatasi
+        // peran isc-pic/admin). Login tetap wajib karena pembuatnya dicatat
+        // sebagai pic_user_id. Rute /isc/interventions tetap dijaga middleware
+        // isc.role di routes/Isc/isc.php; rute dari peta tidak.
+        return $this->user() !== null;
     }
 
     /**

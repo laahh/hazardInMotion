@@ -36,7 +36,7 @@ Route::prefix('isc')
         Route::get('/maps/post-event/trail', [IscPostEventTrackController::class, 'trail'])->name('maps.post-event.trail');
         Route::get('/maps/cctv', [IscCctvMapController::class, 'index'])->name('maps.cctv');
         Route::get('/maps/interventions', [IscMapsInterventionController::class, 'index'])->name('maps.interventions');
-        // Lookup hazard: auth saja. Submit laporan: auth + authorize PIC di FormRequest (selalu ke DB).
+        // Lookup & submit hazard/intervensi dari peta: cukup login, tanpa batas peran ISC.
         Route::get('/maps/hazard-employees', [IscMapsInterventionController::class, 'lookupEmployees'])
             ->middleware('auth')
             ->name('maps.hazard-employees');
@@ -64,12 +64,15 @@ Route::prefix('isc')
         Route::get('/maps/hazard-reports/historical', [IscMapsInterventionController::class, 'hazardReportsHistorical'])
             ->middleware('auth')
             ->name('maps.hazard-reports.historical');
+        // Intervensi dari peta: siapa pun yang login (tanpa batas peran ISC).
+        Route::post('/maps/interventions', [IscMapsInterventionController::class, 'store'])
+            ->middleware('auth')
+            ->name('maps.interventions.store');
 
         Route::middleware('isc.role:isc-pic,isc-verifier,admin')->group(function (): void {
             Route::get('/interventions', [IscInterventionsController::class, 'index'])->name('interventions.index');
             Route::get('/interventions/{event}', [IscInterventionsController::class, 'show'])->name('interventions.show');
             Route::post('/interventions', [IscInterventionsController::class, 'store'])->name('interventions.store');
-            Route::post('/maps/interventions', [IscMapsInterventionController::class, 'store'])->name('maps.interventions.store');
             Route::post('/interventions/{intervention}/evidence', [IscInterventionsController::class, 'storeEvidence'])->name('interventions.evidence');
             Route::post('/interventions/{intervention}/verify', [IscInterventionsController::class, 'verify'])->name('interventions.verify');
             Route::get('/post-event', [IscPostEventController::class, 'index'])->name('post-event.index');

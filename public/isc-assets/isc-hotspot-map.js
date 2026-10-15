@@ -3671,8 +3671,8 @@
       })
       .then(function (pack) {
         if (!pack.ok) {
-          var err = pack.status === 403
-            ? "Akses ditolak: login sebagai PIC / admin ISC untuk menyimpan ke database."
+          var err = (pack.status === 401 || pack.status === 403 || pack.status === 419)
+            ? "Sesi login berakhir — muat ulang halaman lalu login kembali untuk menyimpan laporan."
             : (pack.payload && pack.payload.message
               ? pack.payload.message
               : (pack.payload && pack.payload.errors

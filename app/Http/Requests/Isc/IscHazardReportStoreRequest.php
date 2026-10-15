@@ -4,20 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Isc;
 
-use App\Models\Isc\IscIntervention;
 use Illuminate\Foundation\Http\FormRequest;
 
 final class IscHazardReportStoreRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        $user = $this->user();
-        if ($user === null) {
-            return false;
-        }
-
-        // Wajib PIC/admin — tidak ada bypass demo (laporan selalu ke DB).
-        return $user->can('create', IscIntervention::class);
+        // Siapa pun yang login boleh melapor hazard dari peta ISC (tidak lagi
+        // dibatasi peran isc-pic/admin). Login tetap wajib karena pelapor
+        // dicatat di kolom created_by.
+        return $this->user() !== null;
     }
 
     /**
