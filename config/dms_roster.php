@@ -217,7 +217,9 @@ return [
     */
     'reg_live' => [
         'jendela_hari' => 180,
-        'cache_ttl' => 900,
+        // > 30 menit: hasil yang disimpan command terjadwal dms:sync-roster-rfid
+        // (tiap 30 menit) tetap dipakai sampai putaran berikutnya.
+        'cache_ttl' => 2100,
         'timeout_ms' => 20000,
 
         // Hanya perusahaan ini yang ditampilkan di kartu aturan banned —

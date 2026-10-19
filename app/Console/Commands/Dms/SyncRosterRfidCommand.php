@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands\Dms;
 
+use App\Services\Dms\Roster\DmsRosterRegLiveService;
 use App\Services\Dms\Roster\DmsRosterSyncService;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
@@ -14,7 +15,7 @@ use Throwable;
  *
  *   php artisan dms:sync-roster-rfid --master          # tahap 1 saja (harian)
  *   php artisan dms:sync-roster-rfid --full            # backfill 1 Jan s/d hari ini
- *   php artisan dms:sync-roster-rfid                   # inkremental (tiap 30 menit)
+ *   php artisan dms:sync-roster-rfid                   # inkremental (tiap 30 menit) + kartu aturan banned
  *   php artisan dms:sync-roster-rfid --from=2026-09-01 --to=2026-09-30
  *
  * Master karyawan tidak ikut ditarik pada mode inkremental: jabatan dan SIMPER
@@ -34,7 +35,7 @@ final class SyncRosterRfidCommand extends Command
 
     protected $description = 'Tarik scan RFID ke dms_roster_scan_harian dan rakit pola roster';
 
-    public function handle(DmsRosterSyncService $sync): int
+    public function handle(DmsRosterSyncService $sync, DmsRosterRegLiveService $live): int
     {
         if (! $sync->isUp()) {
             $this->error('Postgres OLAP tidak terjangkau (pgsql_direct / pgsql_ssh). Sinkronisasi dibatalkan.');
@@ -84,9 +85,39 @@ final class SyncRosterRfidCommand extends Command
             return self::FAILURE;
         }
 
+        $this->segarkanAturanBanned($live);
+
         $this->info('Selesai dalam '.round(microtime(true) - $mulai, 1).' detik.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Tahap 5 — hitung ulang empat kartu aturan banned (Ringkasan Roster)
+     * dari RFID dan simpan ke cache. Dikerjakan di sini karena proses
+     * terjadwal ini memang terhubung ke OLAP; halaman web cukup membaca
+     * hasilnya. Gagal di tahap ini tidak menggagalkan sinkronisasi.
+     */
+    private function segarkanAturanBanned(DmsRosterRegLiveService $live): void
+    {
+        $this->info('Tahap 5 — kartu aturan banned (RFID langsung) ...');
+
+        try {
+            $hasil = $live->segarkan();
+        } catch (Throwable $e) {
+            $this->warn('  Gagal: '.$e->getMessage());
+
+            return;
+        }
+
+        if ($hasil === null) {
+            $this->warn('  Gagal: '.($live->galatTerakhir() ?? 'tidak diketahui'));
+
+            return;
+        }
+
+        $this->line('  '.$this->angka((int) $hasil['populasi']).' karyawan dinilai; '
+            .$this->angka(count($hasil['daftar']['onsite'])).' periode kerja > 70 hari.');
     }
 
     /**

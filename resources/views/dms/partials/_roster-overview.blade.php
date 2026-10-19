@@ -56,6 +56,13 @@
     // benar dinilai aturan ini (7 PT, tanpa master banned), bukan total
     // karyawan di kartu kiri.
     $regKini = $regTerkiniLive ?? null;
+    // Hasil terakhir dipakai karena pembaruan dari RFID gagal → tampilkan
+    // jam datanya; null sama sekali → tampilkan alasannya.
+    $regBasi = (bool) ($regKini['basi'] ?? false);
+    $regGalat = (string) ($regKini['galat'] ?? $regTerkiniGalat ?? '');
+    $regStatus = $regKini
+        ? ($regBasi ? 'data RFID '.$regKini['diambil'] : 'RFID · '.$regKini['diambil'])
+        : 'RFID tidak terjangkau'.($regGalat !== '' ? ': '.$regGalat : '');
     $populasiAturan = (int) ($regKini['populasi'] ?? 0);
     $borderTile = [
         'border border-top-0',
@@ -301,9 +308,18 @@
                   <span class="d-block text-sm mb-0">
                     <span class="bg-{{ $t['warna'] }}-focus text-{{ $t['warna'] }}-main px-1 rounded-2 fw-medium text-sm">{{ $t['perlakuan'] }}</span>
                     {{ $t['persen'] ?? ($regKini ? '' : 'RFID tidak terjangkau saat ini') }}
+                    @if (! $regKini && $regGalat !== '')
+                      <span class="d-block text-xs text-danger-main mt-4" title="{{ $regGalat }}">{{ \Illuminate\Support\Str::limit($regGalat, 70) }}</span>
+                    @endif
                   </span>
                   @if ($regKini)
-                    <span class="d-block text-xs fw-semibold text-primary-600 mt-8">Lihat detail &rarr;</span>
+                    <span class="d-flex justify-content-between gap-2 text-xs mt-8">
+                      <span class="{{ $regBasi ? 'text-warning-main' : 'text-secondary-light' }}"
+                            @if ($regBasi) title="Pembaruan dari RFID gagal{{ $regGalat !== '' ? ': '.$regGalat : '' }} — menampilkan hasil terakhir." @endif>
+                        {{ $regBasi ? 'data '.$regKini['diambil'] : 'per '.$regKini['diambil'] }}
+                      </span>
+                      <span class="fw-semibold text-primary-600">Lihat detail &rarr;</span>
+                    </span>
                   @endif
                 </button>
               </div>
@@ -468,7 +484,7 @@
           <span class="text-secondary-light text-sm">
             @if ($regKini)
               {{ number_format($totalTindakan, 0, ',', '.') }} orang
-              <span class="text-success-600 fw-semibold">&middot; RFID</span>
+              <span class="{{ $regBasi ? 'text-warning-main' : 'text-success-600' }} fw-semibold" title="{{ $regBasi ? 'Pembaruan dari RFID gagal — menampilkan hasil terakhir. '.$regGalat : '' }}">&middot; {{ $regStatus }}</span>
             @else
               &mdash;
             @endif
@@ -488,7 +504,12 @@
         <div class="ro-isi-sisa mt-24">
         <div class="ro-isi-sisa__gulir overflow-y-auto scroll-sm">
           @if (! $regKini)
-            <p class="text-secondary-light text-sm mb-0">RFID tidak terjangkau saat ini; muat ulang beberapa saat lagi.</p>
+            <p class="text-secondary-light text-sm mb-0">
+              RFID tidak terjangkau saat ini; muat ulang beberapa saat lagi.
+              @if ($regGalat !== '')
+                <span class="d-block text-xs text-danger-main mt-4">{{ \Illuminate\Support\Str::limit($regGalat, 160) }}</span>
+              @endif
+            </p>
           @elseif ($perluTindakan === [])
             <p class="text-success-600 text-sm fw-medium mb-0">Tidak ada karyawan yang harus di-banned per hari ini.</p>
           @endif

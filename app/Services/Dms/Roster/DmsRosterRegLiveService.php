@@ -43,29 +43,95 @@ final class DmsRosterRegLiveService
         private readonly DmsRosterRfidReader $rfid,
     ) {}
 
+    /** Hasil terakhir yang berhasil — cadangan saat RFID tidak terjangkau. */
+    private const KUNCI_TERAKHIR = 'dms_roster:aturan_live:terakhir:v1';
+
+    /** Penanda gagal singkat supaya request berikutnya tidak menunggu OLAP lagi. */
+    private const KUNCI_GAGAL = 'dms_roster:aturan_live:gagal:v1';
+
+    private ?string $galat = null;
+
     /**
-     * @return array{per:string,diambil:string,jendela:int,populasi:int,daftar:array<string,list<array<string,mixed>>>}|null
-     *         null bila RFID tidak terjangkau / query gagal.
+     * Hasil aturan banned untuk halaman. Urutan sumber:
+     *   1. cache hasil segar (diisi request sebelumnya atau command terjadwal
+     *      dms:sync-roster-rfid lewat segarkan());
+     *   2. hitung langsung dari RFID;
+     *   3. bila gagal, hasil TERAKHIR yang berhasil, ditandai 'basi' => true
+     *      beserta alasan gagalnya — supaya kartu tetap berisi data dengan
+     *      jam pengambilannya, bukan kosong.
+     *
+     * @return array<string, mixed>|null  null hanya bila belum pernah ada
+     *         hasil sukses sama sekali; alasannya di galatTerakhir().
      */
     public function ambil(): ?array
     {
-        $hariIni = CarbonImmutable::now()->startOfDay();
-        // Versi master banned ikut di kunci: begitu ada orang di-banned atau
-        // dicabut, hasil langsung dihitung ulang tanpa menunggu TTL habis.
-        $key = 'dms_roster:aturan_live:v7:'.$hariIni->toDateString().':'.$this->versiMasterBanned();
+        $key = $this->kunciSegar();
 
         $tersimpan = Cache::get($key);
         if (is_array($tersimpan)) {
             return $tersimpan;
         }
 
-        $hasil = $this->hitung($hariIni);
-        // Kegagalan tidak di-cache supaya percobaan berikutnya langsung ke RFID lagi.
-        if ($hasil !== null) {
-            Cache::put($key, $hasil, (int) config('dms_roster.reg_live.cache_ttl', 900));
+        // Baru saja gagal: jangan biarkan tiap request menunggu timeout OLAP.
+        $gagal = Cache::get(self::KUNCI_GAGAL);
+        if (is_string($gagal)) {
+            $this->galat = $gagal;
+
+            return $this->cadangan();
         }
 
+        return $this->segarkan() ?? $this->cadangan();
+    }
+
+    /**
+     * Hitung ulang dari RFID sekarang juga dan simpan — dipanggil command
+     * terjadwal supaya halaman web cukup membaca cache, tidak perlu
+     * terhubung ke OLAP saat dibuka.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function segarkan(): ?array
+    {
+        $hasil = $this->hitung(CarbonImmutable::now()->startOfDay());
+
+        if ($hasil === null) {
+            Cache::put(self::KUNCI_GAGAL, $this->galat ?? 'tidak diketahui', 300);
+
+            return null;
+        }
+
+        $hasil['basi'] = false;
+        Cache::put($this->kunciSegar(), $hasil, (int) config('dms_roster.reg_live.cache_ttl', 900));
+        Cache::put(self::KUNCI_TERAKHIR, $hasil, now()->addDays(7));
+        Cache::forget(self::KUNCI_GAGAL);
+
         return $hasil;
+    }
+
+    /** Alasan percobaan terakhir ke RFID gagal (untuk ditampilkan). */
+    public function galatTerakhir(): ?string
+    {
+        return $this->galat;
+    }
+
+    private function kunciSegar(): string
+    {
+        // Versi master banned ikut di kunci: begitu ada orang di-banned atau
+        // dicabut, hasil langsung dihitung ulang tanpa menunggu TTL habis.
+        return 'dms_roster:aturan_live:v8:'.CarbonImmutable::now()->toDateString().':'.$this->versiMasterBanned();
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function cadangan(): ?array
+    {
+        $terakhir = Cache::get(self::KUNCI_TERAKHIR);
+        if (! is_array($terakhir)) {
+            return null;
+        }
+
+        return ['basi' => true, 'galat' => $this->galat] + $terakhir;
     }
 
     /**
@@ -295,6 +361,8 @@ final class DmsRosterRegLiveService
                 ->get();
         } catch (Throwable $e) {
             Log::warning('DmsRoster aturan banned live gagal: '.$e->getMessage());
+            // Pesan pendek untuk kartu; teks lengkap tetap di log.
+            $this->galat = mb_substr($e->getMessage(), 0, 200);
 
             return null;
         }

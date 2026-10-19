@@ -9,6 +9,7 @@ use App\Services\Dms\Roster\DmsRosterRfidReader;
 use App\Services\Dms\Roster\DmsRosterRuleEngine;
 use App\Services\PembatasanLV\PembatasanLVOlapQuery;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 /**
@@ -159,6 +160,39 @@ class DmsRosterRegLiveServiceTest extends TestCase
         $this->assertSame('o', $hari[0]['kode']);
         $this->assertCount(1, $hari[0]['tap']);
         $this->assertFalse($hari[0]['tap'][0]['lolos']);
+    }
+
+    public function test_ambil_memakai_hasil_terakhir_saat_rfid_baru_saja_gagal(): void
+    {
+        config(['dms_roster.reg_live.kecualikan_master_banned' => false]);
+        Cache::put('dms_roster:aturan_live:terakhir:v1', ['basi' => false, 'diambil' => '18 Oct 2026 23:30', 'daftar' => []]);
+        Cache::put('dms_roster:aturan_live:gagal:v1', 'Postgres OLAP tidak terjangkau');
+
+        $hasil = $this->svc->ambil();
+
+        $this->assertTrue($hasil['basi']);
+        $this->assertSame('18 Oct 2026 23:30', $hasil['diambil']);
+        $this->assertSame('Postgres OLAP tidak terjangkau', $hasil['galat']);
+        $this->assertSame('Postgres OLAP tidak terjangkau', $this->svc->galatTerakhir());
+    }
+
+    public function test_ambil_null_bila_gagal_dan_belum_pernah_ada_hasil(): void
+    {
+        config(['dms_roster.reg_live.kecualikan_master_banned' => false]);
+        Cache::put('dms_roster:aturan_live:gagal:v1', 'timeout');
+
+        $this->assertNull($this->svc->ambil());
+        $this->assertSame('timeout', $this->svc->galatTerakhir());
+    }
+
+    public function test_ambil_mendahulukan_hasil_segar_di_cache(): void
+    {
+        config(['dms_roster.reg_live.kecualikan_master_banned' => false]);
+        $kunci = 'dms_roster:aturan_live:v8:'.CarbonImmutable::now()->toDateString().':';
+        Cache::put($kunci, ['basi' => false, 'diambil' => 'segar']);
+        Cache::put('dms_roster:aturan_live:gagal:v1', 'tidak relevan');
+
+        $this->assertSame(['basi' => false, 'diambil' => 'segar'], $this->svc->ambil());
     }
 
     /**

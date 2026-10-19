@@ -850,6 +850,12 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
 
             $perPage = (int) config('dms_roster.overview_per_page', 10);
 
+            // Aturan banned per hari ini (RFID langsung). Biasanya dibaca dari
+            // cache yang diisi command dms:sync-roster-rfid; bila RFID gagal,
+            // service mengembalikan hasil terakhir yang berhasil (basi).
+            $aturanLive = app(\App\Services\Dms\Roster\DmsRosterRegLiveService::class);
+            $regTerkini = $aturanLive->ambil();
+
             return view($view, [
                 'totalKaryawanLive' => $total->ambil(),
                 'perSiteLive' => $total->perSite(),
@@ -860,8 +866,8 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
                         + \App\Http\Controllers\DMS\RosterComplianceController::filters($req),
                     $perPage,
                 ),
-                // REG-1/2/3 per hari ini: langsung dari RFID, bukan dari pola.
-                'regTerkiniLive' => app(\App\Services\Dms\Roster\DmsRosterRegLiveService::class)->ambil(),
+                'regTerkiniLive' => $regTerkini,
+                'regTerkiniGalat' => $aturanLive->galatTerakhir(),
                 'agregatLive' => $agregat,
                 'heatmapLive' => $peta,
             ]);
