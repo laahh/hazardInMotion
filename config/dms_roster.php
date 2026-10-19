@@ -221,6 +221,11 @@ return [
         // (tiap 30 menit) tetap dipakai sampai putaran berikutnya.
         'cache_ttl' => 2100,
         'timeout_ms' => 20000,
+        // Jendela dipecah per N hari: satu query 180 hari bisa melewati
+        // statement_timeout saat server sibuk; potongan 30 hari ±0,5 dtk.
+        'potongan_hari' => 30,
+        // Memori kerja per query agregasi (bawaan server 4 MB → tumpah ke disk).
+        'work_mem' => '64MB',
 
         // Hanya perusahaan ini yang ditampilkan di kartu aturan banned —
         // ketujuh PT yang punya desain roster di blok 'perusahaan'.

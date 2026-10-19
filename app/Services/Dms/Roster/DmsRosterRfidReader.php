@@ -6,6 +6,8 @@ namespace App\Services\Dms\Roster;
 
 use App\Services\PembatasanLV\PembatasanLVOlapQuery;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Query baca-saja ke bcsid.mv_checkinout_rfid untuk kartu aturan banned di
@@ -25,13 +27,43 @@ final class DmsRosterRfidReader
     ) {}
 
     /**
-     * Kode shift per hari per SID dari CHECK IN pertama: offset hari => 'P'|'M'.
+     * Kode shift per hari per SID dari CHECK IN pertama: offset hari => 'P'|'M'
+     * (offset dihitung dari $awal).
+     *
+     * Jendela panjang (180 hari) dipecah per N hari (config
+     * reg_live.potongan_hari, default 30). Satu query 180 hari memang ±3 dtk
+     * saat server lengang, tapi bisa melewati statement_timeout 20 dtk saat
+     * server sibuk / materialized view sedang di-refresh (SQLSTATE 57014).
+     * Potongan 30 hari ±0,5 dtk, jadi tiap query punya ruang lebar.
      *
      * @return array<string, array<int, string>>
      */
     public function kodeHarian(CarbonImmutable $awal, CarbonImmutable $hariIni): array
     {
-        $rows = $this->olap->select(
+        $potongan = max(7, (int) config('dms_roster.reg_live.potongan_hari', 30));
+        $batasAkhir = $hariIni->addDay();
+        $out = [];
+
+        for ($dari = $awal; $dari->lt($batasAkhir); $dari = $dari->addDays($potongan)) {
+            $sampai = $dari->addDays($potongan)->min($batasAkhir);
+
+            foreach ($this->kodeHarianRentang($awal, $dari, $sampai) as $sid => $hari) {
+                // + menjaga isi lama; rentang tidak beririsan, jadi tak ada tumpang.
+                $out[$sid] = ($out[$sid] ?? []) + $hari;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Satu potongan [$dari, $sampai) dari kodeHarian().
+     *
+     * @return array<string, array<int, string>>
+     */
+    private function kodeHarianRentang(CarbonImmutable $awal, CarbonImmutable $dari, CarbonImmutable $sampai): array
+    {
+        $rows = $this->pilih(
             "SELECT d.kode_sid,
                     string_agg(d.o::text || CASE WHEN d.m < ? THEN 'P' ELSE 'M' END, ',') AS hari
              FROM (
@@ -53,10 +85,9 @@ final class DmsRosterRfidReader
                 (int) config('dms_roster.populasi.batas_menit_pagi', 720),
                 $awal->toDateString(),
                 $this->statusLolos(),
-                $awal->toDateTimeString(),
-                $hariIni->addDay()->toDateTimeString(),
+                $dari->toDateTimeString(),
+                $sampai->toDateTimeString(),
             ],
-            $this->timeout(),
         );
 
         $out = [];
@@ -79,7 +110,7 @@ final class DmsRosterRfidReader
      */
     public function shiftTerakhir(CarbonImmutable $awal, CarbonImmutable $hariIni, int $maksJam): array
     {
-        $rows = $this->olap->select(
+        $rows = $this->pilih(
             "SELECT p.kode_sid,
                     (array_agg(p.t ORDER BY p.t DESC))[1]  AS masuk,
                     (array_agg(p.nt ORDER BY p.t DESC))[1] AS keluar,
@@ -114,7 +145,6 @@ final class DmsRosterRfidReader
                 $hariIni->addDays(2)->toDateTimeString(),
                 $hariIni->addDay()->toDateTimeString(),
             ],
-            $this->timeout(),
         );
 
         $out = [];
@@ -140,7 +170,7 @@ final class DmsRosterRfidReader
      */
     public function tapKaryawan(string $sid, CarbonImmutable $awal, CarbonImmutable $hariIni): array
     {
-        $rows = $this->olap->select(
+        $rows = $this->pilih(
             "SELECT s.tanggal_checkinout AS waktu, s.jenis_checkinout AS jenis, s.gate,
                     upper(trim(coalesce(s.status_lolos, ''))) = ? AS lolos
              FROM bcsid.mv_checkinout_rfid s
@@ -154,7 +184,6 @@ final class DmsRosterRfidReader
                 $awal->toDateTimeString(),
                 $hariIni->addDays(2)->toDateTimeString(),
             ],
-            $this->timeout(),
         );
 
         return array_map(static fn (object $r): array => [
@@ -168,6 +197,35 @@ final class DmsRosterRfidReader
     private function statusLolos(): string
     {
         return strtoupper((string) config('dms_roster.populasi.status_lolos_scan', 'PASSED'));
+    }
+
+    /**
+     * select() ke OLAP dengan setelan sesi untuk agregasi besar, dicoba ulang
+     * SEKALI bila dihentikan statement_timeout (SQLSTATE 57014) — biasanya
+     * karena server sesaat sibuk atau materialized view sedang di-refresh.
+     * Galat lain (koneksi, sintaks) langsung diteruskan.
+     *
+     * @param  list<mixed>  $bindings
+     * @return list<object>
+     */
+    private function pilih(string $sql, array $bindings): array
+    {
+        $setelan = [
+            // work_mem bawaan 4 MB membuat GROUP BY puluhan ribu SID tumpah ke disk.
+            'work_mem' => (string) config('dms_roster.reg_live.work_mem', '64MB'),
+            'jit' => 'off',
+        ];
+
+        try {
+            return $this->olap->select($sql, $bindings, $this->timeout(), $setelan);
+        } catch (QueryException $e) {
+            if ((string) $e->getCode() !== '57014') {
+                throw $e;
+            }
+            Log::info('DmsRoster RFID: query timeout, dicoba ulang sekali.');
+
+            return $this->olap->select($sql, $bindings, $this->timeout(), $setelan);
+        }
     }
 
     private function timeout(): int
