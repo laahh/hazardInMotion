@@ -103,7 +103,9 @@ final class SyncRosterRfidCommand extends Command
         $this->info('Tahap 5 — kartu aturan banned (RFID langsung) ...');
 
         try {
-            $hasil = $live->segarkan();
+            $hasil = $live->segarkan(function (string $rentang, float $detik, int $sid): void {
+                $this->line(sprintf('  %s → %s SID (%.1f dtk)', $rentang, $this->angka($sid), $detik));
+            });
         } catch (Throwable $e) {
             $this->warn('  Gagal: '.$e->getMessage());
 

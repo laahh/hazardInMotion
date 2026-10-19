@@ -30,15 +30,21 @@ final class DmsRosterRfidReader
      * Kode shift per hari per SID dari CHECK IN pertama: offset hari => 'P'|'M'
      * (offset dihitung dari $awal).
      *
-     * Jendela panjang (180 hari) dipecah per N hari (config
-     * reg_live.potongan_hari, default 30). Satu query 180 hari memang ±3 dtk
-     * saat server lengang, tapi bisa melewati statement_timeout 20 dtk saat
-     * server sibuk / materialized view sedang di-refresh (SQLSTATE 57014).
-     * Potongan 30 hari ±0,5 dtk, jadi tiap query punya ruang lebar.
+     * Yang membatasi BUKAN waktu hitung di Postgres (±3 dtk untuk 180 hari),
+     * melainkan waktu KIRIM hasilnya ke server aplikasi: statement_timeout
+     * ikut menghitung pengiriman, dan jalur server aplikasi → RDS lambat,
+     * sehingga hasil ±7,5 MB dibatalkan (SQLSTATE 57014). Karena itu:
+     *   - hanya SID yang dinilai ($sids, ±3,7 rb) yang ditarik, bukan ±24 rb;
+     *   - tiap SID dikirim sebagai string ringkas satu huruf per hari
+     *     (P/M/o), bukan daftar "offset+kode";
+     *   - jendela dipecah per N hari (reg_live.potongan_hari, default 30),
+     *     jadi tiap query hanya mengirim ±130 KB.
      *
+     * @param  list<string>|null  $sids  null = semua SID (hanya untuk uji/diagnosa).
+     * @param  (callable(string, float, int): void)|null  $lapor  dipanggil per potongan: rentang, detik, jumlah SID.
      * @return array<string, array<int, string>>
      */
-    public function kodeHarian(CarbonImmutable $awal, CarbonImmutable $hariIni): array
+    public function kodeHarian(CarbonImmutable $awal, CarbonImmutable $hariIni, ?array $sids = null, ?callable $lapor = null): array
     {
         $potongan = max(7, (int) config('dms_roster.reg_live.potongan_hari', 30));
         $batasAkhir = $hariIni->addDay();
@@ -46,10 +52,16 @@ final class DmsRosterRfidReader
 
         for ($dari = $awal; $dari->lt($batasAkhir); $dari = $dari->addDays($potongan)) {
             $sampai = $dari->addDays($potongan)->min($batasAkhir);
+            $mulai = microtime(true);
+            $hasil = $this->kodeHarianRentang($awal, $dari, $sampai, $sids);
 
-            foreach ($this->kodeHarianRentang($awal, $dari, $sampai) as $sid => $hari) {
+            foreach ($hasil as $sid => $hari) {
                 // + menjaga isi lama; rentang tidak beririsan, jadi tak ada tumpang.
                 $out[$sid] = ($out[$sid] ?? []) + $hari;
+            }
+
+            if ($lapor !== null) {
+                $lapor($dari->toDateString().' … '.$sampai->subDay()->toDateString(), microtime(true) - $mulai, count($hasil));
             }
         }
 
@@ -57,20 +69,26 @@ final class DmsRosterRfidReader
     }
 
     /**
-     * Satu potongan [$dari, $sampai) dari kodeHarian().
+     * Satu potongan [$dari, $sampai) dari kodeHarian(). Postgres merakit
+     * string tepat sepanjang potongan per SID ('o' = tidak ada check-in);
+     * PHP menerjemahkannya kembali ke offset dari $awal.
      *
+     * @param  list<string>|null  $sids
      * @return array<string, array<int, string>>
      */
-    private function kodeHarianRentang(CarbonImmutable $awal, CarbonImmutable $dari, CarbonImmutable $sampai): array
+    private function kodeHarianRentang(CarbonImmutable $awal, CarbonImmutable $dari, CarbonImmutable $sampai, ?array $sids): array
     {
+        $panjang = (int) $dari->diffInDays($sampai);
+        $filterSid = $sids === null ? '' : 'AND trim(s.kode_sid) = ANY(?::text[])';
+        $bindSid = $sids === null ? [] : [$this->arrayPg($sids)];
+
         $rows = $this->pilih(
-            "SELECT d.kode_sid,
-                    string_agg(d.o::text || CASE WHEN d.m < ? THEN 'P' ELSE 'M' END, ',') AS hari
-             FROM (
+            "WITH hari AS (
                  SELECT trim(s.kode_sid) AS kode_sid,
                         s.tanggal_checkinout::date - ?::date AS o,
-                        MIN(extract(hour FROM s.tanggal_checkinout) * 60
-                            + extract(minute FROM s.tanggal_checkinout)) AS m
+                        CASE WHEN MIN(extract(hour FROM s.tanggal_checkinout) * 60
+                                      + extract(minute FROM s.tanggal_checkinout)) < ?
+                             THEN 'P' ELSE 'M' END AS k
                  FROM bcsid.mv_checkinout_rfid s
                  WHERE upper(trim(coalesce(s.status_lolos, ''))) = ?
                    AND s.jenis_checkinout = 'CHECK IN'
@@ -78,23 +96,35 @@ final class DmsRosterRfidReader
                    AND s.tanggal_checkinout < ?
                    AND s.kode_sid IS NOT NULL
                    AND trim(s.kode_sid) <> ''
+                   {$filterSid}
                  GROUP BY 1, 2
-             ) d
-             GROUP BY d.kode_sid",
+             )
+             SELECT x.kode_sid, string_agg(coalesce(h.k, 'o'), '' ORDER BY g.o) AS pola
+             FROM (SELECT DISTINCT kode_sid FROM hari) x
+             CROSS JOIN generate_series(0, ?) AS g(o)
+             LEFT JOIN hari h ON h.kode_sid = x.kode_sid AND h.o = g.o
+             GROUP BY x.kode_sid",
             [
+                $dari->toDateString(),
                 (int) config('dms_roster.populasi.batas_menit_pagi', 720),
-                $awal->toDateString(),
                 $this->statusLolos(),
                 $dari->toDateTimeString(),
                 $sampai->toDateTimeString(),
+                ...$bindSid,
+                $panjang - 1,
             ],
         );
 
+        // Offset di dalam potongan → offset dari awal jendela.
+        $geser = (int) $awal->diffInDays($dari);
         $out = [];
         foreach ($rows as $row) {
+            $pola = (string) $row->pola;
             $hari = [];
-            foreach (explode(',', (string) $row->hari) as $sel) {
-                $hari[(int) substr($sel, 0, -1)] = substr($sel, -1);
+            for ($i = 0, $n = strlen($pola); $i < $n; $i++) {
+                if ($pola[$i] !== 'o') {
+                    $hari[$geser + $i] = $pola[$i];
+                }
             }
             $out[(string) $row->kode_sid] = $hari;
         }
@@ -103,13 +133,31 @@ final class DmsRosterRfidReader
     }
 
     /**
+     * Literal array Postgres untuk parameter ANY(?::text[]). Setiap elemen
+     * dikutip & di-escape, jadi aman untuk SID apa pun.
+     *
+     * @param  list<string>  $nilai
+     */
+    private function arrayPg(array $nilai): string
+    {
+        return '{'.implode(',', array_map(
+            static fn (string $v): string => '"'.str_replace(['\\', '"'], ['\\\\', '\\"'], $v).'"',
+            $nilai,
+        )).'}';
+    }
+
+    /**
      * Shift lengkap terakhir per SID (check-in ≥ $awal) beserta gate-nya, dan
      * berapa shift dalam rentang itu yang melebihi $maksJam.
      *
+     * @param  list<string>|null  $sids  Batasi ke SID yang dinilai (lihat kodeHarian()).
      * @return array<string, array{masuk:string,keluar:string,gate_in:string,gate_out:string,n_lebih:int,n_shift:int}>
      */
-    public function shiftTerakhir(CarbonImmutable $awal, CarbonImmutable $hariIni, int $maksJam): array
+    public function shiftTerakhir(CarbonImmutable $awal, CarbonImmutable $hariIni, int $maksJam, ?array $sids = null): array
     {
+        $filterSid = $sids === null ? '' : 'AND trim(s.kode_sid) = ANY(?::text[])';
+        $bindSid = $sids === null ? [] : [$this->arrayPg($sids)];
+
         $rows = $this->pilih(
             "SELECT p.kode_sid,
                     (array_agg(p.t ORDER BY p.t DESC))[1]  AS masuk,
@@ -132,6 +180,7 @@ final class DmsRosterRfidReader
                    AND s.tanggal_checkinout < ?
                    AND s.kode_sid IS NOT NULL
                    AND trim(s.kode_sid) <> ''
+                   {$filterSid}
              ) p
              WHERE p.j = 'CHECK IN'
                AND p.nj = 'CHECK OUT'
@@ -143,6 +192,7 @@ final class DmsRosterRfidReader
                 $this->statusLolos(),
                 $awal->toDateTimeString(),
                 $hariIni->addDays(2)->toDateTimeString(),
+                ...$bindSid,
                 $hariIni->addDay()->toDateTimeString(),
             ],
         );

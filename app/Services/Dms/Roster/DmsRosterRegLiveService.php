@@ -90,9 +90,9 @@ final class DmsRosterRegLiveService
      *
      * @return array<string, mixed>|null
      */
-    public function segarkan(): ?array
+    public function segarkan(?callable $lapor = null): ?array
     {
-        $hasil = $this->hitung(CarbonImmutable::now()->startOfDay());
+        $hasil = $this->hitung(CarbonImmutable::now()->startOfDay(), $lapor);
 
         if ($hasil === null) {
             Cache::put(self::KUNCI_GAGAL, $this->galat ?? 'tidak diketahui', 300);
@@ -338,15 +338,15 @@ final class DmsRosterRegLiveService
     /**
      * @return array{per:string,diambil:string,jendela:int,populasi:int,daftar:array<string,list<array<string,mixed>>>}|null
      */
-    private function hitung(CarbonImmutable $hariIni): ?array
+    private function hitung(CarbonImmutable $hariIni, ?callable $lapor = null): ?array
     {
         $aturan = $this->aturan();
         $panjang = $this->panjangJendela();
         $awal = $hariIni->subDays($panjang - 1);
 
         try {
-            $scan = $this->rfid->kodeHarian($awal, $hariIni);
-            $shift = $this->rfid->shiftTerakhir($hariIni->subDays($aturan['jam_kerja_jendela'] - 1), $hariIni, $aturan['jam_kerja_maks']);
+            // Master dulu (MySQL), supaya RFID hanya ditarik untuk SID yang
+            // memang dinilai — hasil query jadi ±1/6 ukurannya.
             $karyawan = DB::table('dms_roster_karyawan')
                 ->where('wajib_cek', true)
                 ->when(
@@ -359,6 +359,17 @@ final class DmsRosterRegLiveService
                 )
                 ->select('kode_sid', 'nama', 'jabatan_struktural as jabatan', 'kategori', 'perusahaan', 'kode_pt', 'site')
                 ->get();
+            $sids = $karyawan->pluck('kode_sid')->map(static fn ($s): string => trim((string) $s))
+                ->filter()->unique()->values()->all();
+
+            $scan = $sids === [] ? [] : $this->rfid->kodeHarian($awal, $hariIni, $sids, $lapor);
+            $mulai = microtime(true);
+            $shift = $sids === [] ? [] : $this->rfid->shiftTerakhir(
+                $hariIni->subDays($aturan['jam_kerja_jendela'] - 1), $hariIni, $aturan['jam_kerja_maks'], $sids,
+            );
+            if ($lapor !== null) {
+                $lapor('shift '.$aturan['jam_kerja_jendela'].' hari terakhir', microtime(true) - $mulai, count($shift));
+            }
         } catch (Throwable $e) {
             Log::warning('DmsRoster aturan banned live gagal: '.$e->getMessage());
             // Pesan pendek untuk kartu; teks lengkap tetap di log.
