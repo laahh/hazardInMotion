@@ -232,9 +232,31 @@ return [
         // Dicocokkan ke dms_roster_karyawan.kode_pt.
         'kode_pt' => ['PAMA', 'BUMA', 'FAD', 'KDC', 'MTN', 'MTL', 'BAR'],
 
-        // Karyawan yang sudah tercatat di sid_roster_banned_master (sudah
-        // ditindak/treatment) tidak dimunculkan lagi. Dicocokkan lewat SID/NIK.
+        // Karyawan yang punya kasus AKTIF di sid_roster_banned_master (belum
+        // di-unban) tidak dimunculkan lagi. Dicocokkan lewat SID/NIK. Kasus
+        // yang sudah di-unban tidak menghalangi: orangnya boleh di-banned lagi.
         'kecualikan_master_banned' => true,
+
+        // Status sid_roster_unban_log yang menandakan kasus banned SELESAI.
+        // SKIPPED = "BAN SID sudah tidak ada di Work Permit (dianggap sudah
+        // ter-unban)". FAILED/PROCESSING sengaja tidak termasuk.
+        'status_unban_selesai' => ['SUCCESS', 'SKIPPED'],
+
+        // Penyisipan otomatis "Pelanggaran periode kerja > 70 hari" ke
+        // sid_roster_banned_master (menu Master Roster Banned), dijalankan
+        // command dms:sync-roster-rfid tiap 30 menit.
+        //
+        // PERHATIAN: master banned dibaca modul AutoBanned yang mengeksekusi
+        // banned SID sungguhan di work permit. Karena itu MATI secara bawaan —
+        // pratinjau dulu dengan `php artisan dms:roster-auto-banned --uji`,
+        // lalu nyalakan dengan DMS_AUTO_BANNED=true di .env.
+        'auto_banned' => [
+            'aktif' => (bool) env('DMS_AUTO_BANNED', false),
+            // Sama dengan isi baris yang sudah ada di master, supaya
+            // penyaringan/otomasi yang bergantung pada teks ini tetap jalan.
+            'alasan' => 'BAN SID - Kepatuhan Roster Karyawan',
+            'created_by' => 'Sistem (RFID otomatis)',
+        ],
 
         // Tabel "Penegakan Aturan & Alur Banned/Unban". Angka di sini angka
         // ATURAN (bukan replikasi kode referensi seperti blok 'ambang' di

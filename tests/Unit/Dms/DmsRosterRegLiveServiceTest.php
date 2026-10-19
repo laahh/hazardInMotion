@@ -188,7 +188,7 @@ class DmsRosterRegLiveServiceTest extends TestCase
     public function test_ambil_mendahulukan_hasil_segar_di_cache(): void
     {
         config(['dms_roster.reg_live.kecualikan_master_banned' => false]);
-        $kunci = 'dms_roster:aturan_live:v8:'.CarbonImmutable::now()->toDateString().':';
+        $kunci = 'dms_roster:aturan_live:v10:'.CarbonImmutable::now()->toDateString().':';
         Cache::put($kunci, ['basi' => false, 'diambil' => 'segar']);
         Cache::put('dms_roster:aturan_live:gagal:v1', 'tidak relevan');
 

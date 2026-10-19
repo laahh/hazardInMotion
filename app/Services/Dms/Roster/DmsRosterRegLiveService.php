@@ -118,7 +118,7 @@ final class DmsRosterRegLiveService
     {
         // Versi master banned ikut di kunci: begitu ada orang di-banned atau
         // dicabut, hasil langsung dihitung ulang tanpa menunggu TTL habis.
-        return 'dms_roster:aturan_live:v8:'.CarbonImmutable::now()->toDateString().':'.$this->versiMasterBanned();
+        return 'dms_roster:aturan_live:v10:'.CarbonImmutable::now()->toDateString().':'.$this->versiMasterBanned();
     }
 
     /**
@@ -362,6 +362,9 @@ final class DmsRosterRegLiveService
             $sids = $karyawan->pluck('kode_sid')->map(static fn ($s): string => trim((string) $s))
                 ->filter()->unique()->values()->all();
 
+            $unbanTerakhir = config('dms_roster.reg_live.kecualikan_master_banned', true)
+                ? DmsRosterBannedAktif::unbanTerakhir($sids)
+                : [];
             $scan = $sids === [] ? [] : $this->rfid->kodeHarian($awal, $hariIni, $sids, $lapor);
             $mulai = microtime(true);
             $shift = $sids === [] ? [] : $this->rfid->shiftTerakhir(
@@ -380,6 +383,7 @@ final class DmsRosterRegLiveService
 
         $daftar = array_fill_keys(self::KODE, []);
         $tanggal = static fn (int $i): string => $awal->addDays($i)->translatedFormat('j M Y');
+        $iso = static fn (int $i): string => $awal->addDays($i)->toDateString();
 
         foreach ($karyawan as $k) {
             $sid = (string) $k->kode_sid;
@@ -397,9 +401,16 @@ final class DmsRosterRegLiveService
 
             if ($hariScan !== []) {
                 foreach ($this->nilai($hariScan, $panjang, (string) $k->kategori, (string) $k->perusahaan) as $kode => $run) {
-                    if ($run !== null) {
-                        $daftar[$kode][] = $dasar + $this->barisPola($kode, $run, $tanggal);
+                    if ($run === null) {
+                        continue;
                     }
+                    // Sudah pernah di-banned & di-unban: periode on-site yang
+                    // dimulai sebelum/pada tanggal unban itu adalah pelanggaran
+                    // yang SAMA yang sudah ditindak — jangan dihitung lagi.
+                    if ($kode === 'onsite' && isset($unbanTerakhir[$sid]) && $iso($run['mulai']) <= $unbanTerakhir[$sid]) {
+                        continue;
+                    }
+                    $daftar[$kode][] = $dasar + $this->barisPola($kode, $run, $tanggal, $iso);
                 }
             }
 
@@ -432,7 +443,7 @@ final class DmsRosterRegLiveService
      * @param  callable(int): string  $tanggal
      * @return array<string, mixed>
      */
-    private function barisPola(string $kode, array $run, callable $tanggal): array
+    private function barisPola(string $kode, array $run, callable $tanggal, callable $iso): array
     {
         $aturan = $this->aturan();
         $hariKe = static fn (int $ke): string => $tanggal($run['mulai'] + $ke - 1);
@@ -461,6 +472,13 @@ final class DmsRosterRegLiveService
         if ($kode === 'onsite') {
             $baris['tgl_banned'] = $hariKe($aturan['onsite_banned_hari_ke']);
             $baris['jatuh_tempo'] = $run['hari'] >= $aturan['onsite_banned_hari_ke'];
+            // Untuk penyisipan otomatis ke master banned (DmsRosterAutoBannedService):
+            // tanggal pelanggaran = hari pertama melewati batas (hari ke-71).
+            // Run yang terpotong awal jendela tidak tahu hari ke-71 aslinya,
+            // jadi dipakai hari pertama jendela.
+            $baris['tgl_pelanggaran_iso'] = $iso(
+                $run['terpotong'] ? $run['mulai'] : $run['mulai'] + $aturan['onsite_maks'],
+            );
         }
 
         return $baris;
@@ -575,25 +593,29 @@ final class DmsRosterRegLiveService
     }
 
     /**
-     * Buang karyawan yang sudah pernah tercatat di sid_roster_banned_master
-     * (Master Roster Banned) — mereka sudah ditindak/treatment, jadi tidak
-     * dimunculkan lagi di kartu aturan. Dicocokkan lewat SID ATAU NIK supaya
-     * orang yang SID-nya berganti tetap terkecualikan.
+     * Buang karyawan yang masih punya kasus AKTIF di Master Roster Banned
+     * (sudah ditindak tapi belum di-unban — lihat DmsRosterBannedAktif).
+     * Yang kasusnya sudah di-unban tetap dinilai: kalau melanggar lagi, ia
+     * muncul lagi dan boleh di-banned lagi. Dicocokkan lewat SID ATAU NIK
+     * supaya orang yang SID-nya berganti tetap terkecualikan.
      *
      * whereNotNull di subquery wajib: satu NULL di daftar NOT IN membuat
      * seluruh perbandingan bernilai NULL dan semua baris ikut terbuang.
      */
     private function kecualikanMasterBanned(Builder $q): Builder
     {
+        // Builder diberikan langsung (bukan closure): closure di whereNotIn
+        // harus mengisi builder bawaan Laravel, nilai kembaliannya diabaikan.
+        $sidAktif = DmsRosterBannedAktif::query()->whereNotNull('m.sid')->select('m.sid');
+        $nikAktif = DmsRosterBannedAktif::query()->whereNotNull('m.nik')->where('m.nik', '<>', '')->select('m.nik');
+
         return $q
-            ->whereNotIn('kode_sid', static fn ($s) => $s->from('sid_roster_banned_master')->whereNotNull('sid')->select('sid'))
-            ->where(static fn ($w) => $w
-                ->whereNull('nik')
-                ->orWhereNotIn('nik', static fn ($s) => $s->from('sid_roster_banned_master')->whereNotNull('nik')->where('nik', '<>', '')->select('nik')));
+            ->whereNotIn('kode_sid', $sidAktif)
+            ->where(static fn ($w) => $w->whereNull('nik')->orWhereNotIn('nik', $nikAktif));
     }
 
     /**
-     * Sidik ringkas isi master banned (jumlah baris + perubahan terakhir).
+     * Sidik ringkas master banned + log unban (lihat DmsRosterBannedAktif::versi()).
      * Gagal dibaca = string kosong; kunci cache tetap valid.
      */
     private function versiMasterBanned(): string
@@ -603,9 +625,7 @@ final class DmsRosterRegLiveService
         }
 
         try {
-            $v = DB::table('sid_roster_banned_master')->selectRaw('COUNT(*) AS n, MAX(updated_at) AS t')->first();
-
-            return md5(($v->n ?? 0).'|'.($v->t ?? ''));
+            return DmsRosterBannedAktif::versi();
         } catch (Throwable $e) {
             Log::warning('DmsRoster versi master banned gagal: '.$e->getMessage());
 

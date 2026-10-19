@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands\Dms;
 
+use App\Services\Dms\Roster\DmsRosterAutoBannedService;
 use App\Services\Dms\Roster\DmsRosterRegLiveService;
 use App\Services\Dms\Roster\DmsRosterSyncService;
 use Carbon\CarbonImmutable;
@@ -120,6 +121,42 @@ final class SyncRosterRfidCommand extends Command
 
         $this->line('  '.$this->angka((int) $hasil['populasi']).' karyawan dinilai; '
             .$this->angka(count($hasil['daftar']['onsite'])).' periode kerja > 70 hari.');
+
+        $this->masukkanKeMasterBanned($live, $hasil);
+    }
+
+    /**
+     * Tahap 6 — pelanggaran periode kerja > 70 hari otomatis masuk Master
+     * Roster Banned. Hanya bila DMS_AUTO_BANNED=true (bawaan mati, lihat
+     * config dms_roster.reg_live.auto_banned).
+     *
+     * @param  array<string, mixed>  $hasil  Hasil DmsRosterRegLiveService::segarkan().
+     */
+    private function masukkanKeMasterBanned(DmsRosterRegLiveService $live, array $hasil): void
+    {
+        if (! config('dms_roster.reg_live.auto_banned.aktif', false)) {
+            $this->line('Tahap 6 — auto-banned mati (DMS_AUTO_BANNED). Pratinjau: php artisan dms:roster-auto-banned');
+
+            return;
+        }
+
+        $this->info('Tahap 6 — masukkan periode kerja > 70 hari ke Master Roster Banned ...');
+
+        try {
+            $banned = app(DmsRosterAutoBannedService::class);
+            $ditambah = $banned->masukkan($banned->calon($hasil['daftar']['onsite'])['calon']);
+        } catch (Throwable $e) {
+            $this->warn('  Gagal: '.$e->getMessage());
+
+            return;
+        }
+
+        $this->line("  {$this->angka($ditambah)} karyawan ditambahkan ke sid_roster_banned_master.");
+
+        // Master berubah → hitung ulang supaya yang baru di-banned hilang dari kartu.
+        if ($ditambah > 0) {
+            $live->segarkan();
+        }
     }
 
     /**
