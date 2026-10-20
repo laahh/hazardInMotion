@@ -26,6 +26,38 @@ class AutoBannedSodVerificationService
         return AutoBannedSchema::hasUnbanRequestsTable();
     }
 
+    /** Batas aman tab "Semua" (seluruh periode & status, diolah DataTables di browser). */
+    public const BATAS_SEMUA = 10000;
+
+    /**
+     * Seluruh pengajuan lintas periode & status untuk tab "Semua". Tidak
+     * memakai filter minggu/site/perusahaan dari server — penyaringan
+     * dikerjakan DataTables di browser, termasuk ekspor Excel-nya.
+     *
+     * @return Collection<int, AutoBannedUnbanRequest>
+     */
+    public function listAllRequests(): Collection
+    {
+        if (! $this->tableAvailable()) {
+            return collect();
+        }
+
+        return AutoBannedUnbanRequest::query()
+            ->orderByDesc('created_at')
+            ->limit(self::BATAS_SEMUA)
+            ->get();
+    }
+
+    /**
+     * Ringkasan kartu untuk tab "Semua": seluruh data tanpa filter periode.
+     *
+     * @return array{pending: int, approved: int, rejected: int, total: int, withEvidence: int}
+     */
+    public function summaryCountsAll(): array
+    {
+        return $this->summaryCounts([]);
+    }
+
     /**
      * @param  array{site?: string, week?: string, year?: string, perusahaan?: string, q?: string, status?: string}  $filters
      * @return Collection<int, AutoBannedUnbanRequest>

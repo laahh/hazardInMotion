@@ -41,6 +41,10 @@ class AutoBannedSodVerificationController extends Controller
 
         $filterOptions = $this->overviewService->filterOptions($resolvedFilters);
 
+        // Tab "Semua": seluruh pengajuan lintas periode & status (tanpa filter
+        // minggu bawaan dan tanpa batas 300), diolah DataTables di browser.
+        $semua = $resolvedFilters['status'] === 'all';
+
         return view('AutoBanned.sod-verification.index', [
             'navActive' => 'sod-verification',
             'navItems' => $this->autoBannedNavItems(),
@@ -49,8 +53,14 @@ class AutoBannedSodVerificationController extends Controller
             'filterOptions' => $filterOptions,
             'filterRoute' => 'auto-banned.sod-verification.index',
             'tableAvailable' => $this->sodVerificationService->tableAvailable(),
-            'summaryCounts' => $this->sodVerificationService->summaryCounts($resolvedFilters),
-            'submittedRequests' => $this->sodVerificationService->listSubmittedRequests($resolvedFilters),
+            'modeSemua' => $semua,
+            'batasSemua' => AutoBannedSodVerificationService::BATAS_SEMUA,
+            'summaryCounts' => $semua
+                ? $this->sodVerificationService->summaryCountsAll()
+                : $this->sodVerificationService->summaryCounts($resolvedFilters),
+            'submittedRequests' => $semua
+                ? $this->sodVerificationService->listAllRequests()
+                : $this->sodVerificationService->listSubmittedRequests($resolvedFilters),
         ]);
     }
 
