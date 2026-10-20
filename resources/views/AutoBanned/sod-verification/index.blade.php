@@ -84,6 +84,18 @@
       'perusahaan' => $filters['perusahaan'] ?? '',
       'q' => $filters['q'] ?? '',
    ], fn ($v) => $v !== '' && $v !== null);
+
+   // Tab "Semua": seluruh data lintas periode & status, disaring/diekspor
+   // DataTables di browser. Pilihan filter kolom diambil dari datanya sendiri.
+   $modeSemua = $modeSemua ?? false;
+   $batasSemua = $batasSemua ?? 10000;
+   $mingguLabel = fn ($row): string => trim(($row->week ?? '').' · '.($row->iso_year ?? ''), ' ·');
+   $opsiKolom = $modeSemua ? [
+      'status' => $submittedRequests->map(fn ($r) => $r->status->label())->unique()->sort()->values(),
+      'perusahaan' => $submittedRequests->pluck('perusahaan')->filter()->unique()->sort()->values(),
+      'site' => $submittedRequests->pluck('site_dedicated')->filter()->unique()->sort()->values(),
+      'minggu' => $submittedRequests->map($mingguLabel)->filter()->unique()->sortDesc()->values(),
+   ] : [];
 @endphp
 
 <div class="ab-sod -mt-2 space-y-7">
@@ -102,12 +114,19 @@
             </p>
          </div>
          <div class="shrink-0">
+            @if($modeSemua)
+            <p class="text-xs text-on-surface-variant max-w-xs">
+               Tab <strong>Semua</strong> menampilkan seluruh pengajuan lintas minggu &amp; status.
+               Saring lewat filter di atas tabel.
+            </p>
+            @else
             @include('AutoBanned.partials.filter-bar', [
                'filters' => $filters,
                'filterOptions' => $filterOptions,
                'filterRoute' => $filterRoute,
                'preserveParams' => ['status' => in_array($currentStatus, ['pending', 'approved', 'rejected', 'all'], true) ? $currentStatus : 'pending'],
             ])
+            @endif
          </div>
       </div>
    </section>
@@ -140,23 +159,62 @@
       <div class="px-5 sm:px-6 pt-5 pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-outline-variant/10">
          <div>
             <h2 class="font-headline font-semibold text-base text-on-background">Daftar Pengajuan</h2>
-            <p class="text-xs text-on-surface-variant mt-0.5">{{ $submittedRequests->count() }} baris · verifikasi treatment oleh SOD</p>
+            <p class="text-xs text-on-surface-variant mt-0.5">
+               {{ $submittedRequests->count() }} baris · verifikasi treatment oleh SOD
+               @if($modeSemua && $submittedRequests->count() >= $batasSemua)
+               <span class="text-amber-700 font-semibold">· dibatasi {{ number_format($batasSemua, 0, ',', '.') }} baris terbaru</span>
+               @endif
+            </p>
          </div>
          <div class="inline-flex p-1 rounded-xl bg-[#f1f5f9]/80 gap-0.5 flex-wrap" role="tablist">
             @foreach($statusTabs as $statusKey => $statusLabel)
             @php
-               $tabQuery = array_merge($queryBase, $statusKey === 'all' ? [] : ['status' => $statusKey]);
+               // "Semua" WAJIB membawa status=all: tanpa itu controller
+               // menganggap status kosong = pending, jadi tab tak berpindah.
+               // Tab Semua juga tidak membawa filter periode — ia menampilkan
+               // seluruh data lintas minggu.
+               $tabQuery = $statusKey === 'all'
+                  ? ['status' => 'all']
+                  : array_merge($queryBase, ['status' => $statusKey]);
+               $tabAktif = $currentStatus === $statusKey;
             @endphp
             <a href="{{ route('auto-banned.sod-verification.index', $tabQuery) }}"
                role="tab"
-               aria-selected="{{ ($currentStatus === $statusKey || ($statusKey === 'all' && $currentStatus === '')) ? 'true' : 'false' }}"
-               class="ab-tab-btn rounded-lg px-3 py-2 text-xs font-semibold {{ ($currentStatus === $statusKey || ($statusKey === 'all' && !in_array($currentStatus, ['pending','approved','rejected'], true))) ? 'text-primary bg-white shadow-sm' : 'text-on-surface-variant' }}">
+               aria-selected="{{ $tabAktif ? 'true' : 'false' }}"
+               class="ab-tab-btn rounded-lg px-3 py-2 text-xs font-semibold {{ $tabAktif ? 'text-primary bg-white shadow-sm' : 'text-on-surface-variant' }}">
                {{ $statusLabel }}
             </a>
             @endforeach
          </div>
       </div>
 
+      @if($modeSemua)
+      {{-- Filter DataTables (di browser): mempengaruhi tabel & ekspor Excel. --}}
+      <div class="px-5 sm:px-6 py-3 border-b border-outline-variant/5 bg-[#fafbfc]/50 flex flex-wrap gap-2 items-center">
+         <div class="relative flex-1 min-w-[200px] max-w-sm">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-base">search</span>
+            <input type="search" id="abSodCari" placeholder="Cari SID, nama, perusahaan, treatment…" class="w-full rounded-xl border border-outline-variant/25 bg-white pl-9 pr-3 py-2 text-xs font-medium"/>
+         </div>
+         @foreach([
+            'status' => ['Semua status', 'status'],
+            'perusahaan' => ['Semua perusahaan', 'perusahaan'],
+            'site' => ['Semua site', 'site'],
+            'minggu' => ['Semua minggu', 'minggu'],
+         ] as $kunciOpsi => [$placeholder, $kolom])
+         <select class="rounded-xl border border-outline-variant/25 bg-white py-2 pl-3 pr-8 text-xs font-medium" data-ab-sod-filter="{{ $kolom }}">
+            <option value="">{{ $placeholder }}</option>
+            @foreach($opsiKolom[$kunciOpsi] as $opsi)
+            <option value="{{ $opsi }}">{{ $opsi }}</option>
+            @endforeach
+         </select>
+         @endforeach
+         <button type="button" id="abSodReset" class="rounded-xl border border-outline-variant/25 bg-white px-3 py-2 text-xs font-semibold text-on-surface-variant">Reset</button>
+         <button type="button" id="abSodExcel" class="ml-auto inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white">
+            <span class="material-symbols-outlined text-base">download</span>
+            Unduh Excel
+         </button>
+      </div>
+      @else
       <div class="px-5 sm:px-6 py-3 border-b border-outline-variant/5 bg-[#fafbfc]/50">
          <form method="GET" action="{{ route('auto-banned.sod-verification.index') }}" class="flex flex-wrap gap-2 items-center">
             @foreach($queryBase as $key => $val)
@@ -176,22 +234,24 @@
             </a>
          </form>
       </div>
+      @endif
 
-      <div class="overflow-x-auto">
-         <table class="ab-sheet-table min-w-[1100px]">
+      <div class="overflow-x-auto {{ $modeSemua ? 'p-4' : '' }}">
+         <table class="ab-sheet-table min-w-[1100px]" @if($modeSemua) id="abSodTabel" @endif>
             <thead>
                <tr>
                   <th>No</th>
                   <th>Tanggal Submit</th>
+                  @if($modeSemua)<th data-ab-kolom="minggu">Minggu</th>@endif
                   <th>SID</th>
                   <th>Karyawan</th>
-                  <th>Perusahaan</th>
-                  <th>Site</th>
+                  <th data-ab-kolom="perusahaan">Perusahaan</th>
+                  <th data-ab-kolom="site">Site</th>
                   <th>Ringkasan Treatment</th>
                   <th>Evidence</th>
-                  <th>Status</th>
+                  <th data-ab-kolom="status">Status</th>
                   <th>Verifikasi</th>
-                  <th>Aksi</th>
+                  <th class="ab-no-export">Aksi</th>
                </tr>
             </thead>
             <tbody>
@@ -205,12 +265,13 @@
                @endphp
                <tr>
                   <td class="tabular-nums text-on-surface-variant">{{ $index + 1 }}</td>
-                  <td class="whitespace-nowrap text-[11px]">
+                  <td class="whitespace-nowrap text-[11px]" data-order="{{ $row->created_at?->format('Y-m-d H:i:s') }}">
                      {{ $row->created_at?->format('d M Y H:i') }}
                      @if($row->submitted_by_name)
                      <span class="block text-[10px] text-on-surface-variant mt-0.5">{{ $row->submitted_by_name }}</span>
                      @endif
                   </td>
+                  @if($modeSemua)<td class="whitespace-nowrap" data-search="{{ $mingguLabel($row) }}">{{ $mingguLabel($row) ?: '—' }}</td>@endif
                   <td class="font-mono font-bold text-primary">{{ $row->sid }}</td>
                   <td class="font-medium">{{ $row->karyawan }}</td>
                   <td>{{ $row->perusahaan ?: '—' }}</td>
@@ -231,7 +292,7 @@
                      <span class="text-on-surface-variant">—</span>
                      @endif
                   </td>
-                  <td><span class="ab-badge {{ $badgeClass }}">{{ $row->status->label() }}</span></td>
+                  <td data-search="{{ $row->status->label() }}"><span class="ab-badge {{ $badgeClass }}">{{ $row->status->label() }}</span></td>
                   <td class="text-[11px] text-on-surface-variant whitespace-nowrap">
                      @if($row->reviewed_at)
                      <span class="block">{{ $row->reviewed_at->format('d M Y H:i') }}</span>
@@ -301,6 +362,9 @@
                   </td>
                </tr>
                @empty
+               {{-- Mode Semua: biarkan kosong — DataTables menampilkan pesannya sendiri
+                    dan menolak baris ber-colspan. --}}
+               @if(! $modeSemua)
                <tr>
                   <td colspan="11" class="py-14 text-center text-sm text-on-surface-variant">
                      @if($currentStatus === 'pending')
@@ -310,6 +374,7 @@
                      @endif
                   </td>
                </tr>
+               @endif
                @endforelse
             </tbody>
          </table>
@@ -429,4 +494,101 @@
    });
 })();
 </script>
+
+@if($modeSemua)
+{{-- Tab "Semua": DataTables (cari, urut, paginasi, filter kolom) + ekspor
+     Excel di browser. Dimuat sesudah skrip review di atas: tombol Terima/Tolak
+     sudah terikat ke semua baris sebelum DataTables memindahkan baris antar
+     halaman, jadi tetap berfungsi di halaman mana pun. --}}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-dt@2.1.8/css/dataTables.dataTables.min.css">
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/datatables.net@2.1.8/js/dataTables.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/datatables.net-buttons@3.1.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/datatables.net-buttons@3.1.2/js/buttons.html5.min.js"></script>
+<style>
+   /* Tombol Excel bawaan DataTables disembunyikan; dipicu tombol hijau di toolbar. */
+   #abSodTabel_wrapper .dt-buttons { display: none; }
+   #abSodTabel_wrapper .dt-length,
+   #abSodTabel_wrapper .dt-info,
+   #abSodTabel_wrapper .dt-paging { font-size: 12px; margin: .5rem 0; }
+   #abSodTabel_wrapper .dt-length select { border-radius: .5rem; padding: .15rem 1.5rem .15rem .5rem; font-size: 12px; }
+</style>
+<script>
+(function () {
+   var el = document.getElementById('abSodTabel');
+   if (!el || typeof DataTable === 'undefined') return;
+
+   var tabel = new DataTable(el, {
+      order: [[1, 'desc']],
+      pageLength: 25,
+      lengthMenu: [10, 25, 50, 100, { label: 'Semua', value: -1 }],
+      columnDefs: [{ targets: 'ab-no-export', orderable: false, searchable: false }],
+      layout: {
+         topStart: 'pageLength',
+         topEnd: {
+            buttons: [{
+               extend: 'excelHtml5',
+               className: 'ab-btn-excel',
+               title: 'Verifikasi SOD — Semua Pengajuan',
+               filename: 'verifikasi-sod-semua-' + new Date().toISOString().slice(0, 10),
+               // Hanya baris yang lolos filter/pencarian; kolom Aksi tidak ikut.
+               exportOptions: {
+                  columns: ':not(.ab-no-export)',
+                  modifier: { search: 'applied', order: 'applied', page: 'all' },
+               },
+            }],
+         },
+         bottomStart: 'info',
+         bottomEnd: 'paging',
+      },
+      language: {
+         lengthMenu: 'Tampilkan _MENU_ baris',
+         info: '_START_–_END_ dari _TOTAL_ pengajuan',
+         infoEmpty: 'Tidak ada data',
+         infoFiltered: '(disaring dari _MAX_)',
+         zeroRecords: 'Tidak ada pengajuan yang cocok dengan filter.',
+         emptyTable: 'Belum ada pengajuan.',
+         paginate: { first: '«', last: '»', next: '›', previous: '‹' },
+      },
+   });
+
+   // Indeks kolom dari atribut di <th>, supaya tidak bergantung urutan kolom.
+   function indeksKolom(nama) {
+      var th = el.querySelector('thead th[data-ab-kolom="' + nama + '"]');
+      return th ? Array.prototype.indexOf.call(th.parentNode.children, th) : -1;
+   }
+
+   var filter = document.querySelectorAll('[data-ab-sod-filter]');
+   filter.forEach(function (sel) {
+      sel.addEventListener('change', function () {
+         var idx = indeksKolom(sel.getAttribute('data-ab-sod-filter'));
+         if (idx < 0) return;
+         var nilai = sel.value;
+         // Cocok persis (bukan "mengandung"), mis. site "BMO 1" tidak ikut "BMO 10".
+         tabel.column(idx).search(nilai ? '^' + DataTable.util.escapeRegex(nilai) + '$' : '', true, false).draw();
+      });
+   });
+
+   var cari = document.getElementById('abSodCari');
+   if (cari) {
+      cari.addEventListener('input', function () { tabel.search(cari.value).draw(); });
+   }
+
+   var reset = document.getElementById('abSodReset');
+   if (reset) {
+      reset.addEventListener('click', function () {
+         filter.forEach(function (sel) { sel.value = ''; });
+         if (cari) cari.value = '';
+         tabel.search('').columns().search('').draw();
+      });
+   }
+
+   var excel = document.getElementById('abSodExcel');
+   if (excel) {
+      excel.addEventListener('click', function () { tabel.button('.ab-btn-excel').trigger(); });
+   }
+})();
+</script>
+@endif
 @endpush
