@@ -217,9 +217,9 @@ return [
     */
     'reg_live' => [
         'jendela_hari' => 180,
-        // > 30 menit: hasil yang disimpan command terjadwal dms:sync-roster-rfid
-        // (tiap 30 menit) tetap dipakai sampai putaran berikutnya.
-        'cache_ttl' => 2100,
+        // > 60 menit: hasil yang disimpan command terjadwal dms:sync-roster-rfid
+        // (tiap 1 jam) tetap dipakai sampai putaran berikutnya selesai.
+        'cache_ttl' => 4500,
         'timeout_ms' => 20000,
         // Jendela dipecah per N hari: satu query 180 hari bisa melewati
         // statement_timeout saat server sibuk; potongan 30 hari ±0,5 dtk.
