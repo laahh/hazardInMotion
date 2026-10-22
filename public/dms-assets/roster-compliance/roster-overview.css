@@ -358,3 +358,35 @@
 .ro-sc-riwayat__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12.5px; }
 .ro-sc-riwayat__list li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .ro-sc-riwayat__tgl { min-width: 120px; font-weight: 600; color: #0F172A; font-variant-numeric: tabular-nums; }
+
+/* ── Modal "Cari manual": dua aturan highlight di grid pola harian ──────
+   Titik kuning = tidak sesuai mapping roster (hanya bila hari itu tidak
+   ber-flag merah); garis jingga di bawah kotak = shift > 12 jam. */
+.ro-hm-cell.is-kuning { position: relative; }
+.ro-hm-cell.is-kuning::after {
+  content: '';
+  position: absolute; top: 2px; right: 2px;
+  width: 5px; height: 5px; border-radius: 999px;
+  background: var(--ro-mapping, #F59E0B);
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .9);
+}
+.ro-hm-cell.is-jam::before {
+  content: '';
+  position: absolute; left: 3px; right: 3px; bottom: 1px;
+  height: 3px; border-radius: 2px;
+  background: #EA580C;
+}
+.ro-sw-kuning { background: #fff; border: 1.5px solid var(--ro-mapping, #F59E0B); position: relative; }
+.ro-sw-kuning::after {
+  content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 5px; height: 5px; border-radius: 999px; background: var(--ro-mapping, #F59E0B);
+}
+.ro-sw-jam { background: var(--ro-off); box-shadow: inset 0 -3px 0 #EA580C; }
+
+.ro-cm-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.ro-cm-status__item { border: 1px solid #EEF2F6; border-radius: 10px; padding: 10px 12px; background: #fff; }
+.ro-cm-status__item.is-danger { border-color: #FECDD3; background: #FFF1F2; }
+.ro-cm-status__item.is-warning { border-color: #FDE68A; background: #FFFBEB; }
+.ro-cm-status__judul { font-size: 12.5px; font-weight: 700; color: #0F172A; }
+.ro-cm-status__teks { font-size: 12px; color: #475569; margin-top: 4px; }
+.ro-sc-note-warn { color: #B45309; font-weight: 600; }

@@ -716,10 +716,31 @@
         if (h.durasi) { t += ' · ' + h.durasi; }
         if (batas) { t += ' · ⛔ seharusnya sudah cuti (periode kerja > ' + (ke - 1) + ' hari)'; }
         if (h.merah) { t += ' · ⚠ ' + h.merah; }
+        if (h.kuning) { t += ' · ◆ mapping: ' + h.kuning; }
+        if (h.lebih_jam) { t += ' · ⏱ waktu kerja > ' + jamMaks + ' jam'; }
         return t;
     }
 
+    var jamMaks = 12;
+
+    // Empat aturan kartu "Penegakan Aturan" per hari ini untuk orang ini.
+    function statusTerkini(d) {
+        var html = '<div class="ro-sc-detail__title mb-8">Status per hari ini <span class="ro-sc-muted fw-normal">&middot; 4 aturan kartu Penegakan Aturan</span></div>'
+            + '<div class="ro-cm-status mb-16">';
+        d.terkini.forEach(function (s) {
+            var badge = s.kena
+                ? '<span class="badge bg-' + s.warna + '-focus text-' + s.warna + '-main">' + (s.warna === 'danger' ? 'Melanggar' : 'Highlight') + ' &middot; ' + esc(s.perlakuan) + '</span>'
+                : '<span class="badge bg-success-focus text-success-main">Sesuai</span>';
+            html += '<div class="ro-cm-status__item' + (s.kena ? ' is-' + s.warna : '') + '">'
+                + '<div class="d-flex justify-content-between align-items-start gap-2">'
+                + '<div class="ro-cm-status__judul">' + esc(s.judul) + ' <span class="text-' + s.warna + '-main">' + esc(s.ambang) + '</span></div>' + badge + '</div>'
+                + '<div class="ro-cm-status__teks">' + esc(s.teks) + '</div></div>';
+        });
+        return html + '</div>';
+    }
+
     function render(d) {
+        jamMaks = d.jam_maks;
         var batasKe = d.onsite_maks + 1;
         var baris = [[], [], [], [], [], [], []];
         var kolom = 0;
@@ -733,7 +754,7 @@
             var tampilKe = h.kode === 'c' || h.kode === 'x' ? 0 : ke;
             var batas = tampilKe === batasKe;
             baris[hariKe][kolom] = '<span class="ro-hm-cell ' + (h.kode === 'x' ? 'is-empty' : 'sh-' + h.kode)
-                + (h.merah ? ' is-flag' : '') + (batas ? ' is-batas' : '')
+                + (h.merah ? ' is-flag' : (h.kuning ? ' is-kuning' : '')) + (h.lebih_jam ? ' is-jam' : '') + (batas ? ' is-batas' : '')
                 + '" title="' + esc(judulSel(h, tampilKe, batas)) + '">'
                 + (tampilKe > 0 ? '<span class="ro-hm-ke">' + tampilKe + '</span>' : '') + '</span>';
         });
@@ -762,8 +783,9 @@
         } else {
             riwayat += '<ul class="ro-sc-riwayat__list">';
             d.riwayat.forEach(function (k) {
+                var merah = k.warna === 'danger';
                 riwayat += '<li><span class="ro-sc-riwayat__tgl">' + esc(k.mulai) + (k.mulai !== k.selesai ? ' – ' + esc(k.selesai) : '') + '</span>'
-                    + '<span class="ro-sc-note-red">⚠ ' + esc(k.jenis) + '</span>'
+                    + '<span class="' + (merah ? 'ro-sc-note-red' : 'ro-sc-note-warn') + '">' + (merah ? '⚠ ' : '◆ ') + esc(k.jenis) + '</span>'
                     + '<span class="text-secondary-light">' + esc(k.teks) + '</span></li>';
             });
             riwayat += '</ul>';
@@ -778,9 +800,12 @@
             + '<div class="ro-sc-legend">'
             + '<span><i class="ro-sw ro-sw-pagi"></i>Pagi</span><span><i class="ro-sw ro-sw-malam"></i>Malam</span>'
             + '<span><i class="ro-sw ro-sw-off"></i>Off</span><span><i class="ro-sw ro-sw-cuti"></i>Cuti</span>'
-            + '<span><i class="ro-sw ro-sw-flag"></i>Hari ter-flag</span>'
+            + '<span><i class="ro-sw ro-sw-flag"></i>Periode kerja / beruntun</span>'
+            + '<span><i class="ro-sw ro-sw-kuning"></i>Tidak sesuai mapping</span>'
+            + '<span><i class="ro-sw ro-sw-jam"></i>Waktu kerja &gt; ' + d.jam_maks + ' jam</span>'
             + '<span><i class="ro-sw ro-sw-batas"></i>Hari ke-' + batasKe + ': seharusnya sudah cuti</span>'
             + '<span class="ro-sc-muted">angka = hari kerja ke-N sejak cuti</span></div></div>'
+            + statusTerkini(d)
             + '<div class="ro-heatmap"><div class="ro-hm-scroll"><div class="ro-hm" style="--ro-cols: ' + nKolom + '">' + grid + '</div></div></div>'
             + '<div class="text-xs text-secondary-light mt-8">Arahkan kursor ke kotak untuk jam &amp; gate check-in/out. '
             + 'Bila cuti terakhir lebih dari 75 hari lalu, hitungan hari kerja dimulai dari awal jendela.</div>'

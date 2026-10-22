@@ -256,7 +256,8 @@ final class DmsRosterRegLiveService
             'akhir' => $hariIni->toDateString(),
             'panjang' => $panjang,
             'temuan' => $temuan,
-            'riwayat' => $this->riwayat($eval, $awal),
+            'terkini' => $this->statusTerkini($eval, $param, $hari, $hariIni),
+            'riwayat' => $this->riwayat($eval, $awal, $hari),
             'hari' => $hari,
         ];
     }
@@ -694,16 +695,21 @@ final class DmsRosterRegLiveService
      * Kejadian pelanggaran di jendela, urut tanggal — run yang sama dengan
      * tanda merah per hari, jadi daftar dan kalender selalu sepakat. Run yang
      * menyentuh awal jendela ditandai "≥": panjang aslinya tidak diketahui.
-     * Murni, tanpa DB.
+     * Selain dua aturan banned (merah), dicatat juga dua aturan highlight
+     * (kuning): rentetan hari tidak sesuai mapping roster (pesan rule engine
+     * yang sama dengan titik kuning) dan tiap shift > jam_kerja_maks dari
+     * $hari (hasil susunHari). Murni, tanpa DB.
      *
-     * @return list<array{jenis:string,teks:string,mulai:string,selesai:string,hari:int}>
+     * @param  list<array<string, mixed>>  $hari
+     * @return list<array{jenis:string,teks:string,mulai:string,selesai:string,hari:int,warna:string}>
      */
-    public function riwayat(DmsRosterEvaluation $eval, CarbonImmutable $awal): array
+    public function riwayat(DmsRosterEvaluation $eval, CarbonImmutable $awal, array $hari = []): array
     {
         $jenis = [
             'onsite' => ['Periode kerja', '%s%d hari on-site tanpa cuti (maks %d)'],
             'beruntun' => ['Bekerja berturut-turut', '%s%d hari tanpa off (maks %d)'],
         ];
+        $tgl = static fn (int $i): string => $awal->addDays($i)->translatedFormat('j M');
         $out = [];
 
         foreach ($this->runPelanggaran($eval) as $run) {
@@ -711,13 +717,124 @@ final class DmsRosterRegLiveService
             $out[] = [
                 'jenis' => $judul,
                 'teks' => sprintf($format, $run['mulai'] === 0 ? '≥ ' : '', $run['hari'], $run['batas']),
-                'mulai' => $awal->addDays($run['mulai'])->translatedFormat('j M'),
-                'selesai' => $awal->addDays($run['selesai'])->translatedFormat('j M'),
+                'mulai' => $tgl($run['mulai']),
+                'selesai' => $tgl($run['selesai']),
                 'hari' => $run['mulai'],
+                'warna' => 'danger',
+            ];
+        }
+
+        // Mapping: hari kuning berurutan dengan pesan sama = satu kejadian.
+        $yel = $eval->yel;
+        for ($i = 0, $n = count($yel); $i < $n; $i++) {
+            if (($yel[$i] ?? '') === '') {
+                continue;
+            }
+            $j = $i;
+            while ($j + 1 < $n && ($yel[$j + 1] ?? '') === $yel[$i]) {
+                $j++;
+            }
+            $out[] = ['jenis' => 'Tidak sesuai mapping', 'teks' => $yel[$i], 'mulai' => $tgl($i), 'selesai' => $tgl($j), 'hari' => $i, 'warna' => 'warning'];
+            $i = $j;
+        }
+
+        $maksJam = $this->aturan()['jam_kerja_maks'];
+        foreach ($hari as $i => $h) {
+            if (($h['durasi_menit'] ?? null) === null || $h['durasi_menit'] <= $maksJam * 60) {
+                continue;
+            }
+            $out[] = [
+                'jenis' => 'Waktu kerja > '.$maksJam.' jam',
+                'teks' => $h['durasi'].' (masuk '.$h['masuk']['jam'].' · keluar '
+                    .($h['keluar']['beda_hari'] ? $h['keluar']['tanggal'].' ' : '').$h['keluar']['jam'].')',
+                'mulai' => $tgl($i),
+                'selesai' => $tgl($i),
+                'hari' => $i,
+                'warna' => 'warning',
             ];
         }
 
         usort($out, static fn (array $a, array $b): int => $a['hari'] <=> $b['hari']);
+
+        return $out;
+    }
+
+    /**
+     * Status keempat aturan kartu "Penegakan Aturan" per HARI INI untuk satu
+     * karyawan — penilaian yang sama dengan kartunya (nilaiEvaluasi untuk
+     * periode kerja, beruntun, MAP-1/2/3; shift lengkap terakhir dalam
+     * jam_kerja_hari_terkini hari untuk waktu kerja). Judul & ambang dari
+     * DmsRosterAturanKartu supaya sama persis dengan kartu.
+     *
+     * @param  array{thr:int,map:string}  $param
+     * @param  list<array<string, mixed>>  $hari  Hasil susunHari().
+     * @return list<array{kode:string,judul:string,ambang:string,perlakuan:string,warna:string,kena:bool,teks:string}>
+     */
+    private function statusTerkini(DmsRosterEvaluation $eval, array $param, array $hari, CarbonImmutable $hariIni): array
+    {
+        $nilai = $this->nilaiEvaluasi($eval, $param);
+        $aturan = $this->aturan();
+        $p = $eval->pola;
+        $tgl = static fn (int $i): string => CarbonImmutable::parse($hari[$i]['iso'])->translatedFormat('j M');
+        $mundur = static function (callable $cocok) use ($p): int {
+            $n = 0;
+            for ($i = strlen($p) - 1; $i >= 0 && $cocok($p[$i]); $i--) {
+                $n++;
+            }
+
+            return $n;
+        };
+
+        $teks = [];
+        foreach (['onsite' => 'on-site sejak cuti terakhir', 'beruntun' => 'kerja tanpa off'] as $kode => $ket) {
+            $run = $nilai[$kode];
+            $teks[$kode] = $run === null
+                ? ($kode === 'onsite'
+                    ? $mundur(static fn (string $c): bool => $c !== 'c').' hari '.$ket.' — masih dalam batas'
+                    : $mundur(static fn (string $c): bool => $c === 'P' || $c === 'M').' hari '.$ket.' — masih dalam batas')
+                : ($run['terpotong'] ? '≥ ' : '').$run['hari'].' hari '.$ket.' ('.$tgl($run['mulai']).' – '.$tgl($run['selesai']).')';
+        }
+
+        // Shift lengkap terakhir yang check-in-nya masih dalam N hari terakhir.
+        $batasTerkini = $hariIni->subDays($aturan['jam_kerja_hari_terkini'] - 1)->toDateString();
+        $shift = null;
+        for ($i = count($hari) - 1; $i >= 0 && $hari[$i]['iso'] >= $batasTerkini; $i--) {
+            if ($hari[$i]['durasi_menit'] !== null) {
+                $shift = $hari[$i];
+                break;
+            }
+        }
+        $kenaJam = $shift !== null && $shift['durasi_menit'] > $aturan['jam_kerja_maks'] * 60;
+        $teks['jam12'] = $shift === null
+            ? 'Tidak ada shift lengkap (check-in & check-out) dalam '.$aturan['jam_kerja_hari_terkini'].' hari terakhir'
+            : 'Shift terakhir '.$shift['durasi'].' · '.CarbonImmutable::parse($shift['iso'])->translatedFormat('j M')
+                .' masuk '.$shift['masuk']['jam'].' ('.$shift['masuk']['gate'].') → keluar '.$shift['keluar']['jam'].' ('.$shift['keluar']['gate'].')';
+
+        $out = [];
+        foreach (DmsRosterAturanKartu::daftar() as $kartu) {
+            $id = $kartu['id'];
+            if ($id === 'mapping') {
+                $kenaMap = array_filter(['map1', 'map2', 'map3'], static fn (string $k): bool => $nilai[$k] !== null);
+                $kena = $kenaMap !== [];
+                $isi = $kena
+                    ? implode('; ', array_map(static fn (string $k): string => $kartu['item'][$k][0]
+                        .' (blok '.$nilai[$k]['hari'].' hari, '.$tgl($nilai[$k]['mulai']).' – '.$tgl($nilai[$k]['selesai']).')', $kenaMap))
+                    : 'Blok kerja terakhir sesuai pola roster PT (blok maks '.($param['thr'] - 1).' hari)';
+            } else {
+                $kena = $id === 'jam12' ? $kenaJam : $nilai[$id] !== null;
+                $isi = $teks[$id];
+            }
+
+            $out[] = [
+                'kode' => $id,
+                'judul' => $kartu['judul'],
+                'ambang' => $kartu['ambang'],
+                'perlakuan' => $kartu['perlakuan'],
+                'warna' => $kartu['warna'],
+                'kena' => $kena,
+                'teks' => $isi,
+            ];
+        }
 
         return $out;
     }

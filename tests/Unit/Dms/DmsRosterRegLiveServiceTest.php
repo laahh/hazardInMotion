@@ -101,6 +101,26 @@ class DmsRosterRegLiveServiceTest extends TestCase
         $this->assertSame('15 hari tanpa off (maks 13)', $riwayat[1]['teks']);
     }
 
+    public function test_riwayat_mencatat_mapping_dan_shift_lebih_dari_12_jam(): void
+    {
+        // BUMA (bukan PAMA): Pagi setelah Malam dalam satu blok = MAP-3.
+        $pola = str_repeat('o', 20).'MMMPP'.'oo';
+        $eval = (new DmsRosterRuleEngine())->evaluasi($pola, 'Operator Hauler', 7, 'block');
+        $awal = CarbonImmutable::create(2026, 8, 1);
+        $hari = $this->svc->susunHari([
+            ['waktu' => '2026-08-21 05:30:00', 'jenis' => 'CHECK IN', 'gate' => 'G1', 'lolos' => true],
+            ['waktu' => '2026-08-21 19:00:00', 'jenis' => 'CHECK OUT', 'gate' => 'G2', 'lolos' => true],
+        ], $awal, strlen($pola));
+
+        $riwayat = $this->svc->riwayat($eval, $awal, $hari);
+        $jenis = array_column($riwayat, 'jenis', 'hari');
+
+        $this->assertSame('Waktu kerja > 12 jam', $jenis[20]);
+        $this->assertStringStartsWith('13j 30m', $riwayat[array_search(20, array_column($riwayat, 'hari'), true)]['teks']);
+        $this->assertContains('Tidak sesuai mapping', array_column($riwayat, 'jenis'));
+        $this->assertSame(['warning'], array_values(array_unique(array_column($riwayat, 'warna'))));
+    }
+
     public function test_riwayat_kategori_longgar_kosong(): void
     {
         $eval = (new DmsRosterRuleEngine())->evaluasi(str_repeat('P', 75), 'Mekanik', 7, 'block');
