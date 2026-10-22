@@ -395,7 +395,7 @@ final class DmsRosterSyncService
     /**
      * Kode singkat PT. Perusahaan di luar config diberi singkatan inisial.
      */
-    public function kodePt(string $perusahaan): string
+    public static function kodePt(string $perusahaan): string
     {
         /** @var array<string, array<string, mixed>> $daftar */
         $daftar = config('dms_roster.perusahaan', []);

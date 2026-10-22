@@ -178,8 +178,9 @@ final class RosterComplianceController extends Controller
     private const CARI_MANUAL_HARI = 75;
 
     /**
-     * "Cari manual" di tabel scorecard Ringkasan Roster: SATU karyawan, pola
-     * harian dirakit langsung dari seluruh tap RFID 75 hari terakhir.
+     * "Cari manual" di tabel scorecard Ringkasan Roster: SATU karyawan dari
+     * SELURUH karyawan aktif (bukan hanya populasi roster / hasil filter),
+     * pola harian dirakit langsung dari seluruh tap RFID 75 hari terakhir.
      *
      * ?sid= langsung memuat timeline. ?q= mencari dulu: bila cocok tepat satu
      * orang (atau SID/NIK persis) timeline-nya dimuat, bila lebih dari satu
@@ -197,10 +198,10 @@ final class RosterComplianceController extends Controller
 
             $calon = $live->cariKaryawan($q);
             if ($calon === []) {
-                return response()->json(['up' => false, 'pesan' => 'Karyawan "'.$q.'" tidak ditemukan di master karyawan roster.'], 404);
+                return response()->json(['up' => false, 'pesan' => 'Karyawan "'.$q.'" tidak ditemukan di data karyawan aktif.'], 404);
             }
 
-            $persis = array_values(array_filter($calon, static fn (array $c): bool => $c['sid'] === mb_strtoupper($q)));
+            $persis = array_values(array_filter($calon, static fn (array $c): bool => $c['persis']));
             if (count($calon) > 1 && $persis === []) {
                 return response()->json([
                     'up' => true,

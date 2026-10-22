@@ -41,6 +41,7 @@ final class DmsRosterRegLiveService
     public function __construct(
         private readonly DmsRosterRuleEngine $engine,
         private readonly DmsRosterRfidReader $rfid,
+        private readonly DmsRosterJabatanKategori $jabatan = new DmsRosterJabatanKategori(),
     ) {}
 
     /** Hasil terakhir yang berhasil — cadangan saat RFID tidak terjangkau. */
@@ -195,9 +196,7 @@ final class DmsRosterRegLiveService
         $awal = $hariIni->subDays($panjang - 1);
 
         try {
-            $k = DB::table('dms_roster_karyawan')
-                ->where('kode_sid', $sid)
-                ->first(['kode_sid', 'nama', 'jabatan_struktural as jabatan', 'kategori', 'perusahaan', 'kode_pt', 'site']);
+            $k = $this->identitasKaryawan($sid, $awal);
             if ($k === null) {
                 return ['ditemukan' => false];
             }
@@ -263,9 +262,14 @@ final class DmsRosterRegLiveService
     }
 
     /**
-     * Calon karyawan untuk pencarian manual satu orang: SID / NIK persis
-     * didahulukan, lalu nama atau SID yang mengandung teks. Dibatasi
+     * Calon karyawan untuk pencarian manual satu orang dari SELURUH karyawan
+     * aktif (view karyawan OLAP), bukan hanya populasi roster: SID / NIK
+     * persis didahulukan, lalu nama atau SID yang mengandung teks. Dibatasi
      * $maks + 1 baris supaya pemanggil tahu hasilnya terpotong.
+     *
+     * Hasil di-cache 10 menit per kata kunci, dan identitas tiap calon 1 jam
+     * per SID — supaya memilih salah satu calon tidak membaca view (±6 dtk)
+     * lagi. Bila OLAP tidak terjangkau, jatuh ke master karyawan roster lokal.
      *
      * @return list<array{sid:string,nama:string,jabatan:string,pt:string,site:string}>
      */
@@ -275,6 +279,98 @@ final class DmsRosterRegLiveService
         if (mb_strlen($teks) < 3) {
             return [];
         }
+
+        try {
+            $rows = Cache::remember(
+                'dms_roster:cari_karyawan:v1:'.md5(mb_strtolower($teks)).':'.$maks,
+                600,
+                fn (): array => $this->rfid->cariKaryawanAktif($teks, $maks + 1),
+            );
+        } catch (Throwable $e) {
+            Log::warning('DmsRoster cari karyawan aktif gagal, pakai master roster lokal: '.$e->getMessage());
+
+            return $this->cariKaryawanLokal($teks, $maks);
+        }
+
+        $out = [];
+        foreach ($rows as $r) {
+            $k = $this->identitasDari($r);
+            Cache::put(self::KUNCI_IDENTITAS.$k->kode_sid, $k, 3600);
+            $out[] = [
+                'sid' => $k->kode_sid,
+                'nama' => $k->nama,
+                'jabatan' => $k->jabatan ?: '—',
+                'pt' => $k->kode_pt ?: '—',
+                'site' => $k->site ?: '—',
+                'persis' => $k->kode_sid === mb_strtoupper($teks) || (string) ($r->nik ?? '') === $teks,
+            ];
+        }
+
+        return $out;
+    }
+
+    private const KUNCI_IDENTITAS = 'dms_roster:identitas:v1:';
+
+    /**
+     * Identitas satu SID untuk timeline: master karyawan roster lokal lebih
+     * dulu (kategorinya sudah dipetakan sinkronisasi), lalu hasil pencarian
+     * yang ter-cache, lalu view karyawan aktif, terakhir nama dari tap RFID.
+     */
+    private function identitasKaryawan(string $sid, CarbonImmutable $awal): ?object
+    {
+        $k = DB::table('dms_roster_karyawan')
+            ->where('kode_sid', $sid)
+            ->first(['kode_sid', 'nama', 'jabatan_struktural as jabatan', 'kategori', 'perusahaan', 'kode_pt', 'site']);
+        if ($k !== null) {
+            return $k;
+        }
+
+        $k = Cache::get(self::KUNCI_IDENTITAS.$sid);
+        if (is_object($k)) {
+            return $k;
+        }
+
+        foreach ($this->rfid->cariKaryawanAktif($sid, 5) as $r) {
+            if (mb_strtoupper((string) $r->kode_sid) === $sid) {
+                return $this->identitasDari($r);
+            }
+        }
+
+        $rfid = $this->rfid->identitasDariRfid($sid, $awal);
+
+        return $rfid === null ? null : $this->identitasDari((object) [
+            'kode_sid' => $sid, 'nama' => $rfid->nama, 'jabatan' => null, 'perusahaan' => $rfid->perusahaan, 'site' => null,
+        ]);
+    }
+
+    /**
+     * Baris view karyawan aktif → bentuk yang sama dengan dms_roster_karyawan;
+     * kategori & kode PT dipetakan seperti sinkronisasi populasi.
+     */
+    private function identitasDari(object $r): object
+    {
+        $perusahaan = trim((string) ($r->perusahaan ?? ''));
+        $jabatan = trim((string) ($r->jabatan ?? ''));
+
+        return (object) [
+            'kode_sid' => mb_strtoupper(trim((string) $r->kode_sid)),
+            'nama' => trim((string) $r->nama),
+            'jabatan' => $jabatan,
+            'kategori' => $this->jabatan->kategoriDari($jabatan),
+            'perusahaan' => $perusahaan,
+            'kode_pt' => $perusahaan === '' ? '' : DmsRosterSyncService::kodePt($perusahaan),
+            'site' => trim((string) ($r->site ?? '')),
+        ];
+    }
+
+    /**
+     * Cadangan cariKaryawan() saat OLAP tidak terjangkau: master karyawan
+     * roster lokal saja.
+     *
+     * @return list<array{sid:string,nama:string,jabatan:string,pt:string,site:string}>
+     */
+    private function cariKaryawanLokal(string $teks, int $maks): array
+    {
         $persis = mb_strtoupper($teks);
         $mirip = '%'.addcslashes($teks, '%_\\').'%';
 
@@ -287,13 +383,14 @@ final class DmsRosterRegLiveService
             ->orderByRaw('CASE WHEN kode_sid = ? OR nik = ? THEN 0 ELSE 1 END', [$persis, $teks])
             ->orderBy('nama')
             ->limit($maks + 1)
-            ->get(['kode_sid', 'nama', 'jabatan_struktural', 'kode_pt', 'site'])
+            ->get(['kode_sid', 'nik', 'nama', 'jabatan_struktural', 'kode_pt', 'site'])
             ->map(static fn (object $r): array => [
                 'sid' => (string) $r->kode_sid,
                 'nama' => (string) $r->nama,
                 'jabatan' => (string) ($r->jabatan_struktural ?: '—'),
                 'pt' => (string) ($r->kode_pt ?: '—'),
                 'site' => (string) ($r->site ?: '—'),
+                'persis' => (string) $r->kode_sid === $persis || (string) $r->nik === $teks,
             ])
             ->all();
     }

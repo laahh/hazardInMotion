@@ -244,6 +244,62 @@ final class DmsRosterRfidReader
         ], $rows);
     }
 
+    /**
+     * Cari di SELURUH karyawan aktif (populasi.view_karyawan), bukan hanya
+     * populasi roster. View ini tidak boleh diberi WHERE langsung: predikat
+     * terdorong ke m_karyawan (6 GB) dan query melewati 30 detik. CTE
+     * MATERIALIZED memblokir pushdown, jadi view dibaca utuh (±6 dtk) lalu
+     * disaring di Postgres — yang dikirim hanya baris yang cocok. View memuat
+     * kode_sid ganda, jadi baris pertama per SID yang menang.
+     *
+     * @return list<object{kode_sid:string,nik:string,nama:string,jabatan:?string,perusahaan:?string,site:?string}>
+     */
+    public function cariKaryawanAktif(string $teks, int $batas): array
+    {
+        $view = (string) config('dms_roster.populasi.view_karyawan', 'bcsid.bep_vw_safety_karyawan_aktif');
+        $persis = mb_strtoupper($teks);
+        $mirip = '%'.addcslashes($teks, '%_\\').'%';
+
+        return $this->olap->select(
+            "WITH k AS MATERIALIZED (
+                 SELECT trim(kode_sid) AS kode_sid, trim(nik::text) AS nik, nama,
+                        jabatan_struktural AS jabatan, nama_perusahaan AS perusahaan, site_dedicated AS site
+                 FROM {$view}
+             )
+             SELECT * FROM (
+                 SELECT DISTINCT ON (kode_sid) * FROM k
+                 WHERE kode_sid <> ''
+                   AND (upper(kode_sid) = ? OR nik = ? OR nama ILIKE ? OR kode_sid ILIKE ?)
+                 ORDER BY kode_sid
+             ) d
+             ORDER BY (upper(kode_sid) = ? OR nik = ?) DESC, nama
+             LIMIT ?",
+            [$persis, $teks, $mirip, $mirip, $persis, $teks, $batas],
+            // ±6 dtk di Postgres; PembatasanLVOlapQuery membatasi maks 20 dtk.
+            (int) config('dms_roster.reg_live.timeout_cari_ms', 20000),
+        );
+    }
+
+    /**
+     * Nama & perusahaan terakhir satu SID menurut tap RFID — cadangan untuk
+     * SID yang punya tap tapi tidak ada di view karyawan aktif.
+     *
+     * @return object{nama:string,perusahaan:?string}|null
+     */
+    public function identitasDariRfid(string $sid, CarbonImmutable $awal): ?object
+    {
+        $rows = $this->pilih(
+            'SELECT s.nama_karyawan AS nama, s.perusahaan
+             FROM bcsid.mv_checkinout_rfid s
+             WHERE s.kode_sid = ? AND s.tanggal_checkinout >= ?
+             ORDER BY s.tanggal_checkinout DESC
+             LIMIT 1',
+            [$sid, $awal->toDateTimeString()],
+        );
+
+        return $rows[0] ?? null;
+    }
+
     private function statusLolos(): string
     {
         return strtoupper((string) config('dms_roster.populasi.status_lolos_scan', 'PASSED'));

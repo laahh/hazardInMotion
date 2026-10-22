@@ -631,7 +631,7 @@
       <div class="modal-header">
         <div>
           <h6 class="modal-title fw-bold" id="roModalCariManualJudul">Cari Manual Karyawan</h6>
-          <span class="text-sm text-secondary-light">Satu karyawan &middot; seluruh tap RFID hari ini s/d 75 hari ke belakang</span>
+          <span class="text-sm text-secondary-light">Satu karyawan dari seluruh karyawan aktif &middot; seluruh tap RFID hari ini s/d 75 hari ke belakang</span>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
       </div>
@@ -679,7 +679,7 @@
 
     function muat(params) {
         var no = ++minta;
-        pesan('Mengambil data RFID…');
+        pesan(params.q ? 'Mencari di seluruh karyawan aktif… (bisa ±10 detik)' : 'Mengambil data RFID 75 hari terakhir…');
         fetch(url + '?' + new URLSearchParams(params).toString(), { headers: { Accept: 'application/json' } })
             .then(function (r) { return r.json().catch(function () { return { up: false, pesan: 'Respons server tidak valid (' + r.status + ').' }; }); })
             .then(function (d) {
