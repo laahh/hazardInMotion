@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\DMS;
 
 use App\Http\Controllers\Controller;
+use App\Services\Dms\Roster\DmsLongShiftService;
 use App\Services\Dms\Roster\DmsRosterBannedStatus;
 use App\Services\Dms\Roster\DmsRosterComplianceService;
 use App\Services\Dms\Roster\DmsRosterRegLiveService;
@@ -230,6 +231,42 @@ final class RosterComplianceController extends Controller
         }
 
         return response()->json(['up' => true] + $data);
+    }
+
+    /**
+     * Panel "Long Shift" pengawas di kartu Scorecard (docs/overshift.md):
+     * ringkasan + satu halaman daftar pengawas sesuai filter status & cari.
+     * Hasil deteksi dibaca dari cache yang diisi dms:sync-roster-rfid.
+     */
+    public function longShift(Request $request, DmsLongShiftService $longShift): JsonResponse
+    {
+        $data = $longShift->ambil();
+        if ($data === null) {
+            return response()->json([
+                'up' => false,
+                'pesan' => 'Data Long Shift belum tersedia — menunggu sinkronisasi RFID berikutnya.',
+            ], 503);
+        }
+
+        $status = (string) $request->query('status', '');
+        $status = in_array($status, DmsLongShiftService::STATUS, true) ? $status : '';
+        $halaman = $longShift->saring(
+            $data['baris'],
+            $status,
+            mb_substr((string) $request->query('q', ''), 0, 100),
+            (int) $request->query('hal', 1),
+            25,
+        );
+
+        return response()->json([
+            'up' => true,
+            'basi' => (bool) $data['basi'],
+            'dari' => $data['dari'],
+            'sampai' => $data['sampai'],
+            'diambil' => $data['diambil'],
+            'parameter' => $data['parameter'],
+            'ringkas' => $data['ringkas'],
+        ] + $halaman);
     }
 
     /**

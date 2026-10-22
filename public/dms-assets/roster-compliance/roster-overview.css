@@ -401,3 +401,44 @@
 /* Kolom Status scorecard: pill + jam & gate check-in RFID di bawahnya. */
 .ro-sc-status { min-width: 150px; max-width: 220px; }
 .ro-sc-status .ro-sc-sub { margin-top: 4px; white-space: normal; }
+
+/* ── Saklar geser Scorecard: Roster karyawan ⇄ Long Shift pengawas ───── */
+.ro-switch {
+  position: relative; display: inline-grid; grid-template-columns: 1fr 1fr;
+  background: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 999px; padding: 3px;
+}
+.ro-switch__thumb {
+  position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px);
+  background: #fff; border-radius: 999px; box-shadow: 0 1px 4px rgba(15, 23, 42, .14);
+  transition: transform .22s ease;
+}
+.ro-switch.is-kanan .ro-switch__thumb { transform: translateX(100%); }
+.ro-switch__opt {
+  position: relative; z-index: 1; border: 0; background: transparent; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: #64748B; white-space: nowrap;
+}
+.ro-switch__opt.is-aktif { color: #0F172A; }
+.ro-switch__opt:focus-visible { outline: 2px solid var(--primary-600, #487fff); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .ro-switch__thumb { transition: none; } }
+
+/* ── Panel Long Shift pengawas ─────────────────────────────────────────── */
+.ro-ls-info { background: #F8FAFC; border: 1px solid #EEF2F6; border-radius: 10px; padding: 10px 14px; }
+.ro-ls-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.ro-ls-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+  background: #fff; border: 1px solid #EEF2F6; border-radius: 10px; padding: 10px 12px; cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ro-ls-tile:hover, .ro-ls-tile.is-aktif { border-color: var(--primary-600, #487fff); box-shadow: 0 2px 8px rgba(15, 23, 42, .08); }
+.ro-ls-tile.is-danger { background: #FFF1F2; }
+.ro-ls-tile.is-warning { background: #FFFBEB; }
+.ro-ls-tile.is-success { background: #F0FDF4; }
+.ro-ls-tile__judul { font-size: 11.5px; font-weight: 600; color: #64748B; }
+.ro-ls-tile__nilai { font-size: 20px; font-weight: 700; color: #0F172A; line-height: 1.2; }
+.ro-ls-tile__nilai small { font-size: 11px; font-weight: 500; color: #64748B; }
+.ro-ls-tile__sub { font-size: 11px; color: #64748B; }
+.ro-ls-detail { background: #F8FAFC; padding: 14px 18px !important; }
+.ro-ls-mini { width: 100%; font-size: 12px; border-collapse: collapse; }
+.ro-ls-mini th { font-weight: 600; color: #64748B; text-align: left; padding: 4px 8px; border-bottom: 1px solid #E2E8F0; }
+.ro-ls-mini td { padding: 5px 8px; border-bottom: 1px dashed #E2E8F0; white-space: nowrap; }

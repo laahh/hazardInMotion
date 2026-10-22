@@ -385,4 +385,37 @@ return [
             'TRACK TYPE MECHANIC', 'TYRE REPAIR MAN', 'WHEEL TYPE MECHANIC',
         ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Long Shift pengawas (DmsLongShiftService) — docs/overshift.md
+    |--------------------------------------------------------------------------
+    | Long Shift = kelanjutan ke shift berikutnya: satu blok kehadiran RFID
+    | (sesi IN→OUT yang jedanya <= jeda_maks_menit) hadir >= min_shift_menit di
+    | shift terjadwal DAN >= min_lanjut_menit di 12 jam sesudahnya.
+    |
+    | Jadwal shift per orang TIDAK tersedia di database, jadi shift terjadwal
+    | diturunkan dari RFID: shift 12 jam (mulai shift_mulai_jam dan +12 jam)
+    | PALING AWAL yang terisi >= min_shift_menit oleh blok tersebut.
+    |
+    | Baseline = karyawan level jabatan PENGAWAS berstatus AKTIF di
+    | view_karyawan. Dihitung oleh dms:sync-roster-rfid (Tahap 7) lalu dibaca
+    | halaman dari cache — request web di server tidak bisa ke OLAP.
+    */
+    'long_shift' => [
+        'view_karyawan' => 'bcsid.bep_sid_karyawan',
+        'level_jabatan' => 'PENGAWAS',
+        'status_karyawan' => 'AKTIF',
+        // Shift yang dinilai: yang mulai dalam N hari terakhir dan sudah selesai.
+        'jendela_hari' => 7,
+        'shift_mulai_jam' => 7,          // Shift 1 07:00–19:00, Shift 2 19:00–07:00
+        'duplikat_menit' => 2,           // duplicate_window
+        'jeda_maks_menit' => 60,         // max_continuity_gap
+        'pasangan_maks_jam' => 36,       // max_valid_pair
+        'min_shift_menit' => 360,        // min_shift_minutes
+        'min_lanjut_menit' => 30,        // min_next_shift_minutes
+        // > 60 menit: hasil command terjadwal (tiap jam) dipakai sampai putaran berikutnya.
+        'cache_ttl' => 4500,
+        'timeout_ms' => 20000,
+    ],
 ];

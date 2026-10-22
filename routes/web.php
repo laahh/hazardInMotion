@@ -810,6 +810,9 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         // "Cari manual" satu karyawan di tabel scorecard: RFID 75 hari terakhir.
         Route::get('/roster-compliance/cari-manual.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'cariManual'])
             ->name('roster-compliance.cari-manual');
+        // Panel Long Shift pengawas (docs/overshift.md) di kartu Scorecard.
+        Route::get('/roster-compliance/long-shift.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'longShift'])
+            ->name('roster-compliance.long-shift');
         Route::get('/roster-compliance/terkini/{kode}.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'detailTerkini'])
             ->whereIn('kode', \App\Services\Dms\Roster\DmsRosterRegLiveService::KODE)
             ->name('roster-compliance.terkini.detail');

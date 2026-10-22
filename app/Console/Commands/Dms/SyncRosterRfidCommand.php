@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands\Dms;
 
+use App\Services\Dms\Roster\DmsLongShiftService;
 use App\Services\Dms\Roster\DmsRosterAutoBannedService;
 use App\Services\Dms\Roster\DmsRosterRegLiveService;
 use App\Services\Dms\Roster\DmsRosterSyncService;
@@ -87,6 +88,7 @@ final class SyncRosterRfidCommand extends Command
         }
 
         $this->segarkanAturanBanned($live);
+        $this->segarkanLongShift();
 
         $this->info('Selesai dalam '.round(microtime(true) - $mulai, 1).' detik.');
 
@@ -157,6 +159,38 @@ final class SyncRosterRfidCommand extends Command
         if ($ditambah > 0) {
             $live->segarkan();
         }
+    }
+
+    /**
+     * Tahap 7 — Long Shift pengawas (docs/overshift.md) untuk panel Long
+     * Shift di Ringkasan Roster, disimpan ke cache. Gagal di tahap ini tidak
+     * menggagalkan sinkronisasi.
+     */
+    private function segarkanLongShift(): void
+    {
+        $this->info('Tahap 7 — Long Shift pengawas ...');
+
+        $svc = app(DmsLongShiftService::class);
+        try {
+            $hasil = $svc->segarkan();
+        } catch (Throwable $e) {
+            $this->warn('  Gagal: '.$e->getMessage());
+
+            return;
+        }
+
+        if ($hasil === null) {
+            $this->warn('  Gagal: '.($svc->galatTerakhir() ?? 'tidak diketahui'));
+
+            return;
+        }
+
+        $r = $hasil['ringkas'];
+        $this->line(sprintf(
+            '  %s pengawas (%s ada tap); %s Long Shift oleh %s orang (%.1f dtk).',
+            $this->angka($r['pengawas']), $this->angka($r['ada_tap']),
+            $this->angka($r['kejadian_long']), $this->angka($r['LONG_SHIFT']), $hasil['detik'],
+        ));
     }
 
     /**

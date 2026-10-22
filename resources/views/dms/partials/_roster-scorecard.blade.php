@@ -299,11 +299,23 @@
 
       <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
         <div>
-          <h6 class="mb-1 fw-bold text-lg ro-card__title">Scorecard per Karyawan &amp; Timeline</h6>
-          <span class="ro-card__subtitle">Ringkasan roster tiap karyawan beserta pola kerja hariannya sepanjang periode</span>
+          <h6 class="mb-1 fw-bold text-lg ro-card__title" data-ro-judul>Scorecard per Karyawan &amp; Timeline</h6>
+          <span class="ro-card__subtitle" data-ro-subjudul>Ringkasan roster tiap karyawan beserta pola kerja hariannya sepanjang periode</span>
+        </div>
+
+        {{-- Saklar geser: tabel roster karyawan ⇄ panel Long Shift pengawas. --}}
+        <div class="ro-switch" role="tablist" aria-label="Tampilan scorecard" data-ro-switch>
+          <span class="ro-switch__thumb" aria-hidden="true"></span>
+          <button type="button" class="ro-switch__opt is-aktif" role="tab" aria-selected="true" data-ro-tampil="roster">
+            <iconify-icon icon="solar:users-group-rounded-linear"></iconify-icon>Roster karyawan
+          </button>
+          <button type="button" class="ro-switch__opt" role="tab" aria-selected="false" data-ro-tampil="long-shift">
+            <iconify-icon icon="solar:clock-circle-linear"></iconify-icon>Long Shift pengawas
+          </button>
         </div>
       </div>
 
+      <div id="roScRoster">
       {{-- Toolbar filter (GET). Dropdown langsung menerapkan filter saat
            diganti; kolom cari diterapkan dengan Enter. Nomor halaman sengaja
            tidak ikut form, jadi setiap filter baru mulai lagi dari halaman 1. --}}
@@ -616,6 +628,48 @@
           </div>
         @endif
       </div>
+      </div>{{-- /#roScRoster --}}
+
+      {{-- Panel Long Shift pengawas (docs/overshift.md). Dimuat lewat JSON
+           saat saklar digeser; hasil deteksi dihitung dms:sync-roster-rfid. --}}
+      <div id="roLongShift" hidden>
+        <div class="ro-ls-info mb-16" data-ls-info>Memuat…</div>
+        <div class="ro-ls-kpi mb-16" data-ls-kpi></div>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-16">
+          <input type="search" class="form-control form-control-sm" style="max-width:320px" placeholder="Cari nama / SID / perusahaan / jabatan…" data-ls-q>
+          <select class="form-select form-select-sm w-auto" data-ls-status>
+            <option value="">Semua status</option>
+            <option value="LONG_SHIFT" selected>Long Shift</option>
+            <option value="NORMAL">Normal</option>
+            <option value="DATA_ANOMALY">Data anomali</option>
+            <option value="TIDAK_TERKLASIFIKASI">Tidak terklasifikasi</option>
+            <option value="NO_DATA">Tidak ada data RFID</option>
+          </select>
+        </div>
+        <div class="ro-sc-scroll">
+          <table class="ro-sc-table ro-ls-table">
+            <thead>
+              <tr>
+                <th class="num">#</th>
+                <th>Nama</th>
+                <th>Perusahaan</th>
+                <th>Jabatan / Departemen</th>
+                <th>Status</th>
+                <th class="num">Shift dinilai</th>
+                <th class="num">Long Shift</th>
+                <th>Kejadian terakhir</th>
+                <th class="num">Anomali</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody data-ls-body></tbody>
+          </table>
+        </div>
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mt-16">
+          <span class="text-secondary-light text-sm" data-ls-ket></span>
+          <div class="d-flex gap-2" data-ls-hal></div>
+        </div>
+      </div>
 
     </div>
   </div>
@@ -888,5 +942,210 @@
             }
         });
     });
+})();
+</script>
+
+<script>
+// Saklar geser Scorecard: tabel roster karyawan ⇄ panel Long Shift pengawas.
+// Pilihan diingat per browser; panel Long Shift baru dimuat saat pertama dibuka.
+(function () {
+    'use strict';
+
+    var saklar = document.querySelector('[data-ro-switch]');
+    if (!saklar) { return; }
+
+    var roster = document.getElementById('roScRoster');
+    var panel = document.getElementById('roLongShift');
+    var judul = document.querySelector('[data-ro-judul]');
+    var subjudul = document.querySelector('[data-ro-subjudul]');
+    var url = @json(route('dms.roster-compliance.long-shift'));
+    var teks = {
+        roster: ['Scorecard per Karyawan &amp; Timeline', 'Ringkasan roster tiap karyawan beserta pola kerja hariannya sepanjang periode'],
+        'long-shift': ['Long Shift Pengawas', 'Pengawas yang melanjutkan kerja ke shift berikutnya, dari rangkaian tap RFID IN–OUT']
+    };
+    var label = {
+        LONG_SHIFT: ['Long Shift', 'danger'], NORMAL: ['Normal', 'success'], DATA_ANOMALY: ['Data anomali', 'warning'],
+        TIDAK_TERKLASIFIKASI: ['Tidak terklasifikasi', 'secondary'], NO_DATA: ['Tidak ada data RFID', 'secondary']
+    };
+    var bulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    var q = panel.querySelector('[data-ls-q]');
+    var status = panel.querySelector('[data-ls-status]');
+    var dimuat = false;
+    var halaman = 1;
+    var minta = 0;
+    var jamShift1 = 7;
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function angka(n) { return Number(n || 0).toLocaleString('id-ID'); }
+    // 'YYYY-MM-DD HH:MI' → '20 Okt 07:00'
+    function waktu(s) {
+        if (!s) { return '—'; }
+        var m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/.exec(s);
+        if (!m) { return esc(s); }
+        return (+m[3]) + ' ' + bulan[+m[2] - 1] + (m[4] ? ' ' + m[4] + ':' + m[5] : '');
+    }
+    function dua(n) { return ('0' + n).slice(-2); }
+    function namaShift(s) {
+        var jam = +String(s).substr(11, 2);
+        return (jam === jamShift1 ? 'Shift 1' : 'Shift 2') + ' (' + dua(jam) + '–' + dua((jam + 12) % 24) + ')';
+    }
+    function durasi(menit) { return Math.floor(menit / 60) + 'j ' + (menit % 60) + 'm'; }
+
+    function tampil(mode) {
+        var ls = mode === 'long-shift';
+        saklar.classList.toggle('is-kanan', ls);
+        saklar.querySelectorAll('[data-ro-tampil]').forEach(function (b) {
+            var aktif = b.dataset.roTampil === mode;
+            b.classList.toggle('is-aktif', aktif);
+            b.setAttribute('aria-selected', aktif ? 'true' : 'false');
+        });
+        roster.hidden = ls;
+        panel.hidden = !ls;
+        judul.innerHTML = teks[mode][0];
+        subjudul.textContent = teks[mode][1];
+        try { localStorage.setItem('roScTampil', mode); } catch (e) { /* abaikan */ }
+        if (ls && !dimuat) { dimuat = true; muat(); }
+    }
+
+    function muat() {
+        var no = ++minta;
+        var body = panel.querySelector('[data-ls-body]');
+        body.innerHTML = '<tr><td colspan="10" class="text-secondary-light text-sm">Memuat…</td></tr>';
+        var p = new URLSearchParams({ status: status.value, q: q.value.trim(), hal: halaman });
+        fetch(url + '?' + p.toString(), { headers: { Accept: 'application/json' } })
+            .then(function (r) { return r.json().catch(function () { return { up: false, pesan: 'Respons server tidak valid (' + r.status + ').' }; }); })
+            .then(function (d) {
+                if (no !== minta) { return; }
+                if (!d.up) {
+                    panel.querySelector('[data-ls-info]').innerHTML = '<span class="text-danger-600">' + esc(d.pesan || 'Gagal memuat data.') + '</span>';
+                    body.innerHTML = '';
+                    return;
+                }
+                render(d);
+            })
+            .catch(function () {
+                if (no === minta) { body.innerHTML = '<tr><td colspan="10" class="text-danger-600 text-sm">Gagal terhubung ke server.</td></tr>'; }
+            });
+    }
+
+    function tile(kode, judulT, nilai, sub, warna) {
+        return '<button type="button" class="ro-ls-tile' + (status.value === kode ? ' is-aktif' : '') + (warna ? ' is-' + warna : '') + '" data-ls-tile="' + kode + '">'
+            + '<span class="ro-ls-tile__judul">' + judulT + '</span><span class="ro-ls-tile__nilai">' + nilai + '</span>'
+            + '<span class="ro-ls-tile__sub">' + sub + '</span></button>';
+    }
+
+    function render(d) {
+        var pr = d.parameter;
+        jamShift1 = pr.shift_mulai_jam;
+        var j1 = dua(pr.shift_mulai_jam), j2 = dua((pr.shift_mulai_jam + 12) % 24);
+        panel.querySelector('[data-ls-info]').innerHTML =
+            (d.basi ? '<div class="text-warning-main text-sm fw-medium mb-4">⚠ Sinkronisasi terakhir gagal — menampilkan hasil ' + esc(waktu(d.diambil)) + '.</div>' : '')
+            + '<div class="text-sm">Shift yang mulai <b>' + esc(waktu(d.dari)) + '</b> s/d <b>' + esc(waktu(d.sampai)) + '</b> (yang sudah selesai)'
+            + ' &middot; diambil ' + esc(waktu(d.diambil)) + '</div>'
+            + '<div class="text-xs text-secondary-light mt-4">Long Shift = hadir ≥ ' + pr.min_shift_menit + ' menit di shift terjadwal <b>dan</b> lanjut ≥ '
+            + pr.min_lanjut_menit + ' menit ke shift berikutnya dalam blok yang sama (jeda OUT→IN ≤ ' + pr.jeda_maks_menit + ' menit). '
+            + 'Shift 1 ' + j1 + ':00–' + j2 + ':00, Shift 2 ' + j2 + ':00–' + j1 + ':00. Jadwal per orang tidak tersedia, jadi shift terjadwal ditebak dari RFID: '
+            + 'shift paling awal yang terisi ≥ ' + pr.min_shift_menit + ' menit. Durasi = kehadiran menurut tap gate, bukan bukti bekerja.</div>';
+
+        var r = d.ringkas;
+        panel.querySelector('[data-ls-kpi]').innerHTML =
+            tile('', 'Pengawas aktif', angka(r.pengawas), angka(r.ada_tap) + ' punya tap RFID', '')
+            + tile('LONG_SHIFT', 'Long Shift', angka(r.LONG_SHIFT) + ' <small>orang</small>', angka(r.kejadian_long) + ' kejadian', 'danger')
+            + tile('NORMAL', 'Normal', angka(r.NORMAL) + ' <small>orang</small>', 'tidak berlanjut ke shift berikutnya', 'success')
+            + tile('DATA_ANOMALY', 'Data anomali', angka(r.DATA_ANOMALY) + ' <small>orang</small>', angka(r.anomali) + ' tap bermasalah (semua orang)', 'warning')
+            + tile('TIDAK_TERKLASIFIKASI', 'Tidak terklasifikasi', angka(r.TIDAK_TERKLASIFIKASI) + ' <small>orang</small>', 'tidak ada blok ≥ ' + pr.min_shift_menit + ' menit', '')
+            + tile('NO_DATA', 'Tidak ada data', angka(r.NO_DATA) + ' <small>orang</small>', 'tanpa tap RFID di jendela', '');
+
+        var mulaiNo = (d.halaman - 1) * 25;
+        var body = panel.querySelector('[data-ls-body]');
+        if (d.baris.length === 0) {
+            body.innerHTML = '<tr><td colspan="10" class="text-secondary-light text-sm">Tidak ada pengawas yang cocok.</td></tr>';
+        } else {
+            body.innerHTML = d.baris.map(function (b, i) { return baris(b, i, mulaiNo); }).join('');
+        }
+
+        panel.querySelector('[data-ls-ket]').innerHTML = d.total === 0 ? '' :
+            'Menampilkan <b>' + angka(mulaiNo + 1) + '–' + angka(mulaiNo + d.baris.length) + '</b> dari <b>' + angka(d.total) + '</b> pengawas · hal ' + d.halaman + '/' + d.total_halaman;
+        panel.querySelector('[data-ls-hal]').innerHTML = d.total_halaman <= 1 ? '' :
+            '<button type="button" class="btn btn-sm btn-outline-primary-600 radius-8" data-ls-ke="' + (d.halaman - 1) + '"' + (d.halaman <= 1 ? ' disabled' : '') + '>&laquo; Sebelumnya</button>'
+            + '<button type="button" class="btn btn-sm btn-outline-primary-600 radius-8" data-ls-ke="' + (d.halaman + 1) + '"' + (d.halaman >= d.total_halaman ? ' disabled' : '') + '>Berikutnya &raquo;</button>';
+    }
+
+    function baris(b, i, mulaiNo) {
+        var st = label[b.status];
+        var akhir = b.long_shift[0];
+        var kej = akhir
+            ? '<span class="fw-medium">' + esc(namaShift(akhir.shift)) + ' · ' + esc(waktu(akhir.shift)) + '</span>'
+              + '<span class="ro-sc-sub">' + durasi(akhir.m_shift) + ' di shift · <b class="text-danger-600">+' + durasi(akhir.m_lanjut) + '</b> lanjut</span>'
+            : '<span class="ro-sc-muted">—</span>';
+        var adaDetail = b.long_shift.length > 0 || b.anomali.length > 0;
+        return '<tr>'
+            + '<td class="num ro-sc-muted">' + (mulaiNo + i + 1) + '</td>'
+            + '<td class="fw-medium">' + esc(b.nama) + '<span class="ro-sc-sub fw-semibold">' + esc(b.sid) + '</span></td>'
+            + '<td>' + esc(b.perusahaan || '—') + '</td>'
+            + '<td>' + esc(b.jabatan || '—') + '<span class="ro-sc-sub">' + esc(b.departemen || '') + '</span></td>'
+            + '<td><span class="badge bg-' + st[1] + '-focus text-' + st[1] + '-main">' + st[0] + '</span></td>'
+            + '<td class="num">' + b.n_shift + '</td>'
+            + '<td class="num' + (b.n_long ? ' ro-sc-bad' : '') + '">' + b.n_long + '</td>'
+            + '<td>' + kej + '</td>'
+            + '<td class="num">' + (b.n_anomali ? '<span class="text-warning-main fw-semibold">' + b.n_anomali + '</span>' : '0') + '</td>'
+            + '<td>' + (adaDetail ? '<button type="button" class="ro-sc-toggle" aria-expanded="false" data-ls-detail="' + i + '"><iconify-icon icon="solar:alt-arrow-down-linear"></iconify-icon>Detail</button>' : '') + '</td>'
+            + '</tr>'
+            + (adaDetail ? '<tr hidden data-ls-detail-row="' + i + '"><td colspan="10" class="ro-ls-detail">' + detail(b) + '</td></tr>' : '');
+    }
+
+    function detail(b) {
+        var html = '';
+        if (b.long_shift.length) {
+            html += '<div class="ro-sc-detail__title mb-8">Kejadian Long Shift (' + b.long_shift.length + ')</div>'
+                + '<div class="ro-sc-scroll"><table class="ro-ls-mini"><thead><tr><th>Shift terjadwal</th><th>Blok kehadiran (tap pertama → terakhir)</th><th>Di shift</th><th>Lanjut</th><th>Sesi</th><th>Gate masuk → keluar</th></tr></thead><tbody>'
+                + b.long_shift.map(function (k) {
+                    return '<tr><td>' + esc(namaShift(k.shift)) + ' · ' + esc(waktu(k.shift)) + '</td>'
+                        + '<td>' + esc(waktu(k.mulai)) + ' → ' + esc(waktu(k.selesai)) + '</td>'
+                        + '<td>' + durasi(k.m_shift) + '</td><td class="ro-sc-bad">+' + durasi(k.m_lanjut) + '</td>'
+                        + '<td>' + k.n_sesi + '</td><td>' + esc(k.gate_masuk || '—') + ' → ' + esc(k.gate_keluar || '—') + '</td></tr>';
+                }).join('') + '</tbody></table></div>';
+        }
+        if (b.anomali.length) {
+            html += '<div class="ro-sc-detail__title mb-8' + (b.long_shift.length ? ' mt-16' : '') + '">Anomali tap ('
+                + b.n_anomali + (b.n_anomali > b.anomali.length ? ', ' + b.anomali.length + ' terbaru' : '') + ')</div>'
+                + '<ul class="ro-sc-riwayat__list">' + b.anomali.map(function (a) {
+                    return '<li><span class="ro-sc-riwayat__tgl">' + esc(waktu(a.waktu)) + '</span><span class="ro-sc-note-warn">◆ ' + esc(a.jenis) + '</span>'
+                        + '<span class="text-secondary-light">' + esc(a.gate || '') + '</span></li>';
+                }).join('') + '</ul>';
+        }
+        return html;
+    }
+
+    saklar.querySelectorAll('[data-ro-tampil]').forEach(function (b) {
+        b.addEventListener('click', function () { tampil(b.dataset.roTampil); });
+    });
+    status.addEventListener('change', function () { halaman = 1; muat(); });
+    var tunda;
+    q.addEventListener('input', function () {
+        clearTimeout(tunda);
+        tunda = setTimeout(function () { halaman = 1; muat(); }, 350);
+    });
+    panel.addEventListener('click', function (e) {
+        var t = e.target.closest('[data-ls-tile]');
+        if (t) { status.value = t.dataset.lsTile; halaman = 1; muat(); return; }
+        var ke = e.target.closest('[data-ls-ke]');
+        if (ke && !ke.disabled) { halaman = +ke.dataset.lsKe; muat(); return; }
+        var dt = e.target.closest('[data-ls-detail]');
+        if (dt) {
+            var row = panel.querySelector('[data-ls-detail-row="' + dt.dataset.lsDetail + '"]');
+            row.hidden = !row.hidden;
+            dt.setAttribute('aria-expanded', row.hidden ? 'false' : 'true');
+        }
+    });
+
+    var awal = 'roster';
+    try { awal = localStorage.getItem('roScTampil') || 'roster'; } catch (e) { /* abaikan */ }
+    if (location.hash === '#long-shift') { awal = 'long-shift'; }
+    if (awal === 'long-shift') { tampil('long-shift'); }
 })();
 </script>
