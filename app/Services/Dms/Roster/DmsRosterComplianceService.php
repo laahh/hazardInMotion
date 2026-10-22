@@ -719,6 +719,11 @@ final class DmsRosterComplianceService
      */
     private function urutkan(array $baris, string $sort, string $dir): array
     {
+        // Yang sudah di-banned selalu di nomor teratas (permintaan user
+        // 2026-10-22); di dalam tiap kelompok tetap ikut kolom urut pilihan.
+        $banned = $this->sidSudahBanned();
+        $kelompok = static fn (array $r): int => isset($banned[(string) $r['sid']]) ? 0 : 1;
+
         $teks = ['sid' => true, 'nama' => true, 'jabatan' => true, 'perusahaan' => true, 'site' => true, 'status' => true, 'kategori' => true];
         $angka = [
             'roster' => true, 'hadir' => true, 'pagi' => true, 'malam' => true, 'off' => true,
@@ -731,7 +736,12 @@ final class DmsRosterComplianceService
 
         $arah = $dir === 'desc' ? -1 : 1;
 
-        usort($baris, static function (array $a, array $b) use ($sort, $arah, $teks): int {
+        usort($baris, static function (array $a, array $b) use ($sort, $arah, $teks, $kelompok): int {
+            $g = $kelompok($a) <=> $kelompok($b);
+            if ($g !== 0) {
+                return $g;
+            }
+
             $r = isset($teks[$sort])
                 ? strcasecmp((string) $a[$sort], (string) $b[$sort])
                 : ($a[$sort] <=> $b[$sort]);
@@ -745,6 +755,33 @@ final class DmsRosterComplianceService
         });
 
         return $baris;
+    }
+
+    /**
+     * SID berstatus "Sudah banned" (DmsRosterBannedStatus, kode BANNED) —
+     * di-cache 2 menit karena dipanggil tiap kali tabel diurutkan. Gagal
+     * dibaca = himpunan kosong, tabel tetap terurut seperti biasa.
+     *
+     * @return array<string, true>
+     */
+    private function sidSudahBanned(): array
+    {
+        try {
+            return Cache::remember('dms_roster:sid_sudah_banned:v1', 120, static function (): array {
+                $semua = DmsRosterBannedStatus::untukSid(
+                    DB::table('sid_roster_banned_master')->whereNotNull('sid')->distinct()->pluck('sid')->all(),
+                );
+
+                return array_fill_keys(array_map('strval', array_keys(array_filter(
+                    $semua,
+                    static fn (array $s): bool => $s['kode'] === 'BANNED',
+                ))), true);
+            });
+        } catch (Throwable $e) {
+            Log::warning('DmsRoster urutan sudah banned gagal: '.$e->getMessage());
+
+            return [];
+        }
     }
 
     /**
