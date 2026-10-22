@@ -226,6 +226,7 @@
             'onsiteMaks' => $r['onsiteMaks'],
             'cutiMin' => $r['cutiMin'],
             'status' => $r['status'],
+            'banned' => $r['banned'] ?? null,
             'pelanggaran' => $r['pelanggaran'],
             'pola' => $r['pola'],
             'merah' => $r['merah'],
@@ -438,6 +439,7 @@
                   @endif
                 </th>
               @endforeach
+              <th title="Dari Master Roster Banned: log banned, bukti treatment, dan log unban kasus terakhir">Status banned</th>
               <th>Notes</th>
               <th>Timeline harian</th>
             </tr>
@@ -469,6 +471,19 @@
                 @endforeach
 
                 <td><span class="ro-sc-pill {{ $statusPill[$r['status']] ?? 'is-off' }}">{{ $r['status'] }}</span></td>
+                <td class="ro-sc-banned">
+                  @if (! empty($r['banned']))
+                    @php $b = $r['banned']; @endphp
+                    @if ($b['kode'] === \App\Services\Dms\Roster\DmsRosterBannedStatus::TIDAK_TERCATAT)
+                      <span class="ro-sc-muted" title="{{ $b['sub'] }}">—</span>
+                    @else
+                      <span class="badge bg-{{ $b['warna'] }}-focus text-{{ $b['warna'] }}-main">{{ $b['label'] }}</span>
+                      <span class="ro-sc-sub" title="{{ $b['sub'] }}">{{ $b['sub'] }}</span>
+                    @endif
+                  @else
+                    <span class="ro-sc-muted">—</span>
+                  @endif
+                </td>
                 <td>
                   @if ($r['pelanggaran'])
                     <span class="ro-sc-note-red">⚠ Pelanggaran regulasi</span>
@@ -497,7 +512,7 @@
                 $pola = $gridDari($polaStr, $merahArr);
               @endphp
               <tr>
-                <td colspan="18" style="padding:0;border-bottom:0">
+                <td colspan="19" style="padding:0;border-bottom:0">
                   <div class="collapse" id="tl-{{ $r['sid'] }}">
                     <div class="ro-sc-detail">
                      <div class="ro-sc-detail__panel">

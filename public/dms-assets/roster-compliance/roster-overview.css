@@ -390,3 +390,8 @@
 .ro-cm-status__judul { font-size: 12.5px; font-weight: 700; color: #0F172A; }
 .ro-cm-status__teks { font-size: 12px; color: #475569; margin-top: 4px; }
 .ro-sc-note-warn { color: #B45309; font-weight: 600; }
+
+/* Kolom "Status banned" scorecard: badge + keterangan singkat, dibatasi
+   lebarnya supaya pesan error automation yang panjang tidak melebarkan tabel. */
+.ro-sc-banned { min-width: 150px; max-width: 220px; }
+.ro-sc-banned .ro-sc-sub { margin-top: 3px; white-space: normal; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }

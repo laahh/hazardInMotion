@@ -58,6 +58,15 @@ final class DmsRosterOverviewKaryawanReader
             return null;
         }
 
+        // Status penindakan banned hanya pelengkap: gagal dibaca tidak boleh
+        // menggagalkan tabel, cukup kolomnya kosong.
+        try {
+            $bannedHalaman = DmsRosterBannedStatus::untukSid(array_column($payload['baris'], 'sid'));
+        } catch (Throwable $e) {
+            Log::warning('DmsRoster status banned scorecard gagal: '.$e->getMessage());
+            $bannedHalaman = null;
+        }
+
         $ambang = $this->engine->ambang();
         $pg = $payload['paginasi'];
         $panjang = (int) $payload['meta']['panjang'];
@@ -105,6 +114,7 @@ final class DmsRosterOverviewKaryawanReader
                     ! $longgar && $r['cutiMin'] > 0 && $r['cutiMin'] < ($ambang['cuti_min'] ?? 12),
                 ],
                 'status' => (string) $r['status'],
+                'banned' => $bannedHalaman === null ? null : ($bannedHalaman[(string) $r['sid']] ?? DmsRosterBannedStatus::tidakTercatat()),
                 'pelanggaran' => (bool) $r['everRed'],
                 'longgar' => $longgar,
                 // Dipakai panel collapse untuk menggambar pola harian.

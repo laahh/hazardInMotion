@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\DMS;
 
 use App\Http\Controllers\Controller;
+use App\Services\Dms\Roster\DmsRosterBannedStatus;
 use App\Services\Dms\Roster\DmsRosterComplianceService;
 use App\Services\Dms\Roster\DmsRosterRegLiveService;
 use Carbon\CarbonImmutable;
@@ -92,9 +93,10 @@ final class RosterComplianceController extends Controller
     public function unduhScorecard(Request $request): StreamedResponse
     {
         $baris = $this->service->daftarTersaring(self::filters($request));
+        $banned = DmsRosterBannedStatus::untukSid(array_column($baris, 'sid'));
         $nama = 'scorecard-roster-'.CarbonImmutable::now()->format('Ymd-Hi').'.csv';
 
-        return response()->streamDownload(function () use ($baris): void {
+        return response()->streamDownload(function () use ($baris, $banned): void {
             $out = fopen('php://output', 'wb');
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, [
@@ -103,10 +105,11 @@ final class RosterComplianceController extends Controller
                 'Shift kerja maks (hari)', 'Rentang shift maks',
                 'On-site maks (hari)', 'Rentang on-site maks',
                 'Cuti min (hari)', 'Rentang cuti min',
-                'Status', 'Pelanggaran YTD', 'Wajib cuti',
+                'Status', 'Pelanggaran YTD', 'Wajib cuti', 'Status banned', 'Tanggal banned', 'Keterangan banned',
             ], ';');
 
             foreach ($baris as $r) {
+                $b = $banned[(string) $r['sid']] ?? DmsRosterBannedStatus::tidakTercatat();
                 fputcsv($out, [
                     $r['sid'], $r['nama'], $r['jabatan'], $r['kategori'], $r['perusahaan'], $r['site'], $r['roster'],
                     $r['hadir'], $r['pagi'], $r['malam'], $r['off'], $r['cutiCur'],
@@ -114,6 +117,7 @@ final class RosterComplianceController extends Controller
                     $r['onAll'], $r['rentang_onAll'],
                     $r['cutiMin'], $r['rentang_cutiMin'],
                     $r['status'], $r['everRed'] ? 'Ya' : 'Tidak', $r['wajib'] ? 'Ya' : 'Tidak',
+                    $b['label'], $b['tanggal_banned'], $b['sub'],
                 ], ';');
             }
 
