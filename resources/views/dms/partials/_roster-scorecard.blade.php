@@ -445,7 +445,6 @@
                   <th title="Dari Master Roster Banned: log banned, bukti treatment, dan log unban kasus terakhir">Status banned</th>
                 @endif
               @endforeach
-              <th>Notes</th>
               <th>Timeline harian</th>
             </tr>
           </thead>
@@ -472,13 +471,6 @@
                   @endif
                 </td>
                 <td>
-                  @if ($r['pelanggaran'])
-                    <span class="ro-sc-note-red">⚠ Pelanggaran regulasi</span>
-                  @else
-                    <span class="ro-sc-muted">—</span>
-                  @endif
-                </td>
-                <td>
                   <button class="ro-sc-toggle" type="button" data-bs-toggle="collapse"
                           data-bs-target="#tl-{{ $r['sid'] }}" aria-expanded="false"
                           aria-controls="tl-{{ $r['sid'] }}">
@@ -499,7 +491,7 @@
                 $pola = $gridDari($polaStr, $merahArr);
               @endphp
               <tr>
-                <td colspan="16" style="padding:0;border-bottom:0">
+                <td colspan="15" style="padding:0;border-bottom:0">
                   <div class="collapse" id="tl-{{ $r['sid'] }}">
                     <div class="ro-sc-detail">
                      <div class="ro-sc-detail__panel">
