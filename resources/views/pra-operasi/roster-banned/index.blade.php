@@ -217,6 +217,7 @@
             <th>Tanggal Pelanggaran</th>
             <th>Status Banned</th>
             <th>Status Log Banned</th>
+            <th>Dibuat Oleh</th>
             <th>Aksi</th>
           </tr>
         </thead>
@@ -267,6 +268,7 @@
             { data: 'tanggal_pelanggaran' },
             { data: 'status_banned', orderable: false, searchable: false },
             { data: 'status_log', searchable: false, className: 'rb-col-log' },
+            { data: 'created_by' },
             { data: 'aksi', orderable: false, searchable: false },
         ],
         language: {

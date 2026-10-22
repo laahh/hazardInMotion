@@ -137,6 +137,7 @@ class SidRosterBannedMasterController extends Controller
             6 => 'm.alasan_pelanggaran',
             7 => 'm.tanggal_pelanggaran',
             9 => 'bl.automation_status',
+            10 => 'm.created_by',
         ];
         $orderBy = $orderColumns[$orderColIndex] ?? 'm.nama';
 
@@ -176,6 +177,8 @@ class SidRosterBannedMasterController extends Controller
                 'tanggal_pelanggaran' => $item->tanggal_pelanggaran ? $item->tanggal_pelanggaran->format('d/m/Y') : '-',
                 'status_banned' => '<span class="badge bg-'.$bannedColor.'-focus text-'.$bannedColor.'-main">'.e($bannedLabel).'</span>',
                 'status_log' => $logHtml,
+                'created_by' => e($item->created_by ?: '-')
+                    .($item->created_at ? '<div class="text-xs text-secondary-light mt-2">'.e($item->created_at->format('d/m/Y H:i')).'</div>' : ''),
                 'aksi' => $aksi,
             ];
         }
@@ -201,6 +204,7 @@ class SidRosterBannedMasterController extends Controller
         $headers = [
             'No', 'NIK', 'SID', 'Nama', 'Perusahaan', 'Site Dedicated', 'Alasan Pelanggaran', 'Tanggal Pelanggaran',
             'Status Banned', 'Status Log Banned', 'Step Terakhir', 'Pesan Error', 'Waktu Log',
+            'Dibuat Oleh', 'Tanggal Dibuat',
         ];
 
         $spreadsheet = new Spreadsheet();
@@ -224,6 +228,8 @@ class SidRosterBannedMasterController extends Controller
                 (string) $item->ban_step,
                 (string) $item->ban_error,
                 $item->ban_logged_at ? $this->formatWaktu($item->ban_completed_at ?? $item->ban_logged_at) : '',
+                (string) $item->created_by,
+                $item->created_at ? $item->created_at->format('d/m/Y H:i') : '',
             ];
         }
         // Sel ditulis eksplisit sebagai teks supaya NIK panjang / SID seperti "0E123" tidak diubah Excel jadi angka.
@@ -294,7 +300,8 @@ class SidRosterBannedMasterController extends Controller
                     ->orWhere('m.nama', 'like', '%'.$search.'%')
                     ->orWhere('m.perusahaan', 'like', '%'.$search.'%')
                     ->orWhere('m.site_dedicated', 'like', '%'.$search.'%')
-                    ->orWhere('m.alasan_pelanggaran', 'like', '%'.$search.'%');
+                    ->orWhere('m.alasan_pelanggaran', 'like', '%'.$search.'%')
+                    ->orWhere('m.created_by', 'like', '%'.$search.'%');
             });
         }
 
