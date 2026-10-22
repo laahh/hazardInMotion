@@ -437,9 +437,7 @@
                 ['sid', 'SID', ''], ['perusahaan', 'Perusahaan', ''], ['nama', 'Nama', ''],
                 ['jabatan', 'Jabatan', ''], ['site', 'Site', ''], ['roster', 'Roster', 'num'],
                 ['hadir', 'On-site', 'num'], ['pagi', 'Pagi', 'num'], ['malam', 'Malam', 'num'],
-                ['off', 'Off', 'num'], ['cutiCur', 'Cuti', 'num'],
-                ['onNoOff', 'Shift kerja maks (roster kini)', ''], ['onAll', 'On-site maks (all roster)', ''],
-                ['cutiMin', 'Cuti min (all roster)', ''], ['status', 'Status', ''],
+                ['off', 'Off', 'num'], ['cutiCur', 'Cuti', 'num'], ['status', 'Status', ''],
               ] as [$kunci, $judulKolom, $kelas])
                 <th class="{{ $kelas }}">
                   @if ($live)
@@ -473,17 +471,6 @@
                 <td class="num">{{ $r['malam'] }}</td>
                 <td class="num">{{ $r['off'] }}</td>
                 <td class="num">{{ $r['cuti'] }}</td>
-
-                @foreach (['shiftMaks', 'onsiteMaks', 'cutiMin'] as $kol)
-                  @php [$utama, $sub, $bad] = $r[$kol]; @endphp
-                  <td>
-                    <span class="{{ $bad ? 'ro-sc-bad' : 'fw-medium' }}">
-                      @if ($bad) ⚠ @endif{{ $utama }}
-                    </span>
-                    <span class="ro-sc-sub {{ $bad ? 'ro-sc-bad' : '' }}">{{ $sub }}</span>
-                  </td>
-                @endforeach
-
                 <td><span class="ro-sc-pill {{ $statusPill[$r['status']] ?? 'is-off' }}">{{ $r['status'] }}</span></td>
                 <td>
                   @if ($r['pelanggaran'])
@@ -513,7 +500,7 @@
                 $pola = $gridDari($polaStr, $merahArr);
               @endphp
               <tr>
-                <td colspan="19" style="padding:0;border-bottom:0">
+                <td colspan="16" style="padding:0;border-bottom:0">
                   <div class="collapse" id="tl-{{ $r['sid'] }}">
                     <div class="ro-sc-detail">
                      <div class="ro-sc-detail__panel">
