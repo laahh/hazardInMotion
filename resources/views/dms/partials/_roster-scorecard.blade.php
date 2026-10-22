@@ -302,13 +302,6 @@
           <h6 class="mb-1 fw-bold text-lg ro-card__title">Scorecard per Karyawan &amp; Timeline</h6>
           <span class="ro-card__subtitle">Ringkasan roster tiap karyawan beserta pola kerja hariannya sepanjang periode</span>
         </div>
-        <div class="ro-sc-legend">
-          <span><i class="ro-sw ro-sw-pagi"></i>Pagi</span>
-          <span><i class="ro-sw ro-sw-malam"></i>Malam</span>
-          <span><i class="ro-sw ro-sw-off"></i>Off</span>
-          <span><i class="ro-sw ro-sw-cuti"></i>Cuti</span>
-          <span><i class="ro-sw ro-sw-flag"></i>Hari ter-flag</span>
-        </div>
       </div>
 
       {{-- Toolbar filter (GET). Dropdown langsung menerapkan filter saat
