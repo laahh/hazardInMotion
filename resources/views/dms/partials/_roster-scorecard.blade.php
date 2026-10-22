@@ -237,6 +237,7 @@
             'onsiteMaks' => $r['onsiteMaks'],
             'cutiMin' => $r['cutiMin'],
             'status' => $r['status'],
+            'checkin' => $r['checkin'] ?? null,
             'banned' => $r['banned'] ?? null,
             'pelanggaran' => $r['pelanggaran'],
             'pola' => $r['pola'],
@@ -471,7 +472,12 @@
                 <td class="num">{{ $r['malam'] }}</td>
                 <td class="num">{{ $r['off'] }}</td>
                 <td class="num">{{ $r['cuti'] }}</td>
-                <td><span class="ro-sc-pill {{ $statusPill[$r['status']] ?? 'is-off' }}">{{ $r['status'] }}</span></td>
+                <td class="ro-sc-status">
+                  <span class="ro-sc-pill {{ $statusPill[$r['status']] ?? 'is-off' }}">{{ $r['status'] }}</span>
+                  @if (! empty($r['checkin']))
+                    <span class="ro-sc-sub {{ $r['checkin']['hari_ini'] ? '' : 'ro-sc-muted' }}" title="Check-in RFID pertama hari itu (dms_roster_scan_harian)">{{ $r['checkin']['teks'] }}</span>
+                  @endif
+                </td>
                 <td>
                   @if ($r['pelanggaran'])
                     <span class="ro-sc-note-red">⚠ Pelanggaran regulasi</span>

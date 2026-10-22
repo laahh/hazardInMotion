@@ -67,6 +67,15 @@ final class DmsRosterOverviewKaryawanReader
             $bannedHalaman = null;
         }
 
+        // Hari yang dinilai kolom Status = hari terakhir periode (r1).
+        $hariStatus = CarbonImmutable::create((int) $payload['tahun'], 1, 1)->addDays((int) ($payload['periode']['r1'] ?? 0));
+        try {
+            $checkinHalaman = $this->checkinTerakhir(array_column($payload['baris'], 'sid'), $hariStatus);
+        } catch (Throwable $e) {
+            Log::warning('DmsRoster check-in terakhir scorecard gagal: '.$e->getMessage());
+            $checkinHalaman = null;
+        }
+
         $ambang = $this->engine->ambang();
         $pg = $payload['paginasi'];
         $panjang = (int) $payload['meta']['panjang'];
@@ -114,6 +123,7 @@ final class DmsRosterOverviewKaryawanReader
                     ! $longgar && $r['cutiMin'] > 0 && $r['cutiMin'] < ($ambang['cuti_min'] ?? 12),
                 ],
                 'status' => (string) $r['status'],
+                'checkin' => $checkinHalaman === null ? null : $this->labelCheckin($checkinHalaman[(string) $r['sid']] ?? null, $hariStatus),
                 'banned' => $bannedHalaman === null ? null : ($bannedHalaman[(string) $r['sid']] ?? DmsRosterBannedStatus::tidakTercatat()),
                 'pelanggaran' => (bool) $r['everRed'],
                 'longgar' => $longgar,
@@ -224,6 +234,70 @@ final class DmsRosterOverviewKaryawanReader
         usort($out, static fn (array $a, array $b): int => $a['hari'] <=> $b['hari']);
 
         return $out;
+    }
+
+    /** Seberapa jauh ke belakang check-in terakhir dicari dari hari status. */
+    private const CHECKIN_MUNDUR_HARI = 60;
+
+    /**
+     * Check-in RFID terakhir (jam masuk pertama hari itu + gate) per SID,
+     * paling lambat pada $hari — hari yang dinilai kolom Status. Dari tabel
+     * lokal dms_roster_scan_harian, jadi tidak menyentuh OLAP.
+     *
+     * @param  list<string>  $sids
+     * @return array<string, array{tanggal:string,menit:int,gate:string}>
+     */
+    private function checkinTerakhir(array $sids, CarbonImmutable $hari): array
+    {
+        if ($sids === []) {
+            return [];
+        }
+
+        $dari = $hari->subDays(self::CHECKIN_MUNDUR_HARI)->toDateString();
+        $sampai = $hari->toDateString();
+
+        return DB::table('dms_roster_scan_harian as d')
+            ->join('dms_roster_karyawan as k', 'k.id', '=', 'd.karyawan_id')
+            ->leftJoin('dms_roster_gate as g', 'g.id', '=', 'd.gate_masuk_id')
+            ->whereIn('k.kode_sid', $sids)
+            ->whereNotNull('d.menit_masuk')
+            ->whereRaw(
+                'd.tanggal = (SELECT MAX(d2.tanggal) FROM dms_roster_scan_harian d2
+                              WHERE d2.karyawan_id = d.karyawan_id AND d2.menit_masuk IS NOT NULL
+                                AND d2.tanggal BETWEEN ? AND ?)',
+                [$dari, $sampai],
+            )
+            ->get(['k.kode_sid', 'd.tanggal', 'd.menit_masuk', 'g.nama as gate'])
+            ->mapWithKeys(static fn (object $r): array => [(string) $r->kode_sid => [
+                'tanggal' => (string) $r->tanggal,
+                'menit' => (int) $r->menit_masuk,
+                'gate' => trim((string) ($r->gate ?? '')) ?: '—',
+            ]])
+            ->all();
+    }
+
+    /**
+     * Teks di bawah pill Status: jam & gate check-in. Bila check-in itu bukan
+     * pada hari status (Off/Cuti), tanggalnya ikut ditulis.
+     *
+     * @param  array{tanggal:string,menit:int,gate:string}|null  $c
+     * @return array{teks:string,hari_ini:bool}
+     */
+    private function labelCheckin(?array $c, CarbonImmutable $hari): array
+    {
+        if ($c === null) {
+            return ['teks' => 'Tidak ada check-in '.self::CHECKIN_MUNDUR_HARI.' hari terakhir', 'hari_ini' => false];
+        }
+
+        $jam = sprintf('%02d:%02d', intdiv($c['menit'], 60), $c['menit'] % 60);
+        $tgl = CarbonImmutable::parse($c['tanggal']);
+        $samaHari = $tgl->isSameDay($hari);
+
+        return [
+            'teks' => ($samaHari ? 'Check-in ' : 'Check-in terakhir '.$tgl->translatedFormat('j M').' ')
+                .$jam.' · '.$c['gate'],
+            'hari_ini' => $samaHari,
+        ];
     }
 
     /**
