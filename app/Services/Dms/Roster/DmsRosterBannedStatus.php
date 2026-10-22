@@ -37,7 +37,7 @@ final class DmsRosterBannedStatus
         'DILEWATI' => ['Banned dilewati', 'warning'],
         'PROSES' => ['Sedang diproses', 'info'],
         'ANTRE' => ['Menunggu eksekusi', 'secondary'],
-        self::TIDAK_TERCATAT => ['Tidak tercatat', 'neutral'],
+        self::TIDAK_TERCATAT => ['Belum banned', 'neutral'],
     ];
 
     /**
@@ -82,7 +82,7 @@ final class DmsRosterBannedStatus
      */
     public static function tidakTercatat(): array
     {
-        return self::bentuk(self::TIDAK_TERCATAT, 'belum masuk Master Roster Banned');
+        return self::bentuk(self::TIDAK_TERCATAT, 'tidak ada di Master Roster Banned');
     }
 
     /**

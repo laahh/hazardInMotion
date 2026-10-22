@@ -125,6 +125,17 @@
 
         return $out;
     };
+    // Isi kolom "Status banned" (DmsRosterBannedStatus): badge + keterangan
+    // dengan tanggal banned. Dipakai di baris tabel dan kepala panel pola.
+    $selBanned = static function (?array $b): string {
+        if ($b === null) {
+            return '<span class="ro-sc-muted" title="Status banned tidak terbaca">—</span>';
+        }
+        $kelas = $b['warna'] === 'neutral' ? 'bg-neutral-200 text-secondary-light' : 'bg-'.$b['warna'].'-focus text-'.$b['warna'].'-main';
+
+        return '<span class="badge '.$kelas.'">'.e($b['label']).'</span>'
+            .'<span class="ro-sc-sub" title="'.e($b['sub']).'">'.e($b['sub']).'</span>';
+    };
     $statusPill = [
         'Off' => 'is-off',
         'Shift Pagi' => 'is-pagi',
@@ -438,8 +449,10 @@
                     {{ $judulKolom }}
                   @endif
                 </th>
+                @if ($kunci === 'nama')
+                  <th title="Dari Master Roster Banned: log banned, bukti treatment, dan log unban kasus terakhir">Status banned</th>
+                @endif
               @endforeach
-              <th title="Dari Master Roster Banned: log banned, bukti treatment, dan log unban kasus terakhir">Status banned</th>
               <th>Notes</th>
               <th>Timeline harian</th>
             </tr>
@@ -451,6 +464,7 @@
                 <td class="fw-semibold">{{ $r['sid'] }}</td>
                 <td>{{ $r['pt'] }}</td>
                 <td class="fw-medium">{{ $r['nama'] }}</td>
+                <td class="ro-sc-banned">{!! $selBanned($r['banned'] ?? null) !!}</td>
                 <td>{{ $r['jabatan'] }}</td>
                 <td>{{ $r['site'] }}</td>
                 <td class="num">{{ $r['roster'] }}</td>
@@ -471,19 +485,6 @@
                 @endforeach
 
                 <td><span class="ro-sc-pill {{ $statusPill[$r['status']] ?? 'is-off' }}">{{ $r['status'] }}</span></td>
-                <td class="ro-sc-banned">
-                  @if (! empty($r['banned']))
-                    @php $b = $r['banned']; @endphp
-                    @if ($b['kode'] === \App\Services\Dms\Roster\DmsRosterBannedStatus::TIDAK_TERCATAT)
-                      <span class="ro-sc-muted" title="{{ $b['sub'] }}">—</span>
-                    @else
-                      <span class="badge bg-{{ $b['warna'] }}-focus text-{{ $b['warna'] }}-main">{{ $b['label'] }}</span>
-                      <span class="ro-sc-sub" title="{{ $b['sub'] }}">{{ $b['sub'] }}</span>
-                    @endif
-                  @else
-                    <span class="ro-sc-muted">—</span>
-                  @endif
-                </td>
                 <td>
                   @if ($r['pelanggaran'])
                     <span class="ro-sc-note-red">⚠ Pelanggaran regulasi</span>
@@ -520,6 +521,9 @@
                         <div>
                           <div class="ro-sc-detail__title">Pola Harian &mdash; {{ $r['nama'] }}</div>
                           <div class="ro-sc-detail__sub">{{ $r['sid'] }} &middot; {{ $r['pt'] }} &middot; {{ $r['site'] }} &middot; {{ $tlRentang }}</div>
+                          @if (! empty($r['banned']))
+                            <div class="ro-sc-banned ro-sc-banned--panel mt-8">{!! $selBanned($r['banned']) !!}</div>
+                          @endif
                         </div>
                         <div class="ro-sc-legend">
                           <span><i class="ro-sw ro-sw-pagi"></i>Pagi</span>
