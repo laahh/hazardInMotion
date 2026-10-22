@@ -82,7 +82,7 @@ final class DmsLongShiftService
         try {
             $mulai = microtime(true);
             $pengawas = $this->reader->pengawas();
-            $deteksi = $this->reader->deteksi($dari, $sekarang);
+            $deteksi = $this->reader->deteksi($dari, $sekarang, array_map(static fn (object $p): string => (string) $p->sid, $pengawas));
             $detik = microtime(true) - $mulai;
         } catch (Throwable $e) {
             $this->galat = $e->getMessage();
@@ -146,6 +146,8 @@ final class DmsLongShiftService
                 'n_long' => (int) ($d->n_long ?? 0),
                 'n_anomali' => (int) ($d->n_anomali ?? 0),
                 'long_shift' => $this->json($d->long_shift ?? null),
+                // [[mulai 'Y-m-d H:i', menit di shift, menit lanjut], ...] urut waktu.
+                'shift' => $this->json($d->shift ?? null),
                 'anomali' => $this->json($d->anomali ?? null),
             ];
             $r['status'] = self::status($r);

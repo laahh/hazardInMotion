@@ -138,7 +138,7 @@ final class DmsRosterRfidReader
      *
      * @param  list<string>  $nilai
      */
-    private function arrayPg(array $nilai): string
+    public static function arrayPg(array $nilai): string
     {
         return '{'.implode(',', array_map(
             static fn (string $v): string => '"'.str_replace(['\\', '"'], ['\\\\', '\\"'], $v).'"',

@@ -974,6 +974,7 @@
     var halaman = 1;
     var minta = 0;
     var jamShift1 = 7;
+    var minLanjut = 30;
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -993,7 +994,7 @@
         var jam = +String(s).substr(11, 2);
         return (jam === jamShift1 ? 'Shift 1' : 'Shift 2') + ' (' + dua(jam) + '–' + dua((jam + 12) % 24) + ')';
     }
-    function durasi(menit) { return Math.floor(menit / 60) + 'j ' + (menit % 60) + 'm'; }
+    function durasi(menit) { return menit < 60 ? menit + 'm' : Math.floor(menit / 60) + 'j ' + (menit % 60) + 'm'; }
 
     function tampil(mode) {
         var ls = mode === 'long-shift';
@@ -1041,6 +1042,7 @@
     function render(d) {
         var pr = d.parameter;
         jamShift1 = pr.shift_mulai_jam;
+        minLanjut = pr.min_lanjut_menit;
         var j1 = dua(pr.shift_mulai_jam), j2 = dua((pr.shift_mulai_jam + 12) % 24);
         panel.querySelector('[data-ls-info]').innerHTML =
             (d.basi ? '<div class="text-warning-main text-sm fw-medium mb-4">⚠ Sinkronisasi terakhir gagal — menampilkan hasil ' + esc(waktu(d.diambil)) + '.</div>' : '')
@@ -1082,7 +1084,7 @@
             ? '<span class="fw-medium">' + esc(namaShift(akhir.shift)) + ' · ' + esc(waktu(akhir.shift)) + '</span>'
               + '<span class="ro-sc-sub">' + durasi(akhir.m_shift) + ' di shift · <b class="text-danger-600">+' + durasi(akhir.m_lanjut) + '</b> lanjut</span>'
             : '<span class="ro-sc-muted">—</span>';
-        var adaDetail = b.long_shift.length > 0 || b.anomali.length > 0;
+        var adaDetail = (b.shift || []).length > 0 || b.anomali.length > 0;
         return '<tr>'
             + '<td class="num ro-sc-muted">' + (mulaiNo + i + 1) + '</td>'
             + '<td class="fw-medium">' + esc(b.nama) + '<span class="ro-sc-sub fw-semibold">' + esc(b.sid) + '</span></td>'
@@ -1098,8 +1100,73 @@
             + (adaDetail ? '<tr hidden data-ls-detail-row="' + i + '"><td colspan="10" class="ro-ls-detail">' + detail(b) + '</td></tr>' : '');
     }
 
+    // Grafik per orang: satu batang per shift yang dinilai, urut waktu.
+    // Shift 1 ke atas, Shift 2 ke bawah dari garis dasar; tinggi = menit hadir
+    // di shift itu. Bila berlanjut (Long Shift), menit lanjutnya ditumpuk
+    // sebagai segmen merah di ujung batang (dipisah celah 2px).
+    var WARNA_SHIFT = '#2a78d6';
+    var WARNA_LANJUT = '#d03b3b';
+
+    function batang(x, w, dasar, ujung, bulat) {
+        // Persegi dari garis dasar ke ujung; sudut ujung dibulatkan 4px.
+        var naik = ujung < dasar, r = bulat ? Math.min(4, Math.abs(dasar - ujung) / 2, w / 2) : 0;
+        if (Math.abs(dasar - ujung) < 0.5) { return ''; }
+        if (naik) {
+            return 'M' + x + ',' + dasar + 'V' + (ujung + r) + 'Q' + x + ',' + ujung + ' ' + (x + r) + ',' + ujung
+                + 'H' + (x + w - r) + 'Q' + (x + w) + ',' + ujung + ' ' + (x + w) + ',' + (ujung + r) + 'V' + dasar + 'Z';
+        }
+        return 'M' + x + ',' + dasar + 'V' + (ujung - r) + 'Q' + x + ',' + ujung + ' ' + (x + r) + ',' + ujung
+            + 'H' + (x + w - r) + 'Q' + (x + w) + ',' + ujung + ' ' + (x + w) + ',' + (ujung - r) + 'V' + dasar + 'Z';
+    }
+
+    function grafik(b) {
+        var data = b.shift || [];
+        if (!data.length) { return ''; }
+        var kiri = 62, kolom = 60, lebarBatang = 26, sisi = 92, atas = 20, bawah = 20, tgl = 18;
+        var dasar = atas + sisi;
+        var maks = 720;
+        data.forEach(function (d) { maks = Math.max(maks, d[1] + d[2]); });
+        var skala = function (m) { return m / maks * sisi; };
+        var lebar = kiri + data.length * kolom + 8;
+        var tinggi = dasar + sisi + bawah + tgl;
+
+        var isi = '<line x1="' + kiri + '" x2="' + (lebar - 4) + '" y1="' + dasar + '" y2="' + dasar + '" stroke="#94A3B8" stroke-width="1"/>'
+            + '<text x="0" y="' + (atas + sisi / 2) + '" class="ro-ls-chart__ax">Shift 1</text>'
+            + '<text x="0" y="' + (dasar + sisi / 2) + '" class="ro-ls-chart__ax">Shift 2</text>';
+
+        data.forEach(function (d, i) {
+            var s1 = +String(d[0]).substr(11, 2) === jamShift1;
+            var arah = s1 ? -1 : 1;
+            var x = kiri + i * kolom + (kolom - lebarBatang) / 2;
+            var hShift = skala(d[1]), hLanjut = d[2] >= minLanjut ? skala(d[2]) : 0;
+            var celah = hLanjut > 0 ? 2 : 0;
+            var ujungShift = dasar + arah * hShift;
+            var ujungLanjut = ujungShift + arah * (celah + hLanjut);
+            var long = hLanjut > 0;
+            var judul = namaShift(d[0]) + ' · ' + waktu(d[0]) + ' — ' + durasi(d[1]) + ' di shift'
+                + (d[2] > 0 ? ' · +' + durasi(d[2]) + ' lanjut' : '') + (long ? ' (Long Shift)' : '');
+            var labelY = (long ? ujungLanjut : ujungShift) + arah * 6 + (s1 ? 0 : 9);
+
+            isi += '<g class="ro-ls-chart__bar"><title>' + esc(judul) + '</title>'
+                + '<rect x="' + (kiri + i * kolom) + '" y="' + atas + '" width="' + kolom + '" height="' + (sisi * 2) + '" fill="transparent"/>'
+                + '<path d="' + batang(x, lebarBatang, dasar, ujungShift, !long) + '" fill="' + WARNA_SHIFT + '"/>'
+                + (long ? '<path d="' + batang(x, lebarBatang, ujungShift + arah * celah, ujungLanjut, true) + '" fill="' + WARNA_LANJUT + '"/>' : '')
+                + '<text x="' + (x + lebarBatang / 2) + '" y="' + labelY + '" class="ro-ls-chart__val">' + d[1]
+                + (long ? '<tspan class="ro-ls-chart__plus"> +' + d[2] + '</tspan>' : '') + '</text>'
+                + '<text x="' + (x + lebarBatang / 2) + '" y="' + (tinggi - 4) + '" class="ro-ls-chart__tgl">' + esc(waktu(String(d[0]).substr(0, 10))) + '</text>'
+                + '</g>';
+        });
+
+        return '<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-8">'
+            + '<div class="ro-sc-detail__title">Kehadiran per shift (menit) &middot; ' + data.length + ' shift</div>'
+            + '<div class="ro-sc-legend"><span><i class="ro-sw" style="background:' + WARNA_SHIFT + '"></i>Menit hadir di shift terjadwal</span>'
+            + '<span><i class="ro-sw" style="background:' + WARNA_LANJUT + '"></i>Lanjut ke shift berikutnya (Long Shift)</span></div></div>'
+            + '<div class="ro-sc-scroll mb-16"><svg class="ro-ls-chart" viewBox="0 0 ' + lebar + ' ' + tinggi + '" width="' + lebar + '" height="' + tinggi
+            + '" role="img" aria-label="Kehadiran per shift ' + esc(b.nama) + '">' + isi + '</svg></div>';
+    }
+
     function detail(b) {
-        var html = '';
+        var html = grafik(b);
         if (b.long_shift.length) {
             html += '<div class="ro-sc-detail__title mb-8">Kejadian Long Shift (' + b.long_shift.length + ')</div>'
                 + '<div class="ro-sc-scroll"><table class="ro-ls-mini"><thead><tr><th>Shift terjadwal</th><th>Blok kehadiran (tap pertama → terakhir)</th><th>Di shift</th><th>Lanjut</th><th>Sesi</th><th>Gate masuk → keluar</th></tr></thead><tbody>'

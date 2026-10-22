@@ -442,3 +442,12 @@
 .ro-ls-mini { width: 100%; font-size: 12px; border-collapse: collapse; }
 .ro-ls-mini th { font-weight: 600; color: #64748B; text-align: left; padding: 4px 8px; border-bottom: 1px solid #E2E8F0; }
 .ro-ls-mini td { padding: 5px 8px; border-bottom: 1px dashed #E2E8F0; white-space: nowrap; }
+
+/* Grafik kehadiran per shift (detail Long Shift): Shift 1 ke atas, Shift 2 ke bawah. */
+.ro-ls-chart { display: block; max-width: none; font-family: inherit; }
+.ro-ls-chart__ax { font-size: 11px; font-weight: 600; fill: #52514e; dominant-baseline: middle; }
+.ro-ls-chart__val { font-size: 10.5px; font-weight: 600; fill: #52514e; text-anchor: middle; font-variant-numeric: tabular-nums; }
+.ro-ls-chart__plus { font-weight: 800; fill: #0b0b0b; }
+.ro-ls-chart__tgl { font-size: 10px; fill: #94A3B8; text-anchor: middle; }
+.ro-ls-chart__bar:hover path { filter: brightness(1.08); }
+.ro-ls-chart__bar:hover rect { fill: rgba(15, 23, 42, .04); }

@@ -50,16 +50,20 @@ final class DmsLongShiftReader
      * Event ditarik 2 hari sebelum $dari supaya blok yang sudah berjalan sejak
      * sebelum jendela tetap utuh.
      *
-     * long_shift & anomali dikirim sebagai JSON (array objek) dan di-decode
-     * pemanggil.
+     * long_shift, shift & anomali dikirim sebagai JSON dan di-decode pemanggil.
      *
-     * @return list<object{sid:string,n_shift:int,n_long:int,long_shift:?string,n_anomali:int,anomali:?string}>
+     * @param  list<string>  $sids  SID pengawas dari pengawas().
+     * @return list<object{sid:string,n_shift:int,n_long:int,long_shift:?string,shift:?string,n_anomali:int,anomali:?string}>
      */
-    public function deteksi(CarbonImmutable $dari, CarbonImmutable $sekarang): array
+    public function deteksi(CarbonImmutable $dari, CarbonImmutable $sekarang, array $sids): array
     {
+        if ($sids === []) {
+            return [];
+        }
+
         // Angka dari config di-cast ke int dan timestamp dari Carbon berformat
-        // tetap, jadi aman disisipkan langsung; hanya teks level/status yang
-        // di-bind. (Named parameter berulang tidak andal di PDO pgsql.)
+        // tetap, jadi aman disisipkan langsung; hanya daftar SID yang di-bind.
+        // (Named parameter berulang tidak andal di PDO pgsql.)
         $dup = (int) $this->param('duplikat_menit', 2);
         $pasangan = (int) $this->param('pasangan_maks_jam', 36);
         $jeda = (int) $this->param('jeda_maks_menit', 60);
@@ -72,8 +76,8 @@ final class DmsLongShiftReader
 
         $sql = <<<SQL
             WITH peg AS MATERIALIZED (
-                SELECT DISTINCT trim(kode_sid) AS sid FROM {$this->view()}
-                WHERE level_jabatan = ? AND status_karyawan = ? AND coalesce(trim(kode_sid), '') <> ''
+                -- SID baseline dikirim pemanggil: view pengawas butuh 3–12 dtk, jangan dibaca dua kali.
+                SELECT DISTINCT unnest(CAST(? AS text[])) AS sid
             ),
             ev0 AS MATERIALIZED (
                 SELECT trim(s.kode_sid) AS sid, s.tanggal_checkinout AS t,
@@ -160,7 +164,9 @@ final class DmsLongShiftReader
                            'shift', to_char(s, 'YYYY-MM-DD HH24:MI'), 'm_shift', m_shift, 'm_lanjut', m_lanjut,
                            'mulai', to_char(mulai, 'YYYY-MM-DD HH24:MI'), 'selesai', to_char(selesai, 'YYYY-MM-DD HH24:MI'),
                            'n_sesi', n_sesi, 'gate_masuk', gate_masuk, 'gate_keluar', gate_keluar
-                       ) ORDER BY s DESC) FILTER (WHERE m_lanjut >= {$minLanjut}) AS long_shift
+                       ) ORDER BY s DESC) FILTER (WHERE m_lanjut >= {$minLanjut}) AS long_shift,
+                       -- Semua shift yang dinilai, ringkas [mulai, menit di shift, menit lanjut] — grafik per orang.
+                       json_agg(json_build_array(to_char(s, 'YYYY-MM-DD HH24:MI'), m_shift, m_lanjut) ORDER BY s) AS shift
                 FROM hasil GROUP BY sid
             ),
             per_anom AS MATERIALIZED (
@@ -170,14 +176,14 @@ final class DmsLongShiftReader
                 FROM anom GROUP BY sid
             ),
             ada_tap AS MATERIALIZED (SELECT DISTINCT sid FROM ev0 WHERE t >= TIMESTAMP '{$mulai}')
-            SELECT t.sid, coalesce(p.n_shift, 0) AS n_shift, coalesce(p.n_long, 0) AS n_long, p.long_shift,
+            SELECT t.sid, coalesce(p.n_shift, 0) AS n_shift, coalesce(p.n_long, 0) AS n_long, p.long_shift, p.shift,
                    coalesce(a.n_anomali, 0) AS n_anomali, a.anomali
             FROM ada_tap t
             LEFT JOIN per_sid p ON p.sid = t.sid
             LEFT JOIN per_anom a ON a.sid = t.sid
             SQL;
 
-        return $this->pilih($sql, [$this->param('level_jabatan'), $this->param('status_karyawan')]);
+        return $this->pilih($sql, [DmsRosterRfidReader::arrayPg($sids)]);
     }
 
     /**
