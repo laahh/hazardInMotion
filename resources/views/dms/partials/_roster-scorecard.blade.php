@@ -428,7 +428,7 @@
             <tr>
               <th class="num">#</th>
               @foreach ([
-                ['sid', 'SID', ''], ['perusahaan', 'Perusahaan', ''], ['nama', 'Nama', ''],
+                ['perusahaan', 'Perusahaan', ''], ['nama', 'Nama', ''],
                 ['jabatan', 'Jabatan', ''], ['site', 'Site', ''], ['roster', 'Roster', 'num'],
                 ['hadir', 'On-site', 'num'], ['pagi', 'Pagi', 'num'], ['malam', 'Malam', 'num'],
                 ['off', 'Off', 'num'], ['cutiCur', 'Cuti', 'num'], ['status', 'Status', ''],
@@ -452,9 +452,11 @@
             @foreach ($scorecard as $r)
               <tr>
                 <td class="num ro-sc-muted">{{ $r['no'] }}</td>
-                <td class="fw-semibold">{{ $r['sid'] }}</td>
                 <td>{{ $r['pt'] }}</td>
-                <td class="fw-medium">{{ $r['nama'] }}</td>
+                <td class="fw-medium">
+                  {{ $r['nama'] }}
+                  <span class="ro-sc-sub fw-semibold">{{ $r['sid'] }}</span>
+                </td>
                 <td class="ro-sc-banned">{!! $selBanned($r['banned'] ?? null) !!}</td>
                 <td>{{ $r['jabatan'] }}</td>
                 <td>{{ $r['site'] }}</td>
@@ -491,7 +493,7 @@
                 $pola = $gridDari($polaStr, $merahArr);
               @endphp
               <tr>
-                <td colspan="15" style="padding:0;border-bottom:0">
+                <td colspan="14" style="padding:0;border-bottom:0">
                   <div class="collapse" id="tl-{{ $r['sid'] }}">
                     <div class="ro-sc-detail">
                      <div class="ro-sc-detail__panel">
