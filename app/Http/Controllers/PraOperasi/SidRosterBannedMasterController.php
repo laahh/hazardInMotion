@@ -7,7 +7,6 @@ namespace App\Http\Controllers\PraOperasi;
 use App\Http\Controllers\Controller;
 use App\Models\SidRosterBannedLog;
 use App\Models\SidRosterBannedMaster;
-use App\Models\SidRosterTreatmentEvidence;
 use App\Services\Dms\Roster\DmsRosterBannedAktif;
 use Exception;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
@@ -60,58 +59,7 @@ class SidRosterBannedMasterController extends Controller
 
     public function index(): View
     {
-        return view('pra-operasi.roster-banned.index', [
-            'stats' => $this->overviewStats(),
-        ]);
-    }
-
-    /**
-     * Ringkasan overview: total banned (master), yang benar-benar sudah
-     * ke-eksekusi banned-nya (log automation SUCCESS) vs sudah unbanned
-     * (punya bukti treatment yang APPROVED), dan rekap pengajuan treatment
-     * per status.
-     *
-     * @return array{
-     *     total_banned:int,
-     *     sudah_unbanned:int,
-     *     masih_banned:int,
-     *     total_pengajuan:int,
-     *     pengajuan_pending:int,
-     *     pengajuan_approved:int,
-     *     pengajuan_rejected:int
-     * }
-     */
-    private function overviewStats(): array
-    {
-        $totalBanned = SidRosterBannedMaster::count();
-
-        // "Masih Banned" = distinct master_id di sid_roster_banned_log yang
-        // automation_status-nya SUCCESS (benar-benar sudah ke-eksekusi
-        // banned di sistem, bukan cuma tercatat di master).
-        $masihBanned = SidRosterBannedLog::query()
-            ->where('automation_status', SidRosterBannedLog::STATUS_SUCCESS)
-            ->distinct('master_id')
-            ->count('master_id');
-
-        $sudahUnbanned = SidRosterTreatmentEvidence::query()
-            ->where('approval_status', SidRosterTreatmentEvidence::STATUS_APPROVED)
-            ->distinct('master_id')
-            ->count('master_id');
-
-        $totalPengajuan = SidRosterTreatmentEvidence::count();
-        $pengajuanPending = SidRosterTreatmentEvidence::where('approval_status', SidRosterTreatmentEvidence::STATUS_PENDING)->count();
-        $pengajuanApproved = SidRosterTreatmentEvidence::where('approval_status', SidRosterTreatmentEvidence::STATUS_APPROVED)->count();
-        $pengajuanRejected = SidRosterTreatmentEvidence::where('approval_status', SidRosterTreatmentEvidence::STATUS_REJECTED)->count();
-
-        return [
-            'total_banned' => $totalBanned,
-            'sudah_unbanned' => $sudahUnbanned,
-            'masih_banned' => $masihBanned,
-            'total_pengajuan' => $totalPengajuan,
-            'pengajuan_pending' => $pengajuanPending,
-            'pengajuan_approved' => $pengajuanApproved,
-            'pengajuan_rejected' => $pengajuanRejected,
-        ];
+        return view('pra-operasi.roster-banned.index');
     }
 
     /**
