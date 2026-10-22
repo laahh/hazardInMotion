@@ -8,7 +8,9 @@ use App\Http\Controllers\Controller;
 use App\Models\SidRosterBannedLog;
 use App\Models\SidRosterBannedMaster;
 use App\Models\SidRosterTreatmentEvidence;
+use App\Services\Dms\Roster\DmsRosterBannedAktif;
 use Exception;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,7 +18,10 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -28,6 +33,31 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  */
 class SidRosterBannedMasterController extends Controller
 {
+    private const BANNED_SUDAH = 'BANNED';
+
+    private const BANNED_BELUM = 'BELUM';
+
+    private const BANNED_UNBANNED = 'UNBANNED';
+
+    /** Kode filter "belum ada baris di sid_roster_banned_log". */
+    private const LOG_NONE = 'NONE';
+
+    /** @var array<string, array{0:string, 1:string}> kode => [label, warna badge] */
+    private const STATUS_BANNED = [
+        self::BANNED_SUDAH => ['Sudah Banned', 'danger'],
+        self::BANNED_BELUM => ['Belum Banned', 'warning'],
+        self::BANNED_UNBANNED => ['Sudah Unbanned', 'success'],
+    ];
+
+    /** @var array<string, array{0:string, 1:string}> automation_status => [label, warna badge] */
+    private const STATUS_LOG = [
+        SidRosterBannedLog::STATUS_SUCCESS => ['Sukses', 'success'],
+        SidRosterBannedLog::STATUS_FAILED => ['Gagal / Error', 'danger'],
+        SidRosterBannedLog::STATUS_SKIPPED => ['Dilewati', 'warning'],
+        SidRosterBannedLog::STATUS_PROCESSING => ['Sedang Proses', 'info'],
+        self::LOG_NONE => ['Belum Ada Log', 'secondary'],
+    ];
+
     public function index(): View
     {
         return view('pra-operasi.roster-banned.index', [
@@ -95,32 +125,22 @@ class SidRosterBannedMasterController extends Controller
         if ($length < 1 || $length > 100) {
             $length = 25;
         }
-        $search = trim((string) ($request->input('search.value') ?? ''));
         $orderColIndex = (int) $request->input('order.0.column', 3);
         $orderDir = strtolower((string) $request->input('order.0.dir', 'asc')) === 'desc' ? 'desc' : 'asc';
 
         $orderColumns = [
-            1 => 'nik',
-            2 => 'sid',
-            3 => 'nama',
-            4 => 'perusahaan',
-            5 => 'site_dedicated',
-            6 => 'alasan_pelanggaran',
-            7 => 'tanggal_pelanggaran',
+            1 => 'm.nik',
+            2 => 'm.sid',
+            3 => 'm.nama',
+            4 => 'm.perusahaan',
+            5 => 'm.site_dedicated',
+            6 => 'm.alasan_pelanggaran',
+            7 => 'm.tanggal_pelanggaran',
+            9 => 'bl.automation_status',
         ];
-        $orderBy = $orderColumns[$orderColIndex] ?? 'nama';
+        $orderBy = $orderColumns[$orderColIndex] ?? 'm.nama';
 
-        $query = SidRosterBannedMaster::query();
-        if ($search !== '') {
-            $query->where(function ($q) use ($search): void {
-                $q->where('nik', 'like', '%'.$search.'%')
-                    ->orWhere('sid', 'like', '%'.$search.'%')
-                    ->orWhere('nama', 'like', '%'.$search.'%')
-                    ->orWhere('perusahaan', 'like', '%'.$search.'%')
-                    ->orWhere('site_dedicated', 'like', '%'.$search.'%')
-                    ->orWhere('alasan_pelanggaran', 'like', '%'.$search.'%');
-            });
-        }
+        $query = $this->listQuery($request, trim((string) ($request->input('search.value') ?? '')));
 
         $recordsTotal = SidRosterBannedMaster::count();
         $recordsFiltered = (clone $query)->count();
@@ -128,6 +148,17 @@ class SidRosterBannedMasterController extends Controller
 
         $data = [];
         foreach ($items as $idx => $item) {
+            [$bannedLabel, $bannedColor] = self::STATUS_BANNED[$this->statusBanned($item)];
+            [$logLabel, $logColor] = self::STATUS_LOG[$item->ban_status ?? self::LOG_NONE] ?? [(string) $item->ban_status, 'secondary'];
+
+            $logHtml = '<span class="badge bg-'.$logColor.'-focus text-'.$logColor.'-main">'.e($logLabel).'</span>';
+            if ($item->ban_error) {
+                $logHtml .= '<div class="text-xs text-secondary-light mt-4 rb-log-error" title="'.e($item->ban_error).'">'.e(Str::limit($item->ban_error, 90)).'</div>';
+            }
+            if ($item->ban_logged_at) {
+                $logHtml .= '<div class="text-xs text-secondary-light mt-2">'.e($this->formatWaktu($item->ban_completed_at ?? $item->ban_logged_at)).'</div>';
+            }
+
             $editUrl = route('pra-operasi.roster-banned.edit', $item->id);
             $destroyUrl = route('pra-operasi.roster-banned.destroy', $item->id);
             $csrf = csrf_token();
@@ -143,6 +174,8 @@ class SidRosterBannedMasterController extends Controller
                 'site_dedicated' => $item->site_dedicated ?: '-',
                 'alasan_pelanggaran' => $item->alasan_pelanggaran ?? '-',
                 'tanggal_pelanggaran' => $item->tanggal_pelanggaran ? $item->tanggal_pelanggaran->format('d/m/Y') : '-',
+                'status_banned' => '<span class="badge bg-'.$bannedColor.'-focus text-'.$bannedColor.'-main">'.e($bannedLabel).'</span>',
+                'status_log' => $logHtml,
                 'aksi' => $aksi,
             ];
         }
@@ -153,6 +186,157 @@ class SidRosterBannedMasterController extends Controller
             'recordsFiltered' => $recordsFiltered,
             'data' => $data,
         ]);
+    }
+
+    /**
+     * Download Excel daftar karyawan banned sesuai pencarian + filter status
+     * yang sedang aktif di tabel.
+     */
+    public function export(Request $request)
+    {
+        $items = $this->listQuery($request, trim((string) $request->input('search', '')))
+            ->orderBy('m.nama')
+            ->get();
+
+        $headers = [
+            'No', 'NIK', 'SID', 'Nama', 'Perusahaan', 'Site Dedicated', 'Alasan Pelanggaran', 'Tanggal Pelanggaran',
+            'Status Banned', 'Status Log Banned', 'Step Terakhir', 'Pesan Error', 'Waktu Log',
+        ];
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Roster Banned');
+        $sheet->fromArray($headers, null, 'A1');
+
+        $rows = [];
+        foreach ($items as $idx => $item) {
+            $rows[] = [
+                $idx + 1,
+                (string) $item->nik,
+                (string) $item->sid,
+                (string) $item->nama,
+                (string) $item->perusahaan,
+                (string) $item->site_dedicated,
+                (string) $item->alasan_pelanggaran,
+                $item->tanggal_pelanggaran ? $item->tanggal_pelanggaran->format('d/m/Y') : '',
+                self::STATUS_BANNED[$this->statusBanned($item)][0],
+                (self::STATUS_LOG[$item->ban_status ?? self::LOG_NONE] ?? [(string) $item->ban_status])[0],
+                (string) $item->ban_step,
+                (string) $item->ban_error,
+                $item->ban_logged_at ? $this->formatWaktu($item->ban_completed_at ?? $item->ban_logged_at) : '',
+            ];
+        }
+        // Sel ditulis eksplisit sebagai teks supaya NIK panjang / SID seperti "0E123" tidak diubah Excel jadi angka.
+        foreach ($rows as $r => $row) {
+            foreach ($row as $c => $value) {
+                $sheet->setCellValueExplicit([$c + 1, $r + 2], $value, is_int($value) ? DataType::TYPE_NUMERIC : DataType::TYPE_STRING);
+            }
+        }
+
+        $lastCol = Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle('A1:'.$lastCol.'1')->getFont()->setBold(true);
+        $sheet->setAutoFilter('A1:'.$lastCol.(count($rows) + 1));
+        $sheet->freezePane('A2');
+        for ($c = 1; $c <= count($headers); $c++) {
+            $sheet->getColumnDimensionByColumn($c)->setAutoSize(true);
+        }
+        $sheet->getColumnDimension('G')->setAutoSize(false)->setWidth(50);
+        $sheet->getColumnDimension('L')->setAutoSize(false)->setWidth(60);
+
+        $filename = 'roster_banned_'.date('Y-m-d_His').'.xlsx';
+        $writer = new Xlsx($spreadsheet);
+
+        return response()->streamDownload(function () use ($writer): void {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /**
+     * Master + log banned TERAKHIR per master_id (retry bisa bikin beberapa
+     * baris log) + penanda sudah di-unban (definisi DmsRosterBannedAktif).
+     * Dipakai bersama oleh tabel dan export supaya isinya selalu sama.
+     */
+    private function listQuery(Request $request, string $search): EloquentBuilder
+    {
+        $logTerakhir = DB::table('sid_roster_banned_log')
+            ->selectRaw('master_id, MAX(id) AS last_id')
+            ->groupBy('master_id');
+
+        $selesai = DmsRosterBannedAktif::statusSelesai();
+        $unban = static fn ($q) => $q->from('sid_roster_unban_log as u')
+            ->whereColumn('u.master_id', 'm.id')
+            ->whereIn('u.automation_status', $selesai);
+
+        $query = SidRosterBannedMaster::query()
+            ->from('sid_roster_banned_master as m')
+            ->leftJoinSub($logTerakhir, 'll', 'll.master_id', '=', 'm.id')
+            ->leftJoin('sid_roster_banned_log as bl', 'bl.id', '=', 'll.last_id')
+            ->select('m.*')
+            ->addSelect([
+                'bl.automation_status as ban_status',
+                'bl.automation_step as ban_step',
+                'bl.error_message as ban_error',
+                'bl.completed_at as ban_completed_at',
+                'bl.created_at as ban_logged_at',
+            ])
+            ->selectRaw(
+                'EXISTS (SELECT 1 FROM sid_roster_unban_log u WHERE u.master_id = m.id AND u.automation_status IN ('
+                .implode(',', array_fill(0, count($selesai), '?')).')) AS is_unbanned',
+                $selesai
+            );
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search): void {
+                $q->where('m.nik', 'like', '%'.$search.'%')
+                    ->orWhere('m.sid', 'like', '%'.$search.'%')
+                    ->orWhere('m.nama', 'like', '%'.$search.'%')
+                    ->orWhere('m.perusahaan', 'like', '%'.$search.'%')
+                    ->orWhere('m.site_dedicated', 'like', '%'.$search.'%')
+                    ->orWhere('m.alasan_pelanggaran', 'like', '%'.$search.'%');
+            });
+        }
+
+        $statusBanned = (string) $request->input('status_banned', '');
+        if ($statusBanned === self::BANNED_UNBANNED) {
+            $query->whereExists($unban);
+        } elseif ($statusBanned === self::BANNED_SUDAH) {
+            $query->whereNotExists($unban)->where('bl.automation_status', SidRosterBannedLog::STATUS_SUCCESS);
+        } elseif ($statusBanned === self::BANNED_BELUM) {
+            $query->whereNotExists($unban)->where(function ($q): void {
+                $q->whereNull('bl.automation_status')
+                    ->orWhere('bl.automation_status', '<>', SidRosterBannedLog::STATUS_SUCCESS);
+            });
+        }
+
+        $statusLog = (string) $request->input('status_log', '');
+        if ($statusLog === self::LOG_NONE) {
+            $query->whereNull('bl.id');
+        } elseif (array_key_exists($statusLog, self::STATUS_LOG)) {
+            $query->where('bl.automation_status', $statusLog);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Sudah Unbanned menang atas status log banned: kasusnya sudah ditutup.
+     * Hanya log SUCCESS yang berarti SID benar-benar ter-banned — FAILED,
+     * SKIPPED ("BAN SID sudah penuh"), PROCESSING, atau belum ada log = belum.
+     */
+    private function statusBanned(SidRosterBannedMaster $item): string
+    {
+        if ((int) $item->is_unbanned === 1) {
+            return self::BANNED_UNBANNED;
+        }
+
+        return $item->ban_status === SidRosterBannedLog::STATUS_SUCCESS ? self::BANNED_SUDAH : self::BANNED_BELUM;
+    }
+
+    private function formatWaktu(mixed $value): string
+    {
+        return Carbon::parse($value)->format('d/m/Y H:i');
     }
 
     public function create(): View

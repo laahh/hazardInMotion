@@ -28,6 +28,8 @@
   #rbTable { width: 100% !important; }
   #rbTable th, #rbTable td { vertical-align: middle; }
   #rbTable td.rb-col-alasan { white-space: normal; min-width: 220px; }
+  #rbTable td.rb-col-log { white-space: normal; min-width: 180px; }
+  #rbTable .rb-log-error { max-width: 260px; word-break: break-word; }
 </style>
 @endsection
 
@@ -159,6 +161,10 @@
           <iconify-icon icon="solar:clipboard-check-outline" class="icon"></iconify-icon>
           Review Bukti Treatment
         </a>
+        <a href="{{ route('pra-operasi.roster-banned.export') }}" id="rbExportBtn" class="btn btn-sm btn-success-600 d-inline-flex align-items-center gap-1">
+          <iconify-icon icon="solar:download-minimalistic-bold" class="icon"></iconify-icon>
+          Download Excel
+        </a>
         <a href="{{ route('pra-operasi.roster-banned.import-form') }}" class="btn btn-sm btn-outline-success-600 d-inline-flex align-items-center gap-1">
           <iconify-icon icon="solar:upload-bold" class="icon"></iconify-icon>
           Upload Excel
@@ -175,6 +181,28 @@
     </div>
   </div>
   <div class="card-body p-24">
+    <div class="d-flex flex-wrap align-items-end gap-3 mb-8">
+      <div>
+        <label for="rbFilterBanned" class="form-label text-sm fw-medium mb-4">Status Banned</label>
+        <select id="rbFilterBanned" class="form-select form-select-sm">
+          <option value="">Semua</option>
+          <option value="BANNED">Sudah Banned</option>
+          <option value="BELUM">Belum Banned</option>
+          <option value="UNBANNED">Sudah Unbanned</option>
+        </select>
+      </div>
+      <div>
+        <label for="rbFilterLog" class="form-label text-sm fw-medium mb-4">Status Log Banned</label>
+        <select id="rbFilterLog" class="form-select form-select-sm">
+          <option value="">Semua</option>
+          <option value="SUCCESS">Sukses</option>
+          <option value="FAILED">Gagal / Error</option>
+          <option value="SKIPPED">Dilewati</option>
+          <option value="PROCESSING">Sedang Proses</option>
+          <option value="NONE">Belum Ada Log</option>
+        </select>
+      </div>
+    </div>
     <div class="table-responsive">
       <table id="rbTable" class="table bordered-table mb-0 w-100">
         <thead>
@@ -187,6 +215,8 @@
             <th>Site</th>
             <th>Alasan Pelanggaran</th>
             <th>Tanggal Pelanggaran</th>
+            <th>Status Banned</th>
+            <th>Status Log Banned</th>
             <th>Aksi</th>
           </tr>
         </thead>
@@ -205,7 +235,12 @@
         return;
     }
 
-    new DataTable('#rbTable', {
+    var filterBanned = document.getElementById('rbFilterBanned');
+    var filterLog = document.getElementById('rbFilterLog');
+    var exportBtn = document.getElementById('rbExportBtn');
+    var exportBase = @json(route('pra-operasi.roster-banned.export'));
+
+    var table = new DataTable('#rbTable', {
         processing: true,
         serverSide: true,
         searching: true,
@@ -216,6 +251,10 @@
         autoWidth: false,
         ajax: {
             url: @json(route('pra-operasi.roster-banned.data')),
+            data: function (d) {
+                d.status_banned = filterBanned.value;
+                d.status_log = filterLog.value;
+            },
         },
         columns: [
             { data: 'DT_RowIndex', orderable: false, searchable: false, className: 'text-center' },
@@ -226,6 +265,8 @@
             { data: 'site_dedicated' },
             { data: 'alasan_pelanggaran', className: 'rb-col-alasan' },
             { data: 'tanggal_pelanggaran' },
+            { data: 'status_banned', orderable: false, searchable: false },
+            { data: 'status_log', searchable: false, className: 'rb-col-log' },
             { data: 'aksi', orderable: false, searchable: false },
         ],
         language: {
@@ -238,6 +279,21 @@
             zeroRecords: 'Tidak ada data karyawan banned.',
             paginate: { first: '«', last: '»', next: '›', previous: '‹' },
         },
+    });
+
+    [filterBanned, filterLog].forEach(function (el) {
+        el.addEventListener('change', function () { table.ajax.reload(); });
+    });
+
+    // Export ikut pencarian + filter yang sedang aktif di tabel.
+    exportBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        var params = new URLSearchParams({
+            search: table.search() || '',
+            status_banned: filterBanned.value,
+            status_log: filterLog.value,
+        });
+        window.location.href = exportBase + '?' + params.toString();
     });
 })();
 </script>

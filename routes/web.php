@@ -936,6 +936,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         Route::prefix('roster-banned')->name('roster-banned.')->group(function () {
             Route::get('/', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'index'])->name('index');
             Route::get('/data', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'data'])->name('data');
+            Route::get('/export', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'export'])->name('export');
             Route::get('/create', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'create'])->name('create');
             Route::post('/', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'store'])->name('store');
             Route::get('/import/form', [\App\Http\Controllers\PraOperasi\SidRosterBannedMasterController::class, 'importForm'])->name('import-form');
