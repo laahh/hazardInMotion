@@ -375,6 +375,11 @@
                   aria-pressed="false" @disabled(! $live)>Detail harian</button>
           <button type="button" class="btn btn-sm radius-8 {{ ($f['note'] ?? '') === 'wajib' ? 'btn-danger' : 'btn-outline-danger' }}"
                   data-ro-wajib aria-pressed="{{ ($f['note'] ?? '') === 'wajib' ? 'true' : 'false' }}" @disabled(! $live)>Wajib cuti (segera)</button>
+          <button type="button" class="btn btn-sm btn-outline-primary-600 radius-8 d-inline-flex align-items-center gap-1"
+                  data-bs-toggle="modal" data-bs-target="#roModalCariManual"
+                  title="Cek satu karyawan langsung dari RFID 75 hari terakhir">
+            <iconify-icon icon="solar:magnifer-linear"></iconify-icon>Cari manual
+          </button>
 
           <span class="text-secondary-light text-sm ms-8">Periode:</span>
           <select class="form-select form-select-sm w-auto" data-ro-jenis="kuartal" @disabled(! $live)>
@@ -616,6 +621,182 @@
     </div>
   </div>
 </div>
+
+{{-- "Cari manual": satu karyawan, pola harian dirakit langsung dari seluruh
+     tap RFID 75 hari terakhir (RosterComplianceController::cariManual).
+     Tampilannya sama dengan panel "Pola Harian" di baris tabel. --}}
+<div class="modal fade" id="roModalCariManual" tabindex="-1" aria-labelledby="roModalCariManualJudul" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content radius-8">
+      <div class="modal-header">
+        <div>
+          <h6 class="modal-title fw-bold" id="roModalCariManualJudul">Cari Manual Karyawan</h6>
+          <span class="text-sm text-secondary-light">Satu karyawan &middot; seluruh tap RFID hari ini s/d 75 hari ke belakang</span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body">
+        <form class="d-flex flex-wrap gap-2 mb-16" id="roCariManualForm">
+          <input type="search" class="form-control form-control-sm" style="max-width:420px" id="roCariManualInput"
+                 placeholder="Nama, SID, atau NIK (min. 3 karakter)" autocomplete="off" required minlength="3">
+          <button type="submit" class="btn btn-sm btn-primary-600 radius-8 d-inline-flex align-items-center gap-1">
+            <iconify-icon icon="solar:magnifer-linear"></iconify-icon>Cari
+          </button>
+        </form>
+        <div id="roCariManualHasil" class="ro-sc-detail p-0 border-0 bg-transparent">
+          <span class="text-secondary-light text-sm">Masukkan nama, SID, atau NIK satu karyawan.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Modal "Cari manual": cari satu karyawan → bila banyak yang cocok, pilih
+// satu → render grid Pola Harian (Senin–Minggu x minggu) dari RFID.
+(function () {
+    'use strict';
+
+    var form = document.getElementById('roCariManualForm');
+    if (!form) { return; }
+
+    var input = document.getElementById('roCariManualInput');
+    var hasil = document.getElementById('roCariManualHasil');
+    var url = @json(route('dms.roster-compliance.cari-manual'));
+    var namaHari = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    var namaKode = { P: 'Shift Pagi', M: 'Shift Malam', o: 'Off', c: 'Cuti' };
+    var minta = 0;
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function pesan(teks, kelas) {
+        hasil.innerHTML = '<span class="text-sm ' + (kelas || 'text-secondary-light') + '">' + esc(teks) + '</span>';
+    }
+
+    function muat(params) {
+        var no = ++minta;
+        pesan('Mengambil data RFID…');
+        fetch(url + '?' + new URLSearchParams(params).toString(), { headers: { Accept: 'application/json' } })
+            .then(function (r) { return r.json().catch(function () { return { up: false, pesan: 'Respons server tidak valid (' + r.status + ').' }; }); })
+            .then(function (d) {
+                if (no !== minta) { return; }
+                if (!d.up) { pesan(d.pesan || 'Gagal memuat data.', 'text-danger-600'); return; }
+                if (d.pilihan) { pilihan(d); return; }
+                render(d);
+            })
+            .catch(function () { if (no === minta) { pesan('Gagal terhubung ke server.', 'text-danger-600'); } });
+    }
+
+    function pilihan(d) {
+        var html = '<div class="text-sm fw-semibold mb-8">Ditemukan beberapa karyawan, pilih satu:</div><div class="list-group">';
+        d.pilihan.forEach(function (c) {
+            html += '<button type="button" class="list-group-item list-group-item-action text-sm" data-sid="' + esc(c.sid) + '">'
+                + '<b>' + esc(c.nama) + '</b> <span class="text-secondary-light">&middot; ' + esc(c.sid) + ' &middot; '
+                + esc(c.pt) + ' &middot; ' + esc(c.site) + ' &middot; ' + esc(c.jabatan) + '</span></button>';
+        });
+        html += '</div>';
+        if (d.terpotong) {
+            html += '<div class="text-xs text-secondary-light mt-8">Hanya 10 hasil pertama yang ditampilkan — perjelas kata kunci.</div>';
+        }
+        hasil.innerHTML = html;
+        hasil.querySelectorAll('[data-sid]').forEach(function (b) {
+            b.addEventListener('click', function () { muat({ sid: b.dataset.sid }); });
+        });
+    }
+
+    function judulSel(h, ke, batas) {
+        var t = h.label + ' — ' + (h.kode === 'x' ? 'belum ada scan hari ini' : namaKode[h.kode]);
+        if (ke > 0) { t += ' · hari kerja ke-' + ke; }
+        if (h.masuk) { t += ' · masuk ' + h.masuk.jam + ' (' + h.masuk.gate + ')'; }
+        if (h.keluar) { t += ' · keluar ' + (h.keluar.beda_hari ? h.keluar.tanggal + ' ' : '') + h.keluar.jam + ' (' + h.keluar.gate + ')'; }
+        if (h.durasi) { t += ' · ' + h.durasi; }
+        if (batas) { t += ' · ⛔ seharusnya sudah cuti (periode kerja > ' + (ke - 1) + ' hari)'; }
+        if (h.merah) { t += ' · ⚠ ' + h.merah; }
+        return t;
+    }
+
+    function render(d) {
+        var batasKe = d.onsite_maks + 1;
+        var baris = [[], [], [], [], [], [], []];
+        var kolom = 0;
+        var ke = 0;
+
+        d.hari.forEach(function (h, i) {
+            var tgl = new Date(h.iso + 'T00:00:00');
+            var hariKe = (tgl.getDay() + 6) % 7;
+            if (i > 0 && hariKe === 0) { kolom++; }
+            ke = h.kode === 'c' ? 0 : (h.kode === 'x' ? ke : ke + 1);
+            var tampilKe = h.kode === 'c' || h.kode === 'x' ? 0 : ke;
+            var batas = tampilKe === batasKe;
+            baris[hariKe][kolom] = '<span class="ro-hm-cell ' + (h.kode === 'x' ? 'is-empty' : 'sh-' + h.kode)
+                + (h.merah ? ' is-flag' : '') + (batas ? ' is-batas' : '')
+                + '" title="' + esc(judulSel(h, tampilKe, batas)) + '">'
+                + (tampilKe > 0 ? '<span class="ro-hm-ke">' + tampilKe + '</span>' : '') + '</span>';
+        });
+        var nKolom = kolom + 1;
+
+        var grid = '';
+        namaHari.forEach(function (nama, r) {
+            var sel = '';
+            for (var c = 0; c < nKolom; c++) { sel += baris[r][c] || '<span class="ro-hm-cell is-empty"></span>'; }
+            grid += '<div class="ro-hm-ylabel">' + nama + '</div><div class="ro-hm-row">' + sel + '</div>';
+        });
+        var xl = '';
+        for (var c = 0; c < nKolom; c++) { xl += '<div class="ro-hm-xlabel"><span>' + (c % 2 === 0 ? 'W' + (c + 1) : '') + '</span></div>'; }
+        grid += '<div class="ro-hm-corner"></div><div class="ro-hm-xlabels">' + xl + '</div>';
+
+        var fmt = function (iso) { return new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }); };
+        var rentang = fmt(d.awal) + ' – ' + fmt(d.akhir);
+        var scan = d.hari.filter(function (h) { return h.kode === 'P' || h.kode === 'M'; }).length;
+
+        var riwayat = '<div class="ro-sc-riwayat mt-16"><div class="ro-sc-detail__title mb-8">Riwayat pelanggaran'
+            + ' <span class="ro-sc-muted fw-normal">&middot; ' + d.riwayat.length + ' kejadian sepanjang ' + esc(rentang) + '</span></div>';
+        if (d.longgar) {
+            riwayat += '<span class="text-secondary-light text-sm">Kategori ' + esc(d.kategori) + ' dikecualikan dari aturan roster.</span>';
+        } else if (d.riwayat.length === 0) {
+            riwayat += '<span class="text-success-600 text-sm fw-medium">Tidak ada pelanggaran aturan dalam 75 hari terakhir.</span>';
+        } else {
+            riwayat += '<ul class="ro-sc-riwayat__list">';
+            d.riwayat.forEach(function (k) {
+                riwayat += '<li><span class="ro-sc-riwayat__tgl">' + esc(k.mulai) + (k.mulai !== k.selesai ? ' – ' + esc(k.selesai) : '') + '</span>'
+                    + '<span class="ro-sc-note-red">⚠ ' + esc(k.jenis) + '</span>'
+                    + '<span class="text-secondary-light">' + esc(k.teks) + '</span></li>';
+            });
+            riwayat += '</ul>';
+        }
+        riwayat += '</div>';
+
+        hasil.innerHTML = '<div class="ro-sc-detail__panel">'
+            + '<div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16"><div>'
+            + '<div class="ro-sc-detail__title">Pola Harian &mdash; ' + esc(d.nama) + '</div>'
+            + '<div class="ro-sc-detail__sub">' + esc(d.sid) + ' &middot; ' + esc(d.pt) + ' &middot; ' + esc(d.site) + ' &middot; '
+            + esc(d.jabatan) + ' &middot; ' + esc(rentang) + ' &middot; ' + scan + ' hari ada check-in</div></div>'
+            + '<div class="ro-sc-legend">'
+            + '<span><i class="ro-sw ro-sw-pagi"></i>Pagi</span><span><i class="ro-sw ro-sw-malam"></i>Malam</span>'
+            + '<span><i class="ro-sw ro-sw-off"></i>Off</span><span><i class="ro-sw ro-sw-cuti"></i>Cuti</span>'
+            + '<span><i class="ro-sw ro-sw-flag"></i>Hari ter-flag</span>'
+            + '<span><i class="ro-sw ro-sw-batas"></i>Hari ke-' + batasKe + ': seharusnya sudah cuti</span>'
+            + '<span class="ro-sc-muted">angka = hari kerja ke-N sejak cuti</span></div></div>'
+            + '<div class="ro-heatmap"><div class="ro-hm-scroll"><div class="ro-hm" style="--ro-cols: ' + nKolom + '">' + grid + '</div></div></div>'
+            + '<div class="text-xs text-secondary-light mt-8">Arahkan kursor ke kotak untuk jam &amp; gate check-in/out. '
+            + 'Bila cuti terakhir lebih dari 75 hari lalu, hitungan hari kerja dimulai dari awal jendela.</div>'
+            + riwayat + '</div>';
+    }
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var q = input.value.trim();
+        if (q.length < 3) { pesan('Ketik minimal 3 karakter.', 'text-danger-600'); return; }
+        muat({ q: q });
+    });
+
+    document.getElementById('roModalCariManual').addEventListener('shown.bs.modal', function () { input.focus(); });
+})();
+</script>
 
 <script>
 // Toolbar filter scorecard: dropdown langsung menerapkan filter; tiga pilihan

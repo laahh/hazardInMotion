@@ -807,6 +807,9 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         Route::get('/roster-compliance/terkini/karyawan/{sid}.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'timelineTerkini'])
             ->where('sid', '[A-Za-z0-9]{1,20}')
             ->name('roster-compliance.terkini.timeline');
+        // "Cari manual" satu karyawan di tabel scorecard: RFID 75 hari terakhir.
+        Route::get('/roster-compliance/cari-manual.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'cariManual'])
+            ->name('roster-compliance.cari-manual');
         Route::get('/roster-compliance/terkini/{kode}.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'detailTerkini'])
             ->whereIn('kode', \App\Services\Dms\Roster\DmsRosterRegLiveService::KODE)
             ->name('roster-compliance.terkini.detail');

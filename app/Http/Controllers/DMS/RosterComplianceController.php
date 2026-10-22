@@ -174,6 +174,59 @@ final class RosterComplianceController extends Controller
         return response()->json(['up' => true] + $data);
     }
 
+    /** Jendela "Cari manual": hari ini + 74 hari ke belakang. */
+    private const CARI_MANUAL_HARI = 75;
+
+    /**
+     * "Cari manual" di tabel scorecard Ringkasan Roster: SATU karyawan, pola
+     * harian dirakit langsung dari seluruh tap RFID 75 hari terakhir.
+     *
+     * ?sid= langsung memuat timeline. ?q= mencari dulu: bila cocok tepat satu
+     * orang (atau SID/NIK persis) timeline-nya dimuat, bila lebih dari satu
+     * dikembalikan daftar pilihan supaya pengguna memilih satu.
+     */
+    public function cariManual(Request $request, DmsRosterRegLiveService $live): JsonResponse
+    {
+        $sid = mb_strtoupper(mb_substr(trim((string) $request->query('sid', '')), 0, 20));
+
+        if ($sid === '') {
+            $q = mb_substr(trim((string) $request->query('q', '')), 0, 100);
+            if (mb_strlen($q) < 3) {
+                return response()->json(['up' => false, 'pesan' => 'Ketik minimal 3 karakter nama, SID, atau NIK.'], 422);
+            }
+
+            $calon = $live->cariKaryawan($q);
+            if ($calon === []) {
+                return response()->json(['up' => false, 'pesan' => 'Karyawan "'.$q.'" tidak ditemukan di master karyawan roster.'], 404);
+            }
+
+            $persis = array_values(array_filter($calon, static fn (array $c): bool => $c['sid'] === mb_strtoupper($q)));
+            if (count($calon) > 1 && $persis === []) {
+                return response()->json([
+                    'up' => true,
+                    'pilihan' => array_slice($calon, 0, 10),
+                    'terpotong' => count($calon) > 10,
+                ]);
+            }
+
+            $sid = ($persis[0] ?? $calon[0])['sid'];
+        }
+
+        if (! preg_match('/^[A-Z0-9]{1,20}$/', $sid)) {
+            return response()->json(['up' => false, 'pesan' => 'Kode SID tidak valid.'], 422);
+        }
+
+        $data = $live->timeline($sid, self::CARI_MANUAL_HARI);
+        if ($data === null) {
+            return response()->json(['up' => false, 'pesan' => 'RFID tidak terjangkau, coba beberapa saat lagi.'], 503);
+        }
+        if (! $data['ditemukan']) {
+            return response()->json(['up' => false, 'pesan' => 'Karyawan tidak ditemukan.'], 404);
+        }
+
+        return response()->json(['up' => true] + $data);
+    }
+
     /**
      * Daftar lengkap satu aturan banned per hari ini sebagai CSV.
      */

@@ -82,6 +82,32 @@ class DmsRosterRegLiveServiceTest extends TestCase
         $this->assertNull($hasil['map2']);
     }
 
+    public function test_riwayat_cari_manual_mencatat_run_aturan_dengan_tanggal(): void
+    {
+        // Jendela 75 hari dari 1 Agu: on-site penuh sejak awal (terpotong),
+        // off tiap hari ke-5, lalu 15 hari tanpa off di ujung.
+        $pola = substr(str_repeat('PPPPo', 12), 0, 60).str_repeat('P', 15);
+        $eval = (new DmsRosterRuleEngine())->evaluasi($pola, 'Operator Hauler', 7, 'block');
+
+        $awal = CarbonImmutable::create(2026, 8, 1);
+        $riwayat = $this->svc->riwayat($eval, $awal);
+
+        $this->assertSame(['Periode kerja', 'Bekerja berturut-turut'], array_column($riwayat, 'jenis'));
+        $this->assertSame('≥ 75 hari on-site tanpa cuti (maks 70)', $riwayat[0]['teks']);
+        $this->assertSame(
+            [$awal->translatedFormat('j M'), $awal->addDays(74)->translatedFormat('j M')],
+            [$riwayat[0]['mulai'], $riwayat[0]['selesai']],
+        );
+        $this->assertSame('15 hari tanpa off (maks 13)', $riwayat[1]['teks']);
+    }
+
+    public function test_riwayat_kategori_longgar_kosong(): void
+    {
+        $eval = (new DmsRosterRuleEngine())->evaluasi(str_repeat('P', 75), 'Mekanik', 7, 'block');
+
+        $this->assertSame([], $this->svc->riwayat($eval, CarbonImmutable::create(2026, 8, 1)));
+    }
+
     public function test_kategori_longgar_tidak_kena_banned(): void
     {
         $hasil = $this->nilai($this->pagi(range(0, 99)), 'Mekanik');

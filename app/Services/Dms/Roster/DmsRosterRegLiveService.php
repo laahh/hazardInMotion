@@ -185,12 +185,13 @@ final class DmsRosterRegLiveService
      * Timeline harian satu karyawan langsung dari RFID: kode shift, tanda
      * aturan per hari, dan detail tap (gate, jam check-in/out, durasi).
      *
+     * @param  int|null  $panjang  Jumlah hari mundur termasuk hari ini; null = reg_live.jendela_hari.
      * @return array<string, mixed>|null  null bila RFID tidak terjangkau.
      */
-    public function timeline(string $sid): ?array
+    public function timeline(string $sid, ?int $panjang = null): ?array
     {
         $hariIni = CarbonImmutable::now()->startOfDay();
-        $panjang = $this->panjangJendela();
+        $panjang = $panjang === null ? $this->panjangJendela() : max(14, $panjang);
         $awal = $hariIni->subDays($panjang - 1);
 
         try {
@@ -250,9 +251,51 @@ final class DmsRosterRegLiveService
             'site' => (string) ($k->site ?: '—'),
             'blok' => $param['thr'] - 1,
             'jam_maks' => $this->aturan()['jam_kerja_maks'],
+            'onsite_maks' => $this->aturan()['onsite_maks'],
+            'longgar' => $eval->longgar,
+            'awal' => $awal->toDateString(),
+            'akhir' => $hariIni->toDateString(),
+            'panjang' => $panjang,
             'temuan' => $temuan,
+            'riwayat' => $this->riwayat($eval, $awal),
             'hari' => $hari,
         ];
+    }
+
+    /**
+     * Calon karyawan untuk pencarian manual satu orang: SID / NIK persis
+     * didahulukan, lalu nama atau SID yang mengandung teks. Dibatasi
+     * $maks + 1 baris supaya pemanggil tahu hasilnya terpotong.
+     *
+     * @return list<array{sid:string,nama:string,jabatan:string,pt:string,site:string}>
+     */
+    public function cariKaryawan(string $teks, int $maks = 10): array
+    {
+        $teks = trim($teks);
+        if (mb_strlen($teks) < 3) {
+            return [];
+        }
+        $persis = mb_strtoupper($teks);
+        $mirip = '%'.addcslashes($teks, '%_\\').'%';
+
+        return DB::table('dms_roster_karyawan')
+            ->where(static fn ($q) => $q
+                ->where('kode_sid', $persis)
+                ->orWhere('nik', $teks)
+                ->orWhere('nama', 'like', $mirip)
+                ->orWhere('kode_sid', 'like', $mirip))
+            ->orderByRaw('CASE WHEN kode_sid = ? OR nik = ? THEN 0 ELSE 1 END', [$persis, $teks])
+            ->orderBy('nama')
+            ->limit($maks + 1)
+            ->get(['kode_sid', 'nama', 'jabatan_struktural', 'kode_pt', 'site'])
+            ->map(static fn (object $r): array => [
+                'sid' => (string) $r->kode_sid,
+                'nama' => (string) $r->nama,
+                'jabatan' => (string) ($r->jabatan_struktural ?: '—'),
+                'pt' => (string) ($r->kode_pt ?: '—'),
+                'site' => (string) ($r->site ?: '—'),
+            ])
+            ->all();
     }
 
     /**
@@ -535,15 +578,74 @@ final class DmsRosterRegLiveService
      */
     private function tandaMerah(DmsRosterEvaluation $eval): array
     {
+        $format = [
+            'onsite' => 'Periode kerja %d hari (> %d) — banned 14 hari',
+            'beruntun' => 'Bekerja %d hari berturut-turut (> %d) — banned 1 hari off',
+        ];
+        $merah = [];
+
+        foreach ($this->runPelanggaran($eval) as $run) {
+            for ($k = $run['mulai']; $k <= $run['selesai']; $k++) {
+                $merah[$k] = sprintf($format[$run['kode']], $run['hari'], $run['batas']);
+            }
+        }
+
+        return $merah;
+    }
+
+    /**
+     * Kejadian pelanggaran di jendela, urut tanggal — run yang sama dengan
+     * tanda merah per hari, jadi daftar dan kalender selalu sepakat. Run yang
+     * menyentuh awal jendela ditandai "≥": panjang aslinya tidak diketahui.
+     * Murni, tanpa DB.
+     *
+     * @return list<array{jenis:string,teks:string,mulai:string,selesai:string,hari:int}>
+     */
+    public function riwayat(DmsRosterEvaluation $eval, CarbonImmutable $awal): array
+    {
+        $jenis = [
+            'onsite' => ['Periode kerja', '%s%d hari on-site tanpa cuti (maks %d)'],
+            'beruntun' => ['Bekerja berturut-turut', '%s%d hari tanpa off (maks %d)'],
+        ];
+        $out = [];
+
+        foreach ($this->runPelanggaran($eval) as $run) {
+            [$judul, $format] = $jenis[$run['kode']];
+            $out[] = [
+                'jenis' => $judul,
+                'teks' => sprintf($format, $run['mulai'] === 0 ? '≥ ' : '', $run['hari'], $run['batas']),
+                'mulai' => $awal->addDays($run['mulai'])->translatedFormat('j M'),
+                'selesai' => $awal->addDays($run['selesai'])->translatedFormat('j M'),
+                'hari' => $run['mulai'],
+            ];
+        }
+
+        usort($out, static fn (array $a, array $b): int => $a['hari'] <=> $b['hari']);
+
+        return $out;
+    }
+
+    /**
+     * Run on-site > onsite_maks dan run kerja > beruntun_maks (angka ATURAN)
+     * di seluruh pola. Kategori longgar tidak punya pelanggaran.
+     *
+     * @return list<array{kode:string,mulai:int,selesai:int,hari:int,batas:int}>
+     */
+    private function runPelanggaran(DmsRosterEvaluation $eval): array
+    {
+        if ($eval->longgar) {
+            return [];
+        }
+
         $aturan = $this->aturan();
         $p = $eval->pola;
         $n = strlen($p);
-        $merah = [];
+        $out = [];
 
         foreach ([
-            [static fn (string $c): bool => $c !== 'c', $aturan['onsite_maks'], 'Periode kerja %d hari (> %d) — banned 14 hari'],
-            [static fn (string $c): bool => $c === 'P' || $c === 'M', $aturan['beruntun_maks'], 'Bekerja %d hari berturut-turut (> %d) — banned 1 hari off'],
-        ] as [$cocok, $batas, $format]) {
+            ['onsite', static fn (string $c): bool => $c !== 'c', $aturan['onsite_maks']],
+            ['beruntun', static fn (string $c): bool => $c === 'P' || $c === 'M', $aturan['beruntun_maks']],
+        ] as [$kode, $cocok, $batas]) {
             $i = 0;
             while ($i < $n) {
                 if (! $cocok($p[$i])) {
@@ -555,16 +657,14 @@ final class DmsRosterRegLiveService
                 while ($j < $n && $cocok($p[$j])) {
                     $j++;
                 }
-                if ($j - $i > $batas && ! $eval->longgar) {
-                    for ($k = $i; $k < $j; $k++) {
-                        $merah[$k] = sprintf($format, $j - $i, $batas);
-                    }
+                if ($j - $i > $batas) {
+                    $out[] = ['kode' => $kode, 'mulai' => $i, 'selesai' => $j - 1, 'hari' => $j - $i, 'batas' => $batas];
                 }
                 $i = $j;
             }
         }
 
-        return $merah;
+        return $out;
     }
 
     /**
