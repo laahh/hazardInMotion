@@ -42,8 +42,9 @@ final class RosterMasterController extends Controller
             'ringkas' => $this->ringkas(),
             'bulanTemplate' => CarbonImmutable::now()->addMonthNoOverflow()->format('Y-m'),
             'tahunTemplate' => CarbonImmutable::now()->addMonthsNoOverflow(1)->year,
-            // Daftar perusahaan untuk template terisi otomatis; null = belum tersedia.
-            'perusahaan' => $this->karyawanAktif->perusahaan(),
+            // Daftar perusahaan langsung dari bep_vw_safety_karyawan_aktif (cache 1 jam);
+            // ?segarkan_pt=1 memaksa ambil ulang. null = view tidak terjangkau & belum ada salinan.
+            'perusahaan' => $this->karyawanAktif->perusahaan($request->boolean('segarkan_pt')),
             'perusahaanGalat' => $this->karyawanAktif->galatTerakhir(),
         ]);
     }
@@ -138,7 +139,7 @@ final class RosterMasterController extends Controller
      * Template untuk rentang bulan ?dari=YYYY-MM&sampai=YYYY-MM (maks 12 bulan,
      * mis. Januari–Desember). ?bulan=YYYY-MM lama tetap diterima (satu bulan).
      * ?perusahaan=<nama> mengisi baris karyawan perusahaan itu (SID, nama,
-     * jabatan, site); jadwalnya tinggal diisi.
+     * jabatan, site), ?site=<site> membatasi ke satu site; jadwalnya tinggal diisi.
      */
     public function template(Request $request): StreamedResponse|RedirectResponse
     {
@@ -151,15 +152,17 @@ final class RosterMasterController extends Controller
 
         // Filter perusahaan: baris karyawan terisi dari bep_vw_safety_karyawan_aktif.
         $pt = mb_substr(trim((string) $request->query('perusahaan', '')), 0, 255);
+        $site = mb_substr(trim((string) $request->query('site', '')), 0, 60);
         $karyawan = [];
         if ($pt !== '') {
-            $karyawan = $this->karyawanAktif->untukPerusahaan($pt);
+            $karyawan = $this->karyawanAktif->untukPerusahaan($pt, $site);
             if ($karyawan === null) {
                 return redirect()->route('dms.master-roster.upload')
                     ->with('error', 'Daftar karyawan aktif belum tersedia, coba lagi setelah sinkronisasi berikutnya.');
             }
             if ($karyawan === []) {
-                return redirect()->route('dms.master-roster.upload')->with('error', 'Tidak ada karyawan aktif untuk perusahaan "'.$pt.'".');
+                return redirect()->route('dms.master-roster.upload')
+                    ->with('error', 'Tidak ada karyawan aktif untuk perusahaan "'.$pt.'"'.($site !== '' ? ' di site "'.$site.'"' : '').'.');
             }
         }
 
@@ -171,6 +174,7 @@ final class RosterMasterController extends Controller
 
         $nama = 'template_master_roster_'
             .($pt !== '' ? \Illuminate\Support\Str::slug(\App\Services\Dms\Roster\DmsRosterSyncService::kodePt($pt)).'_' : '')
+            .($pt !== '' && $site !== '' ? \Illuminate\Support\Str::slug($site).'_' : '')
             .$dari->format('Y-m').($sampai->format('Y-m') !== $dari->format('Y-m') ? '_sd_'.$sampai->format('Y-m') : '').'.xlsx';
 
         return response()->streamDownload(static function () use ($writer): void {

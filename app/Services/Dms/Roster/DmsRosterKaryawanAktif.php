@@ -10,22 +10,41 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Daftar seluruh karyawan aktif (populasi.view_karyawan =
- * bcsid.bep_vw_safety_karyawan_aktif) untuk filter perusahaan di template
- * Master Roster: memilih perusahaan → template terisi SID, nama, jabatan, site.
+ * Karyawan aktif (populasi.view_karyawan = bcsid.bep_vw_safety_karyawan_aktif)
+ * untuk filter perusahaan di template Master Roster: memilih perusahaan →
+ * template terisi SID, nama, jabatan, site.
  *
- * View ini TIDAK boleh diberi WHERE (predikat terdorong ke m_karyawan 6 GB,
- * >30 dtk), jadi dibaca utuh (±7 dtk, ±23 rb baris) lalu disaring di PHP,
- * dan memuat kode_sid ganda (baris pertama menang). Karena request web di
- * server sering gagal terhubung ke OLAP, hasilnya disimpan di cache: diisi
- * dms:sync-roster-rfid (Tahap 8) dan dibaca halaman; cache kosong baru
- * mencoba langsung.
+ * Diambil LANGSUNG dari view saat dibutuhkan (permintaan user), dengan dua
+ * query kecil — bukan seluruh ±23 rb baris sekaligus, yang terlalu berat
+ * dikirim lewat koneksi web → OLAP:
+ *   perusahaan()        201 baris: nama perusahaan + jumlah karyawan
+ *   untukPerusahaan()   karyawan satu perusahaan saja (PAMA ±3.700)
+ * Keduanya ±7 dtk: view ini TIDAK boleh diberi WHERE langsung (predikat
+ * terdorong ke m_karyawan 6 GB, >30 dtk), jadi dibaca lewat CTE MATERIALIZED
+ * lalu disaring. Hasil disimpan 1 jam supaya halaman berikutnya instan.
+ *
+ * Bila OLAP tidak terjangkau, dipakai salinan lengkap terakhir yang diisi
+ * dms:sync-roster-rfid (Tahap 8, segarkan()); alasan gagalnya di galatTerakhir().
  */
 final class DmsRosterKaryawanAktif
 {
-    private const KUNCI = 'dms_roster:karyawan_aktif:v1';
+    /** Salinan lengkap dari command terjadwal — cadangan. */
+    private const KUNCI_LENGKAP = 'dms_roster:karyawan_aktif:v1';
 
-    private const KUNCI_GAGAL = 'dms_roster:karyawan_aktif:gagal:v1';
+    private const KUNCI_PT = 'dms_roster:karyawan_aktif:pt:v2';
+
+    private const KUNCI_PER_PT = 'dms_roster:karyawan_aktif:per_pt:v1:';
+
+    private const TTL_DETIK = 3600;
+
+    /**
+     * Gagal terhubung diingat sebentar: mencoba koneksi yang tidak terjangkau
+     * makan ±19 dtk, jangan sampai tiap buka halaman menunggu selama itu.
+     * "Coba ambil lagi" ($segarkan) selalu mencoba ulang.
+     */
+    private const KUNCI_GAGAL = 'dms_roster:karyawan_aktif:gagal:v2';
+
+    private const TTL_GAGAL_DETIK = 60;
 
     private ?string $galat = null;
 
@@ -34,57 +53,132 @@ final class DmsRosterKaryawanAktif
     ) {}
 
     /**
-     * @return array{diambil:string, karyawan: list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>}|null
+     * Daftar perusahaan + jumlah karyawan aktifnya, urut nama, beserta site-nya
+     * (untuk pilihan site yang mengikuti perusahaan).
+     *
+     * @return list<array{nama:string,jumlah:int,site:list<array{nama:string,jumlah:int}>}>|null
+     *         null bila view tidak terjangkau dan belum ada salinan.
      */
-    public function ambil(): ?array
+    public function perusahaan(bool $segarkan = false): ?array
     {
-        $data = Cache::get(self::KUNCI);
-        if (is_array($data)) {
-            return $data;
+        if (! $segarkan && is_array($ada = Cache::get(self::KUNCI_PT))) {
+            return $ada;
         }
-        if (is_string($gagal = Cache::get(self::KUNCI_GAGAL))) {
+        if (! $segarkan && is_string($gagal = Cache::get(self::KUNCI_GAGAL))) {
             $this->galat = $gagal;
+            $lengkap = Cache::get(self::KUNCI_LENGKAP);
 
-            return null;
+            return is_array($lengkap) ? self::hitungPerusahaan($lengkap['karyawan']) : null;
         }
 
-        return $this->segarkan();
+        try {
+            $rows = $this->olap->select(
+                "WITH k AS MATERIALIZED (
+                     SELECT trim(kode_sid) AS sid, trim(nama_perusahaan) AS perusahaan, coalesce(trim(site_dedicated), '') AS site
+                     FROM {$this->view()}
+                 )
+                 SELECT perusahaan, site, count(DISTINCT sid) AS jumlah
+                 FROM k WHERE coalesce(perusahaan, '') <> '' AND coalesce(sid, '') <> ''
+                 GROUP BY perusahaan, site",
+                [],
+                $this->timeout(),
+            );
+            $hasil = self::kelompokkan(array_map(
+                static fn (object $r): array => ['perusahaan' => (string) $r->perusahaan, 'site' => (string) $r->site, 'jumlah' => (int) $r->jumlah],
+                $rows,
+            ));
+            Cache::put(self::KUNCI_PT, $hasil, self::TTL_DETIK);
+            Cache::forget(self::KUNCI_GAGAL);
+
+            return $hasil;
+        } catch (Throwable $e) {
+            $this->catatGagal($e);
+        }
+
+        $lengkap = Cache::get(self::KUNCI_LENGKAP);
+
+        return is_array($lengkap) ? self::hitungPerusahaan($lengkap['karyawan']) : null;
     }
 
     /**
-     * Baca ulang view dari OLAP dan simpan (cache 2 hari: daftar karyawan
-     * berubah lambat, dan cadangan tetap ada bila satu putaran sync gagal).
+     * Karyawan satu perusahaan (nama persis), opsional satu site, urut site
+     * lalu nama. Site '' = semua site; site "-" = karyawan tanpa site.
+     *
+     * @return list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>|null
+     */
+    public function untukPerusahaan(string $perusahaan, string $site = ''): ?array
+    {
+        $semua = $this->karyawanPerusahaan($perusahaan);
+        if ($semua === null || $site === '') {
+            return $semua;
+        }
+        $site = $site === '-' ? '' : trim($site);
+
+        return array_values(array_filter($semua, static fn (array $k): bool => $k['site'] === $site));
+    }
+
+    /**
+     * @return list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>|null
+     */
+    private function karyawanPerusahaan(string $perusahaan): ?array
+    {
+        $kunci = self::KUNCI_PER_PT.md5($perusahaan);
+        if (is_array($ada = Cache::get($kunci))) {
+            return $ada;
+        }
+
+        try {
+            $rows = $this->olap->select(
+                "WITH k AS MATERIALIZED (
+                     SELECT trim(kode_sid) AS sid, nama, trim(nama_perusahaan) AS perusahaan,
+                            jabatan_struktural AS jabatan, site_dedicated AS site
+                     FROM {$this->view()}
+                 )
+                 SELECT * FROM k WHERE perusahaan = ?",
+                [trim($perusahaan)],
+                $this->timeout(),
+            );
+            $hasil = self::urutkan(self::rapikan($rows));
+            Cache::put($kunci, $hasil, self::TTL_DETIK);
+
+            return $hasil;
+        } catch (Throwable $e) {
+            $this->catatGagal($e);
+        }
+
+        $lengkap = Cache::get(self::KUNCI_LENGKAP);
+        if (! is_array($lengkap)) {
+            return null;
+        }
+
+        return self::urutkan(array_values(array_filter($lengkap['karyawan'], static fn (array $k): bool => $k['perusahaan'] === trim($perusahaan))));
+    }
+
+    /**
+     * Salinan lengkap untuk cadangan — dipanggil dms:sync-roster-rfid (Tahap 8),
+     * yang terhubung ke OLAP dari CLI. Ikut menyegarkan daftar perusahaan.
      *
      * @return array{diambil:string, karyawan: list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>}|null
      */
     public function segarkan(): ?array
     {
-        $view = (string) config('dms_roster.populasi.view_karyawan', 'bcsid.bep_vw_safety_karyawan_aktif');
-        if (preg_match('/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/i', $view) !== 1) {
-            $this->galat = 'dms_roster.populasi.view_karyawan tidak valid.';
-
-            return null;
-        }
-
         try {
             $rows = $this->olap->select(
-                "SELECT trim(kode_sid) AS sid, nama, nama_perusahaan AS perusahaan,
+                "SELECT trim(kode_sid) AS sid, nama, trim(nama_perusahaan) AS perusahaan,
                         jabatan_struktural AS jabatan, site_dedicated AS site
-                 FROM {$view}",
+                 FROM {$this->view()}",
                 [],
-                (int) config('dms_roster.reg_live.timeout_cari_ms', 20000),
+                $this->timeout(),
             );
         } catch (Throwable $e) {
-            $this->galat = $e->getMessage();
-            Log::warning('DmsRoster karyawan aktif gagal: '.$e->getMessage());
-            Cache::put(self::KUNCI_GAGAL, $this->galat, 300);
+            $this->catatGagal($e);
 
             return null;
         }
 
         $data = ['diambil' => now()->toDateTimeString(), 'karyawan' => self::rapikan($rows)];
-        Cache::put(self::KUNCI, $data, now()->addDays(2));
-        Cache::forget(self::KUNCI_GAGAL);
+        Cache::put(self::KUNCI_LENGKAP, $data, now()->addDays(2));
+        Cache::put(self::KUNCI_PT, self::hitungPerusahaan($data['karyawan']), self::TTL_DETIK);
 
         return $data;
     }
@@ -92,47 +186,6 @@ final class DmsRosterKaryawanAktif
     public function galatTerakhir(): ?string
     {
         return $this->galat;
-    }
-
-    /**
-     * Daftar perusahaan + jumlah karyawannya, urut nama.
-     *
-     * @return list<array{nama:string,jumlah:int}>|null  null bila daftar karyawan belum tersedia.
-     */
-    public function perusahaan(): ?array
-    {
-        $data = $this->ambil();
-        if ($data === null) {
-            return null;
-        }
-
-        $jumlah = [];
-        foreach ($data['karyawan'] as $k) {
-            if ($k['perusahaan'] !== '') {
-                $jumlah[$k['perusahaan']] = ($jumlah[$k['perusahaan']] ?? 0) + 1;
-            }
-        }
-        uksort($jumlah, 'strcasecmp');
-
-        return array_map(static fn (string $n, int $j): array => ['nama' => $n, 'jumlah' => $j], array_keys($jumlah), $jumlah);
-    }
-
-    /**
-     * Karyawan satu perusahaan (nama persis), urut site lalu nama.
-     *
-     * @return list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>|null
-     */
-    public function untukPerusahaan(string $perusahaan): ?array
-    {
-        $data = $this->ambil();
-        if ($data === null) {
-            return null;
-        }
-
-        $hasil = array_values(array_filter($data['karyawan'], static fn (array $k): bool => $k['perusahaan'] === $perusahaan));
-        usort($hasil, static fn (array $a, array $b): int => [$a['site'], $a['nama']] <=> [$b['site'], $b['nama']]);
-
-        return $hasil;
     }
 
     /**
@@ -159,5 +212,81 @@ final class DmsRosterKaryawanAktif
         }
 
         return array_values($out);
+    }
+
+    /**
+     * @param  list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>  $karyawan
+     * @return list<array{nama:string,jumlah:int,site:list<array{nama:string,jumlah:int}>}>
+     */
+    private static function hitungPerusahaan(array $karyawan): array
+    {
+        $baris = [];
+        foreach ($karyawan as $k) {
+            if ($k['perusahaan'] === '') {
+                continue;
+            }
+            $kunci = $k['perusahaan']."\0".$k['site'];
+            $baris[$kunci] ??= ['perusahaan' => $k['perusahaan'], 'site' => $k['site'], 'jumlah' => 0];
+            $baris[$kunci]['jumlah']++;
+        }
+
+        return self::kelompokkan(array_values($baris));
+    }
+
+    /**
+     * Baris (perusahaan, site, jumlah) → perusahaan dengan daftar site-nya,
+     * keduanya urut nama. Site kosong ditulis "-". Murni.
+     *
+     * @param  list<array{perusahaan:string,site:string,jumlah:int}>  $baris
+     * @return list<array{nama:string,jumlah:int,site:list<array{nama:string,jumlah:int}>}>
+     */
+    public static function kelompokkan(array $baris): array
+    {
+        $pt = [];
+        foreach ($baris as $b) {
+            $pt[$b['perusahaan']] ??= ['nama' => $b['perusahaan'], 'jumlah' => 0, 'site' => []];
+            $pt[$b['perusahaan']]['jumlah'] += $b['jumlah'];
+            $pt[$b['perusahaan']]['site'][] = ['nama' => $b['site'] === '' ? '-' : $b['site'], 'jumlah' => $b['jumlah']];
+        }
+        uksort($pt, 'strcasecmp');
+        foreach ($pt as &$p) {
+            usort($p['site'], static fn (array $a, array $b): int => strcasecmp($a['nama'], $b['nama']));
+        }
+        unset($p);
+
+        return array_values($pt);
+    }
+
+    /**
+     * @param  list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>  $karyawan
+     * @return list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>
+     */
+    private static function urutkan(array $karyawan): array
+    {
+        usort($karyawan, static fn (array $a, array $b): int => [$a['site'], $a['nama']] <=> [$b['site'], $b['nama']]);
+
+        return $karyawan;
+    }
+
+    private function catatGagal(Throwable $e): void
+    {
+        $this->galat = $e->getMessage();
+        Cache::put(self::KUNCI_GAGAL, $this->galat, self::TTL_GAGAL_DETIK);
+        Log::warning('DmsRoster karyawan aktif gagal: '.$e->getMessage());
+    }
+
+    private function view(): string
+    {
+        $view = (string) config('dms_roster.populasi.view_karyawan', 'bcsid.bep_vw_safety_karyawan_aktif');
+        if (preg_match('/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/i', $view) !== 1) {
+            throw new \InvalidArgumentException('dms_roster.populasi.view_karyawan tidak valid.');
+        }
+
+        return $view;
+    }
+
+    private function timeout(): int
+    {
+        return (int) config('dms_roster.reg_live.timeout_cari_ms', 20000);
     }
 }

@@ -104,7 +104,7 @@ class DmsRosterMasterServiceTest extends TestCase
         $this->assertCount(3, $hasil['galat']);
         $this->assertStringContainsString('harus diisi berdua', $hasil['galat'][0]);
         $this->assertStringContainsString('tidak sama dengan 07:00–19:00 = 12 jam', $hasil['galat'][1]);
-        $this->assertStringContainsString('tanpa Jam Check-in', $hasil['galat'][2]);
+        $this->assertStringContainsString('tanpa Jam Kerja Awal', $hasil['galat'][2]);
     }
 
     public function test_tanpa_kolom_jam_tetap_diterima(): void
@@ -232,6 +232,38 @@ class DmsRosterMasterServiceTest extends TestCase
         $this->assertSame(['C5BXK', '6H2DF'], array_column($hasil['karyawan'], 'sid'));
         $this->assertSame(['SAFETY EVALUATOR', 'BMO 2'], [$hasil['karyawan'][0]['jabatan'], $hasil['karyawan'][1]['site']]);
         $this->assertSame([], $hasil['karyawan'][0]['jadwal'], 'Template perusahaan tidak boleh berisi jadwal contoh.');
+    }
+
+    public function test_template_memakai_jam_kerja_awal_akhir_tanpa_kolom_total(): void
+    {
+        $sh = $this->svc->template(CarbonImmutable::create(2026, 11, 1))->getActiveSheet();
+
+        $this->assertSame(['Site', 'Jam Kerja Awal', 'Jam Kerja Akhir'], [$sh->getCell('F4')->getValue(), $sh->getCell('G4')->getValue(), $sh->getCell('H4')->getValue()]);
+        // Kolom tanggal pertama langsung sesudah Jam Kerja Akhir (kolom I).
+        $this->assertSame('2026-11-01', \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $sh->getCell('I4')->getValue())->format('Y-m-d'));
+    }
+
+    public function test_judul_jam_lama_check_in_out_tetap_dibaca(): void
+    {
+        // Helper sheet() memakai judul lama "Jam Check-in / Check-out / Total Jam Kerja".
+        $hasil = $this->svc->bacaSheet($this->sheet([[1, 'A1', '', '', '', '', '06:00', '18:00', 12, 'DS', 'DS', 'DS', 'DS']]));
+
+        $this->assertSame([], $hasil['galat']);
+        $this->assertSame(['masuk' => '06:00', 'keluar' => '18:00', 'menit' => 720], $hasil['karyawan'][0]['jam']);
+    }
+
+    public function test_kelompokkan_perusahaan_dan_site(): void
+    {
+        $pt = DmsRosterKaryawanAktif::kelompokkan([
+            ['perusahaan' => 'PT B', 'site' => 'LMO', 'jumlah' => 2],
+            ['perusahaan' => 'PT A', 'site' => 'BMO 2', 'jumlah' => 5],
+            ['perusahaan' => 'PT A', 'site' => '', 'jumlah' => 1],
+            ['perusahaan' => 'PT A', 'site' => 'BMO 1', 'jumlah' => 3],
+        ]);
+
+        $this->assertSame(['PT A', 'PT B'], array_column($pt, 'nama'));
+        $this->assertSame(9, $pt[0]['jumlah']);
+        $this->assertSame(['-', 'BMO 1', 'BMO 2'], array_column($pt[0]['site'], 'nama'));
     }
 
     public function test_template_bisa_dibaca_ulang_tanpa_galat(): void

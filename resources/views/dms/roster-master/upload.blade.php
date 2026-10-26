@@ -62,17 +62,28 @@
               <select id="rmPt" name="perusahaan" class="form-select form-select-sm" disabled>
                 <option>Daftar perusahaan belum tersedia</option>
               </select>
-              <span class="text-xs text-danger-600" @if ($perusahaanGalat) title="{{ $perusahaanGalat }}" @endif>
-                Data karyawan aktif belum terambil — menunggu sinkronisasi RFID berikutnya. Template kosong tetap bisa didownload.
+              <span class="d-block text-xs text-danger-600 mt-4">
+                Daftar perusahaan gagal diambil dari bep_vw_safety_karyawan_aktif{{ $perusahaanGalat ? ': '.\Illuminate\Support\Str::limit($perusahaanGalat, 160) : '.' }}
+                <a href="{{ route('dms.master-roster.upload', ['segarkan_pt' => 1]) }}" class="fw-semibold text-primary-600 ms-4">Coba ambil lagi</a>
               </span>
+              <span class="d-block text-xs text-secondary-light">Template tanpa perusahaan tetap bisa didownload.</span>
             @else
-              <select id="rmPt" name="perusahaan" class="form-select form-select-sm">
-                <option value="">— Tanpa perusahaan (template kosong + contoh) —</option>
-                @foreach ($perusahaan as $p)
-                  <option value="{{ $p['nama'] }}" @selected(old('perusahaan') === $p['nama'])>{{ $p['nama'] }} ({{ number_format($p['jumlah'], 0, ',', '.') }} karyawan)</option>
-                @endforeach
-              </select>
-              <span class="text-xs text-secondary-light">Pilih perusahaan → SID, nama, jabatan &amp; site karyawan aktifnya langsung terisi; tinggal isi kode roster per tanggal.</span>
+              <div class="row g-2">
+                <div class="col-sm-8">
+                  <select id="rmPt" name="perusahaan" class="form-select form-select-sm">
+                    <option value="">— Tanpa perusahaan (template kosong + contoh) —</option>
+                    @foreach ($perusahaan as $p)
+                      <option value="{{ $p['nama'] }}" data-site='@json($p['site'] ?? [])'>{{ $p['nama'] }} ({{ number_format($p['jumlah'], 0, ',', '.') }} karyawan)</option>
+                    @endforeach
+                  </select>
+                </div>
+                <div class="col-sm-4">
+                  <select id="rmSite" name="site" class="form-select form-select-sm" disabled aria-label="Site">
+                    <option value="">Semua site</option>
+                  </select>
+                </div>
+              </div>
+              <span class="text-xs text-secondary-light">Pilih perusahaan (dan site) → SID, nama, jabatan &amp; site karyawan aktifnya langsung terisi; tinggal isi kode roster per tanggal.</span>
             @endif
           </div>
           <div>
@@ -102,6 +113,27 @@
         (function () {
             var f = document.getElementById('rmTemplate');
             if (!f) { return; }
+
+            // Pilihan site mengikuti perusahaan terpilih (daftar site dibawa data-site).
+            var pt = document.getElementById('rmPt');
+            var site = document.getElementById('rmSite');
+            if (pt && site) {
+                var isiSite = function () {
+                    var opsi = pt.options[pt.selectedIndex];
+                    var daftar = [];
+                    try { daftar = JSON.parse((opsi && opsi.dataset.site) || '[]'); } catch (err) { daftar = []; }
+                    site.innerHTML = '<option value="">Semua site</option>';
+                    daftar.forEach(function (s) {
+                        var o = document.createElement('option');
+                        o.value = s.nama;
+                        o.textContent = (s.nama === '-' ? '(tanpa site)' : s.nama) + ' (' + Number(s.jumlah).toLocaleString('id-ID') + ')';
+                        site.appendChild(o);
+                    });
+                    site.disabled = pt.value === '' || daftar.length === 0;
+                };
+                pt.addEventListener('change', isiSite);
+                isiSite();
+            }
             f.addEventListener('submit', function (e) {
                 var d = f.dari.value.split('-'), s = f.sampai.value.split('-');
                 var selisih = (+s[0] - +d[0]) * 12 + (+s[1] - +d[1]);
@@ -115,11 +147,12 @@
             // Tombol "Setahun …" ikut membawa perusahaan yang sedang dipilih.
             f.querySelectorAll('[data-rm-cepat]').forEach(function (btn) {
                 btn.addEventListener('click', function (e) {
-                    var pt = f.perusahaan && !f.perusahaan.disabled ? f.perusahaan.value : '';
-                    if (!pt) { return; }
+                    var ptNilai = f.perusahaan && !f.perusahaan.disabled ? f.perusahaan.value : '';
+                    if (!ptNilai) { return; }
                     e.preventDefault();
                     var u = new URL(btn.href, location.href);
-                    u.searchParams.set('perusahaan', pt);
+                    u.searchParams.set('perusahaan', ptNilai);
+                    if (f.site && !f.site.disabled && f.site.value) { u.searchParams.set('site', f.site.value); }
                     location.href = u.toString();
                 });
             });
@@ -128,7 +161,7 @@
 
         <div class="alert alert-info bg-info-100 text-info-600 border-info-100 px-16 py-12 mt-24 mb-0 radius-8 text-sm">
           <strong>Format "ROSTER KERJA KARYAWAN":</strong> baris tanggal di judul kolom berisi tanggal asli
-          (untuk bulan lain cukup ganti tanggal pertama di template); judul kolom No, SID, Nama Karyawan, Perusahaan, Jabatan, Site, Jam Check-in, Jam Check-out, Total Jam Kerja,
+          (untuk bulan lain cukup ganti tanggal pertama di template); judul kolom No, SID, Nama Karyawan, Perusahaan, Jabatan, Site, Jam Kerja Awal, Jam Kerja Akhir,
           lalu satu kolom per tanggal berurutan. Kolom jam boleh kosong = ikut jam bawaan kode
           ({{ collect(\App\Services\Dms\Roster\DmsRosterMasterService::KODE)->filter(fn ($k) => $k[2] !== null)->map(fn ($k, $kode) => $kode.' '.$k[2].'–'.$k[3])->implode(', ') }}).
           Kode: @foreach (\App\Services\Dms\Roster\DmsRosterMasterService::KODE as $kodeInfo => [$ketInfo])<b>{{ $kodeInfo }}</b> ({{ $ketInfo }}){{ $loop->last ? '' : ', ' }}@endforeach;
