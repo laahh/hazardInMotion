@@ -30,9 +30,9 @@ use Throwable;
  * sampai kemarin — tidak dianggap off, supaya run kerjanya tidak terputus palsu.
  *
  * Master karyawan (nama, jabatan, kategori, perusahaan, populasi wajib_cek)
- * dibaca dari dms_roster_karyawan, dibatasi ke PT di config
- * dms_roster.reg_live.kode_pt (tujuh PT yang punya desain roster), dan tanpa
- * karyawan yang sudah tercatat di sid_roster_banned_master (sudah treatment).
+ * dibaca dari dms_roster_karyawan — semua perusahaan, atau hanya PT di config
+ * dms_roster.reg_live.kode_pt bila diisi — dan tanpa karyawan yang masih punya
+ * kasus aktif di sid_roster_banned_master.
  */
 final class DmsRosterRegLiveService
 {

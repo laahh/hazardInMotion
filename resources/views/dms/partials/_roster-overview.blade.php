@@ -53,7 +53,7 @@
     // ── Empat tile: aturan banned per hari ini, langsung dari RFID ────────
     // Sumbernya DmsRosterRegLiveService ($regTerkiniLive) — angka yang sama
     // dengan modal detailnya. Persen dihitung terhadap karyawan yang benar-
-    // benar dinilai aturan ini (7 PT, tanpa master banned), bukan total
+    // benar dinilai aturan ini (semua PT, tanpa master banned aktif), bukan total
     // karyawan di kartu kiri.
     $regKini = $regTerkiniLive ?? null;
     // Hasil terakhir dipakai karena pembaruan dari RFID gagal → tampilkan
@@ -142,7 +142,7 @@
 
     // ── Daftar karyawan perlu tindakan ────────────────────────────────────
     // = yang harus di-banned sekarang: "Pelanggaran periode kerja > 70 hari"
-    // dari RFID langsung — daftar yang SAMA dengan tile & modalnya (7 PT,
+    // dari RFID langsung — daftar yang SAMA dengan tile & modalnya (semua PT,
     // tanpa master banned), sudah urut periode terpanjang lebih dulu.
     // Tanpa data RFID kartu menampilkan keadaan kosong, bukan nama contoh.
     $perluTindakan = $regKini['daftar']['onsite'] ?? [];

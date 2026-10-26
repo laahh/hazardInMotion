@@ -227,10 +227,11 @@ return [
         // Memori kerja per query agregasi (bawaan server 4 MB → tumpah ke disk).
         'work_mem' => '64MB',
 
-        // Hanya perusahaan ini yang ditampilkan di kartu aturan banned —
-        // ketujuh PT yang punya desain roster di blok 'perusahaan'.
-        // Dicocokkan ke dms_roster_karyawan.kode_pt.
-        'kode_pt' => ['PAMA', 'BUMA', 'FAD', 'KDC', 'MTN', 'MTL', 'BAR'],
+        // Batasi kartu aturan banned ke kode PT tertentu (dms_roster_karyawan.kode_pt).
+        // Kosong = SEMUA perusahaan (permintaan user 2026-10-26; sebelumnya hanya
+        // tujuh PT ber-desain roster: PAMA, BUMA, FAD, KDC, MTN, MTL, BAR).
+        // PT di luar blok 'perusahaan' dinilai mapping dengan thr_default/map_default.
+        'kode_pt' => [],
 
         // Karyawan yang punya kasus AKTIF di sid_roster_banned_master (belum
         // di-unban) tidak dimunculkan lagi. Dicocokkan lewat SID/NIK. Kasus
