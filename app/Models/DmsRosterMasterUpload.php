@@ -35,6 +35,8 @@ class DmsRosterMasterUpload extends Model
         'direview_oleh',
         'direview_pada',
         'catatan_review',
+        'ttd_path',
+        'ttd_sumber',
     ];
 
     protected $casts = [

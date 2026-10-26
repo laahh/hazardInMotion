@@ -16,6 +16,16 @@
   @endforeach
   .rm-kosong { background: #F8FAFC; }
   .rm-libur { color: #DC2626 !important; }
+
+  /* Tanda tangan approver (signature_pad). */
+  .rm-ttd-kanvas { position: relative; height: 200px; border: 1.5px dashed #94A3B8; border-radius: 10px; background: #fff; touch-action: none; }
+  .rm-ttd-kanvas canvas { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 10px; cursor: crosshair; }
+  .rm-ttd-garis { position: absolute; left: 24px; right: 24px; bottom: 44px; border-bottom: 1px solid #CBD5E1; pointer-events: none; }
+  .rm-ttd-petunjuk { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; font-size: 12px; color: #94A3B8; pointer-events: none; }
+  .rm-ttd-pratinjau { max-height: 160px; max-width: 100%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 6px; background: #fff; }
+  .rm-ttd-hasil img { max-height: 110px; max-width: 280px; display: block; }
+  .rm-tolak { border-left: 1px solid #EEF2F6; padding-left: 24px; }
+  @media (max-width: 1199px) { .rm-tolak { border-left: 0; padding-left: 0; border-top: 1px solid #EEF2F6; padding-top: 16px; } }
   /* Awal bulan pada rentang panjang (template bisa sampai setahun). */
   .rm-grid .rm-bulan { box-shadow: inset 2px 0 0 #1F3864; }
   .rm-bulan__label { font-size: 9.5px; font-weight: 800; color: #1F3864; text-transform: uppercase; }
@@ -79,31 +89,13 @@
   <div class="col-xxl-4">
     <div class="card radius-8 border-0 shadow-sm h-100">
       <div class="card-body p-24">
+        <h6 class="text-md fw-semibold mb-8">Status</h6>
         @if ($upload->isPending())
-          <h6 class="text-md fw-semibold mb-8">Approval</h6>
-          @if ($tumpang > 0)
-            <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-12 py-8 mb-12 radius-8 text-sm">
-              {{ number_format($tumpang, 0, ',', '.') }} jadwal di roster ini bertumpuk dengan roster lain yang sudah disetujui
-              (SID &amp; tanggal sama). Bila disetujui, roster ini yang berlaku untuk tanggal-tanggal itu.
-            </div>
-          @endif
-          <form action="{{ route('dms.master-roster.approve', $upload->id) }}" method="POST" class="mb-12">
-            @csrf
-            <textarea name="catatan_review" rows="2" class="form-control form-control-sm mb-8" maxlength="1000" placeholder="Catatan (opsional)"></textarea>
-            <button type="submit" class="btn btn-success-600 radius-8 w-100 d-inline-flex align-items-center justify-content-center gap-1"
-                    onclick="return confirm('Setujui roster ini?');">
-              <iconify-icon icon="solar:check-circle-bold"></iconify-icon>Setujui
-            </button>
-          </form>
-          <form action="{{ route('dms.master-roster.reject', $upload->id) }}" method="POST">
-            @csrf
-            <textarea name="catatan_review" rows="2" class="form-control form-control-sm mb-8" maxlength="1000" placeholder="Alasan penolakan (wajib)" required></textarea>
-            <button type="submit" class="btn btn-outline-danger radius-8 w-100 d-inline-flex align-items-center justify-content-center gap-1">
-              <iconify-icon icon="solar:close-circle-bold"></iconify-icon>Tolak
-            </button>
-          </form>
+          <p class="text-sm text-secondary-light mb-12">Periksa jadwal di bawah, lalu setujui dengan tanda tangan atau tolak dengan alasan.</p>
+          <a href="#rmApproval" class="btn btn-primary-600 radius-8 w-100 d-inline-flex align-items-center justify-content-center gap-1">
+            <iconify-icon icon="solar:pen-new-square-bold"></iconify-icon>Ke tanda tangan &amp; approval
+          </a>
         @else
-          <h6 class="text-md fw-semibold mb-8">Status</h6>
           <p class="text-sm text-secondary-light mb-0">Roster ini sudah {{ mb_strtolower($label) }}.</p>
         @endif
 
@@ -185,4 +177,203 @@
     </div>
   </div>
 </div>
+
+{{-- ══════════ APPROVAL + TANDA TANGAN (di bawah tabel jadwal) ══════════ --}}
+<div class="card radius-8 border-0 shadow-sm mt-24" id="rmApproval">
+  <div class="card-header border-bottom bg-base py-16 px-24">
+    <h6 class="text-lg fw-semibold mb-4">Approval &amp; tanda tangan</h6>
+    <p class="text-sm text-secondary-light mb-0">
+      {{ $upload->judul }} &middot; {{ $upload->periode_mulai->format('d/m/Y') }} – {{ $upload->periode_selesai->format('d/m/Y') }}
+      &middot; {{ number_format($upload->jumlah_karyawan, 0, ',', '.') }} karyawan
+    </p>
+  </div>
+  <div class="card-body p-24">
+    @if ($upload->isPending())
+      @if ($tumpang > 0)
+        <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-12 py-8 mb-16 radius-8 text-sm">
+          {{ number_format($tumpang, 0, ',', '.') }} jadwal di roster ini bertumpuk dengan roster lain yang sudah disetujui
+          (SID &amp; tanggal sama). Bila disetujui, roster ini yang berlaku untuk tanggal-tanggal itu.
+        </div>
+      @endif
+
+      <div class="row gy-4">
+        <div class="col-xl-7">
+          <form action="{{ route('dms.master-roster.approve', $upload->id) }}" method="POST" enctype="multipart/form-data" id="rmFormSetuju">
+            @csrf
+            <input type="hidden" name="ttd_mode" value="gambar" data-ttd-mode>
+            <input type="hidden" name="ttd_data" data-ttd-data>
+
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-8">
+              <span class="fw-semibold text-sm">Tanda tangan approver <span class="text-danger-600">*</span></span>
+              <div class="btn-group btn-group-sm" role="tablist" aria-label="Cara tanda tangan">
+                <button type="button" class="btn btn-primary-600" data-ttd-tab="gambar" aria-pressed="true">
+                  <iconify-icon icon="solar:pen-bold" class="align-middle"></iconify-icon> Gambar
+                </button>
+                <button type="button" class="btn btn-outline-primary-600" data-ttd-tab="upload" aria-pressed="false">
+                  <iconify-icon icon="solar:upload-bold" class="align-middle"></iconify-icon> Upload gambar
+                </button>
+              </div>
+            </div>
+
+            <div data-ttd-panel="gambar">
+              <div class="rm-ttd-kanvas">
+                <canvas data-ttd-canvas aria-label="Area tanda tangan"></canvas>
+                <span class="rm-ttd-garis" aria-hidden="true"></span>
+                <span class="rm-ttd-petunjuk" data-ttd-petunjuk>Tanda tangan di sini (mouse, jari, atau stylus)</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mt-8">
+                <span class="text-xs text-secondary-light">{{ auth()->user()?->name }} &middot; {{ now()->format('d/m/Y') }}</span>
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-secondary radius-8" data-ttd-undo>Batalkan goresan</button>
+                  <button type="button" class="btn btn-sm btn-outline-danger radius-8" data-ttd-hapus>Hapus</button>
+                </div>
+              </div>
+            </div>
+
+            <div data-ttd-panel="upload" hidden>
+              <input type="file" name="ttd_file" accept="image/png,image/jpeg" class="form-control" data-ttd-file>
+              <span class="text-xs text-secondary-light">PNG / JPG, maks 2 MB — sebaiknya latar putih atau transparan.</span>
+              <img alt="Pratinjau tanda tangan" class="rm-ttd-pratinjau mt-8" data-ttd-pratinjau hidden>
+            </div>
+
+            <textarea name="catatan_review" rows="2" class="form-control form-control-sm mt-16" maxlength="1000" placeholder="Catatan persetujuan (opsional)">{{ old('catatan_review') }}</textarea>
+            <span class="d-block text-sm text-danger-600 mt-8" data-ttd-galat hidden></span>
+            <button type="submit" class="btn btn-success-600 radius-8 mt-12 d-inline-flex align-items-center gap-1">
+              <iconify-icon icon="solar:check-circle-bold"></iconify-icon>Setujui &amp; tanda tangani
+            </button>
+          </form>
+        </div>
+
+        <div class="col-xl-5">
+          <form action="{{ route('dms.master-roster.reject', $upload->id) }}" method="POST" class="rm-tolak">
+            @csrf
+            <span class="fw-semibold text-sm d-block mb-8">Tolak roster</span>
+            <textarea name="catatan_review" rows="4" class="form-control form-control-sm mb-8" maxlength="1000" placeholder="Alasan penolakan (wajib)" required></textarea>
+            <button type="submit" class="btn btn-outline-danger radius-8 d-inline-flex align-items-center gap-1"
+                    onclick="return confirm('Tolak roster ini?');">
+              <iconify-icon icon="solar:close-circle-bold"></iconify-icon>Tolak
+            </button>
+          </form>
+        </div>
+      </div>
+    @elseif ($upload->status === 'APPROVED')
+      <div class="d-flex flex-wrap gap-24 align-items-end">
+        <div class="rm-ttd-hasil">
+          <span class="d-block text-xs text-secondary-light mb-4">Disetujui oleh</span>
+          @if ($upload->ttd_path)
+            <img src="{{ route('dms.master-roster.ttd', $upload->id) }}" alt="Tanda tangan {{ $upload->direview_oleh }}">
+          @else
+            <span class="text-secondary-light text-sm">(tanpa tanda tangan)</span>
+          @endif
+          <span class="d-block fw-semibold mt-4">{{ $upload->direview_oleh }}</span>
+          <span class="d-block text-xs text-secondary-light">
+            {{ $upload->direview_pada?->format('d/m/Y H:i') }}
+            @if ($upload->ttd_sumber) &middot; {{ $upload->ttd_sumber === 'UPLOAD' ? 'gambar di-upload' : 'digambar' }} @endif
+          </span>
+        </div>
+        @if ($upload->catatan_review)
+          <div class="text-sm"><span class="d-block text-secondary-light text-xs">Catatan</span>{{ $upload->catatan_review }}</div>
+        @endif
+      </div>
+    @else
+      <p class="text-sm mb-0">Ditolak oleh <b>{{ $upload->direview_oleh }}</b> · {{ $upload->direview_pada?->format('d/m/Y H:i') }}
+        @if ($upload->catatan_review) — <i>{{ $upload->catatan_review }}</i> @endif</p>
+    @endif
+  </div>
+</div>
+@endsection
+
+@section('page-scripts')
+@if ($upload->isPending())
+{{-- signature_pad (szimek) — tanda tangan digambar di canvas, disimpan PNG. --}}
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    var form = document.getElementById('rmFormSetuju');
+    if (!form) { return; }
+
+    var canvas = form.querySelector('[data-ttd-canvas]');
+    var mode = form.querySelector('[data-ttd-mode]');
+    var data = form.querySelector('[data-ttd-data]');
+    var file = form.querySelector('[data-ttd-file]');
+    var pratinjau = form.querySelector('[data-ttd-pratinjau]');
+    var petunjuk = form.querySelector('[data-ttd-petunjuk]');
+    var galat = form.querySelector('[data-ttd-galat]');
+
+    function tampilGalat(teks) {
+        galat.textContent = teks;
+        galat.hidden = !teks;
+    }
+
+    if (typeof SignaturePad === 'undefined') {
+        tampilGalat('Library tanda tangan gagal dimuat (cek koneksi internet). Gunakan tab "Upload gambar".');
+        return;
+    }
+
+    var pad = new SignaturePad(canvas, { backgroundColor: 'rgba(255,255,255,0)', penColor: '#0F172A', minWidth: 0.8, maxWidth: 2.6 });
+    pad.addEventListener('beginStroke', function () { petunjuk.hidden = true; tampilGalat(''); });
+
+    // Canvas mengikuti lebar kotak & kerapatan layar; goresan dipertahankan saat diubah ukurannya.
+    function sesuaikan() {
+        var rasio = Math.max(window.devicePixelRatio || 1, 1);
+        var goresan = pad.toData();
+        canvas.width = canvas.offsetWidth * rasio;
+        canvas.height = canvas.offsetHeight * rasio;
+        canvas.getContext('2d').scale(rasio, rasio);
+        pad.clear();
+        pad.fromData(goresan);
+    }
+    window.addEventListener('resize', sesuaikan);
+    sesuaikan();
+
+    form.querySelector('[data-ttd-hapus]').addEventListener('click', function () { pad.clear(); petunjuk.hidden = false; });
+    form.querySelector('[data-ttd-undo]').addEventListener('click', function () {
+        var goresan = pad.toData();
+        goresan.pop();
+        pad.fromData(goresan);
+        petunjuk.hidden = goresan.length > 0;
+    });
+
+    form.querySelectorAll('[data-ttd-tab]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var pilih = btn.dataset.ttdTab;
+            mode.value = pilih;
+            form.querySelectorAll('[data-ttd-tab]').forEach(function (b) {
+                var aktif = b === btn;
+                b.classList.toggle('btn-primary-600', aktif);
+                b.classList.toggle('btn-outline-primary-600', !aktif);
+                b.setAttribute('aria-pressed', aktif ? 'true' : 'false');
+            });
+            form.querySelectorAll('[data-ttd-panel]').forEach(function (p) { p.hidden = p.dataset.ttdPanel !== pilih; });
+            if (pilih === 'gambar') { sesuaikan(); }
+            tampilGalat('');
+        });
+    });
+
+    file.addEventListener('change', function () {
+        var f = file.files && file.files[0];
+        if (!f) { pratinjau.hidden = true; return; }
+        if (!/^image\/(png|jpeg)$/.test(f.type)) { tampilGalat('File harus PNG atau JPG.'); file.value = ''; return; }
+        if (f.size > 2 * 1024 * 1024) { tampilGalat('File tanda tangan maksimal 2 MB.'); file.value = ''; return; }
+        tampilGalat('');
+        pratinjau.src = URL.createObjectURL(f);
+        pratinjau.hidden = false;
+    });
+
+    form.addEventListener('submit', function (e) {
+        if (mode.value === 'gambar') {
+            if (pad.isEmpty()) { e.preventDefault(); tampilGalat('Tanda tangan belum digambar.'); return; }
+            data.value = pad.toDataURL('image/png');
+            file.value = '';
+        } else {
+            if (!file.files || !file.files.length) { e.preventDefault(); tampilGalat('Pilih file gambar tanda tangan.'); return; }
+            data.value = '';
+        }
+        if (!window.confirm('Setujui roster ini dengan tanda tangan tersebut?')) { e.preventDefault(); }
+    });
+})();
+</script>
+@endif
 @endsection

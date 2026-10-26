@@ -355,10 +355,16 @@ final class DmsRosterMasterService
     /**
      * Setujui atau tolak upload yang masih PENDING.
      */
-    public function review(DmsRosterMasterUpload $upload, bool $setuju, ?string $catatan, string $oleh): void
+    /**
+     * @param  array{path:string,sumber:string}|null  $ttd  Hasil simpanTtd(); wajib untuk persetujuan.
+     */
+    public function review(DmsRosterMasterUpload $upload, bool $setuju, ?string $catatan, string $oleh, ?array $ttd = null): void
     {
         if (! $upload->isPending()) {
             throw new \RuntimeException('Roster ini sudah direview ('.$upload->status.').');
+        }
+        if ($setuju && $ttd === null) {
+            throw new \RuntimeException('Persetujuan wajib disertai tanda tangan.');
         }
 
         $upload->update([
@@ -366,7 +372,51 @@ final class DmsRosterMasterService
             'direview_oleh' => $oleh,
             'direview_pada' => now(),
             'catatan_review' => $catatan,
+            'ttd_path' => $ttd['path'] ?? null,
+            'ttd_sumber' => $ttd['sumber'] ?? null,
         ]);
+    }
+
+    /** Batas ukuran gambar tanda tangan (byte), digambar maupun di-upload. */
+    public const MAKS_TTD_BYTE = 2 * 1024 * 1024;
+
+    /**
+     * Simpan tanda tangan approver: PNG dari canvas signature_pad (data URL)
+     * atau file gambar yang di-upload. Isi file dicek benar-benar gambar
+     * PNG/JPEG (bukan sekadar ekstensinya).
+     *
+     * @return array{path:string,sumber:string}
+     */
+    public function simpanTtd(DmsRosterMasterUpload $upload, ?string $dataUrl, ?UploadedFile $file): array
+    {
+        if ($file !== null) {
+            $isi = (string) file_get_contents($file->getRealPath());
+            $sumber = 'UPLOAD';
+        } else {
+            if ($dataUrl === null || preg_match('#^data:image/png;base64,([A-Za-z0-9+/=]+)$#', $dataUrl, $m) !== 1) {
+                throw new \RuntimeException('Tanda tangan belum digambar.');
+            }
+            $isi = (string) base64_decode($m[1], true);
+            $sumber = 'GAMBAR';
+        }
+
+        if ($isi === '' || strlen($isi) > self::MAKS_TTD_BYTE) {
+            throw new \RuntimeException('Gambar tanda tangan kosong atau lebih dari 2 MB.');
+        }
+        $info = @getimagesizefromstring($isi);
+        $ekstensi = match ($info[2] ?? null) {
+            IMAGETYPE_PNG => 'png',
+            IMAGETYPE_JPEG => 'jpg',
+            default => null,
+        };
+        if ($ekstensi === null) {
+            throw new \RuntimeException('Tanda tangan harus berupa gambar PNG atau JPG.');
+        }
+
+        $path = 'roster-master/'.$upload->id.'/ttd-approval.'.$ekstensi;
+        Storage::disk('local')->put($path, $isi);
+
+        return ['path' => $path, 'sumber' => $sumber];
     }
 
     /**

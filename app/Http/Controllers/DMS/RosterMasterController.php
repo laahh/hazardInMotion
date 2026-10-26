@@ -195,19 +195,48 @@ final class RosterMasterController extends Controller
         return Storage::disk('local')->download($upload->path_file, $upload->nama_file);
     }
 
+    /**
+     * Gambar tanda tangan approver (disimpan di disk local, tidak publik).
+     */
+    public function ttd(int $id): \Symfony\Component\HttpFoundation\Response
+    {
+        $upload = DmsRosterMasterUpload::findOrFail($id);
+        abort_unless($upload->ttd_path && Storage::disk('local')->exists($upload->ttd_path), 404);
+
+        return Storage::disk('local')->response($upload->ttd_path, null, ['Cache-Control' => 'private, max-age=86400']);
+    }
+
     private function review(Request $request, int $id, bool $setuju): RedirectResponse
     {
         $data = $request->validate([
             'catatan_review' => [$setuju ? 'nullable' : 'required', 'string', 'max:1000'],
+            // Persetujuan: tanda tangan digambar (data URL PNG) ATAU file gambar.
+            'ttd_mode' => [$setuju ? 'required' : 'nullable', 'in:gambar,upload'],
+            'ttd_data' => ['nullable', 'string', 'max:3000000'],
+            'ttd_file' => ['nullable', 'file', 'mimes:png,jpg,jpeg', 'max:2048'],
         ], [
             'catatan_review.required' => 'Alasan penolakan wajib diisi.',
+            'ttd_mode.required' => 'Persetujuan wajib disertai tanda tangan.',
+            'ttd_file.mimes' => 'File tanda tangan harus PNG atau JPG.',
+            'ttd_file.max' => 'File tanda tangan maksimal 2 MB.',
         ]);
         $upload = DmsRosterMasterUpload::findOrFail($id);
 
         try {
-            $this->service->review($upload, $setuju, $data['catatan_review'] ?? null, $this->pengguna());
+            $ttd = null;
+            if ($setuju) {
+                if ($data['ttd_mode'] === 'upload' && ! $request->hasFile('ttd_file')) {
+                    throw new RuntimeException('Pilih file gambar tanda tangan untuk di-upload.');
+                }
+                $ttd = $this->service->simpanTtd(
+                    $upload,
+                    $data['ttd_mode'] === 'gambar' ? ($data['ttd_data'] ?? null) : null,
+                    $data['ttd_mode'] === 'upload' ? $request->file('ttd_file') : null,
+                );
+            }
+            $this->service->review($upload, $setuju, $data['catatan_review'] ?? null, $this->pengguna(), $ttd);
         } catch (RuntimeException $e) {
-            return back()->with('error', $e->getMessage());
+            return back()->withInput($request->except('ttd_data', 'ttd_file'))->with('error', $e->getMessage());
         }
 
         return redirect()

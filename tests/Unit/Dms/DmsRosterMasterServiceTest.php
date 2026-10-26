@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Dms;
 
+use App\Models\DmsRosterMasterUpload;
 use App\Services\Dms\Roster\DmsRosterKaryawanAktif;
 use App\Services\Dms\Roster\DmsRosterMasterService;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 use Tests\TestCase;
 
 /**
@@ -264,6 +268,46 @@ class DmsRosterMasterServiceTest extends TestCase
         $this->assertSame(['PT A', 'PT B'], array_column($pt, 'nama'));
         $this->assertSame(9, $pt[0]['jumlah']);
         $this->assertSame(['-', 'BMO 1', 'BMO 2'], array_column($pt[0]['site'], 'nama'));
+    }
+
+    public function test_tanda_tangan_digambar_dan_upload_disimpan_sebagai_gambar(): void
+    {
+        Storage::fake('local');
+        $upload = new DmsRosterMasterUpload();
+        $upload->id = 77;
+
+        // PNG 1×1, bentuk yang sama dengan signature_pad toDataURL('image/png').
+        $png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+        $hasil = $this->svc->simpanTtd($upload, 'data:image/png;base64,'.$png, null);
+        $this->assertSame(['path' => 'roster-master/77/ttd-approval.png', 'sumber' => 'GAMBAR'], $hasil);
+        Storage::disk('local')->assertExists('roster-master/77/ttd-approval.png');
+
+        $jpg = UploadedFile::fake()->image('ttd.jpg', 300, 120);
+        $this->assertSame(['path' => 'roster-master/77/ttd-approval.jpg', 'sumber' => 'UPLOAD'], $this->svc->simpanTtd($upload, null, $jpg));
+    }
+
+    public function test_tanda_tangan_bukan_gambar_atau_kosong_ditolak(): void
+    {
+        Storage::fake('local');
+        $upload = new DmsRosterMasterUpload();
+        $upload->id = 78;
+
+        foreach ([
+            [null, null, 'belum digambar'],
+            ['data:image/svg+xml;base64,PHN2Zz4=', null, 'belum digambar'],
+            [null, UploadedFile::fake()->createWithContent('ttd.png', 'bukan gambar sungguhan'), 'PNG atau JPG'],
+        ] as [$data, $file, $pesan]) {
+            try {
+                $this->svc->simpanTtd($upload, $data, $file);
+                $this->fail('Seharusnya ditolak: '.$pesan);
+            } catch (RuntimeException $e) {
+                $this->assertStringContainsString($pesan, $e->getMessage());
+            }
+        }
+
+        $pending = new DmsRosterMasterUpload(['status' => DmsRosterMasterUpload::STATUS_PENDING]);
+        $this->expectExceptionMessage('wajib disertai tanda tangan');
+        $this->svc->review($pending, true, null, 'uji', null);
     }
 
     public function test_template_bisa_dibaca_ulang_tanpa_galat(): void
