@@ -44,12 +44,32 @@ final class DmsRosterMasterService
 {
     /**
      * kode => [keterangan, warna isi (RGB), jam check-in bawaan, jam check-out bawaan].
-     * Jam null = bukan hari kerja. DS/NS mengikuti Shift 1/2 di docs/overshift.md.
-     * Kode OF (Office) dihapus atas permintaan user 2026-10-26.
+     * Jam null = bukan hari kerja. Dn = hari ke-n blok Day (06:00–18:00),
+     * Nn = hari ke-n blok Night (18:00–06:00) — jam dari user 2026-10-26.
+     * D1–D13 & N1–N7 menggantikan DS/NS (permintaan user 2026-10-26); kode OF
+     * (Office) dihapus. Kode lama DS/NS tidak lagi diterima saat upload.
      */
     public const KODE = [
-        'DS' => ['Day Shift', 'FFE699', '07:00', '19:00'],
-        'NS' => ['Night Shift', '9DC3E6', '19:00', '07:00'],
+        'D1' => ['Day 1', 'FFE699', '06:00', '18:00'],
+        'D2' => ['Day 2', 'FFE699', '06:00', '18:00'],
+        'D3' => ['Day 3', 'FFE699', '06:00', '18:00'],
+        'D4' => ['Day 4', 'FFE699', '06:00', '18:00'],
+        'D5' => ['Day 5', 'FFE699', '06:00', '18:00'],
+        'D6' => ['Day 6', 'FFE699', '06:00', '18:00'],
+        'D7' => ['Day 7', 'FFE699', '06:00', '18:00'],
+        'D8' => ['Day 8', 'FFE699', '06:00', '18:00'],
+        'D9' => ['Day 9', 'FFE699', '06:00', '18:00'],
+        'D10' => ['Day 10', 'FFE699', '06:00', '18:00'],
+        'D11' => ['Day 11', 'FFE699', '06:00', '18:00'],
+        'D12' => ['Day 12', 'FFE699', '06:00', '18:00'],
+        'D13' => ['Day 13', 'FFE699', '06:00', '18:00'],
+        'N1' => ['Night 1', '9DC3E6', '18:00', '06:00'],
+        'N2' => ['Night 2', '9DC3E6', '18:00', '06:00'],
+        'N3' => ['Night 3', '9DC3E6', '18:00', '06:00'],
+        'N4' => ['Night 4', '9DC3E6', '18:00', '06:00'],
+        'N5' => ['Night 5', '9DC3E6', '18:00', '06:00'],
+        'N6' => ['Night 6', '9DC3E6', '18:00', '06:00'],
+        'N7' => ['Night 7', '9DC3E6', '18:00', '06:00'],
         'OFF' => ['Off / libur', 'D9D9D9', null, null],
         'CT' => ['Cuti', 'F4B183', null, null],
         'S' => ['Sakit', 'FF9999', null, null],
@@ -535,7 +555,7 @@ final class DmsRosterMasterService
         $sh->getStyle($this->kolom($c - 1).'2')->getFont()->setBold(true);
         $sh->setCellValue($this->kolom($c - 1).'3', 'Jam:');
         $sh->getStyle($this->kolom($c - 1).'3')->getFont()->setBold(true);
-        foreach (self::KODE as $kode => [$ket, $warna, $masuk, $keluar]) {
+        foreach (self::legenda() as [$kode, $ket, $warna, $masuk, $keluar]) {
             $sel = $this->kolom($c).'2';
             $sh->setCellValue($sel, $kode);
             $sh->getStyle($sel)->getFont()->setBold(true);
@@ -548,7 +568,14 @@ final class DmsRosterMasterService
             $sh->mergeCells($jamSel.':'.$this->kolom($c + 1).'3');
             $sh->getStyle($jamSel)->getFont()->setSize(8)->getColor()->setRGB('595959');
             $sh->getStyle($jamSel)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-            $c += 2;
+            // Kotak "D1–D13" / "N1–N7" lebih lebar dari satu kolom hari.
+            $lebar = str_contains($kode, '–') ? 3 : 2;
+            if ($lebar === 3) {
+                $sh->mergeCells($sel.':'.$this->kolom($c + 1).'2');
+                $sh->unmergeCells($jamSel.':'.$this->kolom($c + 1).'3');
+                $sh->mergeCells($jamSel.':'.$this->kolom($c + 2).'3');
+            }
+            $c += $lebar;
         }
 
         // Judul kolom identitas (digabung 3 baris).
@@ -603,9 +630,9 @@ final class DmsRosterMasterService
 
         // Baris karyawan: dari filter perusahaan (jadwal kosong), atau 3 baris contoh.
         $contoh = $karyawan === [] ? [
-            ['10023451', 'Ahmad Fauzi', 'PT Berau Coal', 'Operator HD', 'BMO 1', ['DS', 'DS', 'DS', 'DS', 'DS', 'DS', 'DS', 'OFF', 'NS', 'NS', 'NS', 'NS', 'NS', 'NS', 'OFF']],
-            ['10023452', 'Budi Santoso', 'Kontraktor A', 'Mekanik', 'BMO 1', ['NS', 'NS', 'NS', 'NS', 'NS', 'NS', 'NS', 'OFF', 'DS', 'DS', 'DS', 'DS', 'DS', 'DS', 'OFF'], '06:00', '18:00'],
-            ['10023453', 'Siti Rahmawati', 'PT Berau Coal', 'Safety Officer', 'HO', ['DS', 'DS', 'DS', 'DS', 'DS', 'OFF', 'OFF'], '07:30', '16:30'],
+            ['10023451', 'Ahmad Fauzi', 'PT Berau Coal', 'Operator HD', 'BMO 1', ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'OFF', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'OFF']],
+            ['10023452', 'Budi Santoso', 'Kontraktor A', 'Mekanik', 'BMO 1', ['N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'OFF', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'OFF'], '05:30', '17:30'],
+            ['10023453', 'Siti Rahmawati', 'PT Berau Coal', 'Safety Officer', 'HO', ['D1', 'D2', 'D3', 'D4', 'D5', 'OFF', 'OFF'], '07:30', '16:30'],
         ] : array_map(static fn (array $k): array => [$k['sid'], $k['nama'], $k['perusahaan'], $k['jabatan'], $k['site'], []], $karyawan);
         $barisAkhir = 6 + max($karyawan === [] ? 50 : 10, count($contoh) + ($karyawan === [] ? 0 : 10));
         foreach ($contoh as $i => $c0) {
@@ -697,10 +724,10 @@ final class DmsRosterMasterService
             ['Petunjuk pengisian Roster Kerja Karyawan'],
             ['1. Baris tanggal (01, 02, …) berisi tanggal asli dan harus berurutan, maks '.self::MAKS_HARI.' hari (setahun). Mengganti tanggal pertama menggeser semua tanggal; jumlah kolom tetap sesuai rentang saat download.'],
             ['2. Satu baris = satu karyawan, mulai baris 7. Kolom SID wajib; No boleh kosong.'],
-            ['3. Isi tiap hari dengan salah satu kode di bawah; sel kosong = tidak dijadwalkan.'],
+            ['3. Isi tiap hari dengan salah satu kode di bawah (pilih dari dropdown): D1–D13 = hari ke-1 s/d 13 blok Day, N1–N7 = hari ke-1 s/d 7 blok Night; sel kosong = tidak dijadwalkan.'],
             ['4. Jangan ubah judul kolom (No, SID, Nama Karyawan, Perusahaan, Jabatan, Site, Jam Kerja Awal, Jam Kerja Akhir). Hapus baris contoh sebelum upload.'],
-            ['5. Jam Kerja Awal / Akhir (HH:MM) per karyawan boleh kosong = ikut jam bawaan kode di tabel bawah. Bila diisi, berlaku untuk semua hari kerja (DS/NS) orang itu;'],
-            ['   jam akhir lebih kecil dari jam awal berarti lewat tengah malam (mis. 19:00–07:00 = 12 jam).'],
+            ['5. Jam Kerja Awal / Akhir (HH:MM) per karyawan boleh kosong = ikut jam bawaan kode di tabel bawah. Bila diisi, berlaku untuk semua hari kerja (D1–D13 / N1–N7) orang itu;'],
+            ['   jam akhir lebih kecil dari jam awal berarti lewat tengah malam (mis. 18:00–06:00 = 12 jam).'],
             ['6. File dengan satu kesalahan saja ditolak utuh beserta daftar kesalahannya.'],
             [''],
             ['Kode', 'Keterangan', 'Jam Kerja Awal', 'Jam Kerja Akhir', 'Total Jam Kerja'],
@@ -724,6 +751,35 @@ final class DmsRosterMasterService
         $buku->setActiveSheetIndex(0);
 
         return $buku;
+    }
+
+    /**
+     * Legenda kode untuk kepala template & halaman: kode berurutan yang
+     * keterangan, warna, dan jamnya sama (D1–D13, N1–N7) diringkas satu entri.
+     *
+     * @return list<array{0:string,1:string,2:string,3:?string,4:?string}>  [kode, keterangan, warna, jam awal, jam akhir]
+     */
+    public static function legenda(): array
+    {
+        $out = [];
+        foreach (self::KODE as $kode => [$ket, $warna, $masuk, $keluar]) {
+            if (preg_match('/^([A-Z]+)(\d+)$/', $kode, $m) === 1) {
+                $grup = $m[1];
+                $terakhir = end($out);
+                if ($terakhir !== false && ($terakhir['grup'] ?? null) === $grup && $terakhir[2] === $warna && $terakhir[3] === $masuk) {
+                    $i = array_key_last($out);
+                    $out[$i][0] = $terakhir['awal'].'–'.$kode;
+                    $out[$i][1] = preg_replace('/\d+$/', '', $ket).$terakhir['n_awal'].'–'.$m[2];
+                    continue;
+                }
+                $out[] = [$kode, $ket, $warna, $masuk, $keluar, 'grup' => $grup, 'awal' => $kode, 'n_awal' => $m[2]];
+
+                continue;
+            }
+            $out[] = [$kode, $ket, $warna, $masuk, $keluar];
+        }
+
+        return array_map(static fn (array $l): array => [$l[0], $l[1], $l[2], $l[3], $l[4]], $out);
     }
 
     /**
