@@ -502,7 +502,44 @@ final class DmsRosterMasterService
             ];
         }
 
+        foreach ($karyawan as &$k) {
+            [$k['jam_awal'], $k['jam_akhir']] = self::jamKaryawanDariJadwal($k['jadwal']);
+        }
+        unset($k);
+
         return ['karyawan' => array_values($karyawan), 'total' => $total];
+    }
+
+    /**
+     * Isi kolom "Jam Kerja Awal / Akhir" per karyawan, dibalik dari jam efektif
+     * per hari yang tersimpan: terisi hanya bila SEMUA hari kerjanya memakai
+     * satu pasangan jam yang sama DAN berbeda dari jam bawaan kodenya (artinya
+     * jam per karyawan diisi saat upload). Selain itu kosong, seperti template. Murni.
+     *
+     * @param  array<string, array{kode:string,masuk:?string,keluar:?string,menit:?int}>  $jadwal
+     * @return array{0:?string,1:?string}
+     */
+    /** Jam bawaan kode lama (upload sebelum D1–D13 / N1–N7) — hanya untuk membaca data lama. */
+    private const JAM_KODE_LAMA = ['DS' => ['07:00', '19:00'], 'NS' => ['19:00', '07:00']];
+
+    public static function jamKaryawanDariJadwal(array $jadwal): array
+    {
+        $pasangan = [];
+        $adaBeda = false;
+        foreach ($jadwal as $h) {
+            if ($h['masuk'] === null) {
+                continue;
+            }
+            $pasangan[$h['masuk'].'|'.$h['keluar']] = true;
+            $bawaan = isset(self::KODE[$h['kode']]) ? [self::KODE[$h['kode']][2], self::KODE[$h['kode']][3]] : (self::JAM_KODE_LAMA[$h['kode']] ?? null);
+            // Kode tak dikenal: jam bawaannya tidak diketahui, jadi tidak dianggap jam khusus.
+            $adaBeda = $adaBeda || ($bawaan !== null && ($h['masuk'] !== $bawaan[0] || $h['keluar'] !== $bawaan[1]));
+        }
+        if (count($pasangan) !== 1 || ! $adaBeda) {
+            return [null, null];
+        }
+
+        return explode('|', (string) array_key_first($pasangan));
     }
 
     /**

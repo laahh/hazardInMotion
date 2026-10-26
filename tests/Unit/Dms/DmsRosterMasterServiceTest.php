@@ -336,6 +336,28 @@ class DmsRosterMasterServiceTest extends TestCase
         $this->svc->review($pending, true, null, 'uji', null);
     }
 
+    public function test_kolom_jam_kerja_awal_akhir_di_halaman_diturunkan_dari_jadwal(): void
+    {
+        $h = static fn (string $kode, ?string $m, ?string $k): array => ['kode' => $kode, 'masuk' => $m, 'keluar' => $k, 'menit' => null];
+
+        // Semua hari kerja pakai jam bawaan kode → kolom kosong (seperti template).
+        $this->assertSame([null, null], DmsRosterMasterService::jamKaryawanDariJadwal([
+            $h('D1', '06:00', '18:00'), $h('N1', '18:00', '06:00'), $h('OFF', null, null),
+        ]));
+        // Jam khusus karyawan (sama di semua hari kerja, beda dari bawaan) → tampil.
+        $this->assertSame(['05:30', '17:30'], DmsRosterMasterService::jamKaryawanDariJadwal([
+            $h('D1', '05:30', '17:30'), $h('N1', '05:30', '17:30'), $h('CT', null, null),
+        ]));
+        // Data lama berkode DS/NS dengan jam bawaannya dulu → bukan jam khusus.
+        $this->assertSame([null, null], DmsRosterMasterService::jamKaryawanDariJadwal([
+            $h('DS', '07:00', '19:00'), $h('DS', '07:00', '19:00'),
+        ]));
+        // Jam berbeda-beda antar hari → tidak bisa diringkas jadi satu kolom.
+        $this->assertSame([null, null], DmsRosterMasterService::jamKaryawanDariJadwal([
+            $h('D1', '05:30', '17:30'), $h('D2', '06:00', '18:00'),
+        ]));
+    }
+
     public function test_template_bisa_dibaca_ulang_tanpa_galat(): void
     {
         $rows = $this->svc->template(CarbonImmutable::create(2026, 11, 1))->getActiveSheet()->toArray(null, true, false, false);

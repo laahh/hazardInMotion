@@ -4,17 +4,39 @@
 
 @section('css')
 <style>
-  .rm-grid { border-collapse: separate; border-spacing: 2px; font-size: 11.5px; }
-  .rm-grid th, .rm-grid td { white-space: nowrap; }
-  .rm-grid thead th { position: sticky; top: 0; background: #fff; z-index: 1; font-weight: 600; color: #64748B; text-align: center; padding: 4px 2px; }
-  .rm-grid .rm-id { position: sticky; left: 0; background: #fff; z-index: 2; text-align: left; padding: 4px 10px 4px 0; min-width: 220px; }
-  .rm-grid thead .rm-id { z-index: 3; }
-  .rm-sel { width: 34px; height: 24px; text-align: center; border-radius: 5px; font-weight: 700; font-size: 10.5px; }
+  /* Tabel jadwal meniru template Excel "ROSTER KERJA KARYAWAN". */
+  .rm-xl { border-collapse: separate; border-spacing: 0; font-size: 11.5px; font-family: Calibri, 'Segoe UI', sans-serif; }
+  .rm-xl th, .rm-xl td { white-space: nowrap; border-right: 1px solid #BFBFBF; border-bottom: 1px solid #BFBFBF; padding: 3px 6px; }
+  .rm-xl tr > :first-child { border-left: 1px solid #BFBFBF; }
+  .rm-xl thead tr:first-child > * { border-top: 1px solid #BFBFBF; }
+  .rm-xl thead th { position: sticky; z-index: 2; text-align: center; font-weight: 700; }
+  .rm-xl thead tr:nth-child(1) th { top: 0; }
+  .rm-xl thead tr:nth-child(2) th { top: 24px; }
+  .rm-xl thead tr:nth-child(3) th { top: 46px; }
+  .rm-xl .rm-h-id { background: #1F3864; color: #fff; vertical-align: middle; white-space: normal; line-height: 1.25; }
+  .rm-xl .rm-h-tgl { background: #fff; color: #C00000; height: 24px; min-width: 38px; }
+  .rm-xl .rm-h-hari, .rm-xl .rm-h-bln { background: #D9E1F2; color: #1F3864; height: 22px; }
+  .rm-xl .rm-minggu { background: #C00000 !important; color: #fff !important; }
+  .rm-xl .rm-c-id { background: #FFF2CC; color: #1F2937; }
+  .rm-xl .rm-c-no, .rm-xl .rm-c-sid, .rm-xl .rm-c-jam { text-align: center; }
+  /* Tiga kolom pertama (No, SID, Nama) tetap terlihat saat digulir ke kanan. */
+  .rm-xl .rm-s1, .rm-xl .rm-s2, .rm-xl .rm-s3 { position: sticky; z-index: 1; }
+  .rm-xl thead .rm-s1, .rm-xl thead .rm-s2, .rm-xl thead .rm-s3 { z-index: 4; }
+  .rm-xl .rm-s1 { left: 0; min-width: 40px; }
+  .rm-xl .rm-s2 { left: 40px; min-width: 76px; }
+  .rm-xl .rm-s3 { left: 116px; min-width: 190px; box-shadow: 2px 0 0 #8EA9DB; }
+  .rm-xl .rm-c-kode { padding: 0; text-align: center; }
+  .rm-sel { min-width: 38px; height: 22px; line-height: 22px; text-align: center; font-weight: 700; font-size: 11px; }
+  .rm-xl .rm-bulan { border-left: 2px solid #1F3864 !important; }
   /* Warna kode sama dengan template Excel (DmsRosterMasterService::KODE). */
   @foreach (\App\Services\Dms\Roster\DmsRosterMasterService::KODE as $kodeCss => [, $warnaCss])
   .rm-{{ $kodeCss }} { background: #{{ $warnaCss }}; color: #1F2937; }
   @endforeach
-  .rm-kosong { background: #F8FAFC; }
+  /* Kode lama (sebelum D1–D13 / N1–N7) tetap berwarna. */
+  .rm-DS { background: #FFE699; color: #1F2937; }
+  .rm-NS { background: #9DC3E6; color: #1F2937; }
+  .rm-lain { background: #EDEDED; color: #1F2937; }
+  .rm-kosong { background: #fff; }
   .rm-libur { color: #DC2626 !important; }
 
   /* Tanda tangan approver (signature_pad). */
@@ -26,9 +48,6 @@
   .rm-ttd-hasil img { max-height: 110px; max-width: 280px; display: block; }
   .rm-tolak { border-left: 1px solid #EEF2F6; padding-left: 24px; }
   @media (max-width: 1199px) { .rm-tolak { border-left: 0; padding-left: 0; border-top: 1px solid #EEF2F6; padding-top: 16px; } }
-  /* Awal bulan pada rentang panjang (template bisa sampai setahun). */
-  .rm-grid .rm-bulan { box-shadow: inset 2px 0 0 #1F3864; }
-  .rm-bulan__label { font-size: 9.5px; font-weight: 800; color: #1F3864; text-transform: uppercase; }
 </style>
 @endsection
 
@@ -131,36 +150,59 @@
   </div>
   <div class="card-body p-24">
     <div class="table-responsive" style="max-height:70vh">
-      <table class="rm-grid">
+      @php
+        $kelasKode = static fn (?string $kode): string => $kode === null ? 'rm-kosong'
+            : (isset(\App\Services\Dms\Roster\DmsRosterMasterService::KODE[$kode]) || in_array($kode, ['DS', 'NS'], true) ? 'rm-'.$kode : 'rm-lain');
+        $nomorAwal = ($halaman - 1) * 25;
+      @endphp
+      <table class="rm-xl">
         <thead>
           <tr>
-            <th class="rm-id">Karyawan</th>
+            <th rowspan="3" class="rm-h-id rm-s1">No</th>
+            <th rowspan="3" class="rm-h-id rm-s2">SID</th>
+            <th rowspan="3" class="rm-h-id rm-s3">Nama Karyawan</th>
+            <th rowspan="3" class="rm-h-id" style="min-width:160px">Perusahaan</th>
+            <th rowspan="3" class="rm-h-id" style="min-width:140px">Jabatan</th>
+            <th rowspan="3" class="rm-h-id" style="min-width:64px">Site</th>
+            <th rowspan="3" class="rm-h-id" style="min-width:64px">Jam Kerja Awal</th>
+            <th rowspan="3" class="rm-h-id" style="min-width:64px">Jam Kerja Akhir</th>
             @foreach ($tanggal as $t)
-              <th class="{{ $t->dayOfWeek === 0 ? 'rm-libur' : '' }} {{ $t->day === 1 && ! $loop->first ? 'rm-bulan' : '' }}" title="{{ $t->format('d/m/Y') }}">
-                @if ($t->day === 1 || $loop->first)<span class="d-block rm-bulan__label">{{ $bulanSingkat[$t->month] }}</span>@endif
-                {{ $t->format('d') }}<span class="d-block fw-normal">{{ $hariSingkat[$t->dayOfWeek] }}</span>
-              </th>
+              <th class="rm-h-tgl {{ $t->dayOfWeek === 0 ? 'rm-minggu' : '' }} {{ $t->day === 1 && ! $loop->first ? 'rm-bulan' : '' }}" title="{{ $t->format('d/m/Y') }}">{{ $t->format('d') }}</th>
+            @endforeach
+          </tr>
+          <tr>
+            @foreach ($tanggal as $t)
+              <th class="rm-h-hari {{ $t->dayOfWeek === 0 ? 'rm-minggu' : '' }} {{ $t->day === 1 && ! $loop->first ? 'rm-bulan' : '' }}">{{ $hariSingkat[$t->dayOfWeek] }}</th>
+            @endforeach
+          </tr>
+          <tr>
+            @foreach ($tanggal as $t)
+              <th class="rm-h-bln {{ $t->dayOfWeek === 0 ? 'rm-minggu' : '' }} {{ $t->day === 1 && ! $loop->first ? 'rm-bulan' : '' }}">{{ $bulanSingkat[$t->month] }}</th>
             @endforeach
           </tr>
         </thead>
         <tbody>
           @forelse ($grid['karyawan'] as $k)
             <tr>
-              <td class="rm-id">
-                <span class="fw-semibold">{{ $k['nama'] ?? '—' }}</span>
-                <span class="d-block text-secondary-light">{{ $k['sid'] }} · {{ $k['perusahaan'] ?? '—' }} · {{ $k['jabatan'] ?? '—' }} · {{ $k['site'] ?? '—' }}</span>
-              </td>
+              <td class="rm-c-id rm-c-no rm-s1">{{ $nomorAwal + $loop->iteration }}</td>
+              <td class="rm-c-id rm-c-sid rm-s2">{{ $k['sid'] }}</td>
+              <td class="rm-c-id rm-s3">{{ $k['nama'] ?? '—' }}</td>
+              <td class="rm-c-id">{{ $k['perusahaan'] ?? '—' }}</td>
+              <td class="rm-c-id">{{ $k['jabatan'] ?? '—' }}</td>
+              <td class="rm-c-id">{{ $k['site'] ?? '—' }}</td>
+              <td class="rm-c-id rm-c-jam">{{ $k['jam_awal'] ?? '' }}</td>
+              <td class="rm-c-id rm-c-jam">{{ $k['jam_akhir'] ?? '' }}</td>
               @foreach ($tanggal as $t)
                 @php
                   $h = $k['jadwal'][$t->toDateString()] ?? null;
                   $kode = $h['kode'] ?? null;
                   $jamTeks = $h && $h['masuk'] ? ' · '.$h['masuk'].'–'.$h['keluar'].' ('.round($h['menit'] / 60, 2).' jam)' : '';
                 @endphp
-                <td><div class="rm-sel {{ $kode ? 'rm-'.$kode : 'rm-kosong' }}" title="{{ $t->format('d/m/Y') }} — {{ $kode ?? 'tidak dijadwalkan' }}{{ $jamTeks }}">{{ $kode }}</div></td>
+                <td class="rm-c-kode {{ $t->day === 1 && ! $loop->first ? 'rm-bulan' : '' }}"><div class="rm-sel {{ $kelasKode($kode) }}" title="{{ $t->format('d/m/Y') }} — {{ $kode ?? 'tidak dijadwalkan' }}{{ $jamTeks }}">{{ $kode }}</div></td>
               @endforeach
             </tr>
           @empty
-            <tr><td colspan="{{ count($tanggal) + 1 }}" class="text-secondary-light py-16">Tidak ada karyawan yang cocok.</td></tr>
+            <tr><td colspan="{{ count($tanggal) + 8 }}" class="text-secondary-light py-16">Tidak ada karyawan yang cocok.</td></tr>
           @endforelse
         </tbody>
       </table>
