@@ -158,15 +158,6 @@
             });
         })();
         </script>
-
-        <div class="alert alert-info bg-info-100 text-info-600 border-info-100 px-16 py-12 mt-24 mb-0 radius-8 text-sm">
-          <strong>Format "ROSTER KERJA KARYAWAN":</strong> baris tanggal di judul kolom berisi tanggal asli
-          (untuk bulan lain cukup ganti tanggal pertama di template); judul kolom No, SID, Nama Karyawan, Perusahaan, Jabatan, Site, Jam Kerja Awal, Jam Kerja Akhir,
-          lalu satu kolom per tanggal berurutan. Kolom jam boleh kosong = ikut jam bawaan kode
-          ({{ collect(\App\Services\Dms\Roster\DmsRosterMasterService::legenda())->filter(fn ($l) => $l[3] !== null)->map(fn ($l) => $l[0].' '.$l[3].'–'.$l[4])->implode(', ') }}).
-          Kode (pilih dari dropdown): @foreach (\App\Services\Dms\Roster\DmsRosterMasterService::legenda() as [$kodeInfo, $ketInfo])<b>{{ $kodeInfo }}</b> ({{ $ketInfo }}){{ $loop->last ? '' : ', ' }}@endforeach;
-          sel kosong = tidak dijadwalkan. File dengan satu kesalahan saja ditolak utuh beserta daftar kesalahannya.
-        </div>
       </div>
     </div>
   </div>
