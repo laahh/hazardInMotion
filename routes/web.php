@@ -810,6 +810,18 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         // "Cari manual" satu karyawan di tabel scorecard: RFID 75 hari terakhir.
         Route::get('/roster-compliance/cari-manual.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'cariManual'])
             ->name('roster-compliance.cari-manual');
+        // Master Roster: upload jadwal kerja per karyawan + approval.
+        Route::prefix('master-roster')->name('master-roster.')->controller(\App\Http\Controllers\DMS\RosterMasterController::class)->group(function () {
+            Route::get('/upload', 'upload')->name('upload');
+            Route::post('/upload', 'store')->name('store');
+            Route::get('/template', 'template')->name('template');
+            Route::get('/approval', 'approval')->name('approval');
+            Route::get('/{id}', 'show')->whereNumber('id')->name('show');
+            Route::get('/{id}/file', 'file')->whereNumber('id')->name('file');
+            Route::post('/{id}/approve', 'approve')->whereNumber('id')->name('approve');
+            Route::post('/{id}/reject', 'reject')->whereNumber('id')->name('reject');
+            Route::delete('/{id}', 'destroy')->whereNumber('id')->name('destroy');
+        });
         // Panel Long Shift pengawas (docs/overshift.md) di kartu Scorecard.
         Route::get('/roster-compliance/long-shift.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'longShift'])
             ->name('roster-compliance.long-shift');

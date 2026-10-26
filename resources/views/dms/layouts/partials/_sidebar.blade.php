@@ -37,6 +37,25 @@
             ],
         ],
         [
+            'key' => 'master-roster',
+            'label' => 'Master Roster',
+            'icon' => 'solar:calendar-add-outline',
+            'items' => [
+                [
+                    'label' => 'Upload Roster',
+                    'icon' => 'solar:upload-outline',
+                    'url' => route('dms.master-roster.upload'),
+                    'active' => request()->routeIs('dms.master-roster.upload'),
+                ],
+                [
+                    'label' => 'Approval Roster',
+                    'icon' => 'solar:checklist-minimalistic-outline',
+                    'url' => route('dms.master-roster.approval'),
+                    'active' => request()->routeIs('dms.master-roster.approval') || request()->routeIs('dms.master-roster.show'),
+                ],
+            ],
+        ],
+        [
             'key' => 'fatigue-monitoring',
             'label' => 'Fatigue Monitoring',
             'icon' => 'solar:sleeping-outline',
