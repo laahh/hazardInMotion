@@ -70,67 +70,6 @@
 
 @include('dms.roster-master._alert')
 
-<div class="row gy-4 mb-24">
-  <div class="col-xxl-8">
-    <div class="card radius-8 border-0 shadow-sm h-100">
-      <div class="card-body p-24">
-        <div class="d-flex align-items-center gap-2 mb-16">
-          <span class="badge bg-{{ $warna }}-focus text-{{ $warna }}-main">{{ $label }}</span>
-          <span class="text-sm text-secondary-light">#{{ $upload->id }}</span>
-        </div>
-        <div class="row gy-3 text-sm">
-          <div class="col-sm-6"><span class="d-block text-secondary-light">Periode</span>
-            <b>{{ $upload->periode_mulai->format('d/m/Y') }} – {{ $upload->periode_selesai->format('d/m/Y') }}</b>
-            ({{ $upload->periode_mulai->diffInDays($upload->periode_selesai) + 1 }} hari)</div>
-          <div class="col-sm-6"><span class="d-block text-secondary-light">Isi</span>
-            <b>{{ number_format($upload->jumlah_karyawan, 0, ',', '.') }}</b> karyawan · <b>{{ number_format($upload->jumlah_jadwal, 0, ',', '.') }}</b> jadwal</div>
-          <div class="col-sm-6"><span class="d-block text-secondary-light">Diupload</span>
-            {{ $upload->diupload_oleh }} · {{ $upload->created_at?->format('d/m/Y H:i') }}</div>
-          <div class="col-sm-6"><span class="d-block text-secondary-light">File</span>
-            <a href="{{ route('dms.master-roster.file', $upload->id) }}" class="text-primary-600">{{ $upload->nama_file }}</a></div>
-          @if ($upload->departemen_site)
-            <div class="col-sm-6"><span class="d-block text-secondary-light">Departemen / Site</span>{{ $upload->departemen_site }}</div>
-          @endif
-          @if ($upload->catatan)
-            <div class="col-12"><span class="d-block text-secondary-light">Catatan pengupload</span>{{ $upload->catatan }}</div>
-          @endif
-          @if ($upload->direview_oleh)
-            <div class="col-12"><span class="d-block text-secondary-light">Review</span>
-              {{ $label }} oleh {{ $upload->direview_oleh }} · {{ $upload->direview_pada?->format('d/m/Y H:i') }}
-              @if ($upload->catatan_review) — <i>{{ $upload->catatan_review }}</i> @endif
-            </div>
-          @endif
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-xxl-4">
-    <div class="card radius-8 border-0 shadow-sm h-100">
-      <div class="card-body p-24">
-        <h6 class="text-md fw-semibold mb-8">Status</h6>
-        @if ($upload->isPending())
-          <p class="text-sm text-secondary-light mb-12">Periksa jadwal di bawah, lalu setujui dengan tanda tangan atau tolak dengan alasan.</p>
-          <a href="#rmApproval" class="btn btn-primary-600 radius-8 w-100 d-inline-flex align-items-center justify-content-center gap-1">
-            <iconify-icon icon="solar:pen-new-square-bold"></iconify-icon>Ke tanda tangan &amp; approval
-          </a>
-        @else
-          <p class="text-sm text-secondary-light mb-0">Roster ini sudah {{ mb_strtolower($label) }}.</p>
-        @endif
-
-        @if ($upload->status !== 'APPROVED')
-          <form action="{{ route('dms.master-roster.destroy', $upload->id) }}" method="POST" class="mt-16"
-                onsubmit="return confirm('Hapus roster ini beserta seluruh jadwalnya?');">
-            @csrf
-            @method('DELETE')
-            <button type="submit" class="btn btn-sm btn-link text-danger-600 p-0">Hapus roster ini</button>
-          </form>
-        @endif
-      </div>
-    </div>
-  </div>
-</div>
-
 <div class="card radius-8 border-0 shadow-sm">
   <div class="card-header border-bottom bg-base py-16 px-24">
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
@@ -223,11 +162,28 @@
 {{-- ══════════ APPROVAL + TANDA TANGAN (di bawah tabel jadwal) ══════════ --}}
 <div class="card radius-8 border-0 shadow-sm mt-24" id="rmApproval">
   <div class="card-header border-bottom bg-base py-16 px-24">
-    <h6 class="text-lg fw-semibold mb-4">Approval &amp; tanda tangan</h6>
-    <p class="text-sm text-secondary-light mb-0">
-      {{ $upload->judul }} &middot; {{ $upload->periode_mulai->format('d/m/Y') }} – {{ $upload->periode_selesai->format('d/m/Y') }}
-      &middot; {{ number_format($upload->jumlah_karyawan, 0, ',', '.') }} karyawan
-    </p>
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+      <div>
+        <h6 class="text-lg fw-semibold mb-4 d-flex align-items-center gap-2">
+          Approval &amp; tanda tangan
+          <span class="badge bg-{{ $warna }}-focus text-{{ $warna }}-main">{{ $label }}</span>
+        </h6>
+        <p class="text-sm text-secondary-light mb-0">
+          {{ $upload->judul }} &middot; {{ $upload->periode_mulai->format('d/m/Y') }} – {{ $upload->periode_selesai->format('d/m/Y') }}
+          &middot; {{ number_format($upload->jumlah_karyawan, 0, ',', '.') }} karyawan
+          &middot; diupload {{ $upload->diupload_oleh }} {{ $upload->created_at?->format('d/m/Y H:i') }}
+          &middot; <a href="{{ route('dms.master-roster.file', $upload->id) }}" class="text-primary-600">file asli</a>
+        </p>
+      </div>
+      @if ($upload->status !== 'APPROVED')
+        <form action="{{ route('dms.master-roster.destroy', $upload->id) }}" method="POST"
+              onsubmit="return confirm('Hapus roster ini beserta seluruh jadwalnya?');">
+          @csrf
+          @method('DELETE')
+          <button type="submit" class="btn btn-sm btn-link text-danger-600 p-0">Hapus roster ini</button>
+        </form>
+      @endif
+    </div>
   </div>
   <div class="card-body p-24">
     @if ($upload->isPending())
