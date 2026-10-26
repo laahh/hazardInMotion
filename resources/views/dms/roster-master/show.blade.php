@@ -28,6 +28,42 @@
   .rm-xl .rm-c-kode { padding: 0; text-align: center; }
   .rm-sel { min-width: 38px; height: 22px; line-height: 22px; text-align: center; font-weight: 700; font-size: 11px; }
   .rm-xl .rm-bulan { border-left: 2px solid #1F3864 !important; }
+
+  /* ── Responsif ─────────────────────────────────────────────────────────
+     ≥ 992 px : semua kolom identitas seperti template Excel.
+     < 992 px : Perusahaan, Jabatan, Site, Jam Kerja disembunyikan — isinya
+                diringkas di bawah nama, supaya kolom tanggal langsung terlihat.
+     < 576 px : No & SID ikut disembunyikan; hanya kolom Nama yang menempel kiri. */
+  .rm-isi { padding: 24px; }
+  .rm-gulir { max-height: 70vh; -webkit-overflow-scrolling: touch; }
+  .rm-cari { width: 260px; max-width: 100%; }
+  .rm-kepala-teks { min-width: 0; flex: 1 1 420px; }
+  .rm-xl .rm-w-pt { max-width: 200px; min-width: 150px; }
+  .rm-xl .rm-w-jab { max-width: 180px; min-width: 130px; }
+  .rm-xl .rm-w-kecil { min-width: 64px; }
+  .rm-potong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rm-nama { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+  .rm-ringkas { display: none; }
+  @media (max-width: 991.98px) {
+    .rm-xl .rm-opsional { display: none; }
+    .rm-xl .rm-s3 { min-width: 170px; max-width: 190px; white-space: normal; }
+    .rm-nama { max-width: 175px; font-weight: 600; }
+    .rm-ringkas { display: block; font-size: 10px; line-height: 1.3; color: #64748B; white-space: normal; margin-top: 1px; }
+    .rm-ringkas-sid { display: none; }
+    .rm-cari { width: 100%; }
+  }
+  @media (max-width: 575.98px) {
+    .rm-isi { padding: 12px; }
+    .rm-gulir { max-height: 65vh; }
+    .rm-xl .rm-hp-sembunyi { display: none; }
+    .rm-xl .rm-s3 { left: 0; min-width: 140px; max-width: 150px; }
+    .rm-nama { max-width: 135px; }
+    .rm-ringkas-sid { display: inline; }
+    .rm-xl .rm-h-tgl, .rm-sel { min-width: 32px; }
+    .rm-sel { font-size: 10.5px; }
+    .rm-hal { width: 100%; }
+    .rm-hal .btn { flex: 1 1 0; }
+  }
   /* Warna kode sama dengan template Excel (DmsRosterMasterService::KODE). */
   @foreach (\App\Services\Dms\Roster\DmsRosterMasterService::KODE as $kodeCss => [, $warnaCss])
   .rm-{{ $kodeCss }} { background: #{{ $warnaCss }}; color: #1F2937; }
@@ -88,8 +124,8 @@
 
 <div class="card radius-8 border-0 shadow-sm">
   <div class="card-header border-bottom bg-base py-16 px-24">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-      <div>
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+      <div class="rm-kepala-teks">
         <h6 class="text-lg fw-semibold mb-4">Jadwal per karyawan</h6>
         <div class="d-flex flex-wrap gap-3 text-xs text-secondary-light">
           @foreach (\App\Services\Dms\Roster\DmsRosterMasterService::legenda() as [$kodeLeg, $ketLeg, $warnaLeg, $mLeg, $kLeg])
@@ -98,13 +134,13 @@
           <span><span class="rm-sel rm-kosong d-inline-block align-middle" style="width:30px;height:18px"></span> tidak dijadwalkan</span>
         </div>
       </div>
-      <form method="GET" action="{{ route('dms.master-roster.show', $upload->id) }}">
-        <input type="search" name="q" value="{{ $cari }}" class="form-control form-control-sm" placeholder="Cari SID / nama… (Enter)">
+      <form method="GET" action="{{ route('dms.master-roster.show', $upload->id) }}" class="rm-cari">
+        <input type="search" name="q" value="{{ $cari }}" class="form-control form-control-sm" placeholder="Cari SID / nama… (Enter)" aria-label="Cari SID atau nama">
       </form>
     </div>
   </div>
-  <div class="card-body p-24">
-    <div class="table-responsive" style="max-height:70vh">
+  <div class="card-body rm-isi">
+    <div class="table-responsive rm-gulir">
       @php
         $kelasKode = static fn (?string $kode): string => $kode === null ? 'rm-kosong'
             : (isset(\App\Services\Dms\Roster\DmsRosterMasterService::KODE[$kode]) || in_array($kode, ['DS', 'NS'], true) ? 'rm-'.$kode : 'rm-lain');
@@ -113,14 +149,14 @@
       <table class="rm-xl">
         <thead>
           <tr>
-            <th rowspan="3" class="rm-h-id rm-s1">No</th>
-            <th rowspan="3" class="rm-h-id rm-s2">SID</th>
+            <th rowspan="3" class="rm-h-id rm-s1 rm-hp-sembunyi">No</th>
+            <th rowspan="3" class="rm-h-id rm-s2 rm-hp-sembunyi">SID</th>
             <th rowspan="3" class="rm-h-id rm-s3">Nama Karyawan</th>
-            <th rowspan="3" class="rm-h-id" style="min-width:160px">Perusahaan</th>
-            <th rowspan="3" class="rm-h-id" style="min-width:140px">Jabatan</th>
-            <th rowspan="3" class="rm-h-id" style="min-width:64px">Site</th>
-            <th rowspan="3" class="rm-h-id" style="min-width:64px">Jam Kerja Awal</th>
-            <th rowspan="3" class="rm-h-id" style="min-width:64px">Jam Kerja Akhir</th>
+            <th rowspan="3" class="rm-h-id rm-opsional rm-w-pt">Perusahaan</th>
+            <th rowspan="3" class="rm-h-id rm-opsional rm-w-jab">Jabatan</th>
+            <th rowspan="3" class="rm-h-id rm-opsional rm-w-kecil">Site</th>
+            <th rowspan="3" class="rm-h-id rm-opsional rm-w-kecil">Jam Kerja Awal</th>
+            <th rowspan="3" class="rm-h-id rm-opsional rm-w-kecil">Jam Kerja Akhir</th>
             @foreach ($tanggal as $t)
               <th class="rm-h-tgl {{ $t->dayOfWeek === 0 ? 'rm-minggu' : '' }} {{ $t->day === 1 && ! $loop->first ? 'rm-bulan' : '' }}" title="{{ $t->format('d/m/Y') }}">{{ $t->format('d') }}</th>
             @endforeach
@@ -139,14 +175,20 @@
         <tbody>
           @forelse ($grid['karyawan'] as $k)
             <tr>
-              <td class="rm-c-id rm-c-no rm-s1">{{ $nomorAwal + $loop->iteration }}</td>
-              <td class="rm-c-id rm-c-sid rm-s2">{{ $k['sid'] }}</td>
-              <td class="rm-c-id rm-s3">{{ $k['nama'] ?? '—' }}</td>
-              <td class="rm-c-id">{{ $k['perusahaan'] ?? '—' }}</td>
-              <td class="rm-c-id">{{ $k['jabatan'] ?? '—' }}</td>
-              <td class="rm-c-id">{{ $k['site'] ?? '—' }}</td>
-              <td class="rm-c-id rm-c-jam">{{ $k['jam_awal'] ?? '' }}</td>
-              <td class="rm-c-id rm-c-jam">{{ $k['jam_akhir'] ?? '' }}</td>
+              <td class="rm-c-id rm-c-no rm-s1 rm-hp-sembunyi">{{ $nomorAwal + $loop->iteration }}</td>
+              <td class="rm-c-id rm-c-sid rm-s2 rm-hp-sembunyi">{{ $k['sid'] }}</td>
+              <td class="rm-c-id rm-s3">
+                <span class="rm-nama" title="{{ $k['nama'] }}">{{ $k['nama'] ?? '—' }}</span>
+                {{-- Layar sempit: kolom identitas lain disembunyikan, isinya diringkas di sini. --}}
+                <span class="rm-ringkas">
+                  <span class="rm-ringkas-sid">{{ $k['sid'] }} &middot; </span>{{ $k['perusahaan'] ?? '—' }} &middot; {{ $k['jabatan'] ?? '—' }} &middot; {{ $k['site'] ?? '—' }}@if ($k['jam_awal']) &middot; {{ $k['jam_awal'] }}–{{ $k['jam_akhir'] }}@endif
+                </span>
+              </td>
+              <td class="rm-c-id rm-opsional"><span class="rm-potong rm-w-pt" title="{{ $k['perusahaan'] }}">{{ $k['perusahaan'] ?? '—' }}</span></td>
+              <td class="rm-c-id rm-opsional"><span class="rm-potong rm-w-jab" title="{{ $k['jabatan'] }}">{{ $k['jabatan'] ?? '—' }}</span></td>
+              <td class="rm-c-id rm-opsional">{{ $k['site'] ?? '—' }}</td>
+              <td class="rm-c-id rm-c-jam rm-opsional">{{ $k['jam_awal'] ?? '' }}</td>
+              <td class="rm-c-id rm-c-jam rm-opsional">{{ $k['jam_akhir'] ?? '' }}</td>
               @foreach ($tanggal as $t)
                 @php
                   $h = $k['jadwal'][$t->toDateString()] ?? null;
@@ -165,7 +207,7 @@
 
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mt-16">
       <span class="text-sm text-secondary-light">{{ number_format($grid['total'], 0, ',', '.') }} karyawan · hal {{ $halaman }}/{{ $totalHalaman }}</span>
-      <div class="d-flex gap-2">
+      <div class="d-flex gap-2 rm-hal">
         <a class="btn btn-sm btn-outline-primary-600 radius-8 {{ $halaman <= 1 ? 'disabled' : '' }}"
            href="{{ request()->fullUrlWithQuery(['hal' => $halaman - 1]) }}">&laquo; Sebelumnya</a>
         <a class="btn btn-sm btn-outline-primary-600 radius-8 {{ $halaman >= $totalHalaman ? 'disabled' : '' }}"
