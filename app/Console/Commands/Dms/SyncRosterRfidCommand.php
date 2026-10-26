@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands\Dms;
 
 use App\Services\Dms\Roster\DmsLongShiftService;
+use App\Services\Dms\Roster\DmsRosterKaryawanAktif;
 use App\Services\Dms\Roster\DmsRosterAutoBannedService;
 use App\Services\Dms\Roster\DmsRosterRegLiveService;
 use App\Services\Dms\Roster\DmsRosterSyncService;
@@ -89,6 +90,7 @@ final class SyncRosterRfidCommand extends Command
 
         $this->segarkanAturanBanned($live);
         $this->segarkanLongShift();
+        $this->segarkanKaryawanAktif();
 
         $this->info('Selesai dalam '.round(microtime(true) - $mulai, 1).' detik.');
 
@@ -191,6 +193,34 @@ final class SyncRosterRfidCommand extends Command
             $this->angka($r['pengawas']), $this->angka($r['ada_tap']),
             $this->angka($r['kejadian_long']), $this->angka($r['LONG_SHIFT']), $hasil['detik'],
         ));
+    }
+
+    /**
+     * Tahap 8 — daftar seluruh karyawan aktif (filter perusahaan di template
+     * Master Roster) ke cache. Gagal di tahap ini tidak menggagalkan sinkronisasi.
+     */
+    private function segarkanKaryawanAktif(): void
+    {
+        $this->info('Tahap 8 — karyawan aktif untuk template Master Roster ...');
+
+        $svc = app(DmsRosterKaryawanAktif::class);
+        $mulai = microtime(true);
+        try {
+            $hasil = $svc->segarkan();
+        } catch (Throwable $e) {
+            $this->warn('  Gagal: '.$e->getMessage());
+
+            return;
+        }
+
+        if ($hasil === null) {
+            $this->warn('  Gagal: '.($svc->galatTerakhir() ?? 'tidak diketahui'));
+
+            return;
+        }
+
+        $this->line(sprintf('  %s karyawan aktif dari %s perusahaan (%.1f dtk).',
+            $this->angka(count($hasil['karyawan'])), $this->angka(count($svc->perusahaan() ?? [])), microtime(true) - $mulai));
     }
 
     /**

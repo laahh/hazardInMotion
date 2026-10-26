@@ -75,7 +75,10 @@ final class DmsRosterMasterService
 
     private const BULAN = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
-    private const MAKS_HARI = 62;
+    /** Satu file = maksimal setahun (template bisa Januari–Desember sekaligus). */
+    public const MAKS_HARI = 366;
+
+    public const MAKS_BULAN = 12;
 
     private const MAKS_GALAT = 50;
 
@@ -268,7 +271,13 @@ final class DmsRosterMasterService
     public function simpan(UploadedFile $file, string $judul, ?string $catatan, string $oleh): array
     {
         try {
-            $rows = IOFactory::load($file->getRealPath())->getActiveSheet()->toArray(null, true, false, false);
+            // File setahun (366 kolom × ratusan karyawan) bisa ratusan ribu sel:
+            // baca tanpa gaya sel, dan beri ruang memori/waktu lebih.
+            @ini_set('memory_limit', '1024M');
+            @set_time_limit(300);
+            $reader = IOFactory::createReaderForFile($file->getRealPath());
+            $reader->setReadDataOnly(true);
+            $rows = $reader->load($file->getRealPath())->getActiveSheet()->toArray(null, true, false, false);
         } catch (Throwable $e) {
             return ['upload' => null, 'galat' => ['File tidak bisa dibaca sebagai Excel: '.$e->getMessage()]];
         }
@@ -424,11 +433,23 @@ final class DmsRosterMasterService
      * "Departemen / Site" (dihapus atas permintaan user) — pembaca tetap
      * menerima file lama yang masih memuatnya.
      */
-    public function template(CarbonImmutable $bulan): Spreadsheet
+    /**
+     * @param  list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>  $karyawan
+     *         Bila diisi (filter perusahaan), baris karyawan sudah terisi SID, nama,
+     *         perusahaan, jabatan & site — sel jadwal dibiarkan kosong. Kosong = 3 baris contoh.
+     */
+    public function template(CarbonImmutable $dari, ?CarbonImmutable $sampai = null, array $karyawan = []): Spreadsheet
     {
-        $awal = $bulan->startOfMonth();
-        $jumlahHari = $awal->daysInMonth;
-        $akhir = $awal->addDays($jumlahHari - 1);
+        // Rentang bulan: awal bulan $dari s/d akhir bulan $sampai (maks 12 bulan).
+        $awal = $dari->startOfMonth();
+        $akhir = ($sampai ?? $dari)->endOfMonth()->startOfDay();
+        if ($akhir->lt($awal)) {
+            throw new \InvalidArgumentException('Bulan akhir harus sama dengan atau sesudah bulan awal.');
+        }
+        if ($awal->diffInMonths($akhir) >= self::MAKS_BULAN) {
+            throw new \InvalidArgumentException('Rentang template maksimal '.self::MAKS_BULAN.' bulan.');
+        }
+        $jumlahHari = (int) $awal->diffInDays($akhir) + 1;
         $buku = new Spreadsheet();
         $sh = $buku->getActiveSheet()->setTitle('Roster');
         $buku->getDefaultStyle()->getFont()->setName('Calibri')->setSize(10);
@@ -489,6 +510,7 @@ final class DmsRosterMasterService
         // Nama hari & bulan dirumus dari tanggal itu (CHOOSE, bukan format "ddd"
         // supaya selalu bahasa Indonesia), dan Minggu merah lewat conditional
         // formatting — mengganti tanggal pertama memperbarui semuanya.
+        $batasBulan = [];
         $hariRumus = '"'.implode('","', self::HARI).'"';
         $bulanRumus = '"'.implode('","', self::BULAN).'"';
         $kolPertama = $this->kolom($kolomAwalHari - 1);
@@ -500,6 +522,9 @@ final class DmsRosterMasterService
             $sh->setCellValue($kol.'5', '=CHOOSE(WEEKDAY('.$kol.'4),'.$hariRumus.')');
             $sh->setCellValue($kol.'6', '=CHOOSE(MONTH('.$kol.'4),'.$bulanRumus.')');
             $sh->getColumnDimension($kol)->setWidth(5.2);
+            if ($i > 0 && $awal->addDays($i)->day === 1) {
+                $batasBulan[] = $kol;
+            }
         }
         $judulHari = $kolPertama.'4:'.$kolomAkhir.'6';
         $sh->getStyle($kolPertama.'4:'.$kolomAkhir.'4')->getNumberFormat()->setFormatCode('dd');
@@ -515,13 +540,13 @@ final class DmsRosterMasterService
         $sh->getStyle($judulHari)->setConditionalStyles([$minggu]);
         $sh->getStyle($judulHari)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        // Baris contoh.
-        $contoh = [
+        // Baris karyawan: dari filter perusahaan (jadwal kosong), atau 3 baris contoh.
+        $contoh = $karyawan === [] ? [
             ['10023451', 'Ahmad Fauzi', 'PT Berau Coal', 'Operator HD', 'BMO 1', ['DS', 'DS', 'DS', 'DS', 'DS', 'DS', 'DS', 'OFF', 'NS', 'NS', 'NS', 'NS', 'NS', 'NS', 'OFF']],
             ['10023452', 'Budi Santoso', 'Kontraktor A', 'Mekanik', 'BMO 1', ['NS', 'NS', 'NS', 'NS', 'NS', 'NS', 'NS', 'OFF', 'DS', 'DS', 'DS', 'DS', 'DS', 'DS', 'OFF'], '06:00', '18:00'],
             ['10023453', 'Siti Rahmawati', 'PT Berau Coal', 'Safety Officer', 'HO', ['DS', 'DS', 'DS', 'DS', 'DS', 'OFF', 'OFF'], '07:30', '16:30'],
-        ];
-        $barisAkhir = 6 + max(50, count($contoh));
+        ] : array_map(static fn (array $k): array => [$k['sid'], $k['nama'], $k['perusahaan'], $k['jabatan'], $k['site'], []], $karyawan);
+        $barisAkhir = 6 + max($karyawan === [] ? 50 : 10, count($contoh) + ($karyawan === [] ? 0 : 10));
         foreach ($contoh as $i => $c0) {
             [$sid, $nama, $pt, $jab, $site, $pola] = $c0;
             $r = 7 + $i;
@@ -532,8 +557,10 @@ final class DmsRosterMasterService
                 $sh->setCellValue('G'.$r, $this->pecahanHari($c0[6]));
                 $sh->setCellValue('H'.$r, $this->pecahanHari($c0[7]));
             }
-            for ($h = 0; $h < $jumlahHari; $h++) {
-                $sh->setCellValue($this->kolom($kolomAwalHari + $h - 1).$r, $pola[$h % count($pola)]);
+            if ($pola !== []) {
+                for ($h = 0; $h < $jumlahHari; $h++) {
+                    $sh->setCellValue($this->kolom($kolomAwalHari + $h - 1).$r, $pola[$h % count($pola)]);
+                }
             }
         }
 
@@ -546,15 +573,46 @@ final class DmsRosterMasterService
         $sh->getStyle('G7:I'.$barisAkhir)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sh->getStyle('I7:I'.$barisAkhir)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('EDEDED');
 
-        // Area isian: identitas kuning muda, kode di tengah, garis tipis.
+        // Area isian identitas: kuning muda, garis tipis.
         $sh->getStyle('A7:H'.$barisAkhir)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF2CC');
         $sh->getStyle('B7:B'.$barisAkhir)->getNumberFormat()->setFormatCode('@');
         $sh->getStyle('A7:A'.$barisAkhir)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sh->getStyle('B7:B'.$barisAkhir)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $abu = ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'BFBFBF']];
+        $sh->getStyle('A4:I'.$barisAkhir)->getBorders()->applyFromArray(['allBorders' => $abu]);
+        $sh->getStyle($this->kolom($kolomAwalHari - 1).'4:'.$kolomAkhir.'6')->getBorders()->applyFromArray(['allBorders' => $abu]);
+
+        // Area kode hari: gaya bawaan KOLOM (xf kolom), bukan gaya per sel —
+        // perusahaan besar (PAMA ±3.700 orang) × 365 hari = 1,3 juta sel yang
+        // tak perlu dibuat. (getStyle('J:J') juga tidak dipakai: itu memproses
+        // sejuta baris.) Sel yang sudah berisi (baris contoh) diberi gaya sama.
         $areaKode = $this->kolom($kolomAwalHari - 1).'7:'.$kolomAkhir.$barisAkhir;
-        $sh->getStyle($areaKode)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $sh->getStyle($areaKode)->getFont()->setBold(true);
-        $sh->getStyle('A4:'.$kolomAkhir.$barisAkhir)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('BFBFBF');
+        $xfKolom = [];
+        foreach ([false, true] as $awalBulan) {
+            $gaya = new \PhpOffice\PhpSpreadsheet\Style\Style();
+            $gaya->applyFromArray([
+                'font' => ['bold' => true, 'name' => 'Calibri', 'size' => 10],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                'borders' => ['bottom' => $abu, 'right' => $abu]
+                    + ($awalBulan ? ['left' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '1F3864']]] : []),
+            ]);
+            $buku->addCellXf($gaya);
+            $xfKolom[(int) $awalBulan] = $gaya->getIndex();
+        }
+        for ($h = 0; $h < $jumlahHari; $h++) {
+            $kol = $this->kolom($kolomAwalHari + $h - 1);
+            $sh->getColumnDimension($kol)->setXfIndex($xfKolom[(int) in_array($kol, $batasBulan, true)]);
+        }
+        if ($karyawan === []) {
+            $sh->getStyle($this->kolom($kolomAwalHari - 1).'7:'.$kolomAkhir.(6 + count($contoh)))->applyFromArray([
+                'font' => ['bold' => true],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                'borders' => ['allBorders' => $abu],
+            ]);
+        }
+        foreach ($batasBulan as $kol) {
+            $sh->getStyle($kol.'4:'.$kol.'6')->getBorders()->getLeft()->setBorderStyle(Border::BORDER_MEDIUM)->getColor()->setRGB('1F3864');
+        }
 
         // Warna otomatis per kode + dropdown kode.
         $kondisi = [];
@@ -581,7 +639,7 @@ final class DmsRosterMasterService
         $ket = $buku->createSheet()->setTitle('Petunjuk');
         $isi = [
             ['Petunjuk pengisian Roster Kerja Karyawan'],
-            ['1. Baris tanggal (01, 02, …) berisi tanggal asli. Untuk bulan lain cukup ganti tanggal pertama; tanggal, hari & bulan lainnya ikut. Maks '.self::MAKS_HARI.' hari, harus berurutan.'],
+            ['1. Baris tanggal (01, 02, …) berisi tanggal asli dan harus berurutan, maks '.self::MAKS_HARI.' hari (setahun). Mengganti tanggal pertama menggeser semua tanggal; jumlah kolom tetap sesuai rentang saat download.'],
             ['2. Satu baris = satu karyawan, mulai baris 7. Kolom SID wajib; No boleh kosong.'],
             ['3. Isi tiap hari dengan salah satu kode di bawah; sel kosong = tidak dijadwalkan.'],
             ['4. Jangan ubah judul kolom (No, SID, Nama Karyawan, Perusahaan, Jabatan, Site, Jam Check-in, Jam Check-out, Total Jam Kerja). Hapus baris contoh sebelum upload.'],

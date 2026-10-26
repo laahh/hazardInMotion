@@ -6,6 +6,7 @@ namespace App\Http\Controllers\DMS;
 
 use App\Http\Controllers\Controller;
 use App\Models\DmsRosterMasterUpload;
+use App\Services\Dms\Roster\DmsRosterKaryawanAktif;
 use App\Services\Dms\Roster\DmsRosterMasterService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
@@ -28,6 +29,7 @@ final class RosterMasterController extends Controller
 
     public function __construct(
         private readonly DmsRosterMasterService $service,
+        private readonly DmsRosterKaryawanAktif $karyawanAktif,
     ) {}
 
     /**
@@ -39,6 +41,10 @@ final class RosterMasterController extends Controller
             'daftar' => $this->daftar($request, ''),
             'ringkas' => $this->ringkas(),
             'bulanTemplate' => CarbonImmutable::now()->addMonthNoOverflow()->format('Y-m'),
+            'tahunTemplate' => CarbonImmutable::now()->addMonthsNoOverflow(1)->year,
+            // Daftar perusahaan untuk template terisi otomatis; null = belum tersedia.
+            'perusahaan' => $this->karyawanAktif->perusahaan(),
+            'perusahaanGalat' => $this->karyawanAktif->galatTerakhir(),
         ]);
     }
 
@@ -128,18 +134,48 @@ final class RosterMasterController extends Controller
         return redirect()->route('dms.master-roster.upload')->with('success', 'Roster "'.$upload->judul.'" dihapus.');
     }
 
-    public function template(Request $request): StreamedResponse
+    /**
+     * Template untuk rentang bulan ?dari=YYYY-MM&sampai=YYYY-MM (maks 12 bulan,
+     * mis. Januari–Desember). ?bulan=YYYY-MM lama tetap diterima (satu bulan).
+     * ?perusahaan=<nama> mengisi baris karyawan perusahaan itu (SID, nama,
+     * jabatan, site); jadwalnya tinggal diisi.
+     */
+    public function template(Request $request): StreamedResponse|RedirectResponse
     {
-        $bulan = (string) $request->query('bulan', '');
-        $awal = preg_match('/^\d{4}-\d{2}$/', $bulan) === 1
-            ? CarbonImmutable::createFromFormat('!Y-m', $bulan)
-            : CarbonImmutable::now()->addMonthNoOverflow()->startOfMonth();
+        $bulan = static fn (string $v): ?CarbonImmutable => preg_match('/^\d{4}-\d{2}$/', $v) === 1
+            ? CarbonImmutable::createFromFormat('!Y-m', $v)
+            : null;
+        $dari = $bulan((string) $request->query('dari', $request->query('bulan', '')))
+            ?? CarbonImmutable::now()->addMonthNoOverflow()->startOfMonth();
+        $sampai = $bulan((string) $request->query('sampai', '')) ?? $dari;
 
-        $writer = new Xlsx($this->service->template($awal));
+        // Filter perusahaan: baris karyawan terisi dari bep_vw_safety_karyawan_aktif.
+        $pt = mb_substr(trim((string) $request->query('perusahaan', '')), 0, 255);
+        $karyawan = [];
+        if ($pt !== '') {
+            $karyawan = $this->karyawanAktif->untukPerusahaan($pt);
+            if ($karyawan === null) {
+                return redirect()->route('dms.master-roster.upload')
+                    ->with('error', 'Daftar karyawan aktif belum tersedia, coba lagi setelah sinkronisasi berikutnya.');
+            }
+            if ($karyawan === []) {
+                return redirect()->route('dms.master-roster.upload')->with('error', 'Tidak ada karyawan aktif untuk perusahaan "'.$pt.'".');
+            }
+        }
+
+        try {
+            $writer = new Xlsx($this->service->template($dari, $sampai, $karyawan));
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->route('dms.master-roster.upload')->with('error', 'Template tidak dibuat: '.$e->getMessage());
+        }
+
+        $nama = 'template_master_roster_'
+            .($pt !== '' ? \Illuminate\Support\Str::slug(\App\Services\Dms\Roster\DmsRosterSyncService::kodePt($pt)).'_' : '')
+            .$dari->format('Y-m').($sampai->format('Y-m') !== $dari->format('Y-m') ? '_sd_'.$sampai->format('Y-m') : '').'.xlsx';
 
         return response()->streamDownload(static function () use ($writer): void {
             $writer->save('php://output');
-        }, 'template_master_roster_'.$awal->format('Y-m').'.xlsx', [
+        }, $nama, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
     }

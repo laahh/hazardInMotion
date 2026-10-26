@@ -16,6 +16,9 @@
   @endforeach
   .rm-kosong { background: #F8FAFC; }
   .rm-libur { color: #DC2626 !important; }
+  /* Awal bulan pada rentang panjang (template bisa sampai setahun). */
+  .rm-grid .rm-bulan { box-shadow: inset 2px 0 0 #1F3864; }
+  .rm-bulan__label { font-size: 9.5px; font-weight: 800; color: #1F3864; text-transform: uppercase; }
 </style>
 @endsection
 
@@ -24,6 +27,7 @@
   $badge = ['PENDING' => ['Menunggu approval', 'warning'], 'APPROVED' => ['Disetujui', 'success'], 'REJECTED' => ['Ditolak', 'danger']];
   [$label, $warna] = $badge[$upload->status] ?? [$upload->status, 'secondary'];
   $hariSingkat = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  $bulanSingkat = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 @endphp
 
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
@@ -140,7 +144,8 @@
           <tr>
             <th class="rm-id">Karyawan</th>
             @foreach ($tanggal as $t)
-              <th class="{{ $t->dayOfWeek === 0 ? 'rm-libur' : '' }}" title="{{ $t->format('d/m/Y') }}">
+              <th class="{{ $t->dayOfWeek === 0 ? 'rm-libur' : '' }} {{ $t->day === 1 && ! $loop->first ? 'rm-bulan' : '' }}" title="{{ $t->format('d/m/Y') }}">
+                @if ($t->day === 1 || $loop->first)<span class="d-block rm-bulan__label">{{ $bulanSingkat[$t->month] }}</span>@endif
                 {{ $t->format('d') }}<span class="d-block fw-normal">{{ $hariSingkat[$t->dayOfWeek] }}</span>
               </th>
             @endforeach

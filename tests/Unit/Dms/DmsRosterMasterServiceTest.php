@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Dms;
 
+use App\Services\Dms\Roster\DmsRosterKaryawanAktif;
 use App\Services\Dms\Roster\DmsRosterMasterService;
 use Carbon\CarbonImmutable;
 use Tests\TestCase;
@@ -184,6 +185,53 @@ class DmsRosterMasterServiceTest extends TestCase
 
         $this->assertSame([], $hasil['galat']);
         $this->assertNull($hasil['departemen_site']);
+    }
+
+    public function test_template_setahun_januari_sampai_desember_bisa_dibaca_ulang(): void
+    {
+        $rows = $this->svc->template(CarbonImmutable::create(2026, 1, 1), CarbonImmutable::create(2026, 12, 1))
+            ->getActiveSheet()->toArray(null, true, false, false);
+
+        $hasil = $this->svc->bacaSheet($rows);
+
+        $this->assertSame([], $hasil['galat']);
+        $this->assertCount(365, $hasil['tanggal']);
+        $this->assertSame(['2026-01-01', '2026-12-31'], [$hasil['tanggal'][0], $hasil['tanggal'][364]]);
+        $this->assertCount(365, $hasil['karyawan'][0]['jadwal']);
+    }
+
+    public function test_rentang_template_terbalik_atau_lebih_dari_12_bulan_ditolak(): void
+    {
+        foreach ([[CarbonImmutable::create(2026, 5, 1), CarbonImmutable::create(2026, 4, 1)],
+                  [CarbonImmutable::create(2026, 1, 1), CarbonImmutable::create(2027, 1, 1)]] as [$dari, $sampai]) {
+            try {
+                $this->svc->template($dari, $sampai);
+                $this->fail('Rentang '.$dari->format('Y-m').'–'.$sampai->format('Y-m').' seharusnya ditolak.');
+            } catch (\InvalidArgumentException $e) {
+                $this->assertNotSame('', $e->getMessage());
+            }
+        }
+    }
+
+    public function test_template_perusahaan_terisi_karyawan_dengan_jadwal_kosong(): void
+    {
+        $karyawan = DmsRosterKaryawanAktif::rapikan([
+            (object) ['sid' => ' c5bxk ', 'nama' => 'IFA APRILLIANTO', 'perusahaan' => 'PT Berau Coal Energy', 'jabatan' => 'SAFETY EVALUATOR', 'site' => 'HO'],
+            (object) ['sid' => 'C5BXK', 'nama' => 'GANDA', 'perusahaan' => 'PT Berau Coal Energy', 'jabatan' => 'X', 'site' => 'HO'],
+            (object) ['sid' => '', 'nama' => 'TANPA SID', 'perusahaan' => 'PT Berau Coal Energy', 'jabatan' => 'X', 'site' => 'HO'],
+            (object) ['sid' => '6H2DF', 'nama' => 'AGUS CAHYONO', 'perusahaan' => 'PT Berau Coal Energy', 'jabatan' => 'WHEEL TYPE GL', 'site' => 'BMO 2'],
+        ]);
+        $this->assertSame(['C5BXK', '6H2DF'], array_column($karyawan, 'sid'));
+
+        $rows = $this->svc->template(CarbonImmutable::create(2026, 11, 1), CarbonImmutable::create(2026, 12, 1), $karyawan)
+            ->getActiveSheet()->toArray(null, true, false, false);
+        $hasil = $this->svc->bacaSheet($rows);
+
+        $this->assertSame([], $hasil['galat']);
+        $this->assertCount(61, $hasil['tanggal']);
+        $this->assertSame(['C5BXK', '6H2DF'], array_column($hasil['karyawan'], 'sid'));
+        $this->assertSame(['SAFETY EVALUATOR', 'BMO 2'], [$hasil['karyawan'][0]['jabatan'], $hasil['karyawan'][1]['site']]);
+        $this->assertSame([], $hasil['karyawan'][0]['jadwal'], 'Template perusahaan tidak boleh berisi jadwal contoh.');
     }
 
     public function test_template_bisa_dibaca_ulang_tanpa_galat(): void
